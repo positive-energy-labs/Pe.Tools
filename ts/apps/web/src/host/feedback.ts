@@ -1,6 +1,9 @@
+import { z } from "zod";
+
 import { hostFetch } from "#/host/runtime";
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
 
+/** An explicit human note: the one export that keeps its content (the software-factory signal). */
 export type Feedback = {
   comment: string;
   url: string;
@@ -14,14 +17,35 @@ export type Feedback = {
   picture_error: string | null;
 };
 
-/** Resolves once the host has handed the note to PostHog; throws the host's reason otherwise. */
-export async function sendFeedback(feedback: Feedback): Promise<void> {
-  const response = await hostFetch(peUrl(resolveWorkbenchConfig(), "/feedback"), {
+/**
+ * The host keeps the note first and hands it to PostHog second. Kept and delivered are two facts:
+ * `failed` means the note is on this host under `feedbackId` and can be delivered again.
+ */
+const feedbackReceiptSchema = z.discriminatedUnion("delivery", [
+  z.strictObject({ feedbackId: z.uuid(), delivery: z.literal("accepted") }),
+  z.strictObject({ feedbackId: z.uuid(), delivery: z.literal("failed"), error: z.string() }),
+]);
+export type FeedbackReceipt = z.infer<typeof feedbackReceiptSchema>;
+
+async function receiptOf(response: Response): Promise<FeedbackReceipt> {
+  const body = (await response.json().catch(() => null)) as { error?: string } | null;
+  if (!response.ok) throw new Error(body?.error ?? `feedback refused (${response.status})`);
+  const receipt = feedbackReceiptSchema.safeParse(body);
+  if (!receipt.success) throw new Error("The host answered without a feedback receipt.");
+  return receipt.data;
+}
+
+const post = (path: string, body?: unknown) =>
+  hostFetch(peUrl(resolveWorkbenchConfig(), path), {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(feedback),
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (response.ok) return;
-  const body = (await response.json().catch(() => null)) as { error?: string } | null;
-  throw new Error(body?.error ?? `feedback failed (${response.status})`);
-}
+
+/** Throws only when the host refused or never kept the note; a kept note returns its receipt. */
+export const sendFeedback = async (feedback: Feedback) =>
+  receiptOf(await post("/feedback", feedback));
+
+/** Deliver a note this host already keeps; never resubmits its content from the browser. */
+export const deliverFeedback = async (feedbackId: string) =>
+  receiptOf(await post(`/feedback/${encodeURIComponent(feedbackId)}/deliver`));

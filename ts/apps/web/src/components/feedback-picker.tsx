@@ -8,11 +8,12 @@ import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { PopupFrame } from "#/components/lang/list-popup";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Textarea } from "#/components/lang/textarea";
-import { sendFeedback } from "#/host/feedback";
+import { deliverFeedback, sendFeedback, type FeedbackReceipt } from "#/host/feedback";
 import { useAction } from "#/readings";
 import { useScopeKeys } from "#/route/keys";
 
-// Pick one element, write a note, send it with a cropped picture to PostHog through the host.
+// Pick one element, write a note, send it with a cropped picture through the host, which keeps it
+// first and hands it to PostHog second. A kept note that did not deliver says so and can retry.
 type Grab = typeof import("react-grab/primitives");
 type Rect = { x: number; y: number; width: number; height: number };
 type Picked = {
@@ -39,6 +40,7 @@ export function FeedbackPicker({ hideTrigger = false }: { hideTrigger?: boolean 
   const [hover, setHover] = useState<Rect | null>(null);
   const [picked, setPicked] = useState<Picked | null>(null);
   const [note, setNote] = useState("");
+  const [kept, setKept] = useState<FeedbackReceipt | null>(null);
   const [cancelHost, setCancelHost] = useState<HTMLElement | null>(null);
   useEffect(() => {
     const update = () => setCancelHost(document.getElementById("pe-feedback-cancel"));
@@ -54,15 +56,18 @@ export function FeedbackPicker({ hideTrigger = false }: { hideTrigger?: boolean 
     setHover(null);
     setPicked(null);
     setNote("");
+    setKept(null);
   };
+  const settle = (receipt: FeedbackReceipt) =>
+    receipt.delivery === "accepted" ? close() : setKept(receipt);
 
-  // Send waits on PostHog: a failure keeps the popover and the typed note.
+  // A refusal keeps the popover and the typed note; a kept, undelivered note keeps its receipt.
   const send = useAction(async ({ context, rect }: Picked) => {
     const picture = await snapshot(rect).then(
       (dataUrl) => ({ dataUrl, error: null }),
       (error: unknown) => ({ dataUrl: null, error: String(error) }),
     );
-    await sendFeedback({
+    return sendFeedback({
       comment: note.trim(),
       url: location.href,
       selector: context.selector,
@@ -74,8 +79,9 @@ export function FeedbackPicker({ hideTrigger = false }: { hideTrigger?: boolean 
       picture: picture.dataUrl,
       picture_error: picture.error,
     });
-  }, close);
-  const submit = () => picked && note.trim() && !send.isPending && send.mutate(picked);
+  }, settle);
+  const deliver = useAction(deliverFeedback, settle);
+  const submit = () => picked && note.trim() && !kept && !send.isPending && send.mutate(picked);
 
   useEffect(() => {
     const start = (event: Event) => {
@@ -220,21 +226,42 @@ export function FeedbackPicker({ hideTrigger = false }: { hideTrigger?: boolean 
                 }}
               />
               {send.error && <OutcomeLine kind="error" label={send.error.message} />}
+              {kept?.delivery === "failed" ? (
+                <OutcomeLine
+                  kind="refused"
+                  label={`kept ${kept.feedbackId.slice(0, 8)}, not delivered: ${kept.error}`}
+                  says="the note is on this host; deliver it again or close"
+                />
+              ) : null}
+              {deliver.error && <OutcomeLine kind="error" label={deliver.error.message} />}
               <div className="flex justify-end gap-2">
                 <Button kind="framed" label="cancel" onClick={close} reason="Drop this note">
                   cancel
                 </Button>
-                <Button
-                  kind="commit"
-                  label="send"
-                  icon={Send}
-                  busy={send.isPending}
-                  refusal={note.trim() ? null : "Write a note first"}
-                  onClick={submit}
-                  reason="Send this note and a picture of the marked element to PostHog"
-                >
-                  send
-                </Button>
+                {kept ? (
+                  <Button
+                    kind="commit"
+                    label="deliver again"
+                    icon={Send}
+                    busy={deliver.isPending}
+                    onClick={() => deliver.mutate(kept.feedbackId)}
+                    reason="Hand the note this host kept to PostHog again; the browser does not resend it"
+                  >
+                    deliver again
+                  </Button>
+                ) : (
+                  <Button
+                    kind="commit"
+                    label="send"
+                    icon={Send}
+                    busy={send.isPending}
+                    refusal={note.trim() ? null : "Write a note first"}
+                    onClick={submit}
+                    reason="Send this note and a picture of the marked element to PostHog"
+                  >
+                    send
+                  </Button>
+                )}
               </div>
             </div>
           </PopupFrame>
