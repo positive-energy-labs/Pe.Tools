@@ -126,6 +126,20 @@ export const instancesActions = {
       release: release.optional(),
     }),
   },
+  "instances.handover": {
+    says: "Hand over one acquisition by its id: save its document to the acquisition's reserved result path (create-only, never central, ownership kept), then write a diff plan against its recorded baseline that names what it could not compare. Review only: nothing merges, loads back, overwrites or syncs.",
+    dirties: ["sdk"],
+    needs: "nothing",
+    actor: "any",
+    input: z.strictObject({ acquisition: z.string().min(1) }),
+  },
+  "instances.cleanup": {
+    says: "Release one acquisition by its id: close its document (keep refuses while it holds changes no handover saved; discard drops them), stop the Revit it started once nothing else is open there, and remove its temporary copies. A handover's result, diff plan and baseline are kept.",
+    dirties: ["sdk"],
+    needs: "nothing",
+    actor: "any",
+    input: z.strictObject({ acquisition: z.string().min(1), unsaved }),
+  },
   "instances.close": {
     says: "Close the explicitly supplied document lifetime by its published openId, keeping or discarding unsaved changes as the caller chose.",
     dirties: ["sdk"],

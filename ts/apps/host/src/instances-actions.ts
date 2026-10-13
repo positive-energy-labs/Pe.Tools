@@ -10,12 +10,13 @@ import {
   type InstancesActionKey,
   type InstancesLaunch,
   type Basis,
+  type ActionAdmission,
 } from "@pe/agent-contracts";
 import type { ActionStep } from "@pe/agent-contracts";
 import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
-import { constants, copyFile, mkdir, rename } from "node:fs/promises";
-import { dirname, extname, isAbsolute } from "node:path";
+import { createReadStream, existsSync } from "node:fs";
+import { constants, copyFile, lstat, mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { dirname, extname, isAbsolute, relative, resolve } from "node:path";
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import {
@@ -41,7 +42,7 @@ import {
   type SessionObservation,
   type SessionStartResult,
 } from "@pe/host-contracts/pe-revit-contract";
-import type { ActionJournal, Crossing } from "./action-journal.ts";
+import { ActionIncomplete, type ActionJournal, type Crossing } from "./action-journal.ts";
 import { BridgeError } from "./bridge.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
@@ -51,6 +52,7 @@ import {
   foldAcquisitions,
   heldProcess,
   planAcquisition,
+  type Acquisition,
   type AcquisitionIntent,
 } from "./acquisition.ts";
 import { productPeaWorkPath } from "./product-paths.ts";
@@ -134,19 +136,45 @@ type Prepared = {
   acquisition: AcquisitionIntent | null;
 };
 
+async function hashFile(path: string) {
+  const hash = createHash("sha256");
+  let bytes = 0;
+  for await (const chunk of createReadStream(path)) {
+    hash.update(chunk as Buffer);
+    bytes += (chunk as Buffer).length;
+  }
+  return { sha256: hash.digest("hex"), bytes };
+}
+
 /** One recorded file step: saved bytes to a reserved path, never over a file, then its hash. */
 async function copyReserved({ from, to }: { from: string; to: string }) {
   await mkdir(dirname(to), { recursive: true });
   // A half-written copy never has the name an open would take.
   await copyFile(from, `${to}.part`, constants.COPYFILE_EXCL);
   await rename(`${to}.part`, to);
-  const hash = createHash("sha256");
-  let bytes = 0;
-  for await (const chunk of createReadStream(to)) {
-    hash.update(chunk as Buffer);
-    bytes += (chunk as Buffer).length;
+  return hashFile(to);
+}
+
+/**
+ * Remove one recorded temporary file of an acquisition: inside its exclusive root, reached through
+ * no link or junction, a plain file. Anything else refuses; a missing file is already removed.
+ */
+async function removeReserved(root: string, path: string) {
+  const inside = relative(resolve(root), resolve(path));
+  if (!inside || inside.startsWith("..") || isAbsolute(inside))
+    throw refuse(`${path} is outside its acquisition root`);
+  for (let at = resolve(path); ; at = dirname(at)) {
+    const stat = await lstat(at).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (stat && (stat.isSymbolicLink() || (at === resolve(path) && !stat.isFile())))
+      throw refuse(`${at} is not the plain file or folder the acquisition recorded`);
+    if (!stat && at === resolve(path)) return { removed: false };
+    if (at === resolve(root)) break;
   }
-  return { sha256: hash.digest("hex"), bytes };
+  await rm(path);
+  return { removed: true };
 }
 
 type RunningRow = Extract<SessionObservation, { case: "controlled-active" | "observed-active" }>;
@@ -193,6 +221,55 @@ async function readTarget(
       envelope.result,
     );
   return { ...target, selection, expectSession: row.receipt.receiptPath };
+}
+
+/** The exact incarnation's row by its SDK name, or null when the census proves it stopped. */
+async function readLiveTarget(
+  process: { pid: number; processStartUtc: string },
+  read: SdkReceiptReader,
+): Promise<Target | null> {
+  const args = sessionListArgv();
+  const envelope = parsePeRevitEnvelope<SessionListResult>(
+    await read(args),
+    args,
+    peRevitLauncher(),
+  );
+  if (envelope.diagnostics.length)
+    throw refuse("The SDK census cannot say whether the acquired Revit still runs", envelope);
+  const row = (envelope.result as SessionListResult).sessions.find(
+    (each): each is RunningRow =>
+      (each.case === "controlled-active" || each.case === "observed-active") &&
+      each.process.pid === process.pid &&
+      each.process.processStartUtc === process.processStartUtc,
+  );
+  if (!row) return null;
+  return readTarget(
+    row.case === "controlled-active" ? { id: row.id } : { pid: row.process.pid },
+    process,
+    read,
+  );
+}
+
+/** The SDK documents of exactly one process incarnation; any other answer refuses. */
+async function listDocuments(
+  selection: SdkSessionSelection,
+  process: { pid: number; processStartUtc: string },
+  read: SdkReceiptReader,
+) {
+  const argv = docListArgv(selection);
+  const envelope = parsePeRevitEnvelope<DocListResult, Resolved | null>(
+    await read(argv),
+    argv,
+    peRevitLauncher(),
+  );
+  if (
+    envelope.exitCode !== 0 ||
+    envelope.result.state !== "ok" ||
+    envelope.resolved?.pid !== process.pid ||
+    envelope.resolved.processStartUtc !== process.processStartUtc
+  )
+    throw refuse("The SDK cannot list the documents of the original process", envelope);
+  return envelope.result.documents;
 }
 
 /** Run one recorded verb under its step id and settle it from the state the SDK derived (law 10). */
@@ -259,6 +336,8 @@ export async function admitInstancesAction(
       : admission.destination.kind !== "host"
   )
     throw refuse("Instances destination must match the explicitly supplied session");
+  if (key === "instances.handover" || key === "instances.cleanup")
+    return admitAcquisitionRelease(admission, key, crossing, owner, read, resume);
   const door = "/actions";
   const lifecycleRefusal = (reason: string) =>
     new Refused({
@@ -368,20 +447,9 @@ export async function admitInstancesAction(
           canonicalRouteInput(document.session) !== canonicalRouteInput(session.selection)
         )
           throw refuse("SDK document belongs to another session");
-        const argv = docListArgv(document.session);
-        const envelope = parsePeRevitEnvelope<DocListResult, Resolved | null>(
-          await read(argv),
-          argv,
-          peRevitLauncher(),
-        );
-        if (
-          envelope.exitCode !== 0 ||
-          envelope.result.state !== "ok" ||
-          envelope.resolved?.pid !== session.process.pid ||
-          envelope.resolved.processStartUtc !== session.process.processStartUtc ||
-          !envelope.result.documents.some((doc) => doc.openId === document.openId)
-        )
-          throw refuse("The SDK document lifetime is not open in the original process", envelope);
+        const listed = await listDocuments(document.session, session.process, read);
+        if (!listed.some((doc) => doc.openId === document.openId))
+          throw refuse("The SDK document lifetime is not open in the original process", listed);
       }
       // The session row is read once, here, and frozen with the attempt so a replay compares the
       // same bytes. A launch's posture is derived from it, never passed (ADR 0016).
@@ -625,6 +693,226 @@ export async function admitInstancesAction(
         ...(session !== undefined ? { session } : {}),
         document,
       };
+    },
+    resume,
+  );
+}
+
+/** What a cleanup may remove: the work copy, and the baseline unless a handover depends on it. */
+const temporaryFiles = (acquired: Acquisition) => {
+  const origin = acquired.intent.document?.origin;
+  if (origin?.kind !== "file-copy") return [];
+  const roles = acquired.handover ? [origin.work] : [origin.work, origin.baseline];
+  return roles
+    .filter((path) => acquired.files.includes(path))
+    .flatMap((path) => [`${path}.part`, path]);
+};
+
+/**
+ * Handover and cleanup name one acquisition by id and touch only what its receipts recorded: the
+ * bound lifetime in its exact process, the Revit it started, and its reserved paths. A
+ * reconciling acquisition refuses until its unknown steps are recovered; nothing is guessed.
+ */
+async function admitAcquisitionRelease(
+  admission: ActionAdmission,
+  key: "instances.handover" | "instances.cleanup",
+  crossing: Crossing,
+  owner: ActionJournal,
+  read: SdkReceiptReader,
+  resume: boolean,
+) {
+  const door = "/actions";
+  const { acquisition: id, unsaved } = admission.input as {
+    acquisition: string;
+    unsaved?: "keep" | "discard";
+  };
+  const unproven = (reason: string) =>
+    new Refused({ code: "acquisition.unproven", door, reason: `Refused at ${door}: ${reason}` });
+  if (crossing.caller.kind !== "human") admitCrossing(crossing.caller, admission.destination, door);
+  const prior = (await owner.list(undefined, admission.id))[0];
+  const acquired = foldAcquisitions(await owner.list()).find((each) => each.id === id);
+  // A replay of this same action id returns its receipt; only a new attempt is checked afresh.
+  if (!prior) {
+    if (!acquired) throw unproven(`no acquisition '${id}' is in the journal.`);
+    if (acquired.state === "reconciling")
+      throw unproven(
+        `acquisition '${id}' has a step with no proven outcome; recover action '${id}' and any handover or cleanup naming it first.`,
+      );
+    if (acquired.state !== "held") throw unproven(`acquisition '${id}' is ${acquired.state}.`);
+  }
+  const document = acquired?.document ?? null;
+  let basis: Basis =
+    crossing.caller.kind === "human"
+      ? { kind: "human" }
+      : { kind: "acquisition", id, scope: { kind: "release" } };
+  if (key === "instances.handover" && !prior) {
+    if (!document) throw unproven(`acquisition '${id}' holds no document to hand over.`);
+    if (acquired!.handover)
+      throw unproven(
+        `acquisition '${id}' was handed over to ${acquired!.handover.result.path}; a result is create-only.`,
+      );
+    const row = await readMachineSession(document.process).catch((error: unknown) => {
+      throw unproven(`its exact process has no fresh census. ${String(error)}`);
+    });
+    const product = row.attachment?.documents?.find(
+      (doc) => doc.access.kind === "pea" && doc.access.acquisition === id,
+    );
+    if (!product)
+      throw unproven(
+        `acquisition '${id}' is not open, natively certified independent and joined to one product document now.`,
+      );
+    if (crossing.caller.kind !== "human")
+      basis = {
+        kind: "acquisition",
+        id,
+        scope: { kind: "document", lifetime: { session: product.session, openId: product.openId } },
+      };
+  }
+  type Release = { target: Target | null; open: boolean };
+  return owner.admit(
+    { ...admission, ...crossing, basis },
+    async (): Promise<Release> => {
+      const process = document?.process ?? acquired!.process;
+      const target = process ? await readLiveTarget(process, read) : null;
+      if (target && !target.expectSession)
+        throw refuse("The acquired Revit is not a controlled SDK session");
+      if (key === "instances.handover") {
+        if (!target) throw refuse("The acquired Revit is no longer running");
+        if (existsSync(acquired!.intent.document!.result))
+          throw refuse(
+            `${acquired!.intent.document!.result} exists; a handover result is create-only`,
+          );
+        return { target, open: true };
+      }
+      const listed =
+        target && document ? await listDocuments(target.selection, target.process, read) : [];
+      const held = listed.find((doc) => doc.openId === document?.sdkOpenId);
+      const origin = acquired!.intent.document?.origin;
+      // Changes no handover saved: unsaved edits, or a work copy that no longer hashes as its baseline.
+      const changed =
+        held !== undefined &&
+        (held.isModified ||
+          (!acquired!.handover &&
+            origin?.kind === "file-copy" &&
+            acquired!.baseline !== null &&
+            existsSync(origin.work) &&
+            (await hashFile(origin.work)).sha256 !== acquired!.baseline.sha256));
+      if (changed && unsaved === "keep")
+        throw refuse(
+          `Acquisition '${id}' holds changes no handover saved; hand it over first, or clean up with unsaved discard.`,
+        );
+      return { target, open: held !== undefined };
+    },
+    async (execution) => {
+      const { target, open } = execution.prepared as Release;
+      const expectSession = target?.expectSession ?? "";
+      const sdkOpenId = document?.sdkOpenId ?? "";
+      if (key === "instances.handover") {
+        const intent = acquired!.intent.document!;
+        const detached =
+          intent.origin.kind === "detached" ||
+          (intent.origin.kind === "file-copy" && intent.origin.detach);
+        const save: StepInput = {
+          expectSession,
+          argv: docSaveArgv({
+            doc: sdkOpenId,
+            ...target!.selection,
+            out: intent.result,
+            worksets: detached ? "preserve" : undefined,
+            release: "none",
+            requestId: REQUEST_ID,
+            expectSession,
+            expectDoc: sdkOpenId,
+          }),
+        };
+        await execution.step("native", "instances.handover.save", save, (requestId) =>
+          dispatch(save, requestId, read),
+        );
+        return execution.step(
+          "file",
+          "acquisition.handover",
+          { to: intent.diffPlan, result: intent.result },
+          async () => {
+            const result = { path: intent.result, ...(await hashFile(intent.result)) };
+            const baseline =
+              intent.origin.kind === "file-copy"
+                ? acquired!.baseline
+                : intent.origin.kind === "new"
+                  ? { kind: "new", template: intent.origin.template }
+                  : {
+                      kind: "unknown",
+                      reason: "A detached cloud open records no provider version.",
+                    };
+            // ponytail: no domain snapshot extractor is wired to acquisitions yet; hashes are provenance.
+            const plan = {
+              acquisition: id,
+              origin: intent.origin,
+              baseline,
+              result,
+              domain: {
+                state: "unknown",
+                reason:
+                  "No domain snapshot was compared; the hashes prove which bytes, not what changed.",
+              },
+              review: "Review only: nothing merges, loads back, overwrites or syncs.",
+            };
+            await writeFile(intent.diffPlan, JSON.stringify(plan, null, 2), { flag: "wx" });
+            return { result, diffPlan: intent.diffPlan };
+          },
+        );
+      }
+      const outcome = {
+        acquisition: id,
+        closed: null as string | null,
+        removed: [] as string[],
+        stopped: null as { pid: number; processStartUtc: string } | null,
+      };
+      if (open) {
+        const close: StepInput = {
+          expectSession,
+          argv: docCloseArgv({
+            doc: sdkOpenId,
+            ...target!.selection,
+            unsaved: unsaved!,
+            requestId: REQUEST_ID,
+            expectSession,
+            expectDoc: sdkOpenId,
+          }),
+        };
+        await execution.step("native", "instances.cleanup.close", close, (requestId) =>
+          dispatch(close, requestId, read),
+        );
+        outcome.closed = sdkOpenId;
+      }
+      for (const path of temporaryFiles(acquired!).filter((each) => existsSync(each))) {
+        await execution.step("file", "acquisition.remove", { to: path }, () =>
+          removeReserved(acquired!.intent.root, path),
+        );
+        outcome.removed.push(path);
+      }
+      if (acquired!.process && target) {
+        // Only the Revit this acquisition started, and only once nothing else is open there.
+        const left = await listDocuments(target.selection, target.process, read);
+        if (left.length)
+          throw new ActionIncomplete(
+            `Kept the Revit acquisition '${id}' started: ${left.length} other document(s) are open there`,
+            outcome,
+          );
+        const stop: StepInput = {
+          expectSession,
+          argv: sessionStopArgv({
+            ...target.selection,
+            unsaved: "discard",
+            requestId: REQUEST_ID,
+            expectSession,
+          }),
+        };
+        await execution.step("native", "instances.cleanup.stop", stop, (requestId) =>
+          dispatch(stop, requestId, read),
+        );
+        outcome.stopped = acquired!.process;
+      }
+      return outcome;
     },
     resume,
   );

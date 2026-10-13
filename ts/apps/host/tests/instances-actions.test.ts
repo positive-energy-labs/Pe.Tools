@@ -1,8 +1,8 @@
 import { afterEach, expect, test } from "vite-plus/test";
 import { existsSync } from "node:fs";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { instancesActions, instancesSessionSelection } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { Context, Layer } from "effect";
@@ -96,7 +96,12 @@ async function setup(
     if (args[0] === "doc" && args[1] === "list") {
       const process = args.includes("--pid") ? observed.process : originalProcess;
       return JSON.stringify({
-        ...JSON.parse(sdkEnvelope({ state: "ok", documents: [{ openId }] })),
+        ...JSON.parse(
+          sdkEnvelope({
+            state: "ok",
+            documents: census.documents.map((id) => ({ openId: id, isModified: census.modified })),
+          }),
+        ),
         resolved: { ...process, id: "dev" },
       });
     }
@@ -118,6 +123,8 @@ async function setup(
     fail: false,
     /** Native independence facts the SDK census reports for every document; unknown by default. */
     facts: {} as { isWorkshared?: boolean; isDetached?: boolean },
+    /** What `doc list` says about unsaved edits. */
+    modified: false,
   };
   const update = {
     plan: null,
@@ -1024,6 +1031,179 @@ test("F7: an acquisition records its paths before writing; a crash at any bounda
   }
   expect(await readFile(source)).toEqual(before);
   expect(f.calls.filter((argv) => argv[1] === "open" || argv[1] === "start")).toHaveLength(2);
+});
+
+/** An SDK that starts, opens the copy it is given, saves create-only, closes and stops. */
+async function acquisitionSetup() {
+  const row = controlledRow({ shape: shape("background") });
+  const f = await setup(
+    async (args) => {
+      if (args[0] === "session")
+        return args[1] === "start" ? startedAnswer : { result: { state: "ok" } };
+      if (args[1] === "open")
+        return { result: { state: "ok", document: { openId, path: args[2], title: "Tower" } } };
+      if (args[1] === "save") {
+        await mkdir(dirname(flag(args, "--out")!), { recursive: true });
+        await writeFile(flag(args, "--out")!, "saved result", { flag: "wx" });
+        return { result: { state: "ok" } };
+      }
+      if (args[1] === "close") {
+        f.census.documents = f.census.documents.filter((id) => id !== flag(args, "--doc"));
+        return { result: { state: "ok" } };
+      }
+      return Error(`unexpected ${args.join(" ")}`);
+    },
+    [row],
+  );
+  f.census.facts = { isWorkshared: false, isDetached: false };
+  const source = await f.file("Tower.rvt", "Worksharing: Not enabled");
+  const acquired = await f.admit(
+    "instances.open",
+    { source, into: newRevit({ owner: "pea" }) },
+    undefined,
+    "agent",
+  );
+  expect(acquired.state).toBe("succeeded");
+  await f.machine.refresh();
+  const [acquisition] = foldAcquisitions(await f.owner.list());
+  return { f, source, acquired, acquisition: acquisition! };
+}
+
+test("handover saves the acquired copy to its create-only result with a diff plan; cleanup keeps it and stops only its own Revit", async () => {
+  const { f, source, acquired, acquisition } = await acquisitionSetup();
+  const intent = acquisition.intent.document!;
+  const handed = await f.admit(
+    "instances.handover",
+    { acquisition: acquired.id },
+    undefined,
+    "agent",
+  );
+  expect(handed).toMatchObject({
+    state: "succeeded",
+    basis: { kind: "acquisition", id: acquired.id, scope: { kind: "document" } },
+    result: { result: { path: intent.result }, diffPlan: intent.diffPlan },
+  });
+  const save = f.calls.find((argv) => argv[1] === "save")!;
+  expect(flag(save, "--out")).toBe(intent.result);
+  expect(flag(save, "--release")).toBe("none");
+  expect(save).not.toContain("--central");
+  const plan = JSON.parse(await readFile(intent.diffPlan, "utf8"));
+  expect(plan).toMatchObject({
+    baseline: { path: (intent.origin as { baseline: string }).baseline },
+    domain: { state: "unknown" },
+  });
+  expect(plan.baseline.sha256).toBe(acquisition.baseline!.sha256);
+  // A result is create-only: a second handover refuses before anything dispatches.
+  await expect(
+    f.admit("instances.handover", { acquisition: acquired.id }, undefined, "agent"),
+  ).rejects.toMatchObject({ refusal: { code: "acquisition.unproven" } });
+  // Unsaved edits no handover saved: keep refuses, undispatched; discard is the explicit choice.
+  f.census.modified = true;
+  expect(
+    await f.admit(
+      "instances.cleanup",
+      { acquisition: acquired.id, unsaved: "keep" },
+      undefined,
+      "agent",
+    ),
+  ).toMatchObject({ state: "failed", notDispatched: true });
+  const cleaned = await f.admit(
+    "instances.cleanup",
+    { acquisition: acquired.id, unsaved: "discard" },
+    undefined,
+    "agent",
+  );
+  const work = (intent.origin as { work: string }).work;
+  expect(cleaned).toMatchObject({
+    state: "succeeded",
+    basis: { kind: "acquisition", id: acquired.id, scope: { kind: "release" } },
+    result: {
+      closed: openId,
+      removed: [work],
+      stopped: { pid: originalProcess.pid, processStartUtc: originalProcess.processStartUtc },
+    },
+  });
+  expect(f.calls.at(-1)!.slice(0, 2)).toEqual(["session", "stop"]);
+  expect(existsSync(work)).toBe(false);
+  // The handover's result, its diff plan and the baseline it compares against are kept.
+  for (const kept of [
+    intent.result,
+    intent.diffPlan,
+    (intent.origin as { baseline: string }).baseline,
+  ])
+    expect(existsSync(kept)).toBe(true);
+  expect(await readFile(source, "utf16le")).toBe("Worksharing: Not enabled");
+  expect(foldAcquisitions(await f.owner.list())[0]!.state).toBe("released");
+  await expect(
+    f.admit(
+      "instances.cleanup",
+      { acquisition: acquired.id, unsaved: "discard" },
+      undefined,
+      "agent",
+    ),
+  ).rejects.toMatchObject({ refusal: { code: "acquisition.unproven" } });
+});
+
+test("cleanup names only its own acquisition: a foreign id refuses, a user document B is never closed and keeps the Revit", async () => {
+  const { f, acquired, acquisition } = await acquisitionSetup();
+  await expect(
+    f.admit(
+      "instances.cleanup",
+      { acquisition: "someone-else", unsaved: "discard" },
+      undefined,
+      "agent",
+    ),
+  ).rejects.toMatchObject({ refusal: { code: "acquisition.unproven" } });
+  const userB = "b".repeat(32);
+  f.census.documents = [openId, userB];
+  const kept = await f.admit(
+    "instances.cleanup",
+    { acquisition: acquired.id, unsaved: "discard" },
+    undefined,
+    "agent",
+  );
+  const origin = acquisition.intent.document!.origin as { work: string; baseline: string };
+  expect(kept).toMatchObject({
+    state: "incomplete",
+    error: expect.stringContaining("1 other document(s) are open there"),
+  });
+  const closes = f.calls.filter((argv) => argv[1] === "close");
+  expect(closes.map((argv) => flag(argv, "--doc"))).toEqual([openId]);
+  expect(f.calls.some((argv) => argv[1] === "stop")).toBe(false);
+  // No handover: the baseline is temporary too.
+  expect([existsSync(origin.work), existsSync(origin.baseline)]).toEqual([false, false]);
+  expect(foldAcquisitions(await f.owner.list())[0]!.state).toBe("held");
+  // Once the person closes B, a new cleanup stops the Revit it started, and nothing else.
+  f.census.documents = [];
+  const stopped = await f.admit(
+    "instances.cleanup",
+    { acquisition: acquired.id, unsaved: "discard" },
+    undefined,
+    "agent",
+  );
+  expect(stopped).toMatchObject({ state: "succeeded", result: { closed: null, removed: [] } });
+  expect(f.calls.filter((argv) => argv[1] === "close")).toHaveLength(1);
+  expect(f.calls.at(-1)!.slice(0, 2)).toEqual(["session", "stop"]);
+});
+
+test("a reconciling acquisition refuses handover and cleanup until recovered; its lost open is never replayed", async () => {
+  const f = await setup(
+    (args) => (args[0] === "session" ? startedAnswer : Error("lost open response")),
+    [controlledRow({ shape: shape("background") })],
+  );
+  const source = await f.file("Tower.rvt", "Worksharing: Not enabled");
+  const lost = await f.admit("instances.open", { source, into: newRevit({ owner: "pea" }) });
+  expect(lost.state).toBe("unknown");
+  const before = f.calls.length;
+  for (const [key, input] of [
+    ["instances.handover", { acquisition: lost.id }],
+    ["instances.cleanup", { acquisition: lost.id, unsaved: "discard" }],
+  ] as const)
+    await expect(f.admit(key, input, undefined, "agent")).rejects.toMatchObject({
+      refusal: { code: "acquisition.unproven" },
+    });
+  expect(f.calls.slice(before)).toEqual([]);
+  expect(f.calls.filter((argv) => argv[1] === "open")).toHaveLength(1);
 });
 
 test.each(["running", "missing-response", "wrong-request", "wrong-key", "conflicting-state"])(

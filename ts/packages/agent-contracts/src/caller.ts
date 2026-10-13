@@ -33,7 +33,8 @@ export const basisSchema = z.discriminatedUnion("kind", [
   /**
    * Evidence from the action journal that this exact resource is one Pea's action created (ADR
    * 0017 D6 at document grain). `document` is rechecked at every step begin; `process` admits a
-   * session-wide effect on the Revit it started.
+   * session-wide effect on the Revit it started; `release` is that acquisition's own cleanup,
+   * which touches only what its receipts recorded.
    */
   z.strictObject({
     kind: z.literal("acquisition"),
@@ -41,6 +42,7 @@ export const basisSchema = z.discriminatedUnion("kind", [
     scope: z.discriminatedUnion("kind", [
       z.strictObject({ kind: z.literal("document"), lifetime: documentRefSchema }),
       z.strictObject({ kind: z.literal("process"), session: z.string() }),
+      z.strictObject({ kind: z.literal("release") }),
     ]),
   }),
   z.strictObject({
