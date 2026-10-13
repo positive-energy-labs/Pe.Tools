@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { nativeProcessSchema } from "./action-receipts.ts";
+import { sdkReadingSchema } from "./reading.ts";
 import {
   sdkSessionSelectionSchema,
   sdkDocumentRefSchema,
@@ -43,15 +44,29 @@ export const instancesLaunchSchema = z.strictObject({
 });
 export type InstancesLaunch = z.infer<typeof instancesLaunchSchema>;
 
-export const instancesSessionSchema = z.strictObject({
-  selection: sdkSessionSelectionSchema,
-  process: nativeProcessSchema,
+const sessionInput = z.strictObject({
+  session: z.strictObject({ selection: sdkSessionSelectionSchema, process: nativeProcessSchema }),
 });
-const sessionInput = z.object({ session: instancesSessionSchema });
-/** Explicit unsaved-work policy for stop and close. Development HR restart always discards. */
-export const instancesUnsavedSchema = z.enum(["keep", "discard"]);
-const unsaved = instancesUnsavedSchema;
+/** Unsaved work has no default: the caller keeps or discards it, every time. */
+const unsaved = z.enum(["keep", "discard"]);
+/** Workshared ownership on the way out: all returns every borrow to central, none keeps them. */
+const release = z.enum(["none", "all"]);
+/** Where a save writes: in place, a new copy (never over a file), or a synchronize with central. */
+const saveTo = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("self") }),
+  z.strictObject({
+    kind: z.literal("copy"),
+    out: z.string().trim().min(1),
+    /** From a workshared model: preserve keeps a detached central, strip an independent copy. */
+    worksets: z.enum(["preserve", "strip"]).optional(),
+  }),
+  z.strictObject({ kind: z.literal("central"), comment: z.string().max(30_000).optional() }),
+]);
 
+/**
+ * `needs` is the effect: `document` touches one exact lifetime, `session` every document the
+ * session holds. The host resolves the affected lifetimes and admits each through one crossing.
+ */
 export const instancesActions = {
   "instances.start": {
     says: "Start an empty Revit of one installed year. owner pea starts it in the background; addins off quarantines third-party add-ins. The receipt is the SDK envelope.",
@@ -68,23 +83,52 @@ export const instancesActions = {
     input: instancesLaunchSchema,
   },
   "instances.restart": {
-    says: "Restart the explicitly supplied development session for any actor on Pea's sessions, human-only on yours, discarding unsaved changes and reopening its documents.",
+    says: "Restart the explicitly supplied session incarnation, discarding unsaved changes and reopening its documents.",
     dirties: ["sdk"],
-    needs: "nothing",
+    needs: "session",
     actor: "any",
-    input: sessionInput.strict(),
+    input: sessionInput,
   },
   "instances.stop": {
-    says: "Stop the explicitly supplied session incarnation for any actor on Pea's sessions, human-only on yours, keeping or discarding unsaved changes as the caller chose.",
+    says: "Stop the explicitly supplied session incarnation, keeping or discarding unsaved changes as the caller chose.",
     dirties: ["sdk"],
-    needs: "nothing",
+    needs: "session",
     actor: "any",
     input: sessionInput.extend({ force: z.boolean().default(false), unsaved }),
   },
-  "instances.close": {
-    says: "Close the explicitly supplied document lifetime by its published openId for any actor on Pea's sessions, human-only on yours, keeping or discarding unsaved changes as the caller chose.",
+  "instances.reset": {
+    says: "Recover a stuck session incarnation: dismiss its windows, cancel its operations, close its documents keeping or discarding unsaved work, and restart it if still blocked (or always, with restart).",
     dirties: ["sdk"],
-    needs: "nothing",
+    needs: "session",
+    actor: "any",
+    input: sessionInput.extend({
+      unsaved,
+      release: release.optional(),
+      restart: z.boolean().default(false),
+    }),
+  },
+  "instances.dialogs": {
+    says: "Dismiss one window of the session incarnation by the handle a dialogs reading just listed.",
+    dirties: ["sdk"],
+    needs: "session",
+    actor: "any",
+    input: sessionInput.extend({ hwnd: z.string().trim().min(1) }),
+  },
+  "instances.save": {
+    says: "Save the explicitly supplied document lifetime in place, as a new copy, or by synchronizing with central, optionally returning its workshared ownership.",
+    dirties: ["sdk"],
+    needs: "document",
+    actor: "any",
+    input: sessionInput.extend({
+      document: sdkDocumentRefSchema,
+      to: saveTo,
+      release: release.optional(),
+    }),
+  },
+  "instances.close": {
+    says: "Close the explicitly supplied document lifetime by its published openId, keeping or discarding unsaved changes as the caller chose.",
+    dirties: ["sdk"],
+    needs: "document",
     actor: "any",
     input: sessionInput.extend({ document: sdkDocumentRefSchema, unsaved }),
   },
@@ -104,15 +148,10 @@ export function instancesSessionSelection(input: unknown): SdkSessionSelection |
 }
 
 export const instancesReading = {
-  says: "Read SDK sessions, installed years, recents or open documents.",
+  says: "Read SDK sessions, installed years, recents, open documents, or one session's visible windows (dialogs).",
   dirties: [],
   needs: "nothing",
   actor: "any",
   mutates: false,
-  input: z.object({
-    read: z.enum(["sessions", "doctor", "recents", "documents"]),
-    session: sdkSessionSelectionSchema.optional(),
-    year: z.string().optional(),
-    all: z.boolean().optional(),
-  }),
+  input: sdkReadingSchema.omit({ kind: true }),
 } as const;

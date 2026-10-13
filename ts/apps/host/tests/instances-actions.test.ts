@@ -25,12 +25,14 @@ const openId = "a".repeat(32);
 /** The value after `flag` in one recorded argv. */
 const flag = (argv: readonly string[], name: string) => argv[argv.indexOf(name) + 1];
 const shape = (posture: "foreground" | "background") => ({ posture });
+const execution = { allowed: true, code: null, detail: null };
 const controlledRow = (over: Record<string, unknown> = {}) => ({
   case: "controlled-active",
   id: "dev",
   process: originalProcess,
   receipt: { receiptPath },
   shape: shape("foreground"),
+  execution,
   ...over,
 });
 const observed = { selection: { pid: 4242 }, process: { ...originalProcess, pid: 4242 } };
@@ -38,6 +40,7 @@ const observedRow = {
   case: "observed-active",
   process: observed.process,
   shape: shape("foreground"),
+  execution,
 };
 const adopted = {
   state: "ok",
@@ -227,7 +230,7 @@ function grantHead(): ThreadHead {
   };
 }
 
-test.each(["stop", "restart"])(
+test.each(["stop", "restart", "reset"])(
   "D3 %s refuses a granted document plus an uncovered document",
   async (verb) => {
     const f = await setup(() => ({ result: { state: "ok" } }));
@@ -236,7 +239,7 @@ test.each(["stop", "restart"])(
     await expect(
       f.admit(
         `instances.${verb}`,
-        { session, ...(verb === "stop" ? { unsaved: "keep" } : {}) },
+        { session, ...(verb === "restart" ? {} : { unsaved: "keep" }) },
         undefined,
         "agent",
       ),
@@ -245,14 +248,14 @@ test.each(["stop", "restart"])(
   },
 );
 
-test.each(["stop", "restart"])(
+test.each(["stop", "restart", "reset"])(
   "D3 %s carries the grant when only its lifetime is present",
   async (verb) => {
     const f = await setup(() => ({ result: { state: "ok" } }));
     bindControl({ heads: grantHead });
     const row = await f.admit(
       `instances.${verb}`,
-      { session, ...(verb === "stop" ? { unsaved: "keep" } : {}) },
+      { session, ...(verb === "restart" ? {} : { unsaved: "keep" }) },
       undefined,
       "agent",
     );
@@ -264,7 +267,7 @@ test.each(["stop", "restart"])(
   },
 );
 
-test.each(["stop", "restart"])(
+test.each(["stop", "restart", "reset"])(
   "D3 %s carries empty-user-session only after a fresh empty census",
   async (verb) => {
     const f = await setup(() => ({ result: { state: "ok" } }));
@@ -272,7 +275,7 @@ test.each(["stop", "restart"])(
     f.census.documents = [];
     const row = await f.admit(
       `instances.${verb}`,
-      { session, ...(verb === "stop" ? { unsaved: "keep" } : {}) },
+      { session, ...(verb === "restart" ? {} : { unsaved: "keep" }) },
       undefined,
       "agent",
     );
@@ -1175,4 +1178,110 @@ test("fresh Machine ownership rechecks a Pea session before the lifecycle effect
     error: expect.stringContaining("lifecycle.ungranted-documents"),
   });
   expect(f.calls.every((args) => args[1] === "list")).toBe(true);
+});
+
+const sdkDocument = { source: "sdk", session: session.selection, openId } as const;
+
+test.each([
+  [{ kind: "self" }, undefined, []],
+  [
+    { kind: "copy", out: "C:/out/Tower-copy.rvt", worksets: "strip" },
+    undefined,
+    ["--out", "C:/out/Tower-copy.rvt", "--worksets", "strip"],
+  ],
+  [
+    { kind: "central", comment: "rooms renumbered" },
+    "all",
+    ["--central", "--comment", "rooms renumbered", "--release", "all"],
+  ],
+] as const)("save %o reaches doc save for the exact lifetime", async (to, release, expected) => {
+  const f = await setup(() => ({ result: { state: "ok", openId } }));
+  const row = await f.admit("instances.save", {
+    session,
+    document: sdkDocument,
+    to,
+    ...(release ? { release } : {}),
+  });
+  expect(row.state).toBe("succeeded");
+  const save = f.calls.at(-1)!;
+  expect(save.slice(0, 6)).toEqual(["doc", "save", "--doc", openId, "--id", "dev"]);
+  expect(save.slice(6, 6 + expected.length)).toEqual(expected);
+  expect(flag(save, "--expect-doc")).toBe(openId);
+  expect(flag(save, "--expect-session")).toBe(receiptPath);
+  expect(flag(save, "--request-id")).toBe(row.steps.at(-1)!.id);
+});
+
+test("save refuses states the SDK would refuse: comment without central, worksets without a copy", () => {
+  const input = instancesActions["instances.save"].input;
+  for (const to of [
+    { kind: "self", comment: "x" },
+    { kind: "central", out: "C:/x.rvt" },
+    { kind: "self", worksets: "strip" },
+  ])
+    expect(input.safeParse({ session, document: sdkDocument, to }).success).toBe(false);
+});
+
+test("an agent save is one document crossing: the granted lifetime admits, another refuses", async () => {
+  const f = await setup(() => ({ result: { state: "ok", openId } }));
+  bindControl({ heads: grantHead });
+  f.census.documents = [openId, "b".repeat(32)];
+  const input = { session, document: sdkDocument, to: { kind: "self" } };
+  expect(await f.admit("instances.save", input, undefined, "agent")).toMatchObject({
+    state: "succeeded",
+    basis: { kind: "grant", lifetime: grantHead().grant!.lifetime },
+  });
+  await expect(
+    f.admit(
+      "instances.save",
+      { ...input, document: { ...sdkDocument, openId: "b".repeat(32) } },
+      undefined,
+      "agent",
+    ),
+  ).rejects.toMatchObject({ refusal: { code: "grant.other-lifetime" } });
+});
+
+test("reset needs an unsaved choice and reaches session reset with release and restart", async () => {
+  const f = await setup(() => ({ result: { id: "dev", state: "ok", phase: "ready" } }));
+  await expect(f.admit("instances.reset", { session })).rejects.toThrow();
+  expect(f.calls).toEqual([]);
+  const row = await f.admit("instances.reset", {
+    session,
+    unsaved: "discard",
+    release: "none",
+    restart: true,
+  });
+  expect(row.state).toBe("succeeded");
+  const reset = f.calls.at(-1)!;
+  expect(reset.slice(0, 4)).toEqual(["session", "reset", "--id", "dev"]);
+  expect(flag(reset, "--unsaved")).toBe("discard");
+  expect(flag(reset, "--release")).toBe("none");
+  expect(reset).toContain("--restart");
+  expect(flag(reset, "--expect-session")).toBe(receiptPath);
+  expect(flag(reset, "--request-id")).toBe(row.steps.at(-1)!.id);
+});
+
+test("an agent dialog dismiss refuses on the SDK identity gap before any SDK read", async () => {
+  const f = await setup(() => ({ result: { state: "ok" } }));
+  await expect(
+    f.admit("instances.dialogs", { session, hwnd: "0x1A2B" }, undefined, "agent"),
+  ).rejects.toMatchObject({ refusal: { code: "sdk.dialog-identity-missing" } });
+  expect(f.calls).toEqual([]);
+});
+
+test("a person's dismiss sends one handle once; a lost reply stays unknown and is never replayed", async () => {
+  const f = await setup(() => Error("lost response"));
+  const lost = await f.admit("instances.dialogs", { session, hwnd: "0x1A2B" });
+  expect(f.calls.at(-1)).toEqual([
+    "session",
+    "dialogs",
+    "0x1A2B",
+    "--id",
+    "dev",
+    "--dismiss",
+    "--json",
+  ]);
+  expect(lost.steps.at(-1)!.state).toBe("unknown");
+  const settled = await recoverInstancesAction(lost.id, f.owner, f.deps);
+  expect(settled.steps.at(-1)!.state).toBe("unknown");
+  expect(f.calls.filter((args) => args[0] === "op" || args[1] === "dialogs")).toHaveLength(1);
 });

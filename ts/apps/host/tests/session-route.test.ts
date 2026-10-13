@@ -12,6 +12,7 @@ import {
   docRecentsArgs,
   executeSessionCli,
   resolveStartProject,
+  sdkReadingArgs,
   sessionStatusArgs,
 } from "../src/session-route.ts";
 import { peRevitLauncher, validatePeRevitEnvelope } from "../src/pe-revit-launch.ts";
@@ -19,6 +20,12 @@ import { peRevitLauncher, validatePeRevitEnvelope } from "../src/pe-revit-launch
 const execFileAsync = promisify(execFile);
 
 // --- payload routing and reads → CLI args -----------------------------------------------------
+
+test("a dialogs reading lists one session's windows and never dismisses", () => {
+  const args = sdkReadingArgs({ kind: "sdk", read: "dialogs", session: { id: "dev" } });
+  expect(args).toEqual(["session", "dialogs", "--id", "dev", "--json"]);
+  expect(args).not.toContain("--dismiss");
+});
 
 test("a source-linked (dev) host starts from its checkout's Pe.App; an installed host passes no --project", () => {
   expect(resolveStartProject("dev", "C:\\repo\\Pe.Tools")).toBe(

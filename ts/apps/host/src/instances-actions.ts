@@ -19,9 +19,12 @@ import {
   docListArgv,
   type DocListResult,
   docOpenArgv,
+  docSaveArgv,
   opResultArgv,
+  sessionDialogsArgv,
   sessionHrArgv,
   sessionListArgv,
+  sessionResetArgv,
   sessionStartArgv,
   sessionStopArgv,
   type Diagnostic,
@@ -93,12 +96,19 @@ type Incarnation = {
   selection: SdkSessionSelection;
   process: { pid: number; processStartUtc: string; executable: string };
 };
-/** The input of restart, stop and close: an exact session incarnation, and what each verb adds. */
+/** The input of every verb on a running session: an exact incarnation, and what each verb adds. */
 type ControlInput = {
   session: Incarnation;
   force?: boolean;
   unsaved?: "keep" | "discard";
   document?: SdkDocumentRef;
+  release?: "none" | "all";
+  restart?: boolean;
+  hwnd?: string;
+  to?:
+    | { kind: "self" }
+    | { kind: "copy"; out: string; worksets?: "preserve" | "strip" }
+    | { kind: "central"; comment?: string };
 };
 /** The SDK row an action acts on, resolved once at preparation and frozen with the attempt. */
 type Target = {
@@ -252,23 +262,19 @@ export async function admitInstancesAction(
     const attached = row.attachment;
     const session = attached?.session ?? `${target.process.pid}:${target.process.processStartUtc}`;
     if (row.whose === "pea") return { kind: "pea-session", session };
-    if (
-      key !== "instances.close" &&
-      documents.length === 0 &&
-      (!attached || attached.documents?.length === 0)
-    )
+    const one = definition.needs === "document";
+    if (!one && documents.length === 0 && (!attached || attached.documents?.length === 0))
       return {
         kind: "empty-user-session",
         session,
       };
-    const affected =
-      key === "instances.close"
-        ? documents.filter((doc) => doc.openId === control!.document?.openId)
-        : documents;
+    const affected = one
+      ? documents.filter((doc) => doc.openId === control!.document?.openId)
+      : documents;
     if (
       !affected.length ||
       !attached?.documents ||
-      (key !== "instances.close" && attached.documents.length !== documents.length)
+      (!one && attached.documents.length !== documents.length)
     )
       throw lifecycleRefusal("has no complete SDK-to-bridge document census.");
     const uncovered: string[] = [];
@@ -287,7 +293,7 @@ export async function admitInstancesAction(
         );
       } catch (error) {
         if (!(error instanceof Refused)) throw error;
-        if (key === "instances.close") throw error;
+        if (one) throw error;
         uncovered.push(doc.title ?? doc.openId ?? "unknown document");
       }
     }
@@ -301,6 +307,14 @@ export async function admitInstancesAction(
   if (crossing.caller.kind !== "human") {
     // Also validates anonymous and Page callers before the empty-session case.
     admitCrossing(crossing.caller, admission.destination, door);
+    // `session dialogs` takes no request id or session expectation yet, so a handle cannot be
+    // bound to one window incarnation and a lost reply cannot be read back: a person dismisses.
+    if (key === "instances.dialogs")
+      throw new Refused({
+        code: "sdk.dialog-identity-missing",
+        door,
+        reason: `Refused at ${door}: the SDK's session dialogs verb cannot bind a handle to one window or recover a lost dismiss (no --request-id/--expect-session); dismissing stays a human act until the SDK pin carries them.`,
+      });
     if (selection) {
       admittedTarget = await readTarget(selection, control?.session.process, read);
       crossing = { ...crossing, basis: await censusBasis(admittedTarget) };
@@ -321,7 +335,7 @@ export async function admitInstancesAction(
   return owner.admit(
     { ...admission, ...crossing },
     async (): Promise<Prepared> => {
-      if (key === "instances.close") {
+      if (definition.needs === "document") {
         const { session, document } = control!;
         if (
           !document ||
@@ -366,6 +380,12 @@ export async function admitInstancesAction(
     },
     async (execution) => {
       const { target, pea } = execution.prepared as Prepared;
+      if (key === "instances.dialogs") {
+        const dismiss: StepInput = {
+          argv: sessionDialogsArgv({ hwnd: control!.hwnd, ...target!.selection, dismiss: true }),
+        };
+        return execution.step("native", key, dismiss, () => dispatch(dismiss, "", read));
+      }
       // The step that starts a new Revit, when the action does: `instances.start`, or the first
       // leg of an open into a new Revit. Every other action's main step carries its own key.
       const mainKey = launch && start ? `${key}.start` : key;
@@ -465,6 +485,28 @@ export async function admitInstancesAction(
               requestId,
               expectSession,
             });
+          case "instances.reset":
+            return sessionResetArgv({
+              ...chosen,
+              unsaved: control!.unsaved!,
+              release: control!.release,
+              restart: control!.restart,
+              requestId,
+              expectSession,
+            });
+          case "instances.save": {
+            const to = control!.to!;
+            return docSaveArgv({
+              doc: control!.document!.openId,
+              ...chosen,
+              ...(to.kind === "copy" ? { out: to.out, worksets: to.worksets } : {}),
+              ...(to.kind === "central" ? { central: true, comment: to.comment } : {}),
+              release: control!.release,
+              requestId,
+              expectSession,
+              expectDoc: control!.document!.openId,
+            });
+          }
           case "instances.stop":
             return sessionStopArgv({
               ...chosen,
@@ -533,6 +575,8 @@ export const recoverInstancesAction = (
   owner.recover(id, async (step: ActionStep) => {
     const read = deps.sdk ?? mutate;
     const argv = (step.input as StepInput).argv;
+    // A dismiss carried no request id, so no SDK receipt can settle it: it stays unknown.
+    if (argv[1] === "dialogs") return { step, evidence: null };
     const supervisor = argv[0] === "session";
     const args = opResultArgv({ requestId: step.id });
     const evidence = parsePeRevitEnvelope<OpRead>(await read(args), args, peRevitLauncher());
@@ -608,3 +652,4 @@ export const recoverInstancesAction = (
     // running, timed-out, abandoned: the work may still land; it stays unknown.
     return { step, evidence };
   });
+

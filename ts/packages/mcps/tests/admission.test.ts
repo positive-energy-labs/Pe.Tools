@@ -187,3 +187,24 @@ test("pe_do replays the original receipt without catalog or target discovery and
   expect(posts).toHaveLength(1);
   expect(new Set(reads)).toEqual(new Set(["/actions"]));
 });
+
+test("pe_do admits a lifecycle action at the session its input names, with no head lifetime", async () => {
+  const { posts } = host();
+  const session = {
+    selection: { id: "dev" },
+    process: { pid: 7, processStartUtc: "2026-10-13T00:00:00.0000000Z", executable: "Revit.exe" },
+  };
+  expect(
+    await call(peDo, {
+      key: "workflow:instances.stop",
+      input: { session, unsaved: "keep", actionId: "stop" },
+    }),
+  ).toMatchObject({ ok: true });
+  expect(posts).toMatchObject([
+    {
+      id: "stop",
+      key: "instances.stop",
+      destination: { kind: "sdk-session", selection: { id: "dev" } },
+    },
+  ]);
+});

@@ -12,6 +12,7 @@ import {
   scheduleReads,
   semanticActions,
   actionControls,
+  instancesSessionSelection,
   type ActionControlKey,
   canonicalRouteInput,
   type ActionReceipt,
@@ -196,7 +197,8 @@ export async function runCapability(
       (Object.keys(input).length ? input : undefined) as never,
     );
   if (intent.kind === "workflow" && !intent.prior) {
-    if (intent.needs !== "nothing")
+    // A lifecycle action names its own session; the head lifetime is not its destination.
+    if (intent.needs !== "nothing" && instancesSessionSelection(input) === null)
       admissionDestination(key, intent.needs, {
         bridgeSessionId: context.bridgeSessionId,
         openDocumentId: context.openDocumentId,

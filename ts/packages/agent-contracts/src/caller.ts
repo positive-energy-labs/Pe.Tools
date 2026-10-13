@@ -51,7 +51,7 @@ export const refusalCodes = [
   "grant.revoked",
   "grant.other-lifetime",
   "grant.context-cannot-hold",
-  "lifecycle.user-session",
+  "sdk.dialog-identity-missing",
   "lifecycle.ungranted-documents",
   "page.unbound",
   "page.binding-not-yours",

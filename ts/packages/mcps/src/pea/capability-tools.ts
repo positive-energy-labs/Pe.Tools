@@ -437,11 +437,6 @@ async function dispatch(
         return { ok: true, target: { session: null, document: null }, result };
       }
       if (row.key.startsWith("workflow:")) {
-        if (
-          semanticActions[key as SemanticActionKey].needs !== "nothing" &&
-          (!target.bridgeSessionId || !target.openDocumentId)
-        )
-          throw Error("Semantic action requires the exact selected lifetime");
         const { bases, actionId, ...intent } = payload;
         const row = (await runCapability(
           key,
