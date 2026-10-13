@@ -434,7 +434,7 @@ export const retiredPeaSkillNames: readonly string[] = [
 
 /** Codex reads repo skills from `.agents/skills` under its cwd; Claude Code from `.claude/skills`. */
 export const peaStandardSkillsRoot = path.join(".agents", "skills");
-export const peaClaudeSkillsRoot = path.join(".claude", "skills");
+const peaClaudeSkillsRoot = path.join(".claude", "skills");
 export const peaProductHomeEnvVar = "PE_TOOLS_PRODUCT_HOME";
 
 export interface PeaProductHomeOptions {
@@ -458,11 +458,7 @@ export function resolvePeaSkillPaths(options: PeaProductHomeOptions = {}): strin
   return [path.join(home, peaStandardSkillsRoot), path.join(home, peaClaudeSkillsRoot)];
 }
 
-export {
-  publishPeaSkills,
-  type SkillSnapshot,
-  type SkillPublication,
-} from "./skill-publication.ts";
+export { publishPeaSkills } from "./skill-publication.ts";
 
 function readEnvPath(value: string | undefined): string | undefined {
   const trimmed = value?.trim();

@@ -19,7 +19,7 @@ export type SkillSnapshot = {
   files: SkillFile[];
   package: ContributionSource;
 };
-export type SkillDirectoryCapture = (
+type SkillDirectoryCapture = (
   directory: string,
 ) => Promise<{ members: SkillFile[]; diagnostics: { severity: string; message: string }[] }>;
 export type SkillPublicationOptions = PeaProductHomeOptions & {
