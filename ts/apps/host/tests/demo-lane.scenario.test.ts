@@ -355,15 +355,17 @@ async function liveLoop(name: string, loop: (page: Page) => Promise<string>) {
 test("live /schedules: capture then apply files a run receipt", async () => {
   const { shown, workflows } = await liveLoop("schedules", async (page) => {
     const pod = await openLive(page, "/schedules", "demo=capture&live=1");
-    // The Situation's ladder names the resolved target, not "choose a session" (the document word
-    // left the sentence, MAP ruling 28, so the wording is not pinned).
-    await expect
-      .poll(() => page.locator("body").innerText(), { timeout: 30_000 })
-      .toContain("Isolated demo (simulated)");
+    // The user can see the session is simulated: the ladder popup's breadcrumb names the resolved
+    // demo document (the document word left the sentence, MAP ruling 28), never "choose a session".
+    await page.getByRole("button", { name: "Open page palette" }).click();
+    const ladder = page.locator("[data-open]").filter({ hasText: "Isolated demo (simulated)" });
+    await expect.poll(() => ladder.count(), { timeout: 30_000 }).toBeGreaterThan(0);
+    await expect.poll(() => ladder.first().isVisible()).toBe(true);
     expect(await page.locator("body").innerText()).not.toContain("choose a session");
+    await page.keyboard.press("Escape");
     await go(page, `${page.url()}&pod=${pod}`);
     // The schedule list is the Situation's Ladder, opened by Ctrl K (MAP rulings 19, 23).
-    await page.getByRole("button", { name: "Open the palette" }).click();
+    await page.getByRole("button", { name: "Open page palette" }).click();
     await page
       .getByRole("option", { name: /DX Fan Coil Unit Schedule/ })
       .first()
