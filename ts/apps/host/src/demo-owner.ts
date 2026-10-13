@@ -39,6 +39,7 @@ import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
 import { documentMarks } from "./document-marks.ts";
 import { bridgeAttachments, createMachine, unavailableShare } from "./machine.ts";
 import { unreadLeg } from "./update-reader.ts";
+import { listBridgeSessions } from "./local-ops.ts";
 import { readFamily } from "./family-actions.ts";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import type { ScheduleCellsApply } from "@pe/host-contracts/generated";
@@ -841,7 +842,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
             return settings.composeMember(request as Parameters<typeof settings.composeMember>[0]);
           if (key === "pod.member.write") throw unsupported("direct write; use settings.write");
           if (key === "bridge.sessions.list")
-            return { sessions: sessions.map((s) => ({ ...s, ...s.state })) };
+            return Effect.runPromise(listBridgeSessions(bridge.list));
           if (key === "rhvac.list") {
             await assertDemoPath(root, (request as { dir: string }).dir);
             return { exists: true, files: [{ path: join(root, "demo.r10"), name: "demo.r10" }] };
@@ -986,6 +987,10 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       "http://demo",
       (url, init) => handle(new Request(url, init)),
       machine,
+      (_, scope) =>
+        !retired && scope.bridgeSessionId === id && scope.openDocumentId === target.openId
+          ? Effect.succeed({ sessionId: id })
+          : Effect.fail(unsupported("production destination")),
     );
     const localScope = (value: WorkKey) =>
       workKey(value) === workKey(scope) ||

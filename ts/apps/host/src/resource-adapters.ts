@@ -2,7 +2,8 @@ import { invocationContext, hostFetch as fetch } from "@pe/mcps/context";
 import { Effect } from "effect";
 import { readingKey, actionStatusSchema, type ReadingFrame } from "@pe/agent-contracts";
 import { OwnerReads, resourceSnapshot, type ResourceObserver, type OwnerValue } from "@pe/runtime";
-import type { RevitBridge } from "./bridge.ts";
+import type { BridgeError, RevitBridge } from "./bridge.ts";
+import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import type { ActionJournal } from "./action-journal.ts";
 import { hostActionJournal } from "./gateway-owner.ts";
 import { hostTakeoffCaptures, type TakeoffCaptures } from "./takeoff-captures.ts";
@@ -143,6 +144,10 @@ export function hostResourceObserver(
   // Resolved at the call, not at the build: one observer outlives any one `fetch` binding.
   read: (url: URL, init?: RequestInit) => Promise<Response> = (url, init) => fetch(url, init),
   machine?: MachineOwner,
+  resolveSession: (
+    bridge: RevitBridge["Service"],
+    scope: HostSessionScope,
+  ) => Effect.Effect<{ sessionId: string }, BridgeError> = sdkSession,
 ): ResourceObserver {
   const inventoryReads = new OwnerReads();
   return (request, publish) => {
@@ -232,7 +237,7 @@ export function hostResourceObserver(
           let live = true;
           const { target, key: domain, context } = request;
           void Effect.runPromise(
-            sdkSession(bridge, {
+            resolveSession(bridge, {
               bridgeSessionId: target.session,
               openDocumentId: target.openId,
             }).pipe(
