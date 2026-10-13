@@ -83,6 +83,30 @@
             CopyToOutputDirectory="PreserveNewest"
         />
     </ItemGroup>
+    <!-- Native receipt emitter identity, read by Analytics/PostHogAnalytics.cs from the loaded
+         payload: Pe.Build = this build's SDK content stamp (the buildStamp its runtime descriptor
+         and receipt carry), Pe.Commit = the 40-hex source revision. Release builds always bake;
+         dev builds only on -p:PeBakeEmitterIdentity=true, because a per-build compiled attribute is
+         a rude EnC edit (SDK Pe.Revit.Stamp.targets guard). Unbaked stays stamp:null, and
+         AssemblyInformationalVersion is never touched. -->
+    <PropertyGroup>
+        <PeBakeEmitterIdentity Condition="'$(PeBakeEmitterIdentity)' == '' AND $(Configuration.Contains('Release'))">true</PeBakeEmitterIdentity>
+    </PropertyGroup>
+    <Target Name="PeBakeEmitterIdentity" BeforeTargets="GetAssemblyAttributes"
+            DependsOnTargets="PeComputeBuildStamp;InitializeSourceControlInformation"
+            Condition="'$(PeBakeEmitterIdentity)' == 'true'">
+        <ItemGroup>
+            <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute" Condition="'$(PeBuildStamp)' != ''">
+                <_Parameter1>Pe.Build</_Parameter1>
+                <_Parameter2>$(PeBuildStamp)</_Parameter2>
+            </AssemblyAttribute>
+            <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute"
+                               Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(SourceRevisionId)', '^[0-9a-f]{40}$'))">
+                <_Parameter1>Pe.Commit</_Parameter1>
+                <_Parameter2>$(SourceRevisionId)</_Parameter2>
+            </AssemblyAttribute>
+        </ItemGroup>
+    </Target>
     <ItemGroup>
         <ProjectReference Include="..\Pe.Revit.FamilyFoundry\Pe.Revit.FamilyFoundry.csproj" />
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj" />
