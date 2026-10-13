@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { get, type IncomingMessage } from "node:http";
 import { Deferred, Effect, Layer } from "effect";
 import { createServer as createViteServer } from "vite-plus";
 import { expect, test } from "vite-plus/test";
@@ -81,13 +82,19 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
     await Effect.runPromise(Deferred.succeed(webUrl, browser));
     expect(browser).not.toBe(backend);
     expect(await fetch(browser).then((r) => r.text())).toContain("frontend");
-    const navigation = { headers: { accept: "text/html" } };
+    const navigation = { headers: { accept: "text/html", "sec-fetch-mode": "navigate" } };
     const redirected = await fetch(`${backend}/chat?thread=kept`, {
       ...navigation,
       redirect: "manual",
     });
     expect(redirected.headers.get("location")).toBe(`${browser}/chat?thread=kept`);
-    expect(await fetch(`${browser}/ops`, navigation).then((r) => r.text())).toContain("frontend");
+    // Node fetch writes sec-fetch-mode=cors; use a raw request to model document navigation.
+    const document = await new Promise<IncomingMessage>((resolve, reject) =>
+      get(`${browser}/ops`, navigation, resolve).on("error", reject),
+    );
+    let html = "";
+    for await (const chunk of document) html += chunk;
+    expect(html).toContain("frontend");
     expect(await fetch(`${browser}/ops`).then((r) => r.json())).toHaveProperty("operations");
     expect(await fetch(`${browser}/host/status`).then((r) => r.json())).toEqual(
       await fetch(`${backend}/host/status`).then((r) => r.json()),
