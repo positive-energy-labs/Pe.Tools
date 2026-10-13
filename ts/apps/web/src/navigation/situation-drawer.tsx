@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import {
@@ -14,8 +14,15 @@ export const ownsOpenPopup = (element: HTMLElement | null) =>
   Boolean(element?.querySelector('[data-popup-open], [aria-haspopup][aria-expanded="true"]'));
 
 /** The route remains mounted; only presentation/focus admission changes when this drawer folds. */
-export function SituationDrawer({ barAnchor }: { barAnchor?: HTMLElement | null }) {
+export function SituationDrawer({
+  barAnchor,
+  rail,
+}: {
+  barAnchor?: HTMLElement | null;
+  rail?: ReactNode;
+}) {
   const enabled = useRouteSlotPresence("situation");
+  const available = enabled || rail != null;
   const trigger = useRef<HTMLSpanElement>(null);
   const drawer = useRef<HTMLDivElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -43,7 +50,7 @@ export function SituationDrawer({ barAnchor }: { barAnchor?: HTMLElement | null 
     return () => clearTimeout(timer);
   }, [signal?.stamp]);
   const open =
-    enabled && (pagePaletteOpen || (!dismissed && (hovered || focused || pinned || popup)));
+    available && (pagePaletteOpen || (!dismissed && (hovered || focused || pinned || popup)));
   openRef.current = open;
   usePublishSituationPresentation(open);
   const enter = () => {
@@ -67,13 +74,13 @@ export function SituationDrawer({ barAnchor }: { barAnchor?: HTMLElement | null 
     if (portalHost) (pinned && dockHost ? dockHost : document.body).append(portalHost);
   }, [portalHost, pinned, dockHost]);
   useEffect(() => {
-    if (!enabled) {
+    if (!available) {
       setPinned(false);
       setHovered(false);
       setFocused(false);
       setPopup(false);
     }
-  }, [enabled]);
+  }, [available]);
   useEffect(() => {
     if (!mounted) return;
     const bar = barAnchor ?? trigger.current?.closest<HTMLElement>(".pe-appbar");
@@ -169,7 +176,7 @@ export function SituationDrawer({ barAnchor }: { barAnchor?: HTMLElement | null 
               setPinned((prior) => !prior);
               setDismissed(pinned);
             }}
-            refusal={enabled ? undefined : "This page has no Situation"}
+            refusal={available ? undefined : "This page has no Situation"}
             data-situation-kind={signal?.kind}
             data-tone={signal?.tone}
             reason={signal?.title}
@@ -194,6 +201,15 @@ export function SituationDrawer({ barAnchor }: { barAnchor?: HTMLElement | null 
             className="pe-situation-drawer hairline-b shadow-float z-sticky"
             style={pinned ? undefined : { top }}
           >
+            {rail && (
+              <div
+                className="pe-situation-control-rail hairline-b"
+                role="group"
+                aria-label="Page controls"
+              >
+                {rail}
+              </div>
+            )}
             <RouteControlsSlot slot="situation" as="div" className="min-w-0" />
           </div>,
           portalHost,

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useCanGoBack, useRouter, useRouterState } from "@tanstack/react-router";
-import { ArrowLeft, ArrowRight, Search, MessageSquare, Menu } from "lucide-react";
-import { Popover } from "@base-ui/react/popover";
+import { ArrowLeft, ArrowRight, Search, MessageSquare } from "lucide-react";
 import { Button } from "#/components/lang/button";
 import { Input } from "#/components/lang/input";
 import { HotkeyHint } from "#/components/lang/hotkey-command";
@@ -251,39 +250,15 @@ export function AppBar() {
                 <HotkeyHint hotkey="Mod+Shift+K" />
               </span>
             </div>
-            {compact ? (
-              <Popover.Root>
-                <span className="pe-compact-menu-trigger">
-                  <Popover.Trigger render={<Button label="Topbar controls" icon={Menu} />} />
-                </span>
-                <Popover.Portal keepMounted>
-                  <Popover.Positioner
-                    side="bottom"
-                    align="end"
-                    sideOffset={6}
-                    className="isolate z-popup"
-                  >
-                    <Popover.Popup
-                      data-surface="page"
-                      className="float-surface pe-compact-menu-actions"
-                      aria-label="Topbar controls"
-                    >
-                      <SituationDrawer barAnchor={bar.current} />
-                      {actions}
-                    </Popover.Popup>
-                  </Popover.Positioner>
-                </Popover.Portal>
-              </Popover.Root>
-            ) : (
-              <div
-                className="pe-appbar-commands"
-                role="group"
-                aria-label="Situation, Page and Tutorial shortcuts"
-              >
-                <SituationDrawer />
-                {actions}
-              </div>
-            )}
+            <div
+              className="pe-appbar-commands"
+              data-compact={compact || undefined}
+              role="group"
+              aria-label="Situation, Page and Tutorial shortcuts"
+            >
+              <SituationDrawer barAnchor={bar.current} rail={compact ? actions : undefined} />
+              {!compact && actions}
+            </div>
           </div>
         </nav>
       </div>

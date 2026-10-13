@@ -122,48 +122,24 @@
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
-.pe-compact-menu-trigger {
-  order: 2;
-  flex: none;
-}
-.pe-compact-menu-trigger .dl-button {
-  width: var(--control-h);
-  padding: 0;
-  justify-content: center;
-}
-.pe-compact-menu-actions {
+.pe-situation-control-rail {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 4px;
-  min-width: 14rem;
-  max-width: calc(100vw - 1rem);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
 }
-.pe-compact-menu-actions
-  :is(
-    .pe-appbar-controls,
-    .dl-hotkey-command,
-    .pe-situation-trigger,
-    .pe-situation-trigger > span
-  ) {
-  display: contents;
-}
-.pe-compact-menu-actions .pe-appbar-command-seam {
-  display: none;
-}
-.pe-compact-menu-actions .dl-button {
-  width: 100%;
-  justify-content: flex-start;
-}
-.pe-compact-menu-actions [data-command-word] {
+.pe-situation-control-rail [data-command-word] {
   display: inline;
 }
-.pe-compact-menu-actions [data-command-keys] {
+.pe-situation-control-rail [data-command-keys] {
   display: none !important;
 }
-.pe-compact-menu-actions [data-command-chord] {
+.pe-situation-control-rail [data-command-chord] {
   display: inline-flex !important;
-  margin-inline-start: auto;
+}
+.pe-situation-control-rail .dl-hotkey-command > .dl-button > svg {
+  display: none;
 }
 .pe-situation-trigger > .pe-appbar-controls {
   max-width: 16rem;
@@ -309,11 +285,23 @@
   app-region: drag;
 }
 .pe-appbar[data-overlay="true"] > .pe-appbar-row {
+  position: relative;
   min-height: var(
     --app-titlebar-height,
     env(titlebar-area-height, calc(var(--control-h) + 0.5rem))
   );
   padding-block: 0;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+/* Native drag regions consume pointer events, so keep hover on the control row. */
+.pe-appbar[data-overlay="true"] > .pe-appbar-row::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  -webkit-app-region: drag;
+  app-region: drag;
 }
 .pe-appbar :is(button, a, input, [role="button"]),
 .pe-appbar-controls {
@@ -332,13 +320,21 @@
 }
 
 /* The usable caption area can be much narrower than the window itself. */
+@container app-chrome (max-width: 300px) {
+  .pe-appbar-route-search {
+    min-width: 8rem;
+  }
+  .pe-appbar-route-search:is(:focus-within, [data-selected]) {
+    flex-basis: 8rem;
+  }
+}
 @container app-chrome (max-width: 600px) {
   .pe-appbar-row {
     flex-wrap: wrap;
     gap: 2px;
     padding-inline: 4px;
   }
-  .pe-appbar-commands {
+  .pe-appbar-commands:not([data-compact]) {
     order: 6;
     flex: 1 0 100%;
     justify-content: flex-start;
@@ -346,7 +342,7 @@
   .pe-appbar-route-search:is(:focus-within, [data-selected]) {
     flex: 1 1 9rem;
   }
-  .pe-appbar[data-overlay="true"][data-shell="tray"] .pe-appbar-commands {
+  .pe-appbar[data-overlay="true"][data-shell="tray"] .pe-appbar-commands:not([data-compact]) {
     flex-basis: calc(100vw - var(--app-titlebar-x, 0px) - 8px);
     margin-block-start: max(0px, calc(var(--app-titlebar-height, 32px) - var(--control-h) - 2px));
   }
