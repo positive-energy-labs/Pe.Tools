@@ -20,6 +20,7 @@ import {
   type Rung,
   type SemanticActionKey,
   type ExecutionTarget,
+  type HostActionKey,
   type Reading,
   type ReadingRequest,
   type RouteStatePatch,
@@ -130,6 +131,9 @@ export interface RouteManifest<W, R extends string, P, A extends string> {
       (K extends "read" | "refresh" ? { rereads: R | "work" } : unknown);
   };
   views?: readonly View<R>[];
+  /** Host actions this route's views run that no declared verb `does`: with the verbs, what a
+   * transcript record of that action opens (`workbench/chat-plugins.ts` `actionRoute`). */
+  runs?: readonly HostActionKey[];
   seeds?: Readonly<Partial<Record<A, Seed<W, R, P>>>>;
   docs?: ReactNode;
 }
@@ -442,6 +446,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     | "page"
     | "url"
     | "actions"
+    | "runs"
     | "seeds"
   > = {},
 ): RouteManifest<W, R | EntityReading, P & EntityPage, A | EntityAction> {
@@ -596,6 +601,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
       ...(def.capture ? { capture } : {}),
       apply,
     } as never,
+    runs: audit.runs,
     seeds: audit.seeds as never,
   });
 }

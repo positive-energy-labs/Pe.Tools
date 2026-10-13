@@ -2,7 +2,12 @@
  * The routes Chat hosts in its plugin pane, by their manifests, and the one transcript record a
  * Pea call that wrote their Work leaves. Views live in `route-panes.tsx`.
  */
-import { actionControls, routeCallOf, semanticActions } from "@pe/agent-contracts";
+import {
+  actionControls,
+  parseContributionKey,
+  routeCallOf,
+  semanticActions,
+} from "@pe/agent-contracts";
 
 import { manifest as families } from "#/families/manifest";
 import { familyManifest } from "#/family/manifest";
@@ -112,7 +117,7 @@ export interface ActionCall {
 }
 
 /**
- * A `pe_do` of a semantic action, an action control or an `op:`/`pod:` operation, with the
+ * A `pe_do` of a semantic action, an action control, an `op:` operation or a package script, with the
  * receipt ID its result (or its input, for a control) names. Its state is the receipt's, read live.
  */
 export function actionCall(toolName: string, args: unknown, result: unknown): ActionCall | null {
@@ -121,7 +126,8 @@ export function actionCall(toolName: string, args: unknown, result: unknown): Ac
   const known =
     Object.hasOwn(semanticActions, key) ||
     Object.hasOwn(actionControls, key) ||
-    /^(op|pod):/.test(args.key);
+    args.key.startsWith("op:") ||
+    parseContributionKey(args.key)?.kind === "script";
   if (!known) return null;
   const outer =
     isRecord(result) && isRecord(result.structuredContent) ? result.structuredContent : result;
@@ -140,13 +146,24 @@ export function actionCall(toolName: string, args: unknown, result: unknown): Ac
   return id ? { id, key } : null;
 }
 
-/** An action key's first segment names its entity; a few entities live on another route. */
-export function actionRoute(key: string): ChatPluginRoute | null {
-  const entity = key.split(".")[0] ?? "";
-  const route =
-    ({ schedule: "schedules", settings: "pods", pod: "pods" } as const)[entity] ?? entity;
-  return CHAT_PLUGIN_ROUTES.find((name) => name === route) ?? null;
-}
+/**
+ * The pane a host action opens in: the plugin route whose manifest declares a verb that `does`
+ * it, or `runs` it from its views. A key no manifest declares (or two declare) has no pane; its
+ * record keeps the receipt link.
+ */
+const ACTION_ROUTES: ReadonlyMap<string, ChatPluginRoute | null> = CHAT_PLUGIN_ROUTES.reduce(
+  (routes, route) => {
+    const manifest: { actions?: Record<string, { does?: unknown }>; runs?: readonly string[] } =
+      CHAT_PLUGINS[route];
+    const does = Object.values(manifest.actions ?? {}).map((action) => action.does);
+    for (const key of [...does, ...(manifest.runs ?? [])])
+      if (typeof key === "string")
+        routes.set(key, routes.has(key) && routes.get(key) !== route ? null : route);
+    return routes;
+  },
+  new Map<string, ChatPluginRoute | null>(),
+);
+export const actionRoute = (key: string): ChatPluginRoute | null => ACTION_ROUTES.get(key) ?? null;
 
 /** `takeoffs.sync` → `sync`, `schedule.grid.push` → `grid push`. */
 export const actionWord = (key: string) => key.split(".").slice(1).join(" ") || key;

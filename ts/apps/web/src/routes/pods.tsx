@@ -50,6 +50,7 @@ export const manifest = defineRoute({
   key: "pods",
   name: "Pods",
   needs: "document",
+  runs: ["settings.write"],
   seeds: PODS_SEEDS,
 });
 
@@ -313,7 +314,11 @@ export function PodsRouteContent({
                     <span className="face-mono">{runs.length}</span>
                     <Button
                       label={runScope === "pod" ? "whole pod" : "this member"}
-                      refusal={member ? null : "This draft has no member yet, so its runs belong to the whole pod."}
+                      refusal={
+                        member
+                          ? null
+                          : "This draft has no member yet, so its runs belong to the whole pod."
+                      }
                       reason="A draft's run belongs to no member: the whole pod lists it."
                       onClick={() => setPodRuns(!podRuns)}
                     >

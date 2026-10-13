@@ -44,7 +44,7 @@ it("a sent draft with attachments reaches send, and attachments alone are a prom
 it("a draft holding only mentions is a prompt: the composer, the route and the host agree", () => {
   const send = chatManifest({ thread: "t", ready: true, send: async () => {} }).actions!.send;
   const mention = {
-    key: "skill:execute",
+    key: "skill:@product/skills/execute",
     kind: "skill",
     title: "execute",
     takenAt: "2026-10-12T12:00:00.000Z",

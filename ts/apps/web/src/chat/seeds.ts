@@ -5,7 +5,9 @@
  */
 import {
   address,
+  contributionSourcePath,
   documentRows,
+  parseContributionKey,
   mentionOf,
   mentionToken,
   type Capability,
@@ -374,13 +376,13 @@ const CATALOG = {
   sources: { ops: "ok", routes: "ok", pods: "ok", skills: "ok" },
   capabilities: [
     row(
-      "skill:review-schedule",
+      "skill:@product/skills/review-schedule",
       "skill",
       "review-schedule",
       "Review a schedule for blanks, outliers and drift.",
     ),
     row(
-      "skill:build-pod",
+      "skill:@product/skills/build-pod",
       "skill",
       "build-pod",
       "Turn a working script into a Pod the user can press.",
@@ -434,7 +436,12 @@ const CATALOG = {
       "parameters.list",
       "List the parameters of the open document, with their groups and bindings.",
     ),
-    row("pod:sheets.rename", "pod", "Sheets: rename", "Rename sheets from a pattern."),
+    row(
+      "script:@sheets/src/Rename.cs",
+      "script",
+      "Sheets: rename",
+      "Rename sheets from a pattern.",
+    ),
   ],
 } satisfies CapabilityCatalog;
 
@@ -444,16 +451,27 @@ function row(
   title: string,
   description: string,
 ): Capability {
+  const reference = parseContributionKey(key);
   return {
     key,
     kind,
     title,
     description,
-    needs: kind === "op" || kind === "pod" ? "document" : "nothing",
-    mutates: kind === "route-command" || kind === "pod",
+    needs: kind === "op" || kind === "script" ? "document" : "nothing",
+    mutates: kind === "route-command" || kind === "script",
     actor: "any",
     input: {},
     source: "seed",
+    // A packaged row names its admitted entry, as the host's catalog does.
+    ...(reference
+      ? {
+          package: {
+            id: reference.packageId,
+            path: contributionSourcePath(reference),
+            sha256: "0".repeat(64),
+          },
+        }
+      : {}),
     rank: 0,
   };
 }
@@ -476,7 +494,7 @@ function recent(title: string, path: string, rank: number) {
 const byKey = (key: string) => CATALOG.capabilities.find((found) => found.key === key)!;
 const MENTIONED = [
   mentionOf(documentRows(CATALOG)[0]!, CATALOG),
-  mentionOf(byKey("skill:review-schedule"), CATALOG),
+  mentionOf(byKey("skill:@product/skills/review-schedule"), CATALOG),
 ];
 
 /** The user points at a document and a skill with `@`; Pea's first hop uses the ids the mention

@@ -9,8 +9,10 @@ import {
   type SetStateAction,
 } from "react";
 import {
-  Box,
+  AppWindow,
   Cog,
+  FileCode,
+  FileJson,
   FileText,
   History,
   PanelsTopLeft,
@@ -44,10 +46,12 @@ export const MENTION_KINDS: Record<
   document: { group: "Documents", word: "document", icon: FileText },
   recent: { group: "Recent", word: "recent", icon: History },
   skill: { group: "Skills", word: "skill", icon: Sparkles },
+  page: { group: "Pages", word: "page", icon: AppWindow },
   "route-doc": { group: "Route plugins", word: "route", icon: PanelsTopLeft },
   "route-command": { group: "Commands", word: "command", icon: SquareTerminal },
   op: { group: "Ops", word: "op", icon: Cog },
-  pod: { group: "Pods", word: "pod", icon: Box },
+  script: { group: "Scripts", word: "script", icon: FileCode },
+  member: { group: "Pod members", word: "member", icon: FileJson },
 };
 /** Rows a group shows before its "N more" row. */
 export const MENTION_GROUP_CAP = 5;

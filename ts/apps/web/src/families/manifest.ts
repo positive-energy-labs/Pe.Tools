@@ -475,5 +475,6 @@ export const manifest = entityRoute<
       },
     },
   },
+  runs: ["families.plan"],
   seeds: FAMILIES_SEEDS as never,
 });
