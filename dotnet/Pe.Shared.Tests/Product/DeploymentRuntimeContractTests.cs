@@ -16,7 +16,7 @@ public sealed class DeploymentRuntimeContractTests {
         var localAppData = Path.Combine(Path.GetTempPath(), $"pe-localapp-{Guid.NewGuid():N}");
 
         try {
-            var content = ProductUserContentLayout.ForCurrentUser(documents);
+            var content = ProductUserContentLayout.ForCurrentUser(Path.Combine(documents, "Pe.Tools"));
             Assert.That(
                 content.PreferencesPath,
                 Is.EqualTo(Path.Combine(documents, "Pe.Tools", "preferences.json"))
@@ -57,6 +57,41 @@ public sealed class DeploymentRuntimeContractTests {
         } finally {
             TryDeleteDirectory(documents);
             TryDeleteDirectory(localAppData);
+        }
+    }
+
+    // F6 (acceptance round 3): Revit-side script output landed in the owner's OneDrive Pods because
+    // this side ignored the override the host honoured. One variable names the whole home.
+    [Test, NonParallelizable]
+    public void Product_home_override_roots_every_user_content_path_and_nothing_resolves_under_documents() {
+        var home = Path.Combine(Path.GetTempPath(), $"pe-home-{Guid.NewGuid():N}", "Pe.Tools");
+        var defaultHome = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), ProductIdentity.ProductName);
+        var previous = Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable);
+        Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, home);
+        try {
+            var content = ProductUserContentLayout.ForCurrentUser();
+            var paths = new[] {
+                content.RootPath,
+                content.PreferencesPath,
+                content.AgentInstructionsPath,
+                content.ReadmePath,
+                content.Scripting.RootPath,
+                content.InlineScripts.RootPath,
+                content.Output.RootPath,
+                ScriptingWorkspaceLocations.GetDefaultBasePath(),
+                ScriptingWorkspaceLocations.ResolveWorkspaceRoot("accept-r3-snowdon"),
+                new ModuleStorage("census").Output().DirectoryPath
+            };
+            Assert.That(content.RootPath, Is.EqualTo(home));
+            Assert.That(content.Scripting.RootPath, Is.EqualTo(Path.Combine(home, "Pods")));
+            foreach (var path in paths) {
+                Assert.That(path.StartsWith(home, StringComparison.OrdinalIgnoreCase), Is.True, path);
+                Assert.That(path.StartsWith(defaultHome, StringComparison.OrdinalIgnoreCase), Is.False, path);
+            }
+        } finally {
+            Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, previous);
+            TryDeleteDirectory(Path.GetDirectoryName(home)!);
         }
     }
 

@@ -32,6 +32,8 @@ export const productPathNames = {
   podManifestFileName: "pod.json",
   hostLogFileName: "host.log.txt",
   revitAppLogFileName: "revit.log.txt",
+  /** The one override for the whole product home; host, Pea and Revit read it identically. */
+  productHomeVariable: "PE_TOOLS_PRODUCT_HOME",
 } as const;
 
 const hostService = payload("VersionedApp", "host")?.service;

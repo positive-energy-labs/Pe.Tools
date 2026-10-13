@@ -53,7 +53,7 @@ There is no separate dev agent surface anymore (`peco` was deleted): the SDK `pe
 
 `@pe/runtime` is the thin shared runtime helper package below Pea and tooling. Keep it limited to route-workspace state, resource streams, and analytics that need Pe-owned policy. Do not rebuild harness loop, model, mode, thread, or ACP surfaces here; those live in `apps/host/src/harness/`.
 
-The harness child's cwd (the world root) is the product home (`resolvePeaProductHomePath`: `PE_TOOLS_PRODUCT_HOME`, else `Documents\Pe.Tools`). Pea operates inside that product workspace, while scripting tools can continue to default to the Host/Revit scripting workspace key such as `workspaces/default`.
+The harness child's cwd (the world root) is the product home (`productHomePath` in `@pe/host-contracts/product-paths`: `PE_TOOLS_PRODUCT_HOME`, else `Documents\Pe.Tools`; the Revit side reads the same variable). Pea operates inside that product workspace, while scripting tools can continue to default to the Host/Revit scripting workspace key such as `workspaces/default`.
 
 ## Authority Model
 

@@ -1,0 +1,37 @@
+import { afterEach, expect, test, vi } from "vite-plus/test";
+import { join } from "node:path";
+import { resolvePeaProductHomePath, resolvePeaSkillPaths } from "@pe/mcps";
+import { productPathNames } from "@pe/host-contracts/contracts";
+import {
+  productPagesRootPath,
+  productPodsRootPath,
+  productUserContentRootPath,
+} from "../src/product-paths.ts";
+
+afterEach(() => vi.unstubAllEnvs());
+
+// F6 (acceptance round 3): one override names the whole product home. Pods followed a second
+// "documents root" variable while Pea's world followed this one, so an isolated run migrated and
+// wrote into the owner's real OneDrive home. The retired variable is set to a decoy here: nothing
+// may resolve under it, and nothing may resolve outside the override.
+test("with the product home override set, every product path lives under it and nowhere else", () => {
+  const home = join("C:", "isolated", "Pe.Tools");
+  const decoy = join("C:", "owner", "OneDrive", "Documents");
+  vi.stubEnv(productPathNames.productHomeVariable, home);
+  vi.stubEnv("PE_TOOLS_DOCUMENTS_ROOT", decoy);
+  const paths = {
+    content: productUserContentRootPath(),
+    pods: productPodsRootPath(),
+    pages: productPagesRootPath(),
+    world: resolvePeaProductHomePath(),
+    skills: resolvePeaSkillPaths().join("|"),
+  };
+  expect(paths.content).toBe(home);
+  expect(paths.pods).toBe(join(home, "Pods"));
+  expect(paths.pages).toBe(join(home, "Pages"));
+  expect(paths.world).toBe(home);
+  for (const [name, path] of Object.entries(paths)) {
+    expect(path.startsWith(home), `${name} ${path}`).toBe(true);
+    expect(path.includes(decoy), `${name} ${path}`).toBe(false);
+  }
+});

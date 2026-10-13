@@ -1,27 +1,28 @@
 /**
- * The ONE Documents resolver. Host, mcps, and runtime import this; nobody keeps a copy.
+ * The ONE product home resolver. Host, mcps, and runtime import this; nobody keeps a copy, and the
+ * Revit side (`ProductPathing.ResolveProductHome`) reads the same override name.
  *
- * Documents is routinely redirected (OneDrive, a mapped profile), so `%USERPROFILE%\Documents`
- * is a different content home, not a fallback. A resolver that silently produces it lets two
+ * `PE_TOOLS_PRODUCT_HOME` names the whole home (Pages, Pods, skills, backups, script output).
+ * Without it the home is `<Documents>\Pe.Tools`. Documents is routinely redirected (OneDrive, a
+ * mapped profile), so `%USERPROFILE%\Documents` is a different content home, not a fallback. A resolver that silently produces it lets two
  * processes on one machine disagree about where the pods are. This one reads the known folder
  * or throws.
  */
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
-import { join } from "node:path";
-
-export const documentsRootEnvVar = "PE_TOOLS_DOCUMENTS_ROOT";
+import { join, resolve } from "node:path";
+import { productIdentity, productPathNames } from "./contracts/product.ts";
 
 const userShellFolders =
   "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders";
 
 let cached: string | undefined;
 
-/** The user's Documents folder. Cached once per process; the env override is always live. */
-export function userDocumentsPath(): string {
-  const override = process.env[documentsRootEnvVar]?.trim();
-  if (override) return override;
-  return (cached ??= resolveDocumentsPath());
+/** The product home. The Documents lookup is cached once per process; the override is always live. */
+export function productHomePath(): string {
+  const override = process.env[productPathNames.productHomeVariable]?.trim();
+  if (override) return resolve(override);
+  return join((cached ??= resolveDocumentsPath()), productIdentity.productName);
 }
 
 function resolveDocumentsPath(): string {
@@ -37,7 +38,7 @@ function resolveDocumentsPath(): string {
     });
   } catch (error) {
     throw new Error(
-      `Documents known folder unreadable: reg query '${userShellFolders}' /v Personal failed (${String(error)}). Set ${documentsRootEnvVar} to name it explicitly.`,
+      `Documents known folder unreadable: reg query '${userShellFolders}' /v Personal failed (${String(error)}). Set ${productPathNames.productHomeVariable} to name the product home explicitly.`,
     );
   }
   return parseDocumentsKnownFolder(output, process.env);

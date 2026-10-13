@@ -1,6 +1,5 @@
 import path from "node:path";
-import { productIdentity } from "@pe/host-contracts/contracts";
-import { userDocumentsPath } from "@pe/host-contracts/product-paths";
+import { productHomePath } from "@pe/host-contracts/product-paths";
 
 export interface BundledPeaSkill {
   name: string;
@@ -435,18 +434,13 @@ export const retiredPeaSkillNames: readonly string[] = [
 /** Codex reads repo skills from `.agents/skills` under its cwd; Claude Code from `.claude/skills`. */
 export const peaStandardSkillsRoot = path.join(".agents", "skills");
 const peaClaudeSkillsRoot = path.join(".claude", "skills");
-export const peaProductHomeEnvVar = "PE_TOOLS_PRODUCT_HOME";
 
 export interface PeaProductHomeOptions {
   productHomePath?: string;
 }
 
 export function resolvePeaProductHomePath(options: PeaProductHomeOptions = {}): string {
-  return path.resolve(
-    readEnvPath(options.productHomePath) ??
-      readEnvPath(process.env[peaProductHomeEnvVar]) ??
-      path.join(userDocumentsPath(), productIdentity.productName),
-  );
+  return path.resolve(readEnvPath(options.productHomePath) ?? productHomePath());
 }
 
 export function resolvePeaStandardSkillsRoot(options: PeaProductHomeOptions = {}): string {

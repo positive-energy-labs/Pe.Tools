@@ -11,10 +11,18 @@ internal static class ProductPathing {
             ? Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
             : Path.GetFullPath(applicationData);
 
-    public static string ResolveDocuments(string? documentsPath) =>
-        string.IsNullOrWhiteSpace(documentsPath)
-            ? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
-            : Path.GetFullPath(documentsPath);
+    /// <summary>
+    ///     The product home: an explicit path, else <see cref="ProductPathNames.ProductHomeVariable" />,
+    ///     else <c>Documents\Pe.Tools</c>. The host's <c>productHomePath</c> resolves the same way.
+    /// </summary>
+    public static string ResolveProductHome(string? productHomePath) {
+        var explicitHome = string.IsNullOrWhiteSpace(productHomePath)
+            ? Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable)
+            : productHomePath;
+        return string.IsNullOrWhiteSpace(explicitHome)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), ProductIdentity.ProductName)
+            : Path.GetFullPath(explicitHome.Trim());
+    }
 
     public static string ResolveSafeSubDirectoryPath(string rootPath, string? subdirectory, string paramName) {
         var normalized = NormalizeRelativePath(subdirectory, paramName);

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Deferred, Effect, Layer } from "effect";
 import { expect, test, vi } from "vite-plus/test";
-import { documentsRootEnvVar } from "@pe/host-contracts/product-paths";
+import { productPathNames } from "@pe/host-contracts/contracts";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
@@ -53,7 +53,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
   const localAppData = mkdtempSync(join(tmpdir(), "pe-caps-"));
   const previousLocalAppData = process.env.LOCALAPPDATA;
   process.env.LOCALAPPDATA = localAppData;
-  vi.stubEnv(documentsRootEnvVar, join(localAppData, "Documents"));
+  vi.stubEnv(productPathNames.productHomeVariable, join(localAppData, "Documents", "Pe.Tools"));
   const appBase = productRoot();
   const nodeServer = createNodeServer();
   const program = Effect.scoped(

@@ -3,20 +3,22 @@ import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
+import { productPathNames } from "@pe/host-contracts/contracts";
 import {
   bundledPeaSkills,
   publishPeaSkills,
-  peaProductHomeEnvVar,
   peaStandardSkillsRoot,
   resolvePeaProductHomePath,
   resolvePeaSkillPaths,
   retiredPeaSkillNames,
 } from "../src/pea/skills.ts";
 
-test("resolves pea product home under the configured documents root", async () => {
+const homeVariable = productPathNames.productHomeVariable;
+
+test("resolves pea product home and skills under the product home override", async () => {
   const profile = await withTempProductHomeEnv();
   try {
-    const expected = path.join(profile.documentsRoot, "Pe.Tools");
+    const expected = profile.productHome;
     expect(resolvePeaProductHomePath()).toBe(expected);
     expect(resolvePeaSkillPaths()).toEqual([
       path.join(expected, peaStandardSkillsRoot),
@@ -27,36 +29,17 @@ test("resolves pea product home under the configured documents root", async () =
   }
 });
 
-test("lets explicit pea product home override documents root", async () => {
-  const profile = await withTempProductHomeEnv();
-  try {
-    const productHome = path.join(profile.tempRoot, "custom-product-home");
-    process.env[peaProductHomeEnvVar] = productHome;
-
-    expect(resolvePeaProductHomePath()).toBe(productHome);
-  } finally {
-    await profile.dispose();
-  }
-});
-
 async function withTempProductHomeEnv() {
-  const previousProductHome = process.env[peaProductHomeEnvVar];
-  const previousDocumentsRoot = process.env.PE_TOOLS_DOCUMENTS_ROOT;
+  const previousProductHome = process.env[homeVariable];
   const tempRoot = await mkdtemp(path.join(tmpdir(), "pe-tools-home-"));
-  const documentsRoot = path.join(tempRoot, "Documents");
-
-  delete process.env[peaProductHomeEnvVar];
-  process.env.PE_TOOLS_DOCUMENTS_ROOT = documentsRoot;
+  const productHome = path.join(tempRoot, "Pe.Tools");
+  process.env[homeVariable] = productHome;
 
   return {
-    tempRoot,
-    documentsRoot,
+    productHome,
     dispose: async () => {
-      if (previousProductHome == null) delete process.env[peaProductHomeEnvVar];
-      else process.env[peaProductHomeEnvVar] = previousProductHome;
-
-      if (previousDocumentsRoot == null) delete process.env.PE_TOOLS_DOCUMENTS_ROOT;
-      else process.env.PE_TOOLS_DOCUMENTS_ROOT = previousDocumentsRoot;
+      if (previousProductHome == null) delete process.env[homeVariable];
+      else process.env[homeVariable] = previousProductHome;
 
       await rm(tempRoot, { recursive: true, force: true });
     },

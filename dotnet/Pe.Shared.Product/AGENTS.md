@@ -19,7 +19,7 @@ It is not the installed-layout authority. `product.payloads.json` is the single 
 - `ProductPathNames` — product-owned state and user-content names.
 - `ProductRuntimeLayout` — LocalAppData state/log/cache trees, including APS tokens. No binary paths.
 - `ProductUserContentLayout` / `ScriptingWorkspaceLayout` — `Documents\Pe.Tools\preferences.json` and portable Pods.
-- `ProductPathing` — safe subdirectory resolution and LocalAppData lookup.
+- `ProductPathing` — the product home (`PE_TOOLS_PRODUCT_HOME`, else `Documents\Pe.Tools`; the host resolves the same variable), safe subdirectory resolution and LocalAppData lookup.
 
 ## Hard Dependency Rule
 

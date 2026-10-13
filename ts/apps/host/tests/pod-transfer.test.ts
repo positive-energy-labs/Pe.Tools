@@ -10,7 +10,9 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { HttpRouter } from "effect/unstable/http";
 import type { Caller } from "@pe/agent-contracts";
-import { documentsRootEnvVar } from "@pe/host-contracts/product-paths";
+import { productPathNames } from "@pe/host-contracts/contracts";
+
+const homeVariable = productPathNames.productHomeVariable;
 import { withInvocationContext } from "@pe/mcps/context";
 import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge } from "../src/bridge.ts";
@@ -25,11 +27,11 @@ let root: string;
 let pods: string;
 let web: ReturnType<typeof HttpRouter.toWebHandler>;
 const nativeCalls: string[] = [];
-const previousDocuments = process.env[documentsRootEnvVar];
+const previousHome = process.env[homeVariable];
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "pe-pod-transfer-"));
-  process.env[documentsRootEnvVar] = join(root, "Documents");
+  process.env[homeVariable] = join(root, "Documents", "Pe.Tools");
   pods = join(root, "Documents", "Pe.Tools", "Pods");
   const bridge = {
     list: Effect.succeed([]),
@@ -48,8 +50,8 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   await web.dispose();
-  if (previousDocuments === undefined) delete process.env[documentsRootEnvVar];
-  else process.env[documentsRootEnvVar] = previousDocuments;
+  if (previousHome === undefined) delete process.env[homeVariable];
+  else process.env[homeVariable] = previousHome;
   nativeCalls.length = 0;
   await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });

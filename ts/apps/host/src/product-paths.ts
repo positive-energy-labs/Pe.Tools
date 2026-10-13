@@ -2,11 +2,9 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { productIdentity, productPathNames } from "@pe/host-contracts/contracts";
 
-import { userDocumentsPath } from "@pe/host-contracts/product-paths";
+import { productHomePath } from "@pe/host-contracts/product-paths";
 
-export function productUserContentRootPath(): string {
-  return join(userDocumentsPath(), productIdentity.productName);
-}
+export const productUserContentRootPath = productHomePath;
 
 export function productPodsRootPath(): string {
   return join(productUserContentRootPath(), productPathNames.podsDirectoryName);

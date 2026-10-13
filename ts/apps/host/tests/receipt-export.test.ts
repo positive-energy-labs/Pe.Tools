@@ -388,7 +388,12 @@ test("the real fatal process exits 1 with a never-settling sink after committing
   const child = spawn(process.execPath, ["--import", "jiti/register", script], {
     cwd: join(import.meta.dirname, ".."),
     windowsHide: true,
-    env: { ...process.env, PE_LANE: "dev", LOCALAPPDATA: dir, PE_TOOLS_DOCUMENTS_ROOT: dir },
+    env: {
+      ...process.env,
+      PE_LANE: "dev",
+      LOCALAPPDATA: dir,
+      PE_TOOLS_PRODUCT_HOME: join(dir, "Pe.Tools"),
+    },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let ready = 0;

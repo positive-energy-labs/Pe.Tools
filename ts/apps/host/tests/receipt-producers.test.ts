@@ -190,10 +190,10 @@ test("real HTTP prompt and permission produce joined receipts; remote automatic-
   const previous = {
     local: process.env.LOCALAPPDATA,
     adapter: process.env.PE_HARNESS_ADAPTER_CLAUDE,
-    docs: process.env.PE_TOOLS_DOCUMENTS_ROOT,
+    home: process.env.PE_TOOLS_PRODUCT_HOME,
   };
   process.env.LOCALAPPDATA = dir;
-  process.env.PE_TOOLS_DOCUMENTS_ROOT = dir;
+  process.env.PE_TOOLS_PRODUCT_HOME = join(dir, "Pe.Tools");
   process.env.PE_HARNESS_ADAPTER_CLAUDE = join(import.meta.dirname, "fake-acp-agent.mjs");
   const journal = new ActionJournal(join(dir, "journal.json"), () => receiptGoldenEnvelope.stamp);
   const module = await import("../src/receipt-export.ts");
@@ -353,8 +353,8 @@ test("real HTTP prompt and permission produce joined receipts; remote automatic-
     else process.env.LOCALAPPDATA = previous.local;
     if (previous.adapter === undefined) delete process.env.PE_HARNESS_ADAPTER_CLAUDE;
     else process.env.PE_HARNESS_ADAPTER_CLAUDE = previous.adapter;
-    if (previous.docs === undefined) delete process.env.PE_TOOLS_DOCUMENTS_ROOT;
-    else process.env.PE_TOOLS_DOCUMENTS_ROOT = previous.docs;
+    if (previous.home === undefined) delete process.env.PE_TOOLS_PRODUCT_HOME;
+    else process.env.PE_TOOLS_PRODUCT_HOME = previous.home;
     rmSync(dir, { recursive: true, force: true });
   }
 }, 20_000);

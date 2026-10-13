@@ -1,9 +1,8 @@
 import { expect, test } from "vite-plus/test";
-import {
-  documentsRootEnvVar,
-  parseDocumentsKnownFolder,
-  userDocumentsPath,
-} from "../src/product-paths.ts";
+import { productPathNames } from "../src/contracts/product.ts";
+import { parseDocumentsKnownFolder, productHomePath } from "../src/product-paths.ts";
+
+const homeVariable = productPathNames.productHomeVariable;
 
 // The real `reg query` output on a OneDrive-redirected profile: the value stays REG_EXPAND_SZ,
 // so the redirection survives only if the reader expands it itself.
@@ -33,15 +32,15 @@ test("an unreadable known folder fails loudly instead of falling back to the pro
   expect(() => parseDocumentsKnownFolder(oneDrive, {})).toThrow("undefined variable 'USERPROFILE'");
 });
 
-test("the environment override wins and is read live, never from the cache", () => {
-  const original = process.env[documentsRootEnvVar];
+test("the product home override names the home itself, read live, never from the cache", () => {
+  const original = process.env[homeVariable];
   try {
-    process.env[documentsRootEnvVar] = "D:\\override";
-    expect(userDocumentsPath()).toBe("D:\\override");
-    process.env[documentsRootEnvVar] = "D:\\second";
-    expect(userDocumentsPath()).toBe("D:\\second");
+    process.env[homeVariable] = "D:\\override";
+    expect(productHomePath()).toBe("D:\\override");
+    process.env[homeVariable] = "D:\\second";
+    expect(productHomePath()).toBe("D:\\second");
   } finally {
-    if (original === undefined) delete process.env[documentsRootEnvVar];
-    else process.env[documentsRootEnvVar] = original;
+    if (original === undefined) delete process.env[homeVariable];
+    else process.env[homeVariable] = original;
   }
 });

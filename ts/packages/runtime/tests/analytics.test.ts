@@ -34,10 +34,10 @@ test("install id is created once, stable on re-read, and a pre-existing file win
 });
 
 test("lane selection disables dev even with an installed key; only explicit preferences opt in", () => {
-  const previous = { local: process.env.LOCALAPPDATA, docs: process.env.PE_TOOLS_DOCUMENTS_ROOT };
+  const previous = { local: process.env.LOCALAPPDATA, home: process.env.PE_TOOLS_PRODUCT_HOME };
   const dir = mkdtempSync(join(tmpdir(), "pe-key-policy-"));
   process.env.LOCALAPPDATA = dir;
-  process.env.PE_TOOLS_DOCUMENTS_ROOT = join(dir, "docs");
+  process.env.PE_TOOLS_PRODUCT_HOME = join(dir, "docs", "Pe.Tools");
   try {
     const root = join(dir, "Positive Energy", "Pe.Tools");
     mkdirSync(root, { recursive: true });
@@ -65,8 +65,8 @@ test("lane selection disables dev even with an installed key; only explicit pref
   } finally {
     if (previous.local === undefined) delete process.env.LOCALAPPDATA;
     else process.env.LOCALAPPDATA = previous.local;
-    if (previous.docs === undefined) delete process.env.PE_TOOLS_DOCUMENTS_ROOT;
-    else process.env.PE_TOOLS_DOCUMENTS_ROOT = previous.docs;
+    if (previous.home === undefined) delete process.env.PE_TOOLS_PRODUCT_HOME;
+    else process.env.PE_TOOLS_PRODUCT_HOME = previous.home;
     rmSync(dir, { recursive: true, force: true });
   }
 });

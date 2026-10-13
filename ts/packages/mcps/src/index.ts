@@ -8,7 +8,6 @@ export {
   peFind,
   peRead,
   publishPeaSkills,
-  peaProductHomeEnvVar,
   peaProductTools,
   peaStandardSkillsRoot,
   resolvePeaProductHomePath,
