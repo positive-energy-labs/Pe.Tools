@@ -136,6 +136,25 @@ export function resolveCallTarget(
   };
 }
 
+/**
+ * D10 pinned: one Address against every session. One open copy resolves; none is
+ * `document-closed`; two (the same file open in two Revits) is `ambiguous`, never a pick. A session
+ * still checking or failed answers for the whole inventory, since its absence proves nothing.
+ */
+export function resolvePinned(pinned: Address, inventory: TargetInventory): TargetResolution {
+  if (inventory.kind !== "ready") return inventory;
+  const hits: ExecutionTarget[] = [];
+  for (const [session, found] of Object.entries(inventory.sessions)) {
+    if (found.kind !== "ready") return found;
+    for (const doc of found.values)
+      if (doc.address !== null && sameAddress(doc.address, pinned))
+        hits.push({ kind: "document", ref: { session, openId: doc.openId } });
+  }
+  return hits.length === 1
+    ? { kind: "resolved", target: hits[0]! }
+    : { kind: "choose", reason: hits.length ? "ambiguous" : "document-closed" };
+}
+
 /** The stable key of a Target request; null is the empty key. */
 export const targetKey = (target: DocumentRequest | null): string =>
   target === null

@@ -14,6 +14,7 @@ import type {
   DocumentRef,
   ExecutionTarget,
   HeadGrant,
+  PageSlot,
   Refusal,
   RefusalCode,
   ThreadHead,
@@ -77,10 +78,17 @@ export function writeTerminalContext(serviceName: string) {
   };
 }
 
-/** The page key of a `/pages/<slug>/…` path; `<pod>--<page>` is a Pod's page. */
-const pageKeyOf = (slug: string) => {
+/** The D12 page key of a `/pages/<slug>/…` path; `<pod>--<page>` is a Pod's page. */
+export const pageKeyOf = (slug: string) => {
   const [pod, page] = slug.split("--");
   return page ? `page:@${pod}/pages/${page}` : `page:@pages/${slug}`;
+};
+/** The write door of a page key: the inverse of `pageKeyOf`. */
+export const pageActDoor = (page: string) => {
+  const [, pkg = "", path = ""] = /^page:@([^/]+)\/(.+)$/.exec(page) ?? [];
+  return pkg === "pages"
+    ? `/pages/${path}/act`
+    : `/pages/${pkg}--${path.replace(/^pages\//, "")}/act`;
 };
 
 /**
@@ -165,6 +173,8 @@ const sources: Sources = { heads: null, whose: () => "you" };
 /** Bound once at boot (and by tests): the harness head store and Machine's `whose`. */
 export const bindControl = (bound: Partial<Sources>) => void Object.assign(sources, bound);
 export const sessionWhose = (session: string) => sources.whose(session);
+/** The head a thread carries now; null before the head store is bound. */
+export const threadHead = (thread: string): ThreadHead | null => sources.heads?.(thread) ?? null;
 
 const sameRef = (a: DocumentRef, b: DocumentRef) =>
   a.session === b.session && a.openId === b.openId;
@@ -202,8 +212,16 @@ export function admitCrossing(
       door,
       `Refused at ${door}: no caller context. Anonymous loopback calls are read-only; run this from Pea, the web app, or a bound Page.`,
     );
-  if (caller.kind === "page")
-    throw refuse("page.use-page-door", door, `Pages act through /pages/<slug>/act, not ${door}.`);
+  if (caller.kind === "page") {
+    const admitted = pageDoors.get(caller);
+    if (!admitted)
+      throw refuse(
+        "page.use-page-door",
+        door,
+        `Pages act through ${pageActDoor(caller.page)}, not ${door}.`,
+      );
+    return admitPage(admitted.slot, destination, admitted.door);
+  }
   if (caller.kind === "human") return { kind: "human" };
   if (destination.kind === "host" || destination.kind === "sdk-session") return null;
   const session = destination.kind === "session" ? destination.session : destination.ref.session;
@@ -214,20 +232,29 @@ export function admitCrossing(
       door,
       `Refused at ${door}: this external MCP client can read any document and write Pea's own; rw grants for external clients are not in this release.`,
     );
+  return admitThread(caller.thread, destination, door);
+}
+
+/** A thread's rw grant on a destination on your Revit: the exact lifetime, unrevoked, unexpired. */
+function admitThread(
+  thread: string,
+  destination: Extract<ExecutionTarget, { kind: "session" | "document" }>,
+  door: string,
+): Basis {
   if (destination.kind === "session")
     throw refuse(
       "grant.required",
       door,
-      `Refused at ${door}: this would act on your Revit session '${session}', and a thread grant covers one document, never a session.`,
+      `Refused at ${door}: this would act on your Revit session '${destination.session}', and a thread grant covers one document, never a session.`,
     );
-  const head = sources.heads?.(caller.thread) ?? null;
+  const head = sources.heads?.(thread) ?? null;
   const grant = head?.grant ?? null;
   const lifetime = destination.ref;
   if (!head || !grant)
     throw refuse(
       "grant.required",
       door,
-      `Refused at ${door}: this would write your document ${lifetime.session}/${lifetime.openId}, and thread ${caller.thread} holds no rw grant on it. Point this thread at it in the composer to grant rw, or open a copy.`,
+      `Refused at ${door}: this would write your document ${lifetime.session}/${lifetime.openId}, and thread ${thread} holds no rw grant on it. Point this thread at it in the composer to grant rw, or open a copy.`,
       { remedy: "Point this thread at the document in the composer.", lifetime },
     );
   if (!sameRef(grant.lifetime, lifetime))
@@ -240,7 +267,51 @@ export function admitCrossing(
   const dead = grantDead(grant);
   if (dead)
     throw refuse(dead, door, `Refused at ${door}: ${deadReason(dead, grant)}`, { lifetime });
-  return { kind: "grant", thread: caller.thread, headRevision: head.revision, lifetime };
+  return { kind: "grant", thread, headRevision: head.revision, lifetime };
+}
+
+/* ── Page doors (D9/D10) ──────────────────────────────────────────────────────────────── */
+
+/**
+ * A Page writes as itself under its slot: a thread slot under that thread's grant, a pinned slot
+ * on Pea's documents only, no slot never. `door` is the page's own `/pages/<slug>/act`.
+ */
+export function admitPage(
+  slot: PageSlot,
+  destination: ExecutionTarget,
+  door: string,
+): Basis | null {
+  if (slot.kind === "none")
+    throw refuse(
+      "page.unbound",
+      door,
+      `Refused at ${door}: this Page has no target. Bind it to a thread or pin a document from the chip.`,
+    );
+  if (destination.kind === "host" || destination.kind === "sdk-session") return null;
+  const session = destination.kind === "session" ? destination.session : destination.ref.session;
+  if (sources.whose(session) === "pea") return { kind: "pea-session", session };
+  if (slot.kind === "pinned")
+    throw refuse(
+      "grant.required",
+      door,
+      `Refused at ${door}: a pinned Page writes only Pea's documents, and session '${session}' is your Revit. Bind this Page to a thread that holds rw on it.`,
+      destination.kind === "document" ? { lifetime: destination.ref } : {},
+    );
+  return admitThread(slot.thread, destination, door);
+}
+
+/**
+ * The page doors cross through the host's own `/actions` and `/call` under one context minted per
+ * request. Only a caller minted here is admitted under a slot; a page's own browser request to
+ * `/actions` (a Referer-minted `page`) is `page.use-page-door`.
+ */
+const pageDoors = new WeakMap<Caller, { slot: PageSlot; door: string }>();
+export function mintPageDoor(page: string, slot: PageSlot, door: string) {
+  const caller: Caller = { kind: "page", page };
+  const token = randomBytes(24).toString("base64url");
+  contexts.set(token, caller);
+  pageDoors.set(caller, { slot, door });
+  return { token, retire: () => retireContext(token) };
 }
 
 /**

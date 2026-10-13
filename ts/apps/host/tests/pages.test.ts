@@ -4,9 +4,22 @@ import { join } from "node:path";
 import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
-import { createPagesHandler } from "../src/pages-route.ts";
+import {
+  emptyThreadHead,
+  type Caller,
+  type DocumentRef,
+  type ThreadHead,
+} from "@pe/agent-contracts";
+import {
+  createPagesHandler,
+  type LiveSession,
+  type PageLive,
+  type PageTargetReading,
+} from "../src/pages-route.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
+import { admitCrossing, bindControl, callerOf, grantExpiry, Refused } from "../src/control.ts";
+import { asCaller, human, pea } from "./callers.ts";
 
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
@@ -14,7 +27,7 @@ afterEach(async () => {
 });
 
 /** A product home: `Pages/` holding the todo page, `Pods/` empty until a test fills it. */
-async function pagesRoot() {
+async function pagesRoot(live?: PageLive) {
   const home = await mkdtemp(join(tmpdir(), "pe-pages-"));
   cleanup.push(() => rm(home, { recursive: true, force: true }));
   const root = join(home, "Pages");
@@ -28,10 +41,10 @@ async function pagesRoot() {
   await mkdir(join(root, "todo", ".state"), { recursive: true });
   await writeFile(join(root, "todo", ".state", "secret.txt"), "private");
   await writeFile(join(root, "loose.html"), "<p>not a page: a file, not a folder</p>");
-  const handle = createPagesHandler(root, pods);
+  const handle = createPagesHandler(root, pods, live);
   const fetch = (path: string, init?: RequestInit) =>
     handle(new Request(`http://host${path}`, init));
-  return { root, pods, fetch };
+  return { root, pods, fetch, handle };
 }
 
 describe("pages", () => {
@@ -225,15 +238,18 @@ ${source}`),
 
   it("keeps one event log per page, with origin and seq, and a snapshot the page writes", async () => {
     const { fetch } = await pagesRoot();
-    const first = await fetch("/pages/todo/events", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-pe-origin": "page:todo" },
-      body: JSON.stringify({ type: "add", id: "e1", text: "milk" }),
-    });
+    const first = await asCaller({ kind: "page", page: "page:@pages/todo" }, fetch)(
+      "/pages/todo/events",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "add", id: "e1", text: "milk" }),
+      },
+    );
     expect(first.status).toBe(201);
     expect(await first.json()).toMatchObject({
       seq: 1,
-      origin: "page:todo",
+      origin: "page:@pages/todo",
       event: { type: "add", id: "e1" },
     });
     const second = await fetch("/pages/todo/events", {
@@ -290,6 +306,304 @@ ${source}`),
     expect(text).toContain("id: 3\n");
     controller.abort();
     await reader.cancel().catch(() => undefined);
+  });
+
+  describe("page doors: identity is the path, the target is the binding", () => {
+    const MODEL = "C:\\Jobs\\Chadds\\Chadds MEP.rvt";
+    const docA: DocumentRef = { session: "S1", openId: "A" };
+    const session = (
+      id: string,
+      address = MODEL,
+      openId = id === "S1" ? "A" : "B",
+    ): LiveSession => ({
+      session: id,
+      documents: [
+        { openId, title: "Chadds MEP", address, isFamilyDocument: false, isActive: true },
+      ],
+    });
+    let heads: Record<string, ThreadHead> = {};
+    const grantedHead = (lifetime: DocumentRef): ThreadHead => ({
+      ...emptyThreadHead,
+      defaultTarget: { kind: "open", ref: lifetime },
+      revision: 4,
+      grant: {
+        lifetime,
+        grantedAt: new Date().toISOString(),
+        grantedVia: "local",
+        expiresAt: grantExpiry(Date.now()),
+        revoked: null,
+      },
+    });
+    afterEach(() => {
+      heads = {};
+      bindControl({ heads: null, whose: () => "you" });
+    });
+    const bind = (whose: (session: string) => "you" | "pea" = () => "you") =>
+      bindControl({ heads: (thread) => heads[thread] ?? emptyThreadHead, whose });
+
+    type Forwarded = {
+      path: string;
+      headers: Record<string, string>;
+      body: Record<string, unknown>;
+    };
+    /**
+     * A host with these Revits. Its `/actions` is the real decision: the minted context goes
+     * through `callerOf` and `admitCrossing` at "/actions", as the identity gate and door 2 do.
+     */
+    async function host(sessions: LiveSession[]) {
+      const forwarded: Forwarded[] = [];
+      const live: PageLive = {
+        sessions: async () => sessions,
+        forward: async (path, headers, body) => {
+          forwarded.push({ path, headers, body: body as Record<string, unknown> });
+          const minted = callerOf({ kind: "local" }, headers);
+          if (!("caller" in minted)) return Response.json(minted, { status: 403 });
+          if (path === "/call") return Response.json({ caller: minted.caller });
+          try {
+            const basis = admitCrossing(
+              minted.caller,
+              (body as { destination: Parameters<typeof admitCrossing>[1] }).destination,
+              "/actions",
+            );
+            return Response.json(
+              { state: "running", caller: minted.caller, basis },
+              { status: 202 },
+            );
+          } catch (error) {
+            if (error instanceof Refused)
+              return Response.json({ refusal: error.refusal }, { status: 403 });
+            throw error;
+          }
+        },
+      };
+      const root = await pagesRoot(live);
+      const as = (caller: Caller) => ({
+        get: (path: string) => asCaller(caller, root.fetch)(path),
+        post: (path: string, body: unknown, headers: Record<string, string> = {}) =>
+          asCaller(caller, root.fetch)(path, {
+            method: "POST",
+            headers: { "content-type": "application/json", ...headers },
+            body: JSON.stringify(body),
+          }),
+        put: (path: string, body: unknown) =>
+          asCaller(caller, root.fetch)(path, { method: "PUT", body: JSON.stringify(body) }),
+      });
+      return { ...root, forwarded, as, page: as({ kind: "page", page: "page:@pages/todo" }) };
+    }
+    const code = async (response: Response) =>
+      ((await response.json()) as { refusal?: { code: string; door: string } }).refusal;
+
+    it("mints the D12 page key into index.html and stamps it, never a header", async () => {
+      bind();
+      const { fetch, page, forwarded } = await host([session("S1")]);
+      const html = await (await fetch("/pages/todo/")).text();
+      expect(html).toContain('<meta name="pe-page" content="page:@pages/todo">');
+      expect(html.indexOf("pe-page")).toBeLessThan(html.indexOf("<p>hi</p>"));
+      // A forged x-pe-origin names neither the row nor the crossing.
+      const row = await page.post("/pages/todo/events", { type: "x" }, { "x-pe-origin": "human" });
+      expect(await row.json()).toMatchObject({ origin: "page:@pages/todo" });
+      const anonymous = await fetch("/pages/todo/events", {
+        method: "POST",
+        headers: { "x-pe-origin": "page:@pages/other" },
+        body: JSON.stringify({ type: "y" }),
+      });
+      expect(await anonymous.json()).toMatchObject({ origin: "agent" });
+      const read = await page.post(
+        "/pages/todo/call",
+        { key: "revit.context.summary" },
+        { "x-pe-origin": "human" },
+      );
+      expect(await read.json()).toEqual({ caller: { kind: "page", page: "page:@pages/todo" } });
+      expect(forwarded[0]!.headers).toMatchObject({
+        "x-pe-origin": "page:@pages/todo",
+        "x-pe-bridge-session-id": "S1",
+        "x-pe-open-document-id": "A",
+      });
+      // The context was minted for that one request and is gone after it.
+      expect(callerOf({ kind: "local" }, forwarded[0]!.headers)).toMatchObject({
+        refusal: { code: "context.unknown" },
+      });
+    });
+
+    it("act on an unbound page is page.unbound, and nothing crosses", async () => {
+      bind();
+      const { page, forwarded } = await host([session("S1")]);
+      const response = await page.post("/pages/todo/act", { key: "revit.context.lens", input: {} });
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({
+        refusal: { code: "page.unbound", door: "/pages/todo/act" },
+        message:
+          "Refused at /pages/todo/act: this Page has no target. Bind it to a thread or pin a document from the chip.",
+        notDispatched: true,
+      });
+      expect(forwarded).toEqual([]);
+    });
+
+    it("a thread binding writes under that thread's grant, and only while it holds", async () => {
+      bind();
+      const { page, as, forwarded } = await host([session("S1")]);
+      expect(
+        (await as(human).put("/pe/pages/todo/binding", { kind: "thread", thread: "t1" })).status,
+      ).toBe(200);
+      // The head points at the document but holds no grant (Pea set it, or it expired away).
+      heads.t1 = { ...emptyThreadHead, defaultTarget: { kind: "open", ref: docA }, revision: 2 };
+      const ungranted = await page.post("/pages/todo/act", { key: "revit.context.lens" });
+      expect(ungranted.status).toBe(403);
+      expect(await code(ungranted)).toEqual(
+        expect.objectContaining({ code: "grant.required", door: "/pages/todo/act" }),
+      );
+      expect(forwarded).toEqual([]);
+      heads.t1 = grantedHead(docA);
+      const granted = await page.post("/pages/todo/act", { key: "revit.context.lens" });
+      expect(granted.status).toBe(202);
+      // `/actions` admitted the minted page under the binding: the receipt names the page, the basis the grant.
+      expect(await granted.json()).toMatchObject({
+        caller: { kind: "page", page: "page:@pages/todo" },
+        basis: { kind: "grant", thread: "t1", headRevision: 4, lifetime: docA },
+      });
+      expect(forwarded[0]!.body).toMatchObject({
+        kind: "operation",
+        key: "revit.context.lens",
+        destination: { kind: "document", ref: docA },
+      });
+      const reading = (await (await page.get("/pages/todo/target")).json()) as PageTargetReading;
+      expect(reading).toMatchObject({
+        page: "page:@pages/todo",
+        binding: { kind: "thread", thread: "t1" },
+        document: { session: "S1", openId: "A", title: "Chadds MEP" },
+        write: { kind: "rw", thread: "t1" },
+      });
+    });
+
+    it("a pinned Address open in two Revits is choose: ambiguous, closed is document-closed", async () => {
+      bind();
+      const two = await host([session("S1"), session("S2")]);
+      await two.as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
+      const reading = (await (
+        await two.page.get("/pages/todo/target")
+      ).json()) as PageTargetReading;
+      expect(reading.resolution).toEqual({ kind: "choose", reason: "ambiguous" });
+      expect(reading.document).toBeNull();
+      const act = await two.page.post("/pages/todo/act", { key: "revit.context.lens" });
+      expect(act.status).toBe(409);
+      expect(await act.json()).toMatchObject({
+        resolution: { kind: "choose", reason: "ambiguous" },
+      });
+      expect(two.forwarded).toEqual([]);
+      const none = await host([session("S1", "C:\\Jobs\\Other.rvt")]);
+      await none.as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
+      expect(
+        ((await (await none.page.get("/pages/todo/target")).json()) as PageTargetReading)
+          .resolution,
+      ).toEqual({ kind: "choose", reason: "document-closed" });
+    });
+
+    it("a pinned binding writes only Pea's documents", async () => {
+      bind((s) => (s === "S2" ? "pea" : "you"));
+      const yours = await host([session("S1")]);
+      await yours.as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
+      expect(await code(await yours.page.post("/pages/todo/act", { key: "k" }))).toMatchObject({
+        code: "grant.required",
+        door: "/pages/todo/act",
+      });
+      const peas = await host([session("S2")]);
+      await peas.as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
+      expect(await (await peas.page.post("/pages/todo/act", { key: "k" })).json()).toMatchObject({
+        basis: { kind: "pea-session", session: "S2" },
+      });
+    });
+
+    it("no binding and two Revits is choose, never a guess; one Revit reads its active document", async () => {
+      bind();
+      const two = await host([session("S1"), session("S2")]);
+      const reading = (await (
+        await two.page.get("/pages/todo/target")
+      ).json()) as PageTargetReading;
+      expect(reading.resolution).toEqual({ kind: "choose", reason: "ambiguous" });
+      expect(reading.write).toMatchObject({ kind: "read", refusal: { code: "page.unbound" } });
+      const read = await two.page.post("/pages/todo/call", { key: "revit.context.summary" });
+      expect(read.status).toBe(409);
+      expect(two.forwarded).toEqual([]);
+      const one = await host([session("S1")]);
+      expect(
+        ((await (await one.page.get("/pages/todo/target")).json()) as PageTargetReading).document,
+      ).toMatchObject({ session: "S1", openId: "A" });
+    });
+
+    it("/actions from a page's own browser is page.use-page-door; only the minted door crosses", async () => {
+      bind();
+      const fromPage = callerOf(
+        { kind: "local" },
+        {
+          origin: "http://127.0.0.1:5180",
+          [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName,
+          referer: "http://127.0.0.1:5180/pages/ductkit--tour/",
+        },
+      );
+      expect(fromPage).toEqual({ caller: { kind: "page", page: "page:@ductkit/pages/tour" } });
+      let refusal: Refused | null = null;
+      try {
+        admitCrossing(
+          (fromPage as { caller: Caller }).caller,
+          { kind: "document", ref: docA },
+          "/actions",
+        );
+      } catch (error) {
+        refusal = error as Refused;
+      }
+      expect(refusal?.refusal).toEqual({
+        code: "page.use-page-door",
+        door: "/actions",
+        reason: "Pages act through /pages/ductkit--tour/act, not /actions.",
+      });
+    });
+
+    it("binding: a person binds anything; Pea pins only its own documents; a page cannot bind itself", async () => {
+      bind((s) => (s === "S2" ? "pea" : "you"));
+      const { as, page, root } = await host([
+        session("S1", MODEL),
+        session("S2", "C:\\Pea\\Copy.rvt"),
+      ]);
+      const put = (caller: Caller, body: unknown) => as(caller).put("/pe/pages/todo/binding", body);
+      expect(await code(await put(pea("t9"), { kind: "pinned", address: MODEL }))).toMatchObject({
+        code: "page.binding-not-yours",
+      });
+      expect(await code(await put(pea("t9"), { kind: "thread", thread: "t9" }))).toMatchObject({
+        code: "page.binding-not-yours",
+      });
+      expect(await code(await page.put("/pe/pages/todo/binding", { kind: "none" }))).toMatchObject({
+        code: "human.only",
+      });
+      expect(await code(await put({ kind: "anonymous" }, { kind: "none" }))).toMatchObject({
+        code: "context.missing",
+      });
+      expect((await put(pea("t9"), { kind: "pinned", address: "C:\\Pea\\Copy.rvt" })).status).toBe(
+        200,
+      );
+      expect(
+        JSON.parse(await readFile(join(root, "todo", ".state", "binding.json"), "utf8")),
+      ).toEqual({
+        slots: { default: { kind: "pinned", address: "C:\\Pea\\Copy.rvt" } },
+      });
+      expect((await put(human, { kind: "thread", thread: "t1" })).status).toBe(200);
+      expect((await put(human, { kind: "thread" })).status).toBe(400);
+    });
+
+    it("a Pea or MCP context cannot borrow a page's doors", async () => {
+      bind();
+      const { as, forwarded } = await host([session("S1")]);
+      await as(human).put("/pe/pages/todo/binding", { kind: "thread", thread: "t1" });
+      heads.t1 = grantedHead(docA);
+      expect(await code(await as(pea("t2")).post("/pages/todo/act", { key: "k" }))).toMatchObject({
+        code: "page.binding-not-yours",
+      });
+      expect(
+        await code(await as({ kind: "anonymous" }).post("/pages/todo/call", { key: "k" })),
+      ).toMatchObject({
+        code: "context.missing",
+      });
+      expect(forwarded).toEqual([]);
+    });
   });
 
   describe("pe.js as a browser runs it", () => {

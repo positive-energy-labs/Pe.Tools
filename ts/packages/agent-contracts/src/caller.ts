@@ -69,13 +69,26 @@ export const refusalSchema = z.strictObject({
 });
 export type Refusal = z.infer<typeof refusalSchema>;
 
-/** D10: a Page's target, host-written to `<page>/.state/binding.json`. Slice D consumes it. */
-export const pageBindingSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("thread"), thread: z.string() }),
+/**
+ * D10: what one slot of a Page targets. `thread` follows that thread's head (and writes under its
+ * grant); `pinned` names a document by Address, so it survives a reopen; `none` writes nothing.
+ */
+export const pageSlotSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("thread"), thread: z.string().min(1) }),
   z.strictObject({ kind: z.literal("pinned"), address: addressSchema }),
   z.strictObject({ kind: z.literal("none") }),
 ]);
+export type PageSlot = z.infer<typeof pageSlotSchema>;
+
+/**
+ * A Page's binding record, host-written to `<page>/.state/binding.json`. Named slots let a
+ * cross-document report bind several documents later; wave 1 builds and renders `default` only.
+ */
+export const pageBindingSchema = z.strictObject({
+  slots: z.object({ default: pageSlotSchema }).catchall(pageSlotSchema),
+});
 export type PageBinding = z.infer<typeof pageBindingSchema>;
+export const unboundPage: PageBinding = { slots: { default: { kind: "none" } } };
 
 /** The capability eligibility `human` admits only a human caller; a page is not one. */
 export const eligibleCaller = (actor: "any" | "human" | "agent" | undefined, caller: Caller) =>
