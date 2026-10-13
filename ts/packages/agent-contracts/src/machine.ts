@@ -66,7 +66,7 @@ export interface MachinePeer {
  * What the thread heads let a caller do to one open document, projected on the host (ADR
  * 0016/0017). The browser draws `rw` from this and from nothing else; no head is read there.
  */
-export type DocumentAccess =
+export type MachineAccess =
   | { readonly level: "read" }
   | { readonly level: "rw"; readonly via: "pea-session" }
   | {
@@ -81,7 +81,7 @@ export type DocumentAccess =
 /** A document as the product socket names it (its openId, not the SDK's), with what it grants. */
 export interface MachineAttachmentDocument extends DocumentRef {
   readonly title: string;
-  readonly access: DocumentAccess;
+  readonly access: MachineAccess;
 }
 
 /** Product socket evidence, not SDK custody. Documents keep the product openId namespace. */

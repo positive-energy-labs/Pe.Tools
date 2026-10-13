@@ -73,19 +73,19 @@ export type Refusal = z.infer<typeof refusalSchema>;
  * D10: what one slot of a Page targets. `thread` follows that thread's head (and writes under its
  * grant); `pinned` names a document by Address, so it survives a reopen; `none` writes nothing.
  */
-export const pageSlotSchema = z.discriminatedUnion("kind", [
+export const pageChoiceSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("thread"), thread: z.string().min(1) }),
   z.strictObject({ kind: z.literal("pinned"), address: addressSchema }),
   z.strictObject({ kind: z.literal("none") }),
 ]);
-export type PageSlot = z.infer<typeof pageSlotSchema>;
+export type PageChoice = z.infer<typeof pageChoiceSchema>;
 
 /**
  * A Page's binding record, host-written to `<page>/.state/binding.json`. Named slots let a
  * cross-document report bind several documents later; wave 1 builds and renders `default` only.
  */
 export const pageBindingSchema = z.strictObject({
-  slots: z.object({ default: pageSlotSchema }).catchall(pageSlotSchema),
+  slots: z.object({ default: pageChoiceSchema }).catchall(pageChoiceSchema),
 });
 export type PageBinding = z.infer<typeof pageBindingSchema>;
 export const unboundPage: PageBinding = { slots: { default: { kind: "none" } } };
@@ -99,7 +99,7 @@ export type PageWrite =
 export type PageTargetReading = {
   page: string;
   slot: "default";
-  binding: PageSlot;
+  binding: PageChoice;
   resolution: TargetResolution;
   document: { session: string; openId: string; title: string } | null;
   write: PageWrite | null;

@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   address,
   type HarnessThreadSummary,
-  type PageSlot,
+  type PageChoice,
   type PageTargetReading,
 } from "@pe/agent-contracts";
 
@@ -53,7 +53,7 @@ export function BindPicker({
   documents: readonly Pinnable[] | null;
   /** The last bind's answer: the host's refusal, or null. */
   outcome: { ok: boolean; message: string } | null;
-  onBind: (slot: PageSlot) => void;
+  onBind: (slot: PageChoice) => void;
 }) {
   const binding = reading?.binding ?? null;
   return (
@@ -187,7 +187,7 @@ export function BindRoute({ slug }: { slug: string }) {
     [slug],
   );
   useEffect(() => void read(), [read]);
-  const onBind = (slot: PageSlot) =>
+  const onBind = (slot: PageChoice) =>
     void bindPage(slug, slot).then(
       (next) => {
         setReading(next);

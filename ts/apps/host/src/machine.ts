@@ -8,7 +8,7 @@ import { productIdentity } from "@pe/host-contracts/contracts";
 import type {
   Access,
   ActionReceipt,
-  DocumentAccess,
+  MachineAccess,
   DocumentRef,
   HeadGrant,
   Machine,
@@ -98,7 +98,7 @@ export function withAccess(
             grant.lifetime.openId === document.openId &&
             grantDead(grant, at) === null,
         );
-        const access: DocumentAccess =
+        const access: MachineAccess =
           whose === "pea"
             ? { level: "rw", via: "pea-session" }
             : held

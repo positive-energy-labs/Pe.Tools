@@ -1,4 +1,4 @@
-import type { PageSlot, PageTargetReading } from "@pe/agent-contracts";
+import type { PageChoice, PageTargetReading } from "@pe/agent-contracts";
 
 import { hostFetch } from "#/host/runtime";
 
@@ -23,7 +23,7 @@ const answer = async (response: Response): Promise<PageTargetReading> => {
 export const readPageTarget = async (slug: string) =>
   answer(await hostFetch(`/pages/${encodeURIComponent(slug)}/target`));
 
-export const bindPage = async (slug: string, slot: PageSlot) =>
+export const bindPage = async (slug: string, slot: PageChoice) =>
   answer(
     await hostFetch(`/pe/pages/${encodeURIComponent(slug)}/binding`, {
       method: "PUT",

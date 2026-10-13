@@ -5,7 +5,7 @@
  * printed line and the dispatched line cannot drift.
  */
 import type {
-  DocumentAccess,
+  MachineAccess,
   HarnessThreadSummary,
   InstancesLaunch,
   InstancesStart,
@@ -442,7 +442,7 @@ export function jobsOf(
  * document; the only correspondence drawn is an exact openId, so a mismatch reads as read-only
  * rather than guessing from a title.
  */
-export const accessOf = (session: MachineSession, document: SessionDocument): DocumentAccess =>
+export const accessOf = (session: MachineSession, document: SessionDocument): MachineAccess =>
   session.attachment?.documents?.find((each) => each.openId === document.openId)?.access ?? {
     level: "read",
   };

@@ -14,7 +14,7 @@ import type {
   DocumentRef,
   ExecutionTarget,
   HeadGrant,
-  PageSlot,
+  PageChoice,
   Refusal,
   RefusalCode,
   ThreadHead,
@@ -280,7 +280,7 @@ function admitThread(
  * on Pea's documents only, no slot never. `door` is the page's own `/pages/<slug>/act`.
  */
 export function admitPage(
-  slot: PageSlot,
+  slot: PageChoice,
   destination: ExecutionTarget,
   door: string,
 ): Basis | null {
@@ -308,8 +308,8 @@ export function admitPage(
  * request. Only a caller minted here is admitted under a slot; a page's own browser request to
  * `/actions` (a Referer-minted `page`) is `page.use-page-door`.
  */
-const pageDoors = new WeakMap<Caller, { slot: PageSlot; door: string }>();
-export function mintPageDoor(page: string, slot: PageSlot, door: string) {
+const pageDoors = new WeakMap<Caller, { slot: PageChoice; door: string }>();
+export function mintPageDoor(page: string, slot: PageChoice, door: string) {
   const caller: Caller = { kind: "page", page };
   const token = randomBytes(24).toString("base64url");
   contexts.set(token, caller);

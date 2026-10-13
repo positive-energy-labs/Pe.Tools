@@ -7,7 +7,7 @@
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
-import type { DocumentAccess, Machine, MachineSession } from "@pe/agent-contracts";
+import type { MachineAccess, Machine, MachineSession } from "@pe/agent-contracts";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -505,7 +505,7 @@ test("background posture does not override the host ownership projection", () =>
   expect(whoseOf({ ...BAY_PEA_25, whose: "you" })).toBe("you");
 });
 
-const accessed = (access: DocumentAccess) =>
+const accessed = (access: MachineAccess) =>
   withSessions(
     world.revit.sessions!.map((session) =>
       session.row.case === "observed-active" && session.row.process.pid === 18244

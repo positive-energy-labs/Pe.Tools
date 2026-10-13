@@ -31,7 +31,7 @@
  *   GET  /pages/<slug>/target          the default slot: binding, resolution, document, what a write would do
  *   POST /pages/<slug>/call            { key, request? }: a read on the bound document (host `/call`)
  *   POST /pages/<slug>/act             { key, input? }: a write as the page under its binding (host `/actions`)
- *   PUT  /pe/pages/<slug>/binding      a slot (PageSlot): the human picker, or Pea pinning its own document
+ *   PUT  /pe/pages/<slug>/binding      a slot (PageChoice): the human picker, or Pea pinning its own document
  */
 import { readFileSync } from "node:fs";
 import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
@@ -51,13 +51,13 @@ import {
 import {
   addressSchema,
   pageBindingSchema,
-  pageSlotSchema,
+  pageChoiceSchema,
   resolveCallTarget,
   resolvePinned,
   unboundPage,
   type Caller,
   type PageBinding,
-  type PageSlot,
+  type PageChoice,
   type PageTargetReading,
   type PageWrite,
   type Refusal,
@@ -225,7 +225,7 @@ const inventoryOf = (sessions: readonly LiveSession[]): TargetInventory => ({
  * A slot against the live sessions. `none` resolves only the one unambiguous case (one Revit, its
  * active document) so an unbound page can still read; two Revits is `choose`, never a pick.
  */
-function resolveSlot(slot: PageSlot, sessions: readonly LiveSession[]): TargetResolution {
+function resolveSlot(slot: PageChoice, sessions: readonly LiveSession[]): TargetResolution {
   if (slot.kind === "thread")
     return resolveCallTarget(
       { needs: "document" },
@@ -578,7 +578,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
   /** One crossing as the page, under a context minted for this request and retired after it. */
   async function cross(
     slug: string,
-    slot: PageSlot,
+    slot: PageChoice,
     door: string,
     path: "/call" | "/actions",
     headers: Record<string, string>,
@@ -661,7 +661,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
   async function bind(slug: string, dir: string, request: Request) {
     const at = `/pe/pages/${slug}/binding`;
     const caller = currentCaller();
-    const parsed = pageSlotSchema.safeParse(await request.json().catch(() => undefined));
+    const parsed = pageChoiceSchema.safeParse(await request.json().catch(() => undefined));
     if (!parsed.success)
       return problem(
         400,

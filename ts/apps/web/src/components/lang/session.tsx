@@ -10,7 +10,7 @@
  */
 import type { ReactNode } from "react";
 import type {
-  DocumentAccess,
+  MachineAccess,
   MachineAttachmentDocument,
   MachineSession,
 } from "@pe/agent-contracts";
@@ -57,7 +57,7 @@ const persistenceOf = (document: SessionDocument) =>
       : "local";
 
 type GrantedDocument = MachineAttachmentDocument & {
-  access: Extract<DocumentAccess, { via: "grant" }>;
+  access: Extract<MachineAccess, { via: "grant" }>;
 };
 
 /**
@@ -71,7 +71,7 @@ export const grantsOf = (session: MachineSession): GrantedDocument[] =>
       document.access.level === "rw" && document.access.via === "grant",
   );
 
-const rwSays = (access: Extract<DocumentAccess, { level: "rw" }>) =>
+const rwSays = (access: Extract<MachineAccess, { level: "rw" }>) =>
   access.via === "pea-session"
     ? "Pea's own Revit: Pea may write this document"
     : `thread "${access.threadTitle}" may write this document until ${until(access.expiresAt)}`;
@@ -162,7 +162,7 @@ export function HeldRow({
 }: {
   document: SessionDocument;
   /** What the host says may write it; only `rw` is drawn. */
-  access?: DocumentAccess;
+  access?: MachineAccess;
   /** The row a cable was pressed on (not Revit's active document, which is its own mark). */
   active?: boolean;
   verbs?: ReactNode;
