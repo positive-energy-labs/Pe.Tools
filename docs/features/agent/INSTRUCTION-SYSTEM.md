@@ -12,7 +12,7 @@ string: the harness owns the final request and Pea cannot capture it.
 | Workspace root and containment | The harness child's cwd (`worldRoot`) | The kernel never hardcodes a path. |
 | Which tools exist and what they do | `peaProductTools` descriptions and generated host-operation metadata | Routing stays local to the tool description. |
 | Who may call what | The harness permission mode, rendered as `permission_request` cards | Pea holds no tool-category policy. |
-| Reusable workflow judgment | Bundled skills in `@pe/mcps` `pea/skills.ts`, materialized under the product home for each harness root | Each skill is a method with a crisp trigger. Materialization removes only `retiredPeaSkillNames`; user skills are never touched. |
+| Reusable workflow judgment | Bundled skills in `@pe/mcps` `pea/skills.ts`, materialized under the product home for each harness root | Each skill is a method with a crisp trigger. Materialization deletes a folder only when the product receipt proves it wrote those bytes (retired names included); any other folder is left byte-exact with one notice naming its path. |
 | Durable user and project facts | The harness's own memory and context | Pea keeps no memory layer. |
 | Pod-authoring rules at the moment of authoring | Generated workspace docs, C#-owned (`Pe.Revit.Scripting/Bootstrap/ScriptFileTemplates.cs`) | The harness reads the workspace `AGENTS.md` from its cwd. It and `build-pod` must agree; nothing enforces that yet. `AGENTS.md` rewrites on bootstrap, `README`/`JOIN_GUIDE` are create-once. |
 | Current document orientation | None | Return only with source, observation time, and clear-on-absence. |
