@@ -8,8 +8,12 @@ import { productIdentity } from "@pe/host-contracts/contracts";
 import type {
   Access,
   ActionReceipt,
+  DocumentAccess,
+  DocumentRef,
+  HeadGrant,
   Machine,
   MachineAttachment,
+  MachineAttachmentDocument,
   MachineHost,
   MachineLeg,
   MachinePeer,
@@ -36,6 +40,7 @@ import type { Providers } from "./harness/providers.ts";
 import { unreadLeg, type UpdateReader } from "./update-reader.ts";
 import { hostActionJournal } from "./gateway-owner.ts";
 import { whoseOf } from "./whose.ts";
+import { grantDead } from "./control.ts";
 
 export interface MachineShareAdapter {
   read(): Promise<MachineShare>;
@@ -54,13 +59,70 @@ export const unavailableShare: MachineShareAdapter = {
   }),
 };
 
+/** One thread's rw grant, as the head store holds it. */
+export interface HeldGrant {
+  readonly thread: string;
+  readonly title: string;
+  readonly grant: HeadGrant;
+}
+
+/** The thread-head store as Machine reads it: every grant, and a signal when any head moves. */
+export interface GrantSource {
+  grants(): readonly HeldGrant[];
+  subscribe(notify: () => void): () => void;
+}
+
+/** What the bridge socket says; Machine adds `access`. */
+export type AttachmentRead = Omit<MachineAttachment, "documents"> & {
+  readonly documents: readonly (DocumentRef & { readonly title: string })[] | null;
+};
+
+/**
+ * Per open document: Pea's own sessions write freely, a live grant on the exact lifetime
+ * (bridge session + product openId) writes, everything else is read. Expired and revoked grants
+ * are dead, so a stale head never draws rw.
+ */
+export function withAccess(
+  attachment: AttachmentRead,
+  whose: MachineSession["whose"],
+  grants: readonly HeldGrant[],
+  at: number,
+): MachineAttachment {
+  return {
+    ...attachment,
+    documents:
+      attachment.documents?.map((document): MachineAttachmentDocument => {
+        const held = grants.find(
+          ({ grant }) =>
+            grant.lifetime.session === document.session &&
+            grant.lifetime.openId === document.openId &&
+            grantDead(grant, at) === null,
+        );
+        const access: DocumentAccess =
+          whose === "pea"
+            ? { level: "rw", via: "pea-session" }
+            : held
+              ? {
+                  level: "rw",
+                  via: "grant",
+                  thread: held.thread,
+                  threadTitle: held.title,
+                  expiresAt: held.grant.expiresAt,
+                }
+              : { level: "read" };
+        return { ...document, access };
+      }) ?? null,
+  };
+}
+
 export interface MachineSources {
+  grants: GrantSource;
   actions(this: void): Promise<readonly ActionReceipt[]>;
   host(this: void): Promise<Omit<MachineHost, "peers">>;
   peers(this: void): Promise<readonly MachinePeer[]>;
   sessions(this: void): Promise<readonly SessionObservation[]>;
   documents(this: void, process: ProcessIdentity): Promise<DocListResult>;
-  attachments(this: void): Promise<readonly MachineAttachment[]>;
+  attachments(this: void): Promise<readonly AttachmentRead[]>;
   years(this: void): Promise<readonly number[]>;
   providers(
     this: void,
@@ -115,7 +177,7 @@ export function createMachine(
   let host: Omit<MachineHost, "peers"> | null = null;
   let peers: readonly MachinePeer[] = [];
   let sessions: readonly SessionObservation[] | null = null;
-  let attachments: readonly MachineAttachment[] = [];
+  let attachments: readonly AttachmentRead[] = [];
   let years: readonly number[] | null = null;
   let providers: readonly MachineProvider[] | null = null;
   let access: Access | null = null;
@@ -290,7 +352,9 @@ export function createMachine(
             }
           }),
         );
-      const classified = new Set<MachineAttachment>();
+      const classified = new Set<AttachmentRead>();
+      const heldGrants = sources.grants.grants();
+      const at = Date.parse(now());
       const rows =
         sessions?.map((row): MachineSession => {
           const process = processOf(row);
@@ -300,10 +364,11 @@ export function createMachine(
           const attachment = matched.length === 1 ? matched[0]! : null;
           if (attachment) classified.add(attachment);
           const held = process ? documents.get(processKey(process)) : undefined;
+          const whose = whoseOf({ posture: row.shape.posture, process }, actions);
           return {
             row,
-            whose: whoseOf({ posture: row.shape.posture, process }, actions),
-            attachment,
+            whose,
+            attachment: attachment ? withAccess(attachment, whose, heldGrants, at) : null,
             documents: held?.value ?? null,
             documentsLeg: held?.leg ?? unreadLeg(),
           };
@@ -322,7 +387,10 @@ export function createMachine(
         revit: {
           years,
           sessions: rows,
-          unclassifiedAttachments: attachments.filter((attachment) => !classified.has(attachment)),
+          // Nobody proved these Pea's, so they are yours: only a live grant writes.
+          unclassifiedAttachments: attachments
+            .filter((attachment) => !classified.has(attachment))
+            .map((attachment) => withAccess(attachment, "you", heldGrants, at)),
         },
         update: sources.update.current(),
         share,
@@ -347,8 +415,10 @@ export function createMachine(
         void refresh();
       };
       const unwatch = sources.subscribe?.(notify);
+      const ungrant = sources.grants.subscribe(notify);
       const unshare = sources.share.subscribe?.(notify);
       release = () => {
+        ungrant();
         unwatch?.();
         unshare?.();
       };
@@ -430,7 +500,7 @@ function processOf(row: SessionObservation): ProcessIdentity | null {
       : null;
 }
 const processKey = (process: ProcessIdentity) => `${process.pid}:${process.processStartUtc}`;
-const matches = (attachment: MachineAttachment, process: ProcessIdentity) =>
+const matches = (attachment: AttachmentRead, process: ProcessIdentity) =>
   attachment.pid === process.pid &&
   attachment.processStartUtcUnixMs !== null &&
   attachment.processStartUtcUnixMs === Date.parse(process.processStartUtc);
@@ -453,8 +523,10 @@ export function machineSources(
   providers: Providers,
   update: UpdateReader["Service"],
   share: MachineShareAdapter = unavailableShare,
+  grants: GrantSource = { grants: () => [], subscribe: () => () => {} },
 ): MachineSources {
   return {
+    grants,
     actions: () => hostActionJournal().list(),
     host: async () => {
       const file = await readServiceFile(productRoot(), hostOwnership.serviceName);
@@ -540,6 +612,7 @@ export function machineSources(
                       ? view.state.openDocuments.map((doc) => ({
                           session: view.sessionId!,
                           openId: doc.openId,
+                          title: doc.title,
                         }))
                       : null,
                   },

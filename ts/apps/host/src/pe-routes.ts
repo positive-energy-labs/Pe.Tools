@@ -416,7 +416,7 @@ export function makeHostPeRoutes(
     developerInstructions: async () => peaAgentInstructions,
     mcpServer: (context) => peaMcpServer(sourceRoot, hostBaseUrl, context),
   });
-  const machine = createMachine(machineSources(bridge, providers, update, share), {
+  const machine = createMachine(machineSources(bridge, providers, update, share, threads.heads), {
     automaticUpdates:
       hostOwnership.lane === "installed" && updateHandoff
         ? { peaActive: threads.active, handoff: updateHandoff }

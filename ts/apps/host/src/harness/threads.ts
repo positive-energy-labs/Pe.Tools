@@ -563,6 +563,19 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
 
   const heads = {
     read: readHead,
+    /** Every thread's rw grant, for Machine's per-document access. */
+    grants: () =>
+      [...threads.values()].flatMap((t) =>
+        t.meta.head.grant
+          ? [{ thread: t.meta.id, title: t.meta.title, grant: t.meta.head.grant }]
+          : [],
+      ),
+    /** Any head set, revoke or renewal. */
+    subscribe(notify: () => void) {
+      const listener = () => notify();
+      headListeners.add(listener);
+      return () => void headListeners.delete(listener);
+    },
     /** The `thread-head` Reading: the current head, then every set. */
     observe(threadId: string, listener: (value: { value: ThreadHead }) => void) {
       const notify = (id: string, head: ThreadHead) => {

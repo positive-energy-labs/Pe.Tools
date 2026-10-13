@@ -7,7 +7,7 @@ import { HttpRouter } from "effect/unstable/http";
 import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { hostStatusRoute } from "../src/app.ts";
-import type { ActionReceipt, Machine, MachineAttachment } from "@pe/agent-contracts";
+import type { ActionReceipt, HeadGrant, Machine } from "@pe/agent-contracts";
 import type {
   ControlledActive,
   DocListResult,
@@ -21,6 +21,8 @@ import {
   readMachinePeers,
   unavailableShare,
   useHostMachine,
+  type AttachmentRead,
+  type HeldGrant,
   type MachineSources,
 } from "../src/machine.ts";
 import type { Providers } from "../src/harness/providers.ts";
@@ -52,11 +54,11 @@ const row: ObservedActive = {
   },
   bridge: { bridge: "answering", sessionDescriptor: null },
 };
-const attached: MachineAttachment = {
+const attached: AttachmentRead = {
   session: "product-open",
   pid: 42,
   processStartUtcUnixMs: Date.parse(row.process.processStartUtc),
-  documents: [{ session: "product-open", openId: "product-id" }],
+  documents: [{ session: "product-open", openId: "product-id", title: "Tower.rvt" }],
 };
 const docs: DocListResult = {
   state: "ok",
@@ -126,6 +128,7 @@ function fixture() {
     },
     share: unavailableShare,
     subscribe: vi.fn(() => vi.fn()),
+    grants: { grants: vi.fn((): readonly HeldGrant[] => []), subscribe: vi.fn(() => vi.fn()) },
   };
   return { sources, machine: createMachine(sources, { periodMs: 60_000 }) };
 }
@@ -335,7 +338,10 @@ test("raw observed row gets SDK documents with unknown persistence and exact pro
     const value = await f.machine.refresh();
     const session = value.revit.sessions?.[0];
     expect(session?.row).toBe(row);
-    expect(session?.attachment).toBe(attached);
+    expect(session?.attachment).toEqual({
+      ...attached,
+      documents: [{ ...attached.documents![0]!, access: { level: "read" } }],
+    });
     expect(session?.documents).toEqual([{ ...docs.documents[0], persistence: null }]);
     expect(session?.attachment?.documents?.[0]?.openId).toBe("product-id");
     expect(f.sources.documents).toHaveBeenCalledWith(row.process);
@@ -360,7 +366,9 @@ test("unread observed documents remain unknown and a reused pid cannot classify 
     const value = await f.machine.refresh();
     expect(value.revit.sessions).toHaveLength(1);
     expect(value.revit.sessions?.[0]).toMatchObject({ row, attachment: null, documents: null });
-    expect(value.revit.unclassifiedAttachments).toEqual([reused]);
+    expect(value.revit.unclassifiedAttachments).toEqual([
+      { ...reused, documents: [{ ...reused.documents![0]!, access: { level: "read" } }] },
+    ]);
   } finally {
     f.machine.close();
   }
@@ -631,4 +639,111 @@ test("process custody is the SDK census's word: observed without a receipt, cont
     f.machine.close();
   }
   expect(processCustody(42, start)).toBeNull();
+});
+
+/* ── Per-document access: the only place the browser learns who may write ───────────────── */
+
+const grantHeld = (extra: Partial<HeadGrant> = {}): HeldGrant => ({
+  thread: "t1",
+  title: "Retag level 2",
+  grant: {
+    lifetime: { session: "product-open", openId: "product-id" },
+    grantedAt: "2026-10-12T12:00:00.000Z",
+    grantedVia: "local",
+    expiresAt: "2026-10-12T13:00:00.000Z",
+    revoked: null,
+    ...extra,
+  },
+});
+const accessAt = async (grants: readonly HeldGrant[], at: string, whose: "you" | "pea" = "you") => {
+  const f = fixture();
+  vi.mocked(f.sources.grants.grants).mockReturnValue(grants);
+  if (whose === "pea")
+    vi.mocked(f.sources.actions).mockResolvedValue([
+      {
+        kind: "workflow",
+        id: "launch",
+        key: "instances.start",
+        caller: { kind: "human", via: "local" },
+        basis: { kind: "human" },
+        state: "succeeded",
+        destination: { kind: "host" },
+        request: { year: "2025", owner: "pea", addins: "on" },
+        result: { session: { process: row.process } },
+        bases: {},
+        steps: [],
+        preparation: { state: "unprepared" },
+        recovery: [],
+        startedAt: row.observedAtUtc,
+        publication: { state: "unrequested" },
+      } as ActionReceipt,
+    ]);
+  if (whose === "pea")
+    vi.mocked(f.sources.sessions).mockResolvedValue([
+      { ...row, shape: { ...row.shape, posture: "background" } },
+    ]);
+  const machine = createMachine(f.sources, { periodMs: 60_000, now: () => at });
+  try {
+    return (await machine.refresh()).revit.sessions![0]!.attachment!.documents![0]!.access;
+  } finally {
+    machine.close();
+    f.machine.close();
+  }
+};
+
+test("access: a live grant on the exact lifetime draws rw with its thread and expiry", async () => {
+  expect(await accessAt([grantHeld()], "2026-10-12T12:30:00.000Z")).toEqual({
+    level: "rw",
+    via: "grant",
+    thread: "t1",
+    threadTitle: "Retag level 2",
+    expiresAt: "2026-10-12T13:00:00.000Z",
+  });
+});
+
+test("access: expired, revoked and other-lifetime grants are read, and no grant is read", async () => {
+  const read = { level: "read" };
+  expect(await accessAt([grantHeld()], "2026-10-12T13:00:00.000Z")).toEqual(read);
+  expect(
+    await accessAt(
+      [grantHeld({ revoked: { at: "2026-10-12T12:10:00.000Z" } })],
+      "2026-10-12T12:30:00.000Z",
+    ),
+  ).toEqual(read);
+  expect(
+    await accessAt(
+      [grantHeld({ lifetime: { session: "other", openId: "product-id" } })],
+      "2026-10-12T12:30:00.000Z",
+    ),
+  ).toEqual(read);
+  expect(await accessAt([], "2026-10-12T12:30:00.000Z")).toEqual(read);
+});
+
+test("access: Pea's own session is rw by session, not by any grant", async () => {
+  expect(await accessAt([], "2026-10-12T12:30:00.000Z", "pea")).toEqual({
+    level: "rw",
+    via: "pea-session",
+  });
+});
+
+test("access: a head move re-reads the machine through the grant source", async () => {
+  const f = fixture();
+  f.machine.close();
+  const machine = createMachine(f.sources, {
+    periodMs: 60_000,
+    now: () => "2026-10-12T12:30:00.000Z",
+  });
+  const seen: Machine[] = [];
+  const stop = machine.observe((value) => seen.push(value));
+  const notify = vi.mocked(f.sources.grants.subscribe).mock.calls[0]![0];
+  await machine.refresh();
+  vi.mocked(f.sources.grants.grants).mockReturnValue([grantHeld()]);
+  const before = seen.length;
+  notify();
+  await vi.waitFor(() => expect(seen.length).toBeGreaterThan(before));
+  expect(seen.at(-1)!.revit.sessions![0]!.attachment!.documents![0]!.access).toMatchObject({
+    level: "rw",
+  });
+  stop();
+  machine.close();
 });

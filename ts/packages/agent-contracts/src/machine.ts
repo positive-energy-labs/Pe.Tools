@@ -62,12 +62,34 @@ export interface MachinePeer {
   readonly reachable: boolean;
 }
 
+/**
+ * What the thread heads let a caller do to one open document, projected on the host (ADR
+ * 0016/0017). The browser draws `rw` from this and from nothing else; no head is read there.
+ */
+export type DocumentAccess =
+  | { readonly level: "read" }
+  | { readonly level: "rw"; readonly via: "pea-session" }
+  | {
+      readonly level: "rw";
+      readonly via: "grant";
+      readonly thread: string;
+      readonly threadTitle: string;
+      /** Host clock; the grant is already dead when this passes. */
+      readonly expiresAt: string;
+    };
+
+/** A document as the product socket names it (its openId, not the SDK's), with what it grants. */
+export interface MachineAttachmentDocument extends DocumentRef {
+  readonly title: string;
+  readonly access: DocumentAccess;
+}
+
 /** Product socket evidence, not SDK custody. Documents keep the product openId namespace. */
 export interface MachineAttachment {
   readonly session: string;
   readonly pid: number;
   readonly processStartUtcUnixMs: number | null;
-  readonly documents: readonly DocumentRef[] | null;
+  readonly documents: readonly MachineAttachmentDocument[] | null;
 }
 
 export interface MachineSession {
