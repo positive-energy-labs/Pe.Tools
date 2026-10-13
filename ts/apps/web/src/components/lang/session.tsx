@@ -133,7 +133,6 @@ export function SessionCard({
       head={
         <>
           <span className="t-small t-upper">Revit {facts.year}</span>
-          {facts.name ? null : <span>{ICON_STARTED}</span>}
           <PhaseWord facts={facts} />
         </>
       }
@@ -177,7 +176,9 @@ export function SessionCard({
       <div className="flex flex-wrap items-center gap-1 px-(--gutter) pb-1 hairline-t pt-1">
         {facts.name ? (
           <FactChip title="the session name pe-revit addresses it by">{facts.name}</FactChip>
-        ) : null}
+        ) : (
+          <span>{ICON_STARTED}</span>
+        )}
         {facts.pid ? <PidChip pid={facts.pid} /> : null}
         <FactChip title={CUSTODY_SAYS[facts.custody]}>{facts.custody}</FactChip>
         <ShapeCells shape={session.row.shape} />
