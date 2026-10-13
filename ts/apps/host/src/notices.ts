@@ -31,7 +31,7 @@ export interface NoticeContext {
 const KINDS = ["action", "turn", "permission", "usage"] as const;
 
 const chatHref = (threadId: string | undefined) =>
-  threadId ? `/chat?thread=${encodeURIComponent(threadId)}` : undefined;
+  threadId ? `/pea?thread=${encodeURIComponent(threadId)}` : undefined;
 
 /** Pure: one receipt revision to at most one card. Everything not listed here stays quiet. */
 export function noticeOf(r: Receipt, context: NoticeContext): MachineNotice | null {

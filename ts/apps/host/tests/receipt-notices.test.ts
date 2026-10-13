@@ -86,7 +86,7 @@ test("each shared fact projects to one card and nothing else speaks", () => {
   expect(noticeOf(turn("started"), context)).toBeNull();
   expect(noticeOf(turn("finished"), context)).toMatchObject({
     title: "Pea finished · Wiring",
-    href: "/chat?thread=t1",
+    href: "/pea?thread=t1",
   });
   expect(noticeOf(turn("failed"), context)?.title).toBe("Pea stopped · Wiring");
   // A thread this host no longer knows still gets a card, without a link it cannot honor.
