@@ -10,6 +10,7 @@ import { requestIdentityLayer, type IdentityOptions } from "../src/request-ident
 import { withInvocationContext } from "@pe/mcps/context";
 import { createServer } from "node:http";
 import { once } from "node:events";
+import { callerOf, mintContext, retireContext } from "../src/control.ts";
 
 const base = "http://127.0.0.1:5180";
 const version = "2025-11-25";
@@ -341,4 +342,69 @@ test("session construction binds host and maps independently of ambient invocati
   expect(contexts[0]!.admissions).not.toBe(contexts[1]!.admissions);
   expect(contexts[0]!.running).not.toBe(contexts[1]!.running);
   expect(contexts.every((context) => context.hostBaseUrl === f.hostBase)).toBe(true);
+  for (const context of contexts) {
+    expect(callerOf(context.principal!, context.headers!)).toMatchObject({
+      caller: { kind: "external-mcp", label: "fixture" },
+    });
+  }
+  const tokens = contexts.map((context) => context.headers!["x-pe-context"]!);
+  expect(new Set(tokens).size).toBe(2);
+  await door.close();
+  for (const token of tokens)
+    expect(callerOf({ kind: "local" }, { "x-pe-context": token })).toMatchObject({
+      refusal: { code: "context.unknown" },
+    });
+});
+
+test("initialize ignores x-pe-thread and retains only a verified caller context", async () => {
+  const contexts: InvocationContext[] = [];
+  const door = createMcpDoor(
+    () => base,
+    async (context) => {
+      contexts.push(context);
+      return createPeaMcpServer(context);
+    },
+  );
+  dispose.push(() => door.close());
+  const token = mintContext({ kind: "pea", thread: "own-thread" });
+  try {
+    for (const headers of [
+      { "x-pe-thread": "foreign-thread" },
+      { "x-pe-context": token, "x-pe-thread": "foreign-thread" },
+    ]) {
+      const identity = callerOf({ kind: "local" }, headers);
+      if ("refusal" in identity) throw Error(identity.refusal.detail);
+      const response = await withInvocationContext(
+        { principal: { kind: "local" }, caller: identity.caller, headers: {} },
+        () =>
+          door.fetch(
+            new Request(`${base}/mcp`, {
+              method: "POST",
+              headers: {
+                accept: "application/json, text/event-stream",
+                "content-type": "application/json",
+                ...headers,
+              },
+              body: JSON.stringify({
+                jsonrpc: "2.0",
+                id: 1,
+                method: "initialize",
+                params: {
+                  protocolVersion: version,
+                  capabilities: {},
+                  clientInfo: { name: "external", version: "1" },
+                },
+              }),
+            }),
+          ),
+      );
+      expect(response.status).toBe(200);
+    }
+    expect(contexts[0]!.caller).toMatchObject({ kind: "external-mcp" });
+    expect(contexts[1]!.caller).toMatchObject({ kind: "pea", thread: "own-thread" });
+    expect(contexts[1]!.headers!["x-pe-context"]).toBe(token);
+    expect(contexts.every((context) => !("x-pe-thread" in context.headers!))).toBe(true);
+  } finally {
+    retireContext(token);
+  }
 });

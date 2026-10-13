@@ -3,6 +3,8 @@ import { Effect } from "effect";
 import { HttpEffect, HttpRouter } from "effect/unstable/http";
 import { createPeaMcpServer, WebStandardStreamableHTTPServerTransport } from "@pe/mcps/server";
 import { invocationContext, type InvocationContext, type RequestPrincipal } from "@pe/mcps/context";
+import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
+import { callerOf, mintContext, retireContext } from "./control.ts";
 
 const version = "2025-11-25";
 const principalKey = (principal: RequestPrincipal) => JSON.stringify(principal);
@@ -15,6 +17,7 @@ export function createMcpDoor(hostBaseUrl: () => string, makeServer = createPeaM
     context: InvocationContext;
     transport: WebStandardStreamableHTTPServerTransport;
     server: Awaited<ReturnType<typeof makeServer>>;
+    mintedToken?: string;
   };
   const sessions = new Map<string, Session>();
   return {
@@ -59,14 +62,39 @@ export function createMcpDoor(hostBaseUrl: () => string, makeServer = createPeaM
           body.params.protocolVersion !== version
         )
           return error(400, "Unsupported MCP protocol version.");
+        // Only the verified bearer context can bind a thread. A thread-id header carries no authority.
+        const inherited =
+          caller.caller && caller.caller.kind !== "anonymous"
+            ? request.headers.get(HOST_CONTEXT_HEADER)
+            : null;
+        const info = (body.params as { clientInfo?: { name?: unknown } }).clientInfo;
+        const mintedToken = inherited
+          ? undefined
+          : mintContext({
+              kind: "external-mcp",
+              label: typeof info?.name === "string" ? info.name : "MCP client",
+            });
+        const headers = { ...caller.headers, [HOST_CONTEXT_HEADER]: inherited ?? mintedToken! };
+        const identity = callerOf(caller.principal, headers);
+        if ("refusal" in identity) {
+          if (mintedToken) retireContext(mintedToken);
+          return error(403, identity.refusal.detail);
+        }
         const context: InvocationContext = {
           hostBaseUrl: hostBaseUrl(),
           principal: caller.principal,
-          headers: caller.headers,
+          caller: identity.caller,
+          headers,
           admissions: new Map(),
           running: new Map(),
         };
-        const server = await makeServer(context);
+        let server: Awaited<ReturnType<typeof makeServer>>;
+        try {
+          server = await makeServer(context);
+        } catch (cause) {
+          if (mintedToken) retireContext(mintedToken);
+          throw cause;
+        }
         const transport = new WebStandardStreamableHTTPServerTransport({
           sessionIdGenerator: randomUUID,
           enableJsonResponse: true,
@@ -74,20 +102,41 @@ export function createMcpDoor(hostBaseUrl: () => string, makeServer = createPeaM
             sessions.set(id, session!);
           },
           onsessionclosed: (id) => {
+            if (mintedToken) retireContext(mintedToken);
             sessions.delete(id);
           },
         });
-        session = { principal: principalKey(caller.principal), context, transport, server };
-        await server.connect(transport);
+        session = {
+          principal: principalKey(caller.principal),
+          context,
+          transport,
+          server,
+          mintedToken,
+        };
+        try {
+          await server.connect(transport);
+        } catch (cause) {
+          if (mintedToken) retireContext(mintedToken);
+          await server.close();
+          throw cause;
+        }
       }
       // HTTP disconnect does not cancel admitted work. The SDK owns protocol cancellation;
       // the session retains its admission context until explicit DELETE or host retirement.
       const response = await session.transport.handleRequest(request, { parsedBody: body });
-      if (!session.transport.sessionId) await session.server.close();
+      if (!session.transport.sessionId) {
+        if (session.mintedToken) retireContext(session.mintedToken);
+        await session.server.close();
+      }
       return response;
     },
     async close() {
-      await Promise.all([...sessions.values()].map((session) => session.server.close()));
+      await Promise.all(
+        [...sessions.values()].map(async (session) => {
+          if (session.mintedToken) retireContext(session.mintedToken);
+          await session.server.close();
+        }),
+      );
       sessions.clear();
     },
   };
