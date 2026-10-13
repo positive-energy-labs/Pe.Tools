@@ -8,6 +8,7 @@ import { NodeServices } from "@effect/platform-node";
 import { cp, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import { capturePackage, readPackage } from "../src/packages.ts";
 import { listPods } from "../src/settings.ts";
 
 const root = join(import.meta.dirname, "..", "..", "..", "..", "examples", "pods", "snowdon-ducts");
@@ -138,13 +139,34 @@ test("the existing production listing finds the Pod by manifest id after a renam
   }
 });
 
-// Owed until B (packages.ts) and C (pod-transfer.ts) are on the tip. Each must run the production code.
-test.todo(
-  "capturePackage and listing admit the same paths and hashes, including skill and page files",
-);
+test("packages.ts admits every authored file, in a renamed folder, with the canonical keys", async () => {
+  const podsRoot = await mkdtemp(join(tmpdir(), "snowdon-pkg-"));
+  try {
+    await cp(root, join(podsRoot, "Renamed In Explorer"), { recursive: true });
+    const pod = await readPackage("snowdon-ducts", podsRoot);
+    expect(pod.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
+    expect(pod.members.map((m) => m.path).sort()).toEqual(await files(root));
+    const keys = pod.contributions.map((c) => c.key);
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        "script:@snowdon-ducts/src/Census.cs",
+        "script:@snowdon-ducts/src/InspectRun.cs",
+        "script:@snowdon-ducts/src/CoefficientExperiment.cs",
+        "page:@snowdon-ducts/pages/tour",
+        "skill:@snowdon-ducts/skills/duct-loss",
+        "member:@snowdon-ducts/settings/checks.json",
+      ]),
+    );
+    expect(keys.filter((k) => k.startsWith("script:"))).toHaveLength(3);
+    const captured = await capturePackage(pod);
+    expect(captured.sourceBundle.files.map((f) => f.path).sort()).toEqual(await files(root));
+  } finally {
+    await rm(podsRoot, { recursive: true, force: true });
+  }
+});
+
+// Owed until C (pod-transfer.ts) is on the tip; it must run the production export/import, not a fixture zip writer.
 test.todo(
   "pod.export of the imported Pod with no native bridge round-trips to the same admitted bytes",
 );
-test.todo(
-  "page:, skill:, script: and member: keys for snowdon-ducts survive the rename and member refuses execution",
-);
+test.todo("member: refuses execution under the Page principal (E)");
