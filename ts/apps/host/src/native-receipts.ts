@@ -103,6 +103,7 @@ export async function readNativeReceipt(
     localRef: { requestId: step.id, key: step.key, process: original },
   };
   const unchanged = () => ({ step, evidence, observation });
+  const intent = { id: step.id, key: step.key, kind: step.kind, input: step.input };
   const codes = evidence.diagnostics.map((diagnostic) => diagnostic.code);
   const replaced =
     successor !== undefined &&
@@ -119,10 +120,7 @@ export async function readNativeReceipt(
   if (gone)
     return {
       step: {
-        id: step.id,
-        key: step.key,
-        kind: step.kind,
-        input: step.input,
+        ...intent,
         state: "failed",
         error: `Revit process ${original.pid} ended before '${step.key}' recorded an outcome`,
         status: 503,
@@ -139,19 +137,7 @@ export async function readNativeReceipt(
     };
   // Settled only when the answer is the receipt's own terminal verdict with its response: not
   // `running`, not a dead incarnation's bare receipt, not a superseded or late answer.
-  if (
-    !("response" in result) ||
-    result.requestId !== step.id ||
-    !receipt.success ||
-    result.state !== receipt.data.verdict ||
-    receipt.data.requestId !== step.id ||
-    receipt.data.key !== step.key ||
-    receipt.data.pid !== original.pid ||
-    receipt.data.processStartUtc !== original.processStartUtc ||
-    evidence.diagnostics.length
-  )
-    return unchanged();
-  const intent = { id: step.id, key: step.key, kind: step.kind, input: step.input };
+  if (!("response" in result) || !receipt.success || !matches) return unchanged();
   if (receipt.data.verdict === "ok" && result.response !== undefined)
     return {
       step: { ...intent, state: "succeeded", result: result.response },
