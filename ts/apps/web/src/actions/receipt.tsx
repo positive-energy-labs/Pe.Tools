@@ -5,7 +5,49 @@ import { controlAction } from "../../../../packages/mcps/src/shared/takeoff-acti
 import { Button } from "#/components/lang/button";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Code, stringify } from "#/components/lang/code";
+import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
 import { outputRenderers } from "#/ops/renderers";
+
+/**
+ * The one word for an action's state. An operation's success is a reply received, never a
+ * certified mutation; every surface that names an action's state reads it from here.
+ */
+export const stateWord = (row: Pick<ActionReceipt, "kind" | "state">): string =>
+  row.kind === "operation" && row.state === "succeeded" ? "reply received" : row.state;
+
+const OUTCOME_OF: Record<ActionReceipt["state"], OutcomeKind> = {
+  running: "busy",
+  succeeded: "receipt",
+  failed: "error",
+  cancelled: "advisory",
+  unknown: "advisory",
+  incomplete: "advisory",
+};
+
+/** The one projection from a receipt row to the line a surface draws after a verb. */
+export const actionOutcome = (row: ActionReceipt): { kind: OutcomeKind; label: string } => ({
+  kind: OUTCOME_OF[row.state],
+  label: `${row.key} ${stateWord(row)} · action ${row.id}`,
+});
+
+/** Reads one action's receipt and draws its line; it follows the receipt, not the reply. */
+export function ActionOutcome({
+  id,
+  resources = peReadings,
+}: {
+  id: string;
+  resources?: Readings;
+}) {
+  const receipt = useReading<ActionReceipt[]>({ kind: "receipts", id }, resources);
+  const rows = actionReceiptSchema.array().safeParse(previousOf(receipt));
+  const row = rows.success ? rows.data.find((candidate) => candidate.id === id) : undefined;
+  if (row) return <OutcomeLine {...actionOutcome(row)} />;
+  if (receipt.state === "failed")
+    return (
+      <OutcomeLine kind="error" label={`action ${id} receipt read failed: ${receipt.message}`} />
+    );
+  return <OutcomeLine kind="busy" label={`action ${id} · reading receipt`} />;
+}
 
 /**
  * A receipt reads its original ID, independent of the current pane or thread Scope. `base` and
@@ -56,9 +98,7 @@ export function ActionReceiptView({
         <div className="flex min-w-0 flex-1 items-baseline justify-between gap-2">
           <span className="truncate t-small face-mono text-ink">
             Action {id} /{" "}
-            {row?.kind === "operation" && row.state === "succeeded"
-              ? "reply received"
-              : (row?.state ?? (receiptError ? "receipt read failed" : "reading receipt"))}
+            {row ? stateWord(row) : receiptError ? "receipt read failed" : "reading receipt"}
           </span>
           {row ? (
             <span
@@ -105,10 +145,7 @@ export function ActionReceiptView({
             {row.steps.map((step) => (
               <div key={step.id} className="min-w-0 face-mono text-ink-2">
                 <span className="truncate">
-                  {step.kind} / {step.key} /{" "}
-                  {row.kind === "operation" && step.state === "succeeded"
-                    ? "reply received"
-                    : step.state}
+                  {step.kind} / {step.key} / {stateWord({ kind: row.kind, state: step.state })}
                 </span>{" "}
                 <code>{step.id}</code>
                 {"error" in step && (

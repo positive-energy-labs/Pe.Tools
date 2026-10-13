@@ -30,12 +30,13 @@ import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Button } from "#/components/lang/button";
 import { Connectors, type Connection } from "#/components/lang/connector";
 import { EmptyState } from "#/components/lang/empty";
-import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
+import { OutcomeLine } from "#/components/lang/outcome";
 import { Row } from "#/components/lang/row";
 import { docKey, HeldRow, SessionCard, type SessionDocument } from "#/components/lang/session";
 import { Switcher } from "#/components/lang/switcher";
 import type { QueryCommand } from "#/components/master-table/model";
 import { queryWords, readClause, useTableState, visibleRows } from "#/components/master-table/view";
+import { ActionOutcome } from "#/actions/receipt";
 import { frozenDemo } from "#/host/demo-client";
 import { keyOf, pidOf, processOf, selectionOf } from "#/machine/session";
 import { demoRecents } from "#/machine/use-machine";
@@ -77,9 +78,16 @@ export function useThreadSummaries(
 
 export type BayLayout = "row" | "stack";
 
-interface Outcome {
-  kind: OutcomeKind;
-  label: string;
+/** After a verb: the action whose receipt the line follows, or the refusal that stopped it. */
+type Outcome = { action: string } | { refused: string };
+
+function OutcomeOf({ outcome }: { outcome: Outcome | null }) {
+  if (!outcome) return null;
+  return "action" in outcome ? (
+    <ActionOutcome id={outcome.action} />
+  ) : (
+    <OutcomeLine kind="refused" label={outcome.refused} />
+  );
 }
 
 /**
@@ -180,8 +188,8 @@ export function PatchBay({
         crypto.randomUUID(),
         30_000,
       );
-      const said = `${planned.key} ${receipt.state} · action ${receipt.id}`;
-      setOutcome({ kind: receipt.state === "succeeded" ? "receipt" : "advisory", label: said });
+      // The line follows the receipt; the page log keeps what the reply said.
+      setOutcome({ action: receipt.id });
       onNote?.(
         `${planned.key} ${receipt.state}`,
         `action ${receipt.id}`,
@@ -193,7 +201,7 @@ export function PatchBay({
       dirty({ kind: "machine" });
       unplug();
     } catch (caught) {
-      setOutcome({ kind: "refused", label: `${planned.key} refused: ${String(caught)}` });
+      setOutcome({ refused: `${planned.key} refused: ${String(caught)}` });
       onNote?.(`${planned.key} refused`, String(caught), true);
     }
   });
@@ -542,7 +550,7 @@ export function PatchBay({
         </div>
         {draft.target === "new" ? strip : null}
       </ArtifactFrame>
-      {outcome ? <OutcomeLine kind={outcome.kind} label={outcome.label} /> : null}
+      <OutcomeOf outcome={outcome} />
     </div>
   );
 
@@ -868,13 +876,10 @@ function CableRow({
           crypto.randomUUID(),
           30_000,
         );
-        setOutcome({
-          kind: receipt.state === "succeeded" ? "receipt" : "advisory",
-          label: `${key} ${receipt.state} · action ${receipt.id}`,
-        });
+        setOutcome({ action: receipt.id });
         dirty({ kind: "machine" });
       } catch (caught) {
-        setOutcome({ kind: "refused", label: `${verb.kind} refused: ${String(caught)}` });
+        setOutcome({ refused: `${verb.kind} refused: ${String(caught)}` });
       } finally {
         setArmed(null);
       }
@@ -944,7 +949,7 @@ function CableRow({
               }
             />
           ) : null}
-          {outcome ? <OutcomeLine kind={outcome.kind} label={outcome.label} /> : null}
+          <OutcomeOf outcome={outcome} />
         </>
       }
     />
