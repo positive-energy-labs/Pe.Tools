@@ -549,6 +549,15 @@ export const CHAT_SEEDS = {
     readings: { ...READINGS, head: CLOSED_HEAD },
     page: {},
   },
+  granted: {
+    title: "a human pointed the thread at a document; the host reads rw for 42 more minutes",
+    work: CHAT_SEED_STATE,
+    readings: {
+      ...READINGS,
+      head: { ...HEAD, hostNow: at(0).toISOString(), grantView: { state: "rw", minutes: 42 } },
+    },
+    page: {},
+  },
   stop: {
     title: "pea mid-turn, with an approval owed",
     work: CHAT_SEED_STATE,
