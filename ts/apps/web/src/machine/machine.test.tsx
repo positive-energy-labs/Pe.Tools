@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 /**
  * The machine body over the recorded machine: Update opens by itself on a blocked plan and its
- * consent is refused while the blocker stands, the version chip says the version or the waiting
+ * consent is refused while the blocker stands, the chip text says the version or the waiting
  * update, the host's absence is drawn as the honest gap, and the tray window wears no app chrome.
  */
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vite-plus/test";
 import type { Machine, Reading } from "@pe/agent-contracts";
 
@@ -12,6 +12,7 @@ import { acknowledgeUpdate } from "#/host/install";
 import { switchRemoteAdministration, switchShare } from "#/host/machine";
 import { Button } from "#/components/lang/button";
 import { MACHINE_SEEDS } from "#/open/seeds";
+import { openMachine } from "#/machine/door";
 import { AppChrome, AppDevtools } from "#/route/app-chrome";
 
 import { MachineBody } from "./body";
@@ -337,17 +338,25 @@ describe("shells", () => {
     expect(screen.queryByRole("button", { name: "feedback" })).toBeNull();
   });
 
-  test("the tray window wears no app chrome; every other page wears the version chip", () => {
+  test("the tray window wears no app chrome; every other page opens the drawer from Settings", () => {
     const { container } = render(<AppChrome pathname="/machine" />);
     expect(container.innerHTML).toBe("");
     cleanup();
-    render(<AppChrome pathname="/open" />);
-    const chip = screen.getByRole("button", { name: "Fixture · 0.7.0 · 0.7.1 ready" });
-    fireEvent.click(chip);
+    // The app bar's Settings > Machine is the door; the chrome draws no floating chip.
+    render(
+      <>
+        <Button label="Machine">Machine</Button>
+        <AppChrome pathname="/open" />
+      </>,
+    );
+    expect(screen.queryByRole("button", { name: "Fixture · 0.7.0 · 0.7.1 ready" })).toBeNull();
+    const door = screen.getByRole("button", { name: "Machine" });
+    door.focus();
+    act(() => openMachine());
     expect(screen.getByRole("complementary", { name: "this machine" })).toBeTruthy();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("complementary", { name: "this machine" })).toBeNull();
-    expect(document.activeElement).toBe(chip);
+    expect(document.activeElement).toBe(door);
   });
 
   test("the floating launcher is absent in the tray and clear of Open", () => {
