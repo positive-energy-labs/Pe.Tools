@@ -48,7 +48,7 @@ test("compact draws one chord with SVG modifier symbols and preserves fully writ
   ).toEqual(["Ctrl", "Shift"]);
   for (const symbol of compact.querySelectorAll("svg")) {
     expect(symbol.getAttribute("viewBox")).toBe("0 0 12 12");
-    expect(symbol.getAttribute("stroke-width")).toBe("1.5");
+    expect(symbol.getAttribute("stroke-width")).toBe("2");
   }
   expect(button.getAttribute("aria-keyshortcuts")).toBe("Control+Shift+K");
   expect(button.querySelector("[data-command-chord]")?.textContent).toBe("Ctrl+Shift+K");
