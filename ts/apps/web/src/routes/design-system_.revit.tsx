@@ -455,7 +455,7 @@ const sharedParameters: Dialog = {
     { t: "label", text: "Shared parameter file:", at: { x: 11.5, y: 40.5 } },
     {
       t: "field",
-      text: "C:\\Users\\kaitp\\AppData\\Local\\Temp\\0eeed4c1.txt",
+      text: "C:\\Users\\you\\AppData\\Local\\Temp\\0eeed4c1.txt",
       readOnly: true,
       at: { x: 11.5, y: 60.5, w: 206.5, h: 19 },
       h: 19,

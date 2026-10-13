@@ -149,7 +149,7 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
   vi.stubGlobal(
     "fetch",
     vi.fn(async () =>
-      Response.json({ at: machine.observedAtUtc, machine, sources: {}, capabilities: [] }),
+      Response.json({ at: machine.observedAtUtc, machine, sources: {}, diagnostics: [], capabilities: [] }),
     ),
   );
   const map = (await peFind.execute!({ limit: 8 }, {} as never)) as { machine: Machine };

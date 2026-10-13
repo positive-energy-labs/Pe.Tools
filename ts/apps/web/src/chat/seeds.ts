@@ -287,7 +287,7 @@ const CHAT_SKILL_STATE: ChatState = {
     think("Two matches. AHU-2 is the one to lead with."),
     tool("bash", "Bash", {
       command:
-        "python -c \"import json;print(json.dumps(open(r'C:/Users/kaitp/pea-tests/20261007-hcb/test1/work/Census.json').read()))\"",
+        "python -c \"import json;print(json.dumps(open(r'C:/Users/you/pea-tests/hcb/work/Census.json').read()))\"",
     }),
     done("bash", "Exit 0"),
     tool("apply", "mcp__pea__pe_do", { key: "op:schedules.apply", rows: [12, 13] }),
