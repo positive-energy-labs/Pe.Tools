@@ -1,7 +1,7 @@
 // P3 (plan WAVE3-PLAN §6): the shipped snowdon-ducts example is clean authored content and a real Pod.
 // Deterministic lane: no Revit, no server. It proves packaging shape and content hygiene, never any finding about
-// the sample model. Packaged-membership and import/export round trips are `test.todo` until slices B and C land on
-// the tip; they must then use the production implementation, not a fixture zip writer.
+// the sample model. The export/import round trip runs the production pod-transfer.ts, not a fixture zip writer.
+
 import { expect, test } from "vite-plus/test";
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
@@ -9,6 +9,8 @@ import { cp, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { capturePackage, readPackage } from "../src/packages.ts";
+import { exportPod, importPod, readZip } from "../src/pod-transfer.ts";
+import { createHash } from "node:crypto";
 import { listPods } from "../src/settings.ts";
 
 const root = join(import.meta.dirname, "..", "..", "..", "..", "examples", "pods", "snowdon-ducts");
@@ -165,8 +167,48 @@ test("packages.ts admits every authored file, in a renamed folder, with the cano
   }
 });
 
-// Owed until C (pod-transfer.ts) is on the tip; it must run the production export/import, not a fixture zip writer.
-test.todo(
-  "pod.export of the imported Pod with no native bridge round-trips to the same admitted bytes",
-);
-test.todo("member: refuses execution under the Page principal (E)");
+test("production export then import: only authored bytes cross, and keys survive a renamed folder", async () => {
+  const from = await mkdtemp(join(tmpdir(), "snowdon-from-"));
+  const to = await mkdtemp(join(tmpdir(), "snowdon-to-"));
+  try {
+    await cp(root, join(from, "Mine"), { recursive: true });
+    const archivePath = join(from, "snowdon-ducts.zip");
+    const exported = await exportPod({ pod: "snowdon-ducts", archivePath }, { podsRoot: from });
+    // P3: the archive is exactly the authored Pod; no transform touched a byte; nothing vendored or captured.
+    expect(exported.members.map((m) => m.path).sort()).toEqual(await files(root));
+    expect(exported.transforms).toEqual([]);
+    expect(exported.vendored).toEqual([]);
+    expect(exported.captures).toEqual([]);
+    const entries = [...readZip(await readFile(archivePath)).keys()];
+    expect(
+      entries.filter((p) =>
+        /(^|\/)\.state(\/|$)|binding|output\/|imported\.json|\.(rvt|png|zip)$/i.test(p),
+      ),
+    ).toEqual([]);
+    for (const m of exported.members)
+      expect(m.sha256).toBe(
+        createHash("sha256")
+          .update(await readFile(join(root, m.path)))
+          .digest("hex"),
+      );
+
+    const imported = await importPod({ archivePath, folder: "Elsewhere" }, { podsRoot: to });
+    expect(imported.folder).toBe("Elsewhere");
+    const byPath = (a: { path: string }, b: { path: string }) => a.path.localeCompare(b.path);
+    expect(imported.members.filter((m) => m.path !== "imported.json").sort(byPath)).toEqual(
+      [...exported.members].sort(byPath),
+    );
+    const before = (await readPackage("snowdon-ducts", from)).contributions
+      .map((c) => c.key)
+      .sort();
+    const after = (await readPackage("snowdon-ducts", to)).contributions.map((c) => c.key).sort();
+    expect(after).toEqual(before);
+    expect(after).toContain("page:@snowdon-ducts/pages/tour");
+  } finally {
+    await rm(from, { recursive: true, force: true });
+    await rm(to, { recursive: true, force: true });
+  }
+});
+
+// `member:` cannot execute: covered by pages.test.ts ("A member reads, never runs", member:@ducts/settings/checks.json)
+// against the same production Page act door, so it is not duplicated here.
