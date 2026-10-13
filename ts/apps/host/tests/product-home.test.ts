@@ -77,5 +77,7 @@ test("without the override, machine-local state stays under LOCALAPPDATA", () =>
   vi.stubEnv(productPathNames.productHomeVariable, "");
   vi.stubEnv("LOCALAPPDATA", local);
   expect(productRoot()).toBe(join(local, "Positive Energy", "Pe.Tools"));
-  expect(productProvidersPath()).toBe(join(local, "Positive Energy", "Pe.Tools", "state", "providers.json"));
+  expect(productProvidersPath()).toBe(
+    join(local, "Positive Energy", "Pe.Tools", "state", "providers.json"),
+  );
 });
