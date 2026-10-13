@@ -87,7 +87,7 @@ export type AttachmentRead = Omit<MachineAttachment, "documents"> & {
  * Only acquisitions or unexpired exact-lifetime grants write; stale heads remain read-only. Both
  * join product openIds to SDK ids, so a socket that did not attest SDK identity writes nothing.
  */
-export function withAccess(
+function withAccess(
   attachment: AttachmentRead,
   acquired: ReadonlyMap<string, string>,
   grants: readonly HeldGrant[],

@@ -10,7 +10,6 @@ import { withInvocationContext, type RequestPrincipal } from "@pe/mcps/context";
 import type { Caller, MachineShare } from "@pe/agent-contracts";
 import { callerOf } from "./control.ts";
 
-export type { RequestPrincipal } from "@pe/mcps/context";
 export type IdentityResult =
   | {
       readonly principal: RequestPrincipal;

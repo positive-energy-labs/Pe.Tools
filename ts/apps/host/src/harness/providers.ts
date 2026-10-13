@@ -55,7 +55,7 @@ const flatten = (option: SessionConfigOption & { type: "select" }) =>
 /** Mode and collaboration mode are not traits: access sets the mode, plan mode is not offered. */
 const notTraits = new Set(["model", "mode", "collaboration_mode"]);
 
-export function traitsOf(configOptions: readonly SessionConfigOption[]): TraitOption[] {
+function traitsOf(configOptions: readonly SessionConfigOption[]): TraitOption[] {
   return configOptions
     .filter((o) => !notTraits.has(o.category ?? "") && o.id !== "mode")
     .map((o) =>

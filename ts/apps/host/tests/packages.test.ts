@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
+import hostPackage from "../package.json" with { type: "json" };
 import {
   captureDirectory,
   capturePackage,
@@ -150,9 +151,13 @@ test.skipIf(process.platform !== "win32")(
   "an Offline attribute alone does not make a regular file unsafe",
   async () => {
     const path = join(root, "Original", "README.md");
-    execFileSync("attrib.exe", ["+O", path]);
+    execFileSync(hostPackage.config.windowsBinaries.attrib, ["+O", path]);
     expect((await lstat(path)).isFile()).toBe(true);
-    expect(execFileSync("attrib.exe", [path], { encoding: "utf8" }).split(path)[0]).toContain("O");
+    expect(
+      execFileSync(hostPackage.config.windowsBinaries.attrib, [path], { encoding: "utf8" }).split(
+        path,
+      )[0],
+    ).toContain("O");
     const pod = await readPackage("mixed", root);
     expect(pod.diagnostics).toEqual([]);
     expect(

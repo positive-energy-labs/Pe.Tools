@@ -28,7 +28,7 @@ import type {
  */
 
 /** A grant lives 60 minutes past the human's last message in its thread (ADR 0016). */
-export const GRANT_MS = 60 * 60_000;
+const GRANT_MS = 60 * 60_000;
 
 export class Refused extends Error {
   constructor(readonly refusal: Refusal) {
@@ -83,7 +83,7 @@ export function writeTerminalContext(serviceName: string) {
  * The D12 page key of a `/pages/<slug>/…` path: `<id>--<page>` is the page an admitted package
  * (by manifest id) contributes; null when the codec admits no key for it.
  */
-export const pageKeyOf = (slug: string): string | null => {
+const pageKeyOf = (slug: string): string | null => {
   const [id, page, ...more] = slug.split("--");
   const key = page === undefined ? `page:@pages/${slug}` : `page:@${id}/pages/${page}`;
   return !more.length && parseContributionKey(key) ? key : null;

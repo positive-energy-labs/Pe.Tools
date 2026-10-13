@@ -24,7 +24,7 @@ import {
 import { listPackages } from "./packages.ts";
 import { productPodsRootPath } from "./product-paths.ts";
 
-export type ShippedPodOutcome =
+type ShippedPodOutcome =
   | { archive: string; sha256: string; outcome: "imported"; id: string; folder: string }
   | { archive: string; sha256: string; outcome: "present"; id: string; reason: string }
   | { archive: string; sha256: string; outcome: "offered-before" }
@@ -35,7 +35,7 @@ export type ShippedPodsReport = { shippedRoot: string | null; outcomes: ShippedP
 type Ledger = { offered: Record<string, { archive: string; at: string; outcome: string }> };
 
 /** The installed host's shipped pods; the source lane ships none (its examples stay in the checkout). */
-export const shippedPodsRoot = (): string | null =>
+const shippedPodsRoot = (): string | null =>
   hostOwnership.lane === "installed" ? join(dirname(process.execPath), "pods") : null;
 
 const ledgerPath = () =>

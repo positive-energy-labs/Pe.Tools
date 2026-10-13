@@ -185,7 +185,7 @@ type Listener = (row: PageEventRow) => void;
 type Signal = (event: "binding" | "file", data: unknown) => void;
 
 /** One open document as the bridge lists it. */
-export type LiveDocument = {
+type LiveDocument = {
   openId: string;
   title: string;
   address?: string | null;

@@ -6,6 +6,7 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { isSea } from "node:sea";
 import { Readable, Writable } from "node:stream";
 import { ClientSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
+import hostPackage from "../../package.json" with { type: "json" };
 import type { HarnessId } from "@pe/agent-contracts";
 import {
   HOST_CONTEXT_VARIABLE,
@@ -107,12 +108,16 @@ export function adapterCli(harness: HarnessId, env: NodeJS.ProcessEnv = process.
       ? join(homedir(), ".local", "bin", "claude.exe")
       : join(local, "Programs", "OpenAI", "Codex", "bin", "codex.exe");
   if (existsSync(official)) return official;
-  const found = spawnSync("where.exe", [`${adapters[harness].cli}.exe`], {
-    encoding: "utf8",
-    windowsHide: true,
-    timeout: 5000,
-    env,
-  });
+  const found = spawnSync(
+    hostPackage.config.windowsBinaries.where,
+    [`${adapters[harness].cli}.exe`],
+    {
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 5000,
+      env,
+    },
+  );
   return found.status === 0 ? found.stdout.split(/\r?\n/)[0]!.trim() : adapters[harness].cli;
 }
 

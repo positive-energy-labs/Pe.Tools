@@ -25,7 +25,7 @@ export const sdkEnvelope = (result: unknown, resolved: Resolved | null = null) =
     related: [],
     exitCode: 0,
   });
-export const observedProcess: ObservedActive = {
+const observedProcess: ObservedActive = {
   case: "observed-active",
   execution: null,
   process: originalProcess,

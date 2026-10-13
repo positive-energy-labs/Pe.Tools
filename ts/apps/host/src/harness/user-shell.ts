@@ -44,7 +44,7 @@ export function captureUserShellPath(): Promise<string | null> {
 }
 
 /** Prefer the standard PowerShell 7 install; otherwise use Windows PowerShell, independent of stale PATH. */
-export function userPowerShell(): string {
+function userPowerShell(): string {
   const pwsh = join(process.env.ProgramFiles ?? "C:\\Program Files", "PowerShell", "7", "pwsh.exe");
   return existsSync(pwsh)
     ? pwsh

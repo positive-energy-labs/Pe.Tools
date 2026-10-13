@@ -42,7 +42,7 @@ const mcpFields = [
   "$mcp_server_version",
   "$mcp_server_build",
 ] as const;
-export const eventFields = {
+const eventFields = {
   app_boot: ["revit_version"],
   version_mismatch: ["host_version"],
   host_op: ["op", "origin_class", "ts_only", "outcome", "fault_code", "duration_ms"],
@@ -351,7 +351,7 @@ export const diagnosticsSchema = z.strictObject({
 });
 export type ProducerStamps = { host: ReceiptStamp | null; web: ReceiptStamp | null };
 
-export async function bounded<T>(work: Promise<T>, ms = 2000): Promise<T> {
+async function bounded<T>(work: Promise<T>, ms = 2000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([

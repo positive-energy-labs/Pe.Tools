@@ -29,7 +29,7 @@ import { runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
 const DEV_TAKEOVER_ARGUMENT = "--take-over-host";
 const installedPort = 5180;
 
-export type PortOccupant = {
+type PortOccupant = {
   readonly pid: number;
   readonly executable: string;
   readonly serviceName?: string;
@@ -67,7 +67,7 @@ export function tcpListenerPids(stdout: string, port: number): number[] {
 }
 
 /** Read-only Windows census; SDK readers own record parsing. Never signal an occupant. */
-export async function readPortOccupants(appBase: string, port: number): Promise<PortOccupant[]> {
+async function readPortOccupants(appBase: string, port: number): Promise<PortOccupant[]> {
   // Get-NetTCPConnection requires CIM, which is unavailable even to SYSTEM in Windows Sandbox.
   // netstat reads the native TCP table; Get-Process/SDK discovery retain independent PID/path/start proof.
   const tcp = await promisify(execFile)("netstat", ["-ano", "-p", "tcp"], {

@@ -42,7 +42,6 @@ export const PAGE_LIBRARIES = [
   },
   { file: "base.css", source: "../../web/src/base.css", url: null, says: "The product tokens." },
 ] as const;
-export type PageLibrary = (typeof PAGE_LIBRARIES)[number];
 
 /** One Page the host serves, as anything that lists, ranks or opens Pages reads it. */
 export type PageDescriptor = {

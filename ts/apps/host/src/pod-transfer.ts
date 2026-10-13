@@ -30,8 +30,8 @@ import {
 } from "./packages.ts";
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
 
-export const VENDOR_DIRECTORY = "_vendor";
-export const IMPORTED_FILE = "imported.json";
+const VENDOR_DIRECTORY = "_vendor";
+const IMPORTED_FILE = "imported.json";
 const LOCAL_PREFIX = "@local/";
 const CAPTURE_REFERENCE = /\/captures\/([0-9a-f]{64})\.png/g;
 const CAPTURE_MEMBER = /^captures\/([0-9a-f]{64})\.(png|json)$/;
@@ -488,7 +488,7 @@ export function readZip(archive: Buffer): Map<string, Buffer> {
  * (framework, packages and usings kept); one without any already travels and keeps its bytes.
  * Execution derives its own project from this seed, so an omitted framework is year-neutral.
  */
-export function portableProject(project: Buffer): Buffer {
+function portableProject(project: Buffer): Buffer {
   const xml = project.toString("utf8").replace(/^﻿/, "");
   if (!/<Reference[\s/>]/.test(xml)) return project;
   const framework =
