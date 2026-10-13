@@ -171,7 +171,7 @@ describe("pages", () => {
         {
           key: null,
           slug: "Odd_Name",
-          openUrl: null,
+          openUrl: "/pages/Odd_Name/",
           title: "Odd",
           pod: null,
           path: "index.html",
@@ -215,9 +215,28 @@ describe("pages", () => {
     );
     for (const page of pages.filter((one) => one.key === null))
       expect(page.reason, page.slug).toContain("not a lowercase slug");
-    // A keyless folder has no route: no file, no doors, and its referer is no caller.
-    expect((await fetch("/pages/Odd_Name/")).status).toBe(404);
-    expect((await fetch("/pages/Odd_Name/target")).status).toBe(404);
+    // A keyless folder that is one URL segment serves its files under its folder name, mints no
+    // key, refuses every door with the rename reason, and its referer is no caller.
+    const html = await (await fetch("/pages/Odd_Name/")).text();
+    expect(html).toContain("<p>odd</p>");
+    expect(html).not.toContain("pe-page");
+    for (const [verb, method] of [
+      ["target", "GET"],
+      ["state", "GET"],
+      ["events", "GET"],
+      ["events", "POST"],
+      ["call", "POST"],
+    ]) {
+      const refused = await fetch(`/pages/Odd_Name/${verb}`, {
+        method,
+        body: method === "POST" ? "{}" : undefined,
+      });
+      expect(refused.status, `${method} ${verb}`).toBe(409);
+      expect(await refused.text()).toContain("not a lowercase slug");
+    }
+    expect((await fetch("/pe/pages/Odd_Name/binding", { method: "PUT", body: "{}" })).status).toBe(
+      409,
+    );
     expect(
       callerOf(
         { kind: "local" },

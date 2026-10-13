@@ -90,7 +90,6 @@ import {
 } from "./page-libraries.ts";
 import { join } from "node:path";
 import { importShippedPods } from "./installed-pods.ts";
-import { migratePodManifests } from "./pod-manifest-migration.ts";
 import { receiptQuerySchema } from "@pe/agent-contracts";
 import {
   feedbackSchema,
@@ -729,7 +728,6 @@ export function makeHostPeRoutes(
   const content = createContributionContent({
     worldRoot,
     bootstrap: async () => {
-      await migratePodManifests();
       const imported = await importShippedPods();
       const refused = imported.outcomes.filter((outcome) => outcome.outcome === "refused");
       if (refused.length)

@@ -1,5 +1,6 @@
 import { captureDirectory } from "../../../apps/host/src/packages.ts";
-import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
@@ -62,7 +63,7 @@ test("a corrupt projection receipt cannot turn skill retirement into a path esca
   }
 });
 
-test("an unreceipted older copy of a shipped skill is backed up and replaced, never refused", async () => {
+test("an unreceipted copy of a shipped skill is a diagnostic; the product publishes its skill and backs up nothing", async () => {
   const home = await mkdtemp(join(tmpdir(), "pe-skill-shipped-"));
   try {
     const roots = resolvePeaSkillPaths({ productHomePath: home });
@@ -78,17 +79,11 @@ test("an unreceipted older copy of a shipped skill is backed up and replaced, ne
       expect(await readFile(join(root, "build-pod", "SKILL.md"), "utf8")).toBe(shipped.content);
     expect(publication.skills.some((s) => s.key === "skill:@skills/skills/build-pod")).toBe(false);
     expect(await readFile(join(roots[0]!, "mine", "SKILL.md"), "utf8")).toBe("user skill");
-    expect(publication.notices).toHaveLength(1);
-    const backups = await readdir(join(home, ".backups", "skills"));
-    expect(backups).toHaveLength(1);
-    expect(backups[0]).toMatch(/^build-pod-\d{8}T\d{6}Z$/);
-    expect(publication.notices[0]).toContain(backups[0]!);
-    const kept = join(home, ".backups", "skills", backups[0]!);
-    const copies = await Promise.all(
-      (await readdir(kept)).map((d) => readFile(join(kept, d, "SKILL.md"), "utf8")),
+    expect(publication.notices).toEqual(
+      roots.map((root) => expect.stringContaining(join(root, "build-pod"))),
     );
-    expect(copies.sort()).toEqual(["older projection 0", "older projection 1"]);
-    // Idempotent: the receipt now owns the path, so a second publication backs nothing up.
+    expect(existsSync(join(home, ".backups"))).toBe(false);
+    // The receipt now owns the path, so a second publication has nothing to say.
     expect((await publishPeaSkills({ productHomePath: home, captureDirectory })).notices).toEqual(
       [],
     );

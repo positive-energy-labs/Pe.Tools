@@ -839,46 +839,33 @@ export class ActionJournal implements ReceiptReader {
     });
     if (raw === null) return;
     const decoded = JSON.parse(raw);
-    const legacy = decoded?.version === 3;
-    let current: ActionReceipt[];
-    if (legacy) {
-      current = z
-        .strictObject({ version: z.literal(3), actions: actionReceiptSchema.array() })
-        .parse(decoded).actions;
-      // Preserve the exact consumed v3 bytes once, before replacing the envelope. No live v3 writer.
-      if (current.length) {
-        await writeFile(`${this.path}.v3.json`, raw, { encoding: "utf8", flag: "wx" }).catch(
-          async (error: NodeJS.ErrnoException) => {
-            if (error.code !== "EEXIST" || (await readFile(`${this.path}.v3.json`, "utf8")) !== raw)
-              throw error;
-          },
-        );
-      }
-    } else {
-      const envelope = z
-        .strictObject({
-          version: z.literal(4),
-          receipts: receiptSchema.array(),
-          mappings: z.record(z.string(), z.uuid()),
-        })
-        .parse(decoded);
-      this.receipts = envelope.receipts;
-      this.mappings = envelope.mappings;
-      if (new Set(Object.values(this.mappings)).size !== Object.keys(this.mappings).length)
-        throw Error("Duplicate opaque identity in action journal");
-      current = this.receipts.flatMap((r) => (r.body.kind === "action" ? [r.body.value] : []));
-      if (new Set(this.receipts.map((r) => r.id)).size !== this.receipts.length)
-        throw Error("Duplicate receipt id in action journal");
-      for (const r of this.receipts)
-        if (
-          r.body.kind === "action" &&
-          canonicalRouteInput(r.join) !== canonicalRouteInput(this.rootJoin(r.body.value.id))
-        )
-          throw Error("Action receipt join does not match its persisted mapping");
-    }
+    if (decoded?.version !== 4)
+      throw Error(
+        `${this.path} is journal version ${String(decoded?.version)}; this host reads version 4 only: archive or delete it, then restart.`,
+      );
+    const envelope = z
+      .strictObject({
+        version: z.literal(4),
+        receipts: receiptSchema.array(),
+        mappings: z.record(z.string(), z.uuid()),
+      })
+      .parse(decoded);
+    this.receipts = envelope.receipts;
+    this.mappings = envelope.mappings;
+    if (new Set(Object.values(this.mappings)).size !== Object.keys(this.mappings).length)
+      throw Error("Duplicate opaque identity in action journal");
+    const current = this.receipts.flatMap((r) => (r.body.kind === "action" ? [r.body.value] : []));
+    if (new Set(this.receipts.map((r) => r.id)).size !== this.receipts.length)
+      throw Error("Duplicate receipt id in action journal");
+    for (const r of this.receipts)
+      if (
+        r.body.kind === "action" &&
+        canonicalRouteInput(r.join) !== canonicalRouteInput(this.rootJoin(r.body.value.id))
+      )
+        throw Error("Action receipt join does not match its persisted mapping");
     if (new Set(current.map((r) => r.id)).size !== current.length)
       throw Error("Duplicate action id in action journal");
-    let changed = legacy && current.length > 0;
+    let changed = false;
     const rows = current.map((row) => {
       let next = row;
       if (row.state === "running") {
@@ -896,16 +883,12 @@ export class ActionJournal implements ReceiptReader {
       }
       return actionReceiptSchema.parse(next);
     });
-    if (changed) await this.persist(rows, this.receipts, true);
+    if (changed) await this.persist(rows);
     this.rows = rows;
     this.notify();
   }
 
-  private async persist(
-    rows = this.rows,
-    receipts = this.receipts,
-    historical = false,
-  ): Promise<void> {
+  private async persist(rows = this.rows, receipts = this.receipts): Promise<void> {
     const actions = rows.map((row) => {
       const old = this.receipts.find((r) => r.body.kind === "action" && r.body.value.id === row.id);
       if (
@@ -917,8 +900,8 @@ export class ActionJournal implements ReceiptReader {
         schema: 1,
         id: old?.id ?? randomUUID(),
         revision: (old?.revision ?? 0) + 1,
-        at: historical && !old ? row.startedAt : new Date().toISOString(),
-        stamp: old ? old.stamp : historical ? null : this.stamp(),
+        at: new Date().toISOString(),
+        stamp: old ? old.stamp : this.stamp(),
         join: old?.join ?? this.rootJoin(row.id),
         body: { kind: "action", value: row },
       });

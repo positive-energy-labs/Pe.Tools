@@ -50,7 +50,7 @@ export type PageDescriptor = {
   /** Why `key` is null; null when the Page has a key. */
   reason: string | null;
   slug: string;
-  /** The host's own URL for the Page, never derived from a folder by a consumer; null when no route serves it (no key). */
+  /** The host's own URL for the Page, never derived from a folder by a consumer; null when its folder name is no URL segment. */
   openUrl: string | null;
   title: string;
   /** The contributing package's manifest id; null for a scratch Page. */
@@ -63,7 +63,7 @@ export type PageDescriptor = {
   directory: string;
 };
 
-/** The syntax of one `/pages/<slug>` URL segment; only a canonical key's slug resolves to a folder. */
+/** The syntax of one `/pages/<slug>` URL segment; a scratch folder named so serves, keyed or not. */
 export const PAGE_FOLDER = /^[a-z0-9][a-z0-9_-]*$/i;
 
 const titleOf = (html: string, slug: string) =>
@@ -79,7 +79,7 @@ export function scratchPageKey(
   } catch {
     return {
       key: null,
-      reason: `'${slug}' is not a lowercase slug (a-z, 0-9, single hyphens): no route serves it and it has no doors until its folder is renamed.`,
+      reason: `'${slug}' is not a lowercase slug (a-z, 0-9, single hyphens): it has no key and no doors until its folder is renamed.`,
     };
   }
 }
@@ -105,7 +105,11 @@ export async function scratchPageDescriptors(
     pages.push({
       ...named,
       slug: folder.name,
-      openUrl: named.key ? `/pages/${folder.name}/` : null,
+      // A noncanonical folder still serves under its name when that name is one URL segment.
+      openUrl:
+        PAGE_FOLDER.test(folder.name) && !folder.name.includes("--")
+          ? `/pages/${folder.name}/`
+          : null,
       title: titleOf(bytes.toString("utf8"), folder.name),
       pod: null,
       entry: { path: "index.html", sha256: sha(bytes), bytes },

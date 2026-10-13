@@ -1,4 +1,5 @@
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +10,7 @@ import { BridgeError } from "../src/bridge.ts";
 import { readNativeReceipt } from "../src/native-receipts.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { crossingOf } from "./callers.ts";
+import { writeJournal } from "./journal-fixture.ts";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -45,23 +47,13 @@ async function fixture() {
   return { path, owner, intent, action, dispatches: () => dispatches };
 }
 
-test("v3 migration retains exact source and evidence bytes, ids, frozen inputs and unknown", async () => {
-  const { path, owner, action } = await fixture();
-  const output = await owner.outputs(action.id);
-  const evidencePath = join(output.home, "preparation.json");
-  const bytes = await readFile(evidencePath);
-  const source = JSON.stringify({ version: 3, actions: [action] }, null, 2) + "\r\n";
+test("an old v3 journal is refused naming the file to archive; its bytes stay", async () => {
+  const { path, action } = await fixture();
+  const source = JSON.stringify({ version: 3, actions: [action] });
   await writeFile(path, source);
-  const migrated = new ActionJournal(path);
-  expect(await migrated.list()).toEqual([action]);
-  expect(await readFile(path + ".v3.json", "utf8")).toBe(source);
-  expect(await readFile(evidencePath)).toEqual(bytes);
-  const [r] = await migrated.read({ kinds: ["action"] });
-  expect(r!.stamp).toBeNull();
-  expect(r!.body).toEqual({ kind: "action", value: action });
-  expect(JSON.parse(await readFile(path, "utf8")).version).toBe(4);
-  const restarted = new ActionJournal(path);
-  expect(await restarted.read({})).toEqual([r]);
+  await expect(new ActionJournal(path).list()).rejects.toThrow(`${path} is journal version 3`);
+  expect(await readFile(path, "utf8")).toBe(source);
+  expect(existsSync(`${path}.v3.json`)).toBe(false);
 });
 
 test("missing recovery preserves unknown; exact cancellation joins the original native UUID without dispatch", async () => {
@@ -150,13 +142,9 @@ test("restart converts running to unknown once; a malformed/unknown journal is n
     status: _stepStatus,
     ...step
   } = action.steps[0] as (typeof action.steps)[0] & { error?: string; status?: number };
-  await writeFile(
-    path,
-    JSON.stringify({
-      version: 3,
-      actions: [{ ...attempt, state: "running", steps: [{ ...step, state: "running" }] }],
-    }),
-  );
+  await writeJournal(path, [
+    { ...attempt, state: "running", steps: [{ ...step, state: "running" }] },
+  ]);
   const restarted = new ActionJournal(path);
   expect((await restarted.list())[0]!.state).toBe("unknown");
   const receipts = await restarted.read({});

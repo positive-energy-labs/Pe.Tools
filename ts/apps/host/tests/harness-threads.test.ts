@@ -151,6 +151,12 @@ test.each(["claude", "codex"])(
   },
 );
 
+test("no route rewrites stored threads: the contribution migration door is gone", async () => {
+  const call = caller(host());
+  const migrated = await call("POST", "/pe/threads/contribution-migration", []);
+  expect(migrated.status).toBe(404);
+});
+
 test("automatic update admission refuses a new Pea prompt through download and releases on confirmed refusal", async () => {
   const planId = "64f25f46-dfa6-4ee6-b973-d7f6a8b523c4";
   let release!: () => void;
