@@ -520,7 +520,9 @@ public sealed class PodTests {
         if (key == "pod.list") return JObject.FromObject(new { pods = rows });
         if (key != "pod.capture") throw new InvalidOperationException($"Unexpected native admission call: {key}");
         var id = JObject.FromObject(request).Value<string>("pod");
-        var row = rows.Single(item => item.id == id);
+        var matches = rows.Where(item => item.id == id).ToList();
+        if (matches.Count != 1) throw new InvalidDataException($"Pod id '{id}' is claimed by folders {string.Join(", ", matches.Select(item => item.folder))}.");
+        var row = matches[0];
         return JObject.FromObject(new { row.id, row.folder, row.directory, contributions = Array.Empty<object>(), sourceBundle = Bundle(row.directory) });
     }
 
