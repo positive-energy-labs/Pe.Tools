@@ -26,8 +26,10 @@
     "@pe/host-contracts": "workspace:*",
     "@pe/mcps": "workspace:*",
     "@pe/runtime": "workspace:*",
+    "@posthog/mcp": "0.22.3",
     "ajv": "catalog:",
     "effect": "4.0.0-beta.92",
+    "posthog-node": "5.55.2",
     "zod": "catalog:"
   },
   "devDependencies": {
