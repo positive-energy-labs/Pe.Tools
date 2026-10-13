@@ -66,7 +66,7 @@ export function installing(reading: Reading<Machine>, accepting: boolean): Insta
   return {
     to,
     gone,
-    version: machine?.host.version ?? null,
+    version: machine?.host?.version ?? null,
     // A leg waiting on this person (the SDK stub's Load Once prompt) says its own words.
     leg: gone
       ? "Waiting for the new host"
