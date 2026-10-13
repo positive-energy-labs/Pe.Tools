@@ -1,10 +1,6 @@
+import { receiptGoldenEnvelope } from "./receipt-fixture.ts";
 import { expect, test } from "vite-plus/test";
-import {
-  receiptGoldenEnvelope,
-  receiptMatches,
-  receiptSchema,
-  receiptProducerSchema,
-} from "../src/receipts.ts";
+import { receiptMatches, receiptSchema, receiptProducerSchema } from "../src/receipts.ts";
 
 test("golden envelope survives JSON without losing wire identity", () => {
   expect(receiptSchema.parse(JSON.parse(JSON.stringify(receiptGoldenEnvelope)))).toEqual(

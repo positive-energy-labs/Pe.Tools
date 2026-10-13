@@ -1,3 +1,4 @@
+import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
@@ -6,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { expect, test } from "vite-plus/test";
-import { receiptGoldenEnvelope, type Receipt } from "@pe/agent-contracts";
+import { type Receipt } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import {
   projectReceipt,

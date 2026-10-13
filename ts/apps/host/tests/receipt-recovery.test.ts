@@ -1,8 +1,9 @@
+import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
-import { receiptGoldenEnvelope, type Receipt } from "@pe/agent-contracts";
+import { type Receipt } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { BridgeError } from "../src/bridge.ts";
 import { readNativeReceipt } from "../src/native-receipts.ts";

@@ -1,3 +1,4 @@
+import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Layer, Effect, Deferred } from "effect";
@@ -6,7 +7,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PostHog } from "posthog-node";
-import { receiptGoldenEnvelope } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { createReceiptExport, type ReceiptExport } from "../src/receipt-export.ts";
 import { HttpRouter } from "effect/unstable/http";

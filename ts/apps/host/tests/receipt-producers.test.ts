@@ -1,3 +1,4 @@
+import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { createServer, request as httpRequest } from "node:http";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -7,7 +8,6 @@ import { Deferred, Effect, Layer } from "effect";
 import { NodeHttpServer } from "@effect/platform-node";
 import { HttpEffect, HttpRouter } from "effect/unstable/http";
 import { expect, test } from "vite-plus/test";
-import { receiptGoldenEnvelope } from "@pe/agent-contracts";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { ActionJournal } from "../src/action-journal.ts";

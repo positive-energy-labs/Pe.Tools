@@ -1,9 +1,10 @@
+import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { Effect, Fiber, Queue } from "effect";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { receiptGoldenEnvelope, type Receipt } from "@pe/agent-contracts";
+import { type Receipt } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { recordBridgeQueue } from "../src/gateway-owner.ts";
 import { RevitBridgeLive, subscribeReceiptProducers } from "../src/bridge.ts";
