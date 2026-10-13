@@ -90,7 +90,7 @@ export const packageDiagnosticSchema = z.strictObject({
   code: z.string().min(1),
   message: z.string(),
   severity: z.enum(["error", "warning", "info"]),
-  path: packageMemberPathSchema.optional(),
+  path: z.string().optional(),
 });
 export type PackageDiagnostic = z.infer<typeof packageDiagnosticSchema>;
 

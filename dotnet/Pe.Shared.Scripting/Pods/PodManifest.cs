@@ -17,7 +17,6 @@ public sealed record PodManifest(
 );
 
 public sealed record PodEntrypoint(
-    string Id,
     string SourcePath,
     string? Name,
     string? Description
@@ -44,7 +43,6 @@ public static class PodManifestValidator {
     };
 
     private static readonly HashSet<string> EntrypointFields = new(StringComparer.Ordinal) {
-        "id",
         "sourcePath",
         "name",
         "description"
@@ -67,15 +65,11 @@ public static class PodManifestValidator {
         AddUnknownFieldDiagnostics(root, TopLevelFields, diagnostics, "pod.json");
 
         var schemaVersion = ReadRequiredInteger(root, "schemaVersion", diagnostics);
-        if (schemaVersion == 1) {
-            schemaVersion = CurrentSchemaVersion;
-            diagnostics.Add(ScriptDiagnosticFactory.Info(DiagnosticStage, "pod.json schemaVersion upgraded from 1 to 2."));
-        }
         if (schemaVersion.HasValue && schemaVersion.Value != CurrentSchemaVersion)
             diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, $"pod.json schemaVersion must be {CurrentSchemaVersion}."));
 
-        var id = ReadRequiredString(root, "id", diagnostics);
-        if (id is not null && !ScriptingWorkspaceLayout.IsWorkspaceSlug(id))
+        var id = ReadIdentityString(root, "id", diagnostics);
+        if (id is not null && (!ScriptingWorkspaceLayout.IsWorkspaceSlug(id) || id is "pages" or "skills" or "product"))
             diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, "pod.json id must be a lowercase workspace slug."));
 
         var name = ReadRequiredString(root, "name", diagnostics);
@@ -152,7 +146,6 @@ public static class PodManifestValidator {
         }
 
         var entrypoints = new List<PodEntrypoint>();
-        var ids = new HashSet<string>(StringComparer.Ordinal);
         var sourcePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < array.Count; index++) {
             if (array[index] is not JObject obj) {
@@ -161,16 +154,14 @@ public static class PodManifestValidator {
             }
 
             AddUnknownFieldDiagnostics(obj, EntrypointFields, diagnostics, $"entrypoints[{index}]");
-            var id = ReadRequiredString(obj, "id", diagnostics);
-            if (id is not null && !ScriptingWorkspaceLayout.IsWorkspaceSlug(id))
-                diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, $"pod.json entrypoints[{index}].id must be a lowercase slug."));
-            if (id is not null && !ids.Add(id))
-                diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, $"Duplicate pod entrypoint id '{id}'."));
-
-            var sourcePath = ReadRequiredString(obj, "sourcePath", diagnostics);
+            var sourcePath = ReadIdentityString(obj, "sourcePath", diagnostics);
             if (sourcePath is not null) {
                 try {
-                    sourcePath = ScriptingSourcePath.NormalizeWorkspaceSourcePath(sourcePath, "Pod entrypoint source path");
+                    var normalized = ScriptingSourcePath.NormalizeWorkspaceSourcePath(sourcePath, "Pod entrypoint source path");
+                    if (sourcePath.Length > 1024 || normalized != sourcePath || sourcePath.Normalize() != sourcePath || sourcePath.IndexOfAny(['%', '#', '\u007f']) >= 0 ||
+                        sourcePath.Split('/').Any(segment => segment.Trim() != segment || segment.EndsWith(".", StringComparison.Ordinal) ||
+                            System.Text.RegularExpressions.Regex.IsMatch(segment, @"^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)", System.Text.RegularExpressions.RegexOptions.IgnoreCase)))
+                        throw new ArgumentException("Pod entrypoint source path must use its exact portable src/ path.");
                     if (!sourcePaths.Add(sourcePath))
                         diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, $"Duplicate pod entrypoint sourcePath '{sourcePath}'."));
                 } catch (ArgumentException ex) {
@@ -181,10 +172,17 @@ public static class PodManifestValidator {
 
             var name = ReadOptionalString(obj, "name", diagnostics);
             var description = ReadOptionalString(obj, "description", diagnostics);
-            if (id is not null && sourcePath is not null)
-                entrypoints.Add(new PodEntrypoint(id, sourcePath, name, description));
+            if (sourcePath is not null)
+                entrypoints.Add(new PodEntrypoint(sourcePath, name, description));
         }
 
         return entrypoints;
+    }
+
+    private static string? ReadIdentityString(JObject root, string fieldName, List<ScriptDiagnostic> diagnostics) {
+        var value = ReadRequiredString(root, fieldName, diagnostics);
+        if (value is not null && root[fieldName]!.Value<string>() != value)
+            diagnostics.Add(ScriptDiagnosticFactory.Error(DiagnosticStage, $"pod.json field '{fieldName}' must use its exact spelling."));
+        return value;
     }
 }
