@@ -68,6 +68,9 @@ test("explicit feedback still submits its full content, and kept vs delivered ar
   expect(url).toMatch(/\/pe\/feedback$/);
   expect(JSON.parse(init!.body as string)).toEqual(note);
 
+  answer(200, { feedbackId: id, delivery: "uncertain", error: "PostHog may have it" });
+  await expect(deliverFeedback(id)).resolves.toMatchObject({ delivery: "uncertain" });
+
   answer(200, { feedbackId: id, delivery: "accepted" });
   await expect(deliverFeedback(id)).resolves.toEqual({ feedbackId: id, delivery: "accepted" });
   const [again, retry] = vi.mocked(hostFetch).mock.calls.at(-1)!;

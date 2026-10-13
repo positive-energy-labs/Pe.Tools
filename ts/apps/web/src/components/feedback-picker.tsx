@@ -226,10 +226,10 @@ export function FeedbackPicker({ hideTrigger = false }: { hideTrigger?: boolean 
                 }}
               />
               {send.error && <OutcomeLine kind="error" label={send.error.message} />}
-              {kept?.delivery === "failed" ? (
+              {kept && kept.delivery !== "accepted" ? (
                 <OutcomeLine
                   kind="refused"
-                  label={`kept ${kept.feedbackId.slice(0, 8)}, not delivered: ${kept.error}`}
+                  label={`kept ${kept.feedbackId.slice(0, 8)}, ${kept.delivery === "failed" ? "not delivered" : "delivery unconfirmed"}: ${kept.error}`}
                   says="the note is on this host; deliver it again or close"
                 />
               ) : null}

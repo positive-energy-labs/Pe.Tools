@@ -19,11 +19,17 @@ export type Feedback = {
 
 /**
  * The host keeps the note first and hands it to PostHog second. Kept and delivered are two facts:
- * `failed` means the note is on this host under `feedbackId` and can be delivered again.
+ * `failed` means PostHog was not given the note; `uncertain` means a send may have landed or is still
+ * in flight. Either way the note is on this host under `feedbackId` and delivering it again names the
+ * same note.
  */
 const feedbackReceiptSchema = z.discriminatedUnion("delivery", [
   z.strictObject({ feedbackId: z.uuid(), delivery: z.literal("accepted") }),
-  z.strictObject({ feedbackId: z.uuid(), delivery: z.literal("failed"), error: z.string() }),
+  z.strictObject({
+    feedbackId: z.uuid(),
+    delivery: z.enum(["failed", "uncertain"]),
+    error: z.string(),
+  }),
 ]);
 export type FeedbackReceipt = z.infer<typeof feedbackReceiptSchema>;
 

@@ -18,6 +18,7 @@ import {
   recordUpdateFact,
   commandCodes,
   admitBuild,
+  abortableFetch,
 } from "../src/receipt-export.ts";
 import { mcpBeforeSend } from "../src/mcp-analytics.ts";
 
@@ -344,6 +345,186 @@ test("thread and update adapters keep opaque joins and honest endings, with noti
     expect(await f.journal.read({ kinds: ["usage"] })).toHaveLength(1);
   } finally {
     await f.close();
+  }
+});
+
+const settleAfter = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const wireClient = (
+  fetch: (url: string, init: { body?: unknown; signal?: AbortSignal }) => Promise<Response>,
+) =>
+  new PostHog("explicit-test-key", {
+    disableCompression: true,
+    disableGeoip: true,
+    flushInterval: 0,
+    fetchRetryCount: 0,
+    enableExceptionAutocapture: false,
+    fetch: abortableFetch(fetch as never),
+  });
+
+test("a stalled send keeps its capacity: the pending limit bounds the sends the client ever starts", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pe-queue-bound-"));
+  let subscriber: ((r: Receipt) => void) | undefined;
+  let release: () => void = () => {};
+  let started = 0;
+  const journal = {
+    subscribe: (_: unknown, f: (r: Receipt) => void) => {
+      subscriber = f;
+      return () => {};
+    },
+    recordFact: async () => {},
+  };
+  const client = {
+    on: () => () => {},
+    captureImmediate: () => {
+      started++;
+      return started === 1 ? new Promise<void>((r) => (release = r)) : Promise.resolve();
+    },
+    shutdown: async () => {},
+  };
+  const exporter = createReceiptExport({
+    journal: journal as never,
+    root: dir,
+    stamps: { host: { ...stamp, component: "host" }, web: null },
+    client: client as never,
+  });
+  const emit = () => subscriber!({ ...receiptGoldenEnvelope, id: randomUUID() });
+  try {
+    for (let i = 0; i < 64; i++) emit();
+    await settleAfter(2150);
+    for (let i = 0; i < 64; i++) emit();
+    release();
+    await settleAfter(100);
+    expect(started).toBe(64);
+  } finally {
+    await exporter.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 15_000);
+
+test("a send past its deadline is aborted on the wire, one at a time, and frees capacity only when it settles", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pe-send-abort-"));
+  let inFlight = 0;
+  let peak = 0;
+  let aborted = 0;
+  const client = wireClient(
+    (_url, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        peak = Math.max(peak, ++inFlight);
+        init.signal!.addEventListener("abort", () => {
+          inFlight--;
+          aborted++;
+          reject(Error("aborted"));
+        });
+      }),
+  );
+  const journal = new ActionJournal(join(dir, "journal.json"));
+  const exporter = createReceiptExport({
+    journal,
+    root: dir,
+    client,
+    deadlineMs: 30,
+    stamps: { host: { ...stamp, component: "host" }, web: null },
+  });
+  try {
+    for (let i = 0; i < 3; i++)
+      await exporter.record(
+        { kind: "diagnostic", code: "pane.failed" },
+        receiptGoldenEnvelope.join,
+      );
+    await expect.poll(() => aborted, { timeout: 3000 }).toBe(3);
+    expect(peak).toBe(1);
+  } finally {
+    await exporter.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 15_000);
+
+test("feedback never reports failed, or offers a second send, while its first send is still in flight", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pe-feedback-flight-"));
+  const journal = new ActionJournal(join(dir, "journal.json"), () => stamp);
+  const requests: unknown[] = [];
+  let release: (status: number) => void = () => {};
+  const client = new PostHog("explicit-test-key", {
+    disableCompression: true,
+    disableGeoip: true,
+    flushInterval: 0,
+    fetchRetryCount: 0,
+    enableExceptionAutocapture: false,
+    requestTimeout: 60_000,
+    fetch: (_url, init) => {
+      requests.push(init.body);
+      return new Promise(
+        (resolve) => (release = (status) => resolve(new Response("{}", { status }))),
+      );
+    },
+  });
+  const web = { ...stamp, component: "web" as const };
+  const exporter = createReceiptExport({
+    journal,
+    root: dir,
+    client,
+    deadlineMs: 100,
+    stamps: { host: { ...stamp, component: "host" }, web },
+  });
+  const feedback = {
+    comment: "note",
+    url: "https://x/",
+    selector: null,
+    component: null,
+    components: [],
+    html: "",
+    rect: { x: 0, y: 0, width: 1, height: 1 },
+    viewport: { width: 1, height: 1, dpr: 1 },
+    picture: null,
+    picture_error: null,
+  };
+  try {
+    const first = await exporter.submitFeedback(feedback, web.build);
+    expect(first.delivery).toBe("uncertain");
+    const again = await exporter.deliverFeedback(first.feedbackId);
+    expect(again?.delivery).toBe("uncertain");
+    expect(requests).toHaveLength(1);
+    release(200);
+    await settleAfter(50);
+    expect(await exporter.deliverFeedback(first.feedbackId)).toEqual({
+      feedbackId: first.feedbackId,
+      delivery: "accepted",
+    });
+    expect(requests).toHaveLength(1);
+  } finally {
+    await exporter.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 15_000);
+
+test("an answered refusal is failed, not uncertain: the note was not taken", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pe-feedback-refused-"));
+  const web = { ...stamp, component: "web" as const };
+  const exporter = createReceiptExport({
+    journal: new ActionJournal(join(dir, "journal.json"), () => stamp),
+    root: dir,
+    client: wireClient(async () => new Response("{}", { status: 503 })),
+    stamps: { host: { ...stamp, component: "host" }, web },
+  });
+  try {
+    const note = {
+      comment: "note",
+      url: "https://x/",
+      selector: null,
+      component: null,
+      components: [],
+      html: "",
+      rect: { x: 0, y: 0, width: 1, height: 1 },
+      viewport: { width: 1, height: 1, dpr: 1 },
+      picture: null,
+      picture_error: null,
+    };
+    const first = await exporter.submitFeedback(note, web.build);
+    expect(first.delivery).toBe("failed");
+    expect((await exporter.deliverFeedback(first.feedbackId))?.delivery).toBe("failed");
+  } finally {
+    await exporter.close();
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 

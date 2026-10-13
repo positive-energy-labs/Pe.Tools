@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { PostHog } from "posthog-node";
@@ -74,7 +75,7 @@ const eventFields = {
     "picture_error",
   ],
 } as const;
-export type ExportEvent = {
+type ExportEvent = {
   event: keyof typeof eventFields;
   distinctId: string;
   timestamp: Date;
@@ -349,9 +350,10 @@ export const diagnosticsSchema = z.strictObject({
     )
     .max(64),
 });
-export type ProducerStamps = { host: ReceiptStamp | null; web: ReceiptStamp | null };
+type ProducerStamps = { host: ReceiptStamp | null; web: ReceiptStamp | null };
 
-async function bounded<T>(work: Promise<T>, ms = 2000): Promise<T> {
+const DEADLINE_MS = 2000;
+async function bounded<T>(work: Promise<T>, ms = DEADLINE_MS): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
@@ -364,21 +366,56 @@ async function bounded<T>(work: Promise<T>, ms = 2000): Promise<T> {
     clearTimeout(timer);
   }
 }
+/** The send on the wire now: its deadline signal, read by the PostHog client's fetch below. */
+const wire = new AsyncLocalStorage<AbortSignal>();
+type PostHogFetch = NonNullable<NonNullable<ConstructorParameters<typeof PostHog>[1]>["fetch"]>;
+/** The fetch for a PostHog client that exports receipts: a send's deadline aborts its HTTP request. */
+export const abortableFetch =
+  (base: PostHogFetch = fetch as never): PostHogFetch =>
+  (url, init) => {
+    const send = wire.getStore();
+    return base(
+      url,
+      send ? { ...init, signal: AbortSignal.any([send, init.signal ?? send]) } : init,
+    );
+  };
+
+type FeedbackDelivery =
+  | { feedbackId: string; delivery: "accepted" }
+  | { feedbackId: string; delivery: "failed" | "uncertain"; error: string };
+
 export function createReceiptExport(options: {
   journal: ActionJournal;
   root: string;
   stamps: ProducerStamps;
   client?: PostHog;
-  send?: (event: ExportEvent) => Promise<void>;
+  send?: (event: ExportEvent, signal: AbortSignal) => Promise<void>;
+  /** How long one send may hold the wire before its signal aborts it. */
+  deadlineMs?: number;
 }) {
   const { journal, stamps } = options;
+  const deadlineMs = options.deadlineMs ?? DEADLINE_MS;
   const webStamp = (build: string | null | undefined) =>
     stamps.web && build === stamps.web.build ? stamps.web : null;
+  // A send holds its capacity until it settles. Its deadline aborts it; it is never abandoned running.
+  const withDeadline = async (
+    event: ExportEvent,
+    run: (event: ExportEvent, signal: AbortSignal) => Promise<void>,
+  ) => {
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(Error("Telemetry deadline exceeded")), deadlineMs);
+    try {
+      await run(event, abort.signal);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
   // posthog-node resolves captureImmediate even when HTTP failed. Serialize this one client's
-  // sends so its error channel belongs to the exact receipt being delivered.
+  // sends so its error channel belongs to the exact receipt being delivered. A send's deadline
+  // starts when it reaches the wire, not when it queues.
   let delivery = Promise.resolve();
-  const sendClient = (event: ExportEvent) => {
-    const next = delivery.then(async () => {
+  const sendClient = (event: ExportEvent, signal: AbortSignal) =>
+    wire.run(signal, async () => {
       const client = options.client!;
       let failure: unknown;
       const release = client.on("error", (error: unknown) => {
@@ -391,10 +428,15 @@ export function createReceiptExport(options: {
         release();
       }
     });
-    delivery = next.catch(() => {});
-    return next;
-  };
-  const send = options.send ?? (options.client ? sendClient : undefined);
+  const send = options.send
+    ? (event: ExportEvent) => withDeadline(event, options.send!)
+    : options.client
+      ? (event: ExportEvent) => {
+          const next = delivery.then(() => withDeadline(event, sendClient));
+          delivery = next.catch(() => {});
+          return next;
+        }
+      : undefined;
   const pending = new Set<Promise<unknown>>();
   let remotePending = 0;
   let dropped = 0;
@@ -417,7 +459,7 @@ export function createReceiptExport(options: {
     }
     remotePending++;
     track(
-      bounded(Promise.resolve().then(() => send(event))).finally(() => {
+      send(event).finally(() => {
         remotePending--;
         if (dropped) {
           const count = dropped;
@@ -433,6 +475,46 @@ export function createReceiptExport(options: {
       }),
     );
   });
+  const deliver = async (id: string): Promise<FeedbackDelivery | null> => {
+    const r = (await journal.read({ kinds: ["feedback"] })).find(
+      (r) => r.body.kind === "feedback" && r.body.localRef.feedbackId === id,
+    );
+    if (!r || r.body.kind !== "feedback") return null;
+    let event: ExportEvent | null;
+    try {
+      const saved = JSON.parse(readFileSync(r.body.localRef.path, "utf8")) as { feedback: unknown };
+      const { component: ui_component, ...content } = feedbackSchema.parse(saved.feedback);
+      event = projectReceipt(r, { ...content, ui_component });
+      if (!event || !send)
+        throw Error("Telemetry export is not configured with verified web identity");
+    } catch {
+      return {
+        feedbackId: id,
+        delivery: "failed",
+        error: "The host kept the feedback. Delivery failed; try deliver again.",
+      };
+    }
+    try {
+      await send(event);
+      return { feedbackId: id, delivery: "accepted" };
+    } catch (error) {
+      // Only an answered refusal proves the note was not taken; a deadline or a dropped connection may follow acceptance.
+      return error instanceof Error && error.name === "PostHogFetchHttpError"
+        ? {
+            feedbackId: id,
+            delivery: "failed",
+            error: "The host kept the feedback. PostHog refused it; try deliver again.",
+          }
+        : {
+            feedbackId: id,
+            delivery: "uncertain",
+            error:
+              "The host kept the feedback. PostHog may or may not have received it; delivering again repeats the same note.",
+          };
+    }
+  };
+  // One flight per kept note: a second ask joins it, and an accepted note is never sent again.
+  const flights = new Map<string, Promise<FeedbackDelivery | null>>();
   const record = (
     body: ReceiptFact,
     join?: ReceiptJoin,
@@ -455,29 +537,35 @@ export function createReceiptExport(options: {
         undefined,
         webStamp(browserBuild),
       );
-      return this.deliverFeedback(id);
+      return (await this.deliverFeedback(id))!;
     },
-    async deliverFeedback(id: string) {
-      const r = (await journal.read({ kinds: ["feedback"] })).find(
-        (r) => r.body.kind === "feedback" && r.body.localRef.feedbackId === id,
-      );
-      if (!r || r.body.kind !== "feedback") return null;
+    async deliverFeedback(id: string): Promise<FeedbackDelivery | null> {
+      let flight = flights.get(id);
+      if (!flight) {
+        flight = deliver(id);
+        flights.set(id, flight);
+        void flight.then((d) => d?.delivery === "accepted" || flights.delete(id));
+      }
+      // The door answers within two deadlines; a send still queued or on the wire is uncertain, not failed.
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        const saved = JSON.parse(readFileSync(r.body.localRef.path, "utf8")) as {
-          feedback: unknown;
-        };
-        const { component: ui_component, ...content } = feedbackSchema.parse(saved.feedback);
-        const event = projectReceipt(r, { ...content, ui_component });
-        if (!event || !send)
-          throw Error("Telemetry export is not configured with verified web identity");
-        await bounded(send(event));
-        return { feedbackId: id, delivery: "accepted" as const };
-      } catch {
-        return {
-          feedbackId: id,
-          delivery: "failed" as const,
-          error: "The host kept the feedback. Delivery failed; try deliver again.",
-        };
+        return await Promise.race([
+          flight,
+          new Promise<FeedbackDelivery>((resolve) => {
+            timer = setTimeout(
+              () =>
+                resolve({
+                  feedbackId: id,
+                  delivery: "uncertain",
+                  error:
+                    "The host kept the feedback and is still delivering it; ask again before sending it again.",
+                }),
+              deadlineMs * 2,
+            );
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
       }
     },
     async diagnostics(batch: z.infer<typeof diagnosticsSchema>, browserBuild?: string | null) {
@@ -562,9 +650,9 @@ export function hostReceiptExport() {
         host: config.host,
         disableGeoip: true,
         flushAt: 1,
-        requestTimeout: 1500,
         fetchRetryCount: 0,
         enableExceptionAutocapture: false,
+        fetch: abortableFetch(),
       })
     : undefined;
   active = createReceiptExport({
