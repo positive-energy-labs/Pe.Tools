@@ -4,7 +4,7 @@ import { Deferred, Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
 import { HostLifecycle } from "./host-lifecycle.ts";
 import { hostOwnership, productRoot } from "./host-ownership.ts";
-import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
+import { parsePeRevitEnvelope, peRevitLauncher, withStderr } from "./pe-revit-launch.ts";
 import {
   createUpdateReader,
   isUpdatePlanId,
@@ -20,9 +20,10 @@ export const updateVerb: UpdateRunner = (verbArgs, detached = false) => {
       cwd: launch.cwd,
       detached,
       windowsHide: true,
-      stdio: ["ignore", "pipe", "ignore"],
+      stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
+    let stderr = "";
     let settled = false;
     const settle = (envelope: () => Parameters<typeof resolve>[0]) => {
       if (settled) return;
@@ -42,6 +43,9 @@ export const updateVerb: UpdateRunner = (verbArgs, detached = false) => {
       // envelope the CLI prints at handoff; the pipe closes whenever the stub finishes.
       if (detached) settle(() => parsePeRevitEnvelope(stdout, verbArgs, launch));
     });
+    child.stderr.on("data", (chunk) => {
+      stderr = (stderr + chunk).slice(-4096);
+    });
     child.on("error", reject);
     child.on("close", () => {
       if (settled) return;
@@ -49,7 +53,7 @@ export const updateVerb: UpdateRunner = (verbArgs, detached = false) => {
         settled = true;
         resolve(parsePeRevitEnvelope(stdout, verbArgs, launch));
       } catch (error) {
-        reject(error);
+        reject(withStderr(error, stderr));
       }
     });
   });

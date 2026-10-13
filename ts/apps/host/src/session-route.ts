@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { docListArgv, doctorArgv, sessionListArgv } from "@pe/host-contracts/pe-revit-contract";
 import { checkoutLayout } from "@pe/host-contracts/service-identity";
 import { type HostLane } from "./host-ownership.ts";
-import { peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
+import { peRevitLauncher, validatePeRevitEnvelope, withStderr } from "./pe-revit-launch.ts";
 import { runHostChild } from "./host-child.ts";
 
 /**
@@ -116,12 +116,12 @@ export function executeSessionCli<R>(
 export const runPeRevitCli: SessionCliRunner = (args) =>
   Effect.gen(function* () {
     const launch = peRevitLauncher();
-    const { stdout } = yield* runHostChild(launch.cmd, [...launch.args, ...args], {
+    const { stdout, stderr } = yield* runHostChild(launch.cmd, [...launch.args, ...args], {
       cwd: launch.cwd,
     });
     return yield* Effect.try({
       try: () => validatePeRevitEnvelope(stdout, args, launch),
-      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+      catch: (error) => withStderr(error, stderr),
     });
   });
 

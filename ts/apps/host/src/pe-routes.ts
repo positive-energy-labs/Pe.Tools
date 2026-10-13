@@ -206,7 +206,9 @@ export function createPeRoutes(options: PeRoutesOptions) {
       const parsed = feedbackSchema.safeParse(await body());
       if (!parsed.success) return json({ error: "invalid feedback" }, 400);
       try {
-        await captureNow("ui_feedback", parsed.data);
+        // The browser sent it; its React component name rides as ui_component so `component` is never null.
+        const { component: uiComponent, ...rest } = parsed.data;
+        await captureNow("ui_feedback", { ...rest, ui_component: uiComponent, component: "web" });
         return json({ ok: true });
       } catch (error) {
         return json({ error: message(error) }, 502);
