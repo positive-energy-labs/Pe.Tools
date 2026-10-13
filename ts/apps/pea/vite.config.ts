@@ -26,4 +26,7 @@ export default defineConfig({
     },
   },
   fmt: {},
+  // mcp.test.ts imports the host module graph (mcp-route -> receipt-export -> host-ownership),
+  // which resolves PE_LANE at module load; declare the dev lane as the host's own tests do.
+  test: { env: { PE_LANE: "dev" } },
 });
