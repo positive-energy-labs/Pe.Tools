@@ -14,7 +14,10 @@
  *
  * `find`, `read` and `do` are the same words and keys as Pea's `pe_find`, `pe_read` and `pe_do`, over the same
  * endpoints an agent uses by hand (`/ops`, `/call`, `/actions`). The script only adds what every page gets wrong
- * first time: the target headers, the read-versus-write door, and the shared log.
+ * first time: the runtime identity, the target headers, the read-versus-write door, and the shared log.
+ *
+ * The host refuses a browser request that does not name the runtime that served the page. Every door here names
+ * it; a page's own request to its host goes through `pe.fetch(url, init)` (same signature as `fetch`).
  */
 (() => {
   const H = {
@@ -23,11 +26,32 @@
     origin: "x-pe-origin",
     actor: "x-pe-action-actor",
   };
+  // The serving host writes `{ header, query, service }` here (pages-route), so the page names the runtime that
+  // served it, like the web app's `hostFetch`: a host that later takes over the port refuses this copy.
+  const RUNTIME = /*pe:runtime*/ null;
+  if (!RUNTIME) throw new Error("pe.js was not served by a Pe host; load it from /pages/pe.js");
   const pe = {
     /** The page's slug, from its URL. */
     slug: (location.pathname.match(/^\/pages\/([^/]+)/) || [])[1] || "",
     /** The chosen document `{ session, openId, title }`, after `pe.target()`. */
     doc: null,
+  };
+  /** `fetch` that names this page's runtime on same-origin requests; the host refuses a browser request without it. */
+  pe.fetch = (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+      location.href,
+    );
+    if (url.origin !== location.origin) return fetch(input, init);
+    const h = new Headers(init.headers ?? (input instanceof Request ? input.headers : undefined));
+    h.set(RUNTIME.header, RUNTIME.service);
+    return fetch(input, { ...init, headers: h });
+  };
+  // EventSource cannot send headers: the runtime rides the query, as the web app's `runtimeStreamUrl` does.
+  const streamUrl = (path) => {
+    const url = new URL(path, location.href);
+    url.searchParams.set(RUNTIME.query, RUNTIME.service);
+    return url.href;
   };
   const headers = () => ({
     "content-type": "application/json",
@@ -54,7 +78,32 @@
     return body;
   };
   const post = (path, body) =>
-    fetch(path, { method: "POST", headers: headers(), body: JSON.stringify(body) });
+    pe.fetch(path, { method: "POST", headers: headers(), body: JSON.stringify(body) });
+
+  /**
+   * A selector the page asked for that names nothing: thrown, and shown on the page, never swapped for another
+   * target. `code` uses the host resolver's words (`session-gone`, `document-closed`, `ambiguous`); `selector` is
+   * what failed and `available` what would have matched.
+   */
+  const refuse = (code, selector, available) => {
+    const error = new Error(
+      `pe.target refused ${selector} (${code}); available: ${available.join(", ") || "none"}`,
+    );
+    Object.assign(error, { name: "PeTargetRefusal", code, selector, available });
+    if (typeof document !== "undefined" && document.body) {
+      let note = document.getElementById("pe-refusal");
+      if (!note) {
+        note = document.createElement("div");
+        note.id = "pe-refusal";
+        note.setAttribute("role", "alert");
+        note.style.cssText =
+          "position:sticky;top:0;z-index:2147483647;padding:8px 12px;background:#7f1d1d;color:#fff;font:13px/1.4 system-ui,sans-serif;white-space:pre-wrap";
+        document.body.prepend(note);
+      }
+      note.textContent = error.message;
+    }
+    throw error;
+  };
 
   /**
    * Choose the Revit session and document. `?session=<id>&doc=<openId>` or `?title=<part of the title>` on the
@@ -90,7 +139,7 @@
   pe.find = async (words = "") => {
     const q = pe.doc ? `?session=${encodeURIComponent(pe.doc.session)}` : "";
     const { operations } = await json(
-      await fetch(`/ops${q}`, { headers: { accept: "application/json" } }),
+      await pe.fetch(`/ops${q}`, { headers: { accept: "application/json" } }),
     );
     const terms = words.toLowerCase().split(/\s+/).filter(Boolean);
     return operations
@@ -138,7 +187,7 @@
     while (row.state === "running") {
       await new Promise((ok) => setTimeout(ok, 250));
       [row = row] = await json(
-        await fetch(`/actions?id=${encodeURIComponent(id)}`, { headers: headers() }),
+        await pe.fetch(`/actions?id=${encodeURIComponent(id)}`, { headers: headers() }),
       );
     }
     if (row.state !== "succeeded")
@@ -157,7 +206,7 @@
   pe.script = async (source, { mode = "ReadOnly", timeoutSeconds = 120 } = {}) => {
     let scriptContent = source;
     if (!source.includes("\n") && /\.csx?$/i.test(source)) {
-      const r = await fetch(new URL(source, location.href), { cache: "no-store" });
+      const r = await pe.fetch(new URL(source, location.href), { cache: "no-store" });
       if (!r.ok) return fail(r);
       scriptContent = await r.text();
     }
@@ -300,20 +349,20 @@
     const snapshot = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
-        fetch(`${base}/snapshot`, {
+        pe.fetch(`${base}/snapshot`, {
           method: "PUT",
           headers: headers(),
           body: JSON.stringify(k.state),
         }).catch(() => {});
         if (describe)
-          fetch(`${base}/text`, {
+          pe.fetch(`${base}/text`, {
             method: "PUT",
             headers: { ...headers(), "content-type": "text/markdown" },
             body: String(describe(k.state)),
           }).catch(() => {});
       }, 150);
     };
-    const saved = await json(await fetch(`${base}/state`));
+    const saved = await json(await pe.fetch(`${base}/state`));
     seq = saved.seq;
     k.replay(
       saved.events.map((row) => row.event),
@@ -338,7 +387,7 @@
     let retryMs = 1000;
     let heard = Date.now();
     const follow = () => {
-      const es = new EventSource(`${base}/events?after=${seq}`);
+      const es = new EventSource(streamUrl(`${base}/events?after=${seq}`));
       heard = Date.now();
       es.onopen = () => ((retryMs = 1000), (heard = Date.now()));
       es.addEventListener("ping", () => (heard = Date.now()));
@@ -370,10 +419,15 @@
   // buttons for two hours while the fix was on disk (2026-10-05). Re-read the page's own file and reload on change.
   // ponytail: polls the whole file every 15 s; a host-sent mtime on the events heartbeat replaces it if pages get big.
   if (pe.slug) {
-    const own = () => fetch(location.pathname, { cache: "no-store" }).then((r) => (r.ok ? r.text() : null));
+    const own = () =>
+      pe.fetch(location.pathname, { cache: "no-store" }).then((r) => (r.ok ? r.text() : null));
     own().then((first) =>
       setInterval(
-        () => own().then((now) => now != null && first != null && now !== first && location.reload(), () => {}),
+        () =>
+          own().then(
+            (now) => now != null && first != null && now !== first && location.reload(),
+            () => {},
+          ),
         15000,
       ),
     );

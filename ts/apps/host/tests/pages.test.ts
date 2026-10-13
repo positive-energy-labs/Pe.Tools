@@ -1,8 +1,12 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { createPagesHandler } from "../src/pages-route.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
+import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
 
 const cleanup: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
@@ -138,8 +142,11 @@ describe("pages", () => {
     const source = await js.text();
     expect(source).not.toMatch(/^export /m);
     // helpers stay private: a page that declares its own `esc` or `set` must still run
-    expect(() => new Function(`const esc = 1; const set = 2;
-${source}`)).not.toThrow();
+    expect(
+      () =>
+        new Function(`const esc = 1; const set = 2;
+${source}`),
+    ).not.toThrow();
     const scope: {
       rv?: {
         render: (spec: unknown) => string;
@@ -283,5 +290,133 @@ ${source}`)).not.toThrow();
     expect(text).toContain("id: 3\n");
     controller.abort();
     await reader.cancel().catch(() => undefined);
+  });
+
+  describe("pe.js as a browser runs it", () => {
+    type Sent = { url: string; headers: Record<string, string> };
+    const sessions = [
+      {
+        sessionId: "s1",
+        openDocuments: [
+          { openId: "d1", title: "Chadds MEP", isActive: true },
+          { openId: "d2", title: "Chadds Arch", isActive: false },
+        ],
+      },
+    ];
+    /** The served bytes in a page at `/pages/todo/?<query>`, with fetch and EventSource recorded. */
+    async function page(query = "") {
+      const { fetch } = await pagesRoot();
+      const source = await (await fetch("/pages/pe.js")).text();
+      const sent: Sent[] = [];
+      const body: { children: unknown[]; prepend(n: unknown): void } = {
+        children: [],
+        prepend: (n) => body.children.unshift(n),
+      };
+      const nodes = new Map<string, Record<string, unknown>>();
+      const location = new URL(`http://127.0.0.1:5180/pages/todo/${query ? `?${query}` : ""}`);
+      const window: Record<string, unknown> = {};
+      runInNewContext(source, {
+        window,
+        location,
+        URL,
+        URLSearchParams,
+        Headers,
+        Request,
+        Response,
+        console,
+        crypto,
+        setTimeout,
+        clearTimeout,
+        setInterval: () => 0,
+        clearInterval: () => {},
+        document: {
+          body,
+          getElementById: (id: string) => nodes.get(id) ?? null,
+          createElement: () => {
+            const node: Record<string, unknown> = {
+              style: {},
+              setAttribute: (k: string, v: string) => (node[k] = v),
+            };
+            queueMicrotask(() => nodes.set(String(node.id), node));
+            return node;
+          },
+        },
+        fetch: async (input: string | URL, init: RequestInit = {}) => {
+          const url = new URL(String(input), location);
+          sent.push({
+            url: url.pathname + url.search,
+            headers: Object.fromEntries(new Headers(init.headers)),
+          });
+          if (url.pathname === "/call") return Response.json({ sessions });
+          if (url.pathname.endsWith("/state"))
+            return Response.json({ seq: 0, events: [], snapshot: null, text: null });
+          return new Response("<p>page</p>");
+        },
+        EventSource: class {
+          constructor(url: string) {
+            sent.push({ url: new URL(url).pathname + new URL(url).search, headers: {} });
+          }
+          addEventListener() {}
+          close() {}
+        },
+      });
+      return { pe: window.pe as Record<string, (...a: unknown[]) => Promise<unknown>>, sent, body };
+    }
+    const options: IdentityOptions = {
+      port: () => 5180,
+      frontendOrigin: () => undefined,
+      share: {
+        read: async () => ({
+          allowRemoteAdministration: true,
+          desired: "off",
+          state: "off",
+          url: null,
+          refusal: null,
+          callers: [],
+          refused: [],
+        }),
+        observe: () => {},
+      },
+    };
+    const browser = {
+      host: "127.0.0.1:5180",
+      "sec-fetch-site": "same-origin",
+      "sec-fetch-mode": "cors",
+      "sec-fetch-dest": "empty",
+    };
+
+    it("names the serving runtime on every door, so the identity gate admits the page", async () => {
+      const { pe, sent } = await page();
+      await pe.target!();
+      await pe.find!("x").catch(() => undefined);
+      await pe.state!({ base: {}, state: {}, replay() {}, fire() {} });
+      const paths = sent.map((r) => r.url);
+      expect(paths).toEqual(
+        expect.arrayContaining(["/pages/todo/", "/call", "/ops?session=s1", "/pages/todo/state"]),
+      );
+      expect(paths.some((p) => p.startsWith("/pages/todo/events?after=0&peRuntimeService="))).toBe(
+        true,
+      );
+      for (const request of sent) {
+        expect(
+          await readRequestIdentity({ ...browser, ...request.headers }, request.url, options),
+          request.url,
+        ).toHaveProperty("principal");
+        const bare = Object.fromEntries(
+          Object.entries(request.headers).filter(([k]) => k !== HOST_RUNTIME_SERVICE_HEADER),
+        );
+        expect(
+          await readRequestIdentity(
+            { ...browser, ...bare },
+            request.url.replace(/[?&]peRuntimeService=[^&]*/, ""),
+            options,
+          ),
+          request.url,
+        ).toMatchObject({ refusal: { code: "runtime.owner-missing" } });
+      }
+      expect(sent.find((r) => r.url === "/call")!.headers[HOST_RUNTIME_SERVICE_HEADER]).toBe(
+        hostOwnership.serviceName,
+      );
+    });
   });
 });

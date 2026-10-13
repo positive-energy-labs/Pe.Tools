@@ -30,7 +30,11 @@ import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect } from "effect";
 import { HttpEffect, HttpRouter } from "effect/unstable/http";
-import { HOST_RPC_ORIGIN_HEADER } from "@pe/host-contracts/contracts";
+import {
+  HOST_RPC_ORIGIN_HEADER,
+  HOST_RUNTIME_SERVICE_HEADER,
+  HOST_RUNTIME_SERVICE_QUERY,
+} from "@pe/host-contracts/contracts";
 import { hostOwnership } from "./host-ownership.ts";
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
 
@@ -67,6 +71,25 @@ ${source.replace(exports, "globalThis.rv = {$1};")}
 `;
 };
 const asset = (name: string) => readFileSync(assetPath(name), "utf8");
+
+/**
+ * The doors carry the runtime that served them: the request identity gate refuses a browser API
+ * request that does not name its runtime, so this host writes its own service name into pe.js,
+ * as the web app's build freezes it into its module graph.
+ */
+const RUNTIME_SLOT = "/*pe:runtime*/ null";
+const servedPe = () => {
+  const source = asset("pe.js");
+  if (!source.includes(RUNTIME_SLOT)) throw Error(`pe.js must hold one \`${RUNTIME_SLOT}\` slot`);
+  return source.replace(
+    RUNTIME_SLOT,
+    JSON.stringify({
+      header: HOST_RUNTIME_SERVICE_HEADER,
+      query: HOST_RUNTIME_SERVICE_QUERY,
+      service: hostOwnership.serviceName,
+    }),
+  );
+};
 
 const ACTOR_HEADER = "x-pe-action-actor";
 /** One folder name: no dots, so no `..` and no file masquerading as a page. */
@@ -340,7 +363,7 @@ export function createPagesHandler(root: string, pods?: string) {
       return wantsHtml ? listPage(await list()) : json({ root, pages: await list() });
     const [, slug = "", ...rest] = parts;
     if (slug === "pe.js")
-      return new Response(asset("pe.js"), {
+      return new Response(servedPe(), {
         headers: { "content-type": MIME[".js"]!, "cache-control": "no-cache" },
       });
     if (slug === "revit.js")
