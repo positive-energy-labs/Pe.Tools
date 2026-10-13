@@ -123,6 +123,8 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
       refresh: async () => seed.observation.update,
       automaticPending: () => false,
       apply: async () => seed.observation.update,
+      setAutomatic: async () => seed.observation.update,
+      announce: () => {},
     },
     grants: {
       subscribe: () => () => {},
