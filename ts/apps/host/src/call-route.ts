@@ -195,6 +195,8 @@ export function makeCallRoute(
     let op:
       | { key: string; request: unknown; tsOnly: boolean; startedAt: number; origin: string }
       | undefined;
+    // The caller lives in AsyncLocalStorage; the Node body read resumes outside it. Read first.
+    const caller = currentCaller();
     return Effect.gen(function* () {
       // Lenient by ruling (queue-provenance §1): origin is attribution, not authorization —
       // a missing header is counted as "unknown", never rejected. No registry, no validation.
@@ -254,7 +256,7 @@ export function makeCallRoute(
             new BridgeError("Unknown operation intent", 409, { notDispatched: true }),
           );
         yield* Effect.try({
-          try: () => requireEligibleCaller(definition, currentCaller(), "/call"),
+          try: () => requireEligibleCaller(definition, caller, "/call"),
           catch: (error) => error,
         });
         if (!isTsOnlyOperationKey(key)) {
@@ -337,7 +339,7 @@ export function makeCallRoute(
               actionDeps.captureStore ?? hostCaptures(),
               result.value,
               request,
-              captureOrigin(origin, currentCaller()),
+              captureOrigin(origin, caller),
               bridge,
               { session: bridgeSessionId, openId: openDocumentId },
             )
@@ -528,10 +530,12 @@ export function makeCallRoute(
   );
   const actions = HttpRouter.add("POST", "/actions", (req) =>
     Effect.gen(function* () {
+      // The caller lives in AsyncLocalStorage; the Node body read resumes outside it. Read first.
+      const caller = currentCaller();
       const body = yield* req.json;
       const bridge = yield* RevitBridge;
       const row = yield* Effect.tryPromise({
-        try: () => admit(body, bridge, currentCaller()),
+        try: () => admit(body, bridge, caller),
         catch: (error) => error,
       });
       return Response.jsonUnsafe(row, { status: row.state === "running" ? 202 : 200 });
