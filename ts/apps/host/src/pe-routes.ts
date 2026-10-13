@@ -57,6 +57,8 @@ import { productHarnessThreadsPath, productRouteWorkPath } from "./product-paths
 import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
 import { attachmentWhose, createMachine, machineSources, useHostMachine } from "./machine.ts";
 import { bindControl, currentCaller, routeActorOf, writeTerminalContext } from "./control.ts";
+import { bindRevoke } from "./revoke.ts";
+import { hostActionJournal } from "./gateway-owner.ts";
 import { UpdateReader } from "./update-reader.ts";
 import { makeInstalledUpdateReader } from "./update-route.ts";
 import { HostLifecycle } from "./host-lifecycle.ts";
@@ -470,9 +472,11 @@ export const peRoutesLayer = (
       );
       useHostMachine(machine);
       bindControl({ heads: threads.heads.read, whose: attachmentWhose });
+      const unbindRevoke = bridge ? bindRevoke(hostActionJournal(), bridge) : undefined;
       const terminal = writeTerminalContext(hostOwnership.serviceName);
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
+          unbindRevoke?.();
           terminal.retire();
           bindControl({ heads: null, whose: () => "you" });
           useHostMachine(undefined);

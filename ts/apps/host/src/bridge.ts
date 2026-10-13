@@ -172,6 +172,8 @@ export class RevitBridge extends Context.Service<
       { value: unknown; target: { session: string; document: string | null } },
       BridgeError | NoRevitSession
     >;
+    /** Retire only a host-queued request; never send op.cancel to Revit. */
+    readonly cancelQueued: (requestIds: Promise<readonly string[]>) => Promise<void>;
     readonly snapshot: (bridgeSessionId?: string) => Effect.Effect<BridgeSessionView>;
     readonly list: Effect.Effect<readonly BridgeSessionView[]>;
     readonly lastRegistrationRefusal: Effect.Effect<string | null>;
@@ -453,6 +455,8 @@ export const RevitBridgeLive = Layer.effect(
       return yield* Effect.scoped(handleConnectionScoped(req));
     });
 
+    let revocation: Promise<void> = Promise.resolve();
+
     const invokeSession = Effect.fnUntraced(function* (
       session: Session,
       operationKey: string,
@@ -463,12 +467,46 @@ export const RevitBridgeLive = Layer.effect(
       reserved?: Deferred.Deferred<BridgeResponse, BridgeError>,
     ) {
       const reply = reserved ?? (yield* Deferred.make<BridgeResponse, BridgeError>());
-      yield* trackBridgeRequest(session.requests, {
-        operationKey,
-        requestId,
-        reply,
-        phase: "dispatched",
-      });
+      // A revoke fences dispatch synchronously, before its asynchronous journal census answers.
+      // Checking that fence and changing the request phase are one atomic decision.
+      while (true) {
+        const fence = revocation;
+        if (reserved)
+          yield* Effect.tryPromise({
+            try: () => fence,
+            catch: (error) =>
+              new BridgeError(`Grant revoke census failed: ${String(error)}`, 503, {
+                notDispatched: true,
+              }),
+          });
+        if (reserved) {
+          const live = (yield* Ref.get(sessions)).get(session.sessionId);
+          if (live !== session) return yield* Effect.fail(new NoRevitSession());
+          const state = yield* Ref.get(session.state);
+          if (openDocumentId && !state.openDocuments.some((doc) => doc.openId === openDocumentId))
+            return yield* Effect.fail(
+              new BridgeError("The selected document lifetime closed before dispatch", 409, {
+                notDispatched: true,
+              }),
+            );
+        }
+        const phase = yield* Ref.modify(session.requests, (requests) => {
+          if (requests.get(requestId)?.phase === "cancelled")
+            return ["cancelled", requests] as const;
+          if (reserved && fence !== revocation) return ["waiting", requests] as const;
+          const next = new Map(requests);
+          next.set(requestId, { operationKey, requestId, reply, phase: "dispatched" });
+          return ["dispatched", next] as const;
+        });
+        if (phase === "dispatched") break;
+        if (phase === "cancelled")
+          return yield* Effect.fail(
+            new BridgeError(`'${operationKey}' was cancelled before dispatch.`, 499, {
+              notDispatched: true,
+              nativeOutcome: "CancelledBeforeDispatch",
+            }),
+          );
+      }
       return yield* Effect.gen(function* () {
         const payloadJson = yield* encodePayloadJson(payload);
         yield* session.send({
@@ -507,6 +545,27 @@ export const RevitBridgeLive = Layer.effect(
         };
       }).pipe(Effect.ensuring(forgetBridgeRequest(session.requests, requestId)));
     });
+
+    const cancelQueuedRequest = Effect.fnUntraced(function* (requestId: string) {
+      for (const session of (yield* Ref.get(sessions)).values()) {
+        const cancelled = yield* Ref.modify(session.requests, (requests) => {
+          const request = requests.get(requestId);
+          if (request?.phase !== "queued") return [false, requests] as const;
+          const next = new Map(requests);
+          next.set(requestId, { ...request, phase: "cancelled" });
+          return [true, next] as const;
+        });
+        if (cancelled) return true;
+      }
+      return false;
+    });
+
+    const cancelQueued = (requestIds: Promise<readonly string[]>): Promise<void> => {
+      revocation = Promise.all([revocation, requestIds]).then(async ([, ids]) => {
+        for (const id of ids) await Effect.runPromise(cancelQueuedRequest(id));
+      });
+      return revocation;
+    };
 
     /**
      * The whole point of cancel: it walks past the per-session FIFO gate, so it reaches Revit
@@ -630,28 +689,6 @@ export const RevitBridgeLive = Layer.effect(
         yield* Effect.logInfo(
           `Revit queue started op=${operationKey} session=${session.sessionId} depth=${depth} wait_ms=${startedAt - queuedAt}`,
         );
-        // The session may have died — or been taken over by a reconnect — while we queued.
-        const live = (yield* Ref.get(sessions)).get(session.sessionId);
-        if (live !== session) return yield* Effect.fail(new NoRevitSession());
-        // Cancelled while it waited: Revit never sees it, so this is the CancelledBeforeDispatch
-        // the native queue reports for the same situation on its own side.
-        if ((yield* Ref.get(session.requests)).get(wireId)?.phase === "cancelled")
-          return yield* Effect.fail(
-            new BridgeError(`'${operationKey}' was cancelled before dispatch.`, 499, {
-              notDispatched: true,
-              nativeOutcome: "CancelledBeforeDispatch",
-            }),
-          );
-        const currentState = yield* Ref.get(session.state);
-        if (
-          selectedDocument &&
-          !currentState.openDocuments.some((doc) => doc.openId === selectedDocument)
-        )
-          return yield* Effect.fail(
-            new BridgeError("The selected document lifetime closed before dispatch", 409, {
-              notDispatched: true,
-            }),
-          );
         const result = yield* invokeSession(
           session,
           operationKey,
@@ -700,6 +737,7 @@ export const RevitBridgeLive = Layer.effect(
 
     return {
       invoke,
+      cancelQueued,
       snapshot,
       list,
       handleConnection,
