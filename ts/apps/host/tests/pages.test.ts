@@ -418,5 +418,31 @@ ${source}`),
         hostOwnership.serviceName,
       );
     });
+
+    it("keeps the implicit default, and refuses a pin that names nothing instead of retargeting", async () => {
+      expect(await (await page()).pe.target!()).toEqual({
+        session: "s1",
+        openId: "d1",
+        title: "Chadds MEP",
+      });
+      expect(await (await page("title=arch")).pe.target!()).toMatchObject({ openId: "d2" });
+      const cases: [string, string, string][] = [
+        ["session=gone", "session-gone", "session=s1"],
+        ["doc=closed", "document-closed", "doc=d1 (Chadds MEP), doc=d2 (Chadds Arch)"],
+        ["title=hvac", "document-closed", "doc=d1 (Chadds MEP)"],
+        ["title=chadds", "ambiguous", "doc=d2 (Chadds Arch)"],
+      ];
+      for (const [query, code, available] of cases) {
+        const { pe, body } = await page(query);
+        const refusal = await pe.target!().then(
+          () => null,
+          (error: Error & { code: string; selector: string }) => error,
+        );
+        expect(refusal, query).toMatchObject({ name: "PeTargetRefusal", code, selector: query });
+        expect(refusal!.message).toContain(available);
+        expect(pe.doc).toBeNull();
+        expect((body.children[0] as { textContent: string }).textContent).toBe(refusal!.message);
+      }
+    });
   });
 });

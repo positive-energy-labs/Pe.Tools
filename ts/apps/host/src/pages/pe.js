@@ -106,30 +106,52 @@
   };
 
   /**
-   * Choose the Revit session and document. `?session=<id>&doc=<openId>` or `?title=<part of the title>` on the
-   * page URL pins one; otherwise the only connected session and its active document. Sets `pe.doc`.
+   * Choose the Revit session and document. `?session=<id>`, `?doc=<openId>` or `?title=<part of the title>` on the
+   * page URL pins one, and a pin that matches nothing refuses (`refuse` above). With no pin: the only connected
+   * session, else the one with an active document, and its active document. Sets `pe.doc`.
    */
   pe.target = async (want = Object.fromEntries(new URLSearchParams(location.search))) => {
     const { sessions } = await json(
       await post("/call", { key: "bridge.sessions.list", request: {} }),
     );
-    const s =
-      sessions.find((x) => x.sessionId === want.session) ||
-      (sessions.length === 1
-        ? sessions[0]
-        : sessions.find((x) => (x.openDocuments || []).some((d) => d.isActive)));
-    if (!s)
-      throw new Error(
-        sessions.length
-          ? `${sessions.length} Revit sessions are connected; add ?session=<id> to the page URL (${sessions.map((x) => x.sessionId).join(", ")})`
-          : "no Revit session is connected to the host (pe-revit session start, or open Revit with Pe.Tools installed)",
-      );
+    let s;
+    if (want.session) {
+      s = sessions.find((x) => x.sessionId === want.session);
+      if (!s)
+        refuse(
+          "session-gone",
+          `session=${want.session}`,
+          sessions.map((x) => `session=${x.sessionId}`),
+        );
+    } else {
+      s =
+        sessions.length === 1
+          ? sessions[0]
+          : sessions.find((x) => (x.openDocuments || []).some((d) => d.isActive));
+      if (!s)
+        throw new Error(
+          sessions.length
+            ? `${sessions.length} Revit sessions are connected; add ?session=<id> to the page URL (${sessions.map((x) => x.sessionId).join(", ")})`
+            : "no Revit session is connected to the host (pe-revit session start, or open Revit with Pe.Tools installed)",
+        );
+    }
     const docs = s.openDocuments || [];
-    const d =
-      docs.find((x) => x.openId === want.doc) ||
-      (want.title && docs.find((x) => x.title.toLowerCase().includes(want.title.toLowerCase()))) ||
-      docs.find((x) => x.isActive) ||
-      docs[0];
+    const named = (x) => `doc=${x.openId} (${x.title})`;
+    let d;
+    if (want.doc) {
+      d = docs.find((x) => x.openId === want.doc);
+      if (!d) refuse("document-closed", `doc=${want.doc}`, docs.map(named));
+    } else if (want.title) {
+      const part = want.title.toLowerCase();
+      const hits = docs.filter((x) => x.title.toLowerCase().includes(part));
+      if (hits.length !== 1)
+        refuse(
+          hits.length ? "ambiguous" : "document-closed",
+          `title=${want.title}`,
+          (hits.length ? hits : docs).map(named),
+        );
+      d = hits[0];
+    } else d = docs.find((x) => x.isActive) || docs[0];
     if (!d) throw new Error(`Revit session ${s.sessionId} has no open document`);
     pe.doc = { session: s.sessionId, openId: d.openId, title: d.title };
     return pe.doc;
