@@ -96,6 +96,21 @@ export function ThreadComposer({
       },
       options: { preventDefault: false, stopPropagation: false },
     },
+    {
+      hotkey: "Shift+2",
+      label: "@ point at a thing",
+      says: "Starts the composer mention menu from an empty draft.",
+      callback: () => {
+        if (!paneOwnsFocus()) return;
+        if (!draft.text) {
+          setText("@");
+          mentions.onCaret(1);
+          mentions.reset();
+        }
+        area?.focus();
+      },
+      options: { preventDefault: true, stopPropagation: false },
+    },
   ];
 
   const submit = (event: FormEvent) => {
