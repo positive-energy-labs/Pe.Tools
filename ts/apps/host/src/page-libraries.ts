@@ -51,8 +51,8 @@ export type PageDescriptor = {
   /** Why `key` is null; null when the Page has a key. */
   reason: string | null;
   slug: string;
-  /** The host's own URL for the Page; never derived from a folder by a consumer. */
-  openUrl: string;
+  /** The host's own URL for the Page, never derived from a folder by a consumer; null when no route serves it (no key). */
+  openUrl: string | null;
   title: string;
   /** The contributing package's manifest id; null for a scratch Page. */
   pod: string | null;
@@ -64,7 +64,7 @@ export type PageDescriptor = {
   directory: string;
 };
 
-/** A scratch folder name the doors accept; the canonical key is stricter (lowercase slug). */
+/** The syntax of one `/pages/<slug>` URL segment; only a canonical key's slug resolves to a folder. */
 export const PAGE_FOLDER = /^[a-z0-9][a-z0-9_-]*$/i;
 
 const titleOf = (html: string, slug: string) =>
@@ -80,7 +80,7 @@ export function scratchPageKey(
   } catch {
     return {
       key: null,
-      reason: `'${slug}' is not a lowercase slug (a-z, 0-9, single hyphens): the Page serves, but has no key and no doors until its folder is renamed.`,
+      reason: `'${slug}' is not a lowercase slug (a-z, 0-9, single hyphens): no route serves it and it has no doors until its folder is renamed.`,
     };
   }
 }
@@ -95,17 +95,18 @@ export async function scratchPageDescriptors(
     throw error;
   });
   for (const folder of folders) {
-    if (!folder.isDirectory() || !PAGE_FOLDER.test(folder.name) || folder.name.includes("--"))
-      continue;
+    // Every ordinary folder lists, so a noncanonical one never vanishes; a dot-folder is private.
+    if (!folder.isDirectory() || folder.name.startsWith(".")) continue;
     const directory = join(pagesRoot, folder.name);
     const index = join(directory, "index.html");
     const facts = await stat(index).catch(() => null);
     if (!facts?.isFile()) continue;
     const bytes = await readFile(index);
+    const named = scratchPageKey(folder.name);
     pages.push({
-      ...scratchPageKey(folder.name),
+      ...named,
       slug: folder.name,
-      openUrl: `/pages/${folder.name}/`,
+      openUrl: named.key ? `/pages/${folder.name}/` : null,
       title: titleOf(bytes.toString("utf8"), folder.name),
       pod: null,
       entry: { path: "index.html", sha256: sha(bytes), bytes },

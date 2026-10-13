@@ -174,7 +174,8 @@ export type PageRow = {
   /** The Page key: `page:@pages/<slug>`, or the package's `page:@<id>/pages/<page>`; null when the folder has none. */
   key: string | null;
   title: string;
-  url: string;
+  /** Null when no route serves it (a noncanonical scratch folder). */
+  url: string | null;
   /** Null for a packaged Page. */
   modifiedAt: string | null;
   pod: string | null;
@@ -393,14 +394,18 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
    */
   const dirOf = async (slug: string) => {
     const [id, page, ...more] = slug.split("--");
-    if (page === undefined) return { dir: join(root, slug), pod: null, ...scratchPageKey(slug) };
+    if (page === undefined) {
+      // Only a canonical slug is served; a noncanonical folder lists keyless and has no route.
+      const { key } = scratchPageKey(slug);
+      return key ? { dir: join(root, slug), pod: null, key } : null;
+    }
     if (more.length || !pods) return null;
     for (const pod of (await listPackages(pods)).packages) {
       const row = pod.contributions.find(
         (one) => one.kind === "page" && one.path === `pages/${page}`,
       );
       if (pod.id === id && row)
-        return { dir: join(pod.directory, row.path), pod: pod.id, key: row.key, reason: null };
+        return { dir: join(pod.directory, row.path), pod: pod.id, key: row.key };
     }
     return null;
   };
@@ -431,7 +436,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
       ? pages
           .map(
             (p) =>
-              `<li><a href="${p.url}">${escapeHtml(p.title)}</a> <code>${escapeHtml(p.slug)}</code>${p.pod ? ` <small>pod ${escapeHtml(p.pod)}</small>` : ""} ${p.modifiedAt ? ` <small>${escapeHtml(p.modifiedAt.slice(0, 16).replace("T", " "))}</small>` : ""}</li>`,
+              `<li>${p.url ? `<a href="${p.url}">${escapeHtml(p.title)}</a>` : `${escapeHtml(p.title)} <small>no route: rename the folder to a lowercase slug</small>`} <code>${escapeHtml(p.slug)}</code>${p.pod ? ` <small>pod ${escapeHtml(p.pod)}</small>` : ""} ${p.modifiedAt ? ` <small>${escapeHtml(p.modifiedAt.slice(0, 16).replace("T", " "))}</small>` : ""}</li>`,
           )
           .join("\n")
       : `<li><em>none yet</em></li>`;
@@ -457,7 +462,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     );
   }
 
-  async function file(slug: string, dir: string, page: string | null, segments: string[]) {
+  async function file(slug: string, dir: string, page: string, segments: string[]) {
     if (!segments.every((s) => SEGMENT.test(s)))
       return problem(400, "that is not a page file path");
     const path = join(dir, ...segments);
@@ -769,8 +774,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
   }
 
   /** `index.html` names its page: the host mints the key; the page never claims one. */
-  const withPageKey = (html: string, page: string | null) => {
-    if (!page) return html;
+  const withPageKey = (html: string, page: string) => {
     const meta = `<meta name="pe-page" content="${escapeHtml(page)}">`;
     const head = /<head[^>]*>/i.exec(html) ?? /^\s*<!doctype[^>]*>/i.exec(html);
     if (!head) return `${meta}${html}`;
@@ -786,7 +790,6 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
       const where = SLUG.test(slug) ? await dirOf(slug) : null;
       if (!where || verb !== "binding" || more.length || request.method !== "PUT")
         return problem(404, "the binding door is PUT /pe/pages/<slug>/binding");
-      if (!where.key) return problem(409, where.reason ?? "this page has no key");
       return bind(slug, where.dir, where.key, request);
     }
     const wantsHtml = (request.headers.get("accept") ?? "").includes("text/html");
@@ -840,12 +843,10 @@ ${asset("pe.css")}`,
         return problem(400, "an event is one JSON object");
       return json(await state.append(event, originOf(currentCaller())), 201);
     }
-    const keyed = verb === "target" || verb === "call" || verb === "act";
-    if (keyed && !where.key) return problem(409, where.reason ?? "this page has no key");
     if (verb === "target" && request.method === "GET")
-      return json(await target(where.key!, where.dir));
+      return json(await target(where.key, where.dir));
     if ((verb === "call" || verb === "act") && request.method === "POST")
-      return door(verb, slug, where.dir, where.key!, request);
+      return door(verb, slug, where.dir, where.key, request);
     if (verb === "events" && request.method === "GET") {
       const after = Number(
         url.searchParams.get("after") ?? request.headers.get("last-event-id") ?? 0,

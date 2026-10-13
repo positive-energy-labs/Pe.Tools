@@ -70,18 +70,21 @@ describe("pages", () => {
     await writeFile(join(folder, "pod.json"), JSON.stringify({ id: "ductkit", entrypoints: [] }));
     await writeFile(join(tour, "index.html"), "<title>Duct tour</title><p>in a pod</p>");
     await writeFile(join(tour, "census.csx"), "Result(1);");
-    // not a pod (no pod.json), and a plain page whose name carries the pod separator: both skipped
+    // not a pod (no pod.json): skipped; a scratch folder carrying the pod separator lists keyless and unserved
     await mkdir(join(pods, "folder", "pages", "x"), { recursive: true });
     await writeFile(join(pods, "folder", "pages", "x", "index.html"), "<p>no pod.json</p>");
     await mkdir(join(root, "odd--name"), { recursive: true });
     await writeFile(join(root, "odd--name", "index.html"), "<p>skipped</p>");
-    type Listed = { pages: { slug: string; key: string; title: string; pod: string | null }[] };
+    type Listed = {
+      pages: { slug: string; key: string | null; title: string; pod: string | null }[];
+    };
     const listed = async () =>
       ((await (await fetch("/pages")).json()) as Listed).pages
         .map((p) => [p.slug, p.key, p.title, p.pod])
         .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
     const expected = [
       ["ductkit--tour", "page:@ductkit/pages/tour", "Duct tour", "ductkit"],
+      ["odd--name", null, "odd--name", null],
       ["todo", "page:@pages/todo", "A todo page", null],
     ];
     expect(await listed()).toEqual(expected);
@@ -120,6 +123,11 @@ describe("pages", () => {
     await writeFile(join(pods, "kit", "pages", "tour", "index.html"), "<title>Tour</title>");
     await mkdir(join(root, "Odd_Name"), { recursive: true });
     await writeFile(join(root, "Odd_Name", "index.html"), "<title>Odd</title><p>odd</p>");
+    // Noncanonical folders never vanish: a space, a dot, the pod separator. A dot-folder is private.
+    for (const name of ["Has Space", "v1.2", "a--b", ".hidden"]) {
+      await mkdir(join(root, name), { recursive: true });
+      await writeFile(join(root, name, "index.html"), `<title>${name}</title>`);
+    }
     const pages = [
       ...(await scratchPageDescriptors(root)),
       ...packagePageDescriptors((await listPackages(pods)).packages),
@@ -138,45 +146,78 @@ describe("pages", () => {
           text: Buffer.from(entry.bytes).toString("utf8"),
         }))
         .sort((a, b) => a.slug.localeCompare(b.slug)),
-    ).toEqual([
-      {
-        key: "page:@duct-kit/pages/tour",
-        slug: "duct-kit--tour",
-        openUrl: "/pages/duct-kit--tour/",
-        title: "Tour",
-        pod: "duct-kit",
-        path: "pages/tour/index.html",
-        sha256: sha("<title>Tour</title>"),
-        text: "<title>Tour</title>",
-      },
-      {
-        key: null,
-        slug: "Odd_Name",
-        openUrl: "/pages/Odd_Name/",
-        title: "Odd",
-        pod: null,
-        path: "index.html",
-        sha256: sha("<title>Odd</title><p>odd</p>"),
-        text: "<title>Odd</title><p>odd</p>",
-      },
-      {
-        key: "page:@pages/todo",
-        slug: "todo",
-        openUrl: "/pages/todo/",
-        title: "A todo page",
-        pod: null,
-        path: "index.html",
-        sha256: sha("<!doctype html><title>A todo page</title><p>hi</p>"),
-        text: "<!doctype html><title>A todo page</title><p>hi</p>",
-      },
-    ]);
-    expect(pages.find((page) => page.key === null)?.reason).toContain("not a lowercase slug");
-    // A keyless folder still serves, mints no key, and its doors refuse with the reason.
-    const html = await (await fetch("/pages/Odd_Name/")).text();
-    expect(html).toContain("<p>odd</p>");
-    expect(html).not.toContain("pe-page");
-    const target = await fetch("/pages/Odd_Name/target");
-    expect(target.status).toBe(409);
+    ).toEqual(
+      [
+        {
+          key: "page:@duct-kit/pages/tour",
+          slug: "duct-kit--tour",
+          openUrl: "/pages/duct-kit--tour/",
+          title: "Tour",
+          pod: "duct-kit",
+          path: "pages/tour/index.html",
+          sha256: sha("<title>Tour</title>"),
+          text: "<title>Tour</title>",
+        },
+        {
+          key: null,
+          slug: "Has Space",
+          openUrl: null,
+          title: "Has Space",
+          pod: null,
+          path: "index.html",
+          sha256: sha("<title>Has Space</title>"),
+          text: "<title>Has Space</title>",
+        },
+        {
+          key: null,
+          slug: "Odd_Name",
+          openUrl: null,
+          title: "Odd",
+          pod: null,
+          path: "index.html",
+          sha256: sha("<title>Odd</title><p>odd</p>"),
+          text: "<title>Odd</title><p>odd</p>",
+        },
+        {
+          key: "page:@pages/todo",
+          slug: "todo",
+          openUrl: "/pages/todo/",
+          title: "A todo page",
+          pod: null,
+          path: "index.html",
+          sha256: sha("<!doctype html><title>A todo page</title><p>hi</p>"),
+          text: "<!doctype html><title>A todo page</title><p>hi</p>",
+        },
+        {
+          key: null,
+          slug: "v1.2",
+          openUrl: null,
+          title: "v1.2",
+          pod: null,
+          path: "index.html",
+          sha256: sha("<title>v1.2</title>"),
+          text: "<title>v1.2</title>",
+        },
+      ]
+        .concat([
+          {
+            key: null,
+            slug: "a--b",
+            openUrl: null,
+            title: "a--b",
+            pod: null,
+            path: "index.html",
+            sha256: sha("<title>a--b</title>"),
+            text: "<title>a--b</title>",
+          },
+        ])
+        .sort((a, b) => a.slug.localeCompare(b.slug)),
+    );
+    for (const page of pages.filter((one) => one.key === null))
+      expect(page.reason, page.slug).toContain("not a lowercase slug");
+    // A keyless folder has no route: no file, no doors, and its referer is no caller.
+    expect((await fetch("/pages/Odd_Name/")).status).toBe(404);
+    expect((await fetch("/pages/Odd_Name/target")).status).toBe(404);
     expect(
       callerOf(
         { kind: "local" },
