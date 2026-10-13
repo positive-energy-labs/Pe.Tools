@@ -260,7 +260,7 @@ test("HTTP authored writes enforce short local revision checks", async () => {
   expect(
     await asHuman(app)(new Request("http://local/pe/capabilities?session=session-exact")),
   ).toMatchObject({ status: 200 });
-  expect(catalogReads).toContain("session-exact");
+  expect(catalogReads).toContainEqual({ bridgeSessionId: "session-exact", session: undefined });
   const response = await asHuman(app)(
     new Request("http://local/pe/route-state/test-route?target=not-an-address"),
   );
