@@ -76,6 +76,7 @@ import {
   Refused,
   sessionWhose,
   threadHead,
+  subscribeHeads,
 } from "./control.ts";
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
 
@@ -469,6 +470,9 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
         };
         // Follow first, then replay: a row appended between the two is sent once, by seq.
         const unfollow = state.follow(send);
+        const unhead = subscribeHeads(() =>
+          controller.enqueue(encoder.encode("event: head\ndata: {}\n\n")),
+        );
         for (const row of await state.rows()) send(row);
         // A named heartbeat, so pe.js can tell a quiet stream from a dead one (a browser's own
         // EventSource retry was seen to never fire after a dev host restart, 2026-10-04).
@@ -479,6 +483,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
         stop = () => {
           clearInterval(beat);
           unfollow();
+          unhead();
           try {
             controller.close();
           } catch {

@@ -471,6 +471,9 @@
       if (document.visibilityState !== "hidden") readTarget().catch(() => {});
     };
     setInterval(fresh, 5000);
+    const heads = new EventSource(streamUrl(`${base}/events`));
+    heads.addEventListener("head", fresh);
+    window.addEventListener("pagehide", () => heads.close(), { once: true });
     window.addEventListener("focus", fresh);
     queueMicrotask(fresh);
     return {

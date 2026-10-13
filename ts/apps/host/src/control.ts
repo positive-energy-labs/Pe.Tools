@@ -166,6 +166,7 @@ export function requireHuman(caller: Caller, door: string, what: string) {
 
 type Sources = {
   heads: ((thread: string) => ThreadHead) | null;
+  subscribeHeads?: (notify: () => void) => () => void;
   /** Fail closed: a session nobody has proven Pea's is yours. */
   whose: (session: string) => "you" | "pea";
 };
@@ -175,6 +176,8 @@ export const bindControl = (bound: Partial<Sources>) => void Object.assign(sourc
 export const sessionWhose = (session: string) => sources.whose(session);
 /** The head a thread carries now; null before the head store is bound. */
 export const threadHead = (thread: string): ThreadHead | null => sources.heads?.(thread) ?? null;
+export const subscribeHeads = (notify: () => void) =>
+  sources.subscribeHeads?.(notify) ?? (() => {});
 
 const sameRef = (a: DocumentRef, b: DocumentRef) =>
   a.session === b.session && a.openId === b.openId;

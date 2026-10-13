@@ -471,14 +471,18 @@ export const peRoutesLayer = (
         lifecycle ? () => Effect.runSync(Deferred.succeed(lifecycle.latch, undefined)) : undefined,
       );
       useHostMachine(machine);
-      bindControl({ heads: threads.heads.read, whose: attachmentWhose });
+      bindControl({
+        heads: threads.heads.read,
+        subscribeHeads: threads.heads.subscribe,
+        whose: attachmentWhose,
+      });
       const unbindRevoke = bridge ? bindRevoke(hostActionJournal(), bridge) : undefined;
       const terminal = writeTerminalContext(hostOwnership.serviceName);
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
           unbindRevoke?.();
           terminal.retire();
-          bindControl({ heads: null, whose: () => "you" });
+          bindControl({ heads: null, subscribeHeads: undefined, whose: () => "you" });
           useHostMachine(undefined);
           machine.close();
         }),

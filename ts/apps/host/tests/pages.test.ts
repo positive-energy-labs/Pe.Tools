@@ -308,6 +308,37 @@ ${source}`),
     await reader.cancel().catch(() => undefined);
   });
 
+  it("pushes a head change to the page events stream before the five-second poll", async () => {
+    let changed = () => {};
+    let released = false;
+    bindControl({
+      subscribeHeads: (notify: () => void) => {
+        changed = notify;
+        return () => {
+          released = true;
+        };
+      },
+    });
+    const { fetch } = await pagesRoot();
+    const stream = await fetch("/pages/todo/events");
+    const reader = stream.body!.getReader();
+    try {
+      await reader.read();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      changed();
+      const pushed = reader.read().then(({ value }) => new TextDecoder().decode(value));
+      const timeout = new Promise<string>((resolve) => {
+        const timer = setTimeout(() => resolve("no head push within 250ms"), 250);
+        pushed.finally(() => clearTimeout(timer));
+      });
+      expect(await Promise.race([pushed, timeout])).toContain("event: head\ndata: {}\n\n");
+    } finally {
+      await reader.cancel();
+      bindControl({ subscribeHeads: undefined });
+    }
+    expect(released).toBe(true);
+  });
+
   describe("page doors: identity is the path, the target is the binding", () => {
     const MODEL = "C:\\Jobs\\Chadds\\Chadds MEP.rvt";
     const docA: DocumentRef = { session: "S1", openId: "A" };
