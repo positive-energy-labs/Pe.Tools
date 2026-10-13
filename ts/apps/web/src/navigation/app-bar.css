@@ -285,21 +285,11 @@
   app-region: drag;
 }
 .pe-appbar[data-overlay="true"] > .pe-appbar-row {
-  position: relative;
   min-height: var(
     --app-titlebar-height,
     env(titlebar-area-height, calc(var(--control-h) + 0.5rem))
   );
   padding-block: 0;
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
-}
-/* Native drag regions consume pointer events, so keep hover on the control row. */
-.pe-appbar[data-overlay="true"] > .pe-appbar-row::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 3px;
   -webkit-app-region: drag;
   app-region: drag;
 }
