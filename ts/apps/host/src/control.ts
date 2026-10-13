@@ -178,7 +178,6 @@ export const bindControl = (bound: Partial<Sources>) => void Object.assign(sourc
 export const documentAcquisition = (lifetime: DocumentRef) => sources.acquired(lifetime);
 export const sessionAcquisition = (session: string) => sources.acquiredSession(session);
 
-/** Pea's own resource, by acquisition evidence only (never a posture or a session label). */
 function acquisitionBasis(
   destination: Extract<ExecutionTarget, { kind: "session" | "document" }>,
 ): Basis | null {

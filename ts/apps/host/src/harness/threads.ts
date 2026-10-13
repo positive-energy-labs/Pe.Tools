@@ -522,7 +522,6 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     const target = input.defaultTarget;
     const session =
       target === null ? null : target.kind === "open" ? target.ref.session : target.session;
-    // Acquisition evidence per document: a user's document inside Pea's Revit is still yours.
     const acquired =
       target === null
         ? null

@@ -30,12 +30,7 @@ export type Caller = z.infer<typeof callerSchema>;
 /** Why a crossing was admitted; stored on the receipt and rechecked at every step begin (D4). */
 export const basisSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("human") }),
-  /**
-   * Evidence from the action journal that this exact resource is one Pea's action created (ADR
-   * 0017 D6 at document grain). `document` is rechecked at every step begin; `process` admits a
-   * session-wide effect on the Revit it started; `release` is that acquisition's own cleanup,
-   * which touches only what its receipts recorded.
-   */
+  /** Document scope is rechecked at step begin; release must survive its own close. */
   z.strictObject({
     kind: z.literal("acquisition"),
     id: z.string(),

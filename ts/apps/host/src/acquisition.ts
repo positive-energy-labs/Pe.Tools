@@ -3,21 +3,13 @@ import { basename, extname, isAbsolute, join, win32 } from "node:path";
 import { z } from "zod";
 import type { ActionReceipt, InstancesLaunch } from "@pe/agent-contracts";
 
-/**
- * Acquisition evidence (ADR 0017 D6 at document grain; review plan C3). An acquisition is a
- * resource one action created for Pea: a copy of a saved file, a new document, a detached cloud
- * open, or a background Revit. The acquiring action freezes this intent in its preparation before
- * anything is allocated; every allocation is a recorded step after it. This fold over the one
- * action journal is the only reader: no registry, no `owner` flag. Process provenance (`whose`)
- * is a label derived here; write authority is per document and minted only by `acquiredOpenIds`.
- */
+/** Intent is frozen before allocation; the journal fold is the sole acquisition authority (ADR 0017 D6). */
 
 // Parsed, not strict: an SDK incarnation also names its executable; only pid/start bind.
 const processSchema = z.object({ pid: z.number().int(), processStartUtc: z.string() });
-export type AcquiredProcess = z.infer<typeof processSchema>;
+type AcquiredProcess = z.infer<typeof processSchema>;
 
 const originSchema = z.discriminatedUnion("kind", [
-  /** Saved bytes copied to an immutable baseline, then to the work copy Revit opens. */
   z.strictObject({
     kind: z.literal("file-copy"),
     source: z.string(),
@@ -25,13 +17,12 @@ const originSchema = z.discriminatedUnion("kind", [
     baseline: z.string(),
     work: z.string(),
   }),
-  /** A new unsaved document from a template: its baseline is empty. */
   z.strictObject({ kind: z.literal("new"), template: z.string() }),
   /** A cloud model opened detached: no baseline version is recorded (handover says so). */
   z.strictObject({ kind: z.literal("detached"), source: z.string() }),
 ]);
 
-export const acquisitionIntentSchema = z.strictObject({
+const acquisitionIntentSchema = z.strictObject({
   id: z.string().min(1),
   /** The exclusive root under pea-work; every path this acquisition may create lives in it. */
   root: z.string(),
@@ -51,16 +42,12 @@ export const acquisitionIntentSchema = z.strictObject({
 export type AcquisitionIntent = z.infer<typeof acquisitionIntentSchema>;
 
 const artifactSchema = z.strictObject({ path: z.string(), sha256: z.string(), bytes: z.number() });
-export type Artifact = z.infer<typeof artifactSchema>;
+type Artifact = z.infer<typeof artifactSchema>;
 
 export type Acquisition = {
   readonly id: string;
   readonly intent: AcquisitionIntent;
-  /**
-   * planned: intent frozen, nothing allocated. reconciling: a step of its own, its handover or its
-   * cleanup has no proven outcome; nothing is guessed and nothing is admitted. held: its recorded
-   * resources exist as far as receipts know. released: a cleanup succeeded.
-   */
+  /** Reconciling includes unknown handover/cleanup steps; held describes receipts, not liveness. */
   readonly state: "planned" | "reconciling" | "held" | "released";
   /** The Revit this acquisition started (a start step that succeeded, even if the open failed). */
   readonly process: AcquiredProcess | null;
@@ -68,7 +55,6 @@ export type Acquisition = {
   readonly document: {
     readonly process: AcquiredProcess;
     readonly sdkOpenId: string;
-    readonly path: string | null;
   } | null;
   /** Paths its file steps recorded before any write; cleanup touches only these. */
   readonly files: readonly string[];
@@ -77,21 +63,17 @@ export type Acquisition = {
 };
 
 /** A deterministic exclusive root: action ids are caller text, never a path segment. */
-export const acquisitionRoot = (peaWork: string, id: string) =>
+const acquisitionRoot = (peaWork: string, id: string) =>
   join(peaWork, createHash("sha256").update(id).digest("hex").slice(0, 32));
 
-export const isCloud = (source: string) => /^(cld:\/\/|cloud:)/i.test(source);
+const isCloud = (source: string) => /^(cld:\/\/|cloud:)/i.test(source);
 const resultName = (source: string) => {
   const ext = extname(source).toLowerCase();
   const stem = basename(source, extname(source)).replace(/[<>:"/\\|?*{}]/g, "_") || "document";
   return `${stem}${ext === ".rfa" || ext === ".rft" ? ".rfa" : ".rvt"}`;
 };
 
-/**
- * The intent for one acquiring launch, with every path it may create, before anything exists.
- * A reload is never an acquisition: it mutates an exact open lifetime. `hint` is the provisional
- * worksharing read of a local .rvt (true/false); unknown refuses before this is called.
- */
+/** Reserve every output before effects; an unknown worksharing hint must refuse upstream. */
 export function planAcquisition(
   id: string,
   peaWork: string,
@@ -102,41 +84,31 @@ export function planAcquisition(
   const root = acquisitionRoot(peaWork, id);
   if (!launch) return { id, root, process, document: null };
   if (launch.reload) throw Error("A reload acts on an open document; it is never an acquisition.");
-  const result = join(root, "result", resultName(launch.source));
-  const diffPlan = join(root, "diff-plan.json");
-  if (launch.template)
-    return {
-      id,
-      root,
-      process,
-      document: { origin: { kind: "new", template: launch.source }, result, diffPlan },
+  let origin: z.infer<typeof originSchema>;
+  if (launch.template) origin = { kind: "new", template: launch.source };
+  else if (isCloud(launch.source)) origin = { kind: "detached", source: launch.source };
+  else {
+    if (!isAbsolute(launch.source))
+      throw Error(
+        `Pea opens a local path or a cloud identity; '${launch.source}' is neither. Read recents for the path it opens with.`,
+      );
+    const name = basename(launch.source);
+    origin = {
+      kind: "file-copy",
+      source: launch.source,
+      detach: hint || launch.detach === true,
+      baseline: join(root, "baseline", name),
+      work: join(root, "work", name),
     };
-  if (isCloud(launch.source))
-    return {
-      id,
-      root,
-      process,
-      document: { origin: { kind: "detached", source: launch.source }, result, diffPlan },
-    };
-  if (!isAbsolute(launch.source))
-    throw Error(
-      `Pea opens a local path or a cloud identity; '${launch.source}' is neither. Read recents for the path it opens with.`,
-    );
-  const name = basename(launch.source);
+  }
   return {
     id,
     root,
     process,
     document: {
-      origin: {
-        kind: "file-copy",
-        source: launch.source,
-        detach: hint || launch.detach === true,
-        baseline: join(root, "baseline", name),
-        work: join(root, "work", name),
-      },
-      result,
-      diffPlan,
+      origin,
+      result: join(root, "result", resultName(launch.source)),
+      diffPlan: join(root, "diff-plan.json"),
     },
   };
 }
@@ -146,8 +118,7 @@ const startedSchema = z.object({ session: z.object({ process: processSchema }) }
 const docView = z.object({
   document: z.object({ openId: z.string().min(1), path: z.string().nullable() }),
 });
-// A live open settles with the SDK's DocOpResult; one recovered by `op result <request-id>` keeps
-// it under the receipt response's `result`. Either is that exact request's own answer.
+// Recovery wraps the same request's DocOpResult under response.result.
 const openedSchema = z.union([docView, z.object({ result: docView }).transform((r) => r.result)]);
 const copiedSchema = z.object({ sha256: z.string(), bytes: z.number() });
 const fileStepInput = z.object({ to: z.string() });
@@ -160,16 +131,13 @@ const forAcquisition = z.object({ acquisition: z.string() });
 
 const samePath = (a: string, b: string) =>
   win32.normalize(a).toLowerCase() === win32.normalize(b).toLowerCase();
-export const sameProcess = (a: AcquiredProcess, b: AcquiredProcess) =>
+const sameProcess = (a: AcquiredProcess, b: AcquiredProcess) =>
   a.pid === b.pid && a.processStartUtc === b.processStartUtc;
 /** Steps decide, not the attempt's state: a recovered step is proven even before a resume. */
 const uncertain = (row: ActionReceipt) =>
   row.steps.some((step) => step.state === "running" || step.state === "unknown");
 
-/**
- * Every acquisition the journal proves, oldest first. A malformed persisted intent mints nothing
- * (it is skipped, never repaired); an action that failed before any effect leaves no acquisition.
- */
+/** Malformed persisted intent mints nothing; actions with no effects leave no acquisition. */
 export function foldAcquisitions(receipts: readonly ActionReceipt[]): Acquisition[] {
   const linked = (key: string, id: string) =>
     receipts.filter(
@@ -198,7 +166,7 @@ export function foldAcquisitions(receipts: readonly ActionReceipt[]): Acquisitio
       docProcess &&
       (origin?.kind !== "file-copy" ||
         (opened.document.path !== null && samePath(opened.document.path, origin.work)))
-        ? { process: docProcess, sdkOpenId: opened.document.openId, path: opened.document.path }
+        ? { process: docProcess, sdkOpenId: opened.document.openId }
         : null;
     const files = row.steps.flatMap((step) =>
       step.kind === "file" ? [fileStepInput.parse(step.input).to] : [],
@@ -243,12 +211,7 @@ export const processWhose = (acquisitions: readonly Acquisition[], process: Acqu
     ? ("pea" as const)
     : ("you" as const);
 
-/**
- * The only mint of a Pea write on one document: product openId → acquisition id. A held
- * acquisition's bound SDK lifetime must be open in its exact process now, natively certified
- * independent (not workshared, or detached; unknown is not), and joined to exactly one product
- * document by the executor's openId. Anything missing leaves the document read.
- */
+/** Writes require a held lifetime, native independence, and exactly one executor-attested product join. */
 export function acquiredOpenIds(
   acquisitions: readonly Acquisition[],
   process: AcquiredProcess,

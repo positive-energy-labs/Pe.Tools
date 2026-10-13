@@ -1,10 +1,7 @@
 import { createReadStream } from "node:fs";
 
-// ponytail: interim raw scan, kept only as the --detach hint for a copy-first acquisition. It never
-// grants anything: authority waits for native facts on the opened copy (acquisition.ts), and an
-// unknown read refuses the acquisition. Deletion frontier: the SDK's read-only
-// `doc file-facts <path>` verb (generated `docFileFactsArgv`, review acquisition-plan §5) — when the
-// pin carries it, replace this call with its typed receipt and delete this file.
+// Interim detach hint only; native facts grant writes and unknown refuses. Replace with SDK
+// `doc file-facts <path>` / `docFileFactsArgv` once available (acquisition-plan ?5), then delete.
 
 // BasicFileInfo, the stream every .rvt carries, is UTF-16 text; its Worksharing line reads
 // "Worksharing: Not enabled" for a model that was never workshared.

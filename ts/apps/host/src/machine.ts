@@ -82,11 +82,7 @@ export type AttachmentRead = Omit<MachineAttachment, "documents"> & {
   readonly documents: readonly Omit<MachineAttachmentDocument, "access">[] | null;
 };
 
-/**
- * Per open document: a document Pea's acquisition holds (product openId → acquisition id) is
- * Pea's, a live grant on the exact lifetime (bridge session + product openId) writes, everything
- * else is read. Expired and revoked grants are dead, so a stale head never draws rw.
- */
+/** Only acquisitions or unexpired exact-lifetime grants write; stale heads remain read-only. */
 export function withAccess(
   attachment: AttachmentRead,
   acquired: ReadonlyMap<string, string>,

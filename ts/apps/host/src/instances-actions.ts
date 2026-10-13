@@ -8,7 +8,6 @@ import {
   type SdkDocumentRef,
   canonicalRouteInput,
   type InstancesActionKey,
-  type InstancesLaunch,
   type Basis,
   type ActionAdmission,
   type RefusalCode,
@@ -129,7 +128,6 @@ type Target = {
   /** The row's receipt path; null for an icon-started Revit, which the SDK adopts first. */
   expectSession: string | null;
   process: { pid: number; processStartUtc: string };
-  posture: "foreground" | "background";
 };
 type Prepared = {
   target: Target | null;
@@ -186,10 +184,20 @@ type RunningRow = Extract<SessionObservation, { case: "controlled-active" | "obs
  */
 async function readTarget(
   selection: SdkSessionSelection,
-  expected: { pid: number; processStartUtc: string } | undefined,
+  expected: Target["process"] | undefined,
   read: SdkReceiptReader,
-): Promise<Target> {
-  const args = sessionListArgv(selection);
+): Promise<Target>;
+async function readTarget(
+  selection: null,
+  expected: Target["process"],
+  read: SdkReceiptReader,
+): Promise<Target | null>;
+async function readTarget(
+  selection: SdkSessionSelection | null,
+  expected: Target["process"] | undefined,
+  read: SdkReceiptReader,
+): Promise<Target | null> {
+  const args = sessionListArgv(selection ?? {});
   const envelope = parsePeRevitEnvelope<SessionListResult>(
     await read(args),
     args,
@@ -202,6 +210,8 @@ async function readTarget(
         (row.process.pid === expected.pid &&
           row.process.processStartUtc === expected.processStartUtc)),
   );
+  // Acquisition cleanup can finish after its exact process stopped; an unread census cannot prove that.
+  if (selection === null && rows.length === 0 && !envelope.diagnostics.length) return null;
   if (rows.length !== 1 || envelope.diagnostics.length)
     throw refuse(
       expected
@@ -210,45 +220,19 @@ async function readTarget(
       envelope.result,
     );
   const row = rows[0]!;
-  const target = {
-    process: { pid: row.process.pid, processStartUtc: row.process.processStartUtc },
-    posture: row.shape.posture,
-  };
+  const process = { pid: row.process.pid, processStartUtc: row.process.processStartUtc };
   if (row.case === "observed-active")
-    return { ...target, selection: { pid: row.process.pid }, expectSession: null };
-  if ("id" in selection && row.id !== selection.id)
+    return { process, selection: { pid: row.process.pid }, expectSession: null };
+  if (selection && "id" in selection && row.id !== selection.id)
     throw refuse(
       "The supplied session name does not match the SDK process receipt",
       envelope.result,
     );
-  return { ...target, selection, expectSession: row.receipt.receiptPath };
-}
-
-/** The exact incarnation's row by its SDK name, or null when the census proves it stopped. */
-async function readLiveTarget(
-  process: { pid: number; processStartUtc: string },
-  read: SdkReceiptReader,
-): Promise<Target | null> {
-  const args = sessionListArgv();
-  const envelope = parsePeRevitEnvelope<SessionListResult>(
-    await read(args),
-    args,
-    peRevitLauncher(),
-  );
-  if (envelope.diagnostics.length)
-    throw refuse("The SDK census cannot say whether the acquired Revit still runs", envelope);
-  const row = (envelope.result as SessionListResult).sessions.find(
-    (each): each is RunningRow =>
-      (each.case === "controlled-active" || each.case === "observed-active") &&
-      each.process.pid === process.pid &&
-      each.process.processStartUtc === process.processStartUtc,
-  );
-  if (!row) return null;
-  return readTarget(
-    row.case === "controlled-active" ? { id: row.id } : { pid: row.process.pid },
+  return {
     process,
-    read,
-  );
+    selection: selection ?? { id: row.id },
+    expectSession: row.receipt.receiptPath,
+  };
 }
 
 /** The SDK documents of exactly one process incarnation; any other answer refuses. */
@@ -348,12 +332,10 @@ export async function admitInstancesAction(
     });
   // Resolve before admission: the receipt must carry the basis that admits its effects.
   const censusBasis = async (target: Target): Promise<Basis> => {
-    // The Revit an acquisition started, by its receipts: a label for documents, never their write.
     const held = heldProcess(foldAcquisitions(await owner.list()), target.process);
     const processBasis = (session: string): Basis | null =>
       held ? { kind: "acquisition", id: held.id, scope: { kind: "process", session } } : null;
     if (launch) {
-      // A new copy into Pea's own Revit is a new acquisition; a reload mutates an open lifetime.
       const basis = launch.reload
         ? null
         : processBasis(`${target.process.pid}:${target.process.processStartUtc}`);
@@ -406,7 +388,6 @@ export async function admitInstancesAction(
       throw lifecycleRefusal(
         `would affect uncovered documents: ${uncovered.join(", ") || "unknown"}.`,
       );
-    // Every document is covered on its own evidence; the session effect also needs the process.
     return (!one && processBasis(session)) || basis;
   };
   let admittedTarget: Target | undefined;
@@ -452,8 +433,7 @@ export async function admitInstancesAction(
         if (!listed.some((doc) => doc.openId === document.openId))
           throw refuse("The SDK document lifetime is not open in the original process", listed);
       }
-      // The session row is read once, here, and frozen with the attempt so a replay compares the
-      // same bytes. A launch's posture is derived from it, never passed (ADR 0016).
+      // Freeze the exact incarnation so replay compares the same bytes.
       const target =
         admittedTarget ??
         (control
@@ -461,8 +441,6 @@ export async function admitInstancesAction(
           : launch && "session" in launch.into
             ? await readTarget(launch.into.session, undefined, read)
             : null);
-      // An acquisition is planned, never allocated, here: a Pea background start, or a launch
-      // into one, or into a Revit an earlier acquisition holds. A reload is never one.
       const held = target
         ? heldProcess(foldAcquisitions(await owner.list()), target.process)
         : null;
@@ -573,22 +551,19 @@ export async function admitInstancesAction(
           throw refuse("The recorded mutation does not expect the adopted receipt");
       }
       if (!expectSession) throw refuse("The recorded mutation has no session expectation");
-      const openArgv = (
-        session: SessionSelection,
-        expectedSession: string,
-        spec: InstancesLaunch,
-      ) =>
+      const spec = launch!;
+      const opened = origin?.kind === "file-copy" ? origin.work : launch?.source;
+      const detached =
+        origin?.kind === "file-copy"
+          ? origin.detach
+          : origin?.kind === "detached"
+            ? true
+            : launch?.detach;
+      const openArgv = (session: SessionSelection, expectedSession: string) =>
         docOpenArgv({
-          ...(spec.template
-            ? { template: spec.source }
-            : { source: origin?.kind === "file-copy" ? origin.work : spec.source }),
+          ...(spec.template ? { template: spec.source } : { source: opened }),
           ...session,
-          detach:
-            origin?.kind === "file-copy"
-              ? origin.detach
-              : origin?.kind === "detached"
-                ? true
-                : spec.detach,
+          detach: detached,
           upgrade: spec.upgrade,
           links: spec.links,
           reload: spec.reload,
@@ -611,7 +586,7 @@ export async function admitInstancesAction(
                 requestId,
                 expectSession,
               });
-            return openArgv(chosen, expectSession, launch!);
+            return openArgv(chosen, expectSession);
           case "instances.restart":
             return sessionHrArgv({
               ...chosen,
@@ -676,7 +651,7 @@ export async function admitInstancesAction(
         const receiptPath = started.session.receipt.receiptPath;
         const openInput: StepInput = {
           expectSession: receiptPath,
-          argv: openArgv({ id: started.id }, receiptPath, launch),
+          argv: openArgv({ id: started.id }, receiptPath),
         };
         session = native;
         document = await execution.step("native", key, openInput, (id) =>
@@ -685,12 +660,9 @@ export async function admitInstancesAction(
       }
       return {
         acquisition: acquisition?.id ?? null,
-        opened: origin?.kind === "file-copy" ? origin.work : launch.source,
+        opened,
         copiedFrom: origin?.kind === "file-copy" ? origin.source : null,
-        detached:
-          origin?.kind === "file-copy"
-            ? origin.detach
-            : origin?.kind === "detached" || (launch.detach ?? false),
+        detached: detached ?? false,
         ...(session !== undefined ? { session } : {}),
         document,
       };
@@ -709,11 +681,7 @@ const temporaryFiles = (acquired: Acquisition) => {
     .flatMap((path) => [`${path}.part`, path]);
 };
 
-/**
- * Handover and cleanup name one acquisition by id and touch only what its receipts recorded: the
- * bound lifetime in its exact process, the Revit it started, and its reserved paths. A
- * reconciling acquisition refuses until its unknown steps are recovered; nothing is guessed.
- */
+/** Release touches only receipted resources; unknown outcomes require recovery first. */
 async function admitAcquisitionRelease(
   admission: ActionAdmission,
   key: "instances.handover" | "instances.cleanup",
@@ -769,12 +737,12 @@ async function admitAcquisitionRelease(
         scope: { kind: "document", lifetime: { session: product.session, openId: product.openId } },
       };
   }
-  type Release = { target: Target | null; open: boolean };
+  type Release = { target: Target; open: boolean } | { target: null; open: false };
   return owner.admit(
     { ...admission, ...crossing, basis },
     async (): Promise<Release> => {
       const process = document?.process ?? acquired!.process;
-      const target = process ? await readLiveTarget(process, read) : null;
+      const target = process ? await readTarget(null, process, read) : null;
       if (target && !target.expectSession)
         throw refuse("The acquired Revit is not a controlled SDK session");
       if (key === "instances.handover") {
@@ -813,7 +781,7 @@ async function admitAcquisitionRelease(
         }
         throw refuse(reason);
       }
-      return { target, open: held !== undefined };
+      return target ? { target, open: held !== undefined } : { target: null, open: false };
     },
     async (execution) => {
       const { target, open } = execution.prepared as Release;
