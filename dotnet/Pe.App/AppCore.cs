@@ -37,6 +37,8 @@ public sealed class AppCore : IPePayload {
     private IDisposable? _sdkOperations;
 
     public void Startup(PePayloadContext context) {
+        CreateLogger();
+        RevitReceipts.Start();
         // The SDK decided the lane and roots at load time; the launcher only reads them.
         TsHostLauncher.Capture(context);
 
@@ -51,7 +53,6 @@ public sealed class AppCore : IPePayload {
         Pe.Revit.Space.SpaceWorld.Wire(documents);
         documents.ViewActivated += (doc, viewId) => {
             MruViewBuffer.Instance.RecordViewActivation(doc, viewId);
-            PostHogAnalytics.CurrentDocumentTitle = doc.Title;
             // Tab coloring hooks lazily here: the docking manager only exists once a document is open.
             RevitTabColorizer.EnsureStarted();
         };
@@ -62,12 +63,7 @@ public sealed class AppCore : IPePayload {
         this._revitTaskQueue = revitTaskQueue;
         RevitTaskAccessor.RunAsync = action => revitTaskQueue.Run(_ => action());
 
-        CreateLogger();
-
-        PostHogAnalytics.Initialize();
-        PostHogAnalytics.Capture("app_boot", new Dictionary<string, object?> {
-            ["revit_version"] = context.Application.ControlledApplication.VersionNumber,
-        });
+        RevitReceipts.Boot(context.Application.ControlledApplication.VersionNumber);
         Autodesk.Windows.ComponentManager.ItemExecuted += OnRibbonItemExecuted;
 
         HostRuntime.Initialize(
@@ -106,12 +102,14 @@ public sealed class AppCore : IPePayload {
     }
 
     public void Shutdown() {
+        AppDomain.CurrentDomain.UnhandledException -= OnUnhandledException;
         Autodesk.Windows.ComponentManager.ItemExecuted -= OnRibbonItemExecuted;
         RevitTabColorizer.Stop(); // unhook LayoutUpdated from Revit's docking manager (leaked handles are not fine)
         DocumentTrackerAccessor.Current = null;
 
         this._bridgeConnectionSupervisor?.Dispose();
         this._bridgeConnectionSupervisor = null;
+        RevitReceipts.Stop();
 
         AutoTagService.Instance.Shutdown();
         ParameterLinksService.Instance.Shutdown();
@@ -132,11 +130,7 @@ public sealed class AppCore : IPePayload {
         Autodesk.Internal.Windows.RibbonItemExecutedEventArgs e) {
         var id = e.Item?.Id;
         if (id == null || !id.Contains("Pe.App.Commands")) return;
-        PostHogAnalytics.Capture("ribbon_click", new Dictionary<string, object?> {
-            ["component"] = "revit",
-            ["command"] = e.Item?.Text,
-            ["command_id"] = id,
-        });
+        RevitReceipts.RibbonClick(id);
     }
 
     private static void OnDocumentChanged(TrackedDocument tracked, DocumentChangedEventArgs e) {
@@ -167,15 +161,15 @@ public sealed class AppCore : IPePayload {
         Log.Logger = new LoggerConfiguration()
             .WriteTo.Sink(new RevitAppLogSink(appLogFile, outputTemplate), LogEventLevel.Debug)
             .WriteTo.Sink(new DebugLogSink(outputTemplate), LogEventLevel.Debug)
-            .WriteTo.Sink(new PostHogExceptionSink(), LogEventLevel.Error)
+            .WriteTo.Sink(new RevitReceiptExceptionSink(), LogEventLevel.Error)
             .MinimumLevel.Debug()
             .CreateLogger();
 
-        AppDomain.CurrentDomain.UnhandledException += (_, args) => {
-            var exception = (Exception)args.ExceptionObject;
-            Log.Fatal(exception, "Domain unhandled exception");
-        };
+        AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
     }
+
+    private static void OnUnhandledException(object sender, UnhandledExceptionEventArgs args) =>
+        Log.Fatal(args.ExceptionObject as Exception, "Domain unhandled exception");
 }
 
 internal sealed class RevitAppLogSink(ManagedLogFile logFile, string outputTemplate) : ILogEventSink {

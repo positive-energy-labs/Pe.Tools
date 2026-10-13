@@ -91,7 +91,10 @@ internal sealed class BridgeConnectionSupervisor : IDisposable {
         // Installed host lifetime belongs to login and explicit open, including after Quit or a crash.
         if (TsHostLauncher.Lane == "installed") {
             var installed = await this.ConnectRuntimeAsync(cancellationToken).ConfigureAwait(false);
-            if (installed.Success) Analytics.PostHogAnalytics.ReportHostVersion();
+            if (installed.Success) {
+                Analytics.RevitReceipts.ReportHostVersion();
+                Analytics.RevitReceipts.FlushPending();
+            }
             return installed;
         }
 
@@ -104,6 +107,7 @@ internal sealed class BridgeConnectionSupervisor : IDisposable {
         // spawn can both fail against a healthy incumbent (refused claim, slow probe, worktree
         // mismatch); refusing to connect on that evidence is the livelock seen 2026-08-20.
         var connect = await this.ConnectRuntimeAsync(cancellationToken).ConfigureAwait(false);
+        if (connect.Success) Analytics.RevitReceipts.FlushPending();
         return connect.Success || hostLaunchResult.Success
             ? connect
             : new RuntimeActionResult(false, $"{connect.Message} (host launch: {hostLaunchResult.Message})");

@@ -60,8 +60,8 @@ public class CmdPltCommands : IExternalCommand {
                                 Execute = item => {
                                     if (item is not PostableCommandItem command) return;
                                     var (success, error) = Revit.Global.Lib.Commands.Execute(uiapp, command.Command);
-                                    CaptureAction("commands", command.Command.Value, success);
-                                    if (error is not null) Log.Error("Error: " + error.Message + error.StackTrace);
+                                    RevitReceipts.PaletteAction(ReceiptPaletteTab.Commands, success);
+                                    if (error is not null) Log.Error(error, "Palette command failed.");
                                     if (success) commandHelper.UpdateCommandUsage(command.Command);
                                 },
                                 CanExecute = item => item is PostableCommandItem command &&
@@ -81,14 +81,13 @@ public class CmdPltCommands : IExternalCommand {
                                 Execute = item => {
                                     if (item is not TaskItem task) return;
                                     try {
-                                        Console.WriteLine($"Executing task: {task.Task.Name}");
+                                        Log.Information("Executing task: {TaskName}", task.Task.Name);
                                         task.Task.Execute(uiapp);
-                                        Console.WriteLine($"Task '{task.Task.Name}' completed\n");
-                                        CaptureAction("tasks", task.Id, ok: true);
+                                        Log.Information("Task completed: {TaskName}", task.Task.Name);
+                                        RevitReceipts.PaletteAction(ReceiptPaletteTab.Tasks, ok: true);
                                     } catch (Exception ex) {
-                                        Console.WriteLine($"Task '{task.Task.Name}' failed: {ex.Message}");
-                                        Console.WriteLine(ex.StackTrace);
-                                        CaptureAction("tasks", task.Id, ok: false);
+                                        Log.Error(ex, "Task failed: {TaskName}", task.Task.Name);
+                                        RevitReceipts.PaletteAction(ReceiptPaletteTab.Tasks, ok: false);
                                     }
                                 }
                             }
@@ -100,7 +99,7 @@ public class CmdPltCommands : IExternalCommand {
                                 Name = "Run — safe (changes discarded)",
                                 Execute = item => {
                                     if (item is not PodScriptTaskItem pod) return;
-                                    CaptureAction("scripts", pod.Id, mode: "read-only");
+                                    RevitReceipts.PaletteAction(ReceiptPaletteTab.Scripts, mode: ReceiptPaletteMode.ReadOnly);
                                     PodScriptRunner.Run(uiapp, pod, ScriptPermissionMode.ReadOnly);
                                 }
                             },
@@ -108,7 +107,7 @@ public class CmdPltCommands : IExternalCommand {
                                 Name = "Run — full (can modify model)",
                                 Execute = item => {
                                     if (item is not PodScriptTaskItem pod) return;
-                                    CaptureAction("scripts", pod.Id, mode: "write");
+                                    RevitReceipts.PaletteAction(ReceiptPaletteTab.Scripts, mode: ReceiptPaletteMode.Write);
                                     PodScriptRunner.Run(uiapp, pod, ScriptPermissionMode.WriteTransaction);
                                 }
                             }
@@ -119,25 +118,10 @@ public class CmdPltCommands : IExternalCommand {
 
             return Result.Succeeded;
         } catch (Exception ex) {
-            Log.Error(ex.ToStringDemystified());
+            Log.Error(ex, "Error opening command palette.");
             throw new InvalidOperationException($"Error opening command palette: {ex.Message}");
         }
     }
-
-    /// <summary>
-    ///     The Do palette is the one funnel for command/task/script intent (ribbon buttons are
-    ///     migrating into Tasks), so its actions are the single palette_action analytics seam —
-    ///     ribbon_click covers the ribbon until that migration lands.
-    /// </summary>
-    private static void CaptureAction(string tab, string item, bool? ok = null, string? mode = null) =>
-        PostHogAnalytics.Capture("palette_action", new Dictionary<string, object?> {
-            ["component"] = "revit",
-            ["palette"] = "do",
-            ["tab"] = tab,
-            ["item"] = item,
-            ["ok"] = ok,
-            ["mode"] = mode,
-        });
 
     /// <summary>
     ///     Every entrypoint of every valid pod becomes a palette item. Invalid pods are skipped

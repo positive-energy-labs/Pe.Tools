@@ -127,6 +127,7 @@ internal sealed class BridgeAgent : IDisposable {
         Log.Information("Host bridge agent queued initial document state publish.");
 
         this.IsConnected = true;
+        RevitReceiptTransport.Sender = this.ForwardReceiptAsync;
         this.RuntimeFramework = RuntimeInformation.FrameworkDescription;
         this.RevitVersion = uiapp.Application.VersionNumber;
         Log.Information(
@@ -154,6 +155,8 @@ internal sealed class BridgeAgent : IDisposable {
         var disposeStopwatch = Stopwatch.StartNew();
         this._disposed = true;
         this.IsConnected = false;
+        if (RevitReceiptTransport.Sender == this.ForwardReceiptAsync)
+            RevitReceiptTransport.Sender = null;
         Log.Information("Host bridge disconnecting: BridgeUri={BridgeUri}", this._bridgeOptions.BridgeUri);
 
         try {
@@ -219,6 +222,7 @@ internal sealed class BridgeAgent : IDisposable {
     }
 
     private async Task HandleRequestAsync(BridgeRequest request, CancellationToken cancellationToken) {
+        using var requestScope = RevitReceiptTransport.EnterRequest(request.RequestId);
         Log.Information("Host bridge received request: OperationKey={OperationKey}, RequestId={RequestId}",
             request.OperationKey, request.RequestId);
         var startedAt = Stopwatch.GetTimestamp();
@@ -679,6 +683,13 @@ internal sealed class BridgeAgent : IDisposable {
     private Task WriteFrameAsync(BridgeFrame frame, CancellationToken cancellationToken) =>
         this._transportSession.WriteAsync(frame, cancellationToken);
 
+    private async Task<bool> ForwardReceiptAsync(string payloadJson, CancellationToken cancellationToken) {
+        if (!this.IsConnected || Encoding.UTF8.GetByteCount(payloadJson) > 8192) return false;
+        await this.WriteFrameAsync(new BridgeFrame(BridgeFrameKind.Event,
+            Event: new BridgeEvent(RevitReceiptTransport.EventName, payloadJson)), cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
     private static long GetElapsedMilliseconds(long startedTimestamp) {
         var elapsedTicks = Stopwatch.GetTimestamp() - startedTimestamp;
         return (long)(elapsedTicks * 1000.0 / Stopwatch.Frequency);
@@ -704,6 +715,27 @@ internal sealed class BridgeAgent : IDisposable {
                 this._bridgeOptions.BridgeUri
             );
         }
+    }
+}
+
+/// <summary>Private native producer door. The connected bridge supplies host admission and process identity.</summary>
+public static class RevitReceiptTransport {
+    public const string EventName = "receipt.producer";
+    private static readonly AsyncLocal<string?> Request = new();
+    internal static Func<string, CancellationToken, Task<bool>>? Sender { get; set; }
+    public static string? CurrentRequestId => Request.Value;
+
+    public static Task<bool> ForwardAsync(string payloadJson, CancellationToken cancellationToken) =>
+        Sender?.Invoke(payloadJson, cancellationToken) ?? Task.FromResult(false);
+
+    internal static IDisposable EnterRequest(string requestId) {
+        var previous = Request.Value;
+        Request.Value = requestId;
+        return new RequestScope(previous);
+    }
+
+    private sealed class RequestScope(string? previous) : IDisposable {
+        public void Dispose() => Request.Value = previous;
     }
 }
 

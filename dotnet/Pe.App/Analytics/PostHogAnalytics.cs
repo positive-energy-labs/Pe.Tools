@@ -1,177 +1,118 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Pe.Revit.Global.Services.Host;
 using Pe.Revit.ServiceClient;
 using Pe.Shared.HostContracts.Transport;
 using Pe.Shared.Product;
 using Serilog;
 using Serilog.Core;
 using Serilog.Events;
-using System.IO;
-using System.Net.Http;
 using System.Reflection;
-using System.Text;
 
 namespace Pe.App.Analytics;
 
-/// <summary>
-///     PostHog usage analytics for the internal beta. The installed product manifest carries the key;
-///     a checkout without one reads Documents\Pe.Tools\preferences.json:
-///     { "posthog": { "apiKey": "phc_...", "host": "https://us.i.posthog.com" } }
-///     No key → every call is a no-op. The key is a public write-only ingest key.
-///     Mirrors ts/packages/runtime/src/analytics.ts (event shapes must match).
-/// </summary>
-internal static class PostHogAnalytics {
-    // ponytail: char cap, not bytes — close enough for a truncation signal.
-    private const int PayloadBudget = 256 * 1024;
-
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(10) };
-    private static string? _apiKey;
-    private static string _host = "https://us.i.posthog.com";
-
-    /// <summary>Set from the document tracker so events carry the active model's title.</summary>
-    internal static string? CurrentDocumentTitle { get; set; }
-
-    /// <summary>The add-in's own release version ("dev" on a checkout build).</summary>
-    internal static readonly string AppVersion = typeof(PostHogAnalytics).Assembly
+/// <summary>Local-first native facts. Only the admitted host owns export identity and vendor egress.</summary>
+internal static class RevitReceipts {
+    private static readonly NativeReceiptBuffer Pending = new();
+    private static CancellationTokenSource Shutdown = new();
+    private static readonly SemaphoreSlim DrainGate = new(1, 1);
+    private static readonly Assembly Payload = typeof(RevitReceipts).Assembly;
+    internal static readonly string AppVersion = Payload
         .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
-
     private static string? _reportedHostVersion;
 
-    private static readonly string ProductRoot = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Positive Energy", "Pe.Tools");
+    internal static void Start() {
+        if (Shutdown.IsCancellationRequested) Shutdown = new CancellationTokenSource();
+    }
 
-    private static string? _installId;
+    private static JObject Emitter() => new() {
+        ["version"] = AppVersion,
+        ["build"] = Metadata("Pe.Build"),
+        ["commit"] = Metadata("Pe.Commit"),
+    };
 
-    internal static bool Enabled => _apiKey != null;
+    private static string? Metadata(string key) => Payload.GetCustomAttributes<AssemblyMetadataAttribute>()
+        .SingleOrDefault(value => value.Key == key)?.Value;
 
-    internal static void Initialize() {
+    internal static void Boot(string revitVersion) {
+        Log.Information("Native app boot: Version={Version}, RevitVersion={RevitVersion}", AppVersion, revitVersion);
+        Submit(ReceiptEventIds.Usage(ReceiptEventIds.AppBoot, new JObject { ["revitVersion"] = revitVersion }));
+    }
+
+    internal static void RibbonClick(string id) {
+        var command = Payload.GetTypes().FirstOrDefault(type =>
+            typeof(Autodesk.Revit.UI.IExternalCommand).IsAssignableFrom(type) &&
+            type.FullName != null && id.EndsWith(type.FullName, StringComparison.Ordinal));
+        if (command != null)
+            Submit(ReceiptEventIds.Usage(ReceiptEventIds.RibbonClick, new JObject { ["commandCode"] = command.Name }));
+    }
+
+    internal static void PaletteAction(ReceiptPaletteTab tab, bool? ok = null, ReceiptPaletteMode? mode = null) =>
+        Submit(ReceiptEventIds.Palette(tab, ok, mode));
+
+    internal static void Fault(LogEvent logEvent) {
+        var code = logEvent.Level == LogEventLevel.Fatal ? "process.uncaught" : "native.failed";
+        Submit(new JObject { ["kind"] = "diagnostic", ["code"] = code }, RevitReceiptTransport.CurrentRequestId);
+    }
+
+    private static void Submit(JObject body, string? requestId = null) {
+        if (Shutdown.IsCancellationRequested) return;
         try {
-            // Installed product manifest is AUTHORITATIVE (the key rides the release, so
-            // installed machines need zero seeding); preferences.json stays the dev/override
-            // fallback. Mirrors analytics.ts — resolution order must match.
-            var manifest = Path.Combine(ProductRoot, "product.payloads.json");
-            if (!TryAdopt(manifest, root => root["telemetry"]?["posthog"]))
-                TryAdopt(ProductUserContentLayout.ForCurrentUser().PreferencesPath, root => root["posthog"]);
+            Pending.Enqueue(ReceiptEventIds.Producer(body, Emitter(), requestId));
+            FlushPending();
         } catch {
-            // Analytics must never affect startup.
+            // The raw boot/error record was already written locally. Never recurse through the error sink.
         }
     }
 
-    private static bool TryAdopt(string path, Func<JObject, JToken?> select) {
-        try {
-            if (!File.Exists(path)) return false;
-            var posthog = select(JObject.Parse(File.ReadAllText(path)));
-            var apiKey = posthog?["apiKey"]?.ToString()?.Trim();
-            if (string.IsNullOrEmpty(apiKey)) return false;
-            _apiKey = apiKey;
-            _host = posthog?["host"]?.ToString()?.TrimEnd('/') ?? _host;
-            return true;
-        } catch {
-            return false;
-        }
-    }
+    internal static void FlushPending() => _ = DrainAsync();
 
-    /// <summary>
-    ///     One stable id per machine install, shared with the host (analytics.ts):
-    ///     state\install.json = {"installId":"&lt;uuid v4&gt;"}. Exclusive create; a lost race re-reads. Never throws.
-    /// </summary>
-    private static string InstallId() => _installId ??= ReadOrCreateInstallId();
-
-    private static string ReadOrCreateInstallId() {
+    private static async Task DrainAsync() {
+        if (!await DrainGate.WaitAsync(0).ConfigureAwait(false)) return;
+        var shutdown = Shutdown;
+        var drained = false;
         try {
-            var path = Path.Combine(ProductRoot, "state", "install.json");
-            string? Read() {
-                try {
-                    return File.Exists(path) ? JObject.Parse(File.ReadAllText(path))["installId"]?.ToString() : null;
-                } catch {
-                    return null;
+            while (!shutdown.IsCancellationRequested && Pending.Peek() is { } fact) {
+                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token);
+                deadline.CancelAfter(TimeSpan.FromSeconds(2));
+                var forward = RevitReceiptTransport.ForwardAsync(fact.ToString(Formatting.None), deadline.Token);
+                if (await Task.WhenAny(forward, Task.Delay(TimeSpan.FromSeconds(2), shutdown.Token)).ConfigureAwait(false) != forward) {
+                    _ = forward.ContinueWith(task => { _ = task.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
+                    return;
                 }
+                if (!await forward.ConfigureAwait(false)) return;
+                Pending.Delivered(fact);
             }
-            var existing = Read();
-            if (!string.IsNullOrEmpty(existing)) return existing;
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            var id = Guid.NewGuid().ToString();
-            try {
-                using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
-                var bytes = new UTF8Encoding(false).GetBytes(new JObject { ["installId"] = id }.ToString(Formatting.None));
-                stream.Write(bytes, 0, bytes.Length);
-                return id;
-            } catch {
-                var raced = Read();
-                return string.IsNullOrEmpty(raced) ? "unknown" : raced;
-            }
+            drained = true;
         } catch {
-            return "unknown";
+            // Host unavailable: retain the bounded memory queue; reconnect triggers another drain.
+        } finally {
+            DrainGate.Release();
+            if ((drained || !ReferenceEquals(shutdown, Shutdown)) && !Shutdown.IsCancellationRequested && Pending.Peek() != null)
+                FlushPending();
         }
     }
 
-    /// <summary>Fire-and-forget event capture. Never throws, never blocks the caller.</summary>
-    internal static void Capture(string eventName, Dictionary<string, object?> properties) {
-        if (_apiKey == null) return;
-        try {
-            // Every event names what sent it (mirrors baseProperties in analytics.ts).
-            properties["machine"] = Environment.MachineName;
-            properties.TryAdd("component", "revit");
-            properties["version"] = AppVersion;
-            properties["lane"] = HostEndpoint.ConfiguredLane ?? "unknown";
-            properties["install_id"] = InstallId();
-            if (CurrentDocumentTitle != null) properties["doc_title"] = CurrentDocumentTitle;
-            var body = JsonConvert.SerializeObject(new {
-                api_key = _apiKey,
-                @event = eventName,
-                distinct_id = $"{Environment.MachineName}\\{Environment.UserName}",
-                timestamp = DateTimeOffset.UtcNow.ToString("o"),
-                properties,
-            });
-            _ = Http.PostAsync($"{_host}/i/v0/e/",
-                new StringContent(body, Encoding.UTF8, "application/json"));
-        } catch {
-            // Swallow: telemetry is best-effort.
-        }
-    }
+    internal static void Stop() => Shutdown.Cancel();
 
-    /// <summary>
-    ///     An installed add-in beside a host of another version is the stale-host install defect
-    ///     (host ledger 2026-10-12: a 0.7.0 host survived two upgrades under a 0.7.17 add-in). The
-    ///     host's service file carries the version it booted with; one event per differing version.
-    /// </summary>
     internal static void ReportHostVersion() {
         try {
-            var host = PeServiceDiscovery.TryDiscover(ProductRuntimeLayout.ForCurrentUser().RootPath, HostEndpoint.ServiceName)?.Version;
+            var host = PeServiceDiscovery.TryDiscover(ProductRuntimeLayout.ForCurrentUser().RootPath,
+                HostEndpoint.ConfiguredServiceName ?? HostEndpoint.ServiceName)?.Version;
             if (host == null || host == AppVersion || host == _reportedHostVersion) return;
             _reportedHostVersion = host;
             Log.Warning("Installed host {HostVersion} does not match add-in {AppVersion}.", host, AppVersion);
-            Capture("version_mismatch", new Dictionary<string, object?> { ["host_version"] = host });
+            Submit(ReceiptEventIds.Usage(ReceiptEventIds.VersionMismatch, new JObject { ["hostVersion"] = host }));
         } catch {
-            // Telemetry is best-effort.
+            // Service discovery must never affect native startup or reconnection.
         }
     }
-
-    internal static void CaptureException(Exception exception, string source) {
-        Capture("$exception", new Dictionary<string, object?> {
-            ["component"] = "revit",
-            ["source"] = source,
-            ["$exception_list"] = new[] {
-                new {
-                    type = exception.GetType().Name,
-                    value = Truncate(exception.Message),
-                    mechanism = new { handled = true, synthetic = false },
-                    stacktrace = new { type = "raw", frames = Array.Empty<object>() },
-                },
-            },
-            ["$exception_stack_trace_raw"] = Truncate(exception.ToString()),
-        });
-    }
-
-    internal static string Truncate(string value) =>
-        value.Length <= PayloadBudget ? value : value.Substring(0, PayloadBudget);
 }
 
-/// <summary>Ships Error/Fatal log events (with exceptions) to PostHog error tracking.</summary>
-internal sealed class PostHogExceptionSink : ILogEventSink {
+/// <summary>The file sink precedes this sink. Free text, stack traces and source paths remain there.</summary>
+internal sealed class RevitReceiptExceptionSink : ILogEventSink {
     public void Emit(LogEvent logEvent) {
-        if (logEvent.Level < LogEventLevel.Error || logEvent.Exception == null) return;
-        PostHogAnalytics.CaptureException(logEvent.Exception, logEvent.RenderMessage());
+        if (logEvent.Level >= LogEventLevel.Error && logEvent.Exception != null)
+            RevitReceipts.Fault(logEvent);
     }
 }
