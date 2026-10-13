@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, open, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
@@ -76,7 +77,10 @@ test("folder rename preserves keys; duplicate manifest identities refuse resolut
 });
 
 test("unsafe members report their path and refuse capture without hiding healthy siblings", async () => {
-  await put("Original", "assets/large.bin", new Uint8Array(512 * 1024 + 1));
+  await put("Original", "assets/large.bin", "");
+  const oversized = await open(join(root, "Original", "assets/large.bin"), "r+");
+  await oversized.truncate(64 * 1024 * 1024 + 1);
+  await oversized.close();
   const pod = await readPackage("mixed", root);
   expect(pod.diagnostics).toContainEqual(
     expect.objectContaining({ path: "assets/large.bin", severity: "error" }),
@@ -109,14 +113,53 @@ test("canonical skill directories use the same bounded admission without a Pod m
 });
 
 test("file and directory budgets refuse capture instead of quietly truncating authored inputs", async () => {
-  for (let index = 0; index < 200; index++) await put("Original", `support/${index}.txt`, "");
+  await mkdir(join(root, "Original", "support"));
+  for (let offset = 0; offset < 4096; offset += 64)
+    await Promise.all(
+      Array.from({ length: 64 }, (_, index) =>
+        writeFile(join(root, "Original", "support", `${offset + index}.txt`), ""),
+      ),
+    );
   await expect(capturePackage("mixed", root)).rejects.toThrow(/file count/);
   await mkdir(join(root, "Directories"));
-  for (let index = 0; index < 256; index++) await mkdir(join(root, "Directories", `${index}`));
+  for (let offset = 0; offset < 4096; offset += 64)
+    await Promise.all(
+      Array.from({ length: 64 }, (_, index) =>
+        mkdir(join(root, "Directories", `${offset + index}`)),
+      ),
+    );
   expect((await captureDirectory(join(root, "Directories"))).diagnostics).toContainEqual(
     expect.objectContaining({ message: "Pod directory limit exceeded" }),
   );
+}, 30_000);
+
+test("membership admits family assets and settings beyond executable source bundle bounds", async () => {
+  const family = Buffer.alloc(540672, 1);
+  await put("Original", "families/example.rfa", family);
+  for (let index = 0; index < 241; index++)
+    await put("Original", `settings/${index}.json`, JSON.stringify({ value: "x".repeat(90_000) }));
+  const pod = await readPackage("mixed", root);
+  expect(pod.diagnostics).toEqual([]);
+  expect(
+    Buffer.from(pod.members.find((member) => member.path === "families/example.rfa")!.bytes),
+  ).toEqual(family);
+  expect((await capturePackage(pod)).members).toHaveLength(Object.keys(authored).length + 242);
 });
+
+test.skipIf(process.platform !== "win32")(
+  "an Offline attribute alone does not make a regular file unsafe",
+  async () => {
+    const path = join(root, "Original", "README.md");
+    execFileSync("attrib.exe", ["+O", path]);
+    expect((await lstat(path)).isFile()).toBe(true);
+    expect(execFileSync("attrib.exe", [path], { encoding: "utf8" }).split(path)[0]).toContain("O");
+    const pod = await readPackage("mixed", root);
+    expect(pod.diagnostics).toEqual([]);
+    expect(
+      Buffer.from(pod.members.find((member) => member.path === "README.md")!.bytes).toString(),
+    ).toBe("Guide");
+  },
+);
 
 test("member diagnostics preserve sibling bytes while source validation remains native", async () => {
   await put(

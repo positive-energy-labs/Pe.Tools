@@ -7,7 +7,7 @@ import {
 import { createHash } from "node:crypto";
 import { lstat, open, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { scriptPodSourceBounds, type ScriptingExecute } from "@pe/host-contracts/generated";
+import type { ScriptingExecute } from "@pe/host-contracts/generated";
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { productPodsRootPath } from "./product-paths.ts";
 
@@ -47,6 +47,14 @@ export type PackageListing = {
 };
 export type CapturedPackage = AdmittedPackage & {
   sourceBundle: ScriptingExecute.Req.ScriptPodSourceBundle;
+};
+
+// Membership includes binary families, images, and settings; execution has its own source bounds.
+const memberBounds = {
+  maxFileBytes: 64 * 1024 * 1024,
+  maxTotalBytes: 256 * 1024 * 1024,
+  maxFileCount: 4096,
+  maxDirectoryCount: 4096,
 };
 
 // One exclusion policy for authored input. Portable .state observations remain ordinary members.
@@ -184,8 +192,7 @@ export async function captureDirectory(
     files = 0,
     total = 0;
   const walk = async (relative: string): Promise<void> => {
-    if (++directories > scriptPodSourceBounds.maxDirectoryCount)
-      throw Error("Pod directory limit exceeded");
+    if (++directories > memberBounds.maxDirectoryCount) throw Error("Pod directory limit exceeded");
     const absolute = join(directory, relative);
     if ((await lstat(absolute)).isSymbolicLink()) throw Error("Pod directories cannot be links");
     for (const entry of (await readdir(absolute, { withFileTypes: true })).sort((a, b) =>
@@ -201,26 +208,21 @@ export async function captureDirectory(
           await walk(path);
           continue;
         }
-        if (++files > scriptPodSourceBounds.maxFileCount)
-          throw Error("Pod file count limit exceeded");
+        if (++files > memberBounds.maxFileCount) throw Error("Pod file count limit exceeded");
         const info = await lstat(join(directory, path));
-        if (
-          !info.isFile() ||
-          info.isSymbolicLink() ||
-          info.size > scriptPodSourceBounds.maxFileBytes
-        )
-          throw Error("Pod input must be a bounded regular file");
+        if (!info.isFile() || info.isSymbolicLink())
+          throw Error("Pod input must be a regular file");
+        if (info.size > memberBounds.maxFileBytes)
+          throw Error(`Pod member exceeds ${memberBounds.maxFileBytes} bytes`);
+        if ((total += info.size) > memberBounds.maxTotalBytes)
+          throw Error(`Pod members exceed ${memberBounds.maxTotalBytes} total bytes`);
         const handle = await open(join(directory, path), "r");
         let bytes: Buffer;
         try {
           const stat = await handle.stat();
-          if (
-            !stat.isFile() ||
-            stat.ino !== info.ino ||
-            stat.size > scriptPodSourceBounds.maxFileBytes
-          )
+          if (!stat.isFile() || stat.ino !== info.ino || stat.size !== info.size)
             throw Error("Pod input changed during capture");
-          bytes = Buffer.alloc(scriptPodSourceBounds.maxFileBytes + 1);
+          bytes = Buffer.alloc(stat.size + 1);
           let count = 0;
           while (count < bytes.length) {
             const read = await handle.read(bytes, count, bytes.length - count, null);
@@ -231,11 +233,7 @@ export async function captureDirectory(
         } finally {
           await handle.close();
         }
-        if (
-          bytes.length > scriptPodSourceBounds.maxFileBytes ||
-          (total += bytes.length) > scriptPodSourceBounds.maxTotalBytes
-        )
-          throw Error("Pod byte limit exceeded");
+        if (bytes.length !== info.size) throw Error("Pod input changed during capture");
         let schema: string | null = null;
         if (path.endsWith(".json")) {
           try {
@@ -258,9 +256,9 @@ export async function captureDirectory(
         diagnostics.push(problem("PackageMemberInvalid", path, message(error)));
       }
       if (
-        files > scriptPodSourceBounds.maxFileCount ||
-        directories > scriptPodSourceBounds.maxDirectoryCount ||
-        total > scriptPodSourceBounds.maxTotalBytes
+        files > memberBounds.maxFileCount ||
+        directories > memberBounds.maxDirectoryCount ||
+        total > memberBounds.maxTotalBytes
       )
         return;
     }
