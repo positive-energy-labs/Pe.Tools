@@ -10,8 +10,8 @@ const n = rows.length;
 const ask = `set ${param} to ${value} on ${rows.map(([family, type]) => `${family} (${type})`).join(", ")}`;
 
 await journey("J1", async (page, step) => {
-  step(`open ${revit.url("/chat?plugin=families")}, click "new"`);
-  await page.open(revit.url("/chat?plugin=families"));
+  step(`open ${revit.url("/pea?plugin=families")}, click "new"`);
+  await page.open(revit.url("/pea?plugin=families"));
   await page.click("new");
   await requireRevit(page);
   await setPea(page);
@@ -45,7 +45,7 @@ await journey("J1", async (page, step) => {
   await page.click(/^plan r\d+$/, HEAD);
   await page.until(() => page.has(/^apply \d+ rows?$/, SHEET), "the confirmation sheet", 120_000);
   const url = new URL(await page.url());
-  if (url.pathname !== "/chat" || url.searchParams.get("plugin") !== "families")
+  if (url.pathname !== "/pea" || url.searchParams.get("plugin") !== "families")
     throw new Error(
       `ASSERT (d) the sheet opens in the Chat pane: URL is ${url.pathname}${url.search}`,
     );

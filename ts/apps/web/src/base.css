@@ -128,6 +128,12 @@
     min-height: 100%;
   }
 
+  /* The application owns scrolling inside its viewport, including Edge's elastic boundary. */
+  [data-pe-app],
+  [data-pe-app] body {
+    overscroll-behavior: none;
+  }
+
   /* Scrollbar law: thin, no track, thumb visible only while the pointer is inside its scroller. */
   [data-pe] {
     color-scheme: light;

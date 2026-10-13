@@ -1,0 +1,15 @@
+{
+  "id": "/prototype-navigation-window",
+  "name": "Pe.Tools Navigation Prototype",
+  "short_name": "Pe.Tools Proto",
+  "start_url": "/?variant=A&review=titlebar",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay"],
+  "icons": [
+    { "src": "/logo192.png", "type": "image/png", "sizes": "192x192" },
+    { "src": "/logo512.png", "type": "image/png", "sizes": "512x512" }
+  ],
+  "theme_color": "#fdfaf2",
+  "background_color": "#fdfaf2"
+}

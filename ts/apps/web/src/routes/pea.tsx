@@ -34,7 +34,7 @@ export const chatSearchSchema = z.object({
   prompt: z.string().max(PROMPT_MAX).optional(),
 });
 
-export const Route = createFileRoute("/chat")({
+export const Route = createFileRoute("/pea")({
   validateSearch: chatSearchSchema,
   search: {
     middlewares: [retainSearchParams(["thread"]), stripSearchParams(DEFAULTS)],

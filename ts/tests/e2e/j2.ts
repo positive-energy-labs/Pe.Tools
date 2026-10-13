@@ -11,8 +11,8 @@ const ask = `propose ${param} = ${pea} on ${rows.map(([family, type]) => `${fami
 await journey("J2", async (page, step) => {
   if (mine.includes(pea))
     throw new Error("PRECONDITION: E2E_VALUE must not be a substring of E2E_MINE");
-  step(`open ${revit.url("/chat?plugin=families")}, click "new"`);
-  await page.open(revit.url("/chat?plugin=families"));
+  step(`open ${revit.url("/pea?plugin=families")}, click "new"`);
+  await page.open(revit.url("/pea?plugin=families"));
   await page.click("new");
   await requireRevit(page);
   await setPea(page);

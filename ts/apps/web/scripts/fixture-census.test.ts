@@ -19,6 +19,18 @@ const sourceFiles = (dir: string): string[] =>
   });
 
 describe("fixture census", () => {
+  it("publishes the Pea route and retires the Chat route address", () => {
+    const routeTree = readFileSync(new URL("../src/routeTree.gen.ts", import.meta.url), "utf8");
+    const census = censusFromRouteTree(routeTree);
+
+    expect(census.classifiedMaintainedRoutes).toContainEqual({
+      route: "/pea",
+      canonicalReviewUrl: "/pea?demo=diagram",
+      fixtureKind: "demo-fixture",
+    });
+    expect(census.discoveredRenderedRoutes).not.toContain("/chat");
+  });
+
   it("admits every maintained route in the generated route tree", () => {
     const routeTree = readFileSync(new URL("../src/routeTree.gen.ts", import.meta.url), "utf8");
     const census = censusFromRouteTree(routeTree);
@@ -50,7 +62,7 @@ describe("fixture census", () => {
     const routeTree = readFileSync(new URL("../src/routeTree.gen.ts", import.meta.url), "utf8");
     const census = censusFromRouteTree(routeTree);
     const seeds = {
-      "/chat": CHAT_SEEDS,
+      "/pea": CHAT_SEEDS,
       "/families": familiesManifest.seeds,
       "/family": familyManifest().seeds,
       "/machine": MACHINE_SEEDS,

@@ -34,7 +34,7 @@ const NEXT: Record<ThemeMode, ThemeMode> = { light: "dark", dark: "auto", auto: 
 const ICON = { light: Sun, dark: Moon, auto: SunMoon } as const;
 const LABEL = { light: "Light", dark: "Dark", auto: "Auto" } as const;
 
-export function ThemeToggle() {
+export function ThemeToggle({ labelled = false }: { labelled?: boolean }) {
   const [mode, setMode] = useState<ThemeMode>("auto");
 
   // Sync to whatever the inline root script already applied (avoids a flash / mismatch).
@@ -66,5 +66,9 @@ export function ThemeToggle() {
   const label = `Theme: ${LABEL[mode]}${mode === "auto" ? " (system)" : ""}. Click to change.`;
 
   // Icon only, like every other control in a head cluster; the mode rides the title.
-  return <Button onClick={cycle} label={label} icon={<Icon strokeWidth={1.5} aria-hidden />} />;
+  return (
+    <Button onClick={cycle} label={label} icon={<Icon strokeWidth={1.5} aria-hidden />}>
+      {labelled ? `Theme: ${LABEL[mode]}` : undefined}
+    </Button>
+  );
 }

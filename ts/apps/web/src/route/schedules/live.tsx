@@ -343,7 +343,7 @@ export function LiveScheduleGridWorkspace({
     </ActionFlag.Provider>
   );
   return (
-    // A chat pane does not own the URL, so its undo keys never bind on /chat's document.
+    // A chat pane does not own the URL, so its undo keys never bind on /pea's document.
     <KeysNode
       id={handle.manifest.name}
       keys={framed && url ? manifestChords(handle) : []}

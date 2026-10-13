@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Popover } from "@base-ui/react/popover";
 import { MessageSquarePlus, Send } from "lucide-react";
 
 import { Button } from "#/components/lang/button";
+import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { PopupFrame } from "#/components/lang/list-popup";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Textarea } from "#/components/lang/textarea";
@@ -37,6 +39,14 @@ export function FeedbackPicker({ hideTrigger = false }: { hideTrigger?: boolean 
   const [hover, setHover] = useState<Rect | null>(null);
   const [picked, setPicked] = useState<Picked | null>(null);
   const [note, setNote] = useState("");
+  const [cancelHost, setCancelHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    const update = () => setCancelHost(document.getElementById("pe-feedback-cancel"));
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
 
   const close = () => {
     capture.current++;
@@ -149,7 +159,23 @@ export function FeedbackPicker({ hideTrigger = false }: { hideTrigger?: boolean 
           style={{ left: box.x, top: box.y, width: box.width, height: box.height }}
         />
       )}
-      {!hideTrigger || picking ? (
+      {picking && cancelHost
+        ? createPortal(
+            <span {...{ [CHROME]: "" }} data-react-grab-ignore>
+              <HotkeyCommand
+                label="cancel feedback"
+                word="Cancel"
+                hotkey="Escape"
+                invoke={close}
+                bind={false}
+                face="responsive"
+                reason="Stop picking without sending a note"
+              />
+            </span>,
+            cancelHost,
+          )
+        : null}
+      {(!hideTrigger || picking) && !cancelHost ? (
         <div
           {...{ [CHROME]: "" }}
           data-react-grab-ignore

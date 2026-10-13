@@ -41,7 +41,7 @@ type Factory = (deps: unknown) => AnyManifest;
 /** Route path per manifest; `key` is the manifest's word, the path is the router's. */
 const ROUTES: readonly { path: string; manifest: AnyManifest }[] = [
   {
-    path: "/chat",
+    path: "/pea",
     manifest: ((await load("/src/chat/manifest.ts")).chatManifest as Factory)({ thread: "" }),
   },
   {

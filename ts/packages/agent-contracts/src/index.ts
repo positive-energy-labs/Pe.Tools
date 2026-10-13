@@ -36,3 +36,4 @@ export * from "./harness-thread.ts";
 export * from "./capture.ts";
 
 export * from "./sdk-session.ts";
+export * from "./navigation.ts";

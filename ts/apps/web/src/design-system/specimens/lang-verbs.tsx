@@ -2,6 +2,7 @@ import { Fragment } from "react";
 import { RefreshCw, Save, Upload } from "lucide-react";
 
 import { ActionGroup, Button } from "#/components/lang/button";
+import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { Section } from "#/components/lang/section";
 
 import { SpecimenFrame } from "./recipe-grid";
@@ -32,6 +33,24 @@ const KINDS = ["quiet", "framed", "commit"] as const;
 export function LangPressSpecimens() {
   return (
     <>
+      <SpecimenFrame
+        name="HotkeyCommand · modifier symbols / written chord / name + chord"
+        importPath="#/components/lang/hotkey-command"
+      >
+        <div className="flex flex-wrap gap-4">
+          {(["compact", "medium", "full"] as const).map((face) => (
+            <HotkeyCommand
+              key={face}
+              face={face}
+              label={`Save fixture (${face})`}
+              word="Save"
+              hotkey="Mod+Shift+S"
+              invoke={noop}
+              bind={false}
+            />
+          ))}
+        </div>
+      </SpecimenFrame>
       <SpecimenFrame
         name="Button · kind × state (rest, pressed, refused, busy, icon-only)"
         importPath="#/components/lang/button"

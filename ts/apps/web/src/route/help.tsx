@@ -9,13 +9,13 @@
  */
 import { Fragment, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
-import { CircleHelp } from "lucide-react";
 
 import { Kbd } from "#/components/lang/kbd";
 import { Button } from "#/components/lang/button";
+import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { startFeedback } from "#/components/feedback-picker";
 import { MachineHelpTrigger } from "#/machine/drawer";
-import { readKeyMeta, useHotkeyRegistrations, useScopeKeys, type KeyMeta } from "./keys";
+import { readKeyMeta, useHotkeyRegistrations, type KeyMeta } from "./keys";
 
 interface Region {
   id: string;
@@ -262,22 +262,16 @@ export function RouteHelpButton({
   utilities?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  useScopeKeys([
-    {
-      hotkey: "Alt+/",
-      callback: () => setOpen(true),
-      label: "help",
-      says: "how this route works — its regions and every key bound right now",
-    },
-  ]);
   return (
     <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
       <DialogPrimitive.Trigger
         render={
-          <Button
+          <HotkeyCommand
             label="How this route works"
+            word="Tutorial"
+            hotkey="Alt+/"
             reason="how this route works — its regions and every key bound right now (Alt+/)"
-            icon={CircleHelp}
+            invoke={() => setOpen(true)}
           />
         }
       />

@@ -46,7 +46,7 @@ const rows = (route: string, path: string, seeds: AnySeeds): SeedRow[] =>
  * read straight from the seed modules the builders hand to `seeds:`. Same data, no deps needed.
  */
 export const SEED_CATALOGUE: SeedRow[] = [
-  ...rows("chat", "/chat", CHAT_SEEDS as AnySeeds),
+  ...rows("chat", "/pea", CHAT_SEEDS as AnySeeds),
   ...rows("pods", "/pods", PODS_SEEDS as AnySeeds),
   ...rows("schedules", "/schedules", SCHEDULE_SEEDS as AnySeeds),
   ...rows("instances", "/open", OPEN_SEEDS as AnySeeds),

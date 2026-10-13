@@ -83,11 +83,11 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
     expect(browser).not.toBe(backend);
     expect(await fetch(browser).then((r) => r.text())).toContain("frontend");
     const navigation = { headers: { accept: "text/html", "sec-fetch-mode": "navigate" } };
-    const redirected = await fetch(`${backend}/chat?thread=kept`, {
+    const redirected = await fetch(`${backend}/pea?thread=kept`, {
       ...navigation,
       redirect: "manual",
     });
-    expect(redirected.headers.get("location")).toBe(`${browser}/chat?thread=kept`);
+    expect(redirected.headers.get("location")).toBe(`${browser}/pea?thread=kept`);
     // Node fetch writes sec-fetch-mode=cors; use a raw request to model document navigation.
     const document = await new Promise<IncomingMessage>((resolve, reject) =>
       get(`${browser}/ops`, navigation, resolve).on("error", reject),

@@ -24,7 +24,8 @@ import {
 } from "lucide-react";
 import { type DocumentRequest, type Provider, type UpdateThreadRequest } from "@pe/agent-contracts";
 import { Dialog, DialogContent, DialogTitle } from "#/components/lang/dialog";
-import { List, ListPopup } from "#/components/lang/list-popup";
+import { ListPopup } from "#/components/lang/list-popup";
+import { CommandPalette } from "#/components/lang/command-palette";
 import { Input } from "#/components/lang/input";
 import { EmptyState } from "#/components/lang/empty";
 import {
@@ -876,81 +877,77 @@ export function ThreadDialog({
     ...visibleThreads(threads, { query: "", filter: "archived", ...UNFILTERED, now }),
   ].sort((a, b) => SHELF_ORDER.indexOf(shelfOf(a, now)) - SHELF_ORDER.indexOf(shelfOf(b, now)));
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent pad="none" showCloseButton={false} aria-label="Threads">
-        <List<RosterThread>
-          aria-label="Threads"
-          items={roster}
-          keyOf={(thread) => thread.id}
-          labelOf={(thread) =>
-            `${thread.title} ${targetLabel(thread)} ${thread.providerName} ${thread.modelId ?? ""}`
-          }
-          groupOf={(thread) => SHELF_WORD[shelfOf(thread, now)]}
-          filter="fuzzy"
-          searchAbove={0}
-          searchPlaceholder="Search every thread"
-          empty="No threads yet"
-          noMatch="No threads match"
-          maxHeight="min(32rem, 60dvh)"
-          onPick={(thread) => {
-            onSelect(thread.id);
-            onOpenChange(false);
-          }}
-          onEscape={() => onOpenChange(false)}
-          row={(thread) => {
-            const activity = activityWord(thread);
-            return {
-              lead: <ProviderMark harness={thread.harness} />,
-              label: thread.title,
-              sub: [
-                [thread.providerName, thread.modelId].filter(Boolean).join(" · "),
-                thread.head.defaultTarget ? targetLabel(thread) : null,
-              ]
-                .filter(Boolean)
-                .join(" · "),
-              lines: 2,
-              active: thread.id === currentThreadId,
-              meta: (
-                <span className="flex items-center gap-1.5">
-                  {activity ? (
-                    <span
-                      data-slot="nav-state"
-                      data-tone={
-                        thread.activity.state === "failed"
-                          ? "alarm"
-                          : thread.activity.pending
-                            ? "caution"
-                            : undefined
-                      }
-                    >
-                      {activity}
-                    </span>
-                  ) : (
-                    relativeThreadAge(thread.updatedAt, now)
-                  )}
-                  {isUnread(thread) ? (
-                    <span data-slot="nav-unread" role="img" aria-label="unread" />
-                  ) : null}
+    <CommandPalette<RosterThread>
+      open={open}
+      onOpenChange={onOpenChange}
+      aria-label="Threads"
+      items={roster}
+      keyOf={(thread) => thread.id}
+      labelOf={(thread) =>
+        `${thread.title} ${targetLabel(thread)} ${thread.providerName} ${thread.modelId ?? ""}`
+      }
+      groupOf={(thread) => SHELF_WORD[shelfOf(thread, now)]}
+      filter="fuzzy"
+      searchAbove={0}
+      searchPlaceholder="Search every thread"
+      empty="No threads yet"
+      noMatch="No threads match"
+      maxHeight="min(32rem, 60dvh)"
+      onPick={(thread) => {
+        onSelect(thread.id);
+      }}
+      row={(thread) => {
+        const activity = activityWord(thread);
+        return {
+          lead: <ProviderMark harness={thread.harness} />,
+          label: thread.title,
+          sub: [
+            [thread.providerName, thread.modelId].filter(Boolean).join(" · "),
+            thread.head.defaultTarget ? targetLabel(thread) : null,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          lines: 2,
+          active: thread.id === currentThreadId,
+          meta: (
+            <span className="flex items-center gap-1.5">
+              {activity ? (
+                <span
+                  data-slot="nav-state"
+                  data-tone={
+                    thread.activity.state === "failed"
+                      ? "alarm"
+                      : thread.activity.pending
+                        ? "caution"
+                        : undefined
+                  }
+                >
+                  {activity}
                 </span>
-              ),
-            };
-          }}
-          footer={
-            <div className="flex items-center justify-between gap-3 px-1 pb-1">
-              <NewThreadButton
-                onNew={() => {
-                  onNew();
-                  onOpenChange(false);
-                }}
-              />
-              <span className="flex items-center gap-1.5 t-small text-ink-2">
-                <Kbd>↑↓</Kbd> move <Kbd hotkey="Enter" /> open <Kbd hotkey="Escape" /> close
-              </span>
-            </div>
-          }
-        />
-      </DialogContent>
-    </Dialog>
+              ) : (
+                relativeThreadAge(thread.updatedAt, now)
+              )}
+              {isUnread(thread) ? (
+                <span data-slot="nav-unread" role="img" aria-label="unread" />
+              ) : null}
+            </span>
+          ),
+        };
+      }}
+      footer={
+        <div className="flex items-center justify-between gap-3 px-1 pb-1">
+          <NewThreadButton
+            onNew={() => {
+              onNew();
+              onOpenChange(false);
+            }}
+          />
+          <span className="flex items-center gap-1.5 t-small text-ink-2">
+            <Kbd>↑↓</Kbd> move <Kbd hotkey="Enter" /> open <Kbd hotkey="Escape" /> close
+          </span>
+        </div>
+      }
+    />
   );
 }
 

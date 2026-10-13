@@ -6,6 +6,7 @@
  */
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
+import { usePublishPagePalette } from "#/navigation/route-controls";
 
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Switcher } from "#/components/lang/switcher";
@@ -103,6 +104,7 @@ export function EntityRouteView({
   const ladder = useDocumentLadder(handle);
   // The Situation palette is the sentence's ladder, opened by Ctrl K or its own trigger.
   const [palette, setPalette] = useState(false);
+  usePublishPagePalette(handle.manifest.key, palette);
   const openPalette = (open: boolean) => {
     setPalette(open && handle.busy === null);
     if (open) onPalette?.();

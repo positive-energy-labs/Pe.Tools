@@ -11,7 +11,7 @@ const canonicalFixtures: Record<
   "/": { canonicalReviewUrl: "/", fixtureKind: "inherent-static" },
   "/bind": { canonicalReviewUrl: "/bind?page=todo", fixtureKind: "live-route" },
   "/captures": { canonicalReviewUrl: "/captures", fixtureKind: "live-route" },
-  "/chat": { canonicalReviewUrl: "/chat?demo=diagram", fixtureKind: "demo-fixture" },
+  "/pea": { canonicalReviewUrl: "/pea?demo=diagram", fixtureKind: "demo-fixture" },
   "/data-tables": { canonicalReviewUrl: "/data-tables", fixtureKind: "live-route" },
   "/doc-lab": { canonicalReviewUrl: "/doc-lab", fixtureKind: "inherent-static" },
   "/families": { canonicalReviewUrl: "/families?demo=apply", fixtureKind: "demo-fixture" },

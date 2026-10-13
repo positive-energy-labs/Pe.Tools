@@ -18,33 +18,82 @@ public sealed class ButtonRegistry {
     ///     All button registrations. This is the single source of truth for button configuration.
     /// </summary>
     private static readonly List<IButtonRegistration> Registrations = new() {
+        Register(new ButtonRegistration<CmdPeToolsHome> {
+            Text = "Home",
+            SmallImage = "monitor-down16.png",
+            LargeImage = "monitor-down32.png",
+            ToolTip = "Open the Pe.Tools product directory in your browser.",
+            Container = new ButtonContainer.Panel("Pe.Tools")
+        }),
+        Register(new ButtonRegistration<CmdPea> {
+            Text = "Pea",
+            SmallImage = "square-terminal16.png",
+            LargeImage = "square-terminal32.png",
+            ToolTip = "Open Pea in your browser. Choose the target there; this entry does not resume existing Work.",
+            Container = new ButtonContainer.Panel("Pea")
+        }),
+        Register(new ButtonRegistration<CmdFamilyEditor> {
+            Text = "Family Editor",
+            SmallImage = "Red_16.png",
+            LargeImage = "Red_32.png",
+            ToolTip = "Open the Family Foundry editor in your browser. Choose the document or Pod member there.",
+            Container = new ButtonContainer.Panel("Family Foundry")
+        }),
+        Register(new ButtonRegistration<CmdFamilyAudit> {
+            Text = "Project Families",
+            SmallImage = "Red_16.png",
+            LargeImage = "Red_32.png",
+            ToolTip = "Open the Family Foundry project-family audit in your browser. Choose the exact project there.",
+            Container = new ButtonContainer.Panel("Family Foundry")
+        }),
+        Register(new ButtonRegistration<CmdSchedulesWeb> {
+            Text = "Schedules",
+            SmallImage = "Red_16.png",
+            LargeImage = "Red_32.png",
+            ToolTip = "Open Schedules in your browser. Choose the document or Pod member there. Native schedule execution remains in Native Schedules.",
+            Container = new ButtonContainer.Panel("Schedules")
+        }),
+        Register(new ButtonRegistration<CmdTakeoffsWeb> {
+            Text = "Takeoffs",
+            SmallImage = "Red_16.png",
+            LargeImage = "Red_32.png",
+            ToolTip = "Open Takeoffs in your browser. Choose the exact project or saved capture there.",
+            Container = new ButtonContainer.Panel("Takeoffs")
+        }),
+        Register(new ButtonRegistration<CmdPodsWeb> {
+            Text = "Pods",
+            SmallImage = "Red_16.png",
+            LargeImage = "Red_32.png",
+            ToolTip = "Open the Pod library in your browser.",
+            Container = new ButtonContainer.Panel("Pods")
+        }),
         Register(new ButtonRegistration<CmdScheduleManager> {
             Text = "Schedule Manager Creator",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Create individual schedules or batches from a profile.",
-            Container = new ButtonContainer.Panel("Migration")
+            Container = new ButtonContainer.PullDown("Native Schedules", "Schedules")
         }),
         Register(new ButtonRegistration<CmdScheduleManagerSerialize> {
             Text = "Schedule Capture",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Capture a schedule definition as a new spec in a pod.",
-            Container = new ButtonContainer.Panel("Migration")
+            Container = new ButtonContainer.PullDown("Native Schedules", "Schedules")
         }),
         Register(new ButtonRegistration<CmdFFManager> {
             Text = "FF Manager Creator",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Manage families in a variety of ways from the Family Foundry.",
-            Container = new ButtonContainer.Panel("Migration")
+            Container = new ButtonContainer.PullDown("Native Family Foundry", "Family Foundry")
         }),
         Register(new ButtonRegistration<CmdFFMigrator> {
             Text = "FF Migrator",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Process families in a variety of ways from the Family Foundry.",
-            Container = new ButtonContainer.Panel("Migration")
+            Container = new ButtonContainer.PullDown("Native Family Foundry", "Family Foundry")
         }),
         Register(new ButtonRegistration<CmdPltCommands> {
             Text = "Cmd Palette",
@@ -52,70 +101,70 @@ public sealed class ButtonRegistry {
             LargeImage = "square-terminal32.png",
             ToolTip =
                 "Search and execute Revit commands quickly without looking through Revit's tabs, ribbons, and panels. Not all commands are guaranteed to run.",
-            Container = new ButtonContainer.Panel("Tools")
+            Container = new ButtonContainer.Panel("Revit Tools")
         }),
         Register(new ButtonRegistration<CmdPltViews> {
             Text = "All",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Search and open all views, schedules, and sheets in the current document.",
-            Container = new ButtonContainer.Split("Project Palette", "Tools")
+            Container = new ButtonContainer.Split("Project Palette", "Revit Tools")
         }),
         Register(new ButtonRegistration<CmdPltViewsOnly> {
             Text = "Views",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Search and open views in the current document.",
-            Container = new ButtonContainer.Split("Project Palette", "Tools")
+            Container = new ButtonContainer.Split("Project Palette", "Revit Tools")
         }),
         Register(new ButtonRegistration<CmdPltSchedules> {
             Text = "Schedules",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Search and open schedules in the current document.",
-            Container = new ButtonContainer.Split("Project Palette", "Tools")
+            Container = new ButtonContainer.Split("Project Palette", "Revit Tools")
         }),
         Register(new ButtonRegistration<CmdPltSheets> {
             Text = "Sheets",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Search and open sheets in the current document.",
-            Container = new ButtonContainer.Split("Project Palette", "Tools")
+            Container = new ButtonContainer.Split("Project Palette", "Revit Tools")
         }),
         Register(new ButtonRegistration<CmdPltMruViews> {
             Text = "MRU Views",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Open recently visited views in MRU (Most Recently Used) order.",
-            Container = new ButtonContainer.Panel("Tools")
+            Container = new ButtonContainer.Panel("Revit Tools")
         }),
         Register(new ButtonRegistration<CmdPltFamilies> {
             Text = "Families",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Browse families in the current document.",
-            Container = new ButtonContainer.Split("Family Palette", "Tools")
+            Container = new ButtonContainer.Split("Family Palette", "Family Foundry")
         }),
         Register(new ButtonRegistration<CmdPltFamilyTypes> {
             Text = "Types",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Browse family types in the current document.",
-            Container = new ButtonContainer.Split("Family Palette", "Tools")
+            Container = new ButtonContainer.Split("Family Palette", "Family Foundry")
         }),
         Register(new ButtonRegistration<CmdPltFamilyInstances> {
             Text = "Instances",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Select and zoom to placed instances; shows family elements in family documents.",
-            Container = new ButtonContainer.Split("Family Palette", "Tools")
+            Container = new ButtonContainer.Split("Family Palette", "Family Foundry")
         }),
         Register(new ButtonRegistration<CmdPltFamilyElements> {
             Text = "Family Elements",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Select and zoom to elements in the current document: family elements in family docs, placed instances in projects.",
-            Container = new ButtonContainer.Panel("Tools")
+            Container = new ButtonContainer.PullDown("Native Family Foundry", "Family Foundry")
         }),
         Register(new ButtonRegistration<CmdPltTasks> {
             Text = "Task Palette",
@@ -133,7 +182,7 @@ public sealed class ButtonRegistry {
 
                               Tasks are organized by category and tracked by usage frequency.
                               """,
-            Container = new ButtonContainer.Panel("Tools")
+            Container = new ButtonContainer.PullDown("Preview / Admin", "Setup")
         }),
         Register(new ButtonRegistration<CmdTapMaker> {
             Text = "Tap Maker",
@@ -148,7 +197,14 @@ public sealed class ButtonRegistry {
 
                               In the event an easy location or size adjustment is not found, no tap will be placed.
                               """,
-            Container = new ButtonContainer.Panel("Tools")
+            Container = new ButtonContainer.Panel("Revit Tools")
+        }),
+        Register(new ButtonRegistration<CmdCloseModel> {
+            Text = "Close Model",
+            SmallImage = "Red_16.png",
+            LargeImage = "Red_32.png",
+            ToolTip = "Close the active model after seeing what you hold in it: unsaved, saved but not synced, and owned.",
+            Container = new ButtonContainer.Panel("Revit Tools")
         }),
         Register(new ButtonRegistration<CmdApsAuth> {
             Text = "Autodesk Sign-in",
@@ -156,14 +212,14 @@ public sealed class ButtonRegistry {
             LargeImage = "id-card32.png",
             ToolTip =
                 "Check the Autodesk sign-in already active in Revit.",
-            Container = new ButtonContainer.PullDown("General", "Manage")
+            Container = new ButtonContainer.PullDown("Accounts / Connection", "Setup")
         }),
         Register(new ButtonRegistration<CmdCacheParametersService> {
             Text = "Cache Params Svc",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Cache the parameters service data for use in the Family Foundry command.",
-            Container = new ButtonContainer.PullDown("General", "Manage")
+            Container = new ButtonContainer.PullDown("Preview / Admin", "Setup")
         }),
         Register(new ButtonRegistration<CmdAutoTag> {
             Text = "AutoTag",
@@ -182,10 +238,10 @@ public sealed class ButtonRegistry {
 
                               Settings are stored in the document using Extensible Storage.
                               """,
-            Container = new ButtonContainer.PullDown("General", "Manage")
+            Container = new ButtonContainer.Panel("Revit Tools")
         }),
         Register(new ButtonRegistration<CmdPeTools> {
-            Text = "Pe Tools",
+            Text = "Connection / Setup",
             SmallImage = "monitor-down16.png",
             LargeImage = "monitor-down32.png",
             ToolTip = "Manually connect or disconnect this Revit session from the external host.",
@@ -197,7 +253,7 @@ public sealed class ButtonRegistry {
                               - disconnect when you want zero bridge activity
                               - open the browser-based Pe Tools frontend
                               """,
-            Container = new ButtonContainer.PullDown("General", "Manage")
+            Container = new ButtonContainer.PullDown("Accounts / Connection", "Setup")
         })
     };
 

@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from "./routes/__root";
 import { Route as IndexRouteImport } from "./routes/index";
 import { Route as BindRouteImport } from "./routes/bind";
 import { Route as CapturesRouteImport } from "./routes/captures";
-import { Route as ChatRouteImport } from "./routes/chat";
 import { Route as DataTablesRouteImport } from "./routes/data-tables";
 import { Route as DesignSystemRouteImport } from "./routes/design-system";
 import { Route as DocLabRouteImport } from "./routes/doc-lab";
@@ -26,6 +25,7 @@ import { Route as OpenRouteImport } from "./routes/open";
 import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as ParamTablesRouteImport } from "./routes/param-tables";
 import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
+import { Route as PeaRouteImport } from "./routes/pea";
 import { Route as PodsRouteImport } from "./routes/pods";
 import { Route as RoomsRouteImport } from "./routes/rooms";
 import { Route as SchedulesRouteImport } from "./routes/schedules";
@@ -53,11 +53,6 @@ const BindRoute = BindRouteImport.update({
 const CapturesRoute = CapturesRouteImport.update({
   id: "/captures",
   path: "/captures",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ChatRoute = ChatRouteImport.update({
-  id: "/chat",
-  path: "/chat",
   getParentRoute: () => rootRouteImport,
 } as any);
 const DataTablesRoute = DataTablesRouteImport.update({
@@ -123,6 +118,11 @@ const ParamTablesRoute = ParamTablesRouteImport.update({
 const ParameterLinksRoute = ParameterLinksRouteImport.update({
   id: "/parameter-links",
   path: "/parameter-links",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const PeaRoute = PeaRouteImport.update({
+  id: "/pea",
+  path: "/pea",
   getParentRoute: () => rootRouteImport,
 } as any);
 const PodsRoute = PodsRouteImport.update({
@@ -195,7 +195,6 @@ export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
   "/bind": typeof BindRoute;
   "/captures": typeof CapturesRoute;
-  "/chat": typeof ChatRoute;
   "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
@@ -209,6 +208,7 @@ export interface FileRoutesByFullPath {
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
+  "/pea": typeof PeaRoute;
   "/pods": typeof PodsRoute;
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
@@ -227,7 +227,6 @@ export interface FileRoutesByTo {
   "/": typeof IndexRoute;
   "/bind": typeof BindRoute;
   "/captures": typeof CapturesRoute;
-  "/chat": typeof ChatRoute;
   "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
@@ -241,6 +240,7 @@ export interface FileRoutesByTo {
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
+  "/pea": typeof PeaRoute;
   "/pods": typeof PodsRoute;
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
@@ -260,7 +260,6 @@ export interface FileRoutesById {
   "/": typeof IndexRoute;
   "/bind": typeof BindRoute;
   "/captures": typeof CapturesRoute;
-  "/chat": typeof ChatRoute;
   "/data-tables": typeof DataTablesRoute;
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
@@ -274,6 +273,7 @@ export interface FileRoutesById {
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
+  "/pea": typeof PeaRoute;
   "/pods": typeof PodsRoute;
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
@@ -294,7 +294,6 @@ export interface FileRouteTypes {
     | "/"
     | "/bind"
     | "/captures"
-    | "/chat"
     | "/data-tables"
     | "/design-system"
     | "/doc-lab"
@@ -308,6 +307,7 @@ export interface FileRouteTypes {
     | "/ops"
     | "/param-tables"
     | "/parameter-links"
+    | "/pea"
     | "/pods"
     | "/rooms"
     | "/schedules"
@@ -326,7 +326,6 @@ export interface FileRouteTypes {
     | "/"
     | "/bind"
     | "/captures"
-    | "/chat"
     | "/data-tables"
     | "/design-system"
     | "/doc-lab"
@@ -340,6 +339,7 @@ export interface FileRouteTypes {
     | "/ops"
     | "/param-tables"
     | "/parameter-links"
+    | "/pea"
     | "/pods"
     | "/rooms"
     | "/schedules"
@@ -358,7 +358,6 @@ export interface FileRouteTypes {
     | "/"
     | "/bind"
     | "/captures"
-    | "/chat"
     | "/data-tables"
     | "/design-system"
     | "/doc-lab"
@@ -372,6 +371,7 @@ export interface FileRouteTypes {
     | "/ops"
     | "/param-tables"
     | "/parameter-links"
+    | "/pea"
     | "/pods"
     | "/rooms"
     | "/schedules"
@@ -391,7 +391,6 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute;
   BindRoute: typeof BindRoute;
   CapturesRoute: typeof CapturesRoute;
-  ChatRoute: typeof ChatRoute;
   DataTablesRoute: typeof DataTablesRoute;
   DesignSystemRoute: typeof DesignSystemRoute;
   DocLabRoute: typeof DocLabRoute;
@@ -405,6 +404,7 @@ export interface RootRouteChildren {
   OpsRoute: typeof OpsRoute;
   ParamTablesRoute: typeof ParamTablesRoute;
   ParameterLinksRoute: typeof ParameterLinksRoute;
+  PeaRoute: typeof PeaRoute;
   PodsRoute: typeof PodsRoute;
   RoomsRoute: typeof RoomsRoute;
   SchedulesRoute: typeof SchedulesRoute;
@@ -440,13 +440,6 @@ declare module "@tanstack/react-router" {
       path: "/captures";
       fullPath: "/captures";
       preLoaderRoute: typeof CapturesRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/chat": {
-      id: "/chat";
-      path: "/chat";
-      fullPath: "/chat";
-      preLoaderRoute: typeof ChatRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/data-tables": {
@@ -538,6 +531,13 @@ declare module "@tanstack/react-router" {
       path: "/parameter-links";
       fullPath: "/parameter-links";
       preLoaderRoute: typeof ParameterLinksRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/pea": {
+      id: "/pea";
+      path: "/pea";
+      fullPath: "/pea";
+      preLoaderRoute: typeof PeaRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/pods": {
@@ -649,7 +649,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BindRoute: BindRoute,
   CapturesRoute: CapturesRoute,
-  ChatRoute: ChatRoute,
   DataTablesRoute: DataTablesRoute,
   DesignSystemRoute: DesignSystemRoute,
   DocLabRoute: DocLabRoute,
@@ -663,6 +662,7 @@ const rootRouteChildren: RootRouteChildren = {
   OpsRoute: OpsRoute,
   ParamTablesRoute: ParamTablesRoute,
   ParameterLinksRoute: ParameterLinksRoute,
+  PeaRoute: PeaRoute,
   PodsRoute: PodsRoute,
   RoomsRoute: RoomsRoute,
   SchedulesRoute: SchedulesRoute,

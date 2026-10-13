@@ -27,6 +27,8 @@ import {
 import { RouteShell, useRoute } from "#/route";
 import { appAtomRegistry } from "#/route/route-owner";
 import { useScopeKeys } from "#/route/keys";
+import { PagePaletteButton } from "#/route/situation-marks";
+import { PrimaryRouteControls, usePublishPagePalette } from "#/navigation/route-controls";
 import { chatManifest } from "#/chat/manifest";
 import { readThreadTarget } from "#/chat/thread-navigation";
 import "#/workbench/lens.css";
@@ -139,6 +141,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
     if (await deleteThread(id)) setDeletedThreadIds((previous) => new Set([...previous, id]));
   };
   const paletteOpen = useAtomValue(store.atoms.paletteOpen);
+  usePublishPagePalette(handle.manifest.key, paletteOpen);
   const sideOpen = useAtomValue(store.atoms.sideOpen);
   const pluginOpen = useAtomValue(store.atoms.pluginOpen);
   useEffect(() => {
@@ -185,10 +188,12 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
 
   // Surface chords, not manifest actions: they move Page state and never refuse. They bind on
   // whatever scope node the chat surface sits in, so help lists them beside the route's chords.
+  const togglePagePalette = () => store.actions.setPaletteOpen((open) => !open);
   useScopeKeys([
     {
       hotkey: "Mod+K",
-      callback: () => store.actions.setPaletteOpen((open) => !open),
+      callback: togglePagePalette,
+      options: { ignoreInputs: false },
       label: "palette",
       says: "open or close the Do palette",
     },
@@ -287,6 +292,9 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
       data-plugin={plugin}
       className="size-full min-h-0 min-w-0 font-sans text-ink"
     >
+      <PrimaryRouteControls route="chat" slot="palette">
+        <PagePaletteButton open={togglePagePalette} />
+      </PrimaryRouteControls>
       {/* The route shell owns the chords and the remaining-height conversation column. Chat has
           no route head: the Situation is drawn in the composer (`ComposerControls`), so the shell draws
           none of its own. */}
