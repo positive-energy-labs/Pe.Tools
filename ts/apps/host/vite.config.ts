@@ -1,4 +1,5 @@
 import { defineConfig } from "vite-plus";
+import { receiptBuildDefines } from "./src/build-stamp.ts";
 
 export default defineConfig({
   pack: {
@@ -6,6 +7,7 @@ export default defineConfig({
     outDir: "dist-installed/bundle",
     clean: ["dist-installed"],
     shims: true,
+    define: receiptBuildDefines("release"),
     plugins: [
       {
         name: "preserve-node-socket-context",
