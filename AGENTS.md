@@ -41,6 +41,7 @@ You are counsel: you argue and you are liable. An agent's report is testimony. T
 | the wrong reality: a claim proved on a lane that cannot falsify it | `execute` |
 | rumor: a finding without lineage | `mine` |
 | the painting: a page with no state behind it | `page` |
+| the wall of text: a topic explained in prose that a diagram would settle | `show-me` |
 <!-- routing:end -->
 
 `python .agents/skills/check.py --fix` projects this table from each skill's `prevents:`. Do not edit it by hand.

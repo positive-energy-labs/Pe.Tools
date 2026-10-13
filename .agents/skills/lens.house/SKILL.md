@@ -39,11 +39,3 @@ The ten that code cannot hold. Anything holdable by a type, a check, or a specim
 1. Use an existing primitive from the kit.
 2. Extend the kit on the first real consumer, with a specimen in the same commit.
 3. Only then write geometry at the call site: position and size, never stroke, fill, or type.
-
-## Parlance
-
-| Word | Pins |
-|---|---|
-| kit | primitive set, component library |
-| sounding | value, cell |
-| shoal | drift, stale, unverified |
