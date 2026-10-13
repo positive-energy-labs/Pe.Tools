@@ -27,7 +27,13 @@ beforeEach(async () => {
   await mkdir(join(source, "example", "pages", "tour"), { recursive: true });
   await writeFile(
     join(source, "example", "pod.json"),
-    JSON.stringify({ schemaVersion: 2, id: "example", name: "Example", version: "1.0.0", entrypoints: [] }),
+    JSON.stringify({
+      schemaVersion: 2,
+      id: "example",
+      name: "Example",
+      version: "1.0.0",
+      entrypoints: [],
+    }),
   );
   await writeFile(join(source, "example", "pages", "tour", "index.html"), "<title>Tour</title>");
   await exportPod(
@@ -42,7 +48,9 @@ const boot = () => importShippedPods({ shippedRoot: shipped, ledger, podsRoot: p
 test("first boot imports the shipped pod; a restart offers nothing again, even after the user deletes it", async () => {
   const first = await boot();
   expect(first.outcomes.map((o) => o.outcome)).toEqual(["imported"]);
-  expect((await listPackages(pods)).packages.map((p) => [p.id, p.folder])).toEqual([["example", "example"]]);
+  expect((await listPackages(pods)).packages.map((p) => [p.id, p.folder])).toEqual([
+    ["example", "example"],
+  ]);
   expect(JSON.parse(await readFile(join(pods, "example", "imported.json"), "utf8")).locator).toBe(
     join(shipped, "example.zip"),
   );
@@ -55,7 +63,13 @@ test("first boot imports the shipped pod; a restart offers nothing again, even a
 
 test("a user's pod with the shipped id, or a folder with its name, is never overwritten", async () => {
   await mkdir(join(pods, "Mine"), { recursive: true });
-  const mine = JSON.stringify({ schemaVersion: 2, id: "example", name: "Edited", version: "9", entrypoints: [] });
+  const mine = JSON.stringify({
+    schemaVersion: 2,
+    id: "example",
+    name: "Edited",
+    version: "9",
+    entrypoints: [],
+  });
   await writeFile(join(pods, "Mine", "pod.json"), mine);
 
   const report = await boot();

@@ -207,7 +207,10 @@ export type PodCapture = Schema.Schema.Type<typeof podCaptureResponseSchema>;
 
 const podMemberDigestSchema = Schema.Struct({ path: Schema.String, sha256: Schema.String });
 
-export const podExportRequestSchema = Schema.Struct({ pod: Schema.String, archivePath: Schema.String });
+export const podExportRequestSchema = Schema.Struct({
+  pod: Schema.String,
+  archivePath: Schema.String,
+});
 export type PodExportRequest = Schema.Schema.Type<typeof podExportRequestSchema>;
 export const podExportResponseSchema = Schema.Struct({
   id: Schema.String,
@@ -215,7 +218,9 @@ export const podExportResponseSchema = Schema.Struct({
   archiveSha256: Schema.String,
   members: Schema.Array(podMemberDigestSchema),
   /** Foreign fragments carried under settings/_vendor/<id>/, with the sha of their original bytes. */
-  vendored: Schema.Array(Schema.Struct({ id: Schema.String, path: Schema.String, sha256: Schema.String })),
+  vendored: Schema.Array(
+    Schema.Struct({ id: Schema.String, path: Schema.String, sha256: Schema.String }),
+  ),
   /** Every member the crossing rewrote, with hashes before and after. */
   transforms: Schema.Array(
     Schema.Struct({

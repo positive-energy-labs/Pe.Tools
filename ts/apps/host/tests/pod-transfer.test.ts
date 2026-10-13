@@ -57,10 +57,19 @@ afterEach(async () => {
 /** A mutation crosses `/actions` as one exact admission against the host, the only write door. */
 const act = async (key: string, input: unknown, as: Caller = human) => {
   const id = randomUUID();
-  let row = (await post("/actions", { id, kind: "operation", key, destination: { kind: "host" }, input, bases: {} }, as)).json;
+  let row = (
+    await post(
+      "/actions",
+      { id, kind: "operation", key, destination: { kind: "host" }, input, bases: {} },
+      as,
+    )
+  ).json;
   for (let wait = 0; row.state === "running" && wait < 100; wait++) {
     await new Promise((settle) => setTimeout(settle, 20));
-    const listed = await web.handler(new Request(`http://host/actions?id=${id}`), Context.empty() as never);
+    const listed = await web.handler(
+      new Request(`http://host/actions?id=${id}`),
+      Context.empty() as never,
+    );
     row = ((await listed.json()) as Record<string, any>[])[0] ?? row;
   }
   return row;
@@ -132,9 +141,11 @@ test("pod.list carries each pod's canonical contribution keys", async () => {
   const listed = await call("pod.list");
 
   expect(listed.status).toBe(200);
-  expect(
-    listed.json.pods[0].contributions.map((c: { key: string }) => c.key).sort(),
-  ).toEqual(["member:@ducts/settings/checks.json", "page:@ducts/pages/tour", "script:@ducts/src/Census.cs"]);
+  expect(listed.json.pods[0].contributions.map((c: { key: string }) => c.key).sort()).toEqual([
+    "member:@ducts/settings/checks.json",
+    "page:@ducts/pages/tour",
+    "script:@ducts/src/Census.cs",
+  ]);
   expect(nativeCalls).toEqual([]);
 });
 
@@ -159,8 +170,15 @@ async function shared(store: CaptureStore) {
     registration: null,
   });
   await writePod("Global Library", {
-    "pod.json": JSON.stringify({ schemaVersion: 2, id: "global", name: "Global", version: "1", entrypoints: [] }),
-    "settings/_fields/Header.json": '{\n  "title": "header",\n  "$preset": "@local/_fields/Base"\n}',
+    "pod.json": JSON.stringify({
+      schemaVersion: 2,
+      id: "global",
+      name: "Global",
+      version: "1",
+      entrypoints: [],
+    }),
+    "settings/_fields/Header.json":
+      '{\n  "title": "header",\n  "$preset": "@local/_fields/Base"\n}',
     "settings/_fields/Base.json": '{ "base": true }',
   });
   await writePod("Renamed In Explorer", {
@@ -179,7 +197,10 @@ test("export vendors, ports the project, closes captures; import into a renamed 
   const sha = await shared(store);
   const archivePath = join(root, "out", "ducts.zip");
 
-  const exported = await exportPod({ pod: "ducts", archivePath }, { podsRoot: pods, captures: store });
+  const exported = await exportPod(
+    { pod: "ducts", archivePath },
+    { podsRoot: pods, captures: store },
+  );
 
   expect(exported.vendored.map((v) => [v.id, v.path])).toEqual([
     ["global", "settings/_fields/Header.json"],
@@ -273,7 +294,9 @@ test("pod.export and pod.import cross /actions with no session and no native cal
   const imported = await act("pod.import", { archivePath });
   expect(imported).toMatchObject({ state: "succeeded" });
   expect(JSON.stringify(imported)).toContain('"folder":"ducts"');
-  expect(await act("pod.import", { archivePath: "relative.zip" })).toMatchObject({ state: "failed" });
+  expect(await act("pod.import", { archivePath: "relative.zip" })).toMatchObject({
+    state: "failed",
+  });
   expect(nativeCalls).toEqual([]);
 });
 
@@ -282,14 +305,26 @@ const zip = (files: Record<string, string | Buffer>) =>
 const manifest = JSON.stringify({ schemaVersion: 2, id: "evil", entrypoints: [] });
 
 test.each([
-  ["a host-owned binding", { "pod.json": manifest, "pages/p/.state/binding.json": "{}" }, /never carry 'pages\/p\/\.state\/binding\.json'/],
-  ["import provenance", { "pod.json": manifest, "imported.json": "{}" }, /never carry 'imported\.json'/],
+  [
+    "a host-owned binding",
+    { "pod.json": manifest, "pages/p/.state/binding.json": "{}" },
+    /never carry 'pages\/p\/\.state\/binding\.json'/,
+  ],
+  [
+    "import provenance",
+    { "pod.json": manifest, "imported.json": "{}" },
+    /never carry 'imported\.json'/,
+  ],
   ["runtime output", { "pod.json": manifest, "output/r/receipt.json": "{}" }, /never carry/],
   ["traversal", { "pod.json": manifest, "../outside.txt": "x" }, /Pod archive refused/],
   ["case twins", { "pod.json": manifest, "README.md": "a", "readme.md": "b" }, /case-colliding/],
   ["no manifest", { "README.md": "a" }, /must contain pod\.json/],
   ["a reserved id", { "pod.json": JSON.stringify({ id: "pages" }) }, /no valid, unreserved id/],
-  ["an oversized entry", { "pod.json": manifest, "big.bin": Buffer.alloc(600 * 1024) }, /bytes per entry/],
+  [
+    "an oversized entry",
+    { "pod.json": manifest, "big.bin": Buffer.alloc(600 * 1024) },
+    /bytes per entry/,
+  ],
 ] as const)("an archive with %s is refused and installs nothing", async (_, files, refusal) => {
   const archivePath = join(root, "evil.zip");
   await writeFile(archivePath, zip(files as Record<string, string | Buffer>));
@@ -328,7 +363,11 @@ test("pod.promote wraps a scratch Page byte for byte, unbound, without touching 
   expect(await readFile(join(inPod, ".state", "events.jsonl"), "utf8")).toBe('{"seq":1}\n');
   await expect(readFile(join(inPod, ".state", "binding.json"))).rejects.toThrow();
   expect(await readFile(join(pages, "notes", ".state", "binding.json"), "utf8")).toBe("{}");
-  expect(JSON.stringify(await act("pod.promote", { page: "notes", id: "my-notes" }))).toContain("already installed");
-  expect(JSON.stringify(await act("pod.promote", { page: "missing", id: "other" }))).toContain("No scratch Page");
+  expect(JSON.stringify(await act("pod.promote", { page: "notes", id: "my-notes" }))).toContain(
+    "already installed",
+  );
+  expect(JSON.stringify(await act("pod.promote", { page: "missing", id: "other" }))).toContain(
+    "No scratch Page",
+  );
   expect(nativeCalls).toEqual([]);
 });

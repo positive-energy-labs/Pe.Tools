@@ -14,7 +14,13 @@ import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { hostOwnership, productRoot } from "./host-ownership.ts";
-import { archiveId, installArchive, readZip, TransferRefused, type TransferOptions } from "./pod-transfer.ts";
+import {
+  archiveId,
+  installArchive,
+  readZip,
+  TransferRefused,
+  type TransferOptions,
+} from "./pod-transfer.ts";
 import { listPackages } from "./packages.ts";
 import { productPodsRootPath } from "./product-paths.ts";
 
@@ -32,7 +38,8 @@ type Ledger = { offered: Record<string, { archive: string; at: string; outcome: 
 export const shippedPodsRoot = (): string | null =>
   hostOwnership.lane === "installed" ? join(dirname(process.execPath), "pods") : null;
 
-const ledgerPath = () => join(productRoot(), productPathNames.stateDirectoryName, "shipped-pods.json");
+const ledgerPath = () =>
+  join(productRoot(), productPathNames.stateDirectoryName, "shipped-pods.json");
 
 let firstRun: Promise<ShippedPodsReport> | undefined;
 
@@ -73,7 +80,11 @@ async function run(
       continue;
     }
     outcomes.push(await offer(archive, path, bytes, sha256, { ...options, podsRoot }));
-    ledger.offered[sha256] = { archive, at: new Date().toISOString(), outcome: outcomes.at(-1)!.outcome };
+    ledger.offered[sha256] = {
+      archive,
+      at: new Date().toISOString(),
+      outcome: outcomes.at(-1)!.outcome,
+    };
   }
   await mkdir(dirname(ledgerFile), { recursive: true });
   const partial = `${ledgerFile}.${randomUUID()}.partial`;
@@ -93,12 +104,22 @@ async function offer(
     const id = archiveId(readZip(bytes));
     const installed = (await listPackages(options.podsRoot)).packages.find((p) => p.id === id);
     if (installed)
-      return { archive, sha256, outcome: "present", id, reason: `installed in folder '${installed.folder}'` };
+      return {
+        archive,
+        sha256,
+        outcome: "present",
+        id,
+        reason: `installed in folder '${installed.folder}'`,
+      };
     const imported = await installArchive(bytes, path, undefined, options);
     return { archive, sha256, outcome: "imported", id: imported.id, folder: imported.folder };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    if (error instanceof TransferRefused && error.status === 409 && /folder already exists/.test(reason))
+    if (
+      error instanceof TransferRefused &&
+      error.status === 409 &&
+      /folder already exists/.test(reason)
+    )
       return { archive, sha256, outcome: "present", id: archiveId(readZip(bytes)), reason };
     return { archive, sha256, outcome: "refused", reason };
   }

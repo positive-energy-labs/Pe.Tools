@@ -96,7 +96,9 @@ export async function exportPod(
   const captured = await capturePackage(pod).catch((error: unknown) => {
     throw new TransferRefused(`Pod '${request.pod}' is not exportable: ${said(error)}`);
   });
-  const files = new Map<string, Buffer>(captured.members.map((m) => [m.path, Buffer.from(m.bytes)]));
+  const files = new Map<string, Buffer>(
+    captured.members.map((m) => [m.path, Buffer.from(m.bytes)]),
+  );
   const transforms: PodTransform[] = [];
   const record = (path: string, transform: PodTransform["transform"], after: Buffer) => {
     const before = files.get(path)!;
@@ -149,16 +151,23 @@ function vendor(
     try {
       root = JSON.parse(bytes.toString("utf8").replace(/^﻿/, ""));
     } catch (error) {
-      throw new TransferRefused(`Cannot publish '${source}': it is not valid JSON (${said(error)}).`);
+      throw new TransferRefused(
+        `Cannot publish '${source}': it is not valid JSON (${said(error)}).`,
+      );
     }
     let changed = false;
     for (const holder of directiveHolders(root)) {
       const reference = parseReference(holder.value[holder.key] as string, source);
       const foreign =
-        reference.id === "local" ? owner : reference.id === podId && owner === null ? null : reference.id;
+        reference.id === "local"
+          ? owner
+          : reference.id === podId && owner === null
+            ? null
+            : reference.id;
       if (foreign === null) continue;
       pending.push({ owner: foreign, path: reference.path });
-      holder.value[holder.key] = LOCAL_PREFIX + vendorPath(foreign, reference.path).slice("settings/".length);
+      holder.value[holder.key] =
+        LOCAL_PREFIX + vendorPath(foreign, reference.path).slice("settings/".length);
       changed = true;
     }
     return changed ? Buffer.from(`${JSON.stringify(root, null, 2)}\n`) : bytes;
@@ -171,7 +180,9 @@ function vendor(
     if (files.has(target)) continue;
     const bytes = unique(listing, next.owner).members.find((m) => m.path === next.path)?.bytes;
     if (!bytes)
-      throw new TransferRefused(`Cannot publish: pod '${next.owner}' has no member '${next.path}'.`);
+      throw new TransferRefused(
+        `Cannot publish: pod '${next.owner}' has no member '${next.path}'.`,
+      );
     files.set(target, rewrite(`@${next.owner}/${next.path}`, Buffer.from(bytes), next.owner));
     vendored.push({ id: next.owner, path: next.path, sha256: sha256(Buffer.from(bytes)) });
   }
@@ -265,7 +276,10 @@ export async function installArchive(
   const podsRoot = options.podsRoot ?? productPodsRootPath();
   const installed = (await listPackages(podsRoot)).packages.find((p) => p.id === id);
   if (installed)
-    throw new TransferRefused(`Pod id '${id}' is already installed in folder '${installed.folder}'.`, 409);
+    throw new TransferRefused(
+      `Pod id '${id}' is already installed in folder '${installed.folder}'.`,
+      409,
+    );
   const directory = join(podsRoot, folder);
   if (await lstat(directory).catch(() => null))
     throw new TransferRefused(`Pod folder already exists: ${directory}`, 409);
@@ -310,7 +324,8 @@ export async function installArchive(
 /** The manifest id an archive claims; refuses an archive without a valid, unreserved one. */
 export function archiveId(entries: ReadonlyMap<string, Buffer>): string {
   const manifest = entries.get("pod.json");
-  if (!manifest) throw new TransferRefused("Pod archive must contain pod.json at the archive root.");
+  if (!manifest)
+    throw new TransferRefused("Pod archive must contain pod.json at the archive root.");
   let id: unknown;
   try {
     id = (JSON.parse(manifest.toString("utf8").replace(/^﻿/, "")) as { id?: unknown }).id;
@@ -319,7 +334,9 @@ export function archiveId(entries: ReadonlyMap<string, Buffer>): string {
   }
   const parsed = packageIdSchema.safeParse(id);
   if (!parsed.success)
-    throw new TransferRefused(`Pod archive pod.json names no valid, unreserved id (${String(id)}).`);
+    throw new TransferRefused(
+      `Pod archive pod.json names no valid, unreserved id (${String(id)}).`,
+    );
   return parsed.data;
 }
 
@@ -336,7 +353,8 @@ export async function promotePage(
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(request.page))
     throw new TransferRefused(`'${request.page}' is not a scratch Page slug.`, 400);
   const id = packageIdSchema.safeParse(request.id);
-  if (!id.success) throw new TransferRefused(`'${request.id}' is not a valid, unreserved pod id.`, 400);
+  if (!id.success)
+    throw new TransferRefused(`'${request.id}' is not a valid, unreserved pod id.`, 400);
   const source = join(options.pagesRoot ?? productPagesRootPath(), request.page);
   if (!(await lstat(join(source, "index.html")).catch(() => null))?.isFile())
     throw new TransferRefused(`No scratch Page '${request.page}' (no index.html).`, 404);
@@ -453,7 +471,10 @@ export function readZip(archive: Buffer): Map<string, Buffer> {
     folded.add(path.toLowerCase());
     if (entries.size >= scriptPodSourceBounds.maxFileCount)
       throw refuse(`more than ${scriptPodSourceBounds.maxFileCount} files`);
-    if (size > scriptPodSourceBounds.maxFileBytes || (total += size) > scriptPodSourceBounds.maxTotalBytes)
+    if (
+      size > scriptPodSourceBounds.maxFileBytes ||
+      (total += size) > scriptPodSourceBounds.maxTotalBytes
+    )
       throw refuse(
         `over ${scriptPodSourceBounds.maxFileBytes} bytes per entry or ${scriptPodSourceBounds.maxTotalBytes} bytes total`,
       );
@@ -475,7 +496,8 @@ export function readZip(archive: Buffer): Map<string, Buffer> {
     } catch (error) {
       throw refuse(`'${path}' does not inflate within its declared size (${said(error)})`);
     }
-    if (bytes.length !== size || crc32(bytes) !== crc) throw refuse(`'${path}' fails its size or CRC check`);
+    if (bytes.length !== size || crc32(bytes) !== crc)
+      throw refuse(`'${path}' fails its size or CRC check`);
     entries.set(path, bytes);
   }
   return entries;
@@ -495,13 +517,25 @@ export function portableProject(project: Buffer): Buffer {
     /<TargetFramework>\s*([^<]+?)\s*<\/TargetFramework>/.exec(xml)?.[1] ??
     /<TargetFrameworks>\s*([^<;]+)/.exec(xml)?.[1]?.trim();
   const packages = new Map<string, string | undefined>();
-  for (const match of xml.matchAll(/<PackageReference\b([^>]*?)(?:\/>|>([\s\S]*?)<\/PackageReference>)/g)) {
+  for (const match of xml.matchAll(
+    /<PackageReference\b([^>]*?)(?:\/>|>([\s\S]*?)<\/PackageReference>)/g,
+  )) {
     const include = attribute(match[1]!, "Include");
-    if (!include || [...packages.keys()].some((k) => k.toLowerCase() === include.toLowerCase())) continue;
-    packages.set(include, attribute(match[1]!, "Version") ?? /<Version>\s*([^<]+?)\s*<\/Version>/.exec(match[2] ?? "")?.[1]);
+    if (!include || [...packages.keys()].some((k) => k.toLowerCase() === include.toLowerCase()))
+      continue;
+    packages.set(
+      include,
+      attribute(match[1]!, "Version") ??
+        /<Version>\s*([^<]+?)\s*<\/Version>/.exec(match[2] ?? "")?.[1],
+    );
   }
   const usings = [
-    ...new Set([...DEFAULT_USINGS, ...[...xml.matchAll(/<Using\b([^>]*)\/?>/g)].flatMap((m) => attribute(m[1]!, "Include") ?? [])]),
+    ...new Set([
+      ...DEFAULT_USINGS,
+      ...[...xml.matchAll(/<Using\b([^>]*)\/?>/g)].flatMap(
+        (m) => attribute(m[1]!, "Include") ?? [],
+      ),
+    ]),
   ].sort(ordinal);
   const lines = [
     '<Project Sdk="Microsoft.NET.Sdk">',
@@ -570,7 +604,10 @@ const DEFAULT_USINGS = [
 const attribute = (attributes: string, name: string) =>
   new RegExp(`\\b${name}\\s*=\\s*"([^"]*)"`).exec(attributes)?.[1]?.trim() || undefined;
 const escapeXml = (value: string) =>
-  value.replace(/[<>&"']/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[c]!);
+  value.replace(
+    /[<>&"']/g,
+    (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[c]!,
+  );
 const ordinal = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const byPath = ([a]: [string, unknown], [b]: [string, unknown]) => ordinal(a, b);
 
@@ -578,14 +615,21 @@ function unique(listing: PackageListing, id: string): AdmittedPackage {
   const found = listing.packages.filter((p) => p.id === id);
   if (found.length === 1) return found[0]!;
   throw found.length
-    ? new TransferRefused(`Pod id '${id}' is claimed by folders ${found.map((p) => p.folder).join(", ")}.`, 409)
+    ? new TransferRefused(
+        `Pod id '${id}' is claimed by folders ${found.map((p) => p.folder).join(", ")}.`,
+        409,
+      )
     : new TransferRefused(`No installed pod has id '${id}'.`, 404);
 }
 
 function bounded(files: { path: string; bytes: Buffer }[]) {
   const total = files.reduce((sum, f) => sum + f.bytes.length, 0);
   const large = files.find((f) => f.bytes.length > scriptPodSourceBounds.maxFileBytes);
-  if (files.length > scriptPodSourceBounds.maxFileCount || total > scriptPodSourceBounds.maxTotalBytes || large)
+  if (
+    files.length > scriptPodSourceBounds.maxFileCount ||
+    total > scriptPodSourceBounds.maxTotalBytes ||
+    large
+  )
     throw new TransferRefused(
       `Pod export exceeds ${scriptPodSourceBounds.maxFileCount} files, ${scriptPodSourceBounds.maxFileBytes} bytes per file${large ? ` ('${large.path}')` : ""}, or ${scriptPodSourceBounds.maxTotalBytes} bytes total.`,
     );
