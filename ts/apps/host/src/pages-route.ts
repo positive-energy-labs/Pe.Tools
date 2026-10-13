@@ -73,31 +73,31 @@ import {
   currentCaller,
   mintPageDoor,
   pageActDoor,
-  pageKeyOf,
   Refused,
   documentAcquisition,
   threadHead,
   subscribeHeads,
 } from "./control.ts";
 import { listPackages } from "./packages.ts";
+import {
+  PAGE_FOLDER,
+  PAGE_LIBRARIES,
+  readPageDescriptors,
+  scratchPageKey,
+} from "./page-libraries.ts";
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
 
-/** Page assets that live in the web app: the tokens and the Revit facsimile (one source each). */
-const WEB_ASSETS: Record<string, string> = {
-  "base.css": "../../web/src/base.css",
-  "revit.js": "../../web/src/revit/revit.js",
-  "revit.css": "../../web/src/revit/revit.css",
-};
-
 /**
- * `pe.js`, `pe.css`, the product's `base.css` (the tokens) and the Revit facsimile: read beside
- * their source on the dev lane, so an edit is live on the next request; staged to `<exeDir>/pages`
- * when installed (`scripts/stage-web.mjs`), like the web root.
+ * The libraries (`page-libraries.ts`): read beside their source on the dev lane, so an edit is live
+ * on the next request; staged to `<exeDir>/pages` when installed (`scripts/stage-web.mjs`).
  */
-const assetPath = (name: string) =>
+const assetPath = (name: PageLibraryFile) =>
   hostOwnership.lane === "installed"
     ? join(dirname(process.execPath), "pages", name)
-    : fileURLToPath(new URL(WEB_ASSETS[name] ?? `./pages/${name}`, import.meta.url));
+    : fileURLToPath(
+        new URL(PAGE_LIBRARIES.find((library) => library.file === name)!.source, import.meta.url),
+      );
+type PageLibraryFile = (typeof PAGE_LIBRARIES)[number]["file"];
 
 /**
  * The facsimile is an ES module for the web app; pages load classic scripts (their inline handlers
@@ -114,7 +114,7 @@ ${source.replace(exports, "globalThis.rv = {$1};")}
 })();
 `;
 };
-const asset = (name: string) => readFileSync(assetPath(name), "utf8");
+const asset = (name: PageLibraryFile) => readFileSync(assetPath(name), "utf8");
 /** The tokens also land on `:host`, so the bind chip's shadow root (pe.js) reads them on any page. */
 const chipTokens = (base: string) => {
   if (!/^:root \{/m.test(base))
@@ -142,7 +142,7 @@ const servedPe = () => {
 };
 
 /** One folder name: no dots, so no `..` and no file masquerading as a page. */
-const SLUG = /^[a-z0-9][a-z0-9_-]*$/i;
+const SLUG = PAGE_FOLDER;
 /** One file segment: a leading dot is refused, so `.state/` and editor droppings stay private. */
 const SEGMENT = /^[a-z0-9_-][a-z0-9_.-]*$/i;
 const MIME: Record<string, string> = {
@@ -169,8 +169,8 @@ export type PageEventRow = { seq: number; at: string; origin: string; event: unk
 /** One `GET /pages` row; `pod` is the package id when an admitted package contributes the page. */
 export type PageRow = {
   slug: string;
-  /** The Page key: `page:@pages/<slug>`, or the package's `page:@<id>/pages/<page>`. */
-  key: string;
+  /** The Page key: `page:@pages/<slug>`, or the package's `page:@<id>/pages/<page>`; null when the folder has none. */
+  key: string | null;
   title: string;
   url: string;
   modifiedAt: string;
@@ -387,14 +387,16 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
    */
   const dirOf = async (slug: string) => {
     const [id, page, ...more] = slug.split("--");
-    if (page === undefined) return { dir: join(root, slug), pod: null };
+    if (page === undefined) return { dir: join(root, slug), pod: null, ...scratchPageKey(slug) };
     if (more.length || !pods) return null;
-    const pod = (await listPackages(pods)).packages.find(
-      (one) =>
-        one.id === id &&
-        one.contributions.some((row) => row.kind === "page" && row.path === `pages/${page}`),
-    );
-    return pod ? { dir: join(pod.directory, "pages", page), pod: pod.id } : null;
+    for (const pod of (await listPackages(pods)).packages) {
+      const row = pod.contributions.find(
+        (one) => one.kind === "page" && one.path === `pages/${page}`,
+      );
+      if (pod.id === id && row)
+        return { dir: join(pod.directory, row.path), pod: pod.id, key: row.key, reason: null };
+    }
+    return null;
   };
   const states = new Map<string, PageState>();
   /** By folder: a renamed pod's page keeps its slug and opens its state where it lives now. */
@@ -404,42 +406,16 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     return state;
   };
 
-  const folders = async (dir: string) =>
-    (
-      await readdir(dir, { withFileTypes: true }).catch((error) => {
-        if (isMissing(error)) return [];
-        throw error;
-      })
-    )
-      .filter((entry) => entry.isDirectory() && SLUG.test(entry.name))
-      .map((entry) => entry.name);
-
-  async function list() {
-    const pages: PageRow[] = [];
-    const add = async (slug: string, key: string, dir: string, pod: string | null) => {
-      const index = join(dir, "index.html");
-      const facts = await stat(index).catch(() => null);
-      if (!facts) return;
-      const title = /<title>([^<]*)<\/title>/i.exec(await readFile(index, "utf8"))?.[1]?.trim();
-      pages.push({
-        slug,
-        key,
-        title: title || slug,
-        url: `/pages/${slug}/`,
-        modifiedAt: facts.mtime.toISOString(),
-        pod,
-      });
-    };
-    for (const name of await folders(root))
-      if (!name.includes("--")) await add(name, pageKeyOf(name), join(root, name), null);
-    for (const pod of pods ? (await listPackages(pods)).packages : [])
-      for (const row of pod.contributions)
-        if (row.kind === "page") {
-          const page = row.path.slice("pages/".length);
-          await add(`${pod.id}--${page}`, row.key, join(pod.directory, row.path), pod.id);
-        }
-    return pages.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
-  }
+  /** `GET /pages`: the one Page projection, as rows. */
+  const list = async (): Promise<PageRow[]> =>
+    (await readPageDescriptors(root, pods ?? null)).map((page) => ({
+      slug: page.slug,
+      key: page.key,
+      title: page.title,
+      url: page.openUrl,
+      modifiedAt: page.modifiedAt,
+      pod: page.pod,
+    }));
 
   function listPage(pages: PageRow[]) {
     const rows = pages.length
@@ -472,7 +448,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     );
   }
 
-  async function file(slug: string, dir: string, segments: string[]) {
+  async function file(slug: string, dir: string, page: string | null, segments: string[]) {
     if (!segments.every((s) => SEGMENT.test(s)))
       return problem(400, "that is not a page file path");
     const path = join(dir, ...segments);
@@ -480,7 +456,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
       const raw = await readFile(path);
       const bytes =
         segments.length === 1 && segments[0] === "index.html"
-          ? withPageKey(raw.toString("utf8"), slug)
+          ? withPageKey(raw.toString("utf8"), page)
           : raw;
       return new Response(bytes, {
         headers: {
@@ -565,8 +541,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
       },
     );
 
-  async function target(slug: string, dir: string): Promise<PageTargetReading> {
-    const page = pageKeyOf(slug);
+  async function target(page: string, dir: string): Promise<PageTargetReading> {
     const actDoor = pageActDoor(page);
     const slot = (await bindingOf(dir)).slots.default;
     const sessions = await live.sessions();
@@ -627,14 +602,13 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
 
   /** One crossing as the page, under a context minted for this request and retired after it. */
   async function cross(
-    slug: string,
+    page: string,
     slot: PageChoice,
     door: string,
     path: "/call" | "/actions",
     headers: Record<string, string>,
     body: unknown,
   ) {
-    const page = pageKeyOf(slug);
     const minted = mintPageDoor(page, slot, door);
     try {
       return await live.forward(
@@ -647,7 +621,13 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     }
   }
 
-  async function door(verb: "call" | "act", slug: string, dir: string, request: Request) {
+  async function door(
+    verb: "call" | "act",
+    slug: string,
+    dir: string,
+    page: string,
+    request: Request,
+  ) {
     const at = `/pages/${slug}/${verb}`;
     const who = doorRefusal(at);
     if (who) return refused(who);
@@ -661,7 +641,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
         if (resolution.kind !== "resolved") return unresolved(at, resolution);
         const ref = resolution.target.kind === "document" ? resolution.target.ref : null;
         return await cross(
-          slug,
+          page,
           slot,
           at,
           "/call",
@@ -685,7 +665,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
       // Decided here first, so a refusal names this door; `/actions` decides again under the same slot.
       admitPage(slot, resolution.target, at);
       return await cross(
-        slug,
+        page,
         slot,
         at,
         "/actions",
@@ -708,7 +688,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
    * `PUT /pe/pages/<slug>/binding`: a person binds anything; Pea (or an MCP client) only pins a
    * document open in one of Pea's own Revits.
    */
-  async function bind(slug: string, dir: string, request: Request) {
+  async function bind(slug: string, dir: string, page: string, request: Request) {
     const at = `/pe/pages/${slug}/binding`;
     const caller = currentCaller();
     const parsed = pageChoiceSchema.safeParse(await request.json().catch(() => undefined));
@@ -751,12 +731,13 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     const next: PageBinding = { slots: { ...current.slots, default: slot } };
     await writeFile(bindingFile(dir), JSON.stringify(next, null, 2), "utf8");
     stateOf(dir).signal("binding", {});
-    return json(await target(slug, dir));
+    return json(await target(page, dir));
   }
 
   /** `index.html` names its page: the host mints the key; the page never claims one. */
-  const withPageKey = (html: string, slug: string) => {
-    const meta = `<meta name="pe-page" content="${escapeHtml(pageKeyOf(slug))}">`;
+  const withPageKey = (html: string, page: string | null) => {
+    if (!page) return html;
+    const meta = `<meta name="pe-page" content="${escapeHtml(page)}">`;
     const head = /<head[^>]*>/i.exec(html) ?? /^\s*<!doctype[^>]*>/i.exec(html);
     if (!head) return `${meta}${html}`;
     const end = head.index + head[0].length;
@@ -771,7 +752,8 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
       const where = SLUG.test(slug) ? await dirOf(slug) : null;
       if (!where || verb !== "binding" || more.length || request.method !== "PUT")
         return problem(404, "the binding door is PUT /pe/pages/<slug>/binding");
-      return bind(slug, where.dir, request);
+      if (!where.key) return problem(409, where.reason);
+      return bind(slug, where.dir, where.key, request);
     }
     const wantsHtml = (request.headers.get("accept") ?? "").includes("text/html");
     if (parts.length === 1)
@@ -800,8 +782,7 @@ ${asset("pe.css")}`,
     if (!SLUG.test(slug))
       return problem(400, "a page slug is letters, digits, - and _; a pod's page is <id>--<page>");
     const where = await dirOf(slug);
-    if (!where)
-      return problem(404, `no page ${slug}: no admitted package contributes it`);
+    if (!where) return problem(404, `no page ${slug}: no admitted package contributes it`);
     if (rest.length === 0 && !url.pathname.endsWith("/"))
       return Response.redirect(`${url.origin}/pages/${slug}/${url.search}`, 308); // relative links need the slash
     const state = stateOf(where.dir);
@@ -825,9 +806,12 @@ ${asset("pe.css")}`,
         return problem(400, "an event is one JSON object");
       return json(await state.append(event, originOf(currentCaller())), 201);
     }
-    if (verb === "target" && request.method === "GET") return json(await target(slug, where.dir));
+    const keyed = verb === "target" || verb === "call" || verb === "act";
+    if (keyed && !where.key) return problem(409, where.reason);
+    if (verb === "target" && request.method === "GET")
+      return json(await target(where.key!, where.dir));
     if ((verb === "call" || verb === "act") && request.method === "POST")
-      return door(verb, slug, where.dir, request);
+      return door(verb, slug, where.dir, where.key!, request);
     if (verb === "events" && request.method === "GET") {
       const after = Number(
         url.searchParams.get("after") ?? request.headers.get("last-event-id") ?? 0,
@@ -842,7 +826,7 @@ ${asset("pe.css")}`,
     }
     if (request.method !== "GET")
       return problem(405, `${request.method} has no meaning on a page file`);
-    return file(slug, where.dir, rest.length ? rest : ["index.html"]);
+    return file(slug, where.dir, where.key, rest.length ? rest : ["index.html"]);
   };
 }
 

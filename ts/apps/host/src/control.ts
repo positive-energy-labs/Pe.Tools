@@ -8,6 +8,7 @@ import {
   HOST_RUNTIME_SERVICE_HEADER,
 } from "@pe/host-contracts/contracts";
 import { invocationContext, type RequestPrincipal } from "@pe/mcps/context";
+import { parseContributionKey } from "@pe/agent-contracts";
 import type {
   Basis,
   Caller,
@@ -78,17 +79,22 @@ export function writeTerminalContext(serviceName: string) {
   };
 }
 
-/** The D12 page key of a `/pages/<slug>/…` path; `<id>--<page>` is the page an admitted package (by manifest id) contributes. */
-export const pageKeyOf = (slug: string) => {
-  const [pod, page] = slug.split("--");
-  return page ? `page:@${pod}/pages/${page}` : `page:@pages/${slug}`;
+/**
+ * The D12 page key of a `/pages/<slug>/…` path: `<id>--<page>` is the page an admitted package
+ * (by manifest id) contributes; null when the codec admits no key for it.
+ */
+export const pageKeyOf = (slug: string): string | null => {
+  const [id, page, ...more] = slug.split("--");
+  const key = page === undefined ? `page:@pages/${slug}` : `page:@${id}/pages/${page}`;
+  return !more.length && parseContributionKey(key) ? key : null;
 };
 /** The write door of a page key: the inverse of `pageKeyOf`. */
 export const pageActDoor = (page: string) => {
-  const [, pkg = "", path = ""] = /^page:@([^/]+)\/(.+)$/.exec(page) ?? [];
-  return pkg === "pages"
-    ? `/pages/${path}/act`
-    : `/pages/${pkg}--${path.replace(/^pages\//, "")}/act`;
+  const ref = parseContributionKey(page);
+  if (ref?.kind !== "page") throw Error(`'${page}' is not a Page key`);
+  return ref.packageId === "pages"
+    ? `/pages/${ref.path}/act`
+    : `/pages/${ref.packageId}--${ref.path.slice("pages/".length)}/act`;
 };
 
 /**
@@ -127,9 +133,8 @@ export function callerOf(
   if (!path) return anonymous;
   if (path === "/pages" || path.startsWith("/pages/")) {
     const slug = /^\/pages\/([^/]+)\//.exec(path)?.[1];
-    return slug
-      ? { caller: { kind: "page", page: pageKeyOf(decodeURIComponent(slug)) } }
-      : anonymous;
+    const page = slug ? pageKeyOf(decodeURIComponent(slug)) : null;
+    return page ? { caller: { kind: "page", page } } : anonymous;
   }
   return {
     caller:

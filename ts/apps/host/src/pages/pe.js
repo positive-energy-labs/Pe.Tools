@@ -486,7 +486,10 @@
         reading = next;
         clearTimeout(expiry);
         if (next.write && next.write.kind === "rw")
-          expiry = setTimeout(fresh, Math.max(0, Date.parse(next.write.expiresAt) - Date.now()) + 500);
+          expiry = setTimeout(
+            fresh,
+            Math.max(0, Date.parse(next.write.expiresAt) - Date.now()) + 500,
+          );
         draw();
       },
     };

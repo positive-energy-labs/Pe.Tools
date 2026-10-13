@@ -12,6 +12,8 @@ import {
   type ThreadHead,
 } from "@pe/agent-contracts";
 import { createPagesHandler, type LiveSession, type PageLive } from "../src/pages-route.ts";
+import { readPageDescriptors } from "../src/page-libraries.ts";
+import { createHash } from "node:crypto";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
 import { admitCrossing, bindControl, callerOf, grantExpiry, Refused } from "../src/control.ts";
@@ -108,6 +110,79 @@ describe("pages", () => {
     await writeFile(join(pods, "twin", "pod.json"), JSON.stringify({ id: "ductkit" }));
     await writeFile(join(pods, "twin", "pages", "tour", "index.html"), "<p>twin</p>");
     expect((await fetch("/pages/ductkit--tour/")).status).toBe(404);
+  });
+
+  it("projects one descriptor per Page: key, open URL, admitted entry hash and bytes", async () => {
+    const { root, pods, fetch } = await pagesRoot();
+    await mkdir(join(pods, "kit", "pages", "tour"), { recursive: true });
+    await writeFile(join(pods, "kit", "pod.json"), JSON.stringify({ id: "duct-kit" }));
+    await writeFile(join(pods, "kit", "pages", "tour", "index.html"), "<title>Tour</title>");
+    await mkdir(join(root, "Odd_Name"), { recursive: true });
+    await writeFile(join(root, "Odd_Name", "index.html"), "<title>Odd</title><p>odd</p>");
+    const pages = await readPageDescriptors(root, pods);
+    const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+    expect(
+      pages
+        .map(({ key, slug, openUrl, title, pod, entry }) => ({
+          key,
+          slug,
+          openUrl,
+          title,
+          pod,
+          path: entry.path,
+          sha256: entry.sha256,
+          text: Buffer.from(entry.bytes).toString("utf8"),
+        }))
+        .sort((a, b) => a.slug.localeCompare(b.slug)),
+    ).toEqual([
+      {
+        key: "page:@duct-kit/pages/tour",
+        slug: "duct-kit--tour",
+        openUrl: "/pages/duct-kit--tour/",
+        title: "Tour",
+        pod: "duct-kit",
+        path: "pages/tour/index.html",
+        sha256: sha("<title>Tour</title>"),
+        text: "<title>Tour</title>",
+      },
+      {
+        key: null,
+        slug: "Odd_Name",
+        openUrl: "/pages/Odd_Name/",
+        title: "Odd",
+        pod: null,
+        path: "index.html",
+        sha256: sha("<title>Odd</title><p>odd</p>"),
+        text: "<title>Odd</title><p>odd</p>",
+      },
+      {
+        key: "page:@pages/todo",
+        slug: "todo",
+        openUrl: "/pages/todo/",
+        title: "A todo page",
+        pod: null,
+        path: "index.html",
+        sha256: sha("<!doctype html><title>A todo page</title><p>hi</p>"),
+        text: "<!doctype html><title>A todo page</title><p>hi</p>",
+      },
+    ]);
+    expect(pages.find((page) => page.key === null)?.reason).toContain("not a lowercase slug");
+    // A keyless folder still serves, mints no key, and its doors refuse with the reason.
+    const html = await (await fetch("/pages/Odd_Name/")).text();
+    expect(html).toContain("<p>odd</p>");
+    expect(html).not.toContain("pe-page");
+    const target = await fetch("/pages/Odd_Name/target");
+    expect(target.status).toBe(409);
+    expect(
+      callerOf(
+        { kind: "local" },
+        {
+          origin: "http://127.0.0.1:5180",
+          [HOST_RUNTIME_SERVICE_HEADER]: "x",
+          referer: "http://127.0.0.1:5180/pages/Odd_Name/",
+        },
+      ),
+    ).toEqual({ caller: { kind: "anonymous" } });
   });
 
   it("keeps a text projection beside the snapshot", async () => {
@@ -617,9 +692,7 @@ ${source}`),
       expect(two.forwarded).toEqual([]);
       // K15/ADR 0017 D10: one Revit is no binding either; its active document is never read for it.
       const one = await host([session("S1")]);
-      const alone = (await (
-        await one.page.get("/pages/todo/target")
-      ).json()) as PageTargetReading;
+      const alone = (await (await one.page.get("/pages/todo/target")).json()) as PageTargetReading;
       expect(alone.resolution).toEqual({ kind: "choose", reason: "missing" });
       expect(alone.document).toBeNull();
       const unbound = await one.page.post("/pages/todo/call", { key: "revit.context.summary" });
