@@ -202,7 +202,7 @@ const runInputSchema = z.object({
     .max(200)
     .optional()
     .describe(
-      "Work address: Pods uses the member's Work key; Schedules takes workspaceId from its schedule reading; Instances defaults to the shared instances workspace.",
+      "Work address: Pods uses the member's Work key; Schedules takes workspaceId from its schedule reading.",
     ),
   key: z.string().min(1).describe("A capability key from pe_find."),
   input: z.unknown().optional().describe("Matches the row's input schema."),
@@ -248,7 +248,7 @@ export const peDo = createTool({
         row.kind === "document"
           ? `'${row.key}' is a document, a pointer and not an action; pass its session and openId to an op as target {kind: open, ref: {session, openId}}.`
           : row.kind === "recent"
-            ? `'${row.key}' is a recent document, a pointer and not an action; open it first: pe_read it for openWith, then propose the open with pe_do route:instances.propose, path [launch, proposal], value {value: {kind: open, session: {id}, document: <openWith>}}; the person stages it and opens.`
+            ? `'${row.key}' is a recent document, a pointer and not an action; open it first: pe_read it for openWith, then open it with pe_do workflow:instances.open, input {source: <openWith>, into: {session: {id}} or {start: {year, owner: pea, addins: on}}}.`
             : null,
       true,
     ),
@@ -623,13 +623,10 @@ async function dispatch(
         );
       if (
         input.workspaceId &&
-        ![settingsRouteState.route, scheduleGridRouteState.route, "instances"].includes(
-          parsed.route,
-        )
+        ![settingsRouteState.route, scheduleGridRouteState.route].includes(parsed.route)
       )
-        throw new Error("workspaceId targets Pods, Schedules, or Instances Work only.");
-      const workspaceId =
-        parsed.route === "instances" ? (input.workspaceId ?? "instances") : input.workspaceId;
+        throw new Error("workspaceId targets Pods or Schedules Work only.");
+      const workspaceId = input.workspaceId;
       if (parsed.member === undefined) {
         const scope = workspaceId
           ? {
@@ -709,7 +706,7 @@ async function dispatch(
           command: parsed.member,
           input: payload,
         },
-        parsed.route === "instances" ? (input.workspaceId ?? "instances") : input.workspaceId,
+        workspaceId,
       );
     }
   }

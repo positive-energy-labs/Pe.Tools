@@ -9,7 +9,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { PidChip, ShapeCells } from "#/components/lang/process";
 import { custodyOf, keyOf, nameOf, phaseOf, pidOf, PHASE_TONE } from "#/machine/session";
-import { RevitControls, type WorkBasis } from "#/open/lifecycle";
+import { RevitControls } from "#/open/lifecycle";
 
 const CUSTODY_SAYS = {
   controlled: "pe-revit holds its receipt: full lifecycle",
@@ -18,12 +18,10 @@ const CUSTODY_SAYS = {
 
 export function RunningBlock({
   session,
-  basis,
   refusal,
   onHere,
 }: {
   session: MachineSession;
-  basis: WorkBasis | null;
   refusal: string | null;
   onHere: () => void;
 }) {
@@ -55,7 +53,7 @@ export function RunningBlock({
       <div className="flex flex-wrap items-start gap-2">
         <ShapeCells shape={row.shape} />
         <span className="ml-auto">
-          <RevitControls session={session} basis={basis} refusal={refusal} onHere={onHere} />
+          <RevitControls session={session} refusal={refusal} onHere={onHere} />
         </span>
       </div>
       <div className="flex flex-col pl-3" aria-label="documents">
@@ -96,13 +94,11 @@ export function RunningBlock({
 export function RunningList({
   sessions,
   loading,
-  basis,
   refusal,
   onHere,
 }: {
   sessions: readonly MachineSession[] | null;
   loading: boolean;
-  basis: WorkBasis | null;
   refusal: string | null;
   onHere: (session: MachineSession) => void;
 }) {
@@ -124,7 +120,6 @@ export function RunningList({
         <RunningBlock
           key={keyOf(session)}
           session={session}
-          basis={basis}
           refusal={refusal}
           onHere={() => onHere(session)}
         />

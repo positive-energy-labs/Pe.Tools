@@ -4,13 +4,7 @@
  * and the design-system specimen all draw these. A fixture is a `Reading<Machine>` because the
  * honest gap (the host went away) is a reading state, not a field.
  */
-import type {
-  InstancesDocument,
-  Machine,
-  MachineSession,
-  Reading,
-  Seed,
-} from "@pe/agent-contracts";
+import type { Machine, MachineSession, Reading, Seed } from "@pe/agent-contracts";
 import type {
   DocumentInfo,
   RecentDocument,
@@ -466,13 +460,11 @@ export const RECENTS = {
   },
 };
 
-const emptyWork: InstancesDocument = { launch: {} };
-
 /** One seed per action key: `refresh` is the only route-level action. */
-export const OPEN_SEEDS: Record<"refresh", Seed<InstancesDocument, OpenReading, object>> = {
+export const OPEN_SEEDS: Record<"refresh", Seed<object, OpenReading, object>> = {
   refresh: {
-    title: "three Revits, a blocked update, nothing staged",
-    work: emptyWork,
+    title: "three Revits, a blocked update",
+    work: {},
     readings: {
       machine: (MACHINE_SEEDS["blocked-plan"] as { observation: Machine }).observation,
       recents: RECENTS,

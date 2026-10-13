@@ -1,21 +1,14 @@
 /**
  * The per-Revit lifecycle verbs, one component for the Running list and the machine drawer: hr
  * (only when the SDK says `shape.reload === "hot"`), Open here, and Stop. Every verb is an
- * `instances.*` semantic action bound to the instances Work revision; the SDK resolves the Revit
- * from the selection (pid for an icon-started Revit, id otherwise).
+ * `instances.*` semantic action; the SDK resolves the Revit from the selection (pid for an
+ * icon-started Revit, id otherwise).
  *
  * Stop always passes `--unsaved keep` for a lay user; discard is offered only for a checkout
  * session (host ledger 2026-10-09 ruling 9). hr restarts and discards, so it arms first too.
  */
 import { useState } from "react";
-import {
-  instancesActions,
-  instancesRouteState,
-  nativeProcessSchema,
-  type InstancesActionKey,
-  type MachineSession,
-  type WorkKey,
-} from "@pe/agent-contracts";
+import { instancesActions, nativeProcessSchema, type MachineSession } from "@pe/agent-contracts";
 
 import { Button } from "#/components/lang/button";
 import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
@@ -30,72 +23,40 @@ import {
   unsavedOf,
 } from "#/machine/session";
 import { useAction } from "#/readings";
-import { useRouteWork } from "#/route/route-work";
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
-export interface WorkBasis {
-  readonly key: WorkKey;
-  readonly revision: number;
-}
-
-export const INSTANCES_WORK: WorkKey = {
-  binding: "workspace",
-  route: "instances",
-  target: null,
-  work: "instances",
-};
-
-/** The instances Work revision, for a shell that holds no route handle (the drawer, the tray). */
-export function useInstancesBasis(enabled: boolean): WorkBasis | null {
-  const work = useRouteWork(instancesRouteState, enabled ? INSTANCES_WORK : null);
-  return work.revision !== null ? { key: INSTANCES_WORK, revision: work.revision } : null;
-}
-
-type Command = "open" | "restart" | "stop";
+type Command = "restart" | "stop";
 
 /** One lifecycle action over one Revit incarnation, as a person. Resolves to its receipt. */
 export async function runLifecycle(
   command: Command,
   session: MachineSession,
-  basis: WorkBasis,
   unsaved?: "keep" | "discard",
 ) {
   const refusal = executionRefusal(session.row);
   if (refusal) throw Error(refusal);
-  const key: InstancesActionKey = `instances.${command}`;
+  const key = `instances.${command}` as const;
   const process = processOf(session.row);
   if (!process) throw Error("This Revit has no process yet; wait until it is launched.");
   const input = instancesActions[key].input.parse({
-    workspaceId: basis.key.work,
     session: { selection: selectionOf(session.row), process: nativeProcessSchema.parse(process) },
     ...(command === "stop" ? { force: phaseOf(session.row) === "unresponsive", unsaved } : {}),
   });
-  return await runSemanticAction(
-    key,
-    input,
-    undefined,
-    { work: basis },
-    "human",
-    "",
-    command === "open" ? crypto.randomUUID() : undefined,
-    30_000,
-  );
+  return await runSemanticAction(key, input, undefined, {}, "human", "", undefined, 30_000);
 }
 
 type Armed = "stop" | "hr" | null;
 
 export function RevitControls({
   session,
-  basis,
   refusal,
   onHere,
   hr = true,
 }: {
   session: MachineSession;
-  basis: WorkBasis | null;
   /** False where hr is not offered (the drawer and the tray keep it on the Running list). */
   hr?: boolean;
-  /** Present, every verb refuses with it (a fixture, no Work yet). */
+  /** Present, every verb refuses with it (a fixture). */
   refusal?: string | null;
   /** Open here: make this Revit the launcher's target. Absent outside the Open route. */
   onHere?: () => void;
@@ -106,16 +67,12 @@ export function RevitControls({
   const phase = phaseOf(row);
   const checkout = row.shape.payload === "checkout";
   const ownershipRefusal = executionRefusal(row);
-  const blocked =
-    refusal ??
-    ownershipRefusal ??
-    (basis ? null : "Reading the instances Work before any verb runs.");
+  const blocked = refusal ?? ownershipRefusal;
   const unsaved = unsavedOf(session);
   const action = useAction(
     async ({ command, policy }: { command: Command; policy?: "keep" | "discard" }) => {
-      if (!basis) return;
       try {
-        const receipt = await runLifecycle(command, session, basis, policy);
+        const receipt = await runLifecycle(command, session, policy);
         setOutcome({
           kind: receipt.state === "succeeded" ? "receipt" : "advisory",
           label: `${command} ${receipt.state} · action ${receipt.id}`,

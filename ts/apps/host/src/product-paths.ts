@@ -50,6 +50,20 @@ export function productRouteWorkPath(): string {
   );
 }
 
+/**
+ * Pea's work folder: the copies she opens so a user's own file is never her scratch. Machine
+ * state, not Documents: Documents is OneDrive-synced, and a model copy must not upload.
+ */
+export function productPeaWorkPath(): string {
+  return join(
+    process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),
+    productIdentity.vendorName,
+    productIdentity.productName,
+    productPathNames.stateDirectoryName,
+    "pea-work",
+  );
+}
+
 /** A file under product state (LOCALAPPDATA): settings that hold a key or belong to this machine. */
 function productStateFile(name: string): string {
   return join(

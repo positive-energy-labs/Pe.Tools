@@ -4,7 +4,7 @@
  * exact commands the host runs). The argv comes from the SDK's own generated builders, so the
  * printed line and the dispatched line cannot drift.
  */
-import type { InstancesLaunch, Machine, MachineSession } from "@pe/agent-contracts";
+import type { InstancesLaunch, InstancesStart, Machine, MachineSession } from "@pe/agent-contracts";
 import {
   docOpenArgv,
   sessionStartArgv,
@@ -122,7 +122,6 @@ export interface LaunchDraft {
   readonly target: string | null;
   readonly posture: "foreground" | "background";
   readonly quarantine: boolean;
-  readonly name: string;
   readonly missingLinks: "refuse" | "allow";
 }
 
@@ -132,9 +131,13 @@ export const EMPTY_DRAFT: LaunchDraft = {
   target: null,
   posture: "foreground",
   quarantine: false,
-  name: "",
   missingLinks: "refuse",
 };
+
+/** The one action a press runs, with the input it takes (ADR 0016: nothing is staged first). */
+type PlannedLaunch =
+  | { readonly key: "instances.open"; readonly input: InstancesLaunch }
+  | { readonly key: "instances.start"; readonly input: InstancesStart };
 
 export interface LaunchPlan {
   readonly doc: DocRow | null;
@@ -146,7 +149,7 @@ export interface LaunchPlan {
   readonly refusal: string | null;
   readonly caution: string | null;
   readonly note: string | null;
-  readonly launch: InstancesLaunch | null;
+  readonly launch: PlannedLaunch | null;
 }
 
 const cli = (argv: string[]) =>
@@ -154,15 +157,6 @@ const cli = (argv: string[]) =>
     .filter((arg) => arg !== "--json")
     .map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg))
     .join(" ")}`;
-
-/** `session start --id` accepts ≤64 chars of letters, digits, `.`, `-`, `_`. */
-export const sessionIdOf = (name: string) =>
-  name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64);
 
 export function launchPlan(
   draft: LaunchDraft,
@@ -225,7 +219,6 @@ export function launchPlan(
   const project = checkout
     ? `${machine!.host!.sourceRoot}\\dotnet\\Pe.App\\Pe.App.csproj`
     : undefined;
-  const name = sessionIdOf(draft.name);
   const background = draft.posture === "background";
   const nonDefault = draft.posture === "background" || draft.quarantine;
   let refusal: string | null = null;
@@ -257,25 +250,32 @@ export function launchPlan(
   const links = draft.missingLinks;
   let verb: string;
   let argv: string[];
-  let launch: InstancesLaunch | null = null;
+  let launch: PlannedLaunch | null = null;
   if (picked && doc) {
     const selection = selectionOf(picked.row);
-    verb = `Open in Revit ${year}`;
+    // Pressing a verb that names the upgrade is the consent the SDK asks for.
+    verb = upgrade ? `Upgrade and open in Revit ${year}` : `Open in Revit ${year}`;
     argv = [
       ...(picked.row.case === "observed-active"
         ? [cli(sessionStartArgv({ pid: picked.row.process.pid }))]
         : []),
-      cli(docOpenArgv({ source: doc.selector, ...selection, links, unsynced: "keep" })),
+      cli(docOpenArgv({ source: doc.selector, ...selection, upgrade, links, unsynced: "keep" })),
     ];
-    launch = { kind: "open", session: selection, document: doc.selector, missingLinks: links };
+    launch = {
+      key: "instances.open",
+      input: { source: doc.selector, into: { session: selection }, upgrade, links },
+    };
   } else {
-    verb = doc ? `Start Revit ${year} and open` : `Start Revit ${year ?? ""}`.trim();
+    verb = doc
+      ? upgrade
+        ? `Start Revit ${year}, upgrade and open`
+        : `Start Revit ${year} and open`
+      : `Start Revit ${year ?? ""}`.trim();
     argv = [
       cli(
         sessionStartArgv({
           project,
           year: year === null ? undefined : String(year),
-          id: name || undefined,
           background,
           quarantine: draft.quarantine,
         }),
@@ -285,7 +285,8 @@ export function launchPlan(
             cli(
               docOpenArgv({
                 source: doc.selector,
-                id: name || "<minted>",
+                id: "<minted>",
+                upgrade,
                 links,
                 unsynced: "keep",
               }),
@@ -293,18 +294,22 @@ export function launchPlan(
           ]
         : []),
     ];
-    launch =
+    const start: InstancesStart | null =
       year === null
         ? null
         : {
-            kind: "start",
             year: String(year),
-            name,
-            document: doc?.selector,
-            quarantine: draft.quarantine,
-            posture: draft.posture,
-            missingLinks: links,
+            owner: background ? "pea" : "you",
+            addins: draft.quarantine ? "off" : "on",
           };
+    launch = !start
+      ? null
+      : doc
+        ? {
+            key: "instances.open",
+            input: { source: doc.selector, into: { start }, upgrade, links },
+          }
+        : { key: "instances.start", input: start };
   }
   if (missingTarget) {
     launch = null;

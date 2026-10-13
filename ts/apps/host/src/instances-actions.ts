@@ -1,18 +1,16 @@
 import {
   actionAdmissionSchema,
   instancesActions,
-  instancesRouteState,
+  instancesLaunchSchema,
+  instancesSessionSelection,
+  instancesStartSchema,
   type SdkSessionSelection,
   type SdkDocumentRef,
   canonicalRouteInput,
-  transitionPatches,
   type InstancesActionKey,
   type InstancesLaunch,
-  type WorkKey,
-  refusalText,
 } from "@pe/agent-contracts";
 import type { ActionStep } from "@pe/agent-contracts";
-import type { RouteWorkspace } from "@pe/runtime";
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import {
@@ -31,19 +29,22 @@ import {
   type OpStateResult,
   type Resolved,
   type SessionListResult,
+  type SessionObservation,
   type SessionStartResult,
 } from "@pe/host-contracts/pe-revit-contract";
-import { ActionIncomplete, type ActionJournal } from "./action-journal.ts";
+import type { ActionJournal } from "./action-journal.ts";
 import { BridgeError } from "./bridge.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
 import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
+import { peaSourceOf, type PeaSource } from "./pea-source.ts";
+import { productPeaWorkPath } from "./product-paths.ts";
 import { resolveStartProject, runPeRevitCli } from "./session-route.ts";
-import { actionWorkspace } from "./takeoff-actions.ts";
 
 export type InstancesActionDependencies = {
-  workspace?: RouteWorkspace;
   sdk?: SdkReceiptReader;
+  /** Where Pea's copies go; the product's pea-work folder by default. */
+  peaWork?: string;
 };
 
 const refuse = (message: string, result?: unknown) =>
@@ -84,73 +85,75 @@ type StepInput = {
   readonly argv: readonly string[];
 };
 const REQUEST_ID = "<request-id>";
-/** The union of every Instances action input; each verb reads only the fields its schema admitted. */
-type InstancesInput = {
-  workspaceId: string;
-  session?: {
-    selection: SdkSessionSelection;
-    process: { pid: number; processStartUtc: string; executable: string };
-  };
+type Incarnation = {
+  selection: SdkSessionSelection;
+  process: { pid: number; processStartUtc: string; executable: string };
+};
+/** The input of restart, stop and close: an exact session incarnation, and what each verb adds. */
+type ControlInput = {
+  session: Incarnation;
   force?: boolean;
   unsaved?: "keep" | "discard";
   document?: SdkDocumentRef;
 };
+/** The SDK row an action acts on, resolved once at preparation and frozen with the attempt. */
+type Target = {
+  selection: SdkSessionSelection;
+  /** The row's receipt path; null for an icon-started Revit, which the SDK adopts first. */
+  expectSession: string | null;
+  process: { pid: number; processStartUtc: string };
+  posture: "foreground" | "background";
+};
 type Prepared = {
-  staged: import("@pe/agent-contracts").InstancesLaunch | null;
-  session?: {
-    selection: SdkSessionSelection;
-    process: { pid: number; processStartUtc: string; executable: string };
-  };
+  target: Target | null;
+  /** A launch that is Pea's: the path it opens and whether it opens detached. */
+  pea: PeaSource | null;
 };
 
-/** The exact recorded session row for this pid/start pair; a mutable session name never selects. */
-async function readRecordedSession(
-  session: { selection: SdkSessionSelection; process: { pid: number; processStartUtc: string } },
+type RunningRow = Extract<SessionObservation, { case: "controlled-active" | "observed-active" }>;
+
+/**
+ * The one running SDK session a selection names. With an expected incarnation, a row of any other
+ * pid/start pair is refused: a mutable session name alone never selects a restarted Revit.
+ */
+async function readTarget(
+  selection: SdkSessionSelection,
+  expected: { pid: number; processStartUtc: string } | undefined,
   read: SdkReceiptReader,
-): Promise<{ selection: SessionSelection; expectSession: string | null }> {
-  const args = sessionListArgv({ pid: session.process.pid });
+): Promise<Target> {
+  const args = sessionListArgv(selection);
   const envelope = parsePeRevitEnvelope<SessionListResult>(
     await read(args),
     args,
     peRevitLauncher(),
   );
   const rows = (envelope.result as SessionListResult).sessions.filter(
-    (row: SessionListResult["sessions"][number]) =>
-      "process" in row &&
-      row.process.pid === session.process.pid &&
-      row.process.processStartUtc === session.process.processStartUtc,
+    (row): row is RunningRow =>
+      (row.case === "controlled-active" || row.case === "observed-active") &&
+      (!expected ||
+        (row.process.pid === expected.pid &&
+          row.process.processStartUtc === expected.processStartUtc)),
   );
   if (rows.length !== 1 || envelope.diagnostics.length)
     throw refuse(
-      "The supplied session incarnation is not the one the SDK records",
+      expected
+        ? "The supplied session incarnation is not the one the SDK records"
+        : "The selection does not name exactly one running session",
       envelope.result,
     );
   const row = rows[0]!;
+  const target = {
+    process: { pid: row.process.pid, processStartUtc: row.process.processStartUtc },
+    posture: row.shape.posture,
+  };
   if (row.case === "observed-active")
-    return { selection: { pid: row.process.pid }, expectSession: null };
-  if (!("receipt" in row) || ("id" in session.selection && row.id !== session.selection.id))
+    return { ...target, selection: { pid: row.process.pid }, expectSession: null };
+  if ("id" in selection && row.id !== selection.id)
     throw refuse(
       "The supplied session name does not match the SDK process receipt",
       envelope.result,
     );
-  return { selection: session.selection, expectSession: row.receipt.receiptPath };
-}
-
-/** The `--expect-session` a named start passes: `absent`, or the exact row it may retire. */
-async function readStartExpectation(id: string, read: SdkReceiptReader): Promise<string> {
-  const args = sessionListArgv({ id });
-  const envelope = parsePeRevitEnvelope<SessionListResult>(
-    await read(args),
-    args,
-    peRevitLauncher(),
-  );
-  const rows = (envelope.result as SessionListResult).sessions;
-  if (rows.length === 0) return "absent";
-  if (rows.length !== 1) throw refuse(`The SDK returned more than one session named '${id}'`);
-  const row = rows[0]!;
-  if (!("receipt" in row))
-    throw refuse(`Session '${id}' is observed but not controlled by this checkout`);
-  return row.receipt.receiptPath;
+  return { ...target, selection, expectSession: row.receipt.receiptPath };
 }
 
 /** Run one recorded verb under its step id and settle it from the state the SDK derived (law 10). */
@@ -193,53 +196,36 @@ export async function admitInstancesAction(
   deps: InstancesActionDependencies = {},
   resume = false,
 ) {
-  const workspace = deps.workspace ?? actionWorkspace();
   const read = deps.sdk ?? mutate;
   const admission = actionAdmissionSchema.parse(raw);
   const key = admission.key as InstancesActionKey;
   const definition = instancesActions[key];
   if (admission.kind !== "workflow" || !definition) throw refuse("Unknown Instances action");
-  if (definition.actor === "human" && admission.actor !== "human")
-    throw refuse("This Instances action is human-only");
   admission.input = definition.input.parse(admission.input);
-  const input = definition.input.parse(admission.input) as unknown as InstancesInput;
-  const session = input.session;
+  const input = admission.input;
+  const launch = key === "instances.open" ? instancesLaunchSchema.parse(input) : null;
+  const start =
+    key === "instances.start"
+      ? instancesStartSchema.parse(input)
+      : launch && "start" in launch.into
+        ? launch.into.start
+        : null;
+  const control = launch || start ? null : (input as unknown as ControlInput);
+  const selection = instancesSessionSelection(input);
   if (
-    session
+    selection
       ? admission.destination.kind !== "sdk-session" ||
-        canonicalRouteInput(admission.destination.selection) !==
-          canonicalRouteInput(session.selection)
+        canonicalRouteInput(admission.destination.selection) !== canonicalRouteInput(selection)
       : admission.destination.kind !== "host"
   )
     throw refuse("Instances destination must match the explicitly supplied session");
   return owner.admit(
     admission,
-    async () => {
-      const base = admission.bases.work;
-      if (!workspace || !base || base.key.work !== input.workspaceId)
-        throw refuse("An explicit Instances Work address and revision are required");
-      const view = await workspace.read(base.key, "instances");
-      if (!view || view.revision !== base.revision) throw refuse("Instances Work changed");
-      // Open/start launch the person's staged value only; a Pea proposal never arms a launch.
-      const { launch } = instancesRouteState.schema.parse(view.doc);
-      const staged = launch.staged ? launch.staged.value : null;
-      const wants = key === "instances.start" ? "start" : key === "instances.open" ? "open" : null;
-      if (wants && staged?.kind !== wants && launch.proposal?.value?.kind === wants)
-        throw refuse(`Pea proposed this ${wants}; a person stages it first`);
-      if (key === "instances.start" && staged?.kind !== "start")
-        throw refuse("Stage a start first");
-      if (
-        key === "instances.open" &&
-        (staged?.kind !== "open" ||
-          canonicalRouteInput(staged.session) !== canonicalRouteInput(session?.selection))
-      )
-        throw refuse(
-          "The staged open belongs to another session; explicitly stage the requested session",
-        );
+    async (): Promise<Prepared> => {
       if (key === "instances.close") {
-        const document = input.document!;
+        const { session, document } = control!;
         if (
-          !session ||
+          !document ||
           canonicalRouteInput(document.session) !== canonicalRouteInput(session.selection)
         )
           throw refuse("SDK document belongs to another session");
@@ -258,39 +244,50 @@ export async function admitInstancesAction(
         )
           throw refuse("The SDK document lifetime is not open in the original process", envelope);
       }
-      return { kind: "instances", staged, session, input: admission.input };
+      // The session row is read once, here, and frozen with the attempt so a replay compares the
+      // same bytes. A launch's posture is derived from it, never passed (ADR 0016).
+      const target = control
+        ? await readTarget(control.session.selection, control.session.process, read)
+        : launch && "session" in launch.into
+          ? await readTarget(launch.into.session, undefined, read)
+          : null;
+      const forPea =
+        launch !== null &&
+        ("start" in launch.into
+          ? launch.into.start.owner === "pea"
+          : target?.posture === "background");
+      let pea: PeaSource | null = null;
+      try {
+        pea = forPea ? await peaSourceOf(launch!, deps.peaWork ?? productPeaWorkPath()) : null;
+      } catch (error) {
+        throw refuse(error instanceof Error ? error.message : String(error));
+      }
+      return { target, pea };
     },
     async (execution) => {
-      const { staged, session: incarnation } = execution.prepared as Prepared;
-      // The expectation is resolved once, before the step is recorded, so a replay compares the same bytes.
-      const prior = execution.recorded("native", key);
+      const { target, pea } = execution.prepared as Prepared;
+      // The step that starts a new Revit, when the action does: `instances.start`, or the first
+      // leg of an open into a new Revit. Every other action's main step carries its own key.
+      const mainKey = launch && start ? `${key}.start` : key;
+      const prior = execution.recorded("native", mainKey);
       const priorAdoption = execution.recorded("native", `${key}.adopt`);
-      const selected = priorAdoption
-        ? { selection: { pid: incarnation!.process.pid }, expectSession: null }
+      const chosen: SessionSelection = priorAdoption
+        ? { pid: target!.process.pid }
+        : (target?.selection ?? {});
+      // The expectation was resolved at preparation; a recorded step keeps the bytes it ran with.
+      let expectSession: string | null = priorAdoption
+        ? null
         : prior
-          ? {
-              selection: incarnation?.selection ?? {
-                id: staged?.kind === "start" ? staged.name || undefined : undefined,
-              },
-              expectSession: (prior.input as StepInput).expectSession,
-            }
-          : incarnation
-            ? await readRecordedSession(incarnation, read)
-            : {
-                selection: { id: staged?.kind === "start" ? staged.name || undefined : undefined },
-                expectSession:
-                  key === "instances.start" && staged?.kind === "start" && staged.name
-                    ? await readStartExpectation(staged.name, read)
-                    : "absent",
-              };
-      const selection: SessionSelection = selected.selection;
-      let expectSession = selected.expectSession;
+          ? ((prior.input as StepInput).expectSession ?? null)
+          : target
+            ? target.expectSession
+            : "absent";
       const requestId = REQUEST_ID;
       if (priorAdoption || expectSession === null) {
         const adoptionInput: StepInput = priorAdoption
           ? (priorAdoption.input as StepInput)
           : {
-              argv: sessionStartArgv({ ...selection, requestId }),
+              argv: sessionStartArgv({ ...chosen, requestId }),
             };
         const adoption = await execution.step("native", `${key}.adopt`, adoptionInput, (id) =>
           dispatch(adoptionInput, id, read, true),
@@ -302,12 +299,12 @@ export async function admitInstancesAction(
         );
         const adopted = envelope.result.session;
         if (
-          !incarnation ||
-          envelope.resolved?.pid !== incarnation.process.pid ||
-          envelope.resolved.processStartUtc !== incarnation.process.processStartUtc ||
+          !target ||
+          envelope.resolved?.pid !== target.process.pid ||
+          envelope.resolved.processStartUtc !== target.process.processStartUtc ||
           adopted?.case !== "controlled-active" ||
-          adopted.process.pid !== incarnation.process.pid ||
-          adopted.process.processStartUtc !== incarnation.process.processStartUtc ||
+          adopted.process.pid !== target.process.pid ||
+          adopted.process.processStartUtc !== target.process.processStartUtc ||
           adopted.id !== envelope.resolved.id ||
           envelope.result.id !== adopted.id ||
           !adopted.receipt?.receiptPath ||
@@ -323,128 +320,95 @@ export async function admitInstancesAction(
           throw refuse("The recorded mutation does not expect the adopted receipt");
       }
       if (!expectSession) throw refuse("The recorded mutation has no session expectation");
+      const openArgv = (
+        session: SessionSelection,
+        expectedSession: string,
+        spec: InstancesLaunch,
+      ) =>
+        docOpenArgv({
+          ...(spec.template ? { template: spec.source } : { source: pea?.opened ?? spec.source }),
+          ...session,
+          detach: pea?.detach ?? spec.detach,
+          upgrade: spec.upgrade,
+          links: spec.links,
+          reload: spec.reload,
+          unsynced: "keep",
+          requestId,
+          expectSession: expectedSession,
+          expectDoc: spec.reload ? spec.source : spec.template ? "new" : "absent",
+        });
       const argv = () => {
         switch (key) {
           case "instances.start":
-            if (staged?.kind !== "start") throw refuse("Stage a start first");
-            return sessionStartArgv({
-              project: resolveStartProject(hostOwnership.lane, hostOwnership.sourceRoot),
-              year: staged.year,
-              ...selection,
-              quarantine: staged.quarantine,
-              background: staged.posture === "background",
-              requestId,
-              expectSession,
-            });
           case "instances.open":
-            if (staged?.kind !== "open") throw refuse("Stage an open first");
-            return docOpenArgv({
-              source: staged.document,
-              ...selection,
-              links: staged.missingLinks,
-              unsynced: "keep",
-              requestId,
-              expectSession,
-              expectDoc: "absent",
-            });
+            if (start)
+              return sessionStartArgv({
+                project: resolveStartProject(hostOwnership.lane, hostOwnership.sourceRoot),
+                year: start.year,
+                ...chosen,
+                quarantine: start.addins === "off",
+                background: start.owner === "pea",
+                requestId,
+                expectSession,
+              });
+            return openArgv(chosen, expectSession, launch!);
           case "instances.restart":
             return sessionHrArgv({
-              ...selection,
+              ...chosen,
               restart: true,
               requestId,
               expectSession,
             });
           case "instances.stop":
             return sessionStopArgv({
-              ...selection,
-              unsaved: input.unsaved!,
-              force: input.force,
+              ...chosen,
+              unsaved: control!.unsaved!,
+              force: control!.force,
               requestId,
               expectSession,
             });
           case "instances.close":
             return docCloseArgv({
-              doc: input.document!.openId,
-              ...selection,
-              unsaved: input.unsaved!,
+              doc: control!.document!.openId,
+              ...chosen,
+              unsaved: control!.unsaved!,
               requestId,
               expectSession,
-              expectDoc: input.document!.openId,
+              expectDoc: control!.document!.openId,
             });
         }
       };
       // The step id IS the SDK request id: one caller-owned identity from admission to receipt.
       const stepInput: StepInput = { expectSession, argv: argv() };
-      const native = await execution.step("native", key, stepInput, (requestId) =>
+      const native = await execution.step("native", mainKey, stepInput, (requestId) =>
         dispatch(stepInput, requestId, read),
       );
-      const openStarted = (started: SessionStartResult, document: string, links: string) => {
-        const openInput: StepInput = {
-          expectSession: started.session.receipt.receiptPath,
-          argv: docOpenArgv({
-            source: document,
-            id: started.id,
-            links,
-            unsynced: "keep",
-            requestId,
-            expectSession: started.session.receipt.receiptPath,
-            expectDoc: "absent",
-          }),
-        };
-        return execution.step("native", `${key}.open`, openInput, (requestId) =>
-          dispatch(openInput, requestId, read),
-        );
-      };
-      // A start that stages a document opens it as its own receipted op in the session it just
+      if (!launch) return native;
+      // A launch into a new Revit opens its source as its own receipted op in the session it just
       // started: `doc open --start` cannot name the session it would launch.
-      const opened =
-        key === "instances.start" && staged?.kind === "start" && staged.document
-          ? await openStarted(native as SessionStartResult, staged.document, staged.missingLinks)
-          : undefined;
-      const result = opened === undefined ? native : { session: native, document: opened };
-      // Proven success consumed the staged launch: retire it (journaled once) so a second press
-      // does not launch again. A failure, refusal or unknown outcome threw above and keeps it.
-      if ((key === "instances.start" || key === "instances.open") && staged && workspace) {
-        const base = admission.bases.work!;
-        const retired = await execution.step("publication", "work.retire", staged, () =>
-          retireLaunch(workspace, base.key, staged),
+      let session: unknown;
+      let document = native;
+      if (start) {
+        const started = native as SessionStartResult;
+        const receiptPath = started.session.receipt.receiptPath;
+        const openInput: StepInput = {
+          expectSession: receiptPath,
+          argv: openArgv({ id: started.id }, receiptPath, launch),
+        };
+        session = native;
+        document = await execution.step("native", key, openInput, (id) =>
+          dispatch(openInput, id, read),
         );
-        await execution.publish({ native: result, retired });
       }
-      return result;
+      return {
+        opened: pea?.opened ?? launch.source,
+        copiedFrom: pea?.copiedFrom ?? null,
+        detached: pea?.detach ?? launch.detach ?? false,
+        ...(session !== undefined ? { session } : {}),
+        document,
+      };
     },
     resume,
-  );
-}
-
-/**
- * Retires the consumed launch under the unchanged-cell rule: `staged` clears only if it still
- * equals what launched, and a proposal equal to it clears too; a newer edit survives. Retirement
- * is the host's transition, not Pea's authorship, so it writes with the person's rights (the
- * agent mask would refuse a Pea-admitted launch's retirement).
- */
-async function retireLaunch(workspace: RouteWorkspace, key: WorkKey, consumed: InstancesLaunch) {
-  // ponytail: three attempts; a Work that moves three times in one retirement is reported, not chased.
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const view = await workspace.read(key, "instances");
-    if (!view) return { retired: false };
-    const { launch } = instancesRouteState.schema.parse(view.doc);
-    const patches = transitionPatches([], "launch", launch, {
-      kind: "retire",
-      consumed: { value: consumed },
-    });
-    if (!patches.length) return { retired: false, revision: view.revision };
-    const landed = await workspace.apply(key, "instances", "human", patches, view.revision);
-    if (landed.ok) return { retired: true, revision: landed.revision };
-    if (landed.code !== "stale_revision")
-      throw new ActionIncomplete(
-        `Launched; retiring the staged launch was refused: ${refusalText(landed)}`,
-        landed,
-      );
-  }
-  throw new ActionIncomplete(
-    "Launched; Work kept moving, so the staged launch was not retired",
-    {},
   );
 }
 

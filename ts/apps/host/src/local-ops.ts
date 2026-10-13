@@ -23,6 +23,7 @@ import { readFileStringOrEmpty, statOrNull } from "./files/index.ts";
 import { resolvePeaProductHomePath, type PeaRuntimeCapabilities } from "@pe/mcps";
 import { resolveHostVersion } from "./host-lifecycle.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
+import { processCustody } from "./machine.ts";
 
 /** Status must answer even when the installed manifest is unreadable; the throw belongs to boot. */
 function hostVersion(): string {
@@ -83,7 +84,7 @@ export function getBridgeSessionSummary(bridge: BridgeSessionView) {
   return Effect.succeed({
     buildStamp: bridge.buildStamp ?? null,
     lane: bridge.lane ?? null,
-    custody: null,
+    custody: processCustody(bridge.processId, bridge.processStartUtcUnixMs),
     sdkSessionId: bridge.sdkSessionId ?? null,
     activeDocument:
       s?.hasActiveDocument === true
@@ -146,7 +147,7 @@ export const listBridgeSessions = Effect.fnUntraced(function* (
         processStartUtcUnixMs: bridge.processStartUtcUnixMs ?? null,
         revitVersion: bridge.state?.revitVersion ?? null,
         runtimeFramework: bridge.state?.runtimeFramework ?? null,
-        custody: null,
+        custody: processCustody(bridge.processId, bridge.processStartUtcUnixMs),
         sdkSessionId: bridge.sdkSessionId ?? null,
         sessionId: bridge.sessionId!,
       })),

@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
-import { instancesRouteState, type Machine, type MachineSession } from "@pe/agent-contracts";
+import { type Machine, type MachineSession } from "@pe/agent-contracts";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -39,8 +39,6 @@ afterEach(() => {
 const machine = (MACHINE_SEEDS["blocked-plan"] as { observation: Machine }).observation;
 const rows = modelRows(machine.revit.sessions!, RECENTS.result.recents);
 const row = (title: string) => rows.find((candidate) => candidate.title === title)!.key;
-const key = { binding: "workspace" as const, route: "instances", target: null, work: "instances" };
-const basis = { key, revision: 7 };
 
 test("the frozen Open route renders and drafts without opening a host transport", async () => {
   const transports: string[] = [];
@@ -118,7 +116,7 @@ describe("launch plan", () => {
         },
       },
     };
-    await expect(runLifecycle("stop", session, basis, "keep")).rejects.toThrow("another checkout");
+    await expect(runLifecycle("stop", session, "keep")).rejects.toThrow("another checkout");
     expect(runSemanticAction).not.toHaveBeenCalled();
   });
 
@@ -215,24 +213,20 @@ describe("launch plan", () => {
       'pe-revit doc open "C:\\Models\\Riverside MEP.rvt" --id <minted> --unsynced keep --links refuse',
     ]);
     expect(plan.note).toContain("two commands");
-    expect(plan.launch).toMatchObject({ kind: "start", posture: "background", quarantine: true });
+    expect(plan.launch).toEqual({
+      key: "instances.open",
+      input: {
+        source: "C:\\Models\\Riverside MEP.rvt",
+        into: { start: { year: "2024", owner: "pea", addins: "off" } },
+        upgrade: false,
+        links: "refuse",
+      },
+    });
   });
 });
 
-function handleWith(
-  write = vi.fn(async (_patches: unknown, _revision?: number) => null),
-  doc = instancesRouteState.schema.parse({}),
-) {
-  return {
-    work: {
-      key,
-      revision: 7,
-      current: true,
-      write,
-      doc,
-    },
-    note: vi.fn(),
-  } as unknown as OpenHandle;
+function handleWith() {
+  return { note: vi.fn() } as unknown as OpenHandle;
 }
 
 function Harness({
@@ -260,7 +254,6 @@ function Harness({
       <RunningList
         sessions={world?.revit.sessions ?? null}
         loading={false}
-        basis={basis}
         refusal={null}
         onHere={(session) =>
           setDraft({
@@ -277,99 +270,42 @@ function Harness({
   );
 }
 
-test("a staged undiscovered document survives the launch press", async () => {
+test("a document outside the recents survives the launch press and opens in a new Revit", async () => {
   const document = "C:\\Models\\NotInRecents.rvt";
-  const handle = handleWith(
-    undefined,
-    instancesRouteState.schema.parse({
-      launch: {
-        staged: {
-          value: {
-            kind: "start",
-            year: "2025",
-            name: "",
-            document,
-          },
-        },
-      },
-    }),
-  );
-  render(<Harness handle={handle} initial={EMPTY_DRAFT} docs={[]} />);
+  const handle = handleWith();
+  render(<Harness handle={handle} initial={{ ...EMPTY_DRAFT, doc: document }} docs={[]} />);
   await screen.findByText(document);
-  fireEvent.click(screen.getByRole("button", { name: "Start Revit 2025 and open" }));
+  fireEvent.click(screen.getByRole("button", { name: "Start Revit 2026 and open" }));
   await waitFor(() => expect(runSemanticAction).toHaveBeenCalled());
-  expect(handle.work.write).not.toHaveBeenCalled();
-});
-
-test("late discovery resolves staged picks without erasing a person's edits", async () => {
-  const document = rows.find((doc) => doc.title === "Riverside MEP.rvt")!.selector;
-  const handle = handleWith(
-    undefined,
-    instancesRouteState.schema.parse({
-      launch: {
-        staged: {
-          value: {
-            kind: "start",
-            year: "2025",
-            name: "staged",
-            document,
-          },
-        },
-      },
-    }),
-  );
-  const rendered = render(<Harness handle={handle} initial={EMPTY_DRAFT} world={null} docs={[]} />);
-  fireEvent.change(screen.getByRole("textbox", { name: "session name" }), {
-    target: { value: "person-edited" },
+  const [action, input, , bases] = vi.mocked(runSemanticAction).mock.calls[0]!;
+  expect(action).toBe("instances.open");
+  expect(input).toMatchObject({
+    source: document,
+    into: { start: { year: "2026", owner: "you", addins: "on" } },
   });
-  rendered.rerender(<Harness handle={handle} initial={EMPTY_DRAFT} docs={rows} />);
-  expect((screen.getByRole("textbox", { name: "session name" }) as HTMLInputElement).value).toBe(
-    "person-edited",
-  );
-  expect(screen.getByText("Riverside MEP.rvt")).not.toBeNull();
-  expect(document).toContain("Riverside");
+  expect(bases).toEqual({});
 });
 
-test.each([{ id: "pe-app-25-main" }, { pid: 2402 }])(
-  "a staged exact target survives missing readings and resolves later: %j",
-  async (session) => {
-    const selector = "C:\\Models\\NotInRecents.rvt";
-    const handle = handleWith(
-      undefined,
-      instancesRouteState.schema.parse({
-        launch: {
-          staged: {
-            value: {
-              kind: "open",
-              session,
-              document: selector,
-            },
-          },
-        },
-      }),
-    );
-    const rendered = render(
-      <Harness handle={handle} initial={EMPTY_DRAFT} world={null} docs={[]} />,
-    );
-    expect(screen.getByText(/is no longer available/, { selector: "p" })).not.toBeNull();
-    expect(screen.getByRole("button", { name: "new Revit" }).getAttribute("aria-pressed")).toBe(
-      "false",
-    );
-    rendered.rerender(<Harness handle={handle} initial={EMPTY_DRAFT} docs={[]} />);
-    fireEvent.click(
-      screen.getByRole("button", { name: `Open in Revit ${"id" in session ? 2025 : 2024}` }),
-    );
-    await waitFor(() => expect(runSemanticAction).toHaveBeenCalled());
-    expect(handle.work.write).not.toHaveBeenCalled();
-    expect(vi.mocked(runSemanticAction).mock.calls[0]![1]).toMatchObject({
-      session: { selection: session },
-    });
-  },
-);
+test("an older file names its upgrade in the verb and sends the consent", async () => {
+  const handle = handleWith();
+  render(
+    <Harness
+      handle={handle}
+      initial={{ ...EMPTY_DRAFT, doc: row("Riverside MEP.rvt"), year: 2026, target: "new" }}
+    />,
+  );
+  fireEvent.click(
+    await screen.findByRole("button", { name: /^Start Revit 2026, upgrade and open/ }),
+  );
+  await waitFor(() => expect(runSemanticAction).toHaveBeenCalled());
+  expect(vi.mocked(runSemanticAction).mock.calls[0]![1]).toMatchObject({
+    into: { start: { year: "2026" } },
+    upgrade: true,
+  });
+});
 
-test("Open here on an icon-started Revit stages and dispatches by pid", async () => {
-  const write = vi.fn(async (_patches: unknown, _revision?: number) => null);
-  const handle = handleWith(write);
+test("Open here on an icon-started Revit dispatches the open by pid with no staging", async () => {
+  const handle = handleWith();
   render(<Harness handle={handle} initial={{ ...EMPTY_DRAFT, doc: row("Riverside MEP.rvt") }} />);
   const observed = screen.getByRole("region", { name: "Revit 2024 started from the Revit icon" });
   fireEvent.click(within(observed).getByRole("button", { name: "open here" }));
@@ -377,35 +313,32 @@ test("Open here on an icon-started Revit stages and dispatches by pid", async ()
   expect(document.querySelector("[data-argv]")!.textContent).toContain("--pid 2402");
   fireEvent.click(launch);
   await waitFor(() => expect(runSemanticAction).toHaveBeenCalled());
-  expect(write.mock.calls[0]![1]).toBe(7);
-  expect(JSON.stringify(write.mock.calls[0]![0])).toContain('"pid":2402');
   expect(vi.mocked(runSemanticAction).mock.calls[0]!.slice(0, 4)).toEqual([
     "instances.open",
     {
-      workspaceId: "instances",
-      session: {
-        selection: { pid: 2402 },
-        process: (OBSERVED_ICON.row as { process: unknown }).process,
-      },
+      source: "C:\\Models\\Riverside MEP.rvt",
+      into: { session: { pid: 2402 } },
+      upgrade: false,
+      links: "refuse",
     },
     undefined,
-    { work: { key, revision: 8 } },
+    {},
   ]);
 });
 
 test("hr is drawn only for a hot-reload shape", () => {
-  render(<RunningBlock session={CHECKOUT_HOT} basis={basis} refusal={null} onHere={() => {}} />);
+  render(<RunningBlock session={CHECKOUT_HOT} refusal={null} onHere={() => {}} />);
   expect(screen.queryByRole("button", { name: "hr" })).not.toBeNull();
   cleanup();
   for (const session of [OBSERVED_ICON, BACKGROUND_BOOTING]) {
-    render(<RunningBlock session={session} basis={basis} refusal={null} onHere={() => {}} />);
+    render(<RunningBlock session={session} refusal={null} onHere={() => {}} />);
     expect(screen.queryByRole("button", { name: "hr" })).toBeNull();
     cleanup();
   }
 });
 
 test("Stop keeps work by default; discard is offered only for a checkout session", async () => {
-  render(<RunningBlock session={OBSERVED_ICON} basis={basis} refusal={null} onHere={() => {}} />);
+  render(<RunningBlock session={OBSERVED_ICON} refusal={null} onHere={() => {}} />);
   fireEvent.click(screen.getByRole("button", { name: "stop" }));
   expect(screen.queryByRole("button", { name: "stop, discard edits" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "stop, keep work" }));
@@ -418,7 +351,7 @@ test("Stop keeps work by default; discard is offered only for a checkout session
     force: false,
   });
   cleanup();
-  render(<RunningBlock session={CHECKOUT_HOT} basis={basis} refusal={null} onHere={() => {}} />);
+  render(<RunningBlock session={CHECKOUT_HOT} refusal={null} onHere={() => {}} />);
   fireEvent.click(screen.getByRole("button", { name: "stop" }));
   expect(screen.queryByRole("button", { name: "stop, discard edits" })).not.toBeNull();
 });

@@ -212,14 +212,19 @@ test("pe_find offers operations, collaborative Work, valid Pod entrypoints and s
   const keys = [...rows, ...mutating].map((row) => row.key);
   for (const key of [
     "op:scripting.execute",
-    "route:instances",
+    "workflow:instances.open",
+    "workflow:instances.start",
+    "workflow:instances.stop",
     "route:pods",
     "pod:sheets.rename",
     "skill:build-pod",
   ])
     expect(keys).toContain(key);
-  for (const route of ["families", "instances", "parameter-links", "takeoffs"])
+  for (const route of ["families", "parameter-links", "takeoffs"])
     expect(keys).toContain(`route:${route}.propose`);
+  // Instances is a launch, not authored Work: nothing to read or propose (ADR 0016).
+  expect(keys).not.toContain("route:instances");
+  expect(keys).not.toContain("route:instances.propose");
   expect(keys).not.toContain("pod:broken.run");
   expect(keys.some((key) => key.startsWith("route:ops"))).toBe(false);
   expect(new Set(keys).size).toBe(keys.length);
@@ -649,7 +654,8 @@ test("a recent document is a recent: row: pe_find finds it, pe_read returns its 
   };
   expect(done.isError).toBe(true);
   expect(done.content).toContain("is a recent document, a pointer");
-  expect(done.content).toContain("route:instances.propose");
+  expect(done.content).toContain("workflow:instances.open");
+  expect(done.content).not.toContain("propose");
 });
 
 test("recents ride the catalog from the host's SDK reading: cached, never awaited past their budget, a failure is a source", async () => {
@@ -1019,8 +1025,6 @@ test("the doors ride the host under the turn Target and name the revision and re
           },
         },
       );
-    if (url.pathname.startsWith("/pe/route-state/instances"))
-      return Response.json({ revision: 2, doc: { selectedSession: null } });
     return Response.json({ ok: true, revision: 3 });
   });
   try {
@@ -1052,16 +1056,6 @@ test("the doors ride the host under the turn Target and name the revision and re
     expect(mutating.isError).toBe(true);
     expect(mutating.content).toContain("pe_do");
 
-    const read = (await run(peRead, { key: "route:instances", timeoutSeconds: 30 })) as {
-      ok: boolean;
-      target: { session: string | null; document: string | null };
-    };
-    expect(read.ok).toBe(true);
-    // Instances Work is workspace-owned, not document-scoped: the read touches no Revit and names no model.
-    expect(read.target).toEqual({ session: null, document: null });
-    expect(calls.at(-1)?.url.pathname).toBe("/pe/route-state/instances");
-    expect(calls.at(-1)?.url.search).toBe("?work=instances");
-
     // SDK observations are a host reading, never authored Work: no route command, no revision.
     const reading = (await run(peRead, {
       key: "op:instances.read",
@@ -1084,7 +1078,10 @@ test("the doors ride the host under the turn Target and name the revision and re
       input: { sourcePath: "src/Rename.cs", workspaceKey: "sheets" },
     });
 
-    const human = (await run(peDo, { key: "workflow:instances.stop", timeoutSeconds: 30 })) as {
+    const human = (await run(peDo, {
+      key: "workflow:takeoffs.initialize",
+      timeoutSeconds: 30,
+    })) as {
       isError: boolean;
       content: string;
     };

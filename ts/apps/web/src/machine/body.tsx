@@ -13,7 +13,7 @@ import { Button } from "#/components/lang/button";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { PidChip } from "#/components/lang/process";
 import { hostAdmin } from "#/host/machine";
-import { RevitControls, useInstancesBasis } from "#/open/lifecycle";
+import { RevitControls } from "#/open/lifecycle";
 
 import {
   attention,
@@ -38,15 +38,7 @@ export type Shell = "drawer" | "tray";
 
 type InstallPrompt = Event & { prompt: () => Promise<void> };
 
-function RevitRow({
-  session,
-  basis,
-  refusal,
-}: {
-  session: MachineSession;
-  basis: ReturnType<typeof useInstancesBasis>;
-  refusal: string | null;
-}) {
+function RevitRow({ session, refusal }: { session: MachineSession; refusal: string | null }) {
   const row = session.row;
   const phase = phaseOf(row);
   const pid = pidOf(row);
@@ -91,7 +83,7 @@ function RevitRow({
             <span data-tone="caution"> · dialog open</span>
           ) : null}
         </span>
-        <RevitControls session={session} basis={basis} refusal={refusal} hr={false} />
+        <RevitControls session={session} refusal={refusal} hr={false} />
       </span>
     </div>
   );
@@ -238,7 +230,6 @@ export function MachineBody({
 }) {
   const machine = machineOf(reading);
   const [picked, setPicked] = useState<GroupKey | null | undefined>(group);
-  const basis = useInstancesBasis(!fixture);
   if (!machine)
     return reading.state === "failed" ? (
       <OutcomeLine kind="error" label={`machine reading failed: ${reading.message}`} />
@@ -277,12 +268,7 @@ export function MachineBody({
                 <span data-tone="caution">The Revit census has not been read.</span>
               ) : machine.revit.sessions.length ? (
                 machine.revit.sessions.map((session) => (
-                  <RevitRow
-                    key={keyOf(session)}
-                    session={session}
-                    basis={basis}
-                    refusal={refusal}
-                  />
+                  <RevitRow key={keyOf(session)} session={session} refusal={refusal} />
                 ))
               ) : (
                 <span className="text-ink-2">No Revit is running. Start one from Open.</span>

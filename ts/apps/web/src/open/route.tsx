@@ -9,8 +9,6 @@ import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 
 import { Surface } from "#/components/lang/surface";
 import { Section } from "#/components/lang/section";
-import { OutcomeLine } from "#/components/lang/outcome";
-import { WorkStanding } from "#/components/work/band";
 import { frozenDemo } from "#/host/demo-client";
 import { useSessionEvents } from "#/host/world-log";
 import { machineOf } from "#/machine/model";
@@ -26,7 +24,7 @@ import { useRoute } from "#/route/use-route";
 import { readScopedActionStatuses } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 export function OpenPage() {
-  const handle = useRoute(openManifest, { work: "instances" });
+  const handle = useRoute(openManifest);
   const fixture = useMemo(() => frozenDemo() !== null, []);
   const machine = machineOf(handle.readings.machine as Parameters<typeof machineOf>[0]);
   const recents =
@@ -36,80 +34,64 @@ export function OpenPage() {
   const rows = useMemo(() => modelRows(sessions ?? [], recents), [sessions, recents]);
   const [draft, setDraft] = useState<LaunchDraft>(EMPTY_DRAFT);
   useWorldLog(handle, fixture);
-  const work = handle.work;
-  const basis = work.revision === null ? null : { key: work.key, revision: work.revision };
   const refusal = fixture ? "Fixture: nothing on this page reaches a host." : null;
   const loading =
     handle.readings.machine.state === "loading" || handle.readings.machine.state === "absent";
   return (
     <Surface head={<RouteShell manifest={openManifest} handle={handle} />}>
-      {work.refusal ? (
-        <WorkStanding
-          unresolved={[work.refusal]}
-          startFresh={work.startFresh ? () => void work.startFresh?.() : undefined}
+      <div className="flex min-h-0 flex-col gap-4 overflow-auto pb-16" data-testid="open-route">
+        <p className="text-ink-2">Start a Revit, open a model, and see which Revit holds it.</p>
+        <Launcher
+          handle={handle}
+          machine={machine as Machine | null}
+          rows={rows}
+          draft={draft}
+          setDraft={setDraft}
+          fixture={fixture}
         />
-      ) : !work.current ? (
-        <OutcomeLine
-          kind={handle.failure ? "error" : "busy"}
-          label={handle.failure?.message ?? "reading the instances Work"}
-        />
-      ) : (
-        <div className="flex min-h-0 flex-col gap-4 overflow-auto pb-16" data-testid="open-route">
-          <p className="text-ink-2">Start a Revit, open a model, and see which Revit holds it.</p>
-          <Launcher
-            handle={handle}
-            machine={machine as Machine | null}
-            rows={rows}
-            draft={draft}
-            setDraft={setDraft}
-            fixture={fixture}
-          />
-          <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,30rem)]">
-            <Section label="documents">
-              <ModelTable
-                rows={rows}
-                picked={draft.doc}
-                loading={loading}
-                onPick={(row) =>
-                  setDraft({
-                    ...draft,
-                    doc: draft.doc === row.key ? null : row.key,
-                    year: null,
-                    target: null,
-                  })
-                }
-              />
-            </Section>
-            <Section
-              label="running"
-              aside={
-                sessions ? (
-                  <span className="text-ink-2">
-                    {sessions.length} Revit{sessions.length === 1 ? "" : "s"} on this machine
-                  </span>
-                ) : null
+        <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,30rem)]">
+          <Section label="documents">
+            <ModelTable
+              rows={rows}
+              picked={draft.doc}
+              loading={loading}
+              onPick={(row) =>
+                setDraft({
+                  ...draft,
+                  doc: draft.doc === row.key ? null : row.key,
+                  year: null,
+                  target: null,
+                })
               }
-            >
-              <RunningList
-                sessions={sessions}
-                loading={loading}
-                basis={basis}
-                refusal={refusal}
-                onHere={(session) =>
-                  setDraft({ ...draft, year: session.row.year, target: keyOf(session) })
-                }
-              />
-            </Section>
-          </div>
+            />
+          </Section>
+          <Section
+            label="running"
+            aside={
+              sessions ? (
+                <span className="text-ink-2">
+                  {sessions.length} Revit{sessions.length === 1 ? "" : "s"} on this machine
+                </span>
+              ) : null
+            }
+          >
+            <RunningList
+              sessions={sessions}
+              loading={loading}
+              refusal={refusal}
+              onHere={(session) =>
+                setDraft({ ...draft, year: session.row.year, target: keyOf(session) })
+              }
+            />
+          </Section>
         </div>
-      )}
+      </div>
     </Surface>
   );
 }
 
 /** Unresolved lifecycle receipts and bridge-observed world events land in the route's one log. */
 function useWorldLog(handle: OpenHandle, fixture: boolean) {
-  const workspaceId = handle.work.key.work!;
   const inventory = useInventory(!fixture);
   const sessions = useMemo(() => inventoryOf(previousOf(inventory)?.sessions ?? []), [inventory]);
   useSessionEvents(
@@ -121,8 +103,8 @@ function useWorldLog(handle: OpenHandle, fixture: boolean) {
     !fixture,
   );
   const unresolved = useHostCall(
-    (signal) => readScopedActionStatuses({ kind: "instances", workspaceId }, "", signal),
-    ["actions", "subject", "instances", workspaceId],
+    (signal) => readScopedActionStatuses({ kind: "instances" }, "", signal),
+    ["actions", "subject", "instances"],
     !fixture,
   );
   const noted = useRef(new Set<string>());

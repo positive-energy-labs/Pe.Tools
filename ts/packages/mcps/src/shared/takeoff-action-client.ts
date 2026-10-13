@@ -1,4 +1,4 @@
-import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
+import { instancesSessionSelection } from "@pe/agent-contracts";
 import { contextFetch as fetch, invocationContext } from "#invocation-context";
 import { actionListFilterSchema, type ActionListFilter } from "@pe/agent-contracts";
 import {
@@ -127,23 +127,17 @@ export async function runSemanticAction(
         consumed.fileVersion = ((await response.json()) as { fileVersion: string }).fileVersion;
       }
     }
+    const sessionSelection = key.startsWith("instances.") ? instancesSessionSelection(input) : null;
     admission = {
       id: typeof id === "function" ? id() : (id ?? crypto.randomUUID()),
       kind: "workflow",
       key,
       actor,
-      destination:
-        key.startsWith("instances.") &&
-        input.session &&
-        typeof input.session === "object" &&
-        "selection" in input.session
-          ? {
-              kind: "sdk-session",
-              selection: sdkSessionSelectionSchema.parse(input.session.selection),
-            }
-          : target
-            ? { kind: "document", ref: target }
-            : { kind: "host" },
+      destination: sessionSelection
+        ? { kind: "sdk-session", selection: sessionSelection }
+        : target
+          ? { kind: "document", ref: target }
+          : { kind: "host" },
       input,
       bases: consumed,
     };

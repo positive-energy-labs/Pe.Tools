@@ -1,4 +1,3 @@
-import { instancesRouteState } from "@pe/agent-contracts";
 /**
  * The server-side route registry — the ONE place a new collaborative route is
  * wired. The host composition root registers
@@ -37,7 +36,6 @@ export function createRouteRegistrations(
   options: { hostBaseUrl?: string; loadedFamilies?: LoadedFamilies } = {},
 ): RouteRegistration[] {
   return [
-    entry(instancesRouteState),
     // Families and Parameter Links carry no route commands: their readings are host reads and
     // their applies are semantic actions, so neither can write into authored Work.
     {

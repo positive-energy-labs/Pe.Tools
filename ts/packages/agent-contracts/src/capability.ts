@@ -28,7 +28,7 @@ export type CapabilityNeeds = z.infer<typeof capabilityNeedsSchema>;
 
 export const capabilitySchema = z
   .object({
-    /** `op:revit.catalog.loaded-families`, `route:instances.start`, `pod:sheets.rename`, `skill:build-pod` */
+    /** `op:revit.catalog.loaded-families`, `route:families.propose`, `pod:sheets.rename`, `skill:build-pod` */
     key: z.string().min(1),
     kind: capabilityKindSchema,
     title: z.string(),
@@ -103,7 +103,7 @@ export const capabilityCatalogSchema = z.object({
 });
 export type CapabilityCatalog = z.infer<typeof capabilityCatalogSchema>;
 
-/** `route:instances.start` → `{ route: "instances", member: "start" }`; `route:instances` → member undefined. */
+/** `route:families.propose` → `{ route: "families", member: "propose" }`; `route:families` → member undefined. */
 export function parseRouteKey(key: string): { route: string; member?: string } | null {
   if (!key.startsWith("route:")) return null;
   const rest = key.slice("route:".length);

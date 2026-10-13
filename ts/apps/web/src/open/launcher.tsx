@@ -2,60 +2,21 @@
  * The launcher: one sentence that becomes one launch. Open [document] in Revit [year] on [a new
  * Revit | a running one], with the new Revit's shape as cells (payload fixed by this host,
  * posture and add-ins togglable), the refusal said before the press, and the exact commands
- * printed under it. The press stages the launch on the instances Work, then runs the staged
- * value; a Pea proposal is reviewed above it and never launches by itself.
+ * printed under it. The press runs the one `instances.open` or `instances.start` action
+ * directly: pressing the verb is the consent, and nothing is staged first (ADR 0016).
  */
-import { useEffect } from "react";
-import {
-  instancesActions,
-  nativeProcessSchema,
-  sameValue,
-  transitionPatches,
-  type InstancesLaunch,
-  type Machine,
-} from "@pe/agent-contracts";
+import { instancesActions, type Machine } from "@pe/agent-contracts";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { ReviewRow, type CellWire } from "#/components/work/band";
 import { Tag } from "#/components/lang/chip";
-import { Input } from "#/components/lang/input";
 import { Button } from "#/components/lang/button";
 import { ShapeCells } from "#/components/lang/process";
 import { Switcher } from "#/components/lang/switcher";
-import { executionRefusal, keyOf, nameOf, phaseOf, pidOf, processOf } from "#/machine/session";
+import { executionRefusal, keyOf, nameOf, phaseOf, pidOf } from "#/machine/session";
 import type { OpenHandle } from "#/open/manifest";
 import { EMPTY_DRAFT, launchPlan, type DocRow, type LaunchDraft } from "#/open/model";
 import { useAction } from "#/readings";
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-
-const describeLaunch = (value: unknown) => {
-  const launch = value as InstancesLaunch;
-  return launch.kind === "open"
-    ? `open ${launch.document} in ${"id" in launch.session ? launch.session.id : `pid ${launch.session.pid}`}`
-    : `start a new ${launch.year} Revit${launch.document ? ` opening ${launch.document}` : ""}${launch.quarantine ? " with add-ins quarantined" : ""}${launch.posture === "background" ? " in the background" : ""}`;
-};
-
-/** A staged launch, read back into the launcher's picks. */
-function draftOf(launch: InstancesLaunch) {
-  const doc = launch.document ?? null;
-  if (launch.kind === "start")
-    return {
-      ...EMPTY_DRAFT,
-      doc,
-      year: Number(launch.year),
-      target: "new",
-      posture: launch.posture,
-      quarantine: launch.quarantine,
-      name: launch.name,
-      missingLinks: launch.missingLinks,
-    } satisfies LaunchDraft;
-  return {
-    ...EMPTY_DRAFT,
-    doc,
-    target: "pid" in launch.session ? `pid:${launch.session.pid}` : launch.session.id,
-    missingLinks: launch.missingLinks,
-  } satisfies LaunchDraft;
-}
 
 export function Launcher({
   handle,
@@ -72,62 +33,28 @@ export function Launcher({
   setDraft: (next: LaunchDraft) => void;
   fixture: boolean;
 }) {
-  const work = handle.work;
-  const cell = work.doc?.launch ?? {};
-  const staged = cell.staged?.value;
-  const reviewing = cell.proposal != null && !sameValue(cell.proposal, cell.staged);
-  const wire: CellWire = { segment: null, write: work.write, revision: work.revision };
-  const stagedKey = JSON.stringify(staged ?? null);
-  // A staged launch (a person's, or an accepted proposal) becomes the launcher's picks once.
-  useEffect(() => {
-    if (staged) setDraft(draftOf(staged));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- staged is identified by stagedKey
-  }, [stagedKey]);
   const plan = launchPlan(draft, machine, rows);
   const years = machine?.revit.years ?? [];
   const isNew = draft.target === "new" || (draft.target === null && plan.target === null);
   const refusal =
-    plan.refusal ??
-    (fixture ? "Fixture: nothing on this page reaches a host." : null) ??
-    (work.revision === null ? "Reading the instances Work first." : null);
+    plan.refusal ?? (fixture ? "Fixture: nothing on this page reaches a host." : null);
 
   const launch = useAction(async () => {
-    if (!plan.launch || work.revision === null) return;
+    const planned = plan.launch;
+    if (!planned) return;
     try {
-      let revision = work.revision;
-      if (JSON.stringify(staged ?? null) !== JSON.stringify(plan.launch)) {
-        const refused = await work.write(
-          transitionPatches([], "launch", {}, { kind: "stage", rung: { value: plan.launch } }),
-          revision,
-        );
-        if (refused) throw Error(refused.message);
-        revision += 1;
-      }
-      const key = plan.launch.kind === "start" ? "instances.start" : "instances.open";
-      const process = plan.target ? processOf(plan.target.row) : null;
-      const input = instancesActions[key].input.parse({
-        workspaceId: work.key.work,
-        ...(plan.launch.kind === "open" && process
-          ? {
-              session: {
-                selection: plan.launch.session,
-                process: nativeProcessSchema.parse(process),
-              },
-            }
-          : {}),
-      });
       const receipt = await runSemanticAction(
-        key,
-        input,
+        planned.key,
+        instancesActions[planned.key].input.parse(planned.input),
         undefined,
-        { work: { key: work.key, revision } },
+        {},
         "human",
         "",
         crypto.randomUUID(),
         30_000,
       );
       handle.note(
-        `${plan.launch.kind} ${receipt.state}`,
+        `${planned.key} ${receipt.state}`,
         `action ${receipt.id}`,
         receipt.state !== "succeeded",
         {
@@ -137,26 +64,13 @@ export function Launcher({
       );
       setDraft(EMPTY_DRAFT);
     } catch (caught) {
-      handle.note(`${plan.launch.kind} refused`, String(caught), true);
+      handle.note(`${planned.key} refused`, String(caught), true);
     }
   });
 
   return (
     <ArtifactFrame label="launcher">
       <div className="flex flex-col gap-1 px-3 py-2" aria-label="launcher">
-        {reviewing ? (
-          <ReviewRow
-            wire={wire}
-            address="launch"
-            label={<Tag>pea proposes</Tag>}
-            cell={cell}
-            facts={{
-              value: describeLaunch(cell.staged?.value ?? cell.proposal?.value),
-              scale: "row",
-            }}
-            show={describeLaunch}
-          />
-        ) : null}
         <div className="flex min-h-(--control-h) flex-wrap items-center gap-2">
           <span className="w-16 shrink-0">
             <Tag>open</Tag>
@@ -252,15 +166,6 @@ export function Launcher({
                   },
                 ]}
               />
-              <span className="w-44">
-                <Input
-                  face="mono"
-                  aria-label="session name"
-                  placeholder="name (optional)"
-                  value={draft.name}
-                  onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-                />
-              </span>
             </>
           ) : null}
           {plan.doc ? (
