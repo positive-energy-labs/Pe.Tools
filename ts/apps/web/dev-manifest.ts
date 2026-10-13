@@ -1,14 +1,10 @@
-import { createHash } from "node:crypto";
+// Keep the identity of the already installed Dev PWA stable across checkout and process changes.
+const devManifestId = "/?dev=e342bc78d3d4";
 
-/** Install identity follows the checkout, never the current backend process or transient port. */
-export function devManifest<T extends Record<string, unknown>>(sourceRoot: string, manifest: T) {
-  const identity = createHash("sha256")
-    .update(sourceRoot.replaceAll("\\", "/").toLowerCase())
-    .digest("hex")
-    .slice(0, 12);
+export function devManifest<T extends Record<string, unknown>>(manifest: T) {
   return {
     ...manifest,
-    id: `/?dev=${identity}`,
+    id: devManifestId,
     name: "Pe.Tools Dev",
     short_name: "Pe.Tools Dev",
     start_url: "/open",

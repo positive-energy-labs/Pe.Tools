@@ -4,6 +4,19 @@ using Pe.Host.Tray;
 namespace Pe.Host.Tray.Tests;
 public class PwaLauncherTests {
     [Test]
+    public void PackagedEdgeRegistrationRequiresExactManifestIdentityAndActualProfileResources() {
+        var identity = new Uri("http://127.0.0.1:5175/?dev=e342bc78d3d4");
+        var registration = new PackagedPwa(PwaLauncher.AppId(identity), "Default", "http://127.0.0.1:5175/open",
+            "Microsoft.MicrosoftEdge.Stable_8wekyb3d8bbwe!MSEDGE");
+        const string root = @"C:\edge-profile";
+        Assert.That(PwaLauncher.MatchPackaged(identity, [registration], root, _ => true)?.AppId, Is.EqualTo(registration.AppId));
+        Assert.That(PwaLauncher.MatchPackaged(identity, [registration], root, _ => false), Is.Null);
+        Assert.That(PwaLauncher.MatchPackaged(new Uri("http://127.0.0.1:5175/"), [registration], root, _ => true), Is.Null);
+        Assert.That(PwaLauncher.MatchPackaged(identity, [registration with { StartUrl = "http://127.0.0.1:5180/open" }], root, _ => true), Is.Null);
+        Assert.That(PwaLauncher.MatchPackaged(identity, [registration with { EdgeIdentity = "foreign" }], root, _ => true), Is.Null);
+        Assert.That(PwaLauncher.MatchPackaged(identity, [registration with { Profile = "..\\foreign" }], root, _ => true), Is.Null);
+    }
+    [Test]
     public void IdentityMatchesObservedChromiumIdAndSeparatesDevAndProduction() {
         Assert.That(PwaLauncher.AppId(new Uri("http://127.0.0.1:5175/")), Is.EqualTo("dpjcganhfcilifanhcmgkklilogmomnf"));
         Assert.That(PwaLauncher.AppId(new Uri("http://127.0.0.1:5175/?dev=e342bc78d3d4")), Is.EqualTo("fneiaplokelkkploflemnpjlkdffgjkn"));

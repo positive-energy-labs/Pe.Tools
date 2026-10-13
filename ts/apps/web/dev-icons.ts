@@ -25,7 +25,7 @@ export function devIcons(): Plugin {
             );
             response.setHeader("Content-Type", "application/manifest+json");
             response.setHeader("Cache-Control", "no-store");
-            response.end(JSON.stringify(devManifest(sourceRoot, manifest)));
+            response.end(JSON.stringify(devManifest(manifest)));
           } catch (error) {
             next(error);
           }

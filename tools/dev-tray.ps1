@@ -1,21 +1,23 @@
-param([switch]$CreateShortcut, [switch]$Stop, [switch]$Restart)
+param([switch]$CreateShortcut, [switch]$Window, [switch]$Stop, [switch]$Restart)
 $ErrorActionPreference = 'Stop'
 if ($Stop -and $Restart) { throw 'Choose either -Stop or -Restart.' }
+if ($Window -and $Stop) { throw 'Choose either -Window or -Stop.' }
 $checkoutRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $state = Join-Path $checkoutRoot '.artifacts/dev-tray'
 New-Item -ItemType Directory -Force $state | Out-Null
 $node = (Get-Command node -ErrorAction Stop).Source
 
 if ($CreateShortcut) {
-    $desktop = [Environment]::GetFolderPath('Desktop')
-    $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $desktop 'Pe.Tools Dev.lnk'))
+    $programs = [Environment]::GetFolderPath('Programs')
+    $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $programs 'Pe.Tools Dev Tray.lnk'))
     $shortcut.TargetPath = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'
-    $shortcut.Arguments = '-NoProfile -File "' + $PSCommandPath + '"'
+    $shortcut.Arguments = '-NoProfile -WindowStyle Hidden -File "' + $PSCommandPath + '"'
     $shortcut.WorkingDirectory = $checkoutRoot
     $shortcut.WindowStyle = 7
     $shortcut.IconLocation = (Join-Path $checkoutRoot 'ts/apps/web/public/favicon-dev.ico')
-    $shortcut.Description = 'Pe.Tools development checkout and persistent tray'
+    $shortcut.Description = 'Show the compact Pe.Tools development tray'
     $shortcut.Save()
+    return
 }
 
 $supervisorFile = Join-Path $state 'supervisor.json'
@@ -45,8 +47,10 @@ if (Test-Path -LiteralPath $supervisorFile) {
                 }
                 if ($Stop) { return }
             } else {
-            @{ instanceId = $supervisor.instanceId; nonce = [Guid]::NewGuid().ToString() } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $state 'show.tmp') -Encoding UTF8
-            Move-Item -LiteralPath (Join-Path $state 'show.tmp') -Destination (Join-Path $state 'show.json') -Force
+            if (-not $Window) {
+                @{ instanceId = $supervisor.instanceId; nonce = [Guid]::NewGuid().ToString() } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $state 'show.tmp') -Encoding UTF8
+                Move-Item -LiteralPath (Join-Path $state 'show.tmp') -Destination (Join-Path $state 'show.json') -Force
+            }
             $existingSupervisor = $true
             }
         }
@@ -80,7 +84,7 @@ if ($matches.Count -eq 1) {
     try {
         $response = $client.GetAsync(('http://127.0.0.1:' + $match.Record.port + '/')).GetAwaiter().GetResult()
         $destination = $response.Headers.Location
-        if (-not $destination -or $destination.Scheme -ne 'http' -or $destination.Host -ne '127.0.0.1') {
+        if (-not $destination -or $destination.GetLeftPart([UriPartial]::Authority) -ne 'http://127.0.0.1:5175') {
             throw 'The verified host did not disclose its actual Vite frontend.'
         }
         $frontendOrigin = $destination.GetLeftPart([UriPartial]::Authority)
@@ -92,8 +96,40 @@ if ($matches.Count -eq 1) {
         Move-Item -LiteralPath (Join-Path $state 'session.attach.tmp') -Destination (Join-Path $state 'session.json') -Force
     } finally { $client.Dispose(); $handler.Dispose() }
     if (-not $existingSupervisor) {
-        Start-Process -FilePath $node -ArgumentList @('scripts/dev-tray.ts', '--show') -WorkingDirectory (Join-Path $checkoutRoot 'ts/apps/host') -WindowStyle Hidden -RedirectStandardOutput (Join-Path $state 'supervisor.log') -RedirectStandardError (Join-Path $state 'supervisor-error.log')
+        $trayArguments = @('scripts/dev-tray.ts')
+        if (-not $Window) { $trayArguments += '--show' }
+        Start-Process -FilePath $node -ArgumentList $trayArguments -WorkingDirectory (Join-Path $checkoutRoot 'ts/apps/host') -WindowStyle Hidden -RedirectStandardOutput (Join-Path $state 'supervisor.log') -RedirectStandardError (Join-Path $state 'supervisor-error.log')
     }
 } else {
-    Start-Process -FilePath $node -ArgumentList @('scripts/dev-watch.ts') -WorkingDirectory (Join-Path $checkoutRoot 'ts/apps/host') -WindowStyle Hidden -RedirectStandardOutput (Join-Path $state 'dev-watch.log') -RedirectStandardError (Join-Path $state 'dev-watch-error.log')
+    if ($existingSupervisor) {
+        Start-Process -FilePath $node -ArgumentList @('--import', 'jiti/register', 'src/dev.ts') -WorkingDirectory (Join-Path $checkoutRoot 'ts/apps/host') -WindowStyle Hidden -RedirectStandardOutput (Join-Path $state 'dev-host.log') -RedirectStandardError (Join-Path $state 'dev-host-error.log')
+    } else {
+        $watchArguments = @('scripts/dev-watch.ts')
+        if (-not $Window) { $watchArguments += '--show' }
+        Start-Process -FilePath $node -ArgumentList $watchArguments -WorkingDirectory (Join-Path $checkoutRoot 'ts/apps/host') -WindowStyle Hidden -RedirectStandardOutput (Join-Path $state 'dev-watch.log') -RedirectStandardError (Join-Path $state 'dev-watch-error.log')
+    }
+}
+
+if ($Window) {
+    $binary = Join-Path $checkoutRoot '.artifacts/build/Pe.Host.Tray/Debug.R25/Pe.Host.Tray.exe'
+    $until = [DateTime]::UtcNow.AddSeconds(60)
+    do {
+        try {
+            $pair = Get-Content -LiteralPath (Join-Path $state 'session.json') -Raw | ConvertFrom-Json
+            $hostRecord = Get-Content -LiteralPath $pair.serviceFile -Raw | ConvertFrom-Json
+            $frontendProcess = Get-Process -Id $pair.frontendPid -ErrorAction Stop
+            $hostProcess = Get-Process -Id $hostRecord.pid -ErrorAction Stop
+            $ready = $pair.schemaVersion -eq 1 -and $pair.sourceRoot -eq $checkoutRoot -and $pair.frontendOrigin -eq 'http://127.0.0.1:5175' -and
+                $hostRecord.schemaVersion -eq 3 -and $hostRecord.sourceRoot -eq $checkoutRoot -and $hostRecord.lane -eq 'dev' -and $hostRecord.instanceId -eq $pair.hostInstanceId -and
+                [Math]::Abs(($frontendProcess.StartTime.ToUniversalTime() - [DateTime]::Parse($pair.frontendStartUtc).ToUniversalTime()).TotalMilliseconds) -le 2000 -and
+                [Math]::Abs(($hostProcess.StartTime.ToUniversalTime() - [DateTime]::Parse($hostRecord.processStartUtc).ToUniversalTime()).TotalMilliseconds) -le 2000 -and
+                (Test-Path -LiteralPath $binary)
+        } catch { $ready = $false }
+        if ($ready) { break }
+        if ([DateTime]::UtcNow -ge $until) { throw 'Dev frontend startup timed out. Read .artifacts/dev-tray logs before retrying.' }
+        Start-Sleep -Milliseconds 200
+    } while ($true)
+    $launcher = Start-Process -FilePath $binary -ArgumentList @('--launch-window', 'http://127.0.0.1:5175/open') -WindowStyle Hidden -PassThru
+    if (-not $launcher.WaitForExit(10000)) { throw 'Dev PWA launcher timed out.' }
+    if ($launcher.ExitCode -ne 0) { throw 'Dev PWA launcher refused the frontend or PWA registration.' }
 }

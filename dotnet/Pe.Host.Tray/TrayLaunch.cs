@@ -12,10 +12,29 @@ internal sealed record TrayLaunch(int ParentPid, DateTimeOffset ParentStart, str
     public string? SupervisorInstance { get; init; }
     public bool IsDev => SupervisorFile is not null;
     public bool ShowOnStart { get; init; }
+    public string? Route { get; init; }
     public string ProfileKey => IsDev ? "dev-" + Convert.ToHexString(SHA256.HashData(
         Encoding.UTF8.GetBytes(SourceRoot!.ToLowerInvariant())))[..12].ToLowerInvariant() : "installed";
 
     public static TrayLaunch Parse(string[] args) {
+        var show = Array.IndexOf(args, "--show");
+        string? route = null;
+        if (show >= 0) {
+            var tail = args[show..];
+            if (tail.Length == 3 && tail[1] == "--route" && IsCanonicalRoute(tail[2])) route = tail[2];
+            else if (tail.Length != 1) throw new ArgumentException("Expected --show [--route <canonical path>].");
+            args = args[..show];
+        }
+        var launch = ParseOwner(args);
+        return launch with { ShowOnStart = launch.ShowOnStart || show >= 0, Route = route };
+    }
+
+    internal static bool IsCanonicalRoute(string route) => route.StartsWith('/') && !route.StartsWith("//")
+        && !route.Contains('\\') && !route.Any(char.IsControl)
+        && TrayContext.TryGetWindowUrl("http://127.0.0.1" + route, "http://127.0.0.1", out var canonical)
+        && canonical == "http://127.0.0.1" + route;
+
+    private static TrayLaunch ParseOwner(string[] args) {
         if (args.Length == 3 && args[0] == "--dev" && args[1] == "--supervisor-file"
             && Path.IsPathFullyQualified(args[2])) {
             using var json = JsonDocument.Parse(File.ReadAllText(args[2]));

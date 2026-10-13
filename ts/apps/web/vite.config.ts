@@ -61,6 +61,8 @@ const config = defineConfig(({ mode, command }) => {
     ],
     server: {
       host: "127.0.0.1",
+      port: 5175,
+      strictPort: true,
       allowedHosts: ["127.0.0.1"],
       cors: false,
       fs: {

@@ -18,16 +18,20 @@ export function StartupSettings({
   fixture: boolean;
 }) {
   const host = useSurfaceHost();
+  const [edge, setEdge] = useState(false);
+  useEffect(() => setEdge(/\bEdg\//.test(navigator.userAgent)), []);
   const [prompt, setPrompt] = useState<InstallPrompt | null>(null);
   const [status, setStatus] = useState<InstallStatus>(null);
   useEffect(() => {
     if (fixture || host.native || host.surface === "tray") return;
     const capture = (event: Event) => {
       event.preventDefault();
+      if (!edge) return;
       setPrompt(event as InstallPrompt);
       setStatus(null);
     };
     const installed = () => {
+      if (!edge) return;
       setPrompt(null);
       setStatus("installed");
     };
@@ -37,7 +41,7 @@ export function StartupSettings({
       window.removeEventListener("beforeinstallprompt", capture);
       window.removeEventListener("appinstalled", installed);
     };
-  }, [fixture, host.native, host.surface]);
+  }, [edge, fixture, host.native, host.surface]);
   const install = async () => {
     if (!prompt) return;
     const offered = prompt;
@@ -67,14 +71,18 @@ export function StartupSettings({
       {!fixture && !host.native && host.surface !== "tray" && (
         <>
           <p className="text-ink-2">
-            {host.surface === "pwa"
-              ? "This is an app window. "
-              : "Install Pe.Tools in this Edge profile. "}
-            {prompt
-              ? "Use Install app below. "
-              : host.surface === "web"
-                ? "If no install button appears, use Edge menu > Apps > Install this site as an app. "
-                : "Edge manages its installation in this profile. "}
+            {!edge
+              ? "Open this address in Microsoft Edge and install there. Other Chromium browsers create separate Windows app entries. "
+              : host.surface === "pwa"
+                ? "This is an app window. "
+                : "Install Pe.Tools in this Edge profile. "}
+            {!edge
+              ? ""
+              : prompt
+                ? "Use Install in Edge below. "
+                : host.surface === "web"
+                  ? "If no install button appears, use Edge menu > Apps > Install this site as an app. "
+                  : "Edge manages its installation in this profile. "}
             Then choose Pin to taskbar in Edge's app options. Installation and pinning are separate
             choices.
           </p>
@@ -94,8 +102,8 @@ export function StartupSettings({
         </>
       )}
       {prompt && !fixture && !host.native && host.surface === "web" && status !== "installed" && (
-        <Button label="Install app" kind="framed" onClick={() => void install()}>
-          Install app
+        <Button label="Install in Edge" kind="framed" onClick={() => void install()}>
+          Install in Edge
         </Button>
       )}
     </div>

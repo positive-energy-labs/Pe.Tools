@@ -36,6 +36,7 @@ internal sealed class TrayContext : ApplicationContext {
         _launch = launch;
         _service = service;
         _parent = parent;
+        _pendingPath = launch.Route is { } route ? TrayPath(route) : null;
         _window.Controls.Add(_web);
         _ = _window.Handle;
         var favicon = launch.IsDev ? Path.Combine(launch.SourceRoot!, "ts", "apps", "web", "public", "favicon-dev.ico")
@@ -53,10 +54,7 @@ internal sealed class TrayContext : ApplicationContext {
             if (e.Button != MouseButtons.Left) return;
             if (!_ready) { _menu.Show(Cursor.Position); return; }
             if (_window.Visible && _window.WindowState != FormWindowState.Minimized) { _window.Hide(); return; }
-            _window.PositionAboveTaskbar();
-            _window.WindowState = FormWindowState.Normal;
-            _window.Show();
-            _window.Activate();
+            RequestShow(null);
         };
         _window.FormClosing += (_, e) => {
             if (_closing || e.CloseReason != CloseReason.UserClosing) return;
@@ -67,7 +65,7 @@ internal sealed class TrayContext : ApplicationContext {
         _window.TitlebarGeometryChanged += (_, _) => PostTitlebarGeometry();
         _health.Tick += async (_, _) => await CheckHealthAsync();
         _health.Start();
-        if (_launch.ShowOnStart) { _window.PositionAboveTaskbar(); _window.Show(); _window.Activate(); }
+        if (_launch.ShowOnStart) RequestShow(null);
         _window.BeginInvoke(async () => await InitializeWebAsync());
         _ = Task.Run(WatchParentAsync);
         _ = Task.Run(WatchDisposalAsync);
@@ -78,6 +76,28 @@ internal sealed class TrayContext : ApplicationContext {
             await _parent.WaitForExitAsync(_stop.Token);
             ExitOnUiThread();
         } catch (OperationCanceledException) { }
+    }
+
+    private static string TrayPath(string route) {
+        var parts = route.Split('#', 2);
+        return parts[0] + (parts[0].Contains('?') ? "&" : "?") + "shell=tray"
+            + (parts.Length == 2 ? "#" + parts[1] : "");
+    }
+
+    public void RequestShow(string? route) {
+        if (_closing) return;
+        _window.BeginInvoke(() => {
+            if (_closing || !IsOriginalService()) return;
+            if (route is not null) {
+                _pendingPath = TrayPath(route);
+                _hasPage = false;
+                if (_ready && _connected) _web.CoreWebView2.Navigate(_service.ViewOrigin + _pendingPath);
+            }
+            _window.PositionAboveTaskbar();
+            _window.WindowState = FormWindowState.Normal;
+            _window.Show();
+            _window.Activate();
+        });
     }
 
     private async Task WatchDisposalAsync() {
@@ -219,7 +239,7 @@ internal sealed class TrayContext : ApplicationContext {
         if (show is not null && show != _showRequest && !_parent.HasExited) {
             _showRequest = show;
             _recordDev = true;
-            _window.PositionAboveTaskbar(); _window.WindowState = FormWindowState.Normal; _window.Show(); _window.Activate();
+            RequestShow(null);
         }
         _checking = true;
         try {
@@ -349,7 +369,7 @@ internal sealed class TrayContext : ApplicationContext {
             if (PwaLauncher.EdgeExecutable is not { } edge) { _icon.Text = "Pe.Tools: Edge unavailable"; return; }
             var installed = await FindPwaAsync();
             if (!IsOriginalService() || service != _service) return;
-            _openWindow.Text = installed is null ? "Install to taskbar" : "Open window";
+            _openWindow.Text = installed is null ? "Install in Edge" : "Open window";
             var start = PwaLauncher.Launch(edge, service.ViewOrigin, destination, installed, PwaLauncher.StandardProfileRoot);
             Process.Start(start)?.Dispose();
         } catch (Exception error) when (error is System.ComponentModel.Win32Exception or IOException or HttpRequestException

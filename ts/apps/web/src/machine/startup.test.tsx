@@ -1,16 +1,39 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, expect, test, vi } from "vite-plus/test";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { StartupSettings } from "./startup";
 import { machineOf } from "./model";
 import { MACHINE_SEEDS } from "#/open/seeds";
 
 const host = vi.hoisted(() => ({ surface: "web", native: false }));
 vi.mock("#/navigation/surface-host", () => ({ useSurfaceHost: () => host }));
+beforeEach(() => {
+  vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(
+    "Mozilla/5.0 Chrome/155 Safari/537.36 Edg/155.0",
+  );
+});
 afterEach(() => {
   cleanup();
   host.surface = "web";
   host.native = false;
+  vi.restoreAllMocks();
+});
+
+test("other Chromium browsers do not offer a second app installation", () => {
+  vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(
+    "Mozilla/5.0 Chrome/155 Safari/537.36",
+  );
+  render(<StartupSettings machine={machineOf(MACHINE_SEEDS["no-revit"])} fixture={false} />);
+  const prompt = vi.fn();
+  fireEvent(
+    window,
+    Object.assign(new Event("beforeinstallprompt", { cancelable: true }), { prompt }),
+  );
+  expect(screen.queryByRole("button", { name: "Install in Edge" })).toBeNull();
+  expect(screen.getByLabelText("startup settings").textContent).toContain(
+    "Open this address in Microsoft Edge",
+  );
+  expect(prompt).not.toHaveBeenCalled();
 });
 
 test("Startup renders host observation and captured browser install capability", () => {
@@ -19,16 +42,16 @@ test("Startup renders host observation and captured browser install capability",
   render(<StartupSettings machine={machine} fixture={false} />);
   expect(screen.getByLabelText("startup settings").textContent).toContain("Start at login: on.");
   expect(screen.queryByRole("switch")).toBeNull();
-  expect(screen.queryByRole("button", { name: "Install app" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Install in Edge" })).toBeNull();
   const event = Object.assign(new Event("beforeinstallprompt", { cancelable: true }), { prompt });
   fireEvent(window, event);
   expect(event.defaultPrevented).toBe(true);
-  fireEvent.click(screen.getByRole("button", { name: "Install app" }));
+  fireEvent.click(screen.getByRole("button", { name: "Install in Edge" }));
   expect(prompt).toHaveBeenCalledOnce();
-  expect(screen.queryByRole("button", { name: "Install app" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Install in Edge" })).toBeNull();
   fireEvent(window, Object.assign(new Event("beforeinstallprompt"), { prompt }));
   fireEvent(window, new Event("appinstalled"));
-  expect(screen.queryByRole("button", { name: "Install app" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Install in Edge" })).toBeNull();
 });
 
 test.each([
@@ -40,7 +63,7 @@ test.each([
   render(<StartupSettings machine={machineOf(MACHINE_SEEDS["no-revit"])} fixture={false} />);
   const prompt = vi.fn();
   fireEvent(window, Object.assign(new Event("beforeinstallprompt"), { prompt }));
-  expect(screen.queryByRole("button", { name: "Install app" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Install in Edge" })).toBeNull();
   expect(prompt).not.toHaveBeenCalled();
 });
 
@@ -58,12 +81,12 @@ test("a dismissed browser choice reports no installation and consumes that promp
     }),
   );
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Install app" }));
+    fireEvent.click(screen.getByRole("button", { name: "Install in Edge" }));
   });
   expect(screen.getByRole("status").textContent).toBe(
     "Installation dismissed. The app was not installed.",
   );
-  expect(screen.queryByRole("button", { name: "Install app" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Install in Edge" })).toBeNull();
   expect(prompt).toHaveBeenCalledOnce();
 });
 
@@ -75,7 +98,7 @@ test("accepted consent waits for appinstalled and never claims taskbar pinning",
     Object.assign(new Event("beforeinstallprompt", { cancelable: true }), { prompt }),
   );
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Install app" }));
+    fireEvent.click(screen.getByRole("button", { name: "Install in Edge" }));
   });
   expect(screen.getByRole("status").textContent).toContain(
     "Waiting for the browser to confirm completion",
@@ -91,5 +114,5 @@ test("app display mode alone says window mode without certifying installed state
   render(<StartupSettings machine={machineOf(MACHINE_SEEDS["no-revit"])} fixture={false} />);
   expect(screen.getByText(/This is an app window/)).toBeTruthy();
   expect(screen.queryByRole("status")).toBeNull();
-  expect(screen.queryByRole("button", { name: "Install app" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Install in Edge" })).toBeNull();
 });

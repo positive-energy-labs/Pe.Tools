@@ -13,12 +13,11 @@ internal static class Program {
             if (parent.HasExited || !launch.MatchesParent(parent.Id, parent.StartTime.ToUniversalTime()))
                 return 1;
             var service = launch.ReadService();
-            using var singleton = launch.IsDev ? new Mutex(false, "Local\\PeTools.Tray." + launch.ProfileKey) : null;
-            if (singleton is not null) {
-                try { if (!singleton.WaitOne(0)) return 1; } catch (AbandonedMutexException) { }
-            }
+            using var singleton = new TraySingleton(launch);
+            if (!singleton.IsOwner) return !launch.ShowOnStart || singleton.ShowAsync(launch.Route).GetAwaiter().GetResult() ? 0 : 1;
             ApplicationConfiguration.Initialize();
             using var tray = new TrayContext(launch, service, parent);
+            _ = Task.Run(() => singleton.ListenAsync(tray.RequestShow));
             Application.Run(tray);
             return 0;
         } catch (Exception error) when (error is ArgumentException or FormatException or InvalidDataException

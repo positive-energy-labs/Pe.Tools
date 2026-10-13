@@ -1,14 +1,15 @@
 import { expect, test } from "vite-plus/test";
 import { devManifest } from "./dev-manifest";
 
-test("dev install identity is stable per checkout and distinct from production", () => {
+test("dev lane retains its installed identity across restarts and is distinct from production", () => {
   const production = { id: "/", name: "Pe.Tools", scope: "/", display: "standalone" };
-  const first = devManifest("C:\\repos\\Pe.Tools", production);
-  const restarted = devManifest("c:/repos/pe.tools", production);
-  const another = devManifest("C:/repos/Pe.Tools-worktree", production);
+  const first = devManifest(production);
+  const restarted = devManifest({ ...production });
+  const another = devManifest({ ...production, name: "Another checkout" });
   expect(first.id).toBe(restarted.id);
   expect(first.id).not.toBe(production.id);
-  expect(first.id).not.toBe(another.id);
+  expect(first.id).toBe(another.id);
+  expect(first.id).toBe("/?dev=e342bc78d3d4");
   expect(first.name).toBe("Pe.Tools Dev");
   expect(first.scope).toBe("/");
   expect(production).toEqual({ id: "/", name: "Pe.Tools", scope: "/", display: "standalone" });

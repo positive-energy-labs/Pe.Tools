@@ -6,7 +6,7 @@ import { createDevTraySupervisor } from "./dev-tray-supervisor.ts";
 
 const sourceRoot = checkoutRootFrom(import.meta.dirname);
 if (!sourceRoot) throw new Error("Dev watcher must start from a Pe.Tools checkout");
-const tray = await createDevTraySupervisor(sourceRoot);
+const tray = await createDevTraySupervisor(sourceRoot, process.argv.includes("--show"));
 
 let child: ChildProcess | undefined;
 let restart = false;

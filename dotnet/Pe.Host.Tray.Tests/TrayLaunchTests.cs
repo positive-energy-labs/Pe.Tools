@@ -7,6 +7,39 @@ namespace Pe.Host.Tray.Tests;
 
 public class TrayLaunchTests {
     [Test]
+    public void ShowGrammarPreservesOwnerAndAcceptsOnlyCanonicalTokenFreeRoutes() {
+        var owner = new[] { "--parent-pid", "123", "--parent-start", "2026-10-09T12:00:00.123Z", "--service-file", Path.GetTempFileName() };
+        try {
+            var launch = TrayLaunch.Parse([..owner, "--show", "--route", "/pea?thread=one%2Ftwo#turn3"]);
+            Assert.That(launch.ShowOnStart, Is.True);
+            Assert.That(launch.ParentPid, Is.EqualTo(123));
+            Assert.That(launch.Route, Is.EqualTo("/pea?thread=one%2Ftwo#turn3"));
+            Assert.That(TrayLaunch.Parse([..owner, "--show"]).Route, Is.Null);
+            foreach (var route in new[] { "//foreign/open", "/x\\y", "/open?token=secret", "/open?shell=tray", "/a/../open", "https://foreign/open" })
+                Assert.Throws<ArgumentException>(() => TrayLaunch.Parse([..owner, "--show", "--route", route]), route);
+            Assert.Throws<ArgumentException>(() => TrayLaunch.Parse([..owner, "--route", "/open"]));
+        } finally { File.Delete(owner[5]); }
+    }
+
+    [Test]
+    public void SingletonTransportsShowRouteToExistingOwnerWithoutCreatingAnotherOwner() {
+        var launch = new TrayLaunch(Environment.ProcessId, DateTimeOffset.UtcNow, "fixture");
+        var owner = new TraySingleton(launch);
+        Assert.That(owner.IsOwner, Is.True);
+        // The client must run on another thread because Windows mutexes are reentrant.
+        string? shown = null;
+        var listening = Task.Run(() => owner.ListenAsync(route => shown = route));
+        var result = Task.Run(() => {
+            using var client = new TraySingleton(launch);
+            Assert.That(client.IsOwner, Is.False);
+            return client.ShowAsync("/pea?thread=one#turn3").GetAwaiter().GetResult();
+        }).GetAwaiter().GetResult();
+        Assert.That(result, Is.True);
+        Assert.That(shown, Is.EqualTo("/pea?thread=one#turn3"));
+        owner.Dispose();
+        listening.GetAwaiter().GetResult();
+    }
+    [Test]
     public void ChromeThemeAcceptsOnlyExplicitColorrefsAndBooleanMode() {
         using var valid = JsonDocument.Parse("{\"type\":\"chrome-theme\",\"background\":197121,\"foreground\":16777215,\"dark\":true}");
         Assert.That(TrayWindow.TryReadChromeTheme(valid.RootElement, out var background, out var foreground, out var dark), Is.True);

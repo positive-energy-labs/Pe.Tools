@@ -9,6 +9,7 @@ namespace Pe.Host.Tray;
 
 internal sealed record InstalledPwa(string AppId, string UserDataRoot, string Profile);
 internal sealed record PwaRegistration(string Command, string Icon);
+internal sealed record PackagedPwa(string AppId, string Profile, string StartUrl, string EdgeIdentity);
 
 internal static class PwaLauncher {
     internal static string StandardProfileRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "Edge", "User Data");
@@ -23,7 +24,8 @@ internal static class PwaLauncher {
         var privateRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Positive Energy", "Pe.Tools", "edge-app");
         var roots = new[] { StandardProfileRoot, privateRoot }.Concat(Directory.Exists(privateRoot)
             ? Directory.EnumerateDirectories(privateRoot, "dev-*") : []);
-        return Match(identity, edge, roots, Registrations(), File.Exists);
+        return Match(identity, edge, roots, Registrations(), File.Exists)
+            ?? MatchPackaged(identity, await PackagedRegistrationsAsync(stop), StandardProfileRoot, Directory.Exists);
     }
 
     internal static async Task<int> LaunchWindowAsync(string destination) {
@@ -64,6 +66,51 @@ internal static class PwaLauncher {
             if (registration?.GetValue("UninstallString") is string command && registration.GetValue("DisplayIcon") is string icon)
                 yield return new(command, icon.Trim('"'));
         }
+    }
+
+    internal static async Task<IReadOnlyList<PackagedPwa>> PackagedRegistrationsAsync(CancellationToken stop) {
+        // Edge's Windows-integrated PWAs do not have an HKCU Uninstall registration.
+        const string script = "@(Get-AppxPackage | ForEach-Object { $p = Get-AppxPackageManifest -Package $_; foreach ($e in $p.Package.Applications.Application.Extensions.Extension.AppExtension) { if ($e.Name -ne 'com.ms.webapp.internals.4') { continue }; $d = $e.Description; $a = [regex]::Match($d, '--app-id=([a-p]{32})'); $b = [regex]::Match($d, '--ip-edge-aumid=([^; ]+)'); $c = [regex]::Match($d, 'profile-directory[?]([^;]+)'); $u = [regex]::Match($d, 'start-url[?]([^;]+)'); if ($a.Success -and $b.Success -and $c.Success -and $u.Success) { [pscustomobject]@{AppId=$a.Groups[1].Value; Profile=$c.Groups[1].Value; StartUrl=$u.Groups[1].Value; EdgeIdentity=$b.Groups[1].Value} } } }) | ConvertTo-Json -Compress";
+        var start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
+            "WindowsPowerShell", "v1.0", "powershell.exe")) {
+            UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true
+        };
+        start.ArgumentList.Add("-NoProfile"); start.ArgumentList.Add("-NonInteractive");
+        start.ArgumentList.Add("-EncodedCommand"); start.ArgumentList.Add(Convert.ToBase64String(Encoding.Unicode.GetBytes(script)));
+        using var process = Process.Start(start) ?? throw new IOException("PWA registration discovery did not start");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(stop);
+        timeout.CancelAfter(TimeSpan.FromSeconds(8));
+        var output = process.StandardOutput.ReadToEndAsync(timeout.Token);
+        var errors = process.StandardError.ReadToEndAsync(timeout.Token);
+        try {
+            await process.WaitForExitAsync(timeout.Token);
+            var json = await output; await errors;
+            if (process.ExitCode != 0) throw new IOException("PWA registration discovery failed");
+            if (string.IsNullOrWhiteSpace(json)) return [];
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.ValueKind == JsonValueKind.Array
+                ? JsonSerializer.Deserialize<PackagedPwa[]>(json) ?? []
+                : [JsonSerializer.Deserialize<PackagedPwa>(json)!];
+        } catch (OperationCanceledException) {
+            if (!process.HasExited) process.Kill();
+            throw;
+        }
+    }
+
+    internal static InstalledPwa? MatchPackaged(Uri identity, IEnumerable<PackagedPwa> registrations,
+        string profileRoot, Func<string, bool> exists) {
+        var expected = AppId(identity);
+        foreach (var registration in registrations) {
+            if (registration.AppId != expected || registration.EdgeIdentity != "Microsoft.MicrosoftEdge.Stable_8wekyb3d8bbwe!MSEDGE"
+                || !Regex.IsMatch(registration.Profile, @"^(Default|Profile \d+)$")
+                || !Uri.TryCreate(registration.StartUrl, UriKind.Absolute, out var start)
+                || start.GetLeftPart(UriPartial.Authority) != identity.GetLeftPart(UriPartial.Authority)) continue;
+            var appRoot = Path.Combine(profileRoot, registration.Profile, "Web Applications");
+            if (exists(Path.Combine(appRoot, "_crx_" + expected))
+                || exists(Path.Combine(appRoot, "Manifest Resources", expected)))
+                return new(expected, profileRoot, registration.Profile);
+        }
+        return null;
     }
 
     internal static InstalledPwa? Match(Uri identity, string edge, IEnumerable<string> allowedRoots,

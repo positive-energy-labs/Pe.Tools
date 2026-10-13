@@ -3,12 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { once } from "node:events";
 import { createServer } from "vite-plus";
-import { chooseServicePort, rememberServicePort } from "@pe/host-contracts/pe-service-host";
-import {
-  checkoutRootFrom,
-  hostProcessIdentity,
-  productRoot,
-} from "@pe/host-contracts/service-identity";
+import { checkoutRootFrom, hostProcessIdentity } from "@pe/host-contracts/service-identity";
 
 if (!process.send) throw new Error("Run vp run dev from the host or workspace package.");
 const disconnected = once(process, "disconnect");
@@ -22,7 +17,6 @@ const webRoot = resolve(import.meta.dirname, "../../web");
 const sourceRoot = checkoutRootFrom(webRoot);
 if (!sourceRoot || resolve(file.sourceRoot).toLowerCase() !== sourceRoot.toLowerCase())
   throw new Error("Dev frontend and host must belong to the same checkout.");
-const name = file.name + "-web";
 const baseUrl = `http://127.0.0.1:${file.port}`;
 process.env.PE_TOOLS_HOST_BASE_URL = baseUrl;
 process.env[hostProcessIdentity.serviceNameVariable] = file.name;
@@ -35,15 +29,10 @@ try {
     configFile: join(webRoot, "vite.config.ts"),
     cacheDir,
     clearScreen: false,
-    server: {
-      host: "127.0.0.1",
-      port: await chooseServicePort(productRoot(), name, 0),
-    },
   });
   await vite.listen();
   const address = vite.httpServer!.address();
   if (!address || typeof address === "string") throw new Error("Vite did not bind TCP");
-  await rememberServicePort(productRoot(), name, address.port);
   const url = `http://127.0.0.1:${address.port}`;
   console.log(
     `Dev checkout: ${sourceRoot}\nBrowser: ${url}\nBackend: ${baseUrl} (pid ${process.ppid})`,
