@@ -24,7 +24,12 @@ import type { ThreadHead } from "@pe/agent-contracts";
 import type { SessionObservation } from "@pe/host-contracts/pe-revit-contract";
 import { unreadLeg } from "../src/update-reader.ts";
 import { asCaller, crossingOf, human } from "./callers.ts";
-import { acquiredOpenIds, foldAcquisitions, planAcquisition } from "../src/acquisition.ts";
+import {
+  acquiredOpenIds,
+  acquisitionSessionId,
+  foldAcquisitions,
+  planAcquisition,
+} from "../src/acquisition.ts";
 import { runSemanticAction } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
@@ -493,8 +498,30 @@ test.each([
   expect(flag(argv, "--expect-session")).toBe("absent");
   expect(argv.includes("--background")).toBe(bg);
   expect(argv.includes("--quarantine")).toBe(q);
-  expect(argv).not.toContain("--id");
+  if (!bg) expect(argv).not.toContain("--id");
   expect(f.calls.map((call) => call.slice(0, 2).join(" "))).toEqual(["session start"]);
+});
+
+test("each Pea acquisition starts its own named Revit, never the person's dev session name", async () => {
+  // The person's foreground dev session holds the checkout's default name ("dev" here).
+  const f = await setup(() => startedAnswer, [controlledRow()]);
+  const starts: string[][] = [];
+  const acquisitions: string[] = [];
+  for (let n = 0; n < 2; n++) {
+    const receipt = await f.admit("instances.start", { year: "2025", owner: "pea", addins: "off" });
+    expect(receipt.state).toBe("succeeded");
+    acquisitions.push(receipt.id);
+    starts.push(f.calls.filter((argv) => argv[1] === "start").at(-1)!);
+  }
+  const names = starts.map((argv) => flag(argv, "--id"));
+  expect(new Set(names).size).toBe(2);
+  expect(names).toEqual(acquisitions.map(acquisitionSessionId));
+  expect(names).not.toContain("dev");
+  for (const [index, argv] of starts.entries()) {
+    expect(names[index]).toMatch(/^pea-[0-9a-f]{32}$/);
+    // A checkout admits only one hot-reload session per key; Pea's is a snapshot beside it.
+    expect(argv.includes("--snapshot")).toBe(argv.includes("--project"));
+  }
 });
 
 test("every option reaches doc open for a running session, and the receipt names the opened path", async () => {

@@ -51,6 +51,7 @@ import type { SdkReceiptReader } from "./native-receipts.ts";
 import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
 import { worksharingHint } from "./pea-source.ts";
 import {
+  acquisitionSessionId,
   foldAcquisitions,
   heldProcess,
   planAcquisition,
@@ -613,16 +614,24 @@ export async function admitInstancesAction(
         switch (key) {
           case "instances.start":
           case "instances.open":
-            if (start)
+            if (start) {
+              const project = resolveStartProject(hostOwnership.lane, hostOwnership.sourceRoot);
+              // Pea's process is named by its acquisition; on a checkout it is a snapshot, the only
+              // second session the SDK admits beside the person's hot-reload one on that key.
+              const created = acquisition?.process.kind === "create";
               return sessionStartArgv({
-                project: resolveStartProject(hostOwnership.lane, hostOwnership.sourceRoot),
+                project,
                 year: start.year,
                 ...chosen,
+                ...(created
+                  ? { id: acquisitionSessionId(acquisition.id), snapshot: project !== undefined }
+                  : {}),
                 quarantine: start.addins === "off",
                 background: start.owner === "pea",
                 requestId,
                 expectSession,
               });
+            }
             return openArgv(chosen, expectSession);
           case "instances.restart":
             return sessionHrArgv({

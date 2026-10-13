@@ -64,9 +64,14 @@ export type Acquisition = {
   readonly artifacts: readonly Artifact[];
 };
 
-/** A deterministic exclusive root: action ids are caller text, never a path segment. */
-const acquisitionRoot = (peaWork: string, id: string) =>
-  join(peaWork, createHash("sha256").update(id).digest("hex").slice(0, 32));
+/** Action ids are caller text: never a path segment or an SDK name, only this digest of them. */
+const acquisitionKey = (id: string) => createHash("sha256").update(id).digest("hex").slice(0, 32);
+
+/** A deterministic exclusive root. */
+const acquisitionRoot = (peaWork: string, id: string) => join(peaWork, acquisitionKey(id));
+
+/** The SDK session a created process runs as: its own, never the checkout's default name. */
+export const acquisitionSessionId = (id: string) => `pea-${acquisitionKey(id)}`;
 
 const resultName = (source: string) => {
   const ext = extname(source).toLowerCase();
