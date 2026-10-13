@@ -160,7 +160,9 @@ test("caller-owned and hidden scope bindings do not create a second registration
 test("a refused button composed as another trigger keeps its refusal tooltip", async () => {
   render(
     <Popover.Root>
-      <Popover.Trigger render={<Button label="send" icon={Save} refusal="frozen seed is read-only" />} />
+      <Popover.Trigger
+        render={<Button label="send" icon={Save} refusal="frozen seed is read-only" />}
+      />
     </Popover.Root>,
   );
   const button = screen.getByRole("button", { name: "send" });
