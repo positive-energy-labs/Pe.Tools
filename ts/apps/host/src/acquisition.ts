@@ -73,7 +73,7 @@ export type Acquisition = {
   /** Paths its file steps recorded before any write; cleanup touches only these. */
   readonly files: readonly string[];
   readonly baseline: Artifact | null;
-  readonly handover: { readonly result: Artifact; readonly diffPlan: string } | null;
+  readonly handover: z.infer<typeof handedSchema> | null;
 };
 
 /** A deterministic exclusive root: action ids are caller text, never a path segment. */
@@ -151,7 +151,11 @@ const docView = z.object({
 const openedSchema = z.union([docView, z.object({ result: docView }).transform((r) => r.result)]);
 const copiedSchema = z.object({ sha256: z.string(), bytes: z.number() });
 const fileStepInput = z.object({ to: z.string() });
-const handedSchema = z.object({ result: artifactSchema, diffPlan: z.string() });
+const handedSchema = z.object({
+  result: artifactSchema,
+  diffPlan: z.string(),
+  work: artifactSchema.nullable(),
+});
 const forAcquisition = z.object({ acquisition: z.string() });
 
 const samePath = (a: string, b: string) =>

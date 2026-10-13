@@ -11,6 +11,7 @@ import {
   type InstancesLaunch,
   type Basis,
   type ActionAdmission,
+  type RefusalCode,
 } from "@pe/agent-contracts";
 import type { ActionStep } from "@pe/agent-contracts";
 import { createHash } from "node:crypto";
@@ -788,19 +789,30 @@ async function admitAcquisitionRelease(
         target && document ? await listDocuments(target.selection, target.process, read) : [];
       const held = listed.find((doc) => doc.openId === document?.sdkOpenId);
       const origin = acquired!.intent.document?.origin;
-      // Changes no handover saved: unsaved edits, or a work copy that no longer hashes as its baseline.
+      const saved = acquired!.handover ? acquired!.handover.work : acquired!.baseline;
       const changed =
-        held !== undefined &&
-        (held.isModified ||
-          (!acquired!.handover &&
-            origin?.kind === "file-copy" &&
-            acquired!.baseline !== null &&
-            existsSync(origin.work) &&
-            (await hashFile(origin.work)).sha256 !== acquired!.baseline.sha256));
-      if (changed && unsaved === "keep")
-        throw refuse(
-          `Acquisition '${id}' holds changes no handover saved; hand it over first, or clean up with unsaved discard.`,
-        );
+        held?.isModified ||
+        (origin?.kind === "file-copy" &&
+          saved &&
+          existsSync(origin.work) &&
+          (await hashFile(origin.work)).sha256 !== saved.sha256);
+      if (changed && unsaved === "keep") {
+        const reason = `Acquisition '${id}' holds changes no handover saved; retain the work copy for recovery, or clean up with unsaved discard.`;
+        if (acquired!.handover) {
+          throw new BridgeError(reason, 409, {
+            notDispatched: true,
+            issues: [
+              {
+                instancePath: "$",
+                code: "acquisition.changed-after-handover" satisfies RefusalCode,
+                message: reason,
+                severity: "error",
+              },
+            ],
+          });
+        }
+        throw refuse(reason);
+      }
       return { target, open: held !== undefined };
     },
     async (execution) => {
@@ -857,7 +869,12 @@ async function admitAcquisitionRelease(
               review: "Review only: nothing merges, loads back, overwrites or syncs.",
             };
             await writeFile(intent.diffPlan, JSON.stringify(plan, null, 2), { flag: "wx" });
-            return { result, diffPlan: intent.diffPlan };
+            // Save may update the work copy; retain its post-save bytes as the cleanup expectation.
+            const work =
+              intent.origin.kind === "file-copy"
+                ? { path: intent.origin.work, ...(await hashFile(intent.origin.work)) }
+                : null;
+            return { result, diffPlan: intent.diffPlan, work };
           },
         );
       }

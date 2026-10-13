@@ -1057,7 +1057,7 @@ test("F7: an acquisition records its paths before writing; a crash at any bounda
 });
 
 /** An SDK that starts, opens the copy it is given, saves create-only, closes and stops. */
-async function acquisitionSetup() {
+async function acquisitionSetup(detached = false) {
   const row = controlledRow({ shape: shape("background") });
   const f = await setup(
     async (args) => {
@@ -1078,8 +1078,11 @@ async function acquisitionSetup() {
     },
     [row],
   );
-  f.census.facts = { isWorkshared: false, isDetached: false };
-  const source = await f.file("Tower.rvt", "Worksharing: Not enabled");
+  f.census.facts = { isWorkshared: detached, isDetached: detached };
+  const source = await f.file(
+    "Tower.rvt",
+    detached ? "Worksharing: Enabled" : "Worksharing: Not enabled",
+  );
   const acquired = await f.admit(
     "instances.open",
     { source, into: newRevit({ owner: "pea" }) },
@@ -1129,7 +1132,11 @@ test("handover saves the acquired copy to its create-only result with a diff pla
       undefined,
       "agent",
     ),
-  ).toMatchObject({ state: "failed", notDispatched: true });
+  ).toMatchObject({
+    state: "failed",
+    notDispatched: true,
+    issues: [{ code: "acquisition.changed-after-handover" }],
+  });
   const cleaned = await f.admit(
     "instances.cleanup",
     { acquisition: acquired.id, unsaved: "discard" },
@@ -1166,6 +1173,56 @@ test("handover saves the acquired copy to its create-only result with a diff pla
     ),
   ).rejects.toMatchObject({ refusal: { code: "acquisition.unproven" } });
 });
+
+test("a detached handover preserves worksets", async () => {
+  const { f, acquired } = await acquisitionSetup(true);
+  expect(
+    await f.admit("instances.handover", { acquisition: acquired.id }, undefined, "agent"),
+  ).toMatchObject({ state: "succeeded" });
+  const save = f.calls.find((argv) => argv[1] === "save")!;
+  expect(flag(save, "--worksets")).toBe("preserve");
+  expect(save).not.toContain("strip");
+});
+
+test.each([false, true])(
+  "keep refuses saved changes after handover even when the document is closed=%s",
+  async (closed) => {
+    const { f, acquired, acquisition } = await acquisitionSetup();
+    const work = (acquisition.intent.document!.origin as { work: string }).work;
+    // A work copy may already differ from baseline when handed over; that saved state is retainable.
+    await writeFile(work, "edits before handover");
+    expect(
+      await f.admit("instances.handover", { acquisition: acquired.id }, undefined, "agent"),
+    ).toMatchObject({ state: "succeeded" });
+    await writeFile(work, "saved edits after handover");
+    if (closed) f.census.documents = [];
+    const before = f.calls.length;
+    expect(
+      await f.admit(
+        "instances.cleanup",
+        { acquisition: acquired.id, unsaved: "keep" },
+        undefined,
+        "agent",
+      ),
+    ).toMatchObject({
+      state: "failed",
+      notDispatched: true,
+      issues: [{ code: "acquisition.changed-after-handover" }],
+    });
+    expect(f.calls.slice(before).every((argv) => argv[1] === "list")).toBe(true);
+    expect(await readFile(work, "utf8")).toBe("saved edits after handover");
+    // Restoring the exact handover state proves this check compares against handover, not baseline/result.
+    await writeFile(work, "edits before handover");
+    expect(
+      await f.admit(
+        "instances.cleanup",
+        { acquisition: acquired.id, unsaved: "keep" },
+        undefined,
+        "agent",
+      ),
+    ).toMatchObject({ state: "succeeded" });
+  },
+);
 
 test("cleanup names only its own acquisition: a foreign id refuses, a user document B is never closed and keeps the Revit", async () => {
   const { f, acquired, acquisition } = await acquisitionSetup();
