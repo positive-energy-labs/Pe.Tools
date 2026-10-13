@@ -2,7 +2,7 @@
  * PAGES — disposable HTML as a working surface between an agent and a person (pages ledger,
  * 2026-10-04). A page is a folder `Documents/Pe.Tools/Pages/<slug>/` holding an `index.html`,
  * served at `/pages/<slug>/` with no registration: a dropped folder appears. Its doors into Revit
- * are `/pages/pe.js` (`find`, `read`, `do`, the target headers, the read-versus-write door, and
+ * are `/pages/pe.js` (`find`, `read`, `do` through the page doors below, the bind chip, and
  * `state`) and `/pages/pe.css` (the house tokens, opt-in).
  *
  * Shared state is one event log per page under `<slug>/.state/`: the page appends, an agent appends
