@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { join, dirname } from "node:path";
+import { basename, join, dirname } from "node:path";
 import { contributionKey, type ContributionSource } from "@pe/agent-contracts";
 import { z } from "zod";
 import {
@@ -25,7 +25,7 @@ export type SkillDirectoryCapture = (
 export type SkillPublicationOptions = PeaProductHomeOptions & {
   captureDirectory: SkillDirectoryCapture;
 };
-export type SkillPublication = { skills: SkillSnapshot[] };
+export type SkillPublication = { skills: SkillSnapshot[]; notices: string[] };
 const hash = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
 const receiptName = ".pe-projection.json";
 const projectionReceipt = z.record(
@@ -64,6 +64,7 @@ export async function publishPeaSkills(
   });
   const canonicalRoot = join(home, "Skills");
   const personal = new Map<string, SkillFile[]>();
+  const superseded = new Map<string, { root: string; files: SkillFile[] }[]>();
   for (const name of await directories(canonicalRoot))
     personal.set(name, await capture(join(canonicalRoot, name)));
   const managed = await Promise.all(
@@ -83,6 +84,11 @@ export async function publishPeaSkills(
       if (managed[i]![name] && managed[i]![name] === signature(files)) continue;
       const shipped = bundled.find((s) => s.name === name);
       if (shipped && signature(files) === signature(shipped.files)) continue;
+      if (shipped) {
+        // The product owns a shipped skill's path; an unreceipted older copy is backed up, not refused.
+        superseded.set(name, [...(superseded.get(name) ?? []), { root, files }]);
+        continue;
+      }
       const previous = personal.get(name);
       if (previous && signature(previous) !== signature(files))
         throw Error(`Conflicting personal skill copies: ${name}`);
@@ -104,6 +110,16 @@ export async function publishPeaSkills(
     destinations.set(name.toLowerCase(), skill);
   }
   // Admission completes before any destination changes. Personal source bytes remain canonical.
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
+  const notices: string[] = [];
+  for (const [name, copies] of superseded) {
+    const backup = join(home, ".backups", "skills", `${name}-${stamp}`);
+    for (const { root, files } of copies)
+      await writeFiles(join(backup, basename(dirname(root))), files);
+    notices.push(
+      `Skill '${name}' is shipped by the product; the older copy without a receipt was backed up to ${backup} and replaced.`,
+    );
+  }
   for (const [name, files] of personal) await writeFiles(join(canonicalRoot, name), files);
   for (const root of roots) {
     await mkdir(root, { recursive: true });
@@ -117,7 +133,7 @@ export async function publishPeaSkills(
       if (!destinations.has(name)) await rm(join(root, name), { recursive: true, force: true });
     await writeFile(join(root, receiptName), JSON.stringify(receipt));
   }
-  return { skills };
+  return { skills, notices };
 }
 
 const signature = (files: readonly SkillFile[]) =>

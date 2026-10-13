@@ -1,5 +1,5 @@
 import { captureDirectory } from "../../../apps/host/src/packages.ts";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
@@ -57,6 +57,41 @@ test("a corrupt projection receipt cannot turn skill retirement into a path esca
     await writeFile(join(home, "outside"), "keep");
     await expect(publishPeaSkills({ productHomePath: home, captureDirectory })).rejects.toThrow();
     expect(await readFile(join(home, "outside"), "utf8")).toBe("keep");
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("an unreceipted older copy of a shipped skill is backed up and replaced, never refused", async () => {
+  const home = await mkdtemp(join(tmpdir(), "pe-skill-shipped-"));
+  try {
+    const roots = resolvePeaSkillPaths({ productHomePath: home });
+    for (const [i, root] of roots.entries()) {
+      await mkdir(join(root, "build-pod"), { recursive: true });
+      await writeFile(join(root, "build-pod", "SKILL.md"), `older projection ${i}`);
+    }
+    await mkdir(join(roots[0]!, "mine"), { recursive: true });
+    await writeFile(join(roots[0]!, "mine", "SKILL.md"), "user skill");
+    const publication = await publishPeaSkills({ productHomePath: home, captureDirectory });
+    const shipped = publication.skills.find((s) => s.key === "skill:@product/skills/build-pod")!;
+    for (const root of roots)
+      expect(await readFile(join(root, "build-pod", "SKILL.md"), "utf8")).toBe(shipped.content);
+    expect(publication.skills.some((s) => s.key === "skill:@skills/skills/build-pod")).toBe(false);
+    expect(await readFile(join(roots[0]!, "mine", "SKILL.md"), "utf8")).toBe("user skill");
+    expect(publication.notices).toHaveLength(1);
+    const backups = await readdir(join(home, ".backups", "skills"));
+    expect(backups).toHaveLength(1);
+    expect(backups[0]).toMatch(/^build-pod-\d{8}T\d{6}Z$/);
+    expect(publication.notices[0]).toContain(backups[0]!);
+    const kept = join(home, ".backups", "skills", backups[0]!);
+    const copies = await Promise.all(
+      (await readdir(kept)).map((d) => readFile(join(kept, d, "SKILL.md"), "utf8")),
+    );
+    expect(copies.sort()).toEqual(["older projection 0", "older projection 1"]);
+    // Idempotent: the receipt now owns the path, so a second publication backs nothing up.
+    expect((await publishPeaSkills({ productHomePath: home, captureDirectory })).notices).toEqual(
+      [],
+    );
   } finally {
     await rm(home, { recursive: true, force: true });
   }

@@ -667,6 +667,7 @@ export function createContributionContent(options: {
       pages,
       diagnostics,
       sourceDiagnostics: [
+        ...publication.notices,
         ...listing.unreadable.map((d) => `${d.folder}: ${d.message}`),
         ...listing.packages.flatMap((p) =>
           p.diagnostics.map((d) => `${p.id}/${d.path}: ${d.message}`),

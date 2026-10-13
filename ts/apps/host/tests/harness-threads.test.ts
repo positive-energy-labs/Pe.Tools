@@ -1642,6 +1642,9 @@ test("door 7: revoke is human-only, keeps evidence, fires onRevoke, and only a f
   vi.setSystemTime(T0 + 5 * 60_000);
   const revoked = await call("POST", `/pe/scope/${id}/revoke`, {});
   expect(revoked.json.grant).toMatchObject({ revoked: { at: at(T0 + 5 * 60_000) } });
+  expect(revoked.json.receipt).toBe(
+    "rw revoked. Steps already running finish; nothing new starts. Re-point the head to grant again.",
+  );
   expect(fired).toEqual([`${id}@${at(T0 + 5 * 60_000)}`]);
   expect(crossing(peaOf(id), yours.ref)).toBe("grant.revoked");
   // A human message does not revive a revoked grant; re-pointing the head does.

@@ -1297,7 +1297,11 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         return json({ ...(self ? { thread: threadId } : {}), ...reading(readHead(threadId)) });
       if (method === "POST" && scopeVerb === "revoke") {
         requireHuman(caller, door, "revoking rw");
-        return json(revokeHead(threadId));
+        return json({
+          ...revokeHead(threadId),
+          receipt:
+            "rw revoked. Steps already running finish; nothing new starts. Re-point the head to grant again.",
+        });
       }
       if (method !== "PUT" || scopeVerb)
         return json({ error: `No route ${method} ${url.pathname}` }, 404);
