@@ -12,6 +12,7 @@ import { Accordion } from "#/components/lang/accordion";
 import { Button } from "#/components/lang/button";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { PidChip } from "#/components/lang/process";
+import { useDiagnostics, type DiagnosticsState } from "#/host/diagnostics";
 import { hostAdmin } from "#/host/machine";
 import { PatchBay, useBayReadings } from "#/open/bay";
 
@@ -57,6 +58,39 @@ function RevitDesk({
       fixture={fixture}
       layout="stack"
       refusal={refusal}
+    />
+  );
+}
+
+/**
+ * This window's caught faults and whether the host heard them. It reads the diagnostic owner,
+ * never `/host/status`, so a host that is down still has its silence drawn here.
+ */
+export function DiagnosticsLine({ state }: { state: DiagnosticsState }) {
+  const counts = [
+    state.pending ? `${state.pending} waiting` : null,
+    state.dropped ? `${state.dropped} dropped` : null,
+    state.refused ? `${state.refused} refused` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const label = `diagnostics ${state.delivery}${counts ? ` · ${counts}` : ""}`;
+  if (state.delivery === "idle")
+    return <OutcomeLine kind="advisory" label="diagnostics · no fault caught" />;
+  if (state.delivery === "delivered" && !counts)
+    return (
+      <OutcomeLine
+        kind="receipt"
+        label={label}
+        says="the host took every fault this window caught"
+      />
+    );
+  if (state.delivery === "sending") return <OutcomeLine kind="busy" label={label} />;
+  return (
+    <OutcomeLine
+      kind={state.delivery === "refused" ? "refused" : "error"}
+      label={label}
+      says={state.detail ?? undefined}
     />
   );
 }
@@ -188,6 +222,10 @@ function HostFooter({
   );
 }
 
+function Diagnostics() {
+  return <DiagnosticsLine state={useDiagnostics()} />;
+}
+
 export function MachineBody({
   reading,
   fixture,
@@ -203,10 +241,15 @@ export function MachineBody({
   const machine = machineOf(reading);
   const [picked, setPicked] = useState<GroupKey | null | undefined>(group);
   if (!machine)
-    return reading.state === "failed" ? (
-      <OutcomeLine kind="error" label={`machine reading failed: ${reading.message}`} />
-    ) : (
-      <OutcomeLine kind="busy" label="reading this machine" />
+    return (
+      <div className="flex min-w-0 flex-col gap-1.5" data-shell={shell} aria-label="this machine">
+        {reading.state === "failed" ? (
+          <OutcomeLine kind="error" label={`machine reading failed: ${reading.message}`} />
+        ) : (
+          <OutcomeLine kind="busy" label="reading this machine" />
+        )}
+        <Diagnostics />
+      </div>
     );
   const gap = disconnected(reading);
   const open = picked === undefined ? autoOpen(machine) : picked;
@@ -261,6 +304,7 @@ export function MachineBody({
         ]}
       />
       <HostFooter machine={machine} shell={shell} fixture={fixture} />
+      <Diagnostics />
     </div>
   );
 }

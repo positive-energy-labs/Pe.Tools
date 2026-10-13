@@ -1,5 +1,7 @@
 import { Component, Suspense, useRef, type Key, type ReactNode } from "react";
 
+import { reportFault } from "#/host/diagnostics";
+
 import { HelpTip } from "#/components/lang/help";
 import { KeyScope } from "#/route/keys";
 import { Button } from "#/components/lang/button";
@@ -57,6 +59,11 @@ class PaneErrorBoundary extends Component<
 
   static getDerivedStateFromError(error: unknown) {
     return { failed: true, message: error instanceof Error ? error.message : String(error) };
+  }
+
+  // The pane boundary owns its fault; an inner boundary that caught first owns its own.
+  componentDidCatch(error: unknown) {
+    reportFault({ code: "pane.failed" }, error);
   }
 
   render() {

@@ -3,7 +3,11 @@ import { readingKey, type Reading } from "@pe/agent-contracts";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
+import { reportFault } from "#/host/diagnostics";
+
 import { PeReadings, readingAtom } from "./readings";
+
+vi.mock("#/host/diagnostics", () => ({ reportFault: vi.fn() }));
 
 const request = { kind: "machine" } as const;
 
@@ -31,6 +35,7 @@ function setup() {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.mocked(reportFault).mockClear();
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -51,7 +56,32 @@ test("a host that sends no frame fails the reading after 30 s", async () => {
     state: "failed",
     message: "The host sent no reading in 30 s.",
   });
-  expect(console.error).toHaveBeenCalledTimes(1);
+  // One owner: the typed fact names the subject kind, never the serialized key.
+  expect(reportFault).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(reportFault).mock.calls[0]![0]).toEqual({
+    code: "reading.timeout",
+    elapsedMs: 30_000,
+    readingKind: "machine",
+  });
+  expect(console.error).not.toHaveBeenCalled();
+  unsubscribe();
+  readings.close();
+});
+
+test("a lost stream is one fault per outage, not one per reconnect attempt", async () => {
+  const { readings, sources, unsubscribe } = setup();
+  await vi.advanceTimersByTimeAsync(0);
+  sources[0]!.onerror!();
+  expect(reportFault).not.toHaveBeenCalled(); // never opened: the deadline owns this silence
+  await vi.advanceTimersByTimeAsync(1_000);
+  sources[1]!.onopen!();
+  sources[1]!.onerror!();
+  await vi.advanceTimersByTimeAsync(1_000);
+  sources[2]!.onerror!();
+  await vi.advanceTimersByTimeAsync(1_000);
+  sources[3]!.onerror!();
+  expect(reportFault).toHaveBeenCalledTimes(1);
+  expect(reportFault).toHaveBeenCalledWith({ code: "stream.failed", streamKind: "readings" });
   unsubscribe();
   readings.close();
 });

@@ -1,13 +1,5 @@
 import { EndpointError } from "./endpoint-error";
-import {
-  Component,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ErrorInfo,
-  type ReactNode,
-} from "react";
+import { Component, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import {
   DIAGRAM_TOOL_ID,
@@ -50,6 +42,7 @@ import { isPdf, openPdf } from "./open-pdf";
 import { Thumbnail } from "./thumbnail";
 import { useCopy } from "#/lib/use-copy";
 import { startFeedback } from "#/components/feedback-picker";
+import { reportFault } from "#/host/diagnostics";
 import {
   transcriptSegments,
   type CallPart,
@@ -424,8 +417,8 @@ class PartsBoundary extends Component<{ children: ReactNode }, { error?: string 
   static getDerivedStateFromError(error: unknown) {
     return { error: error instanceof Error ? error.message : String(error) };
   }
-  componentDidCatch(error: unknown, info: ErrorInfo) {
-    console.error("[workbench] message-part render failed", error, info.componentStack);
+  componentDidCatch(error: unknown) {
+    reportFault({ code: "parts.failed" }, error);
   }
   render(): ReactNode {
     if (this.state.error)
