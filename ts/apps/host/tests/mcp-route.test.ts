@@ -404,7 +404,31 @@ test("initialize ignores x-pe-thread and retains only a verified caller context"
     expect(contexts[1]!.caller).toMatchObject({ kind: "pea", thread: "own-thread" });
     expect(contexts[1]!.headers!["x-pe-context"]).toBe(token);
     expect(contexts.every((context) => !("x-pe-thread" in context.headers!))).toBe(true);
+    await door.close();
+    expect(callerOf({ kind: "local" }, { "x-pe-context": token })).toMatchObject({
+      caller: { kind: "pea", thread: "own-thread" },
+    });
   } finally {
     retireContext(token);
+  }
+});
+
+test("an MCP session cannot borrow another thread's context on the same local principal", async () => {
+  const f = await fixture();
+  const first = mintContext({ kind: "pea", thread: "first" });
+  const second = mintContext({ kind: "pea", thread: "second" });
+  try {
+    const session = await f.init({ ...local, "x-pe-context": first });
+    expect(
+      (
+        await f.send(
+          { jsonrpc: "2.0", id: 2, method: "tools/list" },
+          { ...session, "x-pe-context": second },
+        )
+      ).status,
+    ).toBe(403);
+  } finally {
+    retireContext(first);
+    retireContext(second);
   }
 });

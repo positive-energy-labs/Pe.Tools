@@ -2,12 +2,13 @@ import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import { HttpEffect, HttpRouter } from "effect/unstable/http";
 import { createPeaMcpServer, WebStandardStreamableHTTPServerTransport } from "@pe/mcps/server";
-import { invocationContext, type InvocationContext, type RequestPrincipal } from "@pe/mcps/context";
+import { invocationContext, type InvocationContext } from "@pe/mcps/context";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
 import { callerOf, mintContext, retireContext } from "./control.ts";
 
 const version = "2025-11-25";
-const principalKey = (principal: RequestPrincipal) => JSON.stringify(principal);
+const principalKey = (context: InvocationContext) =>
+  JSON.stringify([context.principal, context.caller ?? { kind: "anonymous" }]);
 const error = (status: number, message: string) =>
   Response.json({ jsonrpc: "2.0", id: null, error: { code: -32000, message } }, { status });
 
@@ -30,8 +31,8 @@ export function createMcpDoor(hostBaseUrl: () => string, makeServer = createPeaM
       const id = request.headers.get("mcp-session-id");
       let session = id ? sessions.get(id) : undefined;
       if (id && !session) return error(404, "Unknown MCP session.");
-      if (session && session.principal !== principalKey(caller.principal))
-        return error(403, "MCP session is bound to a different principal.");
+      if (session && session.principal !== principalKey(caller))
+        return error(403, "MCP session is bound to a different principal or caller context.");
       if (request.method === "GET")
         return new Response(null, { status: 405, headers: { allow: "POST, DELETE" } });
       if (request.method !== "POST" && request.method !== "DELETE")
@@ -107,7 +108,7 @@ export function createMcpDoor(hostBaseUrl: () => string, makeServer = createPeaM
           },
         });
         session = {
-          principal: principalKey(caller.principal),
+          principal: principalKey(caller),
           context,
           transport,
           server,
