@@ -90,6 +90,7 @@ import {
 } from "./page-libraries.ts";
 import { join } from "node:path";
 import { importShippedPods } from "./installed-pods.ts";
+import { migratePodManifests } from "./pod-manifest-migration.ts";
 import { receiptQuerySchema } from "@pe/agent-contracts";
 import {
   feedbackSchema,
@@ -527,6 +528,7 @@ export function createContributionContent(options: {
   let observedAt = 0;
   let pending = false;
   let initialized: Promise<unknown> | undefined;
+  let admitted: readonly AdmittedPackage[] = [];
   const remember = (key: string, value: { sha256: string } & Record<string, unknown>) => {
     let versions = revisions.get(key);
     if (!versions) revisions.set(key, (versions = new Map()));
@@ -534,9 +536,41 @@ export function createContributionContent(options: {
     if (versions.size > 4) versions.delete(versions.keys().next().value!);
     latest.set(key, value);
   };
+  /** Scratch Page rows with their content remembered for member reads. */
+  function pageRows(
+    descriptors: readonly PageDescriptor[],
+    projections: ReadonlyMap<string | null, { openUrl: string; pane: string }>,
+  ): Capability[] {
+    return descriptors
+      .filter((p) => p.key !== null && p.openUrl !== null)
+      .filter((p) => parseContributionKey(p.key!)?.packageId === "pages")
+      .map((p) => {
+        const ref = parseContributionKey(p.key!)!;
+        remember(p.key!, {
+          content: new TextDecoder().decode(p.entry.bytes),
+          bytesBase64: Buffer.from(p.entry.bytes).toString("base64"),
+          sha256: p.entry.sha256,
+        });
+        return {
+          key: p.key!,
+          kind: "page",
+          title: p.title,
+          description: "Page shared state and binding.",
+          needs: "nothing",
+          mutates: false,
+          actor: "any",
+          input: {},
+          source: "pages",
+          rank: 1,
+          package: { id: "pages", path: `${ref.path}/index.html`, sha256: p.entry.sha256 },
+          projection: projections.get(p.key),
+        };
+      });
+  }
   async function build(): Promise<CapabilityContent> {
     await (initialized ??= options.bootstrap?.() ?? Promise.resolve());
     const listing = await (options.packages ?? listPackages)();
+    admitted = listing.packages;
     const allDescriptors = options.pages
       ? await options.pages(listing.packages)
       : [
@@ -637,30 +671,7 @@ export function createContributionContent(options: {
         sha256: entry.sha256,
       });
     }
-    const pages: Capability[] = descriptors
-      .filter((p) => parseContributionKey(p.key!)?.packageId === "pages")
-      .map((p) => {
-        const ref = parseContributionKey(p.key!)!;
-        remember(p.key!, {
-          content: new TextDecoder().decode(p.entry.bytes),
-          bytesBase64: Buffer.from(p.entry.bytes).toString("base64"),
-          sha256: p.entry.sha256,
-        });
-        return {
-          key: p.key!,
-          kind: "page",
-          title: p.title,
-          description: "Page shared state and binding.",
-          needs: "nothing",
-          mutates: false,
-          actor: "any",
-          input: {},
-          source: "pages",
-          rank: 1,
-          package: { id: "pages", path: `${ref.path}/index.html`, sha256: p.entry.sha256 },
-          projection: pageProjections.get(p.key),
-        };
-      });
+    const pages = pageRows(descriptors, pageProjections);
     return {
       packages,
       skills: publication.skills,
@@ -686,6 +697,22 @@ export function createContributionContent(options: {
       }
       return snapshot;
     },
+    /** Scratch Pages are files an agent writes at any moment; they are never served from the 30 s snapshot. */
+    pages: async () => {
+      const descriptors = options.pages
+        ? await options.pages(admitted)
+        : await scratchPageDescriptors(join(options.worldRoot, "Pages"));
+      return pageRows(
+        descriptors,
+        new Map(
+          descriptors.flatMap((p) =>
+            p.key !== null && p.openUrl !== null
+              ? [[p.key, { openUrl: p.openUrl, pane: "page" }] as const]
+              : [],
+          ),
+        ),
+      );
+    },
     member: (key: string, sha256?: string) =>
       sha256 ? revisions.get(key)?.get(sha256) : latest.get(key),
   };
@@ -704,6 +731,7 @@ export function makeHostPeRoutes(
   const content = createContributionContent({
     worldRoot,
     bootstrap: async () => {
+      await migratePodManifests();
       const imported = await importShippedPods();
       const refused = imported.outcomes.filter((outcome) => outcome.outcome === "refused");
       if (refused.length)
@@ -783,6 +811,7 @@ export function makeHostPeRoutes(
     registrations,
     machine: () => machine.refresh(),
     content: content.read,
+    pages: content.pages,
   });
   const routes = createPeRoutes({
     registrations,

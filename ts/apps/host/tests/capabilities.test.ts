@@ -12,7 +12,7 @@ import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
 import { makeHttpLive } from "../src/app.ts";
 import { createContributionContent, createPeRoutes } from "../src/pe-routes.ts";
 import { listPackages } from "../src/packages.ts";
-import { buildCapabilities } from "@pe/mcps";
+import { buildCapabilities, createCapabilityCatalogSource } from "@pe/mcps";
 import { findCapabilities } from "@pe/agent-contracts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
 
@@ -375,6 +375,32 @@ test("a slow import retains one pending publication when the catalog TTL passes"
     clock.mockRestore();
     release();
     await Promise.allSettled([first, second]);
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("a Page written after the catalog snapshot is addressable at once, by any caller", async () => {
+  const home = mkdtempSync(join(tmpdir(), "pe-page-fresh-"));
+  try {
+    const content = createContributionContent({
+      worldRoot: home,
+      packages: async () => ({ packages: [], unreadable: [] }),
+    });
+    const source = createCapabilityCatalogSource({
+      hostBaseUrl: "http://127.0.0.1:9",
+      registrations: [],
+      machine: async () => machineFixture(),
+      content: content.read,
+      pages: content.pages,
+    });
+    vi.stubGlobal("fetch", async () => Response.json({ operations: [], recents: [] }));
+    const keys = async () => (await source.read()).capabilities.map((c) => c.key);
+    expect(await keys()).not.toContain("page:@pages/probe");
+    mkdirSync(join(home, "Pages", "probe"), { recursive: true });
+    writeFileSync(join(home, "Pages", "probe", "index.html"), "<title>Probe</title>");
+    expect(await keys()).toContain("page:@pages/probe");
+  } finally {
+    vi.unstubAllGlobals();
     rmSync(home, { recursive: true, force: true });
   }
 });

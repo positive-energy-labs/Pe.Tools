@@ -319,6 +319,8 @@ export function createCapabilityCatalogSource(options: {
   registrations: readonly RouteRegistration[];
   machine: () => Promise<Machine>;
   content?: () => Promise<CapabilityContent>;
+  /** Scratch Pages read fresh on every catalog read, whatever the cached snapshot holds. */
+  pages?: () => Promise<readonly Capability[]>;
 }): CapabilityCatalogSource {
   const base = options.hostBaseUrl.replace(/\/$/, "");
   const routes = options.registrations.map((registration) => registration.spec);
@@ -328,11 +330,23 @@ export function createCapabilityCatalogSource(options: {
     invalidate: () => cache.clear(),
     // Recents are the machine's, not the scope's: one source, its own cache and budget.
     read: async (scope = {}) => {
-      const [catalog, recent, machine] = await Promise.all([
+      const [scoped, recent, machine, pages] = await Promise.all([
         readScoped(scope),
         recents(),
         options.machine(),
+        options.pages?.().catch(() => undefined),
       ]);
+      const catalog = pages
+        ? {
+            ...scoped,
+            capabilities: [
+              ...scoped.capabilities.filter(
+                (row) => !(row.kind === "page" && row.package?.id === "pages"),
+              ),
+              ...pages,
+            ],
+          }
+        : scoped;
       return {
         ...catalog,
         machine,
