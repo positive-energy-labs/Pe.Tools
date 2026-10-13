@@ -5,9 +5,22 @@ import {
   nativeTitlebarArea,
   nativeNavigationHistory,
   usableOverlay,
+  surfaceDestination,
 } from "./surface-host";
 
 describe("surface host admission", () => {
+  it("keeps exactly the three declared tray routes local and hands all other registered tools to a full window", () => {
+    const origin = "https://tools.example";
+    for (const path of ["/open", "/machine", "/pea"])
+      expect(surfaceDestination("tray", `${path}?shell=tray#detail`, origin)).toBe("local");
+    for (const path of ["/families", "/settings", "/"]) {
+      expect(surfaceDestination("tray", path, origin)).toBe("window");
+      expect(surfaceDestination("web", path, origin)).toBe("local");
+      expect(surfaceDestination("pwa", path, origin)).toBe("local");
+    }
+    expect(surfaceDestination("tray", "/api/private", origin)).toBeNull();
+    expect(surfaceDestination("tray", "https://elsewhere.example/families", origin)).toBeNull();
+  });
   it("accepts explicit native history booleans and refuses partial or coerced capabilities", () => {
     expect(
       nativeNavigationHistory({ type: "navigation-history", canGoBack: true, canGoForward: false }),

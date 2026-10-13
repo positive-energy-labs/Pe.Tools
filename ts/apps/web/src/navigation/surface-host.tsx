@@ -4,11 +4,12 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
-import { useRouterState } from "@tanstack/react-router";
-import type { AppSurface } from "@pe/agent-contracts";
+import { useRouter, useRouterState } from "@tanstack/react-router";
+import { appRouteMount, type AppSurface } from "@pe/agent-contracts";
 import { admittedDestination } from "./model";
 
 type Overlay = {
@@ -39,6 +40,20 @@ export interface SurfaceHost {
   nativeHistory: { canGoBack: boolean; canGoForward: boolean } | null;
   navigateNativeHistory(direction: "back" | "forward"): boolean;
   openFullWindow(destination: string): boolean;
+  navigationRefusal: string | null;
+}
+
+/** One destination policy for router changes, ordinary links and native document navigation. */
+export function surfaceDestination(
+  surface: AppSurface,
+  destination: string,
+  origin: string,
+): "local" | "window" | null {
+  const admitted = admittedDestination(destination, origin);
+  if (!admitted) return null;
+  return surface === "tray" && !appRouteMount(new URL(admitted, origin).pathname, "tray")
+    ? "window"
+    : "local";
 }
 
 export function nativeNavigationHistory(message: unknown): SurfaceHost["nativeHistory"] {
@@ -126,6 +141,7 @@ const webHost: SurfaceHost = {
   nativeHistory: null,
   navigateNativeHistory,
   openFullWindow,
+  navigationRefusal: null,
 };
 const Context = createContext<SurfaceHost>(webHost);
 
@@ -147,7 +163,12 @@ export function projectCaptionTheme(backgroundColor: string, foreground: string,
 }
 
 export function SurfaceHostProvider({ children }: { children: ReactNode }) {
-  const shell = useRouterState({ select: (state) => state.location.search.shell });
+  const router = useRouter();
+  const location = useRouterState({ select: (state) => state.location });
+  const shell = location.search.shell;
+  const navigationRequest = useRef<(destination: string) => void>(() => {});
+  const lastTrayLocation = useRef("/open?shell=tray");
+  const [navigationRefusal, setNavigationRefusal] = useState<string | null>(null);
   const [standalone, setStandalone] = useState(false);
   const [browserArea, setBrowserArea] = useState<SurfaceHost["titlebarArea"]>(null);
   const [nativeArea, setNativeArea] = useState<SurfaceHost["titlebarArea"]>(null);
@@ -157,6 +178,17 @@ export function SurfaceHostProvider({ children }: { children: ReactNode }) {
     const webview = (window as NativeWindow).chrome?.webview;
     setNative(!!webview);
     const syncNative = ({ data }: MessageEvent<unknown>) => {
+      if (
+        typeof data === "object" &&
+        data !== null &&
+        "type" in data &&
+        data.type === "navigation-request" &&
+        "url" in data &&
+        typeof data.url === "string"
+      ) {
+        navigationRequest.current(data.url);
+        return;
+      }
       const history = nativeNavigationHistory(data);
       if (history) {
         setNativeHistory(history);
@@ -200,6 +232,71 @@ export function SurfaceHostProvider({ children }: { children: ReactNode }) {
   const overlay = titlebarArea !== null;
   const open = useCallback(openFullWindow, []);
   const surface: AppSurface = shell === "tray" ? "tray" : standalone || overlay ? "pwa" : "web";
+  const handoff = useCallback((destination: string) => {
+    const opened = openFullWindow(destination);
+    setNavigationRefusal(
+      opened ? null : "The full window could not be opened. The tray stayed on its current route.",
+    );
+    return opened;
+  }, []);
+  navigationRequest.current = (destination) => {
+    const mode = surfaceDestination(surface, destination, window.location.origin);
+    if (mode === "window") {
+      handoff(destination);
+      return;
+    }
+    if (!mode) {
+      setNavigationRefusal("This destination is not a registered app route.");
+      return;
+    }
+    const url = new URL(destination, window.location.origin);
+    const search = Object.fromEntries(url.searchParams);
+    void router.navigate({
+      to: url.pathname,
+      search: { ...search, shell: surface === "tray" ? "tray" : undefined },
+      hash: url.hash.slice(1),
+    });
+  };
+  useEffect(() => {
+    if (surface !== "tray") return;
+    const decide = (destination: string) =>
+      surfaceDestination(surface, destination, window.location.origin);
+    const unblock = router.history.block({
+      enableBeforeUnload: false,
+      blockerFn: ({ nextLocation }) => {
+        const mode = decide(nextLocation.href);
+        if (mode === "local") return false;
+        if (mode === "window") handoff(nextLocation.href);
+        else setNavigationRefusal("This destination is not a registered app route.");
+        return true;
+      },
+    });
+    const click = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.target instanceof Node === false)
+        return;
+      const anchor =
+        event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
+      if (!anchor || anchor.hasAttribute("download")) return;
+      const mode = decide(anchor.href);
+      if (!mode) return;
+      event.preventDefault();
+      navigationRequest.current(anchor.href);
+    };
+    document.addEventListener("click", click);
+    return () => {
+      unblock();
+      document.removeEventListener("click", click);
+    };
+  }, [surface, router, handoff]);
+  useEffect(() => {
+    if (surface !== "tray") return;
+    if (surfaceDestination(surface, location.href, window.location.origin) === "local") {
+      lastTrayLocation.current = location.href;
+      return;
+    }
+    navigationRequest.current(location.href);
+    void router.navigate({ href: lastTrayLocation.current, replace: true, ignoreBlocker: true });
+  }, [surface, location.href, router]);
   const value = useMemo<SurfaceHost>(
     () => ({
       surface,
@@ -212,8 +309,9 @@ export function SurfaceHostProvider({ children }: { children: ReactNode }) {
       nativeHistory,
       navigateNativeHistory,
       openFullWindow: open,
+      navigationRefusal,
     }),
-    [surface, overlay, titlebarArea, native, nativeHistory, open],
+    [surface, overlay, titlebarArea, native, nativeHistory, open, navigationRefusal],
   );
   return <Context value={value}>{children}</Context>;
 }

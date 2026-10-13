@@ -7,6 +7,29 @@ namespace Pe.Host.Tray.Tests;
 
 public class TrayLaunchTests {
     [Test]
+    public void ReadyRendererReceivesEverySameOriginRouteWithoutNativeRoutePolicy() {
+        const string origin = "http://127.0.0.1:5175";
+        foreach (var path in new[] { "/open", "/pea?thread=one%2Ftwo", "/settings?section=providers", "/families?target=one#cell", "/future-route" }) {
+            Assert.That(TrayContext.TryGetNavigationRequest(false, origin + path, origin, out _), Is.False);
+            Assert.That(TrayContext.TryGetNavigationRequest(true, origin + path, origin, out var destination), Is.True);
+            Assert.That(destination, Is.EqualTo(origin + path));
+        }
+        Assert.That(TrayContext.TryGetNavigationRequest(true, origin + "/open?shell=tray&document=one", origin, out var canonical), Is.True);
+        Assert.That(canonical, Is.EqualTo(origin + "/open?document=one"));
+        foreach (var rejected in new[] { "http://127.0.0.1:5176/open", "https://example.com/open", origin + "/open?token=secret",
+            origin + "/open?%74oken=secret", "http://user:password@127.0.0.1:5175/open" })
+            Assert.That(TrayContext.TryGetNavigationRequest(true, rejected, origin, out _), Is.False, rejected);
+    }
+
+    [Test]
+    public void NativeFullReloadAndBootBypassRelayUntilTheNewRendererIsReady() {
+        const string current = "http://127.0.0.1:5175/open?shell=tray";
+        Assert.That(TrayContext.ShouldRelayNavigation(false, current + "#changed", current), Is.False);
+        Assert.That(TrayContext.ShouldRelayNavigation(true, current, current), Is.False);
+        Assert.That(TrayContext.ShouldRelayNavigation(true, current + "#changed", current), Is.True);
+        Assert.That(TrayContext.ShouldRelayNavigation(true, "http://127.0.0.1:5175/settings", current), Is.True);
+    }
+    [Test]
     public void RehomeScalesItsScreenGutterAndClampsOnSmallAndOffsetMonitors() {
         var work = new System.Drawing.Rectangle(-1920, -100, 1920, 1080);
         var at96 = TrayWindow.HomeBoundsFor(work, 96);

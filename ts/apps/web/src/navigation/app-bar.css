@@ -29,6 +29,9 @@
   gap: 0.5rem;
   order: 2;
 }
+.pe-appbar[data-shell="tray"] .pe-appbar-commands {
+  margin-inline-start: auto;
+}
 .pe-appbar-command-seam {
   order: 3;
   height: var(--control-h);

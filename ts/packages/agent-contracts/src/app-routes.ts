@@ -318,7 +318,7 @@ export const APP_ROUTES: readonly AppRoute[] = [
     aliases: "Pea",
     runtimeNeed: "Host settings",
     directory: true,
-    mounts: compactMounts,
+    mounts: fullMounts,
   },
   {
     key: "design-system",
@@ -369,7 +369,7 @@ export const APP_ROUTES: readonly AppRoute[] = [
     aliases: "home tools directory",
     runtimeNeed: "Host navigation",
     directory: false,
-    mounts: compactMounts,
+    mounts: fullMounts,
   },
   {
     key: "machine",

@@ -60,6 +60,7 @@ import {
   oneThreadRefusal,
   threadVerbs,
   type ThreadActivity,
+  type ThreadFilter,
   type ThreadShelf,
   type TargetRead,
   type ThreadVerb,
@@ -546,6 +547,7 @@ export function ThreadsSidebar({
 }) {
   const host = useSurfaceHost();
   const compactRows = compactRowsOverride ?? host.surface === "tray";
+  const [filter, setFilter] = useState<ThreadFilter>(host.surface === "tray" ? "inbox" : "all");
   const [query, setQuery] = useState("");
   const [now, setNow] = useState(Date.now);
   const previousThreads = useRef(new Map<string, RosterThread>());
@@ -587,10 +589,10 @@ export function ThreadsSidebar({
   const archivedHere = threads.find(
     (thread) => thread.id === currentThreadId && thread.lifecycle.status === "archived",
   );
-  const roster = { query, filter: "all", target, provider, state } as const;
+  const roster = { query, filter, target, provider, state, now } as const;
   const shown = [
     ...visibleThreads(threads, { ...roster, unread }),
-    ...(archivedHere ? [archivedHere] : []),
+    ...(archivedHere && filter === "all" ? [archivedHere] : []),
   ];
   const unreadCount = visibleThreads(threads, { ...roster, unread: true }).length;
   const facets = useMemo(
@@ -657,6 +659,21 @@ export function ThreadsSidebar({
           </>
         }
       />
+      <div role="group" aria-label="Thread list" className="flex flex-wrap gap-1">
+        {(["inbox", "all", "archived"] as const).map((choice) => (
+          <Button
+            key={choice}
+            label={choice === "inbox" ? "Inbox" : choice === "all" ? "All" : "Archived"}
+            pressed={filter === choice}
+            onClick={() => {
+              setFilter(choice);
+              clearSelection();
+            }}
+          >
+            {choice === "inbox" ? "Inbox" : choice === "all" ? "All" : "Archived"}
+          </Button>
+        ))}
+      </div>
       <NavigationFilters>
         <NavigationFilter
           label="Target"
@@ -725,7 +742,7 @@ export function ThreadsSidebar({
         {shelves.map(({ shelf, all }, index) => {
           const compact = shelf === "settled" || shelf === "snoozed" || shelf === "archived";
           // The settled tail pages (T3: 10, then 25 at a time) and always keeps the open thread.
-          const paged = shelf === "settled" && !query;
+          const paged = shelf === "settled" && !query && filter === "all";
           const items = paged
             ? all.filter((thread, index) => index < settledLimit || thread.id === currentThreadId)
             : all;
@@ -738,7 +755,9 @@ export function ThreadsSidebar({
               dim={shelf === "settled" || shelf === "archived"}
               persist={shelf}
               stack={{ index, of: shelves.length }}
-              forceOpen={!!query || items.some((item) => item.id === currentThreadId)}
+              forceOpen={
+                filter !== "all" || !!query || items.some((item) => item.id === currentThreadId)
+              }
               onDrop={
                 shelf === "active" || shelf === "pinned" || shelf === "settled"
                   ? (id) =>
@@ -781,7 +800,12 @@ export function ThreadsSidebar({
                   state={
                     shelf === "snoozed"
                       ? wakeLabel(new Date(thread.lifecycle.snoozedUntil!), new Date(now))
-                      : (activityWord(thread) ?? (woken.has(thread.id) ? "Woke" : undefined))
+                      : (activityWord(thread) ??
+                        (filter === "inbox" && isUnread(thread)
+                          ? "Unread"
+                          : woken.has(thread.id)
+                            ? "Woke"
+                            : undefined))
                   }
                   stateTone={
                     thread.activity.state === "failed"

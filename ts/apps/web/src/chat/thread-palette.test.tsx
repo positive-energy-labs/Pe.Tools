@@ -9,15 +9,24 @@ import { ThreadDialog, ThreadsSidebar } from "./thread-palette";
 
 afterEach(cleanup);
 
+const surface = vi.hoisted(() => ({ value: "web" }));
+vi.mock("#/navigation/surface-host", () => ({
+  useSurfaceHost: () => ({ surface: surface.value }),
+}));
+afterEach(() => {
+  surface.value = "web";
+});
+
 const threads = () => demoThreads({ ...emptyChatState(), id: "open", title: "Open" });
 
 function mount(
   onUpdate = vi.fn(async (_id: string, _change: UpdateThreadRequest) => true),
   compactRows = false,
+  roster = threads(),
 ) {
   render(
     <ThreadsSidebar
-      threads={threads() as never}
+      threads={roster as never}
       currentThreadId="open"
       providers={[]}
       onSelect={vi.fn()}
@@ -35,6 +44,64 @@ function mount(
 }
 const row = (title: string) =>
   screen.getByText(title).closest<HTMLElement>("[data-navigation-item] .dl-row")!;
+
+test("tray defaults to real Inbox work, while All and Archived retain every thread", () => {
+  surface.value = "tray";
+  const base = threads()[0]!;
+  const idle = {
+    ...base,
+    id: "idle",
+    title: "Resting work",
+    activity: { ...base.activity, state: "idle" as const, pending: 0, lastSeq: 0 },
+    lifecycle: {
+      ...base.lifecycle,
+      status: "active" as const,
+      readSeq: 0,
+      explicitUnread: false,
+      snoozedUntil: null,
+    },
+  };
+  const working = {
+    ...idle,
+    id: "running",
+    title: "Working now",
+    activity: { ...idle.activity, state: "running" as const },
+  };
+  const waiting = {
+    ...idle,
+    id: "waiting",
+    title: "Owner answer",
+    activity: { ...idle.activity, state: "waiting" as const },
+  };
+  const finished = {
+    ...idle,
+    id: "finished",
+    title: "Finished unread",
+    lifecycle: { ...idle.lifecycle, status: "settled" as const, explicitUnread: true },
+  };
+  const archived = {
+    ...idle,
+    id: "archived",
+    title: "Archived work",
+    lifecycle: { ...idle.lifecycle, status: "archived" as const },
+  };
+  mount(
+    vi.fn(async () => true),
+    false,
+    [idle, working, waiting, finished, archived],
+  );
+  expect(screen.getByRole("button", { name: "Inbox" }).getAttribute("aria-pressed")).toBe("true");
+  expect(screen.getByText("Working now")).toBeTruthy();
+  expect(screen.getByText("Owner answer")).toBeTruthy();
+  expect(screen.getByText("Finished unread")).toBeTruthy();
+  expect(screen.queryByText("Resting work")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "All" }));
+  expect(screen.getByText("Resting work")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Archived" }));
+  expect(screen.getByText("Archived work")).toBeTruthy();
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "archived" } });
+  expect(screen.getByText("Archived work")).toBeTruthy();
+});
 
 function expectTimeBeforeProvider(element: HTMLElement) {
   const trail = element.querySelector(".pe-thread-trail")!;

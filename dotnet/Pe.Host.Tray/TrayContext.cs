@@ -21,6 +21,7 @@ internal sealed class TrayContext : ApplicationContext {
     private readonly System.Windows.Forms.Timer _health = new() { Interval = 3_000 };
     private readonly CancellationTokenSource _stop = new();
     private bool _ready;
+    private bool _rendererReady;
     private bool _hasPage;
     private bool _navigating;
     private bool _checking;
@@ -130,7 +131,7 @@ internal sealed class TrayContext : ApplicationContext {
                     if (current != _service) {
                         if (_ready && _web.Source is { } source && IsViewUrl(source.AbsoluteUri))
                             _pendingPath = source.PathAndQuery;
-                        _service = current; _hasPage = false;
+                        _service = current; _hasPage = false; _rendererReady = false;
                     }
                     return true;
                 }
@@ -178,12 +179,16 @@ internal sealed class TrayContext : ApplicationContext {
             core.NavigationStarting += (_, e) => {
                 if (!IsOriginalService()) { e.Cancel = true; return; }
                 if (!IsViewUrl(e.Uri)) { e.Cancel = true; OpenExternalUrl(e.Uri, e.IsUserInitiated); }
-                else _navigating = true;
+                else if (ShouldRelayNavigation(_rendererReady, e.Uri, _web.Source?.AbsoluteUri)) { e.Cancel = true; RelayNavigation(e.Uri); }
+                else { _rendererReady = false; _navigating = true; }
             };
             core.NewWindowRequested += (_, e) => {
                 e.Handled = true;
                 if (!IsOriginalService() || !e.IsUserInitiated) return;
-                if (IsViewUrl(e.Uri)) OpenWindow(e.Uri);
+                if (IsViewUrl(e.Uri)) {
+                    if (_rendererReady) RelayNavigation(e.Uri);
+                    else OpenWindow(e.Uri);
+                }
                 else OpenExternalUrl(e.Uri, true);
             };
             core.WebMessageReceived += (_, e) => {
@@ -193,7 +198,10 @@ internal sealed class TrayContext : ApplicationContext {
                     var payload = message.RootElement;
                     if (payload.ValueKind == JsonValueKind.Object
                         && payload.TryGetProperty("type", out var readyType) && readyType.ValueKind == JsonValueKind.String
-                        && readyType.GetString() == "chrome-ready") { PostTitlebarGeometry(); PostNavigationHistory(); return; }
+                        && readyType.GetString() == "chrome-ready") {
+                        _rendererReady = true;
+                        PostTitlebarGeometry(); PostNavigationHistory(); return;
+                    }
                     if (TryReadHistoryCommand(payload, _web.CoreWebView2.CanGoBack, _web.CoreWebView2.CanGoForward, out var back)) {
                         if (back) _web.CoreWebView2.GoBack(); else _web.CoreWebView2.GoForward();
                         return;
@@ -253,6 +261,24 @@ internal sealed class TrayContext : ApplicationContext {
             type = "navigation-history", canGoBack = _web.CoreWebView2.CanGoBack, canGoForward = _web.CoreWebView2.CanGoForward
         })); } catch (Exception error) when (error is InvalidOperationException or COMException) { }
     }
+
+    private void RelayNavigation(string value) {
+        // The current renderer owns route policy; an intercepted load must not become a health retry.
+        _pendingPath = null; _navigating = false; _hasPage = true;
+        if (_closing || !IsOriginalService()
+            || !TryGetNavigationRequest(_rendererReady, value, _service.ViewOrigin, out var destination)) return;
+        try { _web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new {
+            type = "navigation-request", url = destination
+        })); } catch (Exception error) when (error is InvalidOperationException or COMException) { }
+    }
+
+    internal static bool TryGetNavigationRequest(bool rendererReady, string value, string origin, out string destination) {
+        destination = "";
+        return rendererReady && TryGetWindowUrl(value, origin, out destination);
+    }
+
+    internal static bool ShouldRelayNavigation(bool rendererReady, string destination, string? currentUrl) =>
+        rendererReady && !destination.Equals(currentUrl, StringComparison.Ordinal);
 
     internal static bool TryReadHistoryCommand(JsonElement payload, bool canGoBack, bool canGoForward, out bool back) {
         back = false;

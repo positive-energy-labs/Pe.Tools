@@ -13,7 +13,20 @@ import {
 
 export type ThreadShelf = "active" | "pinned" | "snoozed" | "settled" | "archived";
 /** The roster (everything not archived) or the archive; shelves, not filters, sort the rest. */
-export type ThreadFilter = "all" | "archived";
+export type ThreadFilter = "inbox" | "all" | "archived";
+
+/** Inbox observes work in flight and answers the user has not read; pinning alone is not work. */
+export function inThreadInbox(thread: HarnessThreadSummary, now = Date.now()): boolean {
+  if (thread.activity.state === "running") return true;
+  const shelf = shelfOf(thread, now);
+  if (shelf === "archived" || shelf === "snoozed") return false;
+  return (
+    thread.activity.pending > 0 ||
+    thread.activity.state === "waiting" ||
+    thread.activity.state === "failed" ||
+    isUnread(thread)
+  );
+}
 export function relativeThreadAge(at: string, now = Date.now()): string {
   const timestamp = Date.parse(at);
   if (!Number.isFinite(timestamp)) return "—";
@@ -197,7 +210,9 @@ export function visibleThreads<T extends HarnessThreadSummary & TargetRead>(
       if (options.provider !== "*" && thread.providerId !== options.provider) return false;
       if (options.state !== "*" && threadActivity(thread) !== options.state) return false;
       if (options.unread && !isUnread(thread)) return false;
-      if (
+      if (options.filter === "inbox") {
+        if (!inThreadInbox(thread, options.now)) return false;
+      } else if (
         options.filter === "archived"
           ? thread.lifecycle.status !== "archived"
           : thread.lifecycle.status === "archived"
