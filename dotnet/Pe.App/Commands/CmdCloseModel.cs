@@ -55,7 +55,7 @@ public class CmdCloseModel : IExternalCommand {
                 ];
         }
         if (h.Empty) return [new Link(CloseOutcome.SaveAndKeepAll, "Close", "You hold nothing in this model.")];
-        var unchanged = h.Elements.Count(e => e.ChangedSinceSync != true) + h.Worksets.Count;
+        var unchanged = h.Elements.Count(e => e.ChangedSinceSync == false) + h.Worksets.Count;
         var links = new List<Link> {
             new(CloseOutcome.SyncAndReleaseAll, "Sync and give back everything",
                 $"Your changes go to {Central(document)}. Nothing stays yours.")
@@ -76,12 +76,14 @@ public class CmdCloseModel : IExternalCommand {
         var lines = new List<string>();
         if (h.Unsaved) lines.Add("In Revit: unsaved changes");
         if (h.SavedNotSynced == true) lines.Add("On this PC: saved changes, not synced");
+        if (h.Workshared && h.SavedNotSynced is null)
+            lines.Add("Warning: whether saved changes on this PC need syncing is unknown. Saving here does not sync them.");
         if (h.Elements.Count + h.Worksets.Count > 0) {
             var changed = h.Elements.Count(e => e.ChangedSinceSync == true);
             var unknown = h.Elements.Any(e => e.ChangedSinceSync is null);
             var asked = h.Elements.Count(e => e.Requesters.Count > 0);
             lines.Add($"In {Central(document)}: you own {Owned(h)}"
-                      + (unknown ? "" : $"; {changed} changed since your last sync")
+                      + (unknown ? $"; {changed} changed since your last sync; some element changes are unknown" : $"; {changed} changed since your last sync")
                       + (asked > 0 ? $"; others asked for {asked}" : ""));
         }
         return string.Join("\n", lines);
