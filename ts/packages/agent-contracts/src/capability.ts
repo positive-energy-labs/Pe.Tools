@@ -5,14 +5,20 @@
  * `needs` filter replace hiding.
  */
 import { z } from "zod";
+import {
+  capabilityProjectionSchema,
+  contributionKindSchema,
+  contributionSourcePath,
+  contributionSourceSchema,
+  parseContributionKey,
+} from "./contribution.ts";
 import type { Machine } from "./machine.ts";
 
 export const capabilityKindSchema = z.enum([
   "op",
   "route-doc",
   "route-command",
-  "pod",
-  "skill",
+  ...contributionKindSchema.options,
   "document",
   "recent",
 ]);
@@ -29,7 +35,7 @@ export type CapabilityNeeds = z.infer<typeof capabilityNeedsSchema>;
 
 export const capabilitySchema = z
   .object({
-    /** `op:revit.catalog.loaded-families`, `route:families.propose`, `pod:sheets.rename`, `skill:build-pod` */
+    /** Compiled keys retain their grammar; packaged keys use the contribution codec. */
     key: z.string().min(1),
     kind: capabilityKindSchema,
     title: z.string(),
@@ -45,10 +51,35 @@ export const capabilitySchema = z
     output: z.record(z.string(), z.unknown()).optional(),
     /** Who generated this row: catalog, route registry, pod.json, skills. */
     source: z.string(),
+    package: contributionSourceSchema.optional(),
+    projection: capabilityProjectionSchema.optional(),
     /** Ranking nudge: the op catalog's DefaultVisible tier ranks first; nothing is hidden. */
     rank: z.number().default(0),
   })
-  .strict();
+  .strict()
+  .superRefine((row, ctx) => {
+    const packaged = contributionKindSchema.safeParse(row.kind).success;
+    const reference = parseContributionKey(row.key);
+    if (
+      packaged &&
+      (!reference ||
+        reference.kind !== row.kind ||
+        !row.package ||
+        row.package.id !== reference.packageId ||
+        row.package.path !== contributionSourcePath(reference))
+    )
+      ctx.addIssue({
+        code: "custom",
+        message: "Packaged capability must name its canonical key and admitted entry bytes",
+      });
+    if (!packaged && (reference || row.package || row.projection))
+      ctx.addIssue({
+        code: "custom",
+        message: "Compiled capability cannot assert package identity",
+      });
+    if (row.kind === "member" && (row.mutates || row.needs !== "nothing"))
+      ctx.addIssue({ code: "custom", message: "Members are read/mention-only" });
+  });
 export type Capability = z.infer<typeof capabilitySchema>;
 
 /** One entry of Revit's per-year recent documents, as `pe-revit doc list --recent` reads it. */
@@ -96,14 +127,6 @@ export function parseRouteKey(key: string): { route: string; member?: string } |
   const rest = key.slice("route:".length);
   const dot = rest.indexOf(".");
   return dot === -1 ? { route: rest } : { route: rest.slice(0, dot), member: rest.slice(dot + 1) };
-}
-
-/** `pod:<workspace>.<entrypoint>` → the two halves; entrypoint ids never contain a dot. */
-export function parsePodKey(key: string): { workspace: string; entrypoint: string } | null {
-  if (!key.startsWith("pod:")) return null;
-  const rest = key.slice("pod:".length);
-  const dot = rest.lastIndexOf(".");
-  return dot === -1 ? null : { workspace: rest.slice(0, dot), entrypoint: rest.slice(dot + 1) };
 }
 
 export interface CapabilityQuery {

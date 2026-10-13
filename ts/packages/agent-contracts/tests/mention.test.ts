@@ -86,7 +86,7 @@ it("mentionOf snapshots a document's session facts and any other row's routing f
   });
 
   const skill: Capability = {
-    key: "skill:build-pod",
+    key: "skill:@product/skills/build-pod",
     kind: "skill",
     title: "build-pod",
     description: "Build a Pod.",
@@ -98,7 +98,7 @@ it("mentionOf snapshots a document's session facts and any other row's routing f
     rank: 0,
   };
   expect(mentionOf(skill, catalog)).toEqual({
-    key: "skill:build-pod",
+    key: "skill:@product/skills/build-pod",
     kind: "skill",
     title: "build-pod",
     takenAt: "2026-10-12T12:00:00.000Z",
@@ -214,7 +214,7 @@ it("recentRows drops templates, labels families, and an open document wins a sha
         documents: [
           {
             openId: "o1",
-            address: "C:\Jobs\Riser.rvt",
+            address: "C:JobsRiser.rvt",
             title: "Riser",
             isFamilyDocument: false,
             isActive: false,
@@ -223,9 +223,9 @@ it("recentRows drops templates, labels families, and an open document wins a sha
       },
     ]),
     recents: [
-      recent("C:\Templates\MEP.rte", "MEP", 1),
-      recent("C:\Families\Damper.rfa", "Damper", 2),
-      recent("C:\Jobs\Riser Old.rvt", "Riser Old", 3),
+      recent("C:TemplatesMEP.rte", "MEP", 1),
+      recent("C:FamiliesDamper.rfa", "Damper", 2),
+      recent("C:JobsRiser Old.rvt", "Riser Old", 3),
     ],
   });
   expect(rows.map((row) => row.title)).toEqual(["Damper", "Riser Old"]);
@@ -237,7 +237,7 @@ it("recentRows drops templates, labels families, and an open document wins a sha
         documents: [
           {
             openId: "o1",
-            address: "C:\Jobs\Riser.rvt",
+            address: "C:JobsRiser.rvt",
             title: "Riser",
             isFamilyDocument: false,
             isActive: false,

@@ -19,6 +19,7 @@ export * from "./target.ts";
 export * from "./caller.ts";
 export * from "./instances.ts";
 export * from "./capability.ts";
+export * from "./contribution.ts";
 export * from "./mention.ts";
 
 export * from "./semantic-actions.ts";

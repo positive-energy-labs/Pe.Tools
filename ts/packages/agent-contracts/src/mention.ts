@@ -5,15 +5,21 @@
  * the one capability catalog and builds a mention with `mentionOf`.
  */
 import { z } from "zod";
-import type { Capability, CapabilityCatalog, CapabilityRecent } from "./capability.ts";
+import {
+  capabilityKindSchema,
+  type Capability,
+  type CapabilityCatalog,
+  type CapabilityRecent,
+} from "./capability.ts";
+import { contributionKindSchema, parseContributionKey } from "./contribution.ts";
 
 const factSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 
 export const mentionSchema = z
   .object({
-    /** The capability row's key: `doc:<session>/<openId>`, `recent:<path>`, `skill:build-pod`. */
+    /** A capability key, not a document address or an effect receipt id. */
     key: z.string().min(1),
-    kind: z.string(),
+    kind: capabilityKindSchema,
     /** What the chip and the `@token` in the text say. */
     title: z.string(),
     /** A small snapshot, read when the mention was made; ids Pea can pass straight to pe_read/pe_do. */
@@ -21,7 +27,13 @@ export const mentionSchema = z
     /** When `facts` were read (ISO). A stale snapshot says so; Pea reads the key again when it matters. */
     takenAt: z.string(),
   })
-  .strict();
+  .strict()
+  .refine(({ key, kind }) => {
+    const reference = parseContributionKey(key);
+    return contributionKindSchema.safeParse(kind).success
+      ? reference?.kind === kind
+      : reference === null;
+  }, "Mention kind must match its canonical contribution key");
 export type Mention = z.infer<typeof mentionSchema>;
 
 /** The key of an open Revit document as a capability row. */
@@ -213,7 +225,15 @@ export function mentionOf(
     kind: row.kind,
     title: row.title,
     takenAt: catalog.at,
-    facts: { description: row.description, needs: row.needs, mutates: row.mutates },
+    facts: {
+      description: row.description,
+      needs: row.needs,
+      mutates: row.mutates,
+      ...(row.package
+        ? { packageId: row.package.id, sourcePath: row.package.path, sha256: row.package.sha256 }
+        : {}),
+      ...(row.projection?.openUrl ? { openUrl: row.projection.openUrl } : {}),
+    },
   };
 }
 

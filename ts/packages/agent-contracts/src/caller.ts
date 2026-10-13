@@ -1,10 +1,8 @@
 import { z } from "zod";
+import { pageKeySchema } from "./contribution.ts";
 import { addressSchema, documentRefSchema, type TargetResolution } from "./target.ts";
 
 /* ── Caller identity (ADR 0017 D2) ───────────────────────────────────────────────────── */
-
-/** D12 shape only: `page:@pages/<slug>` or `page:@<pod>/pages/<page>`. */
-export const pageKeySchema = z.string().regex(/^page:@[^/]+\/.+$/);
 
 /** How a human reached the host: a browser on loopback or the tailnet, or their own terminal. */
 export const humanViaSchema = z.enum(["local", "tailnet", "cli"]);
