@@ -46,6 +46,10 @@
   text-box: trim-end text alphabetic;
   padding-bottom: 0.3rem;
 }
+[data-slot="pane-header"][data-title-align="center"] [data-slot="rail-lead"] {
+  align-items: center;
+  padding-bottom: 0;
+}
 
 /* Pane views share the header's line and use an underline, leaving framed switches to controls. */
 .dl-pane-tabs {

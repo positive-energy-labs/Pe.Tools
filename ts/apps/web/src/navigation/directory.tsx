@@ -1,14 +1,54 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { ChevronRight, Info, RefreshCw } from "lucide-react";
 import { Button } from "#/components/lang/button";
 import { Input } from "#/components/lang/input";
 import { NavigationGroup } from "#/components/lang/navigation";
-import { TASKS, matchingTools, routeKey, friendlyObservation, type Exposure } from "./model";
+import { TASKS, matchingTools, routeKey, friendlyObservation } from "./model";
 import { useDestination, useNavigation } from "./state";
 import { Information } from "./popover";
 import type { NavigationWork } from "./navigation-client";
 import { PrimaryRouteControls } from "./route-controls";
 import { RouteHelpButton } from "#/route/help";
+import { usePublishRouteOptions } from "#/settings/options";
+import type { PageOption } from "#/settings/option-state";
+import type { DirectorySearch } from "./directory-search";
+
+type DirectoryPage = DirectorySearch;
+const directoryOptions: readonly PageOption<DirectoryPage>[] = [
+  {
+    id: "directory.sort",
+    label: "Sort tools",
+    scope: "page",
+    kind: "choice",
+    surfaces: ["web", "pwa"],
+    projections: ["quick"],
+    choices: [
+      { value: "workflow", label: "Task", title: "Group tools by engineering task" },
+      { value: "name", label: "A–Z", title: "Sort all tools by name in two columns" },
+    ],
+    read: (page) => page.sort,
+    patch: (sort) => (sort === "workflow" || sort === "name" ? { sort } : {}),
+  },
+  {
+    id: "directory.exposure",
+    label: "Show tools",
+    scope: "page",
+    kind: "choice",
+    surfaces: ["web", "pwa"],
+    projections: ["quick"],
+    choices: ["All", "Main", "Preview", "Archive"].map((value) => ({
+      value,
+      label: value,
+      title: `Show ${value.toLowerCase()} tools`,
+    })),
+    read: (page) => page.exposure,
+    patch: (exposure) =>
+      exposure === "All" || exposure === "Main" || exposure === "Preview" || exposure === "Archive"
+        ? { exposure }
+        : {},
+  },
+];
 
 export function WorkItem({
   work,
@@ -83,9 +123,16 @@ export function NavigationStatus() {
   );
 }
 export function Directory() {
-  const [query, setQuery] = useState("");
-  const [exposure, setExposure] = useState<Exposure | "All">("All");
-  const [sort, setSort] = useState<"workflow" | "name">("workflow");
+  const page = useSearch({ from: "/" });
+  const navigate = useNavigate({ from: "/" });
+  const { query, exposure, sort } = page;
+  const setPage = useCallback(
+    (patch: Partial<DirectoryPage>) => {
+      void navigate({ to: ".", search: (previous) => ({ ...previous, ...patch }) });
+    },
+    [navigate],
+  );
+  usePublishRouteOptions("index", "Tools", directoryOptions, page, setPage);
   const [collapsed, setCollapsed] = useState<string[]>([]);
   const { snapshot } = useNavigation();
   const go = useDestination();
@@ -94,8 +141,7 @@ export function Directory() {
   );
   if (sort === "name") tools.sort((a, b) => a.title.localeCompare(b.title));
   const reset = () => {
-    setQuery("");
-    setExposure("All");
+    setPage({ query: "", exposure: "All" });
   };
   const renderTool = (tool: ReturnType<typeof matchingTools>[number]) => {
     const works = snapshot?.works.filter((work) => work.route === routeKey(tool.to)) ?? [];
@@ -134,7 +180,7 @@ export function Directory() {
               Runtime availability is not checked by this catalogue. The destination owns target
               selection and action readiness.
             </p>
-            {"satellites" in tool && (
+            {tool.satellites && (
               <div className="mt-3 flex flex-wrap gap-2">
                 {tool.satellites.map((satellite) => (
                   <Button
@@ -178,7 +224,7 @@ export function Directory() {
           aria-label="Search tools and tasks"
           placeholder="Search a task, tool or description…"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => setPage({ query: event.target.value })}
         />
       </div>
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -188,7 +234,7 @@ export function Directory() {
             key={value}
             label={`Show ${value} exposure`}
             pressed={exposure === value}
-            onClick={() => setExposure(value)}
+            onClick={() => setPage({ exposure: value })}
           >
             {value}
           </Button>
@@ -199,7 +245,7 @@ export function Directory() {
             key={value}
             label={`Sort by ${value}`}
             pressed={sort === value}
-            onClick={() => setSort(value)}
+            onClick={() => setPage({ sort: value })}
           >
             {value === "workflow" ? "Workflow" : "A–Z"}
           </Button>

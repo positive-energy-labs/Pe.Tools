@@ -1,7 +1,7 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createServer } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
@@ -413,34 +413,59 @@ export const adminShutdownRoute = HttpRouter.add(
     }),
 );
 
-/** Edge app mode is the desktop window (host ledger 2026-10-08): Edge ships with Windows, `--app`
- * drops the tabs and address bar, and the product's own profile keeps the window apart from the
- * user's browsing. The default browser is the fallback when Edge is absent. */
-export function openWindow(port: number): void {
-  const url = `http://127.0.0.1:${port}/`;
-  const edge = [process.env["ProgramFiles(x86)"], process.env.ProgramFiles]
-    .filter((root): root is string => root !== undefined)
-    .map((root) => join(root, "Microsoft", "Edge", "Application", "msedge.exe"))
-    .find((candidate) => existsSync(candidate));
-  console.log(`pe-host opening ${url}${edge ? " in an Edge app window" : ""}`);
-  // detached: on Windows a non-detached child dies with this process, and the reuse path exits at once.
-  const [command, args] = edge
-    ? [
-        edge,
-        [`--app=${url}`, `--user-data-dir=${join(productRoot(), "edge-app")}`, "--no-first-run"],
-      ]
-    : ["cmd.exe", ["/c", "start", "", url]];
-  // windowsHide only for cmd: it passes SW_HIDE, which a GUI exe may apply to its first window.
-  spawn(command, args, { detached: true, windowsHide: !edge, stdio: "ignore" }).unref();
+/** The native launcher owns PWA identity, registration and the browser's install flow. */
+export async function openWindow(port: number): Promise<void> {
+  const backend = `http://127.0.0.1:${port}/`;
+  const response = await fetch(backend, {
+    headers: { Accept: "text/html" },
+    redirect: "manual",
+    signal: AbortSignal.timeout(60_000),
+  });
+  const location = response.headers.get("location");
+  if (!response.ok && !(response.status >= 300 && response.status < 400 && location))
+    throw Error(`Window page is unavailable (HTTP ${response.status}).`);
+  const destination = new URL(location ?? backend, backend);
+  if (
+    destination.protocol !== "http:" ||
+    destination.hostname !== "127.0.0.1" ||
+    destination.username ||
+    destination.password
+  )
+    throw Error("Window page is not this local frontend.");
+  await response.body?.cancel();
+  const executable =
+    hostOwnership.lane === "installed"
+      ? join(dirname(hostOwnership.executablePath), "tray", "Pe.Host.Tray.exe")
+      : join(
+          hostOwnership.sourceRoot!,
+          ".artifacts",
+          "build",
+          "Pe.Host.Tray",
+          "Debug.R25",
+          "Pe.Host.Tray.exe",
+        );
+  if (!existsSync(executable)) throw Error("Native PWA launcher is not built for this runtime.");
+  await promisify(execFile)(executable, ["--launch-window", destination.href], {
+    windowsHide: true,
+    timeout: 10_000,
+  });
 }
 
-/** The tray's Open window: the same Edge app window as `--open`, authorized by the claim token. */
+/** Same installed-PWA/install flow as the tray and --open, authorized by the claim token. */
 export const adminWindowRoute = HttpRouter.add("POST", "/admin/window", (request) =>
   Effect.gen(function* () {
     const handle = yield* Deferred.await((yield* HostLifecycle).handle);
     if (!authorizeShutdownFor(handle)(request.headers, null))
       return yield* Response.json({ error: "Forbidden" }, { status: 403 });
-    openWindow(handle.serviceFile.port);
+    const opened = yield* Effect.tryPromise(() => openWindow(handle.serviceFile.port)).pipe(
+      Effect.map(() => true),
+      Effect.catch(() => Effect.succeed(false)),
+    );
+    if (!opened)
+      return yield* Response.json(
+        { error: "Could not open the PWA or its install page." },
+        { status: 502 },
+      );
     return yield* Response.json({ opened: true });
   }),
 );

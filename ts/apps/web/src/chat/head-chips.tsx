@@ -3,7 +3,8 @@
  *  fixed (fork to change) and the model and traits go to the thread. */
 import { useState } from "react";
 import { Button } from "#/components/lang/button";
-import { openMachine } from "#/machine/door";
+import { useDestination } from "#/navigation/state";
+import { settingsDestination } from "#/machine/navigation";
 import type { TraitOption } from "@pe/agent-contracts";
 import { Ladder, type Rung } from "#/route/ladder";
 import { ProviderMark } from "#/components/lang/provider-mark";
@@ -94,6 +95,7 @@ const DEFAULT = "pea-default";
 /** provider › model › traits. Rung 1 refuses a provider that is not ready, and, once a thread is
  * bound, every other provider: a thread never changes provider. */
 export function HeadLadder() {
+  const go = useDestination();
   const head = useHead();
   const [open, setOpen] = useState(false);
   const manage = (
@@ -101,7 +103,7 @@ export function HeadLadder() {
       label="Manage providers"
       onClick={() => {
         setOpen(false);
-        openMachine("pea");
+        go(settingsDestination("providers"));
       }}
     >
       Manage providers

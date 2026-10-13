@@ -47,6 +47,46 @@ function KeyMark({ name }: { name: string }) {
     <span data-command-key>{name}</span>
   );
 }
+function ChordFaces({ hotkey, tone }: { hotkey: Chord; tone?: string }) {
+  return (
+    <>
+      <span data-command-keys aria-hidden>
+        <Kbd>
+          <span data-command-symbols data-tone={tone}>
+            {chordLabel(hotkey)
+              .split("+")
+              .map((key, index) => (
+                <KeyMark key={`${key}-${index}`} name={key} />
+              ))}
+          </span>
+        </Kbd>
+      </span>
+      <span data-command-chord>
+        <Kbd>
+          <span data-tone={tone}>{chordLabel(hotkey)}</span>
+        </Kbd>
+      </span>
+    </>
+  );
+}
+/** A noninteractive chord face; the owning control provides activation and key registration. */
+export function HotkeyHint({
+  hotkey,
+  face = "responsive",
+}: {
+  hotkey: Chord;
+  face?: Props["face"];
+}) {
+  return (
+    <span
+      className="dl-hotkey-command dl-hotkey-hint"
+      data-command-face={face}
+      aria-label={chordLabel(hotkey)}
+    >
+      <ChordFaces hotkey={hotkey} />
+    </span>
+  );
+}
 function Face({
   hotkey,
   invoke,
@@ -75,22 +115,7 @@ function Face({
         <span data-command-word data-tone={tone}>
           {word ?? button.label}
         </span>
-        <span data-command-keys aria-hidden>
-          <Kbd>
-            <span data-command-symbols data-tone={tone}>
-              {chordLabel(hotkey)
-                .split("+")
-                .map((key, index) => (
-                  <KeyMark key={`${key}-${index}`} name={key} />
-                ))}
-            </span>
-          </Kbd>
-        </span>
-        <span data-command-chord>
-          <Kbd>
-            <span data-tone={tone}>{chordLabel(hotkey)}</span>
-          </Kbd>
-        </span>
+        <ChordFaces hotkey={hotkey} tone={tone} />
       </Button>
     </span>
   );

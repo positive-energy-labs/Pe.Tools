@@ -1,18 +1,39 @@
 import { useRef, useState } from "react";
 import { Popover } from "@base-ui/react/popover";
-import { Settings2, MessageCircle, Server, Gauge } from "lucide-react";
+import { useRouterState } from "@tanstack/react-router";
+import { Settings2 } from "lucide-react";
+import { appRouteByPath } from "@pe/agent-contracts";
 import { Button } from "#/components/lang/button";
-import { HotkeyCommand } from "#/components/lang/hotkey-command";
-import { ThemeToggle } from "#/components/lang/theme-toggle";
-import { startFeedback } from "#/components/feedback-picker";
-import { openMachine } from "#/machine/door";
-import { RouteControlsSlot, useRouteSlotPresence } from "./route-controls";
+import { SettingsProjection } from "#/settings/options";
+import { SettingsActions } from "#/settings/options-actions";
+import { useSurfaceHost } from "./surface-host";
+import { useDestination } from "./state";
 import { ownsOpenPopup } from "./situation-drawer";
 
 export function ChromeSettings() {
+  const host = useSurfaceHost();
+  const go = useDestination();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const subject = appRouteByPath(pathname)?.key;
   const [open, setOpen] = useState(false);
   const popup = useRef<HTMLDivElement>(null);
-  const inspector = useRouteSlotPresence("inspector");
+  const close = () => setOpen(false);
+  const openSettings = () => {
+    close();
+    go(
+      `/settings${subject && subject !== "settings" ? `?subject=${encodeURIComponent(subject)}` : ""}`,
+    );
+  };
+  if (host.settingsDoor === "route")
+    return (
+      <Button
+        label="Settings"
+        icon={Settings2}
+        pressed={pathname === "/settings"}
+        onClick={openSettings}
+        data-chrome-settings
+      />
+    );
   return (
     <Popover.Root
       open={open}
@@ -30,46 +51,26 @@ export function ChromeSettings() {
             role="dialog"
             aria-label="Settings menu"
           >
-            <RouteControlsSlot slot="inspector" className="pe-settings-row" />
-            {!inspector && (
-              <span className="pe-settings-row">
-                <Button
-                  label="Inspector"
-                  icon={Gauge}
-                  refusal="This page exposes no route inspector"
-                >
-                  Inspector
-                </Button>
-              </span>
-            )}
+            <div className="p-1">
+              <SettingsProjection quick subject={subject} />
+            </div>
             <span className="pe-settings-row">
-              <ThemeToggle labelled />
-            </span>
-            <span className="pe-settings-row">
-              <HotkeyCommand
-                label="Feedback"
-                word="Feedback"
-                face="full"
-                hotkey={{ key: ".", mod: true, shift: true }}
-                icon={MessageCircle}
-                invoke={() => {
-                  setOpen(false);
-                  startFeedback();
-                }}
-              />
+              <Button label="All settings" onClick={openSettings}>
+                All settings
+              </Button>
             </span>
             <span className="pe-settings-row">
               <Button
-                label="Machine"
-                icon={Server}
+                label="Providers and agent approvals"
                 onClick={() => {
-                  setOpen(false);
-                  openMachine();
+                  close();
+                  go("/settings");
                 }}
               >
-                Machine
+                Providers and agent approvals
               </Button>
             </span>
+            <SettingsActions close={close} />
           </Popover.Popup>
         </Popover.Positioner>
       </Popover.Portal>

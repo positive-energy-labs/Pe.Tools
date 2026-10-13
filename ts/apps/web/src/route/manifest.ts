@@ -30,6 +30,8 @@ import {
 import type { ActionIdentity } from "./facts";
 import type { Refusal } from "./refusal";
 import type { Cells } from "./cells";
+import type { GlobalOption, PageOption, SettingsPanel } from "#/settings/option-state";
+import { registerGlobalOptions } from "#/settings/option-catalogue";
 
 export const semanticActionInput = (
   key: SemanticActionKey,
@@ -132,12 +134,21 @@ export interface RouteManifest<W, R extends string, P, A extends string> {
   views?: readonly View<R>[];
   seeds?: Readonly<Partial<Record<A, Seed<W, R, P>>>>;
   docs?: ReactNode;
+  /** Projections bind to this route instance's Page and disappear with its owner. */
+  options?: readonly PageOption<P>[];
+  /** External owner bindings remain available in Settings after this Page unmounts. */
+  globalOptions?: readonly GlobalOption[];
+  /** Custom forms project existing owner controllers through quick links and full Settings. */
+  settingsPanels?: readonly SettingsPanel[];
 }
 
 /** Identity, for inference only. Exactly one `manifest` per route module (fable §8). */
 export const defineRoute = <W, const R extends string, P, const A extends string>(
   m: RouteManifest<W, R, P, A>,
-): RouteManifest<W, R, P, A> => m;
+): RouteManifest<W, R, P, A> => {
+  registerGlobalOptions(m.key, m.name, m.globalOptions ?? [], m.settingsPanels ?? []);
+  return m;
+};
 
 /** An empty manifest is a legal manifest: the shell must render one. */
 export const emptyManifest = (

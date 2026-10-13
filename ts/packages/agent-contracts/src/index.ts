@@ -37,3 +37,4 @@ export * from "./capture.ts";
 
 export * from "./sdk-session.ts";
 export * from "./navigation.ts";
+export * from "./app-routes.ts";

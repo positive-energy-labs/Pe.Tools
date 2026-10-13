@@ -50,7 +50,14 @@ try {
   );
   if (process.connected)
     await new Promise<void>((resolve, reject) =>
-      process.send!(url, (error) => (error ? reject(error) : resolve())),
+      process.send!(
+        {
+          url,
+          pid: process.pid,
+          processStartUtc: new Date(Date.now() - process.uptime() * 1000).toISOString(),
+        },
+        (error) => (error ? reject(error) : resolve()),
+      ),
     );
   await disconnected;
 } finally {

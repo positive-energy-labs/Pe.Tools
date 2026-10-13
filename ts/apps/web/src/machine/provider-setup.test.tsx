@@ -4,16 +4,15 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { type Machine } from "@pe/agent-contracts";
 import { MACHINE_SEEDS } from "#/open/seeds";
 import { machineOf } from "./model";
-import { closeMachine } from "./door";
 import { PeaGroup, ProviderSetup } from "./pea";
 import { MachinePage } from "./page";
 import { harnessClient } from "#/workbench/provider/harness-client";
 import { FirstOpenCard } from "#/chat/first-open";
 import { HeadLadder } from "#/chat/head-chips";
-import { VersionChip } from "./drawer";
 import { Route as Settings } from "#/routes/settings";
 
-const state = vi.hoisted(() => ({ machine: null as Machine | null, login: vi.fn() }));
+const state = vi.hoisted(() => ({ machine: null as Machine | null, login: vi.fn(), go: vi.fn() }));
+vi.mock("#/navigation/state", () => ({ useDestination: () => state.go }));
 vi.mock("#/machine/use-machine", () => ({
   useMachine: () => ({ reading: { state: "ready", observation: state.machine }, fixture: false }),
   SEED_REFUSAL: "fixture",
@@ -74,13 +73,17 @@ function setup() {
 }
 afterEach(() => {
   cleanup();
-  closeMachine();
   vi.clearAllMocks();
 });
 
-test("machine uses the provider setup with Install and endpoint credentials", () => {
+test("Machine shows provider health and real repair actions while Settings owns credentials", () => {
   render(<PeaGroup fixture={false} machine={seed()} />);
-  setup();
+  expect(screen.getByLabelText("provider health")).toBeTruthy();
+  expect(screen.queryByPlaceholderText("API key")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Install" }));
+  expect(state.login).toHaveBeenCalledWith("codex");
+  fireEvent.click(screen.getByRole("button", { name: "Configure providers" }));
+  expect(state.go).toHaveBeenCalledWith("/settings?subject=machine&section=providers");
 });
 test("composer first-open uses the same provider setup", () => {
   seed();
@@ -89,21 +92,46 @@ test("composer first-open uses the same provider setup", () => {
 });
 test("settings still exists and projects the provider setup", async () => {
   seed();
+  const search = vi.spyOn(Settings, "useSearch").mockReturnValue({ subject: undefined });
   const Component = Settings.options.component!;
   await act(async () => {
     render(<Component />);
   });
   await screen.findByLabelText("providers");
   setup();
+  search.mockRestore();
 });
-test("the tray page projects the same setup from its machine snapshot", () => {
+
+test("direct scoped Settings projects the declared provider controller after Machine Page unmounts", async () => {
+  const machine = seed();
+  const view = render(
+    <MachinePage reading={{ state: "ready", observation: machine }} fixture={false} shell="web" />,
+  );
+  view.unmount();
+  const search = vi
+    .spyOn(Settings, "useSearch")
+    .mockReturnValue({ subject: "machine", section: "providers" });
+  const Component = Settings.options.component!;
+  await act(async () => {
+    render(<Component />);
+  });
+  expect(screen.getByRole("region", { name: "Providers and access" })).toBeTruthy();
+  expect(screen.queryByLabelText("sharing settings")).toBeNull();
+  expect(screen.queryByLabelText("startup settings")).toBeNull();
+  setup();
+  search.mockRestore();
+});
+test("the tray page projects provider health from the same machine snapshot", () => {
   render(
     <MachinePage reading={{ state: "ready", observation: seed() }} fixture={false} shell="tray" />,
   );
   const pea = screen.getByRole("region", { name: "Pea" });
   const toggle = within(pea).getAllByRole("button")[0]!;
   if (toggle.getAttribute("aria-expanded") !== "true") fireEvent.click(toggle);
-  setup();
+  expect(screen.getByLabelText("provider health")).toBeTruthy();
+  expect(screen.queryByPlaceholderText("API key")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Install" }));
+  expect(state.login).toHaveBeenCalledWith("codex");
 });
 test("endpoint add shows one classified line and reveals the raw body only on demand", async () => {
   seed();
@@ -135,15 +163,10 @@ test("endpoint add shows one classified line and reveals the raw body only on de
   expect(screen.getByText(failure.raw)).toBeTruthy();
   vi.unstubAllGlobals();
 });
-test("a ready provider does not hide Install: model picker opens machine setup", () => {
+test("Manage providers from the model picker navigates to canonical Settings", () => {
   seed();
-  render(
-    <>
-      <HeadLadder />
-      <VersionChip hideTrigger />
-    </>,
-  );
+  render(<HeadLadder />);
   fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
   fireEvent.click(screen.getByRole("button", { name: "Manage providers" }));
-  setup();
+  expect(state.go).toHaveBeenCalledWith("/settings?subject=machine&section=providers");
 });

@@ -2,11 +2,22 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Save } from "lucide-react";
-import { HotkeyCommand } from "./hotkey-command";
+import { HotkeyCommand, HotkeyHint } from "./hotkey-command";
 import { Input } from "./input";
 import { KeyScope, useScopeKeys } from "#/route/keys";
 
 afterEach(cleanup);
+test("a hotkey hint shares the chord marks without introducing a focusable or acting control", () => {
+  const view = render(<HotkeyHint hotkey="Mod+Shift+K" face="compact" />);
+  expect(screen.queryByRole("button")).toBeNull();
+  expect(view.container.querySelector("[tabindex]")).toBeNull();
+  expect(view.container.querySelector("[data-command-chord]")?.textContent).toBe("Ctrl+Shift+K");
+  expect(
+    [...view.container.querySelectorAll("[data-key-symbol]")].map((key) =>
+      key.getAttribute("data-key-symbol"),
+    ),
+  ).toEqual(["Ctrl", "Shift"]);
+});
 test("compact draws one chord with SVG modifier symbols and preserves fully written accessibility", () => {
   const view = render(
     <HotkeyCommand

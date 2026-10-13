@@ -3,6 +3,8 @@ import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { navigationClient, type NavigationSnapshot } from "./navigation-client";
 import { admittedDestination } from "./model";
 import { resolveWorkbenchConfig } from "#/workbench/config";
+import { appRouteMount } from "@pe/agent-contracts";
+import { useSurfaceHost } from "./surface-host";
 
 type NavigationState = {
   snapshot: NavigationSnapshot | null;
@@ -51,11 +53,14 @@ export function useNavigation() {
 }
 export function useDestination() {
   const navigate = useNavigate();
+  const host = useSurfaceHost();
   return useCallback(
     (destination: string) => {
       const admitted = admittedDestination(destination, window.location.origin);
       if (!admitted) return false;
       const url = new URL(admitted, window.location.origin);
+      if (host.surface === "tray" && !appRouteMount(url.pathname, "tray"))
+        return host.openFullWindow(url.href);
       const search = Object.fromEntries(url.searchParams);
       void navigate({
         to: url.pathname,
@@ -63,11 +68,12 @@ export function useDestination() {
           ...search,
           thread: search.thread ?? undefined,
           target: search.target ?? undefined,
+          shell: host.surface === "tray" ? "tray" : undefined,
         },
         hash: url.hash.slice(1),
       });
       return true;
     },
-    [navigate],
+    [navigate, host],
   );
 }

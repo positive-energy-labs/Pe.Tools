@@ -4,7 +4,7 @@
  * the shell draws none of its own when a route hands one in.
  *
  * No connected-or-not lamp: those states left product chrome (host ledger 2026-10-09). Machine
- * state, update included, is the version chip's drawer (`machine/drawer.tsx`).
+ * state and repair actions live on the canonical Machine route; configuration lives in Settings.
  */
 import { useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -15,6 +15,7 @@ import {
   useIsPrimaryRoute,
 } from "#/navigation/route-controls";
 import { ThemeToggle } from "#/components/lang/theme-toggle";
+import { usePublishRouteOptions } from "#/settings/options";
 
 import { RouteHelpButton } from "./help";
 import { HostedChrome } from "./hosted-chrome";
@@ -138,6 +139,13 @@ function BaselineShell<W, R extends string, P, A extends string>({
   const chrome = useContext(HostedChrome);
   const globalNavigation = useHasGlobalNavigation();
   const primary = useIsPrimaryRoute(manifest.key);
+  usePublishRouteOptions(
+    manifest.key,
+    manifest.name,
+    manifest.options,
+    handle.page[0],
+    handle.page[1],
+  );
   return (
     // The one landmark of the primitive. A route may override the printed head with its own word
     // (chat prints the thread's label), so the shell names itself with the MANIFEST's name: that

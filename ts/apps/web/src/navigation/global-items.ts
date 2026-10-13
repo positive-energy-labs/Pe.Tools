@@ -1,4 +1,4 @@
-import { CATALOGUE } from "./model";
+import { APP_ROUTES } from "@pe/agent-contracts";
 import type { NavigationSnapshot } from "./navigation-client";
 
 export type ResultKind = "All" | "Tools" | "Works" | "Pea threads";
@@ -15,14 +15,14 @@ export type Destination = {
 export function globalItems(snapshot: NavigationSnapshot | null, kind: ResultKind): Destination[] {
   return [
     ...(kind === "All" || kind === "Tools"
-      ? CATALOGUE.map((tool) => ({
-          key: `tool:${tool.to}`,
+      ? APP_ROUTES.filter((tool) => tool.directory || tool.key === "machine").map((tool) => ({
+          key: `tool:${tool.path}`,
           kind: "Tools" as const,
           label: tool.title,
           context: tool.task,
           aliases: `${tool.aliases} ${tool.description}`,
           state: tool.exposure,
-          url: tool.to,
+          url: tool.path,
           reason: null,
         }))
       : []),

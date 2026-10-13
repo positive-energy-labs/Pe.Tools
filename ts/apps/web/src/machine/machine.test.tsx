@@ -4,7 +4,7 @@
  * consent is refused while the blocker stands, the chip text says the version or the waiting
  * update, the host's absence is drawn as the honest gap, and the tray window wears no app chrome.
  */
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vite-plus/test";
 import type { Machine, Reading } from "@pe/agent-contracts";
 
@@ -12,14 +12,20 @@ import { acknowledgeUpdate } from "#/host/install";
 import { switchRemoteAdministration, switchShare } from "#/host/machine";
 import { Button } from "#/components/lang/button";
 import { MACHINE_SEEDS } from "#/open/seeds";
-import { openMachine } from "#/machine/door";
 import { AppChrome, AppDevtools } from "#/route/app-chrome";
 
 import { MachineBody } from "./body";
 import { chipText, machineOf, shareState } from "./model";
 import { MachinePage } from "./page";
-import { ShareGroup } from "./share";
+import { ShareSettings } from "./share";
 import { UpdateGroup } from "./update";
+import { machineSearch } from "#/routes/machine";
+import { settingsSearch } from "#/routes/settings";
+
+const surface = vi.hoisted(() => ({ surface: "web", native: false }));
+const go = vi.hoisted(() => vi.fn());
+vi.mock("#/navigation/state", () => ({ useDestination: () => go }));
+vi.mock("#/navigation/surface-host", () => ({ useSurfaceHost: () => surface }));
 
 vi.mock("#/host/machine", async (original) => ({
   ...(await original<typeof import("#/host/machine")>()),
@@ -41,9 +47,10 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+  surface.native = false;
 });
 
-const body = (reading: Reading<Machine>, shell: "drawer" | "tray" = "drawer") =>
+const body = (reading: Reading<Machine>, shell: "web" | "tray" = "web") =>
   render(<MachineBody reading={reading} fixture={false} shell={shell} />);
 
 const header = (label: string) =>
@@ -106,11 +113,7 @@ describe("groups", () => {
         })),
     };
     rendered.rerender(
-      <MachineBody
-        reading={{ state: "ready", observation: next }}
-        fixture={false}
-        shell="drawer"
-      />,
+      <MachineBody reading={{ state: "ready", observation: next }} fixture={false} shell="web" />,
     );
     expect(header("Pea").textContent).toContain("no provider ready");
     expect(screen.queryByText("Codex")).toBeNull();
@@ -244,11 +247,11 @@ test("the version chip badges a waiting plan and clears it otherwise", () => {
     Object.assign(Object.create(navigator), { setAppBadge, clearAppBadge }),
   );
   history.replaceState(null, "", "/open?demo=waiting-plan");
-  render(<AppChrome pathname="/open" />);
+  render(<AppChrome />);
   expect(setAppBadge).toHaveBeenCalledOnce();
   cleanup();
   history.replaceState(null, "", "/open?demo=no-revit");
-  render(<AppChrome pathname="/open" />);
+  render(<AppChrome />);
   expect(clearAppBadge).toHaveBeenCalledOnce();
   history.replaceState(null, "", "/");
 });
@@ -281,7 +284,7 @@ describe("sharing", () => {
         refusal: { code: "share.unavailable", detail: "Synthetic unavailable" },
       },
     };
-    render(<ShareGroup machine={machine} fixture={false} stale={false} />);
+    render(<ShareSettings machine={machine} fixture={false} stale={false} />);
     const sharing = screen.getByRole("switch", { name: "Share over tailnet" });
     expect(sharing.getAttribute("aria-checked")).toBe("true");
     expect(sharing.hasAttribute("disabled")).toBe(false);
@@ -298,7 +301,7 @@ describe("sharing", () => {
       share: { ...initial.share!, desired: "off", state: "needs-tailscale", refusal: null },
     };
     expect(shareState(machine)).toEqual({ text: "needs Tailscale" });
-    render(<ShareGroup machine={machine} fixture={false} stale={false} />);
+    render(<ShareSettings machine={machine} fixture={false} stale={false} />);
     const note = screen.getByText(/Sharing needs Tailscale/);
     expect(note.textContent).toContain("tailscale.com/download");
     expect(note.hasAttribute("data-tone")).toBe(false);
@@ -310,7 +313,7 @@ describe("sharing", () => {
 
   test("fixtures and disconnected controls cannot change sharing or administration", () => {
     const machine = machineOf(MACHINE_SEEDS["no-revit"])!;
-    render(<ShareGroup machine={machine} fixture={true} stale={false} />);
+    render(<ShareSettings machine={machine} fixture={true} stale={false} />);
     for (const control of screen.getAllByRole("switch")) {
       expect(control.hasAttribute("data-disabled")).toBe(true);
       fireEvent.click(control);
@@ -324,39 +327,25 @@ describe("shells", () => {
   beforeEach(() => history.replaceState(null, "", "/?demo=blocked-plan"));
   afterEach(() => history.replaceState(null, "", "/"));
 
-  test("the tray page fills and scrolls its viewport without a feedback picker", () => {
+  test("the tray page fills its route pane and shares the feedback controller", () => {
     render(
       <>
         <MachinePage reading={MACHINE_SEEDS["no-revit"]} fixture shell="tray" />
-        <AppChrome pathname="/machine" />
+        <AppChrome />
       </>,
     );
     const main = screen.getByRole("main", { name: "machine" });
     expect(main.className).toContain("w-full");
     expect(main.className).toContain("overflow-y-auto");
     expect(main.className).not.toContain("w-[380px]");
-    expect(screen.queryByRole("button", { name: "feedback" })).toBeNull();
+    expect(screen.getByRole("button", { name: "feedback" })).toBeTruthy();
   });
 
-  test("the tray window wears no app chrome; every other page opens the drawer from Settings", () => {
-    const { container } = render(<AppChrome pathname="/machine" />);
-    expect(container.innerHTML).toBe("");
-    cleanup();
-    // The app bar's Settings > Machine is the door; the chrome draws no floating chip.
-    render(
-      <>
-        <Button label="Machine">Machine</Button>
-        <AppChrome pathname="/open" />
-      </>,
-    );
-    expect(screen.queryByRole("button", { name: "Fixture · 0.7.0 · 0.7.1 ready" })).toBeNull();
-    const door = screen.getByRole("button", { name: "Machine" });
-    door.focus();
-    act(() => openMachine());
-    expect(screen.getByRole("complementary", { name: "this machine" })).toBeTruthy();
-    fireEvent.keyDown(document, { key: "Escape" });
+  test("Machine draws a canonical page instead of a special drawer", () => {
+    render(<MachinePage reading={MACHINE_SEEDS["no-revit"]} fixture shell="web" />);
+    expect(screen.getByRole("main", { name: "machine" })).toBeTruthy();
     expect(screen.queryByRole("complementary", { name: "this machine" })).toBeNull();
-    expect(document.activeElement).toBe(door);
+    expect(screen.queryByRole("button", { name: "close" })).toBeNull();
   });
 
   test("the floating launcher is absent in the tray and clear of Open", () => {
@@ -368,80 +357,80 @@ describe("shells", () => {
     expect(screen.getByTestId("devtools-launcher")).toBeTruthy();
   });
 
-  test("only the tray shell can quit the host and open a window", () => {
+  test("only a native tray capability can quit the host and open a window", () => {
     body(MACHINE_SEEDS["no-revit"], "tray");
+    fireEvent.click(header("Host"));
+    for (const name of ["open window", "quit host"])
+      expect(screen.getByRole("button", { name }).getAttribute("aria-disabled")).toBe("true");
+    cleanup();
+    surface.native = true;
+    body(MACHINE_SEEDS["no-revit"], "tray");
+    fireEvent.click(header("Host"));
     for (const name of ["open window", "quit host"])
       expect(screen.getByRole("button", { name }).getAttribute("aria-disabled")).toBeNull();
     cleanup();
-    body(MACHINE_SEEDS["no-revit"], "drawer");
+    body(MACHINE_SEEDS["no-revit"], "web");
+    fireEvent.click(header("Host"));
     for (const name of ["open window", "quit host"])
       expect(screen.getByRole("button", { name }).getAttribute("aria-disabled")).toBe("true");
   });
+});
 
-  test("install appears only for a captured prompt in the drawer", () => {
-    let standalone = false;
-    vi.stubGlobal("matchMedia", () => ({ matches: standalone }));
-    const prompt = vi.fn().mockResolvedValue(undefined);
-    body(MACHINE_SEEDS["no-revit"]);
-    expect(screen.queryByRole("button", { name: "Install as app" })).toBeNull();
-    const event = Object.assign(new Event("beforeinstallprompt", { cancelable: true }), { prompt });
-    fireEvent(window, event);
-    expect(event.defaultPrevented).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Install as app" }));
-    expect(prompt).toHaveBeenCalledOnce();
-    expect(screen.queryByRole("button", { name: "Install as app" })).toBeNull();
-    fireEvent(window, Object.assign(new Event("beforeinstallprompt"), { prompt }));
-    expect(screen.getByRole("button", { name: "Install as app" })).toBeTruthy();
-    fireEvent(window, new Event("appinstalled"));
-    expect(screen.queryByRole("button", { name: "Install as app" })).toBeNull();
-    cleanup();
-    body(MACHINE_SEEDS["no-revit"], "tray");
-    fireEvent(window, Object.assign(new Event("beforeinstallprompt"), { prompt }));
-    expect(screen.queryByRole("button", { name: "Install as app" })).toBeNull();
-    cleanup();
-    standalone = true;
-    body(MACHINE_SEEDS["no-revit"]);
-    fireEvent(window, Object.assign(new Event("beforeinstallprompt"), { prompt }));
-    expect(screen.queryByRole("button", { name: "Install as app" })).toBeNull();
+test("canonical sections reject unknown query values and keep exact session identity", () => {
+  expect(machineSearch({ section: "revit", session: "pid:18244", variant: "1" })).toEqual({
+    section: "revit",
+    session: "pid:18244",
+  });
+  expect(machineSearch({ section: "invented", session: "" })).toEqual({
+    section: undefined,
+    session: undefined,
+  });
+  expect(settingsSearch({ subject: "machine", section: "sharing" })).toEqual({
+    subject: "machine",
+    section: "sharing",
+  });
+  expect(settingsSearch({ subject: "invented", section: "invented" })).toEqual({
+    subject: undefined,
+    section: undefined,
   });
 });
 
-test("the drawer's Revit group draws a grant from the host's access, as the bay does", () => {
-  const world = (MACHINE_SEEDS["patch-bay"] as { observation: Machine }).observation;
-  const machine: Machine = {
-    ...world,
-    revit: {
-      ...world.revit,
-      sessions: world.revit.sessions!.map((session) =>
-        session.attachment?.session === "bridge-18244"
-          ? {
-              ...session,
-              attachment: {
-                ...session.attachment,
-                documents: [
-                  {
-                    session: "bridge-18244",
-                    openId: "18244-hospital",
-                    title: "Hospital-MEP_kaitp.rvt",
-                    address: null,
-                    isActive: true,
-                    isFamilyDocument: false,
-                    access: {
-                      kind: "rw" as const,
-                      context: "t-retag",
-                      label: "Retag level 2 diffusers",
-                      until: "2026-10-12T13:00:00.000Z",
-                    },
-                  },
-                ],
-              },
-            }
-          : session,
-      ),
-    },
-  };
-  render(<MachineBody reading={{ state: "ready", observation: machine }} fixture shell="drawer" />);
+test("Machine links documents and configuration to their canonical owners", () => {
+  body(MACHINE_SEEDS["patch-bay"]);
   fireEvent.click(header("Revit"));
-  expect(screen.getByText("rw · Hospital-MEP_kaitp.rvt")).toBeTruthy();
-  expect(screen.getByText("Retag level 2 diffusers")).toBeTruthy();
+  expect(screen.queryByLabelText("patch bay")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Open documents and binding" }));
+  expect(go).toHaveBeenCalledWith("/open");
+  fireEvent.click(header("Share"));
+  expect(screen.queryByRole("switch")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Sharing settings" }));
+  expect(go).toHaveBeenCalledWith("/settings?subject=machine&section=sharing");
+  fireEvent.click(header("Pea"));
+  expect(screen.queryByPlaceholderText("API key")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Configure providers" }));
+  expect(go).toHaveBeenCalledWith("/settings?subject=machine&section=providers");
+});
+
+test("canonical Machine section selection follows the address without hidden accordion state", () => {
+  const choose = vi.fn();
+  const tree = (section?: "update" | "host") => (
+    <MachinePage
+      reading={MACHINE_SEEDS["blocked-plan"]}
+      fixture
+      shell="web"
+      section={section}
+      onSection={choose}
+    />
+  );
+  const view = render(tree("update"));
+  fireEvent.click(header("Host"));
+  expect(choose).toHaveBeenLastCalledWith("host");
+  expect(header("Update").getAttribute("aria-expanded")).toBe("true");
+  view.rerender(tree("host"));
+  expect(header("Host").getAttribute("aria-expanded")).toBe("true");
+  fireEvent.click(header("Host"));
+  expect(choose).toHaveBeenLastCalledWith(undefined);
+  view.rerender(tree());
+  expect(header("Host").getAttribute("aria-expanded")).toBe("false");
+  expect(header("Update").getAttribute("aria-expanded")).toBe("false");
 });

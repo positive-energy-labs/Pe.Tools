@@ -1,22 +1,50 @@
 import { createFileRoute } from "@tanstack/react-router";
-
+import { RouteShell } from "#/route";
+import { machineManifest } from "#/machine/manifest";
 import { MachinePage } from "#/machine/page";
 import { useMachine } from "#/machine/use-machine";
+import type { GroupKey } from "#/machine/model";
+import { useDestination } from "#/navigation/state";
+import { useSurfaceHost } from "#/navigation/surface-host";
 
-/**
- * The tray window's page (host ledger 2026-10-09 ruling 4): the WebView2 shim navigates here with
- * `?shell=tray` and the service token. No app chrome, the machine body alone; Open window
- * and Quit host sit in its footer. Without `shell=tray` the same body is a typed-URL view.
- */
+const SECTIONS: readonly GroupKey[] = ["revit", "update", "share", "pea", "host"];
+export function machineSearch(search: Record<string, unknown>): {
+  section?: GroupKey;
+  session?: string;
+} {
+  return {
+    section:
+      typeof search.section === "string" && SECTIONS.includes(search.section as GroupKey)
+        ? (search.section as GroupKey)
+        : undefined,
+    session:
+      typeof search.session === "string" && search.session.trim() ? search.session : undefined,
+  };
+}
 export const Route = createFileRoute("/machine")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    shell: search.shell === "tray" ? ("tray" as const) : undefined,
-  }),
+  validateSearch: machineSearch,
   component: MachineRoute,
 });
-
 function MachineRoute() {
-  const { shell } = Route.useSearch();
+  const { section, session } = Route.useSearch();
   const { reading, fixture } = useMachine();
-  return <MachinePage reading={reading} fixture={fixture} shell={shell ?? "drawer"} />;
+  const host = useSurfaceHost();
+  const go = useDestination();
+  return (
+    <RouteShell manifest={machineManifest}>
+      <MachinePage
+        reading={reading}
+        fixture={fixture}
+        shell={host.surface}
+        section={section}
+        session={session}
+        onSection={(next) => {
+          const query = new URLSearchParams();
+          if (next) query.set("section", next);
+          if (session && next === "revit") query.set("session", session);
+          go(`/machine${query.size ? `?${query}` : ""}`);
+        }}
+      />
+    </RouteShell>
+  );
 }

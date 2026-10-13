@@ -8,17 +8,19 @@ export function CommandPalette<T>({
   onOpenChange,
   presentation = "dialog",
   anchor,
+  sideOffset = 4,
   ...list
 }: Parameters<typeof List<T>>[0] & {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   presentation?: "dialog" | "anchored";
   anchor?: HTMLElement | null;
+  sideOffset?: number;
 }) {
   const body = (
     <List<T>
       {...list}
-      owner={presentation === "anchored" ? (anchor ?? undefined) : list.owner}
+      owner={presentation === "anchored" ? (list.owner ?? anchor ?? undefined) : list.owner}
       onPick={(item, path) => {
         list.onPick?.(item, path);
         onOpenChange(false);
@@ -37,7 +39,7 @@ export function CommandPalette<T>({
             anchor={anchor}
             side="bottom"
             align="start"
-            sideOffset={4}
+            sideOffset={sideOffset}
             collisionPadding={8}
             className="isolate z-popup"
           >

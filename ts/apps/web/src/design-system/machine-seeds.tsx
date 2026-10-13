@@ -15,8 +15,8 @@ export function MachineSeedsDemo() {
   return (
     <Demo
       label="Machine body"
-      consumers="machine/drawer.tsx (version chip), routes/machine.tsx (tray window)"
-      spec="One renderer, two shells. Pick a recorded machine moment; open /machine?shell=tray&demo=<seed> for the tray shell alone."
+      consumers="routes/machine.tsx (web, PWA and control window)"
+      spec="One canonical Machine renderer. Pick a recorded moment; the route owns section navigation and Settings owns configuration."
     >
       <Switcher
         ariaLabel="machine seed"

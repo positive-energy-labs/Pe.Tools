@@ -39,6 +39,8 @@ interface PaneProps extends VariantProps<typeof paneRecipe> {
   meta?: ReactNode;
   help?: ReactNode;
   actions?: ReactNode;
+  leadingActions?: ReactNode;
+  titleAlign?: "start" | "center";
   /** Pane-view tabs replace the title line; the title stays the accessible name. */
   tabs?: ReactNode;
   /** The pane's ground; the artifact plane draws its own hairline. Default: the page. */
@@ -89,6 +91,8 @@ export function Pane({
   meta,
   help,
   actions,
+  leadingActions,
+  titleAlign = "start",
   tabs,
   scroll,
   flush,
@@ -99,6 +103,28 @@ export function Pane({
 }: PaneProps) {
   const { root, body } = paneRecipe({ scroll, flush });
   const rootRef = useRef<HTMLElement>(null);
+  const heading = (
+    <>
+      {tabs ?? (
+        <h2 data-slot="pane-title" data-heading={name ? "name" : undefined}>
+          {title}
+        </h2>
+      )}
+      {tabs == null && meta != null && (
+        <span
+          title={typeof meta === "string" ? meta : undefined}
+          className="face-mono t-small min-w-0 truncate text-ink-mute"
+        >
+          {meta}
+        </span>
+      )}
+      {help != null && (
+        <span className="shrink-0 self-center">
+          <HelpTip>{help}</HelpTip>
+        </span>
+      )}
+    </>
+  );
   return (
     <KeyScope id={id ?? "pane"} element={rootRef}>
       <section
@@ -118,30 +144,15 @@ export function Pane({
         className={root()}
       >
         {(title != null || tabs != null) && (
-          <div data-slot="pane-header" className="shrink-0">
+          <div data-slot="pane-header" data-title-align={titleAlign} className="shrink-0">
             <Rail
               lead={
                 <>
-                  {tabs ?? (
-                    <h2 data-slot="pane-title" data-heading={name ? "name" : undefined}>
-                      {title}
-                    </h2>
-                  )}
-                  {tabs == null && meta != null && (
-                    <span
-                      title={typeof meta === "string" ? meta : undefined}
-                      className="face-mono t-small min-w-0 truncate text-ink-mute"
-                    >
-                      {meta}
-                    </span>
-                  )}
-                  {help != null && (
-                    <span className="shrink-0 self-center">
-                      <HelpTip>{help}</HelpTip>
-                    </span>
-                  )}
+                  {leadingActions}
+                  {titleAlign === "start" ? heading : null}
                 </>
               }
+              center={titleAlign === "center" ? heading : undefined}
               trail={
                 actions != null ? (
                   <div data-slot="pane-actions" className="flex shrink-0 items-center gap-1">

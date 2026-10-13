@@ -20,6 +20,7 @@ import { chatPluginTitle, type ChatPluginRoute } from "#/workbench/chat-plugins"
 import { useChatPluginHost } from "#/workbench/route-panes";
 import {
   ChatCluster,
+  ChatSituationHead,
   ComposerControls,
   ComposerWork,
   useChatSituation,
@@ -29,6 +30,7 @@ import { appAtomRegistry } from "#/route/route-owner";
 import { useScopeKeys } from "#/route/keys";
 import { PagePaletteButton } from "#/route/situation-marks";
 import { PrimaryRouteControls, usePublishPagePalette } from "#/navigation/route-controls";
+import { useSurfaceHost } from "#/navigation/surface-host";
 import { chatManifest } from "#/chat/manifest";
 import { readThreadTarget } from "#/chat/thread-navigation";
 import "#/workbench/lens.css";
@@ -60,6 +62,7 @@ function CurrentThreadChatSurface(props: Plugin) {
 }
 
 function ChatSurface({ plugin, focus, target }: Plugin) {
+  const compact = useSurfaceHost().surface === "tray";
   const {
     store,
     chat,
@@ -85,17 +88,18 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
     updateThread,
   } = useWorkbench();
   const [mode, setMode] = useMode();
-  const [narrow, setNarrow] = useState(false);
+  const [viewportNarrow, setViewportNarrow] = useState(false);
+  const narrow = compact || viewportNarrow;
   useEffect(() => {
     const media = window.matchMedia("(max-width: 720px)");
     const changed = () => {
-      setNarrow(media.matches);
-      if (media.matches) store.actions.setSideOpen(false);
+      setViewportNarrow(media.matches);
+      if (compact || media.matches) store.actions.setSideOpen(false);
     };
     changed();
     media.addEventListener("change", changed);
     return () => media.removeEventListener("change", changed);
-  }, [store]);
+  }, [compact, store]);
   // The route, re-declared with this thread and the provider's verbs bound.
   const manifest = useMemo(
     () =>
@@ -233,24 +237,23 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
           flush
           id="transcript"
           name
+          titleAlign="center"
           meta={handle.demo ? "Fixture" : undefined}
           title={
             selectTitle(chat) ||
             threads.find((thread) => thread.id === currentThreadId)?.title ||
             "thread"
           }
-          actions={
-            <>
-              {narrow ? (
-                <Button
-                  icon={Menu}
-                  label="Open threads"
-                  onClick={() => store.actions.setSideOpen(true)}
-                />
-              ) : null}
-              <ChatCluster handle={handle} situation={situation} />
-            </>
+          leadingActions={
+            narrow ? (
+              <Button
+                icon={Menu}
+                label="Open threads"
+                onClick={() => store.actions.setSideOpen(true)}
+              />
+            ) : null
           }
+          actions={<ChatCluster handle={handle} situation={situation} />}
           boundaryKey={currentThreadId}
           onRetry={retryBody}
         >
@@ -295,27 +298,33 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
       <PrimaryRouteControls route="chat" slot="palette">
         <PagePaletteButton open={togglePagePalette} />
       </PrimaryRouteControls>
+      <PrimaryRouteControls route="chat" slot="situation">
+        <ChatSituationHead handle={handle} situation={situation} status={status} />
+      </PrimaryRouteControls>
       {/* The route shell owns the chords and the remaining-height conversation column. Chat has
-          no route head: the Situation is drawn in the composer (`ComposerControls`), so the shell draws
-          none of its own. */}
+          no generic route head: its global Situation observes the composer owners. */}
       <RouteShell manifest={manifest} handle={handle} situation={<></>}>
         <PageSurface>
           <PaneSplit
             axis="horizontal"
             grow
             hide={narrow ? "start" : undefined}
-            resize={{
-              target: "start",
-              defaultSize: 300,
-              minSize: 240,
-              persist: "pe.sideWidth",
-              collapse: {
-                collapsed: !sideOpen,
-                onCollapsedChange: (collapsed) => store.actions.setSideOpen(!collapsed),
-                collapsedSize: 40,
-                title: "threads",
-              },
-            }}
+            resize={
+              narrow
+                ? undefined
+                : {
+                    target: "start",
+                    defaultSize: 300,
+                    minSize: 240,
+                    persist: "pe.sideWidth",
+                    collapse: {
+                      collapsed: !sideOpen,
+                      onCollapsedChange: (collapsed) => store.actions.setSideOpen(!collapsed),
+                      collapsedSize: 40,
+                      title: "threads",
+                    },
+                  }
+            }
             start={
               <Pane
                 scroll="clip"
@@ -348,21 +357,26 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
               <PaneSplit
                 axis="horizontal"
                 grow
-                resize={{
-                  target: "end",
-                  defaultSize: 640,
-                  minSize: 480,
-                  persist: "pe.pluginWidth",
-                  collapse: {
-                    collapsed: !plugin || !pluginOpen,
-                    onCollapsedChange: (collapsed) => store.actions.setPluginOpen(!collapsed),
-                    collapsedSize: 40,
-                    title: plugin ? chatPluginTitle(plugin) : undefined,
-                  },
-                }}
+                hide={compact ? "end" : undefined}
+                resize={
+                  compact
+                    ? undefined
+                    : {
+                        target: "end",
+                        defaultSize: 640,
+                        minSize: 480,
+                        persist: "pe.pluginWidth",
+                        collapse: {
+                          collapsed: !plugin || !pluginOpen,
+                          onCollapsedChange: (collapsed) => store.actions.setPluginOpen(!collapsed),
+                          collapsedSize: 40,
+                          title: plugin ? chatPluginTitle(plugin) : undefined,
+                        },
+                      }
+                }
                 start={chatColumn}
                 end={
-                  plugin ? (
+                  !compact && plugin ? (
                     <Pane flush id="plugin">
                       <div ref={host.slot} className="contents" />
                     </Pane>
@@ -375,35 +389,45 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
       </RouteShell>
 
       {host.kept}
-      <Dialog open={narrow && sideOpen} onOpenChange={(open) => store.actions.setSideOpen(open)}>
-        <DialogContent>
-          <DialogTitle>Threads</DialogTitle>
-          <div className="h-[75dvh] min-h-0 min-w-0">
-            <ThreadsSidebar
-              threads={sidebarThreads}
-              providers={providers.list ?? []}
-              currentThreadId={currentThreadId || chat.id}
-              onSelect={(id) => {
-                openThread(id);
-                store.actions.setSideOpen(false);
-              }}
-              onNew={() => {
-                void newThread();
-                store.actions.setSideOpen(false);
-              }}
-              onFork={(id, providerId) => void forkThread(providerId, id)}
-              onRename={handleRenameThread}
-              onDelete={handleDeleteThread}
-              onSearch={() => store.actions.setPaletteOpen(true)}
-              onUpdate={updateThread}
-              onNewTarget={(target) => {
-                void newThread(target);
-                store.actions.setSideOpen(false);
-              }}
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
+      {compact && plugin && pluginOpen ? (
+        <Dialog open onOpenChange={store.actions.setPluginOpen}>
+          <DialogContent>
+            <DialogTitle>{plugin ? chatPluginTitle(plugin) : "Workspace"}</DialogTitle>
+            <div ref={host.slot} className="h-[75dvh] min-h-0 min-w-0" />
+          </DialogContent>
+        </Dialog>
+      ) : null}
+      {narrow && sideOpen ? (
+        <Dialog open onOpenChange={(open) => store.actions.setSideOpen(open)}>
+          <DialogContent>
+            <DialogTitle>Threads</DialogTitle>
+            <div className="h-[75dvh] min-h-0 min-w-0">
+              <ThreadsSidebar
+                threads={sidebarThreads}
+                providers={providers.list ?? []}
+                currentThreadId={currentThreadId || chat.id}
+                onSelect={(id) => {
+                  openThread(id);
+                  store.actions.setSideOpen(false);
+                }}
+                onNew={() => {
+                  void newThread();
+                  store.actions.setSideOpen(false);
+                }}
+                onFork={(id, providerId) => void forkThread(providerId, id)}
+                onRename={handleRenameThread}
+                onDelete={handleDeleteThread}
+                onSearch={() => store.actions.setPaletteOpen(true)}
+                onUpdate={updateThread}
+                onNewTarget={(target) => {
+                  void newThread(target);
+                  store.actions.setSideOpen(false);
+                }}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
       <ThreadDialog
         threads={sidebarThreads}
         providers={providers.list ?? []}

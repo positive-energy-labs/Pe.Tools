@@ -1,4 +1,5 @@
 import { familyFixturesDir } from "./checkout-paths.ts";
+import { devIcons } from "./dev-icons.ts";
 import { checkoutIngress, checkoutServiceName, devHostProxy } from "./dev-proxy.ts";
 import { hostProcessIdentity } from "@pe/host-contracts/service-identity";
 import react from "@vitejs/plugin-react";
@@ -32,6 +33,7 @@ const config = defineConfig(({ mode, command }) => {
       ),
     },
     plugins: [
+      devIcons(),
       checkoutIngress(),
       tanstackStart({
         router: {

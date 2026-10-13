@@ -24,15 +24,15 @@ export const hostProgram = (
         capture("app_boot", { component: "host", version: resolveHostVersion() }),
       );
       const open = process.argv.includes("--open");
-      const reuse = (incumbent: ServiceFile) => {
+      const reuse = async (incumbent: ServiceFile) => {
         console.log(
           `pe-host service '${hostOwnership.serviceName}' already serving on ${incumbent.port} (pid ${incumbent.pid})`,
         );
-        if (open) openWindow(incumbent.port);
+        if (open) await openWindow(incumbent.port);
       };
       const binding = yield* Effect.promise(() => prepareHostBinding(open, resolveHostVersion()));
       if (typeof binding !== "number") {
-        reuse(binding);
+        yield* Effect.promise(() => reuse(binding));
         return;
       }
       const port = binding;
@@ -65,7 +65,7 @@ export const hostProgram = (
         // Open only once the claim holds, on the port the service file names.
         yield* Effect.forkScoped(
           Deferred.await(handle).pipe(
-            Effect.tap((claimed) => Effect.sync(() => openWindow(claimed.serviceFile.port))),
+            Effect.tap((claimed) => Effect.promise(() => openWindow(claimed.serviceFile.port))),
           ),
         );
       const frontend =
@@ -90,7 +90,7 @@ export const hostProgram = (
                 Effect.flatMap((incumbent) =>
                   typeof incumbent === "number"
                     ? Effect.fail(error)
-                    : Effect.sync(() => reuse(incumbent)),
+                    : Effect.promise(() => reuse(incumbent)),
                 ),
               );
             }),

@@ -6,6 +6,21 @@ Keep detailed workflow behavior in the owning package docs, repo skills, or the 
 
 ## Core decision
 
+Desktop window launches share the native [PwaLauncher](../dotnet/Pe.Host.Tray/PwaLauncher.cs):
+`Pe.Host.Tray.exe --launch-window <local frontend URL>` resolves an actual Edge app registration
+or opens its install surface. The source host waits for its own Vite redirect before passing the
+URL; the installed host uses its packaged `tray/Pe.Host.Tray.exe`. Missing/unavailable launchers
+refuse rather than silently creating an uninstalled `--app` window. Build-time app identity and
+real OS registration are separate evidence; an app-ID hash alone never proves installation.
+
+The development tray is a checkout-owned native shell over the Vite frontend and source host,
+not an installed runtime. [tools/dev-tray.ps1](../tools/dev-tray.ps1) creates or attaches the pair;
+`-CreateShortcut` installs a distinct Pe.Tools Dev Desktop shortcut. Repeated launch reveals the
+same checkout window. `-Stop` and `-Restart` retire only the identity-verified native child and
+its tray supervisor, preserving an already-running host/frontend. The supervisor keeps the
+frontend origin and backend service receipt separate and revalidates both incarnations.
+Build and native launch evidence do not prove backend restart recovery or installed behavior.
+
 A terminal build, a packaged artifact, a running Revit session, and an installed product are different authorities. Do not let one claim stand in for another.
 
 The practical rule is:

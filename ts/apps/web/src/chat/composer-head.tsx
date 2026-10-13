@@ -43,6 +43,7 @@ import { ComposerOpenMode } from "./composer-open";
 import { ComposerPending } from "./composer-pending";
 import { GrantChip, HeadLadder } from "./head-chips";
 import { emptyPrompt, type ChatDraft } from "#/workbench/prompt";
+import { usePublishSituationSignal } from "#/navigation/route-controls";
 
 export type ChatHandle = RouteHandle<ChatState, ChatReading, ChatPage, ChatActionKey>;
 
@@ -160,6 +161,64 @@ export function useChatSituation(handle: ChatHandle) {
 }
 
 export type ChatSituation = ReturnType<typeof useChatSituation>;
+
+/** The global head observes the same composer owners; Send keeps its controls locally. */
+export function ChatSituationHead({
+  handle,
+  situation,
+  status,
+}: {
+  handle: ChatHandle;
+  situation: ChatSituation;
+  status: ComposerStatus;
+}) {
+  const { head, threadLabel } = situation;
+  const kind = status.caution
+    ? "failure"
+    : status.text === "waiting for you"
+      ? "health"
+      : status.text === "ready"
+        ? "ready"
+        : "busy";
+  usePublishSituationSignal(handle.manifest.key, {
+    kind,
+    tone:
+      kind === "failure"
+        ? "alarm"
+        : kind === "ready"
+          ? "done"
+          : kind === "busy"
+            ? "commit"
+            : "caution",
+    title: `Pea · ${status.text}${status.detail ? ` · ${status.detail}` : ""}`,
+    stamp: `${threadLabel}|${kind}|${head.revision}|${head.stale}|${status.detail ?? ""}`,
+  });
+  return (
+    <div data-surface="page" className="flex min-w-0 flex-col gap-2 p-3" aria-label="Pea Situation">
+      <Ledger
+        rows={[
+          ["thread", threadLabel || "New thread"],
+          [
+            "target",
+            head.defaultTarget
+              ? (situation.ladder.docWord ??
+                (head.defaultTarget.kind === "named"
+                  ? head.defaultTarget.address
+                  : head.defaultTarget.ref.session))
+              : "none · Chat runs; Revit operations need a document",
+          ],
+          ["state", status.text],
+        ]}
+      />
+      {head.stale && (
+        <p className="text-ink-2">
+          Thread context is not current; composer controls wait for its owner.
+        </p>
+      )}
+      {status.detail && <p data-tone="caution">{status.detail}</p>}
+    </div>
+  );
+}
 
 /** Lamp · gauge · help · theme for Chat — it rides the thread head, not the composer. */
 export function ChatCluster({

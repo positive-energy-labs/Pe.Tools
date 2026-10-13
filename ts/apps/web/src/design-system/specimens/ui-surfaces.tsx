@@ -22,6 +22,11 @@ export function UiSurfaceSpecimens() {
             lead={<span className="t-small t-upper">lead and trail</span>}
             trail={<Button label="open">open</Button>}
           />
+          <Rail
+            lead={<Button label="Menu">Menu</Button>}
+            center={<span className="t-small">Centered title</span>}
+            trail={<Button label="Action">Action</Button>}
+          />
         </div>
       </SpecimenFrame>
       <RecipeGrid

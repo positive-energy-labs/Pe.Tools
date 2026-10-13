@@ -7,6 +7,7 @@ import type { Provider, Reading } from "@pe/agent-contracts";
 
 const wb = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
 vi.mock("#/workbench/provider", () => ({ useWorkbench: () => wb.current }));
+vi.mock("#/navigation/state", () => ({ useDestination: () => vi.fn() }));
 
 const { GrantChip, HeadLadder } = await import("./head-chips");
 const { useThreadScope } = await import("./scope");
