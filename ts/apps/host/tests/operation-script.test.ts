@@ -13,6 +13,9 @@ it("captures Pod pages and their state alongside the other members, excluding no
   const members = {
     "pod.json": '{"id":"tour"}',
     "PeScripts.csproj": "<Project />",
+    "README.md": "Guide",
+    "skills/inspect/SKILL.md": "Inspect",
+    "skills/inspect/references/support.txt": "Support",
     "src/main.csx": "return 1;",
     "settings/default.json": "{}",
     "assets/icon.svg": "<svg />",
@@ -38,4 +41,43 @@ it("captures Pod pages and their state alongside the other members, excluding no
     vi.mocked(productUserContentRootPath).mockReset();
     await rm(home, { recursive: true, force: true });
   }
+});
+
+it("freezes a supplied snapshot without reading disk and rejects ambiguous or authority bytes", async () => {
+  const files = [{ path: "src/Run.cs", bytesBase64: Buffer.from("original").toString("base64") }];
+  const frozen = await freezeScript({ sourcePath: "src/Run.cs", sourceBundle: { files } });
+  files[0]!.bytesBase64 = "";
+  expect(Buffer.from(frozen!.sourceBundle.files[0]!.bytesBase64, "base64").toString()).toBe(
+    "original",
+  );
+  for (const paths of [
+    ["src/A.cs", "src/a.cs"],
+    ["src/A.cs", "Src/B.cs"],
+    ["src", "src/A.cs"],
+    ["pages/tour/.state/binding.json"],
+    ["src/../A.cs"],
+  ]) {
+    await expect(
+      freezeScript({
+        sourcePath: "src/A.cs",
+        sourceBundle: { files: paths.map((path) => ({ path, bytesBase64: "" })) },
+      }),
+    ).rejects.toThrow();
+  }
+});
+
+it("accepts the full four MiB binary budget even when its base64 wire form exceeds five MiB", async () => {
+  const files = Array.from({ length: 8 }, (_, index) => ({
+    path: `assets/${index}.bin`,
+    bytesBase64: Buffer.alloc(512 * 1024).toString("base64"),
+  }));
+  expect(
+    (await freezeScript({ sourcePath: "src/Run.cs", sourceBundle: { files } }))!.sourceBundle.files,
+  ).toHaveLength(8);
+  await expect(
+    freezeScript({
+      sourcePath: "src/Run.cs",
+      sourceBundle: { files: [...files, { path: "assets/overflow", bytesBase64: "YQ==" }] },
+    }),
+  ).rejects.toThrow(/byte bounds/);
 });

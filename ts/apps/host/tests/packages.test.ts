@@ -2,16 +2,28 @@ import { mkdir, mkdtemp, rename, rm, symlink, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
-import { captureDirectory, capturePackage, kindOfMember, listPackages, readPackage } from "../src/packages.ts";
+import {
+  captureDirectory,
+  capturePackage,
+  kindOfMember,
+  listPackages,
+  readPackage,
+} from "../src/packages.ts";
 
 let root: string;
 const authored: Record<string, string | Uint8Array> = {
   "pod.json": JSON.stringify({ id: "mixed", entrypoints: [{ sourcePath: "src/Run.cs" }] }),
-  "PeScripts.csproj": "<Project />", "README.md": "Guide", "AGENTS.md": "Instructions",
-  "src/Run.cs": "class Run {}", "src/support.txt": "not C#",
-  "skills/inspect/SKILL.md": "Inspect", "skills/inspect/references/data.bin": new Uint8Array([0, 255, 1]),
-  "pages/tour/index.html": "<title>Tour</title>", "pages/tour/.state/events.jsonl": "{}",
-  "pages/tour/.state/snapshot.json": "{}", "settings/checks.json": '{"$schema":"https://pe/schema"}',
+  "PeScripts.csproj": "<Project />",
+  "README.md": "Guide",
+  "AGENTS.md": "Instructions",
+  "src/Run.cs": "class Run {}",
+  "src/support.txt": "not C#",
+  "skills/inspect/SKILL.md": "Inspect",
+  "skills/inspect/references/data.bin": new Uint8Array([0, 255, 1]),
+  "pages/tour/index.html": "<title>Tour</title>",
+  "pages/tour/.state/events.jsonl": "{}",
+  "pages/tour/.state/snapshot.json": "{}",
+  "settings/checks.json": '{"$schema":"https://pe/schema"}',
 };
 async function put(folder: string, path: string, content: string | Uint8Array) {
   const target = join(root, folder, path);
@@ -25,15 +37,28 @@ beforeEach(async () => {
 afterEach(() => rm(root, { recursive: true, force: true }));
 
 test("one snapshot lists and captures every authored byte, excluding authority and debris", async () => {
-  for (const path of ["output/run/input.json", "obj/a", "bin/a", "imported.json", "pages/tour/.state/binding.json", "pages/tour/.state/grants.json", "node_modules/a", ".env"]) await put("Original", path, "secret");
+  for (const path of [
+    "output/run/input.json",
+    "obj/a",
+    "bin/a",
+    "imported.json",
+    "pages/tour/.state/binding.json",
+    "pages/tour/.state/grants.json",
+    "node_modules/a",
+    ".env",
+  ])
+    await put("Original", path, "secret");
   const pod = await readPackage("mixed", root);
-  expect(pod.members.map(member => member.path).sort()).toEqual(Object.keys(authored).sort());
+  expect(pod.members.map((member) => member.path).sort()).toEqual(Object.keys(authored).sort());
   await put("Original", "README.md", "changed after read");
   const capture = await capturePackage(pod);
-  expect(capture.sourceBundle.files.map(file => file.path)).toEqual(pod.members.map(member => member.path));
-  for (const file of capture.sourceBundle.files) expect(Buffer.from(file.bytesBase64, "base64")).toEqual(Buffer.from(authored[file.path]!));
-  expect(pod.contributions.map(row => row.key)).toContain("script:@mixed/src/Run.cs");
-  expect(pod.contributions.map(row => row.key)).toContain("member:@mixed/settings/checks.json");
+  expect(capture.sourceBundle.files.map((file) => file.path)).toEqual(
+    pod.members.map((member) => member.path),
+  );
+  for (const file of capture.sourceBundle.files)
+    expect(Buffer.from(file.bytesBase64, "base64")).toEqual(Buffer.from(authored[file.path]!));
+  expect(pod.contributions.map((row) => row.key)).toContain("script:@mixed/src/Run.cs");
+  expect(pod.contributions.map((row) => row.key)).toContain("member:@mixed/settings/checks.json");
   expect(kindOfMember("src/support.txt", pod.entrypoints)).toBeUndefined();
   expect(kindOfMember("pages/tour/index.html")).toBe("page");
   expect(kindOfMember("skills/inspect/SKILL.md")).toBe("skill");
@@ -46,15 +71,17 @@ test("folder rename preserves keys; duplicate manifest identities refuse resolut
   await put("Twin", "pod.json", '{"id":"mixed"}');
   await expect(readPackage("mixed", root)).rejects.toThrow(/Renamed, Twin/);
   const listing = await listPackages(root);
-  expect(listing.packages.every(pod => pod.contributions.length === 0)).toBe(true);
+  expect(listing.packages.every((pod) => pod.contributions.length === 0)).toBe(true);
   await expect(capturePackage(listing.packages[0]!)).rejects.toThrow(/claimed/);
 });
 
 test("unsafe members report their path and refuse capture without hiding healthy siblings", async () => {
   await put("Original", "assets/large.bin", new Uint8Array(512 * 1024 + 1));
   const pod = await readPackage("mixed", root);
-  expect(pod.diagnostics).toContainEqual(expect.objectContaining({ path: "assets/large.bin", severity: "error" }));
-  expect(pod.members.some(member => member.path === "README.md")).toBe(true);
+  expect(pod.diagnostics).toContainEqual(
+    expect.objectContaining({ path: "assets/large.bin", severity: "error" }),
+  );
+  expect(pod.members.some((member) => member.path === "README.md")).toBe(true);
   await expect(capturePackage(pod)).rejects.toThrow(/assets\/large.bin/);
 });
 
@@ -63,7 +90,9 @@ test("directory links cannot admit files outside the package", async () => {
   await writeFile(join(root, "outside", "secret"), "secret");
   await symlink(join(root, "outside"), join(root, "Original", "linked"), "junction");
   const pod = await readPackage("mixed", root);
-  expect(pod.diagnostics).toContainEqual(expect.objectContaining({ path: "linked", severity: "error" }));
+  expect(pod.diagnostics).toContainEqual(
+    expect.objectContaining({ path: "linked", severity: "error" }),
+  );
   await expect(capturePackage(pod)).rejects.toThrow(/links/);
 });
 
@@ -73,5 +102,37 @@ test("canonical skill directories use the same bounded admission without a Pod m
   await put("Skills", "inspect/node_modules/ignored", "Ignored");
   const captured = await captureDirectory(join(root, "Skills"));
   expect(captured.diagnostics).toEqual([]);
-  expect(captured.members.map(member => member.path)).toEqual(["inspect/references/guide.md", "inspect/SKILL.md"]);
+  expect(captured.members.map((member) => member.path)).toEqual([
+    "inspect/references/guide.md",
+    "inspect/SKILL.md",
+  ]);
+});
+
+test("file and directory budgets refuse capture instead of quietly truncating authored inputs", async () => {
+  for (let index = 0; index < 200; index++) await put("Original", `support/${index}.txt`, "");
+  await expect(capturePackage("mixed", root)).rejects.toThrow(/file count/);
+  await mkdir(join(root, "Directories"));
+  for (let index = 0; index < 256; index++) await mkdir(join(root, "Directories", `${index}`));
+  expect((await captureDirectory(join(root, "Directories"))).diagnostics).toContainEqual(
+    expect.objectContaining({ message: "Pod directory limit exceeded" }),
+  );
+});
+
+test("member diagnostics preserve sibling bytes while source validation remains native", async () => {
+  await put(
+    "Original",
+    "pod.json",
+    JSON.stringify({ id: "mixed", entrypoints: [{ sourcePath: "src/Missing.cs" }] }),
+  );
+  await put("Original", "settings/broken.json", "not JSON");
+  const pod = await readPackage("mixed", root);
+  expect(pod.diagnostics).toContainEqual(
+    expect.objectContaining({ code: "MissingEntrypoint", path: "src/Missing.cs" }),
+  );
+  expect(pod.diagnostics).toContainEqual(
+    expect.objectContaining({ code: "JsonParseError", path: "settings/broken.json" }),
+  );
+  expect((await capturePackage(pod)).sourceBundle.files.map((file) => file.path)).toContain(
+    "settings/checks.json",
+  );
 });

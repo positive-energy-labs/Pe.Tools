@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { Effect, FileSystem, PlatformError } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memberWork, settingsRouteState } from "@pe/agent-contracts";
@@ -47,7 +47,7 @@ beforeEach(async () => {
       id: "sample",
       name: "Sample",
       version: "1.0.0",
-      entrypoints: [{ id: "run", sourcePath: "src/Run.cs" }],
+      entrypoints: [{ sourcePath: "src/Run.cs" }],
     }),
   );
 });
@@ -81,10 +81,11 @@ test("pods list by manifest id; a bad member never hides its siblings; runs list
   expect(sample).toMatchObject({
     id: "sample",
     name: "Sample",
-    entrypoints: [{ id: "run", sourcePath: "src/Run.cs" }],
+    entrypoints: [{ sourcePath: "src/Run.cs" }],
   });
-  // Members only: a run is not a member, and `pod.runs` is where runs answer.
+  // Admission includes the manifest; runs still answer through pod.runs.
   expect(sample.members).toEqual([
+    { path: "pod.json", sha256: expect.any(String), schema: null },
     { path: "settings/broken.json", sha256: expect.any(String), schema: null },
     {
       path: "settings/file.json",
@@ -523,29 +524,15 @@ test("partial temp write failure cleans only the acquired temp and preserves des
   expect(await readdir(join(root, "Renamed In Explorer", "settings"))).toEqual(["file.json"]);
 });
 
-test("listing twice agrees and an unchanged member is not read again", async () => {
-  await mkdir(join(root, "Renamed In Explorer", "settings"), { recursive: true });
+test("listing hashes current bytes even when file size and timestamp are unchanged", async () => {
   await writeFile(file(), '{"width":1}');
-  const reads: string[] = [];
-  const counting = (fs: FileSystem.FileSystem): FileSystem.FileSystem => ({
-    ...fs,
-    readFile: (path, ...rest) => {
-      reads.push(path);
-      return fs.readFile(path, ...rest);
-    },
-  });
-  const list = () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        return yield* listPods(ctx()).pipe(
-          Effect.provideService(FileSystem.FileSystem, counting(fs)),
-        );
-      }).pipe(Effect.provide(NodeServices.layer)),
-    );
-  const first = await list();
-  const readsAfterFirst = reads.filter((path) => path === file()).length;
-  expect(await list()).toEqual(first);
-  expect(readsAfterFirst).toBe(1);
-  expect(reads.filter((path) => path === file()).length).toBe(1);
+  const before = await stat(file());
+  const first = await run(listPods(ctx()));
+  await writeFile(file(), '{"width":2}');
+  await utimes(file(), before.atime, before.mtime);
+  const second = await run(listPods(ctx()));
+  const find = (listing: typeof first) =>
+    listing.pods[0]!.members.find((row) => row.path === member.path)!;
+  expect(find(second).sha256).toBe(digest('{"width":2}'));
+  expect(find(second).sha256).not.toBe(find(first).sha256);
 });
