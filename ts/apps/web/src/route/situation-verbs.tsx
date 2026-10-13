@@ -84,7 +84,7 @@ export function SituationAction({
               <Button
                 kind={commit ? "commit" : "framed"}
                 icon={Icon}
-                label={`${action.label.charAt(0).toUpperCase()}${action.label.slice(1)}: ${action.says}${chord ? ` · ${chord}` : ""}`}
+                label={`${action.label}: ${action.says}${chord ? ` · ${chord}` : ""}`}
                 refusal={refusal}
                 data-tone={tone}
                 onClick={() => void action.run()}
