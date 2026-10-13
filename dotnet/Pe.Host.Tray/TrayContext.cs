@@ -48,6 +48,12 @@ internal sealed class TrayContext : ApplicationContext {
         if (launch.IsDev) { _window.Text = "Pe.Tools Dev · " + Path.GetFileName(launch.SourceRoot); _window.Icon = _icon.Icon; }
         _openWindow.Click += (_, _) => OpenWindow();
         _menu.Items.Add(_openWindow);
+        _menu.Items.Add("Rehome", null, (_, _) => {
+            _window.Rehome();
+            _window.WindowState = FormWindowState.Normal;
+            _window.Show();
+            _window.Activate();
+        });
         _menu.Opening += async (_, _) => await RefreshPwaMenuAsync();
         _menu.Items.Add("Quit host", null, async (_, _) => await QuitHostAsync());
         _icon.MouseClick += (_, e) => {
@@ -187,7 +193,11 @@ internal sealed class TrayContext : ApplicationContext {
                     var payload = message.RootElement;
                     if (payload.ValueKind == JsonValueKind.Object
                         && payload.TryGetProperty("type", out var readyType) && readyType.ValueKind == JsonValueKind.String
-                        && readyType.GetString() == "chrome-ready") { PostTitlebarGeometry(); return; }
+                        && readyType.GetString() == "chrome-ready") { PostTitlebarGeometry(); PostNavigationHistory(); return; }
+                    if (TryReadHistoryCommand(payload, _web.CoreWebView2.CanGoBack, _web.CoreWebView2.CanGoForward, out var back)) {
+                        if (back) _web.CoreWebView2.GoBack(); else _web.CoreWebView2.GoForward();
+                        return;
+                    }
                     if (payload.ValueKind == JsonValueKind.Object
                         && payload.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.String
                         && type.GetString() == "open-window"
@@ -208,10 +218,11 @@ internal sealed class TrayContext : ApplicationContext {
                 _recordDev |= e.IsSuccess;
                 if (e.IsSuccess) _pendingPath = null;
                 if (!e.IsSuccess) _connected = false;
-                if (e.IsSuccess) PostTitlebarGeometry();
+                if (e.IsSuccess) { PostTitlebarGeometry(); PostNavigationHistory(); }
                 await ShowConnectionAsync();
                 if (_launch.IsDev && e.IsSuccess) await RecordDevStateAsync();
             };
+            core.HistoryChanged += (_, _) => PostNavigationHistory();
             _ready = true;
             await CheckHealthAsync();
         } catch (Exception error) when (error is WebView2RuntimeNotFoundException or COMException
@@ -234,6 +245,22 @@ internal sealed class TrayContext : ApplicationContext {
         if (!_ready || _closing || !IsOriginalService() || _web.Source is not { } source || !IsViewUrl(source.AbsoluteUri)) return;
         try { _web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(_window.ReadTitlebarGeometry())); }
         catch (Exception error) when (error is InvalidOperationException or COMException) { }
+    }
+
+    private void PostNavigationHistory() {
+        if (!_ready || _closing || !IsOriginalService() || _web.Source is not { } source || !IsViewUrl(source.AbsoluteUri)) return;
+        try { _web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new {
+            type = "navigation-history", canGoBack = _web.CoreWebView2.CanGoBack, canGoForward = _web.CoreWebView2.CanGoForward
+        })); } catch (Exception error) when (error is InvalidOperationException or COMException) { }
+    }
+
+    internal static bool TryReadHistoryCommand(JsonElement payload, bool canGoBack, bool canGoForward, out bool back) {
+        back = false;
+        if (payload.ValueKind != JsonValueKind.Object
+            || !payload.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String || type.GetString() != "navigate-history"
+            || !payload.TryGetProperty("direction", out var direction) || direction.ValueKind != JsonValueKind.String) return false;
+        back = direction.GetString() == "back";
+        return back ? canGoBack : direction.GetString() == "forward" && canGoForward;
     }
 
     private bool IsHostUrl(string value) => Uri.TryCreate(value, UriKind.Absolute, out var uri)
@@ -522,10 +549,20 @@ internal sealed class TrayWindow : Form {
         PositionAboveTaskbar(work, DeviceDpi);
     }
 
+    public void Rehome() => PositionAboveTaskbar(Screen.FromRectangle(Bounds).WorkingArea, DeviceDpi);
+
     private void PositionAboveTaskbar(Rectangle work, int dpi) {
-        var size = SizeFor(work.Size, dpi);
-        Bounds = new Rectangle(work.Right - size.Width, work.Bottom - size.Height, size.Width, size.Height);
+        Bounds = HomeBoundsFor(work, dpi);
         _positioned = true;
+    }
+
+    internal static Rectangle HomeBoundsFor(Rectangle work, int dpi) {
+        var gutter = Math.Max(0, (int)Math.Round(12 * dpi / 96d));
+        var insetX = Math.Min(gutter, Math.Max(0, (work.Width - 1) / 2));
+        var insetY = Math.Min(gutter, Math.Max(0, (work.Height - 1) / 2));
+        var available = new Size(Math.Max(0, work.Width - 2 * insetX), Math.Max(0, work.Height - 2 * insetY));
+        var size = SizeFor(available, dpi);
+        return new Rectangle(work.Right - insetX - size.Width, work.Bottom - insetY - size.Height, size.Width, size.Height);
     }
 
     internal static Size SizeFor(Size work, int dpi) =>

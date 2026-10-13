@@ -14,7 +14,7 @@ export const ownsOpenPopup = (element: HTMLElement | null) =>
   Boolean(element?.querySelector('[data-popup-open], [aria-haspopup][aria-expanded="true"]'));
 
 /** The route remains mounted; only presentation/focus admission changes when this drawer folds. */
-export function SituationDrawer() {
+export function SituationDrawer({ barAnchor }: { barAnchor?: HTMLElement | null }) {
   const enabled = useRouteSlotPresence("situation");
   const trigger = useRef<HTMLSpanElement>(null);
   const drawer = useRef<HTMLDivElement>(null);
@@ -76,7 +76,7 @@ export function SituationDrawer() {
   }, [enabled]);
   useEffect(() => {
     if (!mounted) return;
-    const bar = trigger.current?.closest<HTMLElement>(".pe-appbar");
+    const bar = barAnchor ?? trigger.current?.closest<HTMLElement>(".pe-appbar");
     if (!bar) return;
     const position = () => setTop(bar.getBoundingClientRect().bottom);
     const editable = (target: EventTarget | null) =>
@@ -117,7 +117,7 @@ export function SituationDrawer() {
       body?.removeEventListener("pointerleave", leave);
       window.removeEventListener("resize", position);
     };
-  }, [mounted]);
+  }, [mounted, barAnchor]);
   useEffect(() => {
     if (!mounted) return;
     const updatePopup = () => setPopup(openRef.current && ownsOpenPopup(drawer.current));

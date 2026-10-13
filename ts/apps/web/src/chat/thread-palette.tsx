@@ -40,6 +40,8 @@ import {
 import { Kbd } from "#/components/lang/kbd";
 import { Button } from "#/components/lang/button";
 import { ProviderMark } from "#/components/lang/provider-mark";
+import { useSurfaceHost } from "#/navigation/surface-host";
+import "./thread-navigation.css";
 import type { StoredThreadSummary } from "#/workbench/provider";
 import { isReady } from "#/workbench/provider/providers";
 import {
@@ -499,12 +501,40 @@ export function ThreadActions({
 const SETTLED_PAGE = 10;
 const SETTLED_MORE = 25;
 
+function ThreadTime({ thread, now }: { thread: RosterThread; now: number }) {
+  return (
+    <time dateTime={thread.updatedAt} title={new Date(thread.updatedAt).toLocaleString()}>
+      {relativeThreadAge(thread.updatedAt, now)}
+    </time>
+  );
+}
+
+function CompactThreadTarget({ thread }: { thread: RosterThread }) {
+  return thread.head.defaultTarget ? (
+    <span className="pe-thread-target" title={exactTarget(thread.head.defaultTarget)}>
+      {targetLabel(thread)}
+    </span>
+  ) : null;
+}
+
+function CompactThreadTrail({ thread, now }: { thread: RosterThread; now: number }) {
+  return (
+    <span className="pe-thread-trail">
+      <ThreadTime thread={thread} now={now} />
+      <span title={[thread.providerName, thread.modelId].filter(Boolean).join(" · ")}>
+        <ProviderMark harness={thread.harness} />
+      </span>
+    </span>
+  );
+}
+
 export function ThreadsSidebar({
   threads,
   currentThreadId,
   onSelect,
   onNew,
   onSearch,
+  compactRows: compactRowsOverride,
   ...verbs
 }: ThreadVerbs & {
   threads: RosterThread[];
@@ -512,7 +542,10 @@ export function ThreadsSidebar({
   onSelect: (id: string) => void;
   onNew: () => void;
   onSearch: () => void;
+  compactRows?: boolean;
 }) {
+  const host = useSurfaceHost();
+  const compactRows = compactRowsOverride ?? host.surface === "tray";
   const [query, setQuery] = useState("");
   const [now, setNow] = useState(Date.now);
   const previousThreads = useRef(new Map<string, RosterThread>());
@@ -601,6 +634,7 @@ export function ThreadsSidebar({
   return (
     <nav
       data-navigation=""
+      data-thread-rows={compactRows ? "compact" : undefined}
       aria-label="Threads"
       className="flex h-full min-h-0 flex-col gap-(--gutter)"
       // Escape clears the selection unless a menu or dialog above it is taking the key.
@@ -727,21 +761,22 @@ export function ThreadsSidebar({
                   id={thread.id}
                   title={thread.title}
                   target={
-                    thread.head.defaultTarget ? (
+                    compactRows ? (
+                      <CompactThreadTarget thread={thread} />
+                    ) : thread.head.defaultTarget ? (
                       <span title={exactTarget(thread.head.defaultTarget)}>
                         {targetLabel(thread)}
                       </span>
                     ) : undefined
                   }
                   time={
-                    <time
-                      dateTime={thread.updatedAt}
-                      title={new Date(thread.updatedAt).toLocaleString()}
-                    >
-                      {relativeThreadAge(thread.updatedAt, now)}
-                    </time>
+                    compactRows ? (
+                      <CompactThreadTrail thread={thread} now={now} />
+                    ) : (
+                      <ThreadTime thread={thread} now={now} />
+                    )
                   }
-                  mark={<ProviderMark harness={thread.harness} />}
+                  mark={compactRows ? undefined : <ProviderMark harness={thread.harness} />}
                   meta={[thread.providerName, thread.modelId].filter(Boolean).join(" · ")}
                   state={
                     shelf === "snoozed"
@@ -898,15 +933,13 @@ export function ThreadDialog({
       row={(thread) => {
         const activity = activityWord(thread);
         return {
-          lead: <ProviderMark harness={thread.harness} />,
-          label: thread.title,
-          sub: [
-            [thread.providerName, thread.modelId].filter(Boolean).join(" · "),
-            thread.head.defaultTarget ? targetLabel(thread) : null,
-          ]
-            .filter(Boolean)
-            .join(" · "),
-          lines: 2,
+          label: (
+            <span className="pe-thread-label">
+              <span className="pe-thread-title">{thread.title}</span>
+              <CompactThreadTarget thread={thread} />
+            </span>
+          ),
+          lines: 1,
           active: thread.id === currentThreadId,
           meta: (
             <span className="flex items-center gap-1.5">
@@ -923,9 +956,8 @@ export function ThreadDialog({
                 >
                   {activity}
                 </span>
-              ) : (
-                relativeThreadAge(thread.updatedAt, now)
-              )}
+              ) : null}
+              <CompactThreadTrail thread={thread} now={now} />
               {isUnread(thread) ? (
                 <span data-slot="nav-unread" role="img" aria-label="unread" />
               ) : null}

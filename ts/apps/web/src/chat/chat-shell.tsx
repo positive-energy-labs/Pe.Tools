@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { ModeDial } from "#/chat/mode-dial";
 import { NewThreadButton, ThreadDialog, ThreadsSidebar } from "#/chat/thread-palette";
@@ -34,6 +34,7 @@ import { useSurfaceHost } from "#/navigation/surface-host";
 import { chatManifest } from "#/chat/manifest";
 import { readThreadTarget } from "#/chat/thread-navigation";
 import "#/workbench/lens.css";
+import "./chat-shell.css";
 import { CurrentThreadViewOwner } from "#/workbench/thread-view";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Surface as PageSurface } from "#/components/lang/surface";
@@ -62,6 +63,19 @@ function CurrentThreadChatSurface(props: Plugin) {
 }
 
 function ChatSurface({ plugin, focus, target }: Plugin) {
+  const columnRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const column = columnRef.current;
+    const composer = composerRef.current;
+    if (!column || !composer) return;
+    const measure = () =>
+      column.style.setProperty("--chat-composer-height", `${composer.offsetHeight}px`);
+    const observer = new ResizeObserver(measure);
+    observer.observe(composer);
+    measure();
+    return () => observer.disconnect();
+  }, []);
   const compact = useSurfaceHost().surface === "tray";
   const {
     store,
@@ -227,11 +241,8 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
     detail: operationError ?? turnFailure,
   };
   const chatColumn = (
-    <div
-      data-chat-column=""
-      className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto]"
-    >
-      <div className="min-h-0 min-w-0 flex-1">
+    <div data-chat-column="" ref={columnRef} className="chat-column min-h-0 min-w-0 flex-1">
+      <div data-chat-transcript="" className="min-h-0 min-w-0">
         <Pane
           scroll="clip"
           flush
@@ -270,21 +281,23 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
           )}
         </Pane>
       </div>
-      <ComposerBank
-        currentThreadId={currentThreadId}
-        deletedThreadIds={deletedThreadIds}
-        prompt={prompt}
-        handle={handle}
-        controls={
-          <ComposerControls
-            handle={handle}
-            situation={situation}
-            status={status}
-            urlTarget={target}
-          />
-        }
-        work={<ComposerWork situation={situation} status={status} />}
-      />
+      <div data-chat-composer="" ref={composerRef}>
+        <ComposerBank
+          currentThreadId={currentThreadId}
+          deletedThreadIds={deletedThreadIds}
+          prompt={prompt}
+          handle={handle}
+          controls={
+            <ComposerControls
+              handle={handle}
+              situation={situation}
+              status={status}
+              urlTarget={target}
+            />
+          }
+          work={<ComposerWork situation={situation} status={status} />}
+        />
+      </div>
     </div>
   );
 

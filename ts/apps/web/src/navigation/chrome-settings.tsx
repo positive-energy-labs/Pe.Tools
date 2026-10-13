@@ -10,7 +10,7 @@ import { useSurfaceHost } from "./surface-host";
 import { useDestination } from "./state";
 import { ownsOpenPopup } from "./situation-drawer";
 
-export function ChromeSettings() {
+export function ChromeSettings({ word = false }: { word?: boolean }) {
   const host = useSurfaceHost();
   const go = useDestination();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -32,7 +32,9 @@ export function ChromeSettings() {
         pressed={pathname === "/settings"}
         onClick={openSettings}
         data-chrome-settings
-      />
+      >
+        {word ? "Settings" : null}
+      </Button>
     );
   return (
     <Popover.Root
@@ -41,7 +43,13 @@ export function ChromeSettings() {
         if (next || !ownsOpenPopup(popup.current)) setOpen(next);
       }}
     >
-      <Popover.Trigger render={<Button label="Settings" icon={Settings2} data-chrome-settings />} />
+      <Popover.Trigger
+        render={
+          <Button label="Settings" icon={Settings2} data-chrome-settings>
+            {word ? "Settings" : null}
+          </Button>
+        }
+      />
       <Popover.Portal keepMounted>
         <Popover.Positioner side="bottom" align="end" sideOffset={6} className="isolate z-popup">
           <Popover.Popup

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useCanGoBack, useRouter, useRouterState } from "@tanstack/react-router";
-import { ArrowLeft, ArrowRight, Search, MessageSquare } from "lucide-react";
+import { ArrowLeft, ArrowRight, Search, MessageSquare, Menu } from "lucide-react";
+import { Popover } from "@base-ui/react/popover";
 import { Button } from "#/components/lang/button";
 import { Input } from "#/components/lang/input";
 import { HotkeyHint } from "#/components/lang/hotkey-command";
@@ -38,6 +39,16 @@ export function AppBar() {
   const { snapshot, refresh } = useNavigation();
   const go = useDestination();
   const bar = useRef<HTMLElement>(null);
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    const node = bar.current;
+    if (!node) return;
+    const measure = () => setCompact(node.clientWidth <= 700);
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(node);
+    return () => observer?.disconnect();
+  }, []);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [searchField, setSearchField] = useState<HTMLInputElement | null>(null);
@@ -131,6 +142,21 @@ export function AppBar() {
     );
   });
   const label = locationLabel(location.pathname);
+  const actions = (
+    <>
+      <RouteControlsSlot slot="palette" />
+      <RouteControlsSlot />
+      {!hasRouteHelp && (
+        <RouteHelpButton
+          name={label}
+          docs="Home opens the tool directory. The route search chooses tools, saved Works and Pea threads. The page palette belongs to the current page; global Find searches tools, saved Works and Pea threads. Settings opens the real theme, feedback and machine controls."
+        />
+      )}
+      <span className="pe-appbar-command-seam hairline-l" aria-hidden />
+      <span id="pe-feedback-cancel" className="pe-feedback-cancel" />
+      <ChromeSettings word={compact} />
+    </>
+  );
   useEffect(() => {
     document.title = `${import.meta.env.DEV ? "Pe.Tools Dev" : "Positive Energy"} / ${label}${currentWork ? ` / ${currentWork.label}` : ""}`;
   }, [label, currentWork?.label]);
@@ -161,19 +187,29 @@ export function AppBar() {
                   label="Back"
                   icon={ArrowLeft}
                   refusal={
-                    canGoBack ? undefined : "No previous entry in this window's router history"
+                    (host.native ? host.nativeHistory?.canGoBack : canGoBack)
+                      ? undefined
+                      : "No previous entry in this window's history"
                   }
-                  onClick={() => router.history.back()}
+                  onClick={() =>
+                    host.native ? host.navigateNativeHistory("back") : router.history.back()
+                  }
                 />
                 <Button
                   label="Forward"
                   icon={ArrowRight}
                   refusal={
-                    historyIndex < furthestHistory
+                    (
+                      host.native
+                        ? host.nativeHistory?.canGoForward
+                        : historyIndex < furthestHistory
+                    )
                       ? undefined
                       : "No forward entry has been observed in this window"
                   }
-                  onClick={() => router.history.forward()}
+                  onClick={() =>
+                    host.native ? host.navigateNativeHistory("forward") : router.history.forward()
+                  }
                 />
               </>
             )}
@@ -215,24 +251,39 @@ export function AppBar() {
                 <HotkeyHint hotkey="Mod+Shift+K" />
               </span>
             </div>
-            <div
-              className="pe-appbar-commands"
-              role="group"
-              aria-label="Situation, Page and Tutorial shortcuts"
-            >
-              <SituationDrawer />
-              <RouteControlsSlot slot="palette" />
-              <RouteControlsSlot />
-              {!hasRouteHelp && (
-                <RouteHelpButton
-                  name={label}
-                  docs="Home opens the tool directory. The route search chooses tools, saved Works and Pea threads. The page palette belongs to the current page; global Find searches tools, saved Works and Pea threads. Settings opens the real theme, feedback and machine controls."
-                />
-              )}
-              <span className="pe-appbar-command-seam hairline-l" aria-hidden />
-              <span id="pe-feedback-cancel" className="pe-feedback-cancel" />
-              <ChromeSettings />
-            </div>
+            {compact ? (
+              <Popover.Root>
+                <span className="pe-compact-menu-trigger">
+                  <Popover.Trigger render={<Button label="Topbar controls" icon={Menu} />} />
+                </span>
+                <Popover.Portal keepMounted>
+                  <Popover.Positioner
+                    side="bottom"
+                    align="end"
+                    sideOffset={6}
+                    className="isolate z-popup"
+                  >
+                    <Popover.Popup
+                      data-surface="page"
+                      className="float-surface pe-compact-menu-actions"
+                      aria-label="Topbar controls"
+                    >
+                      <SituationDrawer barAnchor={bar.current} />
+                      {actions}
+                    </Popover.Popup>
+                  </Popover.Positioner>
+                </Popover.Portal>
+              </Popover.Root>
+            ) : (
+              <div
+                className="pe-appbar-commands"
+                role="group"
+                aria-label="Situation, Page and Tutorial shortcuts"
+              >
+                <SituationDrawer />
+                {actions}
+              </div>
+            )}
           </div>
         </nav>
       </div>

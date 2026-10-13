@@ -1,0 +1,23 @@
+/* The transcript and input share the content column; the timeline keeps its own rail. */
+.chat-column {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--map, 23px);
+  grid-template-rows: minmax(0, 1fr);
+  position: relative;
+}
+.chat-column > [data-chat-transcript] {
+  grid-area: 1 / 1 / 2 / 3;
+}
+.chat-column > [data-chat-composer] {
+  grid-area: 1 / 1 / 2 / 2;
+  align-self: end;
+  min-width: 0;
+  z-index: 9;
+  pointer-events: none;
+}
+.chat-column [data-annotation="chat"] {
+  padding-bottom: calc(var(--chat-composer-height, 0px) + var(--gutter));
+}
+.chat-column .chat-tail-floater {
+  bottom: calc(var(--chat-composer-height, 0px) + var(--gutter));
+}

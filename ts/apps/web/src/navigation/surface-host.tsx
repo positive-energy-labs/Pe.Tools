@@ -36,7 +36,26 @@ export interface SurfaceHost {
   overlay: boolean;
   titlebarArea: Pick<DOMRect, "x" | "y" | "width" | "height"> | null;
   native: boolean;
+  nativeHistory: { canGoBack: boolean; canGoForward: boolean } | null;
+  navigateNativeHistory(direction: "back" | "forward"): boolean;
   openFullWindow(destination: string): boolean;
+}
+
+export function nativeNavigationHistory(message: unknown): SurfaceHost["nativeHistory"] {
+  if (typeof message !== "object" || message === null) return null;
+  const value = message as Record<string, unknown>;
+  return value.type === "navigation-history" &&
+    typeof value.canGoBack === "boolean" &&
+    typeof value.canGoForward === "boolean"
+    ? { canGoBack: value.canGoBack, canGoForward: value.canGoForward }
+    : null;
+}
+
+function navigateNativeHistory(direction: "back" | "forward"): boolean {
+  const native = (window as NativeWindow).chrome?.webview;
+  if (!native) return false;
+  native.postMessage(JSON.stringify({ type: "navigate-history", direction }));
+  return true;
 }
 
 export function usableOverlay(
@@ -104,6 +123,8 @@ const webHost: SurfaceHost = {
   overlay: false,
   titlebarArea: null,
   native: false,
+  nativeHistory: null,
+  navigateNativeHistory,
   openFullWindow,
 };
 const Context = createContext<SurfaceHost>(webHost);
@@ -131,10 +152,16 @@ export function SurfaceHostProvider({ children }: { children: ReactNode }) {
   const [browserArea, setBrowserArea] = useState<SurfaceHost["titlebarArea"]>(null);
   const [nativeArea, setNativeArea] = useState<SurfaceHost["titlebarArea"]>(null);
   const [native, setNative] = useState(false);
+  const [nativeHistory, setNativeHistory] = useState<SurfaceHost["nativeHistory"]>(null);
   useEffect(() => {
     const webview = (window as NativeWindow).chrome?.webview;
     setNative(!!webview);
     const syncNative = ({ data }: MessageEvent<unknown>) => {
+      const history = nativeNavigationHistory(data);
+      if (history) {
+        setNativeHistory(history);
+        return;
+      }
       if (
         typeof data !== "object" ||
         data === null ||
@@ -182,9 +209,11 @@ export function SurfaceHostProvider({ children }: { children: ReactNode }) {
       overlay,
       titlebarArea,
       native,
+      nativeHistory,
+      navigateNativeHistory,
       openFullWindow: open,
     }),
-    [surface, overlay, titlebarArea, native, open],
+    [surface, overlay, titlebarArea, native, nativeHistory, open],
   );
   return <Context value={value}>{children}</Context>;
 }

@@ -122,6 +122,49 @@
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
+.pe-compact-menu-trigger {
+  order: 2;
+  flex: none;
+}
+.pe-compact-menu-trigger .dl-button {
+  width: var(--control-h);
+  padding: 0;
+  justify-content: center;
+}
+.pe-compact-menu-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  min-width: 14rem;
+  max-width: calc(100vw - 1rem);
+}
+.pe-compact-menu-actions
+  :is(
+    .pe-appbar-controls,
+    .dl-hotkey-command,
+    .pe-situation-trigger,
+    .pe-situation-trigger > span
+  ) {
+  display: contents;
+}
+.pe-compact-menu-actions .pe-appbar-command-seam {
+  display: none;
+}
+.pe-compact-menu-actions .dl-button {
+  width: 100%;
+  justify-content: flex-start;
+}
+.pe-compact-menu-actions [data-command-word] {
+  display: inline;
+}
+.pe-compact-menu-actions [data-command-keys] {
+  display: none !important;
+}
+.pe-compact-menu-actions [data-command-chord] {
+  display: inline-flex !important;
+  margin-inline-start: auto;
+}
 .pe-situation-trigger > .pe-appbar-controls {
   max-width: 16rem;
 }

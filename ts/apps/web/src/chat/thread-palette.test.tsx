@@ -11,7 +11,10 @@ afterEach(cleanup);
 
 const threads = () => demoThreads({ ...emptyChatState(), id: "open", title: "Open" });
 
-function mount(onUpdate = vi.fn(async (_id: string, _change: UpdateThreadRequest) => true)) {
+function mount(
+  onUpdate = vi.fn(async (_id: string, _change: UpdateThreadRequest) => true),
+  compactRows = false,
+) {
   render(
     <ThreadsSidebar
       threads={threads() as never}
@@ -25,12 +28,44 @@ function mount(onUpdate = vi.fn(async (_id: string, _change: UpdateThreadRequest
       onDelete={vi.fn()}
       onUpdate={onUpdate}
       onNewTarget={vi.fn()}
+      compactRows={compactRows}
     />,
   );
   return onUpdate;
 }
 const row = (title: string) =>
   screen.getByText(title).closest<HTMLElement>("[data-navigation-item] .dl-row")!;
+
+function expectTimeBeforeProvider(element: HTMLElement) {
+  const trail = element.querySelector(".pe-thread-trail")!;
+  const time = trail.querySelector("time")!;
+  const provider = trail.querySelector("[data-provider]")!;
+  expect(time.compareDocumentPosition(provider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(trail.querySelectorAll("[data-provider]")).toHaveLength(1);
+}
+
+test("compact sidebar keeps its target and places provider after the time", () => {
+  mount(
+    vi.fn(async () => true),
+    true,
+  );
+  const item = row("Check AHU type parameters");
+  expect(item.closest("[data-thread-rows]")?.getAttribute("data-thread-rows")).toBe("compact");
+  expectTimeBeforeProvider(item);
+  const target = item.querySelector(".pe-thread-target")!;
+  expect(target.textContent).toBe("Air Handling Unit.rfa");
+  expect(target.getAttribute("title")).toBe("C:/Families/Air Handling Unit.rfa");
+  expect(item.querySelectorAll("[data-provider]")).toHaveLength(1);
+});
+
+test("full web sidebar retains the original two-line target and provider layout", () => {
+  mount();
+  const item = row("Check AHU type parameters");
+  expect(item.closest("[data-thread-rows]")).toBeNull();
+  expect(item.getAttribute("data-lines")).toBe("2");
+  expect(item.querySelector(".pe-thread-trail")).toBeNull();
+  expect(item.querySelector(".dl-row-sub [data-provider]")).toBeTruthy();
+});
 
 test("the menu on a selected row acts on every selected thread and greys what needs one", async () => {
   const onUpdate = mount();
@@ -97,6 +132,11 @@ test("Ctrl K thread dialog finds a renamed thread by full ID and selects that ex
     />,
   );
   const search = await screen.findByPlaceholderText("Search every thread");
+  const targetRow = screen.getByRole("option", { name: /Check AHU type parameters/ });
+  expectTimeBeforeProvider(targetRow);
+  expect(targetRow.querySelector(".pe-thread-target")?.textContent).toBe("Air Handling Unit.rfa");
+  expect(targetRow.querySelector(".dl-row-sub")).toBeNull();
+  expect(targetRow.querySelector(".dl-row-lead")).toBeNull();
   fireEvent.change(search, { target: { value: id } });
   const option = screen.getByRole("option", { name: /Renamed thread/ });
   expect(screen.queryByRole("option", { name: /Trace the supply air path/ })).toBeNull();

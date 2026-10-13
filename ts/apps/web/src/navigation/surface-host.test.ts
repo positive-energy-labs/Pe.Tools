@@ -3,10 +3,25 @@ import {
   captionColor,
   fullWindowDestination,
   nativeTitlebarArea,
+  nativeNavigationHistory,
   usableOverlay,
 } from "./surface-host";
 
 describe("surface host admission", () => {
+  it("accepts explicit native history booleans and refuses partial or coerced capabilities", () => {
+    expect(
+      nativeNavigationHistory({ type: "navigation-history", canGoBack: true, canGoForward: false }),
+    ).toEqual({ canGoBack: true, canGoForward: false });
+    for (const message of [
+      null,
+      [],
+      { type: "other", canGoBack: true, canGoForward: true },
+      { type: "navigation-history", canGoBack: 1, canGoForward: false },
+      { type: "navigation-history", canGoBack: false },
+      { type: "navigation-history", canGoBack: false, canGoForward: "false" },
+    ])
+      expect(nativeNavigationHistory(message)).toBeNull();
+  });
   it("admits only visible measured native geometry inside the actual viewport", () => {
     const viewport = { width: 747, height: 525 };
     const rect = { x: 0, y: 0, width: 595, height: 29 };

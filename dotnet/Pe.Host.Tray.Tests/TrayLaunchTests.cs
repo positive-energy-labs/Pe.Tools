@@ -7,6 +7,37 @@ namespace Pe.Host.Tray.Tests;
 
 public class TrayLaunchTests {
     [Test]
+    public void RehomeScalesItsScreenGutterAndClampsOnSmallAndOffsetMonitors() {
+        var work = new System.Drawing.Rectangle(-1920, -100, 1920, 1080);
+        var at96 = TrayWindow.HomeBoundsFor(work, 96);
+        Assert.That(at96.Size, Is.EqualTo(new System.Drawing.Size(760, 560)));
+        Assert.That(at96.Right, Is.EqualTo(work.Right - 12));
+        Assert.That(at96.Bottom, Is.EqualTo(work.Bottom - 12));
+        var at192 = TrayWindow.HomeBoundsFor(work, 192);
+        Assert.That(at192.Right, Is.EqualTo(work.Right - 24));
+        Assert.That(at192.Bottom, Is.EqualTo(work.Bottom - 24));
+        Assert.That(work.Contains(at192), Is.True);
+        foreach (var small in new[] { new System.Drawing.Rectangle(50, 60, 600, 500), new System.Drawing.Rectangle(-2, -2, 5, 3) })
+            Assert.That(small.Contains(TrayWindow.HomeBoundsFor(small, 192)), Is.True);
+    }
+
+    [Test]
+    public void NativeHistoryCommandsRequireAnAvailableExactDirection() {
+        foreach (var direction in new[] { "back", "forward" }) {
+            using var json = JsonDocument.Parse(JsonSerializer.Serialize(new { type = "navigate-history", direction }));
+            Assert.That(TrayContext.TryReadHistoryCommand(json.RootElement, true, true, out var back), Is.True);
+            Assert.That(back, Is.EqualTo(direction == "back"));
+            Assert.That(TrayContext.TryReadHistoryCommand(json.RootElement, false, false, out _), Is.False);
+            Assert.That(TrayContext.TryReadHistoryCommand(json.RootElement, direction == "back", direction == "forward", out _), Is.True);
+        }
+        foreach (var invalid in new[] { "null", "[]", "{\"type\":\"navigate-history\",\"direction\":\"Back\"}",
+            "{\"type\":\"navigate-history\",\"direction\":true}", "{\"type\":\"navigate-history\"}",
+            "{\"type\":\"foreign\",\"direction\":\"back\"}" }) {
+            using var json = JsonDocument.Parse(invalid);
+            Assert.That(TrayContext.TryReadHistoryCommand(json.RootElement, true, true, out _), Is.False, invalid);
+        }
+    }
+    [Test]
     public void ShowGrammarPreservesOwnerAndAcceptsOnlyCanonicalTokenFreeRoutes() {
         var owner = new[] { "--parent-pid", "123", "--parent-start", "2026-10-09T12:00:00.123Z", "--service-file", Path.GetTempFileName() };
         try {
