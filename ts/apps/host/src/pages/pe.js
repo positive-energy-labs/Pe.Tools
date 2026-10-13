@@ -6,6 +6,7 @@
  *   await pe.read("revit.context.summary");              // run a read on the bound document; the answer is the op's response
  *   await pe.do("revit.context.show-elements", { elementIds: [1234] });   // run a mutation as this page; waits until it settles
  *   await pe.script("checks/census.csx");                // run C# in Revit: a source string, or a .cs/.csx path beside the page
+ *   await pe.do("script:@snowdon-ducts/src/Census.cs");  // run a package's declared script on the bound document
  *   await pe.state(kernel);                              // share a kit kernel's event log with every copy and every agent
  *   pe.describe(() => `# ${kernel.state.title}`);        // what the page says, as markdown, kept beside the snapshot for agents
  *   await pe.picture([1234]);                            // lens then view-image: { url, sha, at, viewId, viewName, registration }
@@ -169,15 +170,19 @@
   /**
    * Run any op. A read answers at once on the bound document; a mutation runs as this page through
    * `/pages/<slug>/act`, under the binding (the bound thread's rw grant, or Pea's own document for a pin), and this
-   * waits until its receipt settles. The answer is the op's response either way.
+   * waits until its receipt settles. The answer is the op's response either way. A package script key
+   * (`script:@snowdon-ducts/src/Census.cs`) always acts: it runs that package's declared script on the binding's
+   * document, as this page; `input` passes only `permissionMode` and `timeoutSeconds`.
    */
   pe.do = async (key, input = {}) => {
-    const r = await post(door("call"), { key, request: input });
-    if (r.ok) return json(r);
-    const answer = await r.json().catch(() => null);
-    // Only "this is a mutation" moves on to act; a binding that names no one document stops here.
-    if (!(r.status === 409 && answer && answer.notDispatched && !answer.resolution))
-      return fail(r, answer ?? "");
+    if (!key.startsWith("script:")) {
+      const r = await post(door("call"), { key, request: input });
+      if (r.ok) return json(r);
+      const answer = await r.json().catch(() => null);
+      // Only "this is a mutation" moves on to act; a binding that names no one document stops here.
+      if (!(r.status === 409 && answer && answer.notDispatched && !answer.resolution))
+        return fail(r, answer ?? "");
+    }
     let row = await json(await post(door("act"), { key, input }));
     const id = row.id;
     while (row.state === "running") {

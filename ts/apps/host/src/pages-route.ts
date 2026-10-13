@@ -52,6 +52,7 @@ import {
 import {
   addressSchema,
   pageBindingSchema,
+  parseContributionKey,
   pageChoiceSchema,
   resolveCallTarget,
   resolvePinned,
@@ -78,7 +79,7 @@ import {
   threadHead,
   subscribeHeads,
 } from "./control.ts";
-import { listPackages } from "./packages.ts";
+import { capturePackage, listPackages } from "./packages.ts";
 import {
   PAGE_FOLDER,
   PAGE_LIBRARIES,
@@ -664,24 +665,49 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
       if (resolution.kind !== "resolved") return unresolved(at, resolution);
       // Decided here first, so a refusal names this door; `/actions` decides again under the same slot.
       admitPage(slot, resolution.target, at);
+      const action = await operationOf(body.data.key, body.data.input);
+      if ("problem" in action) return problem(400, action.problem);
       return await cross(
         page,
         slot,
         at,
         "/actions",
         {},
-        {
-          id: randomUUID(),
-          kind: "operation",
-          key: body.data.key,
-          destination: resolution.target,
-          input: body.data.input ?? {},
-        },
+        { id: randomUUID(), kind: "operation", destination: resolution.target, ...action },
       );
     } catch (error) {
       if (error instanceof Refused) return refused(error.refusal);
       throw error;
     }
+  }
+
+  /**
+   * The operation a page's act names. A host op runs as sent. A contribution key runs only as a
+   * declared script of an admitted package: `scripting.execute` over that package's captured bytes,
+   * the same frozen input Pea's dispatch sends. The target is the binding's, so a page-sent
+   * selector, bundle or source path is dropped; only the run's mode and timeout pass.
+   */
+  async function operationOf(
+    key: string,
+    input: unknown,
+  ): Promise<{ key: string; input: Record<string, unknown> } | { problem: string }> {
+    const ref = parseContributionKey(key);
+    const sent = (input ?? {}) as Record<string, unknown>;
+    if (!ref) return { key, input: sent };
+    if (ref.kind !== "script")
+      return { problem: `${key} is a ${ref.kind}: it reads and mentions, it never runs.` };
+    const pod = pods
+      ? (await listPackages(pods)).packages.find((one) => one.id === ref.packageId)
+      : undefined;
+    if (!pod?.contributions.some((row) => row.kind === "script" && row.key === key))
+      return { problem: `${key} is no declared script of an admitted package.` };
+    const { sourceBundle } = await capturePackage(pod);
+    const run = Object.fromEntries(
+      (["permissionMode", "timeoutSeconds"] as const)
+        .filter((name) => sent[name] !== undefined)
+        .map((name) => [name, sent[name]]),
+    );
+    return { key: "scripting.execute", input: { ...run, sourcePath: ref.path, sourceBundle } };
   }
 
   /**

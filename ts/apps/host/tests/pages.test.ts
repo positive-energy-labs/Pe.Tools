@@ -641,6 +641,79 @@ ${source}`),
       });
     });
 
+    it("a Pod page runs its package's script key on its binding's target, as the page", async () => {
+      bind();
+      const { pods, as, forwarded } = await host([session("S1")]);
+      const pod = join(pods, "kit-folder");
+      await mkdir(join(pod, "pages", "tour"), { recursive: true });
+      await mkdir(join(pod, "src"), { recursive: true });
+      await mkdir(join(pod, "settings"), { recursive: true });
+      await writeFile(
+        join(pod, "pod.json"),
+        JSON.stringify({ id: "ducts", entrypoints: [{ sourcePath: "src/Census.cs" }] }),
+      );
+      await writeFile(join(pod, "src", "Census.cs"), "// census");
+      await writeFile(join(pod, "src", "Helper.cs"), "// helper");
+      await writeFile(join(pod, "settings", "checks.json"), "{}");
+      await writeFile(join(pod, "pages", "tour", "index.html"), "<title>Tour</title>");
+      const tour = as({ kind: "page", page: "page:@ducts/pages/tour" });
+      const act = (key: string, input: unknown = {}) =>
+        tour.post("/pages/ducts--tour/act", { key, input });
+      // No binding: page.unbound, nothing crosses.
+      const unbound = await act("script:@ducts/src/Census.cs");
+      expect(unbound.status).toBe(403);
+      expect(await code(unbound)).toMatchObject({ code: "page.unbound" });
+      expect(forwarded).toEqual([]);
+      heads.t1 = grantedHead(docA);
+      await as(human).put("/pe/pages/ducts--tour/binding", { kind: "thread", thread: "t1" });
+      // A page-sent selector or bundle never names the target or the bytes.
+      const ran = await act("script:@ducts/src/Census.cs", {
+        permissionMode: "ReadOnly",
+        target: { kind: "open", ref: { session: "S9", openId: "Z" } },
+        sourceBundle: { files: [] },
+        sourcePath: "src/Helper.cs",
+      });
+      expect(ran.status, await ran.clone().text()).toBe(202);
+      expect(await ran.json()).toMatchObject({
+        caller: { kind: "page", page: "page:@ducts/pages/tour" },
+        basis: { kind: "grant", thread: "t1", lifetime: docA },
+      });
+      const body = forwarded[0]!.body as {
+        key: string;
+        destination: unknown;
+        input: {
+          sourcePath: string;
+          permissionMode: string;
+          sourceBundle: { files: { path: string }[] };
+        };
+      };
+      expect(body.key).toBe("scripting.execute");
+      expect(body.destination).toEqual({ kind: "document", ref: docA });
+      expect(Object.keys(body.input).sort()).toEqual([
+        "permissionMode",
+        "sourceBundle",
+        "sourcePath",
+      ]);
+      expect(body.input.sourcePath).toBe("src/Census.cs");
+      expect(body.input.sourceBundle.files.map((file) => file.path).sort()).toEqual([
+        "pages/tour/index.html",
+        "pod.json",
+        "settings/checks.json",
+        "src/Census.cs",
+        "src/Helper.cs",
+      ]);
+      // A member reads, never runs; an undeclared source is no script; another package is not this page's.
+      for (const key of [
+        "member:@ducts/settings/checks.json",
+        "script:@ducts/src/Helper.cs",
+        "script:@other/src/Census.cs",
+      ]) {
+        const refused = await act(key);
+        expect(refused.status, key).toBe(400);
+      }
+      expect(forwarded).toHaveLength(1);
+    });
+
     it("a pinned Address open in two Revits is choose: ambiguous, closed is document-closed", async () => {
       bind();
       const two = await host([session("S1"), session("S2")]);
