@@ -11,6 +11,7 @@ import { acknowledgeUpdate } from "#/host/install";
 import { MACHINE_SEEDS, OPEN_SEEDS } from "#/open/seeds";
 import { dirty, useAction, useReading } from "#/readings";
 
+import { setAccepting } from "./accepting";
 import { machineOf, planWaits } from "./model";
 
 const ABSENT: Reading<Machine> = { state: "absent" };
@@ -42,9 +43,11 @@ export function useUpdateConsent(reading: Reading<Machine>, fixture: boolean) {
   const machine = machineOf(reading);
   const [requestId, setRequestId] = useState<string | null>(null);
   const run = useCallback(async (planId: string) => {
+    setAccepting(true);
     try {
       return await acknowledgeUpdate(planId);
     } finally {
+      setAccepting(false);
       dirty({ kind: "machine" });
     }
   }, []);

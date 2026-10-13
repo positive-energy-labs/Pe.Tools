@@ -25,6 +25,52 @@ const SETTLED = new Set(["ok", "failed", "refused"]);
 export const receiptRunning = (machine: Machine) =>
   machine.update.receipt !== null && !SETTLED.has(machine.update.receipt.state);
 
+/** What the install scrim says: the version going in, the current leg in words, and the baseline host. */
+export interface Installing {
+  readonly to: string | null;
+  readonly leg: string;
+  /** The host stopped answering: the successor is not up yet. */
+  readonly gone: boolean;
+  /** The version of the host this page was served by; a different answer means the successor. */
+  readonly version: string | null;
+}
+
+const legWords = (leg: string, to: string | null) => {
+  switch (leg.split(":")[0]) {
+    case "download":
+      return `Downloading ${to ?? "the update"}`;
+    case "stop":
+      return "Closing Revit";
+    case "handoff":
+    case "install":
+      return `Installing ${to ?? "the update"}`;
+    case "reopen":
+      return "Reopening documents";
+    case "relaunch":
+      return "Relaunching Revit";
+    default:
+      return leg;
+  }
+};
+
+/**
+ * An install is in progress while its receipt runs (or its consent is still being admitted), read
+ * from the host's state, never a timer. A stale reading keeps it: the host going away is part of it.
+ */
+export function installing(reading: Reading<Machine>, accepting: boolean): Installing | null {
+  const machine = machineOf(reading);
+  if (!accepting && !(machine && receiptRunning(machine))) return null;
+  const to = machine?.update.plan?.latest ?? null;
+  const last = machine?.update.receipt?.legs.at(-1);
+  const gone = disconnected(reading);
+  return {
+    to,
+    gone,
+    version: machine?.host.version ?? null,
+    leg: gone ? "Waiting for the new host" : last ? legWords(last.name, to) : "Starting the update",
+  };
+}
+
 /** A plan that waits on this person: available, not yet admitted, nothing applying. */
 export const planWaits = (machine: Machine): UpdatePlan | null => {
   const plan = machine.update.plan;
