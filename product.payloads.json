@@ -21,6 +21,7 @@
       "app/bin/host/Pe.Host.exe",
       "app/bin/host/tray/Pe.Host.Tray.exe",
       "app/bin/host/web/client/index.html",
+      "app/bin/host/pods/snowdon-ducts.zip",
       "app/bin/pea/pea.exe"
     ]
   },

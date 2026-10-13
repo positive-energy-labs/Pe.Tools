@@ -187,6 +187,8 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             .ShouldBeTrue("Failed to publish TS host for installer packaging.");
         runtimePublishDirectory.GetFile("web/client/index.html").Exists
             .ShouldBeTrue("Installer runtime publish should include the staged web SPA.");
+        runtimePublishDirectory.GetFile("pods/snowdon-ducts.zip").Exists
+            .ShouldBeTrue("Installer runtime publish should include the shipped example Pod (stage-web.mjs exports examples/pods).");
         StageUsageIndex(context, rootDirectory, builtHostDirectory);
         context.Logger.LogInformation("Finished publishing TS host runtime for installer packaging.");
     }

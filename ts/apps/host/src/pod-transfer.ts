@@ -483,14 +483,17 @@ export function readZip(archive: Buffer): Map<string, Buffer> {
 
 // --- helpers ----------------------------------------------------------------------------------
 
-/** Portable project: machine references dropped; framework, packages and usings kept. */
+/**
+ * Portable project: a project with machine `<Reference>` hint paths is regenerated without them
+ * (framework, packages and usings kept); one without any already travels and keeps its bytes.
+ * Execution derives its own project from this seed, so an omitted framework is year-neutral.
+ */
 export function portableProject(project: Buffer): Buffer {
   const xml = project.toString("utf8").replace(/^﻿/, "");
+  if (!/<Reference[\s/>]/.test(xml)) return project;
   const framework =
     /<TargetFramework>\s*([^<]+?)\s*<\/TargetFramework>/.exec(xml)?.[1] ??
     /<TargetFrameworks>\s*([^<;]+)/.exec(xml)?.[1]?.trim();
-  if (!framework)
-    throw new TransferRefused("Cannot publish PeScripts.csproj: it names no TargetFramework.");
   const packages = new Map<string, string | undefined>();
   for (const match of xml.matchAll(/<PackageReference\b([^>]*?)(?:\/>|>([\s\S]*?)<\/PackageReference>)/g)) {
     const include = attribute(match[1]!, "Include");
@@ -503,7 +506,7 @@ export function portableProject(project: Buffer): Buffer {
   const lines = [
     '<Project Sdk="Microsoft.NET.Sdk">',
     "  <PropertyGroup>",
-    `    <TargetFramework>${escapeXml(framework)}</TargetFramework>`,
+    ...(framework ? [`    <TargetFramework>${escapeXml(framework)}</TargetFramework>`] : []),
     "    <LangVersion>latest</LangVersion>",
     "    <PlatformTarget>x64</PlatformTarget>",
     "    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>",
