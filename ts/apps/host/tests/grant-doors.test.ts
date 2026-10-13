@@ -170,7 +170,7 @@ test("door 2: a Page is sent to its own door", async () => {
   refused(
     await send(page, "/actions", admission()),
     "page.use-page-door",
-    "Pages act through /pages/<slug>/act, not /actions.",
+    "Pages act through /pages/todo/act, not /actions.",
   );
 });
 
