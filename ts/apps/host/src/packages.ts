@@ -72,12 +72,8 @@ const authority = new Set([
   "context-token.txt",
 ]);
 
-export function normalizePackagePath(path: string): string {
-  return packageMemberPathSchema.parse(path);
-}
-
 export function isPackageMember(path: string): boolean {
-  const parts = normalizePackagePath(path).toLowerCase().split("/");
+  const parts = packageMemberPathSchema.parse(path).toLowerCase().split("/");
   return (
     !parts.some((part) => debris.has(part)) &&
     !(parts.length === 1 && parts[0] === "imported.json") &&
@@ -288,7 +284,7 @@ async function readFolder(directory: string, folder: string): Promise<AdmittedPa
     try {
       if (Object.keys(entry).some((key) => !["sourcePath", "name", "description"].includes(key)))
         throw Error("Unknown entrypoint field; sourcePath is its identity");
-      const path = normalizePackagePath(entry.sourcePath);
+      const path = packageMemberPathSchema.parse(entry.sourcePath);
       if (
         !(path.startsWith("src/") && /^src\/.+\.cs$/i.test(path)) ||
         entrypoints.some((item) => item.sourcePath.toLowerCase() === path.toLowerCase())

@@ -16,16 +16,15 @@ import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
-import { packageIdSchema } from "@pe/agent-contracts";
+import { packageIdSchema, packageMemberPathSchema } from "@pe/agent-contracts";
 import { scriptPodSourceBounds } from "@pe/host-contracts/generated";
-import type { MemberIssue } from "@pe/host-contracts/operation-types";
+import type { PodExport, PodImport, PodPromote } from "@pe/host-contracts/operation-types";
 import { hostCaptures, type CaptureStore } from "./captures-route.ts";
 import {
   captureDirectory,
   capturePackage,
   isPackageMember,
   listPackages,
-  normalizePackagePath,
   type AdmittedPackage,
   type PackageListing,
 } from "./packages.ts";
@@ -55,41 +54,12 @@ export class TransferRefused extends Error {
   }
 }
 
-export type PodTransform = {
-  path: string;
-  transform: "vendor-references" | "portable-project";
-  beforeSha256: string;
-  afterSha256: string;
-};
-export type PodVendored = { id: string; path: string; sha256: string };
-
-export type PodExported = {
-  id: string;
-  archivePath: string;
-  archiveSha256: string;
-  members: { path: string; sha256: string }[];
-  vendored: PodVendored[];
-  transforms: PodTransform[];
-  captures: string[];
-};
-
-export type PodImported = {
-  id: string;
-  folder: string;
-  directory: string;
-  archiveSha256: string;
-  members: { path: string; sha256: string }[];
-  diagnostics: MemberIssue[];
-};
-
-export type PagePromoted = { id: string; folder: string; directory: string; key: string };
-
 // --- export -----------------------------------------------------------------------------------
 
 export async function exportPod(
   request: { pod: string; archivePath: string },
   options: TransferOptions = {},
-): Promise<PodExported> {
+): Promise<PodExport> {
   const archivePath = zipPath(request.archivePath);
   const listing = await listPackages(options.podsRoot ?? productPodsRootPath());
   const pod = unique(listing, request.pod);
@@ -99,8 +69,12 @@ export async function exportPod(
   const files = new Map<string, Buffer>(
     captured.members.map((m) => [m.path, Buffer.from(m.bytes)]),
   );
-  const transforms: PodTransform[] = [];
-  const record = (path: string, transform: PodTransform["transform"], after: Buffer) => {
+  const transforms: PodExport["transforms"][number][] = [];
+  const record = (
+    path: string,
+    transform: PodExport["transforms"][number]["transform"],
+    after: Buffer,
+  ) => {
     const before = files.get(path)!;
     if (before.equals(after)) return;
     transforms.push({ path, transform, beforeSha256: sha256(before), afterSha256: sha256(after) });
@@ -141,9 +115,13 @@ function vendor(
   podId: string,
   files: Map<string, Buffer>,
   listing: PackageListing,
-  record: (path: string, transform: PodTransform["transform"], after: Buffer) => void,
-): PodVendored[] {
-  const vendored: PodVendored[] = [];
+  record: (
+    path: string,
+    transform: PodExport["transforms"][number]["transform"],
+    after: Buffer,
+  ) => void,
+): PodExport["vendored"] {
+  const vendored: PodExport["vendored"][number][] = [];
   const pending: { owner: string; path: string }[] = [];
   // owner is null for this pod's own members; otherwise the vendored fragment's pod (its `@local`).
   const rewrite = (source: string, bytes: Buffer, owner: string | null): Buffer => {
@@ -253,7 +231,7 @@ async function closeCaptures(files: Map<string, Buffer>, store: CaptureStore): P
 export async function importPod(
   request: { archivePath: string; folder?: string },
   options: TransferOptions = {},
-): Promise<PodImported> {
+): Promise<PodImport> {
   const archivePath = zipPath(request.archivePath);
   const info = await stat(archivePath).catch(() => null);
   if (!info?.isFile()) throw new TransferRefused(`No pod archive at ${archivePath}.`, 404);
@@ -269,7 +247,7 @@ export async function installArchive(
   locator: string,
   folderName: string | undefined,
   options: TransferOptions = {},
-): Promise<PodImported> {
+): Promise<PodImport> {
   const entries = readZip(archive);
   const id = archiveId(entries);
   const folder = localFolder(folderName ?? id);
@@ -349,7 +327,7 @@ export function archiveId(entries: ReadonlyMap<string, Buffer>): string {
 export async function promotePage(
   request: { page: string; id: string; name?: string },
   options: TransferOptions = {},
-): Promise<PagePromoted> {
+): Promise<PodPromote> {
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(request.page))
     throw new TransferRefused(`'${request.page}' is not a scratch Page slug.`, 400);
   const id = packageIdSchema.safeParse(request.id);
@@ -462,7 +440,7 @@ export function readZip(archive: Buffer): Map<string, Buffer> {
     if ((mode & 0xf000) === 0xa000) throw refuse(`'${name}' is a link`);
     let path: string;
     try {
-      path = normalizePackagePath(name);
+      path = packageMemberPathSchema.parse(name);
     } catch (error) {
       throw refuse(said(error));
     }

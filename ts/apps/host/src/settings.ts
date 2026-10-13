@@ -24,7 +24,7 @@ import type {
   SettingsValidate,
 } from "@pe/host-contracts/generated";
 import type { PodDraftSource, PodMemberSource } from "@pe/agent-contracts";
-import { isPackageMember, listPackages, normalizePackagePath, readPackage } from "./packages.ts";
+import { isPackageMember, listPackages, readPackage } from "./packages.ts";
 import { LocalOpError } from "./local-error.ts";
 import { productPodsRootPath } from "./product-paths.ts";
 import {
@@ -620,9 +620,8 @@ function hasDirectives(value: unknown): boolean {
 }
 
 function normalizeMemberPath(input: string): string {
-  const path = normalizePackagePath(input);
-  if (!isPackageMember(path)) throw Error(`'${path}' is not an authored package member.`);
-  return path;
+  if (!isPackageMember(input)) throw Error(`'${input}' is not an authored package member.`);
+  return input;
 }
 
 function safeJoin(rootPath: string, relativePath: string): string {
