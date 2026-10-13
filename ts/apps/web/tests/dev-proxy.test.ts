@@ -98,3 +98,101 @@ test("dev proxy includes MCP and omits the five removed relay routes", () => {
     expect(matches.test(path), path).toBe(false);
   expect(proxy).toMatchObject({ target: "http://127.0.0.1:5180", changeOrigin: true, ws: true });
 });
+
+/**
+ * F2 (acceptance 2026-10-13): through the checkout frontend a Page navigation and its `<script>`
+ * and `<link>` loads carry no runtime marker (a browser cannot add a header to them), so the guard
+ * refused them. The host writes its own marker into the pe.js it serves and every request pe.js
+ * makes carries it, so Page documents and static assets pass; every API door keeps the guard.
+ */
+test("the real proxy forwards Page documents and assets and still refuses unmarked API requests", async () => {
+  const { createServer: createVite } = await import("vite-plus");
+  const { createServer, request } = await import("node:http");
+  const { once } = await import("node:events");
+  const { mkdtempSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const forwarded: string[] = [];
+  const backend = createServer((req, res) => {
+    forwarded.push(`${req.method} ${req.url}`);
+    res.end("host");
+  });
+  backend.listen(0, "127.0.0.1");
+  await once(backend, "listening");
+  const backendPort = (backend.address() as { port: number }).port;
+  const root = mkdtempSync(join(tmpdir(), "pe-dev-proxy-"));
+  const vite = await createVite({
+    configFile: false,
+    root,
+    logLevel: "silent",
+    server: {
+      host: "127.0.0.1",
+      port: 0,
+      proxy: devHostProxy(`http://127.0.0.1:${backendPort}`),
+    },
+  });
+  try {
+    await vite.listen();
+    const port = (vite.httpServer!.address() as { port: number }).port;
+    const send = (method: string, path: string, headers: Record<string, string>) =>
+      new Promise<number>((resolve, reject) => {
+        const req = request(
+          {
+            host: "127.0.0.1",
+            port,
+            method,
+            path,
+            headers: { "sec-fetch-site": "same-origin", ...headers },
+          },
+          (res) => {
+            res.resume();
+            resolve(res.statusCode ?? 0);
+          },
+        );
+        req.on("error", reject);
+        req.end();
+      });
+    const navigate = {
+      accept: "text/html",
+      "sec-fetch-mode": "navigate",
+      "sec-fetch-dest": "document",
+    };
+    expect(await send("GET", "/pages/probe/", navigate)).toBe(200);
+    expect(await send("GET", "/pages", navigate)).toBe(200);
+    expect(
+      await send("GET", "/pages/pe.js", {
+        "sec-fetch-mode": "no-cors",
+        "sec-fetch-dest": "script",
+      }),
+    ).toBe(200);
+    expect(
+      await send("GET", "/pages/pe.css", {
+        "sec-fetch-mode": "no-cors",
+        "sec-fetch-dest": "style",
+      }),
+    ).toBe(200);
+    expect(
+      await send("GET", "/pages/probe/chart.png", {
+        "sec-fetch-mode": "no-cors",
+        "sec-fetch-dest": "image",
+      }),
+    ).toBe(200);
+    // API doors, including the Page's own, keep the guard when unmarked.
+    const api = { "sec-fetch-mode": "cors", "sec-fetch-dest": "empty" };
+    expect(await send("POST", "/pages/probe/act", api)).toBe(403);
+    expect(await send("GET", "/pages/probe/state", api)).toBe(403);
+    expect(await send("POST", "/actions", api)).toBe(403);
+    expect(await send("GET", "/call", navigate)).toBe(403);
+    expect(forwarded).toEqual([
+      "GET /pages/probe/",
+      "GET /pages",
+      "GET /pages/pe.js",
+      "GET /pages/pe.css",
+      "GET /pages/probe/chart.png",
+    ]);
+  } finally {
+    await vite.close();
+    backend.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

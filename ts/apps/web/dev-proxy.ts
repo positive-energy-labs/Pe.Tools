@@ -82,6 +82,16 @@ export function devHostProxy(target: string): Record<string, ProxyOptions> {
             req.headers.accept?.includes("text/html")
           )
             return req.url;
+          // A Page navigation and its <script>/<link>/<img> loads cannot carry a header. The host
+          // writes its own marker into the pe.js it serves, so every door a Page calls is marked.
+          if (
+            (req.method === "GET" || req.method === "HEAD") &&
+            /^\/pages(?:\/|\?|$)/.test(req.url ?? "") &&
+            ["document", "iframe", "script", "style", "image", "font"].includes(
+              String(req.headers["sec-fetch-dest"]),
+            )
+          )
+            return;
           if (
             (req.headers.origin || req.headers["sec-fetch-site"]) &&
             !req.headers[HOST_RUNTIME_SERVICE_HEADER] &&
