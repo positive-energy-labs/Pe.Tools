@@ -72,7 +72,11 @@ export function StaleResolve({
           <Button
             kind="framed"
             label={`Overwrite ${values(n)}`}
-            refusal={others > 0 ? `${others} other staged cell${others === 1 ? "" : "s"} would push too; push or drop ${others === 1 ? "it" : "them"} first.` : null}
+            refusal={
+              others > 0
+                ? `${others} other staged cell${others === 1 ? "" : "s"} would push too; push or drop ${others === 1 ? "it" : "them"} first.`
+                : null
+            }
             reason={
               others > 0
                 ? `${others} other staged cell${others === 1 ? "" : "s"} would push too; push or drop ${others === 1 ? "it" : "them"} first`

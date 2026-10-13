@@ -14,11 +14,17 @@ const baked = (defines: Record<string, string>, key: string) => JSON.parse(defin
 
 test("release stamps carry the product version and the current commit; dev carries `dev`", () => {
   expect(receiptBuildStamp("release")).toEqual({ version, build: head.slice(0, 12), commit: head });
-  expect(receiptBuildStamp("dev")).toEqual({ version: "dev", build: head.slice(0, 12), commit: head });
+  expect(receiptBuildStamp("dev")).toEqual({
+    version: "dev",
+    build: head.slice(0, 12),
+    commit: head,
+  });
 });
 
 test("the built host and web carry the same stamp and the admission accepts it", () => {
-  const web = (webConfig as (e: { mode: string; command: string }) => { define: Record<string, string> })({
+  const web = (
+    webConfig as (e: { mode: string; command: string }) => { define: Record<string, string> }
+  )({
     mode: "production",
     command: "build",
   }).define;

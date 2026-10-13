@@ -1,5 +1,5 @@
 import { contextFetch as fetch } from "#invocation-context";
-﻿import {
+import {
   scheduleReadingSchema,
   scheduleCatalogSchema,
   type ScheduleReadKey,

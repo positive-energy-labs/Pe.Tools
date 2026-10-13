@@ -70,8 +70,8 @@ export function geometry(f: Face) {
   const pitch = {
     friction: f.K,
     cfmFriction: EXP.cfm * f.K,
-    velocity: EXP.diameter * f.K / EXP.velocityDiameter,
-    cfmVelocity: EXP.diameter * f.K / EXP.velocityDiameter,
+    velocity: (EXP.diameter * f.K) / EXP.velocityDiameter,
+    cfmVelocity: (EXP.diameter * f.K) / EXP.velocityDiameter,
     diameter: EXP.diameter * f.K,
   };
   return {

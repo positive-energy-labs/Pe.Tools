@@ -98,7 +98,9 @@ test("a pending approval disables every option until the decision finishes", asy
   fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
   expect(resolveApproval).toHaveBeenCalledExactlyOnceWith("permission-original", "deny-original");
   await act(async () => finish());
-  expect(screen.getByRole("button", { name: "Allow once" }).getAttribute("aria-disabled")).toBeNull();
+  expect(
+    screen.getByRole("button", { name: "Allow once" }).getAttribute("aria-disabled"),
+  ).toBeNull();
 });
 
 test("required question fields refuse an empty answer and Enter cannot submit the composer", async () => {

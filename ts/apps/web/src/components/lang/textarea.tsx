@@ -9,7 +9,8 @@ export const textareaRecipe = tv({
     surface: {
       field: "t-small",
       // Embedded in a frame that owns focus (the composer box rings itself): no ring of its own.
-      embedded: "t-prose rounded-none border-0 bg-transparent focus-visible:ring-0 dark:bg-transparent",
+      embedded:
+        "t-prose rounded-none border-0 bg-transparent focus-visible:ring-0 dark:bg-transparent",
     },
   },
   defaultVariants: { size: "normal", surface: "field" },

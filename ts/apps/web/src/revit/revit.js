@@ -51,7 +51,10 @@
  */
 
 const esc = (/** @type {unknown} */ v) =>
-  String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c);
+  String(v ?? "").replace(
+    /[&<>"]/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c,
+  );
 
 /** @param {Record<string, unknown>} attrs */
 const attrs = (attrs) =>
@@ -95,11 +98,16 @@ const index = (/** @type {Spec} */ spec) => {
         const ids = rowIds(id, p.rows);
         p.rows.forEach((r, i) => add(ids[i], scalars(r)));
       }
-      if (p.t === "list") for (const item of p.items) add(`${id}/${item}`, { selected: item === p.selected });
+      if (p.t === "list")
+        for (const item of p.items) add(`${id}/${item}`, { selected: item === p.selected });
       if (p.t === "grid")
         for (const r of p.rows)
           if ("band" in r) add(`${id}/${r.band}`, scalars(r));
-          else add(`${id}/${cellText(r.cells[0])}`, { ...scalars(r), cells: r.cells.map(cellText).join(" | ") });
+          else
+            add(`${id}/${cellText(r.cells[0])}`, {
+              ...scalars(r),
+              cells: r.cells.map(cellText).join(" | "),
+            });
     }
   };
   if (spec.t === "dialog") {
@@ -121,7 +129,9 @@ const index = (/** @type {Spec} */ spec) => {
 /** The state of one thing: its scalar fields, without children or geometry. */
 const scalars = (/** @type {object} */ o) =>
   Object.fromEntries(
-    Object.entries(o).filter(([k, v]) => typeof v !== "object" && !["t", "id", "w", "h", "grow", "gap"].includes(k)),
+    Object.entries(o).filter(
+      ([k, v]) => typeof v !== "object" && !["t", "id", "w", "h", "grow", "gap"].includes(k),
+    ),
   );
 
 const cellText = (/** @type {Cell | undefined} */ c) =>
@@ -145,9 +155,11 @@ const diff = (a, b) => {
       continue;
     }
     for (const prop of new Set([...Object.keys(va), ...Object.keys(vb)]))
-      if ((va[prop] ?? false) !== (vb[prop] ?? false)) out.push({ at: id, prop, from: va[prop], to: vb[prop] });
+      if ((va[prop] ?? false) !== (vb[prop] ?? false))
+        out.push({ at: id, prop, from: va[prop], to: vb[prop] });
   }
-  for (const id of ib.keys()) if (!ia.has(id)) out.push({ at: id, prop: "added", from: false, to: true });
+  for (const id of ib.keys())
+    if (!ia.has(id)) out.push({ at: id, prop: "added", from: false, to: true });
   return out;
 };
 
@@ -231,7 +243,11 @@ const rowIds = (tree, rows) => {
 };
 
 /** Is there a later sibling at `depth` (does the connector run on down)? */
-const continues = (/** @type {TreeRow[]} */ rows, /** @type {number} */ i, /** @type {number} */ depth) => {
+const continues = (
+  /** @type {TreeRow[]} */ rows,
+  /** @type {number} */ i,
+  /** @type {number} */ depth,
+) => {
   for (const r of rows.slice(i + 1)) {
     const d = r.depth ?? 0;
     if (d < depth) return false;
@@ -275,11 +291,29 @@ const inner = (p, o, id) => {
       return `<span class="rv-group-title">${esc(p.text)}</span>${(p.items ?? []).map((c) => piece(c, o)).join("")}`;
     case "tabs":
       return `<div class="rv-tabstrip">${p.items
-        .map((tab) => tag("span", `${id}/${tab}`, o, { class: "rv-tab", "data-selected": tab === p.selected }, esc(tab)))
-        .join("")}</div><div class="rv-tabpage">${(p.body ?? []).map((c) => piece(c, o)).join("")}</div>`;
+        .map((tab) =>
+          tag(
+            "span",
+            `${id}/${tab}`,
+            o,
+            { class: "rv-tab", "data-selected": tab === p.selected },
+            esc(tab),
+          ),
+        )
+        .join(
+          "",
+        )}</div><div class="rv-tabpage">${(p.body ?? []).map((c) => piece(c, o)).join("")}</div>`;
     case "list":
       return p.items
-        .map((item) => tag("div", `${id}/${item}`, o, { class: "rv-list-item", "data-selected": item === p.selected }, esc(item)))
+        .map((item) =>
+          tag(
+            "div",
+            `${id}/${item}`,
+            o,
+            { class: "rv-list-item", "data-selected": item === p.selected },
+            esc(item),
+          ),
+        )
         .join("");
     case "tree": {
       const ids = rowIds(id, p.rows);
@@ -288,10 +322,13 @@ const inner = (p, o, id) => {
           const depth = r.depth ?? 0;
           const guides = Array.from(
             { length: depth },
-            (_, c) => `<span class="rv-tree-col"${attrs({ "data-line": continues(p.rows, i, c) })}></span>`,
+            (_, c) =>
+              `<span class="rv-tree-col"${attrs({ "data-line": continues(p.rows, i, c) })}></span>`,
           ).join("");
           const joint = `<span class="rv-tree-col" data-joint${attrs({ "data-up": i > 0, "data-down": continues(p.rows, i, depth) })}>${
-            r.open === undefined ? "" : `<span class="rv-tree-box"${attrs({ "data-closed": !r.open })}></span>`
+            r.open === undefined
+              ? ""
+              : `<span class="rv-tree-box"${attrs({ "data-closed": !r.open })}></span>`
           }</span>`;
           return tag(
             "div",
@@ -327,32 +364,38 @@ const inner = (p, o, id) => {
           const rid = `${id}/${cellText(r.cells[0])}`;
           const ring = o.changed?.has(rid);
           return r.cells
-            .map((c, ci) =>
-              `<span class="rv-grid-cell"${attrs({
-                "data-split": ci < n - 1,
-                "data-last": ci === n - 1,
-                "data-disabled": r.disabled,
-                "data-current": r.current === ci,
-                "data-changed": ring,
-                "data-rv": ci === 0 ? rid : undefined,
-              })}>${
-                typeof c === "string"
-                  ? esc(c)
-                  : `<span class="rv-check"${attrs({ "data-checked": c.checked, "data-disabled": c.disabled })}></span>`
-              }${ci === 0 ? badges(rid, o) : ""}</span>`,
+            .map(
+              (c, ci) =>
+                `<span class="rv-grid-cell"${attrs({
+                  "data-split": ci < n - 1,
+                  "data-last": ci === n - 1,
+                  "data-disabled": r.disabled,
+                  "data-current": r.current === ci,
+                  "data-changed": ring,
+                  "data-rv": ci === 0 ? rid : undefined,
+                })}>${
+                  typeof c === "string"
+                    ? esc(c)
+                    : `<span class="rv-check"${attrs({ "data-checked": c.checked, "data-disabled": c.disabled })}></span>`
+                }${ci === 0 ? badges(rid, o) : ""}</span>`,
             )
             .join("");
         })
         .join("");
       const fill = cols
-        .map((_, ci) => `<span class="rv-grid-fill"${attrs({ "data-split": ci < n - 1, "data-last": ci === n - 1 })}></span>`)
+        .map(
+          (_, ci) =>
+            `<span class="rv-grid-fill"${attrs({ "data-split": ci < n - 1, "data-last": ci === n - 1 })}></span>`,
+        )
         .join("");
       return `<div class="rv-grid-table" style="${style}">${head}${body}${fill}</div>${scrollbar(p.scroll)}`;
     }
     case "tools":
       return p.items.map((t) => icon(t.icon, t.disabled)).join("");
     case "image":
-      return p.src ? `<img src="${esc(p.src)}" alt="${esc(p.text)}">` : `<span>${esc(p.text)}</span>`;
+      return p.src
+        ? `<img src="${esc(p.src)}" alt="${esc(p.text)}">`
+        : `<span>${esc(p.text)}</span>`;
   }
 };
 
@@ -370,7 +413,12 @@ const shell = (/** @type {Piece} */ p) => {
       return { class: "rv-label", "data-disabled": p.disabled };
     case "text":
       // Wrapping prose: an error message, a dialog's explanation. `well` sinks it into a white box.
-      return { class: "rv-text", "data-well": p.well, "data-strong": p.strong, "data-disabled": p.disabled };
+      return {
+        class: "rv-text",
+        "data-well": p.well,
+        "data-strong": p.strong,
+        "data-disabled": p.disabled,
+      };
     case "link":
       return { class: "rv-anchor" };
     case "button":
@@ -410,7 +458,8 @@ const tag = (
   /** @type {RenderOptions} */ o,
   /** @type {Record<string, unknown>} */ a,
   /** @type {string} */ body,
-) => `<${name}${attrs({ ...a, "data-rv": id, "data-changed": o.changed?.has(id) })}>${body}${badges(id, o)}</${name}>`;
+) =>
+  `<${name}${attrs({ ...a, "data-rv": id, "data-changed": o.changed?.has(id) })}>${body}${badges(id, o)}</${name}>`;
 
 /** @param {Piece} p @param {RenderOptions} o */
 const piece = (p, o) => {
@@ -425,23 +474,36 @@ const piece = (p, o) => {
     height: at?.h ?? p.h,
     flex: p.grow ? "1 1 0" : undefined,
   });
-  return tag("div", id, o, { ...a, style: [style, geometry].filter(Boolean).join(";") || undefined }, inner(p, o, id));
+  return tag(
+    "div",
+    id,
+    o,
+    { ...a, style: [style, geometry].filter(Boolean).join(";") || undefined },
+    inner(p, o, id),
+  );
 };
 
 // ── windows ──────────────────────────────────────────────────────────────────────────────────
 
-const X = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M0.5 0.5 L9.5 9.5 M9.5 0.5 L0.5 9.5"/></svg>';
+const X =
+  '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M0.5 0.5 L9.5 9.5 M9.5 0.5 L0.5 9.5"/></svg>';
 
-const titlebar = (/** @type {string} */ title, /** @type {"help" | "close" | "full"} */ caption, /** @type {boolean} */ dock = false) =>
+const titlebar = (
+  /** @type {string} */ title,
+  /** @type {"help" | "close" | "full"} */ caption,
+  /** @type {boolean} */ dock = false,
+) =>
   `<div class="rv-titlebar"${attrs({ "data-dock": dock })}><span class="rv-titlebar-text">${esc(title)}</span><span class="rv-caption">${
     caption === "full" ? "<span>—</span><span>☐</span>" : caption === "help" ? "<span>?</span>" : ""
   }<span>${X}</span></span></div>`;
 
 /** @param {Dialog} d @param {RenderOptions} o */
 const dialog = (d, o) =>
-  `<div class="rv" style="${css({ width: d.w, height: d.h })}">${titlebar(d.title, d.caption ?? "close")}<div class="rv-body"${attrs({
-    style: css({ padding: d.padding, gap: d.gap }),
-  })}>${d.body.map((p) => piece(p, o)).join("")}${
+  `<div class="rv" style="${css({ width: d.w, height: d.h })}">${titlebar(d.title, d.caption ?? "close")}<div class="rv-body"${attrs(
+    {
+      style: css({ padding: d.padding, gap: d.gap }),
+    },
+  )}>${d.body.map((p) => piece(p, o)).join("")}${
     d.buttons ? `<div class="rv-buttonbar">${d.buttons.map((p) => piece(p, o)).join("")}</div>` : ""
   }</div>${d.grip ? '<span class="rv-grip"></span>' : ""}</div>`;
 
@@ -468,12 +530,14 @@ const palette = (s, o) => {
                 : r.checked !== undefined
                   ? `<span class="rv-check"${attrs({ "data-checked": r.checked, "data-disabled": r.disabled })}></span>`
                   : `<span class="rv-props-text">${esc(r.value)}</span>`;
-            return `<span class="rv-props-name"${attrs({ "data-disabled": r.disabled, "data-rv": id, "data-changed": o.changed?.has(id) })}>${esc(r.name)}${badges(id, o)}</span><span class="rv-props-value"${attrs({
-              "data-disabled": r.disabled,
-              "data-number": r.number,
-              "data-edit": r.editing,
-              "data-changed": o.changed?.has(id),
-            })}>${value}${r.link ? '<span class="rv-props-link"></span>' : ""}</span>`;
+            return `<span class="rv-props-name"${attrs({ "data-disabled": r.disabled, "data-rv": id, "data-changed": o.changed?.has(id) })}>${esc(r.name)}${badges(id, o)}</span><span class="rv-props-value"${attrs(
+              {
+                "data-disabled": r.disabled,
+                "data-number": r.number,
+                "data-edit": r.editing,
+                "data-changed": o.changed?.has(id),
+              },
+            )}>${value}${r.link ? '<span class="rv-props-link"></span>' : ""}</span>`;
           })
           .join("")
       );
@@ -483,10 +547,13 @@ const palette = (s, o) => {
 };
 
 const TASK_ICONS = {
-  warning: '<path d="M16 3 L31 29 H1 Z" class="rv-icon-warning"/><rect x="14.5" y="11" width="3" height="10" rx="1" class="rv-icon-mark"/><circle cx="16" cy="25" r="1.8" class="rv-icon-mark"/>',
-  error: '<circle cx="16" cy="16" r="15" class="rv-icon-error"/><text x="16" y="23" text-anchor="middle" class="rv-icon-text">✕</text>',
+  warning:
+    '<path d="M16 3 L31 29 H1 Z" class="rv-icon-warning"/><rect x="14.5" y="11" width="3" height="10" rx="1" class="rv-icon-mark"/><circle cx="16" cy="25" r="1.8" class="rv-icon-mark"/>',
+  error:
+    '<circle cx="16" cy="16" r="15" class="rv-icon-error"/><text x="16" y="23" text-anchor="middle" class="rv-icon-text">✕</text>',
   info: '<circle cx="16" cy="16" r="15" class="rv-icon-info"/><text x="16" y="23" text-anchor="middle" class="rv-icon-text">i</text>',
-  shield: '<path d="M16 2 L29 7 V16 C29 23 23 28 16 30 C9 28 3 23 3 16 V7 Z" class="rv-icon-shield"/>',
+  shield:
+    '<path d="M16 2 L29 7 V16 C29 23 23 28 16 30 C9 28 3 23 3 16 V7 Z" class="rv-icon-shield"/>',
 };
 
 /**
@@ -496,8 +563,12 @@ const TASK_ICONS = {
  */
 const task = (s, o) =>
   `<div class="rv" style="${css({ width: s.w ?? 460 })}">${titlebar(s.title, "close")}<div class="rv-task"${attrs({ "data-icon": !!s.icon })}><div class="rv-task-head">${
-    s.icon ? `<svg class="rv-icon" viewBox="0 0 32 32" aria-hidden="true">${TASK_ICONS[s.icon]}</svg>` : ""
-  }<span class="rv-task-instruction">${esc(s.instruction)}</span></div>${s.content ? `<div class="rv-task-content">${esc(s.content)}</div>` : ""}${(s.links ?? [])
+    s.icon
+      ? `<svg class="rv-icon" viewBox="0 0 32 32" aria-hidden="true">${TASK_ICONS[s.icon]}</svg>`
+      : ""
+  }<span class="rv-task-instruction">${esc(s.instruction)}</span></div>${s.content ? `<div class="rv-task-content">${esc(s.content)}</div>` : ""}${(
+    s.links ?? []
+  )
     .map((l) =>
       tag(
         "div",
@@ -511,15 +582,30 @@ const task = (s, o) =>
     s.expander
       ? `<span class="rv-expander"><svg viewBox="0 0 17 17" aria-hidden="true"><circle cx="8.5" cy="8.5" r="7.5"/><path d="M5 5.5 L8.5 9 L12 5.5 M5 9 L8.5 12.5 L12 9"/></svg>${esc(s.expander)}</span>`
       : ""
-  }${s.verification ? `<span class="rv-check"${attrs({ "data-checked": s.verification.checked })}>${esc(s.verification.text)}</span>` : ""}<span class="rv-footer-spacer"></span>${(s.buttons ?? [])
-    .map((b) => tag("span", `button:${b}`, o, { class: "rv-button", "data-default": b === s.default }, esc(b)))
+  }${s.verification ? `<span class="rv-check"${attrs({ "data-checked": s.verification.checked })}>${esc(s.verification.text)}</span>` : ""}<span class="rv-footer-spacer"></span>${(
+    s.buttons ?? []
+  )
+    .map((b) =>
+      tag(
+        "span",
+        `button:${b}`,
+        o,
+        { class: "rv-button", "data-default": b === s.default },
+        esc(b),
+      ),
+    )
     .join("")}</div></div>`;
 
 /** @param {Ribbon} s */
 const ribbon = (s) =>
   `<div class="rv rv-ribbon"><div class="rv-ribbon-tabs"><span class="rv-ribbon-tab" data-file>File</span>${s.tabs
-    .map((tab) => `<span class="rv-ribbon-tab"${attrs({ "data-selected": tab === s.selected })}>${esc(tab)}</span>`)
-    .join("")}${s.modify ? `<span class="rv-ribbon-tab" data-modify>${esc(s.modify)}</span>` : ""}<span class="rv-ribbon-state">▭ ▾</span></div><div class="rv-ribbon-panels">${s.panels
+    .map(
+      (tab) =>
+        `<span class="rv-ribbon-tab"${attrs({ "data-selected": tab === s.selected })}>${esc(tab)}</span>`,
+    )
+    .join(
+      "",
+    )}${s.modify ? `<span class="rv-ribbon-tab" data-modify>${esc(s.modify)}</span>` : ""}<span class="rv-ribbon-state">▭ ▾</span></div><div class="rv-ribbon-panels">${s.panels
     .map(
       (panel) =>
         `<div class="rv-panel"><div class="rv-panel-items">${panel.items
@@ -530,7 +616,9 @@ const ribbon = (s) =>
           )
           .join("")}</div><div class="rv-panel-title">${esc(panel.text)}</div></div>`,
     )
-    .join("")}</div>${s.options ? `<div class="rv-options" data-modify>${s.options.map((p) => piece(p, {})).join("")}</div>` : ""}</div>`;
+    .join(
+      "",
+    )}</div>${s.options ? `<div class="rv-options" data-modify>${s.options.map((p) => piece(p, {})).join("")}</div>` : ""}</div>`;
 
 const press = (/** @type {RibbonButton} */ b, /** @type {boolean} */ small) =>
   `<span class="rv-rbtn"${attrs({ "data-split": b.split, "data-selected": b.selected })}><span class="rv-glyph"${attrs({ "data-size": small ? "small" : undefined })}>${esc(
@@ -539,7 +627,13 @@ const press = (/** @type {RibbonButton} */ b, /** @type {boolean} */ small) =>
 
 /** @param {Spec} spec @param {RenderOptions} o */
 const window_ = (spec, o) =>
-  spec.t === "dialog" ? dialog(spec, o) : spec.t === "palette" ? palette(spec, o) : spec.t === "task" ? task(spec, o) : ribbon(spec);
+  spec.t === "dialog"
+    ? dialog(spec, o)
+    : spec.t === "palette"
+      ? palette(spec, o)
+      : spec.t === "task"
+        ? task(spec, o)
+        : ribbon(spec);
 
 // ── public ───────────────────────────────────────────────────────────────────────────────────
 
@@ -564,8 +658,10 @@ const render = (spec, o = {}) => {
 };
 
 /** How a value reads in the legend. */
-const word = (/** @type {unknown} */ v) => (v === true ? "yes" : v === false || v === undefined ? "no" : String(v));
-const plain = (/** @type {string} */ id) => id.replace(/^(button|check|radio|field|label|link|group):/, "");
+const word = (/** @type {unknown} */ v) =>
+  v === true ? "yes" : v === false || v === undefined ? "no" : String(v);
+const plain = (/** @type {string} */ id) =>
+  id.replace(/^(button|check|radio|field|label|link|group):/, "");
 
 /**
  * The legend and the rings for a set of changes. Rows of one tree, list or grid that change the
@@ -585,19 +681,31 @@ const summarise = (changes) => {
   const collapsed = new Set([...bulk.values()].filter((g) => g.length > 3).flat());
   /** @type {Map<string, string[]>} */
   const lines = new Map();
-  const add = (/** @type {string} */ at, /** @type {string} */ text) => lines.set(at, [...(lines.get(at) ?? []), text]);
+  const add = (/** @type {string} */ at, /** @type {string} */ text) =>
+    lines.set(at, [...(lines.get(at) ?? []), text]);
   for (const g of bulk.values()) {
     if (g.length <= 3) continue;
     const c = g[0];
     const container = c.at.slice(0, c.at.indexOf("/"));
     add(
       container,
-      c.prop === "added" ? `${g.length} rows appear` : c.prop === "removed" ? `${g.length} rows go` : `${g.length} rows ${c.prop} ${word(c.from)} → ${word(c.to)}`,
+      c.prop === "added"
+        ? `${g.length} rows appear`
+        : c.prop === "removed"
+          ? `${g.length} rows go`
+          : `${g.length} rows ${c.prop} ${word(c.from)} → ${word(c.to)}`,
     );
   }
   for (const c of changes) {
     if (collapsed.has(c)) continue;
-    add(c.at, c.prop === "added" ? "appears" : c.prop === "removed" ? "gone" : `${c.prop} ${word(c.from)} → ${word(c.to)}`);
+    add(
+      c.at,
+      c.prop === "added"
+        ? "appears"
+        : c.prop === "removed"
+          ? "gone"
+          : `${c.prop} ${word(c.from)} → ${word(c.to)}`,
+    );
   }
   return {
     rings: new Set(lines.keys()),
@@ -617,11 +725,15 @@ const compare = (a, b, o = {}) => {
   const side = (/** @type {Spec} */ s, /** @type {string} */ label) => {
     const known = index(s);
     // keep each note's number: badge only those whose id this side holds
-    const own = notes.map((n) => (known.has(n.at) || n.at.startsWith("button:") ? n : { at: "", text: n.text }));
+    const own = notes.map((n) =>
+      known.has(n.at) || n.at.startsWith("button:") ? n : { at: "", text: n.text },
+    );
     return `<div class="rv-side"><div class="rv-side-label">${esc(label)}</div>${window_(s, { changed: rings, notes: own })}</div>`;
   };
   return `<div class="rv-compare"><div class="rv-sides">${side(a, la)}${side(b, lb)}</div>${
-    legend.length ? `<ul class="rv-changes">${legend.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : ""
+    legend.length
+      ? `<ul class="rv-changes">${legend.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>`
+      : ""
   }${notes.length ? `<ol class="rv-notes">${notes.map((n) => `<li>${esc(n.text)}</li>`).join("")}</ol>` : ""}</div>`;
 };
 
@@ -646,7 +758,11 @@ const fromElement = (e, { groups } = {}) => {
     if (groups && !groups.includes(g)) continue;
     const rows = byGroup.get(g) ?? [];
     byGroup.set(g, rows);
-    rows.push({ name: p.name, value: p.displayValue ?? p.rawValue ?? p.value ?? "", disabled: p.isReadOnly === true || undefined });
+    rows.push({
+      name: p.name,
+      value: p.displayValue ?? p.rawValue ?? p.value ?? "",
+      disabled: p.isReadOnly === true || undefined,
+    });
   }
   const order = groups ?? [...byGroup.keys()];
   return {
@@ -654,7 +770,9 @@ const fromElement = (e, { groups } = {}) => {
     family: e.familyName ?? e.className,
     type: e.typeName ?? "",
     instance: `${e.categoryName ?? e.className} (1)`,
-    groups: order.filter((g) => byGroup.has(g)).map((g) => ({ text: g, rows: byGroup.get(g) ?? [] })),
+    groups: order
+      .filter((g) => byGroup.has(g))
+      .map((g) => ({ text: g, rows: byGroup.get(g) ?? [] })),
   };
 };
 
@@ -670,25 +788,32 @@ const fromElement = (e, { groups } = {}) => {
 // TODO: the `row` and `tools` pieces below carry no id, so `compare` refuses the spec as duplicate ids (pdrop-tour numbers them first, 2026-10-05); give them ids per group.
 const fromRouting = (rows, { typeName = "Duct Type", preferred = "Tee" } = {}) => {
   const size = (/** @type {string} */ crit) =>
-    crit === "all" ? ["All", "None"] : crit.replace(/ in$/, "").split("-").map((s) => `${s} in`);
-  const table = (/** @type {string} */ g) =>
-    /** @type {Piece} */ ({
-      t: "row",
-      gap: 4,
-      items: [
-        { t: "tools", items: [{ icon: "up" }, { icon: "down" }, { icon: "add" }, { icon: "remove" }] },
-        {
-          t: "grid",
-          id: g,
-          grow: true,
-          columns: ["Content", { text: "Minimum Size", w: 110 }, { text: "Maximum Size", w: 110 }],
-          rows: rows
-            .filter((r) => r.group === g)
-            .sort((a, b) => a.i - b.i)
-            .map((r) => ({ cells: [r.part, ...size(r.crit)] })),
-        },
-      ],
-    });
+    crit === "all"
+      ? ["All", "None"]
+      : crit
+          .replace(/ in$/, "")
+          .split("-")
+          .map((s) => `${s} in`);
+  const table = (/** @type {string} */ g) => /** @type {Piece} */ ({
+    t: "row",
+    gap: 4,
+    items: [
+      {
+        t: "tools",
+        items: [{ icon: "up" }, { icon: "down" }, { icon: "add" }, { icon: "remove" }],
+      },
+      {
+        t: "grid",
+        id: g,
+        grow: true,
+        columns: ["Content", { text: "Minimum Size", w: 110 }, { text: "Maximum Size", w: 110 }],
+        rows: rows
+          .filter((r) => r.group === g)
+          .sort((a, b) => a.i - b.i)
+          .map((r) => ({ cells: [r.part, ...size(r.crit)] })),
+      },
+    ],
+  });
   const groups = [...new Set(rows.map((r) => r.group))];
   return {
     t: "dialog",

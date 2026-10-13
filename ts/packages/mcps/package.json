@@ -16,6 +16,12 @@
     "dist"
   ],
   "type": "module",
+  "imports": {
+    "#invocation-context": {
+      "browser": "./src/shared/invocation-context.browser.ts",
+      "default": "./src/shared/invocation-context.ts"
+    }
+  },
   "exports": {
     ".": {
       "types": "./src/index.ts",
@@ -52,11 +58,5 @@
     "bumpp": "^11.1.0",
     "typescript": "^6.0.3",
     "vite-plus": "catalog:"
-  },
-  "imports": {
-    "#invocation-context": {
-      "browser": "./src/shared/invocation-context.browser.ts",
-      "default": "./src/shared/invocation-context.ts"
-    }
   }
 }

@@ -162,25 +162,79 @@ export function Ductulator({
     >
       {/* base plate */}
       <circle r={326} fill="var(--color-line)" fillOpacity={0.18} stroke="var(--color-line)" />
-      <Scale r={292} out angle={g.base.friction} range={face.range.friction} color={BASE} title="FRICTION LOSS · IN. WG PER 100 FT" />
-      <Scale r={234} out angle={g.base.velocity} range={face.range.velocity} color={BASE} title="VELOCITY · FPM" />
+      <Scale
+        r={292}
+        out
+        angle={g.base.friction}
+        range={face.range.friction}
+        color={BASE}
+        title="FRICTION LOSS · IN. WG PER 100 FT"
+      />
+      <Scale
+        r={234}
+        out
+        angle={g.base.velocity}
+        range={face.range.velocity}
+        color={BASE}
+        title="VELOCITY · FPM"
+      />
 
       {/* clear disk */}
       <g transform={`rotate(${spin})`} onPointerDown={down("disk")} style={{ cursor: "grab" }}>
         <circle r={284} fill={INK} fillOpacity={0.035} stroke={DISK} strokeWidth={1.5} />
-        <Scale r={284} out={false} angle={g.disk.cfmFriction} range={face.range.cfmFriction} color={DISK} title="AIR VOLUME · CFM" />
-        <Scale r={222} out={false} angle={g.disk.cfmVelocity} range={face.range.cfmVelocity} color={DISK} title="AIR VOLUME · CFM" />
-        <Scale r={122} out angle={g.disk.diameter} range={face.range.diameter} color={DISK} title="ROUND DUCT · INCHES" />
-        <circle r={110} fill="var(--color-line)" fillOpacity={0.35} stroke={DISK} strokeWidth={0.75} />
+        <Scale
+          r={284}
+          out={false}
+          angle={g.disk.cfmFriction}
+          range={face.range.cfmFriction}
+          color={DISK}
+          title="AIR VOLUME · CFM"
+        />
+        <Scale
+          r={222}
+          out={false}
+          angle={g.disk.cfmVelocity}
+          range={face.range.cfmVelocity}
+          color={DISK}
+          title="AIR VOLUME · CFM"
+        />
+        <Scale
+          r={122}
+          out
+          angle={g.disk.diameter}
+          range={face.range.diameter}
+          color={DISK}
+          title="ROUND DUCT · INCHES"
+        />
+        <circle
+          r={110}
+          fill="var(--color-line)"
+          fillOpacity={0.35}
+          stroke={DISK}
+          strokeWidth={0.75}
+        />
       </g>
 
       {/* base, above the disk: window frame, hub, cursor */}
       <g transform={`rotate(${WINDOW})`}>
-        <rect x={-20} y={-158} width={40} height={46} rx={4} fill="none" stroke={INK} strokeWidth={1.5} />
+        <rect
+          x={-20}
+          y={-158}
+          width={40}
+          height={46}
+          rx={4}
+          fill="none"
+          stroke={INK}
+          strokeWidth={1.5}
+        />
         <line y1={-158} y2={-112} stroke={CURSOR} strokeWidth={0.75} />
       </g>
       {hub}
-      <g transform={`rotate(${cursor})`} onPointerDown={down("cursor")} style={{ cursor: "ew-resize" }}>
+      <g
+        transform={`rotate(${cursor})`}
+        onPointerDown={down("cursor")}
+        style={{ cursor: "ew-resize" }}
+      >
         <line y1={-328} y2={-200} stroke={CURSOR} strokeWidth={1} />
         <line y1={-328} y2={-200} stroke="transparent" strokeWidth={14} />
         <circle cy={-318} r={5} fill={CURSOR} />

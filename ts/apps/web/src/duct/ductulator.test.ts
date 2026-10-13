@@ -1,13 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import {
-  FACES,
-  WINDOW,
-  diameterFor,
-  equivalent,
-  geometry,
-  read,
-  rectSides,
-} from "./ductulator";
+import { FACES, WINDOW, diameterFor, equivalent, geometry, read, rectSides } from "./ductulator";
 
 test("one spin lines both laws up on every face: Δp and velocity read straight across from cfm", () => {
   for (const face of Object.values(FACES)) {
