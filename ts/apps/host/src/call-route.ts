@@ -1,6 +1,10 @@
 import { sdkSession, readSessionScope } from "./sdk-session.ts";
 import { admitScheduleAction, recoverScheduleAction, readSchedule } from "./schedule-actions.ts";
-import { admitInstancesAction, recoverInstancesAction } from "./instances-actions.ts";
+import {
+  admitInstancesAction,
+  cancelInstancesAction,
+  recoverInstancesAction,
+} from "./instances-actions.ts";
 import { instancesActions } from "@pe/agent-contracts";
 import { actionControls, semanticActions } from "@pe/agent-contracts";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
@@ -655,19 +659,22 @@ export function makeCallRoute(
               });
             if (choice === "cancel")
               return Response.jsonUnsafe(
-                await owner().cancel(body.id, async (requestId) => {
-                  const { value } = await Effect.runPromise(
-                    bridge
-                      .invoke(CANCEL_OPERATION_KEY, { requestId })
-                      .pipe(Effect.catchCause(Effect.failCause)) as Effect.Effect<
-                      { value: unknown },
-                      unknown
-                    >,
-                  );
-                  // Revit answers 200 even when the id is not in flight; that is a refusal, not a stop.
-                  const answer = value as { cancelled?: boolean; message?: string } | null;
-                  if (answer?.cancelled === false) throw Error(answer.message);
-                }),
+                // An Instances step is an SDK request: the SDK cancels it, not the Revit bridge.
+                await (Object.hasOwn(instancesActions, controlled.key)
+                  ? cancelInstancesAction(body.id, owner(), actionDeps)
+                  : owner().cancel(body.id, async (requestId) => {
+                      const { value } = await Effect.runPromise(
+                        bridge
+                          .invoke(CANCEL_OPERATION_KEY, { requestId })
+                          .pipe(Effect.catchCause(Effect.failCause)) as Effect.Effect<
+                          { value: unknown },
+                          unknown
+                        >,
+                      );
+                      // Revit answers 200 even when the id is not in flight; that is a refusal, not a stop.
+                      const answer = value as { cancelled?: boolean; message?: string } | null;
+                      if (answer?.cancelled === false) throw Error(answer.message);
+                    })),
                 { status: 202 },
               );
             if (choice === "recover") {

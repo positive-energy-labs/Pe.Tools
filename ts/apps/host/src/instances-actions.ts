@@ -20,6 +20,7 @@ import {
   type DocListResult,
   docOpenArgv,
   docSaveArgv,
+  opCancelArgv,
   opResultArgv,
   sessionDialogsArgv,
   sessionHrArgv,
@@ -653,3 +654,22 @@ export const recoverInstancesAction = (
     return { step, evidence };
   });
 
+/**
+ * Cancel a running Instances action through the SDK: its native step id IS the SDK request id.
+ * A supervisor op refuses (`op.supervisor-not-cancellable`) and the refusal is the answer.
+ */
+export const cancelInstancesAction = (
+  id: string,
+  owner: ActionJournal,
+  deps: InstancesActionDependencies = {},
+) =>
+  owner.cancel(id, async (requestId) => {
+    const args = opCancelArgv({ requestId });
+    const envelope = parsePeRevitEnvelope(
+      await (deps.sdk ?? mutate)(args),
+      args,
+      peRevitLauncher(),
+    );
+    if (envelope.diagnostics.length)
+      throw Error(envelope.diagnostics.map((d: Diagnostic) => `${d.code}: ${d.detail}`).join("; "));
+  });

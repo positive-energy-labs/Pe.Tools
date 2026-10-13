@@ -5,14 +5,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { instancesActions, instancesSessionSelection } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
+import { Context, Layer } from "effect";
+import { HttpRouter } from "effect/unstable/http";
 import { admitInstancesAction, recoverInstancesAction } from "../src/instances-actions.ts";
+import { makeCallRoute } from "../src/call-route.ts";
+import { RevitBridge } from "../src/bridge.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { createMachine, useHostMachine, unavailableShare } from "../src/machine.ts";
 import { bindControl } from "../src/control.ts";
 import type { ThreadHead } from "@pe/agent-contracts";
 import type { SessionObservation } from "@pe/host-contracts/pe-revit-contract";
 import { unreadLeg } from "../src/update-reader.ts";
-import { crossingOf } from "./callers.ts";
+import { asCaller, crossingOf, human } from "./callers.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -1284,4 +1288,50 @@ test("a person's dismiss sends one handle once; a lost reply stays unknown and i
   const settled = await recoverInstancesAction(lost.id, f.owner, f.deps);
   expect(settled.steps.at(-1)!.state).toBe("unknown");
   expect(f.calls.filter((args) => args[0] === "op" || args[1] === "dialogs")).toHaveLength(1);
+});
+
+test("/actions/cancel stops a running Instances step through the SDK op cancel, never the Revit bridge", async () => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const f = await setup(async (args) => {
+    if (args[0] === "op") return { result: { state: "ok" } };
+    await held;
+    return { result: { state: "cancelled" } };
+  });
+  const row = await admitInstancesAction(
+    {
+      id: "save-held",
+      kind: "workflow",
+      key: "instances.save",
+      destination: { kind: "sdk-session", selection: session.selection },
+      input: { session, document: sdkDocument, to: { kind: "self" } },
+      bases: {},
+    },
+    crossingOf("human"),
+    f.owner,
+    f.deps,
+  );
+  while (!f.calls.some((args) => args[1] === "save")) await new Promise((r) => setTimeout(r, 5));
+  const step = (await f.owner.list(undefined, row.id))[0]!.steps.at(-1)!;
+  const web = HttpRouter.toWebHandler(
+    makeCallRoute(f.owner, undefined, { sdk: f.deps.sdk }).pipe(
+      Layer.provideMerge(Layer.succeed(RevitBridge, {} as RevitBridge["Service"])),
+    ),
+    { disableLogger: true },
+  );
+  cleanup.push(() => web.dispose());
+  const response = await asCaller(human, () =>
+    web.handler(
+      new Request("http://host/actions/cancel", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: row.id }),
+      }),
+      Context.empty() as never,
+    ),
+  )();
+  expect(response.status).toBe(202);
+  expect(f.calls.at(-1)).toEqual(["op", "cancel", step.id, "--json"]);
+  release();
+  expect((await f.owner.wait(row.id)).state).toBe("cancelled");
 });
