@@ -19,6 +19,9 @@ not an installed runtime. [tools/dev-tray.ps1](../tools/dev-tray.ps1) creates or
 same checkout window. `-Stop` and `-Restart` retire only the identity-verified native child and
 its tray supervisor, preserving an already-running host/frontend. The supervisor keeps the
 frontend origin and backend service receipt separate and revalidates both incarnations.
+Both retirement switches refuse while the original host reports running or waiting Pea turns,
+or when that reading is unavailable; `-Force` explicitly overrides the check. Announce any dev
+tray or host restart before acting, including an idle restart: the owner may be using the window.
 Build and native launch evidence do not prove backend restart recovery or installed behavior.
 
 PWA identity belongs to the lane, not the process or checkout. Installed uses

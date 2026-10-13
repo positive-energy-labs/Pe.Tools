@@ -1,5 +1,37 @@
-param([switch]$CreateShortcut, [switch]$Window, [switch]$Stop, [switch]$Restart)
+param([switch]$CreateShortcut, [switch]$Window, [switch]$Stop, [switch]$Restart, [switch]$Force)
 $ErrorActionPreference = 'Stop'
+function Assert-DevTrayIdle {
+    param([string]$CheckoutRoot, [string]$StateDirectory, [switch]$Force)
+    if ($Force) {
+        Write-Warning 'Forcing dev tray retirement without an active-turn check. Announce this interruption before proceeding.'
+        return
+    }
+    try {
+        $pair = Get-Content -LiteralPath (Join-Path $StateDirectory 'session.json') -Raw | ConvertFrom-Json
+        $record = Get-Content -LiteralPath $pair.serviceFile -Raw | ConvertFrom-Json
+        $process = Get-Process -Id $record.pid -ErrorAction Stop
+        if ($pair.schemaVersion -ne 1 -or $pair.sourceRoot -ne $CheckoutRoot -or
+            $record.schemaVersion -ne 3 -or $record.lane -ne 'dev' -or $record.sourceRoot -ne $CheckoutRoot -or
+            $pair.hostInstanceId -ne $record.instanceId -or
+            [Math]::Abs(($process.StartTime.ToUniversalTime() - [DateTime]::Parse($record.processStartUtc).ToUniversalTime()).TotalMilliseconds) -gt 2000 -or
+            $record.port -lt 1 -or $record.port -gt 65535) {
+            throw 'The original dev host identity is not verified.'
+        }
+        $threads = Invoke-RestMethod -Uri ('http://127.0.0.1:' + $record.port + '/pe/threads') -TimeoutSec 5
+        if ($threads -isnot [Array]) { throw 'The host did not return a thread list.' }
+        foreach ($thread in $threads) {
+            if (-not $thread.id -or $thread.activity.state -notin @('idle', 'running', 'waiting', 'failed')) {
+                throw 'The host returned an unknown thread state.'
+            }
+        }
+    } catch {
+        throw ('Cannot establish that Pea is idle; dev tray retirement refused. Use -Force only for an announced interruption. ' + $_.Exception.Message)
+    }
+    $active = @($threads | Where-Object { $_.activity.state -in @('running', 'waiting') })
+    if ($active.Count) {
+        throw ('Dev tray retirement refused: Pea has active turns in ' + (($active | ForEach-Object { $_.id }) -join ', ') + '. Wait for them to finish or announce the interruption and use -Force.')
+    }
+}
 if ($Stop -and $Restart) { throw 'Choose either -Stop or -Restart.' }
 if ($Window -and $Stop) { throw 'Choose either -Window or -Stop.' }
 $checkoutRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -31,6 +63,7 @@ if (Test-Path -LiteralPath $supervisorFile) {
                 $nativeChildren = @(Get-CimInstance Win32_Process -Filter ('ParentProcessId=' + $supervisor.pid) | Where-Object {
                     $_.ExecutablePath -eq [IO.Path]::GetFullPath((Join-Path $checkoutRoot '.artifacts/build/Pe.Host.Tray/Debug.R25/Pe.Host.Tray.exe'))
                 } | ForEach-Object { Get-Process -Id $_.ProcessId -ErrorAction Stop })
+                Assert-DevTrayIdle -CheckoutRoot $checkoutRoot -StateDirectory $state -Force:$Force
                 @{ instanceId = $supervisor.instanceId; nonce = [Guid]::NewGuid().ToString() } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $state 'stop.tmp') -Encoding UTF8
                 Move-Item -LiteralPath (Join-Path $state 'stop.tmp') -Destination (Join-Path $state 'stop.json') -Force
                 $until = [DateTime]::UtcNow.AddSeconds(10)
