@@ -179,6 +179,7 @@ for (const { path, manifest } of ROUTES)
         await page.goto(`${baseUrl}${path}?demo=${encodeURIComponent(action)}`, {
           waitUntil: "domcontentloaded",
         });
+        if (manifest.key !== "chat") await pinSituation(page);
         // Shell head or Situation, independent of the body title.
         const head = page
           .getByRole("region", { name: `${manifest.name} route` })
@@ -214,7 +215,12 @@ for (const { path, manifest } of ROUTES)
           await verb.hover();
           await page.bringToFront();
           await expect
-            .poll(() => page.getByText(/^frozen seed is read-only(?: · |$)/).isVisible())
+            .poll(() =>
+              page
+                .locator('[role="presentation"][data-open]')
+                .getByText(/^frozen seed is read-only(?: · |$)/)
+                .isVisible(),
+            )
             .toBe(true);
           await page.mouse.move(0, 0);
         }
@@ -231,12 +237,27 @@ type Page = any;
 
 const SCRATCH = process.env.PE_DEMO_LANE_SHOTS;
 
+/** The app bar folds the Situation into a drawer that is inert until pinned (Ctrl+.); pin it so
+ * its head, verbs and ladder are on the page. Pinning is page state, so every load pins again. */
+async function pinSituation(page: Page) {
+  const door = page.getByRole("button", { name: "Show Situation", exact: true });
+  await expect.poll(() => door.getAttribute("aria-disabled"), { timeout: 30_000 }).toBeNull();
+  if ((await door.getAttribute("aria-pressed")) !== "true") await door.click();
+  await expect.poll(() => page.getByRole("region", { name: "Situation drawer" }).count()).toBe(1);
+}
+
+async function go(page: Page, url: string) {
+  await page.goto(url, { waitUntil: "domcontentloaded" });
+  await pinSituation(page);
+}
+
 async function openLive(page: Page, path: string, query: string) {
   await page.goto(`${baseUrl}${path}?${query}`, { waitUntil: "domcontentloaded" });
   // The lane creates the owner, then reloads bound to its one session.
   await expect
     .poll(() => new URL(page.url()).searchParams.get("target"), { timeout: 30_000 })
     .toMatch(/^demo-/);
+  await pinSituation(page);
   return new URL(page.url()).searchParams.get("target")!;
 }
 
@@ -337,7 +358,7 @@ test("live /schedules: capture then apply files a run receipt", async () => {
       .poll(() => page.locator("body").innerText(), { timeout: 30_000 })
       .toContain("Isolated demo (simulated)");
     expect(await page.locator("body").innerText()).not.toContain("choose a session");
-    await page.goto(`${page.url()}&pod=${pod}`, { waitUntil: "domcontentloaded" });
+    await go(page, `${page.url()}&pod=${pod}`);
     // The schedule list is the Situation's Ladder, opened by Ctrl K (MAP rulings 19, 23).
     await page.getByRole("button", { name: "Open the palette" }).click();
     await page
@@ -347,7 +368,7 @@ test("live /schedules: capture then apply files a run receipt", async () => {
     await run(page, "capture schedule");
     const path = await landed(page, /^settings\/schedules\/schedule-481223-.*\.json$/);
     // Apply is an Applying verb; with no cell staged it names the opened spec (ruling 41).
-    await page.goto(`${page.url()}&stage=apply`, { waitUntil: "domcontentloaded" });
+    await go(page, `${page.url()}&stage=apply`);
     await run(page, "apply spec");
     await logged(page, "apply", "ran");
     return receiptOnPods(page, pod, path, "schedule.apply");
@@ -361,14 +382,14 @@ test("live /schedules: capture then apply files a run receipt", async () => {
 test("live /family: capture, then apply twice (plan, send) files a run receipt", async () => {
   const { shown, workflows } = await liveLoop("family", async (page) => {
     const pod = await openLive(page, "/family", "demo=capture&live=1");
-    await page.goto(`${page.url()}&pod=${pod}`, { waitUntil: "domcontentloaded" });
+    await go(page, `${page.url()}&pod=${pod}`);
     await run(page, "capture family");
     const path = await landed(page, /^settings\/family\/Simulated-demo-family-.*\.json$/);
     // The capture's receipt is a log row whose label opens the member it filed.
     await logged(page, "captured 1 family", path);
     if (SCRATCH) await page.screenshot({ path: join(SCRATCH, "family-captured.png") });
     // Apply is an Applying verb: press 1 plans and opens the sheet (ruling 35).
-    await page.goto(`${page.url()}&stage=apply`, { waitUntil: "domcontentloaded" });
+    await go(page, `${page.url()}&stage=apply`);
     await run(page, "apply");
     await applySheet(page);
     // The log prints the verb the user pressed, never the action key (w4-revit defect 9).
@@ -390,6 +411,8 @@ async function readMechanicalFamilies(page: Page, expectedValue = "Fan Coil Unit
     .getByRole("option", { name: /Mechanical Equipment/ })
     .first()
     .click();
+  // The multi-pick list stays open and, in the docked Situation, covers the verbs; Esc folds it.
+  await page.keyboard.press("Escape");
   await run(page, "read families");
   await expectModelValue(page, "Fan Coil Unit - Ducted", expectedValue);
 }
@@ -429,6 +452,8 @@ test("live /families: explicit read retains the last matrix while the next scope
       .getByRole("option", { name: /Mechanical Equipment/ })
       .first()
       .click();
+    // The multi-pick list stays open and, in the docked Situation, covers the verbs; Esc folds it.
+    await page.keyboard.press("Escape");
     await expect
       .poll(() => count("revit.catalog.loaded-families"), { timeout: 10_000 })
       .toBe(idle.catalog);
@@ -525,7 +550,7 @@ test("/families Archived inspects a saved reading without a target or Revit conn
       if (request.url().endsWith("/call"))
         writes.push((request.postDataJSON() as { key?: string }).key ?? "unknown call");
     });
-    await page.goto(`${baseUrl}/families?stage=archived`, { waitUntil: "domcontentloaded" });
+    await go(page, `${baseUrl}/families?stage=archived`);
     await expect
       .poll(
         () =>
@@ -612,7 +637,7 @@ test("live /families: retained readback supports repeat and consecutive family p
       if (request.method() === "POST" && request.url().includes("/families/readings")) fullReads++;
     });
     const pod = await openLive(page, "/families", "demo=edit&live=1");
-    await page.goto(`${page.url()}&pod=${pod}`, { waitUntil: "domcontentloaded" });
+    await go(page, `${page.url()}&pod=${pod}`);
     await readMechanicalFamilies(page);
     // The read dirties the matrix Reading: the log grows its tab (MAP ruling 3).
     await expect
@@ -656,10 +681,11 @@ test("live /families: retained readback supports repeat and consecutive family p
     }
     // Staged cells are Work, not page memory: a reload still finds them.
     await page.reload({ waitUntil: "domcontentloaded" });
+    await pinSituation(page);
     await band(0, 2);
     const auditUrl = new URL(page.url());
     auditUrl.searchParams.set("stage", "audit");
-    await page.goto(auditUrl.href, { waitUntil: "domcontentloaded" });
+    await go(page, auditUrl.href);
     // The host's retained matrix restores without another expensive Read.
     await expectModelValue(page, "Fan Coil Unit - Ducted", "FXMQ20");
     // Typing a cell back to Revit's value clears its stage: it shows Revit's value again.
