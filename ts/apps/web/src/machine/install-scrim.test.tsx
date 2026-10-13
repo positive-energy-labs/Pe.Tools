@@ -128,3 +128,37 @@ test("probeSuccessor reads a refusal by the old service or a new version as the 
   answer(new TypeError("fetch failed"));
   expect(await probeSuccessor("0.7.0")).toBe("down");
 });
+
+test("a leg waiting on the person shows its own words", () => {
+  const running = machineOf(MACHINE_SEEDS["receipt-handoff"])!;
+  const receipt = running.update.receipt!;
+  const detail = "Revit is waiting for you to pick Load Once on the add-in prompt";
+  render(
+    <InstallGate
+      reading={{
+        state: "ready",
+        observation: {
+          ...running,
+          update: {
+            ...running.update,
+            receipt: {
+              ...receipt,
+              legs: [
+                ...receipt.legs,
+                {
+                  name: "relaunch",
+                  status: "waiting",
+                  detail,
+                  exitCode: null,
+                  observedAtUtc: "2026-10-13T02:00:00Z",
+                },
+              ],
+            },
+          },
+        },
+      }}
+      fixture={false}
+    />,
+  );
+  expect(screen.getByRole("dialog").textContent).toContain(detail);
+});

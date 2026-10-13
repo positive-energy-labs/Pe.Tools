@@ -67,7 +67,14 @@ export function installing(reading: Reading<Machine>, accepting: boolean): Insta
     to,
     gone,
     version: machine?.host.version ?? null,
-    leg: gone ? "Waiting for the new host" : last ? legWords(last.name, to) : "Starting the update",
+    // A leg waiting on this person (the SDK stub's Load Once prompt) says its own words.
+    leg: gone
+      ? "Waiting for the new host"
+      : last?.status === "waiting" && last.detail
+        ? last.detail
+        : last
+          ? legWords(last.name, to)
+          : "Starting the update",
   };
 }
 
