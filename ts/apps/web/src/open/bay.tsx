@@ -47,6 +47,7 @@ import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-
 import { documentColumns, ModelTable } from "./documents";
 import { factsOf, useLifecycle } from "./lifecycle";
 import {
+  accessOf,
   defaultYear,
   EMPTY_DRAFT,
   launchPlan,
@@ -886,6 +887,7 @@ function CableRow({
   return (
     <HeldRow
       document={document}
+      access={accessOf(session, document)}
       active={held}
       onClick={onHeld}
       verbs={

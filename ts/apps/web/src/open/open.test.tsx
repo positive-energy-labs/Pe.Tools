@@ -7,7 +7,7 @@
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
-import type { Machine, MachineSession } from "@pe/agent-contracts";
+import type { DocumentAccess, Machine, MachineSession } from "@pe/agent-contracts";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -328,6 +328,11 @@ function Bay({
   );
 }
 
+/** The bay over a machine, with the table rebuilt from that machine's own sessions. */
+const BayOf = ({ machine }: { machine: Machine }) => (
+  <Bay machine={machine} docs={modelRows(machine.revit.sessions!, BAY_RECENTS.result.recents)} />
+);
+
 const yoursCard = () =>
   screen.getByRole("group", { name: "Revit 2025 started from the Revit icon" });
 const box = () => screen.getByRole("combobox", { name: "table query" }) as HTMLInputElement;
@@ -457,7 +462,7 @@ test("hr is drawn only for a hot-reload shape, and only in the wide bay", () => 
   expect(screen.queryByRole("button", { name: "hr" })).toBeNull();
   cleanup();
   for (const session of [OBSERVED_ICON, BACKGROUND_BOOTING]) {
-    render(<Bay machine={withSessions([session])} />);
+    render(<BayOf machine={withSessions([session])} />);
     expect(screen.queryByRole("button", { name: "hr" })).toBeNull();
     cleanup();
   }
@@ -500,9 +505,78 @@ test("background posture does not override the host ownership projection", () =>
   expect(whoseOf({ ...BAY_PEA_25, whose: "you" })).toBe("you");
 });
 
-test("thread heads draw no rw grant or revoke control before host access projection", () => {
+const accessed = (access: DocumentAccess) =>
+  withSessions(
+    world.revit.sessions!.map((session) =>
+      session.row.case === "observed-active" && session.row.process.pid === 18244
+        ? {
+            ...session,
+            attachment: {
+              ...session.attachment!,
+              documents: [
+                {
+                  session: "bridge-18244",
+                  openId: "18244-hospital",
+                  title: "Hospital-MEP_kaitp.rvt",
+                  access,
+                },
+              ],
+            },
+          }
+        : session,
+    ),
+  );
+
+test("thread heads alone draw no rw: the bay is not told by the heads it lists", () => {
+  // BAY_THREADS point their heads at the person's Hospital-MEP, and no access says it may write.
   render(<Bay />);
+  expect(BAY_THREADS.some((thread) => thread.head.defaultTarget?.kind === "open")).toBe(true);
   expect(screen.queryByText(/^rw(?: |$)/)).toBeNull();
   expect(screen.queryByRole("button", { name: "take back rw" })).toBeNull();
   expect(document.querySelector('[title^="Pea holds rw"]')).toBeNull();
+  // A host reading that says read draws nothing either.
+  cleanup();
+  render(<BayOf machine={accessed({ level: "read" })} />);
+  expect(screen.queryByText(/^rw(?: |$)/)).toBeNull();
+});
+
+test("a grant in the host's access draws rw on the document, its thread and its expiry", () => {
+  render(
+    <BayOf
+      machine={accessed({
+        level: "rw",
+        via: "grant",
+        thread: "t-retag",
+        threadTitle: "Retag level 2 diffusers",
+        expiresAt: "2026-10-12T13:00:00.000Z",
+      })}
+    />,
+  );
+  const card = within(yoursCard());
+  // The session card names the granted document by its socket title, and whose grant it is.
+  expect(card.getByText("rw · Hospital-MEP_kaitp.rvt")).toBeTruthy();
+  expect(card.getByText("Retag level 2 diffusers")).toBeTruthy();
+  // The document's own row and the table both carry the word, because the ids coincide here.
+  expect(card.getAllByText("rw").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("rw").length).toBeGreaterThan(card.getAllByText("rw").length);
+  expect(card.queryByRole("button", { name: /take back|revoke/i })).toBeNull();
+});
+
+test("Pea's own session is rw by its access, with no thread or expiry", () => {
+  const pea = world.revit.sessions!.find((session) => session.whose === "pea")!;
+  const session = {
+    ...pea,
+    attachment: {
+      ...pea.attachment!,
+      documents: pea.documents!.map((document) => ({
+        session: pea.attachment!.session,
+        openId: document.openId!,
+        title: document.title ?? "",
+        access: { level: "rw", via: "pea-session" } as const,
+      })),
+    },
+  };
+  render(<Bay machine={withSessions([session])} />);
+  expect(screen.getAllByText("rw").length).toBeGreaterThanOrEqual(pea.documents!.length);
+  expect(screen.queryByText(/^rw ·/)).toBeNull();
 });

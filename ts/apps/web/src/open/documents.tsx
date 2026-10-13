@@ -17,7 +17,7 @@ import { Table } from "#/components/master-table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
 import { queryWords, quoted, readClause } from "#/components/master-table/view";
 import { pidOf } from "#/machine/session";
-import { whoseOf, type DocRow } from "#/open/model";
+import { accessOf, whoseOf, type DocRow } from "#/open/model";
 
 const folderOf = (path: string) => path.replace(/[\\/][^\\/]+$/, "");
 
@@ -137,6 +137,11 @@ export function documentColumns(layout: "row" | "stack"): Column<DocRow>[] {
                   </span>
                   {row.openIn.document.isModified ? (
                     <span className="font-semibold">unsaved</span>
+                  ) : null}
+                  {accessOf(row.openIn.session, row.openIn.document).level === "rw" ? (
+                    <span data-tone="done" title="the host lets a caller write this document">
+                      rw
+                    </span>
                   ) : null}
                 </span>
               ) : (

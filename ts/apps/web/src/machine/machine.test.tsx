@@ -379,3 +379,41 @@ describe("shells", () => {
     expect(screen.queryByRole("button", { name: "Install as app" })).toBeNull();
   });
 });
+
+test("the drawer's Revit group draws a grant from the host's access, as the bay does", () => {
+  const world = (MACHINE_SEEDS["patch-bay"] as { observation: Machine }).observation;
+  const machine: Machine = {
+    ...world,
+    revit: {
+      ...world.revit,
+      sessions: world.revit.sessions!.map((session) =>
+        session.attachment?.session === "bridge-18244"
+          ? {
+              ...session,
+              attachment: {
+                ...session.attachment,
+                documents: [
+                  {
+                    session: "bridge-18244",
+                    openId: "18244-hospital",
+                    title: "Hospital-MEP_kaitp.rvt",
+                    access: {
+                      level: "rw" as const,
+                      via: "grant" as const,
+                      thread: "t-retag",
+                      threadTitle: "Retag level 2 diffusers",
+                      expiresAt: "2026-10-12T13:00:00.000Z",
+                    },
+                  },
+                ],
+              },
+            }
+          : session,
+      ),
+    },
+  };
+  render(<MachineBody reading={{ state: "ready", observation: machine }} fixture shell="drawer" />);
+  fireEvent.click(header("Revit"));
+  expect(screen.getByText("rw · Hospital-MEP_kaitp.rvt")).toBeTruthy();
+  expect(screen.getByText("Retag level 2 diffusers")).toBeTruthy();
+});

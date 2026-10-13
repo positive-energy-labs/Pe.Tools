@@ -5,6 +5,7 @@
  * printed line and the dispatched line cannot drift.
  */
 import type {
+  DocumentAccess,
   HarnessThreadSummary,
   InstancesLaunch,
   InstancesStart,
@@ -17,6 +18,7 @@ import {
   type RecentDocument,
 } from "@pe/host-contracts/pe-revit-contract";
 
+import type { SessionDocument } from "#/components/lang/session";
 import { executionRefusal, keyOf, phaseOf, pidOf, selectionOf } from "#/machine/session";
 
 export type HeldModel = NonNullable<MachineSession["documents"]>[number];
@@ -434,3 +436,13 @@ export function jobsOf(
       : [];
   });
 }
+
+/**
+ * What the host says may write an SDK-listed document. The host projects access per product
+ * document; the only correspondence drawn is an exact openId, so a mismatch reads as read-only
+ * rather than guessing from a title.
+ */
+export const accessOf = (session: MachineSession, document: SessionDocument): DocumentAccess =>
+  session.attachment?.documents?.find((each) => each.openId === document.openId)?.access ?? {
+    level: "read",
+  };

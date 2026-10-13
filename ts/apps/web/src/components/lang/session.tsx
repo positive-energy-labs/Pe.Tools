@@ -9,7 +9,11 @@
  * draw each document itself through `documentRow` (a `HeldRow` with verbs and a strip).
  */
 import type { ReactNode } from "react";
-import type { MachineSession } from "@pe/agent-contracts";
+import type {
+  DocumentAccess,
+  MachineAttachmentDocument,
+  MachineSession,
+} from "@pe/agent-contracts";
 
 import { ArtifactFrame } from "./artifact-frame";
 import { FactChip } from "./chip";
@@ -52,6 +56,29 @@ const persistenceOf = (document: SessionDocument) =>
       ? "cloud"
       : "local";
 
+type GrantedDocument = MachineAttachmentDocument & {
+  access: Extract<DocumentAccess, { via: "grant" }>;
+};
+
+/**
+ * The documents a thread may write here, from the host's `access` projection and nothing else:
+ * no head is read in the browser. Keyed by the product socket's own document (its bridge title),
+ * since an SDK document id is a different namespace and is never guessed from a title.
+ */
+export const grantsOf = (session: MachineSession): GrantedDocument[] =>
+  (session.attachment?.documents ?? []).filter(
+    (document): document is GrantedDocument =>
+      document.access.level === "rw" && document.access.via === "grant",
+  );
+
+const rwSays = (access: Extract<DocumentAccess, { level: "rw" }>) =>
+  access.via === "pea-session"
+    ? "Pea's own Revit: Pea may write this document"
+    : `thread "${access.threadTitle}" may write this document until ${until(access.expiresAt)}`;
+
+const until = (iso: string) =>
+  new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
 /** The `Connectors` anchor of one held document. */
 export const docKey = (document: SessionDocument) => `doc:${document.openId ?? document.path}`;
 
@@ -92,7 +119,7 @@ interface SessionViewProps {
 export function SessionRow({ session, facts, anchor, verbs, strip }: SessionViewProps) {
   const documents = session.documents;
   const active = documents?.find((document) => document.isActive) ?? documents?.[0];
-  const words = shapeWords(session);
+  const words = [...shapeWords(session), ...grantsOf(session).map((g) => `rw · ${g.title}`)];
   return (
     <div className="flex flex-col" data-key={anchor} aria-label={titleOf(facts)}>
       <Row
@@ -127,12 +154,15 @@ export function SessionRow({ session, facts, anchor, verbs, strip }: SessionView
 /** A held document as a desk card's row: the cable lands on it; a desk adds verbs and a strip. */
 export function HeldRow({
   document,
+  access,
   active,
   verbs,
   strip,
   onClick,
 }: {
   document: SessionDocument;
+  /** What the host says may write it; only `rw` is drawn. */
+  access?: DocumentAccess;
   /** The row a cable was pressed on (not Revit's active document, which is its own mark). */
   active?: boolean;
   verbs?: ReactNode;
@@ -147,7 +177,18 @@ export function HeldRow({
         selected={active}
         label={document.title ?? document.path}
         aside={document.isModified ? "unsaved" : undefined}
-        meta={persistenceOf(document)}
+        meta={
+          access?.level === "rw" ? (
+            <>
+              <span data-tone="done" title={rwSays(access)}>
+                rw
+              </span>
+              {persistenceOf(document)}
+            </>
+          ) : (
+            persistenceOf(document)
+          )
+        }
         actions={verbs}
         title={`${document.path ?? ""}${document.isModified ? " · unsaved work" : ""}`}
         onClick={onClick}
@@ -216,6 +257,16 @@ export function SessionCard({
             ),
           )
         )}
+        {grantsOf(session).map((granted) => (
+          <Row
+            key={`rw:${granted.session}/${granted.openId}`}
+            lines={2}
+            label={<span data-tone="done">rw · {granted.title}</span>}
+            meta={`until ${until(granted.access.expiresAt)}`}
+            sub={granted.access.threadTitle}
+            title={rwSays(granted.access)}
+          />
+        ))}
         {children}
       </div>
       {/* The machine facts wrap (a desk card is narrow); a rail would clip them. */}
