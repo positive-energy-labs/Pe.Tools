@@ -53,8 +53,8 @@ const ROUTES: readonly { path: string; manifest: AnyManifest }[] = [
     manifest: ((await load("/src/chat/manifest.ts")).chatManifest as Factory)({ thread: "" }),
   },
   {
-    path: "/instances",
-    manifest: (await load("/src/instances/manifest.ts")).instancesManifest as AnyManifest,
+    path: "/open",
+    manifest: (await load("/src/open/manifest.ts")).openManifest as AnyManifest,
   },
   { path: "/takeoffs", manifest: (await load("/src/takeoff/manifest.ts")).manifest as AnyManifest },
   {
