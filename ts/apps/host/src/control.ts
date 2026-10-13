@@ -83,7 +83,7 @@ export function writeTerminalContext(serviceName: string) {
  * The D12 page key of a `/pages/<slug>/…` path: `<id>--<page>` is the page an admitted package
  * (by manifest id) contributes; null when the codec admits no key for it.
  */
-const pageKeyOf = (slug: string): string | null => {
+export const pageKeyOf = (slug: string): string | null => {
   const [id, page, ...more] = slug.split("--");
   const key = page === undefined ? `page:@pages/${slug}` : `page:@${id}/pages/${page}`;
   return !more.length && parseContributionKey(key) ? key : null;

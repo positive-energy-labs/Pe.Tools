@@ -12,7 +12,11 @@ import {
   type ThreadHead,
 } from "@pe/agent-contracts";
 import { createPagesHandler, type LiveSession, type PageLive } from "../src/pages-route.ts";
-import { packagePageDescriptors, scratchPageDescriptors } from "../src/page-libraries.ts";
+import {
+  packagePageDescriptors,
+  pageFolderCollisions,
+  scratchPageDescriptors,
+} from "../src/page-libraries.ts";
 import { listPackages } from "../src/packages.ts";
 import { createHash } from "node:crypto";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -94,7 +98,7 @@ describe("pages", () => {
     expect(await (await fetch("/pages/ductkit--tour/census.csx")).text()).toBe("Result(1);");
     // The folder never names the page: its old folder slug is no page.
     expect((await fetch("/pages/duct-kit-v1--tour/")).status).toBe(404);
-    expect((await fetch("/pages/a--b--c/")).status).toBe(404);
+    expect((await fetch("/pages/a--b--c/")).status).toBe(400);
     const posted = await fetch("/pages/ductkit--tour/events", {
       method: "POST",
       body: JSON.stringify({ type: "note" }),
@@ -169,7 +173,7 @@ describe("pages", () => {
           text: "<title>Has Space</title>",
         },
         {
-          key: null,
+          key: "page:@pages/Odd_Name",
           slug: "Odd_Name",
           openUrl: "/pages/Odd_Name/",
           title: "Odd",
@@ -189,9 +193,9 @@ describe("pages", () => {
           text: "<!doctype html><title>A todo page</title><p>hi</p>",
         },
         {
-          key: null,
+          key: "page:@pages/v1.2",
           slug: "v1.2",
-          openUrl: null,
+          openUrl: "/pages/v1.2/",
           title: "v1.2",
           pod: null,
           path: "index.html",
@@ -214,29 +218,20 @@ describe("pages", () => {
         .sort((a, b) => a.slug.localeCompare(b.slug)),
     );
     for (const page of pages.filter((one) => one.key === null))
-      expect(page.reason, page.slug).toContain("not a lowercase slug");
-    // A keyless folder that is one URL segment serves its files under its folder name, mints no
-    // key, refuses every door with the rename reason, and its referer is no caller.
+      expect(page.reason, page.slug).toContain("is not a Page folder name");
+    // A noncanonical folder that is one safe URL segment is a full Page under its exact name:
+    // keyed as named, its doors work, and its referer is that Page. Another spelling is no Page.
     const html = await (await fetch("/pages/Odd_Name/")).text();
-    expect(html).toContain("<p>odd</p>");
-    expect(html).not.toContain("pe-page");
-    for (const [verb, method] of [
-      ["target", "GET"],
-      ["state", "GET"],
-      ["events", "GET"],
-      ["events", "POST"],
-      ["call", "POST"],
-    ]) {
-      const refused = await fetch(`/pages/Odd_Name/${verb}`, {
-        method,
-        body: method === "POST" ? "{}" : undefined,
-      });
-      expect(refused.status, `${method} ${verb}`).toBe(409);
-      expect(await refused.text()).toContain("not a lowercase slug");
-    }
-    expect((await fetch("/pe/pages/Odd_Name/binding", { method: "PUT", body: "{}" })).status).toBe(
-      409,
+    expect(html).toContain('<meta name="pe-page" content="page:@pages/Odd_Name">');
+    const row = await asCaller({ kind: "page", page: "page:@pages/Odd_Name" }, fetch)(
+      "/pages/Odd_Name/events",
+      { method: "POST", headers: { "content-type": "application/json" }, body: '{"type":"x"}' },
     );
+    expect(row.status).toBe(201);
+    expect(await row.json()).toMatchObject({ origin: "page:@pages/Odd_Name" });
+    expect((await fetch("/pages/Odd_Name/state")).status).toBe(200);
+    expect((await fetch("/pages/odd_name/")).status).toBe(404);
+    expect((await fetch("/pages/Has%20Space/")).status).toBe(400);
     expect(
       callerOf(
         { kind: "local" },
@@ -246,7 +241,14 @@ describe("pages", () => {
           referer: "http://127.0.0.1:5180/pages/Odd_Name/",
         },
       ),
-    ).toEqual({ caller: { kind: "anonymous" } });
+    ).toEqual({ caller: { kind: "page", page: "page:@pages/Odd_Name" } });
+  });
+
+  it("refuses every scratch folder whose name collides with another by case", () => {
+    expect(pageFolderCollisions(["Todo", "todo", "Other", "TODO", "odd"])).toEqual([
+      ["TODO", "Todo", "todo"],
+    ]);
+    expect(pageFolderCollisions(["todo", "other"])).toEqual([]);
   });
 
   it("keeps a text projection beside the snapshot", async () => {
@@ -284,7 +286,7 @@ describe("pages", () => {
     expect((await fetch("/pages/todo/.state/secret.txt")).status).toBe(400);
     expect((await fetch("/pages/todo/..%2F..%2Fetc")).status).toBe(400);
     expect((await fetch("/pages/..%2Ftodo/index.html")).status).toBe(400);
-    expect((await fetch("/pages/loose.html")).status).toBe(400);
+    expect((await fetch("/pages/loose.html/")).status).toBe(404); // a file, not a folder
     expect((await fetch("/pages/missing/")).status).toBe(404);
     expect((await fetch("/pages/todo/index.html", { method: "DELETE" })).status).toBe(405);
   });

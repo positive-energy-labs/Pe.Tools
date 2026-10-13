@@ -288,11 +288,9 @@ test("one admitted content snapshot waits for import, publishes exact skill byte
         }),
       ]),
     );
-    expect(
-      catalog.capabilities.some(
-        (c) => c.key.includes("Office_Page") || c.key.includes("odd--name"),
-      ),
-    ).toBe(false);
+    // A noncanonical but safe folder is a full Page keyed as named; `--` stays the Pod separator.
+    expect(catalog.capabilities.some((c) => c.key === "page:@pages/Office_Page")).toBe(true);
+    expect(catalog.capabilities.some((c) => c.key.includes("odd--name"))).toBe(false);
     expect(catalog.capabilities.some((c) => c.key === "page:@pages/working")).toBe(true);
     const filtered = await (
       await app.fetch(new Request("http://local/pe/capabilities?query=Shelf&kind=page&limit=3"))

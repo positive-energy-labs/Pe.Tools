@@ -23,6 +23,7 @@ import type { SessionObservation } from "@pe/host-contracts/pe-revit-contract";
 import { unreadLeg } from "../src/update-reader.ts";
 import { crossingOf } from "./callers.ts";
 import { serveRoutes } from "./real-server.ts";
+import { writeJournal } from "./journal-fixture.ts";
 import {
   acquiredOpenIds,
   acquisitionSessionId,
@@ -1083,7 +1084,7 @@ test("F7: an acquisition records its paths before writing; a crash at any bounda
       ],
     };
     const path = join(f.dir, `crash-${k}.json`);
-    await writeFile(path, JSON.stringify({ version: 3, actions: [crashed] }));
+    await writeJournal(path, [crashed]);
     const restarted = await new ActionJournal(path).list();
     const [acquisition] = foldAcquisitions(restarted);
     if (k === done.steps.length) {

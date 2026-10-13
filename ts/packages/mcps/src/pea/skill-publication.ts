@@ -65,6 +65,8 @@ export async function publishPeaSkills(
   const canonicalRoot = join(home, "Skills");
   const personal = new Map<string, SkillFile[]>();
   const notices: string[] = [];
+  /** Paths of same-named skills without the product's receipt: the product never writes over them. */
+  const held = new Set<string>();
   for (const name of await directories(canonicalRoot))
     personal.set(name, await capture(join(canonicalRoot, name)));
   const managed = await Promise.all(
@@ -85,9 +87,9 @@ export async function publishPeaSkills(
       const shipped = bundled.find((s) => s.name === name);
       if (shipped && signature(files) === signature(shipped.files)) continue;
       if (shipped) {
-        // The product owns a shipped skill's path: an unreceipted copy there is named, never kept.
+        held.add(join(root, name.toLowerCase()));
         notices.push(
-          `Skill '${name}' is shipped by the product; it replaced the unreceipted copy at ${join(root, name)}.`,
+          `Skill '${name}' at ${join(root, name)} has no product receipt, so the product's '${name}' is not published there; rename or delete that folder to receive it.`,
         );
         continue;
       }
@@ -117,6 +119,7 @@ export async function publishPeaSkills(
     await mkdir(root, { recursive: true });
     const receipt: Record<string, string> = {};
     for (const [name, skill] of destinations) {
+      if (held.has(join(root, name))) continue;
       await rm(join(root, name), { recursive: true, force: true });
       await writeFiles(join(root, name), skill.files);
       receipt[name] = signature(skill.files);

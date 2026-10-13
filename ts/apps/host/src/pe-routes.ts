@@ -16,6 +16,7 @@ import {
   routeStatePatchSchema,
   START_FRESH,
   contributionKey,
+  isCanonicalSlug,
   parseContributionKey,
   packageProjectionSchema,
   capabilityKindSchema,
@@ -84,6 +85,7 @@ import { skillSnapshot } from "../../../packages/mcps/src/pea/skill-publication.
 import type { CapabilityContent } from "../../../packages/mcps/src/pea/capabilities.ts";
 import {
   packagePageDescriptors,
+  pageFolderCollisions,
   scratchPageDescriptors,
   PAGE_LIBRARIES,
   type PageDescriptor,
@@ -575,21 +577,34 @@ export function createContributionContent(options: {
           ...packagePageDescriptors(listing.packages),
         ];
     const descriptors = allDescriptors.filter((p) => p.key !== null && p.openUrl !== null);
-    const diagnostics: CapabilityCatalog["diagnostics"] = allDescriptors
-      .filter((p) => p.key === null)
-      .map((p) => {
-        const canonicalSlug =
-          p.slug
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, "-")
-            .replace(/^-+|-+$/g, "") || "page";
-        return {
-          code: "page.noncanonical-folder",
-          folder: p.slug,
-          canonicalSlug,
-          message: `Rename '${p.slug}' to '${canonicalSlug}' (or another distinct canonical slug) to enable its doors.`,
-        };
-      });
+    const scratch = allDescriptors.filter((p) => p.pod === null).map((p) => p.slug);
+    const collisions = pageFolderCollisions(scratch);
+    const diagnostics: CapabilityCatalog["diagnostics"] = [
+      ...collisions.map((folders) => ({
+        code: "page.folder-collision" as const,
+        folders,
+        message: `Page folders ${folders.join(", ")} differ only by case; none is a Page until all but one are renamed.`,
+      })),
+      ...allDescriptors
+        .filter(
+          (p) => p.pod === null && !isCanonicalSlug(p.slug) && !collisions.flat().includes(p.slug),
+        )
+        .map((p) => {
+          const canonicalSlug =
+            p.slug
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-+|-+$/g, "") || "page";
+          return {
+            code: "page.noncanonical-folder" as const,
+            folder: p.slug,
+            canonicalSlug,
+            message: p.key
+              ? `'${p.slug}' works as ${p.key}; '${canonicalSlug}' would be its canonical slug.`
+              : `${p.reason} Rename it to '${canonicalSlug}' (or another distinct name).`,
+          };
+        }),
+    ];
     const pageProjections = new Map(
       descriptors.map((p) => [p.key, { openUrl: p.openUrl!, pane: "page" }]),
     );

@@ -10,6 +10,7 @@ import {
   contributionKindSchema,
   contributionSourcePath,
   contributionSourceSchema,
+  isCanonicalSlug,
   parseContributionKey,
 } from "./contribution.ts";
 import type { Machine } from "./machine.ts";
@@ -117,19 +118,22 @@ export const capabilityCatalogSchema = z.object({
   recents: z.array(capabilityRecentSchema).optional(),
   /** Per-source outcome; a source that could not answer says why instead of hiding rows. */
   sources: z.record(z.string(), z.string()),
-  /** A Page without a canonical key stays visible, with no dispatch or binding authority. */
+  /** Warnings about scratch Page folders; a noncanonical one still works when its name is safe. */
   diagnostics: z.array(
-    z.strictObject({
-      code: z.literal("page.noncanonical-folder"),
-      folder: z.string().min(1),
-      canonicalSlug: z
-        .string()
-        .refine(
-          (slug) => parseContributionKey(`page:@pages/${slug}`) !== null,
-          "Expected a canonical scratch Page slug",
-        ),
-      message: z.string().min(1),
-    }),
+    z.discriminatedUnion("code", [
+      z.strictObject({
+        code: z.literal("page.noncanonical-folder"),
+        folder: z.string().min(1),
+        canonicalSlug: z.string().refine(isCanonicalSlug, "Expected a canonical scratch Page slug"),
+        message: z.string().min(1),
+      }),
+      /** Folders that differ only by case: none of them is a Page until one is renamed. */
+      z.strictObject({
+        code: z.literal("page.folder-collision"),
+        folders: z.array(z.string().min(1)).min(2),
+        message: z.string().min(1),
+      }),
+    ]),
   ),
   capabilities: z.array(capabilitySchema),
 });

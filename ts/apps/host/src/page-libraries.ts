@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { contributionKey } from "@pe/agent-contracts";
+import { contributionKey, parseContributionKey } from "@pe/agent-contracts";
 import type { AdmittedPackage } from "./packages.ts";
 import { productPagesRootPath } from "./product-paths.ts";
 
@@ -45,12 +45,12 @@ export const PAGE_LIBRARIES = [
 
 /** One Page the host serves, as anything that lists, ranks or opens Pages reads it. */
 export type PageDescriptor = {
-  /** `page:@pages/<slug>` or `page:@<id>/pages/<page>`; null for a scratch folder that is no canonical slug. */
+  /** `page:@pages/<folder>` or `page:@<id>/pages/<page>`; null for an unsafe or case-colliding scratch folder. */
   key: string | null;
   /** Why `key` is null; null when the Page has a key. */
   reason: string | null;
   slug: string;
-  /** The host's own URL for the Page, never derived from a folder by a consumer; null when its folder name is no URL segment. */
+  /** The host's own URL for the Page, never derived from a folder by a consumer; null when it has no key. */
   openUrl: string | null;
   title: string;
   /** The contributing package's manifest id; null for a scratch Page. */
@@ -63,25 +63,43 @@ export type PageDescriptor = {
   directory: string;
 };
 
-/** The syntax of one `/pages/<slug>` URL segment; a scratch folder named so serves, keyed or not. */
-export const PAGE_FOLDER = /^[a-z0-9][a-z0-9_-]*$/i;
-
 const titleOf = (html: string, slug: string) =>
   /<title>([^<]*)<\/title>/i.exec(html)?.[1]?.trim() || slug;
 const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
-/** The scratch Page key, or why the folder has none. */
+/** Scratch folder names that differ only by case, each group sorted: none of them is a Page. */
+export function pageFolderCollisions(names: readonly string[]): string[][] {
+  const folded = Map.groupBy(names, (name) => name.toLowerCase());
+  return [...folded.values()].filter((group) => group.length > 1).map((group) => group.toSorted());
+}
+
+/** The ordinary folders under the Pages root; a dot-folder is private. */
+export async function scratchPageFolders(pagesRoot: string) {
+  const entries = await readdir(pagesRoot, { withFileTypes: true }).catch((error) => {
+    if ((error as { code?: string }).code === "ENOENT") return [];
+    throw error;
+  });
+  return entries.filter((e) => e.isDirectory() && !e.name.startsWith(".")).map((e) => e.name);
+}
+
+/** The scratch Page key (the folder as named), or why the folder has none. */
 export function scratchPageKey(
   slug: string,
+  collisions: readonly string[][] = [],
 ): { key: string; reason: null } | { key: null; reason: string } {
-  try {
-    return { key: contributionKey({ kind: "page", packageId: "pages", path: slug }), reason: null };
-  } catch {
+  const twins = collisions.find((group) => group.includes(slug));
+  if (twins)
     return {
       key: null,
-      reason: `'${slug}' is not a lowercase slug (a-z, 0-9, single hyphens): it has no key and no doors until its folder is renamed.`,
+      reason: `Page folders ${twins.map((name) => `'${name}'`).join(" and ")} differ only by case: none is a Page until all but one are renamed.`,
     };
-  }
+  const parsed = parseContributionKey(`page:@pages/${slug}`);
+  return parsed
+    ? { key: contributionKey(parsed), reason: null }
+    : {
+        key: null,
+        reason: `'${slug}' is not a Page folder name (letters, digits, '.', '_', single '-'): it has no key or doors until its folder is renamed.`,
+      };
 }
 
 /** Scratch Pages: every folder under the Pages root holding an `index.html`, newest first. */
@@ -89,28 +107,20 @@ export async function scratchPageDescriptors(
   pagesRoot = productPagesRootPath(),
 ): Promise<PageDescriptor[]> {
   const pages: PageDescriptor[] = [];
-  const folders = await readdir(pagesRoot, { withFileTypes: true }).catch((error) => {
-    if ((error as { code?: string }).code === "ENOENT") return [];
-    throw error;
-  });
+  const folders = await scratchPageFolders(pagesRoot);
+  const collisions = pageFolderCollisions(folders);
   for (const folder of folders) {
-    // Every ordinary folder lists, so a noncanonical one never vanishes; a dot-folder is private.
-    if (!folder.isDirectory() || folder.name.startsWith(".")) continue;
-    const directory = join(pagesRoot, folder.name);
+    const directory = join(pagesRoot, folder);
     const index = join(directory, "index.html");
     const facts = await stat(index).catch(() => null);
     if (!facts?.isFile()) continue;
     const bytes = await readFile(index);
-    const named = scratchPageKey(folder.name);
+    const named = scratchPageKey(folder, collisions);
     pages.push({
       ...named,
-      slug: folder.name,
-      // A noncanonical folder still serves under its name when that name is one URL segment.
-      openUrl:
-        PAGE_FOLDER.test(folder.name) && !folder.name.includes("--")
-          ? `/pages/${folder.name}/`
-          : null,
-      title: titleOf(bytes.toString("utf8"), folder.name),
+      slug: folder,
+      openUrl: named.key ? `/pages/${folder}/` : null,
+      title: titleOf(bytes.toString("utf8"), folder),
       pod: null,
       entry: { path: "index.html", sha256: sha(bytes), bytes },
       modifiedAt: facts.mtime.toISOString(),

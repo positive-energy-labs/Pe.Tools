@@ -8,6 +8,7 @@ import {
   contributionSourcePath,
   packageIdSchema,
   packageProjectionSchema,
+  isCanonicalSlug,
   parseContributionKey,
   type ContributionReference,
 } from "../src/contribution.ts";
@@ -119,6 +120,19 @@ test("Page callers refuse unsafe or noncanonical packaged references", () => {
     "page:@pages/tour/",
   ])
     expect(callerSchema.safeParse({ kind: "page", page }).success, page).toBe(false);
+});
+
+test("a scratch Page key is its folder as named when that is one safe URL segment", () => {
+  for (const folder of ["todo", "Odd_Name", "v1.2", "Q3-Report"])
+    expect(parseContributionKey(`page:@pages/${folder}`), folder).toEqual({
+      kind: "page",
+      packageId: "pages",
+      path: folder,
+    });
+  for (const folder of ["a--b", "Has Space", "..", ".hidden", "x.", "-x", "a/b", "a%20b", "con"])
+    expect(parseContributionKey(`page:@pages/${folder}`), folder).toBeNull();
+  expect(isCanonicalSlug("odd-name")).toBe(true);
+  expect(isCanonicalSlug("Odd_Name")).toBe(false);
 });
 
 test("contribution kinds replace the folder-based Pod action kind", () => {

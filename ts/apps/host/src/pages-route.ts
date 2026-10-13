@@ -74,6 +74,7 @@ import {
   currentCaller,
   mintPageDoor,
   pageActDoor,
+  pageKeyOf,
   Refused,
   documentAcquisition,
   threadHead,
@@ -81,10 +82,11 @@ import {
 } from "./control.ts";
 import { capturePackage, listPackages } from "./packages.ts";
 import {
-  PAGE_FOLDER,
   PAGE_LIBRARIES,
   packagePageDescriptors,
+  pageFolderCollisions,
   scratchPageDescriptors,
+  scratchPageFolders,
   scratchPageKey,
 } from "./page-libraries.ts";
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
@@ -143,8 +145,6 @@ const servedPe = () => {
   );
 };
 
-/** One folder name: no dots, so no `..` and no file masquerading as a page. */
-const SLUG = PAGE_FOLDER;
 /** One file segment: a leading dot is refused, so `.state/` and editor droppings stay private. */
 const SEGMENT = /^[a-z0-9_-][a-z0-9_.-]*$/i;
 const MIME: Record<string, string> = {
@@ -174,7 +174,7 @@ export type PageRow = {
   /** The Page key: `page:@pages/<slug>`, or the package's `page:@<id>/pages/<page>`; null when the folder has none. */
   key: string | null;
   title: string;
-  /** Null when its folder name is no URL segment (a space, a dot, the pod separator). */
+  /** Null when the folder has no key (an unsafe or case-colliding name). */
   url: string | null;
   /** Null for a packaged Page. */
   modifiedAt: string | null;
@@ -394,15 +394,22 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
    */
   const dirOf = async (slug: string) => {
     const [id, page, ...more] = slug.split("--");
-    // A scratch folder serves under its own name; a noncanonical one has no key and no doors.
-    if (page === undefined) return { dir: join(root, slug), pod: null, ...scratchPageKey(slug) };
+    if (page === undefined) {
+      // A scratch Page is its folder as named: the exact name, never another spelling or a twin.
+      const folders = await scratchPageFolders(root);
+      const { key } = scratchPageKey(slug, pageFolderCollisions(folders));
+      const named = folders.find((folder) => folder.toLowerCase() === slug.toLowerCase());
+      return key && (named === undefined || named === slug)
+        ? { dir: join(root, slug), pod: null, key }
+        : null;
+    }
     if (more.length || !pods) return null;
     for (const pod of (await listPackages(pods)).packages) {
       const row = pod.contributions.find(
         (one) => one.kind === "page" && one.path === `pages/${page}`,
       );
       if (pod.id === id && row)
-        return { dir: join(pod.directory, row.path), pod: pod.id, key: row.key, reason: null };
+        return { dir: join(pod.directory, row.path), pod: pod.id, key: row.key };
     }
     return null;
   };
@@ -433,7 +440,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
       ? pages
           .map(
             (p) =>
-              `<li>${p.url ? `<a href="${p.url}">${escapeHtml(p.title)}</a>` : escapeHtml(p.title)}${p.key ? "" : ` <small>no key, no doors: rename the folder to a lowercase slug</small>`} <code>${escapeHtml(p.slug)}</code>${p.pod ? ` <small>pod ${escapeHtml(p.pod)}</small>` : ""} ${p.modifiedAt ? ` <small>${escapeHtml(p.modifiedAt.slice(0, 16).replace("T", " "))}</small>` : ""}</li>`,
+              `<li>${p.url ? `<a href="${p.url}">${escapeHtml(p.title)}</a>` : `${escapeHtml(p.title)} <small>not a Page until its folder is renamed</small>`} <code>${escapeHtml(p.slug)}</code>${p.pod ? ` <small>pod ${escapeHtml(p.pod)}</small>` : ""} ${p.modifiedAt ? ` <small>${escapeHtml(p.modifiedAt.slice(0, 16).replace("T", " "))}</small>` : ""}</li>`,
           )
           .join("\n")
       : `<li><em>none yet</em></li>`;
@@ -459,7 +466,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     );
   }
 
-  async function file(slug: string, dir: string, page: string | null, segments: string[]) {
+  async function file(slug: string, dir: string, page: string, segments: string[]) {
     if (!segments.every((s) => SEGMENT.test(s)))
       return problem(400, "that is not a page file path");
     const path = join(dir, ...segments);
@@ -770,8 +777,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
   }
 
   /** `index.html` names its page: the host mints the key; the page never claims one. */
-  const withPageKey = (html: string, page: string | null) => {
-    if (!page) return html;
+  const withPageKey = (html: string, page: string) => {
     const meta = `<meta name="pe-page" content="${escapeHtml(page)}">`;
     const head = /<head[^>]*>/i.exec(html) ?? /^\s*<!doctype[^>]*>/i.exec(html);
     if (!head) return `${meta}${html}`;
@@ -785,10 +791,9 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     const parts = url.pathname.split("/").filter(Boolean); // ["pages", slug?, ...rest]
     if (parts[0] === "pe") {
       const [, , slug = "", verb, ...more] = parts;
-      const where = SLUG.test(slug) ? await dirOf(slug) : null;
+      const where = await dirOf(slug);
       if (!where || verb !== "binding" || more.length || request.method !== "PUT")
         return problem(404, "the binding door is PUT /pe/pages/<slug>/binding");
-      if (!where.key) return problem(409, where.reason ?? "this page has no key");
       return bind(slug, where.dir, where.key, request, caller);
     }
     const wantsHtml = (request.headers.get("accept") ?? "").includes("text/html");
@@ -815,18 +820,15 @@ ${asset("pe.css")}`,
           headers: { "content-type": MIME[".css"]!, "cache-control": "no-cache" },
         },
       );
-    if (!SLUG.test(slug))
-      return problem(400, "a page slug is letters, digits, - and _; a pod's page is <id>--<page>");
+    if (!pageKeyOf(slug))
+      return problem(
+        400,
+        "a page slug is its folder name (letters, digits, '.', '_', single '-'); a pod's page is <id>--<page>",
+      );
     const where = await dirOf(slug);
     if (!where) return problem(404, `no page ${slug}: no admitted package contributes it`);
     if (rest.length === 0 && !url.pathname.endsWith("/"))
       return Response.redirect(`${url.origin}/pages/${slug}/${url.search}`, 308); // relative links need the slash
-    // A keyless scratch folder serves its files and refuses every door with the rename reason.
-    if (!where.key)
-      return request.method === "GET" &&
-        !(rest.length === 1 && ["state", "target", "events"].includes(rest[0]!))
-        ? file(slug, where.dir, null, rest.length ? rest : ["index.html"])
-        : problem(409, where.reason ?? "this page has no key");
     const state = stateOf(where.dir);
     const verb = rest.length === 1 ? rest[0] : undefined;
     if (verb === "state" && request.method === "GET") {

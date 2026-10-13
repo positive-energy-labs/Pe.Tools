@@ -1,6 +1,10 @@
 import { z } from "zod";
 
 const slug = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+/** A scratch Page is its folder as named: one URL segment, `--` reserved for `<pod>--<page>`. */
+const pageFolder = /^[A-Za-z0-9](?:[A-Za-z0-9._]|-(?!-))*$/;
+/** The canonical lowercase slug; a scratch Page named otherwise works and carries a warning. */
+export const isCanonicalSlug = (value: string) => slug.test(value);
 const namespaceIdSchema = z
   .string()
   .regex(slug)
@@ -47,7 +51,7 @@ export const contributionReferenceSchema = z
     path: packageMemberPathSchema,
   })
   .refine(({ kind, packageId, path }) => {
-    if (packageId === "pages") return kind === "page" && slug.test(path);
+    if (packageId === "pages") return kind === "page" && pageFolder.test(path);
     if (packageId === "skills" || packageId === "product")
       return kind === "skill" && /^skills\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(path);
     if (kind === "script") return /^src\/.+\.cs$/i.test(path) && path.startsWith("src/");
