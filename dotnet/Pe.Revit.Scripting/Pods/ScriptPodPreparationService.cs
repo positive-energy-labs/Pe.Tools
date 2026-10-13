@@ -85,7 +85,7 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null, Func<st
         try {
             var capture = this.ReadAdmission("pod.capture", new { pod = podId }).ToObject<PodCapture>()
                 ?? throw new InvalidDataException("Host returned no package capture.");
-            if (capture.Id != podId || Path.GetFullPath(capture.Directory) != Path.GetFullPath(FullPath(this.PodsRoot, capture.Folder)))
+            if (capture.Id != podId || !string.Equals(Path.GetFullPath(capture.Directory), Path.GetFullPath(FullPath(this.PodsRoot, capture.Folder)), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Host package capture identity or local folder disagrees.");
             return new(capture, null, null);
         } catch (Exception exception) {
