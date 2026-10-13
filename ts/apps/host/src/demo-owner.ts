@@ -37,6 +37,8 @@ import { familiesAdmission } from "../../../packages/mcps/src/pea/families-admis
 import { resourceResponse, type ResourceObserver } from "@pe/runtime";
 import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
 import { documentMarks } from "./document-marks.ts";
+import { bridgeAttachments, createMachine, unavailableShare } from "./machine.ts";
+import { unreadLeg } from "./update-reader.ts";
 import { readFamily } from "./family-actions.ts";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import type { ScheduleCellsApply } from "@pe/host-contracts/generated";
@@ -133,6 +135,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
   await mkdir(parent, { recursive: true });
   const root = await mkdtemp(join(await assertDemoPath(parent, parent), "instance-"));
   let releaseHandler: (() => Promise<void>) | undefined;
+  let machine: ReturnType<typeof createMachine> | undefined;
   try {
     const id = `demo-${randomUUID()}`;
     const r10Path = join(root, "demo.r10");
@@ -945,12 +948,44 @@ export async function createDemoOwner(parent: string, raw: unknown) {
     // One-shot readings (a schedule reading, scoped receipts) read this owner's own surface.
     // Subscribed now, before any event: the Readings and the push share this one holder.
     const marked = markReadings(documentMarks(bridge));
+    // The live host's Machine contract over this owner's one simulated session: no SDK census,
+    // so the session is an unclassified attachment, read the same way the real bridge is.
+    const update = {
+      plan: null,
+      receipt: null,
+      requestId: null,
+      admittedPlanId: null,
+      planLeg: unreadLeg(),
+      receiptLeg: unreadLeg(),
+    };
+    machine = createMachine({
+      grants: { grants: () => [], subscribe: () => () => {} },
+      actions: () => journal.list(),
+      host: async () => {
+        throw Error("An isolated demo owner simulates Revit, not a host process.");
+      },
+      peers: async () => [],
+      sessions: async () => [],
+      documents: async () => ({ state: "ok", documents: [] }),
+      attachments: () => bridgeAttachments(bridge),
+      years: async () => [],
+      providers: async () => ({ providers: [], access: { guarded: true } }),
+      update: {
+        current: () => update,
+        refresh: async () => update,
+        apply: async () => update,
+        automaticPending: () => false,
+      },
+      share: unavailableShare,
+      subscribe: bridge.subscribe,
+    });
     const hostObserve = hostResourceObserver(
       bridge,
       () => journal,
       () => captures,
       "http://demo",
       (url, init) => handle(new Request(url, init)),
+      machine,
     );
     const localScope = (value: WorkKey) =>
       workKey(value) === workKey(scope) ||
@@ -964,6 +999,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       const targetMatches = (ref: typeof target) =>
         ref.session === id && ref.openId === target.openId;
       const allowed =
+        request.kind === "machine" ||
         request.kind === "inventory" ||
         request.kind === "world" ||
         request.kind === "host-status" ||
@@ -1011,7 +1047,10 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       member: files[0]?.member,
       simulated: true,
     };
-    releaseHandler = () => web.dispose();
+    releaseHandler = () => {
+      machine?.close();
+      return web.dispose();
+    };
     async function handle(request: Request): Promise<Response> {
       if (retired) return json({ error: "Demo instance retired" }, 410);
       const url = new URL(request.url);
@@ -1254,7 +1293,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           await Promise.allSettled(pending);
           for (const row of await journal.list())
             if (row.state === "running") await journal.wait(row.id);
-          await web.dispose();
+          await releaseHandler!();
           await assertDemoPath(parent, root);
           await rm(root, { recursive: true, force: true });
         })());

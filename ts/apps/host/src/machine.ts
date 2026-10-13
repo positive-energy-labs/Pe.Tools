@@ -644,30 +644,7 @@ export function machineSources(
         .parse(envelope.result);
       return result;
     },
-    attachments: async () =>
-      bridge
-        ? (await Effect.runPromise(bridge.list)).flatMap((view) =>
-            view.connected && view.sessionId && view.processId
-              ? [
-                  {
-                    session: view.sessionId,
-                    pid: view.processId,
-                    processStartUtcUnixMs: view.processStartUtcUnixMs ?? null,
-                    documents: view.state
-                      ? view.state.openDocuments.map((doc) => ({
-                          session: view.sessionId!,
-                          openId: doc.openId,
-                          title: doc.title,
-                          address: doc.address ?? null,
-                          isFamilyDocument: doc.isFamilyDocument,
-                          isActive: doc.isActive,
-                        }))
-                      : null,
-                  },
-                ]
-              : [],
-          )
-        : [],
+    attachments: () => bridgeAttachments(bridge),
     // Doctor can report unrelated wiring refusals while still identifying installed years.
     years: async () =>
       (await sdk<DoctorResult>(doctorArgv({ timeoutSeconds: 20 }), [0, 3])).result.revitYears.map(
@@ -689,6 +666,34 @@ export function machineSources(
       };
     },
   };
+}
+
+/** What the bridge socket says about each connected session: the one projection Machine reads. */
+export async function bridgeAttachments(
+  bridge: Pick<RevitBridge["Service"], "list"> | undefined,
+): Promise<readonly AttachmentRead[]> {
+  if (!bridge) return [];
+  return (await Effect.runPromise(bridge.list)).flatMap((view) =>
+    view.connected && view.sessionId && view.processId
+      ? [
+          {
+            session: view.sessionId,
+            pid: view.processId,
+            processStartUtcUnixMs: view.processStartUtcUnixMs ?? null,
+            documents: view.state
+              ? view.state.openDocuments.map((doc) => ({
+                  session: view.sessionId!,
+                  openId: doc.openId,
+                  title: doc.title,
+                  address: doc.address ?? null,
+                  isFamilyDocument: doc.isFamilyDocument,
+                  isActive: doc.isActive,
+                }))
+              : null,
+          },
+        ]
+      : [],
+  );
 }
 
 /** Read/discover only: stale files remain visible and no display sweeps another host's record. */
