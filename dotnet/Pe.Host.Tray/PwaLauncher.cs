@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
+using Pe.Shared.Product;
 
 namespace Pe.Host.Tray;
 
@@ -12,6 +13,8 @@ internal sealed record PwaRegistration(string Command, string Icon);
 internal sealed record PackagedPwa(string AppId, string Profile, string StartUrl, string EdgeIdentity);
 
 internal static class PwaLauncher {
+    /** Pe.Tools-owned Edge app profiles, under the root `PE_TOOLS_PRODUCT_HOME` moves; Edge's own stays Edge's. */
+    internal static string PrivateProfileRoot => Path.Combine(ProductRuntimeLayout.ForCurrentUser().RootPath, "edge-app");
     internal static string StandardProfileRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "Edge", "User Data");
     internal static async Task<InstalledPwa?> ResolveAsync(string origin, CancellationToken stop = default) {
         if (EdgeExecutable is not { } edge) throw new InvalidOperationException("Microsoft Edge is unavailable");
@@ -21,7 +24,7 @@ internal static class PwaLauncher {
         using var manifest = JsonDocument.Parse(await response.Content.ReadAsStringAsync(stop));
         var identity = ManifestIdentity(origin, manifest.RootElement);
         if (identity is null) throw new InvalidDataException("Frontend manifest identity is unavailable");
-        var privateRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Positive Energy", "Pe.Tools", "edge-app");
+        var privateRoot = PrivateProfileRoot;
         var roots = new[] { StandardProfileRoot, privateRoot }.Concat(Directory.Exists(privateRoot)
             ? Directory.EnumerateDirectories(privateRoot, "dev-*") : []);
         return Match(identity, edge, roots, Registrations(), File.Exists)

@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
+using Pe.Shared.Product;
 
 namespace Pe.Host.Tray;
 
@@ -81,6 +82,9 @@ internal sealed class TrayContext : ApplicationContext {
         _ = Task.Run(WatchDisposalAsync);
         _ = Task.Run(ReadNoticesAsync);
     }
+
+    /** Under the product's one machine-local root, which `PE_TOOLS_PRODUCT_HOME` moves. */
+    internal static string WebViewProfileRoot => Path.Combine(ProductRuntimeLayout.ForCurrentUser().RootPath, "tray-webview");
 
     private async Task WatchParentAsync() {
         try {
@@ -228,8 +232,7 @@ internal sealed class TrayContext : ApplicationContext {
         try {
             DevStage("environment");
             _ = CoreWebView2Environment.GetAvailableBrowserVersionString();
-            var profile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Positive Energy", "Pe.Tools", "tray-webview");
+            var profile = WebViewProfileRoot;
             if (_launch.IsDev) profile = Path.Combine(profile, _launch.ProfileKey);
             var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: profile);
             DevStage("controller");
