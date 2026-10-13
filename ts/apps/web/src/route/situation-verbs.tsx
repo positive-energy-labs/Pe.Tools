@@ -1,5 +1,5 @@
 /** The Situation's verb row: each verb button with its flag, and the board that stands them up. */
-import { Fragment, createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import type { LucideIcon } from "lucide-react";
 import { FactChip } from "#/components/lang/chip";
@@ -8,6 +8,7 @@ import { Button } from "#/components/lang/button";
 import { changedInRevit } from "#/readings";
 import type { RouteAction } from "./manifest";
 import type { ActionHandle, RouteHandle } from "./use-route";
+import { useSituationPresentation } from "#/navigation/route-controls";
 
 const DONE_FADE_MS = 5000;
 
@@ -46,6 +47,7 @@ export function SituationAction({
     return () => clearTimeout(timer);
   }, [outcome]);
   const flag = useContext(ActionFlag)[name];
+  const presented = useSituationPresentation(handle.manifest.key);
   // A route's standing question for this verb (schedules' stale resolve) holds its popover open.
   const shown =
     busy !== null ||
@@ -71,7 +73,10 @@ export function SituationAction({
   const tone = refusedNow || stale ? "caution" : standing;
   return (
     <span className="relative inline-flex">
-      <Popover.Root open={shown} onOpenChange={(o) => !o && outcome && setDismissed(outcome.at)}>
+      <Popover.Root
+        open={shown && presented}
+        onOpenChange={(o) => !o && presented && outcome && setDismissed(outcome.at)}
+      >
         <Popover.Trigger
           render={
             Icon ? (
@@ -217,36 +222,15 @@ export function ActionBoard({
       </Button>
     </span>
   );
-  if (!open)
-    return (
-      <div className="hairline-t flex flex-wrap items-center gap-x-2 gap-y-1 py-1.5">
-        {head}
-        {verbs.map(([name, action]) => (
-          <SituationAction
-            key={name}
-            handle={handle}
-            name={name}
-            action={action}
-            chord={chords?.[name] ?? action.chord}
-            commit={name === commit}
-          />
-        ))}
-        {meter}
-      </div>
-    );
   return (
-    <div className="hairline-t grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-4 gap-y-1.5 py-1.5">
+    <div className="pe-action-board hairline-t" data-expanded={open}>
       {head}
-      <Label>why</Label>
-      <span className="flex items-baseline justify-between gap-3">
-        <Label>dispatches</Label>
-        {meter}
-      </span>
+      {meter}
       {verbs.map(([name, action]) => {
         const spec = declared[name];
         const chord = chords?.[name] ?? action.chord;
         return (
-          <Fragment key={name}>
+          <div key={name} className="pe-action-board-item">
             <span className="flex justify-start">
               <SituationAction
                 handle={handle}
@@ -256,37 +240,44 @@ export function ActionBoard({
                 commit={name === commit}
               />
             </span>
-            <span
-              className={`t-prose ${action.refusal ? "" : "text-ink-2"}`}
-              data-tone={action.refusal ? "caution" : undefined}
-            >
-              {action.refusal ?? action.says}
-            </span>
-            <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 t-small face-mono text-ink-mute">
-              {spec ? (
-                <>
-                  {action.actor === "human" ? (
-                    <Noun title="a person runs this verb; Pea may only propose it">human</Noun>
-                  ) : null}
-                  needs
-                  <Noun title={`the target this verb needs bound: ${action.needs}`}>
-                    {action.needs}
-                  </Noun>
-                  → dirties
-                  {spec.dirties.length
-                    ? spec.dirties.map((key) => (
-                        <Noun key={key} title={`${action.label} marks the ${key} Reading stale`}>
-                          {key}
-                        </Noun>
-                      ))
-                    : "nothing"}
-                </>
-              ) : (
-                "—"
-              )}
-              {chord ? <Kbd>{chord}</Kbd> : null}
-            </span>
-          </Fragment>
+            <div className="pe-action-board-detail" aria-hidden={!open} inert={!open}>
+              <div className="pe-action-board-detail-inner">
+                <span
+                  className={`t-prose ${action.refusal ? "" : "text-ink-2"}`}
+                  data-tone={action.refusal ? "caution" : undefined}
+                >
+                  {action.refusal ?? action.says}
+                </span>
+                <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 t-small face-mono text-ink-mute">
+                  {spec ? (
+                    <>
+                      {action.actor === "human" ? (
+                        <Noun title="a person runs this verb; Pea may only propose it">human</Noun>
+                      ) : null}
+                      needs
+                      <Noun title={`the target this verb needs bound: ${action.needs}`}>
+                        {action.needs}
+                      </Noun>
+                      → dirties
+                      {spec.dirties.length
+                        ? spec.dirties.map((key) => (
+                            <Noun
+                              key={key}
+                              title={`${action.label} marks the ${key} Reading stale`}
+                            >
+                              {key}
+                            </Noun>
+                          ))
+                        : "nothing"}
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                  {chord ? <Kbd>{chord}</Kbd> : null}
+                </span>
+              </div>
+            </div>
+          </div>
         );
       })}
     </div>

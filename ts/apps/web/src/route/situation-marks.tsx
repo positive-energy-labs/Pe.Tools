@@ -1,8 +1,7 @@
 /** The Situation's marks: a sentence slot and its choice (dotted = operable, dashed = empty). */
 import type { ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
-import { Kbd } from "#/components/lang/kbd";
-import { Button } from "#/components/lang/button";
+import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { useScopeKeys } from "./keys";
 
 /** A slot in the sentence: an operable value with its io mark (`r`, `w`, `rw`) as a superscript. */
@@ -82,13 +81,17 @@ export function PaletteKey({ open }: { open: () => void }) {
       options: { ignoreInputs: false },
     },
   ]);
+  return <PagePaletteButton open={open} />;
+}
+export function PagePaletteButton({ open }: { open: () => void }) {
   return (
-    <Button
-      label="Open the palette"
-      reason="Switch what this page shows: every rung of the sentence, type to filter (Ctrl K)"
-      onClick={open}
-    >
-      <Kbd mute hotkey="Mod+K" />
-    </Button>
+    <HotkeyCommand
+      label="Open page palette"
+      word="Page"
+      hotkey="Mod+K"
+      invoke={open}
+      bind={false}
+      reason="Switch what this page shows"
+    />
   );
 }

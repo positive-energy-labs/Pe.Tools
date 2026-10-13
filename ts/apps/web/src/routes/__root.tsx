@@ -12,6 +12,9 @@ import { inspectAtomRegistry } from "../state/atom-inspect";
 import { appAtomRegistry, routeSearch } from "../route/route-owner";
 import { AppChrome, AppDevtools } from "../route/app-chrome";
 import { InstallScrim } from "../machine/install-scrim";
+import { AppNavigation } from "../route/app-chrome";
+import { NavigationProvider } from "#/navigation/state";
+import { RouteControlsProvider, SituationPinnedSlot } from "#/navigation/route-controls";
 
 import appCss from "../styles.css?url";
 
@@ -52,10 +55,27 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 });
 
 export function RootComponent() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  if (pathname === "/machine")
+    return (
+      <div className="h-dvh min-h-0 min-w-0">
+        <Outlet />
+      </div>
+    );
   return (
-    <div className="h-dvh min-h-0 min-w-0">
-      <Outlet />
-    </div>
+    <NavigationProvider>
+      <RouteControlsProvider>
+        <div className="flex h-dvh min-h-0 min-w-0 flex-col">
+          <AppNavigation />
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <SituationPinnedSlot />
+            <div className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-none" data-app-content>
+              <Outlet />
+            </div>
+          </div>
+        </div>
+      </RouteControlsProvider>
+    </NavigationProvider>
   );
 }
 
@@ -72,7 +92,7 @@ function Chrome() {
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-pe suppressHydrationWarning>
+    <html lang="en" data-pe data-pe-app suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <HeadContent />

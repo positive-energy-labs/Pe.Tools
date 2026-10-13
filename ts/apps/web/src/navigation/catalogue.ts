@@ -1,0 +1,177 @@
+import {
+  FileScan,
+  FlaskConical,
+  Image,
+  Boxes,
+  LayoutDashboard,
+  LayoutGrid,
+  Link2,
+  Map,
+  MessageSquare,
+  Palette,
+  Server,
+  Settings2,
+  Table,
+  Table2,
+  Terminal,
+  Wind,
+} from "lucide-react";
+export const TOOLS = [
+  {
+    to: "/open",
+    title: "Open",
+    label: "Revit",
+    icon: Server,
+    description:
+      "Start a Revit, open a model, and see which Revit holds it: the launcher, every recent document across installed years, and each running Revit with its shape, documents and verbs.",
+  },
+  {
+    to: "/family",
+    title: "Family",
+    label: "Family Foundry",
+    icon: Boxes,
+    description:
+      "One family, two lanes: an authored family.json (anatomy, matrix, build) or the family open in Revit's editor. Binding picks the lane; capture bridges them.",
+  },
+  {
+    to: "/pea",
+    title: "Pea",
+    label: "Workbench",
+    icon: MessageSquare,
+    description: "The Pea agent workbench — chat and the context world inspector.",
+  },
+  {
+    to: "/families",
+    title: "Families",
+    label: "Family Foundry",
+    icon: Table2,
+    description:
+      "Every loaded family's types × parameters in one table — audit it against a profile, plan the reconciliation, apply with receipts.",
+  },
+  {
+    to: "/takeoffs",
+    title: "Takeoffs",
+    label: "Manual J",
+    icon: Map,
+    description:
+      "The takeoff atlas — zones on the plan, rooms in the table, Manual J data through to a synced RHVAC .r10.",
+  },
+  {
+    to: "/rooms",
+    title: "Rooms",
+    label: "Manual J",
+    icon: LayoutDashboard,
+    description:
+      "Split a level's plan view into room regions, stage each room's name, type and loads, and write them to the regions in Revit.",
+  },
+  {
+    to: "/grilles",
+    title: "Grilles",
+    label: "Wood floor grille",
+    icon: LayoutGrid,
+    description:
+      "The custom wood floor grille calculator — profiles in a sheet, the active one drawn to submittal scale, the buildable field charted; export a sheet to PDF or .svg.",
+  },
+  {
+    to: "/duct-loss",
+    title: "Duct Loss",
+    label: "Duct friction",
+    icon: Wind,
+    description:
+      "The imperial duct friction loss formula, live — type a duct and airflow, read Δp with every intermediate term beside the equation.",
+  },
+  {
+    to: "/pods",
+    title: "Pods",
+    label: "Pods",
+    icon: Settings2,
+    description:
+      "Every installed pod — browse members, edit a spec as a form or raw JSON, and see the runs filed against it.",
+  },
+  {
+    to: "/doc-lab",
+    title: "Doc Lab",
+    label: "Experimental",
+    icon: FileScan,
+    description:
+      "The grounded-document engine in isolation — parsed markdown beside the PDF pages, hover either side to link them.",
+  },
+  {
+    to: "/lab",
+    title: "Lab",
+    label: "Experimental",
+    icon: FlaskConical,
+    description:
+      "Composed glances — many host calls gathered into one drawing, run against a session you pick.",
+  },
+  {
+    to: "/captures",
+    title: "Captures",
+    label: "Revit data",
+    icon: Image,
+    description:
+      "Every picture taken of a Revit view, newest first — who took it, which view, the receipt, and the URL a page or a chat links.",
+  },
+  {
+    to: "/ops",
+    title: "Ops Playground",
+    label: "Host API",
+    icon: Terminal,
+    description: "Call any host operation directly and inspect the raw response.",
+  },
+  {
+    to: "/schedules",
+    title: "Schedules",
+    label: "Revit data",
+    icon: LayoutGrid,
+    description:
+      "Any Revit schedule as a grid — push staged cell values, capture its definition into a pod, or apply a saved spec as a new schedule.",
+  },
+  {
+    to: "/data-tables",
+    title: "Data Tables",
+    label: "Revit data",
+    icon: Table,
+    description:
+      "Author synthetic data tables — draft columns and keyed rows, then upsert them in one apply; rows deleted here are pruned in Revit.",
+  },
+  {
+    to: "/param-tables",
+    title: "Parameter Tables",
+    label: "Incubating product",
+    icon: Table2,
+    description:
+      "Five mounted parameter-table variants for linked engineering data; switch between them while the product shape is incubating.",
+  },
+  {
+    to: "/parameter-links",
+    title: "Parameter Links",
+    label: "Revit data",
+    icon: Link2,
+    description:
+      "Cross-element parameter links — co-edit the link profile with pea, preview the projected target writes, then apply to reconcile them.",
+  },
+  {
+    to: "/settings",
+    title: "Settings",
+    label: "Pea",
+    icon: Settings2,
+    description:
+      "Whether Pea asks before each change. Providers and sign-in live in the machine drawer, behind the version chip.",
+  },
+  {
+    to: "/design-system",
+    title: "Design System",
+    label: "Design language",
+    icon: Palette,
+    description:
+      "The spec and catalogue for the design language — production components under production tokens, with the gaps they cannot yet express marked in place.",
+    satellites: [
+      { to: "/design-system/band", label: "band" },
+      { to: "/design-system/list", label: "list" },
+      { to: "/design-system/arming", label: "arming" },
+      { to: "/design-system/popovers", label: "popovers" },
+      { to: "/design-system/swatch", label: "swatch" },
+    ],
+  },
+] as const;

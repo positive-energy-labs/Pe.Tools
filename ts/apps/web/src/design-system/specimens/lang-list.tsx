@@ -17,6 +17,7 @@ import {
 import { Popover } from "@base-ui/react/popover";
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "#/components/lang/button";
+import { CommandPalette } from "#/components/lang/command-palette";
 import { Row, RowGroupHead, rowRecipe } from "#/components/lang/row";
 import { Table } from "#/components/master-table/table";
 
@@ -105,7 +106,53 @@ export function LangListSpecimens() {
           />
         </div>
       </SpecimenFrame>
+      <SpecimenFrame name="CommandPalette" importPath="#/components/lang/command-palette">
+        <PaletteSpecimen />
+      </SpecimenFrame>
     </>
+  );
+}
+
+function PaletteSpecimen() {
+  const [open, setOpen] = useState(false);
+  const [picked, setPicked] = useState("none");
+  const items = [
+    { key: "family", label: "Family audit", group: "Tools", reason: null },
+    { key: "thread", label: "Pea coordination thread", group: "Threads", reason: null },
+    {
+      key: "closed",
+      label: "Closed document Work",
+      group: "Works",
+      reason: "Its open-document lifetime ended",
+    },
+  ];
+  return (
+    <div className="flex items-center gap-3">
+      <Button label="Open shared command palette" onClick={() => setOpen(true)}>
+        Open palette
+      </Button>
+      <span className="text-ink-2">Chosen fixture: {picked}</span>
+      <CommandPalette
+        open={open}
+        onOpenChange={setOpen}
+        aria-label="Shared destination palette specimen"
+        items={items}
+        keyOf={(item) => item.key}
+        labelOf={(item) => item.label}
+        groupOf={(item) => item.group}
+        filter="fuzzy"
+        searchAbove={0}
+        searchPlaceholder="Search fixture destinations"
+        empty="No fixture destinations"
+        onPick={(item) => setPicked(item.label)}
+        row={(item) => ({ label: item.label, refusal: item.reason })}
+        footer={
+          <p className="px-1 pb-1 text-ink-2">
+            Fixture destinations only; this specimen does not navigate.
+          </p>
+        }
+      />
+    </div>
   );
 }
 

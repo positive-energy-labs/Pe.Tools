@@ -1,0 +1,245 @@
+.pe-appbar-shell {
+  flex: none;
+  min-width: 0;
+  background: var(--pe-page);
+}
+.pe-appbar {
+  container-type: inline-size;
+  container-name: app-chrome;
+  display: flex;
+  flex: none;
+  min-width: 0;
+  min-height: calc(var(--control-h) + 0.5rem);
+  padding: 0;
+  background: var(--pe-page);
+}
+.pe-appbar-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+  min-height: calc(var(--control-h) + 0.5rem);
+  padding: 0.25rem 0.5rem;
+}
+.pe-appbar-commands {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.5rem;
+  order: 2;
+}
+.pe-appbar-command-seam {
+  order: 3;
+  height: var(--control-h);
+  margin-inline: 2px;
+}
+.pe-appbar-route-search {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: var(--control-h);
+  align-items: center;
+  gap: 0.25rem;
+  order: 1;
+}
+.pe-appbar-route-search > input {
+  height: var(--control-h);
+  padding-inline-end: 1.5rem;
+  text-overflow: ellipsis;
+}
+.pe-appbar-route-search > svg {
+  position: absolute;
+  inset-inline-end: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+.pe-feedback-cancel {
+  order: 4;
+  flex: none;
+}
+.pe-appbar-row > [data-chrome-settings] {
+  order: 5;
+}
+.pe-appbar-commands [data-command-word] {
+  display: none;
+}
+@container app-chrome (max-width: 700px) {
+  .pe-appbar-row {
+    gap: 2px;
+    padding-inline: 4px;
+  }
+  .pe-appbar-commands {
+    gap: 2px;
+  }
+}
+.pe-appbar-search,
+.pe-situation-trigger {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.25rem;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.pe-situation-trigger > .pe-appbar-controls {
+  max-width: 16rem;
+}
+.pe-situation-drawer {
+  position: fixed;
+  inset-inline: 0;
+  max-height: min(65dvh, 36rem);
+  overflow: auto;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-0.35rem);
+  pointer-events: none;
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease,
+    visibility 160ms;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.pe-situation-drawer[data-state="open"] {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.pe-situation-dock {
+  flex: none;
+  min-width: 0;
+}
+.pe-situation-drawer[data-mode="pinned"] {
+  position: relative;
+  inset-inline: auto;
+  max-height: 40dvh;
+}
+.pe-settings-row {
+  display: block;
+  width: 100%;
+}
+.pe-settings-row .dl-button {
+  width: 100%;
+  min-height: var(--item-h);
+  justify-content: flex-start;
+}
+.pe-action-board {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding-block: 0.375rem;
+}
+.pe-action-board-item {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 1rem;
+}
+.pe-action-board[data-expanded="true"] .pe-action-board-item {
+  width: 100%;
+}
+.pe-action-board[data-expanded="true"] .pe-action-board-item > span {
+  flex: none;
+  width: 9rem;
+}
+.pe-action-board-detail {
+  display: grid;
+  grid-template-rows: 0fr;
+  min-width: 0;
+  max-width: 0;
+  opacity: 0;
+  transition:
+    grid-template-rows 180ms ease,
+    opacity 180ms ease;
+}
+.pe-action-board-detail-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  gap: 1rem;
+}
+.pe-action-board[data-expanded="true"] .pe-action-board-detail {
+  flex: 1;
+  max-width: none;
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+@container app-chrome (max-width: 1400px) {
+  .pe-situation-trigger > .pe-appbar-controls {
+    max-width: 9rem;
+  }
+}
+.pe-settings-row > .dl-hotkey-command {
+  display: flex;
+  width: 100%;
+}
+.pe-settings-row .dl-hotkey-command > .dl-button {
+  flex: 1;
+}
+.pe-settings-row .dl-hotkey-command [data-command-chord] {
+  margin-inline-start: auto;
+}
+@container app-chrome (max-width: 600px) {
+  .pe-situation-trigger > .pe-appbar-controls {
+    max-width: 5rem;
+  }
+}
+[data-situation-pulse] [data-tone] {
+  animation: situation-state-pulse 600ms ease-out 1;
+}
+@keyframes situation-state-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  35% {
+    opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-situation-pulse] [data-tone] {
+    animation: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pe-situation-drawer,
+  .pe-action-board-detail {
+    transition: none;
+    transform: none;
+  }
+}
+.pe-appbar[data-overlay="true"] {
+  min-height: 0;
+  margin-left: env(titlebar-area-x, 0px);
+  width: env(titlebar-area-width, 100%);
+  height: env(titlebar-area-height, calc(var(--control-h) + 0.5rem));
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+.pe-appbar[data-overlay="true"] > .pe-appbar-row {
+  min-height: 0;
+  height: 100%;
+  padding-block: 0;
+}
+.pe-appbar :is(button, a, input, [role="button"]),
+.pe-appbar-controls {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.pe-appbar-controls,
+.pe-navigation-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+.pe-navigation-row {
+  padding-block: 0.25rem;
+}

@@ -82,11 +82,11 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
     expect(browser).not.toBe(backend);
     expect(await fetch(browser).then((r) => r.text())).toContain("frontend");
     const navigation = { headers: { accept: "text/html" } };
-    const redirected = await fetch(`${backend}/chat?thread=kept`, {
+    const redirected = await fetch(`${backend}/pea?thread=kept`, {
       ...navigation,
       redirect: "manual",
     });
-    expect(redirected.headers.get("location")).toBe(`${browser}/chat?thread=kept`);
+    expect(redirected.headers.get("location")).toBe(`${browser}/pea?thread=kept`);
     expect(await fetch(`${browser}/ops`, navigation).then((r) => r.text())).toContain("frontend");
     expect(await fetch(`${browser}/ops`).then((r) => r.json())).toHaveProperty("operations");
     expect(await fetch(`${browser}/host/status`).then((r) => r.json())).toEqual(

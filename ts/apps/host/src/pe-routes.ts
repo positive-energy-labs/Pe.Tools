@@ -1,9 +1,6 @@
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
 import type { MachineShareAdapter } from "./machine.ts";
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { Deferred, Effect, Option, Stream } from "effect";
 import { HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http";
 import {
@@ -61,6 +58,9 @@ import { makeInstalledUpdateReader } from "./update-route.ts";
 import { HostLifecycle } from "./host-lifecycle.ts";
 import { bindActionWorkspace } from "./takeoff-actions.ts";
 import { familySpecAsset, familySpecHandlers } from "./family-spec.ts";
+import { fileRouteDocumentStore } from "./route-document-store.ts";
+import { readNavigation, type NavigationSources } from "./navigation.ts";
+export { fileRouteDocumentStore } from "./route-document-store.ts";
 
 // One user note on one picked element, bound for PostHog; the picture rides inline as a data URL.
 const feedbackSchema = z.object({
@@ -76,32 +76,11 @@ const feedbackSchema = z.object({
   picture_error: z.string().max(500).nullable(),
 });
 
-/**
- * Route Work as one JSON file per (route, Work key), named by hash: Addresses are Windows paths. The
- * workspace serializes its own writes; tmp + rename keeps each file whole.
- */
-export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
-  mkdirSync(dir, { recursive: true });
-  const file = (targetKey: string, route: string) =>
-    join(dir, `${createHash("sha256").update(`${route}:${targetKey}`).digest("hex")}.json`);
-  return {
-    getState: async ({ targetKey, route }) => {
-      const path = file(targetKey, route);
-      return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null;
-    },
-    setState: async ({ targetKey, route, value }) => {
-      const path = file(targetKey, route);
-      if (value == null) return rmSync(path, { force: true });
-      writeFileSync(`${path}.tmp`, JSON.stringify(value));
-      renameSync(`${path}.tmp`, path);
-    },
-  };
-}
-
 export interface PeRoutesOptions {
   registrations: readonly RouteWorkspaceRegistration[];
   store: RouteDocumentStore;
   heads: ThreadHeadSource;
+  navigation?: NavigationSources;
   capabilityCatalog?: { read(scope?: HostSessionScope): Promise<CapabilityCatalog> };
   observeHostResource?: ResourceObserver;
   /** Wraps every served Reading, Work included, e.g. with the host's document change mark. */
@@ -179,6 +158,13 @@ export function createPeRoutes(options: PeRoutesOptions) {
     const parts = url.pathname.split("/").slice(2).map(decodeURIComponent); // drop "", "pe"
     const body = () => request.json().catch(() => null);
 
+    if (method === "GET" && url.pathname === "/pe/navigation") {
+      try {
+        return json(await readNavigation(work, options.navigation));
+      } catch (error) {
+        return json({ error: message(error) }, 502);
+      }
+    }
     if (method === "GET" && url.pathname === "/pe/capabilities") {
       if (!options.capabilityCatalog) return json({ error: "no capability catalog" }, 503);
       const scope = workKey(url, "", "read");
@@ -410,6 +396,26 @@ export function makeHostPeRoutes(
     registrations,
     store: fileRouteDocumentStore(productRouteWorkPath()),
     heads: threads.heads,
+    navigation: {
+      threads: async () => {
+        const response = await threads.fetch(new Request(`${hostBaseUrl}/pe/threads`));
+        if (!response.ok) throw new Error(`Thread summaries unavailable (${response.status})`);
+        return response.json();
+      },
+      documents: async () => {
+        if (!bridge) return [];
+        const sessions = await Effect.runPromise(bridge.list);
+        return sessions.flatMap((session) =>
+          session.connected && session.sessionId
+            ? (session.state?.openDocuments ?? []).map((document) => ({
+                session: session.sessionId!,
+                openId: document.openId,
+                address: document.address ?? null,
+              }))
+            : [],
+        );
+      },
+    },
     capabilityCatalog: catalog,
     observeHostResource: hostResourceObserver(
       bridge,
@@ -477,6 +483,7 @@ export const peRoutesLayer = (
       ] as const)
         yield* router.add("*", path, harness);
       for (const path of [
+        "/pe/navigation",
         "/pe/capabilities",
         "/pe/family-spec",
         "/pe/feedback",

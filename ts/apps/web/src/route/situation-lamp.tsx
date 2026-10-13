@@ -4,6 +4,13 @@ import { Popover } from "@base-ui/react/popover";
 import { Gauge } from "lucide-react";
 import { Button } from "#/components/lang/button";
 import { StateDot } from "#/components/master-table/cells";
+import {
+  PrimaryRouteControls,
+  useHasGlobalNavigation,
+  useIsPrimaryRoute,
+  usePublishSituationSignal,
+  type SituationSignal,
+} from "#/navigation/route-controls";
 import { ThemeToggle } from "#/components/lang/theme-toggle";
 import { RouteHelpButton } from "./help";
 import { FlowMatrix } from "./flow";
@@ -21,6 +28,8 @@ export function ChainLamp({
   health,
   session,
   document,
+  inspection = false,
+  stageWord,
 }: {
   handle: RouteHandle<any, any, any, any>;
   /** The document's complaint, when it has one ("needs initialization · 4 carriers"). */
@@ -29,6 +38,8 @@ export function ChainLamp({
   session: string | null;
   /** Diagnostic label only; the sentence owns target selection. */
   document: string | null;
+  inspection?: boolean;
+  stageWord?: string;
 }) {
   const resolution = handle.resolution;
   const sessionWord =
@@ -37,6 +48,53 @@ export function ChainLamp({
   const title = [`session · ${sessionWord}`, health ? `document · ${health}` : null]
     .filter(Boolean)
     .join("\n");
+  const primary = useIsPrimaryRoute(handle.manifest.key);
+  const kind: SituationSignal["kind"] = inspection
+    ? "archived"
+    : handle.failure
+      ? "failure"
+      : handle.busy
+        ? "busy"
+        : health
+          ? "health"
+          : document && session
+            ? "ready"
+            : "unbound";
+  const tone: SituationSignal["tone"] =
+    kind === "archived"
+      ? "nav"
+      : kind === "busy"
+        ? "commit"
+        : kind === "ready"
+          ? "done"
+          : "caution";
+  const stateWord =
+    kind === "archived"
+      ? "Archived · Saved observation"
+      : kind === "failure"
+        ? "Attention needed"
+        : kind === "busy"
+          ? `Running · ${handle.busy?.key}`
+          : kind === "health"
+            ? "Document needs attention"
+            : kind === "ready"
+              ? "Document bound"
+              : "No live document bound";
+  usePublishSituationSignal(handle.manifest.key, {
+    kind,
+    tone,
+    title: [
+      stateWord,
+      stageWord,
+      handle.failure?.message,
+      document ?? "no document selected",
+      inspection ? null : title,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    stamp: `${kind}|${stageWord}|${session}|${document}|${health}|${handle.failure?.message}|${handle.busy?.key}`,
+  });
+  if (primary || inspection) return null;
   const dot = (on: boolean, tone: "done" | "alarm" | "caution" | "mute" = "done") =>
     on ? (
       <StateDot tone={tone} />
@@ -44,10 +102,13 @@ export function ChainLamp({
       <span className="inline-block size-2 shrink-0 rounded-[1px] border border-ink-mute align-middle" />
     );
   return (
-    <span className="flex items-center gap-1.5 t-small face-mono text-ink-mute" title={title}>
+    <span
+      className="flex min-w-0 items-center gap-1.5 t-small face-mono text-ink-mute"
+      title={title}
+    >
       {dot(session !== null, health ? "caution" : "done")}
       <span
-        className={health ? undefined : "text-ink-2"}
+        className={`min-w-0 truncate ${health ? "" : "text-ink-2"}`}
         data-tone={health ? "caution" : undefined}
       >
         {document ?? "no document selected"}
@@ -67,9 +128,11 @@ export function ChainLamp({
 function StateGauge({
   handle,
   children,
+  word,
 }: {
   handle: RouteHandle<any, any, any, any>;
   children?: ReactNode;
+  word?: string;
 }) {
   if (!import.meta.env.DEV && children == null) return null;
   return (
@@ -77,10 +140,12 @@ function StateGauge({
       <Popover.Trigger
         render={
           <Button
-            label="Route state"
+            label={word ?? "Route state"}
             reason="route state: what is bound, what ran, and the route's nouns"
             icon={Gauge}
-          />
+          >
+            {word}
+          </Button>
         }
       />
       <Popover.Portal>
@@ -113,17 +178,25 @@ export function Cluster({
   helpUtilities?: boolean;
 }) {
   const chrome = useContext(HostedChrome);
+  const globalNavigation = useHasGlobalNavigation();
+  const primary = useIsPrimaryRoute(handle.manifest.key);
   return (
-    <span className="flex shrink-0 items-center gap-1">
+    <>
       {lamp}
-      <StateGauge handle={handle}>{state}</StateGauge>
-      <RouteHelpButton
-        name={handle.manifest.name}
-        docs={handle.manifest.docs}
-        utilities={helpUtilities}
-      />
-      <ThemeToggle />
-      {chrome}
-    </span>
+      <PrimaryRouteControls route={handle.manifest.key} slot="inspector">
+        <StateGauge handle={handle} word={primary ? "Inspector" : undefined}>
+          {state}
+        </StateGauge>
+      </PrimaryRouteControls>
+      <PrimaryRouteControls route={handle.manifest.key}>
+        <RouteHelpButton
+          name={handle.manifest.name}
+          docs={handle.manifest.docs}
+          utilities={helpUtilities}
+        />
+        {chrome}
+        {!globalNavigation && <ThemeToggle />}
+      </PrimaryRouteControls>
+    </>
   );
 }

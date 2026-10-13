@@ -542,10 +542,6 @@
 [data-chat="surface"] [data-slot="pane-title"][data-heading="name"] {
   font-family: var(--font-body);
 }
-[data-chat="surface"] [data-slot="surface"] {
-  border: 1px solid var(--pe-line);
-  border-radius: var(--radius);
-}
 [data-chat="surface"] .dl-composer-frame {
   max-width: var(--chat-measure);
   padding: var(--space-unit) var(--gutter) var(--gutter);

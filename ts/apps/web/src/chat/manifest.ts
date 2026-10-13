@@ -57,7 +57,7 @@ export const chatManifest = (
 ): RouteManifest<ChatState, ChatReading, ChatPage, ChatActionKey> =>
   defineRoute<ChatState, ChatReading, ChatPage, ChatActionKey>({
     key: "chat",
-    name: "Chat",
+    name: "Pea",
     docs: "Choose a thread in the left pane; the transcript reads only that thread while its composer keeps each visited draft. The Situation names the bound target and turn state. Enter sends from the focused composer; Shift+Enter adds a line. The optional workspace stays beside the same conversation.",
     // Conversation needs no Revit target; each invoked capability resolves its own requirement.
     readings: {

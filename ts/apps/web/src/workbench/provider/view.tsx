@@ -21,8 +21,8 @@ import { emptyPrompt } from "../prompt";
 
 export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const config = useMemo(() => resolveWorkbenchConfig(), []);
-  const navigate = useNavigate({ from: "/chat" });
-  const search = useSearch({ from: "/chat" });
+  const navigate = useNavigate({ from: "/pea" });
+  const search = useSearch({ from: "/pea" });
   const currentThreadId = search.thread ?? "";
   const store = useRouteOwner(() =>
     createChatPageStore({
