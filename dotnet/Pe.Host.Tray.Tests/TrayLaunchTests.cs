@@ -7,6 +7,60 @@ namespace Pe.Host.Tray.Tests;
 
 public class TrayLaunchTests {
     [Test]
+    public void ReadyRendererReceivesEverySameOriginRouteWithoutNativeRoutePolicy() {
+        const string origin = "http://127.0.0.1:5175";
+        foreach (var path in new[] { "/open", "/pea?thread=one%2Ftwo", "/settings?section=providers", "/families?target=one#cell", "/future-route" }) {
+            Assert.That(TrayContext.TryGetNavigationRequest(false, origin + path, origin, out _), Is.False);
+            Assert.That(TrayContext.TryGetNavigationRequest(true, origin + path, origin, out var destination), Is.True);
+            Assert.That(destination, Is.EqualTo(origin + path));
+        }
+        Assert.That(TrayContext.TryGetNavigationRequest(true, origin + "/open?shell=tray&document=one", origin, out var canonical), Is.True);
+        Assert.That(canonical, Is.EqualTo(origin + "/open?document=one"));
+        foreach (var rejected in new[] { "http://127.0.0.1:5176/open", "https://example.com/open", origin + "/open?token=secret",
+            origin + "/open?%74oken=secret", "http://user:password@127.0.0.1:5175/open" })
+            Assert.That(TrayContext.TryGetNavigationRequest(true, rejected, origin, out _), Is.False, rejected);
+    }
+
+    [Test]
+    public void NativeFullReloadAndBootBypassRelayUntilTheNewRendererIsReady() {
+        const string current = "http://127.0.0.1:5175/open?shell=tray";
+        Assert.That(TrayContext.ShouldRelayNavigation(false, current + "#changed", current), Is.False);
+        Assert.That(TrayContext.ShouldRelayNavigation(true, current, current), Is.False);
+        Assert.That(TrayContext.ShouldRelayNavigation(true, current + "#changed", current), Is.True);
+        Assert.That(TrayContext.ShouldRelayNavigation(true, "http://127.0.0.1:5175/settings", current), Is.True);
+    }
+    [Test]
+    public void RehomeScalesItsScreenGutterAndClampsOnSmallAndOffsetMonitors() {
+        var work = new System.Drawing.Rectangle(-1920, -100, 1920, 1080);
+        var at96 = TrayWindow.HomeBoundsFor(work, 96);
+        Assert.That(at96.Size, Is.EqualTo(new System.Drawing.Size(760, 560)));
+        Assert.That(at96.Right, Is.EqualTo(work.Right - 12));
+        Assert.That(at96.Bottom, Is.EqualTo(work.Bottom - 12));
+        var at192 = TrayWindow.HomeBoundsFor(work, 192);
+        Assert.That(at192.Right, Is.EqualTo(work.Right - 24));
+        Assert.That(at192.Bottom, Is.EqualTo(work.Bottom - 24));
+        Assert.That(work.Contains(at192), Is.True);
+        foreach (var small in new[] { new System.Drawing.Rectangle(50, 60, 600, 500), new System.Drawing.Rectangle(-2, -2, 5, 3) })
+            Assert.That(small.Contains(TrayWindow.HomeBoundsFor(small, 192)), Is.True);
+    }
+
+    [Test]
+    public void NativeHistoryCommandsRequireAnAvailableExactDirection() {
+        foreach (var direction in new[] { "back", "forward" }) {
+            using var json = JsonDocument.Parse(JsonSerializer.Serialize(new { type = "navigate-history", direction }));
+            Assert.That(TrayContext.TryReadHistoryCommand(json.RootElement, true, true, out var back), Is.True);
+            Assert.That(back, Is.EqualTo(direction == "back"));
+            Assert.That(TrayContext.TryReadHistoryCommand(json.RootElement, false, false, out _), Is.False);
+            Assert.That(TrayContext.TryReadHistoryCommand(json.RootElement, direction == "back", direction == "forward", out _), Is.True);
+        }
+        foreach (var invalid in new[] { "null", "[]", "{\"type\":\"navigate-history\",\"direction\":\"Back\"}",
+            "{\"type\":\"navigate-history\",\"direction\":true}", "{\"type\":\"navigate-history\"}",
+            "{\"type\":\"foreign\",\"direction\":\"back\"}" }) {
+            using var json = JsonDocument.Parse(invalid);
+            Assert.That(TrayContext.TryReadHistoryCommand(json.RootElement, true, true, out _), Is.False, invalid);
+        }
+    }
+    [Test]
     public void ShowGrammarPreservesOwnerAndAcceptsOnlyCanonicalTokenFreeRoutes() {
         var owner = new[] { "--parent-pid", "123", "--parent-start", "2026-10-09T12:00:00.123Z", "--service-file", Path.GetTempFileName() };
         try {
@@ -132,6 +186,17 @@ public class TrayLaunchTests {
             Is.EqualTo(new System.Drawing.Size(1520, 1120)));
         Assert.That(TrayWindow.SizeFor(new System.Drawing.Size(600, 500), 192),
             Is.EqualTo(new System.Drawing.Size(600, 500)));
+    }
+
+    [Test]
+    public void ExternalBrowserLinksRequireAUserClickAndWebAddress() {
+        const string pdf = "https://www.magicaire.com/wp-content/uploads/2014/01/HBB-Submittal-12142013.pdf";
+        Assert.That(TrayContext.TryGetExternalUrl(pdf, true, out var destination), Is.True);
+        Assert.That(destination, Is.EqualTo(pdf));
+        Assert.That(TrayContext.TryGetExternalUrl(pdf, false, out _), Is.False);
+        foreach (var refused in new[] { "file:///C:/secret.txt", "javascript:alert(1)", "data:text/html,test",
+                     "https://user:password@example.com/", "https://example.com/\n", "/relative" })
+            Assert.That(TrayContext.TryGetExternalUrl(refused, true, out _), Is.False, refused);
     }
 
     [Test]

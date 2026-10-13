@@ -5,16 +5,28 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { UpdateThreadRequest } from "@pe/agent-contracts";
 import { emptyChatState } from "#/workbench/chat-state";
 import { demoThreads } from "./thread-navigation";
-import { ThreadsSidebar } from "./thread-palette";
+import { ThreadDialog, ThreadsSidebar } from "./thread-palette";
 
 afterEach(cleanup);
 
+const surface = vi.hoisted(() => ({ value: "web" }));
+vi.mock("#/navigation/surface-host", () => ({
+  useSurfaceHost: () => ({ surface: surface.value }),
+}));
+afterEach(() => {
+  surface.value = "web";
+});
+
 const threads = () => demoThreads({ ...emptyChatState(), id: "open", title: "Open" });
 
-function mount(onUpdate = vi.fn(async (_id: string, _change: UpdateThreadRequest) => true)) {
+function mount(
+  onUpdate = vi.fn(async (_id: string, _change: UpdateThreadRequest) => true),
+  compactRows = false,
+  roster = threads(),
+) {
   render(
     <ThreadsSidebar
-      threads={threads() as never}
+      threads={roster as never}
       currentThreadId="open"
       providers={[]}
       onSelect={vi.fn()}
@@ -25,12 +37,102 @@ function mount(onUpdate = vi.fn(async (_id: string, _change: UpdateThreadRequest
       onDelete={vi.fn()}
       onUpdate={onUpdate}
       onNewTarget={vi.fn()}
+      compactRows={compactRows}
     />,
   );
   return onUpdate;
 }
 const row = (title: string) =>
   screen.getByText(title).closest<HTMLElement>("[data-navigation-item] .dl-row")!;
+
+test("tray defaults to real Inbox work, while All and Archived retain every thread", () => {
+  surface.value = "tray";
+  const base = threads()[0]!;
+  const idle = {
+    ...base,
+    id: "idle",
+    title: "Resting work",
+    activity: { ...base.activity, state: "idle" as const, pending: 0, lastSeq: 0 },
+    lifecycle: {
+      ...base.lifecycle,
+      status: "active" as const,
+      readSeq: 0,
+      explicitUnread: false,
+      snoozedUntil: null,
+    },
+  };
+  const working = {
+    ...idle,
+    id: "running",
+    title: "Working now",
+    activity: { ...idle.activity, state: "running" as const },
+  };
+  const waiting = {
+    ...idle,
+    id: "waiting",
+    title: "Owner answer",
+    activity: { ...idle.activity, state: "waiting" as const },
+  };
+  const finished = {
+    ...idle,
+    id: "finished",
+    title: "Finished unread",
+    lifecycle: { ...idle.lifecycle, status: "settled" as const, explicitUnread: true },
+  };
+  const archived = {
+    ...idle,
+    id: "archived",
+    title: "Archived work",
+    lifecycle: { ...idle.lifecycle, status: "archived" as const },
+  };
+  mount(
+    vi.fn(async () => true),
+    false,
+    [idle, working, waiting, finished, archived],
+  );
+  expect(screen.getByRole("button", { name: "Inbox" }).getAttribute("aria-pressed")).toBe("true");
+  expect(screen.getByText("Working now")).toBeTruthy();
+  expect(screen.getByText("Owner answer")).toBeTruthy();
+  expect(screen.getByText("Finished unread")).toBeTruthy();
+  expect(screen.queryByText("Resting work")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "All" }));
+  expect(screen.getByText("Resting work")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Archived" }));
+  expect(screen.getByText("Archived work")).toBeTruthy();
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "archived" } });
+  expect(screen.getByText("Archived work")).toBeTruthy();
+});
+
+function expectTimeBeforeProvider(element: HTMLElement) {
+  const trail = element.querySelector(".pe-thread-trail")!;
+  const time = trail.querySelector("time")!;
+  const provider = trail.querySelector("[data-provider]")!;
+  expect(time.compareDocumentPosition(provider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(trail.querySelectorAll("[data-provider]")).toHaveLength(1);
+}
+
+test("compact sidebar keeps its target and places provider after the time", () => {
+  mount(
+    vi.fn(async () => true),
+    true,
+  );
+  const item = row("Check AHU type parameters");
+  expect(item.closest("[data-thread-rows]")?.getAttribute("data-thread-rows")).toBe("compact");
+  expectTimeBeforeProvider(item);
+  const target = item.querySelector(".pe-thread-target")!;
+  expect(target.textContent).toBe("Air Handling Unit.rfa");
+  expect(target.getAttribute("title")).toBe("C:/Families/Air Handling Unit.rfa");
+  expect(item.querySelectorAll("[data-provider]")).toHaveLength(1);
+});
+
+test("full web sidebar retains the original two-line target and provider layout", () => {
+  mount();
+  const item = row("Check AHU type parameters");
+  expect(item.closest("[data-thread-rows]")).toBeNull();
+  expect(item.getAttribute("data-lines")).toBe("2");
+  expect(item.querySelector(".pe-thread-trail")).toBeNull();
+  expect(item.querySelector(".dl-row-sub [data-provider]")).toBeTruthy();
+});
 
 test("the menu on a selected row acts on every selected thread and greys what needs one", async () => {
   const onUpdate = mount();
@@ -69,6 +171,45 @@ test("the menu on a selected row acts on every selected thread and greys what ne
 });
 
 const selectedRows = () => document.querySelectorAll(".dl-row[data-selected]").length;
+
+test("sidebar search finds a renamed thread by partial immutable ID", () => {
+  mount();
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "fixture-local" } });
+  expect(screen.getByText("Draft the BIM handoff notes")).toBeTruthy();
+  expect(screen.queryByText("Trace the supply air path")).toBeNull();
+});
+
+test("Ctrl K thread dialog finds a renamed thread by full ID and selects that exact ID", async () => {
+  const id = "019c6e27-e55b-73d1-87d8-4e01f1f75043";
+  const onSelect = vi.fn();
+  render(
+    <ThreadDialog
+      threads={demoThreads({ ...emptyChatState(), id, title: "Renamed thread" }) as never}
+      currentThreadId={id}
+      open
+      onOpenChange={vi.fn()}
+      onSelect={onSelect}
+      onNew={vi.fn()}
+      providers={[]}
+      onFork={vi.fn()}
+      onRename={vi.fn()}
+      onDelete={vi.fn()}
+      onUpdate={vi.fn(async () => true)}
+      onNewTarget={vi.fn()}
+    />,
+  );
+  const search = await screen.findByPlaceholderText("Search every thread");
+  const targetRow = screen.getByRole("option", { name: /Check AHU type parameters/ });
+  expectTimeBeforeProvider(targetRow);
+  expect(targetRow.querySelector(".pe-thread-target")?.textContent).toBe("Air Handling Unit.rfa");
+  expect(targetRow.querySelector(".dl-row-sub")).toBeNull();
+  expect(targetRow.querySelector(".dl-row-lead")).toBeNull();
+  fireEvent.change(search, { target: { value: id } });
+  const option = screen.getByRole("option", { name: /Renamed thread/ });
+  expect(screen.queryByRole("option", { name: /Trace the supply air path/ })).toBeNull();
+  fireEvent.click(option);
+  expect(onSelect).toHaveBeenCalledWith(id);
+});
 
 test("ctrl-click toggles a row out, a plain click opens and clears, Escape and empty space clear", () => {
   mount();

@@ -5,7 +5,7 @@ export { routeKey, routePath } from "@pe/agent-contracts";
 export const TASKS = APP_TASKS;
 export type Exposure = AppExposure;
 export const CATALOGUE = TOOLS;
-function matches(text: string, query: string) {
+export function matches(text: string, query: string) {
   return query
     .toLowerCase()
     .trim()

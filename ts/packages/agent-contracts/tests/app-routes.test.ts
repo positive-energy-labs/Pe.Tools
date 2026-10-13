@@ -55,7 +55,7 @@ describe("application route identities and surfaces", () => {
         expect(appRouteMount(path, "web")).toBe("full");
         expect(appRouteMount(path, "pwa")).toBe("full");
         expect(appRouteMount(path, "tray")).toBe(
-          ["/", "/open", "/pea", "/settings", "/machine"].includes(path) ? "compact" : undefined,
+          ["/open", "/machine", "/pea"].includes(path) ? "compact" : undefined,
         );
       }
     }

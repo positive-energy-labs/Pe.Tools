@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useCanGoBack, useRouter, useRouterState } from "@tanstack/react-router";
-import { ArrowLeft, ArrowRight, Search, MessageSquare } from "lucide-react";
+import { ArrowLeft, ArrowRight, Search, MessageSquare, Inbox, Server } from "lucide-react";
 import { Button } from "#/components/lang/button";
 import { Input } from "#/components/lang/input";
 import { HotkeyHint } from "#/components/lang/hotkey-command";
@@ -22,6 +22,7 @@ type LaunchWindow = Window & {
 };
 export function AppBar() {
   const host = useSurfaceHost();
+  const tray = host.surface === "tray";
   const router = useRouter();
   const location = useRouterState({ select: (state) => state.location });
   const canGoBack = useCanGoBack();
@@ -38,6 +39,16 @@ export function AppBar() {
   const { snapshot, refresh } = useNavigation();
   const go = useDestination();
   const bar = useRef<HTMLElement>(null);
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    const node = bar.current;
+    if (!node) return;
+    const measure = () => setCompact(node.clientWidth <= 700);
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(node);
+    return () => observer?.disconnect();
+  }, []);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [searchField, setSearchField] = useState<HTMLInputElement | null>(null);
@@ -47,17 +58,22 @@ export function AppBar() {
   };
   const [launchRefusal, setLaunchRefusal] = useState<string | null>(null);
   const showSearch = () => {
+    if (tray) return;
     refresh();
     setOpen(true);
     searchField?.focus();
   };
   useScopeKeys([
-    {
-      hotkey: "Mod+Shift+K",
-      callback: showSearch,
-      label: "Find tools, Works and Pea threads",
-      options: { ignoreInputs: false },
-    },
+    ...(!tray
+      ? [
+          {
+            hotkey: "Mod+Shift+K" as const,
+            callback: showSearch,
+            label: "Find tools, Works and Pea threads",
+            options: { ignoreInputs: false },
+          },
+        ]
+      : []),
     {
       hotkey: { key: ".", mod: true, shift: true },
       callback: () => startFeedback(),
@@ -131,6 +147,21 @@ export function AppBar() {
     );
   });
   const label = locationLabel(location.pathname);
+  const actions = (
+    <>
+      <RouteControlsSlot slot="palette" />
+      <RouteControlsSlot />
+      {!hasRouteHelp && (
+        <RouteHelpButton
+          name={label}
+          docs="Home opens the tool directory. The route search chooses tools, saved Works and Pea threads. The page palette belongs to the current page; global Find searches tools, saved Works and Pea threads. Settings opens the real theme, feedback and machine controls."
+        />
+      )}
+      <span className="pe-appbar-command-seam hairline-l" aria-hidden />
+      <span id="pe-feedback-cancel" className="pe-feedback-cancel" />
+      <ChromeSettings word={compact} />
+    </>
+  );
   useEffect(() => {
     document.title = `${import.meta.env.DEV ? "Pe.Tools Dev" : "Positive Energy"} / ${label}${currentWork ? ` / ${currentWork.label}` : ""}`;
   }, [label, currentWork?.label]);
@@ -161,19 +192,29 @@ export function AppBar() {
                   label="Back"
                   icon={ArrowLeft}
                   refusal={
-                    canGoBack ? undefined : "No previous entry in this window's router history"
+                    (host.native ? host.nativeHistory?.canGoBack : canGoBack)
+                      ? undefined
+                      : "No previous entry in this window's history"
                   }
-                  onClick={() => router.history.back()}
+                  onClick={() =>
+                    host.native ? host.navigateNativeHistory("back") : router.history.back()
+                  }
                 />
                 <Button
                   label="Forward"
                   icon={ArrowRight}
                   refusal={
-                    historyIndex < furthestHistory
+                    (
+                      host.native
+                        ? host.nativeHistory?.canGoForward
+                        : historyIndex < furthestHistory
+                    )
                       ? undefined
                       : "No forward entry has been observed in this window"
                   }
-                  onClick={() => router.history.forward()}
+                  onClick={() =>
+                    host.native ? host.navigateNativeHistory("forward") : router.history.forward()
+                  }
                 />
               </>
             )}
@@ -181,73 +222,82 @@ export function AppBar() {
               label={host.surface === "tray" ? "Home / open work" : "Home / tool directory"}
               icon={<img src="/favicon.ico" alt="" aria-hidden width={16} height={16} />}
               onClick={() => navigateTo(host.homePath)}
+              pressed={tray && location.pathname === "/open"}
             />
-            <Button label="Open Pea" icon={MessageSquare} onClick={() => navigateTo("/pea")} />
-            <div
-              className="pe-appbar-route-search dl-control"
-              data-selected={open || undefined}
-              onClick={showSearch}
-            >
-              <Search aria-hidden className="pe-appbar-route-search-icon" />
-              <Input
-                ref={setSearchField}
-                surface="embedded"
-                role="combobox"
-                aria-label="Choose product, Work or Pea thread"
-                aria-autocomplete="list"
-                aria-keyshortcuts="Control+Shift+K"
-                title="Search tools, Works and Pea threads · Ctrl+Shift+K"
-                aria-expanded={open}
-                placeholder={`${label}${currentWork ? ` / ${currentWork.label}` : ""}`}
-                value={open ? query : ""}
-                onKeyDown={(event) => {
-                  if (!open && (event.key === "ArrowDown" || event.key === "Enter")) {
-                    event.preventDefault();
-                    showSearch();
-                  }
-                }}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  setOpen(true);
-                }}
+            <Button
+              label={tray ? "Pea Inbox" : "Open Pea"}
+              icon={tray ? Inbox : MessageSquare}
+              pressed={tray && location.pathname === "/pea"}
+              onClick={() => navigateTo("/pea")}
+            />
+            {tray && (
+              <Button
+                label="Machine"
+                icon={Server}
+                pressed={location.pathname === "/machine"}
+                onClick={() => navigateTo("/machine")}
               />
-              <span className="pe-appbar-search-hint" aria-hidden>
-                <HotkeyHint hotkey="Mod+Shift+K" />
-              </span>
-            </div>
+            )}
+            {!tray && (
+              <div
+                className="pe-appbar-route-search dl-control"
+                data-selected={open || undefined}
+                onClick={showSearch}
+              >
+                <Search aria-hidden className="pe-appbar-route-search-icon" />
+                <Input
+                  ref={setSearchField}
+                  surface="embedded"
+                  role="combobox"
+                  aria-label="Choose product, Work or Pea thread"
+                  aria-autocomplete="list"
+                  aria-keyshortcuts="Control+Shift+K"
+                  title="Search tools, Works and Pea threads · Ctrl+Shift+K"
+                  aria-expanded={open}
+                  placeholder={`${label}${currentWork ? ` / ${currentWork.label}` : ""}`}
+                  value={open ? query : ""}
+                  onKeyDown={(event) => {
+                    if (!open && (event.key === "ArrowDown" || event.key === "Enter")) {
+                      event.preventDefault();
+                      showSearch();
+                    }
+                  }}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    setOpen(true);
+                  }}
+                />
+                <span className="pe-appbar-search-hint" aria-hidden>
+                  <HotkeyHint hotkey="Mod+Shift+K" />
+                </span>
+              </div>
+            )}
             <div
               className="pe-appbar-commands"
+              data-compact={compact || undefined}
               role="group"
               aria-label="Situation, Page and Tutorial shortcuts"
             >
-              <SituationDrawer />
-              <RouteControlsSlot slot="palette" />
-              <RouteControlsSlot />
-              {!hasRouteHelp && (
-                <RouteHelpButton
-                  name={label}
-                  docs="Home opens the tool directory. The route search chooses tools, saved Works and Pea threads. The page palette belongs to the current page; global Find searches tools, saved Works and Pea threads. Settings opens the real theme, feedback and machine controls."
-                />
-              )}
+              <SituationDrawer barAnchor={bar.current} rail={compact ? actions : undefined} />
+              {!compact && actions}
             </div>
-            <span className="pe-appbar-command-seam hairline-l" aria-hidden />
-            <span id="pe-feedback-cancel" className="pe-feedback-cancel" />
-            <ChromeSettings />
           </div>
         </nav>
       </div>
-      {launchRefusal && (
+      {(launchRefusal || host.navigationRefusal) && (
         <p role="status" className="px-3 py-1 text-ink-2">
-          {launchRefusal}
+          {launchRefusal || host.navigationRefusal}
         </p>
       )}
-      <GlobalSearch
-        open={open}
-        onOpenChange={changeSearchOpen}
-        onNavigate={navigateTo}
-        anchor={searchField?.parentElement ?? null}
-        query={query}
-      />
+      {!tray && (
+        <GlobalSearch
+          open={open}
+          onOpenChange={changeSearchOpen}
+          onNavigate={navigateTo}
+          anchor={searchField?.parentElement ?? null}
+          query={query}
+        />
+      )}
     </>
   );
 }

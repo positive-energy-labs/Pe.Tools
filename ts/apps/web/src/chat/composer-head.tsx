@@ -9,12 +9,13 @@ import {
   type Machine,
   type Reading,
 } from "@pe/agent-contracts";
-import { File, X } from "lucide-react";
+import { Check, Copy, File, X } from "lucide-react";
 import { Popover } from "@base-ui/react/popover";
 import { PopupFrame } from "#/components/lang/list-popup";
 import { useAtomValue } from "@effect/atom-react";
 
 import { Button } from "#/components/lang/button";
+import { useCopy } from "#/lib/use-copy";
 import { previousOf } from "#/readings";
 import { Ladder } from "#/route/ladder";
 import { Ledger, PageLog } from "#/route/situation-grids";
@@ -157,10 +158,35 @@ export function useChatSituation(handle: ChatHandle) {
     : selectTitle(chat) ||
       threads.find((item) => item.id === currentThreadId)?.title ||
       currentThreadId;
-  return { head, inventory, bound, ladder, health, closedWord, threadLabel };
+  return {
+    head,
+    inventory,
+    bound,
+    ladder,
+    health,
+    closedWord,
+    threadLabel,
+    threadId: missingThread ? null : currentThreadId,
+  };
 }
 
 export type ChatSituation = ReturnType<typeof useChatSituation>;
+
+function ThreadIdentity({ id }: { id: string }) {
+  const { copy, copied } = useCopy();
+  return (
+    <span className="flex min-w-0 items-center gap-2" data-testid="thread-identity">
+      <span className="min-w-0 truncate face-mono" title={id}>
+        {id}
+      </span>
+      <Button
+        label={copied ? "Copied thread ID" : "Copy thread ID"}
+        icon={copied ? Check : Copy}
+        onClick={() => copy(id)}
+      />
+    </span>
+  );
+}
 
 /** The global head observes the same composer owners; Send keeps its controls locally. */
 export function ChatSituationHead({
@@ -172,7 +198,7 @@ export function ChatSituationHead({
   situation: ChatSituation;
   status: ComposerStatus;
 }) {
-  const { head, threadLabel } = situation;
+  const { head, threadLabel, threadId } = situation;
   const kind = status.caution
     ? "failure"
     : status.text === "waiting for you"
@@ -197,7 +223,13 @@ export function ChatSituationHead({
     <div data-surface="page" className="flex min-w-0 flex-col gap-2 p-3" aria-label="Pea Situation">
       <Ledger
         rows={[
-          ["thread", threadLabel || "New thread"],
+          [
+            "thread",
+            threadId && threadLabel === threadId ? "Untitled thread" : threadLabel || "New thread",
+          ],
+          ...(threadId
+            ? [["thread id", <ThreadIdentity key={threadId} id={threadId} />] as const]
+            : []),
           [
             "target",
             head.defaultTarget

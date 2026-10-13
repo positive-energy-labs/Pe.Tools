@@ -14,7 +14,7 @@ type Props = Omit<ButtonProps, "children" | "onClick" | "icon" | "kind" | "direc
   face?: "compact" | "medium" | "full" | "responsive";
 };
 const KEY_SYMBOLS: Record<string, string> = {
-  Ctrl: "M2.5 8 6 4.5 9.5 8",
+  Ctrl: "M2 8.5 6 3 10 8.5",
   Shift: "M6 1.5 10.5 6H8v4.5H4V6H1.5Z",
   Alt: "M1.5 2.5H4l4 7h2.5M7 2.5h3.5",
   Escape: "M9.5 2.5V7h-7M5 4.5 2.5 7 5 9.5",
@@ -35,7 +35,7 @@ function KeyMark({ name }: { name: string }) {
       height={12}
       fill="none"
       stroke="currentColor"
-      strokeWidth={1.5}
+      strokeWidth={2}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden

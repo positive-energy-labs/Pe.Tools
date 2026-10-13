@@ -144,3 +144,29 @@ Q13, Q14 and Q15 were ruled on 2026-10-12 and recorded in `docs/adr/0016-proposa
 - Auto target for an older file: the page picks your running Revit (2023 to 2025) over starting the lowest installed year (2024). Both upgrades are permanent; the lower year keeps the file open to more colleagues.
 
 - Q16: option homes. Proposal: each option has exactly one home, where its consequence shows. The jack holds source, search and saved year. The free socket holds a new Revit's year, owner and add-ins. The cable holds detach. Upgrade and missing links are words on the verb. A patched cable holds rw, switch, reload and close. The command line is a keyboard projection with no option of its own. Drop window from human surfaces.
+
+## Control surface round 1 (2026-10-13)
+
+Lineup: `/machine?variant=%22<id>%22` on the web dev server, files in `ts/apps/web/src/prototypes/control-surface/` (throwaway). Brief and chrome research: `.artifacts/runs/protoui-control-20261013/{BRIEF,CHROME-RESEARCH}.md`.
+
+| Variant | Shape |
+|---|---|
+| 1 Inbox first | Inbox rows, then Work; machine collapses to one lamp strip |
+| 2 Rail + pane | Icon rail, mini sidebar of palette rows, detail pane with reply, approve and per-change review; own title bar |
+| 3 Bare patch bay | Year sockets; threads and Work nest under the session they target |
+| 4 Command palette | One input; Needs you, Running, Launch, Machine sections |
+| 5 Activity log | One timeline of every event |
+| 6 Tray is Pea | Small Pea with tickets and a composer (overreach) |
+| T1-T3 | Own WebView2 toasts: compact, rich, one paged card |
+
+Verdict (kaitpw): 2 is the base, "most intuitive by far". 5 is bad as a surface. 4 is right as an idea and must fold into the existing palettes (command palette, thread route picker) rather than stand alone; the palette list should also be reachable in the tray as its own view. 1, 3, 6 and T1-T3 drew no verdict yet.
+
+Primitive gaps the round hit (move to the design-system ledger when that file is free): no lamp or notify-dot primitive; `NavigationItem` has no inline-verb slot (1 and 3 fell back to `Row`); no toast-window primitive.
+
+Notification verdict (kaitpw, 2026-10-13): T3 (one paged card) is the base. Rulings for its round 2 (`variant-T4`): a compact composer built from the chat composer's own elements; Send and Stop share one slot (fixed in canon at `chat/composer.tsx`, same day); the draining timer cycles item to item and the card dies after the last; a new item appends live to the open card; the final response renders as a densified chat lane ("too spacey to read"). Backend idea, not built: buffer every notification about 30 s before the first window so items can accumulate, since paging through several is where review earns its keep.
+
+Round 2 for the tray (palette fold, on 2's base): 2a palette is the sidebar, 2b palette over the window, 2c palette as a rail view. Brief: `.artifacts/runs/protoui-control-20261013/BRIEF-R2.md`.
+
+Round 2 verdict (kaitpw, 2026-10-13): all three enticing; 2a most intuitive, 2b transfers the palette pattern, 2c says "find everything" but is cluttered. 2b is the base because it matches how navigation works in the web app. Further: tray sidebar items are routes, rendered with the app bar's WCO left cluster (`navigation/app-bar.tsx`); the selected route shows its name in the route field and swaps the page body; settings moves into the top bar. Round 3: 2d (per-route buttons in the left cluster) and 2e (route field only). T4 notification logic accepted ("great"); the tray and the card must get more compact, which needs density work in the design system.
+
+Round 3 verdict (kaitpw, 2026-10-13): 2e over 2d. 2e follows the web app bar's left-to-right order (Back, Forward, Home, Open Pea, route field, route commands, seam, Settings, window controls). Open question: native vs web-drawn caption buttons in the tray (WebView2 has no WCO; see CHROME-RESEARCH.md Q1).

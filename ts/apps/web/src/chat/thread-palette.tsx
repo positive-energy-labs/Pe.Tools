@@ -40,6 +40,8 @@ import {
 import { Kbd } from "#/components/lang/kbd";
 import { Button } from "#/components/lang/button";
 import { ProviderMark } from "#/components/lang/provider-mark";
+import { useSurfaceHost } from "#/navigation/surface-host";
+import "./thread-navigation.css";
 import type { StoredThreadSummary } from "#/workbench/provider";
 import { isReady } from "#/workbench/provider/providers";
 import {
@@ -53,10 +55,12 @@ import {
   activityWord,
   wokeFromSnooze,
   visibleThreads,
+  threadSearchText,
   THREAD_STATES,
   oneThreadRefusal,
   threadVerbs,
   type ThreadActivity,
+  type ThreadFilter,
   type ThreadShelf,
   type TargetRead,
   type ThreadVerb,
@@ -498,12 +502,40 @@ function ThreadActions({
 const SETTLED_PAGE = 10;
 const SETTLED_MORE = 25;
 
+function ThreadTime({ thread, now }: { thread: RosterThread; now: number }) {
+  return (
+    <time dateTime={thread.updatedAt} title={new Date(thread.updatedAt).toLocaleString()}>
+      {relativeThreadAge(thread.updatedAt, now)}
+    </time>
+  );
+}
+
+function CompactThreadTarget({ thread }: { thread: RosterThread }) {
+  return thread.head.defaultTarget ? (
+    <span className="pe-thread-target" title={exactTarget(thread.head.defaultTarget)}>
+      {targetLabel(thread)}
+    </span>
+  ) : null;
+}
+
+function CompactThreadTrail({ thread, now }: { thread: RosterThread; now: number }) {
+  return (
+    <span className="pe-thread-trail">
+      <ThreadTime thread={thread} now={now} />
+      <span title={[thread.providerName, thread.modelId].filter(Boolean).join(" · ")}>
+        <ProviderMark harness={thread.harness} />
+      </span>
+    </span>
+  );
+}
+
 export function ThreadsSidebar({
   threads,
   currentThreadId,
   onSelect,
   onNew,
   onSearch,
+  compactRows: compactRowsOverride,
   ...verbs
 }: ThreadVerbs & {
   threads: RosterThread[];
@@ -511,7 +543,11 @@ export function ThreadsSidebar({
   onSelect: (id: string) => void;
   onNew: () => void;
   onSearch: () => void;
+  compactRows?: boolean;
 }) {
+  const host = useSurfaceHost();
+  const compactRows = compactRowsOverride ?? host.surface === "tray";
+  const [filter, setFilter] = useState<ThreadFilter>(host.surface === "tray" ? "inbox" : "all");
   const [query, setQuery] = useState("");
   const [now, setNow] = useState(Date.now);
   const previousThreads = useRef(new Map<string, RosterThread>());
@@ -553,10 +589,10 @@ export function ThreadsSidebar({
   const archivedHere = threads.find(
     (thread) => thread.id === currentThreadId && thread.lifecycle.status === "archived",
   );
-  const roster = { query, filter: "all", target, provider, state } as const;
+  const roster = { query, filter, target, provider, state, now } as const;
   const shown = [
     ...visibleThreads(threads, { ...roster, unread }),
-    ...(archivedHere ? [archivedHere] : []),
+    ...(archivedHere && filter === "all" ? [archivedHere] : []),
   ];
   const unreadCount = visibleThreads(threads, { ...roster, unread: true }).length;
   const facets = useMemo(
@@ -600,6 +636,7 @@ export function ThreadsSidebar({
   return (
     <nav
       data-navigation=""
+      data-thread-rows={compactRows ? "compact" : undefined}
       aria-label="Threads"
       className="flex h-full min-h-0 flex-col gap-(--gutter)"
       // Escape clears the selection unless a menu or dialog above it is taking the key.
@@ -622,6 +659,21 @@ export function ThreadsSidebar({
           </>
         }
       />
+      <div role="group" aria-label="Thread list" className="flex flex-wrap gap-1">
+        {(["inbox", "all", "archived"] as const).map((choice) => (
+          <Button
+            key={choice}
+            label={choice === "inbox" ? "Inbox" : choice === "all" ? "All" : "Archived"}
+            pressed={filter === choice}
+            onClick={() => {
+              setFilter(choice);
+              clearSelection();
+            }}
+          >
+            {choice === "inbox" ? "Inbox" : choice === "all" ? "All" : "Archived"}
+          </Button>
+        ))}
+      </div>
       <NavigationFilters>
         <NavigationFilter
           label="Target"
@@ -690,7 +742,7 @@ export function ThreadsSidebar({
         {shelves.map(({ shelf, all }, index) => {
           const compact = shelf === "settled" || shelf === "snoozed" || shelf === "archived";
           // The settled tail pages (T3: 10, then 25 at a time) and always keeps the open thread.
-          const paged = shelf === "settled" && !query;
+          const paged = shelf === "settled" && !query && filter === "all";
           const items = paged
             ? all.filter((thread, index) => index < settledLimit || thread.id === currentThreadId)
             : all;
@@ -703,7 +755,9 @@ export function ThreadsSidebar({
               dim={shelf === "settled" || shelf === "archived"}
               persist={shelf}
               stack={{ index, of: shelves.length }}
-              forceOpen={!!query || items.some((item) => item.id === currentThreadId)}
+              forceOpen={
+                filter !== "all" || !!query || items.some((item) => item.id === currentThreadId)
+              }
               onDrop={
                 shelf === "active" || shelf === "pinned" || shelf === "settled"
                   ? (id) =>
@@ -726,26 +780,32 @@ export function ThreadsSidebar({
                   id={thread.id}
                   title={thread.title}
                   target={
-                    thread.head.defaultTarget ? (
+                    compactRows ? (
+                      <CompactThreadTarget thread={thread} />
+                    ) : thread.head.defaultTarget ? (
                       <span title={exactTarget(thread.head.defaultTarget)}>
                         {targetLabel(thread)}
                       </span>
                     ) : undefined
                   }
                   time={
-                    <time
-                      dateTime={thread.updatedAt}
-                      title={new Date(thread.updatedAt).toLocaleString()}
-                    >
-                      {relativeThreadAge(thread.updatedAt, now)}
-                    </time>
+                    compactRows ? (
+                      <CompactThreadTrail thread={thread} now={now} />
+                    ) : (
+                      <ThreadTime thread={thread} now={now} />
+                    )
                   }
-                  mark={<ProviderMark harness={thread.harness} />}
+                  mark={compactRows ? undefined : <ProviderMark harness={thread.harness} />}
                   meta={[thread.providerName, thread.modelId].filter(Boolean).join(" · ")}
                   state={
                     shelf === "snoozed"
                       ? wakeLabel(new Date(thread.lifecycle.snoozedUntil!), new Date(now))
-                      : (activityWord(thread) ?? (woken.has(thread.id) ? "Woke" : undefined))
+                      : (activityWord(thread) ??
+                        (filter === "inbox" && isUnread(thread)
+                          ? "Unread"
+                          : woken.has(thread.id)
+                            ? "Woke"
+                            : undefined))
                   }
                   stateTone={
                     thread.activity.state === "failed"
@@ -883,9 +943,7 @@ export function ThreadDialog({
       aria-label="Threads"
       items={roster}
       keyOf={(thread) => thread.id}
-      labelOf={(thread) =>
-        `${thread.title} ${targetLabel(thread)} ${thread.providerName} ${thread.modelId ?? ""}`
-      }
+      labelOf={threadSearchText}
       groupOf={(thread) => SHELF_WORD[shelfOf(thread, now)]}
       filter="fuzzy"
       searchAbove={0}
@@ -899,15 +957,13 @@ export function ThreadDialog({
       row={(thread) => {
         const activity = activityWord(thread);
         return {
-          lead: <ProviderMark harness={thread.harness} />,
-          label: thread.title,
-          sub: [
-            [thread.providerName, thread.modelId].filter(Boolean).join(" · "),
-            thread.head.defaultTarget ? targetLabel(thread) : null,
-          ]
-            .filter(Boolean)
-            .join(" · "),
-          lines: 2,
+          label: (
+            <span className="pe-thread-label">
+              <span className="pe-thread-title">{thread.title}</span>
+              <CompactThreadTarget thread={thread} />
+            </span>
+          ),
+          lines: 1,
           active: thread.id === currentThreadId,
           meta: (
             <span className="flex items-center gap-1.5">
@@ -924,9 +980,8 @@ export function ThreadDialog({
                 >
                   {activity}
                 </span>
-              ) : (
-                relativeThreadAge(thread.updatedAt, now)
-              )}
+              ) : null}
+              <CompactThreadTrail thread={thread} now={now} />
               {isUnread(thread) ? (
                 <span data-slot="nav-unread" role="img" aria-label="unread" />
               ) : null}

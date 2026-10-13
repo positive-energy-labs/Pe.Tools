@@ -1,9 +1,9 @@
 /**
  * /open, the front surface (host ledger 2026-10-09 ruling 3): the patch bay side by side, a
  * projection of the host's one `Machine` reading plus the SDK recents and the thread list. The
- * machine layer (update, share, Pea, host) is the drawer behind the version chip, not here.
+ * machine controls live at /machine and project into Settings, not this patch bay.
  */
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Machine } from "@pe/agent-contracts";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 
@@ -11,18 +11,30 @@ import { Surface } from "#/components/lang/surface";
 import { frozenDemo } from "#/host/demo-client";
 import { useSessionEvents } from "#/host/world-log";
 import { machineOf } from "#/machine/model";
-import { PatchBay, useThreadSummaries } from "#/open/bay";
+import { PatchBay, useThreadSummaries, type BayLayout } from "#/open/bay";
 import { openManifest, type OpenHandle } from "#/open/manifest";
 import { modelRows } from "#/open/model";
 import { BAY_THREADS } from "#/open/seeds";
 import { inventoryOf, previousOf, useHostCall, useInventory } from "#/readings";
 import { RouteShell } from "#/route";
-import { useSurfaceHost } from "#/navigation/surface-host";
 import { useRoute } from "#/route/use-route";
 import { readScopedActionStatuses } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 export function OpenPage() {
-  const compact = useSurfaceHost().surface === "tray";
+  const container = useRef<HTMLDivElement>(null);
+  const [layout, setLayout] = useState<BayLayout>("stack");
+  useLayoutEffect(() => {
+    const node = container.current;
+    if (!node) return;
+    // Budget the documents lane, connector gutter and socket lane together, in the UI's rem scale.
+    const rowMinimum = 64 * parseFloat(getComputedStyle(document.documentElement).fontSize);
+    const measure = () =>
+      setLayout(node.getBoundingClientRect().width >= rowMinimum ? "row" : "stack");
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(node);
+    return () => observer?.disconnect();
+  }, []);
   const handle = useRoute(openManifest);
   const fixture = useMemo(() => frozenDemo() !== null, []);
   const machine = machineOf(handle.readings.machine as Parameters<typeof machineOf>[0]);
@@ -37,9 +49,13 @@ export function OpenPage() {
     handle.readings.machine.state === "loading" || handle.readings.machine.state === "absent";
   return (
     <Surface head={<RouteShell manifest={openManifest} handle={handle} />}>
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto" data-testid="open-route">
+      <div
+        ref={container}
+        className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-y-auto"
+        data-testid="open-route"
+      >
         <p className="m-0 text-ink-2">
-          {compact
+          {layout === "stack"
             ? "Choose a document and a Revit below."
             : "Documents on the left, Revits on the right."}{" "}
           Pick a document, patch it into a Revit, and press the one verb that names what happens.
@@ -50,7 +66,7 @@ export function OpenPage() {
           rows={rows}
           threads={threads}
           fixture={fixture}
-          layout={compact ? "stack" : "row"}
+          layout={layout}
           onNote={(label, detail, caution, receipt) =>
             handle.note(
               label,

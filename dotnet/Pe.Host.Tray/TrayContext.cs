@@ -21,6 +21,7 @@ internal sealed class TrayContext : ApplicationContext {
     private readonly System.Windows.Forms.Timer _health = new() { Interval = 3_000 };
     private readonly CancellationTokenSource _stop = new();
     private bool _ready;
+    private bool _rendererReady;
     private bool _hasPage;
     private bool _navigating;
     private bool _checking;
@@ -53,6 +54,12 @@ internal sealed class TrayContext : ApplicationContext {
         if (launch.IsDev) { _window.Text = "Pe.Tools Dev · " + Path.GetFileName(launch.SourceRoot); _window.Icon = _icon.Icon; }
         _openWindow.Click += (_, _) => OpenWindow();
         _menu.Items.Add(_openWindow);
+        _menu.Items.Add("Rehome", null, (_, _) => {
+            _window.Rehome();
+            _window.WindowState = FormWindowState.Normal;
+            _window.Show();
+            _window.Activate();
+        });
         _menu.Opening += async (_, _) => await RefreshPwaMenuAsync();
         _menu.Items.Add("Quit host", null, async (_, _) => await QuitHostAsync());
         _icon.MouseClick += (_, e) => {
@@ -213,7 +220,7 @@ internal sealed class TrayContext : ApplicationContext {
                     if (current != _service) {
                         if (_ready && _web.Source is { } source && IsViewUrl(source.AbsoluteUri))
                             _pendingPath = source.PathAndQuery;
-                        _service = current; _hasPage = false;
+                        _service = current; _hasPage = false; _rendererReady = false;
                     }
                     return true;
                 }
@@ -259,10 +266,20 @@ internal sealed class TrayContext : ApplicationContext {
                 else e.Response = environment.CreateWebResourceResponse(null, 503, "Parent service retired", "");
             };
             core.NavigationStarting += (_, e) => {
-                if (!IsOriginalService() || !IsViewUrl(e.Uri)) e.Cancel = true;
-                else _navigating = true;
+                if (!IsOriginalService()) { e.Cancel = true; return; }
+                if (!IsViewUrl(e.Uri)) { e.Cancel = true; OpenExternalUrl(e.Uri, e.IsUserInitiated); }
+                else if (ShouldRelayNavigation(_rendererReady, e.Uri, _web.Source?.AbsoluteUri)) { e.Cancel = true; RelayNavigation(e.Uri); }
+                else { _rendererReady = false; _navigating = true; }
             };
-            core.NewWindowRequested += (_, e) => e.Handled = true;
+            core.NewWindowRequested += (_, e) => {
+                e.Handled = true;
+                if (!IsOriginalService() || !e.IsUserInitiated) return;
+                if (IsViewUrl(e.Uri)) {
+                    if (_rendererReady) RelayNavigation(e.Uri);
+                    else OpenWindow(e.Uri);
+                }
+                else OpenExternalUrl(e.Uri, true);
+            };
             core.WebMessageReceived += (_, e) => {
                 if (!IsOriginalService() || !IsViewUrl(e.Source)) return;
                 try {
@@ -270,7 +287,14 @@ internal sealed class TrayContext : ApplicationContext {
                     var payload = message.RootElement;
                     if (payload.ValueKind == JsonValueKind.Object
                         && payload.TryGetProperty("type", out var readyType) && readyType.ValueKind == JsonValueKind.String
-                        && readyType.GetString() == "chrome-ready") { PostTitlebarGeometry(); return; }
+                        && readyType.GetString() == "chrome-ready") {
+                        _rendererReady = true;
+                        PostTitlebarGeometry(); PostNavigationHistory(); return;
+                    }
+                    if (TryReadHistoryCommand(payload, _web.CoreWebView2.CanGoBack, _web.CoreWebView2.CanGoForward, out var back)) {
+                        if (back) _web.CoreWebView2.GoBack(); else _web.CoreWebView2.GoForward();
+                        return;
+                    }
                     if (TryNoticeMessage(payload)) return;
                     if (payload.ValueKind == JsonValueKind.Object
                         && payload.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.String
@@ -288,14 +312,17 @@ internal sealed class TrayContext : ApplicationContext {
             };
             core.NavigationCompleted += async (_, e) => {
                 _navigating = false;
+                if (!e.IsSuccess && e.WebErrorStatus == CoreWebView2WebErrorStatus.OperationCanceled
+                    && IsOriginalService() && _hasPage) return;
                 _hasPage |= e.IsSuccess;
                 _recordDev |= e.IsSuccess;
                 if (e.IsSuccess) _pendingPath = null;
                 if (!e.IsSuccess) _connected = false;
-                if (e.IsSuccess) PostTitlebarGeometry();
+                if (e.IsSuccess) { PostTitlebarGeometry(); PostNavigationHistory(); }
                 await ShowConnectionAsync();
                 if (_launch.IsDev && e.IsSuccess) await RecordDevStateAsync();
             };
+            core.HistoryChanged += (_, _) => PostNavigationHistory();
             _ready = true;
             await CheckHealthAsync();
         } catch (Exception error) when (error is WebView2RuntimeNotFoundException or COMException
@@ -320,10 +347,61 @@ internal sealed class TrayContext : ApplicationContext {
         catch (Exception error) when (error is InvalidOperationException or COMException) { }
     }
 
+    private void PostNavigationHistory() {
+        if (!_ready || _closing || !IsOriginalService() || _web.Source is not { } source || !IsViewUrl(source.AbsoluteUri)) return;
+        try { _web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new {
+            type = "navigation-history", canGoBack = _web.CoreWebView2.CanGoBack, canGoForward = _web.CoreWebView2.CanGoForward
+        })); } catch (Exception error) when (error is InvalidOperationException or COMException) { }
+    }
+
+    private void RelayNavigation(string value) {
+        // The current renderer owns route policy; an intercepted load must not become a health retry.
+        _pendingPath = null; _navigating = false; _hasPage = true;
+        if (_closing || !IsOriginalService()
+            || !TryGetNavigationRequest(_rendererReady, value, _service.ViewOrigin, out var destination)) return;
+        try { _web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new {
+            type = "navigation-request", url = destination
+        })); } catch (Exception error) when (error is InvalidOperationException or COMException) { }
+    }
+
+    internal static bool TryGetNavigationRequest(bool rendererReady, string value, string origin, out string destination) {
+        destination = "";
+        return rendererReady && TryGetWindowUrl(value, origin, out destination);
+    }
+
+    internal static bool ShouldRelayNavigation(bool rendererReady, string destination, string? currentUrl) =>
+        rendererReady && !destination.Equals(currentUrl, StringComparison.Ordinal);
+
+    internal static bool TryReadHistoryCommand(JsonElement payload, bool canGoBack, bool canGoForward, out bool back) {
+        back = false;
+        if (payload.ValueKind != JsonValueKind.Object
+            || !payload.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String || type.GetString() != "navigate-history"
+            || !payload.TryGetProperty("direction", out var direction) || direction.ValueKind != JsonValueKind.String) return false;
+        back = direction.GetString() == "back";
+        return back ? canGoBack : direction.GetString() == "forward" && canGoForward;
+    }
+
     private bool IsHostUrl(string value) => Uri.TryCreate(value, UriKind.Absolute, out var uri)
         && uri.GetLeftPart(UriPartial.Authority) == _service.Origin;
     private bool IsViewUrl(string value) => Uri.TryCreate(value, UriKind.Absolute, out var uri)
         && uri.GetLeftPart(UriPartial.Authority) == _service.ViewOrigin;
+
+    internal static bool TryGetExternalUrl(string value, bool userInitiated, out string destination) {
+        destination = "";
+        if (!userInitiated || value.Any(char.IsControl) || !Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            || uri.Scheme is not ("http" or "https") || uri.UserInfo.Length != 0) return false;
+        destination = uri.AbsoluteUri;
+        return true;
+    }
+
+    private void OpenExternalUrl(string value, bool userInitiated) {
+        if (_web.Source is not { } source || !IsViewUrl(source.AbsoluteUri)
+            || !TryGetExternalUrl(value, userInitiated, out var destination)) return;
+        try { Process.Start(new ProcessStartInfo(destination) { UseShellExecute = true })?.Dispose(); }
+        catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException) {
+            _icon.Text = "Pe.Tools: browser link could not open";
+        }
+    }
 
     private async Task CheckHealthAsync() {
         if (_closing || _checking) return;
@@ -609,10 +687,20 @@ internal sealed class TrayWindow : Form {
         PositionAboveTaskbar(work, DeviceDpi);
     }
 
+    public void Rehome() => PositionAboveTaskbar(Screen.FromRectangle(Bounds).WorkingArea, DeviceDpi);
+
     private void PositionAboveTaskbar(Rectangle work, int dpi) {
-        var size = SizeFor(work.Size, dpi);
-        Bounds = new Rectangle(work.Right - size.Width, work.Bottom - size.Height, size.Width, size.Height);
+        Bounds = HomeBoundsFor(work, dpi);
         _positioned = true;
+    }
+
+    internal static Rectangle HomeBoundsFor(Rectangle work, int dpi) {
+        var gutter = Math.Max(0, (int)Math.Round(12 * dpi / 96d));
+        var insetX = Math.Min(gutter, Math.Max(0, (work.Width - 1) / 2));
+        var insetY = Math.Min(gutter, Math.Max(0, (work.Height - 1) / 2));
+        var available = new Size(Math.Max(0, work.Width - 2 * insetX), Math.Max(0, work.Height - 2 * insetY));
+        var size = SizeFor(available, dpi);
+        return new Rectangle(work.Right - insetX - size.Width, work.Bottom - insetY - size.Height, size.Width, size.Height);
     }
 
     internal static Size SizeFor(Size work, int dpi) =>

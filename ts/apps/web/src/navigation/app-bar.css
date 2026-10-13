@@ -29,6 +29,9 @@
   gap: 0.5rem;
   order: 2;
 }
+.pe-appbar[data-shell="tray"] .pe-appbar-commands {
+  margin-inline-start: auto;
+}
 .pe-appbar-command-seam {
   order: 3;
   height: var(--control-h);
@@ -41,7 +44,7 @@
   width: fit-content;
   max-width: 14rem;
   margin-inline-end: auto;
-  min-width: 6rem;
+  min-width: 9rem;
   align-items: center;
   gap: 0.25rem;
   padding-inline-start: var(--control-pad-x);
@@ -71,6 +74,7 @@
 .pe-appbar-route-search:is(:focus-within, [data-selected]) > input {
   flex: 1;
   field-sizing: fixed;
+  width: 0;
   cursor: text;
 }
 .pe-appbar-search-hint {
@@ -94,10 +98,13 @@
 .pe-feedback-cancel:empty {
   display: none;
 }
-.pe-appbar-row > [data-chrome-settings] {
+.pe-appbar-commands > [data-chrome-settings] {
   order: 5;
 }
 .pe-appbar-commands [data-command-word] {
+  display: none;
+}
+.pe-appbar-commands .dl-hotkey-command > .dl-button > svg {
   display: none;
 }
 @container app-chrome (max-width: 700px) {
@@ -117,6 +124,25 @@
   gap: 0.25rem;
   -webkit-app-region: no-drag;
   app-region: no-drag;
+}
+.pe-situation-control-rail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+}
+.pe-situation-control-rail [data-command-word] {
+  display: inline;
+}
+.pe-situation-control-rail [data-command-keys] {
+  display: none !important;
+}
+.pe-situation-control-rail [data-command-chord] {
+  display: inline-flex !important;
+}
+.pe-situation-control-rail .dl-hotkey-command > .dl-button > svg {
+  display: none;
 }
 .pe-situation-trigger > .pe-appbar-controls {
   max-width: 16rem;
@@ -267,6 +293,8 @@
     env(titlebar-area-height, calc(var(--control-h) + 0.5rem))
   );
   padding-block: 0;
+  -webkit-app-region: drag;
+  app-region: drag;
 }
 .pe-appbar :is(button, a, input, [role="button"]),
 .pe-appbar-controls {
@@ -285,19 +313,31 @@
 }
 
 /* The usable caption area can be much narrower than the window itself. */
-@container app-chrome (max-width: 340px) {
+@container app-chrome (max-width: 300px) {
+  .pe-appbar-route-search {
+    min-width: 8rem;
+  }
+  .pe-appbar-route-search:is(:focus-within, [data-selected]) {
+    flex-basis: 8rem;
+  }
+}
+@container app-chrome (max-width: 600px) {
   .pe-appbar-row {
     flex-wrap: wrap;
-    gap: 1px;
-    padding-inline: 2px;
+    gap: 2px;
+    padding-inline: 4px;
   }
-  .pe-appbar-route-search {
-    flex-basis: 6rem;
-  }
-  .pe-appbar-commands {
+  .pe-appbar-commands:not([data-compact]) {
     order: 6;
     flex: 1 0 100%;
-    justify-content: flex-end;
+    justify-content: flex-start;
+  }
+  .pe-appbar-route-search:is(:focus-within, [data-selected]) {
+    flex: 1 1 9rem;
+  }
+  .pe-appbar[data-overlay="true"][data-shell="tray"] .pe-appbar-commands:not([data-compact]) {
+    flex-basis: calc(100vw - var(--app-titlebar-x, 0px) - 8px);
+    margin-block-start: max(0px, calc(var(--app-titlebar-height, 32px) - var(--control-h) - 2px));
   }
   .pe-appbar-command-seam {
     display: none;

@@ -3,10 +3,38 @@ import {
   captionColor,
   fullWindowDestination,
   nativeTitlebarArea,
+  nativeNavigationHistory,
   usableOverlay,
+  surfaceDestination,
 } from "./surface-host";
 
 describe("surface host admission", () => {
+  it("keeps exactly the three declared tray routes local and hands all other registered tools to a full window", () => {
+    const origin = "https://tools.example";
+    for (const path of ["/open", "/machine", "/pea"])
+      expect(surfaceDestination("tray", `${path}?shell=tray#detail`, origin)).toBe("local");
+    for (const path of ["/families", "/settings", "/"]) {
+      expect(surfaceDestination("tray", path, origin)).toBe("window");
+      expect(surfaceDestination("web", path, origin)).toBe("local");
+      expect(surfaceDestination("pwa", path, origin)).toBe("local");
+    }
+    expect(surfaceDestination("tray", "/api/private", origin)).toBeNull();
+    expect(surfaceDestination("tray", "https://elsewhere.example/families", origin)).toBeNull();
+  });
+  it("accepts explicit native history booleans and refuses partial or coerced capabilities", () => {
+    expect(
+      nativeNavigationHistory({ type: "navigation-history", canGoBack: true, canGoForward: false }),
+    ).toEqual({ canGoBack: true, canGoForward: false });
+    for (const message of [
+      null,
+      [],
+      { type: "other", canGoBack: true, canGoForward: true },
+      { type: "navigation-history", canGoBack: 1, canGoForward: false },
+      { type: "navigation-history", canGoBack: false },
+      { type: "navigation-history", canGoBack: false, canGoForward: "false" },
+    ])
+      expect(nativeNavigationHistory(message)).toBeNull();
+  });
   it("admits only visible measured native geometry inside the actual viewport", () => {
     const viewport = { width: 747, height: 525 };
     const rect = { x: 0, y: 0, width: 595, height: 29 };

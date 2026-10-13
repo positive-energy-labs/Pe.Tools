@@ -3,7 +3,6 @@ import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { navigationClient, type NavigationSnapshot } from "./navigation-client";
 import { admittedDestination } from "./model";
 import { resolveWorkbenchConfig } from "#/workbench/config";
-import { appRouteMount } from "@pe/agent-contracts";
 import { useSurfaceHost } from "./surface-host";
 
 type NavigationState = {
@@ -59,8 +58,6 @@ export function useDestination() {
       const admitted = admittedDestination(destination, window.location.origin);
       if (!admitted) return false;
       const url = new URL(admitted, window.location.origin);
-      if (host.surface === "tray" && !appRouteMount(url.pathname, "tray"))
-        return host.openFullWindow(url.href);
       const search = Object.fromEntries(url.searchParams);
       void navigate({
         to: url.pathname,

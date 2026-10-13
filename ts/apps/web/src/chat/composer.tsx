@@ -96,6 +96,21 @@ export function ThreadComposer({
       },
       options: { preventDefault: false, stopPropagation: false },
     },
+    {
+      hotkey: "Shift+2",
+      label: "@ point at a thing",
+      says: "Starts the composer mention menu from an empty draft.",
+      callback: () => {
+        if (!paneOwnsFocus()) return;
+        if (!draft.text) {
+          setText("@");
+          mentions.onCaret(1);
+          mentions.reset();
+        }
+        area?.focus();
+      },
+      options: { preventDefault: true, stopPropagation: false },
+    },
   ];
 
   const submit = (event: FormEvent) => {
@@ -246,6 +261,7 @@ export function ThreadComposer({
                     label="Attach files: images and text, 5 MB each, 10 a message"
                     onClick={files.browse}
                   />
+                  {/* One slot: Stop replaces Send while a turn runs, so the two never coexist. */}
                   {isRunning ? (
                     <SituationAction
                       handle={handle}
@@ -254,14 +270,15 @@ export function ThreadComposer({
                       icon={Square}
                       tone="alarm"
                     />
-                  ) : null}
-                  <SituationAction
-                    handle={handle}
-                    name="send"
-                    action={send}
-                    commit
-                    icon={ArrowUp}
-                  />
+                  ) : (
+                    <SituationAction
+                      handle={handle}
+                      name="send"
+                      action={send}
+                      commit
+                      icon={ArrowUp}
+                    />
+                  )}
                 </>
               }
             />
