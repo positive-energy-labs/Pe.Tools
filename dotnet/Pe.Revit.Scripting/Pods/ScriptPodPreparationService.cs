@@ -75,7 +75,8 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
     private const int MaxFileCount = ScriptPodSourceBounds.MaxFileCount;
     private const int MaxDirectoryCount = ScriptPodSourceBounds.MaxDirectoryCount;
     private static readonly string[] RootFiles = ["pod.json", "PeScripts.csproj", ImportedFileName];
-    private static readonly string[] MemberDirectories = ["src", "settings", "assets"];
+    // `pages/` holds the pod's Pages with their `.state/` beside them (pages ledger, ruling 5): export carries them.
+    private static readonly string[] MemberDirectories = ["src", "settings", "assets", "pages"];
 
     public string PodsRoot { get; } = podsRoot ?? RevitScriptingStorageLocations.GetDefaultBasePath();
 
@@ -272,7 +273,7 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
         var inRoot = RootFiles.Contains(relative, StringComparer.OrdinalIgnoreCase)
             || MemberDirectories.Any(directory => relative.StartsWith(directory + "/", StringComparison.OrdinalIgnoreCase));
         if (!inRoot || relative.Split('/').Any(segment => segment is "" or "." or ".." || segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0))
-            throw new InvalidDataException($"'{path}' is not a pod member path (pod.json, PeScripts.csproj, {ImportedFileName}, src/, settings/, assets/).");
+            throw new InvalidDataException($"'{path}' is not a pod member path (pod.json, PeScripts.csproj, {ImportedFileName}, src/, settings/, assets/, pages/).");
         return relative;
     }
 

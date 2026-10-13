@@ -238,7 +238,9 @@ public sealed class PodTests {
         this.WritePod("Global", "global", new() { ["settings/_fields/Header.json"] = header });
         this.WritePod("Office", "office", new() {
             ["settings/family.json"] = "{\"$preset\":\"@global/_fields/Header\",\"x\":1}",
-            ["settings/leaf.json"] = "{ \"untouched\": true }"
+            ["settings/leaf.json"] = "{ \"untouched\": true }",
+            ["pages/tour/index.html"] = "<title>Tour</title>",
+            ["pages/tour/.state/events.jsonl"] = "{\"seq\":1}"
         });
         File.WriteAllText(Path.Combine(this._pods, "Office", ScriptPodPreparationService.ImportedFileName), "{}");
         var archivePath = Path.Combine(this._root, "office.zip");
@@ -256,6 +258,8 @@ public sealed class PodTests {
             Assert.That(File.ReadAllText(Path.Combine(imported.Folder, "settings", "_vendor", "global", "_fields", "Header.json")), Is.EqualTo(header));
             Assert.That(File.ReadAllText(Path.Combine(imported.Folder, "settings", "family.json")), Does.Contain("@local/_vendor/global/_fields/Header.json"));
             Assert.That(File.ReadAllText(Path.Combine(imported.Folder, "settings", "leaf.json")), Is.EqualTo("{ \"untouched\": true }"));
+            Assert.That(File.ReadAllText(Path.Combine(imported.Folder, "pages", "tour", "index.html")), Is.EqualTo("<title>Tour</title>"));
+            Assert.That(File.ReadAllText(Path.Combine(imported.Folder, "pages", "tour", ".state", "events.jsonl")), Is.EqualTo("{\"seq\":1}"));
             Assert.That(composed.Diagnostics, Is.Empty);
             Assert.That(JObject.Parse(composed.Composed!)["title"]!.Value<string>(), Is.EqualTo("header"));
             Assert.That(composed.Dependencies.Single().PodId, Is.EqualTo("office"));
