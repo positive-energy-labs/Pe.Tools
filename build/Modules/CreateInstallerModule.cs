@@ -189,6 +189,8 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             .ShouldBeTrue("Installer runtime publish should include the staged web SPA.");
         runtimePublishDirectory.GetFile("pods/snowdon-ducts.zip").Exists
             .ShouldBeTrue("Installer runtime publish should include the shipped example Pod (stage-web.mjs exports examples/pods).");
+        runtimePublishDirectory.GetFiles(file => file.Extension == ".map")
+            .ShouldBeEmpty("Browser source maps are private symbolication input (stage-web.mjs keeps them in dist/web-maps), never product assets.");
         StageUsageIndex(context, rootDirectory, builtHostDirectory);
         context.Logger.LogInformation("Finished publishing TS host runtime for installer packaging.");
     }

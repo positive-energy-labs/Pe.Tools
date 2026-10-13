@@ -3,6 +3,7 @@
 import { cpSync, existsSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { splitWebMaps } from "./web-maps.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const src = join(here, "..", "..", "web", "dist", "client");
@@ -12,9 +13,10 @@ if (!existsSync(src)) {
   console.error(`web build not found at ${src} — run \`pnpm --filter @pe/web build\` first`);
   process.exit(1);
 }
-rmSync(dest, { recursive: true, force: true });
-cpSync(src, dest, { recursive: true });
-console.log(`staged web SPA -> ${dest}`);
+// Maps stay private: outside dist-installed (the installer payload), keyed by chunk debug id.
+const maps = join(here, "..", "dist", "web-maps");
+const split = splitWebMaps(src, dest, maps);
+console.log(`staged web SPA -> ${dest}; ${split.length} private maps -> ${maps}`);
 
 // Page assets (pages-route.ts reads them from <dir of Pe.Host.exe>/pages when installed).
 const pages = join(here, "..", "dist-installed", "pages");

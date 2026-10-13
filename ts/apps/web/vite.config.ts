@@ -1,3 +1,4 @@
+import path, { dirname, resolve } from "node:path";
 import { familyFixturesDir } from "./checkout-paths.ts";
 import { checkoutIngress, checkoutServiceName, devHostProxy } from "./dev-proxy.ts";
 import { hostProcessIdentity } from "@pe/host-contracts/service-identity";
@@ -73,8 +74,21 @@ const config = defineConfig(({ mode, command }) => {
       dedupe: ["react", "react-dom"],
       alias: { "@family-fixtures": familyFixturesDir },
     },
-    // Feedback notes name the picked component; minified names would read `p`.
-    build: { rolldownOptions: { output: { keepNames: true } } },
+    build: {
+      // Private symbolication only: "hidden" emits maps without a sourceMappingURL, the chunk and
+      // its map share a debug id, sources are repo-relative, and no source text is embedded.
+      // stage-web.mjs moves every map out of the served client tree.
+      sourcemap: "hidden",
+      rolldownOptions: {
+        output: {
+          // Feedback notes name the picked component; minified names would read `p`.
+          keepNames: true,
+          sourcemapDebugIds: true,
+          sourcemapExcludeSources: true,
+          sourcemapPathTransform: repoRelativeSource,
+        },
+      },
+    },
     optimizeDeps: {
       // ponytail: the dev host's optimizer held its bundle until static-import crawl end and the
       // crawl never ended on 2026-09-11 (504 Outdated Optimize Dep forever, `deps_temp_*` never
@@ -94,6 +108,15 @@ const config = defineConfig(({ mode, command }) => {
 });
 
 export default config;
+
+const repoRoot = resolve(import.meta.dirname, "../../..");
+/** Map sources name repo files only; anything outside the checkout keeps just its file name. */
+function repoRelativeSource(source: string, mapPath: string) {
+  const relative = path.relative(repoRoot, resolve(dirname(mapPath), source));
+  return relative.startsWith("..") || path.isAbsolute(relative)
+    ? `external/${path.basename(source)}`
+    : relative.split(path.sep).join("/");
+}
 
 // SHIM: TanStack Start's dev-server plugin silently skips registering its SSR document middleware
 // under Vite 8 / Vite+ (its `isRunnableDevEnvironment` guard rejects the Vite+ ssr environment), so
