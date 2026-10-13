@@ -8,6 +8,7 @@ import { bundledPeaSkills } from "../src/pea/skills.ts";
 import { peaAgentInstructions } from "../src/pea/instructions.ts";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 import { defaultReadImageMaxBytes } from "../src/shared/read-image.ts";
+import { peaProductTools } from "../src/pea/index.ts";
 
 test("kernel starts with live discovery and makes Revit orientation conditional", () => {
   for (const door of ["pe_find", "pe_read", "pe_do", "target_set"])
@@ -18,6 +19,13 @@ test("kernel starts with live discovery and makes Revit orientation conditional"
   expect(peaAgentInstructions).toContain("capture_view");
   expect(peaAgentInstructions).not.toContain("Revit is connected:");
   expect(peaAgentInstructions).not.toMatch(/subagent|forked/i);
+});
+
+test("capability doors describe the head grant rather than per-call approval", () => {
+  for (const tool of Object.values(peaProductTools))
+    expect(tool.description).not.toContain("approval-gated");
+  expect(peaProductTools.pe_do.description).toContain("granted head");
+  expect(peaProductTools.target_set.description).toContain("Pea's own");
 });
 
 test("one MCP connection discovers session and target changes without startup context", async () => {

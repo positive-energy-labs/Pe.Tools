@@ -91,7 +91,7 @@ export class ScriptingTools {
     private readonly context: AdmissionContext & Pick<ScriptRuntimeContext, "workspaceKey">,
   ) {}
 
-  /** Every verb, mutating or not, goes through the one admission builder. */
+  /** The process context crosses the host gate even for ReadOnly execution; this is no confinement boundary. */
   private run<K extends keyof ScriptingResponses>(
     key: K,
     input: Record<string, unknown> = {},

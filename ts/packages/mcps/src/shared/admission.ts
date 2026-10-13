@@ -33,6 +33,7 @@ import {
 } from "./takeoff-action-client.ts";
 
 export interface AdmissionContext {
+  /** Caller identity travels in x-pe-context, never in the admission body. */
   hostBaseUrl: string;
   /** Explicit session selector; omitted means "the session the catalog answered from". */
   bridgeSessionId?: string;
@@ -168,7 +169,8 @@ const exactDocument = (context: AdmissionContext) => {
 /**
  * Run any catalogued capability by key. Reads go to `/call` (schedule readings to their host
  * route); mutations are admitted at `/actions` and followed to a terminal receipt, whose result
- * is returned unwrapped. A caller that already read the intent passes it.
+ * is returned unwrapped. The host checks the process context and exact lifetime grant; this
+ * builder never supplies an actor or a grant. A caller that already read the intent passes it.
  */
 export async function runCapability(
   key: string,

@@ -219,7 +219,8 @@ export class PeaCliCommands {
   private hostOperationCallCommand() {
     return define({
       name: "call",
-      description: "Call a generated public host operation by key with an optional JSON request.",
+      description:
+        "Call a public host operation under the process caller context. Reads need no grant; anonymous writes refuse context.missing.",
       args: {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,

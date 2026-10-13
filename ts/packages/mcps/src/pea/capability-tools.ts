@@ -17,6 +17,7 @@ import {
   workKeySchema,
   type FamilyReadKey,
   actionBasesSchema,
+  refusalSchema,
   type SemanticActionKey,
   type ActionReceipt,
 } from "@pe/agent-contracts";
@@ -32,7 +33,7 @@ import { readScheduleCapture } from "../shared/schedule-client.ts";
  *
  * `pe_find` ranks the one capability catalog (no query → the map plus the connected sessions).
  * `pe_read` runs any row with `mutates: false`. `pe_do` runs any row. Two runners rather than one
- * so a harness that asks before a tool call can let reads through and ask for `pe_do`. Op calls may override their target without changing
+ * so reads run freely and writes cross the host's grant check. Op calls may override their target without changing
  * the thread head's default Target, and every result carries `revision` (the Scope revision it ran under) and `target` (what the host actually
  * resolved to), so the transcript card shows what was touched, not what was typed.
  */
@@ -104,6 +105,7 @@ export type Scope = ThreadHead & { thread: string };
 
 /** The live head of this caller's own thread (`/pe/scope/self`); none outside a harness context. */
 export async function scopeOf(): Promise<Scope | null> {
+  if (invocationContext()?.caller?.kind === "external-mcp") return null;
   if (!carriesCallerContext()) return null;
   const response = await fetch(`${base()}/pe/scope/self`);
   if (response.status === 404) return null;
@@ -180,7 +182,7 @@ export const peFind = createTool({
         defaultDocument: targetDocument(target),
         sources: catalog.sources,
         map: capabilityMap(offered),
-        hint: "Query pe_find for rows. pe_read runs a row that does not mutate; pe_do runs any row and is approval-gated. The SDK decides session resolution, adoption and refusal. defaultDocument is the thread's default document, read live per call. Op target overrides affect one call only. Session work accepts SDK id-or-pid selection; host work needs no document. target_set changes later turns.",
+        hint: "Query pe_find for rows. pe_read runs a row that does not mutate; pe_do runs authorized actions through the host grant check. Reads need no grant. Writes target Pea's own lifetimes or the granted head; external MCP clients cannot hold rw in this release. defaultDocument is read live per call. Op target overrides affect one call only. Session work accepts SDK id-or-pid selection; host work needs no document. target_set selects only Pea's own documents for later calls.",
       };
     const rows = findCapabilities(offered, input);
     return {
@@ -215,7 +217,7 @@ const runInputSchema = z.object({
     .union([sdkSessionSelectionSchema, documentRequestSchema.options[0]])
     .optional()
     .describe(
-      "Op calls only: SDK selection {id: name} or {pid: number} for session work, or {kind: open, ref: {session, openId}} for an exact product document. Overrides only this call; omission keeps the frozen turn default.",
+      "Op calls only: SDK selection {id: name} or {pid: number} for session work, or {kind: open, ref: {session, openId}} for an exact product document. Overrides only this call; omission follows the live thread head. Reads need no grant; writes target only Pea's own lifetimes or the granted head.",
     ),
   expectedRevision: z
     .number()
@@ -236,14 +238,14 @@ export const peRead = createTool({
   inputSchema: runInputSchema,
   execute: (input, context) =>
     executeTool(input, context, (row) =>
-      row.mutates ? `'${row.key}' mutates; run it with pe_do (approval-gated).` : null,
+      row.mutates ? `'${row.key}' mutates; run it with pe_do under the host grant check.` : null,
     ),
 });
 
 export const peDo = createTool({
   id: "pe_do",
   description:
-    "Do one capability by key from pe_find. Approval-gated because it may mutate; use pe_read for rows that do not. Human-only rows refuse. Op calls accept an exact per-call target override; omission uses the thread's default Target, read live. The result separately names Scope revision and actual target. For Takeoffs actions, retain input.actionId from the first result to recover the same attempt; never mint another ID after an uncertain outcome.",
+    "Do one authorized capability by key from pe_find. The host admits writes only to Pea's own lifetimes or the granted head; external MCP clients can read any document and write Pea's own, but cannot hold rw in this release. Use pe_read for rows that do not mutate. Human-only rows refuse. Op calls accept an exact per-call target override; omission follows the live thread head. The result separately names Scope revision and actual target. For Takeoffs actions, retain input.actionId from the first result to recover the same attempt; never mint another ID after an uncertain outcome.",
   inputSchema: runInputSchema,
   execute: (input, context) =>
     executeTool(
@@ -379,6 +381,9 @@ async function executeTool(
     );
     return { key: row.key, kind: row.kind, revision, ...outcome };
   } catch (error) {
+    const refusal = refusalSchema.safeParse((error as { refusal?: unknown } | null)?.refusal).data;
+    if (refusal)
+      return { ...refuse(row.key, defaultTarget, revision, JSON.stringify({ refusal })), refusal };
     return refuse(row.key, defaultTarget, revision, message(error));
   }
 }
@@ -890,11 +895,16 @@ function requestIdentity(context: unknown): string {
 export const targetSet = createTool({
   id: "target_set",
   description:
-    "Propose the default Target for later calls. Name an exact open document (kind open, with its session and openId) or a saved document Address plus the session holding it (kind named). null removes the document default. Every call resolves this default against the live inventory, so closing or reopening a document never silently redirects a call. Host work needs no document; session operations take an explicit session target. Use an op target override for a document detour within this turn. The new revision applies to the next call.",
+    "Select Pea's own document as this thread's default Target for later calls. Name an exact open lifetime or a saved Address plus its Pea-owned session. Only the human can move the head onto a user document and grant rw. null removes the default. Calls resolve against the live inventory; a close or reopen never silently redirects. Without a bound thread, use exact per-call op targets. The new revision applies to the next call.",
   inputSchema: z.object({ defaultTarget: documentRequestSchema.nullable() }),
   execute: async (input) => {
     const turn = await scopeOf();
-    if (!turn) return { isError: true, content: "target_set needs a thread; none is bound." };
+    if (!turn)
+      return {
+        isError: true,
+        content:
+          "grant.required: target_set needs a bound thread to change its head. External MCP clients cannot hold rw in this release; use an exact per-call target for reads or Pea's own documents.",
+      };
     const body = putTargetSchema.parse({
       defaultTarget: input.defaultTarget,
       expectedRevision: turn.revision,

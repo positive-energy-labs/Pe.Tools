@@ -22,6 +22,22 @@ import { peDo, peFind, peRead } from "../src/pea/capability-tools.ts";
 
 import { bodyText } from "./body-text.ts";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
+import { createServer } from "node:http";
+import { once } from "node:events";
+import { createHash } from "node:crypto";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { contextFetch, withInvocationContext } from "../src/shared/invocation-context.ts";
+import { createMcpDoor } from "../../../apps/host/src/mcp-route.ts";
+import {
+  admitCrossing,
+  bindControl,
+  callerOf,
+  mintContext,
+  retireContext,
+  Refused,
+} from "../../../apps/host/src/control.ts";
 
 const ops = [
   {
@@ -93,6 +109,331 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
+
+test("contextFetch carries the process token, isolates bound MCP contexts, and keeps foreign origins free of caller identity", async () => {
+  fakeRuntimeHost("http://127.0.0.1:9");
+  vi.stubEnv("PE_CONTEXT", "process-context");
+  const seen: Array<{ url: string; token: string | null }> = [];
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    seen.push({
+      url: input instanceof Request ? input.url : String(input),
+      token: new Headers(init?.headers).get("x-pe-context"),
+    });
+    return Response.json({});
+  });
+  await contextFetch("http://127.0.0.1:9/actions", { method: "POST" });
+  await Promise.all(
+    ["one", "two"].map((token) =>
+      withInvocationContext(
+        { hostBaseUrl: "http://127.0.0.1:9", headers: { "x-pe-context": token } },
+        async () => {
+          await contextFetch("http://127.0.0.1:9/pe/capabilities");
+          await contextFetch("https://docs.example/test");
+        },
+      ),
+    ),
+  );
+  expect(
+    seen
+      .filter((request) => request.url.startsWith("http://127.0.0.1"))
+      .map((request) => request.token),
+  ).toEqual(["process-context", "one", "two"]);
+  expect(
+    seen
+      .filter((request) => request.url.startsWith("https://docs.example"))
+      .map((request) => request.token),
+  ).toEqual([null, null]);
+});
+
+test.each(["http", "stdio"])(
+  "F-a %s: an MCP-only client reads user documents, refuses their writes, and writes Pea lifetimes",
+  async (transport) => {
+    vi.stubEnv("PE_CONTEXT", "");
+    const user = { session: "you", openId: "a" };
+    const own = { session: "pea", openId: "copy" };
+    const other = { session: "you", openId: "b" };
+    const head: ThreadHead = {
+      ...emptyThreadHead,
+      revision: 7,
+      defaultTarget: { kind: "open", ref: user },
+      grant: {
+        lifetime: user,
+        grantedAt: new Date().toISOString(),
+        grantedVia: "local",
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        revoked: null,
+      },
+    };
+    bindControl({ whose: (session) => (session === "pea" ? "pea" : "you"), heads: () => head });
+    const nativeOps = [
+      ...ops,
+      { key: "revit.context.view-image", intent: "Read" as const, needs: "document" as const },
+    ];
+    const sessions = [user, own, other].map((ref) => ({
+      sessionId: ref.session,
+      custody: "controlled" as const,
+      connected: true,
+      openDocuments: [
+        {
+          openId: ref.openId,
+          address: `C:/Models/${ref.openId}.rvt`,
+          title: ref.openId,
+          isActive: true,
+          isFamilyDocument: false,
+        },
+      ],
+    }));
+    // One inventory row per session, including both user documents.
+    sessions[0]!.openDocuments.push(sessions.pop()!.openDocuments[0]!);
+    const image = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    const capturePath = `/captures/${createHash("sha256").update(image).digest("hex")}.png`;
+    const writes: Array<{ caller: unknown; destination: unknown; basis: unknown }> = [];
+    const reads: Array<{ key: string; ref: unknown }> = [];
+    const tokens = new Set<string>();
+    const rows = new Map<string, unknown>();
+    let hostBase = "";
+    const door = createMcpDoor(() => hostBase);
+    const backend = createServer((req, res) => {
+      void (async () => {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(Buffer.from(chunk));
+        const body = Buffer.concat(chunks).toString();
+        const headers = Object.fromEntries(
+          Object.entries(req.headers).map(([key, value]) => [
+            key,
+            Array.isArray(value) ? value.join(",") : (value ?? ""),
+          ]),
+        );
+        const identity = callerOf({ kind: "local" }, headers);
+        if ("refusal" in identity) return Response.json(identity, { status: 403 });
+        if (headers["x-pe-context"]) tokens.add(headers["x-pe-context"]);
+        const url = new URL(req.url!, hostBase);
+        if (url.pathname === "/mcp")
+          return withInvocationContext(
+            { principal: { kind: "local" }, caller: identity.caller, headers: {} },
+            () =>
+              door.fetch(
+                new Request(url, { method: req.method, headers, ...(body ? { body } : {}) }),
+              ),
+          );
+        if (url.pathname === "/pe/scope/self")
+          return identity.caller.kind === "pea"
+            ? Response.json({ thread: identity.caller.thread, ...head })
+            : Response.json({ error: "no thread" }, { status: 404 });
+        if (url.pathname === "/pe/capabilities")
+          return Response.json({
+            at: new Date().toISOString(),
+            sessions,
+            sources: {},
+            capabilities: buildCapabilities({ ops: nativeOps, routes: [], pods: null, skills: [] }),
+          });
+        if (url.pathname === "/ops") return Response.json({ operations: nativeOps });
+        if (url.pathname === capturePath)
+          return new Response(image, { headers: { "content-type": "image/png" } });
+        if (url.pathname === "/call") {
+          const { key } = JSON.parse(body);
+          if (key === "bridge.sessions.list") return Response.json({ sessions });
+          const ref = {
+            session: headers["x-pe-bridge-session-id"],
+            openId: headers["x-pe-open-document-id"],
+          };
+          reads.push({ key, ref });
+          return key === "revit.context.view-image"
+            ? Response.json(
+                { view: { label: "User view" }, byteSize: image.length, pixelSize: 1500 },
+                { headers: { "x-pe-capture-id": "f-a", "x-pe-capture-url": capturePath } },
+              )
+            : Response.json({ families: 3 });
+        }
+        if (url.pathname === "/actions") {
+          if (req.method !== "POST")
+            return Response.json(
+              rows.has(url.searchParams.get("id")!) ? [rows.get(url.searchParams.get("id")!)] : [],
+            );
+          const { input, ...admission } = JSON.parse(body);
+          try {
+            const basis = admitCrossing(identity.caller, admission.destination, "/actions");
+            writes.push({ caller: identity.caller, destination: admission.destination, basis });
+            const row = {
+              ...admission,
+              caller: identity.caller,
+              basis,
+              request: input,
+              state: "succeeded",
+              result: { status: "Succeeded" },
+              steps: [],
+              preparation: { state: "unprepared" },
+              recovery: [],
+              publication: { state: "unrequested" },
+              startedAt: new Date().toISOString(),
+            };
+            rows.set(admission.id, row);
+            return Response.json(row);
+          } catch (error) {
+            if (!(error instanceof Refused)) throw error;
+            return Response.json(
+              {
+                error: error.message,
+                message: error.message,
+                refusal: error.refusal,
+                notDispatched: true,
+              },
+              { status: 403 },
+            );
+          }
+        }
+        throw Error(`Unexpected fake host request ${url}`);
+      })()
+        .then(async (response) => {
+          res.writeHead(response.status, Object.fromEntries(response.headers));
+          res.end(Buffer.from(await response.arrayBuffer()));
+        })
+        .catch((error) => {
+          res.writeHead(500);
+          res.end(String(error));
+        });
+    });
+    backend.listen(0, "127.0.0.1");
+    await once(backend, "listening");
+    const bound = backend.address();
+    if (!bound || typeof bound === "string") throw Error("No fake host port");
+    hostBase = fakeRuntimeHost(`http://127.0.0.1:${bound.port}`);
+    const clients: Client[] = [];
+    const peaToken = mintContext({ kind: "pea", thread: "chat" });
+    try {
+      const connect = async (headers: Record<string, string>) => {
+        const client = new Client({ name: "f-a", version: "1" });
+        clients.push(client);
+        await client.connect(
+          new StreamableHTTPClientTransport(new URL(`${hostBase}/mcp`), {
+            requestInit: { headers },
+          }),
+        );
+        return client;
+      };
+      const client =
+        transport === "http"
+          ? await connect({ "x-pe-thread": "chat" })
+          : new Client({ name: "f-a", version: "1" });
+      if (transport === "stdio") {
+        clients.push(client);
+        const root = checkoutRootFrom(import.meta.dirname)!;
+        await client.connect(
+          new StdioClientTransport({
+            command: process.execPath,
+            args: [
+              join(root, "ts/node_modules/jiti/lib/jiti-cli.mjs"),
+              join(root, "ts/apps/pea/src/main.ts"),
+              "mcp",
+              "--host",
+              hostBase,
+            ],
+            env: {
+              ...(Object.fromEntries(
+                Object.entries(process.env).filter(([, value]) => typeof value === "string"),
+              ) as Record<string, string>),
+              PE_CONTEXT: "",
+            },
+            stderr: "pipe",
+          }),
+        );
+      }
+      const call = (name: string, args: Record<string, unknown>) =>
+        client.callTool({ name, arguments: args });
+      const read = await call("pe_read", {
+        key: "op:revit.catalog.loaded-families",
+        target: { kind: "open", ref: user },
+      });
+      expect(read.isError, JSON.stringify(read)).not.toBe(true);
+      const captured = await call("capture_view", { target: { kind: "open", ref: user } });
+      expect(captured.isError, JSON.stringify(captured)).not.toBe(true);
+      expect(captured.content).toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: "image" })]),
+      );
+      const beforeInvalid = reads.length;
+      const invalidCapture = await call("capture_view", {
+        target: { kind: "named", address: "C:/Models/a.rvt", session: "you" },
+      });
+      expect(invalidCapture.isError).toBe(true);
+      expect(reads).toHaveLength(beforeInvalid);
+      const refused = await call("pe_do", {
+        key: "op:scripting.execute",
+        target: { kind: "open", ref: user },
+        input: { scriptContent: "WriteLine(1);" },
+      });
+      expect(JSON.stringify(refused)).toContain("grant.context-cannot-hold");
+      expect(writes).toEqual([]);
+      const moved = await call("target_set", { defaultTarget: { kind: "open", ref: user } });
+      expect(moved.isError).toBe(true);
+      expect(JSON.stringify(moved)).toContain("grant.required");
+      const result = await call("pe_do", {
+        key: "op:scripting.execute",
+        target: { kind: "open", ref: own },
+        input: { scriptContent: "WriteLine(1);" },
+      });
+      expect(JSON.parse((result.content as Array<{ text: string }>)[0]!.text)).toMatchObject({
+        ok: true,
+      });
+      expect(writes).toEqual([
+        {
+          caller: expect.objectContaining({
+            kind: "external-mcp",
+            label: transport === "stdio" ? "pea-stdio" : "f-a",
+          }),
+          destination: { kind: "document", ref: own },
+          basis: { kind: "pea-session", session: "pea" },
+        },
+      ]);
+      expect(reads).toEqual(
+        expect.arrayContaining([{ key: "revit.context.view-image", ref: user }]),
+      );
+      expect(tokens.size).toBe(1);
+      // Chat keeps the head default, permits that grant and Pea detours, and refuses another user lifetime.
+      const chat = await connect({ "x-pe-context": peaToken });
+      expect(
+        (
+          await chat.callTool({
+            name: "capture_view",
+            arguments: { target: { kind: "open", ref: own } },
+          })
+        ).isError,
+      ).not.toBe(true);
+      expect((await chat.callTool({ name: "capture_view", arguments: {} })).isError).not.toBe(true);
+      expect(reads.slice(-2)).toEqual([
+        { key: "revit.context.view-image", ref: own },
+        { key: "revit.context.view-image", ref: user },
+      ]);
+      const chatCall = (ref?: typeof user) =>
+        chat.callTool({
+          name: "pe_do",
+          arguments: {
+            key: "op:scripting.execute",
+            ...(ref ? { target: { kind: "open", ref } } : {}),
+          },
+        });
+      expect(JSON.stringify(await chatCall(other))).toContain("grant.other-lifetime");
+      expect(
+        JSON.parse(((await chatCall()).content as Array<{ text: string }>)[0]!.text),
+      ).toMatchObject({ ok: true, revision: 7 });
+      expect(
+        JSON.parse(((await chatCall(own)).content as Array<{ text: string }>)[0]!.text),
+      ).toMatchObject({ ok: true });
+      expect(head.defaultTarget).toEqual({ kind: "open", ref: user });
+      expect(writes[1]).toMatchObject({ basis: { kind: "grant", thread: "chat", lifetime: user } });
+    } finally {
+      for (const client of clients) await client.close();
+      await door.close();
+      retireContext(peaToken);
+      bindControl({ heads: null, whose: () => "you" });
+      backend.closeAllConnections();
+      await new Promise<void>((resolve) => backend.close(() => resolve()));
+    }
+  },
+  15_000,
+);
 
 test("native catalog survives SDK latency while host-only sources keep their short deadlines", async () => {
   fakeRuntimeHost("http://127.0.0.1:19");

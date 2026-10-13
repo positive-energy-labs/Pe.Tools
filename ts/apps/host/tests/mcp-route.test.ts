@@ -368,10 +368,11 @@ test("initialize ignores x-pe-thread and retains only a verified caller context"
   dispose.push(() => door.close());
   const token = mintContext({ kind: "pea", thread: "own-thread" });
   try {
-    for (const headers of [
+    const initializeHeaders: Record<string, string>[] = [
       { "x-pe-thread": "foreign-thread" },
       { "x-pe-context": token, "x-pe-thread": "foreign-thread" },
-    ]) {
+    ];
+    for (const headers of initializeHeaders) {
       const identity = callerOf({ kind: "local" }, headers);
       if ("refusal" in identity) throw Error(identity.refusal.detail);
       const response = await withInvocationContext(

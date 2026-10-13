@@ -4,6 +4,82 @@ import type { HostOpResponse } from "@pe/host-contracts/operation-types";
 import { documentRows, recentRows } from "@pe/agent-contracts";
 import { PeaCliCommands } from "../src/pea/PeaCliCommands.ts";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
+import { admitCrossing, callerOf, Refused } from "../../../apps/host/src/control.ts";
+
+test("CLI has no actor flag; no-context host and script writes get context.missing", async () => {
+  fakeRuntimeHost("http://127.0.0.1:9");
+  vi.stubEnv("PE_CONTEXT", "");
+  const posts: Record<string, unknown>[] = [];
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === "/ops")
+      return Response.json({
+        bridgeSessionId: "you",
+        operations: [{ key: "scripting.execute", intent: "Mutate", needs: "document" }],
+      });
+    expect(url.pathname).toBe("/actions");
+    const body = JSON.parse(await new Response(init?.body).text());
+    posts.push(body);
+    expect(body).not.toHaveProperty("actor");
+    const identity = callerOf({ kind: "local" }, Object.fromEntries(new Headers(init?.headers)));
+    if ("refusal" in identity) throw Error(identity.refusal.detail);
+    try {
+      admitCrossing(identity.caller, body.destination, "/actions");
+    } catch (error) {
+      if (!(error instanceof Refused)) throw error;
+      return Response.json(
+        { error: error.message, refusal: error.refusal, notDispatched: true },
+        { status: 403 },
+      );
+    }
+    throw Error("Anonymous write was admitted");
+  });
+  const commands = new PeaCliCommands({ hostBaseUrl: "http://127.0.0.1:9" });
+  const host = commands.hostCommand();
+  const output = vi.spyOn(console, "log").mockImplementation(() => {});
+  const disclosure = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const invoke = (args: string[]) => cli(args, host, { subCommands: host.subCommands });
+    const operation = host.subCommands.operations;
+    const call = operation.subCommands.call;
+    expect(call.args).not.toHaveProperty("actor");
+    await expect(
+      invoke([
+        "operations",
+        "call",
+        "--key",
+        "scripting.execute",
+        "--bridge-session-id",
+        "you",
+        "--open-document-id",
+        "a",
+      ]),
+    ).rejects.toMatchObject({ refusal: { code: "context.missing" } });
+    const script = commands.scriptCommand();
+    expect(script.subCommands.execute.args).not.toHaveProperty("actor");
+    await expect(
+      cli(
+        [
+          "execute",
+          "--script-content",
+          "WriteLine(1);",
+          "--bridge-session-id",
+          "you",
+          "--open-document-id",
+          "a",
+        ],
+        script,
+        { subCommands: script.subCommands },
+      ),
+    ).rejects.toMatchObject({ refusal: { code: "context.missing" } });
+    expect(posts).toHaveLength(2);
+  } finally {
+    output.mockRestore();
+    disclosure.mockRestore();
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  }
+});
 
 const statuses = [
   "Succeeded",
