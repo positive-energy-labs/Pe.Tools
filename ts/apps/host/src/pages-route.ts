@@ -58,6 +58,8 @@ import {
   type Caller,
   type PageBinding,
   type PageSlot,
+  type PageTargetReading,
+  type PageWrite,
   type Refusal,
   type TargetInventory,
   type TargetResolution,
@@ -194,22 +196,6 @@ export type PageLive = {
 const noLive: PageLive = {
   sessions: async () => [],
   forward: async () => problem(503, "this host has no Revit composition"),
-};
-
-/** What a write from the default slot would do now, as the act door would decide it. */
-export type PageWrite =
-  | { kind: "pea" }
-  | { kind: "rw"; thread: string; expiresAt: string }
-  | { kind: "read"; refusal: Refusal };
-/** `GET /pages/<slug>/target`: the default slot, resolved. Never a guess. */
-export type PageTargetReading = {
-  page: string;
-  slot: "default";
-  binding: PageSlot;
-  resolution: TargetResolution;
-  document: { session: string; openId: string; title: string } | null;
-  write: PageWrite | null;
-  hostNow: string;
 };
 
 const callBodySchema = z.strictObject({ key: z.string().min(1), request: z.unknown().optional() });

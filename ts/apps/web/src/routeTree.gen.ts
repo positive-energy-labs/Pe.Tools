@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from "./routes/__root";
 import { Route as IndexRouteImport } from "./routes/index";
+import { Route as BindRouteImport } from "./routes/bind";
 import { Route as CapturesRouteImport } from "./routes/captures";
 import { Route as ChatRouteImport } from "./routes/chat";
 import { Route as DataTablesRouteImport } from "./routes/data-tables";
@@ -42,6 +43,11 @@ import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-au
 const IndexRoute = IndexRouteImport.update({
   id: "/",
   path: "/",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const BindRoute = BindRouteImport.update({
+  id: "/bind",
+  path: "/bind",
   getParentRoute: () => rootRouteImport,
 } as any);
 const CapturesRoute = CapturesRouteImport.update({
@@ -187,6 +193,7 @@ const ApiPdfAuditParseParseIdRoute = ApiPdfAuditParseParseIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
+  "/bind": typeof BindRoute;
   "/captures": typeof CapturesRoute;
   "/chat": typeof ChatRoute;
   "/data-tables": typeof DataTablesRoute;
@@ -218,6 +225,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
+  "/bind": typeof BindRoute;
   "/captures": typeof CapturesRoute;
   "/chat": typeof ChatRoute;
   "/data-tables": typeof DataTablesRoute;
@@ -250,6 +258,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
   "/": typeof IndexRoute;
+  "/bind": typeof BindRoute;
   "/captures": typeof CapturesRoute;
   "/chat": typeof ChatRoute;
   "/data-tables": typeof DataTablesRoute;
@@ -283,6 +292,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
   fullPaths:
     | "/"
+    | "/bind"
     | "/captures"
     | "/chat"
     | "/data-tables"
@@ -314,6 +324,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo;
   to:
     | "/"
+    | "/bind"
     | "/captures"
     | "/chat"
     | "/data-tables"
@@ -345,6 +356,7 @@ export interface FileRouteTypes {
   id:
     | "__root__"
     | "/"
+    | "/bind"
     | "/captures"
     | "/chat"
     | "/data-tables"
@@ -377,6 +389,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute;
+  BindRoute: typeof BindRoute;
   CapturesRoute: typeof CapturesRoute;
   ChatRoute: typeof ChatRoute;
   DataTablesRoute: typeof DataTablesRoute;
@@ -413,6 +426,13 @@ declare module "@tanstack/react-router" {
       path: "/";
       fullPath: "/";
       preLoaderRoute: typeof IndexRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/bind": {
+      id: "/bind";
+      path: "/bind";
+      fullPath: "/bind";
+      preLoaderRoute: typeof BindRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/captures": {
@@ -627,6 +647,7 @@ const ApiPdfAuditParseRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BindRoute: BindRoute,
   CapturesRoute: CapturesRoute,
   ChatRoute: ChatRoute,
   DataTablesRoute: DataTablesRoute,

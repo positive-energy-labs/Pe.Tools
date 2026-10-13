@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { addressSchema, documentRefSchema } from "./target.ts";
+import { addressSchema, documentRefSchema, type TargetResolution } from "./target.ts";
 
 /* ── Caller identity (ADR 0017 D2) ───────────────────────────────────────────────────── */
 
@@ -89,6 +89,23 @@ export const pageBindingSchema = z.strictObject({
 });
 export type PageBinding = z.infer<typeof pageBindingSchema>;
 export const unboundPage: PageBinding = { slots: { default: { kind: "none" } } };
+
+/** What a write from a Page's slot would do now, decided as its act door decides. */
+export type PageWrite =
+  | { kind: "pea" }
+  | { kind: "rw"; thread: string; expiresAt: string }
+  | { kind: "read"; refusal: Refusal };
+/** `GET /pages/<slug>/target`: one slot, resolved against the live Revits. Never a guess. */
+export type PageTargetReading = {
+  page: string;
+  slot: "default";
+  binding: PageSlot;
+  resolution: TargetResolution;
+  document: { session: string; openId: string; title: string } | null;
+  write: PageWrite | null;
+  /** Host clock, so an rw countdown never trusts the browser's. */
+  hostNow: string;
+};
 
 /** The capability eligibility `human` admits only a human caller; a page is not one. */
 export const eligibleCaller = (actor: "any" | "human" | "agent" | undefined, caller: Caller) =>

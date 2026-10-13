@@ -8,13 +8,13 @@ import {
   emptyThreadHead,
   type Caller,
   type DocumentRef,
+  type PageTargetReading,
   type ThreadHead,
 } from "@pe/agent-contracts";
 import {
   createPagesHandler,
   type LiveSession,
   type PageLive,
-  type PageTargetReading,
 } from "../src/pages-route.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
