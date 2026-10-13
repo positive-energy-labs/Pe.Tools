@@ -173,6 +173,7 @@ export function HeadLadder() {
  * Whether Pea may write the document this thread points at, counted on the host's clock. Words
  * only, no button: pointing the thread elsewhere ends the grant, and the next message you send
  * renews it. Nothing when the thread holds no grant (no document, a named target, Pea's own).
+ * The copy is lowercase by ruling (`rw · 42m`), so the chip takes no sentence casing.
  */
 export function GrantChip({ grant }: { grant: GrantView | null }) {
   if (!grant) return null;
@@ -195,7 +196,7 @@ export function GrantChip({ grant }: { grant: GrantView | null }) {
             "rw on this document was revoked. Steps already running finish; nothing new starts until you point the thread at the document again.",
           ];
   return (
-    <span className="t-sentence face-mono" data-tone={tone} data-testid="grant-chip" title={title}>
+    <span className="face-mono" data-tone={tone} data-testid="grant-chip" title={title}>
       {text}
     </span>
   );

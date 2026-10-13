@@ -191,6 +191,9 @@ for (const { path, manifest } of ROUTES)
             const diagram = page.getByRole("group", { name: "AHU-1 supply air", exact: true });
             await expect.poll(() => diagram.locator("[data-diagram] svg").count()).toBe(1);
           }
+          // innerText applies CSS casing, so this reads what the user sees, not the DOM text.
+          if (action === "granted")
+            await expect.poll(() => page.getByTestId("grant-chip").innerText()).toBe("rw · 42m");
         }
         if (
           manifest.key !== "schedules" &&
