@@ -21,7 +21,7 @@ import { Launcher } from "./launcher";
 import { runLifecycle } from "./lifecycle";
 import type { OpenHandle } from "./manifest";
 import { EMPTY_DRAFT, launchPlan, modelRows, type DocRow, type LaunchDraft } from "./model";
-import { RunningBlock, RunningList } from "./running";
+import { RunningList, RunningSession } from "./running";
 import { OpenPage } from "./route";
 import { BACKGROUND_BOOTING, CHECKOUT_HOT, MACHINE_SEEDS, OBSERVED_ICON, RECENTS } from "./seeds";
 
@@ -307,7 +307,7 @@ test("an older file names its upgrade in the verb and sends the consent", async 
 test("Open here on an icon-started Revit dispatches the open by pid with no staging", async () => {
   const handle = handleWith();
   render(<Harness handle={handle} initial={{ ...EMPTY_DRAFT, doc: row("Riverside MEP.rvt") }} />);
-  const observed = screen.getByRole("region", { name: "Revit 2024 started from the Revit icon" });
+  const observed = screen.getByRole("group", { name: "Revit 2024 started from the Revit icon" });
   fireEvent.click(within(observed).getByRole("button", { name: "open here" }));
   const launch = await screen.findByRole("button", { name: "Open in Revit 2024" });
   expect(document.querySelector("[data-argv]")!.textContent).toContain("--pid 2402");
@@ -327,18 +327,18 @@ test("Open here on an icon-started Revit dispatches the open by pid with no stag
 });
 
 test("hr is drawn only for a hot-reload shape", () => {
-  render(<RunningBlock session={CHECKOUT_HOT} refusal={null} onHere={() => {}} />);
+  render(<RunningSession session={CHECKOUT_HOT} refusal={null} onHere={() => {}} />);
   expect(screen.queryByRole("button", { name: "hr" })).not.toBeNull();
   cleanup();
   for (const session of [OBSERVED_ICON, BACKGROUND_BOOTING]) {
-    render(<RunningBlock session={session} refusal={null} onHere={() => {}} />);
+    render(<RunningSession session={session} refusal={null} onHere={() => {}} />);
     expect(screen.queryByRole("button", { name: "hr" })).toBeNull();
     cleanup();
   }
 });
 
 test("Stop keeps work by default; discard is offered only for a checkout session", async () => {
-  render(<RunningBlock session={OBSERVED_ICON} refusal={null} onHere={() => {}} />);
+  render(<RunningSession session={OBSERVED_ICON} refusal={null} onHere={() => {}} />);
   fireEvent.click(screen.getByRole("button", { name: "stop" }));
   expect(screen.queryByRole("button", { name: "stop, discard edits" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "stop, keep work" }));
@@ -351,7 +351,7 @@ test("Stop keeps work by default; discard is offered only for a checkout session
     force: false,
   });
   cleanup();
-  render(<RunningBlock session={CHECKOUT_HOT} refusal={null} onHere={() => {}} />);
+  render(<RunningSession session={CHECKOUT_HOT} refusal={null} onHere={() => {}} />);
   fireEvent.click(screen.getByRole("button", { name: "stop" }));
   expect(screen.queryByRole("button", { name: "stop, discard edits" })).not.toBeNull();
 });

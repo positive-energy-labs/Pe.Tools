@@ -15,6 +15,8 @@ interface ArtifactFrameProps {
   children: React.ReactNode;
   className?: string;
   label?: string;
+  /** The frame as a `Connectors` anchor. */
+  "data-key"?: string;
 }
 
 export function ArtifactFrame({
@@ -24,11 +26,13 @@ export function ArtifactFrame({
   children,
   className,
   label,
+  "data-key": key,
 }: ArtifactFrameProps) {
   return (
     <div
       data-surface="artifact"
       data-slot="artifact-frame"
+      data-key={key}
       className={className}
       role={label ? "group" : undefined}
       aria-label={label}

@@ -38,6 +38,8 @@ type Gutter<Row> = (row: Row) => {
 
 interface MasterRowProps<Row extends RowData> {
   row: Row;
+  /** The row's key, as `data-key`: a `Connectors` anchor and a test handle. */
+  rowKey: string;
   active: boolean;
   selected?: boolean;
   /** Present, the row refuses selection and says why. */
@@ -55,6 +57,7 @@ interface MasterRowProps<Row extends RowData> {
 
 function MasterRowView<Row extends RowData>({
   row,
+  rowKey,
   active,
   selected,
   refusal,
@@ -70,6 +73,7 @@ function MasterRowView<Row extends RowData>({
     <Row
       as="tr"
       ref={active ? activeRowRef : undefined}
+      data-key={rowKey}
       active={active}
       selected={selected}
       refusal={refusal}
@@ -92,6 +96,7 @@ const MasterRow = memo(
   MasterRowView,
   (previous, next) =>
     previous.row === next.row &&
+    previous.rowKey === next.rowKey &&
     previous.active === next.active &&
     previous.selected === next.selected &&
     previous.refusal === next.refusal &&
@@ -229,6 +234,7 @@ export function MasterTableBody<Row extends RowData>({
           <MasterRow
             key={key}
             row={tableRow.original}
+            rowKey={key}
             active={activeKey === key}
             selected={selectedKeys ? selectedKeys.has(key) : undefined}
             refusal={refusalOf?.(key)}

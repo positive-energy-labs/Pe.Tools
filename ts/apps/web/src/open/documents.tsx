@@ -52,9 +52,12 @@ export function ModelTable({
       },
       {
         key: "saved",
-        label: "saved in",
+        label: "saved",
+        header: "saved in",
+        title: "the Revit year the file was last saved in; `saved>2023` keeps the newer ones",
         width: "w-20",
         sort: (row) => row.savedYear ?? 0,
+        condition: { kind: "number", read: (row) => row.savedYear },
         cell: (row) =>
           row.savedYear ? (
             <span className="face-mono">{row.savedYear}</span>
@@ -68,9 +71,12 @@ export function ModelTable({
       },
       {
         key: "last",
-        label: "last opened in",
+        label: "opened",
+        header: "last opened in",
+        title: "the Revit year whose recents list it; `opened=2025` keeps that year's",
         width: "w-28",
         sort: (row) => row.lastYear ?? 0,
+        condition: { kind: "number", read: (row) => row.lastYear },
         cell: (row) => <span className="face-mono text-ink-2">{row.lastYear ?? "—"}</span>,
       },
       {

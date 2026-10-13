@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { ThemeToggle } from "#/components/lang/theme-toggle";
 import { FactChip } from "#/components/lang/chip";
 
+import { LangBaySpecimens } from "./lang-bay";
 import { LangCellSpecimens } from "./lang-cells";
 import { LangMachineSpecimens } from "./lang-machine";
 import { LangStatusSpecimens } from "./lang-status";
@@ -49,6 +50,7 @@ export function SwatchSpecimens() {
         <LangCellSpecimens />
         <LangStatusSpecimens />
         <LangMachineSpecimens />
+        <LangBaySpecimens />
         <LangPressSpecimens />
         <p className="t-small t-upper text-ink-2">ui · the surviving application component layer</p>
         <UiInputSpecimens />
