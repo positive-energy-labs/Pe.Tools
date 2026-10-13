@@ -16,17 +16,37 @@ const at = (offsetMs = 0) => new Date(T0 + offsetMs).toISOString();
 const uid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const THREAD = uid(900);
 const ASK = uid(901);
+const QUESTION = uid(902);
+const TURN = uid(903);
+const LEVELS = { type: "object", properties: { level: { type: "string" } } };
 const context: NoticeContext = {
   thread: (opaque) => (opaque === THREAD ? { id: "t1", title: "Wiring" } : undefined),
-  permission: (r) =>
+  asked: (r) =>
     r.join.requestId === ASK
       ? {
           threadId: "t1",
-          requestId: "perm-text-id",
           body: "Delete the schedule",
-          options: [{ optionId: "yes", name: "Allow", kind: "allow_once" }],
+          act: {
+            kind: "permission",
+            threadId: "t1",
+            requestId: "perm-text-id",
+            options: [{ optionId: "yes", name: "Allow", kind: "allow_once" }],
+          },
         }
-      : undefined,
+      : r.join.requestId === QUESTION
+        ? {
+            threadId: "t1",
+            body: "Which level?",
+            act: {
+              kind: "question",
+              threadId: "t1",
+              requestId: "q-text-id",
+              message: "Which level?",
+              requestedSchema: LEVELS,
+            },
+          }
+        : undefined,
+  said: (r) => (r.join.turnId === TURN ? "Retagged **41 of 43**." : undefined),
 };
 /** Every fixture is a real receipt: the schema, not a cast, says it is one. */
 const make = (id: string, revision: number, join: object, body: object, atMs = 0): Receipt =>
@@ -56,6 +76,13 @@ const permission = (phase: "asked" | "resolved", id = uid(3), revision = 1): Rec
     revision,
     { requestId: ASK, threadId: THREAD },
     { kind: "permission", phase, localRef: { threadId: "t1", eventId: "e1" } },
+  );
+const question = (phase: "asked" | "resolved", id = uid(8), revision = 1): Receipt =>
+  make(
+    id,
+    revision,
+    { requestId: QUESTION, threadId: THREAD },
+    { kind: "question", phase, localRef: { threadId: "t1", eventId: "e2" } },
   );
 const update = (
   phase: "available" | "applying" | "finished" | "failed",
@@ -109,6 +136,14 @@ test("each shared fact projects to one card and nothing else speaks", () => {
     act: { kind: "permission", threadId: "t1", requestId: "perm-text-id" },
   });
 
+  expect(noticeOf(question("resolved"), context)).toBeNull();
+  expect(noticeOf(question("asked"), context)).toMatchObject({
+    title: "Pea is asking · Wiring",
+    body: "Which level?",
+    href: "/pea?thread=t1",
+    act: { kind: "question", threadId: "t1", requestId: "q-text-id", requestedSchema: LEVELS },
+  });
+
   expect(noticeOf(update("available"), context)).toMatchObject({
     title: "Pe.Tools 0.9.0 is available",
     act: { kind: "automatic-updates" },
@@ -124,7 +159,38 @@ test("each shared fact projects to one card and nothing else speaks", () => {
   ).toBeNull();
 });
 
-function harness(initial: Receipt[] = []) {
+test("a finished turn carries Pea's final response and the thread's reply door", () => {
+  const finished = make(
+    uid(7),
+    1,
+    { requestId: uid(16), threadId: THREAD, turnId: TURN },
+    { kind: "turn", phase: "finished" },
+  );
+  expect(noticeOf(finished, context)).toMatchObject({
+    title: "Pea finished · Wiring",
+    body: "Retagged **41 of 43**.",
+    href: "/pea?thread=t1",
+    act: { kind: "reply", threadId: "t1" },
+  });
+  // A turn whose words this host never held still ends honestly, and a forgotten thread has no door.
+  expect(noticeOf(turn("finished"), context)).toMatchObject({
+    body: "The turn ended.",
+    act: { kind: "reply", threadId: "t1" },
+  });
+  expect(
+    noticeOf(
+      make(
+        uid(9),
+        1,
+        { requestId: uid(17), threadId: uid(999) },
+        { kind: "turn", phase: "failed" },
+      ),
+      context,
+    )?.act,
+  ).toBeUndefined();
+});
+
+function harness(initial: Receipt[] = [], bufferMs = 0) {
   const consumers = new Set<(r: Receipt) => void>();
   let reads = 0;
   const source: ReceiptReader = {
@@ -138,12 +204,12 @@ function harness(initial: Receipt[] = []) {
     },
   };
   let clock = T0;
-  const notices = createNotices({ source, context, now: () => clock });
+  const notices = createNotices({ source, context, now: () => clock, bufferMs });
   const web = HttpRouter.toWebHandler(notices.route.pipe(Layer.provideMerge(Layer.empty)), {
     disableLogger: true,
   });
   /** Connects, collects cards until `count` arrived (or the stream ends), then hangs up. */
-  async function connect(count: number, afterOpen?: () => void) {
+  async function connect(count: number, afterOpen?: () => void, onCard?: () => void) {
     const response = await web.handler(
       new Request("http://host/host/notices"),
       Context.empty() as never,
@@ -165,7 +231,10 @@ function harness(initial: Receipt[] = []) {
             opened = true;
             afterOpen?.();
           }
-        } else if (part.startsWith("data: ")) cards.push(JSON.parse(part.slice(6)));
+        } else if (part.startsWith("data: ")) {
+          cards.push(JSON.parse(part.slice(6)));
+          onCard?.();
+        }
       }
     }
     await reader.cancel();
@@ -252,4 +321,30 @@ test("closing the feed releases the receipt subscription", async () => {
   expect(h.consumers.size).toBe(1);
   await h.close();
   expect(h.consumers.size).toBe(0);
+});
+
+test("a burst waits out one buffer window and arrives together", async () => {
+  const h = harness([], 200);
+  try {
+    let start = 0;
+    const arrived: number[] = [];
+    const cards = await h.connect(
+      2,
+      () => {
+        start = performance.now();
+        h.deliver(lifecycle("succeeded"));
+        h.deliver(permission("asked"));
+        setTimeout(() => h.deliver(turn("finished")), 100);
+        // Answered inside the window: the ask never reaches the tray.
+        setTimeout(() => h.deliver(permission("resolved", uid(3), 2)), 50);
+      },
+      () => arrived.push(performance.now() - start),
+    );
+    expect(cards.map((c) => c.id)).toEqual([uid(1), uid(2)]);
+    // Nothing shows before the window closes; the late card joins it instead of opening its own.
+    expect(Math.min(...arrived)).toBeGreaterThanOrEqual(180);
+    expect(Math.max(...arrived)).toBeLessThan(270);
+  } finally {
+    await h.close();
+  }
 });

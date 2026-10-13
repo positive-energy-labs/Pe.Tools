@@ -172,6 +172,12 @@ export const receiptBodySchema = z.discriminatedUnion("kind", [
     phase: z.enum(["asked", "resolved"]),
     localRef: z.strictObject({ threadId: z.string().min(1), eventId: z.string().min(1) }),
   }),
+  /** Pea asks the person a form question; `localRef` is the thread event holding its words. */
+  z.strictObject({
+    kind: z.literal("question"),
+    phase: z.enum(["asked", "resolved"]),
+    localRef: z.strictObject({ threadId: z.string().min(1), eventId: z.string().min(1) }),
+  }),
   diagnosticReceipt,
   usageReceipt,
   z.strictObject({

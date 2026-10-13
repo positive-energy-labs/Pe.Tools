@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { expect, test } from "vite-plus/test";
-import { type Receipt } from "@pe/agent-contracts";
+import { type HarnessEvent, type Receipt } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import {
   projectReceipt,
@@ -317,9 +317,9 @@ test("thread and update adapters keep opaque joins and honest endings, with noti
       .toBe(4);
     const rows = await f.journal.read({ kinds: ["turn", "permission"] });
     expect(rows[1]!.join.requestId).toBe(rows[2]!.join.requestId);
-    expect(adapter.context.permission(rows[1]!)).toMatchObject({
-      requestId: "private-request",
+    expect(adapter.context.asked(rows[1]!)).toMatchObject({
       body: "local approval text",
+      act: { kind: "permission", requestId: "private-request" },
     });
     expect(JSON.stringify(f.sent)).not.toContain("private");
     expect((f.sent.at(-1) as { properties: object }).properties).toMatchObject({
@@ -343,6 +343,66 @@ test("thread and update adapters keep opaque joins and honest endings, with noti
     });
     await f.exporter.close();
     expect(await f.journal.read({ kinds: ["usage"] })).toHaveLength(1);
+  } finally {
+    await f.close();
+  }
+});
+
+test("an open question and Pea's final words reach the notice context, never the export", async () => {
+  const f = fixture();
+  try {
+    const id = "private-thread";
+    const turn = "private-turn";
+    const at = "2026-10-13T16:00:00.000Z";
+    const chunk = (seq: number, text: string) => ({
+      seq,
+      at,
+      kind: "update" as const,
+      turnId: turn,
+      update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } },
+    });
+    const events = [
+      { seq: 1, at, kind: "prompt" as const, turnId: turn, text: "private prompt" },
+      chunk(2, "private "),
+      chunk(3, "answer"),
+      {
+        seq: 4,
+        at,
+        kind: "question_request" as const,
+        turnId: turn,
+        requestId: "private-question",
+        message: "private which level?",
+        requestedSchema: { type: "object" },
+      },
+      {
+        seq: 5,
+        at,
+        kind: "question_resolved" as const,
+        turnId: turn,
+        requestId: "private-question",
+        by: "user" as const,
+        action: "decline" as const,
+      },
+      { seq: 6, at, kind: "turn_end" as const, turnId: turn, stopReason: "end_turn" },
+    ] as HarnessEvent[];
+    const adapter = createThreadReceiptAdapter(f.exporter, () => [
+      { id, title: "local title", events },
+    ]);
+    for (const event of events) adapter.accept(id, "local title", event);
+    await expect
+      .poll(async () => (await f.journal.read({ kinds: ["turn", "question"] })).length)
+      .toBe(4);
+    const rows = await f.journal.read({ kinds: ["turn", "question"] });
+    const asked = rows.find((r) => r.body.kind === "question" && r.body.phase === "asked")!;
+    expect(adapter.context.asked(asked)).toMatchObject({
+      threadId: id,
+      body: "private which level?",
+      act: { kind: "question", threadId: id, requestId: "private-question" },
+    });
+    const ended = rows.find((r) => r.body.kind === "turn" && r.body.phase === "finished")!;
+    expect(adapter.context.said(ended)).toBe("private answer");
+    await f.exporter.close();
+    expect(JSON.stringify(f.sent)).not.toContain("private");
   } finally {
     await f.close();
   }

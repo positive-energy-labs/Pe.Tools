@@ -34,9 +34,7 @@ internal sealed class TrayContext : ApplicationContext {
     private readonly ToolStripMenuItem _openWindow = new("Installation unavailable") { Enabled = false };
     /** The window shows as a notice card, not the panel: no focus, card height, the page hides it. */
     private bool _card;
-    /** `id:revision` of recent cards: the host replays its last minute on every connect, a card is shown once. */
-    private readonly Queue<string> _shownOrder = new();
-    private readonly HashSet<string> _shown = new();
+    private readonly NoticeInbox _inbox = new();
 
     public TrayContext(TrayLaunch launch, ServiceRecord service, Process parent) {
         _launch = launch;
@@ -121,7 +119,7 @@ internal sealed class TrayContext : ApplicationContext {
         _ = RunScriptAsync("window.peNotice?.(null)");
     }
 
-    /** The host's notice feed (`/host/notices`, SSE): each `data:` line is one card. */
+    /** The host's notice feed (`/host/notices`, SSE): each `data:` line is one card item. */
     private async Task ReadNoticesAsync() {
         using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         while (!_stop.IsCancellationRequested && !_retired) {
@@ -130,31 +128,19 @@ internal sealed class TrayContext : ApplicationContext {
                 using var request = new HttpRequestMessage(HttpMethod.Get, service.Origin + "/host/notices");
                 request.Headers.Add(TokenHeader, service.Token);
                 using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, _stop.Token);
-                if (response.IsSuccessStatusCode) {
-                    using var reader = new StreamReader(await response.Content.ReadAsStreamAsync(_stop.Token));
-                    while (await reader.ReadLineAsync(_stop.Token) is { } line)
-                        if (line.StartsWith("data: ", StringComparison.Ordinal)) ShowNotice(line[6..]);
-                }
+                if (response.IsSuccessStatusCode)
+                    await NoticeInbox.ReadFeedAsync(await response.Content.ReadAsStreamAsync(_stop.Token),
+                        json => ShowNotices(_inbox.Receive(json)), _stop.Token);
             } catch (OperationCanceledException) { return; }
-            catch (Exception error) when (error is HttpRequestException or IOException or JsonException
-                                          or KeyNotFoundException or InvalidOperationException) { }
+            catch (Exception error) when (error is HttpRequestException or IOException or InvalidOperationException) { }
             try { await Task.Delay(2_000, _stop.Token); } catch (OperationCanceledException) { return; }
         }
     }
 
-    private void ShowNotice(string json) {
-        // Parsed first, so only a JSON value ever reaches the page as script.
-        using var notice = JsonDocument.Parse(json);
-        var root = notice.RootElement;
-        var key = root.GetProperty("id").GetString() + ":" + root.GetProperty("revision").GetInt32();
-        if (!_shown.Add(key)) return;
-        _shownOrder.Enqueue(key);
-        if (_shownOrder.Count > 64) _shown.Remove(_shownOrder.Dequeue());
-        var value = root.GetRawText();
+    private void ShowNotices(IReadOnlyList<string> notices) {
+        if (notices.Count == 0) return;
         try {
-            // ponytail: no page yet means the notice is dropped; the host replays its last minute.
             _window.BeginInvoke(async () => {
-                if (!_hasPage) return;
                 // A hidden page never lays out, so its card cannot measure itself: show first, then
                 // the page's first height report resizes the window. An open panel just shows the card.
                 if (!_window.Visible) {
@@ -162,7 +148,7 @@ internal sealed class TrayContext : ApplicationContext {
                     _window.PositionCard(96);
                     _window.Show();
                 }
-                await RunScriptAsync($"window.peNotice?.({value})");
+                foreach (var notice in notices) await RunScriptAsync($"window.peNotice?.({notice})");
             });
         } catch (InvalidOperationException) { }
     }
@@ -178,6 +164,9 @@ internal sealed class TrayContext : ApplicationContext {
         if (payload.ValueKind != JsonValueKind.Object || !payload.TryGetProperty("type", out var type)
             || type.ValueKind != JsonValueKind.String) return false;
         switch (type.GetString()) {
+            case "notice-ready":
+                ShowNotices(_inbox.PageReady());
+                return true;
             case "notice-card":
                 if ((_window.Visible && !_card) || !payload.TryGetProperty("height", out var height)
                     || height.ValueKind != JsonValueKind.Number || !height.TryGetInt32(out var css)) return true;
@@ -269,7 +258,7 @@ internal sealed class TrayContext : ApplicationContext {
                 if (!IsOriginalService()) { e.Cancel = true; return; }
                 if (!IsViewUrl(e.Uri)) { e.Cancel = true; OpenExternalUrl(e.Uri, e.IsUserInitiated); }
                 else if (ShouldRelayNavigation(_rendererReady, e.Uri, _web.Source?.AbsoluteUri)) { e.Cancel = true; RelayNavigation(e.Uri); }
-                else { _rendererReady = false; _navigating = true; }
+                else { _rendererReady = false; _navigating = true; _inbox.PageGone(); }
             };
             core.NewWindowRequested += (_, e) => {
                 e.Handled = true;
@@ -589,6 +578,8 @@ internal sealed class TrayWindow : Form {
     private bool _positioned;
     /** The panel's bounds while the window is lent to a notice card. */
     private Rectangle? _panelBounds;
+    /** Lent to the card: the page covers the whole window, caption buttons included. */
+    private bool _card;
     public event EventHandler? TaskbarRestarted;
     internal CaptionThemeResult? ChromeThemeResult { get; private set; }
     private WebView2? _frameView;
@@ -601,6 +592,8 @@ internal sealed class TrayWindow : Form {
         _frameView = view; _customFrame = true; BackColor = Color.Black;
         var policy = 2;
         DwmSetWindowAttribute(Handle, 2, ref policy, sizeof(int));
+        var round = 2; // DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND, panel and card alike
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000)) DwmSetWindowAttribute(Handle, 33, ref round, sizeof(int));
         SetWindowPos(Handle, IntPtr.Zero, 0, 0, 0, 0, 0x37); // NOMOVE|NOSIZE|NOZORDER|NOACTIVATE|FRAMECHANGED
         var margins = new NativeMargins { Top = (int)Math.Round(40 * DeviceDpi / 96d) };
         DwmExtendFrameIntoClientArea(Handle, ref margins);
@@ -640,7 +633,7 @@ internal sealed class TrayWindow : Form {
         try {
             var geometry = ReadTitlebarGeometry();
             Region? next = null;
-            if (geometry.visible) {
+            if (geometry.visible && !_card) {
                 next = new Region(ContentClipBounds(ClientSize, VisibleFrameBorder));
                 var scale = DeviceDpi / 96d;
                 next.Exclude(new Rectangle((int)Math.Round(geometry.rect.width * scale), 0,
@@ -668,16 +661,23 @@ internal sealed class TrayWindow : Form {
     /** Card-wide and as tall as the card says, in CSS pixels, at the taskbar's corner. */
     public void PositionCard(int cssHeight) {
         if (_panelBounds is null && _positioned) _panelBounds = Bounds;
-        var work = (Screen.PrimaryScreen ?? Screen.FromPoint(Cursor.Position)).WorkingArea;
-        var width = Math.Min((int)Math.Round(380 * DeviceDpi / 96f), work.Width);
-        var height = Math.Min((int)Math.Ceiling(cssHeight * DeviceDpi / 96f), work.Height);
-        Bounds = new Rectangle(work.Right - width, work.Bottom - height, width, height);
+        Bounds = CardBoundsFor((Screen.PrimaryScreen ?? Screen.FromPoint(Cursor.Position)).WorkingArea, DeviceDpi, cssHeight);
+        if (!_card) { _card = true; RefreshTitlebar(); }
+    }
+
+    /** The card's 420 CSS px, padded from the screen edge by the panel's own gutter. */
+    internal static Rectangle CardBoundsFor(Rectangle work, int dpi, int cssHeight) {
+        var gutter = Math.Max(0, (int)Math.Round(12 * dpi / 96d));
+        var width = Math.Min((int)Math.Round(420 * dpi / 96d), Math.Max(0, work.Width - 2 * gutter));
+        var height = Math.Min((int)Math.Ceiling(cssHeight * dpi / 96d), Math.Max(0, work.Height - 2 * gutter));
+        return new Rectangle(work.Right - gutter - width, work.Bottom - gutter - height, width, height);
     }
 
     /** The panel returns to the bounds it had before the card borrowed the window. */
     public void LeaveCard() {
         if (_panelBounds is { } panel) Bounds = panel;
         _panelBounds = null;
+        if (_card) { _card = false; RefreshTitlebar(); }
     }
 
     public void PositionAboveTaskbar() {

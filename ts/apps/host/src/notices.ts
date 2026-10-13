@@ -9,7 +9,7 @@ import type { MachineNotice, Receipt, ReceiptReader } from "@pe/agent-contracts"
  * nothing, and a card that never shows leaves every action exactly as the receipt says.
  */
 
-type PermissionAct = Extract<NonNullable<MachineNotice["act"]>, { kind: "permission" }>;
+type Act = NonNullable<MachineNotice["act"]>;
 
 /**
  * What a card names that a receipt keeps local. Receipts carry opaque joins; the thread owner maps
@@ -17,18 +17,16 @@ type PermissionAct = Extract<NonNullable<MachineNotice["act"]>, { kind: "permiss
  */
 export interface NoticeContext {
   thread(opaqueThreadId: string): { readonly id: string; readonly title: string } | undefined;
-  permission(receipt: Receipt):
-    | {
-        readonly threadId: string;
-        readonly requestId: string;
-        readonly body: string;
-        readonly options: PermissionAct["options"];
-      }
-    | undefined;
+  /** An open permission or question: its words and the door that answers it. */
+  asked(
+    receipt: Receipt,
+  ): { readonly threadId: string; readonly body: string; readonly act: Act } | undefined;
+  /** Pea's final response for a turn receipt, in Markdown. */
+  said(receipt: Receipt): string | undefined;
 }
 
 /** The receipts a card can come from: nothing else is read. */
-const KINDS = ["action", "turn", "permission", "usage"] as const;
+const KINDS = ["action", "turn", "permission", "question", "usage"] as const;
 
 const chatHref = (threadId: string | undefined) =>
   threadId ? `/pea?thread=${encodeURIComponent(threadId)}` : undefined;
@@ -52,32 +50,30 @@ export function noticeOf(r: Receipt, context: NoticeContext): MachineNotice | nu
       if (body.phase === "started") return null;
       const thread = r.join.threadId ? context.thread(r.join.threadId) : undefined;
       const title = thread?.title ?? "a thread";
+      const finished = body.phase === "finished";
       return {
         ...base,
-        title: body.phase === "finished" ? `Pea finished · ${title}` : `Pea stopped · ${title}`,
-        body: body.phase === "finished" ? "The turn ended." : "The turn ended with an error.",
+        title: finished ? `Pea finished · ${title}` : `Pea stopped · ${title}`,
+        body: context.said(r) || (finished ? "The turn ended." : "The turn ended with an error."),
         href: chatHref(thread?.id),
+        ...(thread ? { act: { kind: "reply" as const, threadId: thread.id } } : {}),
       };
     }
-    case "permission": {
+    case "permission":
+    case "question": {
       if (body.phase !== "asked") return null;
-      const asked = context.permission(r);
+      const asked = context.asked(r);
       const title = (r.join.threadId && context.thread(r.join.threadId)?.title) || "a thread";
       return {
         ...base,
-        title: `Pea wants approval · ${title}`,
-        body: asked?.body ?? "A tool call is waiting.",
+        title: `${body.kind === "permission" ? "Pea wants approval" : "Pea is asking"} · ${title}`,
+        body:
+          asked?.body ??
+          (body.kind === "permission"
+            ? "A tool call is waiting."
+            : "Pea is waiting for an answer."),
         href: chatHref(asked?.threadId),
-        ...(asked
-          ? {
-              act: {
-                kind: "permission" as const,
-                threadId: asked.threadId,
-                requestId: asked.requestId,
-                options: asked.options,
-              },
-            }
-          : {}),
+        ...(asked ? { act: asked.act } : {}),
       };
     }
     case "usage": {
@@ -111,52 +107,75 @@ export function noticeOf(r: Receipt, context: NoticeContext): MachineNotice | nu
 }
 
 const REPLAY_MS = 60_000;
+/** Cards wait this long after the first of a burst, so a burst arrives as one paged card. */
+const BUFFER_MS = 30_000;
 const RING = 16;
 const SEEN = 256;
+
+type Entry = { notice: MachineNotice; atMs: number; request: string };
+const asks = (r: Receipt) => r.body.kind === "permission" || r.body.kind === "question";
 
 export function createNotices(deps: {
   readonly source: ReceiptReader;
   readonly context: NoticeContext;
   readonly replayMs?: number;
+  readonly bufferMs?: number;
   readonly now?: () => number;
   readonly onFault?: (error: unknown) => void;
 }) {
   const now = deps.now ?? Date.now;
   const replayMs = deps.replayMs ?? REPLAY_MS;
+  const bufferMs = deps.bufferMs ?? BUFFER_MS;
   const hub = Effect.runSync(PubSub.unbounded<MachineNotice>());
   /** Highest revision accepted per receipt id: a duplicate or stale delivery is not a card. */
   const seen = new Map<string, number>();
   /** Answered requests, so a late delivery of the question cannot resurrect its card. */
   const answered = new Set<string>();
-  const ring: { notice: MachineNotice; atMs: number; request: string }[] = [];
+  const ring: Entry[] = [];
+  /** Accepted, not yet published: the open buffer window. */
+  let pending: Entry[] = [];
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  function flush() {
+    timer = undefined;
+    const burst = pending;
+    pending = [];
+    for (const entry of burst) {
+      const same = ring.findIndex((e) => e.notice.id === entry.notice.id);
+      if (same >= 0) ring.splice(same, 1);
+      ring.push(entry);
+      if (ring.length > RING) ring.shift();
+      Effect.runSync(PubSub.publish(hub, entry.notice));
+    }
+  }
 
   function ingest(r: Receipt) {
-    if (r.body.kind === "permission" && r.body.phase === "resolved") {
-      // The question was answered elsewhere: it must not replay as a live request.
-      answered.add(r.join.requestId);
+    const body = r.body;
+    if ((body.kind === "permission" || body.kind === "question") && body.phase === "resolved") {
+      // The question was answered elsewhere: it must not show, nor replay as a live request.
+      const request = r.join.requestId;
+      answered.add(request);
       if (answered.size > SEEN) answered.delete(answered.values().next().value!);
-      for (let i = ring.length - 1; i >= 0; i--) {
-        if (ring[i]!.request === r.join.requestId) ring.splice(i, 1);
-      }
+      pending = pending.filter((e) => e.request !== request);
+      for (let i = ring.length - 1; i >= 0; i--)
+        if (ring[i]!.request === request) ring.splice(i, 1);
       return;
     }
-    if (r.body.kind === "permission" && answered.has(r.join.requestId)) return;
+    if (asks(r) && answered.has(r.join.requestId)) return;
     const notice = noticeOf(r, deps.context);
     if (!notice || (seen.get(r.id) ?? -1) >= r.revision) return;
     seen.delete(r.id);
     seen.set(r.id, r.revision);
     if (seen.size > SEEN) seen.delete(seen.keys().next().value!);
     const at = Date.parse(r.at);
-    const entry = {
+    pending = pending.filter((e) => e.notice.id !== notice.id);
+    pending.push({
       notice,
       atMs: Number.isFinite(at) ? at : now(),
-      request: r.body.kind === "permission" ? r.join.requestId : "",
-    };
-    const same = ring.findIndex((e) => e.notice.id === notice.id);
-    if (same >= 0) ring.splice(same, 1);
-    ring.push(entry);
-    if (ring.length > RING) ring.shift();
-    Effect.runSync(PubSub.publish(hub, notice));
+      request: asks(r) ? r.join.requestId : "",
+    });
+    if (bufferMs <= 0) flush();
+    else timer ??= setTimeout(flush, bufferMs);
   }
 
   const unsubscribe = deps.source.subscribe({ kinds: [...KINDS] }, ingest);
@@ -172,7 +191,7 @@ export function createNotices(deps: {
   const encoder = new TextEncoder();
   const frame = (n: MachineNotice) => encoder.encode(`data: ${JSON.stringify(n)}\n\n`);
 
-  /** The tray's toast feed: SSE, one `data:` line per card; replay is the bounded last minute. */
+  /** The tray's card feed: SSE, one `data:` line per item; replay is the bounded last minute. */
   const route = HttpRouter.add("GET", "/host/notices", () =>
     Effect.succeed(
       Response.stream(
@@ -201,6 +220,12 @@ export function createNotices(deps: {
     ),
   );
 
-  return { route, close: unsubscribe };
+  return {
+    route,
+    close: () => {
+      unsubscribe();
+      clearTimeout(timer);
+    },
+  };
 }
 export type Notices = ReturnType<typeof createNotices>;

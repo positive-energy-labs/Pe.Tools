@@ -707,6 +707,7 @@ export function createThreadReceiptAdapter(
   snapshot: () => readonly ThreadSnapshot[],
 ) {
   const localIds = new Map<string, string>();
+  const localTurns = new Map<string, { threadId: string; turnId: string }>();
   let tail = Promise.resolve();
   const peaStamp = exporter.stamps.host
     ? receiptStampSchema.parse({ ...exporter.stamps.host, component: "pea" })
@@ -716,32 +717,73 @@ export function createThreadReceiptAdapter(
     localIds.set(opaque, id);
     return opaque;
   };
+  const eventOf = (ref: { threadId: string; eventId: string }) =>
+    snapshot()
+      .find((t) => t.id === ref.threadId)
+      ?.events.find((e) => String(e.seq) === ref.eventId);
   const context: NoticeContext = {
     thread(opaque) {
       const thread = snapshot().find((t) => t.id === localIds.get(opaque));
       return thread ? { id: thread.id, title: thread.title } : undefined;
     },
-    permission(r) {
-      if (r.body.kind !== "permission") return undefined;
-      const ref = r.body.localRef;
-      const e = snapshot()
-        .find((t) => t.id === ref.threadId)
-        ?.events.find((e) => String(e.seq) === ref.eventId);
-      return e?.kind === "permission_request"
-        ? {
-            threadId: ref.threadId,
+    asked(r) {
+      if (r.body.kind !== "permission" && r.body.kind !== "question") return undefined;
+      const threadId = r.body.localRef.threadId;
+      const e = eventOf(r.body.localRef);
+      if (e?.kind === "permission_request")
+        return {
+          threadId,
+          body: e.toolCall.title ?? "A tool call is waiting.",
+          act: { kind: "permission", threadId, requestId: e.requestId, options: e.options },
+        };
+      if (e?.kind === "question_request")
+        return {
+          threadId,
+          body: e.message,
+          act: {
+            kind: "question",
+            threadId,
             requestId: e.requestId,
-            body: e.toolCall.title ?? "A tool call is waiting.",
-            options: e.options,
-          }
-        : undefined;
+            message: e.message,
+            requestedSchema: e.requestedSchema,
+          },
+        };
+      return undefined;
+    },
+    said(r) {
+      const turn = r.join.turnId ? localTurns.get(r.join.turnId) : undefined;
+      const text = snapshot()
+        .find((t) => t.id === turn?.threadId)
+        ?.events.flatMap((e) =>
+          e.kind === "update" &&
+          e.turnId === turn?.turnId &&
+          e.update.sessionUpdate === "agent_message_chunk"
+            ? [(e.update as { content?: { type?: string; text?: string } }).content]
+            : [],
+        )
+        .map((content) => (content?.type === "text" ? (content.text ?? "") : ""))
+        .join("")
+        .trim();
+      return text || undefined;
     },
   };
+  const ASKS = {
+    permission_request: ["permission", "asked"],
+    permission_resolved: ["permission", "resolved"],
+    question_request: ["question", "asked"],
+    question_resolved: ["question", "resolved"],
+  } as const;
   const accept = (id: string, _title: string, event: HarnessEvent) => {
     if (
-      !["prompt", "turn_end", "error", "permission_request", "permission_resolved"].includes(
-        event.kind,
-      )
+      ![
+        "prompt",
+        "turn_end",
+        "error",
+        "permission_request",
+        "permission_resolved",
+        "question_request",
+        "question_resolved",
+      ].includes(event.kind)
     )
       return;
     tail = tail
@@ -751,20 +793,17 @@ export function createThreadReceiptAdapter(
           "turnId" in event && event.turnId
             ? await exporter.journal.opaqueId("turn", `${id}:${event.turnId}`)
             : undefined;
-        const permission =
-          event.kind === "permission_request" || event.kind === "permission_resolved";
+        if (turnId && "turnId" in event && event.turnId)
+          localTurns.set(turnId, { threadId: id, turnId: event.turnId });
+        const ask = event.kind in ASKS ? ASKS[event.kind as keyof typeof ASKS] : undefined;
         const requestId = await exporter.journal.opaqueId(
           "request",
-          permission
-            ? `${id}:permission:${event.requestId}`
+          ask && "requestId" in event
+            ? `${id}:${ask[0]}:${event.requestId}`
             : `${id}:turn:${"turnId" in event ? event.turnId : event.seq}`,
         );
-        const body: ReceiptFact = permission
-          ? {
-              kind: "permission",
-              phase: event.kind === "permission_request" ? "asked" : "resolved",
-              localRef: { threadId: id, eventId: String(event.seq) },
-            }
+        const body: ReceiptFact = ask
+          ? { kind: ask[0], phase: ask[1], localRef: { threadId: id, eventId: String(event.seq) } }
           : {
               kind: "turn",
               phase:

@@ -297,11 +297,12 @@ test("real HTTP prompt and permission produce joined receipts; remote automatic-
     expect(prompt.status, await prompt.clone().text()).toBe(200);
     await expect.poll(async () => (await journal.read({ kinds: ["permission"] })).length).toBe(1);
     const asked = (await journal.read({ kinds: ["permission"] }))[0]!;
-    const context = adapter.context.permission(asked)!;
+    const act = adapter.context.asked(asked)?.act;
+    if (act?.kind !== "permission") throw Error("the asked receipt names no permission door");
     expect(
       (
         await post(`/pe/threads/${id}/permission`, {
-          requestId: context.requestId,
+          requestId: act.requestId,
           optionId: "yes",
         })
       ).status,

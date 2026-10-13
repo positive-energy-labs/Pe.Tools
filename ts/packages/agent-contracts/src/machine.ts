@@ -125,17 +125,18 @@ export interface MachineUpdate {
 }
 
 /**
- * One tray card: a projection of one receipt revision on `/host/notices`, never a source of truth.
- * `id` + `revision` are the receipt's own, so a replay, a reconnect or a successor host's re-read
- * of the same revision is one card. `href` opens in the app window; absent opens the panel.
+ * One tray card item: a projection of one receipt revision on `/host/notices`, never a source of
+ * truth. `id` + `revision` are the receipt's own, so a replay, a reconnect or a successor host's
+ * re-read of the same revision is one item. `href` opens in the app window; absent opens the panel.
  */
 export interface MachineNotice {
   readonly id: string;
   readonly revision: number;
   readonly title: string;
+  /** Plain text, except under a `reply` act, where it is Pea's final response in Markdown. */
   readonly body: string;
   readonly href?: string;
-  /** What the card can do in place, beside opening. */
+  /** What the card can do in place, beside opening; each act is the thread's own door. */
   readonly act?:
     | {
         readonly kind: "permission";
@@ -143,6 +144,14 @@ export interface MachineNotice {
         readonly requestId: string;
         readonly options: readonly { optionId: string; name: string; kind: string }[];
       }
+    | {
+        readonly kind: "question";
+        readonly threadId: string;
+        readonly requestId: string;
+        readonly message: string;
+        readonly requestedSchema: Readonly<Record<string, unknown>>;
+      }
+    | { readonly kind: "reply"; readonly threadId: string }
     | { readonly kind: "automatic-updates" };
 }
 
