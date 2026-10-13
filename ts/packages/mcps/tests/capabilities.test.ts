@@ -808,32 +808,6 @@ test("F-B-2: a Families route read carries its proposed scope types", async () =
     const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
     calls.push({ url, body });
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
-    if (url.pathname === "/pe/contributions") {
-      const skill = admittedSkills.find((s) => s.key === url.searchParams.get("key"));
-      return Response.json(
-        skill
-          ? {
-              content: skill.content,
-              bytesBase64: Buffer.from(skill.content).toString("base64"),
-              sha256: skill.package.sha256,
-            }
-          : {
-              content: "script",
-              bytesBase64: "c2NyaXB0",
-              sha256: fixtureHash,
-              folder: "sheets",
-              sourceBundle: {
-                files: [
-                  {
-                    path: "pod.json",
-                    bytesBase64: Buffer.from(JSON.stringify({ id: "sheets" })).toString("base64"),
-                  },
-                  { path: "src/Rename.cs", bytesBase64: "c2NyaXB0" },
-                ],
-              },
-            },
-      );
-    }
     if (url.pathname === "/pe/route-state/families")
       return Response.json({
         revision: 1,
@@ -896,32 +870,6 @@ test("F-B-2: a Families route read names a missing scope and preserves a catalog
       const url = new URL(input instanceof Request ? input.url : String(input));
       const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
       if (url.pathname === "/pe/capabilities") return Response.json(catalog());
-      if (url.pathname === "/pe/contributions") {
-        const skill = admittedSkills.find((s) => s.key === url.searchParams.get("key"));
-        return Response.json(
-          skill
-            ? {
-                content: skill.content,
-                bytesBase64: Buffer.from(skill.content).toString("base64"),
-                sha256: skill.package.sha256,
-              }
-            : {
-                content: "script",
-                bytesBase64: "c2NyaXB0",
-                sha256: fixtureHash,
-                folder: "sheets",
-                sourceBundle: {
-                  files: [
-                    {
-                      path: "pod.json",
-                      bytesBase64: Buffer.from(JSON.stringify({ id: "sheets" })).toString("base64"),
-                    },
-                    { path: "src/Rename.cs", bytesBase64: "c2NyaXB0" },
-                  ],
-                },
-              },
-        );
-      }
       if (url.pathname === "/pe/route-state/families")
         return Response.json({ revision: 1, doc: document });
       if (url.pathname === "/ops") return Response.json({ operations: ops });
@@ -994,32 +942,6 @@ test("Families view Pea doors require a mounted pane and return an exact retaine
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
-    if (url.pathname === "/pe/contributions") {
-      const skill = admittedSkills.find((s) => s.key === url.searchParams.get("key"));
-      return Response.json(
-        skill
-          ? {
-              content: skill.content,
-              bytesBase64: Buffer.from(skill.content).toString("base64"),
-              sha256: skill.package.sha256,
-            }
-          : {
-              content: "script",
-              bytesBase64: "c2NyaXB0",
-              sha256: fixtureHash,
-              folder: "sheets",
-              sourceBundle: {
-                files: [
-                  {
-                    path: "pod.json",
-                    bytesBase64: Buffer.from(JSON.stringify({ id: "sheets" })).toString("base64"),
-                  },
-                  { path: "src/Rename.cs", bytesBase64: "c2NyaXB0" },
-                ],
-              },
-            },
-      );
-    }
     if (url.pathname === "/pe/route-view/families" && !mounted)
       return Response.json({ ok: false, error: "no mounted Families view" }, { status: 409 });
     if (url.pathname === "/pe/route-view/families") {
@@ -1318,32 +1240,6 @@ test("an exact-open turn Target reads and writes route Work under its document's
         ],
       });
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
-    if (url.pathname === "/pe/contributions") {
-      const skill = admittedSkills.find((s) => s.key === url.searchParams.get("key"));
-      return Response.json(
-        skill
-          ? {
-              content: skill.content,
-              bytesBase64: Buffer.from(skill.content).toString("base64"),
-              sha256: skill.package.sha256,
-            }
-          : {
-              content: "script",
-              bytesBase64: "c2NyaXB0",
-              sha256: fixtureHash,
-              folder: "sheets",
-              sourceBundle: {
-                files: [
-                  {
-                    path: "pod.json",
-                    bytesBase64: Buffer.from(JSON.stringify({ id: "sheets" })).toString("base64"),
-                  },
-                  { path: "src/Rename.cs", bytesBase64: "c2NyaXB0" },
-                ],
-              },
-            },
-      );
-    }
     if (!url.pathname.includes("/route-state/")) throw Error(`unexpected ${url.pathname}`);
     routeCalls.push(url);
     return url.searchParams.get("target") === projectA
@@ -1399,32 +1295,6 @@ test("an explicit document detour leaves the next call on the thread head defaul
   vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
     const url = new URL(input);
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
-    if (url.pathname === "/pe/contributions") {
-      const skill = admittedSkills.find((s) => s.key === url.searchParams.get("key"));
-      return Response.json(
-        skill
-          ? {
-              content: skill.content,
-              bytesBase64: Buffer.from(skill.content).toString("base64"),
-              sha256: skill.package.sha256,
-            }
-          : {
-              content: "script",
-              bytesBase64: "c2NyaXB0",
-              sha256: fixtureHash,
-              folder: "sheets",
-              sourceBundle: {
-                files: [
-                  {
-                    path: "pod.json",
-                    bytesBase64: Buffer.from(JSON.stringify({ id: "sheets" })).toString("base64"),
-                  },
-                  { path: "src/Rename.cs", bytesBase64: "c2NyaXB0" },
-                ],
-              },
-            },
-      );
-    }
     if (url.pathname === "/ops") return Response.json({ operations: ops });
     const headers = new Headers(init?.headers);
     const body = JSON.parse(typeof init?.body === "string" ? init.body : "{}");
@@ -1761,32 +1631,6 @@ test("Pea doors author native JSON and plan both family routes under the turn Ta
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
-    if (url.pathname === "/pe/contributions") {
-      const skill = admittedSkills.find((s) => s.key === url.searchParams.get("key"));
-      return Response.json(
-        skill
-          ? {
-              content: skill.content,
-              bytesBase64: Buffer.from(skill.content).toString("base64"),
-              sha256: skill.package.sha256,
-            }
-          : {
-              content: "script",
-              bytesBase64: "c2NyaXB0",
-              sha256: fixtureHash,
-              folder: "sheets",
-              sourceBundle: {
-                files: [
-                  {
-                    path: "pod.json",
-                    bytesBase64: Buffer.from(JSON.stringify({ id: "sheets" })).toString("base64"),
-                  },
-                  { path: "src/Rename.cs", bytesBase64: "c2NyaXB0" },
-                ],
-              },
-            },
-      );
-    }
     if (typeof init?.body === "string") {
       writes.push({ url, body: JSON.parse(init.body) });
       return Response.json({ ok: true, revision: 13 });
