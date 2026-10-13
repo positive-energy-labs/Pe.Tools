@@ -4,6 +4,9 @@ import { productPathNames } from "@pe/host-contracts/contracts";
 import { scriptPodSourceBounds, type ScriptingExecute } from "@pe/host-contracts/generated";
 import { productUserContentRootPath } from "./product-paths.ts";
 
+// Authority: dotnet/Pe.Revit.Scripting/Pods/ScriptPodPreparationService.cs MemberDirectories.
+const memberDirectories = ["src", "settings", "assets", "pages"];
+
 type FrozenScript = { sourceBundle: ScriptingExecute.Req.ScriptPodSourceBundle };
 
 // Capture is the only mutable-filesystem read for one admitted execution. Native preparation owns
@@ -49,13 +52,13 @@ async function capturePod(
       if (path.length > 1024) throw Error("Pod path exceeds 1024 characters");
       const root = path.split("/")[0]!;
       if (entry.isDirectory()) {
-        if (["src", "settings", "assets"].includes(root)) await walk(path);
+        if (memberDirectories.includes(root)) await walk(path);
         continue;
       }
       if (
         path !== "pod.json" &&
         path !== "PeScripts.csproj" &&
-        !["src", "settings", "assets"].includes(root)
+        !memberDirectories.includes(root)
       )
         continue;
       const info = await lstat(join(directory, path));
