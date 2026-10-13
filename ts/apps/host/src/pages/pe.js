@@ -124,7 +124,12 @@
    * `PeTargetRefusal` with the resolver's word as `code` (`ambiguous`, `document-closed`, `session-gone`, `missing`)
    * and shown on the page; nothing is ever picked for it. Bind the page from the chip.
    */
-  pe.target = async () => {
+  pe.target = async (...selector) => {
+    // A page no longer names its target; a selector here would be silently ignored, so it is refused.
+    if (selector.length)
+      throw new Error(
+        "pe.target takes no selector: the page's binding names its document (Bind… on the chip)",
+      );
     const reading = await readTarget();
     if (reading.resolution.kind === "resolved") return pe.doc;
     const code = reading.resolution.reason || reading.resolution.kind;

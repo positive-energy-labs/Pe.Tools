@@ -11,11 +11,7 @@ import {
   type PageTargetReading,
   type ThreadHead,
 } from "@pe/agent-contracts";
-import {
-  createPagesHandler,
-  type LiveSession,
-  type PageLive,
-} from "../src/pages-route.ts";
+import { createPagesHandler, type LiveSession, type PageLive } from "../src/pages-route.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
 import { admitCrossing, bindControl, callerOf, grantExpiry, Refused } from "../src/control.ts";
@@ -148,7 +144,7 @@ describe("pages", () => {
     expect(css).toContain("button:hover");
     // The bind chip lives in pe.js's shadow root: the tokens reach it on :host, its look is here.
     expect(css).toContain(":root, :host {");
-    expect(css).toContain(".pe-bind[data-write=\"rw\"]");
+    expect(css).toContain('.pe-bind[data-write="rw"]');
     expect(text).toContain('attachShadow({ mode: "open" })');
   });
 
@@ -775,6 +771,10 @@ ${source}`),
         openId: "d1",
         title: "Chadds MEP",
       });
+      // The old selector form names nothing now, so it refuses instead of being ignored.
+      await expect((await page()).pe.target!({ session: "s1", doc: "d2" })).rejects.toThrow(
+        "pe.target takes no selector",
+      );
       for (const reason of ["ambiguous", "document-closed", "session-gone", "missing"]) {
         const { pe, body } = await page((url) =>
           url.pathname === "/pages/todo/target"
