@@ -109,6 +109,8 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 
 ## Owed
 
+- 2026-10-12, repo skill hygiene owes the three pre-existing `python .agents/skills/check.py` failures: `show-me` directory name is not `<kind>.<name>`; `lens.house` retains `## Parlance`; user-global `C:/Users/kaitp/.claude/skills/synced` violates the single skills home. The worktree junction restores `.claude/skills` to `.agents/skills`; this cut changes no skill or user-global content.
+
 - Delete the `CLAUDE.md` bridge when Claude Code's native `AGENTS.md` support is switched on, or the file loads twice.
 - `AGENTS.md` is 2,975 words always-on, about double the 1,500 target. Candidates: Proof Lanes and Executing code duplicate `execute`; Shared Language and Living Memory are package glossary and C# style; Critical Entry Points is a map.
 - Descriptions: one sentence of situation, three to five verbatim phrases marked as examples, and the not-for line; routing weight moves to the failure table.
