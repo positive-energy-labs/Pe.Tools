@@ -6,6 +6,35 @@ Keep detailed workflow behavior in the owning package docs, repo skills, or the 
 
 ## Core decision
 
+Desktop window launches share the native [PwaLauncher](../dotnet/Pe.Host.Tray/PwaLauncher.cs):
+`Pe.Host.Tray.exe --launch-window <local frontend URL>` resolves an actual Edge app registration
+or opens its install surface. The source host waits for its own Vite redirect before passing the
+URL; the installed host uses its packaged `tray/Pe.Host.Tray.exe`. Missing/unavailable launchers
+refuse rather than silently creating an uninstalled `--app` window. Build-time app identity and
+real OS registration are separate evidence; an app-ID hash alone never proves installation.
+
+The development tray is a checkout-owned native shell over the Vite frontend and source host,
+not an installed runtime. [tools/dev-tray.ps1](../tools/dev-tray.ps1) creates or attaches the pair;
+`-CreateShortcut` installs a distinct Pe.Tools Dev Tray Start shortcut. Repeated launch reveals the
+same checkout window. `-Stop` and `-Restart` retire only the identity-verified native child and
+its tray supervisor, preserving an already-running host/frontend. The supervisor keeps the
+frontend origin and backend service receipt separate and revalidates both incarnations.
+Build and native launch evidence do not prove backend restart recovery or installed behavior.
+
+PWA identity belongs to the lane, not the process or checkout. Installed uses
+`http://127.0.0.1:5180` with manifest `id: /`; Dev uses `http://127.0.0.1:5175` with
+`id: /?dev=e342bc78d3d4`, preserving the existing Dev installation. Vite refuses an occupied
+5175 rather than creating another app origin. The backend can still use its SDK-owned dynamic port.
+
+The full PWA entries are **Pe.Tools** and **Pe.Tools Dev**. Their separate compact launchers are
+**Pe.Tools Tray** and **Pe.Tools Dev Tray**. The next MSI authors `Pe.Tools Tray` with
+`Pe.Host.exe --show-tray`; it starts the claim-owned tray or forwards to its existing owner.
+Native forwarding appends `--show [--route <canonical path>]` to verified parent/service arguments
+or `--dev --supervisor-file <absolute path>`. Tray menu, startup and forwarding use one show path.
+`tools/dev-tray.ps1` shows the Dev tray; `-Window` bootstraps the dev host and opens its PWA.
+The Edge-authored PWA Start entry itself depends on the background host; it cannot bootstrap a
+stopped host. Edge MSIX and registry-style PWA registrations are both read without changing them.
+
 A terminal build, a packaged artifact, a running Revit session, and an installed product are different authorities. Do not let one claim stand in for another.
 
 The practical rule is:

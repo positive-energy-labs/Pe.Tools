@@ -8,7 +8,7 @@ import type { UpdateBlocker, UpdatePlan, UpdateRevit } from "@pe/host-contracts/
 
 import { phaseOf, unsavedOf } from "./session";
 
-export type GroupKey = "revit" | "update" | "share" | "pea";
+export type GroupKey = "revit" | "update" | "share" | "pea" | "host";
 
 export const machineOf = (reading: Reading<Machine>): Machine | null =>
   reading.state === "ready"

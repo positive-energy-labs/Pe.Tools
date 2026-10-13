@@ -1,21 +1,9 @@
-/**
- * THE MACHINE BODY — one renderer, two shells (host ledger 2026-10-09 rulings 2 and 4): the web
- * drawer behind the version chip, and the tray window (`/machine?shell=tray`). A status line says
- * what waits on the person, then four groups (Revit, Update, Share, Pea), each header carrying its
- * critical state, one open at a time, Update opening by itself while a plan waits or a receipt
- * runs. The host footer closes it. Everything drawn is the host's one `Machine` reading.
- */
-import { useEffect, useState } from "react";
-import type { Machine, Reading } from "@pe/agent-contracts";
-
+/** One canonical Machine route renderer on web, PWA, and tray. */
+import { useState } from "react";
+import type { AppSurface, Machine, Reading } from "@pe/agent-contracts";
 import { Accordion } from "#/components/lang/accordion";
-import { Button } from "#/components/lang/button";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { PidChip } from "#/components/lang/process";
 import { useDiagnostics, type DiagnosticsState } from "#/host/diagnostics";
-import { hostAdmin } from "#/host/machine";
-import { PatchBay, useBayReadings } from "#/open/bay";
-
 import {
   attention,
   autoOpen,
@@ -26,41 +14,14 @@ import {
   revitState,
   shareState,
   updateState,
-  uptimeWords,
   type GroupKey,
 } from "./model";
+import { RevitGroup } from "./revit";
+import { HostGroup } from "./host";
 import { PeaGroup } from "./pea";
 import { ShareGroup } from "./share";
 import { UpdateGroup } from "./update";
 import { SEED_REFUSAL } from "./use-machine";
-
-export type Shell = "drawer" | "tray";
-
-type InstallPrompt = Event & { prompt: () => Promise<void> };
-
-/** The Revit group: the patch bay, lanes stacked, over the same machine the route draws. */
-function RevitDesk({
-  machine,
-  fixture,
-  refusal,
-}: {
-  machine: Machine;
-  fixture: boolean;
-  refusal: string | null;
-}) {
-  const { rows, threads, loading } = useBayReadings(machine, fixture);
-  return (
-    <PatchBay
-      machine={machine}
-      loading={loading}
-      rows={rows}
-      threads={threads}
-      fixture={fixture}
-      layout="stack"
-      refusal={refusal}
-    />
-  );
-}
 
 /**
  * This window's caught faults and whether the host heard them. It reads the diagnostic owner,
@@ -95,133 +56,6 @@ function DiagnosticsLine({ state }: { state: DiagnosticsState }) {
   );
 }
 
-function HostFooter({
-  machine,
-  shell,
-  fixture,
-}: {
-  machine: Machine;
-  shell: Shell;
-  fixture: boolean;
-}) {
-  const host = machine.host;
-  const [said, setSaid] = useState<string | null>(null);
-  const [installPrompt, setInstallPrompt] = useState<InstallPrompt | null>(null);
-  useEffect(() => {
-    if (shell === "tray") return;
-    const onPrompt = (event: Event) => {
-      event.preventDefault();
-      setInstallPrompt(event as InstallPrompt);
-    };
-    const onInstalled = () => setInstallPrompt(null);
-    window.addEventListener("beforeinstallprompt", onPrompt);
-    window.addEventListener("appinstalled", onInstalled);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", onPrompt);
-      window.removeEventListener("appinstalled", onInstalled);
-    };
-  }, [shell]);
-  const run = (verb: "window" | "shutdown") =>
-    void hostAdmin(verb).then(setSaid, (caught: unknown) => setSaid(String(caught)));
-  const trayOnly =
-    shell === "tray"
-      ? null
-      : "Only the tray holds the host's service token; use the Pe.Tools icon in the notification area.";
-  const refusal = fixture ? SEED_REFUSAL : trayOnly;
-  if (!host)
-    return (
-      <span data-tone="caution">
-        Host identity unread{machine.legs.host?.error ? `: ${machine.legs.host.error}` : "."}
-      </span>
-    );
-  return (
-    <div className="hairline-t flex flex-col gap-1 pt-1.5" aria-label="host">
-      {shell === "tray" ? (
-        <span className="flex min-w-0 items-center gap-1 whitespace-nowrap">
-          <span
-            className="min-w-0 flex-1 truncate"
-            title={`since ${host.startedBy ?? "unknown"} · up ${uptimeWords(host.uptimeSeconds)}`}
-          >
-            Pe.Tools {host.version} · {host.payload} · up {uptimeWords(host.uptimeSeconds)}
-          </span>
-          <span className="shrink-0 face-mono text-ink-2">
-            pid {host.process.pid} · :{host.port}
-          </span>
-        </span>
-      ) : (
-        <span className="flex flex-wrap items-center gap-2">
-          <span className="font-semibold">Pe.Tools</span>
-          <span className="face-mono">{host.version}</span>
-          <span className="face-mono text-ink-2">{host.payload}</span>
-          <span className="text-ink-2">
-            {host.startedBy ? `since ${host.startedBy} · ` : ""}up {uptimeWords(host.uptimeSeconds)}
-          </span>
-          <span className="ml-auto flex items-center gap-1">
-            <PidChip
-              pid={host.process.pid}
-              title={`host process, started ${host.process.processStartUtc}`}
-            />
-            <span
-              className="face-mono text-ink-2"
-              title="the pinned origin the window and the tailnet URL use"
-            >
-              :{host.port}
-            </span>
-          </span>
-        </span>
-      )}
-      <span className="flex flex-wrap items-center gap-1">
-        <span
-          className="text-ink-2"
-          title="the HKCU Run value; Windows Settings › Apps › Startup can also turn it off"
-        >
-          start at login:{" "}
-          {host.autostart === "disabled-in-windows"
-            ? "off in Windows"
-            : (host.autostart ?? "unknown")}
-        </span>
-        <span className="ml-auto flex gap-1">
-          <Button
-            label="open window"
-            kind="framed"
-            reason={refusal ?? "open this host in its Edge app window"}
-            refusal={refusal}
-            onClick={() => run("window")}
-          >
-            open window
-          </Button>
-          <Button
-            label="quit host"
-            kind="framed"
-            reason={
-              refusal ??
-              "stop this host; every Revit keeps running; the next login or the Pe.Tools icon starts it again"
-            }
-            refusal={refusal}
-            onClick={() => run("shutdown")}
-          >
-            quit host
-          </Button>
-        </span>
-      </span>
-      {shell === "drawer" && installPrompt && !matchMedia("(display-mode: standalone)").matches ? (
-        <Button
-          label="Install as app"
-          kind="framed"
-          reason="install Pe.Tools in this Edge profile"
-          onClick={() => {
-            void installPrompt.prompt().catch(() => {});
-            setInstallPrompt(null);
-          }}
-        >
-          Install as app
-        </Button>
-      ) : null}
-      {said ? <OutcomeLine kind="advisory" label={said} /> : null}
-    </div>
-  );
-}
-
 function Diagnostics() {
   return <DiagnosticsLine state={useDiagnostics()} />;
 }
@@ -231,12 +65,15 @@ export function MachineBody({
   fixture,
   shell,
   group,
+  session,
+  onGroup,
 }: {
   reading: Reading<Machine>;
   fixture: boolean;
-  shell: Shell;
-  /** A group a caller opened the body at (Pea, from a provider that needs a sign-in). */
+  shell: AppSurface;
   group?: GroupKey;
+  session?: string;
+  onGroup?: (group: GroupKey | undefined) => void;
 }) {
   const machine = machineOf(reading);
   const [picked, setPicked] = useState<GroupKey | null | undefined>(group);
@@ -251,34 +88,45 @@ export function MachineBody({
         <Diagnostics />
       </div>
     );
-  const gap = disconnected(reading);
-  const open = picked === undefined ? autoOpen(machine) : picked;
+  const gap = reading.state !== "ready";
+  const disconnectedHost = disconnected(reading);
+  const open = onGroup ? (group ?? null) : picked === undefined ? autoOpen(machine) : picked;
   const waits = attention(machine);
-  const refusal = fixture ? SEED_REFUSAL : gap ? "The host is not answering." : null;
-  const revit = revitState(machine);
-  const update = updateState(machine);
-  const share = shareState(machine);
-  const pea = peaState(machine);
+  const refusal = fixture
+    ? SEED_REFUSAL
+    : gap
+      ? "The machine reading is not current; wait for the host."
+      : null;
+  const revit = revitState(machine),
+    update = updateState(machine),
+    share = shareState(machine),
+    pea = peaState(machine);
   return (
-    <div className="flex min-w-0 flex-col gap-1.5" data-shell={shell} aria-label="this machine">
+    <div className="flex min-w-0 flex-col gap-2" data-shell={shell} aria-label="this machine">
       <p className="m-0" data-tone={gap || waits.length ? "caution" : undefined} role="status">
-        {gap
+        {disconnectedHost
           ? `The host stopped answering after ${hhmm(machine.observedAtUtc)}; this is its last reading.`
-          : waits.length
-            ? `${waits.join(". ")}.`
-            : "Nothing waits on you."}
+          : gap
+            ? "This machine reading is not current; repair actions wait for the host."
+            : waits.length
+              ? `${waits.join(". ")}.`
+              : "Nothing waits on you."}
       </p>
       <Accordion
         label="machine groups"
         open={open}
-        onOpen={(key) => setPicked(key as GroupKey | null)}
+        onOpen={(key) =>
+          onGroup
+            ? onGroup((key ?? undefined) as GroupKey | undefined)
+            : setPicked(key as GroupKey | null)
+        }
         groups={[
           {
             key: "revit",
             label: "Revit",
             state: revit.text,
             tone: revit.tone,
-            body: <RevitDesk machine={machine} fixture={fixture} refusal={refusal} />,
+            body: <RevitGroup machine={machine} refusal={refusal} session={session} />,
           },
           {
             key: "update",
@@ -292,18 +140,23 @@ export function MachineBody({
             label: "Share",
             state: share.text,
             tone: share.tone,
-            body: <ShareGroup machine={machine} fixture={fixture} stale={gap} />,
+            body: <ShareGroup machine={machine} />,
           },
           {
             key: "pea",
             label: "Pea",
             state: pea.text,
             tone: pea.tone,
-            body: <PeaGroup fixture={fixture} machine={machine} />,
+            body: <PeaGroup fixture={fixture} machine={machine} stale={gap} />,
+          },
+          {
+            key: "host",
+            label: "Host",
+            state: machine.host ? `${machine.host.version} · ${machine.host.payload}` : "unread",
+            body: <HostGroup machine={machine} surface={shell} fixture={fixture} stale={gap} />,
           },
         ]}
       />
-      <HostFooter machine={machine} shell={shell} fixture={fixture} />
       <Diagnostics />
     </div>
   );

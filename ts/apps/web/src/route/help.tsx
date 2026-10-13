@@ -14,7 +14,7 @@ import { Kbd } from "#/components/lang/kbd";
 import { Button } from "#/components/lang/button";
 import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { startFeedback } from "#/components/feedback-picker";
-import { MachineHelpTrigger } from "#/machine/drawer";
+import { MachineHelpTrigger } from "#/machine/navigation";
 import { readKeyMeta, useHotkeyRegistrations, type KeyMeta } from "./keys";
 
 interface Region {

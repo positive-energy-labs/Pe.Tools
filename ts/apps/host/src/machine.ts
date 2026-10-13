@@ -765,13 +765,13 @@ export function machineSources(
     attachments: () => bridgeAttachments(bridge),
     // Doctor can report unrelated wiring refusals while still identifying installed years.
     years: async () =>
-      (await sdk<DoctorResult>(doctorArgv({ timeoutSeconds: 20 }), [0, 3])).result.revitYears.map(
-        (year) => {
-          const number = Number(year);
-          if (!Number.isInteger(number)) throw Error(`Invalid SDK Revit year ${year}`);
-          return number;
-        },
-      ),
+      (
+        await sdk<DoctorResult>(doctorArgv({ timeoutSeconds: 20 }), [0, 1, 3])
+      ).result.revitYears.map((year) => {
+        const number = Number(year);
+        if (!Number.isInteger(number)) throw Error(`Invalid SDK Revit year ${year}`);
+        return number;
+      }),
     providers: () => providers.snapshot(),
     update,
     share,

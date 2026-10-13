@@ -496,6 +496,29 @@ test("peer census preserves dead service records and never exposes their tokens"
   }
 });
 
+test("installed years survive doctor check failures without inventing missing years", async () => {
+  const f = fixture();
+  const sources = machineSources(undefined, {} as Providers, f.sources.update);
+  const doctor = (result: unknown) =>
+    JSON.stringify({
+      result,
+      exitCode: 1,
+      diagnostics: [{ code: "doctor.check-failed", detail: "bootstrap version skew" }],
+    });
+  try {
+    sdkRun.mockResolvedValueOnce(doctor({ revitYears: ["2023", "2024", "2025", "2026"] }));
+    expect(await sources.years()).toEqual([2023, 2024, 2025, 2026]);
+    expect(sdkRun).toHaveBeenLastCalledWith(["doctor", "--timeout-seconds", "20", "--json"]);
+    sdkRun.mockResolvedValueOnce(doctor({ revitYears: ["unknown"] }));
+    await expect(sources.years()).rejects.toThrow("Invalid SDK Revit year");
+    sdkRun.mockResolvedValueOnce(doctor({}));
+    await expect(sources.years()).rejects.toThrow();
+  } finally {
+    sdkRun.mockReset();
+    f.machine.close();
+  }
+});
+
 test("SDK adapter uses the all-row census and pid document read, refusing a different incarnation", async () => {
   const f = fixture();
   const envelope = (result: unknown, resolved: unknown = null) =>

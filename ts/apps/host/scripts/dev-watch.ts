@@ -1,6 +1,12 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, readdirSync, statSync, watch } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
+import { createDevTraySupervisor } from "./dev-tray-supervisor.ts";
+
+const sourceRoot = checkoutRootFrom(import.meta.dirname);
+if (!sourceRoot) throw new Error("Dev watcher must start from a Pe.Tools checkout");
+const tray = await createDevTraySupervisor(sourceRoot, process.argv.includes("--show"));
 
 let child: ChildProcess | undefined;
 let restart = false;
@@ -97,5 +103,6 @@ try {
   disconnect();
   process.removeListener("SIGINT", interrupt);
   process.removeListener("SIGTERM", interrupt);
+  await tray?.stop();
 }
 if (retired) console.log("Dev session retired. Host, frontend, and watcher stopped.");

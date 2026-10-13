@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useCanGoBack, useRouter, useRouterState } from "@tanstack/react-router";
 import { ArrowLeft, ArrowRight, Search, MessageSquare } from "lucide-react";
 import { Button } from "#/components/lang/button";
 import { Input } from "#/components/lang/input";
-import { HotkeyCommand } from "#/components/lang/hotkey-command";
+import { HotkeyHint } from "#/components/lang/hotkey-command";
+import { useScopeKeys } from "#/route/keys";
 import { ChromeSettings } from "./chrome-settings";
 import { SituationDrawer } from "./situation-drawer";
 import { locationLabel, admittedDestination } from "./model";
@@ -12,18 +13,15 @@ import { GlobalSearch } from "./global-search";
 import { RouteControlsSlot } from "./route-controls";
 import { useRouteSlotPresence } from "./route-controls";
 import { RouteHelpButton } from "#/route/help";
+import { projectCaptionTheme, useSurfaceHost } from "./surface-host";
+import { startFeedback } from "#/components/feedback-picker";
 import "./app-bar.css";
 
-type WindowOverlay = {
-  visible: boolean;
-  getTitlebarAreaRect: () => DOMRect;
-  addEventListener: (event: "geometrychange", listener: () => void) => void;
-  removeEventListener: (event: "geometrychange", listener: () => void) => void;
-};
 type LaunchWindow = Window & {
   launchQueue?: { setConsumer: (consumer: (params: { targetURL?: string }) => void) => void };
 };
 export function AppBar() {
+  const host = useSurfaceHost();
   const router = useRouter();
   const location = useRouterState({ select: (state) => state.location });
   const canGoBack = useCanGoBack();
@@ -40,8 +38,6 @@ export function AppBar() {
   const { snapshot, refresh } = useNavigation();
   const go = useDestination();
   const bar = useRef<HTMLElement>(null);
-  const [overlay, setOverlay] = useState(false);
-  const [standalone, setStandalone] = useState(false);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [searchField, setSearchField] = useState<HTMLInputElement | null>(null);
@@ -55,25 +51,21 @@ export function AppBar() {
     setOpen(true);
     searchField?.focus();
   };
+  useScopeKeys([
+    {
+      hotkey: "Mod+Shift+K",
+      callback: showSearch,
+      label: "Find tools, Works and Pea threads",
+      options: { ignoreInputs: false },
+    },
+    {
+      hotkey: { key: ".", mod: true, shift: true },
+      callback: () => startFeedback(),
+      label: "Feedback",
+      options: { ignoreInputs: false },
+    },
+  ]);
   const hasRouteHelp = useRouteSlotPresence("controls");
-  useEffect(() => {
-    const media = matchMedia("(display-mode: standalone)");
-    const update = () => setStandalone(media.matches);
-    update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
-  useEffect(() => {
-    const controls = (navigator as Navigator & { windowControlsOverlay?: WindowOverlay })
-      .windowControlsOverlay;
-    if (!controls) return;
-    const update = () => {
-      setOverlay(controls.visible);
-    };
-    update();
-    controls.addEventListener("geometrychange", update);
-    return () => controls.removeEventListener("geometrychange", update);
-  }, []);
   useEffect(() => {
     const node = bar.current;
     if (!node) return;
@@ -92,6 +84,11 @@ export function AppBar() {
         document.head.append(meta);
       }
       meta.content = color;
+      projectCaptionTheme(
+        color,
+        getComputedStyle(node).color,
+        document.documentElement.classList.contains("dark"),
+      );
     };
     syncColor();
     const observer = new MutationObserver(syncColor);
@@ -135,7 +132,7 @@ export function AppBar() {
   });
   const label = locationLabel(location.pathname);
   useEffect(() => {
-    document.title = `Positive Energy / ${label}${currentWork ? ` / ${currentWork.label}` : ""}`;
+    document.title = `${import.meta.env.DEV ? "Pe.Tools Dev" : "Positive Energy"} / ${label}${currentWork ? ` / ${currentWork.label}` : ""}`;
   }, [label, currentWork?.label]);
   return (
     <>
@@ -145,10 +142,20 @@ export function AppBar() {
           aria-label="Global navigation"
           className="pe-appbar"
           data-surface="page"
-          data-overlay={overlay}
+          data-overlay={host.overlay}
+          data-shell={host.surface}
+          style={
+            host.titlebarArea
+              ? ({
+                  "--app-titlebar-x": `${host.titlebarArea.x}px`,
+                  "--app-titlebar-width": `${host.titlebarArea.width}px`,
+                  "--app-titlebar-height": `${host.titlebarArea.height}px`,
+                } as CSSProperties)
+              : undefined
+          }
         >
           <div className="pe-appbar-row">
-            {(standalone || overlay) && (
+            {host.history === "window" && (
               <>
                 <Button
                   label="Back"
@@ -171,22 +178,28 @@ export function AppBar() {
               </>
             )}
             <Button
-              label="Home / tool directory"
+              label={host.surface === "tray" ? "Home / open work" : "Home / tool directory"}
               icon={<img src="/favicon.ico" alt="" aria-hidden width={16} height={16} />}
-              onClick={() => navigateTo("/")}
+              onClick={() => navigateTo(host.homePath)}
             />
             <Button label="Open Pea" icon={MessageSquare} onClick={() => navigateTo("/pea")} />
-            <div className="pe-appbar-route-search">
+            <div
+              className="pe-appbar-route-search dl-control"
+              data-selected={open || undefined}
+              onClick={showSearch}
+            >
+              <Search aria-hidden className="pe-appbar-route-search-icon" />
               <Input
                 ref={setSearchField}
                 surface="embedded"
                 role="combobox"
                 aria-label="Choose product, Work or Pea thread"
                 aria-autocomplete="list"
+                aria-keyshortcuts="Control+Shift+K"
+                title="Search tools, Works and Pea threads · Ctrl+Shift+K"
                 aria-expanded={open}
                 placeholder={`${label}${currentWork ? ` / ${currentWork.label}` : ""}`}
                 value={open ? query : ""}
-                onClick={showSearch}
                 onKeyDown={(event) => {
                   if (!open && (event.key === "ArrowDown" || event.key === "Enter")) {
                     event.preventDefault();
@@ -198,21 +211,17 @@ export function AppBar() {
                   setOpen(true);
                 }}
               />
-              <Search aria-hidden />
+              <span className="pe-appbar-search-hint" aria-hidden>
+                <HotkeyHint hotkey="Mod+Shift+K" />
+              </span>
             </div>
             <div
               className="pe-appbar-commands"
               role="group"
-              aria-label="Situation, Page, Find and Tutorial shortcuts"
+              aria-label="Situation, Page and Tutorial shortcuts"
             >
               <SituationDrawer />
               <RouteControlsSlot slot="palette" />
-              <HotkeyCommand
-                label="Find tools, Works and Pea threads"
-                word="Find"
-                hotkey="Mod+Shift+K"
-                invoke={showSearch}
-              />
               <RouteControlsSlot />
               {!hasRouteHelp && (
                 <RouteHelpButton
@@ -236,7 +245,7 @@ export function AppBar() {
         open={open}
         onOpenChange={changeSearchOpen}
         onNavigate={navigateTo}
-        anchor={searchField}
+        anchor={searchField?.parentElement ?? null}
         query={query}
       />
     </>

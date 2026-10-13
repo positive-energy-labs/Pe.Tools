@@ -5,7 +5,7 @@ import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { startInstalledTray } from "../src/host-program.ts";
 
 const { spawn } = vi.hoisted(() => ({ spawn: vi.fn() }));
-vi.mock("node:child_process", () => ({ spawn }));
+vi.mock("node:child_process", () => ({ spawn, execFile: vi.fn() }));
 vi.mock("../src/host-ownership.ts", () => ({
   hostOwnership: {
     lane: "installed",
@@ -30,6 +30,21 @@ function tray() {
   queueMicrotask(() => child.emit("spawn"));
   return child;
 }
+
+test("explicit tray entry shows the compact tray while background startup remains hidden", async () => {
+  spawn.mockImplementation(tray);
+  const dispose = await startInstalledTray(handle, true);
+  expect(spawn.mock.calls[0]![1]).toEqual([
+    "--parent-pid",
+    "123",
+    "--parent-start",
+    "2026-10-09T12:00:00.123Z",
+    "--service-file",
+    expect.stringMatching(/state[\\/]service[\\/]host.json$/),
+    "--show",
+  ]);
+  await dispose();
+});
 
 test("unexpected tray loss restores the child with a bounded retry budget", async () => {
   const children: ReturnType<typeof tray>[] = [];

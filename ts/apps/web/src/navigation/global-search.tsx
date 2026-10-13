@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { CommandPalette } from "#/components/lang/command-palette";
 import { Button } from "#/components/lang/button";
 import { Kbd } from "#/components/lang/kbd";
 import { useNavigation } from "./state";
 import { globalItems, type Destination, type ResultKind } from "./global-items";
-import { friendlyObservation } from "./model";
+import { friendlyObservation, resumeRefusal } from "./model";
 
 export function GlobalSearch({
   open,
@@ -17,17 +17,33 @@ export function GlobalSearch({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onNavigate: (url: string) => void;
-  anchor: HTMLInputElement | null;
+  anchor: HTMLElement | null;
   query: string;
 }) {
   const { snapshot, loading, error, refresh } = useNavigation();
   const [kind, setKind] = useState<ResultKind>("All");
+  const [sideOffset, setSideOffset] = useState(4);
+  useLayoutEffect(() => {
+    const bar = anchor?.closest("nav");
+    if (!open || !anchor || !bar) return;
+    const measure = () =>
+      setSideOffset(
+        Math.max(4, bar.getBoundingClientRect().bottom - anchor.getBoundingClientRect().bottom + 4),
+      );
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(bar);
+    observer.observe(anchor);
+    return () => observer.disconnect();
+  }, [open, anchor]);
   return (
     <CommandPalette<Destination>
       open={open}
       onOpenChange={onOpenChange}
       presentation="anchored"
       anchor={anchor}
+      owner={anchor?.querySelector("input")}
+      sideOffset={sideOffset}
       query={query}
       aria-label="Find anything"
       items={globalItems(snapshot, kind)}
@@ -48,12 +64,7 @@ export function GlobalSearch({
         aside: row.context,
         meta: row.state,
         title: `${row.context} · ${row.state}${row.reason ? ` · ${row.reason}` : ""}`,
-        refusal:
-          row.kind === "Works" && (loading || error)
-            ? "Refresh inventory before resuming Work"
-            : row.url
-              ? undefined
-              : (row.reason ?? "No resumable destination"),
+        refusal: resumeRefusal(row, row.kind === "Works" && !!(loading || error)),
       })}
       footer={
         <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-1">

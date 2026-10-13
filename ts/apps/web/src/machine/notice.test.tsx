@@ -28,7 +28,7 @@ const asking = {
   },
 };
 
-let postMessage: ReturnType<typeof vi.fn<(message: unknown) => void>>;
+let postMessage: ReturnType<typeof vi.fn<(message: string) => void>>;
 beforeEach(() => {
   vi.stubGlobal(
     "ResizeObserver",
@@ -37,7 +37,7 @@ beforeEach(() => {
       disconnect() {}
     },
   );
-  postMessage = vi.fn<(message: unknown) => void>();
+  postMessage = vi.fn<(message: string) => void>();
   window.chrome = { webview: { postMessage } };
   permission.mockReset();
 });
@@ -61,14 +61,17 @@ test("a card holds while hovered, then hides itself and tells the tray", () => {
   fireEvent.mouseLeave(card);
   act(() => void vi.advanceTimersByTime(NOTICE_HOLD_MS));
   expect(screen.queryByRole("status", { name: "notice" })).toBeNull();
-  expect(postMessage).toHaveBeenLastCalledWith({ kind: "hide" });
+  expect(postMessage).toHaveBeenLastCalledWith(JSON.stringify({ type: "notice-hide" }));
 });
 
-test("the body opens the card's href in the app window", () => {
+test("the body opens the card's href in the app window, then hides the card", () => {
   render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture={false} />);
   act(() => window.peNotice?.(asking));
   fireEvent.click(screen.getByRole("button", { name: /Pea wants approval/ }));
-  expect(postMessage).toHaveBeenLastCalledWith({ kind: "open", href: "/pea?thread=t1" });
+  expect(postMessage).toHaveBeenCalledWith(
+    JSON.stringify({ type: "open-window", url: `${window.location.origin}/pea?thread=t1` }),
+  );
+  expect(postMessage).toHaveBeenLastCalledWith(JSON.stringify({ type: "notice-hide" }));
 });
 
 test("a permission answer goes to the thread's door; the card closes only when it accepts", async () => {
@@ -78,10 +81,10 @@ test("a permission answer goes to the thread's door; the card closes only when i
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Allow once" })));
   expect(permission).toHaveBeenCalledWith("t1", "r1", "allow");
   expect(screen.getByText(/Pea did not take this answer: Error: no request r1/)).toBeTruthy();
-  expect(postMessage).not.toHaveBeenCalledWith({ kind: "hide" });
+  expect(postMessage).not.toHaveBeenCalledWith(JSON.stringify({ type: "notice-hide" }));
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Allow once" })));
   expect(screen.queryByRole("status", { name: "notice" })).toBeNull();
-  expect(postMessage).toHaveBeenLastCalledWith({ kind: "hide" });
+  expect(postMessage).toHaveBeenLastCalledWith(JSON.stringify({ type: "notice-hide" }));
 });
 
 test("a fixture card refuses to answer for Pea", () => {

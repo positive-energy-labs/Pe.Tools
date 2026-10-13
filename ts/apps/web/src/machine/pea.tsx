@@ -1,8 +1,6 @@
 /**
- * The Pea group: harness readiness is machine state (agent ledger 2026-10-09), so the provider
- * list, sign-in, probe and endpoint config have one component shared by the drawer, tray,
- * composer and settings. Each provider is a row with its readiness in the host's words and the one step
- * that readies it; an endpoint is probed by the host before it is saved.
+ * Machine projects harness readiness and repair actions from the shared reading. ProviderSetup
+ * configures the same host-owned providers in Settings and the composer's first-open form.
  */
 import { useState, type ReactNode } from "react";
 import { Plug } from "lucide-react";
@@ -15,12 +13,68 @@ import { Button } from "#/components/lang/button";
 import { readinessSub, useProviders, type ProvidersState } from "#/workbench/provider/providers";
 import { EndpointError } from "#/workbench/endpoint-error";
 import { errorMessage } from "#/workbench/provider/use-workbench";
+import { useDestination } from "#/navigation/state";
+import { SEED_REFUSAL } from "./use-machine";
+import { settingsDestination } from "./navigation";
 
-export function PeaGroup({ fixture, machine }: { fixture: boolean; machine: Machine }) {
+export function PeaGroup({
+  fixture,
+  machine,
+  stale = false,
+}: {
+  fixture: boolean;
+  machine: Machine;
+  stale?: boolean;
+}) {
   const providers = useProviders("", !fixture, machine);
-  if (fixture)
-    return <span className="text-ink-2">Fixture: provider details are read from a live host.</span>;
-  return <ProviderSetup providers={providers} />;
+  const go = useDestination();
+  const refusal = fixture ? SEED_REFUSAL : stale ? "The machine reading is not current." : null;
+  return (
+    <div className="flex flex-col gap-2" aria-label="provider health">
+      <Button label="Configure providers" onClick={() => go(settingsDestination("providers"))}>
+        Configure providers
+      </Button>
+      {providers.list?.map((provider) => (
+        <div key={provider.id} className="flex flex-wrap items-center gap-2 hairline-b py-1">
+          <span className="font-semibold">{provider.name}</span>
+          <span data-tone={provider.readiness.state === "ready" ? undefined : "caution"}>
+            {readinessSub(provider)}
+          </span>
+          <span className="ml-auto flex gap-1">
+            <Button
+              label="Probe"
+              refusal={refusal}
+              onClick={() => void providers.probe(provider.id)}
+            >
+              Probe
+            </Button>
+            {provider.auth.kind === "subscription" && (
+              <Button
+                label={
+                  provider.readiness.state === "refused" && provider.readiness.step === "installed"
+                    ? "Install"
+                    : "Sign in"
+                }
+                refusal={refusal}
+                onClick={() => void providers.openLogin(provider.id)}
+              >
+                {provider.readiness.state === "refused" && provider.readiness.step === "installed"
+                  ? "Install"
+                  : "Sign in"}
+              </Button>
+            )}
+          </span>
+        </div>
+      ))}
+      {!providers.list && (
+        <OutcomeLine
+          kind={providers.error ? "error" : "busy"}
+          label={providers.error ?? "reading providers"}
+        />
+      )}
+      {providers.list && providers.error && <OutcomeLine kind="refused" label={providers.error} />}
+    </div>
+  );
 }
 
 export function ProviderSetup({ providers }: { providers: ProvidersState }) {

@@ -9,6 +9,18 @@ describe("global navigation admission and catalogue", () => {
     ).toBe("/pea?thread=chosen");
     expect(admittedDestination("https://other.example/family", "https://tools.example")).toBeNull();
     expect(admittedDestination("javascript:alert(1)", "https://tools.example")).toBeNull();
+    for (const path of [
+      "/unknown",
+      "/pe/navigation",
+      "/api/pdf-audit/parse",
+      "/pages/example/",
+      "/family/unknown",
+    ])
+      expect(admittedDestination(path, "https://tools.example")).toBeNull();
+    expect(admittedDestination("/bind", "https://tools.example")).toBe("/bind");
+    expect(admittedDestination("/design-system/revit#specimen", "https://tools.example")).toBe(
+      "/design-system/revit#specimen",
+    );
   });
   it("retains engineering and exploration routes in one searchable catalogue", () => {
     expect(new Set(CATALOGUE.map((tool) => tool.to)).size).toBe(19);

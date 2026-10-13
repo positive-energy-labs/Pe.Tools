@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  APP_ROUTES,
   addressSchema,
   documentRefSchema,
   harnessThreadSummarySchema,
@@ -17,14 +18,9 @@ export interface NavigationSources {
   documents(): Promise<unknown>;
 }
 
-// These are executable route mounts, not the route-registration catalogue.
-const documentRoutes: Readonly<Record<string, string | undefined>> = {
-  family: "/family",
-  families: "/families",
-  schedules: "/schedules",
-  takeoffs: "/takeoffs",
-  rooms: "/rooms",
-};
+const documentRoutes: Readonly<Record<string, string | undefined>> = Object.fromEntries(
+  APP_ROUTES.filter((route) => route.resume === "document").map((route) => [route.key, route.path]),
+);
 
 function destination(scope: WorkKey, documents: readonly NavigationDocument[], available: boolean) {
   // No route mounts a named Work workspace: /open holds no staged Work, and /takeoffs?work names a

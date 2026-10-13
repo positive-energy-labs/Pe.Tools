@@ -1,6 +1,8 @@
 /**
- * The tray's notice card. The host projects receipt revisions onto `/host/notices`; the tray shim
- * hands each card to `window.peNotice` and shows its window card-sized without taking focus. The
+ * The tray's notice card, mounted once at the root on the tray surface. The host projects receipt
+ * revisions onto `/host/notices`; the tray shim hands each card to `window.peNotice` and lends its
+ * window card-sized without taking focus. Card messages ride the tray's string-JSON `type` protocol
+ * (`notice-card`/`notice-hide`/`notice-panel`); opening an href is the surface's own `open-window`. The
  * card settles nothing: a permission reply goes to the thread's own door, which stays the reply
  * authority, and the card closes only when that door accepts. The card reports its height and
  * says when it is done. Hover holds it; eight seconds otherwise.
@@ -13,22 +15,22 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import { Row } from "#/components/lang/row";
 import { harnessClient } from "#/workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "#/workbench/config";
+import { useSurfaceHost } from "#/navigation/surface-host";
 
 import { AutomaticUpdates } from "./update";
 
 declare global {
   interface Window {
     peNotice?: (notice: MachineNotice | null) => void;
-    chrome?: { webview?: { postMessage(message: unknown): void } };
+    chrome?: { webview?: { postMessage(message: string): void } };
   }
 }
 
-export type TrayMessage =
-  | { kind: "card"; height: number }
-  | { kind: "hide" }
-  | { kind: "panel" }
-  | { kind: "open"; href: string };
-const tray = (message: TrayMessage) => window.chrome?.webview?.postMessage(message);
+type TrayMessage =
+  | { type: "notice-card"; height: number }
+  | { type: "notice-hide" }
+  | { type: "notice-panel" };
+const tray = (message: TrayMessage) => window.chrome?.webview?.postMessage(JSON.stringify(message));
 
 export const NOTICE_HOLD_MS = 8_000;
 
@@ -37,6 +39,7 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
   const [held, setHeld] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const card = useRef<HTMLDivElement>(null);
+  const host = useSurfaceHost();
   useEffect(() => {
     window.peNotice = (next) => {
       setError(null);
@@ -48,7 +51,7 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
     if (!notice || held) return;
     const timer = setTimeout(() => {
       setNotice(null);
-      tray({ kind: "hide" });
+      tray({ type: "notice-hide" });
     }, NOTICE_HOLD_MS);
     return () => clearTimeout(timer);
   }, [notice, held]);
@@ -56,7 +59,7 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
     const element = card.current;
     if (!element) return;
     const observer = new ResizeObserver(() =>
-      tray({ kind: "card", height: Math.ceil(element.getBoundingClientRect().height) }),
+      tray({ type: "notice-card", height: Math.ceil(element.getBoundingClientRect().height) }),
     );
     observer.observe(element);
     return () => observer.disconnect();
@@ -66,7 +69,12 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
     setNotice(null);
     tray(message);
   };
-  const open = () => close(notice.href ? { kind: "open", href: notice.href } : { kind: "panel" });
+  const open = () =>
+    close(
+      notice.href && host.openFullWindow(notice.href)
+        ? { type: "notice-hide" }
+        : { type: "notice-panel" },
+    );
   const act = notice.act;
   return (
     <div
@@ -103,7 +111,7 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
                 void harnessClient(resolveWorkbenchConfig().origin)
                   .permission(act.threadId, act.requestId, option.optionId)
                   .then(
-                    () => close({ kind: "hide" }),
+                    () => close({ type: "notice-hide" }),
                     (caught: unknown) =>
                       setError(`Pea did not take this answer: ${String(caught)}`),
                   )

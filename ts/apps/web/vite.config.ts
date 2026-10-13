@@ -1,5 +1,6 @@
 import path, { dirname, resolve } from "node:path";
 import { familyFixturesDir } from "./checkout-paths.ts";
+import { devIcons } from "./dev-icons.ts";
 import { checkoutIngress, checkoutServiceName, devHostProxy } from "./dev-proxy.ts";
 import { receiptBuildDefines } from "../host/src/build-stamp.ts";
 import { hostProcessIdentity } from "@pe/host-contracts/service-identity";
@@ -36,6 +37,7 @@ const config = defineConfig(({ mode, command }) => {
       ),
     },
     plugins: [
+      devIcons(),
       checkoutIngress(),
       tanstackStart({
         router: {
@@ -63,6 +65,8 @@ const config = defineConfig(({ mode, command }) => {
     ],
     server: {
       host: "127.0.0.1",
+      port: 5175,
+      strictPort: true,
       allowedHosts: ["127.0.0.1"],
       cors: false,
       fs: {

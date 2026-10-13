@@ -2,7 +2,7 @@ import { Fragment } from "react";
 import { RefreshCw, Save, Upload } from "lucide-react";
 
 import { ActionGroup, Button } from "#/components/lang/button";
-import { HotkeyCommand } from "#/components/lang/hotkey-command";
+import { HotkeyCommand, HotkeyHint } from "#/components/lang/hotkey-command";
 import { Section } from "#/components/lang/section";
 
 import { SpecimenFrame } from "./recipe-grid";
@@ -38,6 +38,7 @@ export function LangPressSpecimens() {
         importPath="#/components/lang/hotkey-command"
       >
         <div className="flex flex-wrap gap-4">
+          <HotkeyHint hotkey="Mod+Shift+K" face="compact" />
           {(["compact", "medium", "full"] as const).map((face) => (
             <HotkeyCommand
               key={face}

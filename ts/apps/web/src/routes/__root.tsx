@@ -15,6 +15,11 @@ import { InstallScrim } from "../machine/install-scrim";
 import { AppBar } from "#/navigation/app-bar";
 import { NavigationProvider } from "#/navigation/state";
 import { RouteControlsProvider, SituationPinnedSlot } from "#/navigation/route-controls";
+import { SurfaceHostProvider } from "#/navigation/surface-host";
+import { SettingsProvider } from "#/settings/options";
+import { useSurfaceHost } from "#/navigation/surface-host";
+import { appRouteMount, appRouteByPath } from "@pe/agent-contracts";
+import { Button } from "#/components/lang/button";
 
 import appCss from "../styles.css?url";
 
@@ -26,9 +31,14 @@ interface MyRouterContext {}
 const THEME_INIT_SCRIPT = `(function(){try{var stored=window.localStorage.getItem('theme');var mode=(stored==='light'||stored==='dark'||stored==='auto')?stored:'auto';var prefersDark=window.matchMedia('(prefers-color-scheme: dark)').matches;var resolved=mode==='auto'?(prefersDark?'dark':'light'):mode;var root=document.documentElement;root.classList.remove('light','dark');root.classList.add(resolved);if(mode==='auto'){root.removeAttribute('data-theme')}else{root.setAttribute('data-theme',mode)}root.style.colorScheme=resolved;}catch(e){}})();`;
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
-  validateSearch: routeSearch,
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): ReturnType<typeof routeSearch> & { shell?: "tray" } => ({
+    ...routeSearch(search),
+    shell: search.shell === "tray" ? ("tray" as const) : undefined,
+  }),
   // The URL carries the thread (its head is the target store) and a `?target` pin across every link.
-  search: { middlewares: [retainSearchParams(["thread", "target"])] },
+  search: { middlewares: [retainSearchParams(["thread", "target", "shell"])] },
   head: () => ({
     meta: [
       {
@@ -55,27 +65,41 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 });
 
 export function RootComponent() {
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-  if (pathname === "/machine")
-    return (
-      <div className="h-dvh min-h-0 min-w-0">
-        <Outlet />
-      </div>
-    );
   return (
     <NavigationProvider>
       <RouteControlsProvider>
-        <div className="flex h-dvh min-h-0 min-w-0 flex-col">
-          <AppBar />
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <SituationPinnedSlot />
-            <div className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-none" data-app-content>
-              <Outlet />
+        <SettingsProvider>
+          <div className="flex h-dvh min-h-0 min-w-0 flex-col">
+            <AppBar />
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              <div
+                className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto overscroll-none"
+                data-app-content
+              >
+                <SituationPinnedSlot />
+                <div className="min-h-0 min-w-0 flex-1">
+                  <SurfaceOutlet />
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        </SettingsProvider>
       </RouteControlsProvider>
     </NavigationProvider>
+  );
+}
+
+function SurfaceOutlet() {
+  const host = useSurfaceHost();
+  const location = useRouterState({ select: (state) => state.location });
+  if (host.surface !== "tray" || appRouteMount(location.pathname, "tray")) return <Outlet />;
+  return (
+    <div className="flex flex-col gap-3 p-3">
+      <p>{appRouteByPath(location.pathname)?.label ?? "This tool"} opens in a full window.</p>
+      <Button label="Open in full window" onClick={() => host.openFullWindow(location.href)}>
+        Open in full window
+      </Button>
+    </div>
   );
 }
 
@@ -83,7 +107,7 @@ function Chrome() {
   const location = useRouterState({ select: (state) => state.location });
   return (
     <>
-      <AppChrome pathname={location.pathname} />
+      <AppChrome />
       <InstallScrim />
       <AppDevtools pathname={location.pathname} shell={String(location.search.shell ?? "")} />
     </>
@@ -99,8 +123,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <RegistryContext.Provider value={appAtomRegistry}>
-          {children}
-          <Chrome />
+          <SurfaceHostProvider>
+            {children}
+            <Chrome />
+          </SurfaceHostProvider>
         </RegistryContext.Provider>
         <Scripts />
       </body>

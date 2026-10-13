@@ -558,7 +558,9 @@ export function PatchBay({
     <div
       data-key="jacks"
       className={
-        layout === "row" ? "flex min-h-0 min-w-0 flex-col" : "flex h-72 min-w-0 flex-col pr-6"
+        layout === "row"
+          ? "flex min-h-0 min-w-0 flex-col"
+          : "flex max-h-72 min-w-0 shrink-0 flex-col pr-6 [&_table]:table-fixed [&_[data-slot=table-filters]]:gap-y-1 [&_[data-slot=query-box]]:basis-full [&_[data-slot=query-box]]:flex-none [&_[role=group]]:max-w-full [&_[role=group]]:flex-wrap"
       }
     >
       <ModelTable

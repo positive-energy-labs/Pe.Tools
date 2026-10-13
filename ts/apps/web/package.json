@@ -7,7 +7,7 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "dev": "vp dev --port 3000",
+    "dev": "vp dev",
     "generate-routes": "tsr generate",
     "fixture-census": "node scripts/fixture-census.ts",
     "type-sweep": "node scripts/type-sweep.mjs",

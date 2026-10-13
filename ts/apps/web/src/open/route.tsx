@@ -17,10 +17,12 @@ import { modelRows } from "#/open/model";
 import { BAY_THREADS } from "#/open/seeds";
 import { inventoryOf, previousOf, useHostCall, useInventory } from "#/readings";
 import { RouteShell } from "#/route";
+import { useSurfaceHost } from "#/navigation/surface-host";
 import { useRoute } from "#/route/use-route";
 import { readScopedActionStatuses } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 export function OpenPage() {
+  const compact = useSurfaceHost().surface === "tray";
   const handle = useRoute(openManifest);
   const fixture = useMemo(() => frozenDemo() !== null, []);
   const machine = machineOf(handle.readings.machine as Parameters<typeof machineOf>[0]);
@@ -35,10 +37,12 @@ export function OpenPage() {
     handle.readings.machine.state === "loading" || handle.readings.machine.state === "absent";
   return (
     <Surface head={<RouteShell manifest={openManifest} handle={handle} />}>
-      <div className="flex min-h-0 flex-1 flex-col gap-2" data-testid="open-route">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto" data-testid="open-route">
         <p className="m-0 text-ink-2">
-          Documents on the left, Revits on the right. Pick a document, patch it into a Revit, and
-          press the one verb that names what happens.
+          {compact
+            ? "Choose a document and a Revit below."
+            : "Documents on the left, Revits on the right."}{" "}
+          Pick a document, patch it into a Revit, and press the one verb that names what happens.
         </p>
         <PatchBay
           machine={machine as Machine | null}
@@ -46,7 +50,7 @@ export function OpenPage() {
           rows={rows}
           threads={threads}
           fixture={fixture}
-          layout="row"
+          layout={compact ? "stack" : "row"}
           onNote={(label, detail, caution, receipt) =>
             handle.note(
               label,
