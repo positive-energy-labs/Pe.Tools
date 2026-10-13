@@ -24,3 +24,32 @@ test("HTTP and SSE retain the page's build owner across a changed destination", 
     vi.unstubAllGlobals();
   }
 });
+
+test("the browser contextFetch carries the runtime owner to its own origin and to no other", async () => {
+  const { contextFetch } =
+    await import("../../../../packages/mcps/src/shared/invocation-context.browser");
+  const fetcher = vi.fn().mockResolvedValue(new Response());
+  vi.stubGlobal("fetch", fetcher);
+  try {
+    await contextFetch("/actions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    await contextFetch(`${location.origin}/actions/cancel`, { method: "POST" });
+    await contextFetch("https://example.com/docs.json");
+    const sent = fetcher.mock.calls.map(
+      ([, init]) => (init?.headers as Headers | undefined)?.get("x-pe-runtime-service") ?? null,
+    );
+    // Without it the host answers runtime.owner-missing, or reads the call as anonymous.
+    expect(sent).toEqual([
+      import.meta.env.PE_RUNTIME_SERVICE,
+      import.meta.env.PE_RUNTIME_SERVICE,
+      null,
+    ]);
+    expect((fetcher.mock.calls[0]![1].headers as Headers).get("content-type")).toBe(
+      "application/json",
+    );
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
