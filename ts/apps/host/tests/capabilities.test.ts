@@ -313,9 +313,10 @@ test("one admitted content snapshot waits for import, publishes exact skill byte
     const frozen = await answer.json();
     expect(frozen.content).toBe(input["src/Census.cs"]);
     expect(frozen.folder).toBe("renamed-folder");
-    expect(frozen.sourceBundle.files.map((f: { path: string }) => f.path).sort()).toEqual(
-      Object.keys(input).sort(),
-    );
+    expect(frozen.sourceBundle.files.map((f: { path: string }) => f.path).sort()).toEqual([
+      "pod.json",
+      "src/Census.cs",
+    ]);
     const skill = catalog.capabilities.find((c) => c.key === "skill:@shelf-test/skills/check")!;
     const skillBytes = content.member(skill.key, skill.package!.sha256) as { content: string };
     expect(skillBytes.content).toBe(input["skills/check/SKILL.md"]);

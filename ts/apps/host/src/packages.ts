@@ -7,7 +7,10 @@ import {
 import { createHash } from "node:crypto";
 import { lstat, open, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { ScriptingExecute } from "@pe/host-contracts/generated";
+import {
+  scriptPodMemberBounds as memberBounds,
+  type ScriptingExecute,
+} from "@pe/host-contracts/generated";
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { productPodsRootPath } from "./product-paths.ts";
 
@@ -47,15 +50,12 @@ export type PackageListing = {
 };
 export type CapturedPackage = AdmittedPackage & {
   sourceBundle: ScriptingExecute.Req.ScriptPodSourceBundle;
+  memberBundle: ScriptingExecute.Req.ScriptPodSourceBundle;
 };
 
-// Membership includes binary families, images, and settings; execution has its own source bounds.
-const memberBounds = {
-  maxFileBytes: 64 * 1024 * 1024,
-  maxTotalBytes: 256 * 1024 * 1024,
-  maxFileCount: 4096,
-  maxDirectoryCount: 4096,
-};
+export const isCompilerSource = (path: string) => path.startsWith("src/") && /\.cs$/i.test(path);
+export const isCompilerInput = (path: string) =>
+  path === "pod.json" || path === "PeScripts.csproj" || isCompilerSource(path);
 
 // One exclusion policy for authored input. Portable .state observations remain ordinary members.
 const debris = new Set([
@@ -171,14 +171,14 @@ export async function capturePackage(
   );
   if (errors.length)
     throw Error(errors.map((issue) => `${issue.path}: ${issue.message}`).join("; "));
+  const files = pod.members.map((member) => ({
+    path: member.path,
+    bytesBase64: Buffer.from(member.bytes).toString("base64"),
+  }));
   return {
     ...pod,
-    sourceBundle: {
-      files: pod.members.map((member) => ({
-        path: member.path,
-        bytesBase64: Buffer.from(member.bytes).toString("base64"),
-      })),
-    },
+    memberBundle: { files },
+    sourceBundle: { files: files.filter((file) => isCompilerInput(file.path)) },
   };
 }
 

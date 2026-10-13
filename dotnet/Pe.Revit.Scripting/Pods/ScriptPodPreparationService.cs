@@ -67,13 +67,13 @@ public sealed record PodCapturedSource(
 );
 
 public sealed record PodContribution(string Key, string Kind, string MemberPath);
-public sealed record PodCapture(string Id, string Folder, string Directory, IReadOnlyList<PodContribution> Contributions, ScriptPodSourceBundle SourceBundle);
+public sealed record PodCapture(string Id, string Folder, string Directory, IReadOnlyList<PodContribution> Contributions, ScriptPodSourceBundle MemberBundle, ScriptPodSourceBundle SourceBundle);
 public sealed record PodCaptureResult(PodCapture? Capture, string? Code, string? Reason);
 
 /// <summary>Native composition and bundle validation. The host alone admits package membership.</summary>
 public sealed class ScriptPodPreparationService(string? podsRoot = null, Func<string, object, JObject>? admission = null) {
     public const string Stage = "pod";
-    private const long MaxFileBytes = ScriptPodSourceBounds.MaxFileBytes;
+    private const long MaxFileBytes = ScriptPodMemberBounds.MaxFileBytes;
     public string PodsRoot { get; } = podsRoot ?? RevitScriptingStorageLocations.GetDefaultBasePath();
 
     // These two reads are host-local; neither may enter the Revit bridge while native code awaits it.
@@ -108,7 +108,7 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null, Func<st
                 pods.Add(new RefusedPod(row.Value<string>("folder") ?? id, [], [ScriptDiagnosticFactory.Error(result.Code!, result.Reason!)]));
                 continue;
             }
-            var prepared = Prepare(capture.Directory, capture.SourceBundle);
+            var prepared = Prepare(capture.Directory, capture.MemberBundle);
             pods.Add(prepared is PreparedPod pod ? pod with { Contributions = capture.Contributions } : prepared);
         }
         return pods;
@@ -184,7 +184,7 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null, Func<st
             throw new InvalidDataException("A settings capture must name settings/<path>.");
         var fullPath = FullPath(this.ResolveFolder(podId), path);
         var bytes = Encoding.UTF8.GetBytes(content);
-        if (bytes.LongLength > MaxFileBytes) throw new InvalidDataException("Settings capture exceeds 512 KiB.");
+        if (bytes.LongLength > MaxFileBytes) throw new InvalidDataException($"Settings capture exceeds {MaxFileBytes} bytes.");
         var parent = Path.GetDirectoryName(fullPath);
         while (parent is not null && parent.Length >= this.PodsRoot.Length) {
             if (Directory.Exists(parent) && (File.GetAttributes(parent) & FileAttributes.ReparsePoint) != 0)
@@ -211,7 +211,7 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null, Func<st
             if (!snapshots.TryGetValue(owner, out var files)) {
                 var admitted = this.Capture(owner);
                 if (admitted.Capture is not { } capture) throw new InvalidDataException($"{admitted.Code}: {admitted.Reason}");
-                files = ScriptPodSourceNormalizer.DecodeFiles(capture.SourceBundle);
+                files = ScriptPodSourceNormalizer.DecodeFiles(capture.MemberBundle);
                 snapshots.Add(owner, files);
             }
             return files.TryGetValue(memberPath, out var bytes) ? bytes

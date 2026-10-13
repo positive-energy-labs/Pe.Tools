@@ -987,14 +987,17 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
         try: () => capturePackage(pod),
         catch: (error) => packageError(key, error),
       }).pipe(
-        Effect.map(({ id, folder, directory, entrypoints, contributions, sourceBundle }) => ({
-          id,
-          folder,
-          directory,
-          entrypoints,
-          contributions,
-          sourceBundle,
-        })),
+        Effect.map(
+          ({ id, folder, directory, entrypoints, contributions, memberBundle, sourceBundle }) => ({
+            id,
+            folder,
+            directory,
+            entrypoints,
+            contributions,
+            memberBundle,
+            sourceBundle,
+          }),
+        ),
       );
     }
     case "pod.export": {

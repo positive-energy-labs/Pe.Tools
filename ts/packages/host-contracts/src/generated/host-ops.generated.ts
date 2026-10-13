@@ -6278,6 +6278,14 @@ export const parameterValueApplyBounds = {
 } as const;
 
 /** Contract constants shared with C#; read these instead of re-typing the numbers. */
+export const scriptPodMemberBounds = {
+  "maxFileBytes": 67108864,
+  "maxTotalBytes": 268435456,
+  "maxFileCount": 4096,
+  "maxDirectoryCount": 4096
+} as const;
+
+/** Contract constants shared with C#; read these instead of re-typing the numbers. */
 export const scriptPodSourceBounds = {
   "maxFileBytes": 524288,
   "maxTotalBytes": 4194304,

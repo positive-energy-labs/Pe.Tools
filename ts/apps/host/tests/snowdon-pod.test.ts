@@ -271,7 +271,7 @@ test("packages.ts admits every authored file, in a renamed folder, with the cano
     );
     expect(keys.filter((k) => k.startsWith("script:"))).toHaveLength(3);
     const captured = await capturePackage(pod);
-    expect(captured.sourceBundle.files.map((f) => f.path).sort()).toEqual(await files(root));
+    expect(captured.memberBundle.files.map((f) => f.path).sort()).toEqual(await files(root));
   } finally {
     await rm(podsRoot, { recursive: true, force: true });
   }

@@ -54,10 +54,10 @@ test("one snapshot lists and captures every authored byte, excluding authority a
   expect(pod.members.map((member) => member.path).sort()).toEqual(Object.keys(authored).sort());
   await put("Original", "README.md", "changed after read");
   const capture = await capturePackage(pod);
-  expect(capture.sourceBundle.files.map((file) => file.path)).toEqual(
+  expect(capture.memberBundle.files.map((file) => file.path)).toEqual(
     pod.members.map((member) => member.path),
   );
-  for (const file of capture.sourceBundle.files)
+  for (const file of capture.memberBundle.files)
     expect(Buffer.from(file.bytesBase64, "base64")).toEqual(Buffer.from(authored[file.path]!));
   expect(pod.contributions.map((row) => row.key)).toContain("script:@mixed/src/Run.cs");
   expect(pod.contributions.map((row) => row.key)).toContain("member:@mixed/settings/checks.json");
@@ -180,7 +180,7 @@ test("member diagnostics preserve sibling bytes while source validation remains 
   expect(pod.diagnostics).toContainEqual(
     expect.objectContaining({ code: "JsonParseError", path: "settings/broken.json" }),
   );
-  expect((await capturePackage(pod)).sourceBundle.files.map((file) => file.path)).toContain(
+  expect((await capturePackage(pod)).memberBundle.files.map((file) => file.path)).toContain(
     "settings/checks.json",
   );
 });

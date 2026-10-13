@@ -17,7 +17,7 @@ import { lstat, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/pro
 import { dirname, isAbsolute, join } from "node:path";
 import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
 import { packageIdSchema, packageMemberPathSchema } from "@pe/agent-contracts";
-import { scriptPodSourceBounds } from "@pe/host-contracts/generated";
+import { scriptPodMemberBounds } from "@pe/host-contracts/generated";
 import type { PodExport, PodImport, PodPromote } from "@pe/host-contracts/operation-types";
 import { hostCaptures, type CaptureStore } from "./captures-route.ts";
 import {
@@ -36,7 +36,7 @@ const LOCAL_PREFIX = "@local/";
 const CAPTURE_REFERENCE = /\/captures\/([0-9a-f]{64})\.png/g;
 const CAPTURE_MEMBER = /^captures\/([0-9a-f]{64})\.(png|json)$/;
 /** A stored archive of bounded members plus headers; anything larger is refused before it is read. */
-const MAX_ARCHIVE_BYTES = scriptPodSourceBounds.maxTotalBytes * 2;
+const MAX_ARCHIVE_BYTES = scriptPodMemberBounds.maxTotalBytes * 2;
 
 export type TransferOptions = {
   readonly podsRoot?: string;
@@ -401,7 +401,7 @@ export function writeZip(files: ReadonlyMap<string, Buffer>): Buffer {
 }
 
 /**
- * Read a pod archive under the source bounds: every entry must be an admissible package member
+ * Read a pod archive under the membership bounds: every entry must be an admissible package member
  * (no host state, traversal, links or case twins), inflate within its declared size and match its CRC.
  */
 export function readZip(archive: Buffer): Map<string, Buffer> {
@@ -416,8 +416,8 @@ export function readZip(archive: Buffer): Map<string, Buffer> {
   const count = archive.readUInt16LE(end + 10);
   let at = archive.readUInt32LE(end + 16);
   if (count === 0xffff || at === 0xffffffff) throw refuse("zip64 archives are not supported");
-  if (count > scriptPodSourceBounds.maxFileCount + scriptPodSourceBounds.maxDirectoryCount)
-    throw refuse(`more than ${scriptPodSourceBounds.maxFileCount} entries`);
+  if (count > scriptPodMemberBounds.maxFileCount + scriptPodMemberBounds.maxDirectoryCount)
+    throw refuse(`more than ${scriptPodMemberBounds.maxFileCount} entries`);
   const entries = new Map<string, Buffer>();
   const folded = new Set<string>();
   let total = 0;
@@ -447,14 +447,14 @@ export function readZip(archive: Buffer): Map<string, Buffer> {
     if (!isPackageMember(path)) throw refuse(`pod archives never carry '${path}'`);
     if (folded.has(path.toLowerCase())) throw refuse(`duplicate or case-colliding entry '${path}'`);
     folded.add(path.toLowerCase());
-    if (entries.size >= scriptPodSourceBounds.maxFileCount)
-      throw refuse(`more than ${scriptPodSourceBounds.maxFileCount} files`);
+    if (entries.size >= scriptPodMemberBounds.maxFileCount)
+      throw refuse(`more than ${scriptPodMemberBounds.maxFileCount} files`);
     if (
-      size > scriptPodSourceBounds.maxFileBytes ||
-      (total += size) > scriptPodSourceBounds.maxTotalBytes
+      size > scriptPodMemberBounds.maxFileBytes ||
+      (total += size) > scriptPodMemberBounds.maxTotalBytes
     )
       throw refuse(
-        `over ${scriptPodSourceBounds.maxFileBytes} bytes per entry or ${scriptPodSourceBounds.maxTotalBytes} bytes total`,
+        `over ${scriptPodMemberBounds.maxFileBytes} bytes per entry or ${scriptPodMemberBounds.maxTotalBytes} bytes total`,
       );
     if (local + 30 > archive.length || archive.readUInt32LE(local) !== 0x04034b50)
       throw refuse(`corrupt local header for '${path}'`);
@@ -602,14 +602,14 @@ function unique(listing: PackageListing, id: string): AdmittedPackage {
 
 function bounded(files: { path: string; bytes: Buffer }[]) {
   const total = files.reduce((sum, f) => sum + f.bytes.length, 0);
-  const large = files.find((f) => f.bytes.length > scriptPodSourceBounds.maxFileBytes);
+  const large = files.find((f) => f.bytes.length > scriptPodMemberBounds.maxFileBytes);
   if (
-    files.length > scriptPodSourceBounds.maxFileCount ||
-    total > scriptPodSourceBounds.maxTotalBytes ||
+    files.length > scriptPodMemberBounds.maxFileCount ||
+    total > scriptPodMemberBounds.maxTotalBytes ||
     large
   )
     throw new TransferRefused(
-      `Pod export exceeds ${scriptPodSourceBounds.maxFileCount} files, ${scriptPodSourceBounds.maxFileBytes} bytes per file${large ? ` ('${large.path}')` : ""}, or ${scriptPodSourceBounds.maxTotalBytes} bytes total.`,
+      `Pod export exceeds ${scriptPodMemberBounds.maxFileCount} files, ${scriptPodMemberBounds.maxFileBytes} bytes per file${large ? ` ('${large.path}')` : ""}, or ${scriptPodMemberBounds.maxTotalBytes} bytes total.`,
     );
 }
 

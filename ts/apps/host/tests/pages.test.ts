@@ -747,9 +747,7 @@ ${source}`),
       ]);
       expect(body.input.sourcePath).toBe("src/Census.cs");
       expect(body.input.sourceBundle.files.map((file) => file.path).sort()).toEqual([
-        "pages/tour/index.html",
         "pod.json",
-        "settings/checks.json",
         "src/Census.cs",
         "src/Helper.cs",
       ]);

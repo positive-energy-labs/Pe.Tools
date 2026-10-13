@@ -200,6 +200,9 @@ export const podCaptureResponseSchema = Schema.Struct({
   sourceBundle: Schema.Struct({
     files: Schema.Array(Schema.Struct({ path: Schema.String, bytesBase64: Schema.String })),
   }),
+  memberBundle: Schema.Struct({
+    files: Schema.Array(Schema.Struct({ path: Schema.String, bytesBase64: Schema.String })),
+  }),
 });
 export type PodCapture = Schema.Schema.Type<typeof podCaptureResponseSchema>;
 
@@ -1073,7 +1076,7 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     origin: "host-local",
     displayName: "Capture Pod",
     description:
-      "One installed pod's frozen execution input by manifest id: admitted source bytes (sourceBundle), entrypoints and canonical contribution keys, read once from its admitted package. A pod with error diagnostics refuses. No Revit session is needed.",
+      "One installed pod's frozen execution input by manifest id: admitted member bytes (memberBundle), entrypoints and canonical contribution keys, read once from its admitted package. A pod with error diagnostics refuses. No Revit session is needed.",
     intent: "Read",
     visibility: "ExpertOnly",
     costTier: "Cheap",

@@ -158,7 +158,7 @@ it.each([
   30_000,
 );
 
-it("captures Pod pages and their state alongside the other members, excluding nonmembers", async () => {
+it("captures only CSharp sources plus manifest and project metadata", async () => {
   const home = await mkdtemp(join(tmpdir(), "pe-pod-capture-"));
   vi.mocked(productUserContentRootPath).mockReturnValue(home);
   const members = {
@@ -167,7 +167,7 @@ it("captures Pod pages and their state alongside the other members, excluding no
     "README.md": "Guide",
     "skills/inspect/SKILL.md": "Inspect",
     "skills/inspect/references/support.txt": "Support",
-    "src/main.csx": "return 1;",
+    "src/main.cs": "return 1;",
     "settings/default.json": "{}",
     "assets/icon.svg": "<svg />",
     "pages/tour/index.html": "<title>Tour</title>",
@@ -179,7 +179,7 @@ it("captures Pod pages and their state alongside the other members, excluding no
       await mkdir(join(file, ".."), { recursive: true });
       await writeFile(file, content);
     }
-    const captured = await freezeScript({ sourcePath: "src/main.csx", workspaceKey: "tour" });
+    const captured = await freezeScript({ sourcePath: "src/main.cs", workspaceKey: "tour" });
     expect(
       Object.fromEntries(
         captured!.sourceBundle.files.map(({ path, bytesBase64 }) => [
@@ -187,7 +187,11 @@ it("captures Pod pages and their state alongside the other members, excluding no
           Buffer.from(bytesBase64, "base64").toString("utf8"),
         ]),
       ),
-    ).toEqual(members);
+    ).toEqual({
+      "pod.json": members["pod.json"],
+      "PeScripts.csproj": members["PeScripts.csproj"],
+      "src/main.cs": members["src/main.cs"],
+    });
   } finally {
     vi.mocked(productUserContentRootPath).mockReset();
     await rm(home, { recursive: true, force: true });
@@ -219,7 +223,7 @@ it("freezes a supplied snapshot without reading disk and rejects ambiguous or au
 
 it("accepts the full four MiB binary budget even when its base64 wire form exceeds five MiB", async () => {
   const files = Array.from({ length: 8 }, (_, index) => ({
-    path: `assets/${index}.bin`,
+    path: `src/File${index}.cs`,
     bytesBase64: Buffer.alloc(512 * 1024).toString("base64"),
   }));
   expect(
@@ -228,7 +232,7 @@ it("accepts the full four MiB binary budget even when its base64 wire form excee
   await expect(
     freezeScript({
       sourcePath: "src/Run.cs",
-      sourceBundle: { files: [...files, { path: "assets/overflow", bytesBase64: "YQ==" }] },
+      sourceBundle: { files: [...files, { path: "src/Overflow.cs", bytesBase64: "YQ==" }] },
     }),
   ).rejects.toThrow(/byte bounds/);
 });

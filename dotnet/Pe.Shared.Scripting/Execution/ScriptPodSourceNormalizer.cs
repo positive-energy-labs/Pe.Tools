@@ -9,8 +9,7 @@ public sealed record NormalizedPodSource(ScriptSourceSet SourceSet, PodManifest 
 /// <summary>Decodes captured authored inputs only. References and explicit script file reads remain runtime inputs.</summary>
 public static class ScriptPodSourceNormalizer {
     private const int MaxFiles = ScriptPodSourceBounds.MaxFileCount;
-    private const int MaxFileBytes = ScriptPodSourceBounds.MaxFileBytes;
-    public const int MaxSourceBytes = 2 * 1024 * 1024;
+    private const int MaxFileBytes = ScriptPodMemberBounds.MaxFileBytes;
 
     public static NormalizedPodSource Normalize(ScriptPodSourceBundle bundle, string workspaceKey, string sourcePath) {
         var captured = DecodeFiles(bundle);
@@ -25,6 +24,8 @@ public static class ScriptPodSourceNormalizer {
             && file.Key.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)).ToList();
         if (sources.Count is < 1 or > MaxFiles)
             throw new ArgumentException($"Pod source requires 1 to {MaxFiles} files.");
+        var directories = sources.SelectMany(file => file.Key.Split('/').Select((_, i) => string.Join("/", file.Key.Split('/').Take(i)))).Distinct().Count();
+        if (directories > ScriptPodSourceBounds.MaxDirectoryCount) throw new ArgumentException("Pod source exceeds its directory bound.");
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var files = new List<ScriptSourceFile>();
         var total = 0;
@@ -33,7 +34,8 @@ public static class ScriptPodSourceNormalizer {
             if (!names.Add(path)) throw new ArgumentException($"Duplicate Pod source: {path}");
             var content = Text(file.Value);
             total += file.Value.Length;
-            if (total > MaxSourceBytes) throw new ArgumentException("Pod source exceeds 2 MiB.");
+            if (file.Value.Length > ScriptPodSourceBounds.MaxFileBytes || total > ScriptPodSourceBounds.MaxTotalBytes)
+                throw new ArgumentException("Pod source exceeds its byte bounds.");
             files.Add(new ScriptSourceFile(path.Substring(4), content));
         }
         if (!names.Contains(selected)) throw new ArgumentException("Captured Pod source lacks the selected entrypoint.");
@@ -42,8 +44,8 @@ public static class ScriptPodSourceNormalizer {
 
     /// <summary>Validate the untrusted bundle envelope, never infer filesystem membership here.</summary>
     public static IReadOnlyDictionary<string, byte[]> DecodeFiles(ScriptPodSourceBundle bundle) {
-        if (bundle?.Files is null || bundle.Files.Count > MaxFiles)
-            throw new ArgumentException($"Pod capture requires at most {MaxFiles} files.");
+        if (bundle?.Files is null || bundle.Files.Count > ScriptPodMemberBounds.MaxFileCount)
+            throw new ArgumentException($"Pod capture requires at most {ScriptPodMemberBounds.MaxFileCount} files.");
         var files = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
         var directories = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { [""] = "" };
         var total = 0;
@@ -51,9 +53,9 @@ public static class ScriptPodSourceNormalizer {
             if (file is null) throw new ArgumentException("Pod source file cannot be null.");
             var path = ValidateMemberPath(file.Path);
             if (file.BytesBase64 is null || file.BytesBase64.Length > ((MaxFileBytes + 2) / 3) * 4)
-                throw new ArgumentException("Captured Pod file exceeds 512 KiB.");
+                throw new ArgumentException("Captured Pod file exceeds membership bounds.");
             var bytes = Convert.FromBase64String(file.BytesBase64);
-            if (bytes.Length > MaxFileBytes || (total += bytes.Length) > ScriptPodSourceBounds.MaxTotalBytes)
+            if (bytes.Length > MaxFileBytes || (total += bytes.Length) > ScriptPodMemberBounds.MaxTotalBytes)
                 throw new ArgumentException("Captured Pod exceeds its byte bounds.");
             if (files.ContainsKey(path)) throw new ArgumentException($"Duplicate Pod source: {path}");
             files.Add(path, bytes);
@@ -64,7 +66,7 @@ public static class ScriptPodSourceNormalizer {
                 directories[directory] = directory;
             }
         }
-        if (directories.Count > ScriptPodSourceBounds.MaxDirectoryCount)
+        if (directories.Count > ScriptPodMemberBounds.MaxDirectoryCount)
             throw new ArgumentException("Captured Pod exceeds its directory bound.");
         if (directories.Keys.Any(directory => files.ContainsKey(directory)))
             throw new ArgumentException("Captured Pod path is both file and directory.");

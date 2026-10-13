@@ -122,7 +122,7 @@ test("pod.capture answers the admitted bundle by manifest id from a renamed fold
 
   expect(captured.status).toBe(200);
   expect(captured.json.folder).toBe("Renamed In Explorer");
-  expect(captured.json.sourceBundle.files.map((f: { path: string }) => f.path).sort()).toEqual([
+  expect(captured.json.memberBundle.files.map((f: { path: string }) => f.path).sort()).toEqual([
     "pages/tour/index.html",
     "pod.json",
     "settings/checks.json",
@@ -324,7 +324,7 @@ test.each([
   ["a reserved id", { "pod.json": JSON.stringify({ id: "pages" }) }, /no valid, unreserved id/],
   [
     "an oversized entry",
-    { "pod.json": manifest, "big.bin": Buffer.alloc(600 * 1024) },
+    { "pod.json": manifest, "big.bin": Buffer.alloc(64 * 1024 * 1024 + 1) },
     /bytes per entry/,
   ],
 ] as const)("an archive with %s is refused and installs nothing", async (_, files, refusal) => {

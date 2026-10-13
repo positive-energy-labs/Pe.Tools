@@ -501,11 +501,23 @@ public sealed class PodTests {
     [Test]
     public void Capture_enforces_the_file_count_bound() {
         var folder = this.WritePod("Bounded", "bounded");
-        Directory.CreateDirectory(Path.Combine(folder, "assets"));
-        for (var index = 0; index < 200; index++)
-            File.WriteAllText(Path.Combine(folder, "assets", $"{index:D3}.txt"), string.Empty);
+        var bundle = Bundle(folder) with { Files = [.. Bundle(folder).Files,
+            .. Enumerable.Range(0, ScriptPodMemberBounds.MaxFileCount).Select(i => new ScriptPodSourceFile($"assets/{i}.txt", ""))] };
+        Assert.Throws<ArgumentException>(() => ScriptPodPreparationService.Prepare(folder, bundle));
+    }
 
-        Assert.Throws<ArgumentException>(() => ScriptPodPreparationService.Prepare(folder, Bundle(folder)));
+    [Test]
+    public void Large_members_remain_listable_and_composable_under_membership_bounds() {
+        var content = "{\"text\":\"" + new string('x', 614400) + "\"}";
+        this.WritePod("Large", "large", new() {
+            ["assets/image.bin"] = new string('a', 614400),
+            ["settings/large.json"] = content,
+            ["settings/root.json"] = "{\"$include\":\"@local/large\"}"
+        });
+        Assert.That(this._service.List().Single(), Is.TypeOf<PreparedPod>());
+        var composed = this._service.Compose("large", "settings/root.json", null);
+        Assert.That(composed.Diagnostics, Is.Empty);
+        Assert.That(JObject.Parse(composed.Composed!)["text"]!.Value<string>(), Has.Length.EqualTo(614400));
     }
 
     private static ScriptPodSourceBundle Bundle(string folder) => new(Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)
@@ -523,7 +535,7 @@ public sealed class PodTests {
         var matches = rows.Where(item => item.id == id).ToList();
         if (matches.Count != 1) throw new InvalidDataException($"Pod id '{id}' is claimed by folders {string.Join(", ", matches.Select(item => item.folder))}.");
         var row = matches[0];
-        return JObject.FromObject(new { row.id, row.folder, row.directory, contributions = Array.Empty<object>(), sourceBundle = Bundle(row.directory) });
+        return JObject.FromObject(new { row.id, row.folder, row.directory, contributions = Array.Empty<object>(), memberBundle = Bundle(row.directory) });
     }
 
     [Test]
