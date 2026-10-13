@@ -14,6 +14,7 @@ const canonicalFixtures: Record<
   "/pea": { canonicalReviewUrl: "/pea?demo=diagram", fixtureKind: "demo-fixture" },
   "/data-tables": { canonicalReviewUrl: "/data-tables", fixtureKind: "live-route" },
   "/doc-lab": { canonicalReviewUrl: "/doc-lab", fixtureKind: "inherent-static" },
+  "/duct-loss": { canonicalReviewUrl: "/duct-loss", fixtureKind: "inherent-static" },
   "/families": { canonicalReviewUrl: "/families?demo=apply", fixtureKind: "demo-fixture" },
   "/family": { canonicalReviewUrl: "/family?demo=apply", fixtureKind: "demo-fixture" },
   "/grilles": { canonicalReviewUrl: "/grilles", fixtureKind: "inherent-static" },
