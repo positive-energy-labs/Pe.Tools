@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 /** The composer ladder: provider › model › one rung per trait, read whole in its trigger. */
+import { useEffect } from "react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { Provider, Reading } from "@pe/agent-contracts";
@@ -193,15 +194,10 @@ test("a refused head write shows the door, the reason and the remedy, not an unk
   );
   function Setter() {
     const scope = useThreadScope("t2", true, headReading(null));
-    return (
-      <>
-        <button onClick={() => void scope.set(null)}>move</button>
-        <output>{scope.refusal}</output>
-      </>
-    );
+    useEffect(() => void scope.set(null), []);
+    return <output>{scope.refusal}</output>;
   }
   render(<Setter />);
-  fireEvent.click(screen.getByRole("button", { name: "move" }));
   expect(await screen.findByText(`${refusal.reason} ${refusal.remedy}`)).toBeTruthy();
   vi.unstubAllGlobals();
 });
