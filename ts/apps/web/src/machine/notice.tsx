@@ -74,7 +74,7 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
       role="status"
       aria-label="notice"
       data-surface="artifact"
-      className="hairline-b fixed inset-x-0 top-0 z-50 flex flex-col gap-1.5 px-3 py-2"
+      className="hairline-b fixed inset-x-0 top-0 z-notice flex flex-col gap-1.5 px-3 py-2"
       onMouseEnter={() => setHeld(true)}
       onMouseLeave={() => setHeld(false)}
     >
