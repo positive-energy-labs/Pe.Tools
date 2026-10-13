@@ -646,6 +646,25 @@ test("a cached catalog still reads the open documents fresh: a closed one is gon
   expect(opsReads).toBe(1);
 });
 
+test("a new catalog scope reads the content owner's current snapshot without a second TTL", async () => {
+  vi.stubGlobal("fetch", async () => Response.json({ operations: [], result: { recents: [] } }));
+  let revision = "first";
+  const source = createCapabilityCatalogSource({
+    machine: async () => machineFixture(),
+    hostBaseUrl: "http://127.0.0.1:19",
+    registrations: [],
+    content: async () => ({
+      packages: [],
+      skills: [],
+      diagnostics: [],
+      sourceDiagnostics: [revision],
+    }),
+  });
+  expect((await source.read({ bridgeSessionId: "one" })).sources.packages).toBe("first");
+  revision = "second";
+  expect((await source.read({ bridgeSessionId: "two" })).sources.packages).toBe("second");
+});
+
 test("an op's [Op(Finds)] search terms find it when its key, title, and description do not", () => {
   const rows = buildCapabilities({
     ops: [

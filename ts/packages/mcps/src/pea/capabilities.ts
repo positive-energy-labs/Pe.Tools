@@ -324,21 +324,8 @@ export function createCapabilityCatalogSource(options: {
   const routes = options.registrations.map((registration) => registration.spec);
   const cache = new Map<string, { at: number; catalog: Omit<CapabilityCatalog, "machine"> }>();
   const recents = recentsSource(base);
-  let content: { at: number; answer: Promise<CapabilityContent> } | undefined;
-  const readContent = () => {
-    if (!content || Date.now() - content.at >= CATALOG_TTL_MS)
-      content = {
-        at: Date.now(),
-        answer:
-          options.content?.() ?? Promise.resolve({ packages: [], skills: [], diagnostics: [] }),
-      };
-    return content.answer;
-  };
   return {
-    invalidate: () => {
-      cache.clear();
-      content = undefined;
-    },
+    invalidate: () => cache.clear(),
     // Recents are the machine's, not the scope's: one source, its own cache and budget.
     read: async (scope = {}) => {
       const [catalog, recent, machine] = await Promise.all([
@@ -361,7 +348,10 @@ export function createCapabilityCatalogSource(options: {
     if (hit && Date.now() - hit.at < CATALOG_TTL_MS) return hit.catalog;
 
     const sources: Record<string, string> = { "route registry": "ok", skills: "ok" };
-    const [ops, admitted] = await Promise.allSettled([fetchOps(base, scope), readContent()]);
+    const [ops, admitted] = await Promise.allSettled([
+      fetchOps(base, scope),
+      options.content?.() ?? Promise.resolve({ packages: [], skills: [], diagnostics: [] }),
+    ]);
     const opsValue =
       ops.status === "fulfilled"
         ? ops.value
