@@ -133,6 +133,7 @@ async function setup(
     admittedPlanId: null,
     planLeg: unreadLeg(),
     receiptLeg: unreadLeg(),
+    automatic: true,
   };
   const machine = createMachine({
     grants: { grants: () => [], subscribe: () => () => {} },
@@ -149,6 +150,8 @@ async function setup(
       refresh: async () => update,
       apply: async () => update,
       automaticPending: () => false,
+      announce: () => {},
+      setAutomatic: async () => update,
     },
     sessions: async () => {
       census.reads++;

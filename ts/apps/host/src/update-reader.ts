@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Context } from "effect";
 import { z } from "zod";
@@ -108,6 +109,20 @@ export type UpdateRunner = (args: string[], detached?: boolean) => Promise<Envel
 export const isUpdatePlanId = (id: unknown): id is string =>
   typeof id === "string" && z.uuid().safeParse(id).success && id === id.toLowerCase();
 
+/**
+ * An update fact for the receipt spine to publish. The reader announces; it never notifies. A
+ * settled fact fires on the transition into a terminal receipt, so a re-read of the same terminal
+ * receipt (a successor host loading it, the diagnostic re-persist) announces nothing twice.
+ */
+export type UpdateFact =
+  | { readonly kind: "available"; readonly version: string }
+  | {
+      readonly kind: "settled";
+      readonly requestId: string;
+      readonly state: "ok" | "failed" | "refused";
+      readonly detail: string | null;
+    };
+
 /** One persisted recovery handle. A lost acknowledgement is never permission to dispatch again. */
 export function createUpdateReader(options: {
   readonly path: string;
@@ -116,6 +131,10 @@ export function createUpdateReader(options: {
   readonly pid: number;
   /** The installed product manifest; the SDK resolves the install root from it (`update.not-installed` otherwise). */
   readonly manifest?: string;
+  /** Present means automatic updates are off; absent (the default) means on. */
+  readonly automaticOffPath?: string;
+  /** The spine's intake for update facts; absent in tests that do not observe them. */
+  readonly fact?: (fact: UpdateFact) => void;
   readonly now?: () => string;
 }) {
   const now = options.now ?? (() => new Date().toISOString());
@@ -134,6 +153,7 @@ export function createUpdateReader(options: {
     admittedPlanId: null,
     planLeg: unreadLeg(),
     receiptLeg: unreadLeg(),
+    automatic: !(options.automaticOffPath && existsSync(options.automaticOffPath)),
   };
 
   const load = () =>
@@ -176,10 +196,19 @@ export function createUpdateReader(options: {
         await file.close();
       }
       await rename(temporary, options.path);
+      const before = admission?.requestId === record.requestId ? admission.receipt?.state : null;
       admission = record;
+      const after = record.receipt?.state;
       terminalDiagnosticPending = false;
       if (record.receipt && ["ok", "failed", "refused"].includes(record.receipt.state))
         automaticPending = false;
+      if (after !== before && (after === "ok" || after === "failed" || after === "refused"))
+        options.fact?.({
+          kind: "settled",
+          requestId: record.requestId,
+          state: after,
+          detail: record.receipt?.legs.at(-1)?.detail ?? null,
+        });
       value = {
         ...value,
         requestId: record.requestId,
@@ -363,7 +392,26 @@ export function createUpdateReader(options: {
     return applying;
   }
 
-  return { refresh, apply, current: () => value, automaticPending: () => automaticPending };
+  /** The off switch is one marker file: present means off. */
+  async function setAutomatic(on: boolean) {
+    if (!options.automaticOffPath) throw Error("Automatic updates have no switch on this host.");
+    if (on) await rm(options.automaticOffPath, { force: true });
+    else {
+      await mkdir(dirname(options.automaticOffPath), { recursive: true });
+      await writeFile(options.automaticOffPath, "");
+    }
+    value = { ...value, automatic: on };
+    return value;
+  }
+
+  return {
+    refresh,
+    apply,
+    setAutomatic,
+    announce: (fact: UpdateFact) => options.fact?.(fact),
+    current: () => value,
+    automaticPending: () => automaticPending,
+  };
 }
 
 function said(envelope: Envelope<unknown>) {

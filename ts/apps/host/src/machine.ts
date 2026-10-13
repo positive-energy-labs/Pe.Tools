@@ -142,12 +142,24 @@ export interface MachineSources {
  */
 const LEG_DEADLINE_MS = 15_000;
 
+class LegDeadline extends Error {}
+
+/**
+ * A leg that stopped being readable: typed for the receipt spine, which publishes it once per
+ * outage (the transition into failure), never once per 5 s tick of a stuck leg.
+ */
+export interface MachineLegFault {
+  readonly leg: string;
+  readonly kind: "deadline" | "error";
+  readonly elapsedMs: number;
+}
+
 function withDeadline<A>(promise: Promise<A>, ms: number, key: string): Promise<A> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([
     promise,
     new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(Error(`${key} leg exceeded ${ms} ms`)), ms);
+      timer = setTimeout(() => reject(new LegDeadline(`${key} leg exceeded ${ms} ms`)), ms);
     }),
   ]).finally(() => clearTimeout(timer));
 }
@@ -159,6 +171,8 @@ export function createMachine(
     periodMs?: number;
     updatePeriodMs?: number;
     automaticUpdates?: { peaActive(): boolean; handoff(): void };
+    /** The spine's intake for leg faults; absent where nothing observes them. */
+    fault?: (fault: MachineLegFault) => void;
   } = {},
 ) {
   const now = options.now ?? (() => new Date().toISOString());
@@ -171,6 +185,7 @@ export function createMachine(
   let noRevitSince: number | null = null;
   let eligibleBefore = false;
   let automaticPlan: string | null = null;
+  let announced: string | null = null;
   const listeners = new Set<(value: Machine) => void>();
   let inFlight: Promise<Machine> | undefined;
   let timer: ReturnType<typeof setInterval> | undefined;
@@ -202,12 +217,20 @@ export function createMachine(
 
   async function read<A>(key: string, acquire: () => Promise<A>, accept: (value: A) => void) {
     const attemptedAtUtc = now();
+    const startedMs = Date.now();
     try {
       accept(await withDeadline(acquire(), LEG_DEADLINE_MS, key));
       legs[key] = { observedAtUtc: now(), attemptedAtUtc, error: null };
       return true;
     } catch (error) {
+      const wasFailing = legs[key]?.error != null;
       legs[key] = { ...(legs[key] ?? unreadLeg()), attemptedAtUtc, error: String(error) };
+      if (!wasFailing)
+        options.fault?.({
+          leg: key,
+          kind: error instanceof LegDeadline ? "deadline" : "error",
+          elapsedMs: Date.now() - startedMs,
+        });
       return false;
     }
   }
@@ -281,8 +304,22 @@ export function createMachine(
       )
         noRevitSince = null;
       else noRevitSince ??= Date.now();
+      const offered = sources.update.current();
+      // Once per version per host boot; the spine's id/revision dedupe covers the restart repeat.
+      const latestVersion = offered.plan?.latest;
+      if (
+        policy &&
+        !offered.automatic &&
+        offered.plan?.available &&
+        latestVersion &&
+        latestVersion !== announced
+      ) {
+        announced = latestVersion;
+        sources.update.announce({ kind: "available", version: latestVersion });
+      }
       const eligible =
         policy !== undefined &&
+        offered.automatic &&
         noRevitSince !== null &&
         Date.now() - noRevitSince >= 120_000 &&
         !policy.peaActive();

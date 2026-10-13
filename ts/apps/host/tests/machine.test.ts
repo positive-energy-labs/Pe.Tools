@@ -94,6 +94,7 @@ function fixture() {
     admittedPlanId: null,
     planLeg: unreadLeg(),
     receiptLeg: unreadLeg(),
+    automatic: true,
   };
   const sources: MachineSources = {
     actions: vi.fn(async (): Promise<readonly ActionReceipt[]> => []),
@@ -133,6 +134,8 @@ function fixture() {
     })),
     update: {
       automaticPending: () => false,
+      announce: vi.fn(),
+      setAutomatic: vi.fn(),
       current: () => update,
       refresh: vi.fn(async () => update),
       apply: vi.fn(async () => update),
@@ -952,5 +955,73 @@ test("failed receipt rows preserve acquisition provenance and controlled custody
   } finally {
     useHostMachine(undefined);
     f.machine.close();
+  }
+});
+
+test("a switched-off automatic update announces its version once and never applies", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  const handoff = vi.fn();
+  const machine = createMachine(f.sources, {
+    automaticUpdates: { peaActive: () => false, handoff },
+  });
+  Object.assign(f.sources.update.current(), {
+    automatic: false,
+    plan: { planId: "idle-plan", latest: "0.9.0", available: true, blockers: [], revits: [] },
+  });
+  vi.mocked(f.sources.sessions).mockResolvedValue([]);
+  vi.mocked(f.sources.attachments).mockResolvedValue([]);
+  try {
+    await machine.refresh();
+    vi.advanceTimersByTime(300_000);
+    await machine.refresh();
+    await machine.refresh();
+    expect(f.sources.update.apply).not.toHaveBeenCalled();
+    expect(f.sources.update.announce).toHaveBeenCalledExactlyOnceWith({
+      kind: "available",
+      version: "0.9.0",
+    });
+  } finally {
+    machine.close();
+    f.machine.close();
+    vi.useRealTimers();
+  }
+});
+
+test("a leg outage publishes one typed fault at its transition, not one per tick", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  const fault = vi.fn();
+  const machine = createMachine(f.sources, { fault });
+  vi.mocked(f.sources.peers).mockRejectedValue(Error("no peers"));
+  try {
+    await machine.refresh();
+    await machine.refresh();
+    expect(fault).toHaveBeenCalledExactlyOnceWith({
+      leg: "peers",
+      kind: "error",
+      elapsedMs: expect.any(Number),
+    });
+    vi.mocked(f.sources.peers).mockReturnValue(new Promise<never>(() => {}));
+    const pending = machine.refresh();
+    await vi.advanceTimersByTimeAsync(15_001);
+    await pending;
+    // Still the same outage: a deadline after an error is not a new transition.
+    expect(fault).toHaveBeenCalledTimes(1);
+    vi.mocked(f.sources.peers).mockResolvedValue([]);
+    await machine.refresh();
+    vi.mocked(f.sources.peers).mockReturnValue(new Promise<never>(() => {}));
+    const stalled = machine.refresh();
+    await vi.advanceTimersByTimeAsync(15_001);
+    await stalled;
+    expect(fault).toHaveBeenLastCalledWith({
+      leg: "peers",
+      kind: "deadline",
+      elapsedMs: expect.any(Number),
+    });
+  } finally {
+    machine.close();
+    f.machine.close();
+    vi.useRealTimers();
   }
 });

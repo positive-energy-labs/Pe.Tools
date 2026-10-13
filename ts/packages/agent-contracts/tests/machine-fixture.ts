@@ -20,6 +20,7 @@ export function machineFixture(attachments: readonly Attachment[] = []): Machine
       admittedPlanId: null,
       planLeg: leg,
       receiptLeg: leg,
+      automatic: true,
     },
     revit: {
       years: [2025],

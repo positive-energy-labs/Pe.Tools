@@ -26,6 +26,11 @@ internal sealed class TrayContext : ApplicationContext {
     private bool _retired;
     private volatile bool _closing;
     private bool _connected;
+    /** The window shows as a notice card, not the panel: no focus, card height, the page hides it. */
+    private bool _card;
+    /** `id:revision` of recent cards: the host replays its last minute on every connect, a card is shown once. */
+    private readonly Queue<string> _shownOrder = new();
+    private readonly HashSet<string> _shown = new();
 
     public TrayContext(TrayLaunch launch, ServiceRecord service, Process parent) {
         _launch = launch;
@@ -43,18 +48,106 @@ internal sealed class TrayContext : ApplicationContext {
         _icon.MouseClick += (_, e) => {
             if (e.Button != MouseButtons.Left) return;
             if (!_ready) { _menu.Show(Cursor.Position); return; }
-            if (_window.Visible) { _window.Hide(); return; }
-            _window.PositionAboveTaskbar();
-            _window.Show();
-            _window.Activate();
+            if (_window.Visible && !_card) { _window.Hide(); return; }
+            ShowPanel();
         };
-        _window.Deactivate += (_, _) => _window.Hide();
+        _window.Deactivate += (_, _) => HideWindow();
         _window.TaskbarRestarted += (_, _) => { _icon.Visible = false; _icon.Visible = true; };
         _health.Tick += async (_, _) => await CheckHealthAsync();
         _health.Start();
         _window.BeginInvoke(async () => await InitializeWebAsync());
         _ = Task.Run(WatchParentAsync);
         _ = Task.Run(WatchDisposalAsync);
+        _ = Task.Run(ReadNoticesAsync);
+    }
+
+    private void ShowPanel() {
+        _card = false;
+        _window.PositionAboveTaskbar();
+        _window.Show();
+        _window.Activate();
+    }
+
+    private void HideWindow() {
+        _window.Hide();
+        if (!_card) return;
+        _card = false;
+        _ = RunScriptAsync("window.peNotice?.(null)");
+    }
+
+    /** The host's notice feed (`/host/notices`, SSE): each `data:` line is one card. */
+    private async Task ReadNoticesAsync() {
+        using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+        while (!_stop.IsCancellationRequested && !_retired) {
+            try {
+                using var request = new HttpRequestMessage(HttpMethod.Get, _service.Origin + "/host/notices");
+                request.Headers.Add(TokenHeader, _service.Token);
+                using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, _stop.Token);
+                if (response.IsSuccessStatusCode) {
+                    using var reader = new StreamReader(await response.Content.ReadAsStreamAsync(_stop.Token));
+                    while (await reader.ReadLineAsync(_stop.Token) is { } line)
+                        if (line.StartsWith("data: ", StringComparison.Ordinal)) ShowNotice(line[6..]);
+                }
+            } catch (OperationCanceledException) { return; }
+            catch (Exception error) when (error is HttpRequestException or IOException
+                                          or System.Text.Json.JsonException) { }
+            try { await Task.Delay(2_000, _stop.Token); } catch (OperationCanceledException) { return; }
+        }
+    }
+
+    private void ShowNotice(string json) {
+        // Parsed first, so only a JSON value ever reaches the page as script.
+        using var notice = System.Text.Json.JsonDocument.Parse(json);
+        var root = notice.RootElement;
+        var key = root.GetProperty("id").GetString() + ":" + root.GetProperty("revision").GetInt32();
+        if (!_shown.Add(key)) return;
+        _shownOrder.Enqueue(key);
+        if (_shownOrder.Count > 64) _shown.Remove(_shownOrder.Dequeue());
+        var value = root.GetRawText();
+        try {
+            // ponytail: no page yet means the notice is dropped; the host replays its last minute.
+            _window.BeginInvoke(async () => {
+                if (!_hasPage) return;
+                // A hidden page never lays out, so its card cannot measure itself: show first, then
+                // the page's first height report resizes the window. An open panel just shows the card.
+                if (!_window.Visible) {
+                    _card = true;
+                    _window.PositionCard(96);
+                    _window.Show();
+                }
+                await RunScriptAsync($"window.peNotice?.({value})");
+            });
+        } catch (InvalidOperationException) { }
+    }
+
+    private async Task RunScriptAsync(string script) {
+        if (_closing || !_ready) return;
+        try { await _web.ExecuteScriptAsync(script); }
+        catch (Exception error) when (error is InvalidOperationException or COMException) { }
+    }
+
+    /** The card's side of the conversation: its height, done, expand to the panel, open a page. */
+    private void OnPageMessage(CoreWebView2WebMessageReceivedEventArgs e) {
+        if (!IsHostUrl(e.Source)) return;
+        using var message = System.Text.Json.JsonDocument.Parse(e.WebMessageAsJson);
+        var root = message.RootElement;
+        switch (root.GetProperty("kind").GetString()) {
+            case "card" when !_window.Visible || _card:
+                _card = true;
+                _window.PositionCard(root.GetProperty("height").GetInt32());
+                _window.Show();
+                break;
+            case "hide" when _card:
+                HideWindow();
+                break;
+            case "panel":
+                ShowPanel();
+                break;
+            case "open" when root.GetProperty("href").GetString() is { } href && href.StartsWith('/'):
+                if (_card) HideWindow();
+                OpenWindow(href);
+                break;
+        }
     }
 
     private async Task WatchParentAsync() {
@@ -119,6 +212,11 @@ internal sealed class TrayContext : ApplicationContext {
                 else _navigating = true;
             };
             core.NewWindowRequested += (_, e) => e.Handled = true;
+            core.WebMessageReceived += (_, e) => {
+                try { OnPageMessage(e); }
+                catch (Exception error) when (error is System.Text.Json.JsonException or KeyNotFoundException
+                                               or InvalidOperationException or FormatException) { }
+            };
             core.NavigationCompleted += async (_, e) => {
                 _navigating = false;
                 _hasPage |= e.IsSuccess;
@@ -188,7 +286,7 @@ internal sealed class TrayContext : ApplicationContext {
         } catch (Exception error) when (error is InvalidOperationException or COMException) { }
     }
 
-    private void OpenWindow() {
+    private void OpenWindow(string path = "/") {
         if (!IsOriginalService()) return;
         var edge = new[] { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
                 Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) }
@@ -196,10 +294,10 @@ internal sealed class TrayContext : ApplicationContext {
             .FirstOrDefault(File.Exists);
         try {
             var start = edge is null
-                ? new ProcessStartInfo(_service.Origin + "/") { UseShellExecute = true }
+                ? new ProcessStartInfo(_service.Origin + path) { UseShellExecute = true }
                 : new ProcessStartInfo(edge) { UseShellExecute = false };
             if (edge is not null) {
-                start.ArgumentList.Add("--app=" + _service.Origin + "/");
+                start.ArgumentList.Add("--app=" + _service.Origin + path);
                 start.ArgumentList.Add("--user-data-dir=" + Path.Combine(Path.GetDirectoryName(
                     Path.GetDirectoryName(Path.GetDirectoryName(_launch.ServiceFile)))!, "edge-app"));
                 start.ArgumentList.Add("--no-first-run");
@@ -256,6 +354,17 @@ internal sealed class TrayWindow : Form {
         Text = "Pe.Tools machine";
         DpiChanged += (_, e) => PositionAboveTaskbar(Screen.FromRectangle(e.SuggestedRectangle).WorkingArea,
             e.DeviceDpiNew);
+    }
+
+    /** The panel shows with Activate; a notice card never takes focus from Revit. */
+    protected override bool ShowWithoutActivation => true;
+
+    /** Panel-wide and as tall as the card says, in CSS pixels, at the taskbar's corner. */
+    public void PositionCard(int cssHeight) {
+        var work = (Screen.PrimaryScreen ?? Screen.FromPoint(Cursor.Position)).WorkingArea;
+        var width = SizeFor(work.Size, DeviceDpi).Width;
+        var height = Math.Min((int)Math.Ceiling(cssHeight * DeviceDpi / 96f), work.Height);
+        Bounds = new Rectangle(work.Right - width, work.Bottom - height, width, height);
     }
 
     public void PositionAboveTaskbar() {

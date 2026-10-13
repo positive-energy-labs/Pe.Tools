@@ -958,6 +958,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       admittedPlanId: null,
       planLeg: unreadLeg(),
       receiptLeg: unreadLeg(),
+      automatic: true,
     };
     machine = createMachine({
       grants: { grants: () => [], subscribe: () => () => {} },
@@ -977,6 +978,8 @@ export async function createDemoOwner(parent: string, raw: unknown) {
         refresh: async () => update,
         apply: async () => update,
         automaticPending: () => false,
+        announce: () => {},
+        setAutomatic: async () => update,
       },
       share: unavailableShare,
       subscribe: bridge.subscribe,

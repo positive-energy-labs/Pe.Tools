@@ -9,6 +9,7 @@ import {
   createUpdateReader,
   isUpdatePlanId,
   UpdateReader,
+  type UpdateFact,
   type UpdateRunner,
 } from "./update-reader.ts";
 
@@ -59,9 +60,11 @@ export const updateVerb: UpdateRunner = (verbArgs, detached = false) => {
   });
 };
 
-export const makeInstalledUpdateReader = () =>
+export const makeInstalledUpdateReader = (fact?: (fact: UpdateFact) => void) =>
   createUpdateReader({
     path: join(productRoot(), "state", "host-update.json"),
+    automaticOffPath: join(productRoot(), "state", "host-update-automatic-off"),
+    fact,
     run: updateVerb,
     installed: hostOwnership.lane === "installed",
     pid: process.pid,
@@ -79,6 +82,21 @@ export const updateRoutes = Layer.mergeAll(
           current.planLeg.attemptedAtUtc
           ? current
           : yield* Effect.promise(() => reader.refresh()),
+      );
+    }),
+  ),
+  HttpRouter.add("POST", "/host/update/automatic", (request) =>
+    Effect.gen(function* () {
+      const body = yield* request.json.pipe(Effect.catch(() => Effect.succeed(null)));
+      const enabled = (body as { enabled?: unknown } | null)?.enabled;
+      if (typeof enabled !== "boolean")
+        return Response.jsonUnsafe({ error: "Say enabled: true or false." }, { status: 400 });
+      const reader = yield* UpdateReader;
+      return yield* Effect.tryPromise(() => reader.setAutomatic(enabled)).pipe(
+        Effect.map((update) => Response.jsonUnsafe(update)),
+        Effect.catch((error) =>
+          Effect.succeed(Response.jsonUnsafe({ error: String(error) }, { status: 409 })),
+        ),
       );
     }),
   ),

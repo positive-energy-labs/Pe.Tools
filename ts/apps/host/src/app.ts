@@ -35,8 +35,9 @@ import { staticSpaLayer } from "./static-spa.ts";
 import { peRoutesLayer } from "./pe-routes.ts";
 import { capturesRoute } from "./captures-route.ts";
 import { pagesRoute } from "./pages-route.ts";
+import type { Notices } from "./notices.ts";
 import { makeInstalledUpdateReader, updateRoutes } from "./update-route.ts";
-import { UpdateReader } from "./update-reader.ts";
+import { UpdateReader, type UpdateFact } from "./update-reader.ts";
 
 export { resolveWebRoot } from "./static-spa.ts";
 
@@ -164,6 +165,10 @@ export interface HttpLiveOptions {
   /** Boot-scoped shutdown latch + service token, injected by the launch root. */
   readonly lifecycle: HostLifecycle["Service"];
   readonly updateReader?: UpdateReader["Service"];
+  /** The spine's intake for update facts, handed to the reader this app builds. */
+  readonly updateFact?: (fact: UpdateFact) => void;
+  /** The receipt-projected tray card feed; absent serves no `/host/notices`. */
+  readonly notices?: Notices;
   /** Built SPA directory, or null to skip static serving (dev/vite). */
   readonly webRoot: string | null;
   /** Route registrations for the host-owned route surface; tests inject their own. */
@@ -180,7 +185,7 @@ export interface HttpLiveOptions {
 export function makeHttpLive(options: HttpLiveOptions) {
   const UpdateLive = Layer.succeed(
     UpdateReader,
-    options.updateReader ?? makeInstalledUpdateReader(),
+    options.updateReader ?? makeInstalledUpdateReader(options.updateFact),
   );
   const nodeServer = options.nodeServer ?? createServer();
   // Socket retirement. The platform layer detaches its request handler and calls `server.close`
@@ -240,6 +245,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
     adminShutdownRoute,
     adminWindowRoute,
     updateRoutes,
+    options.notices?.route ?? Layer.empty,
     peRoutesLayer(options.routeRegistrations, share),
     demoRoutes(),
     webUrl

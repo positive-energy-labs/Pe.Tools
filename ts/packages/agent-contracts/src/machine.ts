@@ -117,6 +117,30 @@ export interface MachineUpdate {
   readonly admittedPlanId: string | null;
   readonly planLeg: MachineLeg;
   readonly receiptLeg: MachineLeg;
+  /** Install eligible updates without asking; on unless the person turned it off. */
+  readonly automatic: boolean;
+}
+
+/**
+ * One tray card: a projection of one receipt revision on `/host/notices`, never a source of truth.
+ * `id` + `revision` are the receipt's own, so a replay, a reconnect or a successor host's re-read
+ * of the same revision is one card. `href` opens in the app window; absent opens the panel.
+ */
+export interface MachineNotice {
+  readonly id: string;
+  readonly revision: number;
+  readonly title: string;
+  readonly body: string;
+  readonly href?: string;
+  /** What the card can do in place, beside opening. */
+  readonly act?:
+    | {
+        readonly kind: "permission";
+        readonly threadId: string;
+        readonly requestId: string;
+        readonly options: readonly { optionId: string; name: string; kind: string }[];
+      }
+    | { readonly kind: "automatic-updates" };
 }
 
 /** Wave 4 implements the Serve adapter; desired intent never proves an active mapping. */
