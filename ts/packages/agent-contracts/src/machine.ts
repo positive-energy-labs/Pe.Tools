@@ -7,6 +7,7 @@ import type {
   UpdatePlan,
   UpdateReceipt,
 } from "@pe/host-contracts/pe-revit-contract";
+import type { DocumentIdentityAuthority } from "@pe/host-contracts/contracts";
 import type { Access, Provider } from "./harness-thread.ts";
 import { addressSchema, type DocumentRef, type TargetInventory } from "./target.ts";
 
@@ -78,7 +79,7 @@ export type MachineAccess =
       readonly until: string;
     };
 
-/** A document as the product socket names it (its openId, not the SDK's), with what it grants. */
+/** A document as the product socket names it, with what it grants. */
 export interface MachineAttachmentDocument extends DocumentRef {
   readonly title: string;
   readonly address: string | null;
@@ -87,11 +88,13 @@ export interface MachineAttachmentDocument extends DocumentRef {
   readonly access: MachineAccess;
 }
 
-/** Product socket evidence, not SDK custody. Documents keep the product openId namespace. */
+/** Product socket evidence, not SDK custody. */
 export interface MachineAttachment {
   readonly session: string;
   readonly pid: number;
   readonly processStartUtcUnixMs: number | null;
+  /** Set when the payload attested its openIds are the SDK's; null means no SDK join, so no write. */
+  readonly documentIdentity: DocumentIdentityAuthority | null;
   readonly documents: readonly MachineAttachmentDocument[] | null;
 }
 

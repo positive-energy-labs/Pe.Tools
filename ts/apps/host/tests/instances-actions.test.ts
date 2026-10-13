@@ -125,6 +125,8 @@ async function setup(
     facts: {} as { isWorkshared?: boolean; isDetached?: boolean },
     /** What `doc list` says about unsaved edits. */
     modified: false,
+    /** The bridge snapshot's SDK identity marker; null is a payload that did not attest. */
+    identity: "sdk-open-v1" as "sdk-open-v1" | null,
   };
   const update = {
     plan: null,
@@ -176,6 +178,7 @@ async function setup(
         session: "bridge-dev",
         pid: originalProcess.pid,
         processStartUtcUnixMs: Date.parse(originalProcess.processStartUtc),
+        documentIdentity: census.identity,
         documents: census.documents.map((openId) => ({
           session: "bridge-dev",
           openId,
@@ -314,6 +317,25 @@ test.each(["stop", "restart", "reset"])(
       basis: { kind: "grant", lifetime: grantHead().grant!.lifetime },
     });
     expect(f.census.reads).toBeGreaterThanOrEqual(2);
+  },
+);
+
+test.each(["stop", "restart"])(
+  "D3 %s refuses the granted lifetime when the bridge does not attest SDK document identity",
+  async (verb) => {
+    const f = await setup(() => ({ result: { state: "ok" } }));
+    bindControl({ heads: grantHead });
+    // Same string on both sides, but no marker: no join, no title/path fallback, no dispatch.
+    f.census.identity = null;
+    await expect(
+      f.admit(
+        `instances.${verb}`,
+        { session, ...(verb === "restart" ? {} : { unsaved: "keep" }) },
+        undefined,
+        "agent",
+      ),
+    ).rejects.toMatchObject({ refusal: { code: "lifecycle.ungranted-documents" } });
+    expect(f.calls.every((args) => args[1] === "list")).toBe(true);
   },
 );
 

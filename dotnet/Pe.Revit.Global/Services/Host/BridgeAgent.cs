@@ -11,6 +11,7 @@ using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 using Pe.Shared.StorageRuntime.Modules;
 using Pe.Revit.Loader;
+using Pe.Revit.Loader.Documents;
 using Pe.Revit.Operations;
 using Pe.Revit.Tasks;
 using Pe.Revit.Global.Services.Document;
@@ -609,11 +610,14 @@ internal sealed class BridgeAgent : IDisposable {
             ?? throw new InvalidOperationException("Document tracker is unavailable.");
         // Title and address come from the live document, never the tracker's event-time snapshot:
         // SaveAs changes the path, and an EditFamily document is admitted before it has a title.
+        var attested = true;
         var documents = tracker.Open.Where(tracked => !tracked.IsLinked)
             .Select(tracked => {
                 var document = tracked.Resolve();
+                // The SDK authority, not this payload, names the lifetime; one disagreement withholds the marker.
+                attested &= PeDocumentIdentity.TryGetOpenId(document, out var authority) && authority == tracked.OpenId;
                 return new BridgeDocumentSnapshot(
-                    tracked.OpenId(),
+                    tracked.OpenId,
                     document.Title,
                     document.GetCloudModelGuid() ?? document.GetDocumentPath(),
                     document.IsFamilyDocument,
@@ -641,7 +645,8 @@ internal sealed class BridgeAgent : IDisposable {
             DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             RevitUiSession.CurrentUIApplication.Application.SharedParametersFilename,
             documents,
-            runtimeAssemblies
+            runtimeAssemblies,
+            attested ? BridgeProtocol.DocumentIdentity : null
         );
     }
 

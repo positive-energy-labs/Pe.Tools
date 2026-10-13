@@ -6,7 +6,11 @@ import type { SessionObservation } from "../vendor/generated/pe-revit-contract.t
 import type { HostLane } from "../service-identity.ts";
 
 export const HOST_CONTRACT_VERSION = 55 as const;
-export const BRIDGE_CONTRACT_VERSION = 24 as const;
+// 25: open ids are the SDK bridge's (beta.202 sole document identity authority), attested per snapshot.
+export const BRIDGE_CONTRACT_VERSION = 25 as const;
+/** Snapshot marker: every listed openId is the SDK's id for that open lifetime. Absent = no join. */
+export const DOCUMENT_IDENTITY_AUTHORITY = "sdk-open-v1" as const;
+export type DocumentIdentityAuthority = typeof DOCUMENT_IDENTITY_AUTHORITY;
 export const BRIDGE_PATH = "/api/bridge" as const;
 export const HOST_RPC_SDK_SESSION_HEADER = "x-pe-sdk-session" as const;
 /** Private exact attachment identity; never an SDK name or selector language. */
@@ -84,7 +88,7 @@ export const bridgeRegistrationAckSchema = Schema.Struct({
 });
 export type BridgeRegistrationAck = Schema.Schema.Type<typeof bridgeRegistrationAckSchema>;
 
-/** `openId` is the bridge's id, carried with an exact attachment (not `pe-revit doc open`'s).
+/** `openId` is the SDK bridge's open-lifetime id when the snapshot carries `documentIdentity`.
  * `address` is null until the document is saved (detached, new, or an EditFamily family). */
 export const bridgeDocumentSnapshotSchema = Schema.Struct({
   openId: Schema.String,
@@ -105,6 +109,8 @@ export const bridgeStateSnapshotSchema = Schema.Struct({
   activeDocumentObservedAtUnixMs: Schema.Number,
   activeDocumentPath: nullableString,
   activeDocumentTitle: nullableString,
+  // DOCUMENT_IDENTITY_AUTHORITY only when the payload attested every openId; anything else is no join.
+  documentIdentity: nullableString,
   hasActiveDocument: Schema.Boolean,
   openDocuments: Schema.Array(bridgeDocumentSnapshotSchema),
   revitVersion: Schema.String,

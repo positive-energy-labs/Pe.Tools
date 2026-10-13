@@ -114,6 +114,7 @@ export const CHECKOUT_HOT = {
     session: "bridge-2501",
     pid: 2501,
     processStartUtcUnixMs: Date.parse(STARTED),
+    documentIdentity: "sdk-open-v1",
     documents: null,
   },
   documents: [TOWER, SHELL],
@@ -433,6 +434,7 @@ export const BAY_YOURS_25: MachineSession = {
     session: "bridge-18244",
     pid: 18244,
     processStartUtcUnixMs: Date.parse(STARTED),
+    documentIdentity: "sdk-open-v1",
     documents: null,
   },
   documents: [
@@ -503,6 +505,7 @@ const peaSession = (
     session: `bridge-${pid}`,
     pid,
     processStartUtcUnixMs: Date.parse(STARTED),
+    documentIdentity: "sdk-open-v1",
     documents: null,
   },
   documents,

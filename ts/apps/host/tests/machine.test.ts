@@ -15,6 +15,7 @@ import type {
   SessionObservation,
 } from "@pe/host-contracts/pe-revit-contract";
 import {
+  bridgeAttachments,
   createMachine,
   machineSources,
   processCustody,
@@ -59,6 +60,7 @@ const attached: AttachmentRead = {
   session: "product-open",
   pid: 42,
   processStartUtcUnixMs: Date.parse(row.process.processStartUtc),
+  documentIdentity: "sdk-open-v1",
   documents: [
     {
       session: "product-open",
@@ -775,15 +777,18 @@ const accessesAt = async (
   grants: readonly HeldGrant[],
   at: string,
   acquired?: { sdk: { openId: string; isWorkshared: boolean | null }[]; products?: string[] },
+  documentIdentity: AttachmentRead["documentIdentity"] = "sdk-open-v1",
 ) => {
   const f = fixture();
   vi.mocked(f.sources.grants.grants).mockReturnValue(grants);
+  vi.mocked(f.sources.attachments).mockResolvedValue([{ ...attached, documentIdentity }]);
   if (acquired) {
     vi.mocked(f.sources.actions).mockResolvedValue([acquiring("open", "succeeded", row.process)]);
     vi.mocked(f.sources.sessions).mockResolvedValue([controlled(acquired.sdk)]);
     vi.mocked(f.sources.attachments).mockResolvedValue([
       {
         ...attached,
+        documentIdentity,
         documents: (acquired.products ?? ["product-id"]).map((openId) => ({
           ...attached.documents![0]!,
           openId,
@@ -858,6 +863,36 @@ test("access: only the document Pea acquired is Pea's; a user document opened in
   expect(await accessesAt([], at, { sdk: [{ openId: "product-id", isWorkshared: null }] })).toEqual(
     [{ kind: "read" }],
   );
+});
+
+test("access: one SDK id joins the acquisition and grant; without the identity marker both stay read", async () => {
+  const at = "2026-10-12T12:30:00.000Z";
+  // The SDK doc-list id and the bridge openId are the same string: SDK beta.202's one authority.
+  const sdk = [{ openId: "product-id", isWorkshared: false }];
+  expect(await accessesAt([], at, { sdk })).toEqual([{ kind: "pea", acquisition: "launch" }]);
+  expect(await accessAt([grantHeld()], at)).toMatchObject({ kind: "rw" });
+  // A payload that did not attest SDK identity: equal strings prove nothing, nothing writes.
+  expect(await accessesAt([], at, { sdk }, null)).toEqual([{ kind: "read" }]);
+  expect(await accessesAt([grantHeld()], at, undefined, null)).toEqual([{ kind: "read" }]);
+});
+
+test("bridge attachments project the identity marker only from its exact attested value", async () => {
+  const view = (documentIdentity: string | null | undefined) => ({
+    connected: true,
+    sessionId: "product-open",
+    processId: 42,
+    processStartUtcUnixMs: 1000,
+    state: { openDocuments: [], ...(documentIdentity === undefined ? {} : { documentIdentity }) },
+  });
+  const marks = await bridgeAttachments({
+    list: Effect.succeed([view("sdk-open-v1"), view("sdk-open-v2"), view(null), view(undefined)]),
+  } as never);
+  expect(marks.map((attachment) => attachment.documentIdentity)).toEqual([
+    "sdk-open-v1",
+    null,
+    null,
+    null,
+  ]);
 });
 
 test("access: a head move re-reads the machine through the grant source", async () => {

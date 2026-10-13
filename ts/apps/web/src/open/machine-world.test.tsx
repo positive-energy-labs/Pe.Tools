@@ -86,6 +86,7 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
     session,
     pid,
     processStartUtcUnixMs: Date.parse(observed.process.processStartUtc),
+    documentIdentity: "sdk-open-v1" as const,
     documents: [
       {
         session,

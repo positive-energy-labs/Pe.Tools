@@ -72,6 +72,7 @@ export function machineFixture(attachments: readonly Attachment[] = []): Machine
           ...attachment,
           pid: index + 1,
           processStartUtcUnixMs: Date.parse(at),
+          documentIdentity: "sdk-open-v1",
           documents:
             attachment.documents?.map((doc) => ({
               ...doc,

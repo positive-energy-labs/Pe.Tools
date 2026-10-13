@@ -344,6 +344,7 @@ const CATALOG = {
             session: "pe.app-26",
             pid: 2501,
             processStartUtcUnixMs: 0,
+            documentIdentity: "sdk-open-v1",
             documents: [
               {
                 session: "pe.app-26",

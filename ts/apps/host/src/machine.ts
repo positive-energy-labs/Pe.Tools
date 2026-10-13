@@ -4,7 +4,7 @@ import { join, win32 } from "node:path";
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { z } from "zod";
-import { productIdentity } from "@pe/host-contracts/contracts";
+import { DOCUMENT_IDENTITY_AUTHORITY, productIdentity } from "@pe/host-contracts/contracts";
 import type {
   Access,
   ActionReceipt,
@@ -83,17 +83,22 @@ export type AttachmentRead = Omit<MachineAttachment, "documents"> & {
   readonly documents: readonly Omit<MachineAttachmentDocument, "access">[] | null;
 };
 
-/** Only acquisitions or unexpired exact-lifetime grants write; stale heads remain read-only. */
+/**
+ * Only acquisitions or unexpired exact-lifetime grants write; stale heads remain read-only. Both
+ * join product openIds to SDK ids, so a socket that did not attest SDK identity writes nothing.
+ */
 export function withAccess(
   attachment: AttachmentRead,
   acquired: ReadonlyMap<string, string>,
   grants: readonly HeldGrant[],
   at: number,
 ): MachineAttachment {
+  const joined = attachment.documentIdentity === DOCUMENT_IDENTITY_AUTHORITY;
   return {
     ...attachment,
     documents:
       attachment.documents?.map((document): MachineAttachmentDocument => {
+        if (!joined) return { ...document, access: { kind: "read" } };
         const held = grants.find(
           ({ grant }) =>
             grant.lifetime.session === document.session &&
@@ -592,6 +597,8 @@ export async function readMachineSession(process: {
     throw Error("Machine has no fresh document census for the exact process incarnation.");
   if (machine.revit.unclassifiedAttachments.some((attachment) => matches(attachment, process)))
     throw Error("Machine cannot join the process to one exact bridge attachment.");
+  if (row.attachment && row.attachment.documentIdentity !== DOCUMENT_IDENTITY_AUTHORITY)
+    throw Error("The bridge attachment does not attest SDK document identity; no document joins.");
   return row;
 }
 
@@ -781,6 +788,10 @@ export async function bridgeAttachments(
             session: view.sessionId,
             pid: view.processId,
             processStartUtcUnixMs: view.processStartUtcUnixMs ?? null,
+            documentIdentity:
+              view.state?.documentIdentity === DOCUMENT_IDENTITY_AUTHORITY
+                ? DOCUMENT_IDENTITY_AUTHORITY
+                : null,
             documents: view.state
               ? view.state.openDocuments.map((doc) => ({
                   session: view.sessionId!,
