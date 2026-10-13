@@ -34,6 +34,8 @@ export const productPathNames = {
   revitAppLogFileName: "revit.log.txt",
   /** The one override for the whole product home; host, Pea and Revit read it identically. */
   productHomeVariable: "PE_TOOLS_PRODUCT_HOME",
+  /** Under an override, machine-local state, logs and service files live in `<home>\.local-state`. */
+  localStateDirectoryName: ".local-state",
 } as const;
 
 const hostService = payload("VersionedApp", "host")?.service;

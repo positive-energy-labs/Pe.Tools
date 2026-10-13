@@ -5,9 +5,9 @@ import {
   BRIDGE_CONTRACT_VERSION,
   BRIDGE_PATH,
   HOST_CONTRACT_VERSION,
-  productIdentity,
   productPathNames,
 } from "@pe/host-contracts/contracts";
+import { productRoot } from "@pe/host-contracts/service-identity";
 import {
   HostLogTarget,
   type HostProbeData,
@@ -254,12 +254,7 @@ function splitLogLines(text: string): string[] {
 }
 
 function productLogPaths() {
-  const rootPath = join(
-    process.env.LOCALAPPDATA ?? "",
-    productIdentity.vendorName,
-    productIdentity.productName,
-    productPathNames.logsDirectoryName,
-  );
+  const rootPath = join(productRoot(), productPathNames.logsDirectoryName);
   return {
     hostLogPath: join(rootPath, productPathNames.hostLogFileName),
     revitAppLogPath: join(rootPath, productPathNames.revitAppLogFileName),

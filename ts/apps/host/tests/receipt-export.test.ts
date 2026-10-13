@@ -594,7 +594,7 @@ test("the real fatal process exits 1 with a never-settling sink after committing
     expect(ready).toBeGreaterThan(0);
     expect(Date.now() - ready).toBeLessThan(500);
     expect(
-      readFileSync(join(dir, "Positive Energy", "Pe.Tools", "logs", "host-fatal.jsonl"), "utf8"),
+      readFileSync(join(dir, "Pe.Tools", ".local-state", "logs", "host-fatal.jsonl"), "utf8"),
     ).toContain("raw-child-sentinel");
   } finally {
     if (child.exitCode === null) child.kill();

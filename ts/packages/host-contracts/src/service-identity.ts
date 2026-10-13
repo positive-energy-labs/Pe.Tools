@@ -6,7 +6,13 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { isSea } from "node:sea";
-import { hostProcessIdentity, productIdentity, productInstallLayout } from "./contracts/product.ts";
+import {
+  hostProcessIdentity,
+  productIdentity,
+  productInstallLayout,
+  productPathNames,
+} from "./contracts/product.ts";
+import { productHomePath } from "./product-paths.ts";
 export {
   HOST_RUNTIME_SERVICE_HEADER,
   HOST_RUNTIME_SERVICE_QUERY,
@@ -19,9 +25,13 @@ export type HostLane = "dev" | "installed";
 /**
  * Product root under `%LOCALAPPDATA%\<vendor>\<product>` — the A10 service-file `appBase`
  * (`state/service/<service-name>.json` lives beneath it) and the install-receipt root. Resolved
- * lazily so tests can redirect it via `LOCALAPPDATA`.
+ * lazily so tests can redirect it via `LOCALAPPDATA`. When the product home override is set the
+ * root moves under it (`<home>\.local-state`), so an isolated run shares no state with the owner's
+ * host; the SDK's own registry stays in `%LOCALAPPDATA%\Pe.Revit.Sdk`.
  */
 export function productRoot(): string {
+  if (process.env[productPathNames.productHomeVariable]?.trim())
+    return join(productHomePath(), productPathNames.localStateDirectoryName);
   return join(
     process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),
     productIdentity.vendorName,

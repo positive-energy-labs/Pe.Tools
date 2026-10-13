@@ -39,7 +39,8 @@ test("lane selection disables dev even with an installed key; only explicit pref
   process.env.LOCALAPPDATA = dir;
   process.env.PE_TOOLS_PRODUCT_HOME = join(dir, "docs", "Pe.Tools");
   try {
-    const root = join(dir, "Positive Energy", "Pe.Tools");
+    // Under the override the machine-local root, and so the installed manifest, moves with it.
+    const root = join(dir, "docs", "Pe.Tools", ".local-state");
     mkdirSync(root, { recursive: true });
     writeFileSync(
       join(root, "product.payloads.json"),

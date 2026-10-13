@@ -13,11 +13,7 @@ public sealed record ProductRuntimeLayout(
     ProductRuntimeCacheLayout Cache
 ) {
     public static ProductRuntimeLayout ForCurrentUser(string? localAppData = null) {
-        var rootPath = Path.Combine(
-            ProductPathing.ResolveLocalAppData(localAppData),
-            ProductIdentity.VendorName,
-            ProductIdentity.ProductName
-        );
+        var rootPath = ProductPathing.ResolveRuntimeRoot(localAppData);
         return new ProductRuntimeLayout(
             rootPath,
             new ProductRuntimeStateLayout(Path.Combine(rootPath, ProductPathNames.StateDirectoryName)),

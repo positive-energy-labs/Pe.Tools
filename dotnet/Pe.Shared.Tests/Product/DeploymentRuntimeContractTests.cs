@@ -95,6 +95,42 @@ public sealed class DeploymentRuntimeContractTests {
         }
     }
 
+    // ADV2-S4: acceptance hosts on worktrees shared the owner's %LOCALAPPDATA% state. The one
+    // override roots machine-local state too, under <home>\.local-state, matching the host's productRoot.
+    [Test, NonParallelizable]
+    public void Product_home_override_roots_machine_local_state_and_logs_and_nothing_resolves_under_local_app_data() {
+        var home = Path.Combine(Path.GetTempPath(), $"pe-home-{Guid.NewGuid():N}", "Pe.Tools");
+        var ownerRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Positive Energy", "Pe.Tools");
+        var previous = Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable);
+        Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, home);
+        try {
+            var runtime = ProductRuntimeLayout.ForCurrentUser();
+            var state = Path.Combine(home, ".local-state");
+            Assert.That(runtime.RootPath, Is.EqualTo(state));
+            var paths = new[] {
+                runtime.State.RootPath,
+                runtime.State.ApsCredentialsPath,
+                runtime.State.ApsTokenStorePath,
+                runtime.Logs.HostLogPath,
+                runtime.Cache.ResolveModuleCachePath("census"),
+                new GlobalStorage().DirectoryPath,
+                new ModuleStorage("census").State().DirectoryPath
+            };
+            foreach (var path in paths) {
+                Assert.That(path.StartsWith(state, StringComparison.OrdinalIgnoreCase), Is.True, path);
+                Assert.That(path.StartsWith(ownerRoot, StringComparison.OrdinalIgnoreCase), Is.False, path);
+            }
+            // An explicit local app data argument still wins over the environment.
+            Assert.That(
+                ProductRuntimeLayout.ForCurrentUser(Path.Combine(home, "explicit")).RootPath,
+                Is.EqualTo(Path.Combine(home, "explicit", "Positive Energy", "Pe.Tools")));
+        } finally {
+            Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, previous);
+            TryDeleteDirectory(Path.GetDirectoryName(home)!);
+        }
+    }
+
     [Test]
     public void Scripting_workspace_layout_accepts_local_names_and_refuses_path_escape() {
         var rootPath = Path.Combine(Path.GetTempPath(), $"pe-workspaces-{Guid.NewGuid():N}");

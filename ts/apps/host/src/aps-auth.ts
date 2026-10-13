@@ -1,11 +1,9 @@
 import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { Effect, FileSystem, Schema, Semaphore } from "effect";
 import { HttpBody, HttpClient, UrlParams } from "effect/unstable/http";
-import { productIdentity, productPathNames } from "@pe/host-contracts/contracts";
 import {
   ApsAuthFlowKind,
   ApsScopeProfile,
@@ -16,7 +14,7 @@ import {
 } from "@pe/host-contracts/operation-types";
 import { LocalOpError } from "./local-error.ts";
 import { runHostChild } from "./host-child.ts";
-import { productApsCredentialsPath } from "./product-paths.ts";
+import { productApsCredentialsPath, productApsTokensPath } from "./product-paths.ts";
 
 const APS_AUTH_BASE_URL = "https://developer.api.autodesk.com/authentication/v2";
 const CALLBACK_PORT = 8080;
@@ -433,17 +431,6 @@ function apsCredentialsPath(): string {
   return productApsCredentialsPath();
 }
 
-function tokenStorePath(): string {
-  return join(
-    process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),
-    productIdentity.vendorName,
-    productIdentity.productName,
-    productPathNames.stateDirectoryName,
-    "aps-auth",
-    "tokens.json",
-  );
-}
-
 const loadPersistedToken = Effect.fnUntraced(function* (key: string) {
   const map = yield* loadPersistedTokenMap();
   return map.get(key) ?? null;
@@ -464,7 +451,7 @@ const deletePersistedTokensByClientId = Effect.fnUntraced(function* (clientId: s
 
 const loadPersistedTokenMap = Effect.fnUntraced(function* () {
   const fs = yield* FileSystem.FileSystem;
-  const fileResult = yield* Effect.result(fs.readFileString(tokenStorePath()));
+  const fileResult = yield* Effect.result(fs.readFileString(productApsTokensPath()));
   if (fileResult._tag === "Failure" || !fileResult.success.trim())
     return new Map<string, PersistedTokenRecord>();
 
@@ -513,10 +500,10 @@ const writePersistedTokenMap = Effect.fnUntraced(function* (
   );
   const fs = yield* FileSystem.FileSystem;
   yield* fs
-    .makeDirectory(dirname(tokenStorePath()), { recursive: true })
+    .makeDirectory(dirname(productApsTokensPath()), { recursive: true })
     .pipe(Effect.mapError((error) => new LocalOpError("aps.auth.token", error.message)));
   yield* fs
-    .writeFileString(tokenStorePath(), `${JSON.stringify({ entries }, null, 2)}\n`)
+    .writeFileString(productApsTokensPath(), `${JSON.stringify({ entries }, null, 2)}\n`)
     .pipe(Effect.mapError((error) => new LocalOpError("aps.auth.token", error.message)));
 });
 
