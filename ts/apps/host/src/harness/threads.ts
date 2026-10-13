@@ -49,6 +49,7 @@ import {
   type ThreadHeadReading,
   type Caller,
   emptyThreadHead,
+  contributionKindSchema,
 } from "@pe/agent-contracts";
 import { HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
 import {
@@ -67,6 +68,7 @@ import { Effect } from "effect";
 import { z } from "zod";
 import { openAdapter, stopChild } from "./adapter.ts";
 import { accessModes, sessionOffer, type Providers } from "./providers.ts";
+import { migrateContributionEvents, type ContributionMigration } from "./contribution-migration.ts";
 
 /** The thread wire of ADR 0015; contract and route list in `@pe/agent-contracts` `harness-thread.ts`. */
 
@@ -134,6 +136,8 @@ export type HarnessThreadsOptions = {
   providers: Providers;
   /** Automatic update admission excludes new harness work through installer handoff. */
   updatePending?: () => boolean;
+  /** Admission/import and skill publication must settle before either harness starts. */
+  prepare?: () => Promise<unknown>;
 };
 
 /** A turn with no session update for this long gets a `waiting` marker, and again each period. */
@@ -368,6 +372,37 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   }
 
   const writeMeta = (t: Thread) => writeJson(join(options.root, t.meta.id, "meta.json"), t.meta);
+
+  function migrateContributions(mapping: readonly ContributionMigration[]) {
+    if ([...threads.values()].some((t) => t.live || t.running || t.busy))
+      return { ok: false, diagnostics: ["Stop harness work before migrating typed references."] };
+    const unreadable = readdirSync(options.root).filter(
+      (id) => existsSync(join(options.root, id, "meta.json")) && !threads.has(id),
+    );
+    if (unreadable.length)
+      return { ok: false, diagnostics: unreadable.map((id) => `Unreadable stored thread: ${id}`) };
+    const planned = [...threads.values()].map((t) => {
+      const path = join(options.root, t.meta.id, "events.jsonl");
+      return {
+        t,
+        path,
+        ...migrateContributionEvents(existsSync(path) ? readFileSync(path, "utf8") : "", mapping),
+      };
+    });
+    const diagnostics = planned.flatMap((p) => p.diagnostics.map((d) => `${p.t.meta.id}: ${d}`));
+    if (diagnostics.length) return { ok: false, diagnostics };
+    for (const p of planned) {
+      if (!p.changed) continue;
+      writeFileSync(`${p.path}.tmp`, p.journal);
+      renameSync(`${p.path}.tmp`, p.path);
+      p.t.events = p.journal
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as HarnessEvent);
+      p.t.refeed = null;
+    }
+    return { ok: true, changed: planned.reduce((n, p) => n + p.changed, 0), diagnostics };
+  }
 
   function append(t: Thread, event: Append): HarnessEvent {
     const line = JSON.stringify({
@@ -671,6 +706,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   }
 
   async function connect(t: Thread): Promise<Live> {
+    await options.prepare?.();
     const harness = t.meta.harness;
     const record = options.providers.get(t.meta.providerId);
     if (!record)
@@ -1219,6 +1255,20 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       if (!request.headers.get("content-type")?.startsWith("application/json")) throw new NotJson();
       return schema.parse(await request.json());
     };
+    if (url.pathname === "/pe/threads/contribution-migration" && method === "POST") {
+      requireHuman(currentCaller(), url.pathname, "migrating typed contribution references");
+      const mapping = await input(
+        z.array(
+          z.strictObject({
+            oldKey: z.string().min(1),
+            key: z.string().min(1),
+            kind: contributionKindSchema,
+          }),
+        ),
+      );
+      const result = migrateContributions(mapping);
+      return json(result, result.ok ? 200 : 409);
+    }
     if (url.pathname.startsWith("/pe/scope/")) {
       const caller = currentCaller();
       const [named, scopeVerb, ...rest] = url.pathname.slice("/pe/scope/".length).split("/");
@@ -1590,6 +1640,8 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   sweep.unref();
 
   return {
+    /** Explicit acceptance-lane operation; loading a thread never migrates user state. */
+    migrateContributions,
     /** Automatic updates wait for every turn and harness action to finish. */
     active: () => [...threads.values()].some((t) => t.running !== null || t.busy > 0),
     /** The thread head store; the `thread-head` Reading observes it. */

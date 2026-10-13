@@ -81,6 +81,7 @@ import {
 } from "./settings.ts";
 import { LocalOpError, localOpHttpStatus } from "./local-error.ts";
 import { capturePackage } from "./packages.ts";
+import { exportPod, importPod, promotePage, TransferRefused } from "./pod-transfer.ts";
 import {
   rhvacAssemblies,
   rhvacLaunch,
@@ -934,6 +935,18 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
         })),
       );
     }
+    case "pod.export": {
+      const input = yield* decodeRequest(key, request);
+      return yield* transfer(key, () => exportPod(input));
+    }
+    case "pod.import": {
+      const input = yield* decodeRequest(key, request);
+      return yield* transfer(key, () => importPod(input));
+    }
+    case "pod.promote": {
+      const input = yield* decodeRequest(key, request);
+      return yield* transfer(key, () => promotePage(input));
+    }
     case "pod.runs":
       return yield* listRuns(yield* decodeRequest(key, request));
     case "pod.member.read":
@@ -969,6 +982,19 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
       return yield* apsAuthToken(yield* decodeRequest(key, request));
   }
 });
+
+/**
+ * Archive transport is host-only. A refusal is a settled answer (the transfer is all-or-nothing, so
+ * nothing landed): it fails the receipt with its own status instead of leaving it unknown.
+ */
+const transfer = <A>(key: "pod.export" | "pod.import" | "pod.promote", run: () => Promise<A>) =>
+  Effect.tryPromise({
+    try: run,
+    catch: (error) =>
+      error instanceof TransferRefused
+        ? new BridgeError(error.message, error.status, { dispatched: true })
+        : new LocalOpError(key, error instanceof Error ? error.message : String(error)),
+  });
 
 /** A package refusal keeps its own words; identity misses are 404, twins 409, bad members 422. */
 const packageError = (key: string, error: unknown) => {

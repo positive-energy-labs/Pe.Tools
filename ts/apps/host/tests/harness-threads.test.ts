@@ -41,7 +41,7 @@ type Host = {
 const hosts: Host[] = [];
 const mcpServer = () => ({ name: "pea", command: "unused", args: [], env: [] });
 /** Threads and providers behind one fetch, as the host's router mounts them. No probe at start. */
-const host = (updatePending?: () => boolean): Host => {
+const host = (updatePending?: () => boolean, prepare?: () => Promise<unknown>): Host => {
   const consoles: string[] = [];
   const providers = createProviders({
     shellPath: async () => "C:\\canary-bin;C:\\also",
@@ -49,6 +49,7 @@ const host = (updatePending?: () => boolean): Host => {
     openConsole: async (command) => void consoles.push(command),
   });
   const threads = createHarnessThreads({
+    prepare,
     updatePending,
     root,
     worldRoot: tmpdir(),
@@ -127,6 +128,28 @@ async function until(
 }
 const kinds = (events: HarnessEvent[]) =>
   events.map((e) => (e.kind === "update" ? `update:${e.update.sessionUpdate}` : e.kind));
+
+test.each(["claude", "codex"])(
+  "%s waits for admitted skill publication before starting its child",
+  async (providerId) => {
+    let release!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const prepare = vi.fn(() => ready);
+    const threads = host(undefined, prepare);
+    const created = await caller(threads)("POST", "/pe/threads", { providerId });
+    expect(created.status).toBe(200);
+    const id = created.json.id;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(prepare).toHaveBeenCalledOnce();
+    const waiting = await reader(threads)(id);
+    expect(waiting.models).toEqual([]);
+    expect(waiting.events).toEqual([]);
+    release();
+    await until(reader(threads), id, (body) => body.models.length > 0);
+  },
+);
 
 test("automatic update admission refuses a new Pea prompt through download and releases on confirmed refusal", async () => {
   const planId = "64f25f46-dfa6-4ee6-b973-d7f6a8b523c4";
