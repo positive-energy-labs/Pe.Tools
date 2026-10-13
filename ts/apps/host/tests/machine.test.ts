@@ -916,3 +916,41 @@ test("holdings retain nullable facts and last confirmed evidence after a failed 
     f.machine.close();
   }
 });
+
+test("failed receipt rows preserve acquisition provenance and controlled custody", async () => {
+  const f = fixture();
+  const failed = {
+    ...controlled([]),
+    case: "failed-receipt",
+    detail: "Payload failed",
+    execution: { allowed: false, code: "session.boot-blocked", detail: "Payload failed" },
+    failure: {
+      source: "journal",
+      event: "failed",
+      journalFile: "journal",
+      message: "Payload failed",
+      process: row.process,
+    },
+  } as SessionObservation;
+  vi.mocked(f.sources.sessions).mockResolvedValue([failed]);
+  vi.mocked(f.sources.actions).mockResolvedValue([acquiring("open", "succeeded", row.process)]);
+  useHostMachine(f.machine);
+  try {
+    const result = await f.machine.refresh();
+    expect(result.revit.sessions).toHaveLength(1);
+    expect(result.revit.sessions![0]).toMatchObject({
+      row: failed,
+      whose: "pea",
+      documents: null,
+      attachment: null,
+    });
+    expect(processCustody(row.process.pid, Date.parse(row.process.processStartUtc))).toBe(
+      "controlled",
+    );
+    expect(f.sources.documents).not.toHaveBeenCalled();
+    expect(f.sources.holdings).not.toHaveBeenCalled();
+  } finally {
+    useHostMachine(undefined);
+    f.machine.close();
+  }
+});

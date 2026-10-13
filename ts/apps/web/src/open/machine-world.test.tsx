@@ -46,6 +46,20 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
     process: { ...controlled.process, pid: 46 },
     bridge: { ...controlled.bridge, documents: null },
   };
+  const failed = {
+    ...controlled,
+    case: "failed-receipt" as const,
+    id: "failed-payload",
+    detail: "Payload failed",
+    execution: { allowed: false, code: "session.boot-blocked", detail: "Payload failed" },
+    failure: {
+      source: "journal" as const,
+      event: "failed",
+      journalFile: "journal",
+      message: "Payload failed",
+      process: { ...controlled.process, pid: 47 },
+    },
+  };
   const knownHoldings = [
     {
       openId: controlled.bridge.documents[0]!.openId!,
@@ -88,7 +102,7 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
       throw Error("host record unavailable");
     },
     peers: async () => [],
-    sessions: async () => [observed, foreign, disconnected, controlled, holdingsUnknown],
+    sessions: async () => [observed, foreign, disconnected, controlled, holdingsUnknown, failed],
     documents: async () => new Promise(() => {}),
     holdings: async (process) => (process.pid === controlled.process.pid ? knownHoldings : null),
     attachments: async () => [
@@ -157,6 +171,10 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
       </>,
     );
   }
+  expect(map.machine.revit.sessions![5]).toMatchObject({ row: failed, whose: "you" });
+  expect(custodyOf(map.machine.revit.sessions![5]!.row)).toBe("controlled");
+  expect(pidOf(map.machine.revit.sessions![5]!.row)).toBe(47);
+  expect(within(document.querySelector('[data-key="card-5"]')!).getByText("failed")).toBeTruthy();
   expect(screen.getByText("Review ducts")).toBeTruthy();
   expect(screen.getAllByText(/documents unread: Error: documents:.*leg exceeded/)).toHaveLength(3);
   expect(screen.queryByText("no document open")).toBeNull();

@@ -382,7 +382,9 @@ export function createMachine(
           const allowed = row.execution?.allowed === true;
           return {
             row,
-            whose: process ? processWhose(acquisitions, process) : "you",
+            whose: receiptProcessOf(row)
+              ? processWhose(acquisitions, receiptProcessOf(row)!)
+              : "you",
             attachment: attachment
               ? withAccess(
                   attachment,
@@ -519,7 +521,7 @@ export function processCustody(
     return null;
   }
   const row = latest.revit.sessions?.find((session) => {
-    const process = processOf(session.row);
+    const process = receiptProcessOf(session.row);
     return (
       process?.pid === pid &&
       (processStartUtcUnixMs == null ||
@@ -573,6 +575,12 @@ export function machineSessionAcquisition(session: string): string | null {
   const process = row ? processOf(row.row) : null;
   return process ? (heldProcess(hostMachine!.acquisitions(), process)?.id ?? null) : null;
 }
+
+/** A failed journal retains provenance, but does not certify a live attachment or document read. */
+const receiptProcessOf = (row: SessionObservation): ProcessIdentity | null =>
+  row.case === "failed-receipt" && row.failure.source === "journal"
+    ? row.failure.process
+    : processOf(row);
 
 function processOf(row: SessionObservation): ProcessIdentity | null {
   return row.case === "controlled-active" || row.case === "observed-active"
