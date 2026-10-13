@@ -51,7 +51,7 @@ afterEach(async () => {
   if (previousDocuments === undefined) delete process.env[documentsRootEnvVar];
   else process.env[documentsRootEnvVar] = previousDocuments;
   nativeCalls.length = 0;
-  await rm(root, { recursive: true, force: true });
+  await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 });
 
 /** A mutation crosses `/actions` as one exact admission against the host, the only write door. */
