@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { PROTOCOL_VERSION, type SessionConfigOption } from "@agentclientprotocol/sdk";
 import {
   accessSchema,
@@ -452,24 +453,44 @@ export type ProvidersOptions = {
   openConsole?: (command: string, env: Record<string, string | undefined>) => Promise<void>;
 };
 
-/** A PowerShell window of its own (`detached` on win32 is a new console), left open on failure. */
+// 2026-10-12: `detached: true` on win32 is DETACHED_PROCESS, a child with no console, so interactive
+// installers and logins had nowhere to draw and exited at once. `start` gives PowerShell a fresh
+// visible console; `/wait` keeps this promise open until it closes.
 function openConsole(command: string, env: Record<string, string | undefined>): Promise<void> {
-  const script = `try { ${command}; if ($LASTEXITCODE) { throw "exited $LASTEXITCODE" } } catch { Write-Host $_; Read-Host 'Press Enter to close' }`;
+  const scriptPath = join(tmpdir(), `pe-tools-console-${randomUUID()}.ps1`);
+  writeFileSync(
+    scriptPath,
+    `try { ${command}; if ($LASTEXITCODE) { throw "exited $LASTEXITCODE" } } catch { Write-Host $_; Read-Host 'Press Enter to close' }`,
+    "utf8",
+  );
   const child = spawn(
-    "powershell.exe",
-    ["-NoLogo", "-ExecutionPolicy", "Bypass", "-Command", script],
-    {
-      env,
-      detached: true,
-      stdio: "ignore",
-      windowsHide: false,
-    },
+    "cmd.exe",
+    [
+      "/c",
+      "start",
+      // Window title. An unquoted first token is the program to cmd's start; an empty string is
+      // rendered as "" and read as the title, so the next token is the program.
+      "",
+      "/wait",
+      "powershell.exe",
+      "-NoLogo",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      scriptPath,
+    ],
+    { env, stdio: "ignore", windowsHide: true },
   );
   child.unref();
+  const cleanup = () => rmSync(scriptPath, { force: true });
   return new Promise((resolve) => {
-    child.once("exit", () => resolve());
+    child.once("exit", () => {
+      cleanup();
+      resolve();
+    });
     child.once("error", (error) => {
       log.warn(`login console did not open: ${String(error)}`);
+      cleanup();
       resolve();
     });
   });
