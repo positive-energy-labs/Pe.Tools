@@ -96,6 +96,8 @@ let browserVite: Awaited<ReturnType<typeof createViteServer>> | undefined;
 beforeAll(async () => {
   process.env.LOCALAPPDATA = mkdtempSync(join(tmpdir(), "pe-demo-lane-"));
   const nodeServer = createNodeServer();
+  // The dev host's shape: the frontend origin is recorded once the browser's Vite listens.
+  const webUrl = Effect.runSync(Deferred.make<string>());
   const program = Effect.scoped(
     Effect.gen(function* () {
       const latch = yield* Deferred.make<void>();
@@ -108,6 +110,7 @@ beforeAll(async () => {
             nodeServer,
             port: 0,
             webRoot: null,
+            webUrl,
           }),
         ),
         Deferred.await(latch),
@@ -130,6 +133,7 @@ beforeAll(async () => {
   });
   await browserVite.listen();
   baseUrl = browserVite.resolvedUrls!.local[0]!.replace(/\/$/, "");
+  Effect.runSync(Deferred.succeed(webUrl, baseUrl));
   const { chromium } = await import("playwright-core");
   const executablePath = [
     "C:/Program Files/Google/Chrome/Application/chrome.exe",
