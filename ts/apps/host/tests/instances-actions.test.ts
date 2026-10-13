@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "vite-plus/test";
 import { existsSync } from "node:fs";
+import { createServer } from "node:http";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -24,6 +25,7 @@ import type { SessionObservation } from "@pe/host-contracts/pe-revit-contract";
 import { unreadLeg } from "../src/update-reader.ts";
 import { asCaller, crossingOf, human } from "./callers.ts";
 import { acquiredOpenIds, foldAcquisitions, planAcquisition } from "../src/acquisition.ts";
+import { runSemanticAction } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -1827,3 +1829,53 @@ test("/actions/cancel stops a running Instances step through the SDK op cancel, 
   release();
   expect((await f.owner.wait(row.id)).state).toBe("cancelled");
 });
+
+/**
+ * R5 (acceptance 2026-10-13): Pea's stop succeeded, then the action client called its own receipt
+ * a conflict, because the host records the parsed request (force defaulted) and the client
+ * compared it with the raw input. The real client against the real /actions route over HTTP.
+ */
+test.each([
+  ["instances.stop", "stop"],
+  ["instances.reset", "reset"],
+] as const)(
+  "%s that omits a defaulted option reads back its own receipt over HTTP",
+  async (key, verb) => {
+    const f = await setup(() => ({ result: { id: "dev", state: "ok", phase: "stopped" } }));
+    const web = HttpRouter.toWebHandler(
+      makeCallRoute(f.owner, undefined, { sdk: f.deps.sdk }).pipe(
+        Layer.provideMerge(Layer.succeed(RevitBridge, {} as RevitBridge["Service"])),
+      ),
+      { disableLogger: true },
+    );
+    cleanup.push(() => web.dispose());
+    const server = createServer(async (req, res) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      const response = await asCaller(human, () =>
+        web.handler(
+          new Request(`http://host${req.url}`, {
+            method: req.method,
+            headers: { "content-type": "application/json" },
+            ...(req.method === "POST" ? { body: Buffer.concat(chunks) } : {}),
+          }),
+          Context.empty() as never,
+        ),
+      )();
+      res.writeHead(response.status, { "content-type": "application/json" });
+      res.end(Buffer.from(await response.arrayBuffer()));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    cleanup.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+    const { port } = server.address() as { port: number };
+    const row = await runSemanticAction(
+      key,
+      { session, unsaved: "keep" },
+      undefined,
+      {},
+      `http://127.0.0.1:${port}`,
+    );
+    expect(row).toMatchObject({ state: "succeeded", key });
+    expect(f.calls.at(-1)!.slice(0, 2)).toEqual(["session", verb]);
+  },
+);

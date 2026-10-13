@@ -212,11 +212,19 @@ export async function submitAction(
   }
   if (!row) throw Error(`Action '${admission.id}' has no receipt`);
   inFlight().set(admission.id, base);
+  // A host may record the request parsed (defaults applied) or as sent; compare both parsed.
+  const schema = (semanticActions as Record<string, { input: z.ZodType } | undefined>)[
+    admission.key
+  ]?.input;
+  const intent = (input: unknown) => {
+    const parsed = schema?.safeParse(input);
+    return canonicalRouteInput(parsed?.success ? parsed.data : input);
+  };
   try {
     if (
       row.kind !== admission.kind ||
       row.key !== admission.key ||
-      canonicalRouteInput(row.request) !== canonicalRouteInput(admission.input) ||
+      intent(row.request) !== intent(admission.input) ||
       canonicalRouteInput(row.destination) !== canonicalRouteInput(admission.destination) ||
       canonicalRouteInput(row.bases) !== canonicalRouteInput(admission.bases)
     )
