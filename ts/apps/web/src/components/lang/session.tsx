@@ -9,11 +9,7 @@
  * draw each document itself through `documentRow` (a `HeldRow` with verbs and a strip).
  */
 import type { ReactNode } from "react";
-import type {
-  MachineAccess,
-  MachineAttachmentDocument,
-  MachineSession,
-} from "@pe/agent-contracts";
+import type { MachineAccess, MachineAttachmentDocument, MachineSession } from "@pe/agent-contracts";
 
 import { ArtifactFrame } from "./artifact-frame";
 import { FactChip } from "./chip";
