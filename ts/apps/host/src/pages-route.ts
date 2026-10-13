@@ -10,10 +10,11 @@
  * (`pe.describe`) so an agent reads the state, and what the page says, without running the reducer.
  * The log lives beside the page, so deleting or sharing the folder deletes or shares its state.
  *
- * A Pod may carry pages (pages ledger, ruling 5): `Documents/Pe.Tools/Pods/<pod>/pages/<page>/index.html`
- * lists and serves as the slug `<pod>--<page>`, and its `.state/` sits beside the page inside the pod,
- * so publishing the pod carries it. A pod is a folder holding `pod.json`; nothing in it is read, so a
- * page never depends on its pod (ruling 6). A plain page whose folder name contains `--` is skipped.
+ * A Pod may carry pages (pages ledger, ruling 5): a `pages/<page>/index.html` member of an admitted
+ * package (`packages.ts`) lists and serves as the slug `<id>--<page>`, where `<id>` is the manifest's
+ * package id, never its folder: renaming the folder keeps the slug, the key and the state. Its
+ * `.state/` sits beside the page inside the pod, so publishing the pod carries it. A plain page
+ * whose folder name contains `--` is skipped.
  *
  *   GET  /pages                        every page, newest first (JSON, rows carry `pod`; a list page when a browser navigates)
  *   GET  /pages/pe.js | /pages/pe.css  the doors and the house look
@@ -78,6 +79,7 @@ import {
   threadHead,
   subscribeHeads,
 } from "./control.ts";
+import { listPackages } from "./packages.ts";
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
 
 /** Page assets that live in the web app: the tokens and the Revit facsimile (one source each). */
@@ -164,9 +166,11 @@ const HEARTBEAT_MS = 15_000;
 const isMissing = (error: unknown) => (error as { code?: string } | null)?.code === "ENOENT";
 
 export type PageEventRow = { seq: number; at: string; origin: string; event: unknown };
-/** One `GET /pages` row; `pod` is the pod folder's name when the page lives inside a pod. */
+/** One `GET /pages` row; `pod` is the package id when an admitted package contributes the page. */
 export type PageRow = {
   slug: string;
+  /** The Page key: `page:@pages/<slug>`, or the package's `page:@<id>/pages/<page>`. */
+  key: string;
   title: string;
   url: string;
   modifiedAt: string;
@@ -376,17 +380,27 @@ const escapeHtml = (text: string) =>
  * server and SSE is a ReadableStream. No pods root means no pod pages.
  */
 export function createPagesHandler(root: string, pods?: string, live: PageLive = noLive) {
-  /** Where a slug's folder is: `<root>/<slug>`, or `<pods>/<pod>/pages/<page>` for `<pod>--<page>`. */
-  const dirOf = (slug: string) => {
-    const [pod, page, ...more] = slug.split("--");
+  /**
+   * Where a slug's folder is: `<root>/<slug>`, or for `<id>--<page>` the folder of the one admitted
+   * package with that id that contributes `pages/<page>` (a duplicated id contributes nothing).
+   * ponytail: a pod page's request lists the packages once; cache by snapshot if pods get large.
+   */
+  const dirOf = async (slug: string) => {
+    const [id, page, ...more] = slug.split("--");
     if (page === undefined) return { dir: join(root, slug), pod: null };
     if (more.length || !pods) return null;
-    return { dir: join(pods, pod!, "pages", page), pod: pod! };
+    const pod = (await listPackages(pods)).packages.find(
+      (one) =>
+        one.id === id &&
+        one.contributions.some((row) => row.kind === "page" && row.path === `pages/${page}`),
+    );
+    return pod ? { dir: join(pod.directory, "pages", page), pod: pod.id } : null;
   };
   const states = new Map<string, PageState>();
-  const stateOf = (slug: string, dir: string) => {
-    let state = states.get(slug);
-    if (!state) states.set(slug, (state = new PageState(dir)));
+  /** By folder: a renamed pod's page keeps its slug and opens its state where it lives now. */
+  const stateOf = (dir: string) => {
+    let state = states.get(dir);
+    if (!state) states.set(dir, (state = new PageState(dir)));
     return state;
   };
 
@@ -399,21 +413,17 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     )
       .filter((entry) => entry.isDirectory() && SLUG.test(entry.name))
       .map((entry) => entry.name);
-  const exists = (path: string) =>
-    stat(path).then(
-      () => true,
-      () => false,
-    );
 
   async function list() {
     const pages: PageRow[] = [];
-    const add = async (slug: string, dir: string, pod: string | null) => {
+    const add = async (slug: string, key: string, dir: string, pod: string | null) => {
       const index = join(dir, "index.html");
       const facts = await stat(index).catch(() => null);
       if (!facts) return;
       const title = /<title>([^<]*)<\/title>/i.exec(await readFile(index, "utf8"))?.[1]?.trim();
       pages.push({
         slug,
+        key,
         title: title || slug,
         url: `/pages/${slug}/`,
         modifiedAt: facts.mtime.toISOString(),
@@ -421,12 +431,13 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
       });
     };
     for (const name of await folders(root))
-      if (!name.includes("--")) await add(name, join(root, name), null);
-    for (const pod of pods ? await folders(pods) : [])
-      if (!pod.includes("--") && (await exists(join(pods!, pod, "pod.json"))))
-        for (const page of await folders(join(pods!, pod, "pages")))
-          if (!page.includes("--"))
-            await add(`${pod}--${page}`, join(pods!, pod, "pages", page), pod);
+      if (!name.includes("--")) await add(name, pageKeyOf(name), join(root, name), null);
+    for (const pod of pods ? (await listPackages(pods)).packages : [])
+      for (const row of pod.contributions)
+        if (row.kind === "page") {
+          const page = row.path.slice("pages/".length);
+          await add(`${pod.id}--${page}`, row.key, join(pod.directory, row.path), pod.id);
+        }
     return pages.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
   }
 
@@ -739,7 +750,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     await mkdir(join(dir, ".state"), { recursive: true });
     const next: PageBinding = { slots: { ...current.slots, default: slot } };
     await writeFile(bindingFile(dir), JSON.stringify(next, null, 2), "utf8");
-    stateOf(slug, dir).signal("binding", {});
+    stateOf(dir).signal("binding", {});
     return json(await target(slug, dir));
   }
 
@@ -757,7 +768,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     const parts = url.pathname.split("/").filter(Boolean); // ["pages", slug?, ...rest]
     if (parts[0] === "pe") {
       const [, , slug = "", verb, ...more] = parts;
-      const where = SLUG.test(slug) ? dirOf(slug) : null;
+      const where = SLUG.test(slug) ? await dirOf(slug) : null;
       if (!where || verb !== "binding" || more.length || request.method !== "PUT")
         return problem(404, "the binding door is PUT /pe/pages/<slug>/binding");
       return bind(slug, where.dir, request);
@@ -786,12 +797,14 @@ ${asset("pe.css")}`,
           headers: { "content-type": MIME[".css"]!, "cache-control": "no-cache" },
         },
       );
-    const where = SLUG.test(slug) ? dirOf(slug) : null;
+    if (!SLUG.test(slug))
+      return problem(400, "a page slug is letters, digits, - and _; a pod's page is <id>--<page>");
+    const where = await dirOf(slug);
     if (!where)
-      return problem(400, "a page slug is letters, digits, - and _; a pod's page is <pod>--<page>");
+      return problem(404, `no page ${slug}: no admitted package contributes it`);
     if (rest.length === 0 && !url.pathname.endsWith("/"))
       return Response.redirect(`${url.origin}/pages/${slug}/${url.search}`, 308); // relative links need the slash
-    const state = stateOf(slug, where.dir);
+    const state = stateOf(where.dir);
     const verb = rest.length === 1 ? rest[0] : undefined;
     if (verb === "state" && request.method === "GET") {
       const rows = await state.rows();

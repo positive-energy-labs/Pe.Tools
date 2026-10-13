@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
@@ -59,11 +59,12 @@ describe("pages", () => {
     expect(await html.text()).toContain('href="/pages/todo/"');
   });
 
-  it("lists and serves a pod's pages as <pod>--<page>, with their state inside the pod", async () => {
+  it("lists and serves a package's pages as <id>--<page>, keyed by manifest id, state inside the pod", async () => {
     const { root, pods, fetch } = await pagesRoot();
-    const tour = join(pods, "ductkit", "pages", "tour");
+    const folder = join(pods, "duct-kit-v1");
+    const tour = join(folder, "pages", "tour");
     await mkdir(tour, { recursive: true });
-    await writeFile(join(pods, "ductkit", "pod.json"), "{}");
+    await writeFile(join(folder, "pod.json"), JSON.stringify({ id: "ductkit", entrypoints: [] }));
     await writeFile(join(tour, "index.html"), "<title>Duct tour</title><p>in a pod</p>");
     await writeFile(join(tour, "census.csx"), "Result(1);");
     // not a pod (no pod.json), and a plain page whose name carries the pod separator: both skipped
@@ -71,16 +72,23 @@ describe("pages", () => {
     await writeFile(join(pods, "folder", "pages", "x", "index.html"), "<p>no pod.json</p>");
     await mkdir(join(root, "odd--name"), { recursive: true });
     await writeFile(join(root, "odd--name", "index.html"), "<p>skipped</p>");
-    const body = (await (await fetch("/pages")).json()) as {
-      pages: { slug: string; title: string; pod: string | null }[];
-    };
-    expect(body.pages.map((p) => [p.slug, p.title, p.pod]).sort()).toEqual([
-      ["ductkit--tour", "Duct tour", "ductkit"],
-      ["todo", "A todo page", null],
-    ]);
-    expect(await (await fetch("/pages/ductkit--tour/")).text()).toContain("<p>in a pod</p>");
+    type Listed = { pages: { slug: string; key: string; title: string; pod: string | null }[] };
+    const listed = async () =>
+      ((await (await fetch("/pages")).json()) as Listed).pages
+        .map((p) => [p.slug, p.key, p.title, p.pod])
+        .sort();
+    const expected = [
+      ["ductkit--tour", "page:@ductkit/pages/tour", "Duct tour", "ductkit"],
+      ["todo", "page:@pages/todo", "A todo page", null],
+    ];
+    expect(await listed()).toEqual(expected);
+    expect(await (await fetch("/pages/ductkit--tour/")).text()).toContain(
+      '<meta name="pe-page" content="page:@ductkit/pages/tour">',
+    );
     expect(await (await fetch("/pages/ductkit--tour/census.csx")).text()).toBe("Result(1);");
-    expect((await fetch("/pages/a--b--c/")).status).toBe(400);
+    // The folder never names the page: its old folder slug is no page.
+    expect((await fetch("/pages/duct-kit-v1--tour/")).status).toBe(404);
+    expect((await fetch("/pages/a--b--c/")).status).toBe(404);
     const posted = await fetch("/pages/ductkit--tour/events", {
       method: "POST",
       body: JSON.stringify({ type: "note" }),
@@ -90,6 +98,16 @@ describe("pages", () => {
     expect(await (await fetch("/pages", { headers: { accept: "text/html" } })).text()).toContain(
       "pod ductkit",
     );
+    // A folder rename keeps the slug, the key, and the state that travels inside the pod.
+    await rename(folder, join(pods, "renamed"));
+    expect(await listed()).toEqual(expected);
+    const state = (await (await fetch("/pages/ductkit--tour/state")).json()) as { seq: number };
+    expect(state.seq).toBe(1);
+    // Two folders claiming one id contribute no page at all.
+    await mkdir(join(pods, "twin", "pages", "tour"), { recursive: true });
+    await writeFile(join(pods, "twin", "pod.json"), JSON.stringify({ id: "ductkit" }));
+    await writeFile(join(pods, "twin", "pages", "tour", "index.html"), "<p>twin</p>");
+    expect((await fetch("/pages/ductkit--tour/")).status).toBe(404);
   });
 
   it("keeps a text projection beside the snapshot", async () => {

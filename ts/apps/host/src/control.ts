@@ -78,7 +78,7 @@ export function writeTerminalContext(serviceName: string) {
   };
 }
 
-/** The D12 page key of a `/pages/<slug>/…` path; `<pod>--<page>` is a Pod's page. */
+/** The D12 page key of a `/pages/<slug>/…` path; `<id>--<page>` is the page an admitted package (by manifest id) contributes. */
 export const pageKeyOf = (slug: string) => {
   const [pod, page] = slug.split("--");
   return page ? `page:@${pod}/pages/${page}` : `page:@pages/${slug}`;
