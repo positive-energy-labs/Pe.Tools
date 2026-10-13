@@ -39,6 +39,7 @@ import {
   type OpStateResult,
   type Resolved,
   type SessionListResult,
+  type SessionDialogsResult,
   type SessionObservation,
   type SessionStartResult,
 } from "@pe/host-contracts/pe-revit-contract";
@@ -88,6 +89,9 @@ const NOT_DISPATCHED = new Set([
   "op.intent-conflict",
   "op.admission-unavailable",
   "op.request-id-unusable",
+  "session.dialog-identity-required",
+  "session.dialog-identity-stale",
+  "session.dialog-receiver-unavailable",
   "session.bad-invocation",
   "session.year-mismatch",
   "session.no-sessions-for-year",
@@ -394,14 +398,6 @@ export async function admitInstancesAction(
   if (crossing.caller.kind !== "human") {
     // Also validates anonymous and Page callers before the empty-session case.
     admitCrossing(crossing.caller, admission.destination, door);
-    // `session dialogs` takes no request id or session expectation yet, so a handle cannot be
-    // bound to one window incarnation and a lost reply cannot be read back: a person dismisses.
-    if (key === "instances.dialogs")
-      throw new Refused({
-        code: "sdk.dialog-identity-missing",
-        door,
-        reason: `Refused at ${door}: the SDK's session dialogs verb cannot bind a handle to one window or recover a lost dismiss (no --request-id/--expect-session); dismissing stays a human act until the SDK pin carries them.`,
-      });
     if (selection) {
       admittedTarget = await readTarget(selection, control?.session.process, read);
       crossing = { ...crossing, basis: await censusBasis(admittedTarget) };
@@ -486,10 +482,27 @@ export async function admitInstancesAction(
           await execution.step("file", key, { from, to }, () => copyReserved({ from, to }));
       }
       if (key === "instances.dialogs") {
-        const dismiss: StepInput = {
-          argv: sessionDialogsArgv({ hwnd: control!.hwnd, ...target!.selection, dismiss: true }),
-        };
-        return execution.step("native", key, dismiss, () => dispatch(dismiss, "", read));
+        const prior = execution.recorded("native", key);
+        let dismiss = prior?.input as StepInput | undefined;
+        if (!dismiss) {
+          const args = sessionDialogsArgv({ pid: target!.process.pid });
+          const { result } = parsePeRevitEnvelope<SessionDialogsResult>(
+            await read(args), args, peRevitLauncher(),
+          );
+          if (result.state !== "ok" || result.pid !== target!.process.pid ||
+              result.processStartUtc !== target!.process.processStartUtc)
+            throw refuse("Dialog read did not return the exact process incarnation", result);
+          dismiss = { argv: sessionDialogsArgv({
+            pid: target!.process.pid, hwnd: control!.hwnd, dismiss: true,
+            expectDialog: result.windows.find((window) => window.handle === control!.hwnd)?.identity?.observationId,
+            expectSession: result.expectSession ?? undefined, requestId: REQUEST_ID,
+          }) };
+        }
+        const input = dismiss;
+        return execution.step("native", key, input, async (id) => {
+          await recheck(target);
+          return dispatch(input, id, read);
+        });
       }
       // The step that starts a new Revit, when the action does: `instances.start`, or the first
       // leg of an open into a new Revit. Every other action's main step carries its own key.
@@ -917,8 +930,6 @@ export const recoverInstancesAction = (
   owner.recover(id, async (step: ActionStep) => {
     const read = deps.sdk ?? mutate;
     const argv = (step.input as StepInput).argv;
-    // A dismiss carried no request id, so no SDK receipt can settle it: it stays unknown.
-    if (argv[1] === "dialogs") return { step, evidence: null };
     const supervisor = argv[0] === "session";
     const args = opResultArgv({ requestId: step.id });
     const evidence = parsePeRevitEnvelope<OpRead>(await read(args), args, peRevitLauncher());
@@ -949,8 +960,7 @@ export const recoverInstancesAction = (
       if (terminal.result?.state !== result.state) return { step, evidence };
       const legs = terminal.result.legs;
       notDispatched =
-        Array.isArray(legs) &&
-        legs.length === 0 &&
+        !legs?.length &&
         terminal.diagnostics.some((d) => NOT_DISPATCHED.has(d.code));
       // Adoption needs resolved process evidence on resume; other supervisors return their payload.
       response = step.key.endsWith(".adopt") ? terminal : terminal.result;

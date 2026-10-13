@@ -62,7 +62,6 @@ export const refusalCodes = [
   "grant.context-cannot-hold",
   "acquisition.unproven",
   "acquisition.changed-after-handover",
-  "sdk.dialog-identity-missing",
   "lifecycle.ungranted-documents",
   "page.unbound",
   "page.binding-not-yours",

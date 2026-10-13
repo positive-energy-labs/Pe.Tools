@@ -1665,30 +1665,50 @@ test("reset needs an unsaved choice and reaches session reset with release and r
   expect(flag(reset, "--request-id")).toBe(row.steps.at(-1)!.id);
 });
 
-test("an agent dialog dismiss refuses on the SDK identity gap before any SDK read", async () => {
-  const f = await setup(() => ({ result: { state: "ok" } }));
-  await expect(
-    f.admit("instances.dialogs", { session, hwnd: "0x1A2B" }, undefined, "agent"),
-  ).rejects.toMatchObject({ refusal: { code: "sdk.dialog-identity-missing" } });
-  expect(f.calls).toEqual([]);
+const dialogList = {
+  state: "ok", pid: originalProcess.pid, processStartUtc: originalProcess.processStartUtc,
+  expectSession: receiptPath,
+  windows: [{ handle: "0x1A2B", identity: { observationId: "fresh-dialog" } }],
+};
+
+test("dialog dismiss binds the fresh observation, exact process and action request", async () => {
+  const f = await setup((args) => ({ result: args.includes("--dismiss") ? { state: "ok" } : dialogList }));
+  f.census.documents = [];
+  const result = await f.admit("instances.dialogs", { session, hwnd: "0x1A2B" }, undefined, "agent");
+  expect(result.state).toBe("succeeded");
+  const calls = f.calls.filter((args) => args[1] === "dialogs");
+  expect(calls).toHaveLength(2);
+  expect(calls[0]).toEqual(["session", "dialogs", "--pid", String(originalProcess.pid), "--json"]);
+  expect(flag(calls[1]!, "--expect-dialog")).toBe("fresh-dialog");
+  expect(flag(calls[1]!, "--expect-session")).toBe(receiptPath);
+  expect(flag(calls[1]!, "--pid")).toBe(String(originalProcess.pid));
+  expect(flag(calls[1]!, "--request-id")).toBe(result.steps.at(-1)!.id);
 });
 
-test("a person's dismiss sends one handle once; a lost reply stays unknown and is never replayed", async () => {
-  const f = await setup(() => Error("lost response"));
+test("dialog dismiss passes the SDK stale-identity refusal through as undispatched", async () => {
+  const f = await setup((args) => args.includes("--dismiss") ? {
+    result: { state: "refused" }, exitCode: 3,
+    diagnostics: [{ code: "session.dialog-identity-stale", detail: "Window replaced", fix: null }],
+  } : { result: dialogList });
+  const result = await f.admit("instances.dialogs", { session, hwnd: "0x1A2B" });
+  expect(result.steps.at(-1)).toMatchObject({ state: "failed", notDispatched: true });
+  expect(result.steps.at(-1)!.error).toContain("session.dialog-identity-stale");
+});
+
+test("a lost dialog dismiss recovers from its SDK receipt without replay", async () => {
+  const f = await setup((args) => {
+    if (args[0] === "op") return { result: {
+      requestId: args[2], state: "ok",
+      receipt: { requestId: args[2], key: "session.dialogs", verdict: "ok" },
+      response: JSON.parse(sdkEnvelope({ state: "ok" })),
+    } };
+    return args.includes("--dismiss") ? Error("lost response") : { result: dialogList };
+  });
   const lost = await f.admit("instances.dialogs", { session, hwnd: "0x1A2B" });
-  expect(f.calls.at(-1)).toEqual([
-    "session",
-    "dialogs",
-    "0x1A2B",
-    "--id",
-    "dev",
-    "--dismiss",
-    "--json",
-  ]);
   expect(lost.steps.at(-1)!.state).toBe("unknown");
   const settled = await recoverInstancesAction(lost.id, f.owner, f.deps);
-  expect(settled.steps.at(-1)!.state).toBe("unknown");
-  expect(f.calls.filter((args) => args[0] === "op" || args[1] === "dialogs")).toHaveLength(1);
+  expect(settled.steps.at(-1)!.state).toBe("succeeded");
+  expect(f.calls.filter((args) => args.includes("--dismiss"))).toHaveLength(1);
 });
 
 test("/actions/cancel stops a running Instances step through the SDK op cancel, never the Revit bridge", async () => {
