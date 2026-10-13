@@ -151,7 +151,9 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
   expect(map.machine.revit.sessions![3]!.documents![0]!.persistence).toBeNull();
   expect(screen.getByText("persistence unknown")).toBeTruthy();
   expect(map.machine.revit.sessions![4]!.documents).toBeNull();
-  expect(within(document.querySelector('[data-key="card-4"]')!).getByText("documents unknown")).toBeTruthy();
+  expect(
+    within(document.querySelector('[data-key="card-4"]')!).getByText("documents unknown"),
+  ).toBeTruthy();
   expect(
     machineInventory({
       ...machine,
