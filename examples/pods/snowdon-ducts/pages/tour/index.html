@@ -156,7 +156,7 @@ $("experiment").onclick = () => busy("Running experiment", async () => {
   }
   armed = false;
   $("experiment").textContent = "Coefficient experiment (copy only)";
-  const reading = await pe.reading(KEYS.experiment, () => pe.do(KEYS.experiment, {}));
+  const reading = await pe.reading(KEYS.experiment, () => pe.do(KEYS.experiment, { permissionMode: "NoTransaction" }));
   k.fire({ type: "experiment", reading });
 });
 $("save-note").onclick = () => {

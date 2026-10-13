@@ -3,6 +3,20 @@ import { productPathNames } from "@pe/host-contracts/contracts";
 import { scriptPodSourceBounds, type ScriptingExecute } from "@pe/host-contracts/generated";
 import { capturePackage, isPackageMember, listPackages } from "./packages.ts";
 import { productUserContentRootPath } from "./product-paths.ts";
+import { BridgeError } from "./bridge.ts";
+
+export function requireScriptSuccess(value: unknown): void {
+  const status = value && typeof value === "object" && "status" in value ? value.status : undefined;
+  if (status === "Succeeded") return;
+  throw new BridgeError(
+    `Script execution ${typeof status === "string" ? status : "returned no valid status"}`,
+    status === "Cancelled" ? 499 : 422,
+    {
+      dispatched: true,
+      result: value,
+    },
+  );
+}
 
 type FrozenScript = { sourceBundle: ScriptingExecute.Req.ScriptPodSourceBundle };
 

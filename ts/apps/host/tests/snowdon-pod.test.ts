@@ -93,6 +93,8 @@ test("content carries no seed fingerprints, fixed model ids, recorded dates or c
 
 test("the Page invokes only the three canonical script keys and existing host operations", async () => {
   const page = await text("pages/tour/index.html");
+  expect(page).toContain('pe.do(KEYS.experiment, { permissionMode: "NoTransaction" })');
+  expect(page).toContain("pe.do(KEYS.census, {})");
   const keys = [...page.matchAll(/script:@snowdon-ducts\/[^"'\s]+/g)].map((m) => m[0]);
   expect(new Set(keys)).toEqual(
     new Set([

@@ -1,5 +1,5 @@
 import { resolveSdkSession, type SdkSession } from "./sdk-session.ts";
-import { freezeScript } from "./operation-script.ts";
+import { freezeScript, requireScriptSuccess } from "./operation-script.ts";
 import { Ajv, type ValidateFunction } from "ajv";
 import { Effect, Schema } from "effect";
 import {
@@ -232,6 +232,7 @@ export async function admitGatewayAction(
           );
           if (answer._tag === "Failure") throw answer.failure;
           const value = answer.success.value;
+          if (admission.key === "scripting.execute") requireScriptSuccess(value);
           // The generated DTO exposes status as string. Only proven terminal successes proceed.
           // Refusal/recovery evidence is not a successful effect and never permits automatic resume.
           if (isTemporary(admission.key) && !temporarySucceeded(value))
