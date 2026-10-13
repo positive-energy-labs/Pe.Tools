@@ -69,7 +69,10 @@ export function harnessClient(origin: string) {
       events.onerror = () => onFault(new Error("Thread list disconnected; reconnecting."));
       return () => events.close();
     },
-    target: (id: string, head: HarnessThreadSummary["head"]) =>
+    target: (
+      id: string,
+      head: Pick<HarnessThreadSummary["head"], "defaultTarget" | "revision" | "displayLabel">,
+    ) =>
       call<{ ok: boolean; head: HarnessThreadSummary["head"] }>(
         `/scope/${encodeURIComponent(id)}`,
         "PUT",

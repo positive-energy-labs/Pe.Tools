@@ -1,5 +1,9 @@
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
-import { contextFetch as fetch, invocationContext } from "#invocation-context";
+import {
+  carriesCallerContext,
+  contextFetch as fetch,
+  invocationContext,
+} from "#invocation-context";
 import {
   sdkSessionSelectionSchema,
   instancesReading,
@@ -98,13 +102,14 @@ const targetDocument = (target: Target): DocumentRef | null =>
 /** A thread's head as a tool reads it. */
 export type Scope = ThreadHead & { thread: string };
 
-/** The live head of `PE_THREAD` (the harness child's thread); else none. */
+/** The live head of this caller's own thread (`/pe/scope/self`); none outside a harness context. */
 export async function scopeOf(): Promise<Scope | null> {
-  const thread = invocationContext()?.thread;
-  if (!thread) return null;
-  const response = await fetch(`${base()}/pe/scope/${encodeURIComponent(thread)}`);
-  const head = threadHeadSchema.parse(await response.json());
-  return { thread, ...head };
+  if (!carriesCallerContext()) return null;
+  const response = await fetch(`${base()}/pe/scope/self`);
+  if (response.status === 404) return null;
+  const body = (await response.json()) as { thread?: unknown };
+  if (typeof body.thread !== "string") return null;
+  return { thread: body.thread, ...threadHeadSchema.parse(body) };
 }
 
 /** The Scope's default Target; a call with no Scope runs with none. */
@@ -315,7 +320,6 @@ async function executeTool(
       const requested = input.target;
       const caller = new HostRpcCaller({
         hostBaseUrl: base(),
-        actor: "agent",
         requestId: id,
         ...transportScope(requested),
         timeoutMs: input.timeoutSeconds * 1000,
@@ -400,7 +404,6 @@ async function dispatch(
         hostBaseUrl: base(),
         ...target,
         requestId: row.mutates ? requestId : undefined,
-        actor: "agent",
         timeoutMs: input.timeoutSeconds * 1000,
       });
       const key = row.key.replace(/^(op|workflow):/, "");
@@ -425,7 +428,7 @@ async function dispatch(
         };
       }
       if (Object.hasOwn(actionControls, key)) {
-        const result = await runCapability(key, payload, { hostBaseUrl: base(), actor: "agent" });
+        const result = await runCapability(key, payload, { hostBaseUrl: base() });
         return { ok: true, target: { session: null, document: null }, result };
       }
       if (row.key.startsWith("workflow:")) {
@@ -441,7 +444,6 @@ async function dispatch(
           {
             hostBaseUrl: base(),
             ...target,
-            actor: "agent",
             bases: actionBasesSchema.parse(bases ?? {}),
             actionId: typeof actionId === "string" ? actionId : requestId,
             timeoutMs: input.timeoutSeconds * 1000,
@@ -535,7 +537,6 @@ async function dispatch(
         hostBaseUrl: base(),
         ...target,
         requestId: row.mutates ? requestId : undefined,
-        actor: "agent",
         timeoutMs: input.timeoutSeconds * 1000,
       });
       const pods = await caller.call("pod.list");
@@ -557,7 +558,7 @@ async function dispatch(
     case "route-doc":
     case "route-command": {
       if (row.key === "route:families.view" || row.key === "route:families.set-query") {
-        if (!viewThread) throw Error("This MCP server has no thread (PE_THREAD is unset).");
+        if (!viewThread) throw Error("This MCP server has no thread (no harness context).");
         const query = new URLSearchParams({ thread: viewThread });
         if (row.key === "route:families.view" && typeof payload.instance === "string")
           query.set("instance", payload.instance);
@@ -798,7 +799,7 @@ async function routeWrite(
     (await routeFetch(`/pe/route-state/${encoded}?${query}`).then((view) =>
       typeof view.revision === "number" ? view.revision : 0,
     ));
-  const result = await routeFetch(`/pe/agent/route-state/${encoded}/${suffix}?${query}`, {
+  const result = await routeFetch(`/pe/route-state/${encoded}/${suffix}?${query}`, {
     ...body,
     expectedRevision: revision,
   });
@@ -898,13 +899,20 @@ export const targetSet = createTool({
       defaultTarget: input.defaultTarget,
       expectedRevision: turn.revision,
     });
-    const response = await fetch(`${base()}/pe/scope/${encodeURIComponent(turn.thread)}`, {
+    const response = await fetch(`${base()}/pe/scope/self`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-    const result = putTargetResultSchema.safeParse(await response.json().catch(() => null)).data;
-    if (!result) return { isError: true, content: `target set failed (${response.status})` };
+    const answer: unknown = await response.json().catch(() => null);
+    const result = putTargetResultSchema.safeParse(answer).data;
+    // A host refusal (`grant.required`, `context.foreign-thread`) is returned in its own words.
+    if (!result)
+      return {
+        isError: true,
+        content:
+          (answer as { error?: string } | null)?.error ?? `target set failed (${response.status})`,
+      };
     if (!result.ok)
       return {
         isError: true,

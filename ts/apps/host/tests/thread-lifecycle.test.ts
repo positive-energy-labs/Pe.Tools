@@ -1,3 +1,4 @@
+import { asCaller, human } from "./callers.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -46,7 +47,8 @@ function fixture(events: HarnessEvent[] = []) {
       invalidate: () => {},
     } as unknown as Providers,
   };
-  const host = createHarnessThreads(options);
+  const threads = createHarnessThreads(options);
+  const host = { ...threads, fetch: asCaller(human, threads.fetch) };
   cleanups.push(async () => {
     await host.close();
     rmSync(root, { recursive: true, force: true });

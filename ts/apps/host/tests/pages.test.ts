@@ -238,7 +238,7 @@ ${source}`),
     });
     const second = await fetch("/pages/todo/events", {
       method: "POST",
-      headers: { "content-type": "application/json", "x-pe-action-actor": "agent" },
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ type: "done", id: "e1" }),
     });
     expect(await second.json()).toMatchObject({ seq: 2, origin: "agent" });

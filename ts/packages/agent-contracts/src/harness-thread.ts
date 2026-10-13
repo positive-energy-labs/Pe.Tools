@@ -6,7 +6,7 @@ import { threadHeadSchema } from "./target.ts";
  * The harness-thread wire (ADR 0015: the harness drives; Pea is tools and UI).
  *
  * One thread is one ACP session on one harness child (claude-agent-acp or codex-acp), spawned by
- * the host with the Pea MCP server bound to the thread head (`PE_THREAD`). The host keeps the
+ * the host with the Pea MCP server bound to its thread by a `PE_CONTEXT` token. The host keeps the
  * durable record: an append-only log of `HarnessEvent`s per thread. The web renders that log and
  * the live tail of it over SSE; it never talks to a harness directly.
  *

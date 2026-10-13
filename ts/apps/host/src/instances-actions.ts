@@ -32,7 +32,7 @@ import {
   type SessionObservation,
   type SessionStartResult,
 } from "@pe/host-contracts/pe-revit-contract";
-import type { ActionJournal } from "./action-journal.ts";
+import type { ActionJournal, Crossing } from "./action-journal.ts";
 import { BridgeError } from "./bridge.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
@@ -193,6 +193,7 @@ async function dispatch(
 
 export async function admitInstancesAction(
   raw: unknown,
+  crossing: Crossing,
   owner: ActionJournal,
   deps: InstancesActionDependencies = {},
   resume = false,
@@ -221,7 +222,7 @@ export async function admitInstancesAction(
   )
     throw refuse("Instances destination must match the explicitly supplied session");
   return owner.admit(
-    admission,
+    { ...admission, ...crossing },
     async (): Promise<Prepared> => {
       if (key === "instances.close") {
         const { session, document } = control!;
@@ -253,7 +254,7 @@ export async function admitInstancesAction(
           ? await readTarget(launch.into.session, undefined, read)
           : null;
       const whose = target ? whoseOf(target, await owner.list()) : null;
-      if (control && admission.actor === "agent" && whose === "you")
+      if (control && crossing.caller.kind !== "human" && whose === "you")
         throw refuse(`human.only: '${key}' on your Revit is yours to press.`);
       const peaLaunch =
         launch !== null &&

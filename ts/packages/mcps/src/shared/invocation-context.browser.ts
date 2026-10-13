@@ -1,4 +1,4 @@
-import type { ActionAdmission } from "@pe/agent-contracts";
+import type { ActionAdmission, Caller } from "@pe/agent-contracts";
 
 export type RequestPrincipal =
   | { readonly kind: "local" }
@@ -7,8 +7,9 @@ export type RequestPrincipal =
 export interface InvocationContext {
   readonly hostBaseUrl?: string;
   readonly beforeTool?: (name: string) => Promise<void>;
-  readonly thread?: string;
   readonly principal?: RequestPrincipal;
+  /** The host-minted caller of the request this context serves (host side only). */
+  readonly caller?: Caller;
   readonly headers?: Readonly<Record<string, string>>;
   readonly admissions?: Map<string, ActionAdmission>;
   readonly running?: Map<string, string>;
@@ -16,4 +17,5 @@ export interface InvocationContext {
 
 // Browser clients already have a single user and same-origin transport, with no ambient tool scope.
 export const invocationContext = (): InvocationContext | undefined => undefined;
+export const carriesCallerContext = (): boolean => false;
 export const contextFetch: typeof fetch = (input, init) => globalThis.fetch(input, init);

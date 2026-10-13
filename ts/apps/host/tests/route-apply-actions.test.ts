@@ -24,6 +24,7 @@ import { admitFamilyAction, readFamily, recoverFamilyAction } from "../src/famil
 import { documentMarks } from "../src/document-marks.ts";
 import { sdkEnvelope, sdkSessions } from "./native-receipt-fixture.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
+import { crossingOf } from "./callers.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -274,11 +275,11 @@ async function setup(sdk: (args: readonly string[]) => Promise<string> = sdkSess
         id,
         kind: "workflow",
         key,
-        actor,
         destination: { kind: "document", ref: target },
         input,
         bases: where ? { work: { key: where, revision } } : {},
       },
+      crossingOf(actor),
       owner,
       captures,
       bridge,
@@ -341,9 +342,7 @@ async function setup(sdk: (args: readonly string[]) => Promise<string> = sdkSess
 
 test("family.build refuses an agent before dispatch", async () => {
   const { admit, sent } = await setup();
-  await expect(admit("family.build", {}, 0, "agent-build", "agent")).rejects.toThrow(
-    "requires human approval",
-  );
+  await expect(admit("family.build", {}, 0, "agent-build", "agent")).rejects.toThrow("human.only");
   expect(sent).toEqual([]);
 });
 
@@ -616,7 +615,7 @@ test("plan, capture, and apply over loaded families are human verbs (F-H6-3)", a
     ["families.capture", { pod: "global", familyIds: [1] }],
   ] as const)
     await expect(admit(key, input, revision, `agent-${key}`, "agent")).rejects.toThrow(
-      "requires human approval",
+      "human.only",
     );
   const plan = resultOf<Plan>(await admit("families.plan", { source }, revision));
   await expect(
@@ -627,7 +626,7 @@ test("plan, capture, and apply over loaded families are human verbs (F-H6-3)", a
       "a",
       "agent",
     ),
-  ).rejects.toThrow("requires human approval");
+  ).rejects.toThrow("human.only");
   expect(sent.map((s) => s.key).filter((key) => key.startsWith("families."))).toEqual([
     "families.plan",
   ]);

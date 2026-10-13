@@ -1,10 +1,18 @@
 import { cli, define } from "gunshi";
 import { renderUsage } from "gunshi/renderer";
 import { harnessIds, type HarnessId } from "@pe/agent-contracts";
-import { PeaCliCommands, discoverHostBaseUrl, resolveWorkspaceKey, startPeaMcp } from "@pe/mcps";
+import {
+  PeaCliCommands,
+  adoptTerminalContext,
+  discoverHostBaseUrl,
+  resolveWorkspaceKey,
+  startPeaMcp,
+} from "@pe/mcps";
 import type { PeaPromptRequest } from "./prompt.ts";
 
 export async function runPeaMain(args = process.argv.slice(2)): Promise<void> {
+  // `pea mcp` serves an MCP client, never the owner: it keeps only a context it was spawned with.
+  if (args[0] !== "mcp") adoptTerminalContext();
   if (isRootPromptInvocation(args)) {
     const { runPeaPrompt } = await import("./prompt.ts");
     const options = parsePeaRootPromptOptions(args);

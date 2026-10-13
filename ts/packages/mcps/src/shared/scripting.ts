@@ -147,7 +147,6 @@ export class ScriptingTools {
       hostBaseUrl: context.hostBaseUrl,
       bridgeSessionId: context.bridgeSessionId,
       openDocumentId: context.openDocumentId,
-      actor: "agent",
       timeoutMs: scriptClientTimeoutMs(context.timeoutSeconds),
       workspaceKey: context.workspaceKey,
     });

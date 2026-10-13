@@ -5,6 +5,7 @@ import {
   type HarnessThreadBody,
   type Mention,
   type PromptAttachment,
+  emptyThreadHead,
 } from "@pe/agent-contracts";
 import { stringify } from "../components/lang/code-format.ts";
 
@@ -29,7 +30,7 @@ export function emptyChatState(): ChatState {
     session: "closed",
     promptCapabilities: null,
     events: [],
-    head: { defaultTarget: null, revision: 0 },
+    head: emptyThreadHead,
     lifecycle: emptyThreadLifecycle(),
     activity: { state: "idle", pending: 0, lastSeq: 0, message: null },
   };

@@ -22,6 +22,7 @@ import {
   type PodContext,
 } from "../src/settings.ts";
 import type { RevitBridge } from "../src/bridge.ts";
+import { crossingOf } from "./callers.ts";
 
 let root: string;
 const member = { pod: "sample", path: "settings/file.json" };
@@ -461,11 +462,11 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
         id,
         kind: "workflow",
         key: "settings.write",
-        actor: "human",
         destination: { kind: "host" },
         input: { member, write },
         bases: { work: { key: scope, revision } },
       },
+      crossingOf("human"),
       owner,
       new TakeoffCaptures(join(root, "captures")),
       {} as RevitBridge["Service"],

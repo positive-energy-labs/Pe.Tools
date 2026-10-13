@@ -7,6 +7,7 @@ import {
   type DocumentRequest,
   type Reading,
   type ThreadHead,
+  emptyThreadHead,
 } from "@pe/agent-contracts";
 
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
@@ -33,7 +34,7 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
     return () => void generation.current++;
   }, [threadId, enabled]);
 
-  const current: ThreadHead = head ?? { defaultTarget: null, revision: 0 };
+  const current: ThreadHead = head ?? emptyThreadHead;
   /** True when the head moved; otherwise `refusal` says why, in the head's own words. */
   const set = async (
     defaultTarget: DocumentRequest | null,

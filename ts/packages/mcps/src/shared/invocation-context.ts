@@ -2,7 +2,11 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { request as httpRequest } from "node:http";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
+import {
+  HOST_CONTEXT_HEADER,
+  HOST_CONTEXT_VARIABLE,
+  HOST_RUNTIME_SERVICE_HEADER,
+} from "@pe/host-contracts/contracts";
 import { resolveLaneAndRoot } from "./host-config.ts";
 import type { InvocationContext } from "./invocation-context.browser.ts";
 export type { InvocationContext, RequestPrincipal } from "./invocation-context.browser.ts";
@@ -60,6 +64,7 @@ export const contextFetch: typeof fetch = (input, init) => {
     const headers = new Headers(input instanceof Request ? input.headers : undefined);
     new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
     headers.set(HOST_RUNTIME_SERVICE_HEADER, resolveLaneAndRoot().serviceName);
+    carryContext(headers);
     return globalThis.fetch(input, { ...init, headers });
   }
   const url = new URL(input instanceof Request ? input.url : String(input), held?.hostBaseUrl);
@@ -68,5 +73,19 @@ export const contextFetch: typeof fetch = (input, init) => {
   new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
   for (const [key, value] of Object.entries(held.headers ?? {})) headers.set(key, value);
   headers.set(HOST_RUNTIME_SERVICE_HEADER, resolveLaneAndRoot().serviceName);
+  carryContext(headers);
   return hostFetch(input, { ...init, headers });
 };
+
+/** Whether a host call from here carries a caller context, and so may have a thread of its own. */
+export const carriesCallerContext = (): boolean =>
+  Boolean(
+    process.env[HOST_CONTEXT_VARIABLE]?.trim() ||
+    new Headers(invocationContext()?.headers).has(HOST_CONTEXT_HEADER),
+  );
+
+/** This process's caller context (a harness child's, or the owner's terminal's) rides every host call. */
+function carryContext(headers: Headers) {
+  const token = process.env[HOST_CONTEXT_VARIABLE]?.trim();
+  if (token && !headers.has(HOST_CONTEXT_HEADER)) headers.set(HOST_CONTEXT_HEADER, token);
+}

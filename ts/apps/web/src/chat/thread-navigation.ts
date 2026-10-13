@@ -8,6 +8,7 @@ import {
   type HarnessThreadSummary,
   type TargetInventory,
   type UpdateThreadRequest,
+  emptyThreadHead,
 } from "@pe/agent-contracts";
 
 export type ThreadShelf = "active" | "pinned" | "snoozed" | "settled" | "archived";
@@ -347,7 +348,7 @@ export function demoThreads(body: HarnessThreadBody): HarnessThreadSummary[] {
   const at = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
   const base = {
     ...body,
-    head: { defaultTarget: target, revision: 3 },
+    head: { ...emptyThreadHead, defaultTarget: target, revision: 3 },
     lifecycle: emptyThreadLifecycle(),
     activity: { state: "idle" as const, pending: 0, lastSeq: 2, message: null },
     lastSeq: 2,
@@ -378,7 +379,7 @@ export function demoThreads(body: HarnessThreadBody): HarnessThreadSummary[] {
       id: "fixture-local",
       title: "Draft the BIM handoff notes",
       updatedAt: at(12),
-      head: { defaultTarget: null, revision: 0 },
+      head: emptyThreadHead,
       lifecycle: { ...base.lifecycle, readSeq: 2 },
     },
     {
@@ -387,6 +388,7 @@ export function demoThreads(body: HarnessThreadBody): HarnessThreadSummary[] {
       title: "Check AHU type parameters",
       updatedAt: at(30),
       head: {
+        ...emptyThreadHead,
         defaultTarget: { ...target, address: address("C:/Families/Air Handling Unit.rfa") },
         revision: 1,
       },
@@ -426,7 +428,7 @@ export function demoThreads(body: HarnessThreadBody): HarnessThreadSummary[] {
       id: "fixture-ended",
       title: "Resize the ductwork on Level 1",
       updatedAt: at(75),
-      head: { defaultTarget: { ...target, session: "pe.app-25" }, revision: 2 },
+      head: { ...emptyThreadHead, defaultTarget: { ...target, session: "pe.app-25" }, revision: 2 },
       lifecycle: { ...base.lifecycle, readSeq: 2 },
     },
   ];

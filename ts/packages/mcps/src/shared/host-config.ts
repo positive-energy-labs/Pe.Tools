@@ -1,10 +1,16 @@
+import { readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { isSea } from "node:sea";
-import { hostProcessIdentity, scriptingWorkspaceIdentity } from "@pe/host-contracts/contracts";
+import {
+  HOST_CONTEXT_VARIABLE,
+  hostProcessIdentity,
+  scriptingWorkspaceIdentity,
+} from "@pe/host-contracts/contracts";
 import { discoverServiceSync, normalizeSourceRoot } from "@pe/host-contracts/pe-service";
 import { productInstallLayout } from "@pe/host-contracts/contracts";
 import {
   checkoutRootFrom,
+  hostContextTokenPath,
   hostServiceName,
   productRoot,
   sourceRootVariable,
@@ -152,4 +158,19 @@ export function resolveHostBaseUrl(value?: string): string {
 
 export function resolveWorkspaceKey(value?: string): string {
   return firstNonBlank(value) ?? scriptingWorkspaceIdentity.defaultWorkspaceKey;
+}
+
+/**
+ * BUILD-RULES ruling 1: the owner's own terminal crosses as a human. A process that already
+ * carries a context (a harness child and its shell) keeps it; otherwise the `pea` CLI adopts the
+ * token its host wrote at start. No host running means no token, and the CLI stays anonymous.
+ */
+export function adoptTerminalContext() {
+  if (process.env[HOST_CONTEXT_VARIABLE]) return;
+  try {
+    const token = readFileSync(hostContextTokenPath(resolveLaneAndRoot().serviceName), "utf8");
+    if (token.trim()) process.env[HOST_CONTEXT_VARIABLE] = token.trim();
+  } catch {
+    // No host has written a token for this runtime: reads only.
+  }
 }

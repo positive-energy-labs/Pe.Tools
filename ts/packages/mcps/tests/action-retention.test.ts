@@ -17,7 +17,8 @@ const receipt = (id: string, state: string, extra: Record<string, unknown> = {})
   id,
   kind: "workflow",
   key: "families.plan",
-  actor: "human",
+  caller: { kind: "human", via: "local" },
+  basis: { kind: "human" },
   destination: { kind: "document", ref: target },
   request: {},
   bases: {},
@@ -62,7 +63,6 @@ test("a settled retained admission is discarded, not thrown at the next attempt"
     { scope: "a" },
     target,
     {},
-    "human",
     "",
     undefined,
     400,
@@ -77,7 +77,6 @@ test("a settled retained admission is discarded, not thrown at the next attempt"
     { scope: "b" },
     target,
     {},
-    "human",
     "",
     undefined,
     400,
@@ -93,14 +92,13 @@ test("a still-running retained admission refuses and names the stop control", as
     { scope: "a" },
     target,
     {},
-    "human",
     "",
     undefined,
     400,
   );
   rows.set(first.id, receipt(first.id, "running"));
   await expect(
-    runSemanticAction("families.plan", { scope: "b" }, target, {}, "human", "", undefined, 400),
+    runSemanticAction("families.plan", { scope: "b" }, target, {}, "", undefined, 400),
   ).rejects.toThrow(/is still running; stop it/);
   // And the control the refusal names reaches the host journal, not the bridge directly.
   rows.set(first.id, receipt(first.id, "cancelled", { error: "stopped", status: 499 }));

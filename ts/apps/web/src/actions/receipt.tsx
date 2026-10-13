@@ -38,7 +38,7 @@ export function ActionReceiptView({
 }) {
   const receipt = useReading<ActionReceipt[]>({ kind: "receipts", id }, resources);
   const control = useAction(
-    (key: ActionControlKey) => controlAction(key, { id }, base, "human"),
+    (key: ActionControlKey) => controlAction(key, { id }, base),
     () => dirty({ kind: "receipts", id }, resources),
   );
   const observed = previousOf(receipt);

@@ -1,4 +1,3 @@
-import { withInvocationContext } from "../src/shared/invocation-context.ts";
 import type { PodList } from "@pe/host-contracts/operation-types";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -14,6 +13,7 @@ import {
   recentRows,
   type CapabilityCatalog,
   type ThreadHead,
+  emptyThreadHead,
 } from "@pe/agent-contracts";
 import { buildCapabilities, createCapabilityCatalogSource } from "../src/pea/capabilities.ts";
 import { createRouteRegistrations } from "../src/pea/routes.ts";
@@ -426,23 +426,28 @@ test("F-B-2: a Families route read names a missing scope and preserves a catalog
 type ExecutableTool = { execute?: (input: never, context: never) => Promise<unknown> };
 type Head = ThreadHead & { thread: string };
 const turn: Head = {
+  ...emptyThreadHead,
   thread: "t1",
   defaultTarget: { kind: "named", session: "b1", address: address("C:\\Models\\A.rvt") },
   revision: 4,
 };
-/** A harness child's call: `PE_THREAD` names the thread, and the host answers its live head. */
+/** A harness child's call: its context names the thread, and the host answers `/pe/scope/self`. */
 async function withHead<T>(head: Head, body: () => Promise<T>): Promise<T> {
   const inner = globalThis.fetch;
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
-    return url.pathname === `/pe/scope/${encodeURIComponent(head.thread)}`
-      ? Response.json({ defaultTarget: head.defaultTarget, revision: head.revision })
+    return url.pathname === "/pe/scope/self"
+      ? Response.json({ ...emptyThreadHead, ...head })
       : inner(input as string, init);
   }) as typeof fetch;
+  const context = process.env.PE_CONTEXT;
+  process.env.PE_CONTEXT = `context-${head.thread}`;
   try {
-    return await withInvocationContext({ thread: head.thread }, body);
+    return await body();
   } finally {
     globalThis.fetch = inner;
+    if (context === undefined) delete process.env.PE_CONTEXT;
+    else process.env.PE_CONTEXT = context;
   }
 }
 const run = (tool: ExecutableTool, input: unknown, head = turn) =>
@@ -899,6 +904,7 @@ test("the live head names an open lifetime; reopen needs an explicit override an
   });
   try {
     const head: Head = {
+      ...emptyThreadHead,
       thread: "t1",
       defaultTarget: { kind: "open", ref: { session: "b1", openId: "a" } },
       revision: 4,
@@ -989,7 +995,8 @@ test("the doors ride the host under the turn Target and name the revision and re
         id: body.id,
         kind: body.kind,
         key: body.key,
-        actor: body.actor,
+        caller: { kind: "pea", context: "c", thread: "t1" },
+        basis: null,
         destination: body.destination,
         request: body.input,
         bases: body.bases,
@@ -1074,9 +1081,9 @@ test("the doors ride the host under the turn Target and name the revision and re
     expect(calls.at(-1)?.body).toMatchObject({
       kind: "operation",
       key: "scripting.execute",
-      actor: "agent",
       input: { sourcePath: "src/Rename.cs", workspaceKey: "sheets" },
     });
+    expect(calls.at(-1)?.body).not.toHaveProperty("actor");
 
     const human = (await run(peDo, {
       key: "workflow:takeoffs.initialize",
@@ -1169,7 +1176,7 @@ test("Pea doors author native JSON and plan both family routes under the turn Ta
         }),
       ).toMatchObject({ ok: true });
       expect(writes.at(-1)?.url.pathname).toBe(
-        `/pe/agent/route-state/${route === "family" ? "pods" : "families"}/apply`,
+        `/pe/route-state/${route === "family" ? "pods" : "families"}/apply`,
       );
       expect(writes.at(-1)?.body).toEqual({ patches: proposal.patches, expectedRevision: 12 });
       const before = writes.length;

@@ -1,4 +1,5 @@
 import { documentRefSchema } from "./target.ts";
+import { basisSchema, callerSchema } from "./caller.ts";
 import { z } from "zod";
 import { executionTargetSchema } from "./target.ts";
 
@@ -54,7 +55,10 @@ const actionAttempt = z.object({
   kind: z.enum(["operation", "workflow"]),
   id: z.string().min(1),
   key: z.string(),
-  actor: z.enum(["human", "agent"]),
+  /** Host-minted; never read from the admission body. */
+  caller: callerSchema,
+  /** Why the crossing was admitted; null for a host leaf that crosses into no Revit document. */
+  basis: basisSchema.nullable(),
   destination: executionTargetSchema,
   request: z.record(z.string(), z.unknown()),
   bases: z.record(z.string(), z.unknown()),

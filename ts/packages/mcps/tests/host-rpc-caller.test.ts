@@ -40,18 +40,6 @@ const catalog: HostOperationDefinition[] = [
   },
 ];
 
-test("script execution requires an explicit initiating actor before admission", async () => {
-  const client = new HostRpcCaller({
-    hostBaseUrl: "http://127.0.0.1:5180",
-    bridgeSessionId: "source",
-    openDocumentId: "original",
-    catalogOverride: catalog,
-  });
-  await expect(
-    client.callOperation("scripting.execute", { scriptContent: 'WriteLine("ok");' }),
-  ).rejects.toThrow("initiating actor");
-});
-
 test("catalog enrichment preserves the explicit session selector", async () => {
   const originalFetch = globalThis.fetch;
   const calls: Array<{ url: string; init?: RequestInit }> = [];

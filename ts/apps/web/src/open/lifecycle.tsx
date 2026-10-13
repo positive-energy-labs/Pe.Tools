@@ -64,7 +64,7 @@ export async function runLifecycle(
     session: { selection: selectionOf(session.row), process: nativeProcessSchema.parse(process) },
     ...(command === "stop" ? { force: phaseOf(session.row) === "unresponsive", unsaved } : {}),
   });
-  return await runSemanticAction(key, input, undefined, {}, "human", "", undefined, 30_000);
+  return await runSemanticAction(key, input, undefined, {}, "", undefined, 30_000);
 }
 
 type Armed = "stop" | "hr" | null;

@@ -1,3 +1,6 @@
+import type { Caller } from "@pe/agent-contracts";
+import { withInvocationContext } from "@pe/mcps/context";
+import { human, pea } from "./callers.ts";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -92,17 +95,19 @@ async function host(
   );
   const fetch = (path: string, init?: RequestInit) =>
     web.handler(new Request(`http://host${path}`, init), Context.empty() as never);
-  const capture = (request: unknown, headers: Record<string, string> = {}) =>
-    fetch("/call", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-pe-bridge-session-id": "bridge-a",
-        "x-pe-open-document-id": "open-a",
-        ...headers,
-      },
-      body: JSON.stringify({ key: "revit.context.view-image", request }),
-    });
+  const capture = (request: unknown, headers: Record<string, string> = {}, as: Caller = human) =>
+    withInvocationContext({ caller: as }, () =>
+      fetch("/call", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-pe-bridge-session-id": "bridge-a",
+          "x-pe-open-document-id": "open-a",
+          ...headers,
+        },
+        body: JSON.stringify({ key: "revit.context.view-image", request }),
+      }),
+    );
   return { dir, store, fetch, capture };
 }
 
@@ -117,9 +122,7 @@ test("every view-image answer through /call keeps one blob per sha and one recei
   expect(first.status, await first.clone().text()).toBe(200);
   const id = first.headers.get("x-pe-capture-id");
   expect(first.headers.get("x-pe-capture-url")).toBe(`/captures/${sha(l1)}.png`);
-  expect((await capture({ target: { name: "L1" } }, { "x-pe-action-actor": "agent" })).status).toBe(
-    200,
-  );
+  expect((await capture({ target: { name: "L1" } }, {}, pea())).status).toBe(200);
   expect((await capture({ target: { name: "L2" } })).status).toBe(200);
 
   expect((await readdir(join(dir, "store", "blobs"))).sort()).toHaveLength(2);

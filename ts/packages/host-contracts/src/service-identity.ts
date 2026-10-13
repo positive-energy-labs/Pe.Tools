@@ -29,6 +29,10 @@ export function productRoot(): string {
   );
 }
 
+/** The owner's terminal context token, written by the host at start and read by the `pea` CLI. */
+export const hostContextTokenPath = (serviceName: string): string =>
+  join(productRoot(), "state", "service", `${serviceName}.context`);
+
 /** Installed executables must run at the manifest's canonical installed location. */
 export function installedRuntimeRoot(
   app: "host" | "pea",

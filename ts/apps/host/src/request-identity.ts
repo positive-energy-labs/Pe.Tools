@@ -7,11 +7,17 @@ import {
 } from "@pe/host-contracts/contracts";
 import { hostOwnership } from "./host-ownership.ts";
 import { withInvocationContext, type RequestPrincipal } from "@pe/mcps/context";
-import type { MachineShare } from "@pe/agent-contracts";
+import type { Caller, MachineShare } from "@pe/agent-contracts";
+import { callerOf } from "./control.ts";
 
 export type { RequestPrincipal } from "@pe/mcps/context";
 export type IdentityResult =
-  | { readonly principal: RequestPrincipal; readonly headers: Readonly<Record<string, string>> }
+  | {
+      readonly principal: RequestPrincipal;
+      readonly headers: Readonly<Record<string, string>>;
+      /** Minted from the transport and `x-pe-context`; never from a body or page header. */
+      readonly caller: Caller;
+    }
   | { readonly refusal: { readonly code: string; readonly detail: string } };
 
 export interface IdentityOptions {
@@ -94,6 +100,7 @@ export async function readRequestIdentity(
       "runtime.owner-missing",
       "Browser API requests require their original runtime service identity.",
     );
+  const anonymous: Caller = { kind: "anonymous" };
   let result: IdentityResult;
   if (host === `127.0.0.1:${options.port()}`) {
     const proxyIdentity = Object.keys(headers).some((key) => key.startsWith("tailscale-"));
@@ -103,7 +110,7 @@ export async function readRequestIdentity(
           origin !== `http://127.0.0.1:${options.port()}` &&
           origin !== options.frontendOrigin()
         ? refuse("identity.origin", "Origin is not this host or its recorded checkout frontend.")
-        : { principal: { kind: "local" }, headers: origin ? { origin } : {} };
+        : { principal: { kind: "local" }, headers: origin ? { origin } : {}, caller: anonymous };
   } else {
     const share = await options.share.read();
     const shared =
@@ -124,6 +131,7 @@ export async function readRequestIdentity(
               )
             : {
                 principal: { kind: "tailnet", login, authority: shared.host },
+                caller: anonymous,
                 headers: {
                   host: shared.host,
                   "tailscale-user-login": login,
@@ -159,6 +167,13 @@ export async function readRequestIdentity(
       "identity.local-only",
       "The bridge, SDK shutdown, window and share switch are local-only.",
     );
+  if ("principal" in result) {
+    const minted = callerOf(result.principal, headers);
+    result =
+      "refusal" in minted
+        ? refuse(minted.refusal.code, minted.refusal.detail)
+        : { ...result, caller: minted.caller };
+  }
   options.share.observe(result, pathname, host);
   return result;
 }
@@ -190,6 +205,7 @@ export const requestIdentityLayer = (options: IdentityOptions) =>
             {
               hostBaseUrl: `http://127.0.0.1:${options.port()}`,
               principal: identity.principal,
+              caller: identity.caller,
               headers: identity.headers,
             },
             () => Effect.runPromiseExitWith(services)(handler, { signal }),

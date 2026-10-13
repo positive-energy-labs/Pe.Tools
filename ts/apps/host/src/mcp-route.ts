@@ -12,7 +12,6 @@ const error = (status: number, message: string) =>
 export function createMcpDoor(hostBaseUrl: () => string, makeServer = createPeaMcpServer) {
   type Session = {
     principal: string;
-    thread?: string;
     context: InvocationContext;
     transport: WebStandardStreamableHTTPServerTransport;
     server: Awaited<ReturnType<typeof makeServer>>;
@@ -26,14 +25,10 @@ export function createMcpDoor(hostBaseUrl: () => string, makeServer = createPeaM
       if (protocol !== null && protocol !== version)
         return error(400, "Unsupported MCP protocol version.");
       const id = request.headers.get("mcp-session-id");
-      const thread = request.headers.get("x-pe-thread") ?? undefined;
       let session = id ? sessions.get(id) : undefined;
       if (id && !session) return error(404, "Unknown MCP session.");
-      if (
-        session &&
-        (session.principal !== principalKey(caller.principal) || session.thread !== thread)
-      )
-        return error(403, "MCP session is bound to a different principal or tool context.");
+      if (session && session.principal !== principalKey(caller.principal))
+        return error(403, "MCP session is bound to a different principal.");
       if (request.method === "GET")
         return new Response(null, { status: 405, headers: { allow: "POST, DELETE" } });
       if (request.method !== "POST" && request.method !== "DELETE")
@@ -68,7 +63,6 @@ export function createMcpDoor(hostBaseUrl: () => string, makeServer = createPeaM
           hostBaseUrl: hostBaseUrl(),
           principal: caller.principal,
           headers: caller.headers,
-          thread,
           admissions: new Map(),
           running: new Map(),
         };
@@ -83,7 +77,7 @@ export function createMcpDoor(hostBaseUrl: () => string, makeServer = createPeaM
             sessions.delete(id);
           },
         });
-        session = { principal: principalKey(caller.principal), thread, context, transport, server };
+        session = { principal: principalKey(caller.principal), context, transport, server };
         await server.connect(transport);
       }
       // HTTP disconnect does not cancel admitted work. The SDK owns protocol cancellation;

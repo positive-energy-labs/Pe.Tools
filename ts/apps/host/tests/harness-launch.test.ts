@@ -50,7 +50,7 @@ test("installed MCP uses sibling Pea and exact host/thread while dev keeps sourc
   );
   expect(installed.command).toBe(join(root, "bin", "pea", "pea.exe"));
   expect(installed.args).toEqual(["mcp", "--host", "http://127.0.0.1:52123"]);
-  expect(installed.env).toContainEqual({ name: "PE_THREAD", value: "thread-1" });
+  expect(installed.env).toContainEqual({ name: "PE_CONTEXT", value: "thread-1" });
   const dev = peaMcpServer(root, "http://127.0.0.1:52123", "thread-2");
   expect(dev.command).toBe(process.execPath);
   expect(dev.args).toEqual([

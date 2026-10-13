@@ -18,6 +18,7 @@ export {
 export type { CapabilityCatalogSource, RouteRegistration } from "./pea/index.ts";
 export type { PeaCliCommandOptions } from "./pea/PeaCliCommands.ts";
 export {
+  adoptTerminalContext,
   discoverHostBaseUrl,
   resolveHostBaseUrl,
   resolveLaneAndRoot,

@@ -79,13 +79,21 @@ else if(args.includes('--https=443')) {
     await writeFile(config, JSON.stringify(unrelated));
     expect(await share.set(true)).toHaveProperty("state", "on");
     share.observe(
-      { principal: { kind: "tailnet", login: "one", authority }, headers: {} },
+      {
+        principal: { kind: "tailnet", login: "one", authority },
+        headers: {},
+        caller: { kind: "anonymous" },
+      },
       "/mcp",
       authority,
     );
     time = "2026-10-09T01:00:00.000Z";
     share.observe(
-      { principal: { kind: "tailnet", login: "one", authority }, headers: {} },
+      {
+        principal: { kind: "tailnet", login: "one", authority },
+        headers: {},
+        caller: { kind: "anonymous" },
+      },
       "/pe/resources",
       authority,
     );

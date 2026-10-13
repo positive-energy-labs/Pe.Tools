@@ -18,6 +18,8 @@ const receipt = (admission: Record<string, unknown>) => {
   const { input, ...rest } = admission;
   return {
     ...rest,
+    caller: { kind: "pea", context: "c", thread: "t" },
+    basis: null,
     request: input,
     state: "succeeded",
     result: { done: true },
@@ -82,7 +84,7 @@ const call = (tool: typeof peDo | typeof peRead, input: Record<string, unknown>,
     ),
   ) as Promise<Record<string, unknown>>;
 
-test("pe_do admits native operations and workflows with exact identity, actor, target and bases", async () => {
+test("pe_do admits native operations and workflows with exact identity, target and bases, and no actor", async () => {
   const { posts } = host();
   expect(
     await call(peDo, { key: "op:scripting.execute", target, input: { scriptContent: "x" } }),
@@ -111,7 +113,6 @@ test("pe_do admits native operations and workflows with exact identity, actor, t
       id: "attempt",
       kind: "operation",
       key: "scripting.execute",
-      actor: "agent",
       destination,
       input: { scriptContent: "x" },
       bases: {},
@@ -120,19 +121,18 @@ test("pe_do admits native operations and workflows with exact identity, actor, t
       id: key,
       kind: "operation",
       key,
-      actor: "agent",
       destination: { kind: "session", session: "A" },
     })),
     {
       id: "workflow",
       kind: "workflow",
       key: "takeoffs.partition",
-      actor: "agent",
       destination,
       bases,
     },
   ]);
   expect(posts.at(-1)?.input).not.toHaveProperty("bases");
+  for (const post of posts) expect(post).not.toHaveProperty("actor");
 });
 
 test("pe_read refuses mutations; pe_do refuses human, unknown and missing or closed targets before admission", async () => {
@@ -165,7 +165,6 @@ test("pe_do replays the original receipt without catalog or target discovery and
       id: "attempt",
       kind: "operation",
       key: "scripting.execute",
-      actor: "agent",
       destination,
       input: { scriptContent: "x" },
       bases: {},

@@ -10,10 +10,16 @@ import {
   actionBasesSchema,
   type ActionAdmission,
   type ActionStep,
+  type Basis,
+  type Caller,
   type DocumentRef,
   type ExecutionTarget,
   type ActionReceipt,
 } from "@pe/agent-contracts";
+import { live } from "./control.ts";
+
+/** Who crossed and why it was admitted: host-minted, stamped on the receipt beside the admission. */
+export type Crossing = { readonly caller: Caller; readonly basis: Basis | null };
 
 export type ActionExecution = {
   step<A>(
@@ -304,19 +310,19 @@ export class ActionJournal {
     await rename(`${file}.tmp`, file);
   }
   async admit(
-    raw: ActionAdmission,
+    raw: ActionAdmission & Crossing,
     prepare: () => Promise<unknown>,
     execute: (execution: ActionExecution) => Promise<unknown>,
     resume = false,
   ): Promise<ActionReceipt> {
-    const admission = actionAdmissionSchema.parse(raw);
+    const { caller, basis, ...authored } = raw;
+    const admission = actionAdmissionSchema.parse(authored);
     return this.serial(async () => {
       const prior = this.rows.find((row) => row.id === admission.id);
       const identity = (row: ActionReceipt) => ({
         id: row.id,
         kind: row.kind,
         key: row.key,
-        actor: row.actor,
         destination: row.destination,
         input: row.request,
         bases: row.bases,
@@ -324,7 +330,7 @@ export class ActionJournal {
       if (prior) {
         if (canonicalRouteInput(identity(prior)) !== canonicalRouteInput(admission))
           throw Error(
-            `request id '${admission.id}' conflicts with its admitted intent, actor, target or bases`,
+            `request id '${admission.id}' conflicts with its admitted intent, target or bases`,
           );
         if (!resume || (prior.state !== "unknown" && prior.state !== "incomplete"))
           return structuredClone(prior);
@@ -363,7 +369,9 @@ export class ActionJournal {
         id: admission.id,
         kind: admission.kind,
         key: admission.key,
-        actor: admission.actor,
+        // A resume is admitted afresh under its own caller; it never inherits the original basis.
+        caller,
+        basis,
         destination: admission.destination,
         request: admission.input,
         bases: admission.bases,
@@ -455,6 +463,8 @@ export class ActionJournal {
                 notDispatched: true,
               });
             });
+            const dead = live(row.basis);
+            if (dead) throw new BridgeError(dead.message, 403, { notDispatched: true });
             result = await effect(step.id);
           } catch (error) {
             await save((row) => ({

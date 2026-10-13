@@ -7,6 +7,7 @@ import { instancesActions, instancesSessionSelection } from "@pe/agent-contracts
 import { ActionJournal } from "../src/action-journal.ts";
 import { admitInstancesAction, recoverInstancesAction } from "../src/instances-actions.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
+import { crossingOf } from "./callers.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -105,11 +106,11 @@ async function setup(
         id: resume ?? `${key}-${++serial}`,
         kind: "workflow",
         key,
-        actor,
         destination: selection ? { kind: "sdk-session", selection } : { kind: "host" },
         input,
         bases: {},
       },
+      crossingOf(actor),
       owner,
       deps,
       resume !== undefined,
@@ -131,7 +132,7 @@ async function recordPeaLaunch(owner: ActionJournal) {
       id: "pea-launch",
       kind: "workflow",
       key: "instances.start",
-      actor: "human",
+      ...crossingOf("human"),
       destination: { kind: "host" },
       input: { year: "2025", owner: "pea", addins: "on" },
       bases: {},
@@ -973,11 +974,11 @@ test("an action whose destination is not the supplied session is refused before 
         id: "foreign-destination",
         kind: "workflow",
         key: "instances.open",
-        actor: "agent",
         destination: { kind: "host" },
         input: { source: "C:/Tower.rvt", into: into() },
         bases: {},
       },
+      crossingOf("agent"),
       f.owner,
       f.deps,
     ),

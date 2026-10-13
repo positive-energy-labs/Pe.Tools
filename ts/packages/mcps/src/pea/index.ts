@@ -30,7 +30,6 @@ const captureView = createCaptureViewTool(async () => {
     );
   return new HostRpcCaller({
     hostBaseUrl: peaHostBaseUrl(),
-    actor: "agent",
     bridgeSessionId: target.ref.session,
     openDocumentId: target.ref.openId,
   });
@@ -42,7 +41,7 @@ const captureView = createCaptureViewTool(async () => {
  * and docs helpers that do not fit a JSON row. Session lifecycle is in the catalog like everything
  * else: every lifecycle verb (`workflow:instances.start|open|restart|stop|close`) runs for any actor on Pea's sessions
  * (ADR 0017). Every host-bound tool resolves its Revit session from the thread
- * head's default Target (`PE_THREAD`); no tool input names a session or a document.
+ * head's default Target (`/pe/scope/self`); no tool input names a session or a document.
  */
 export const peaProductTools = {
   [peFind.id]: peFind,

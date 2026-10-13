@@ -2,7 +2,7 @@ import { expect, test, vi } from "vite-plus/test";
 import { createHash } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { address, type ThreadHead } from "@pe/agent-contracts";
+import { address, emptyThreadHead, type ThreadHead } from "@pe/agent-contracts";
 import { createPeaMcpServer } from "../src/server.ts";
 import { bundledPeaSkills } from "../src/pea/skills.ts";
 import { peaAgentInstructions } from "../src/pea/instructions.ts";
@@ -22,11 +22,13 @@ test("kernel starts with live discovery and makes Revit orientation conditional"
 
 test("one MCP connection discovers session and target changes without startup context", async () => {
   fakeRuntimeHost("http://127.0.0.1:9");
-  let head: ThreadHead = { defaultTarget: null, revision: 0 };
+  // A harness child: the host minted its context at spawn, so its own scope answers.
+  vi.stubEnv("PE_CONTEXT", "test-context");
+  let head: ThreadHead = emptyThreadHead;
   let sessions: Array<{ sessionId: string; activeDocumentTitle: string }> = [];
   const fetch = vi.fn(async (input: string | URL | Request) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
-    if (url.pathname === "/pe/scope/t1") return Response.json(head);
+    if (url.pathname === "/pe/scope/self") return Response.json({ thread: "t1", ...head });
     if (url.pathname === "/pe/capabilities")
       return Response.json({
         at: new Date().toISOString(),
@@ -37,7 +39,7 @@ test("one MCP connection discovers session and target changes without startup co
     throw new Error(`unexpected ${url.pathname}`);
   });
   vi.stubGlobal("fetch", fetch);
-  const server = await createPeaMcpServer({ hostBaseUrl: "http://127.0.0.1:9", thread: "t1" });
+  const server = await createPeaMcpServer({ hostBaseUrl: "http://127.0.0.1:9" });
   const client = new Client({ name: "discovery-fixture", version: "1" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   try {
@@ -56,6 +58,7 @@ test("one MCP connection discovers session and target changes without startup co
     expect(await discover()).toMatchObject({ target: null, sessions });
     for (const [index, openId] of ["a", "b"].entries()) {
       head = {
+        ...head,
         defaultTarget: { kind: "open", ref: { session: "s1", openId } },
         revision: index + 1,
       };
@@ -91,7 +94,9 @@ test("bundled skills are unique, parseable, and carry a trigger", () => {
 
 test("capture_view refuses null and named targets before host work and preserves exact open targeting", async () => {
   fakeRuntimeHost("http://127.0.0.1:9");
-  let head: ThreadHead = { defaultTarget: null, revision: 0 };
+  // A harness child: the host minted its context at spawn, so its own scope answers.
+  vi.stubEnv("PE_CONTEXT", "test-context");
+  let head: ThreadHead = emptyThreadHead;
   const paths: string[] = [];
   const image = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
@@ -104,7 +109,7 @@ test("capture_view refuses null and named targets before host work and preserves
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     paths.push(url.pathname);
-    if (url.pathname === "/pe/scope/capture") return Response.json(head);
+    if (url.pathname === "/pe/scope/self") return Response.json({ thread: "capture", ...head });
     if (url.pathname === "/ops")
       return Response.json({
         operations: [{ key: "revit.context.view-image", intent: "Read", needs: "document" }],
@@ -118,7 +123,7 @@ test("capture_view refuses null and named targets before host work and preserves
     const headers = new Headers(init?.headers);
     expect(headers.get("x-pe-bridge-session-id")).toBe("selected-session");
     expect(headers.get("x-pe-open-document-id")).toBe("selected-open");
-    expect(headers.get("x-pe-action-actor")).toBe("agent");
+    expect(headers.has("x-pe-action-actor")).toBe(false);
     expect(JSON.parse(typeof init?.body === "string" ? init.body : "{}").key).toBe(
       "revit.context.view-image",
     );
@@ -129,7 +134,7 @@ test("capture_view refuses null and named targets before host work and preserves
       },
     );
   });
-  const server = await createPeaMcpServer({ hostBaseUrl: "http://127.0.0.1:9", thread: "capture" });
+  const server = await createPeaMcpServer({ hostBaseUrl: "http://127.0.0.1:9" });
   const client = new Client({ name: "capture-fixture", version: "1" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   try {
@@ -139,14 +144,15 @@ test("capture_view refuses null and named targets before host work and preserves
       null,
       { kind: "named" as const, session: "selected-session", address: address("C:/Models/A.rvt") },
     ]) {
-      head = { defaultTarget: target, revision: head.revision + 1 };
+      head = { ...head, defaultTarget: target, revision: head.revision + 1 };
       paths.length = 0;
       const result = await client.callTool({ name: "capture_view", arguments: {} });
       expect(result.isError).toBe(true);
       expect(JSON.stringify(result.content)).toContain("requires an exact selected open document");
-      expect(paths).toEqual(["/pe/scope/capture"]);
+      expect(paths).toEqual(["/pe/scope/self"]);
     }
     head = {
+      ...head,
       defaultTarget: {
         kind: "open",
         ref: { session: "selected-session", openId: "selected-open" },
@@ -168,14 +174,14 @@ test("capture_view refuses null and named targets before host work and preserves
     expect(content[0]?.text).not.toContain(image.toString("base64"));
     expect(content[1]?.mimeType).toBe("image/png");
     expect(Buffer.from(content[1]?.data ?? "", "base64").equals(image)).toBe(true);
-    expect(paths).toEqual(["/pe/scope/capture", "/ops", "/call", capturePath]);
+    expect(paths).toEqual(["/pe/scope/self", "/ops", "/call", capturePath]);
     for (const invalid of ["https://foreign.test/image.png", "/captures/../secret.png"]) {
       returnedCapturePath = invalid;
       paths.length = 0;
       const result = await client.callTool({ name: "capture_view", arguments: {} });
       expect(result.isError).toBe(true);
       expect(JSON.stringify(result.content)).toContain("invalid capture URL");
-      expect(paths.every((path) => path === "/pe/scope/capture" || path === "/call")).toBe(true);
+      expect(paths.every((path) => path === "/pe/scope/self" || path === "/call")).toBe(true);
     }
     returnedCapturePath = capturePath;
     reportedSize = defaultReadImageMaxBytes + 1;

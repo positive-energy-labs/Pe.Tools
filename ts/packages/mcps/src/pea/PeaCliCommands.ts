@@ -94,7 +94,6 @@ export class PeaCliCommands {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
         openDocumentId: commonArgs.openDocumentId,
-        actor: commonArgs.actor,
         actionId: commonArgs.actionId,
       },
       run: async (ctx) => {
@@ -225,7 +224,6 @@ export class PeaCliCommands {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
         openDocumentId: commonArgs.openDocumentId,
-        actor: commonArgs.actor,
         actionId: commonArgs.actionId,
         key: {
           type: "string",
@@ -254,10 +252,6 @@ export class PeaCliCommands {
           hostBaseUrl: this.resolveHostBaseUrl(ctx.values.host),
           bridgeSessionId: asOptionalString(ctx.values.bridgeSessionId),
           openDocumentId: asOptionalString(ctx.values.openDocumentId),
-          actor:
-            ctx.values.actor === "human" || ctx.values.actor === "agent"
-              ? ctx.values.actor
-              : undefined,
           actionId: asOptionalString(ctx.values.actionId),
         };
         const intent = await readCapabilityIntent(key, context);
@@ -366,7 +360,6 @@ export class PeaCliCommands {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
         openDocumentId: commonArgs.openDocumentId,
-        actor: commonArgs.actor,
         actionId: commonArgs.actionId,
         requestId: {
           type: "string",
@@ -394,7 +387,6 @@ export class PeaCliCommands {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
         openDocumentId: commonArgs.openDocumentId,
-        actor: commonArgs.actor,
         actionId: commonArgs.actionId,
       },
       toKebab: true,
@@ -432,7 +424,6 @@ export class PeaCliCommands {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
         openDocumentId: commonArgs.openDocumentId,
-        actor: commonArgs.actor,
         actionId: commonArgs.actionId,
         archive: { type: "string", description: "Path to the Pod zip archive to import." },
         folder: {
@@ -463,7 +454,6 @@ export class PeaCliCommands {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
         openDocumentId: commonArgs.openDocumentId,
-        actor: commonArgs.actor,
         actionId: commonArgs.actionId,
         pod: { type: "string", description: "Manifest id of the pod to export." },
         output: { type: "string", description: "Path of the .zip archive to write." },
@@ -490,7 +480,6 @@ export class PeaCliCommands {
       hostBaseUrl: this.resolveHostBaseUrl(values.host),
       bridgeSessionId: asOptionalString(values.bridgeSessionId),
       openDocumentId: asOptionalString(values.openDocumentId),
-      actor: values.actor === "human" || values.actor === "agent" ? values.actor : undefined,
       actionId: asOptionalString(values.actionId),
       timeoutMs: scriptClientTimeoutMs(scriptTimeoutSeconds),
       workspaceKey: this.resolveWorkspaceKey(values.workspace),
@@ -506,7 +495,6 @@ export class PeaCliCommands {
       bridgeSessionId: asOptionalString(values.bridgeSessionId),
       openDocumentId: asOptionalString(values.openDocumentId),
       requestId: asOptionalString(values.actionId),
-      actor: values.actor === "human" || values.actor === "agent" ? values.actor : undefined,
       ...(scriptTimeoutSeconds != null
         ? { timeoutMs: scriptClientTimeoutMs(scriptTimeoutSeconds) }
         : {}),
@@ -523,11 +511,6 @@ export class PeaCliCommands {
 }
 
 const commonArgs = {
-  actor: {
-    type: "string",
-    description:
-      "Initiating actor: human or agent. Required for mutation; never inferred from CLI transport.",
-  },
   actionId: {
     type: "string",
     description: "Original action ID. Reuse for receipt replay, never replace an unknown attempt.",

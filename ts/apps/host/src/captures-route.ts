@@ -13,7 +13,12 @@ import { appendFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/pr
 import { join } from "node:path";
 import { Effect } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
-import { captureReceiptSchema, captureUrl, type CaptureReceipt } from "@pe/agent-contracts";
+import {
+  captureReceiptSchema,
+  captureUrl,
+  type Caller,
+  type CaptureReceipt,
+} from "@pe/agent-contracts";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
 import { productRoot } from "./host-ownership.ts";
@@ -109,9 +114,9 @@ type ViewImageAnswer = {
 };
 type ViewImageRequest = { focus?: CaptureReceipt["focus"] } | null | undefined;
 
-/** The receipt's origin from the /call attribution: a web or page path, else the actor. */
-export const captureOrigin = (origin: string, actor: string | undefined) =>
-  /^(?:web|page):./.test(origin) ? origin : actor === "agent" ? "agent" : "human";
+/** The receipt's origin from the /call attribution: a web or page path, else the caller. */
+export const captureOrigin = (origin: string, caller: Caller) =>
+  /^(?:web|page):./.test(origin) ? origin : caller.kind === "human" ? "human" : "agent";
 
 /**
  * Register one `revit.context.view-image` answer. The PNG is read from the path the op returned

@@ -19,6 +19,7 @@ import { ActionJournal } from "../src/action-journal.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { readNativeReceipt } from "../src/native-receipts.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
+import { asCaller, crossingOf, human } from "./callers.ts";
 
 const metrics = {
   requestBytes: 0,
@@ -42,14 +43,16 @@ const lane = <A, E, R>(body: (harness: Harness) => Effect.Effect<A, E, R>) =>
       { disableLogger: true },
     );
     const post = (path: string, body: unknown) =>
-      Effect.promise(() =>
-        web.handler(
-          new Request(`http://host${path}`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
-          }),
-          Context.empty() as never,
+      Effect.promise(
+        asCaller(human, () =>
+          web.handler(
+            new Request(`http://host${path}`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(body),
+            }),
+            Context.empty() as never,
+          ),
         ),
       );
     const get = (path: string) =>
@@ -199,7 +202,7 @@ test("an exact cancelled SDK receipt settles a lost reply once without replaying
   try {
     const interrupted = new ActionJournal(path);
     await interrupted.admit(
-      intent,
+      { ...intent, ...crossingOf("human") },
       async () => ({ kind: "native-leaf", originalProcess }),
       async (execution) => {
         await execution.step("file", "prior", {}, async () => ++effects);

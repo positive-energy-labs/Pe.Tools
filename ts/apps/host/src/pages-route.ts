@@ -36,6 +36,7 @@ import {
   HOST_RUNTIME_SERVICE_QUERY,
 } from "@pe/host-contracts/contracts";
 import { hostOwnership } from "./host-ownership.ts";
+import { currentCaller, routeActorOf } from "./control.ts";
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
 
 /** Page assets that live in the web app: the tokens and the Revit facsimile (one source each). */
@@ -91,7 +92,6 @@ const servedPe = () => {
   );
 };
 
-const ACTOR_HEADER = "x-pe-action-actor";
 /** One folder name: no dots, so no `..` and no file masquerading as a page. */
 const SLUG = /^[a-z0-9][a-z0-9_-]*$/i;
 /** One file segment: a leading dot is refused, so `.state/` and editor droppings stay private. */
@@ -406,9 +406,7 @@ ${asset("pe.css")}`,
       const event: unknown = await request.json().catch(() => undefined);
       if (typeof event !== "object" || event === null || Array.isArray(event))
         return problem(400, "an event is one JSON object");
-      const actor = request.headers.get(ACTOR_HEADER);
-      const origin =
-        request.headers.get(HOST_RPC_ORIGIN_HEADER) ?? (actor === "agent" ? "agent" : "human");
+      const origin = request.headers.get(HOST_RPC_ORIGIN_HEADER) ?? routeActorOf(currentCaller());
       return json(await state.append(event, origin), 201);
     }
     if (verb === "events" && request.method === "GET") {

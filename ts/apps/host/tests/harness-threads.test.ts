@@ -4,7 +4,16 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { HarnessEvent, HarnessThreadBody, Provider, ThreadHead } from "@pe/agent-contracts";
+import type {
+  Caller,
+  HarnessEvent,
+  HarnessThreadBody,
+  Provider,
+  ThreadHead,
+} from "@pe/agent-contracts";
+import { emptyThreadHead } from "@pe/agent-contracts";
+import { withInvocationContext } from "@pe/mcps/context";
+import { human } from "./callers.ts";
 import { createProviders } from "../src/harness/providers.ts";
 import {
   createHarnessThreads,
@@ -22,6 +31,8 @@ let root = "";
 let previousLocalAppData: string | undefined;
 type Host = {
   fetch: (request: Request) => Promise<Response>;
+  /** Who every request crosses as: the identity middleware's stand-in. */
+  as: Caller;
   heads: ReturnType<typeof createHarnessThreads>["heads"];
   close: () => Promise<unknown>;
   consoles: string[];
@@ -45,10 +56,13 @@ const host = (updatePending?: () => boolean): Host => {
     providers,
   });
   const routed: Host = {
+    as: human,
     fetch: (request) =>
-      /^\/pe\/(providers|access)/.test(new URL(request.url).pathname)
-        ? providers.fetch(request)
-        : threads.fetch(request),
+      withInvocationContext({ caller: routed.as }, () =>
+        /^\/pe\/(providers|access)/.test(new URL(request.url).pathname)
+          ? providers.fetch(request)
+          : threads.fetch(request),
+      ),
     heads: threads.heads,
     close: threads.close,
     consoles,
@@ -568,16 +582,21 @@ test("the thread head lives in meta.json, falls back for unknown ids, and is obs
   const target = { kind: "named", session: "s1", address: "C:\\Models\\A.rvt" };
   const seen: ThreadHead[] = [];
   const release = threads.heads.observe(id, ({ value }) => seen.push(value));
-  expect((await call("GET", `/pe/scope/${id}`)).json).toEqual({ defaultTarget: null, revision: 0 });
+  const hostNow = expect.any(String);
+  expect((await call("GET", `/pe/scope/${id}`)).json).toEqual({ ...emptyThreadHead, hostNow });
   const set = await call("PUT", `/pe/scope/${id}`, { defaultTarget: target, expectedRevision: 0 });
   expect(set).toEqual({
     status: 200,
-    json: { ok: true, why: "set", head: { defaultTarget: target, revision: 1 } },
+    json: {
+      ok: true,
+      why: "set",
+      head: { ...emptyThreadHead, defaultTarget: target, revision: 1, hostNow },
+    },
   });
   const stale = await call("PUT", `/pe/scope/${id}`, { defaultTarget: null, expectedRevision: 0 });
   expect([stale.status, stale.json.why]).toEqual([409, "stale"]);
   const meta = JSON.parse(await readFile(join(root, id, "meta.json"), "utf8"));
-  expect(meta.head).toEqual({ defaultTarget: target, revision: 1 });
+  expect(meta.head).toEqual({ ...emptyThreadHead, defaultTarget: target, revision: 1 });
   await expect.poll(() => seen.at(-1)?.revision).toBe(1);
   release();
 
@@ -588,8 +607,10 @@ test("the thread head lives in meta.json, falls back for unknown ids, and is obs
       .ok,
   ).toBe(true);
   expect((await caller(host())("GET", `/pe/scope/${loose}`)).json).toEqual({
+    ...emptyThreadHead,
     defaultTarget: target,
     revision: 1,
+    hostNow,
   });
 });
 

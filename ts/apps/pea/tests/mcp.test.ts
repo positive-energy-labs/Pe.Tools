@@ -38,7 +38,7 @@ test("pea mcp initializes, lists tools and reads its explicit host with no stdou
     ...process.env,
     PE_TOOLS_HOST_BASE_URL: "http://127.0.0.1:9",
   };
-  delete env.PE_THREAD;
+  delete env.PE_CONTEXT;
   const child = spawn(
     process.execPath,
     [

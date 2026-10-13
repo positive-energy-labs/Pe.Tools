@@ -255,28 +255,12 @@ test("lost acceptance and host remount replay the original admission once", asyn
   const original = await f.admission();
   f.lose();
   expect(
-    await runSemanticAction(
-      "schedule.grid.push",
-      {},
-      f.b,
-      original.bases,
-      "human",
-      "",
-      original.id,
-    ),
+    await runSemanticAction("schedule.grid.push", {}, f.b, original.bases, "", original.id),
   ).toMatchObject({ id: original.id, state: "succeeded" });
   await f.owner().wait(original.id);
   await f.restart();
   expect(
-    await runSemanticAction(
-      "schedule.grid.push",
-      {},
-      f.b,
-      original.bases,
-      "human",
-      "",
-      original.id,
-    ),
+    await runSemanticAction("schedule.grid.push", {}, f.b, original.bases, "", original.id),
   ).toMatchObject({ id: original.id, state: "succeeded" });
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
 });
@@ -289,8 +273,8 @@ test("lost native outcome remains staged, original receipt recovers without a fr
   expect((await f.view()).doc.cells["1::2"].staged).toBeTruthy();
   expect((await f.post("/actions", await f.admission())).status).toBe(409);
   await f.restart();
-  await controlAction("action.recover", { id: original.id }, "", "human");
-  await controlAction("action.resume", { id: original.id }, "", "human");
+  await controlAction("action.recover", { id: original.id }, "");
+  await controlAction("action.resume", { id: original.id }, "");
   expect(await f.owner().wait(original.id)).toMatchObject({ state: "succeeded" });
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
 });
@@ -328,7 +312,7 @@ test("readback failure is explicit and original resume performs only a read, nev
   });
   expect((await f.post("/actions", await f.admission())).status).toBe(409);
   f.failReadback(false);
-  await controlAction("action.resume", { id: result.id }, "", "human");
+  await controlAction("action.resume", { id: result.id }, "");
   expect(await f.owner().wait(result.id)).toMatchObject({ state: "succeeded" });
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
 });
@@ -393,8 +377,8 @@ test("missing acknowledgments recover the same native receipt before original re
   const original = await f.admission();
   expect(await f.submit(original)).toMatchObject({ state: "incomplete" });
   f.setResponse(cellsApplied([[1, 2, true]]));
-  await controlAction("action.recover", { id: original.id }, "", "human");
-  await controlAction("action.resume", { id: original.id }, "", "human");
+  await controlAction("action.recover", { id: original.id }, "");
+  await controlAction("action.resume", { id: original.id }, "");
   expect(await f.owner().wait(original.id)).toMatchObject({ state: "succeeded" });
   expect((await f.view()).doc.cells["1::2"].staged).toBeUndefined();
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);

@@ -1,5 +1,10 @@
 import { expect, test } from "vite-plus/test";
-import { address, type HarnessThreadSummary, type TargetInventory } from "@pe/agent-contracts";
+import {
+  address,
+  type HarnessThreadSummary,
+  type TargetInventory,
+  emptyThreadHead,
+} from "@pe/agent-contracts";
 import { emptyChatState } from "#/workbench/chat-state";
 import {
   demoThreads,
@@ -94,11 +99,15 @@ test("shelves derive overlays without merging targets or provider identities", (
     "active",
   ]);
   const exact = { kind: "open" as const, ref: { session: "a", openId: "one" } };
-  const a = { ...threads[0]!, head: { defaultTarget: exact, revision: 1 } };
+  const a = { ...threads[0]!, head: { ...emptyThreadHead, defaultTarget: exact, revision: 1 } };
   const b = {
     ...a,
     id: "other",
-    head: { defaultTarget: { ...exact, ref: { session: "a", openId: "two" } }, revision: 1 },
+    head: {
+      ...emptyThreadHead,
+      defaultTarget: { ...exact, ref: { session: "a", openId: "two" } },
+      revision: 1,
+    },
   };
   expect(
     visibleThreads([a, b], {
@@ -178,6 +187,7 @@ test("unread comes from actual activity or explicit mark, never generic lastSeq/
   const named = {
     ...thread,
     head: {
+      ...emptyThreadHead,
       defaultTarget: { kind: "named" as const, session: "s", address: address("C:/Model.rvt") },
       revision: 1,
     },

@@ -45,7 +45,21 @@ import {
   type PromptAttachment,
   type PutTargetResult,
   type ThreadHead,
+  type ThreadHeadReading,
+  type Caller,
+  emptyThreadHead,
 } from "@pe/agent-contracts";
+import { HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
+import {
+  currentCaller,
+  emitRevoke,
+  grantExpiry,
+  mintContext,
+  Refused,
+  requireHuman,
+  retireContext,
+  sessionWhose,
+} from "../control.ts";
 import { Effect } from "effect";
 import { z } from "zod";
 import { openAdapter, stopChild } from "./adapter.ts";
@@ -104,8 +118,8 @@ export type HarnessThreadsOptions = {
   root: string;
   /** The harness child's cwd: the Pea world root. */
   worldRoot: string;
-  /** The Pea MCP server the child launches, bound to `threadId` through `PE_THREAD`. */
-  mcpServer: (threadId: string) => {
+  /** The Pea MCP server the child launches, bound to its thread by the `PE_CONTEXT` token. */
+  mcpServer: (context: string) => {
     name: string;
     command: string;
     args: string[];
@@ -119,7 +133,6 @@ export type HarnessThreadsOptions = {
   updatePending?: () => boolean;
 };
 
-const emptyHead: ThreadHead = { defaultTarget: null, revision: 0 };
 /** A turn with no session update for this long gets a `waiting` marker, and again each period. */
 export const WAITING_MS = 60_000;
 export const IDLE_CHILD_MS = 15 * 60_000;
@@ -294,7 +307,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
             .map((line) => JSON.parse(line) as HarnessEvent)
         : [];
       const meta = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8")) as Meta;
-      meta.head ??= emptyHead;
+      meta.head = threadHeadSchema.safeParse(meta.head ?? emptyThreadHead).data ?? emptyThreadHead;
       meta.lifecycle = threadLifecycleSchema.parse(meta.lifecycle ?? emptyThreadLifecycle());
       meta.forkOf ??= null;
       meta.promptCapabilities ??= null;
@@ -459,22 +472,17 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     const t = threads.get(threadId);
     if (t) return t.meta.head;
     const file = headFile(threadId);
-    if (!existsSync(file)) return emptyHead;
+    if (!existsSync(file)) return emptyThreadHead;
     const parsed = threadHeadSchema.safeParse(JSON.parse(readFileSync(file, "utf8")));
     if (!parsed.success) warn(`thread head ${threadId}: stored head no longer parses`);
-    return parsed.data ?? emptyHead;
+    return parsed.data ?? emptyThreadHead;
   }
-
-  /** Every write says what it read. No in-turn refusal: the child reads the live head per call. */
-  function setHead(threadId: string, input: z.infer<typeof putTargetSchema>): PutTargetResult {
-    const current = readHead(threadId);
-    if (current.revision !== input.expectedRevision)
-      return { ok: false, why: "stale", head: current };
-    const head = {
-      defaultTarget: input.defaultTarget,
-      revision: current.revision + 1,
-      ...(input.displayLabel ? { displayLabel: input.displayLabel } : {}),
-    };
+  /** The head as served: `hostNow` lets a chip count from the host clock, not the browser's. */
+  const reading = (head: ThreadHead): ThreadHeadReading => ({
+    ...head,
+    hostNow: new Date().toISOString(),
+  });
+  function writeHead(threadId: string, head: ThreadHead) {
     const t = threads.get(threadId);
     if (t) {
       t.meta.head = head;
@@ -482,7 +490,75 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     } else writeJson(headFile(threadId), head);
     for (const listener of headListeners) listener(threadId, head);
     notifySummaries();
-    return { ok: true, why: "set", head };
+  }
+
+  /**
+   * Door 6, the only grant writer. A human sets any target, and an open lifetime on your Revit
+   * stamps the rw grant; any move retires it. Pea sets only null or Pea's own sessions.
+   */
+  function setHead(
+    threadId: string,
+    input: z.infer<typeof putTargetSchema>,
+    caller: Extract<Caller, { kind: "human" | "pea" }>,
+    door: string,
+  ): PutTargetResult {
+    const target = input.defaultTarget;
+    const session =
+      target === null ? null : target.kind === "open" ? target.ref.session : target.session;
+    if (caller.kind === "pea" && session !== null && sessionWhose(session) !== "pea")
+      throw new Refused({
+        code: "grant.required",
+        door,
+        reason: `Refused at ${door}: Pea may point its thread only at Pea's own documents; session '${session}' is your Revit. Point this thread at it in the composer to grant rw, or open a copy.`,
+      });
+    const current = readHead(threadId);
+    if (current.revision !== input.expectedRevision)
+      return { ok: false, why: "stale", head: reading(current) };
+    const now = Date.now();
+    const head: ThreadHead = {
+      defaultTarget: target,
+      revision: current.revision + 1,
+      ...(input.displayLabel ? { displayLabel: input.displayLabel } : {}),
+      grant:
+        caller.kind === "human" &&
+        target?.kind === "open" &&
+        sessionWhose(target.ref.session) === "you"
+          ? {
+              lifetime: target.ref,
+              grantedAt: new Date(now).toISOString(),
+              grantedVia: caller.via,
+              expiresAt: grantExpiry(now),
+              revoked: null,
+            }
+          : null,
+      lastHumanMessageAt: current.lastHumanMessageAt,
+    };
+    writeHead(threadId, head);
+    return { ok: true, why: "set", head: reading(head) };
+  }
+
+  /** Door 7: one click revokes. Begun steps finish; the step-begin check refuses the rest. */
+  function revokeHead(threadId: string): ThreadHeadReading {
+    const current = readHead(threadId);
+    if (!current.grant || current.grant.revoked) return reading(current);
+    const grant = { ...current.grant, revoked: { at: new Date().toISOString() } };
+    writeHead(threadId, { ...current, grant });
+    emitRevoke(threadId, grant);
+    return reading(readHead(threadId));
+  }
+
+  /** Door 8: a human message renews an unrevoked grant to 60 minutes from now. */
+  function heardHuman(t: Thread) {
+    const now = Date.now();
+    const head = t.meta.head;
+    writeHead(t.meta.id, {
+      ...head,
+      lastHumanMessageAt: new Date(now).toISOString(),
+      grant:
+        head.grant && !head.grant.revoked
+          ? { ...head.grant, expiresAt: grantExpiry(now) }
+          : head.grant,
+    });
   }
 
   const heads = {
@@ -490,11 +566,11 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     /** The `thread-head` Reading: the current head, then every set. */
     observe(threadId: string, listener: (value: { value: ThreadHead }) => void) {
       const notify = (id: string, head: ThreadHead) => {
-        if (id === threadId) listener({ value: head });
+        if (id === threadId) listener({ value: reading(head) });
       };
       headListeners.add(notify);
       queueMicrotask(() => {
-        if (headListeners.has(notify)) listener({ value: readHead(threadId) });
+        if (headListeners.has(notify)) listener({ value: reading(readHead(threadId)) });
       });
       return () => void headListeners.delete(notify);
     },
@@ -563,6 +639,9 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       );
     const env = await childEnv(record, options, t.meta.modelId);
     if (t.stopped) throw new Error("The thread was stopped before its harness connected");
+    // One pea context per spawn: the child, its shell and its MCP server cross as this thread.
+    const context = mintContext({ kind: "pea", thread: t.meta.id });
+    env[HOST_CONTEXT_VARIABLE] = context;
     let live: Live | undefined;
     const { child, conn, stderr } = openAdapter(harness, options.worldRoot, env, () => ({
       sessionUpdate: ({ update }) => {
@@ -619,6 +698,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         }),
     }));
     t.child = child;
+    child.once("exit", () => retireContext(context));
     child.on("exit", (code, signal) => {
       if (t.child !== child || t.session === "closed") return;
       clearIdle(t);
@@ -639,7 +719,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         elicitation: { form: {} },
       },
     });
-    const request = { cwd: options.worldRoot, mcpServers: [options.mcpServer(t.meta.id)] };
+    const request = { cwd: options.worldRoot, mcpServers: [options.mcpServer(context)] };
     // No session verb restores the user's model or traits (drive 2026-10-01: a sonnet thread came
     // back opus), so both are re-applied below.
     const wantModel = t.meta.modelId;
@@ -1090,10 +1170,47 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       return schema.parse(await request.json());
     };
     if (url.pathname.startsWith("/pe/scope/")) {
-      const threadId = decodeURIComponent(url.pathname.slice("/pe/scope/".length));
-      if (method === "GET") return json(readHead(threadId));
-      if (method !== "PUT") return json({ error: `No route ${method} ${url.pathname}` }, 404);
-      const result = setHead(threadId, await input(putTargetSchema));
+      const caller = currentCaller();
+      const [named, scopeVerb, ...rest] = url.pathname.slice("/pe/scope/".length).split("/");
+      // `self` is the caller's own thread: a pea context's, bound at spawn. No thread string travels.
+      const self = named === "self";
+      const threadId = self
+        ? caller.kind === "pea"
+          ? caller.thread
+          : null
+        : decodeURIComponent(named ?? "");
+      const door = `/pe/scope/${named}${scopeVerb ? `/${scopeVerb}` : ""}`;
+      if (rest.length || !threadId)
+        return json(
+          {
+            error:
+              threadId === null
+                ? `${door} answers only a Pea harness context`
+                : `No route ${method} ${url.pathname}`,
+          },
+          404,
+        );
+      if (method === "GET" && !scopeVerb)
+        return json({ ...(self ? { thread: threadId } : {}), ...reading(readHead(threadId)) });
+      if (method === "POST" && scopeVerb === "revoke") {
+        requireHuman(caller, door, "revoking rw");
+        return json(revokeHead(threadId));
+      }
+      if (method !== "PUT" || scopeVerb)
+        return json({ error: `No route ${method} ${url.pathname}` }, 404);
+      if (caller.kind === "pea" && caller.thread !== threadId)
+        throw new Refused({
+          code: "context.foreign-thread",
+          door,
+          reason: `This context belongs to thread ${caller.thread}; it cannot write thread ${threadId}'s head.`,
+        });
+      if (caller.kind !== "pea") requireHuman(caller, door, "setting a thread head");
+      const result = setHead(
+        threadId,
+        await input(putTargetSchema),
+        caller as Extract<Caller, { kind: "human" | "pea" }>,
+        door,
+      );
       return json(result, result.ok ? 200 : 409);
     }
     if (url.pathname === "/pe/threads" && method === "GET")
@@ -1123,7 +1240,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         models: [],
         traits: [],
         traitValues: {},
-        head: emptyHead,
+        head: emptyThreadHead,
         forkOf: null,
         promptCapabilities: null,
         lifecycle: emptyThreadLifecycle(),
@@ -1212,6 +1329,8 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         notifySummaries();
         return new Response(null, { status: 204 });
       case "POST prompt": {
+        // Only a human message moves a thread, and only it renews the grant: Pea cannot renew itself.
+        requireHuman(currentCaller(), `/pe/threads/${t.meta.id}/prompt`, "a thread message");
         const { text, attachments: sent, mentions: named } = await input(promptRequestSchema);
         const attachments = sent?.length ? sent : undefined;
         const mentions = named?.length ? named : undefined;
@@ -1245,7 +1364,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         t.meta.lifecycle.settledAt = null;
         t.meta.lifecycle.snoozedUntil = null;
         t.meta.lifecycle.revision++;
-        writeMeta(t);
+        heardHuman(t);
         const turnId = randomUUID();
         t.turn = run(t, turnId, text, attachments, mentions);
         return json({ turnId });
@@ -1432,15 +1551,17 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     /** The web handler for `/pe/threads*` and `/pe/scope/:id`. Bad input is 400; a harness refusal 502. */
     fetch: (request: Request) =>
       handle(request).catch((error) =>
-        error instanceof NotJson
-          ? json(
-              { error: "This route reads a JSON body: send content-type: application/json" },
-              415,
-            )
-          : json(
-              { error: String(error?.message ?? error) },
-              error instanceof z.ZodError || error instanceof SyntaxError ? 400 : 502,
-            ),
+        error instanceof Refused
+          ? json({ error: error.message, refusal: error.refusal }, 403)
+          : error instanceof NotJson
+            ? json(
+                { error: "This route reads a JSON body: send content-type: application/json" },
+                415,
+              )
+            : json(
+                { error: String(error?.message ?? error) },
+                error instanceof z.ZodError || error instanceof SyntaxError ? 400 : 502,
+              ),
       ),
     /** Host shutdown: stop every harness child and its tree. */
     close: () => {

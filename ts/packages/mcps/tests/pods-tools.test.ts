@@ -59,7 +59,7 @@ test("Pea enumerates Pod members and proposes revision-checked Work without rout
       }
       if (url.pathname === "/pe/route-state/pods")
         return Response.json(await runtime.view(scope, "pods"));
-      if (url.pathname === "/pe/agent/route-state/pods/apply") {
+      if (url.pathname === "/pe/route-state/pods/apply") {
         const body = JSON.parse(await bodyText(init));
         return Response.json(
           await runtime.apply(scope, "pods", "agent", body.patches, body.expectedRevision),

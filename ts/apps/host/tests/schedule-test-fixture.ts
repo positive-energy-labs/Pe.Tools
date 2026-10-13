@@ -26,6 +26,9 @@ import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
 import { sdkSessions, sdkEnvelope, originalProcess } from "./native-receipt-fixture.ts";
 import { detailResponse } from "./schedule-fixture.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
+import { withInvocationContext } from "@pe/mcps/context";
+import type { Caller } from "@pe/agent-contracts";
+import { human, pea } from "./callers.ts";
 
 /** The host's schedule reading endpoint, read the way a route client reads it. */
 async function readScheduleCapture(
@@ -232,6 +235,8 @@ export async function setup() {
     for (const row of await owner.list()) await owner.wait(row.id);
   });
   const requests: { path: string; body: string; result?: unknown }[] = [];
+  // The identity middleware's stand-in: every request crosses as `as`.
+  let as: Caller = human;
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const request = new Request(
       new URL(
@@ -248,11 +253,13 @@ export async function setup() {
         result: undefined as unknown,
       };
       requests.push(row);
-      const response = await app.fetch(request);
+      const response = await withInvocationContext({ caller: as }, () => app.fetch(request));
       row.result = await response.clone().json();
       return response;
     }
-    const result = await server.handler(request, Context.empty() as never);
+    const result = await withInvocationContext({ caller: as }, () =>
+      server.handler(request, Context.empty() as never),
+    );
     if (lost && url.pathname === "/actions" && request.method === "POST") {
       lost = false;
       throw Error("lost acceptance");
@@ -279,16 +286,18 @@ export async function setup() {
     }>;
   const patch = async (patches: RouteStatePatch[], actor = "human") => {
     const previous = await view();
-    return (
-      await fetch(
-        `/pe/${actor === "agent" ? "agent/" : ""}route-state/schedules/apply?work=${scope.work}`,
-        {
+    as = actor === "agent" ? pea() : human;
+    try {
+      return (
+        await fetch(`/pe/route-state/schedules/apply?work=${scope.work}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ patches, expectedRevision: previous?.revision ?? 0 }),
-        },
-      )
-    ).json();
+        })
+      ).json();
+    } finally {
+      as = human;
+    }
   };
   expect(
     await patch([
@@ -301,7 +310,6 @@ export async function setup() {
     id,
     kind: "workflow",
     key: "schedule.grid.push",
-    actor: "human",
     destination: { kind: "document", ref: b },
     input: {},
     bases: { work: { key: scope, revision: (await view()).revision } },

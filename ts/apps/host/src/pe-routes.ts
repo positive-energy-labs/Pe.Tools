@@ -55,7 +55,8 @@ import { createHarnessThreads } from "./harness/threads.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { productHarnessThreadsPath, productRouteWorkPath } from "./product-paths.ts";
 import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
-import { createMachine, machineSources, useHostMachine } from "./machine.ts";
+import { attachmentWhose, createMachine, machineSources, useHostMachine } from "./machine.ts";
+import { bindControl, currentCaller, routeActorOf, writeTerminalContext } from "./control.ts";
 import { UpdateReader } from "./update-reader.ts";
 import { makeInstalledUpdateReader } from "./update-route.ts";
 import { HostLifecycle } from "./host-lifecycle.ts";
@@ -252,12 +253,13 @@ export function createPeRoutes(options: PeRoutesOptions) {
     }
 
     // Discovery is unscoped; every document read or write names one Work key.
-    const agent = parts[0] === "agent";
-    const [head, route, verb, extra] = agent ? parts.slice(1) : parts;
+    const [head, route, verb, extra] = parts;
     if (head === "route-state" && extra === undefined) {
-      const actor = agent ? "agent" : "human";
-      if (method === "GET" && !route && !agent) return json(work.list());
-      if (method === "GET" && route && !verb && !agent) {
+      // Door 9: the author is the host-minted caller, never the path. Reads are free.
+      const caller = currentCaller();
+      const actor = routeActorOf(caller);
+      if (method === "GET" && !route) return json(work.list());
+      if (method === "GET" && route && !verb) {
         const scope = workKey(url, route, "read");
         if (scope instanceof Response) return scope;
         try {
@@ -267,7 +269,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
           return json({ error: message(error) }, 403);
         }
       }
-      // Human-only and read-only; the agent prefix answers so it is refused by name, not 404.
+      // Human-only and read-only; any other caller is refused by name, not 404.
       if (method === "GET" && route && verb === "salvage") {
         const scope = workKey(url, route, "read");
         if (scope instanceof Response) return scope;
@@ -276,6 +278,26 @@ export function createPeRoutes(options: PeRoutesOptions) {
         return "ok" in salvaged ? json(salvaged, 403) : json(salvaged);
       }
       const write = method === "POST" && route && verb ? writes[verb] : undefined;
+      if (write && route && (caller.kind === "anonymous" || caller.kind === "page"))
+        return json(
+          {
+            ok: false,
+            kind: "error",
+            error:
+              caller.kind === "page"
+                ? `page.use-page-door: Pages act through /pages/<slug>/act, not /pe/route-state.`
+                : "context.missing: Refused at /pe/route-state: no caller context. Anonymous loopback calls are read-only; run this from Pea, the web app, or a bound Page.",
+            refusal: {
+              code: caller.kind === "page" ? "page.use-page-door" : "context.missing",
+              door: `/pe/route-state/${route}/${verb}`,
+              reason:
+                caller.kind === "page"
+                  ? "Pages act through /pages/<slug>/act."
+                  : "Anonymous loopback calls are read-only.",
+            },
+          },
+          403,
+        );
       if (write && route) {
         const scope = workKey(url, route, "write");
         if (scope instanceof Response) return scope;
@@ -392,7 +414,7 @@ export function makeHostPeRoutes(
     worldRoot,
     // The same kernel the Pea MCP server declares, for the harness that cannot read it from there.
     developerInstructions: async () => peaAgentInstructions,
-    mcpServer: (threadId) => peaMcpServer(sourceRoot, hostBaseUrl, threadId),
+    mcpServer: (context) => peaMcpServer(sourceRoot, hostBaseUrl, context),
   });
   const machine = createMachine(machineSources(bridge, providers, update, share), {
     automaticUpdates:
@@ -447,8 +469,12 @@ export const peRoutesLayer = (
         lifecycle ? () => Effect.runSync(Deferred.succeed(lifecycle.latch, undefined)) : undefined,
       );
       useHostMachine(machine);
+      bindControl({ heads: threads.heads.read, whose: attachmentWhose });
+      const terminal = writeTerminalContext(hostOwnership.serviceName);
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
+          terminal.retire();
+          bindControl({ heads: null, whose: () => "you" });
           useHostMachine(undefined);
           machine.close();
         }),
@@ -480,6 +506,7 @@ export const peRoutesLayer = (
         "/pe/threads/:id",
         "/pe/threads/:id/:verb",
         "/pe/scope/:id",
+        "/pe/scope/:id/:verb",
       ] as const)
         yield* router.add("*", path, harness);
       for (const path of [
@@ -490,7 +517,6 @@ export const peRoutesLayer = (
         "/pe/route-state",
         "/pe/route-state/:route",
         "/pe/route-state/:route/:verb",
-        "/pe/agent/route-state/:route/:verb",
         "/pe/route-view/families",
         "/pe/route-view/families/:instance",
       ] as const)

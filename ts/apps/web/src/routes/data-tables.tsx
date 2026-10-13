@@ -107,7 +107,6 @@ const dataTablesManifest = (draft: Draft | null, setDraft: (next: Draft | null) 
               id: crypto.randomUUID(),
               kind: "operation",
               key: "data-table.apply",
-              actor: "human",
               destination: ctx.target,
               input: {
                 table: {

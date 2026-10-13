@@ -93,7 +93,6 @@ export async function runSemanticAction(
   input: Record<string, unknown>,
   target: DocumentRef | undefined,
   bases: ActionBases = {},
-  actor: "human" | "agent" = "human",
   base = "",
   id?: string | (() => string),
   waitMs = Infinity,
@@ -132,7 +131,6 @@ export async function runSemanticAction(
       id: typeof id === "function" ? id() : (id ?? crypto.randomUUID()),
       kind: "workflow",
       key,
-      actor,
       destination: sessionSelection
         ? { kind: "sdk-session", selection: sessionSelection }
         : target
@@ -197,7 +195,6 @@ export async function submitAction(
     if (
       row.kind !== admission.kind ||
       row.key !== admission.key ||
-      row.actor !== admission.actor ||
       canonicalRouteInput(row.request) !== canonicalRouteInput(admission.input) ||
       canonicalRouteInput(row.destination) !== canonicalRouteInput(admission.destination) ||
       canonicalRouteInput(row.bases) !== canonicalRouteInput(admission.bases)
@@ -236,7 +233,6 @@ export async function controlAction(
   key: ActionControlKey,
   input: unknown,
   base = "",
-  actor?: "human" | "agent",
 ): Promise<ActionReceipt> {
   const { id } = actionControls[key].input.parse(input);
   if (key === "action.read") {
@@ -247,7 +243,7 @@ export async function controlAction(
   const response = await fetch(`${base}/actions/${key.slice("action.".length)}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id, ...(actor ? { actor } : {}) }),
+    body: JSON.stringify({ id }),
     signal: AbortSignal.timeout(30_000),
   });
   if (!response.ok) throw Error(await response.text());
@@ -286,7 +282,6 @@ export async function saveSettingsAction(
     input,
     undefined,
     { work: { key: scope, revision } },
-    "human",
     base,
     id,
   );

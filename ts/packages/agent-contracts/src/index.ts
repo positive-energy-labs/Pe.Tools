@@ -16,6 +16,7 @@ export * from "./schedule-actions.ts";
 export * from "./schedule-grid-data.ts";
 export * from "./world.ts";
 export * from "./target.ts";
+export * from "./caller.ts";
 export * from "./instances.ts";
 export * from "./capability.ts";
 export * from "./mention.ts";

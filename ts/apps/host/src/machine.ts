@@ -414,6 +414,14 @@ export function processCustody(
   return row ? (row.row.case === "observed-active" ? "observed" : "controlled") : null;
 }
 
+/** Whose the Revit behind one bridge session is; unproven (no census, no row) is yours. */
+export function attachmentWhose(session: string): "you" | "pea" {
+  return (
+    hostMachine?.current().revit.sessions?.find((row) => row.attachment?.session === session)
+      ?.whose ?? "you"
+  );
+}
+
 function processOf(row: SessionObservation): ProcessIdentity | null {
   return row.case === "controlled-active" || row.case === "observed-active"
     ? row.process

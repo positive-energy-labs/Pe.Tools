@@ -14,6 +14,7 @@ import { ActionIncomplete, ActionJournal } from "../src/action-journal.ts";
 import { BridgeError } from "../src/bridge.ts";
 import { readNativeReceipt } from "../src/native-receipts.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
+import { crossingOf } from "./callers.ts";
 
 type Outcome = "succeeded" | "failed" | "dispatchedFailure" | "cancelled" | "unknown";
 type End = "return" | "rethrow" | "incomplete" | "hostError";
@@ -32,7 +33,7 @@ const admission = (id: string) => ({
   id,
   kind: "workflow" as const,
   key: "test.terminal",
-  actor: "human" as const,
+  ...crossingOf("human"),
   destination: { kind: "host" as const },
   input: {},
   bases: {},

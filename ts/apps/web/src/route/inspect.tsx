@@ -89,7 +89,6 @@ async function openOnHost(path: string): Promise<void> {
       id: crypto.randomUUID(),
       kind: "operation",
       key: "host.shell.open",
-      actor: "human",
       destination: { kind: "host" },
       input: { path },
       bases: {},

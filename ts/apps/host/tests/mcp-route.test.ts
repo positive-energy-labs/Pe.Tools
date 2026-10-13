@@ -51,13 +51,9 @@ async function fixture() {
     const login = new Headers(init?.headers).get("tailscale-user-login");
     seen.push({ path: url.pathname, login });
     if (url.pathname === "/pe/access") return Response.json({ guarded: true });
-    if (url.pathname.startsWith("/pe/scope/")) {
-      await Promise.resolve();
-      return Response.json({
-        defaultTarget: null,
-        revision: url.pathname.endsWith("/one") ? 1 : 2,
-      });
-    }
+    // An external MCP client holds no thread in wave 1: its own scope is absent.
+    if (url.pathname === "/pe/scope/self")
+      return Response.json({ error: "no thread" }, { status: 404 });
     if (url.pathname === "/pe/capabilities")
       return Response.json({
         at: new Date(0).toISOString(),
@@ -79,6 +75,8 @@ async function fixture() {
       const { input: request, ...admission } = body;
       const row = {
         ...admission,
+        caller: { kind: "anonymous" },
+        basis: null,
         request,
         state: "succeeded",
         result: { login },
@@ -214,7 +212,6 @@ test("SDK HTTP initialization, tool discovery, notifications, versions, Origin, 
   expect((await f.send({}, { ...one, "mcp-protocol-version": "2099-01-01" })).status).toBe(400);
   expect((await f.send({}, { ...one, origin: "https://evil.example" })).status).toBe(403);
   expect((await f.send({}, { ...one, ...remote("two") })).status).toBe(403);
-  expect((await f.send({}, { ...one, "x-pe-thread": "changed" })).status).toBe(403);
   expect((await f.send({}, { ...one, "mcp-session-id": "absent" })).status).toBe(404);
   expect((await f.send({}, one, "GET")).status).toBe(405);
   expect((await f.send({}, one, "DELETE")).status).toBe(200);
@@ -244,33 +241,30 @@ test("MCP tool operations do not consult the harness agent approval preference",
     expect(JSON.parse(read.result.content[0].text)).toMatchObject({ ok: true });
   }
   expect(f.posts).toHaveLength(2);
-  expect(f.posts[0]).toMatchObject({ actor: "agent", key: "pod.member.write" });
+  expect(f.posts[0]).toMatchObject({ key: "pod.member.write" });
+  expect(f.posts[0]).not.toHaveProperty("actor");
   expect(f.seen.some((request) => request.path === "/pe/access")).toBe(false);
 });
 
-test("concurrent principals retain separate thread scope, headers, and admission identities", async () => {
+test("concurrent principals retain separate headers and admission identities", async () => {
   const f = await fixture();
-  const [one, two] = await Promise.all([
-    f.init({ ...remote("one"), "x-pe-thread": "one" }),
-    f.init({ ...remote("two"), "x-pe-thread": "two" }),
-  ]);
+  const [one, two] = await Promise.all([f.init(remote("one")), f.init(remote("two"))]);
   const replies = await Promise.all(
     [one, two].map(async (session) =>
       (await f.call("pe_do", { key: "op:pod.member.write" }, session)).json(),
     ),
   );
   for (const reply of replies) expect(reply.result.isError, JSON.stringify(reply)).not.toBe(true);
-  expect(replies.map((reply) => JSON.parse(reply.result.content[0].text).revision)).toEqual([1, 2]);
+  expect(replies.map((reply) => JSON.parse(reply.result.content[0].text).revision)).toEqual([0, 0]);
   expect(f.posts).toHaveLength(2);
   expect(new Set(f.posts.map((row) => row.id)).size).toBe(2);
-  expect(f.seen.filter((row) => row.path.startsWith("/pe/scope/"))).toEqual([
-    { path: "/pe/scope/one", login: "one" },
-    { path: "/pe/scope/two", login: "two" },
-  ]);
-  expect([...f.rows.values()].map((row) => row.result)).toEqual([
-    { login: "one" },
-    { login: "two" },
-  ]);
+  const byLogin = (a: { login: string | null }, b: { login: string | null }) =>
+    String(a.login).localeCompare(String(b.login));
+  // A client with no caller context has no thread to read: no scope request is made.
+  expect(f.seen.filter((row) => row.path.startsWith("/pe/scope/"))).toEqual([]);
+  expect(
+    [...f.rows.values()].map((row) => row.result as { login: string | null }).sort(byLogin),
+  ).toEqual([{ login: "one" }, { login: "two" }]);
 });
 
 test("transport disconnect does not cancel an admitted action; replay reads the retained receipt", async () => {
@@ -323,7 +317,6 @@ test("session construction binds host and maps independently of ambient invocati
               headers: {
                 accept: "application/json, text/event-stream",
                 "content-type": "application/json",
-                "x-pe-thread": login,
               },
               body: JSON.stringify({
                 jsonrpc: "2.0",
@@ -340,7 +333,11 @@ test("session construction binds host and maps independently of ambient invocati
       ),
     ),
   );
-  expect(contexts.map((context) => context.thread)).toEqual(["one", "two"]);
+  expect(
+    contexts.map((context) =>
+      context.principal?.kind === "tailnet" ? context.principal.login : null,
+    ),
+  ).toEqual(["one", "two"]);
   expect(contexts[0]!.admissions).not.toBe(contexts[1]!.admissions);
   expect(contexts[0]!.running).not.toBe(contexts[1]!.running);
   expect(contexts.every((context) => context.hostBaseUrl === f.hostBase)).toBe(true);

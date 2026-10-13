@@ -10,8 +10,10 @@ import {
   recoverGatewayAction,
   operationDefinition,
   gatewayTarget,
-  requireEligibleActor,
+  requireEligibleCaller,
 } from "./gateway-actions.ts";
+import { admitCrossing, currentCaller, Refused } from "./control.ts";
+import type { Caller } from "@pe/agent-contracts";
 import { actionBasesSchema, actionListFilterSchema } from "@pe/agent-contracts";
 import {
   admitFamilyAction,
@@ -93,6 +95,13 @@ import {
 } from "@pe/host-contracts/operation-types";
 import type { HostErrorKind } from "@pe/host-contracts/contracts";
 
+/** A door refusal: 403, named, and never dispatched. */
+const refusedResponse = (error: Refused) =>
+  Response.jsonUnsafe(
+    { error: error.message, message: error.message, refusal: error.refusal, notDispatched: true },
+    { status: 403 },
+  );
+
 /** A refusal's own words. `BridgeError` is a plain class, so `String()` would say [object Object]. */
 const said = (error: unknown): string =>
   error !== null && typeof error === "object" && "message" in error
@@ -114,7 +123,6 @@ export type CallRouteDispatch = (
   Effect.Services<ReturnType<typeof dispatchTsOnlyOperation>>
 >;
 
-const ACTOR_HEADER = "x-pe-action-actor";
 export function makeCallRoute(
   operations?: ActionJournal,
   captures?: TakeoffCaptures,
@@ -127,7 +135,7 @@ export function makeCallRoute(
     readonly forwardBase: string | null;
     readonly dispatch: CallRouteDispatch;
     readonly captureHostOp?: typeof captureHostOp;
-    readonly local?: Parameters<typeof admitGatewayAction>[3];
+    readonly local?: Parameters<typeof admitGatewayAction>[4];
   },
 ) {
   const CALL_FORWARD_BASE = process.env.PE_TOOLS_CALL_FORWARD?.trim().replace(/\/$/, "");
@@ -140,18 +148,34 @@ export function makeCallRoute(
     (composition?.dispatch ?? dispatchTsOnlyOperation)(...args);
   const observations = () => (captures ??= hostTakeoffCaptures());
   const owner = () => (operations ??= hostActionJournal());
-  const admit = (raw: unknown, bridge: RevitBridge["Service"], resume = false) => {
+  /** Door 2: the strict admission (no `actor`), then the crossing for the host-minted caller. */
+  const admit = async (
+    raw: unknown,
+    bridge: RevitBridge["Service"],
+    caller: Caller,
+    resume = false,
+  ) => {
     const input = actionAdmissionSchema.parse(raw);
+    const crossing = { caller, basis: admitCrossing(caller, input.destination, "/actions") };
     return input.kind === "workflow" && Object.hasOwn(scheduleActions, input.key)
-      ? admitScheduleAction(input, owner(), observations(), bridge, actionDeps, resume)
+      ? admitScheduleAction(input, crossing, owner(), observations(), bridge, actionDeps, resume)
       : input.kind === "workflow" && Object.hasOwn(instancesActions, input.key)
-        ? admitInstancesAction(input, owner(), actionDeps, resume)
+        ? admitInstancesAction(input, crossing, owner(), actionDeps, resume)
         : input.kind === "workflow" && Object.hasOwn(familyActions, input.key)
-          ? admitFamilyAction(input, owner(), observations(), bridge, actionDeps, resume)
+          ? admitFamilyAction(input, crossing, owner(), observations(), bridge, actionDeps, resume)
           : input.kind === "workflow" && Object.hasOwn(takeoffActions, input.key)
-            ? admitTakeoffAction(input, owner(), observations(), bridge, actionDeps, resume)
+            ? admitTakeoffAction(
+                input,
+                crossing,
+                owner(),
+                observations(),
+                bridge,
+                actionDeps,
+                resume,
+              )
             : admitGatewayAction(
                 input,
+                crossing,
                 owner(),
                 bridge,
                 composition?.local ??
@@ -224,9 +248,8 @@ export function makeCallRoute(
           return yield* Effect.fail(
             new BridgeError("Unknown operation intent", 409, { notDispatched: true }),
           );
-        // No actor header is a human caller (browser/CLI); agents are stamped by host-rpc-caller.
         yield* Effect.try({
-          try: () => requireEligibleActor(definition, req.headers[ACTOR_HEADER] ?? "human"),
+          try: () => requireEligibleCaller(definition, currentCaller(), "/call"),
           catch: (error) => error,
         });
         if (!isTsOnlyOperationKey(key)) {
@@ -309,7 +332,7 @@ export function makeCallRoute(
               actionDeps.captureStore ?? hostCaptures(),
               result.value,
               request,
-              captureOrigin(origin, req.headers[ACTOR_HEADER]),
+              captureOrigin(origin, currentCaller()),
               bridge,
               { session: bridgeSessionId, openId: openDocumentId },
             )
@@ -397,7 +420,7 @@ export function makeCallRoute(
             bridge,
             resolvedSession,
           );
-          requireEligibleActor(definition, req.headers[ACTOR_HEADER] ?? "human");
+          requireEligibleCaller(definition, currentCaller(), "/families/readings");
           if (definition.intent !== "Read") throw Error("Matrix operation must be a read");
           const resolved = gatewayTarget(
             "revit.matrix.loaded-families",
@@ -503,23 +526,25 @@ export function makeCallRoute(
       const body = yield* req.json;
       const bridge = yield* RevitBridge;
       const row = yield* Effect.tryPromise({
-        try: () => admit(body, bridge),
+        try: () => admit(body, bridge, currentCaller()),
         catch: (error) => error,
       });
       return Response.jsonUnsafe(row, { status: row.state === "running" ? 202 : 200 });
     }).pipe(
       Effect.catch((error) =>
         Effect.succeed(
-          Response.jsonUnsafe(
-            {
-              error: String(error),
-              message:
-                typeof error === "object" && error && "message" in error
-                  ? String(error.message)
-                  : String(error),
-            },
-            { status: 409 },
-          ),
+          error instanceof Refused
+            ? refusedResponse(error)
+            : Response.jsonUnsafe(
+                {
+                  error: String(error),
+                  message:
+                    typeof error === "object" && error && "message" in error
+                      ? String(error.message)
+                      : String(error),
+                },
+                { status: 409 },
+              ),
         ),
       ),
     ),
@@ -611,18 +636,23 @@ export function makeCallRoute(
             const controlled = (await owner().list(undefined, body.id))[0];
             if (body.kind !== undefined && body.kind !== controlled?.kind)
               throw Error("Original admission kind mismatch");
-            if (body.actor !== undefined) {
-              if (body.actor !== "human" && body.actor !== "agent")
-                throw Error("Explicit control actor invalid");
-              const required =
-                controlled?.kind === "workflow"
-                  ? semanticActions[controlled.key as keyof typeof semanticActions]?.actor
-                  : controlled?.preparation.state === "ready"
-                    ? (controlled.preparation.value as { actor?: string }).actor
-                    : undefined;
-              if (required && required !== "any" && required !== body.actor)
-                throw Error("Control actor is not eligible for the original admission");
-            }
+            const caller = currentCaller();
+            if (!controlled) throw Error(`Action '${body.id}' has no admitted receipt`);
+            // Cancel and recover belong to a human or the context that admitted the original.
+            if (
+              choice !== "resume" &&
+              caller.kind !== "human" &&
+              !(
+                "context" in caller &&
+                "context" in controlled.caller &&
+                caller.context === controlled.caller.context
+              )
+            )
+              throw new Refused({
+                code: caller.kind === "anonymous" ? "context.missing" : "human.only",
+                door: `/actions/${choice}`,
+                reason: `Refused at /actions/${choice}: only a human or the caller that admitted '${body.id}' may ${choice} it.`,
+              });
             if (choice === "cancel")
               return Response.jsonUnsafe(
                 await owner().cancel(body.id, async (requestId) => {
@@ -656,19 +686,27 @@ export function makeCallRoute(
             }
             // A control added to actionControls gets a route before it gets a handler.
             if (choice !== "resume") throw Error(`Action control '${choice}' has no handler`);
-            const prior = (await owner().list(undefined, body.id))[0];
-            if (!prior) throw Error("Original action has no resumable authored admission");
+            // A resume re-crosses under the current caller and never inherits the original basis.
+            if (controlled.kind === "workflow")
+              requireEligibleCaller(
+                {
+                  key: controlled.key,
+                  actor: semanticActions[controlled.key as keyof typeof semanticActions]?.actor,
+                },
+                caller,
+                "/actions/resume",
+              );
             const row = await admit(
               {
-                id: prior.id,
-                kind: prior.kind,
-                key: prior.key,
-                actor: prior.actor,
-                destination: prior.destination,
-                input: prior.request,
-                bases: prior.bases,
+                id: controlled.id,
+                kind: controlled.kind,
+                key: controlled.key,
+                destination: controlled.destination,
+                input: controlled.request,
+                bases: controlled.bases,
               },
               bridge,
+              caller,
               true,
             );
             return Response.jsonUnsafe(row, { status: row.state === "running" ? 202 : 200 });
@@ -676,7 +714,11 @@ export function makeCallRoute(
           catch: (error) => error,
         }).pipe(
           Effect.catch((error) =>
-            Effect.succeed(Response.jsonUnsafe({ error: said(error) }, { status: 409 })),
+            Effect.succeed(
+              error instanceof Refused
+                ? refusedResponse(error)
+                : Response.jsonUnsafe({ error: said(error) }, { status: 409 }),
+            ),
           ),
         ),
       ),

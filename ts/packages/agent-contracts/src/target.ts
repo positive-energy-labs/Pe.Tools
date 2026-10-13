@@ -151,13 +151,50 @@ export const targetKey = (target: DocumentRequest | null): string =>
  * stamped on it. A default is not an execution target; every call resolves it through
  * `resolveCallTarget` against the live inventory and never rewrites it.
  */
-export const threadHeadSchema = z.object({
-  defaultTarget: documentRequestSchema.nullable(),
-  revision: z.number().int().nonnegative(),
-  /** Display snapshot only. It never participates in target resolution or admission. */
-  displayLabel: z.string().max(300).optional(),
+export const headGrantSchema = z.strictObject({
+  /** D1: equals `defaultTarget.ref`; a closed lifetime is a dead grant with no extra state. */
+  lifetime: documentRefSchema,
+  /** Host clock at the human PUT that stamped it. */
+  grantedAt: z.iso.datetime(),
+  grantedVia: z.enum(["local", "tailnet", "cli"]),
+  /** Host-written: max(grantedAt, lastHumanMessageAt) + 60 min. */
+  expiresAt: z.iso.datetime(),
+  /** Revoke evidence; only a fresh human PUT clears it. */
+  revoked: z.strictObject({ at: z.iso.datetime() }).nullable(),
 });
+export type HeadGrant = z.infer<typeof headGrantSchema>;
+
+export const threadHeadSchema = z
+  .object({
+    defaultTarget: documentRequestSchema.nullable(),
+    revision: z.number().int().nonnegative(),
+    /** Display snapshot only. It never participates in target resolution or admission. */
+    displayLabel: z.string().max(300).optional(),
+    /** The rw grant (ADR 0016/0017 D1). The host is its only writer. */
+    grant: headGrantSchema.nullable().default(null),
+    /** Stamped only by a human `POST /pe/threads/:id/prompt`. */
+    lastHumanMessageAt: z.iso.datetime().nullable().default(null),
+  })
+  .refine(
+    (h) =>
+      h.grant === null ||
+      (h.defaultTarget?.kind === "open" &&
+        h.defaultTarget.ref.session === h.grant.lifetime.session &&
+        h.defaultTarget.ref.openId === h.grant.lifetime.openId),
+    "a grant binds the exact open head lifetime, never a named address",
+  );
 export type ThreadHead = z.infer<typeof threadHeadSchema>;
+export const emptyThreadHead: ThreadHead = {
+  defaultTarget: null,
+  revision: 0,
+  grant: null,
+  lastHumanMessageAt: null,
+};
+/** A head as the host serves it: `hostNow` lets a chip count from the host clock. */
+export const threadHeadReadingSchema = threadHeadSchema.and(
+  z.object({ hostNow: z.iso.datetime() }),
+);
+export type ThreadHeadReading = ThreadHead & { hostNow: string };
 
 /** `PUT /pe/scope/:thread`. */
 export const putTargetSchema = z.object({
@@ -168,8 +205,8 @@ export const putTargetSchema = z.object({
 export type PutTarget = z.infer<typeof putTargetSchema>;
 
 export const putTargetResultSchema = z.discriminatedUnion("why", [
-  z.object({ ok: z.literal(true), why: z.literal("set"), head: threadHeadSchema }),
+  z.object({ ok: z.literal(true), why: z.literal("set"), head: threadHeadReadingSchema }),
   /** Someone wrote first; `head` is current, re-read and decide again. */
-  z.object({ ok: z.literal(false), why: z.literal("stale"), head: threadHeadSchema }),
+  z.object({ ok: z.literal(false), why: z.literal("stale"), head: threadHeadReadingSchema }),
 ]);
 export type PutTargetResult = z.infer<typeof putTargetResultSchema>;

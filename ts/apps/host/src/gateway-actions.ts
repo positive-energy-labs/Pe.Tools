@@ -4,16 +4,19 @@ import { Ajv, type ValidateFunction } from "ajv";
 import { Effect, Schema } from "effect";
 import {
   actionAdmissionSchema,
+  eligibleCaller,
   nativeProcessSchema,
+  type Caller,
   type ExecutionTarget,
 } from "@pe/agent-contracts";
+import { Refused } from "./control.ts";
 import { hostOperationDefinitionSchema } from "@pe/host-contracts/contracts";
 import {
   isTsOnlyOperationKey,
   tsOnlyOperationCatalog,
   tsOnlyOperationSchemas,
 } from "@pe/host-contracts/operation-types";
-import { type ActionJournal } from "./action-journal.ts";
+import { type ActionJournal, type Crossing } from "./action-journal.ts";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
 import {
   readNativeReceipt,
@@ -23,13 +26,18 @@ import {
 } from "./native-receipts.ts";
 
 const refused = (message: string) => new BridgeError(message, 409, { notDispatched: true });
-/** One rule for /call and /actions: a declared human- or agent-only op refuses the other actor. */
-export function requireEligibleActor(
+/** One rule for /call and /actions: a declared human-only op refuses every other caller. */
+export function requireEligibleCaller(
   definition: { key: string; actor?: "human" | "agent" | "any" },
-  actor: string,
+  caller: Caller,
+  door: string,
 ) {
-  if (definition.actor !== undefined && definition.actor !== "any" && definition.actor !== actor)
-    throw refused(`'${definition.key}' is ${definition.actor}-only; ${actor} calls are refused`);
+  if (!eligibleCaller(definition.actor, caller))
+    throw new Refused({
+      code: "human.only",
+      door,
+      reason: `'${definition.key}' is ${definition.actor}-only; ${caller.kind} calls are refused.`,
+    });
 }
 export async function operationDefinition(
   key: string,
@@ -80,6 +88,7 @@ export function gatewayTarget(
 }
 export async function admitGatewayAction(
   raw: unknown,
+  crossing: Crossing,
   owner: ActionJournal,
   bridge: RevitBridge["Service"],
   local: (key: string, input: unknown) => Promise<unknown>,
@@ -120,11 +129,11 @@ export async function admitGatewayAction(
     return session;
   };
   return owner.admit(
-    admission,
+    { ...admission, ...crossing },
     async () => {
       const session = await validate();
       const definition = await operationDefinition(admission.key, bridge, session);
-      requireEligibleActor(definition, admission.actor);
+      requireEligibleCaller(definition, crossing.caller, "/actions");
       const actor = "actor" in definition ? definition.actor : undefined;
       if (definition.intent !== "Mutate")
         throw refused("Only catalogued mutations enter external admission");

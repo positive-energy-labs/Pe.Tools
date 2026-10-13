@@ -7,7 +7,11 @@ import { isSea } from "node:sea";
 import { Readable, Writable } from "node:stream";
 import { ClientSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
 import type { HarnessId } from "@pe/agent-contracts";
-import { hostProcessIdentity, productInstallLayout } from "@pe/host-contracts/contracts";
+import {
+  HOST_CONTEXT_VARIABLE,
+  hostProcessIdentity,
+  productInstallLayout,
+} from "@pe/host-contracts/contracts";
 import { checkoutLayout } from "@pe/host-contracts/service-identity";
 
 /**
@@ -123,7 +127,7 @@ export function adapterLogin(harness: HarnessId, cli = adapterCli(harness)): str
 export function peaMcpServer(
   sourceRoot: string | null,
   hostBaseUrl: string,
-  threadId: string,
+  context: string,
   hostExecutable = process.execPath,
 ) {
   const ts = sourceRoot ? join(sourceRoot, checkoutLayout.ts) : null;
@@ -148,7 +152,7 @@ export function peaMcpServer(
       : mcp,
     env: [
       { name: hostProcessIdentity.hostBaseUrlVariable, value: hostBaseUrl },
-      { name: "PE_THREAD", value: threadId },
+      { name: HOST_CONTEXT_VARIABLE, value: context },
     ],
   };
 }

@@ -42,7 +42,6 @@ export async function runOp(input: {
     id: crypto.randomUUID(),
     kind: "operation",
     key: input.op.key,
-    actor: "human",
     destination: isTsOnlyOperationKey(input.op.key) ? { kind: "host" } : input.target,
     input: input.request ?? {},
     bases: {},

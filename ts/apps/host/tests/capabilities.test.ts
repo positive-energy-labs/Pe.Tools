@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer as createNodeServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +7,7 @@ import { expect, test, vi } from "vite-plus/test";
 import { documentsRootEnvVar } from "@pe/host-contracts/product-paths";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
+import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
 import { makeHttpLive } from "../src/app.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
@@ -83,11 +84,21 @@ test("the host-owned /pe surface answers without Revit", async () => {
     expect(keys.some((key) => key.startsWith("op:revit."))).toBe(false);
 
     // The thread head, its Reading, and route Work, with no tenant behind them.
-    const put = await fetch(`${base}/pe/scope/t1`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ defaultTarget: null, expectedRevision: 0 }),
+    // Anonymous loopback is read-only; the owner's terminal token (written at start) is a human.
+    const putAs = (headers: Record<string, string>) =>
+      fetch(`${base}/pe/scope/t1`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify({ defaultTarget: null, expectedRevision: 0 }),
+      });
+    const anonymous = await putAs({});
+    expect(anonymous.status).toBe(403);
+    expect(await anonymous.json()).toMatchObject({ refusal: { code: "context.missing" } });
+    expect(await (await putAs({ "x-pe-context": "forged" })).json()).toMatchObject({
+      refusal: { code: "context.unknown" },
     });
+    const terminal = readFileSync(hostContextTokenPath(hostOwnership.serviceName), "utf8");
+    const put = await putAs({ "x-pe-context": terminal });
     expect(await put.json()).toMatchObject({ ok: true, head: { revision: 1 } });
     const resources = await fetch(
       `${base}/pe/resources?keys=${encodeURIComponent(JSON.stringify([{ kind: "thread-head", thread: "t1" }]))}`,

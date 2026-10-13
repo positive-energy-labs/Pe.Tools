@@ -24,7 +24,6 @@
     session: "x-pe-bridge-session-id",
     doc: "x-pe-open-document-id",
     origin: "x-pe-origin",
-    actor: "x-pe-action-actor",
   };
   // The serving host writes `{ header, query, service }` here (pages-route), so the page names the runtime that
   // served it, like the web app's `hostFetch`: a host that later takes over the port refuses this copy.
@@ -201,7 +200,6 @@
         id,
         kind: "operation",
         key,
-        actor: "human",
         destination: { kind: "document", ref: { session: pe.doc.session, openId: pe.doc.openId } },
         input,
       }),

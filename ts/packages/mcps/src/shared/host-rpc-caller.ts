@@ -28,7 +28,6 @@ type HostRpcCallerOptions = HostSessionScope & {
   hostBaseUrl?: string;
   timeoutMs?: number;
   requestId?: string;
-  actor?: "human" | "agent";
   /** Persist caller view identity before submitting a mutation; reads never invoke this. */
   beforeAdmission?: (id: string) => Promise<void>;
   /** Known host metadata or an injected catalog; skips the live /ops enrichment fetch. */
@@ -333,7 +332,6 @@ const runHostRpcEffect = Effect.fnUntraced(function* (
     try: async () => {
       const headers: Record<string, string> = { "content-type": "application/json" };
       if (options.requestId) headers["x-pe-action-id"] = options.requestId;
-      if (options.actor) headers["x-pe-action-actor"] = options.actor;
       if (options.session) headers[HOST_RPC_SDK_SESSION_HEADER] = JSON.stringify(options.session);
       if (options.bridgeSessionId)
         headers[HOST_RPC_BRIDGE_SESSION_HEADER] = options.bridgeSessionId;

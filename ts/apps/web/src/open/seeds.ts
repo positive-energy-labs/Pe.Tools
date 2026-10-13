@@ -11,6 +11,7 @@ import {
   type MachineSession,
   type Reading,
   type Seed,
+  emptyThreadHead,
 } from "@pe/agent-contracts";
 import type {
   DocumentInfo,
@@ -635,7 +636,12 @@ const thread = (
   updatedAt,
   modelId: null,
   lastSeq: activity.lastSeq,
-  head: { defaultTarget: { kind: "open", ref }, revision: 3, displayLabel: title },
+  head: {
+    ...emptyThreadHead,
+    defaultTarget: { kind: "open", ref },
+    revision: 3,
+    displayLabel: title,
+  },
   lifecycle: emptyThreadLifecycle(),
   activity,
 });
