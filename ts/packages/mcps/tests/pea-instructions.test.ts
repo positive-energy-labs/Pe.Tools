@@ -23,7 +23,7 @@ test("kernel starts with live discovery and makes Revit orientation conditional"
 
 test("capability doors describe the head grant rather than per-call approval", () => {
   for (const tool of Object.values(peaProductTools))
-    expect(tool.description).not.toContain("approval-gated");
+    expect(tool.description).not.toMatch(/approval-gated/i);
   expect(peaProductTools.pe_do.description).toContain("granted head");
   expect(peaProductTools.target_set.description).toContain("Pea's own");
 });

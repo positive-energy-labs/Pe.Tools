@@ -393,6 +393,16 @@ test.each(["http", "stdio"])(
       expect(tokens.size).toBe(1);
       // Chat keeps the head default, permits that grant and Pea detours, and refuses another user lifetime.
       const chat = await connect({ "x-pe-context": peaToken });
+      const beforeNamedCapture = reads.length;
+      expect(
+        (
+          await chat.callTool({
+            name: "capture_view",
+            arguments: { target: { kind: "named", address: "C:/Models/copy.rvt", session: "pea" } },
+          })
+        ).isError,
+      ).toBe(true);
+      expect(reads).toHaveLength(beforeNamedCapture);
       expect(
         (
           await chat.callTool({
