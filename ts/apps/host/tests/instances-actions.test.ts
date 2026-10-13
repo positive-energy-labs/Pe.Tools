@@ -1031,6 +1031,29 @@ test("F7: an acquisition records its paths before writing; a crash at any bounda
   }
   expect(await readFile(source)).toEqual(before);
   expect(f.calls.filter((argv) => argv[1] === "open" || argv[1] === "start")).toHaveLength(2);
+  // The lost open is settled from its SDK op receipt by its original request id, never re-sent.
+  const lostOpen = join(f.dir, `crash-${done.steps.length - 1}.json`);
+  const journal = new ActionJournal(lostOpen);
+  const openStep = done.steps.at(-1)!;
+  const reads: string[][] = [];
+  const response = { state: "ok", document: { openId, path: opened } };
+  await recoverInstancesAction(done.id, journal, {
+    sdk: async (args) => {
+      reads.push([...args]);
+      return sdkEnvelope({
+        state: "ok",
+        requestId: openStep.id,
+        receipt: { requestId: openStep.id, key: "doc.open", verdict: "ok" },
+        response: { requestId: openStep.id, key: "doc.open", verdict: "ok", result: response },
+      });
+    },
+  });
+  expect(reads).toEqual([["op", "result", openStep.id, "--json"]]);
+  const recovered = foldAcquisitions(await journal.list());
+  expect(recovered[0]).toMatchObject({ state: "held", document: { sdkOpenId: openId } });
+  expect(acquiredOpenIds(recovered, originalProcess, certified, [openId]).get(openId)).toBe(
+    done.id,
+  );
 });
 
 /** An SDK that starts, opens the copy it is given, saves create-only, closes and stops. */

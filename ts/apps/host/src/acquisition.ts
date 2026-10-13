@@ -143,9 +143,12 @@ export function planAcquisition(
 
 const preparedSchema = z.object({ acquisition: acquisitionIntentSchema.nullable() });
 const startedSchema = z.object({ session: z.object({ process: processSchema }) });
-const openedSchema = z.object({
+const docView = z.object({
   document: z.object({ openId: z.string().min(1), path: z.string().nullable() }),
 });
+// A live open settles with the SDK's DocOpResult; one recovered by `op result <request-id>` keeps
+// it under the receipt response's `result`. Either is that exact request's own answer.
+const openedSchema = z.union([docView, z.object({ result: docView }).transform((r) => r.result)]);
 const copiedSchema = z.object({ sha256: z.string(), bytes: z.number() });
 const fileStepInput = z.object({ to: z.string() });
 const handedSchema = z.object({ result: artifactSchema, diffPlan: z.string() });
@@ -155,8 +158,8 @@ const samePath = (a: string, b: string) =>
   win32.normalize(a).toLowerCase() === win32.normalize(b).toLowerCase();
 export const sameProcess = (a: AcquiredProcess, b: AcquiredProcess) =>
   a.pid === b.pid && a.processStartUtc === b.processStartUtc;
+/** Steps decide, not the attempt's state: a recovered step is proven even before a resume. */
 const uncertain = (row: ActionReceipt) =>
-  row.state === "unknown" ||
   row.steps.some((step) => step.state === "running" || step.state === "unknown");
 
 /**

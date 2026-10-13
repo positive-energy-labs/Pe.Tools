@@ -136,7 +136,7 @@ test("a malformed or foreign persisted intent mints nothing; a reload never ente
 
 test("a cleanup in flight reconciles and a succeeded cleanup releases", () => {
   const cleanup = (state: ActionReceipt["state"]) =>
-    receipt(state, [], null, {
+    receipt(state, state === "unknown" ? [step("instances.cleanup.close", "unknown")] : [], null, {
       id: "c",
       key: "instances.cleanup",
       request: { acquisition: "acq-1" },
