@@ -7,6 +7,7 @@ import { expect, test } from "vite-plus/test";
 import { withInvocationContext } from "../../../packages/mcps/src/shared/invocation-context.ts";
 import { createMcpDoor } from "../../host/src/mcp-route.ts";
 import { callerOf } from "../../host/src/control.ts";
+import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 
 type Reply = {
   id: number;
@@ -54,7 +55,7 @@ test("pea mcp initializes, lists tools and reads its explicit host with no stdou
       }
       return Response.json({
         at: "2026-10-08T00:00:00Z",
-        sessions: [],
+        machine: machineFixture(),
         sources: { catalog: "ok" },
         capabilities: [],
       });
