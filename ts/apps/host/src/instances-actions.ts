@@ -286,7 +286,7 @@ async function dispatch(
       (!(envelope.result as { legs?: readonly unknown[] }).legs?.length &&
         envelope.diagnostics.some((d: Diagnostic) => NOT_DISPATCHED.has(d.code))))
   )
-    throw refuse(said, envelope.result);
+    throw refuse(said, args[1] === "dialogs" ? envelope : envelope.result);
   if (doc && state === "failed")
     throw new BridgeError(said, 502, { dispatched: true, result: envelope.result });
   if (doc && state === "cancelled") throw new BridgeError(said, 499, { result: envelope.result });
@@ -487,16 +487,27 @@ export async function admitInstancesAction(
         if (!dismiss) {
           const args = sessionDialogsArgv({ pid: target!.process.pid });
           const { result } = parsePeRevitEnvelope<SessionDialogsResult>(
-            await read(args), args, peRevitLauncher(),
+            await read(args),
+            args,
+            peRevitLauncher(),
           );
-          if (result.state !== "ok" || result.pid !== target!.process.pid ||
-              result.processStartUtc !== target!.process.processStartUtc)
+          if (
+            result.state !== "ok" ||
+            result.pid !== target!.process.pid ||
+            result.processStartUtc !== target!.process.processStartUtc
+          )
             throw refuse("Dialog read did not return the exact process incarnation", result);
-          dismiss = { argv: sessionDialogsArgv({
-            pid: target!.process.pid, hwnd: control!.hwnd, dismiss: true,
-            expectDialog: result.windows.find((window) => window.handle === control!.hwnd)?.identity?.observationId,
-            expectSession: result.expectSession ?? undefined, requestId: REQUEST_ID,
-          }) };
+          dismiss = {
+            argv: sessionDialogsArgv({
+              pid: target!.process.pid,
+              hwnd: control!.hwnd,
+              dismiss: true,
+              expectDialog: result.windows.find((window) => window.handle === control!.hwnd)
+                ?.identity?.observationId,
+              expectSession: result.expectSession ?? undefined,
+              requestId: REQUEST_ID,
+            }),
+          };
         }
         const input = dismiss;
         return execution.step("native", key, input, async (id) => {
@@ -959,9 +970,7 @@ export const recoverInstancesAction = (
       );
       if (terminal.result?.state !== result.state) return { step, evidence };
       const legs = terminal.result.legs;
-      notDispatched =
-        !legs?.length &&
-        terminal.diagnostics.some((d) => NOT_DISPATCHED.has(d.code));
+      notDispatched = !legs?.length && terminal.diagnostics.some((d) => NOT_DISPATCHED.has(d.code));
       // Adoption needs resolved process evidence on resume; other supervisors return their payload.
       response = step.key.endsWith(".adopt") ? terminal : terminal.result;
     }

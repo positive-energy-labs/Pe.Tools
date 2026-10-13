@@ -1667,15 +1667,24 @@ test("reset needs an unsaved choice and reaches session reset with release and r
 });
 
 const dialogList = {
-  state: "ok", pid: originalProcess.pid, processStartUtc: originalProcess.processStartUtc,
+  state: "ok",
+  pid: originalProcess.pid,
+  processStartUtc: originalProcess.processStartUtc,
   expectSession: receiptPath,
   windows: [{ handle: "0x1A2B", identity: { observationId: "fresh-dialog" } }],
 };
 
 test("dialog dismiss binds the fresh observation, exact process and action request", async () => {
-  const f = await setup((args) => ({ result: args.includes("--dismiss") ? { state: "ok" } : dialogList }));
+  const f = await setup((args) => ({
+    result: args.includes("--dismiss") ? { state: "ok" } : dialogList,
+  }));
   f.census.documents = [];
-  const result = await f.admit("instances.dialogs", { session, hwnd: "0x1A2B" }, undefined, "agent");
+  const result = await f.admit(
+    "instances.dialogs",
+    { session, hwnd: "0x1A2B" },
+    undefined,
+    "agent",
+  );
   expect(result.state).toBe("succeeded");
   const calls = f.calls.filter((args) => args[1] === "dialogs");
   expect(calls).toHaveLength(2);
@@ -1687,22 +1696,42 @@ test("dialog dismiss binds the fresh observation, exact process and action reque
 });
 
 test("dialog dismiss passes the SDK stale-identity refusal through as undispatched", async () => {
-  const f = await setup((args) => args.includes("--dismiss") ? {
-    result: { state: "refused" }, exitCode: 3,
-    diagnostics: [{ code: "session.dialog-identity-stale", detail: "Window replaced", fix: null }],
-  } : { result: dialogList });
+  const f = await setup((args) =>
+    args.includes("--dismiss")
+      ? {
+          result: { state: "refused" },
+          exitCode: 3,
+          diagnostics: [
+            { code: "session.dialog-identity-stale", detail: "Window replaced", fix: null },
+          ],
+        }
+      : { result: dialogList },
+  );
   const result = await f.admit("instances.dialogs", { session, hwnd: "0x1A2B" });
   expect(result.steps.at(-1)).toMatchObject({ state: "failed", notDispatched: true });
-  expect(result.steps.at(-1)!.error).toContain("session.dialog-identity-stale");
+  const step = result.steps.at(-1)!;
+  if (step.state !== "failed") throw Error("SDK refusal must fail the step");
+  expect(step.error).toContain("session.dialog-identity-stale");
+  expect(step.evidence).toMatchObject({
+    result: {
+      diagnostics: [
+        { code: "session.dialog-identity-stale", detail: "Window replaced", fix: null },
+      ],
+    },
+  });
 });
 
 test("a lost dialog dismiss recovers from its SDK receipt without replay", async () => {
   const f = await setup((args) => {
-    if (args[0] === "op") return { result: {
-      requestId: args[2], state: "ok",
-      receipt: { requestId: args[2], key: "session.dialogs", verdict: "ok" },
-      response: JSON.parse(sdkEnvelope({ state: "ok" })),
-    } };
+    if (args[0] === "op")
+      return {
+        result: {
+          requestId: args[2],
+          state: "ok",
+          receipt: { requestId: args[2], key: "session.dialogs", verdict: "ok" },
+          response: JSON.parse(sdkEnvelope({ state: "ok" })),
+        },
+      };
     return args.includes("--dismiss") ? Error("lost response") : { result: dialogList };
   });
   const lost = await f.admit("instances.dialogs", { session, hwnd: "0x1A2B" });
