@@ -21,12 +21,20 @@ import { updateRoutes } from "../src/update-route.ts";
 import { HostLifecycle } from "../src/host-lifecycle.ts";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { PostHog } from "posthog-node";
+import { receiptBuildStamp } from "../src/build-stamp.ts";
 
 test("real HTTP feedback retains content and caller before body; diagnostics cannot claim the exception", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pe-feedback-http-"));
   const journal = new ActionJournal(join(dir, "journal.json"), () => receiptGoldenEnvelope.stamp);
   const delivered: { properties: unknown; timestamp: string }[] = [];
   const module = await import("../src/receipt-export.ts");
+  // The web stamp is the shared build stamp admitted by the host, the same one hostFetch sends as its header.
+  const webStamp = module.admitBuild(
+    "web",
+    receiptBuildStamp("dev"),
+    receiptGoldenEnvelope.stamp!.installId,
+    receiptGoldenEnvelope.stamp!.processSessionId,
+  )!;
   let refuse = true;
   const client = new PostHog("explicit-test-key", {
     disableCompression: true,
@@ -44,7 +52,7 @@ test("real HTTP feedback retains content and caller before body; diagnostics can
     root: dir,
     stamps: {
       host: receiptGoldenEnvelope.stamp!,
-      web: { ...receiptGoldenEnvelope.stamp!, component: "web" },
+      web: webStamp,
     },
     client,
   });
@@ -90,7 +98,7 @@ test("real HTTP feedback retains content and caller before body; diagnostics can
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-pe-web-build": receiptGoldenEnvelope.stamp!.build,
+          "x-pe-web-build": webStamp.build,
           ...(token ? { [HOST_CONTEXT_HEADER]: token } : {}),
         },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
