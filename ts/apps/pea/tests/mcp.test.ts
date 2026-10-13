@@ -57,6 +57,7 @@ test("pea mcp initializes, lists tools and reads its explicit host with no stdou
         at: "2026-10-08T00:00:00Z",
         machine: machineFixture(),
         sources: { catalog: "ok" },
+        diagnostics: [],
         capabilities: [],
       });
     })()
@@ -129,7 +130,7 @@ test("pea mcp initializes, lists tools and reads its explicit host with no stdou
     );
     expect((await call(2, "tools/list", {})).tools?.map((tool) => tool.name)).toContain("pe_find");
     const found = await call(3, "tools/call", { name: "pe_find", arguments: {} });
-    expect(found.isError).not.toBe(true);
+    expect(found.isError, found.content?.[0]?.text).not.toBe(true);
     expect(JSON.parse(found.content![0]!.text).sources).toEqual({ catalog: "ok" });
     const refused = await call(4, "tools/call", {
       name: "pe_read",
