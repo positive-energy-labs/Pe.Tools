@@ -9,6 +9,7 @@ export function SwitchRow({
   checked,
   onCheckedChange,
   refusal,
+  disabled = false,
   says,
 }: {
   label: string;
@@ -16,6 +17,8 @@ export function SwitchRow({
   onCheckedChange: (checked: boolean) => void;
   /** Present, the switch cannot move; this sentence says why. */
   refusal?: string | null;
+  /** The switch cannot move, and nothing was refused; the caller says why in its own words. */
+  disabled?: boolean;
   /** What turning it on does. */
   says: string;
 }) {
@@ -26,7 +29,7 @@ export function SwitchRow({
         <Switch
           size="sm"
           checked={checked}
-          disabled={Boolean(refusal)}
+          disabled={disabled || Boolean(refusal)}
           onCheckedChange={onCheckedChange}
         />
       </label>

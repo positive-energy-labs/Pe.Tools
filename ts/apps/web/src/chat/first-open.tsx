@@ -4,12 +4,11 @@
  * Claude desktop, Claude Code or Codex to Pea's tools over MCP.
  */
 import { useState } from "react";
-import type { Provider } from "@pe/agent-contracts";
 import { Button } from "#/components/lang/button";
-import { openMachine } from "#/machine/door";
+import { ProviderSetup } from "#/machine/pea";
 import { Switch } from "#/components/lang/switch";
 import { Switcher } from "#/components/lang/switcher";
-import { readinessSub, type ProvidersState } from "#/workbench/provider/providers";
+import { type ProvidersState } from "#/workbench/provider/providers";
 
 /** Agent approvals choose the harness mode for new sessions. HTTP and MCP access are separate. */
 export function AccessSwitch({ providers }: { providers: ProvidersState }) {
@@ -30,33 +29,6 @@ export function AccessSwitch({ providers }: { providers: ProvidersState }) {
             : "harness full access for new sessions"}
       </span>
     </label>
-  );
-}
-
-/** The verb that readies a provider: the step its readiness names. */
-function ReadyVerb({ provider, providers }: { provider: Provider; providers: ProvidersState }) {
-  const { readiness } = provider;
-  if (readiness.state === "ready") return null;
-  if (provider.auth.kind === "endpoint")
-    return (
-      <Button kind="framed" label="Open providers" onClick={() => openMachine("pea")}>
-        Open providers
-      </Button>
-    );
-  if (readiness.state === "unknown")
-    return (
-      <Button kind="framed" label="Probe" onClick={() => void providers.probe(provider.id)}>
-        Probe
-      </Button>
-    );
-  return (
-    <Button
-      kind="framed"
-      label={readiness.step === "installed" ? "Install" : "Sign in"}
-      onClick={() => void providers.openLogin(provider.id)}
-    >
-      {readiness.step === "installed" ? "Install" : "Sign in"}
-    </Button>
   );
 }
 
@@ -88,24 +60,7 @@ export function FirstOpenCard({
       </div>
       {door === "here" ? (
         <>
-          {(providers.list ?? []).map((provider) => (
-            <div key={provider.id} className="flex items-center gap-3 t-small">
-              <span className="w-40 shrink-0">{provider.name}</span>
-              <span
-                className="face-mono min-w-0 flex-1 truncate"
-                data-tone="caution"
-                title={readinessSub(provider)}
-              >
-                {readinessSub(provider)}
-              </span>
-              <ReadyVerb provider={provider} providers={providers} />
-            </div>
-          ))}
-          {providers.error ? (
-            <p className="t-small" data-tone="caution">
-              {providers.error}
-            </p>
-          ) : null}
+          <ProviderSetup providers={providers} />
           <AccessSwitch providers={providers} />
         </>
       ) : (

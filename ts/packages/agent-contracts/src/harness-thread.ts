@@ -59,6 +59,13 @@ export const authSourceViewSchema = z.discriminatedUnion("kind", [
 ]);
 export type AuthSourceView = z.infer<typeof authSourceViewSchema>;
 
+export const endpointFailureSchema = z.object({
+  kind: z.enum(["billing", "auth", "unreachable", "model", "other"]),
+  message: z.string(),
+  raw: z.string(),
+});
+export type EndpointFailure = z.infer<typeof endpointFailureSchema>;
+
 /** The first step that stands between the provider and a turn; `unknown` when the probe could not tell. */
 export const readinessSchema = z.discriminatedUnion("state", [
   z.object({ state: z.literal("ready") }),
@@ -66,6 +73,7 @@ export const readinessSchema = z.discriminatedUnion("state", [
     state: z.literal("refused"),
     step: z.enum(["installed", "signed-in", "endpoint"]),
     message: z.string(),
+    failure: endpointFailureSchema.optional(),
   }),
   z.object({ state: z.literal("unknown"), message: z.string() }),
 ]);
@@ -265,6 +273,7 @@ export const harnessEventSchema = z.discriminatedUnion("kind", [
     kind: z.literal("error"),
     turnId: z.string().nullable(),
     message: z.string(),
+    failure: endpointFailureSchema.optional(),
   }),
   z.object({
     seq: z.number(),

@@ -15,7 +15,7 @@ import { MACHINE_SEEDS } from "#/open/seeds";
 import { AppChrome, AppDevtools } from "#/route/app-chrome";
 
 import { MachineBody } from "./body";
-import { chipText, machineOf } from "./model";
+import { chipText, machineOf, shareState } from "./model";
 import { MachinePage } from "./page";
 import { ShareGroup } from "./share";
 import { UpdateGroup } from "./update";
@@ -93,7 +93,7 @@ describe("groups", () => {
     vi.stubGlobal("fetch", fetch);
     const rendered = body({ state: "ready", observation: machine });
     fireEvent.click(header("Pea"));
-    expect(header("Pea").textContent).toContain("1 of 2 last ready");
+    expect(header("Pea").textContent).toContain("1 of 2 ready");
     expect(screen.getByText("Codex")).toBeTruthy();
     const next: Machine = {
       ...machine,
@@ -232,7 +232,7 @@ test("the chip says the version, or the update that waits", () => {
   expect(said("receipt-handoff")).toBe("Installed · 0.7.0 · identity unverified");
   expect(said("disconnected")).toBe("Installed · 0.7.0 · stale");
   expect(said("no-revit")).toBe("Installed · 0.7.0 · identity unverified");
-  expect(chipText({ state: "absent" })).toBe("Runtime unknown");
+  expect(chipText({ state: "absent" })).toBe("");
 });
 
 test("the version chip badges a waiting plan and clears it otherwise", () => {
@@ -288,6 +288,23 @@ describe("sharing", () => {
     expect(switchShare).toHaveBeenCalledWith(false);
     fireEvent.click(screen.getByRole("switch", { name: "Allow remote machine administration" }));
     expect(switchRemoteAdministration).toHaveBeenCalledWith(false);
+  });
+
+  test("a machine without Tailscale says so plainly: not a refusal, no caution tone", () => {
+    const initial = machineOf(MACHINE_SEEDS["no-revit"])!;
+    const machine: Machine = {
+      ...initial,
+      share: { ...initial.share!, desired: "off", state: "needs-tailscale", refusal: null },
+    };
+    expect(shareState(machine)).toEqual({ text: "needs Tailscale" });
+    render(<ShareGroup machine={machine} fixture={false} stale={false} />);
+    const note = screen.getByText(/Sharing needs Tailscale/);
+    expect(note.textContent).toContain("tailscale.com/download");
+    expect(note.hasAttribute("data-tone")).toBe(false);
+    expect(screen.queryByText(/refus/i)).toBeNull();
+    expect(
+      screen.getByRole("switch", { name: "Share over tailnet" }).getAttribute("aria-disabled"),
+    ).toBe("true");
   });
 
   test("fixtures and disconnected controls cannot change sharing or administration", () => {

@@ -49,10 +49,12 @@ test("every provider refused: one row each, its own verb, the access switch, and
   expect(screen.getByText("○ claude is not on your PATH")).toBeTruthy();
   fireEvent.click(screen.getByText("Install"));
   expect(providers.openLogin).toHaveBeenCalledWith("claude");
-  fireEvent.click(screen.getByText("Sign in"));
+  fireEvent.click(screen.getAllByText("Sign in")[0]!);
   expect(providers.openLogin).toHaveBeenCalledWith("codex");
-  expect(screen.getByText("Open providers")).toBeTruthy();
-  fireEvent.click(screen.getByText("Probe"));
+  expect(screen.getByText("Remove")).toBeTruthy();
+  fireEvent.click(screen.getByText("Remove"));
+  expect(providers.remove).toHaveBeenCalledWith("codex-vps");
+  fireEvent.click(screen.getAllByText("Probe")[3]!);
   expect(providers.probe).toHaveBeenCalledWith("claude-probe");
   expect(screen.getByText("Agent approvals")).toBeTruthy();
 

@@ -14,6 +14,10 @@ import { switchRemoteAdministration, switchShare } from "#/host/machine";
 import { hhmm } from "./model";
 import { SEED_REFUSAL } from "./use-machine";
 
+/** Nothing failed: sharing rides on Tailscale and this machine does not have it. Plain words, no error tone. */
+const NEEDS_TAILSCALE =
+  "Sharing needs Tailscale. Install it from tailscale.com/download, then sign in.";
+
 export function ShareGroup({
   machine,
   fixture,
@@ -38,6 +42,7 @@ export function ShareGroup({
       : share.state === "refused" && share.desired !== "on"
         ? (share.refusal?.detail ?? "The host refused to share.")
         : null;
+  const needsTailscale = share.state === "needs-tailscale";
   const url = share.url?.replace(/^https?:\/\//, "");
   return (
     <div className="flex flex-col gap-1" aria-label="share">
@@ -45,6 +50,7 @@ export function ShareGroup({
         label="Share over tailnet"
         checked={share.desired === "on"}
         refusal={refusal}
+        disabled={needsTailscale && share.desired !== "on"}
         says="serve this host to people on your tailnet; their tailnet identity is the credential"
         onCheckedChange={(on) => {
           setError(null);
@@ -70,6 +76,7 @@ export function ShareGroup({
       <span className="text-ink-2">
         Turning administration off keeps shared HTTP and MCP product operations available.
       </span>
+      {needsTailscale ? <span className="text-ink-2">{NEEDS_TAILSCALE}</span> : null}
       {share.refusal && share.state === "refused" ? (
         <span className="face-mono text-ink-2">
           {share.refusal.code} · {share.refusal.detail}

@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Moments } from "./moments";
 import { transcriptSegments, type CallPart, type Segment } from "./conversation-sequences";
 import type { ChatMessage } from "./chat-state";
+import { emptyChatState, selectMessages } from "./chat-state";
+import { harnessEventSchema } from "@pe/agent-contracts";
 
 const wire = vi.hoisted(() => ({
   pin: null as string | null,
@@ -72,6 +74,27 @@ afterEach(() => {
   vi.useRealTimers();
   wire.pin = null;
   vi.clearAllMocks();
+});
+
+test("a classified turn error survives the event projection and discloses its raw body", () => {
+  const failure = {
+    kind: "billing",
+    message: "billing: Out of credit or billing limit reached.",
+    raw: '{"error":{"type":"insufficient_quota"}}',
+  };
+  const event = harnessEventSchema.parse({
+    seq: 1,
+    at: "2026-10-12T12:00:00Z",
+    kind: "error",
+    turnId: "turn",
+    message: failure.message,
+    failure,
+  });
+  show(selectMessages({ ...emptyChatState(), events: [event] }));
+  expect(screen.getByText(failure.message)).toBeTruthy();
+  expect(screen.queryByText(failure.raw)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Raw error" }));
+  expect(screen.getByText(failure.raw)).toBeTruthy();
 });
 
 test("live, approval and record calls stay in one maximal sequence, while agent prose interrupts it", () => {

@@ -25,6 +25,59 @@ const SETTLED = new Set(["ok", "failed", "refused"]);
 export const receiptRunning = (machine: Machine) =>
   machine.update.receipt !== null && !SETTLED.has(machine.update.receipt.state);
 
+/** What the install scrim says: the version going in, the current leg in words, and the baseline host. */
+export interface Installing {
+  readonly to: string | null;
+  readonly leg: string;
+  /** The host stopped answering: the successor is not up yet. */
+  readonly gone: boolean;
+  /** The version of the host this page was served by; a different answer means the successor. */
+  readonly version: string | null;
+}
+
+const legWords = (leg: string, to: string | null) => {
+  switch (leg.split(":")[0]) {
+    case "download":
+      return `Downloading ${to ?? "the update"}`;
+    case "stop":
+      return "Closing Revit";
+    case "handoff":
+    case "install":
+      return `Installing ${to ?? "the update"}`;
+    case "reopen":
+      return "Reopening documents";
+    case "relaunch":
+      return "Relaunching Revit";
+    default:
+      return leg;
+  }
+};
+
+/**
+ * An install is in progress while its receipt runs (or its consent is still being admitted), read
+ * from the host's state, never a timer. A stale reading keeps it: the host going away is part of it.
+ */
+export function installing(reading: Reading<Machine>, accepting: boolean): Installing | null {
+  const machine = machineOf(reading);
+  if (!accepting && !(machine && receiptRunning(machine))) return null;
+  const to = machine?.update.plan?.latest ?? null;
+  const last = machine?.update.receipt?.legs.at(-1);
+  const gone = disconnected(reading);
+  return {
+    to,
+    gone,
+    version: machine?.host?.version ?? null,
+    // A leg waiting on this person (the SDK stub's Load Once prompt) says its own words.
+    leg: gone
+      ? "Waiting for the new host"
+      : last?.status === "waiting" && last.detail
+        ? last.detail
+        : last
+          ? legWords(last.name, to)
+          : "Starting the update",
+  };
+}
+
 /** A plan that waits on this person: available, not yet admitted, nothing applying. */
 export const planWaits = (machine: Machine): UpdatePlan | null => {
   const plan = machine.update.plan;
@@ -38,7 +91,15 @@ export const planWaits = (machine: Machine): UpdatePlan | null => {
 
 export function runtimeIdentity(reading: Reading<Machine>, fixture = false) {
   const host = machineOf(reading)?.host;
-  if (!host) return { text: "Runtime unknown", detail: "Host identity has not been read." };
+  // Before the first reading there is nothing to say, so the chip is omitted; "unknown" was not a
+  // runtime. A reading without a host identity keeps the door open and says why in its detail.
+  if (!host)
+    return reading.state === "absent"
+      ? { text: "", detail: "Reading this machine." }
+      : {
+          text: "This machine",
+          detail: reading.state === "failed" ? reading.message : "Host identity is unread.",
+        };
   if (fixture)
     return {
       text: `Fixture · ${host.version}`,
@@ -184,6 +245,7 @@ export function shareState(machine: Machine): Said {
   const share = machine.share;
   if (!share)
     return { text: machine.legs.share?.error ? "read failed" : "unread", tone: "caution" };
+  if (share.state === "needs-tailscale") return { text: "needs Tailscale" };
   if (share.state === "refused") return { text: "refused", tone: "caution" };
   if (share.state === "unknown") return { text: "unknown", tone: "caution" };
   if (share.desired !== share.state) return { text: `turning ${share.desired}` };
@@ -196,14 +258,7 @@ export function peaState(machine: Machine): Said {
   if (!providers) return { text: "unread", tone: "caution" };
   const ready = providers.filter((provider) => provider.readiness.state === "ready");
   if (!ready.length) return { text: "no provider ready", tone: "caution" };
-  const stale = ready.some(
-    (provider) =>
-      provider.probedAt === null || Date.now() - Date.parse(provider.probedAt) >= 60_000,
-  );
-  return {
-    text: `${ready.length} of ${providers.length} ${stale ? "last ready" : "ready"}`,
-    ...(stale ? { tone: "caution" as const } : {}),
-  };
+  return { text: `${ready.length} of ${providers.length} ready` };
 }
 
 export const hostOfUrl = (url: string) => url.replace(/^https?:\/\//, "").split(/[./]/)[0]!;

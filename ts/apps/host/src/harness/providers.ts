@@ -20,6 +20,7 @@ import { Effect } from "effect";
 import { z } from "zod";
 import { productAccessPath, productProvidersPath } from "../product-paths.ts";
 import { adapterCli, adapterLogin, adapters, openAdapter, stopChild } from "./adapter.ts";
+import { classifyEndpointFailure } from "./endpoint-failure.ts";
 import { mergePath } from "./user-shell.ts";
 
 /**
@@ -159,11 +160,15 @@ class Refusal extends Error {
   constructor(
     message: string,
     readonly status?: number,
+    readonly failure = classifyEndpointFailure(message, status),
   ) {
-    super(message);
+    super(
+      failure.kind === "other" && !status
+        ? message.replace(/\s+/g, " ").slice(0, 180)
+        : failure.message,
+    );
   }
 }
-const excerpt = (body: string) => body.trim().slice(0, 300);
 
 /**
  * http(s) only. Codex's base ends in `/v1` (an empty path becomes `/v1`); Claude's is the origin the
@@ -201,16 +206,23 @@ async function upstream(
   }).catch((e: unknown) => {
     throw new Refusal(`${step}: ${url} unreachable: ${String(e)}`);
   });
-  const text = await response.text();
+  const text = (await response.text())
+    .split(headers["x-api-key"] ?? headers.authorization!.replace(/^Bearer /, ""))
+    .join("[redacted]");
   if (response.status !== 200)
     throw new Refusal(
-      `${step}: HTTP ${response.status} from ${url}: ${excerpt(text)}`,
+      `${step}: HTTP ${response.status} from ${url}`,
       response.status,
+      classifyEndpointFailure(text, response.status),
     );
   try {
     return JSON.parse(text) as Record<string, any>;
   } catch {
-    throw new Refusal(`${step}: HTTP 200 from ${url} was not JSON: ${excerpt(text)}`);
+    throw new Refusal(
+      `${step}: HTTP 200 from ${url} was not JSON`,
+      200,
+      classifyEndpointFailure(text),
+    );
   }
 }
 
@@ -291,16 +303,17 @@ async function checkEndpoint(
             ?.content?.find((c: { type?: string }) => c?.type === "output_text")?.text;
       if (typeof text !== "string" || !text.trim())
         throw new Refusal(
-          `${claude ? "messages" : "responses"}: HTTP 200 but no assistant text: ${excerpt(JSON.stringify(reply))}`,
+          `${claude ? "messages" : "responses"}: HTTP 200 but no assistant text`,
+          200,
+          classifyEndpointFailure(JSON.stringify(reply)),
         );
       return [
         models.find((m) => m.modelId === model)!,
         ...models.filter((m) => m.modelId !== model && !rejected.has(m.modelId)),
       ];
     } catch (error) {
-      if (!(error instanceof Refusal) || (error.status !== 400 && error.status !== 404))
-        throw error;
-      failures.push(`${model}: ${error.message}`);
+      if (!(error instanceof Refusal) || error.failure.kind !== "model") throw error;
+      failures.push(`${model}: ${error.failure.raw}`);
       rejected.add(model);
     }
   }
@@ -622,7 +635,12 @@ export function createProviders(options: ProvidersOptions) {
     } catch (error) {
       if (!(error instanceof Refusal)) throw error;
       return {
-        readiness: { state: "refused", step: error.step, message: error.message },
+        readiness: {
+          state: "refused",
+          step: error.step,
+          message: error.message,
+          failure: error.failure,
+        },
         models: [],
         traits: [],
         probedAt: probedAt(),
@@ -702,7 +720,7 @@ export function createProviders(options: ProvidersOptions) {
       baseUrl = normalizeBaseUrl(input.harness, input.auth.baseUrl);
     } catch (error) {
       if (!(error instanceof Refusal)) throw error;
-      return json({ step: error.step, message: error.message }, 400);
+      return json({ step: error.step, message: error.message, failure: error.failure }, 400);
     }
     const record: EndpointRecord = {
       id,
@@ -717,7 +735,14 @@ export function createProviders(options: ProvidersOptions) {
     };
     const probed = await probeRecord(record);
     if (probed.readiness.state === "refused" && probed.readiness.step === "endpoint")
-      return json({ step: probed.readiness.step, message: probed.readiness.message }, 400);
+      return json(
+        {
+          step: probed.readiness.step,
+          message: probed.readiness.message,
+          failure: probed.readiness.failure,
+        },
+        400,
+      );
     // The probe yields; another request may have claimed this identity meanwhile.
     if (get(id))
       return json({ error: `A provider ${id} exists; remove it or pick another name.` }, 409);
@@ -850,7 +875,12 @@ export function createProviders(options: ProvidersOptions) {
           cache.set(record.id, {
             readiness:
               error instanceof Refusal
-                ? { state: "refused", step: "endpoint", message: error.message }
+                ? {
+                    state: "refused",
+                    step: "endpoint",
+                    message: error.message,
+                    failure: error.failure,
+                  }
                 : { state: "unknown", message: "Endpoint validation failed." },
             models: [],
             traits: [],

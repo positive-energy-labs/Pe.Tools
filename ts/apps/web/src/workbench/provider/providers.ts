@@ -17,16 +17,11 @@ export interface HeadDraft {
 export const EMPTY_HEAD: HeadDraft = { providerId: null, modelId: null, traits: {} };
 
 export const isReady = (provider: Provider) => provider.readiness.state === "ready";
-export const isFresh = (provider: Provider) =>
-  provider.probedAt !== null && Date.now() - Date.parse(provider.probedAt) < 60_000;
-
-/** Readiness as one dot and the host's words: the head chip, the first-open card and Settings. */
+/** Readiness as one dot and the host's words: the head chip, the first-open card and Settings.
+ * Optimistic (kaitpw, 2026-10-12): the last probe stands until a probe or a send says otherwise;
+ * a 60 s expiry read "probe expired" on providers that worked. */
 export const readinessSub = (provider: Provider) =>
-  provider.readiness.state === "ready"
-    ? isFresh(provider)
-      ? "● ready"
-      : "○ last ready · probe expired"
-    : `○ ${provider.readiness.message}`;
+  provider.readiness.state === "ready" ? "● ready" : `○ ${provider.readiness.message}`;
 
 export function useProviders(origin: string, enabled = true, snapshot?: Machine) {
   const client = useMemo(() => harnessClient(origin), [origin]);

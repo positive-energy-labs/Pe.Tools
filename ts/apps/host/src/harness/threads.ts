@@ -1,3 +1,4 @@
+import { classifyEndpointFailure } from "./endpoint-failure.ts";
 import type { ChildProcess } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -1034,7 +1035,17 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       // A stopped thread's open turn is ended by restart recovery, not by "connection closed".
       if (!t.stopped) {
         options.providers.invalidate(t.meta.providerId, "The harness turn failed; probe again.");
-        append(t, { kind: "error", turnId, message: String((error as Error)?.message ?? error) });
+        const raw = String((error as Error)?.message ?? error);
+        const failure =
+          options.providers.get(t.meta.providerId)?.auth.kind === "endpoint"
+            ? classifyEndpointFailure(error)
+            : undefined;
+        append(t, {
+          kind: "error",
+          turnId,
+          message: failure?.message ?? raw,
+          ...(failure ? { failure } : {}),
+        });
       }
     }
     disarm(t);
@@ -1445,12 +1456,8 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
             try {
               await options.providers.validateModel(record, modelId);
             } catch (error) {
-              return json(
-                {
-                  error: `Endpoint model ${modelId} was refused: ${String((error as Error).message ?? error)}`,
-                },
-                400,
-              );
+              const failure = classifyEndpointFailure(error);
+              return json({ message: failure.message, failure }, 400);
             }
             // Both adapters admit custom IDs at startup; their ACP pickers can reject those IDs.
             // Resume the same durable session in a child pinned to the requested endpoint model.

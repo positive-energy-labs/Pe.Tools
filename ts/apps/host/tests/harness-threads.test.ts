@@ -1044,7 +1044,12 @@ test("an endpoint provider is checked before save, and every thread carries its 
     expect(refused.status).toBe(400);
     expect(refused.json).toEqual({
       step: "endpoint",
-      message: expect.stringMatching(/^models: HTTP 503 from .*auth_unavailable/),
+      message: "unreachable: Endpoint unreachable or unavailable.",
+      failure: {
+        kind: "unreachable",
+        message: "unreachable: Endpoint unreachable or unavailable.",
+        raw: JSON.stringify({ error: "auth_unavailable" }),
+      },
     });
     expect((await add("codex", "Ftp", "ftp://x", "sk-x")).json.step).toBe("endpoint");
     expect((await call("GET", "/pe/providers")).json).toHaveLength(2);
@@ -1082,8 +1087,9 @@ test("an endpoint provider is checked before save, and every thread carries its 
       },
     });
     expect(explicit.status).toBe(400);
-    expect(explicit.json.message).toContain("gpt-5.2-codex");
-    expect(explicit.json.message).toContain("Set Model");
+    expect(explicit.json.failure.kind).toBe("model");
+    expect(explicit.json.failure.raw).toContain("gpt-5.2-codex");
+    expect(explicit.json.failure.raw).toContain("Set Model");
     expect(hits).toEqual(
       expect.arrayContaining([
         "GET /ok/v1/models",
@@ -1171,6 +1177,17 @@ test("an endpoint provider is checked before save, and every thread carries its 
     expect(said(claudeEnd, "CODEX_CONFIG")).toBe("");
     expect(claudeEnd.modelId).toBe("claude-haiku-5-5");
     expect(claudeEnd.models).toEqual(gate.json.models);
+    await call("POST", `/pe/threads/${claudeEnd.id}/prompt`, { text: "credit-refusal" });
+    const failed = await until(
+      reader(threads),
+      claudeEnd.id,
+      (body) => !body.running && body.events.some((event) => event.kind === "error"),
+    );
+    const refusal = failed.events.findLast((event) => event.kind === "error");
+    expect(refusal).toMatchObject({
+      message: "billing: Out of credit or billing limit reached.",
+      failure: { kind: "billing", raw: expect.stringContaining("credit balance") },
+    });
     for (const body of [codexEnd, claudeEnd]) {
       const log = await readFile(join(root, body.id, "events.jsonl"), "utf8");
       expect(log).not.toContain(codexKey);

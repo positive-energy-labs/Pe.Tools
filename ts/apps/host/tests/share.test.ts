@@ -213,6 +213,32 @@ test("dev never invokes tailscale; failed verification never advertises on; fore
   expect(await share.set(true)).toMatchObject({ desired: "on", state: "refused", url: null });
 });
 
+test("a machine without the tailscale binary is needs-tailscale, not refused; other failures stay refusals", async () => {
+  const base = {
+    installed: true,
+    port: () => 5180,
+    load: async () => null,
+    save: async () => {},
+  };
+  const missing = createShare({ ...base, run: tailscaleCommand("pe-no-such-tailscale-binary") });
+  expect(await missing.read()).toMatchObject({ state: "needs-tailscale", refusal: null });
+  expect(await missing.set(true)).toMatchObject({
+    desired: "off",
+    state: "needs-tailscale",
+    refusal: null,
+  });
+  const broken = createShare({
+    ...base,
+    run: async () => {
+      throw Error("synthetic status unavailable");
+    },
+  });
+  expect(await broken.read()).toMatchObject({
+    state: "refused",
+    refusal: { code: "share.unavailable" },
+  });
+});
+
 test("share reads coalesce and reuse only a bounded verified snapshot", async () => {
   let time = Date.parse("2026-10-10T00:00:00Z");
   let calls = 0;

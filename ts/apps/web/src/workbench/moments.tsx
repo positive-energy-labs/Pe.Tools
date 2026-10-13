@@ -1,3 +1,4 @@
+import { EndpointError } from "./endpoint-error";
 import {
   Component,
   useCallback,
@@ -96,9 +97,13 @@ export function Moments({
     if (message.role === "system")
       return [
         <MomentSection key={message.id} message={message} register={register}>
-          <p className="t-small text-ink-2">
-            {message.parts.map((part) => (part.type === "text" ? part.text : "")).join(" ")}
-          </p>
+          {message.failure ? (
+            <EndpointError message={message.failure.message} failure={message.failure} />
+          ) : (
+            <p className="t-small text-ink-2">
+              {message.parts.map((part) => (part.type === "text" ? part.text : "")).join(" ")}
+            </p>
+          )}
         </MomentSection>,
       ];
     const segments = groups.get(message.id)!;

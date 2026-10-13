@@ -116,7 +116,8 @@ export interface MachineUpdate {
 export interface MachineShare {
   readonly allowRemoteAdministration: boolean;
   readonly desired: "off" | "on";
-  readonly state: "off" | "on" | "refused" | "unknown";
+  /** `needs-tailscale` is a state, not a refusal: the `tailscale` CLI is not installed on this machine. */
+  readonly state: "off" | "on" | "refused" | "unknown" | "needs-tailscale";
   readonly url: string | null;
   readonly refusal: { readonly code: string; readonly detail: string } | null;
   readonly callers: readonly {

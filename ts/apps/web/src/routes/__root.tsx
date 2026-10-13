@@ -11,6 +11,7 @@ import { RegistryContext } from "@effect/atom-react";
 import { inspectAtomRegistry } from "../state/atom-inspect";
 import { appAtomRegistry, routeSearch } from "../route/route-owner";
 import { AppChrome, AppDevtools } from "../route/app-chrome";
+import { InstallScrim } from "../machine/install-scrim";
 
 import appCss from "../styles.css?url";
 
@@ -63,6 +64,7 @@ function Chrome() {
   return (
     <>
       <AppChrome pathname={location.pathname} />
+      <InstallScrim />
       <AppDevtools pathname={location.pathname} shell={String(location.search.shell ?? "")} />
     </>
   );
