@@ -18,6 +18,14 @@ test("kernel starts with live discovery and makes Revit orientation conditional"
   expect(peaAgentInstructions).toContain("Distinguish the thread's selected target");
   expect(peaAgentInstructions).toContain("When discovery shows connected Revit");
   expect(peaAgentInstructions).toContain("capture_view");
+  for (const text of [
+    "Pages/<slug>/index.html",
+    "page:@pages/<slug>",
+    "pe_do",
+    "binding",
+    "Page's /act or /call",
+  ])
+    expect(peaAgentInstructions).toContain(text);
   expect(peaAgentInstructions).not.toContain("Revit is connected:");
   expect(peaAgentInstructions).not.toMatch(/subagent|forked/i);
 });

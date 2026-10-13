@@ -106,6 +106,52 @@ function catalog(): CapabilityCatalog {
   };
 }
 
+test("Page shelf reads state and pins through the binding door without borrowing Page authority", async () => {
+  fakeRuntimeHost("http://127.0.0.1:9");
+  const calls: Array<{ path: string; method: string; body: unknown }> = [];
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const path = new URL(String(input)).pathname;
+    calls.push({
+      path,
+      method: init?.method ?? "GET",
+      body: init?.body ? JSON.parse(String(init.body)) : null,
+    });
+    return Response.json(
+      path.endsWith("binding")
+        ? { refusal: { code: "page.binding-not-yours" } }
+        : { page: "page:@pages/ducts", text: "Duct checks" },
+      { status: path.endsWith("binding") ? 403 : 200 },
+    );
+  });
+  const read = await run(peRead, { key: "page:@pages/ducts", timeoutSeconds: 30 });
+  expect(read).toMatchObject({ ok: true, result: { state: { text: "Duct checks" } } });
+  const bound = await run(peDo, {
+    key: "page:@pages/ducts",
+    input: { binding: { kind: "pinned", address: "C:/Ducts.rvt" } },
+    timeoutSeconds: 30,
+  });
+  expect(bound).toMatchObject({
+    ok: false,
+    result: { refusal: { code: "page.binding-not-yours" } },
+  });
+  expect(calls.at(-1)).toEqual({
+    path: "/pe/pages/ducts/binding",
+    method: "PUT",
+    body: { kind: "pinned", address: "C:/Ducts.rvt" },
+  });
+  await run(peDo, {
+    key: "page:@ducts/pages/check",
+    input: { event: { kind: "checked", text: "Duct checks" } },
+    timeoutSeconds: 30,
+  });
+  expect(calls.at(-1)).toEqual({
+    path: "/pages/ducts--check/events",
+    method: "POST",
+    body: { kind: "checked", text: "Duct checks" },
+  });
+  expect(calls.some((call) => /\/(act|call)$/.test(call.path))).toBe(false);
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();

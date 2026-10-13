@@ -57,6 +57,7 @@ import {
   putTargetResultSchema,
   putTargetSchema,
   threadHeadSchema,
+  pageChoiceSchema,
   type Capability,
   type CapabilityCatalog,
   type DocumentRequest,
@@ -271,6 +272,56 @@ async function executeTool(
   const { target: defaultTarget, revision } = scope
     ? { target: scope.defaultTarget, revision: scope.revision }
     : { target: null, revision: 0 };
+  if (input.key.startsWith("page:")) {
+    const page =
+      /^page:@(?:pages\/([a-zA-Z0-9_-]+)|([a-zA-Z0-9_-]+)\/pages\/([a-zA-Z0-9_-]+))$/.exec(
+        input.key,
+      );
+    if (!page || input.target)
+      return refuse(
+        input.key,
+        defaultTarget,
+        revision,
+        "A Page key is page:@pages/<slug> or page:@<pod>/pages/<page>; its shelf takes no Revit target override.",
+      );
+    const slug = page[1] ?? `${page[2]}--${page[3]}`;
+    const read = async (path: string, init?: RequestInit) => {
+      const response = await fetch(`${base()}${path}`, init);
+      return { ok: response.ok, result: await response.json() };
+    };
+    if (!replayOperations) {
+      if (input.input)
+        return refuse(
+          input.key,
+          defaultTarget,
+          revision,
+          "pe_read reads a Page; use pe_do for an event or binding.",
+        );
+      const [state, target] = await Promise.all([
+        read(`/pages/${slug}/state`),
+        read(`/pages/${slug}/target`),
+      ]);
+      return {
+        ok: state.ok && target.ok,
+        key: input.key,
+        revision,
+        result: { state: state.result, target: target.result },
+      };
+    }
+    const action = z
+      .union([
+        z.strictObject({ binding: pageChoiceSchema }),
+        z.strictObject({ event: z.record(z.string(), z.unknown()) }),
+      ])
+      .parse(coerceJsonObject(input.input));
+    const binding = "binding" in action;
+    const answer = await read(binding ? `/pe/pages/${slug}/binding` : `/pages/${slug}/events`, {
+      method: binding ? "PUT" : "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(binding ? action.binding : action.event),
+    });
+    return { ...answer, key: input.key, revision };
+  }
   // A known operation attempt replays before catalog or target discovery.
   if (
     replayOperations &&
