@@ -1,23 +1,48 @@
 import { hostFetch } from "#/host/runtime";
-import { useEffect, useRef, useState } from "react";
+import { z } from "zod";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { peReadings, previousOf, useReading } from "#/readings";
 import {
   threadHeadSchema,
   putTargetResultSchema,
+  refusalSchema,
   type DocumentRequest,
+  type HeadGrant,
   type Reading,
+  type Refusal,
   type ThreadHead,
   emptyThreadHead,
 } from "@pe/agent-contracts";
 
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
 
+const hostClockSchema = z.object({ hostNow: z.iso.datetime() });
+
 const scopeUrl = (threadId: string) =>
   peUrl(resolveWorkbenchConfig(), `/scope/${encodeURIComponent(threadId)}`);
 
+/** What the head's grant says right now, counted on the host's clock. */
+export type GrantView =
+  | { readonly state: "rw"; readonly minutes: number }
+  | { readonly state: "expired" }
+  | { readonly state: "revoked" };
+
+/** A host door's refusal in the person's words: the door, the reason, then the remedy. */
+export const refusalSentence = ({ reason, remedy }: Refusal) =>
+  remedy && !reason.includes(remedy) ? `${reason} ${remedy}` : reason;
+
+/** `hostNowMs` is the host's clock at this instant, never the browser's. */
+export function grantViewOf(grant: HeadGrant | null, hostNowMs: number): GrantView | null {
+  if (!grant) return null;
+  if (grant.revoked) return { state: "revoked" };
+  const left = Date.parse(grant.expiresAt) - hostNowMs;
+  return left <= 0 ? { state: "expired" } : { state: "rw", minutes: Math.ceil(left / 60_000) };
+}
+
 /**
  * The thread's default Target comes from the shared resource stream; the head writes with PUT.
- * The head is the only writer; every tool call runs under the revision frozen at admission.
+ * The head is the only writer of its target, and the host stamps the rw grant on a human's PUT
+ * and retires it when the target moves. The browser only reads the grant.
  */
 export function useThreadScope(threadId: string, enabled = true, observed?: Reading<unknown>) {
   const generation = useRef(0);
@@ -25,8 +50,23 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
   const request = { kind: "thread-head" as const, thread: threadId };
   const subscribed = useReading<ThreadHead>(enabled && !observed ? request : null);
   const reading = observed ?? subscribed;
-  const parsed = threadHeadSchema.safeParse(previousOf(reading));
+  const raw = previousOf(reading);
+  const parsed = threadHeadSchema.safeParse(raw);
   const head = parsed.success ? parsed.data : undefined;
+  // A head served without the host's clock (a frozen seed) has no countdown to show.
+  const hostNow = hostClockSchema.safeParse(raw).data?.hostNow;
+  // The host's clock at this reading, and the browser's monotonic clock when it arrived. Elapsed
+  // time since then is the only thing the browser adds; its wall clock is never consulted.
+  const clock = useMemo(
+    () => (hostNow ? { hostMs: Date.parse(hostNow), at: performance.now() } : null),
+    [raw],
+  );
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!head?.grant) return;
+    const timer = setInterval(() => tick((n) => n + 1), 15_000);
+    return () => clearInterval(timer);
+  }, [head?.grant?.expiresAt, head?.grant?.revoked?.at]);
 
   useEffect(() => {
     generation.current++;
@@ -35,6 +75,8 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
   }, [threadId, enabled]);
 
   const current: ThreadHead = head ?? emptyThreadHead;
+  const grantView =
+    head && clock ? grantViewOf(head.grant, clock.hostMs + (performance.now() - clock.at)) : null;
   /** True when the head moved; otherwise `refusal` says why, in the head's own words. */
   const set = async (
     defaultTarget: DocumentRequest | null,
@@ -61,17 +103,17 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
           displayLabel,
         }),
       });
-      const result = putTargetResultSchema.safeParse(await response.json().catch(() => null)).data;
+      const body = await response.json().catch(() => null);
+      const result = putTargetResultSchema.safeParse(body).data;
+      const refused = refusalSchema.safeParse(body?.refusal).data;
       if (attempt !== generation.current) return false;
       peReadings.dirty(request);
-      if (!result) {
+      if (refused) {
+        setRefusal(refusalSentence(refused));
+      } else if (!result) {
         setRefusal(`target outcome unknown (${response.status}); reading the current target again`);
-      } else if (!result.ok && result.why === "stale") {
-        setRefusal(`the target changed to r${result.head.revision} under you; pick again.`);
       } else if (!result.ok) {
-        setRefusal(
-          "pea is mid-turn; the turn keeps the target it was admitted under. Wait or stop it.",
-        );
+        setRefusal(`the target changed to r${result.head.revision} under you; pick again.`);
       }
       return result?.ok === true;
     } catch (error) {
@@ -87,6 +129,7 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
     ...current,
     hydrated: head !== undefined,
     stale: reading.state !== "ready" || !parsed.success,
+    grantView,
     set,
     refusal,
   };

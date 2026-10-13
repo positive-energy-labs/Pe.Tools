@@ -6,6 +6,7 @@ import { Ladder, type Rung } from "#/route/ladder";
 import { ProviderMark } from "#/components/lang/provider-mark";
 import { useWorkbench } from "#/workbench/provider";
 import { isReady, readinessSub } from "#/workbench/provider/providers";
+import type { GrantView } from "./scope";
 
 /** A two-way on/off select is a toggle, as a boolean is. */
 const isToggle = (trait: TraitOption) =>
@@ -146,5 +147,37 @@ export function HeadLadder() {
         ...head.traits.map((trait) => traitRung(trait, head.pickTrait)),
       ]}
     />
+  );
+}
+
+/**
+ * Whether Pea may write the document this thread points at, counted on the host's clock. Words
+ * only, no button: pointing the thread elsewhere ends the grant, and the next message you send
+ * renews it. Nothing when the thread holds no grant (no document, a named target, Pea's own).
+ */
+export function GrantChip({ grant }: { grant: GrantView | null }) {
+  if (!grant) return null;
+  const [tone, text, title] =
+    grant.state === "rw"
+      ? [
+          "done",
+          `rw · ${grant.minutes}m`,
+          "Pea may write this document. Each message you send renews it to 60 minutes; pointing the thread elsewhere ends it.",
+        ]
+      : grant.state === "expired"
+        ? [
+            "caution",
+            "read · renews on your next message",
+            "Pea can read this document but not write it. Your next message in this thread renews rw.",
+          ]
+        : [
+            "alarm",
+            "revoked · point the thread at it again to grant",
+            "rw on this document was revoked. Steps already running finish; nothing new starts until you point the thread at the document again.",
+          ];
+  return (
+    <span className="t-sentence face-mono" data-tone={tone} data-testid="grant-chip" title={title}>
+      {text}
+    </span>
   );
 }

@@ -35,7 +35,7 @@ import { targetClosure, targetLabel } from "./thread-navigation";
 import { ProposalHead } from "./proposal-head";
 import { ComposerOpenMode } from "./composer-open";
 import { ComposerPending } from "./composer-pending";
-import { HeadLadder } from "./head-chips";
+import { GrantChip, HeadLadder } from "./head-chips";
 import { emptyPrompt, type ChatDraft } from "#/workbench/prompt";
 
 export type ChatHandle = RouteHandle<ChatState, ChatReading, ChatPage, ChatActionKey>;
@@ -278,6 +278,7 @@ export function ComposerControls({
           }
         />
       </ComposerOpenMode>
+      <GrantChip grant={head.grantView} />
       {status ? (
         <span
           aria-live="polite"
