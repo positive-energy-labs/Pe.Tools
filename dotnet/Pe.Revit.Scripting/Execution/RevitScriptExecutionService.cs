@@ -115,7 +115,7 @@ public sealed class RevitScriptExecutionService(
             revitVersion = plan.RevitVersion;
             try {
                 outputSink.Attribution = plan.Attribution ?? PodReceipt.ForOperation(
-                    ScriptPodPreparationService.ReadId(runPod) ?? throw new InvalidDataException($"The pod at {runPod} has no manifest id to store the run under."),
+                    new ScriptPodPreparationService().ResolveId(runPod),
                     "scripting.execute", null, PodRunOutcome.Failed, [], null);
                 outputSink.Artifacts.WriteInput(PodRuns.WithReviewBasis(RunInputMetadata(plan, request), null), RunInputFiles(plan, request));
             } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException) {
@@ -468,6 +468,9 @@ public sealed class RevitScriptExecutionService(
                 sourceSet = captured.SourceSet;
                 executionMode = ScriptWorkspaceExecutionMode.Pod;
                 podManifest = captured.Manifest;
+                // The frozen manifest owns attribution; a renamed folder is only the current output locator.
+                workspaceRoot = new ScriptPodPreparationService().ResolveFolder(podManifest.Id);
+                workspaceKey = Path.GetFileName(workspaceRoot);
                 projectSeed = captured.ProjectSeed;
                 var member = preparation.Members.Single(item => string.Equals(item.Path, "src/" + sourceSet.EntryPointSourceName, StringComparison.OrdinalIgnoreCase));
                 // Outcome and output references are settled when CreateResult observes the final result.

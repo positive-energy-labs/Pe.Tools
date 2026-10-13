@@ -104,7 +104,7 @@ public class CmdScheduleManagerSerialize : IExternalCommand {
             var spec = ScheduleBridgeOps.CaptureSpec(item.Schedule);
             var path = $"settings/schedules/{string.Concat(item.Schedule.Name.Split(Path.GetInvalidFileNameChars()))}-{DateTime.Now:yyyyMMdd-HHmmss}.json";
             var pods = new ScriptPodPreparationService();
-            _ = pods.WriteMember(podId, path, spec);
+            _ = pods.WriteSettingsMember(podId, path, spec);
             var fullPath = Path.Combine(pods.ResolveFolder(podId), path);
             new Ballogger()
                 .Add(LogEventLevel.Information, new StackFrame(), $"Captured schedule '{item.Schedule.Name}' as {podId}:{path}")
