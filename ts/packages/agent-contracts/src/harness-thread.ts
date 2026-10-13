@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { callerSchema } from "./caller.ts";
 import { mentionSchema } from "./mention.ts";
 import { threadHeadSchema } from "./target.ts";
 
@@ -260,6 +261,19 @@ export const harnessEventSchema = z.discriminatedUnion("kind", [
       by: z.enum(["cancel", "expired"]),
     }),
   ]),
+  /** The host spawned or resumed the harness child for this turn's prompt: nothing else is logged
+   * until it answers (seconds when a reaped child is respawned). Absent when a live child took it. */
+  z.object({ seq: z.number(), at: z.string(), kind: z.literal("starting"), turnId: z.string() }),
+  /** Who asked the running turn to stop, and through which door (the cancel route, or the prompt
+   * that interrupts it). Written before the harness is told, so it precedes the `turn_end`. */
+  z.object({
+    seq: z.number(),
+    at: z.string(),
+    kind: z.literal("cancel_requested"),
+    turnId: z.string(),
+    by: callerSchema,
+    door: z.string(),
+  }),
   z.object({
     seq: z.number(),
     at: z.string(),

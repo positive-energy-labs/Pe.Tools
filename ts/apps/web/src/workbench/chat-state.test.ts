@@ -13,6 +13,7 @@ import {
   selectTitle,
   selectToolCalls,
   selectTurnFailure,
+  selectStarting,
   selectWaitingSeconds,
   skillInvocation,
   toolDetail,
@@ -349,6 +350,18 @@ describe("harness event projection", () => {
     expect(selectWaitingSeconds(state(waiting as HarnessEvent[]))).toBe(61);
     const moved = [...waiting, chunk(3, "agent_message_chunk", "ok")];
     expect(selectWaitingSeconds(state(moved as HarnessEvent[]))).toBeUndefined();
+  });
+
+  it("says the harness is starting from the host's marker until the next event", () => {
+    const open: HarnessEvent[] = [{ seq: 1, at, kind: "prompt", turnId: "t1", text: "hi" }];
+    const starting = [...open, { seq: 2, at, kind: "starting", turnId: "t1" }] as HarnessEvent[];
+    expect(selectStarting(state(open))).toBe(false);
+    expect(selectStarting(state(starting))).toBe(true);
+    const resumed = [
+      ...starting,
+      { seq: 3, at, kind: "session", state: "resumed", acpSessionId: "s" },
+    ] as HarnessEvent[];
+    expect(selectStarting(state(resumed))).toBe(false);
   });
 
   it("parks a form question until answered; a skip or a cancel leaves a quiet line", () => {

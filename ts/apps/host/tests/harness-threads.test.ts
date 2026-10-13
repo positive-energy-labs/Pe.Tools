@@ -342,6 +342,83 @@ test("idle reaping keeps history and choices, and a prompt waits for exact-child
   }
 });
 
+test("a warm resume says it is starting, and a cancel records who asked and at which door", async () => {
+  process.env.FAKE_ACP_SHAPE = "config";
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  try {
+    await untilIo(
+      () => read(id),
+      (b) => b.models.length > 0,
+    );
+    // A live child admits the prompt with no start to announce.
+    await call("POST", `/pe/threads/${id}/prompt`, { text: "echo" });
+    const warm = await untilIo(
+      () => read(id),
+      (b) => !b.running && turnEnds(b).length === 1,
+    );
+    expect(warm.events.some((e) => e.kind === "starting")).toBe(false);
+    // Nothing is running: a cancel changes nothing and leaves no record.
+    expect((await call("POST", `/pe/threads/${id}/cancel`)).json).toEqual({ cancelled: false });
+    expect((await read(id)).events.some((e) => e.kind === "cancel_requested")).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(IDLE_CHILD_MS);
+    expect((await read(id)).session).toBe("closed");
+    await call("POST", `/pe/threads/${id}/prompt`, { text: "hang" });
+    // The reaped child is respawned after the prompt: the log says so before the session does.
+    const resumed = await untilIo(
+      () => read(id),
+      (b) => b.session === "resumed" && lastEcho(b) === "echo: hang",
+    );
+    expect(kinds(resumed.events.slice(warm.events.length)).slice(0, 3)).toEqual([
+      "prompt",
+      "starting",
+      "session",
+    ]);
+    expect(resumed.events.find((e) => e.kind === "starting")).toMatchObject({
+      turnId: resumed.events.findLast((e) => e.kind === "prompt")?.turnId,
+    });
+
+    threads.as = { kind: "human", via: "cli" };
+    await call("POST", `/pe/threads/${id}/cancel`);
+    const stopped = await untilIo(
+      () => read(id),
+      (b) => !b.running,
+    );
+    expect(kinds(stopped.events.slice(resumed.events.length))).toEqual([
+      "cancel_requested",
+      "turn_end",
+    ]);
+    expect(stopped.events.findLast((e) => e.kind === "cancel_requested")).toMatchObject({
+      turnId: stopped.events.findLast((e) => e.kind === "prompt")?.turnId,
+      by: { kind: "human", via: "cli" },
+      door: `/pe/threads/${id}/cancel`,
+    });
+
+    // A prompt sent over a running turn cancels it too, and the record names that door.
+    threads.as = human;
+    await call("POST", `/pe/threads/${id}/prompt`, { text: "hang" });
+    await untilIo(
+      () => read(id),
+      (b) => b.running,
+    );
+    await call("POST", `/pe/threads/${id}/prompt`, { text: "echo" });
+    const interrupted = await untilIo(
+      () => read(id),
+      (b) => !b.running && turnEnds(b).length === 4,
+    );
+    expect(interrupted.events.findLast((e) => e.kind === "cancel_requested")).toMatchObject({
+      by: { kind: "human", via: "local" },
+      door: `/pe/threads/${id}/prompt`,
+    });
+  } finally {
+    await threads.close();
+  }
+});
+
 test("connect, model/trait RPCs, active turns and asks prevent idle reaping", async () => {
   process.env.FAKE_ACP_SHAPE = "config";
   const gates = await mkdtemp(join(root, "gates-"));
@@ -711,6 +788,7 @@ test("a restarted host expires open asks, ends the open turn, resumes, and keeps
     "permission_resolved",
     "error",
     "prompt",
+    "starting",
     "session",
     "model_changed",
     "update:agent_message_chunk",

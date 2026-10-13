@@ -11,6 +11,7 @@ import {
   selectBreakdown,
   selectRunStatus,
   selectTitle,
+  selectStarting,
   selectWaitingSeconds,
 } from "#/workbench/chat-state";
 import { EmptyState } from "#/components/lang/empty";
@@ -232,11 +233,13 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
         ? "loading thread state"
         : runStatus === "waiting"
           ? "waiting for you"
-          : silentFor !== undefined
-            ? `waiting on the model for ${silentFor} s`
-            : runStatus === "running"
-              ? "running"
-              : "ready",
+          : selectStarting(chat)
+            ? "starting the harness"
+            : silentFor !== undefined
+              ? `waiting on the model for ${silentFor} s`
+              : runStatus === "running"
+                ? "running"
+                : "ready",
     caution: turnFailure !== undefined,
     detail: operationError ?? turnFailure,
   };

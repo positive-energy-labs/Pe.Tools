@@ -430,6 +430,11 @@ export function selectWaitingSeconds(state: ChatState): number | undefined {
   return last?.kind === "waiting" && fold(state).turn ? Math.round(last.sinceMs / 1000) : undefined;
 }
 
+/** The host is spawning or resuming the harness child for the running turn and has heard nothing since. */
+export function selectStarting(state: ChatState): boolean {
+  return state.events.at(-1)?.kind === "starting" && fold(state).turn;
+}
+
 /** The newest `session/update` of one kind, or undefined. */
 function latest(state: ChatState, kind: string): Record<string, unknown> | undefined {
   for (let i = state.events.length - 1; i >= 0; i -= 1) {

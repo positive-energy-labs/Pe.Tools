@@ -1048,6 +1048,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     });
     arm(t);
     try {
+      if (!t.live) append(t, { kind: "starting", turnId });
       const live = await ensure(t);
       const refeed = t.refeed;
       t.refeed = null;
@@ -1085,18 +1086,23 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     scheduleIdle(t);
   }
 
-  /** ACP `session/cancel` on the running turn; its open asks settle as cancelled. */
-  async function cancel(t: Thread) {
+  /**
+   * ACP `session/cancel` on the running turn; its open asks settle as cancelled. The log names who
+   * asked and at which door first: a bare `cancelled` turn_end is otherwise unattributable.
+   */
+  async function cancel(t: Thread, by: Caller, door: string) {
+    const turnId = t.running;
     settleAsks(t, "cancel");
-    const live = t.running ? await t.live?.catch(() => null) : null;
+    const live = turnId ? await t.live?.catch(() => null) : null;
+    if (turnId && live) append(t, { kind: "cancel_requested", turnId, by, door });
     if (live) await live.conn.cancel({ sessionId: live.sessionId });
     return Boolean(live);
   }
 
   /** Cancel the running turn and wait for its end; false when it outlives {@link INTERRUPT_MS}. */
-  async function interrupt(t: Thread) {
+  async function interrupt(t: Thread, by: Caller, door: string) {
     const turn = t.turn;
-    await cancel(t);
+    await cancel(t, by, door);
     let timer: ReturnType<typeof setTimeout> | undefined;
     const ended = await Promise.race([
       turn.then(() => true),
@@ -1410,7 +1416,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         }
         // A prompt on a running turn interrupts it: that turn ends cancelled, then this one starts.
         while (t.running)
-          if (!(await interrupt(t)))
+          if (!(await interrupt(t, caller, url.pathname)))
             return json(
               {
                 error: `${t.meta.providerName} did not stop the running turn within ${INTERRUPT_MS / 1000} s; press Stop, then send again`,
@@ -1430,7 +1436,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         return json({ turnId });
       }
       case "POST cancel":
-        return json({ cancelled: await cancel(t) });
+        return json({ cancelled: await cancel(t, caller, url.pathname) });
       case "POST permission": {
         const { requestId, optionId } = await input(permissionResponseSchema);
         return resolvePermission(t, requestId, optionId, "user")
