@@ -35,11 +35,10 @@
   justify-content: center;
   width: 12px;
   height: 12px;
-  font-size: 12px;
-  line-height: 1;
+  font-size: var(--type-small-size);
 }
 .dl-hotkey-command [data-command-key] {
-  font-size: 13px;
+  font-size: var(--type-prose-size);
   font-weight: 600;
 }
 .dl-hotkey-command:where([data-command-face="full"], [data-command-face="responsive"])

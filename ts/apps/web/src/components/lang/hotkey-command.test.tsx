@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
+import { Popover } from "@base-ui/react/popover";
 import { Save } from "lucide-react";
+import { Button } from "./button";
 import { HotkeyCommand } from "./hotkey-command";
 import { Input } from "./input";
 import { KeyScope, useScopeKeys } from "#/route/keys";
@@ -152,4 +154,23 @@ test("caller-owned and hidden scope bindings do not create a second registration
   );
   fireEvent.keyDown(document, { key: "k", code: "KeyK", ctrlKey: true });
   expect(invoke).toHaveBeenCalledTimes(2);
+});
+
+// A refused verb that is also a Popover trigger (situation-verbs) still says why on focus.
+test("a refused button composed as another trigger keeps its refusal tooltip", async () => {
+  render(
+    <Popover.Root>
+      <Popover.Trigger
+        render={<Button label="send" icon={Save} refusal="frozen seed is read-only" />}
+      />
+    </Popover.Root>,
+  );
+  const button = screen.getByRole("button", { name: "send" });
+  expect(button.getAttribute("aria-disabled")).toBe("true");
+  await act(async () => {
+    button.focus();
+    fireEvent.focus(button);
+    await new Promise((wait) => setTimeout(wait, 50));
+  });
+  expect(await screen.findByText("frozen seed is read-only")).toBeTruthy();
 });

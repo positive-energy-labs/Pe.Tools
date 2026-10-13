@@ -39,6 +39,7 @@ export function Button({
   children,
   type,
   onClick,
+  id,
   "data-tone": toneProp,
   ...props
 }: ButtonProps) {
@@ -68,6 +69,7 @@ export function Button({
       aria-busy={busy || undefined}
       title={tipped ? undefined : reason}
       onClick={inert ? undefined : onClick}
+      id={tipped ? undefined : id}
       {...props}
     >
       {Glyph == null ? null : isValidElement(Glyph) ? (
@@ -81,7 +83,9 @@ export function Button({
   if (!tipped) return button;
   return (
     <Primitive.Root>
-      <Primitive.Trigger render={button} />
+      {/* A composing trigger's id (a Popover's) is the tooltip trigger's id too: Base UI finds
+          its hovered trigger by id, so two ids on one button silently kill the tooltip. */}
+      <Primitive.Trigger render={button} id={id} />
       {tip == null ? null : (
         <Tooltip.Portal>
           <Tooltip.Positioner side="top" sideOffset={6}>

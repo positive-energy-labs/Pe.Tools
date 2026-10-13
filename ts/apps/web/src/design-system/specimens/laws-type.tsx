@@ -4,7 +4,6 @@ import { Button } from "#/components/lang/button";
 import { Input } from "#/components/lang/input";
 import { Kbd } from "#/components/lang/kbd";
 import { ProviderMark } from "#/components/lang/provider-mark";
-import { Row } from "#/components/lang/row";
 import { Switcher } from "#/components/lang/switcher";
 import { GitFork, Paperclip, Plus, SendHorizontal } from "lucide-react";
 import { CounterExample, Law } from "#/design-system/exhibit";
@@ -74,57 +73,31 @@ export function TypeLaws({ owner }: { owner: (name: string) => string }) {
       </Law>
 
       <Law
-        name="two registers"
-        owner={owner("two registers")}
-        ruling="One palette, one face. Comfort geometry is the root; data-density=dense redeclares only heights, gutters and the type ladder for tables a pilot scans. No call site names a size; the register does."
-      >
-        <div className="grid grid-cols-2 gap-6">
-          <div data-density="dense">
-            <RegisterSample register="dense" />
-          </div>
-          <RegisterSample register="comfort" />
-        </div>
-      </Law>
-
-      <Law
         name="one control family"
         owner={owner("one control family")}
         ruling="Every freestanding control wears one frame: one height (--control-h), one hairline, one small radius, one ground. Surfaces, rows, fills, popovers and dialogs are square. A segmented control, a field, a framed press and a framed icon press measure identical side by side."
       >
-        <div className="flex flex-col gap-4">
-          {(["dense", "comfort"] as const).map((register) => (
-            <div
-              key={register}
-              data-density={register === "dense" ? "dense" : undefined}
-              data-control-row={register}
-              className="flex flex-wrap items-center gap-2"
-            >
-              <Switcher
-                ariaLabel={`${register} family switch`}
-                value="threads"
-                onChange={() => {}}
-                options={[
-                  { value: "threads", label: "threads", title: "The thread list" },
-                  { value: "world", label: "world", title: "The world lane" },
-                ]}
-              />
-              <span className="w-48">
-                <Input placeholder="Search threads" aria-label={`${register} family field`} />
-              </span>
-              <Button kind="framed" label="fork">
-                fork
-              </Button>
-              <Button icon={Plus} label="New thread" kind="framed" />
-              <Button icon={Paperclip} label="Attach a file" />
-              <Button
-                icon={GitFork}
-                label="Fork"
-                refusal="Nothing to fork yet: the thread is empty"
-              />
-              <Button icon={SendHorizontal} label="Send" />
-              <Kbd hotkey="Mod+K" />
-            </div>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <Switcher
+            ariaLabel="family switch"
+            value="threads"
+            onChange={() => {}}
+            options={[
+              { value: "threads", label: "threads", title: "The thread list" },
+              { value: "world", label: "world", title: "The world lane" },
+            ]}
+          />
+          <span className="w-48">
+            <Input placeholder="Search threads" aria-label="family field" />
+          </span>
+          <Button kind="framed" label="fork">
+            fork
+          </Button>
+          <Button icon={Plus} label="New thread" kind="framed" />
+          <Button icon={Paperclip} label="Attach a file" />
+          <Button icon={GitFork} label="Fork" refusal="Nothing to fork yet: the thread is empty" />
+          <Button icon={SendHorizontal} label="Send" />
+          <Kbd hotkey="Mod+K" />
         </div>
       </Law>
 
@@ -155,38 +128,3 @@ export function TypeLaws({ owner }: { owner: (name: string) => string }) {
 }
 
 /** The same primitives, once per register: what moves is the tokens, never the call site. */
-function RegisterSample({ register }: { register: "dense" | "comfort" }) {
-  return (
-    <div className="flex flex-col gap-3">
-      <span className="t-small t-upper">{register}</span>
-      <span className="t-head face-display text-ink">Chadds clone in 25</span>
-      <span className="t-title text-ink">Region title</span>
-      <span className="t-prose text-ink">
-        Prose a person reads, with a measured 322 MB inside it.
-      </span>
-      <span className="t-small text-ink-2">small · plain reading</span>
-      <span className="t-small face-mono text-ink-2">small + mono · plan a91f#c04</span>
-      <div className="flex flex-wrap items-center gap-2">
-        <Switcher
-          ariaLabel={`${register} view depth`}
-          value="threads"
-          onChange={() => {}}
-          options={[
-            { value: "threads", label: "threads", title: "The thread list" },
-            { value: "world", label: "world", title: "The world lane" },
-          ]}
-        />
-        <Button kind="framed" label="fork">
-          fork
-        </Button>
-        <Kbd>Enter</Kbd>
-        <FactChip title="The plan this write was made against.">a91f#c04</FactChip>
-      </div>
-      <Input placeholder="Ask Pea…" aria-label={`${register} sample field`} />
-      <div>
-        <Row label="Chadds clone in 25" meta="36m" active />
-        <Row label="Model, harness, and cwd" meta="3d" cursor />
-      </div>
-    </div>
-  );
-}
