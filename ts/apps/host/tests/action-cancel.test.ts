@@ -201,6 +201,7 @@ test("an exact cancelled SDK receipt settles a lost reply once without replaying
   let effects = 0;
   try {
     const interrupted = new ActionJournal(path);
+    const nativeStarted = Promise.withResolvers<void>();
     await interrupted.admit(
       { ...intent, ...crossingOf("human") },
       async () => ({ kind: "native-leaf", originalProcess }),
@@ -208,12 +209,18 @@ test("an exact cancelled SDK receipt settles a lost reply once without replaying
         await execution.step("file", "prior", {}, async () => ++effects);
         return execution.step("native", "takeoffs.partition", {}, async () => {
           ++effects;
+          nativeStarted.resolve();
           return new Promise(() => undefined);
         });
       },
     );
-    while (JSON.parse(await readFile(path, "utf8")).actions[0].steps.length !== 2)
-      await new Promise((resolve) => setTimeout(resolve, 1));
+    // Polling this file races its Windows rename; entry proves persistence and export finished.
+    await Promise.race([
+      nativeStarted.promise,
+      interrupted.wait(intent.id).then((row) => {
+        throw Error(`Action settled before native entry: ${JSON.stringify(row)}`);
+      }),
+    ]);
     const envelope = JSON.parse(await readFile(path, "utf8"));
     const nativeId = envelope.actions[0].steps[1].id;
     envelope.actions[0].steps.push({
