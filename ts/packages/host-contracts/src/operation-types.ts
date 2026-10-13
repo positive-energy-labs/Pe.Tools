@@ -143,8 +143,8 @@ export const memberIssueSchema = Schema.Struct({
 });
 export type MemberIssue = Schema.Schema.Type<typeof memberIssueSchema>;
 
+/** `sourcePath` is the entrypoint identity; canonical keys live on `contributions`. */
 const podEntrypointSchema = Schema.Struct({
-  id: Schema.String,
   sourcePath: Schema.String,
   name: Schema.optional(Schema.NullOr(Schema.String)),
   description: Schema.optional(Schema.NullOr(Schema.String)),
