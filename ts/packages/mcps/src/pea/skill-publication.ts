@@ -25,7 +25,7 @@ export type SkillDirectoryCapture = (
 export type SkillPublicationOptions = PeaProductHomeOptions & {
   captureDirectory: SkillDirectoryCapture;
 };
-export type SkillPublication = { skills: SkillSnapshot[]; revision: string };
+export type SkillPublication = { skills: SkillSnapshot[] };
 const hash = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
 const receiptName = ".pe-projection.json";
 const projectionReceipt = z.record(
@@ -58,6 +58,10 @@ export async function publishPeaSkills(
   };
   const home = resolvePeaProductHomePath(options);
   const roots = resolvePeaSkillPaths(options);
+  const bundled = bundledPeaSkills.map((s) => {
+    const bytes = Buffer.from(`${s.content.trimEnd()}\n`);
+    return skillSnapshot("product", s.name, [{ path: "SKILL.md", bytes, sha256: hash(bytes) }]);
+  });
   const canonicalRoot = join(home, "Skills");
   const personal = new Map<string, SkillFile[]>();
   for (const name of await directories(canonicalRoot))
@@ -77,19 +81,8 @@ export async function publishPeaSkills(
       if (retiredPeaSkillNames.includes(name)) continue;
       const files = await capture(join(root, name));
       if (managed[i]![name] && managed[i]![name] === signature(files)) continue;
-      const shipped = bundledPeaSkills.find((s) => s.name === name);
-      if (
-        shipped &&
-        signature(files) ===
-          signature([
-            {
-              path: "SKILL.md",
-              bytes: Buffer.from(`${shipped.content.trimEnd()}\n`),
-              sha256: hash(`${shipped.content.trimEnd()}\n`),
-            },
-          ])
-      )
-        continue;
+      const shipped = bundled.find((s) => s.name === name);
+      if (shipped && signature(files) === signature(shipped.files)) continue;
       const previous = personal.get(name);
       if (previous && signature(previous) !== signature(files))
         throw Error(`Conflicting personal skill copies: ${name}`);
@@ -97,10 +90,7 @@ export async function publishPeaSkills(
     }
   }
   const skills = [
-    ...bundledPeaSkills.map((s) => {
-      const bytes = Buffer.from(`${s.content.trimEnd()}\n`);
-      return skillSnapshot("product", s.name, [{ path: "SKILL.md", bytes, sha256: hash(bytes) }]);
-    }),
+    ...bundled,
     ...[...personal].map(([name, files]) => skillSnapshot("skills", name, files)),
     ...packaged,
   ];
@@ -127,15 +117,7 @@ export async function publishPeaSkills(
       if (!destinations.has(name)) await rm(join(root, name), { recursive: true, force: true });
     await writeFile(join(root, receiptName), JSON.stringify(receipt));
   }
-  return {
-    skills,
-    revision: hash(
-      skills
-        .map((s) => `${s.key}:${signature(s.files)}`)
-        .sort()
-        .join("\n"),
-    ),
-  };
+  return { skills };
 }
 
 const signature = (files: readonly SkillFile[]) =>
