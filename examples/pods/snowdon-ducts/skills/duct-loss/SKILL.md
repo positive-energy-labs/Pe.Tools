@@ -20,7 +20,7 @@ You work with the Pod `snowdon-ducts`. Its keys: `script:@snowdon-ducts/src/Cens
 2. **Census.** Run `Census`. Report the systems, their element and fitting counts, and any duct warnings. If there are no duct systems, say the model does not suit this investigation.
 3. **Pick a run.** Select an element of one system (or let `InspectRun` take the largest) and run `InspectRun`. Report fittings with a loss parameter and fittings without. If none carry one, say that plainly: the sample may not store loss on its fittings.
 4. **Show.** Use `revit.context.lens` then `revit.context.show-elements` on the fitting ids so the person sees them. Capture the view when asked.
-5. **Experiment (optional).** Read `settings/checks.json` for the delta and markers. Run `CoefficientExperiment` on the copy. Report `before`, `readback`, and `applied`. If it says `refused` or `unavailable`, relay that; never fabricate a fixture and call it a sample defect.
+5. **Experiment (optional).** Read `settings/checks.json` for the markers. Run `CoefficientExperiment` on the copy with `permissionMode: NoTransaction`; it writes each duct's velocity and size into Comments. Report `changed`, `alreadyCurrent`, `applied` and the `sample` readbacks. If it says `refused` or `unavailable`, relay that; never fabricate a fixture and call it a sample defect.
 
 ## Adapting the Page
 

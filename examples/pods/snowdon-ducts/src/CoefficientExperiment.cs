@@ -1,9 +1,14 @@
 // MUTATES THE MODEL. Refuses unless the document title carries a sandbox marker (checks.json: sandboxTitleMarkers).
-// Picks the first discovered fitting that exposes a writable loss parameter, changes it by ExperimentDelta, and
-// reads it back from a fresh element lookup. When no fitting qualifies it reports "unavailable" and changes nothing.
+// The key keeps its historical name; the experiment is a copy-only annotation. For each duct it writes the computed
+// velocity (fpm) and calculated size into the built-in Comments parameter, then looks every duct up again and reports
+// how many Comments now hold the written text. Comments is writable on every duct, so this works on any sample.
+// The script owns its transaction (the Page requests NoTransaction).
 
 public sealed class CoefficientExperiment : PeScriptContainer
 {
+    public const int MaxDucts = 500;
+    public const string Prefix = "Pe: ";
+
     public override void Execute()
     {
         if (doc == null) { Result(new { error = "No active document." }); return; }
@@ -13,36 +18,61 @@ public sealed class CoefficientExperiment : PeScriptContainer
             return;
         }
 
-        var target = Probe.Fittings(doc)
-            .Select(fi => new { fi, p = Probe.LossParameter(fi) })
-            .FirstOrDefault(x => x.p != null && !x.p.IsReadOnly);
-        if (target == null)
+        var ducts = new FilteredElementCollector(doc).OfClass(typeof(Duct)).Cast<Duct>().Take(MaxDucts).ToList();
+        if (ducts.Count == 0)
         {
-            Result(new { unavailable = "No duct fitting in this document exposes a writable loss parameter. Nothing was changed." });
+            Result(new { unavailable = "This document has no ducts. Nothing was changed." });
             return;
         }
 
-        var id = target.fi.Id;
-        var name = target.p.Definition.Name;
-        var before = target.p.AsDouble();
-        using (var t = new Transaction(doc, "Snowdon coefficient experiment"))
+        var planned = new List<(ElementId id, string before, string text)>();
+        foreach (var d in ducts)
+        {
+            ThrowIfCancelled();
+            var comments = d.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS);
+            if (comments == null || comments.IsReadOnly) continue;
+            planned.Add((d.Id, comments.AsString() ?? "", Prefix + Describe(d)));
+        }
+
+        using (var t = new Transaction(doc, "Snowdon duct annotation experiment"))
         {
             t.Start();
-            target.p.Set(before + Probe.ExperimentDelta);
+            foreach (var p in planned)
+                if (p.before != p.text) doc.GetElement(p.id).get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS).Set(p.text);
             t.Commit();
         }
 
-        // Independent readback: look the element up again rather than trusting the parameter just set.
-        var after = doc.GetElement(id).LookupParameter(name)?.AsDouble();
+        // Independent readback: look each duct up again rather than trusting the parameter just set.
+        var changed = planned.Count(p =>
+            p.before != p.text &&
+            doc.GetElement(p.id).get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)?.AsString() == p.text);
+        var already = planned.Count(p => p.before == p.text);
+        var sample = planned.Take(3).Select(p => new
+        {
+            ductId = p.id.Value,
+            before = p.before,
+            readback = doc.GetElement(p.id).get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)?.AsString()
+        }).ToList();
+
         Result(new
         {
-            fittingId = id.Value,
-            fitting = Probe.NameOf(target.fi),
-            parameter = name,
-            before,
-            requested = before + Probe.ExperimentDelta,
-            readback = after,
-            applied = after.HasValue && System.Math.Abs(after.Value - (before + Probe.ExperimentDelta)) < 1e-9
+            parameter = "Comments",
+            examined = ducts.Count,
+            writable = planned.Count,
+            changed,
+            alreadyCurrent = already,
+            applied = planned.Count > 0 && changed + already == planned.Count,
+            sample
         });
+    }
+
+    private static string Describe(Duct d)
+    {
+        var size = d.get_Parameter(BuiltInParameter.RBS_CALCULATED_SIZE)?.AsString();
+        var v = d.get_Parameter(BuiltInParameter.RBS_VELOCITY);
+        var fpm = v != null && v.HasValue
+            ? UnitUtils.ConvertFromInternalUnits(v.AsDouble(), UnitTypeId.FeetPerMinute).ToString("0")
+            : null;
+        return $"{(string.IsNullOrEmpty(size) ? "size n/a" : size)}, {(fpm == null ? "velocity n/a" : fpm + " fpm")}";
     }
 }

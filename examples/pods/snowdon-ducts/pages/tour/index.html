@@ -28,7 +28,7 @@
     <button id="inspect" disabled>Inspect selected system</button>
     <button id="show" disabled>Show in Revit</button>
     <button id="capture" disabled>Capture view</button>
-    <button id="experiment" disabled>Coefficient experiment (copy only)</button>
+    <button id="experiment" disabled>Annotate ducts with velocity (copy only)</button>
   </div>
   <p id="status" class="note"></p>
 
@@ -47,7 +47,7 @@
 
   <h2>How loss is read</h2>
   <div class="illustration">
-    <p><strong>Illustration, not a reading.</strong> A fitting's pressure drop is its loss coefficient C times the velocity pressure of the flow through it: <code>&Delta;p = C &middot; &rho; v&sup2; / 2</code>. Doubling the flow quadruples the drop; changing C changes it in proportion. The experiment nudges C on one fitting and reads the value back; whether the model recomputes system totals is something you check in Revit.</p>
+    <p><strong>Illustration, not a reading.</strong> A fitting's pressure drop is its loss coefficient C times the velocity pressure of the flow through it: <code>&Delta;p = C &middot; &rho; v&sup2; / 2</code>. Doubling the flow quadruples the drop; changing C changes it in proportion. No fitting in the Snowdon sample exposes a writable C, so the experiment does not touch it: on a copy it writes each duct's computed velocity and size into that duct's Comments and reads them back, so you can see the numbers a drop would be built from.</p>
   </div>
 
   <h2>Shared notes</h2>
@@ -62,6 +62,12 @@ const KEYS = {
   census: "script:@snowdon-ducts/src/Census.cs",
   inspect: "script:@snowdon-ducts/src/InspectRun.cs",
   experiment: "script:@snowdon-ducts/src/CoefficientExperiment.cs",
+};
+// A script key answers the whole ScriptExecutionResult { status, data, ... }; the Page's rows are its data.
+const script = async (key, input) => {
+  const result = await pe.do(key, input);
+  if (result?.status !== "Succeeded") throw new Error(`${key} ${result?.status ?? "returned nothing"}`);
+  return result.data;
 };
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
@@ -126,7 +132,7 @@ async function busy(label, fn) {
 }
 
 $("census").onclick = () => busy("Reading census", async () => {
-  const reading = await pe.reading(KEYS.census, () => pe.do(KEYS.census, {}));
+  const reading = await pe.reading(KEYS.census, () => script(KEYS.census, {}));
   k.fire({ type: "census", reading });
 });
 $("systems").onclick = (ev) => {
@@ -135,7 +141,7 @@ $("systems").onclick = (ev) => {
 };
 $("inspect").onclick = () => busy("Inspecting", async () => {
   // InspectRun takes the selection's system, or the largest. Select an element of the chosen system in Revit first.
-  const reading = await pe.reading(KEYS.inspect, () => pe.do(KEYS.inspect, {}));
+  const reading = await pe.reading(KEYS.inspect, () => script(KEYS.inspect, {}));
   k.fire({ type: "run", reading });
 });
 const runIds = () => (k.state.run?.rows.fittings || []).map((f) => f.id);
@@ -151,12 +157,12 @@ $("experiment").onclick = () => busy("Running experiment", async () => {
   if (!armed) {
     // Two presses: the first arms, the second changes the bound document.
     armed = true;
-    $("experiment").textContent = "Confirm: change this copy";
+    $("experiment").textContent = "Confirm: write Comments on this copy";
     return;
   }
   armed = false;
-  $("experiment").textContent = "Coefficient experiment (copy only)";
-  const reading = await pe.reading(KEYS.experiment, () => pe.do(KEYS.experiment, { permissionMode: "NoTransaction" }));
+  $("experiment").textContent = "Annotate ducts with velocity (copy only)";
+  const reading = await pe.reading(KEYS.experiment, () => script(KEYS.experiment, { permissionMode: "NoTransaction" }));
   k.fire({ type: "experiment", reading });
 });
 $("save-note").onclick = () => {

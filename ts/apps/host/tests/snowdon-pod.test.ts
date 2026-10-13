@@ -11,6 +11,7 @@ import { join, relative } from "node:path";
 import { capturePackage, readPackage } from "../src/packages.ts";
 import { exportPod, importPod, readZip } from "../src/pod-transfer.ts";
 import { createHash } from "node:crypto";
+import { runInNewContext } from "node:vm";
 import { listPods } from "../src/settings.ts";
 
 const root = join(import.meta.dirname, "..", "..", "..", "..", "examples", "pods", "snowdon-ducts");
@@ -93,8 +94,8 @@ test("content carries no seed fingerprints, fixed model ids, recorded dates or c
 
 test("the Page invokes only the three canonical script keys and existing host operations", async () => {
   const page = await text("pages/tour/index.html");
-  expect(page).toContain('pe.do(KEYS.experiment, { permissionMode: "NoTransaction" })');
-  expect(page).toContain("pe.do(KEYS.census, {})");
+  expect(page).toContain('script(KEYS.experiment, { permissionMode: "NoTransaction" })');
+  expect(page).toContain("script(KEYS.census, {})");
   const keys = [...page.matchAll(/script:@snowdon-ducts\/[^"'\s]+/g)].map((m) => m[0]);
   expect(new Set(keys)).toEqual(
     new Set([
@@ -107,6 +108,79 @@ test("the Page invokes only the three canonical script keys and existing host op
   expect(new Set(ops)).toEqual(
     new Set(["revit.context.lens", "revit.context.show-elements", "revit.context.journal"]),
   );
+});
+
+// Runs the Page's own inline script against a fake DOM and a fake `pe` whose `do` answers exactly what pe.js answers
+// for a script key: row.result, the whole ScriptExecutionResult { status, data, ... } (pe.js `pe.do`).
+function runPage(html: string, scriptResult: (key: string) => unknown) {
+  const source = /<script>\n([\s\S]*?)<\/script>/.exec(html.slice(html.indexOf("</style>")))![1]!;
+  const els = new Map<string, Record<string, unknown>>();
+  const el = (id: string) => {
+    if (!els.has(id)) els.set(id, { id, textContent: "", innerHTML: "", disabled: false, dataset: {} });
+    return els.get(id)!;
+  };
+  const calls: string[] = [];
+  const pe = {
+    doc: null,
+    kernel: (reduce: (s: unknown, e: unknown) => unknown, base: unknown, draw: (s: unknown) => void) => {
+      const k = {
+        state: base,
+        fire: (e: unknown) => {
+          k.state = reduce(k.state, e);
+          draw(k.state);
+        },
+      };
+      return k;
+    },
+    describe: () => {},
+    state: async () => {},
+    target: async () => {},
+    do: async (key: string) => {
+      calls.push(key);
+      return scriptResult(key);
+    },
+    reading: async (source: string, run: () => Promise<unknown>) => ({ source, at: Date.now(), rows: await run() }),
+  };
+  runInNewContext(source, { document: { getElementById: el }, pe, setInterval: () => 0, Date, JSON, Number, String });
+  return { el, calls };
+}
+
+test("the Page draws a real-shaped successful census without throwing, and surfaces a failed one", async () => {
+  const html = await text("pages/tour/index.html");
+  const census = {
+    status: "Succeeded",
+    artifacts: [],
+    diagnostics: [],
+    data: {
+      document: "Snowdon copy",
+      revitVersion: "2025",
+      systemCount: 1,
+      listed: 1,
+      systems: [{ id: 7, name: "Supply 1", type: "Supply", elementCount: 4, fittingCount: 2, baseEquipment: null }],
+      ductWarnings: [],
+    },
+  };
+  const ok = runPage(html, () => census);
+  await (ok.el("census").onclick as () => Promise<void>)();
+  expect(ok.el("status").textContent).toBe("");
+  expect(ok.el("doc").textContent).toContain("Snowdon copy (Revit 2025)");
+  expect(ok.el("systems").innerHTML).toContain("Supply 1");
+  expect(ok.el("experiment").disabled).toBe(false);
+
+  const experiment = {
+    status: "Succeeded",
+    data: { parameter: "Comments", examined: 3, writable: 3, changed: 3, alreadyCurrent: 0, applied: true, sample: [] },
+  };
+  const exp = runPage(html, (key) => (key.endsWith("Census.cs") ? census : experiment));
+  await (exp.el("census").onclick as () => Promise<void>)();
+  const press = exp.el("experiment").onclick as () => Promise<void>;
+  await press(); // arms
+  await press(); // runs
+  expect(exp.el("status").textContent).toContain('"changed":3');
+
+  const failed = runPage(html, () => ({ status: "CompilationFailed", diagnostics: [] }));
+  await (failed.el("census").onclick as () => Promise<void>)();
+  expect(failed.el("status").textContent).toContain("CompilationFailed");
 });
 
 test("the skill loads: frontmatter has a name and a description free of the gray-matter trap", async () => {

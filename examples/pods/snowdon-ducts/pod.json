@@ -17,8 +17,8 @@
     },
     {
       "sourcePath": "src/CoefficientExperiment.cs",
-      "name": "Coefficient experiment",
-      "description": "Changes the model: on a disposable copy only, nudges one fitting's loss coefficient and reads the result back."
+      "name": "Duct annotation experiment",
+      "description": "Changes the model: on a disposable copy only, writes each duct's computed velocity and size into its Comments and reads them back."
     }
   ]
 }

@@ -11,7 +11,7 @@ Open the sample from your own licensed Revit installation (Revit's "Snowdon Towe
 1. Import this Pod (it arrives with the product), then open the Page `page:@snowdon-ducts/pages/tour`.
 2. Bind the Page to the copy with the chip in the corner.
 3. Press **Census**, choose a system, then **Inspect**. **Show in Revit** frames the elements in a 3D view; **Capture** keeps the picture.
-4. The experiment is guarded: it runs only on a document whose title contains `copy` or `sandbox` and prints before/after readings from an independent second read. If the model has no eligible fitting the Page says so; it never invents one.
+4. The experiment is guarded: it runs only on a document whose title contains `copy` or `sandbox` and writes each duct's computed velocity and size into its Comments, then looks the ducts up again and reports how many changed. Comments is always writable, so it works on any sample; the Snowdon fittings expose no writable loss parameter, which is why the experiment does not touch one.
 
 Everything the Page shows comes from a reading made this session. Teaching figures are labeled as illustrations.
 
