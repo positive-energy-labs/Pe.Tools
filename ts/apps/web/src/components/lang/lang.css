@@ -1,7 +1,5 @@
 /* Shared grammar: tones, planes, selection, the row, the control frame. A primitive's own CSS lives beside its tsx. */
-/* --head-h is re-derived in every density scope: a custom property's var() resolves where it is declared. */
-:root,
-[data-density] {
+:root {
   --head-h: calc(var(--item-h) * 5);
 }
 /* Tones: call sites declare state; the language owns its rendering. */

@@ -16,7 +16,6 @@ export const LAW_POINTERS = [
   ["orientation hides behind a mark", "lens.house law 3"],
   ["a stand-in announces itself", "lens.house law 8"],
   ["small type takes opt-in marks", "lens.house law 6"],
-  ["two registers", "base.css [data-density=dense]"],
   ["one control family", "lang.css control frame · --control-radius"],
   ["who runs it, as a mark", "lang/provider-mark.tsx · ProviderMark"],
   ["provenance rides with the value", "StateCellProps.grounding"],
