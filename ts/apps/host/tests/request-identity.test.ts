@@ -439,3 +439,59 @@ test("the actual router supplies the mutation method to the remote administratio
     ).toBe(200);
   expect(reached).toBe(2);
 });
+
+test("identity mints the caller: browser Referer is human, an actor header is nobody, a browser context is refused", async () => {
+  const browser = { ...local, origin: "http://127.0.0.1:5180", "sec-fetch-site": "same-origin" };
+  expect(
+    await readRequestIdentity(
+      { ...browser, referer: "http://127.0.0.1:5180/open" },
+      "/actions",
+      options,
+      "POST",
+    ),
+  ).toMatchObject({ caller: { kind: "human", via: "local" } });
+  expect(
+    await readRequestIdentity(
+      { ...local, "x-pe-action-actor": "human" },
+      "/actions",
+      options,
+      "POST",
+    ),
+  ).toMatchObject({ caller: { kind: "anonymous" } });
+  expect(
+    await readRequestIdentity(
+      { ...browser, referer: "http://127.0.0.1:5180/pages/todo/" },
+      "/actions",
+      options,
+      "POST",
+    ),
+  ).toMatchObject({ caller: { kind: "page", page: "page:@pages/todo" } });
+  expect(
+    await readRequestIdentity(
+      { ...browser, referer: "http://127.0.0.1:5180/open", "x-pe-context": "anything" },
+      "/actions",
+      options,
+      "POST",
+    ),
+  ).toMatchObject({ refusal: { code: "context.unknown" } });
+  expect(
+    await readRequestIdentity(
+      { ...local, "x-pe-context": "never-minted" },
+      "/actions",
+      options,
+      "POST",
+    ),
+  ).toMatchObject({ refusal: { code: "context.unknown" } });
+  expect(
+    await readRequestIdentity(
+      {
+        ...remote,
+        origin: "https://box.tailabc.ts.net",
+        referer: "https://box.tailabc.ts.net/chat",
+      },
+      "/actions",
+      options,
+      "POST",
+    ),
+  ).toMatchObject({ caller: { kind: "human", via: "tailnet", login: "operator@example.com" } });
+});

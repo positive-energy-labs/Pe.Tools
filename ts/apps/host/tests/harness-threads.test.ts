@@ -14,6 +14,7 @@ import type {
 import { emptyThreadHead } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/mcps/context";
 import { human } from "./callers.ts";
+import { admitCrossing, bindControl, onRevoke, Refused } from "../src/control.ts";
 import { createProviders } from "../src/harness/providers.ts";
 import {
   createHarnessThreads,
@@ -1425,4 +1426,146 @@ test("a harness that reads no embedded context gets each mention as a text line,
   );
   expect(blocksSeen(body)).toBeNull();
   await threads.close();
+});
+
+/* ── The head grant: doors 6, 7 and 8 (ADR 0017) ─────────────────────────────────────── */
+
+const T0 = Date.parse("2026-10-12T12:00:00.000Z");
+const at = (ms: number) => new Date(ms).toISOString();
+const yours = { kind: "open", ref: { session: "S1", openId: "A" } } as const;
+const peas = { kind: "open", ref: { session: "P", openId: "copy" } } as const;
+const peaOf = (thread: string): Caller => ({ kind: "pea", context: `ctx-${thread}`, thread });
+const onDoc = (ref: { session: string; openId: string }) => ({ kind: "document", ref }) as const;
+const crossing = (caller: Caller, ref: { session: string; openId: string }) => {
+  try {
+    return admitCrossing(caller, onDoc(ref), "/actions");
+  } catch (error) {
+    if (error instanceof Refused) return error.refusal.code;
+    throw error;
+  }
+};
+afterEach(() => bindControl({ heads: null, whose: () => "you" }));
+
+test("door 6: a human PUT on your open lifetime stamps rw; a move retires it; a named target never holds one", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(T0);
+  bindControl({ whose: (session) => (session === "P" ? "pea" : "you") });
+  const call = caller(host());
+  const id = "grant-door-6";
+  const set = await call("PUT", `/pe/scope/${id}`, { defaultTarget: yours, expectedRevision: 0 });
+  expect(set.status).toBe(200);
+  expect(set.json.head).toMatchObject({
+    revision: 1,
+    hostNow: at(T0),
+    grant: {
+      lifetime: yours.ref,
+      grantedAt: at(T0),
+      grantedVia: "local",
+      expiresAt: at(T0 + 60 * 60_000),
+      revoked: null,
+    },
+  });
+  const named = { kind: "named", session: "S1", address: "C:/Models/A.rvt" };
+  const moved = await call("PUT", `/pe/scope/${id}`, { defaultTarget: named, expectedRevision: 1 });
+  expect(moved.json.head).toMatchObject({ defaultTarget: named, grant: null });
+  const back = await call("PUT", `/pe/scope/${id}`, { defaultTarget: yours, expectedRevision: 2 });
+  expect(back.json.head.grant).not.toBeNull();
+  // Pea's own document needs no grant, so none is stamped.
+  const own = await call("PUT", `/pe/scope/${id}`, { defaultTarget: peas, expectedRevision: 3 });
+  expect(own.json.head.grant).toBeNull();
+  const cleared = await call("PUT", `/pe/scope/${id}`, {
+    defaultTarget: null,
+    expectedRevision: 4,
+  });
+  expect(cleared.json.head.grant).toBeNull();
+});
+
+test("door 6 for Pea: only its own thread, only Pea's documents; anonymous cannot write a head", async () => {
+  bindControl({ whose: (session) => (session === "P" ? "pea" : "you") });
+  const threads = host();
+  const call = caller(threads);
+  const id = "grant-door-6-pea";
+  threads.as = peaOf(id);
+  const refused = await call("PUT", "/pe/scope/self", {
+    defaultTarget: yours,
+    expectedRevision: 0,
+  });
+  expect([refused.status, refused.json.refusal.code]).toEqual([403, "grant.required"]);
+  const own = await call("PUT", "/pe/scope/self", { defaultTarget: peas, expectedRevision: 0 });
+  expect(own.json).toMatchObject({ ok: true, head: { defaultTarget: peas, grant: null } });
+  expect((await call("GET", "/pe/scope/self")).json).toMatchObject({
+    thread: id,
+    defaultTarget: peas,
+    revision: 1,
+    hostNow: expect.any(String),
+  });
+  const foreign = await call("PUT", "/pe/scope/someone-else", {
+    defaultTarget: null,
+    expectedRevision: 0,
+  });
+  expect([foreign.status, foreign.json.refusal.code]).toEqual([403, "context.foreign-thread"]);
+  threads.as = { kind: "anonymous" };
+  const anonymous = await call("PUT", `/pe/scope/${id}`, {
+    defaultTarget: null,
+    expectedRevision: 1,
+  });
+  expect([anonymous.status, anonymous.json.refusal.code]).toEqual([403, "context.missing"]);
+  expect((await call("GET", "/pe/scope/self")).status).toBe(404);
+});
+
+test("door 8: Pea cannot prompt; a human prompt renews rw from the host clock, then it expires", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(T0);
+  const threads = host();
+  bindControl({ heads: threads.heads.read });
+  const call = caller(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await call("PUT", `/pe/scope/${id}`, { defaultTarget: yours, expectedRevision: 0 });
+  threads.as = peaOf(id);
+  const self = await call("POST", `/pe/threads/${id}/prompt`, { text: "renew me" });
+  expect([self.status, self.json.refusal.code]).toEqual([403, "human.only"]);
+  expect(threads.heads.read(id).grant?.expiresAt).toBe(at(T0 + 60 * 60_000));
+  threads.as = human;
+  vi.setSystemTime(T0 + 30 * 60_000);
+  expect((await call("POST", `/pe/threads/${id}/prompt`, { text: "hello" })).status).toBe(200);
+  expect(threads.heads.read(id)).toMatchObject({
+    lastHumanMessageAt: at(T0 + 30 * 60_000),
+    grant: { grantedAt: at(T0), expiresAt: at(T0 + 90 * 60_000) },
+  });
+  vi.setSystemTime(T0 + 89 * 60_000);
+  expect(crossing(peaOf(id), yours.ref)).toMatchObject({ kind: "grant", thread: id });
+  vi.setSystemTime(T0 + 90 * 60_000);
+  expect(crossing(peaOf(id), yours.ref)).toBe("grant.expired");
+  await until(reader(threads), id, (b) => !b.running);
+  await threads.close();
+});
+
+test("door 7: revoke is human-only, keeps evidence, fires onRevoke, and only a fresh human PUT clears it", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(T0);
+  const threads = host();
+  bindControl({ heads: threads.heads.read });
+  const call = caller(threads);
+  const id = "grant-door-7";
+  await call("PUT", `/pe/scope/${id}`, { defaultTarget: yours, expectedRevision: 0 });
+  expect(crossing(peaOf(id), yours.ref)).toMatchObject({ kind: "grant" });
+  const fired: string[] = [];
+  const release = onRevoke((thread, grant) => fired.push(`${thread}@${grant.revoked?.at}`));
+  threads.as = peaOf(id);
+  const self = await call("POST", `/pe/scope/${id}/revoke`, {});
+  expect([self.status, self.json.refusal.code]).toEqual([403, "human.only"]);
+  threads.as = human;
+  vi.setSystemTime(T0 + 5 * 60_000);
+  const revoked = await call("POST", `/pe/scope/${id}/revoke`, {});
+  expect(revoked.json.grant).toMatchObject({ revoked: { at: at(T0 + 5 * 60_000) } });
+  expect(fired).toEqual([`${id}@${at(T0 + 5 * 60_000)}`]);
+  expect(crossing(peaOf(id), yours.ref)).toBe("grant.revoked");
+  // A human message does not revive a revoked grant; re-pointing the head does.
+  const renewed = await call("PUT", `/pe/scope/${id}`, {
+    defaultTarget: yours,
+    expectedRevision: revoked.json.revision,
+  });
+  expect(renewed.json.head.grant).toMatchObject({ revoked: null, grantedAt: at(T0 + 5 * 60_000) });
+  expect(crossing(peaOf(id), yours.ref)).toMatchObject({ kind: "grant" });
+  release();
 });

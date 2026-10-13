@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { Effect } from "effect";
+import { Context, Effect, Layer } from "effect";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -24,7 +24,16 @@ import { admitFamilyAction, readFamily, recoverFamilyAction } from "../src/famil
 import { documentMarks } from "../src/document-marks.ts";
 import { sdkEnvelope, sdkSessions } from "./native-receipt-fixture.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
-import { crossingOf } from "./callers.ts";
+import { crossingOf, human, pea } from "./callers.ts";
+import { HttpRouter } from "effect/unstable/http";
+import { z } from "zod";
+import { takeoffsRouteState, type Caller } from "@pe/agent-contracts";
+import type { RouteWorkspaceRegistration } from "@pe/runtime";
+import { withInvocationContext } from "@pe/mcps/context";
+import { makeCallRoute } from "../src/call-route.ts";
+import { RevitBridge } from "../src/bridge.ts";
+import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
+import { bindControl } from "../src/control.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -1872,4 +1881,105 @@ test("a Pea proposal on a consumed cell does not stale the plan", async () => {
     now,
   );
   resultOf(await env.admit("families.apply", apply, revision));
+});
+
+/* ── Doors 2 and 9: the minted caller, never a self-asserted actor (ADR 0017 D2) ─────────── */
+
+const doorRegistrations = [
+  {
+    spec: {
+      route: "door",
+      title: "Door",
+      description: "Caller proof",
+      schema: takeoffsRouteState.schema.extend({ count: z.number().int().default(0) }),
+      agentWriteMask: [["count"]],
+      commands: {},
+    },
+    handlers: {},
+  },
+] as unknown as RouteWorkspaceRegistration[];
+
+test("door 2: anonymous /actions is context.missing, a body actor is a strict parse error, and an actor header is ignored", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pe-door2-"));
+  const web = HttpRouter.toWebHandler(
+    makeCallRoute(
+      new ActionJournal(join(root, "journal.json")),
+      new TakeoffCaptures(join(root, "c")),
+      {
+        sdk: sdkSessions,
+      },
+    ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, {} as RevitBridge["Service"]))),
+    { disableLogger: true },
+  );
+  // The session is Pea's, so the grant passes and only eligibility can refuse.
+  bindControl({ whose: () => "pea" });
+  const admission = {
+    id: "door-2",
+    kind: "workflow",
+    key: "family.build",
+    destination: { kind: "document", ref: { session: "S1", openId: "A" } },
+    input: {},
+    bases: {},
+  };
+  const post = (as: Caller, body: unknown, headers: Record<string, string> = {}) =>
+    withInvocationContext({ caller: as }, async () => {
+      const response = await web.handler(
+        new Request("http://host/actions", {
+          method: "POST",
+          headers: { "content-type": "application/json", ...headers },
+          body: JSON.stringify(body),
+        }),
+        Context.empty() as never,
+      );
+      return { status: response.status, json: (await response.json()) as Record<string, any> };
+    });
+  try {
+    const anonymous = await post({ kind: "anonymous" }, admission);
+    expect([anonymous.status, anonymous.json.refusal?.code]).toEqual([403, "context.missing"]);
+    expect(anonymous.json.notDispatched).toBe(true);
+    const spoofed = await post(human, { ...admission, actor: "human" });
+    expect(spoofed.status).toBe(409);
+    expect(spoofed.json.error).toMatch(/actor/);
+    const header = await post(pea(), admission, { "x-pe-action-actor": "human" });
+    expect([header.status, header.json.refusal?.code]).toEqual([403, "human.only"]);
+    expect(header.json.refusal.reason).toContain("pea calls are refused");
+  } finally {
+    bindControl({ whose: () => "you" });
+    await web.dispose();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("door 9: route Work writes take their author from the caller; the /pe/agent prefix is gone", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pe-door9-"));
+  const app = createPeRoutes({
+    registrations: doorRegistrations,
+    store: fileRouteDocumentStore(join(root, "work")),
+    heads: { observe: () => () => {} },
+  });
+  const write = (as: Caller, path = "/pe/route-state/door/apply?work=w1", revision = 0) =>
+    withInvocationContext({ caller: as }, async () => {
+      const response = await app.fetch(
+        new Request(`http://host${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-pe-action-actor": "human" },
+          body: JSON.stringify({
+            expectedRevision: revision,
+            patches: [{ path: ["count"], value: 1 + revision }],
+          }),
+        }),
+      );
+      return { status: response.status, json: (await response.json()) as Record<string, any> };
+    });
+  try {
+    const anonymous = await write({ kind: "anonymous" });
+    expect([anonymous.status, anonymous.json.refusal?.code]).toEqual([403, "context.missing"]);
+    const page = await write({ kind: "page", page: "page:@pages/todo" });
+    expect([page.status, page.json.refusal?.code]).toEqual([403, "page.use-page-door"]);
+    expect((await write(pea(), "/pe/agent/route-state/door/apply?work=w1")).status).toBe(404);
+    expect((await write(human)).json).toMatchObject({ ok: true, revision: 1 });
+    expect((await write(pea(), undefined, 1)).json).toMatchObject({ ok: true, revision: 2 });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
