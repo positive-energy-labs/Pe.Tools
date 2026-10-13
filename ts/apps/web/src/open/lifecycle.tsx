@@ -1,6 +1,6 @@
 /**
  * The per-Revit lifecycle, one hook for the Running desk and the machine drawer: `useLifecycle`
- * returns the verbs (hr only when the SDK says `shape.reload === "hot"`, Open here, Stop) and the
+ * returns the verbs (hr only when the SDK says `shape.reload === "hot"`, and Stop) and the
  * `ArmingStrip` the armed verb opens, as two slots a `SessionRow` or `SessionCard` places. Every
  * verb is an `instances.*` semantic action; the SDK resolves the Revit from the selection (pid for
  * an icon-started Revit, id otherwise). Nothing is staged first (ADR 0016).
@@ -72,14 +72,11 @@ type Armed = "stop" | "hr" | null;
 export function useLifecycle({
   session,
   refusal,
-  onHere,
   hr = true,
 }: {
   session: MachineSession;
   /** Present, every verb refuses with it (a fixture). */
   refusal?: string | null;
-  /** Open here: make this Revit the launcher's target. Absent outside the Open route. */
-  onHere?: () => void;
   /** False where hr is not offered (the drawer and the tray keep it on the Running list). */
   hr?: boolean;
 }): { verbs: ReactNode; strip: ReactNode } {
@@ -115,11 +112,6 @@ export function useLifecycle({
   });
   const selector = selectorWords(row);
   const stopLabel = phase === "unresponsive" ? "force stop" : "stop";
-  const hereSays =
-    ownershipRefusal ??
-    (phase === "ready"
-      ? "make this Revit the launcher's target"
-      : `this Revit is ${phase}; it opens nothing until it answers`);
   const pid = pidOf(row);
 
   const verbs = (
@@ -136,17 +128,6 @@ export function useLifecycle({
           onClick={() => setArmed(armed === "hr" ? null : "hr")}
         >
           hr
-        </Button>
-      ) : null}
-      {onHere ? (
-        <Button
-          label="open here"
-          kind="framed"
-          reason={hereSays}
-          refusal={ownershipRefusal !== null || phase !== "ready" ? hereSays : null}
-          onClick={onHere}
-        >
-          open here
         </Button>
       ) : null}
       <Button

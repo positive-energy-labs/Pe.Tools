@@ -6,15 +6,14 @@
  * runs. The host footer closes it. Everything drawn is the host's one `Machine` reading.
  */
 import { useEffect, useState } from "react";
-import type { Machine, MachineSession, Reading } from "@pe/agent-contracts";
+import type { Machine, Reading } from "@pe/agent-contracts";
 
 import { Accordion } from "#/components/lang/accordion";
 import { Button } from "#/components/lang/button";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { PidChip } from "#/components/lang/process";
-import { SessionRow } from "#/components/lang/session";
 import { hostAdmin } from "#/host/machine";
-import { factsOf, useLifecycle } from "#/open/lifecycle";
+import { PatchBay, useBayReadings } from "#/open/bay";
 
 import {
   attention,
@@ -30,7 +29,6 @@ import {
   type GroupKey,
 } from "./model";
 import { PeaGroup } from "./pea";
-import { keyOf } from "./session";
 import { ShareGroup } from "./share";
 import { UpdateGroup } from "./update";
 import { SEED_REFUSAL } from "./use-machine";
@@ -39,15 +37,26 @@ export type Shell = "drawer" | "tray";
 
 type InstallPrompt = Event & { prompt: () => Promise<void> };
 
-function RevitRow({ session, refusal }: { session: MachineSession; refusal: string | null }) {
-  const { verbs, strip } = useLifecycle({ session, refusal, hr: false });
+/** The Revit group: the patch bay, lanes stacked, over the same machine the route draws. */
+function RevitDesk({
+  machine,
+  fixture,
+  refusal,
+}: {
+  machine: Machine;
+  fixture: boolean;
+  refusal: string | null;
+}) {
+  const { rows, threads, loading } = useBayReadings(machine, fixture);
   return (
-    <SessionRow
-      session={session}
-      facts={factsOf(session)}
-      anchor={keyOf(session)}
-      verbs={verbs}
-      strip={strip}
+    <PatchBay
+      machine={machine}
+      loading={loading}
+      rows={rows}
+      threads={threads}
+      fixture={fixture}
+      layout="stack"
+      refusal={refusal}
     />
   );
 }
@@ -226,16 +235,7 @@ export function MachineBody({
             label: "Revit",
             state: revit.text,
             tone: revit.tone,
-            body:
-              machine.revit.sessions === null ? (
-                <span data-tone="caution">The Revit census has not been read.</span>
-              ) : machine.revit.sessions.length ? (
-                machine.revit.sessions.map((session) => (
-                  <RevitRow key={keyOf(session)} session={session} refusal={refusal} />
-                ))
-              ) : (
-                <span className="text-ink-2">No Revit is running. Start one from Open.</span>
-              ),
+            body: <RevitDesk machine={machine} fixture={fixture} refusal={refusal} />,
           },
           {
             key: "update",

@@ -498,3 +498,6 @@ tr.dl-row[data-active]::before {
   pointer-events: auto;
   white-space: nowrap;
 }
+.dl-connector-label[data-before] {
+  transform: translate(-100%, -50%);
+}

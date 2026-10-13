@@ -247,7 +247,9 @@ export function Connectors({
             key={link.key}
             className="dl-connector-label"
             data-tone={link.tone}
-            style={{ left: mid.x, top: mid.y }}
+            // In the gutter the label hangs left of the line, so it never leaves the container.
+            data-before={layout === "stack" ? "" : undefined}
+            style={{ left: layout === "stack" ? mid.x - 6 : mid.x, top: mid.y }}
           >
             {link.label}
           </span>

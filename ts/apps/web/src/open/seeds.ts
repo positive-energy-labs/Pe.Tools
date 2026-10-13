@@ -4,7 +4,14 @@
  * and the design-system specimen all draw these. A fixture is a `Reading<Machine>` because the
  * honest gap (the host went away) is a reading state, not a field.
  */
-import type { Machine, MachineSession, Reading, Seed } from "@pe/agent-contracts";
+import {
+  emptyThreadLifecycle,
+  type HarnessThreadSummary,
+  type Machine,
+  type MachineSession,
+  type Reading,
+  type Seed,
+} from "@pe/agent-contracts";
 import type {
   DocumentInfo,
   RecentDocument,
@@ -391,8 +398,126 @@ const HANDOFF = withUpdate(
   },
 );
 
+/* ── The patch bay's world: one person's Revit, two of Pea's, recents from 2022 to 2027 ─────── */
+
+const PEA_WORK = "C:\\Users\\demo\\AppData\\Local\\Positive Energy\\Pe.Tools\\pea\\work";
+const HOSPITAL = "C:\\Projects\\Hospital\\Hospital-MEP_kaitp.rvt";
+const SD_DIFFUSER = "C:\\Families\\SD-Diffuser-24x24.rfa";
+const HCB = "C:\\Families\\HCB-48.rfa";
+const CHADDS =
+  "cld://US/{c0ffee00-0000-4000-8000-000000000001}p/{c0ffee00-0000-4000-8000-000000000002}Chadds-Ford-Coord.rvt";
+
+/** The person's own Revit 2025, started from its icon: Hospital-MEP unsaved, a family beside it. */
+export const BAY_YOURS_25: MachineSession = {
+  row: {
+    case: "observed-active",
+    execution: { allowed: true, code: null, detail: null },
+    year: 2025,
+    observedAtUtc: AT,
+    shape: shape({}),
+    process: { executable: exe(2025), pid: 18244, processStartUtc: STARTED },
+    bridge: { bridge: "answering", sessionDescriptor: null },
+  },
+  attachment: {
+    session: "bridge-18244",
+    pid: 18244,
+    processStartUtcUnixMs: Date.parse(STARTED),
+    documents: null,
+  },
+  documents: [
+    {
+      isActive: true,
+      isFamily: false,
+      isModified: true,
+      openId: "18244-hospital",
+      path: HOSPITAL,
+      sessionId: "18244",
+      title: "Hospital-MEP_kaitp.rvt",
+      window: null,
+      persistence: null,
+    },
+    {
+      isActive: false,
+      isFamily: true,
+      isModified: false,
+      openId: "18244-sd",
+      path: SD_DIFFUSER,
+      sessionId: "18244",
+      title: "SD-Diffuser-24x24.rfa",
+      window: null,
+      persistence: null,
+    },
+  ],
+  documentsLeg: read,
+};
+
+const peaSession = (
+  id: string,
+  year: number,
+  pid: number,
+  documents: DocumentInfo[],
+): MachineSession => ({
+  row: {
+    case: "controlled-active",
+    execution: { allowed: true, code: null, detail: null },
+    id,
+    year,
+    detail: "",
+    dialogs: null,
+    observedAtUtc: AT,
+    origin: "Pe.Tools Open",
+    project: null,
+    worktree: "C:\\Users\\demo\\AppData\\Local\\Positive Energy\\Pe.Tools",
+    shape: shape({ posture: "background" }),
+    process: { executable: exe(year), pid, processStartUtc: STARTED },
+    receipt: {
+      payload: "installed",
+      generationRoot: `${REGISTRY}\\installed`,
+      receiptPath: `${REGISTRY}\\sessions\\${id}.json`,
+    },
+    bridge: {
+      bridge: "ready",
+      documents,
+      modal: null,
+      privateBytes: null,
+      queue: null,
+      sessionDescriptor: null,
+      unresponsive: false,
+    },
+  },
+  attachment: {
+    session: `bridge-${pid}`,
+    pid,
+    processStartUtcUnixMs: Date.parse(STARTED),
+    documents: null,
+  },
+  documents,
+  documentsLeg: read,
+});
+
+/** Pea's background Revit 2025, mid-job on its own copy of Hospital-MEP. */
+export const BAY_PEA_25 = peaSession("pea-25-schedules", 2025, 22910, [
+  doc("Hospital-MEP_kaitp.rvt", `${PEA_WORK}\\7f3a\\Hospital-MEP_kaitp.rvt`, {
+    openId: "22910-copy",
+    isActive: true,
+    isModified: true,
+  }),
+]);
+
+/** Pea's background Revit 2026, its job done, holding the family it built. */
+const BAY_PEA_26 = peaSession("pea-26-hcb", 2026, 23377, [
+  doc("HCB-48.rfa", HCB, { openId: "23377-hcb", isActive: true, isFamily: true }),
+]);
+
+const BAY_SESSIONS = [BAY_YOURS_25, BAY_PEA_25, BAY_PEA_26];
+
 /** Every machine moment the surfaces must draw, by name. */
 export const MACHINE_SEEDS = {
+  "patch-bay": ready(
+    base({
+      revit: { years: [2024, 2025, 2026], sessions: BAY_SESSIONS, unclassifiedAttachments: [] },
+    }),
+  ),
   "controlled-hot": ready(
     base({
       revit: { years: [2024, 2025, 2026], sessions: [CHECKOUT_HOT], unclassifiedAttachments: [] },
@@ -460,14 +585,94 @@ export const RECENTS = {
   },
 };
 
+/** The patch bay's recents: 2022 to 2027, local, UNC and cloud, two held by Revits now. */
+export const BAY_RECENTS = {
+  result: {
+    recents: [
+      recent("Hospital-MEP_kaitp.rvt", HOSPITAL, 2025, 2025),
+      recent("Clinic-Fitout.rvt", "C:\\Projects\\Clinic\\Clinic-Fitout.rvt", 2025, 2023),
+      recent("Chadds-Ford-Coord.rvt", CHADDS, 2025, 2025, {
+        region: "US",
+        projectGuid: "c0ffee00-0000-4000-8000-000000000001",
+        modelGuid: "c0ffee00-0000-4000-8000-000000000002",
+      }),
+      recent("HCB-48.rfa", HCB, 2026, 2026),
+      recent("SD-Diffuser-24x24.rfa", SD_DIFFUSER, 2025, 2025),
+      recent("Library-Mech.rvt", "C:\\Projects\\Library\\Library-Mech.rvt", 2024, 2024),
+      recent(
+        "Warehouse-Retrofit.rvt",
+        "C:\\Projects\\Warehouse\\Warehouse-Retrofit.rvt",
+        2024,
+        2022,
+      ),
+      recent("Tower-B-MEP.rvt", "cld://US/{t0b0}p/{mep}Tower-B-MEP.rvt", 2026, 2026),
+      recent("Stadium-Concourse.rvt", "cld://US/{s7ad}p/{con}Stadium-Concourse.rvt", 2026, 2027),
+      recent("Office Fitout.rvt", "\\\\fs01\\jobs\\2219\\Office Fitout.rvt", 2025, null, {
+        savedYearFailure: "file header unreadable",
+      }),
+    ],
+  },
+};
+
+const thread = (
+  id: string,
+  title: string,
+  ref: { session: string; openId: string },
+  activity: HarnessThreadSummary["activity"],
+  updatedAt: string,
+): HarnessThreadSummary => ({
+  id,
+  harness: "claude",
+  providerId: "claude",
+  providerName: "Claude",
+  title,
+  createdAt: STARTED,
+  updatedAt,
+  modelId: null,
+  lastSeq: activity.lastSeq,
+  head: { defaultTarget: { kind: "open", ref }, revision: 3, displayLabel: title },
+  lifecycle: emptyThreadLifecycle(),
+  activity,
+});
+
+/** The thread list the bay reads in a fixture: one grant on the person's document, two Pea jobs. */
+export const BAY_THREADS: HarnessThreadSummary[] = [
+  thread(
+    "t-retag",
+    "Retag level 2 diffusers",
+    { session: "bridge-18244", openId: "18244-hospital" },
+    { state: "idle", pending: 0, lastSeq: 41, message: "12 tags written · receipt r-0912" },
+    "2026-10-08T16:48:00.000Z",
+  ),
+  thread(
+    "t-schedules",
+    "Schedule cleanup L1-L4",
+    { session: "bridge-22910", openId: "22910-copy" },
+    { state: "running", pending: 0, lastSeq: 88, message: "Renaming schedule fields 37/140" },
+    "2026-10-08T17:11:30.000Z",
+  ),
+  thread(
+    "t-hcb",
+    "Build HCB family",
+    { session: "bridge-23377", openId: "23377-hcb" },
+    {
+      state: "idle",
+      pending: 0,
+      lastSeq: 120,
+      message: "22 parameters, 4 connectors, 3 views checked",
+    },
+    "2026-10-08T16:20:00.000Z",
+  ),
+];
+
 /** One seed per action key: `refresh` is the only route-level action. */
 export const OPEN_SEEDS: Record<"refresh", Seed<object, OpenReading, object>> = {
   refresh: {
-    title: "three Revits, a blocked update",
+    title: "the patch bay: your Revit 2025, two of Pea's, recents 2022 to 2027",
     work: {},
     readings: {
-      machine: (MACHINE_SEEDS["blocked-plan"] as { observation: Machine }).observation,
-      recents: RECENTS,
+      machine: (MACHINE_SEEDS["patch-bay"] as { observation: Machine }).observation,
+      recents: BAY_RECENTS,
     },
     page: {},
   },

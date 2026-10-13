@@ -5,7 +5,8 @@
  * shape in the foot). Both take the verbs and the arming strip as slots (`useLifecycle` in
  * `open/lifecycle.tsx` makes them), so the kit knows nothing of the instances Work. Anchors for a
  * `Connectors` overlay: the card and the row carry `data-key` = `anchor` (the session's key), each
- * document row `doc:<openId>`. A desk adds its own rows (a free socket) through `children`.
+ * document row `doc:<openId>`. A desk adds its own rows (a free socket) through `children`, and may
+ * draw each document itself through `documentRow` (a `HeldRow` with verbs and a strip).
  */
 import type { ReactNode } from "react";
 import type { MachineSession } from "@pe/agent-contracts";
@@ -20,6 +21,8 @@ import "./lang.css";
 
 type Phase = "ready" | "booting" | "no add-in" | "unresponsive" | "gone" | "failed";
 
+export type SessionDocument = NonNullable<MachineSession["documents"]>[number];
+
 /** What the kit reads of a session; the machine layer derives it from the SDK row once. */
 export interface SessionFacts {
   year: number;
@@ -31,6 +34,8 @@ export interface SessionFacts {
   custody: "controlled" | "observed";
   /** A modal dialog is open in it. */
   dialog: boolean;
+  /** Pea's background Revit; absent, the person's own. */
+  whose?: "pea";
 }
 
 const CUSTODY_SAYS = {
@@ -40,15 +45,15 @@ const CUSTODY_SAYS = {
 
 const ICON_STARTED = "started from the Revit icon";
 
-const persistenceOf = (document: NonNullable<MachineSession["documents"]>[number]) =>
+const persistenceOf = (document: SessionDocument) =>
   document.persistence === null
     ? "persistence unknown"
     : document.persistence === "cloud"
       ? "cloud"
       : "local";
 
-const docKey = (document: NonNullable<MachineSession["documents"]>[number]) =>
-  `doc:${document.openId ?? document.path}`;
+/** The `Connectors` anchor of one held document. */
+export const docKey = (document: SessionDocument) => `doc:${document.openId ?? document.path}`;
 
 function shapeWords(session: MachineSession) {
   const shape = session.row.shape;
@@ -69,6 +74,9 @@ function PhaseWord({ facts }: { facts: SessionFacts }) {
   );
 }
 
+const titleOf = (facts: SessionFacts) =>
+  facts.whose === "pea" ? `Pea's Revit ${facts.year}` : `Revit ${facts.year}`;
+
 interface SessionViewProps {
   session: MachineSession;
   facts: SessionFacts;
@@ -86,10 +94,10 @@ export function SessionRow({ session, facts, anchor, verbs, strip }: SessionView
   const active = documents?.find((document) => document.isActive) ?? documents?.[0];
   const words = shapeWords(session);
   return (
-    <div className="flex flex-col" data-key={anchor} aria-label={`Revit ${facts.year}`}>
+    <div className="flex flex-col" data-key={anchor} aria-label={titleOf(facts)}>
       <Row
         lines={2}
-        label={`Revit ${facts.year}`}
+        label={<span data-tone={facts.whose}>{titleOf(facts)}</span>}
         aside={facts.name ? <span className="face-mono">{facts.name}</span> : ICON_STARTED}
         meta={
           <>
@@ -116,6 +124,39 @@ export function SessionRow({ session, facts, anchor, verbs, strip }: SessionView
   );
 }
 
+/** A held document as a desk card's row: the cable lands on it; a desk adds verbs and a strip. */
+export function HeldRow({
+  document,
+  active,
+  verbs,
+  strip,
+  onClick,
+}: {
+  document: SessionDocument;
+  /** The row a cable was pressed on (not Revit's active document, which is its own mark). */
+  active?: boolean;
+  verbs?: ReactNode;
+  strip?: ReactNode;
+  onClick?: () => void;
+}) {
+  return (
+    <>
+      <Row
+        data-key={docKey(document)}
+        active={document.isActive}
+        selected={active}
+        label={document.title ?? document.path}
+        aside={document.isModified ? "unsaved" : undefined}
+        meta={persistenceOf(document)}
+        actions={verbs}
+        title={`${document.path ?? ""}${document.isModified ? " · unsaved work" : ""}`}
+        onClick={onClick}
+      />
+      {strip}
+    </>
+  );
+}
+
 /** A desk's Revit: the frame is the socket, each document a row the cables land on. */
 export function SessionCard({
   session,
@@ -123,16 +164,23 @@ export function SessionCard({
   anchor,
   verbs,
   strip,
+  documentRow,
   children,
-}: SessionViewProps & { children?: ReactNode }) {
+}: SessionViewProps & {
+  /** Draw one held document (a `HeldRow` with the desk's verbs); absent, the plain row. */
+  documentRow?: (document: SessionDocument) => ReactNode;
+  children?: ReactNode;
+}) {
   const documents = session.documents;
   return (
     <ArtifactFrame
       data-key={anchor}
-      label={`Revit ${facts.year} ${facts.name ?? ICON_STARTED}`}
+      label={`${titleOf(facts)} ${facts.name ?? ICON_STARTED}`}
       head={
         <>
-          <span className="t-small t-upper">Revit {facts.year}</span>
+          <span className="t-small t-upper" data-tone={facts.whose}>
+            {titleOf(facts)}
+          </span>
           <PhaseWord facts={facts} />
         </>
       }
@@ -158,17 +206,15 @@ export function SessionCard({
             }
           />
         ) : (
-          documents.map((document) => (
-            <Row
-              key={docKey(document)}
-              data-key={docKey(document)}
-              active={document.isActive}
-              label={document.title ?? document.path}
-              aside={document.isModified ? "unsaved" : undefined}
-              meta={persistenceOf(document)}
-              title={`${document.path ?? ""}${document.isModified ? " · unsaved work" : ""}`}
-            />
-          ))
+          documents.map((document) =>
+            documentRow ? (
+              <div key={docKey(document)} className="contents">
+                {documentRow(document)}
+              </div>
+            ) : (
+              <HeldRow key={docKey(document)} document={document} />
+            ),
+          )
         )}
         {children}
       </div>

@@ -41,6 +41,9 @@ export interface TableFrameProps<Row extends RowData> {
   /** Route-owned filters narrowing the rows before the table sees them: one chip each. Present
    * (even empty), the box reserves its line, so a chip appearing never moves the grid. */
   chips?: { label: string; onClear: () => void }[];
+  /** Route-owned controls at the head of the filters band (a source switcher, a year pick) that
+   * write the same query the box shows as chips: one state, two inputs. */
+  filters?: ReactNode;
   modes?: ReactNode;
   actions?: ReactNode;
   /** Present, the strip offers select-all over the shown rows. */
@@ -82,6 +85,7 @@ export function TableFrame<Row extends RowData>({
   query,
   command,
   chips,
+  filters,
   modes,
   actions,
   selection,
@@ -102,6 +106,7 @@ export function TableFrame<Row extends RowData>({
     query !== undefined ||
     command !== undefined ||
     chips !== undefined ||
+    filters !== undefined ||
     conditioned ||
     Boolean(state.query);
   return (
@@ -149,7 +154,11 @@ export function TableFrame<Row extends RowData>({
       }
     >
       {boxed && (
-        <div data-slot="table-filters" className="flex shrink-0 items-center px-2 hairline-b">
+        <div
+          data-slot="table-filters"
+          className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-px px-2 hairline-b"
+        >
+          {filters}
           <QueryBox
             vocabulary={query ?? columnVocabulary(rows, visibleColumns, state)}
             state={state}

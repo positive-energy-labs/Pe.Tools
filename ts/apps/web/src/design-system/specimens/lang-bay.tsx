@@ -11,7 +11,7 @@ import { Button } from "#/components/lang/button";
 import { Connectors, type Connection } from "#/components/lang/connector";
 import { PidChip } from "#/components/lang/process";
 import { Row } from "#/components/lang/row";
-import { SessionCard, SessionRow, type SessionFacts } from "#/components/lang/session";
+import { HeldRow, SessionCard, SessionRow, type SessionFacts } from "#/components/lang/session";
 import type { QueryCommand, QueryVocabulary } from "#/components/master-table/model";
 import { QueryBox } from "#/components/master-table/query";
 import { useTableState } from "#/components/master-table/view";
@@ -269,6 +269,17 @@ export function LangBaySpecimens() {
               facts={facts({ year: 2024, name: null, pid: 2402, custody: "observed" })}
               anchor="card:pid:2402"
               verbs={fixtureVerbs}
+              documentRow={(document) => (
+                <HeldRow
+                  document={document}
+                  active
+                  verbs={
+                    <Button label="close" kind="framed" refusal="fixture: no host">
+                      close
+                    </Button>
+                  }
+                />
+              )}
             >
               <Row label="patch a document here" refusal="fixture: pick a row in the table" />
             </SessionCard>

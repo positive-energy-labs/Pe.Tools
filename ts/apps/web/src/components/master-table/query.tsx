@@ -376,11 +376,16 @@ export function QueryBox({
         onFocus={() => setOpen(true)}
         onClick={() => setOpen(true)}
         onBlur={() => setOpen(false)}
+        // Enter on an empty word after the arrow runs the command. Taken in the capture phase: the
+        // open list owns this input's keys through a native listener that stops propagation, so a
+        // bubble-phase handler would never hear it while tokens are still offered.
+        onKeyDownCapture={(event) => {
+          if (event.key !== "Enter" || !runs) return;
+          event.preventDefault();
+          event.stopPropagation();
+          command!.onCommit();
+        }}
         onKeyDown={(event) => {
-          if (event.key === "Enter" && runs) {
-            event.preventDefault();
-            return command!.onCommit();
-          }
           // With the list closed, Escape still clears the word, then drops the command.
           if (event.key === "Escape" && armed && !open)
             return draft === "" ? command!.onArmed(false) : onDraft("");

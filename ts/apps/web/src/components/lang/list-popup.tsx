@@ -230,6 +230,8 @@ type PopupFrameProps = {
   atCaret?: boolean;
   side?: "top" | "bottom";
   align?: "start" | "end";
+  /** A working surface over the page (the composer's patch bay), not a list: wider than rows. */
+  wide?: boolean;
 };
 
 /** The one popup surface: positioned by Base UI, drawn by the kit. */
@@ -241,6 +243,7 @@ export function PopupFrame({
   atCaret,
   side = "bottom",
   align = "start",
+  wide,
 }: PopupFrameProps) {
   return (
     <Popover.Portal>
@@ -259,7 +262,7 @@ export function PopupFrame({
           data-surface="artifact"
           // A caret menu holds one width while its query narrows it; a field's suggestions match
           // the field; a triggered list is as wide as its rows.
-          className={`block overflow-hidden p-1 text-ink float-surface ${atCaret ? "w-[min(28rem,var(--available-width))]" : owned ? "w-(--anchor-width) min-w-48" : "min-w-48 max-w-[min(36rem,var(--available-width))]"}`}
+          className={`block overflow-hidden p-1 text-ink float-surface ${wide ? "w-[min(52rem,var(--available-width))]" : atCaret ? "w-[min(28rem,var(--available-width))]" : owned ? "w-(--anchor-width) min-w-48" : "min-w-48 max-w-[min(36rem,var(--available-width))]"}`}
         >
           {children}
         </Popover.Popup>
