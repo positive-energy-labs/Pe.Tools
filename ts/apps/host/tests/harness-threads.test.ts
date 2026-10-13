@@ -1387,7 +1387,7 @@ const docMention = {
   takenAt: "2026-10-12T12:00:00.000Z",
 };
 const skillMention = {
-  key: "skill:build-pod",
+  key: "skill:@product/skills/build-pod",
   kind: "skill",
   title: "build-pod",
   facts: { description: "Build a Pod.", needs: "nothing", mutates: false },
@@ -1435,7 +1435,7 @@ test("mentions reach the harness as one pe:// JSON resource each, after the text
     },
     {
       type: "resource",
-      uri: "pe://skill:build-pod",
+      uri: "pe://skill:@product/skills/build-pod",
       mimeType: "application/json",
       text: JSON.stringify(skillMention),
     },

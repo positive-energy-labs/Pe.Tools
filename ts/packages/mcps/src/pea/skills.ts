@@ -1,4 +1,3 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { productIdentity } from "@pe/host-contracts/contracts";
 import { userDocumentsPath } from "@pe/host-contracts/product-paths";
@@ -9,6 +8,23 @@ export interface BundledPeaSkill {
 }
 
 export const bundledPeaSkills: readonly BundledPeaSkill[] = [
+  {
+    name: "make-page",
+    content: String.raw`---
+name: make-page
+description: Make or adapt an interactive Pe.Tools Page. Use when the user asks for an interactive Page, a bound HTML tool, or a portable Pod containing it.
+---
+
+# Make a Page
+
+1. Discover existing Pages, scripts, skills and members with pe_find. Read their canonical keys with pe_read before adapting them. Use the catalog's openUrl; package folders are local locators, never identity.
+2. Author arbitrary HTML in a scratch Pages/<slug>/index.html or a Pod's pages/<page>/index.html. Include /pages/pe.js. Consult the host Page library list at /pe/page-libraries for its typed doors and staged browser libraries.
+3. Use pe.target(), pe.read(key), pe.do(key, input), pe.script(path), pe.describe() and shared Page state. Keep the host Bind chip. Never choose Revit session/document headers, imitate Pea, or hide a refusal. An unbound Page must ask for a binding.
+4. script:@<manifest-id>/src/File.cs selects the admitted source file. member:@<manifest-id>/settings/file.json is data and cannot execute. Pea reads a Page through pe_read, and appends an event or requests its own pinned binding through pe_do; the Page's action door belongs to the Page.
+5. Read actual observations before presenting model claims. Label illustrations and stale observations. After an authorized edit, obtain an independent reading and its receipt.
+6. Share a scratch Page through op:pod.promote, or adapt an installed Pod under a distinct manifest id. Export with op:pod.export and import with op:pod.import. These archive doors need no Revit. Keep authored support files; binding authority and runtime output never travel.
+`,
+  },
   {
     name: "survey-revit-model",
     content: String.raw`---
@@ -211,15 +227,15 @@ The user supplies intent and ideas; you handle the code. Nothing that does not c
 
 ## What a Pod is
 
-A Pod is one folder under Documents/Pe.Tools/Pods/<folder>/ holding pod.json and any of src/ (scripts), settings/ (JSON members and fragments), assets/, and output/ (runs, never published). pod.json holds schemaVersion, id, name, version, description, and optional script entrypoints; nothing else. Libraries offer operations for JSON members; do not bind a JSON file to an operation in the manifest. A folder without pod.json is not a Pod.
+A Pod is one folder under Documents/Pe.Tools/Pods/<folder>/ holding pod.json and authored source, guides, settings, assets, Pages and skills. The host admits one bounded membership set; runtime/build debris and binding authority never travel. pod.json holds schemaVersion, id, name, version, description, and optional script entrypoints; nothing else. Libraries offer operations for JSON members; do not bind a JSON file to an operation in the manifest. A folder without pod.json is not a Pod.
 
 ## Identity: three facts
 
 - The folder path is an address. Renaming or moving it does not change identity. Use the discovered folder when executing; never derive it from the manifest id.
-- The pod.json id names the lineage. Different local copies and versions can share it.
+- The pod.json id names the package. Conflicting installed ids refuse; give an adapted derivative a distinct id.
 - Each member's SHA-256 identifies its exact bytes. It is derived on read, never stored. The human version is a label, not an update policy.
 
-Address a member as { pod: <id>, path: <relative path> } everywhere.
+Canonical keys are script:@<id>/src/File.cs, page:@<id>/pages/<page>, skill:@<id>/skills/<skill>, and member:@<id>/settings/file.json. sourcePath is script identity; no entrypoint id or folder alias survives. Address operation inputs as { pod: <id>, path: <relative path> }. Members are read/mention-only. Other admitted support files remain readable package members.
 
 ## Compose, share, and adapt
 
@@ -239,9 +255,9 @@ Every apply and every entrypoint run writes output/<runId>/receipt.json in the p
 
 ## Every entrypoint is a button
 
-A declared entrypoint appears in Revit's Do palette, on the Scripts tab, with two actions: run safe, where document changes are discarded, and run full, where they are kept. The palette rebuilds its list each time it is summoned, so a new entrypoint appears without restarting Revit. It runs in-process on the Revit lane, so the button still works when Pea is closed and the host is disconnected.
+A declared entrypoint appears in Revit's Do palette, on the Scripts tab, with two actions: run safe, where document changes are discarded, and run full, where they are kept. The palette rebuilds its list each time it is summoned, so a new entrypoint appears without restarting Revit. It runs in-process on the Revit lane using the host-admitted frozen input; unavailable host admission refuses with its reason.
 
-The entrypoint name and description in pod.json are the button label and its subtitle, and the Pod name is the filter pill. Write all three for the practitioner who presses the button, not for yourself. An entrypoint with no name shows its raw id. A Pod whose pod.json is invalid does not appear on the tab at all, and the user cannot see why from Revit, so validate the manifest before you hand it over.
+The entrypoint name and description in pod.json are the button label and its subtitle, and the Pod name is the filter pill. Write all three for the practitioner who presses the button, not for yourself. An entrypoint with no name shows its sourcePath. A Pod whose pod.json is invalid does not appear on the tab at all, and the user cannot see why from Revit, so validate the manifest before you hand it over.
 
 A Pod is not a compiled add-in. The ladder is: a script proves the idea, a declared entrypoint makes it a button, and a typed host operation is the promotion after that. The last rung is a repo change and an add-in rebuild, not session work; say so when the user asks for it.
 
@@ -442,44 +458,11 @@ export function resolvePeaSkillPaths(options: PeaProductHomeOptions = {}): strin
   return [path.join(home, peaStandardSkillsRoot), path.join(home, peaClaudeSkillsRoot)];
 }
 
-export interface MaterializedPeaSkill {
-  name: string;
-  path: string;
-  status: "created" | "updated" | "unchanged";
-}
-
-/** Writes every bundled skill under each harness root; retires the product's former names there. */
-export async function materializeBundledPeaSkills(
-  options: PeaProductHomeOptions = {},
-): Promise<MaterializedPeaSkill[]> {
-  const materialized: MaterializedPeaSkill[] = [];
-  for (const skillsRoot of resolvePeaSkillPaths(options)) {
-    await mkdir(skillsRoot, { recursive: true });
-    for (const name of retiredPeaSkillNames) {
-      if (bundledPeaSkills.some((skill) => skill.name === name))
-        throw new Error(`Pea skill '${name}' is both bundled and retired.`);
-      await rm(path.join(skillsRoot, name), { recursive: true, force: true });
-    }
-    for (const skill of bundledPeaSkills) {
-      const skillPath = path.join(skillsRoot, skill.name, "SKILL.md");
-      await mkdir(path.dirname(skillPath), { recursive: true });
-      const content = `${skill.content.trimEnd()}\n`;
-      const existing = await readExisting(skillPath);
-      const status = existing == null ? "created" : existing === content ? "unchanged" : "updated";
-      if (status !== "unchanged") await writeFile(skillPath, content, "utf-8");
-      materialized.push({ name: skill.name, path: skillPath, status });
-    }
-  }
-  return materialized;
-}
-
-async function readExisting(filePath: string): Promise<string | null> {
-  try {
-    return await readFile(filePath, "utf-8");
-  } catch {
-    return null;
-  }
-}
+export {
+  publishPeaSkills,
+  type SkillSnapshot,
+  type SkillPublication,
+} from "./skill-publication.ts";
 
 function readEnvPath(value: string | undefined): string | undefined {
   const trimmed = value?.trim();

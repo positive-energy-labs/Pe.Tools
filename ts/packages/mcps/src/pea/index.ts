@@ -17,7 +17,7 @@ export { type RouteRegistration, createRouteRegistrations } from "./routes.ts";
 export { PeaCliCommands } from "./PeaCliCommands.ts";
 export {
   bundledPeaSkills,
-  materializeBundledPeaSkills,
+  publishPeaSkills,
   resolvePeaProductHomePath,
   resolvePeaSkillPaths,
   resolvePeaStandardSkillsRoot,

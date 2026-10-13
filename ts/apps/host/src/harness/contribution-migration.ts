@@ -12,7 +12,15 @@ export function migrateContributionEvents(
   const byNew = new Map<string, string>();
   for (const entry of mapping) {
     const parsed = parseContributionKey(entry.key);
-    if (!parsed || parsed.kind !== entry.kind || byOld.has(entry.oldKey) || byNew.has(entry.key))
+    if (
+      !parsed ||
+      parsed.kind !== entry.kind ||
+      !["pod:", "script:", "page:", "skill:", "member:"].some((prefix) =>
+        entry.oldKey.startsWith(prefix),
+      ) ||
+      byOld.has(entry.oldKey) ||
+      byNew.has(entry.key)
+    )
       diagnostics.push(
         `Ambiguous or invalid contribution mapping: ${entry.oldKey} -> ${entry.key}`,
       );
@@ -36,6 +44,10 @@ export function migrateContributionEvents(
           if (byNew.has(mention.key) || canonical?.packageId === "pages") continue;
           if (["pod", "script", "page", "skill", "member"].includes(mention.kind))
             diagnostics.push(`Missing pre-cut mapping at line ${index + 1}: ${mention.key}`);
+          continue;
+        }
+        if (!["pod", "script", "page", "skill", "member"].includes(mention.kind)) {
+          diagnostics.push(`A compiled/document mention cannot be migrated: ${mention.key}`);
           continue;
         }
         if (mention.key === entry.key && mention.kind === entry.kind) continue;

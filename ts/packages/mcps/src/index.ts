@@ -7,7 +7,7 @@ export {
   peDo,
   peFind,
   peRead,
-  materializeBundledPeaSkills,
+  publishPeaSkills,
   peaProductHomeEnvVar,
   peaProductTools,
   peaStandardSkillsRoot,

@@ -42,11 +42,12 @@ test("Pea enumerates Pod members and proposes revision-checked Work without rout
         return Response.json({
           at: new Date(0).toISOString(),
           sources: {},
+          diagnostics: [],
           machine: machineFixture(),
           capabilities: buildCapabilities({
             ops: tsOnlyOperationCatalog,
             routes: registrations.map((row) => row.spec),
-            pods: null,
+            packages: [],
             skills: [],
           }),
         });

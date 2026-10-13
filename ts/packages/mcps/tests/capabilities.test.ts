@@ -19,6 +19,8 @@ import {
 import { buildCapabilities, createCapabilityCatalogSource } from "../src/pea/capabilities.ts";
 import { createRouteRegistrations } from "../src/pea/routes.ts";
 import { bundledPeaSkills } from "../src/pea/skills.ts";
+import { skillSnapshot } from "../src/pea/skill-publication.ts";
+import type { PackageProjection } from "@pe/agent-contracts";
 import { peDo, peFind, peRead } from "../src/pea/capability-tools.ts";
 
 import { bodyText } from "./body-text.ts";
@@ -73,8 +75,18 @@ const pods = {
       name: "Sheet tools",
       version: "1.0.0",
       folder: "sheets",
-      entrypoints: [{ id: "rename", sourcePath: "src/Rename.cs", name: "Rename sheets" }],
+      entrypoints: [{ sourcePath: "src/Rename.cs", name: "Rename sheets" }],
       members: [],
+      contributions: [
+        {
+          kind: "script",
+          path: "src/Rename.cs",
+          memberPath: "src/Rename.cs",
+          key: "script:@sheets/src/Rename.cs",
+          name: "Rename sheets",
+          description: null,
+        },
+      ],
       diagnostics: [],
     },
     {
@@ -82,26 +94,53 @@ const pods = {
       name: "Broken",
       version: "0.1.0",
       folder: "broken",
-      entrypoints: [{ id: "run", sourcePath: "src/Run.cs" }],
+      entrypoints: [{ sourcePath: "src/Run.cs" }],
       members: [],
+      contributions: [],
       diagnostics: [{ code: "Manifest", path: "pod.json", severity: "error", message: "bad json" }],
     },
   ],
   unreadable: [],
 } satisfies PodList;
 
+const fixtureHash = "a".repeat(64);
+const packages: PackageProjection[] = pods.pods.map((p) => ({
+  id: p.id,
+  folder: p.folder,
+  diagnostics: p.diagnostics.map((d) => ({
+    code: d.code,
+    severity: d.severity,
+    message: d.message,
+    path: d.path ?? undefined,
+  })),
+  members: p.contributions.map((c) => ({ path: c.memberPath, sha256: fixtureHash, sizeBytes: 1 })),
+  contributions: p.contributions.map((c) => ({
+    key: c.key,
+    sourcePath: c.memberPath,
+    title: `${p.name}: ${c.name}`,
+    description: c.description ?? "",
+  })),
+}));
+const admittedSkills = bundledPeaSkills.map((s) => {
+  const bytes = Buffer.from(`${s.content.trimEnd()}\n`);
+  return skillSnapshot("product", s.name, [
+    { path: "SKILL.md", bytes, sha256: createHash("sha256").update(bytes).digest("hex") },
+  ]);
+});
+
 function catalog(): CapabilityCatalog {
   return {
     at: "2026-09-04T00:00:00.000Z",
     machine: machineFixture([{ session: "b1", documents: null }]),
     sources: { catalog: "ok" },
+    diagnostics: [],
     capabilities: buildCapabilities({
       ops,
       routes: createRouteRegistrations({ hostBaseUrl: "http://127.0.0.1:9" }).map(
         (registration) => registration.spec,
       ),
-      pods,
-      skills: bundledPeaSkills,
+      packages,
+      skills: admittedSkills,
     }),
   };
 }
@@ -116,6 +155,30 @@ test("Page shelf reads state and pins through the binding door without borrowing
       method: init?.method ?? "GET",
       body: init?.body ? JSON.parse(String(init.body)) : null,
     });
+    if (path === "/pe/capabilities")
+      return Response.json({
+        ...catalog(),
+        capabilities: [
+          ...catalog().capabilities,
+          ...[
+            ["page:@pages/ducts", "/pages/ducts/", "pages", "ducts/index.html"],
+            ["page:@ducts/pages/check", "/pages/ducts--check/", "ducts", "pages/check/index.html"],
+          ].map(([key, openUrl, id, sourcePath]) => ({
+            key,
+            kind: "page",
+            title: "Ducts",
+            description: "Page",
+            needs: "nothing",
+            mutates: false,
+            actor: "any",
+            input: {},
+            source: "pages",
+            rank: 1,
+            package: { id, path: sourcePath, sha256: fixtureHash },
+            projection: { openUrl, pane: "page" },
+          })),
+        ],
+      });
     return Response.json(
       path.endsWith("binding")
         ? { refusal: { code: "page.binding-not-yours" } }
@@ -281,7 +344,13 @@ test.each(["http", "stdio"])(
               sessions.map((s) => ({ session: s.sessionId, documents: s.openDocuments })),
             ),
             sources: {},
-            capabilities: buildCapabilities({ ops: nativeOps, routes: [], pods: null, skills: [] }),
+            diagnostics: [],
+            capabilities: buildCapabilities({
+              ops: nativeOps,
+              routes: [],
+              packages: [],
+              skills: [],
+            }),
           });
         if (url.pathname === "/ops") return Response.json({ operations: nativeOps });
         if (url.pathname === capturePath)
@@ -538,7 +607,7 @@ test("native catalog survives SDK latency while host-only sources keep their sho
     const result = await reading;
     expect(result.sources.catalog).toBe("ok");
     expect(result.capabilities.some((row) => row.key === "op:scripting.execute")).toBe(true);
-    expect(deadlines.filter((ms) => ms === 2000)).toHaveLength(1);
+    expect(deadlines.filter((ms) => ms === 2000)).toHaveLength(0);
     expect(deadlines.some((ms) => ms > 30_000)).toBe(true);
   } finally {
     timeout.mockRestore();
@@ -591,7 +660,7 @@ test("an op's [Op(Finds)] search terms find it when its key, title, and descript
       { key: "revit.context.view-image", description: "Export a view.", needs: "document" },
     ],
     routes: [],
-    pods: null,
+    packages: [],
     skills: [],
   });
   expect(findCapabilities(rows, { query: "highlight" }).map((row) => row.key)).toEqual([
@@ -626,8 +695,8 @@ test("pe_find offers operations, collaborative Work, valid Pod entrypoints and s
     "workflow:instances.start",
     "workflow:instances.stop",
     "route:pods",
-    "pod:sheets.rename",
-    "skill:build-pod",
+    "script:@sheets/src/Rename.cs",
+    "skill:@product/skills/build-pod",
   ])
     expect(keys).toContain(key);
   for (const route of ["families", "parameter-links", "takeoffs"])
@@ -647,7 +716,7 @@ test("pe_find maps every kind and ranks and filters visible rows", async () => {
     "op",
     "route-doc",
     "route-command",
-    "pod",
+    "script",
     "skill",
   ]);
   const view = (await find({ query: "visible families rules" })).matches;
@@ -658,7 +727,9 @@ test("pe_find maps every kind and ranks and filters visible rows", async () => {
   expect((await find({ query: "loaded families" })).matches[0]?.key).toBe(
     "op:revit.catalog.loaded-families",
   );
-  expect((await find({ query: "rename sheets" })).matches[0]?.key).toBe("pod:sheets.rename");
+  expect((await find({ query: "rename sheets" })).matches[0]?.key).toBe(
+    "script:@sheets/src/Rename.cs",
+  );
   expect(
     (await find({ needs: "project-document" })).matches.every(
       (row) => row.needs === "project-document",
@@ -737,6 +808,32 @@ test("F-B-2: a Families route read carries its proposed scope types", async () =
     const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
     calls.push({ url, body });
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+    if (url.pathname === "/pe/contributions") {
+      const skill = admittedSkills.find((s) => s.key === url.searchParams.get("key"));
+      return Response.json(
+        skill
+          ? {
+              content: skill.content,
+              bytesBase64: Buffer.from(skill.content).toString("base64"),
+              sha256: skill.package.sha256,
+            }
+          : {
+              content: "script",
+              bytesBase64: "c2NyaXB0",
+              sha256: fixtureHash,
+              folder: "sheets",
+              sourceBundle: {
+                files: [
+                  {
+                    path: "pod.json",
+                    bytesBase64: Buffer.from(JSON.stringify({ id: "sheets" })).toString("base64"),
+                  },
+                  { path: "src/Rename.cs", bytesBase64: "c2NyaXB0" },
+                ],
+              },
+            },
+      );
+    }
     if (url.pathname === "/pe/route-state/families")
       return Response.json({
         revision: 1,
@@ -799,6 +896,32 @@ test("F-B-2: a Families route read names a missing scope and preserves a catalog
       const url = new URL(input instanceof Request ? input.url : String(input));
       const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
       if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+      if (url.pathname === "/pe/contributions") {
+        const skill = admittedSkills.find((s) => s.key === url.searchParams.get("key"));
+        return Response.json(
+          skill
+            ? {
+                content: skill.content,
+                bytesBase64: Buffer.from(skill.content).toString("base64"),
+                sha256: skill.package.sha256,
+              }
+            : {
+                content: "script",
+                bytesBase64: "c2NyaXB0",
+                sha256: fixtureHash,
+                folder: "sheets",
+                sourceBundle: {
+                  files: [
+                    {
+                      path: "pod.json",
+                      bytesBase64: Buffer.from(JSON.stringify({ id: "sheets" })).toString("base64"),
+                    },
+                    { path: "src/Rename.cs", bytesBase64: "c2NyaXB0" },
+                  ],
+                },
+              },
+        );
+      }
       if (url.pathname === "/pe/route-state/families")
         return Response.json({ revision: 1, doc: document });
       if (url.pathname === "/ops") return Response.json({ operations: ops });
@@ -871,6 +994,32 @@ test("Families view Pea doors require a mounted pane and return an exact retaine
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+    if (url.pathname === "/pe/contributions") {
+      const skill = admittedSkills.find((s) => s.key === url.searchParams.get("key"));
+      return Response.json(
+        skill
+          ? {
+              content: skill.content,
+              bytesBase64: Buffer.from(skill.content).toString("base64"),
+              sha256: skill.package.sha256,
+            }
+          : {
+              content: "script",
+              bytesBase64: "c2NyaXB0",
+              sha256: fixtureHash,
+              folder: "sheets",
+              sourceBundle: {
+                files: [
+                  {
+                    path: "pod.json",
+                    bytesBase64: Buffer.from(JSON.stringify({ id: "sheets" })).toString("base64"),
+                  },
+                  { path: "src/Rename.cs", bytesBase64: "c2NyaXB0" },
+                ],
+              },
+            },
+      );
+    }
     if (url.pathname === "/pe/route-view/families" && !mounted)
       return Response.json({ ok: false, error: "no mounted Families view" }, { status: 409 });
     if (url.pathname === "/pe/route-view/families") {
@@ -1169,6 +1318,32 @@ test("an exact-open turn Target reads and writes route Work under its document's
         ],
       });
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+    if (url.pathname === "/pe/contributions") {
+      const skill = admittedSkills.find((s) => s.key === url.searchParams.get("key"));
+      return Response.json(
+        skill
+          ? {
+              content: skill.content,
+              bytesBase64: Buffer.from(skill.content).toString("base64"),
+              sha256: skill.package.sha256,
+            }
+          : {
+              content: "script",
+              bytesBase64: "c2NyaXB0",
+              sha256: fixtureHash,
+              folder: "sheets",
+              sourceBundle: {
+                files: [
+                  {
+                    path: "pod.json",
+                    bytesBase64: Buffer.from(JSON.stringify({ id: "sheets" })).toString("base64"),
+                  },
+                  { path: "src/Rename.cs", bytesBase64: "c2NyaXB0" },
+                ],
+              },
+            },
+      );
+    }
     if (!url.pathname.includes("/route-state/")) throw Error(`unexpected ${url.pathname}`);
     routeCalls.push(url);
     return url.searchParams.get("target") === projectA
@@ -1224,6 +1399,32 @@ test("an explicit document detour leaves the next call on the thread head defaul
   vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
     const url = new URL(input);
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+    if (url.pathname === "/pe/contributions") {
+      const skill = admittedSkills.find((s) => s.key === url.searchParams.get("key"));
+      return Response.json(
+        skill
+          ? {
+              content: skill.content,
+              bytesBase64: Buffer.from(skill.content).toString("base64"),
+              sha256: skill.package.sha256,
+            }
+          : {
+              content: "script",
+              bytesBase64: "c2NyaXB0",
+              sha256: fixtureHash,
+              folder: "sheets",
+              sourceBundle: {
+                files: [
+                  {
+                    path: "pod.json",
+                    bytesBase64: Buffer.from(JSON.stringify({ id: "sheets" })).toString("base64"),
+                  },
+                  { path: "src/Rename.cs", bytesBase64: "c2NyaXB0" },
+                ],
+              },
+            },
+      );
+    }
     if (url.pathname === "/ops") return Response.json({ operations: ops });
     const headers = new Headers(init?.headers);
     const body = JSON.parse(typeof init?.body === "string" ? init.body : "{}");
@@ -1280,7 +1481,7 @@ test("the live head names an open lifetime; reopen needs an explicit override an
         { key: "revit.context.document-session", needs: "nothing", intent: "Read" },
       ],
       routes: [],
-      pods: null,
+      packages: [],
       skills: [],
     }),
   );
@@ -1391,6 +1592,32 @@ test("the doors ride the host under the turn Target and name the revision and re
       body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
     });
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+    if (url.pathname === "/pe/contributions") {
+      const skill = admittedSkills.find((s) => s.key === url.searchParams.get("key"));
+      return Response.json(
+        skill
+          ? {
+              content: skill.content,
+              bytesBase64: Buffer.from(skill.content).toString("base64"),
+              sha256: skill.package.sha256,
+            }
+          : {
+              content: "script",
+              bytesBase64: "c2NyaXB0",
+              sha256: fixtureHash,
+              folder: "sheets",
+              sourceBundle: {
+                files: [
+                  {
+                    path: "pod.json",
+                    bytesBase64: Buffer.from(JSON.stringify({ id: "sheets" })).toString("base64"),
+                  },
+                  { path: "src/Rename.cs", bytesBase64: "c2NyaXB0" },
+                ],
+              },
+            },
+      );
+    }
     if (url.pathname === "/ops")
       return Response.json({
         operations: [
@@ -1484,7 +1711,7 @@ test("the doors ride the host under the turn Target and name the revision and re
     expect(calls.at(-1)?.url.pathname).toBe("/instances/readings");
     expect(calls.at(-1)?.url.search).toBe("?read=sessions");
 
-    const pod = (await run(peDo, { key: "pod:sheets.rename", timeoutSeconds: 30 })) as {
+    const pod = (await run(peDo, { key: "script:@sheets/src/Rename.cs", timeoutSeconds: 30 })) as {
       ok: boolean;
     };
     expect(pod.ok).toBe(true);
@@ -1506,7 +1733,10 @@ test("the doors ride the host under the turn Target and name the revision and re
     expect(human.isError).toBe(true);
     expect(human.content).toContain("human-only");
 
-    const skill = (await run(peRead, { key: "skill:build-pod", timeoutSeconds: 30 })) as {
+    const skill = (await run(peRead, {
+      key: "skill:@product/skills/build-pod",
+      timeoutSeconds: 30,
+    })) as {
       result: string;
     };
     expect(skill.result).toContain("name: build-pod");
@@ -1531,6 +1761,32 @@ test("Pea doors author native JSON and plan both family routes under the turn Ta
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+    if (url.pathname === "/pe/contributions") {
+      const skill = admittedSkills.find((s) => s.key === url.searchParams.get("key"));
+      return Response.json(
+        skill
+          ? {
+              content: skill.content,
+              bytesBase64: Buffer.from(skill.content).toString("base64"),
+              sha256: skill.package.sha256,
+            }
+          : {
+              content: "script",
+              bytesBase64: "c2NyaXB0",
+              sha256: fixtureHash,
+              folder: "sheets",
+              sourceBundle: {
+                files: [
+                  {
+                    path: "pod.json",
+                    bytesBase64: Buffer.from(JSON.stringify({ id: "sheets" })).toString("base64"),
+                  },
+                  { path: "src/Rename.cs", bytesBase64: "c2NyaXB0" },
+                ],
+              },
+            },
+      );
+    }
     if (typeof init?.body === "string") {
       writes.push({ url, body: JSON.parse(init.body) });
       return Response.json({ ok: true, revision: 13 });

@@ -90,8 +90,12 @@ test.each(
   [
     [],
     [...mapping, { ...mapping[0]!, key: "script:@other/src/Census.cs" }],
-    [...mapping, { oldKey: "pod:other.run", key: mapping[0]!.key, kind: "script" }],
-    [...mapping, { oldKey: mapping[1]!.key, key: "page:@other/pages/tour", kind: "page" }],
+    [...mapping, { oldKey: "pod:other.run", key: mapping[0]!.key, kind: "script" as const }],
+    [...mapping, { oldKey: mapping[1]!.key, key: "page:@other/pages/tour", kind: "page" as const }],
+    [
+      ...mapping,
+      { oldKey: "doc:session/open", key: "page:@other/pages/tour", kind: "page" as const },
+    ],
   ].map((entries) => [entries]),
 )("missing, ambiguous or colliding migration mapping refuses the entire journal", (entries) => {
   const input = journal();

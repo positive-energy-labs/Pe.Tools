@@ -1,5 +1,5 @@
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createNodeServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,7 +10,10 @@ import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
 import { makeHttpLive } from "../src/app.ts";
-import { createPeRoutes } from "../src/pe-routes.ts";
+import { createContributionContent, createPeRoutes } from "../src/pe-routes.ts";
+import { listPackages } from "../src/packages.ts";
+import { buildCapabilities } from "@pe/mcps";
+import { findCapabilities } from "@pe/agent-contracts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
 
 vi.mock("../src/machine.ts", async (original) => {
@@ -97,7 +100,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
     expect(catalog.sources.skills).toBe("ok");
     expect(catalog.sources.catalog).toMatch(/bridge catalog unavailable|did not answer/);
     // pod.list is host-local: the pods answer with Revit closed.
-    expect(catalog.sources["pod.json"]).toBe("ok");
+    expect(catalog.sources.packages).toBe("ok");
     expect(catalog.machine.revit.sessions).toEqual([]);
     // Recents read without Revit; whatever they answered in their own budget is named.
     expect(catalog.sources.recents).toMatch(/^(ok|still reading|did not answer)/);
@@ -109,7 +112,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
     expect(keys).toContain("route:pods.propose");
     expect(keys).toContain("op:pod.list");
     expect(keys).not.toContain("route:pods.open");
-    expect(keys).toContain("skill:build-pod");
+    expect(keys).toContain("skill:@product/skills/build-pod");
     expect(keys.some((key) => key.startsWith("op:revit."))).toBe(false);
 
     // The thread head, its Reading, and route Work, with no tenant behind them.
@@ -171,6 +174,7 @@ test("GET /pe/capabilities serves each open document as a doc: row and each unop
       read: async () => ({
         at: "2026-10-12T12:00:00.000Z",
         sources: {},
+        diagnostics: [],
         machine: machineFixture([
           {
             session: "b1",
@@ -210,4 +214,167 @@ test("GET /pe/capabilities serves each open document as a doc: row and each unop
     { key: "recent:C:\\Models\\Plant.rvt", kind: "recent" },
   ]);
   expect(catalog.capabilities).toHaveLength(2);
+});
+
+test("one admitted content snapshot waits for import, publishes exact skill bytes and retains frozen script input", async () => {
+  const home = mkdtempSync(join(tmpdir(), "pe-catalog-cut-"));
+  const folder = join(home, "Pods", "renamed-folder");
+  for (const name of ["Office_Page", "odd--name", "working"]) {
+    mkdirSync(join(home, "Pages", name), { recursive: true });
+    writeFileSync(join(home, "Pages", name, "index.html"), "<title>Scratch Page</title>");
+  }
+  let imports = 0,
+    listings = 0;
+  const input = {
+    "pod.json": JSON.stringify({
+      id: "shelf-test",
+      name: "Shelf",
+      entrypoints: [{ sourcePath: "src/Census.cs" }],
+    }),
+    "src/Census.cs": "original script\r\n",
+    "pages/tour/index.html": "<title>Tour</title>",
+    "skills/check/SKILL.md": "---\nname: check\ndescription: Check things.\n---\nexact\r\n",
+    "skills/check/support.txt": "support\r\n",
+    "settings/checks.json": "{}\r\n",
+    "README.md": "guide\r\n",
+  };
+  const content = createContributionContent({
+    worldRoot: home,
+    bootstrap: async () => {
+      imports++;
+      for (const [path, text] of Object.entries(input)) {
+        mkdirSync(join(folder, path, ".."), { recursive: true });
+        writeFileSync(join(folder, path), text);
+      }
+    },
+    packages: async () => {
+      listings++;
+      expect(imports).toBe(1);
+      return listPackages(join(home, "Pods"));
+    },
+  });
+  try {
+    const [first, same] = await Promise.all([content.read(), content.read()]);
+    expect(same).toBe(first);
+    expect(listings).toBe(1);
+    const catalog = {
+      at: "now",
+      sources: {},
+      diagnostics: first.diagnostics,
+      machine: machineFixture(),
+      capabilities: buildCapabilities({ ops: [], routes: [], ...first }),
+    };
+    const app = createPeRoutes({
+      registrations: [],
+      store: { getState: async () => null, setState: async () => {} },
+      heads: { observe: () => () => {} },
+      capabilityCatalog: { read: async () => catalog },
+      contributionRead: content.member,
+    });
+    const script = catalog.capabilities.find((c) => c.key === "script:@shelf-test/src/Census.cs")!;
+    const page = catalog.capabilities.find((c) => c.key === "page:@shelf-test/pages/tour")!;
+    expect(page.projection).toEqual({ openUrl: "/pages/shelf-test--tour/", pane: "page" });
+    expect(catalog.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "page.noncanonical-folder",
+          folder: "Office_Page",
+          canonicalSlug: "office-page",
+        }),
+        expect.objectContaining({
+          code: "page.noncanonical-folder",
+          folder: "odd--name",
+          canonicalSlug: "odd-name",
+        }),
+      ]),
+    );
+    expect(
+      catalog.capabilities.some(
+        (c) => c.key.includes("Office_Page") || c.key.includes("odd--name"),
+      ),
+    ).toBe(false);
+    expect(catalog.capabilities.some((c) => c.key === "page:@pages/working")).toBe(true);
+    const filtered = await (
+      await app.fetch(new Request("http://local/pe/capabilities?query=Shelf&kind=page&limit=3"))
+    ).json();
+    expect(filtered.capabilities).toEqual(
+      findCapabilities(catalog.capabilities, { query: "Shelf", kind: "page", limit: 3 }),
+    );
+    expect(filtered.diagnostics).toEqual(catalog.diagnostics);
+    expect((await app.fetch(new Request("http://local/pe/capabilities?kind=pod"))).status).toBe(
+      400,
+    );
+    writeFileSync(join(folder, "src/Census.cs"), "changed after admission");
+    const answer = await app.fetch(
+      new Request(
+        `http://local/pe/contributions?key=${encodeURIComponent(script.key)}&sha256=${script.package!.sha256}`,
+      ),
+    );
+    const frozen = await answer.json();
+    expect(frozen.content).toBe(input["src/Census.cs"]);
+    expect(frozen.folder).toBe("renamed-folder");
+    expect(frozen.sourceBundle.files.map((f: { path: string }) => f.path).sort()).toEqual(
+      Object.keys(input).sort(),
+    );
+    const skill = catalog.capabilities.find((c) => c.key === "skill:@shelf-test/skills/check")!;
+    const skillBytes = content.member(skill.key, skill.package!.sha256) as { content: string };
+    expect(skillBytes.content).toBe(input["skills/check/SKILL.md"]);
+    for (const root of [".agents", ".claude"]) {
+      expect(
+        readFileSync(join(home, root, "skills", "shelf-test--check", "SKILL.md"), "utf8"),
+      ).toBe(skillBytes.content);
+      expect(
+        readFileSync(join(home, root, "skills", "shelf-test--check", "support.txt"), "utf8"),
+      ).toBe(input["skills/check/support.txt"]);
+    }
+    expect(
+      (
+        await app.fetch(
+          new Request(
+            `http://local/pe/contributions?key=${encodeURIComponent(script.key)}&sha256=${"f".repeat(64)}`,
+          ),
+        )
+      ).status,
+    ).toBe(409);
+    expect(content.member("member:@shelf-test/README.md")).toMatchObject({
+      content: input["README.md"],
+    });
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("a slow import retains one pending publication when the catalog TTL passes", async () => {
+  const home = mkdtempSync(join(tmpdir(), "pe-publication-pending-"));
+  let release!: () => void;
+  const bootstrap = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let listings = 0;
+  const content = createContributionContent({
+    worldRoot: home,
+    bootstrap: () => bootstrap,
+    packages: async () => {
+      listings++;
+      return { packages: [], unreadable: [] };
+    },
+    pages: async () => [],
+  });
+  const started = Date.now();
+  const clock = vi.spyOn(Date, "now").mockReturnValue(started);
+  const first = content.read();
+  let second = first;
+  try {
+    clock.mockReturnValue(started + 31_000);
+    second = content.read();
+    expect(second).toBe(first);
+    release();
+    await first;
+    expect(listings).toBe(1);
+  } finally {
+    clock.mockRestore();
+    release();
+    await Promise.allSettled([first, second]);
+    rmSync(home, { recursive: true, force: true });
+  }
 });

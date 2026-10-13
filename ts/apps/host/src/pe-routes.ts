@@ -15,6 +15,13 @@ import {
   recentRows,
   routeStatePatchSchema,
   START_FRESH,
+  contributionKey,
+  parseContributionKey,
+  packageProjectionSchema,
+  capabilityKindSchema,
+  capabilityNeedsSchema,
+  findCapabilities,
+  type Capability,
   type CapabilityCatalog,
   type WorkKey,
 } from "@pe/agent-contracts";
@@ -22,7 +29,7 @@ import {
   createCapabilityCatalogSource,
   createRouteRegistrations,
   resolvePeaProductHomePath,
-  materializeBundledPeaSkills,
+  publishPeaSkills,
   peaAgentInstructions,
 } from "@pe/mcps";
 import {
@@ -69,6 +76,22 @@ import { bindActionWorkspace } from "./takeoff-actions.ts";
 import { familySpecAsset, familySpecHandlers } from "./family-spec.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
 import { readNavigation, type NavigationSources } from "./navigation.ts";
+import {
+  captureDirectory,
+  capturePackage,
+  listPackages,
+  type AdmittedPackage,
+} from "./packages.ts";
+import { skillSnapshot } from "../../../packages/mcps/src/pea/skill-publication.ts";
+import type { CapabilityContent } from "../../../packages/mcps/src/pea/capabilities.ts";
+import {
+  packagePageDescriptors,
+  scratchPageDescriptors,
+  PAGE_LIBRARIES,
+  type PageDescriptor,
+} from "./page-libraries.ts";
+import { join } from "node:path";
+import { importShippedPods } from "./installed-pods.ts";
 export { fileRouteDocumentStore } from "./route-document-store.ts";
 
 // One user note on one picked element, bound for PostHog; the picture rides inline as a data URL.
@@ -91,6 +114,7 @@ export interface PeRoutesOptions {
   heads: ThreadHeadSource;
   navigation?: NavigationSources;
   capabilityCatalog?: { read(scope?: HostSessionScope): Promise<CapabilityCatalog> };
+  contributionRead?: (key: string, sha256?: string) => unknown;
   observeHostResource?: ResourceObserver;
   /** Wraps every served Reading, Work included, e.g. with the host's document change mark. */
   markReadings?: (observe: ResourceObserver) => ResourceObserver;
@@ -167,6 +191,20 @@ export function createPeRoutes(options: PeRoutesOptions) {
     const parts = url.pathname.split("/").slice(2).map(decodeURIComponent); // drop "", "pe"
     const body = () => request.json().catch(() => null);
 
+    if (method === "GET" && url.pathname === "/pe/contributions") {
+      const key = url.searchParams.get("key") ?? "";
+      if (!parseContributionKey(key))
+        return json({ error: "Expected a canonical contribution key" }, 400);
+      const value = options.contributionRead?.(key, url.searchParams.get("sha256") ?? undefined);
+      return value
+        ? json(value)
+        : json(
+            { error: "Admitted contribution revision unavailable; rediscover before reading." },
+            409,
+          );
+    }
+    if (method === "GET" && url.pathname === "/pe/page-libraries") return json(PAGE_LIBRARIES);
+
     if (method === "GET" && url.pathname === "/pe/navigation") {
       try {
         return json(await readNavigation(work, options.navigation));
@@ -187,9 +225,40 @@ export function createPeRoutes(options: PeRoutesOptions) {
             : undefined,
         });
         // Open and recent documents are rows too, so every door's one search finds them to mention.
+        const capabilities = [
+          ...catalog.capabilities,
+          ...documentRows(catalog),
+          ...recentRows(catalog),
+        ];
+        const filtering = ["query", "kind", "needs", "mutates", "limit"].some((name) =>
+          query.has(name),
+        );
+        const mutates = query.get("mutates");
+        if (mutates !== null && mutates !== "true" && mutates !== "false")
+          return json({ error: "mutates must be true or false" }, 400);
+        const filters = z
+          .object({
+            query: z.string().optional(),
+            kind: capabilityKindSchema.optional(),
+            needs: capabilityNeedsSchema.optional(),
+            limit: z.coerce.number().int().min(1).max(500).optional(),
+          })
+          .safeParse({
+            query: query.get("query") ?? undefined,
+            kind: query.get("kind") ?? undefined,
+            needs: query.get("needs") ?? undefined,
+            limit: query.get("limit") ?? undefined,
+          });
+        if (!filters.success)
+          return json({ error: "Invalid catalog filters", diagnostics: filters.error.issues }, 400);
         return json({
           ...catalog,
-          capabilities: [...catalog.capabilities, ...documentRows(catalog), ...recentRows(catalog)],
+          capabilities: filtering
+            ? findCapabilities(capabilities, {
+                ...filters.data,
+                ...(mutates !== null ? { mutates: mutates === "true" } : {}),
+              })
+            : capabilities,
         });
       } catch (error) {
         return json({ error: message(error) }, 502);
@@ -366,6 +435,181 @@ function workKey(url: URL, route: string, shape: "read" | "write"): WorkKey | Re
  * route Work, Readings and the capability catalog. Wires the Work into the action owner and the
  * document-close sweep.
  */
+export function createContributionContent(options: {
+  worldRoot: string;
+  packages?: typeof listPackages;
+  pages?: (packages: readonly AdmittedPackage[]) => Promise<readonly PageDescriptor[]>;
+  bootstrap?: () => Promise<unknown>;
+}) {
+  const revisions = new Map<string, Map<string, unknown>>();
+  const latest = new Map<string, unknown>();
+  let snapshot: Promise<CapabilityContent> | undefined;
+  let observedAt = 0;
+  let pending = false;
+  let initialized: Promise<unknown> | undefined;
+  const remember = (key: string, value: { sha256: string } & Record<string, unknown>) => {
+    let versions = revisions.get(key);
+    if (!versions) revisions.set(key, (versions = new Map()));
+    versions.set(value.sha256, value);
+    if (versions.size > 4) versions.delete(versions.keys().next().value!);
+    latest.set(key, value);
+  };
+  async function build(): Promise<CapabilityContent> {
+    await (initialized ??= options.bootstrap?.() ?? Promise.resolve());
+    const listing = await (options.packages ?? listPackages)();
+    const allDescriptors = options.pages
+      ? await options.pages(listing.packages)
+      : [
+          ...(await scratchPageDescriptors(join(options.worldRoot, "Pages"))),
+          ...packagePageDescriptors(listing.packages),
+        ];
+    const descriptors = allDescriptors.filter((p) => p.key !== null && p.openUrl !== null);
+    const diagnostics: CapabilityCatalog["diagnostics"] = allDescriptors
+      .filter((p) => p.key === null)
+      .map((p) => {
+        const canonicalSlug =
+          p.slug
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "") || "page";
+        return {
+          code: "page.noncanonical-folder",
+          folder: p.slug,
+          canonicalSlug,
+          message: `Rename '${p.slug}' to '${canonicalSlug}' (or another distinct canonical slug) to enable its doors.`,
+        };
+      });
+    const pageProjections = new Map(
+      descriptors.map((p) => [p.key, { openUrl: p.openUrl!, pane: "page" }]),
+    );
+    const packages = listing.packages.map((pod) =>
+      packageProjectionSchema.parse({
+        id: pod.id,
+        folder: pod.folder,
+        members: pod.members.map((m) => ({
+          path: m.path,
+          sha256: m.sha256,
+          sizeBytes: m.bytes.length,
+        })),
+        diagnostics: pod.diagnostics.map((d) => ({
+          code: d.code,
+          message: d.message,
+          severity: d.severity,
+          path: d.path ?? undefined,
+        })),
+        contributions: pod.contributions.map((c) => ({
+          key: c.key,
+          sourcePath: c.memberPath,
+          title: `${pod.name}: ${c.name}`,
+          description: c.description ?? "",
+          projection: pageProjections.get(c.key),
+        })),
+      }),
+    );
+    const packagedSkills = listing.packages.flatMap((pod) =>
+      pod.diagnostics.some((d) => d.severity === "error")
+        ? []
+        : pod.contributions
+            .filter((c) => c.kind === "skill")
+            .map((c) => {
+              const prefix = `${c.path}/`;
+              return skillSnapshot(
+                pod.id,
+                c.path.split("/").at(-1)!,
+                pod.members
+                  .filter((m) => m.path.startsWith(prefix))
+                  .map((m) => ({
+                    path: m.path.slice(prefix.length),
+                    sha256: m.sha256,
+                    bytes: m.bytes,
+                  })),
+              );
+            }),
+    );
+    const publication = await publishPeaSkills(
+      { productHomePath: options.worldRoot, captureDirectory },
+      packagedSkills,
+    );
+    latest.clear();
+    for (const pod of listing.packages) {
+      if (pod.diagnostics.some((d) => d.severity === "error")) continue;
+      const frozen = await capturePackage(pod);
+      for (const member of pod.members) {
+        const value = {
+          content: new TextDecoder().decode(member.bytes),
+          bytesBase64: Buffer.from(member.bytes).toString("base64"),
+          sha256: member.sha256,
+        };
+        remember(contributionKey({ kind: "member", packageId: pod.id, path: member.path }), value);
+        for (const c of pod.contributions.filter((c) => c.memberPath === member.path))
+          remember(c.key, {
+            ...value,
+            folder: pod.folder,
+            ...(c.kind === "script" ? { sourceBundle: frozen.sourceBundle } : {}),
+          });
+      }
+    }
+    for (const skill of publication.skills) {
+      const entry = skill.files.find((f) => f.path === "SKILL.md")!;
+      remember(skill.key, {
+        content: skill.content,
+        bytesBase64: Buffer.from(entry.bytes).toString("base64"),
+        sha256: entry.sha256,
+      });
+    }
+    const pages: Capability[] = descriptors
+      .filter((p) => parseContributionKey(p.key!)?.packageId === "pages")
+      .map((p) => {
+        const ref = parseContributionKey(p.key!)!;
+        remember(p.key!, {
+          content: new TextDecoder().decode(p.entry.bytes),
+          bytesBase64: Buffer.from(p.entry.bytes).toString("base64"),
+          sha256: p.entry.sha256,
+        });
+        return {
+          key: p.key!,
+          kind: "page",
+          title: p.title,
+          description: "Page shared state and binding.",
+          needs: "nothing",
+          mutates: false,
+          actor: "any",
+          input: {},
+          source: "pages",
+          rank: 1,
+          package: { id: "pages", path: `${ref.path}/index.html`, sha256: p.entry.sha256 },
+          projection: pageProjections.get(p.key),
+        };
+      });
+    return {
+      packages,
+      skills: publication.skills,
+      pages,
+      diagnostics,
+      sourceDiagnostics: [
+        ...listing.unreadable.map((d) => `${d.folder}: ${d.message}`),
+        ...listing.packages.flatMap((p) =>
+          p.diagnostics.map((d) => `${p.id}/${d.path}: ${d.message}`),
+        ),
+      ],
+    };
+  }
+  return {
+    read: () => {
+      if (!snapshot || (!pending && Date.now() - observedAt >= 30_000)) {
+        pending = true;
+        snapshot = build().finally(() => {
+          observedAt = Date.now();
+          pending = false;
+        });
+      }
+      return snapshot;
+    },
+    member: (key: string, sha256?: string) =>
+      sha256 ? revisions.get(key)?.get(sha256) : latest.get(key),
+  };
+}
+
 export function makeHostPeRoutes(
   hostBaseUrl: string,
   bridge: RevitBridge["Service"] | undefined,
@@ -376,10 +620,17 @@ export function makeHostPeRoutes(
 ) {
   const sourceRoot = hostOwnership.sourceRoot;
   const worldRoot = resolvePeaProductHomePath();
-  // Pea's bundled skills under the world root, where both harnesses read cwd skills from.
-  void materializeBundledPeaSkills().catch((error) =>
-    Effect.runSync(Effect.logWarning(`Pea skills were not materialized: ${String(error)}`)),
-  );
+  const content = createContributionContent({
+    worldRoot,
+    bootstrap: async () => {
+      const imported = await importShippedPods();
+      const refused = imported.outcomes.filter((outcome) => outcome.outcome === "refused");
+      if (refused.length)
+        throw Error(
+          `Shipped Pod import refused: ${refused.map((outcome) => outcome.reason).join("; ")}`,
+        );
+    },
+  });
   // The user's own Codex MCP servers stay out of Pea threads: a project-level config in the world root.
   void userCodexMcpServers(userCodexConfigPath())
     .then((names) => writePeaCodexProjectConfig(worldRoot, names))
@@ -402,6 +653,7 @@ export function makeHostPeRoutes(
   // Every provider is probed once in the background; the list says `unknown` until then.
   const providers = createProviders({ shellPath });
   const threads = createHarnessThreads({
+    prepare: () => content.read(),
     providers,
     updatePending: update.automaticPending,
     root: productHarnessThreadsPath(),
@@ -425,6 +677,7 @@ export function makeHostPeRoutes(
     hostBaseUrl,
     registrations,
     machine: () => machine.refresh(),
+    content: content.read,
   });
   const routes = createPeRoutes({
     registrations,
@@ -451,6 +704,7 @@ export function makeHostPeRoutes(
       },
     },
     capabilityCatalog: catalog,
+    contributionRead: content.member,
     observeHostResource: hostResourceObserver(
       bridge,
       undefined,
@@ -542,6 +796,8 @@ export const peRoutesLayer = (
       for (const path of [
         "/pe/navigation",
         "/pe/capabilities",
+        "/pe/contributions",
+        "/pe/page-libraries",
         "/pe/family-spec",
         "/pe/feedback",
         "/pe/resources",

@@ -208,6 +208,7 @@ test("HTTP authored writes enforce short local revision checks", async () => {
       at: "2026-09-14T22:54:30.125Z",
       machine: machineFixture(),
       sources: {},
+      diagnostics: [],
       capabilities: [],
     }
   );

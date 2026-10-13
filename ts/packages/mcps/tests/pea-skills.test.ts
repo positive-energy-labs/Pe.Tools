@@ -1,10 +1,11 @@
+import { captureDirectory } from "../../../apps/host/src/packages.ts";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
 import {
   bundledPeaSkills,
-  materializeBundledPeaSkills,
+  publishPeaSkills,
   peaProductHomeEnvVar,
   peaStandardSkillsRoot,
   resolvePeaProductHomePath,
@@ -73,16 +74,15 @@ test("materialization retires only the product's former skill directories", asyn
     await writeFile(retired, "stale\n", "utf-8");
     await writeFile(userOwned, "mine\n", "utf-8");
 
-    const materialized = await materializeBundledPeaSkills();
+    const materialized = await publishPeaSkills({ captureDirectory });
 
     // Every bundled skill lands under each harness root: Codex's `.agents/skills`, Claude's `.claude/skills`.
-    expect(materialized.map((skill) => skill.name)).toEqual([
-      ...bundledPeaSkills.map((skill) => skill.name),
-      ...bundledPeaSkills.map((skill) => skill.name),
-    ]);
-    expect(new Set(materialized.map((skill) => path.dirname(path.dirname(skill.path))))).toEqual(
-      new Set(resolvePeaSkillPaths()),
-    );
+    expect(materialized.skills.map((skill) => skill.name)).toContain("my-office-standards");
+    for (const root of resolvePeaSkillPaths())
+      for (const skill of bundledPeaSkills)
+        expect(await readFile(path.join(root, skill.name, "SKILL.md"), "utf8")).toBe(
+          `${skill.content.trimEnd()}\n`,
+        );
     await expect(access(path.dirname(retired))).rejects.toThrow();
     expect(await readFile(userOwned, "utf-8")).toBe("mine\n");
     expect(retiredPeaSkillNames.some((name) => bundledPeaSkills.some((s) => s.name === name))).toBe(

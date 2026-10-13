@@ -117,6 +117,20 @@ export const capabilityCatalogSchema = z.object({
   recents: z.array(capabilityRecentSchema).optional(),
   /** Per-source outcome; a source that could not answer says why instead of hiding rows. */
   sources: z.record(z.string(), z.string()),
+  /** A Page without a canonical key stays visible, with no dispatch or binding authority. */
+  diagnostics: z.array(
+    z.strictObject({
+      code: z.literal("page.noncanonical-folder"),
+      folder: z.string().min(1),
+      canonicalSlug: z
+        .string()
+        .refine(
+          (slug) => parseContributionKey(`page:@pages/${slug}`) !== null,
+          "Expected a canonical scratch Page slug",
+        ),
+      message: z.string().min(1),
+    }),
+  ),
   capabilities: z.array(capabilitySchema),
 });
 export type CapabilityCatalog = z.infer<typeof capabilityCatalogSchema>;

@@ -19,11 +19,11 @@ test("kernel starts with live discovery and makes Revit orientation conditional"
   expect(peaAgentInstructions).toContain("When discovery shows connected Revit");
   expect(peaAgentInstructions).toContain("capture_view");
   for (const text of [
-    "Pages/<slug>/index.html",
-    "page:@pages/<slug>",
+    "skill:@product/skills/make-page",
+    "<kind>:@<manifest-id>/<path>",
     "pe_do",
     "binding",
-    "Page's /act or /call",
+    "Page action door",
   ])
     expect(peaAgentInstructions).toContain(text);
   expect(peaAgentInstructions).not.toContain("Revit is connected:");
@@ -51,6 +51,7 @@ test("one MCP connection discovers session and target changes without startup co
         at: new Date().toISOString(),
         machine,
         sources: { catalog: "ok" },
+        diagnostics: [],
         capabilities: [],
       });
     throw new Error(`unexpected ${url.pathname}`);

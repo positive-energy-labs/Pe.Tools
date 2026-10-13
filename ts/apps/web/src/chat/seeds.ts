@@ -374,6 +374,7 @@ const CATALOG = {
     recent("PE Duct Tag", "C:\\Standards\\Families\\Annotation\\PE Duct Tag.rfa", 3),
   ],
   sources: { ops: "ok", routes: "ok", pods: "ok", skills: "ok" },
+  diagnostics: [],
   capabilities: [
     row(
       "skill:@product/skills/review-schedule",

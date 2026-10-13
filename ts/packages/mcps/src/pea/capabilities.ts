@@ -9,18 +9,9 @@ import {
   actionBasesSchema,
   settingsRouteState,
 } from "@pe/agent-contracts";
-/**
- * The one capability catalog. Every door pea has (ops, route documents, route commands, pod
- * buttons, skills) projects into `Capability` rows here; `GET /pe/capabilities` serves it,
- * `pe_find` ranks it, `pe_read`/`pe_do` dispatch by kind, the web `/ops` route renders it.
- *
- * Assembled on request (ops and pods cached 30 s per bridge selector; sessions and their open
- * documents read on every request; Revit's recent documents cached 5 min for the whole machine and
- * never awaited past their own 2 s), not at boot: the op and pod sources describe whichever Revit
- * session is connected right now. Host-only sources have a 2 s budget;
- * the native catalog allows SDK resolution and bridge dispatch. Sources are read with
- * `Promise.allSettled`, and a source that did not answer is named in `sources`.
- */
+/** One discovery projection and ranker: native availability is contextual; installed content
+ * comes from one admitted snapshot, independent of the native catalog. Session/document readings
+ * remain fresh; missing sources report their diagnostic instead of hiding the answering ones. */
 import { z } from "zod";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import {
@@ -28,7 +19,6 @@ import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   isTsOnlyOperationKey,
   tsOnlyOperationCatalog,
-  type PodList,
 } from "@pe/host-contracts/operation-types";
 import {
   capabilityRecentSchema,
@@ -37,9 +27,10 @@ import {
   type CapabilityCatalog,
   type CapabilityRecent,
   type RouteStateSpec,
+  type PackageProjection,
+  parseContributionKey,
 } from "@pe/agent-contracts";
-import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
-import { bundledPeaSkills, type BundledPeaSkill } from "./skills.ts";
+import type { SkillSnapshot } from "./skill-publication.ts";
 import type { RouteRegistration } from "./routes.ts";
 
 type OpsCatalogEntry = HostOperationDefinition & {
@@ -50,11 +41,12 @@ type OpsCatalogEntry = HostOperationDefinition & {
 export interface CapabilitySources {
   ops: readonly OpsCatalogEntry[];
   routes: readonly RouteStateSpec<z.ZodType>[];
-  pods: PodList | null;
-  skills: readonly BundledPeaSkill[];
+  packages: readonly PackageProjection[];
+  skills: readonly SkillSnapshot[];
+  pages?: readonly Capability[];
 }
 
-/** Pure projection of every source into rows. Deterministic order: op, route, pod, skill. */
+/** Pure projection, ordered by compiled operations/routes, packaged content and scratch Pages. */
 export function buildCapabilities(sources: CapabilitySources): Capability[] {
   return [
     ...sources.ops.map(opRow),
@@ -155,8 +147,9 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
       source: "browser Page",
       rank: 2,
     },
-    ...(sources.pods?.pods ?? []).flatMap(podRows),
+    ...sources.packages.flatMap(packageRows),
     ...sources.skills.map(skillRow),
+    ...(sources.pages ?? []),
   ];
 }
 
@@ -239,22 +232,34 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
   return [read, ...(spec.agentWriteMask.length ? [propose] : []), ...commands];
 }
 
-/** Entrypoints only: members are data, reached through route:pods, never executable rows. */
-function podRows(pod: PodList["pods"][number]): Capability[] {
-  if (pod.diagnostics.length) return [];
-  return pod.entrypoints.map((entry) => ({
-    key: `pod:${pod.folder}.${entry.id}`,
-    kind: "pod",
-    title: `${pod.name}: ${entry.name ?? entry.id}`,
-    description:
-      `${entry.description ?? ""} Pod button the user presses in Revit's Do palette; runs ${entry.sourcePath} in-process through the public scripting.execute operation; its receipt belongs to the host journal. Defaults to ReadOnly (changes rolled back); pass permissionMode WriteTransaction to keep edits.`.trim(),
-    needs: "document",
-    mutates: true,
-    actor: "any",
-    input: podInputSchema,
-    source: "pod.json",
-    rank: 1,
-  }));
+function packageRows(pod: PackageProjection): Capability[] {
+  if (pod.diagnostics.some((d) => d.severity === "error")) return [];
+  return pod.contributions
+    .filter((c) => parseContributionKey(c.key)?.kind !== "skill")
+    .map((entry) => {
+      const reference = parseContributionKey(entry.key)!;
+      const member = pod.members.find((m) => m.path === entry.sourcePath)!;
+      return {
+        key: entry.key,
+        kind: reference.kind,
+        title: entry.title,
+        description:
+          entry.description ||
+          (reference.kind === "script"
+            ? "Runs the admitted source through scripting.execute; ReadOnly rolls back changes."
+            : reference.kind === "member"
+              ? "Read or mention this member. It cannot execute."
+              : "Read this Page's shared state and binding; append events or request your own binding through pe_do."),
+        needs: reference.kind === "script" ? "document" : "nothing",
+        mutates: reference.kind === "script",
+        actor: "any",
+        input: reference.kind === "script" ? podInputSchema : {},
+        package: { id: pod.id, path: member.path, sha256: member.sha256 },
+        projection: entry.projection,
+        source: "packages",
+        rank: 1,
+      };
+    });
 }
 
 const podInputSchema = z.toJSONSchema(
@@ -264,9 +269,9 @@ const podInputSchema = z.toJSONSchema(
   }),
 ) as Record<string, unknown>;
 
-function skillRow(skill: BundledPeaSkill): Capability {
+function skillRow(skill: SkillSnapshot): Capability {
   return {
-    key: `skill:${skill.name}`,
+    key: skill.key,
     kind: "skill",
     title: skill.name,
     description: /^description:\s*(.+)$/m.exec(skill.content)?.[1]?.trim() ?? "",
@@ -275,6 +280,7 @@ function skillRow(skill: BundledPeaSkill): Capability {
     actor: "any",
     input: {},
     source: "skills",
+    package: skill.package,
     rank: 0,
   };
 }
@@ -292,7 +298,6 @@ function parseSchema(json: string | undefined): Record<string, unknown> {
 /* ── live source ─────────────────────────────────────────────────────────── */
 
 const CATALOG_TTL_MS = 30_000;
-const SOURCE_BUDGET_MS = 2_000;
 // SDK resolution allows 30 s before native catalog dispatch; host-only sources keep their 2 s budget.
 const NATIVE_CATALOG_BUDGET_MS = 60_000;
 
@@ -303,21 +308,37 @@ export interface CapabilityCatalogSource {
   invalidate(): void;
 }
 
-/**
- * The host's catalog reader. Routes and skills are static; ops, pods, and sessions come from
- * the host's own port for the selected bridge session.
- */
+export type CapabilityContent = Pick<CapabilitySources, "packages" | "skills" | "pages"> & {
+  diagnostics: CapabilityCatalog["diagnostics"];
+  sourceDiagnostics?: string[];
+};
+
+/** Native metadata is scoped; every scope shares the same admitted content snapshot. */
 export function createCapabilityCatalogSource(options: {
   hostBaseUrl: string;
   registrations: readonly RouteRegistration[];
   machine: () => Promise<Machine>;
+  content?: () => Promise<CapabilityContent>;
 }): CapabilityCatalogSource {
   const base = options.hostBaseUrl.replace(/\/$/, "");
   const routes = options.registrations.map((registration) => registration.spec);
   const cache = new Map<string, { at: number; catalog: Omit<CapabilityCatalog, "machine"> }>();
   const recents = recentsSource(base);
+  let content: { at: number; answer: Promise<CapabilityContent> } | undefined;
+  const readContent = () => {
+    if (!content || Date.now() - content.at >= CATALOG_TTL_MS)
+      content = {
+        at: Date.now(),
+        answer:
+          options.content?.() ?? Promise.resolve({ packages: [], skills: [], diagnostics: [] }),
+      };
+    return content.answer;
+  };
   return {
-    invalidate: () => cache.clear(),
+    invalidate: () => {
+      cache.clear();
+      content = undefined;
+    },
     // Recents are the machine's, not the scope's: one source, its own cache and budget.
     read: async (scope = {}) => {
       const [catalog, recent, machine] = await Promise.all([
@@ -337,18 +358,10 @@ export function createCapabilityCatalogSource(options: {
   async function readScoped(scope: HostSessionScope): Promise<Omit<CapabilityCatalog, "machine">> {
     const cacheKey = JSON.stringify(scope);
     const hit = cache.get(cacheKey);
-    const caller = new HostRpcCaller({
-      hostBaseUrl: base,
-      ...scope,
-      timeoutMs: SOURCE_BUDGET_MS,
-      // Host-owned reads must not wait for the independent native catalog source.
-      catalogOverride: tsOnlyOperationCatalog,
-    });
-    if (hit && Date.now() - hit.at < CATALOG_TTL_MS)
-      return { ...hit.catalog, at: new Date().toISOString() };
+    if (hit && Date.now() - hit.at < CATALOG_TTL_MS) return hit.catalog;
 
     const sources: Record<string, string> = { "route registry": "ok", skills: "ok" };
-    const [ops, pods] = await Promise.allSettled([fetchOps(base, scope), caller.call("pod.list")]);
+    const [ops, admitted] = await Promise.allSettled([fetchOps(base, scope), readContent()]);
     const opsValue =
       ops.status === "fulfilled"
         ? ops.value
@@ -359,17 +372,19 @@ export function createCapabilityCatalogSource(options: {
         : opsValue.bridgeCatalogError
           ? `bridge catalog unavailable: ${opsValue.bridgeCatalogError}`
           : "ok";
-    sources["pod.json"] =
-      pods.status === "rejected" ? `did not answer: ${message(pods.reason)}` : "ok";
+    sources.packages = sources.skills =
+      admitted.status === "rejected"
+        ? `did not answer: ${message(admitted.reason)}`
+        : admitted.value.sourceDiagnostics?.join("; ") || "ok";
     const catalog: Omit<CapabilityCatalog, "machine"> = {
       at: new Date().toISOString(),
       bridgeSessionId: opsValue.bridgeSessionId,
       sources,
+      diagnostics: admitted.status === "fulfilled" ? admitted.value.diagnostics : [],
       capabilities: buildCapabilities({
         ops: opsValue.operations ?? [],
         routes,
-        pods: pods.status === "fulfilled" ? pods.value : null,
-        skills: bundledPeaSkills,
+        ...(admitted.status === "fulfilled" ? admitted.value : { packages: [], skills: [] }),
       }),
     };
     cache.set(cacheKey, { at: Date.now(), catalog });

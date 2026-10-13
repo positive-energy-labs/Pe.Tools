@@ -49,8 +49,9 @@ function host(prior?: Record<string, unknown>) {
       return Response.json({
         at: new Date(0).toISOString(),
         sources: {},
+        diagnostics: [],
         machine: machineFixture(),
-        capabilities: buildCapabilities({ ops: operations, routes: [], pods: null, skills: [] }),
+        capabilities: buildCapabilities({ ops: operations, routes: [], packages: [], skills: [] }),
       });
     if (url.pathname === "/ops") return Response.json({ operations, bridgeSessionId: "A" });
     if (url.pathname === "/call") {
@@ -91,7 +92,16 @@ test("pe_do admits native operations and workflows with exact identity, target a
     await call(peDo, { key: "op:scripting.execute", target, input: { scriptContent: "x" } }),
   ).toMatchObject({ ok: true });
   for (const key of ["scripting.workspace.bootstrap", "pod.import", "pod.export"])
-    expect(await call(peDo, { key: `op:${key}`, target: { id: "A" } }, key)).toMatchObject({
+    expect(
+      await call(
+        peDo,
+        {
+          key: `op:${key}`,
+          ...(key === "scripting.workspace.bootstrap" ? { target: { id: "A" } } : {}),
+        },
+        key,
+      ),
+    ).toMatchObject({
       ok: true,
     });
   const bases = { captureId: "c".repeat(64) };
@@ -122,7 +132,10 @@ test("pe_do admits native operations and workflows with exact identity, target a
       id: key,
       kind: "operation",
       key,
-      destination: { kind: "session", session: "A" },
+      destination:
+        key === "scripting.workspace.bootstrap"
+          ? { kind: "session", session: "A" }
+          : { kind: "host" },
     })),
     {
       id: "workflow",
@@ -208,4 +221,33 @@ test("pe_do admits a lifecycle action at the session its input names, with no he
       destination: { kind: "sdk-session", selection: { id: "dev" } },
     },
   ]);
+});
+
+test("a canonical script replays its captured manifest identity and sourcePath without a current folder lookup", async () => {
+  const sourceBundle = {
+    files: [
+      { path: "pod.json", bytesBase64: Buffer.from('{"id":"shelf-test"}').toString("base64") },
+      { path: "src/Census.cs", bytesBase64: Buffer.from("sealed script").toString("base64") },
+    ],
+  };
+  const prior = receipt({
+    id: "attempt",
+    kind: "operation",
+    key: "scripting.execute",
+    destination,
+    input: { workspaceKey: "historical-folder", sourcePath: "src/Census.cs", sourceBundle },
+    bases: {},
+  });
+  const before = JSON.stringify(prior);
+  const { posts, reads } = host(prior);
+  expect(await call(peDo, { key: "script:@shelf-test/src/Census.cs" })).toMatchObject({ ok: true });
+  expect(posts[0]).toMatchObject({
+    id: "attempt",
+    input: { workspaceKey: "historical-folder", sourcePath: "src/Census.cs", sourceBundle },
+  });
+  await expect(call(peDo, { key: "script:@other/src/Census.cs" })).rejects.toThrow("conflicts");
+  await expect(call(peDo, { key: "script:@shelf-test/src/Other.cs" })).rejects.toThrow("conflicts");
+  expect(posts).toHaveLength(1);
+  expect(new Set(reads)).toEqual(new Set(["/actions"]));
+  expect(JSON.stringify(prior)).toBe(before);
 });

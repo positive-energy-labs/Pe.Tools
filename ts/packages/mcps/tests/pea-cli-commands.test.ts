@@ -221,7 +221,7 @@ test("pea find prints key, kind and title per row of the host's catalog; --menti
     },
   ]);
   const skill = {
-    key: "skill:riser-check",
+    key: "skill:@skills/skills/riser-check",
     kind: "skill",
     title: "riser-check",
     description: "Check a riser.",
@@ -230,6 +230,7 @@ test("pea find prints key, kind and title per row of the host's catalog; --menti
     actor: "any",
     input: {},
     source: "skills",
+    package: { id: "skills", path: "skills/riser-check/SKILL.md", sha256: "a".repeat(64) },
     rank: 0,
   } as const;
   // A human-only press: pe_find never offers it, so neither does pea find.
@@ -239,6 +240,7 @@ test("pea find prints key, kind and title per row of the host's catalog; --menti
     kind: "route-command",
     title: "Riser: apply",
     actor: "human",
+    package: undefined,
   } as const;
   const recents = [
     {
@@ -262,6 +264,7 @@ test("pea find prints key, kind and title per row of the host's catalog; --menti
       machine,
       recents,
       sources: {},
+      diagnostics: [],
       capabilities: [
         skill,
         humanOnly,
@@ -279,7 +282,7 @@ test("pea find prints key, kind and title per row of the host's catalog; --menti
     expect(disclosed).toHaveBeenCalledWith(`host ${host}`);
     // findCapabilities' ranking: the skill's key, title and description all say riser.
     expect(output.mock.calls.map(([line]) => line)).toEqual([
-      "skill:riser-check  skill  riser-check",
+      "skill:@skills/skills/riser-check  skill  riser-check",
       "doc:b1/o1  document  Mechanical Riser",
     ]);
     output.mockClear();

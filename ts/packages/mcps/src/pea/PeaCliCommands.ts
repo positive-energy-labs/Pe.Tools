@@ -161,7 +161,7 @@ export class PeaCliCommands {
         kind: {
           type: "string",
           description:
-            "Optional kind filter: op, route-doc, route-command, pod, skill, document, or recent.",
+            "Optional kind filter: op, route-doc, route-command, script, page, skill, member, document, or recent.",
         },
         needs: {
           type: "string",
@@ -193,6 +193,8 @@ export class PeaCliCommands {
           bridgeSessionId: asOptionalString(ctx.values.bridgeSessionId),
         });
         if ("isError" in catalog) throw new Error(catalog.content);
+        for (const diagnostic of catalog.diagnostics)
+          console.error(`${diagnostic.code}: ${diagnostic.message}`);
         const key = firstNonBlank(ctx.values.mention);
         if (key) {
           const row = catalog.capabilities.find((candidate) => candidate.key === key);
@@ -423,8 +425,6 @@ export class PeaCliCommands {
       description: "Import a Pod zip archive into Documents/Pe.Tools/Pods.",
       args: {
         host: commonArgs.host,
-        bridgeSessionId: commonArgs.bridgeSessionId,
-        openDocumentId: commonArgs.openDocumentId,
         actionId: commonArgs.actionId,
         archive: { type: "string", description: "Path to the Pod zip archive to import." },
         folder: {
@@ -453,8 +453,6 @@ export class PeaCliCommands {
         "Export an installed pod as a portable zip archive with its foreign fragments vendored.",
       args: {
         host: commonArgs.host,
-        bridgeSessionId: commonArgs.bridgeSessionId,
-        openDocumentId: commonArgs.openDocumentId,
         actionId: commonArgs.actionId,
         pod: { type: "string", description: "Manifest id of the pod to export." },
         output: { type: "string", description: "Path of the .zip archive to write." },
@@ -580,16 +578,13 @@ function writeScriptBootstrap(result: HostOpResponse<"scripting.workspace.bootst
   console.log(`workspace    ${result.workspaceRootPath}`);
   console.log(`project      ${result.projectFilePath}`);
   console.log(`pod          ${result.podManifestPath}`);
-  console.log(`sample       ${result.sampleScriptPath}`);
 }
 
 function writeScriptPodList(result: PodList) {
   for (const pod of result.pods) {
     console.log(`${pod.id}  ${pod.name} v${pod.version}  ${pod.folder}`);
     for (const entrypoint of pod.entrypoints)
-      console.log(
-        `  ${entrypoint.id}  ${entrypoint.sourcePath}${entrypoint.name ? `  ${entrypoint.name}` : ""}`,
-      );
+      console.log(`  ${entrypoint.sourcePath}${entrypoint.name ? `  ${entrypoint.name}` : ""}`);
     for (const diagnostic of pod.diagnostics)
       console.error(`  ${diagnostic.severity} ${diagnostic.path}: ${diagnostic.message}`);
   }

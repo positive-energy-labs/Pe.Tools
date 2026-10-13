@@ -50,7 +50,7 @@ import {
   findCapabilities,
   mentionOf,
   message,
-  parsePodKey,
+  parseContributionKey,
   parseRouteKey,
   scheduleGridRouteState,
   settingsRouteState,
@@ -69,7 +69,6 @@ import { HostRpcCaller, type ResolvedTarget } from "../shared/host-rpc-caller.ts
 import type { RevitCatalogLoadedFamilies } from "@pe/host-contracts/generated";
 import { coerceJsonObject } from "../shared/coerce.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
-import { bundledPeaSkills } from "./skills.ts";
 
 function base(): string {
   // Hosted tools inherit the authority already admitted by the host middleware.
@@ -156,7 +155,7 @@ async function routeWorkScope(target: Target): Promise<{ query: string; target: 
 export const peFind = createTool({
   id: "pe_find",
   description:
-    "Find a capability. No query returns the map: connected Revit sessions with their active document and custody, counts per kind, top rows per kind, and which sources answered. A query ranks rows across host operations (op:), the collaborative route documents you co-edit with the user and their commands (route:), pod buttons the user presses in Revit's Do palette (pod:), skills (skill:), documents open in Revit (doc:<session>/<openId>, the same pointer the user @-mentions), and Revit's recent documents, not open (recent:<path> or recent:cloud:<region>/<project>/<model>). Filter with kind, needs, mutates. Every row you may run is visible; nothing is tiered, and human-only rows (the person's presses) are not offered. Then pe_read a non-mutating row or pe_do any row.",
+    "Find a capability. No query returns the map: connected Revit sessions with their active document and custody, counts per kind, top rows per kind, and which sources answered. A query ranks rows across host operations (op:), the collaborative route documents you co-edit with the user and their commands (route:), packaged scripts (script:@), Pages (page:@), skills (skill:@), and read-only members (member:@), documents open in Revit (doc:<session>/<openId>, the same pointer the user @-mentions), and Revit's recent documents, not open (recent:<path> or recent:cloud:<region>/<project>/<model>). Filter with kind, needs, mutates. Every row you may run is visible; nothing is tiered, and human-only rows (the person's presses) are not offered. Then pe_read a non-mutating row or pe_do any row.",
   inputSchema: z.object({
     query: z.string().optional().describe("Keywords describing what you need."),
     kind: capabilityKindSchema.optional(),
@@ -182,6 +181,7 @@ export const peFind = createTool({
         machine: catalog.machine,
         defaultDocument: targetDocument(target),
         sources: catalog.sources,
+        diagnostics: catalog.diagnostics,
         map: capabilityMap(offered),
         hint: "Query pe_find for rows. pe_read runs a row that does not mutate; pe_do runs authorized actions through the host grant check. Reads need no grant. Writes target Pea's own lifetimes or the granted head; external MCP clients cannot hold rw in this release. defaultDocument is read live per call. Op target overrides affect one call only. Session work accepts SDK id-or-pid selection; host work needs no document. target_set selects only Pea's own documents for later calls.",
       };
@@ -189,6 +189,7 @@ export const peFind = createTool({
     return {
       at: catalog.at,
       sources: catalog.sources,
+      diagnostics: catalog.diagnostics,
       matches: rows.map((row) => ({
         key: row.key,
         kind: row.kind,
@@ -198,6 +199,8 @@ export const peFind = createTool({
         mutates: row.mutates,
         actor: row.actor,
         input: row.input,
+        package: row.package,
+        projection: row.projection,
       })),
     };
   },
@@ -257,7 +260,9 @@ export const peDo = createTool({
           ? `'${row.key}' is a document, a pointer and not an action; pass its session and openId to an op as target {kind: open, ref: {session, openId}}.`
           : row.kind === "recent"
             ? `'${row.key}' is a recent document, a pointer and not an action; open it first: pe_read it for openWith, then open it with pe_do workflow:instances.open, input {source: <openWith>, into: {session: {id}} or {start: {year, owner: pea, addins: on}}}.`
-            : null,
+            : row.kind === "member"
+              ? `'${row.key}' is a read/mention-only member and cannot execute.`
+              : null,
       true,
     ),
 });
@@ -272,60 +277,25 @@ async function executeTool(
   const { target: defaultTarget, revision } = scope
     ? { target: scope.defaultTarget, revision: scope.revision }
     : { target: null, revision: 0 };
-  if (input.key.startsWith("page:")) {
-    const page =
-      /^page:@(?:pages\/([a-zA-Z0-9_-]+)|([a-zA-Z0-9_-]+)\/pages\/([a-zA-Z0-9_-]+))$/.exec(
-        input.key,
-      );
-    if (!page || input.target)
-      return refuse(
-        input.key,
-        defaultTarget,
-        revision,
-        "A Page key is page:@pages/<slug> or page:@<pod>/pages/<page>; its shelf takes no Revit target override.",
-      );
-    const slug = page[1] ?? `${page[2]}--${page[3]}`;
-    const read = async (path: string, init?: RequestInit) => {
-      const response = await fetch(`${base()}${path}`, init);
-      return { ok: response.ok, result: await response.json() };
-    };
-    if (!replayOperations) {
-      if (input.input)
-        return refuse(
-          input.key,
-          defaultTarget,
-          revision,
-          "pe_read reads a Page; use pe_do for an event or binding.",
-        );
-      const [state, target] = await Promise.all([
-        read(`/pages/${slug}/state`),
-        read(`/pages/${slug}/target`),
-      ]);
-      return {
-        ok: state.ok && target.ok,
-        key: input.key,
-        revision,
-        result: { state: state.result, target: target.result },
-      };
-    }
-    const action = z
-      .union([
-        z.strictObject({ binding: pageChoiceSchema }),
-        z.strictObject({ event: z.record(z.string(), z.unknown()) }),
-      ])
-      .parse(coerceJsonObject(input.input));
-    const binding = "binding" in action;
-    const answer = await read(binding ? `/pe/pages/${slug}/binding` : `/pages/${slug}/events`, {
-      method: binding ? "PUT" : "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(binding ? action.binding : action.event),
-    });
-    return { ...answer, key: input.key, revision };
-  }
+  const contribution = parseContributionKey(input.key);
+  if (/^(pod|script|page|skill|member):/.test(input.key) && !contribution)
+    return refuse(
+      input.key,
+      defaultTarget,
+      revision,
+      "Legacy or malformed contribution key; obtain a canonical key with pe_find.",
+    );
+  if (contribution?.kind === "member" && replayOperations)
+    return refuse(
+      input.key,
+      defaultTarget,
+      revision,
+      "Members are read/mention-only and cannot execute.",
+    );
   // A known operation attempt replays before catalog or target discovery.
   if (
     replayOperations &&
-    (input.key.startsWith("op:") || input.key.startsWith("pod:")) &&
+    (input.key.startsWith("op:") || contribution?.kind === "script") &&
     !Object.hasOwn(actionControls, input.key.slice(3))
   ) {
     const id = requestIdentity(context);
@@ -333,41 +303,32 @@ async function executeTool(
     if (original) {
       let key = input.key.slice(3);
       let payload = coerceJsonObject(input.input) ?? {};
-      if (input.key.startsWith("pod:")) {
-        const pod = parsePodKey(input.key);
+      if (contribution?.kind === "script") {
         const preparation =
           original.preparation.state === "ready"
             ? (original.preparation.value as {
                 script?: { sourceBundle?: { files?: { path: string; bytesBase64: string }[] } };
               })
             : undefined;
-        const encoded = preparation?.script?.sourceBundle?.files?.find(
-          (file) => file.path === "pod.json",
-        )?.bytesBase64;
+        const bundle =
+          (original.request.sourceBundle as
+            | { files?: { path: string; bytesBase64: string }[] }
+            | undefined) ?? preparation?.script?.sourceBundle;
+        const encoded = bundle?.files?.find((file) => file.path === "pod.json")?.bytesBase64;
+        if (!encoded || original.kind !== "operation" || original.key !== "scripting.execute")
+          throw Error("Original script admission cannot be identified");
+        const manifest = JSON.parse(decodeCapturedManifest(encoded)) as { id: string };
         if (
-          !pod ||
-          !encoded ||
-          original.kind !== "operation" ||
-          original.key !== "scripting.execute"
+          manifest.id !== contribution.packageId ||
+          original.request.sourcePath !== contribution.path
         )
-          throw Error("Original Pod admission cannot be identified");
-        const manifest = JSON.parse(decodeCapturedManifest(encoded)) as {
-          entrypoints: { id: string; sourcePath: string }[];
-        };
-        const source = manifest.entrypoints.find(
-          (entry) => entry.id === pod.entrypoint,
-        )?.sourcePath;
-        if (
-          pod.workspace !== original.request.workspaceKey ||
-          source?.replaceAll("\\", "/").trim().toLowerCase() !==
-            String(original.request.sourcePath).replaceAll("\\", "/").trim().toLowerCase()
-        )
-          throw Error("Original Pod entrypoint conflicts");
+          throw Error("Original script contribution conflicts");
         key = "scripting.execute";
         payload = {
           ...payload,
-          workspaceKey: pod.workspace,
+          workspaceKey: original.request.workspaceKey,
           sourcePath: original.request.sourcePath,
+          ...(original.request.sourceBundle ? { sourceBundle: original.request.sourceBundle } : {}),
         };
       }
       const requested = input.target;
@@ -388,6 +349,19 @@ async function executeTool(
   );
   if ("isError" in catalog) return catalog;
   const row = catalog.capabilities.find((candidate) => candidate.key === input.key);
+  if (!row && contribution?.kind === "member" && !replayOperations && !input.target) {
+    const response = await fetch(
+      `${base()}/pe/contributions?${new URLSearchParams({ key: input.key })}`,
+    );
+    const result = await response.json();
+    return {
+      ok: response.ok,
+      key: input.key,
+      revision,
+      target: namedTarget(defaultTarget),
+      result,
+    };
+  }
   // TODO: with no Target, a row that needs a document is absent from the catalog and refuses as
   // "Unknown capability" instead of "no document" (ACP spike 2026-09-26, REPORT2.md reduced run).
   if (!row)
@@ -404,6 +378,13 @@ async function executeTool(
       revision,
       `'${row.key}' is human-only. Ask the user to press it in the ${row.title.split(":")[0]} workspace.`,
     );
+  if (row.kind === "page" && !replayOperations && input.input)
+    return refuse(
+      row.key,
+      defaultTarget,
+      revision,
+      "pe_read reads a Page; use pe_do for an event or binding.",
+    );
   const refusal = gate(row);
   if (refusal) return refuse(row.key, defaultTarget, revision, refusal);
   // TODO: a temporary document needs an owner that releases it when the harness turn ends.
@@ -414,7 +395,7 @@ async function executeTool(
       revision,
       "family.temporary.acquire has no turn-owned release on the harness lane.",
     );
-  if (input.target !== undefined && row.kind !== "op" && row.kind !== "pod")
+  if (input.target !== undefined && row.kind !== "op" && row.kind !== "script")
     return refuse(
       row.key,
       defaultTarget,
@@ -430,7 +411,14 @@ async function executeTool(
       scope?.thread,
       catalog,
     );
-    return { key: row.key, kind: row.kind, revision, ...outcome };
+    return {
+      key: row.key,
+      kind: row.kind,
+      revision,
+      package: row.package,
+      projection: row.projection,
+      ...outcome,
+    };
   } catch (error) {
     const refusal = refusalSchema.safeParse((error as { refusal?: unknown } | null)?.refusal).data;
     if (refusal)
@@ -439,7 +427,14 @@ async function executeTool(
   }
 }
 
-type Outcome = { ok: boolean; target: ResolvedTarget; result: unknown; elapsedMs?: number };
+type Outcome = {
+  ok: boolean;
+  target: ResolvedTarget;
+  result: unknown;
+  elapsedMs?: number;
+  source?: Capability["package"];
+  bytesBase64?: string;
+};
 
 async function dispatch(
   row: Capability,
@@ -567,13 +562,64 @@ async function dispatch(
       if (!catalog) throw Error("A document row needs the catalog it was read from.");
       return { ok: true, target: scopeTarget, result: mentionOf(row, catalog) };
     }
-    case "skill": {
-      const skill = bundledPeaSkills.find((entry) => `skill:${entry.name}` === row.key);
-      return { ok: true, target: scopeTarget, result: skill?.content ?? "" };
+    case "page": {
+      if (input.target) throw Error("A Page shelf takes no Revit target override.");
+      if (!row.projection?.openUrl)
+        throw Error("Page open URL unavailable from its host descriptor.");
+      const open = new URL(row.projection.openUrl, base());
+      if (open.origin !== new URL(base()).origin)
+        throw Error("Page descriptor has a foreign origin.");
+      const read = async (path: string | URL, init?: RequestInit) => {
+        const response = await fetch(String(path), init);
+        return { ok: response.ok, result: await response.json() };
+      };
+      // pe_do is the Page shelf's event/binding door; these cross their original host checks.
+      if (!input.input) {
+        const [state, target] = await Promise.all([
+          read(new URL("state", open)),
+          read(new URL("target", open)),
+        ]);
+        return {
+          ok: state.ok && target.ok,
+          target: scopeTarget,
+          result: { state: state.result, target: target.result },
+        };
+      }
+      const action = z
+        .union([
+          z.strictObject({ binding: pageChoiceSchema }),
+          z.strictObject({ event: z.record(z.string(), z.unknown()) }),
+        ])
+        .parse(coerceJsonObject(input.input));
+      const binding = "binding" in action;
+      const path = binding
+        ? new URL(`/pe${open.pathname}binding`, base())
+        : new URL("events", open);
+      const answer = await read(path, {
+        method: binding ? "PUT" : "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(binding ? action.binding : action.event),
+      });
+      return { ...answer, target: scopeTarget };
     }
-    case "pod": {
-      const pod = parsePodKey(row.key);
-      if (!pod) throw new Error(`Malformed pod key '${row.key}'.`);
+    case "skill":
+    case "member": {
+      const answer = await contributionRead(row);
+      return {
+        ok: true,
+        target: scopeTarget,
+        result: answer.content,
+        source: row.package,
+        bytesBase64: answer.bytesBase64,
+      };
+    }
+    case "script": {
+      const reference = parseContributionKey(row.key);
+      if (!reference || reference.kind !== "script")
+        throw Error(`Malformed script key '${row.key}'.`);
+      const admitted = await contributionRead(row);
+      if (!admitted.sourceBundle || !admitted.folder)
+        throw Error("Frozen admitted script input unavailable");
       const definition = await new HostRpcCaller({
         hostBaseUrl: base(),
         ...transportScope(input.target, defaultTarget),
@@ -587,18 +633,14 @@ async function dispatch(
       const caller = new HostRpcCaller({
         hostBaseUrl: base(),
         ...target,
-        requestId: row.mutates ? requestId : undefined,
+        requestId,
         timeoutMs: input.timeoutSeconds * 1000,
       });
-      const pods = await caller.call("pod.list");
-      const sourcePath = pods.pods
-        .find((value) => value.folder === pod.workspace)
-        ?.entrypoints.find((entry) => entry.id === pod.entrypoint)?.sourcePath;
-      if (!sourcePath) throw Error("Declared Pod entrypoint unavailable");
       const result = await caller.callOperation("scripting.execute", {
         ...payload,
-        workspaceKey: pod.workspace,
-        sourcePath,
+        workspaceKey: admitted.folder,
+        sourcePath: reference.path,
+        sourceBundle: admitted.sourceBundle,
       });
       return {
         ok: result.ok,
@@ -764,6 +806,23 @@ async function dispatch(
   }
 }
 
+async function contributionRead(row: Capability) {
+  if (!row.package) throw Error("Contribution has no admitted source");
+  const query = new URLSearchParams({ key: row.key, sha256: row.package.sha256 });
+  const response = await fetch(`${base()}/pe/contributions?${query}`);
+  const answer = (await response.json()) as {
+    content: string;
+    bytesBase64: string;
+    sha256: string;
+    folder?: string;
+    sourceBundle?: { files: { path: string; bytesBase64: string }[] };
+    error?: string;
+  };
+  if (!response.ok || answer.sha256 !== row.package.sha256)
+    throw Error(answer.error ?? "Admitted contribution revision unavailable");
+  return answer;
+}
+
 /** SDK selection and product document references travel on different fields. */
 function transportScope(target: RunInput["target"], fallback: Target = null): HostSessionScope {
   if (target && !("kind" in target)) return { session: target };
@@ -927,7 +986,7 @@ function refuse(key: string, defaultTarget: Target, revision: number, content: s
 }
 
 function requestIdentity(context: unknown): string {
-  const record = context as {
+  const record = (context ?? {}) as {
     agent?: { toolCallId?: string };
     mcp?: { extra?: { requestId?: string | number } };
   };

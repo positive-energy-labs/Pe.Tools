@@ -60,8 +60,9 @@ async function fixture() {
       return Response.json({
         at: new Date(0).toISOString(),
         sources: {},
+        diagnostics: [],
         machine: machineFixture(),
-        capabilities: buildCapabilities({ ops: operations, routes: [], pods: null, skills: [] }),
+        capabilities: buildCapabilities({ ops: operations, routes: [], packages: [], skills: [] }),
       });
     if (url.pathname === "/ops") return Response.json({ operations });
     if (url.pathname === "/call") return Response.json({ login });

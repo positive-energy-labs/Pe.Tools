@@ -86,11 +86,12 @@ export async function setup() {
       read: async () => ({
         at: new Date().toISOString(),
         sources: { catalog: "ok" },
+        diagnostics: [],
         machine: machineFixture(),
         capabilities: buildCapabilities({
           ops: [],
           routes: [scheduleGridRouteState],
-          pods: null,
+          packages: [],
           skills: [],
         }),
       }),
