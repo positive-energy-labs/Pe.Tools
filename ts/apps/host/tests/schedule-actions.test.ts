@@ -69,7 +69,7 @@ test("actual HTTP Work + journal consumes fanout only after positive acknowledgm
     transactionName: "Schedule grid push",
   });
   expect(request.edits[0].expectedBinding.targets).toEqual([target(7), target(8)]);
-  const step = JSON.parse(await readFile(join(f.dir, "actions.json"), "utf8")).actions[0].steps[0];
+  const step = (await f.owner().list())[0]!.steps[0];
   expect(step).toMatchObject({ state: "succeeded", input: request, result: { appliedCells: 1 } });
 });
 
@@ -391,7 +391,7 @@ test("retired Family Types has no route or capabilities; current Schedule admiss
   const rows = buildCapabilities({
     ops: [],
     routes: registrations.map((r) => r.spec),
-    pods: null,
+    packages: [],
     skills: [],
   });
   expect(rows.some((r) => r.key.includes("family-types"))).toBe(false);
