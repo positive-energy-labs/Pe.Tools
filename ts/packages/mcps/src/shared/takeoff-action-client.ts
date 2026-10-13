@@ -1,4 +1,5 @@
-import { instancesSessionSelection } from "@pe/agent-contracts";
+import { z } from "zod";
+import { instancesSessionSelection, refusalSchema } from "@pe/agent-contracts";
 import { contextFetch as fetch, invocationContext } from "#invocation-context";
 import { actionListFilterSchema, type ActionListFilter } from "@pe/agent-contracts";
 import {
@@ -18,6 +19,26 @@ import {
   type WorkKey,
 } from "@pe/agent-contracts";
 import { readTakeoffObservation } from "./takeoff-capture-client.ts";
+
+/**
+ * A refused admission. A door's typed refusal rides on the error (`refusal`) and its sentence is
+ * the message; any other body stays text, because only a host door speaks the typed shape.
+ */
+const parsedOrNull = (text: string): unknown => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+};
+async function refusedAdmission(id: string, response: Response) {
+  const text = await response.text();
+  const typed = z.object({ refusal: refusalSchema }).safeParse(parsedOrNull(text));
+  if (!typed.success) return Error(`Action '${id}' refused: ${text}`);
+  const { reason, remedy } = typed.data.refusal;
+  const said = remedy && !reason.includes(remedy) ? `${reason} ${remedy}` : reason;
+  return Object.assign(Error(`Action '${id}' refused. ${said}`), { refusal: typed.data.refusal });
+}
 
 const retained = new Map<string, ActionAdmission>();
 const retentionKey = (base: string, key: string, target: DocumentRef | undefined, path: unknown) =>
@@ -186,7 +207,7 @@ export async function submitAction(
     }
   }
   if (response) {
-    if (!response.ok) throw Error(`Action '${admission.id}' refused: ${await response.text()}`);
+    if (!response.ok) throw await refusedAdmission(admission.id, response);
     row = actionReceiptSchema.parse(await response.json());
   }
   if (!row) throw Error(`Action '${admission.id}' has no receipt`);
