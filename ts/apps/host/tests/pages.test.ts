@@ -308,7 +308,7 @@ ${source}`),
     await reader.cancel().catch(() => undefined);
   });
 
-  it("pushes a head change to the page events stream before the five-second poll", async () => {
+  it("pushes a head change to the page events stream", async () => {
     let changed = () => {};
     let released = false;
     bindControl({
@@ -337,6 +337,42 @@ ${source}`),
       bindControl({ subscribeHeads: undefined });
     }
     expect(released).toBe(true);
+  });
+
+  it("pushes a binding change and a page file change to the events stream, so nothing polls", async () => {
+    const { fetch, root, handle } = await pagesRoot();
+    const stream = await fetch(`/pages/todo/events?after=${Number.MAX_SAFE_INTEGER}`);
+    const reader = stream.body!.getReader();
+    let text = "";
+    /** Read for `ms`, or until `needle` arrives. */
+    const read = async (ms: number, needle?: string) => {
+      const deadline = Date.now() + ms;
+      while (Date.now() < deadline && !(needle && text.includes(needle))) {
+        const next = await Promise.race([
+          reader.read(),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), deadline - Date.now())),
+        ]);
+        if (next?.value) text += new TextDecoder().decode(next.value);
+      }
+      return text;
+    };
+    try {
+      await read(1000, ": open");
+      await asCaller(human, (path, init) => handle(new Request(`http://host${path}`, init)))(
+        "/pe/pages/todo/binding",
+        { method: "PUT", body: JSON.stringify({ kind: "none" }) },
+      );
+      expect(await read(1000, "event: binding\n")).toContain("event: binding\n");
+      await writeFile(join(root, "todo", "index.html"), "<!doctype html><title>v2</title>");
+      const file = 'event: file\ndata: {"path":"index.html"}';
+      expect(await read(2000, file)).toContain(file);
+      // The page's own state never reads as a file change.
+      text = "";
+      await writeFile(join(root, "todo", ".state", "snapshot.json"), "{}");
+      expect(await read(400)).not.toContain("event: file");
+    } finally {
+      await reader.cancel();
+    }
   });
 
   describe("page doors: identity is the path, the target is the binding", () => {
@@ -776,7 +812,6 @@ ${source}`),
       const paths = sent.map((r) => r.url);
       expect(paths).toEqual(
         expect.arrayContaining([
-          "/pages/todo/",
           "/pages/todo/target",
           "/ops?session=s1",
           "/pages/todo/call",
@@ -784,6 +819,8 @@ ${source}`),
         ]),
       );
       expect(paths).not.toContain("/call");
+      // Nothing polls the page's own file; the host pushes `file` on its stream.
+      expect(paths).not.toContain("/pages/todo/");
       expect(paths.some((p) => p.startsWith("/pages/todo/events?after=0&peRuntimeService="))).toBe(
         true,
       );

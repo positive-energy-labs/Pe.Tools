@@ -33,7 +33,7 @@
  *   POST /pages/<slug>/act             { key, input? }: a write as the page under its binding (host `/actions`)
  *   PUT  /pe/pages/<slug>/binding      a slot (PageChoice): the human picker, or Pea pinning its own document
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, watch } from "node:fs";
 import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -173,6 +173,8 @@ export type PageRow = {
   pod: string | null;
 };
 type Listener = (row: PageEventRow) => void;
+/** A named push on a page's stream that is not a log row: `binding`, `file`. */
+type Signal = (event: "binding" | "file", data: unknown) => void;
 
 /** One open document as the bridge lists it. */
 export type LiveDocument = {
@@ -250,8 +252,10 @@ const unboundRefusal = (door: string): Refusal => ({
 class PageState {
   private readonly dir: string;
   private readonly listeners = new Set<Listener>();
+  private readonly signals = new Set<Signal>();
+  private unwatch: (() => void) | null = null;
   private queue: Promise<unknown> = Promise.resolve();
-  constructor(pageDir: string) {
+  constructor(private readonly pageDir: string) {
     this.dir = join(pageDir, ".state");
   }
   async rows(): Promise<PageEventRow[]> {
@@ -300,6 +304,46 @@ class PageState {
   follow(listen: Listener) {
     this.listeners.add(listen);
     return () => this.listeners.delete(listen);
+  }
+  signal: Signal = (event, data) => {
+    for (const hear of this.signals) hear(event, data);
+  };
+  /**
+   * Named pushes while a stream is open. The page folder is watched only then: a change to any
+   * file outside a dot-folder is `file`, so a stale tab reloads without polling its own file.
+   */
+  hear(signal: Signal) {
+    this.signals.add(signal);
+    if (!this.unwatch) this.unwatch = this.watch();
+    return () => {
+      this.signals.delete(signal);
+      if (this.signals.size || !this.unwatch) return;
+      this.unwatch();
+      this.unwatch = null;
+    };
+  }
+  private watch() {
+    const pending = new Map<string, ReturnType<typeof setTimeout>>();
+    try {
+      const watcher = watch(this.pageDir, { recursive: true }, (_kind, name) => {
+        const path = name?.toString().replaceAll("\\", "/");
+        if (!path || path.split("/").some((segment) => segment.startsWith("."))) return;
+        // One write is several OS events; one push per path settles them.
+        clearTimeout(pending.get(path));
+        pending.set(
+          path,
+          setTimeout(() => (pending.delete(path), this.signal("file", { path })), 50),
+        );
+      });
+      watcher.on("error", () => watcher.close());
+      return () => {
+        for (const timer of pending.values()) clearTimeout(timer);
+        watcher.close();
+      };
+    } catch (error) {
+      if (isMissing(error)) return () => {};
+      throw error;
+    }
   }
 }
 
@@ -464,6 +508,9 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
         const unhead = subscribeHeads(() =>
           controller.enqueue(encoder.encode("event: head\ndata: {}\n\n")),
         );
+        const unhear = state.hear((event, data) =>
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)),
+        );
         for (const row of await state.rows()) send(row);
         // A named heartbeat, so pe.js can tell a quiet stream from a dead one (a browser's own
         // EventSource retry was seen to never fire after a dev host restart, 2026-10-04).
@@ -475,6 +522,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
           clearInterval(beat);
           unfollow();
           unhead();
+          unhear();
           try {
             controller.close();
           } catch {
@@ -691,6 +739,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     await mkdir(join(dir, ".state"), { recursive: true });
     const next: PageBinding = { slots: { ...current.slots, default: slot } };
     await writeFile(bindingFile(dir), JSON.stringify(next, null, 2), "utf8");
+    stateOf(slug, dir).signal("binding", {});
     return json(await target(slug, dir));
   }
 

@@ -458,41 +458,39 @@
             : resolution.kind;
       what.textContent = subject ? `${named} · ${subject}` : named;
     };
-    // The binding moves in another tab (the picker) and a thread's head moves in chat: read it again while seen.
-    const fresh = () => {
-      if (document.visibilityState !== "hidden") readTarget().catch(() => {});
+    // Nothing polls: the host pushes `binding` (the picker, another tab), `head` (a thread's head moved in chat) and
+    // `file` on this page's stream; a grant's expiry is read again at its own minute. A dropped stream reopens.
+    let expiry = 0;
+    const fresh = () => readTarget().catch(() => {});
+    const follow = () => {
+      // Live only: the log's rows belong to `pe.state`.
+      const es = new EventSource(streamUrl(`${door("events")}?after=${Number.MAX_SAFE_INTEGER}`));
+      es.onopen = fresh;
+      es.addEventListener("head", fresh);
+      es.addEventListener("binding", fresh);
+      // A tab never learned its page file changed, so a stale copy ran old code: kaitpw pressed pre-fix buttons for
+      // two hours while the fix was on disk (2026-10-05). A changed page, script or style reloads it.
+      es.addEventListener("file", (m) => {
+        if (/\.(html|m?js|css)$/i.test(JSON.parse(m.data).path)) location.reload();
+      });
+      es.onerror = () => {
+        es.close();
+        setTimeout(follow, 2000);
+      };
+      window.addEventListener("pagehide", () => es.close(), { once: true });
     };
-    setInterval(fresh, 5000);
-    const heads = new EventSource(streamUrl(door("events")));
-    heads.addEventListener("head", fresh);
-    window.addEventListener("pagehide", () => heads.close(), { once: true });
+    follow();
     window.addEventListener("focus", fresh);
-    queueMicrotask(fresh);
     return {
       show(next) {
         reading = next;
+        clearTimeout(expiry);
+        if (next.write && next.write.kind === "rw")
+          expiry = setTimeout(fresh, Math.max(0, Date.parse(next.write.expiresAt) - Date.now()) + 500);
         draw();
       },
     };
   })();
-
-  // A tab never learns its page file changed, so a stale copy keeps running old code: kaitpw pressed pre-fix
-  // buttons for two hours while the fix was on disk (2026-10-05). Re-read the page's own file and reload on change.
-  // ponytail: polls the whole file every 15 s; a host-sent mtime on the events heartbeat replaces it if pages get big.
-  if (pe.slug) {
-    const own = () =>
-      pe.fetch(location.pathname, { cache: "no-store" }).then((r) => (r.ok ? r.text() : null));
-    own().then((first) =>
-      setInterval(
-        () =>
-          own().then(
-            (now) => now != null && first != null && now !== first && location.reload(),
-            () => {},
-          ),
-        15000,
-      ),
-    );
-  }
 
   window.pe = pe;
 })();
