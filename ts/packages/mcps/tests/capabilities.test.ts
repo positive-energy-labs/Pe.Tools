@@ -1,3 +1,4 @@
+import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
 import type { PodList } from "@pe/host-contracts/operation-types";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -92,7 +93,7 @@ const pods = {
 function catalog(): CapabilityCatalog {
   return {
     at: "2026-09-04T00:00:00.000Z",
-    sessions: [{ sessionId: "b1", custody: "observed", sdkSessionId: "dev" }],
+    machine: machineFixture([{ session: "b1", documents: null }]),
     sources: { catalog: "ok" },
     capabilities: buildCapabilities({
       ops,
@@ -226,7 +227,9 @@ test.each(["http", "stdio"])(
         if (url.pathname === "/pe/capabilities")
           return Response.json({
             at: new Date().toISOString(),
-            sessions,
+            machine: machineFixture(
+              sessions.map((s) => ({ session: s.sessionId, documents: s.openDocuments })),
+            ),
             sources: {},
             capabilities: buildCapabilities({ ops: nativeOps, routes: [], pods: null, skills: [] }),
           });
@@ -472,6 +475,7 @@ test("native catalog survives SDK latency while host-only sources keep their sho
   });
   try {
     const source = createCapabilityCatalogSource({
+      machine: async () => machineFixture(),
       hostBaseUrl: "http://127.0.0.1:19",
       registrations: [],
     });
@@ -480,7 +484,7 @@ test("native catalog survives SDK latency while host-only sources keep their sho
     const result = await reading;
     expect(result.sources.catalog).toBe("ok");
     expect(result.capabilities.some((row) => row.key === "op:scripting.execute")).toBe(true);
-    expect(deadlines.filter((ms) => ms === 2000)).toHaveLength(2);
+    expect(deadlines.filter((ms) => ms === 2000)).toHaveLength(1);
     expect(deadlines.some((ms) => ms > 30_000)).toBe(true);
   } finally {
     timeout.mockRestore();
@@ -508,6 +512,7 @@ test("a cached catalog still reads the open documents fresh: a closed one is gon
     );
   });
   const source = createCapabilityCatalogSource({
+    machine: async () => machineFixture([{ session: "b1", documents: open }]),
     hostBaseUrl: "http://127.0.0.1:19",
     registrations: [],
   });
@@ -914,12 +919,10 @@ test("an open document is a doc: row: pe_find finds it, pe_read returns its ment
   fakeRuntimeHost("http://127.0.0.1:9");
   // What GET /pe/capabilities serves: the catalog plus its sessions' open documents as rows.
   const base = catalog();
-  base.sessions = [
+  base.machine = machineFixture([
     {
-      sessionId: "b1",
-      custody: "controlled",
-      revitVersion: "2025",
-      openDocuments: [
+      session: "b1",
+      documents: [
         {
           openId: "o1",
           address: "C:\\Models\\Riser.rvt",
@@ -929,7 +932,7 @@ test("an open document is a doc: row: pe_find finds it, pe_read returns its ment
         },
       ],
     },
-  ];
+  ]);
   const served = { ...base, capabilities: [...base.capabilities, ...documentRows(base)] };
   vi.stubGlobal("fetch", async () => Response.json(served));
   const found = (await run(peFind, { query: "mechanical riser" })) as {
@@ -1001,7 +1004,7 @@ test("a recent document is a recent: row: pe_find finds it, pe_read returns its 
   expect(read.result.facts).toMatchObject({
     path: "C:\\Jobs\\Belmont Plant.rvt",
     year: 2024,
-    open: false,
+    open: null,
     openWith: "C:\\Jobs\\Belmont Plant.rvt",
   });
   const done = (await run(peDo, { key, timeoutSeconds: 30 })) as {
@@ -1043,6 +1046,7 @@ test("recents ride the catalog from the host's SDK reading: cached, never awaite
     return Response.json(key === "pod.list" ? pods : { sessions: [] });
   });
   const source = createCapabilityCatalogSource({
+    machine: async () => machineFixture(),
     hostBaseUrl: "http://127.0.0.1:19",
     registrations: [],
   });
@@ -1056,6 +1060,7 @@ test("recents ride the catalog from the host's SDK reading: cached, never awaite
   vi.useFakeTimers();
   try {
     const slow = createCapabilityCatalogSource({
+      machine: async () => machineFixture(),
       hostBaseUrl: "http://127.0.0.1:19",
       registrations: [],
     });
@@ -1081,6 +1086,7 @@ test("recents ride the catalog from the host's SDK reading: cached, never awaite
   // A failure names itself in sources; the rest of the catalog stands.
   answer = async () => Response.json({ error: "pe-revit missing" }, { status: 503 });
   const failing = createCapabilityCatalogSource({
+    machine: async () => machineFixture(),
     hostBaseUrl: "http://127.0.0.1:19",
     registrations: [],
   });
@@ -1388,11 +1394,11 @@ test("the doors ride the host under the turn Target and name the revision and re
   try {
     const map = (await run(peFind, {})) as {
       map: { total: number };
-      sessions: unknown[];
+      machine: { revit: { sessions: unknown[] } };
       revision: number;
     };
     expect(map.map.total).toBeGreaterThan(10);
-    expect(map.sessions).toHaveLength(1);
+    expect(map.machine.revit.sessions).toHaveLength(1);
     expect(map.revision).toBe(4);
     // The catalog is read for the turn's Target Address, never for a model-typed selector.
     expect(calls[0]?.url.search).toBe("?target=C%3A%5CModels%5CA.rvt&session=b1");

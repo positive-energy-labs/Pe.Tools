@@ -53,7 +53,7 @@ const persistenceOf = (document: SessionDocument) =>
       : "local";
 
 type GrantedDocument = MachineAttachmentDocument & {
-  access: Extract<MachineAccess, { via: "grant" }>;
+  access: Extract<MachineAccess, { kind: "rw" }>;
 };
 
 /**
@@ -63,14 +63,13 @@ type GrantedDocument = MachineAttachmentDocument & {
  */
 export const grantsOf = (session: MachineSession): GrantedDocument[] =>
   (session.attachment?.documents ?? []).filter(
-    (document): document is GrantedDocument =>
-      document.access.level === "rw" && document.access.via === "grant",
+    (document): document is GrantedDocument => document.access.kind === "rw",
   );
 
-const rwSays = (access: Extract<MachineAccess, { level: "rw" }>) =>
-  access.via === "pea-session"
+const rwSays = (access: Exclude<MachineAccess, { kind: "read" }>) =>
+  access.kind === "pea"
     ? "Pea's own Revit: Pea may write this document"
-    : `thread "${access.threadTitle}" may write this document until ${until(access.expiresAt)}`;
+    : `thread "${access.label}" may write this document until ${until(access.until)}`;
 
 const until = (iso: string) =>
   new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -126,6 +125,11 @@ export function SessionRow({ session, facts, anchor, verbs, strip }: SessionView
           <>
             {facts.pid ? <PidChip pid={facts.pid} /> : null}
             <PhaseWord facts={facts} />
+            {session.row.execution?.allowed !== true ? (
+              <span data-tone="caution">
+                {session.row.execution?.detail ?? "Runtime ownership not verified"}
+              </span>
+            ) : null}
           </>
         }
         sub={
@@ -174,7 +178,7 @@ export function HeldRow({
         label={document.title ?? document.path}
         aside={document.isModified ? "unsaved" : undefined}
         meta={
-          access?.level === "rw" ? (
+          access && access.kind !== "read" ? (
             <>
               <span data-tone="done" title={rwSays(access)}>
                 rw
@@ -219,6 +223,11 @@ export function SessionCard({
             {titleOf(facts)}
           </span>
           <PhaseWord facts={facts} />
+          {session.row.execution?.allowed !== true ? (
+            <span data-tone="caution">
+              {session.row.execution?.detail ?? "Runtime ownership not verified"}
+            </span>
+          ) : null}
         </>
       }
       headTrail={verbs}
@@ -258,8 +267,8 @@ export function SessionCard({
             key={`rw:${granted.session}/${granted.openId}`}
             lines={2}
             label={<span data-tone="done">rw · {granted.title}</span>}
-            meta={`until ${until(granted.access.expiresAt)}`}
-            sub={granted.access.threadTitle}
+            meta={`until ${until(granted.access.until)}`}
+            sub={granted.access.label}
             title={rwSays(granted.access)}
           />
         ))}

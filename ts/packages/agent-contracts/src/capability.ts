@@ -5,6 +5,7 @@
  * `needs` filter replace hiding.
  */
 import { z } from "zod";
+import type { Machine } from "./machine.ts";
 
 export const capabilityKindSchema = z.enum([
   "op",
@@ -50,27 +51,6 @@ export const capabilitySchema = z
   .strict();
 export type Capability = z.infer<typeof capabilitySchema>;
 
-export const capabilitySessionSchema = z.object({
-  sessionId: z.string().optional(),
-  custody: z.string().optional(),
-  sdkSessionId: z.string().nullable().optional(),
-  revitVersion: z.string().nullable().optional(),
-  activeDocumentTitle: z.string().nullable().optional(),
-  activeDocument: z.string().nullable().optional(),
-  openDocuments: z
-    .array(
-      z.object({
-        openId: z.string(),
-        address: z.string().nullable(),
-        title: z.string(),
-        isFamilyDocument: z.boolean(),
-        isActive: z.boolean(),
-      }),
-    )
-    .nullable()
-    .optional(),
-});
-
 /** One entry of Revit's per-year recent documents, as `pe-revit doc list --recent` reads it. */
 export const capabilityRecentSchema = z.object({
   title: z.string(),
@@ -94,7 +74,14 @@ export const capabilityCatalogSchema = z.object({
   at: z.string(),
   /** The bridge session the op rows were read from, when one answered. */
   bridgeSessionId: z.string().optional(),
-  sessions: z.array(capabilitySessionSchema),
+  machine: z.custom<Machine>(
+    (value) =>
+      !!value &&
+      typeof value === "object" &&
+      "revit" in value &&
+      "legs" in value &&
+      "observedAtUtc" in value,
+  ),
   /** Revit's recent documents (no Revit needed); absent when the catalog was built without them. */
   recents: z.array(capabilityRecentSchema).optional(),
   /** Per-source outcome; a source that could not answer says why instead of hiding rows. */

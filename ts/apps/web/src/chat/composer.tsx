@@ -1,7 +1,12 @@
 // The composer's DOM: draft box, attachments, slash and `@` menus, send. Logic lives in the hooks and `useSend`.
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { ArrowUp, GitFork, Paperclip, Square } from "lucide-react";
-import { capabilityCatalogSchema, type Capability } from "@pe/agent-contracts";
+import {
+  capabilityCatalogSchema,
+  type Capability,
+  type Machine,
+  type Reading,
+} from "@pe/agent-contracts";
 import { FirstOpenCard } from "#/chat/first-open";
 import { isReady } from "#/workbench/provider/providers";
 import { Textarea } from "#/components/lang/textarea";
@@ -16,7 +21,7 @@ import { SituationAction } from "#/route/situation-verbs";
 import { ComposerBox, ComposerFrame, ComposerRow } from "#/components/lang/conversation";
 import { Button } from "#/components/lang/button";
 import { MentionChip } from "#/components/lang/chip";
-import { previousOf, targetInventory } from "#/readings";
+import { previousOf } from "#/readings";
 import { AttachmentChip } from "./attachment-chip";
 import { useAttachments } from "./use-attachments";
 import { useSlashMenu, type SlashCommand } from "./use-slash-menu";
@@ -58,11 +63,11 @@ export function ThreadComposer({
   const [form, setForm] = useState<HTMLFormElement | null>(null);
   const [area, setArea] = useState<HTMLTextAreaElement | null>(null);
   // Documents come from the live inventory, never the catalog read at mount.
-  const inventory = previousOf(handle.readings.inventory as Parameters<typeof targetInventory>[0]);
+  const machine = previousOf(handle.readings.machine as Reading<Machine>);
   const catalog = useMemo(() => {
     const read = capabilityCatalogSchema.safeParse(previousOf(handle.readings.capabilities)).data;
-    return read && liveCatalog(read, inventory, new Date().toISOString());
-  }, [handle.readings.capabilities, inventory]);
+    return read && machine && liveCatalog(read, machine);
+  }, [handle.readings.capabilities, machine]);
   const mentions = useMentions(draft, setDraft, catalog, area, slash.open);
   const setText = (text: string) => setDraft((previous) => withText(previous, text));
   const sendCurrent = () => void send.run();

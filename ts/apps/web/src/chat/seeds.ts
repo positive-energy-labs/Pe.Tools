@@ -5,7 +5,6 @@
  */
 import {
   address,
-  catalogSessions,
   documentRows,
   mentionOf,
   mentionToken,
@@ -16,7 +15,7 @@ import {
   type PromptAttachment,
   type Seed,
 } from "@pe/agent-contracts";
-import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
+import { CHECKOUT_HOT, MACHINE_SEEDS } from "#/open/seeds";
 
 import type { ChatReading } from "#/chat/manifest";
 import { emptyChatState, type ChatState } from "#/workbench/chat-state";
@@ -323,32 +322,42 @@ const CLOSED_HEAD = {
   displayLabel: "Operations Demo.rvt",
 };
 
-const INVENTORY = {
-  sessions: [
-    {
-      sessionId: "pe.app-26",
-      connected: true,
-      custody: "controlled",
-      revitVersion: "2026",
-      openDocumentCount: 1,
-      openDocuments: [
-        {
-          openId: "open-1",
-          title: "Operations Demo.rvt",
-          address: DEMO_ADDRESS,
-          isFamilyDocument: false,
-          isActive: true,
-        },
-      ],
-    },
-  ],
-} satisfies { sessions: readonly BridgeSessionListEntry[] };
+const machineSeed = MACHINE_SEEDS["controlled-hot"];
+if (machineSeed.state !== "ready") throw new Error("Chat seed requires a ready Machine fixture");
 
 /** `GET /pe/capabilities` as a hostless page sees it: the seed inventory's session, Revit's recent
  * documents and one row of each kind. No `doc:` or `recent:` rows: the `@` menu derives them. */
 const CATALOG = {
   at: at(29).toISOString(),
-  sessions: catalogSessions(INVENTORY.sessions),
+  machine: {
+    ...machineSeed.observation,
+    revit: {
+      years: [2026],
+      unclassifiedAttachments: [],
+      sessions: [
+        {
+          ...CHECKOUT_HOT,
+          row: { ...CHECKOUT_HOT.row, year: 2026 },
+          attachment: {
+            session: "pe.app-26",
+            pid: 2501,
+            processStartUtcUnixMs: 0,
+            documents: [
+              {
+                session: "pe.app-26",
+                openId: "open-1",
+                title: "Operations Demo.rvt",
+                address: DEMO_ADDRESS,
+                isFamilyDocument: false,
+                isActive: true,
+                access: { kind: "read" },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  },
   recents: [
     recent(
       "Boiler Plant Retrofit",
@@ -494,7 +503,7 @@ const CHAT_MENTION_STATE: ChatState = {
   ),
 };
 
-const READINGS = { head: HEAD, inventory: INVENTORY, receipts: [], capabilities: CATALOG };
+const READINGS = { head: HEAD, machine: CATALOG.machine, receipts: [], capabilities: CATALOG };
 
 /** One seed per action. The map is total: every action key has a moment. */
 export const CHAT_SEEDS = {

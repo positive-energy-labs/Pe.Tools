@@ -1,3 +1,4 @@
+import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -205,7 +206,7 @@ test("HTTP authored writes enforce short local revision checks", async () => {
     catalogReads.push(session),
     {
       at: "2026-09-14T22:54:30.125Z",
-      sessions: [],
+      machine: machineFixture(),
       sources: {},
       capabilities: [],
     }

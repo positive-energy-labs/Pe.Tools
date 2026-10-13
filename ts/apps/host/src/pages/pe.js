@@ -429,21 +429,14 @@
     if (document.body) mount();
     else document.addEventListener("DOMContentLoaded", mount);
     let reading = null;
-    let readAt = 0;
     const draw = () => {
       if (!reading) return;
       const { binding, resolution, document: doc } = reading;
       const w = reading.write;
-      const left =
-        w && w.kind === "rw"
-          ? Date.parse(w.expiresAt) - Date.parse(reading.hostNow) - (performance.now() - readAt)
-          : 0;
       const mark = !w
         ? "—"
         : w.kind === "rw"
-          ? left > 0
-            ? `rw · ${Math.ceil(left / 60000)}m`
-            : "read"
+          ? `rw · until ${new Date(w.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
           : w.kind;
       face.dataset.write = mark.startsWith("rw") ? "rw" : mark;
       face.dataset.state = resolution.kind;
@@ -465,13 +458,12 @@
             : resolution.kind;
       what.textContent = subject ? `${named} · ${subject}` : named;
     };
-    setInterval(draw, 15000);
     // The binding moves in another tab (the picker) and a thread's head moves in chat: read it again while seen.
     const fresh = () => {
       if (document.visibilityState !== "hidden") readTarget().catch(() => {});
     };
     setInterval(fresh, 5000);
-    const heads = new EventSource(streamUrl(`${base}/events`));
+    const heads = new EventSource(streamUrl(door("events")));
     heads.addEventListener("head", fresh);
     window.addEventListener("pagehide", () => heads.close(), { once: true });
     window.addEventListener("focus", fresh);
@@ -479,7 +471,6 @@
     return {
       show(next) {
         reading = next;
-        readAt = performance.now();
         draw();
       },
     };

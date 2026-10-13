@@ -2,14 +2,20 @@
  *  next turn's provider, traits and document target in its bottom row beside Send. The target binds
  *  through the thread head (`PUT /scope/:thread`); a `?target` pin seeds a document-less thread once. */
 import { useEffect, useRef } from "react";
-import { resolveCallTarget, type TargetResolution } from "@pe/agent-contracts";
+import {
+  resolveCallTarget,
+  machineInventory,
+  type TargetResolution,
+  type Machine,
+  type Reading,
+} from "@pe/agent-contracts";
 import { File, X } from "lucide-react";
 import { Popover } from "@base-ui/react/popover";
 import { PopupFrame } from "#/components/lang/list-popup";
 import { useAtomValue } from "@effect/atom-react";
 
 import { Button } from "#/components/lang/button";
-import { targetInventory } from "#/readings";
+import { previousOf } from "#/readings";
 import { Ladder } from "#/route/ladder";
 import { Ledger, PageLog } from "#/route/situation-grids";
 import { useDocumentLadder } from "#/route/situation-ladder";
@@ -82,7 +88,7 @@ const complaint = (resolution: TargetResolution): string | null =>
           }[resolution.reason];
 
 /** The one open document at a `?target` address pin; none when absent or held twice. */
-const pinnedRef = (inventory: ReturnType<typeof targetInventory>, target?: string) => {
+const pinnedRef = (inventory: ReturnType<typeof machineInventory>, target?: string) => {
   const parsed = parseTarget(target);
   if (parsed?.kind !== "address" || inventory.kind !== "ready") return null;
   const refs = Object.entries(inventory.sessions).flatMap(([session, found]) =>
@@ -97,7 +103,7 @@ const pinnedRef = (inventory: ReturnType<typeof targetInventory>, target?: strin
 
 /** The bound document's Address, which keys document-owned Work. */
 const documentAddress = (
-  inventory: ReturnType<typeof targetInventory>,
+  inventory: ReturnType<typeof machineInventory>,
   ref: { session: string; openId: string } | null,
 ) => {
   const found = ref && inventory.kind === "ready" ? inventory.sessions[ref.session] : undefined;
@@ -127,9 +133,7 @@ function useThreadHead(handle: ChatHandle) {
 export function useChatSituation(handle: ChatHandle) {
   const { currentThreadId, threads, chat, missingThread } = useWorkbench();
   const head = useThreadHead(handle);
-  const inventory = targetInventory(
-    handle.readings.inventory as Parameters<typeof targetInventory>[0],
-  );
+  const inventory = machineInventory(previousOf(handle.readings.machine as Reading<Machine>));
   const resolution = resolveCallTarget({ needs: "document" }, head.defaultTarget, inventory);
   const bound =
     resolution.kind === "resolved" && resolution.target.kind === "document"

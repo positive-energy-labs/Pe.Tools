@@ -58,7 +58,16 @@ const attached: AttachmentRead = {
   session: "product-open",
   pid: 42,
   processStartUtcUnixMs: Date.parse(row.process.processStartUtc),
-  documents: [{ session: "product-open", openId: "product-id", title: "Tower.rvt" }],
+  documents: [
+    {
+      session: "product-open",
+      openId: "product-id",
+      title: "Tower.rvt",
+      address: null,
+      isFamilyDocument: false,
+      isActive: true,
+    },
+  ],
 };
 const docs: DocListResult = {
   state: "ok",
@@ -139,7 +148,9 @@ test("a stalled observed-document leg publishes unknown at the Machine deadline"
   vi.mocked(f.sources.documents).mockReturnValue(new Promise(() => {}));
   let value: Machine | undefined;
   try {
-    void f.machine.refresh().then((reading) => { value = reading; });
+    void f.machine.refresh().then((reading) => {
+      value = reading;
+    });
     await vi.advanceTimersByTimeAsync(15_001);
     expect(value?.revit.sessions?.[0]).toMatchObject({
       whose: "you",
@@ -359,7 +370,7 @@ test("raw observed row gets SDK documents with unknown persistence and exact pro
     expect(session?.row).toBe(row);
     expect(session?.attachment).toEqual({
       ...attached,
-      documents: [{ ...attached.documents![0]!, access: { level: "read" } }],
+      documents: [{ ...attached.documents![0]!, access: { kind: "read" } }],
     });
     expect(session?.documents).toEqual([{ ...docs.documents[0], persistence: null }]);
     expect(session?.attachment?.documents?.[0]?.openId).toBe("product-id");
@@ -386,7 +397,7 @@ test("unread observed documents remain unknown and a reused pid cannot classify 
     expect(value.revit.sessions).toHaveLength(1);
     expect(value.revit.sessions?.[0]).toMatchObject({ row, attachment: null, documents: null });
     expect(value.revit.unclassifiedAttachments).toEqual([
-      { ...reused, documents: [{ ...reused.documents![0]!, access: { level: "read" } }] },
+      { ...reused, documents: [{ ...reused.documents![0]!, access: { kind: "read" } }] },
     ]);
   } finally {
     f.machine.close();
@@ -712,16 +723,15 @@ const accessAt = async (grants: readonly HeldGrant[], at: string, whose: "you" |
 
 test("access: a live grant on the exact lifetime draws rw with its thread and expiry", async () => {
   expect(await accessAt([grantHeld()], "2026-10-12T12:30:00.000Z")).toEqual({
-    level: "rw",
-    via: "grant",
-    thread: "t1",
-    threadTitle: "Retag level 2",
-    expiresAt: "2026-10-12T13:00:00.000Z",
+    kind: "rw",
+    context: "t1",
+    label: "Retag level 2",
+    until: "2026-10-12T13:00:00.000Z",
   });
 });
 
 test("access: expired, revoked and other-lifetime grants are read, and no grant is read", async () => {
-  const read = { level: "read" };
+  const read = { kind: "read" };
   expect(await accessAt([grantHeld()], "2026-10-12T13:00:00.000Z")).toEqual(read);
   expect(
     await accessAt(
@@ -740,8 +750,7 @@ test("access: expired, revoked and other-lifetime grants are read, and no grant 
 
 test("access: Pea's own session is rw by session, not by any grant", async () => {
   expect(await accessAt([], "2026-10-12T12:30:00.000Z", "pea")).toEqual({
-    level: "rw",
-    via: "pea-session",
+    kind: "pea",
   });
 });
 
@@ -761,7 +770,7 @@ test("access: a head move re-reads the machine through the grant source", async 
   notify();
   await vi.waitFor(() => expect(seen.length).toBeGreaterThan(before));
   expect(seen.at(-1)!.revit.sessions![0]!.attachment!.documents![0]!.access).toMatchObject({
-    level: "rw",
+    kind: "rw",
   });
   stop();
   machine.close();

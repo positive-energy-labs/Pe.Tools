@@ -1,13 +1,13 @@
 import { hostFetch } from "#/host/runtime";
-import { z } from "zod";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { peReadings, previousOf, useReading } from "#/readings";
 import {
   threadHeadSchema,
   putTargetResultSchema,
   refusalSchema,
   type DocumentRequest,
-  type HeadGrant,
+  threadHeadReadingSchema,
+  type GrantView,
   type Reading,
   type Refusal,
   type ThreadHead,
@@ -16,28 +16,14 @@ import {
 
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
 
-const hostClockSchema = z.object({ hostNow: z.iso.datetime() });
-
 const scopeUrl = (threadId: string) =>
   peUrl(resolveWorkbenchConfig(), `/scope/${encodeURIComponent(threadId)}`);
 
-/** What the head's grant says right now, counted on the host's clock. */
-export type GrantView =
-  | { readonly state: "rw"; readonly minutes: number }
-  | { readonly state: "expired" }
-  | { readonly state: "revoked" };
+export type { GrantView };
 
 /** A host door's refusal in the person's words: the door, the reason, then the remedy. */
 export const refusalSentence = ({ reason, remedy }: Refusal) =>
   remedy && !reason.includes(remedy) ? `${reason} ${remedy}` : reason;
-
-/** `hostNowMs` is the host's clock at this instant, never the browser's. */
-export function grantViewOf(grant: HeadGrant | null, hostNowMs: number): GrantView | null {
-  if (!grant) return null;
-  if (grant.revoked) return { state: "revoked" };
-  const left = Date.parse(grant.expiresAt) - hostNowMs;
-  return left <= 0 ? { state: "expired" } : { state: "rw", minutes: Math.ceil(left / 60_000) };
-}
 
 /**
  * The thread's default Target comes from the shared resource stream; the head writes with PUT.
@@ -53,21 +39,6 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
   const raw = previousOf(reading);
   const parsed = threadHeadSchema.safeParse(raw);
   const head = parsed.success ? parsed.data : undefined;
-  // A head served without the host's clock (a frozen seed) has no countdown to show.
-  const hostNow = hostClockSchema.safeParse(raw).data?.hostNow;
-  // The host's clock at this reading, and the browser's monotonic clock when it arrived. Elapsed
-  // time since then is the only thing the browser adds; its wall clock is never consulted.
-  const clock = useMemo(
-    () => (hostNow ? { hostMs: Date.parse(hostNow), at: performance.now() } : null),
-    [raw],
-  );
-  const [, tick] = useState(0);
-  useEffect(() => {
-    if (!head?.grant) return;
-    const timer = setInterval(() => tick((n) => n + 1), 15_000);
-    return () => clearInterval(timer);
-  }, [head?.grant?.expiresAt, head?.grant?.revoked?.at]);
-
   useEffect(() => {
     generation.current++;
     setRefusal(null);
@@ -75,8 +46,7 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
   }, [threadId, enabled]);
 
   const current: ThreadHead = head ?? emptyThreadHead;
-  const grantView =
-    head && clock ? grantViewOf(head.grant, clock.hostMs + (performance.now() - clock.at)) : null;
+  const grantView = threadHeadReadingSchema.safeParse(raw).data?.grantView ?? null;
   /** True when the head moved; otherwise `refusal` says why, in the head's own words. */
   const set = async (
     defaultTarget: DocumentRequest | null,

@@ -19,7 +19,7 @@ const csv: PromptAttachment = {
   text: "a,b\n1,2",
 };
 // No head or inventory read yet: nothing is closed, so Send reasons only about the draft.
-const ctx = { readings: { head: { state: "absent" }, inventory: { state: "absent" } } } as never;
+const ctx = { readings: { head: { state: "absent" }, machine: { state: "absent" } } } as never;
 
 afterEach(() => vi.unstubAllGlobals());
 

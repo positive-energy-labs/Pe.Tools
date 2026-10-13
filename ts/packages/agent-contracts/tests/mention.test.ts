@@ -1,3 +1,4 @@
+import { machineFixture } from "./machine-fixture.ts";
 import { expect, it } from "vite-plus/test";
 import type { Capability, CapabilityCatalog } from "../src/capability.ts";
 import { findCapabilities } from "../src/capability.ts";
@@ -11,14 +12,12 @@ import {
   recentRows,
 } from "../src/mention.ts";
 
-const catalog: Pick<CapabilityCatalog, "at" | "sessions"> = {
+const catalog: Pick<CapabilityCatalog, "at" | "machine"> = {
   at: "2026-10-12T12:00:00.000Z",
-  sessions: [
+  machine: machineFixture([
     {
-      sessionId: "b1",
-      custody: "controlled",
-      revitVersion: "2025",
-      openDocuments: [
+      session: "b1",
+      documents: [
         {
           openId: "o1",
           address: "C:\\Models\\Riser.rvt",
@@ -29,14 +28,8 @@ const catalog: Pick<CapabilityCatalog, "at" | "sessions"> = {
         { openId: "o2", address: null, title: "Elbow", isFamilyDocument: true, isActive: false },
       ],
     },
-    // No id: nothing to point through.
-    {
-      openDocuments: [
-        { openId: "o3", address: null, title: "Lost", isFamilyDocument: false, isActive: true },
-      ],
-    },
-    { sessionId: "b2", openDocuments: null },
-  ],
+    { session: "b2", documents: null },
+  ]),
 };
 
 it("document keys round-trip and refuse other keys", () => {
@@ -181,10 +174,10 @@ it("recentRows keys local files by path and cloud models by guids, drops open on
   // An open cloud model is matched by its guid, the address the bridge reports for it.
   const cloudOpen = {
     ...withRecents,
-    sessions: [
+    machine: machineFixture([
       {
-        sessionId: "b3",
-        openDocuments: [
+        session: "b3",
+        documents: [
           {
             openId: "c1",
             address: cloud.modelGuid.toUpperCase(),
@@ -194,7 +187,7 @@ it("recentRows keys local files by path and cloud models by guids, drops open on
           },
         ],
       },
-    ],
+    ]),
   };
   expect(recentRows(cloudOpen).map((row) => row.key)).not.toContain(rows[0]!.key);
   expect(findCapabilities(rows, { query: "belmont" }).map((row) => row.key)).toEqual([
@@ -215,10 +208,10 @@ it("recentRows drops templates, labels families, and an open document wins a sha
     savedYear: 2026,
   });
   const rows = recentRows({
-    sessions: [
+    machine: machineFixture([
       {
-        sessionId: "s1",
-        openDocuments: [
+        session: "s1",
+        documents: [
           {
             openId: "o1",
             address: "C:\Jobs\Riser.rvt",
@@ -228,7 +221,7 @@ it("recentRows drops templates, labels families, and an open document wins a sha
           },
         ],
       },
-    ],
+    ]),
     recents: [
       recent("C:\Templates\MEP.rte", "MEP", 1),
       recent("C:\Families\Damper.rfa", "Damper", 2),
@@ -238,10 +231,10 @@ it("recentRows drops templates, labels families, and an open document wins a sha
   expect(rows.map((row) => row.title)).toEqual(["Damper", "Riser Old"]);
   expect(rows[0]!.description).toMatch(/^Recent family file/);
   const open = documentRows({
-    sessions: [
+    machine: machineFixture([
       {
-        sessionId: "s1",
-        openDocuments: [
+        session: "s1",
+        documents: [
           {
             openId: "o1",
             address: "C:\Jobs\Riser.rvt",
@@ -251,7 +244,7 @@ it("recentRows drops templates, labels families, and an open document wins a sha
           },
         ],
       },
-    ],
+    ]),
   });
   expect(findCapabilities([...rows, ...open], { query: "riser" })[0]!.key).toBe("doc:s1/o1");
 });
@@ -271,7 +264,7 @@ it("mentionOf a recent row snapshots where it lives and the source that opens it
       modelGuid: null,
       year: 2024,
       savedYear: 2024,
-      open: false,
+      open: null,
       openWith: "C:\\Models\\Plant.rvt",
     },
   });
@@ -288,4 +281,26 @@ it("mentionOf a recent row snapshots where it lives and the source that opens it
   // Recents gone from the catalog: a local key still says its path; a cloud key cannot.
   expect(mentionOf(plantRow!, catalog).facts).toMatchObject({ openWith: "C:\\Models\\Plant.rvt" });
   expect(mentionOf(cloudRow!, catalog).facts).toMatchObject({ path: null, openWith: null });
+});
+
+it("recentRows preserves unknown open state and omits documents held by a disconnected session", () => {
+  const rows = recentRows(withRecents);
+  expect(rows.every((row) => row.description.includes("open state unknown"))).toBe(true);
+  const known = { ...withRecents, machine: machineFixture() };
+  expect(mentionOf(recentRows(known)[0]!, known).facts.open).toBe(false);
+  const held = structuredClone(withRecents);
+  held.machine = {
+    ...held.machine,
+    revit: {
+      ...held.machine.revit,
+      sessions: [
+        {
+          ...held.machine.revit.sessions![0]!,
+          attachment: null,
+          documents: [{ path: "C:\\Models\\Plant.rvt" }] as never,
+        },
+      ],
+    },
+  };
+  expect(recentRows(held).some((row) => row.title === "Plant")).toBe(false);
 });

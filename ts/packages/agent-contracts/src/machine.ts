@@ -7,7 +7,7 @@ import type {
   UpdateReceipt,
 } from "@pe/host-contracts/pe-revit-contract";
 import type { Access, Provider } from "./harness-thread.ts";
-import type { DocumentRef } from "./target.ts";
+import { addressSchema, type DocumentRef, type TargetInventory } from "./target.ts";
 
 /** Last confirmed data lives in the field; a failed attempt changes only this evidence. */
 export interface MachineLeg {
@@ -67,20 +67,21 @@ export interface MachinePeer {
  * 0016/0017). The browser draws `rw` from this and from nothing else; no head is read there.
  */
 export type MachineAccess =
-  | { readonly level: "read" }
-  | { readonly level: "rw"; readonly via: "pea-session" }
+  | { readonly kind: "pea" }
+  | { readonly kind: "read" }
   | {
-      readonly level: "rw";
-      readonly via: "grant";
-      readonly thread: string;
-      readonly threadTitle: string;
-      /** Host clock; the grant is already dead when this passes. */
-      readonly expiresAt: string;
+      readonly kind: "rw";
+      readonly context: string;
+      readonly label: string;
+      readonly until: string;
     };
 
 /** A document as the product socket names it (its openId, not the SDK's), with what it grants. */
 export interface MachineAttachmentDocument extends DocumentRef {
   readonly title: string;
+  readonly address: string | null;
+  readonly isFamilyDocument: boolean;
+  readonly isActive: boolean;
   readonly access: MachineAccess;
 }
 
@@ -133,3 +134,45 @@ export interface MachineShare {
 }
 
 export type MachineProvider = Provider;
+
+/** Resolver view of the host's evidence; an unread or failed leg never proves absence. */
+export function machineInventory(machine: Machine | undefined): TargetInventory {
+  if (!machine || machine.revit.sessions === null) return { kind: "checking" };
+  for (const key of ["sessions", "attachments"]) {
+    const leg = machine.legs[key];
+    if (leg?.error) return { kind: "failed", message: leg.error };
+    if (!leg?.observedAtUtc) return { kind: "checking" };
+  }
+  const attachments = [
+    ...machine.revit.sessions.flatMap((s) => (s.attachment ? [s.attachment] : [])),
+    ...machine.revit.unclassifiedAttachments,
+  ];
+  return {
+    kind: "ready",
+    sessions: Object.fromEntries(
+      attachments.map((attachment) => {
+        const execution = machine.revit.sessions!.find(
+          (s) => s.attachment?.session === attachment.session,
+        )?.row.execution;
+        return [
+          attachment.session,
+          attachment.documents === null
+            ? { kind: "checking" }
+            : execution?.allowed !== true
+              ? {
+                  kind: "failed",
+                  message: execution?.detail ?? "Runtime ownership is not verified",
+                }
+              : {
+                  kind: "ready",
+                  values: attachment.documents.map((doc) => ({
+                    openId: doc.openId,
+                    address: addressSchema.safeParse(doc.address).data ?? null,
+                    kind: doc.isFamilyDocument ? "family" : "project",
+                  })),
+                },
+        ];
+      }),
+    ),
+  };
+}

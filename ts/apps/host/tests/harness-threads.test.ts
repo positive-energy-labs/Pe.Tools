@@ -584,14 +584,18 @@ test("the thread head lives in meta.json, falls back for unknown ids, and is obs
   const seen: ThreadHead[] = [];
   const release = threads.heads.observe(id, ({ value }) => seen.push(value));
   const hostNow = expect.any(String);
-  expect((await call("GET", `/pe/scope/${id}`)).json).toEqual({ ...emptyThreadHead, hostNow });
+  expect((await call("GET", `/pe/scope/${id}`)).json).toEqual({
+    ...emptyThreadHead,
+    hostNow,
+    grantView: null,
+  });
   const set = await call("PUT", `/pe/scope/${id}`, { defaultTarget: target, expectedRevision: 0 });
   expect(set).toEqual({
     status: 200,
     json: {
       ok: true,
       why: "set",
-      head: { ...emptyThreadHead, defaultTarget: target, revision: 1, hostNow },
+      head: { ...emptyThreadHead, defaultTarget: target, revision: 1, hostNow, grantView: null },
     },
   });
   const stale = await call("PUT", `/pe/scope/${id}`, { defaultTarget: null, expectedRevision: 0 });
@@ -612,6 +616,7 @@ test("the thread head lives in meta.json, falls back for unknown ids, and is obs
     defaultTarget: target,
     revision: 1,
     hostNow,
+    grantView: null,
   });
 });
 
@@ -1462,6 +1467,27 @@ const crossing = (caller: Caller, ref: { session: string; openId: string }) => {
   }
 };
 afterEach(() => bindControl({ heads: null, whose: () => "you" }));
+
+test("the head reading projects expiry and republishes it on the host clock", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(T0);
+  const threads = host();
+  const call = caller(threads);
+  const id = "projected-expiry";
+  const result = await call("PUT", `/pe/scope/${id}`, {
+    defaultTarget: yours,
+    expectedRevision: 0,
+  });
+  expect(result.json.head.grantView).toEqual({ state: "rw", minutes: 60 });
+  const seen: unknown[] = [];
+  const release = threads.heads.observe(id, ({ value }) => seen.push(value));
+  try {
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(seen.at(-1)).toMatchObject({ grantView: { state: "expired" } });
+  } finally {
+    release();
+  }
+});
 
 test("door 6: a human PUT on your open lifetime stamps rw; a move retires it; a named target never holds one", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });

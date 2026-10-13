@@ -1,3 +1,4 @@
+import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
@@ -59,7 +60,7 @@ async function fixture() {
       return Response.json({
         at: new Date(0).toISOString(),
         sources: {},
-        sessions: [],
+        machine: machineFixture(),
         capabilities: buildCapabilities({ ops: operations, routes: [], pods: null, skills: [] }),
       });
     if (url.pathname === "/ops") return Response.json({ operations });

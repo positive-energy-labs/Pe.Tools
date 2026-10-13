@@ -7,19 +7,22 @@ import { z } from "zod";
 import {
   attachmentRefusal,
   threadHeadSchema,
+  machineInventory,
+  type Machine,
+  type Reading,
   type DocumentRequest,
   type PromptCapabilities,
 } from "@pe/agent-contracts";
 
 import { defineRoute, type RouteManifest } from "#/route";
-import { previousOf, targetInventory } from "#/readings";
+import { previousOf } from "#/readings";
 import { targetClosure } from "#/chat/thread-navigation";
 import type { PromptRequest } from "#/workbench/provider/harness-client";
 import { emptyPrompt } from "#/workbench/prompt";
 import type { ChatState } from "#/workbench/chat-state";
 import { CHAT_SEEDS, type ChatPage } from "#/chat/seeds";
 
-export type ChatReading = "head" | "inventory" | "receipts" | "capabilities";
+export type ChatReading = "head" | "machine" | "receipts" | "capabilities";
 
 /** What the route needs from the live surface to run its actions; absent on seeds. */
 export interface ChatRouteDeps {
@@ -62,7 +65,7 @@ export const chatManifest = (
     // Conversation needs no Revit target; each invoked capability resolves its own requirement.
     readings: {
       head: { kind: "thread-head", thread: deps.thread || "draft" },
-      inventory: { kind: "inventory" },
+      machine: { kind: "machine" },
       receipts: { kind: "receipts" },
       // The one catalog the `@` menu searches; the same rows `pe_find` and `pea find` read.
       capabilities: { kind: "capabilities" },
@@ -84,7 +87,12 @@ export const chatManifest = (
             ? (threadHeadSchema.safeParse(previousOf(ctx.readings.head)).data?.defaultTarget ??
               null)
             : (deps.draftTarget ?? null);
-          if (targetClosure(target, targetInventory(ctx.readings.inventory as never)))
+          if (
+            targetClosure(
+              target,
+              machineInventory(previousOf(ctx.readings.machine as Reading<Machine>)),
+            )
+          )
             return CLOSED_SEND;
           const prompt = input as PromptRequest | undefined;
           if (!prompt) return null;

@@ -122,9 +122,6 @@ export function modelRows(
   return rows;
 }
 
-/** Ownership is projected by the host from launch receipts and SDK process identity. */
-export const whoseOf = (session: MachineSession): "you" | "pea" => session.whose;
-
 /**
  * A row for a pasted source the recents do not know: an absolute path, a UNC path, or a `cld://`
  * identity. Null for anything else (a search word stays a search word).
@@ -250,7 +247,7 @@ export function launchPlan(
     draft.target && draft.target !== "new"
       ? (sessions.find((session) => keyOf(session) === draft.target) ?? null)
       : null;
-  const whose = target ? whoseOf(target) : draft.owner;
+  const whose = target ? target.whose : draft.owner;
   const pea = whose === "pea";
   const year = target
     ? target.row.year
@@ -285,7 +282,7 @@ export function launchPlan(
   else if (
     doc?.openIn &&
     !pea &&
-    (doc.openIn.session === target || (!target && whoseOf(doc.openIn.session) === "you"))
+    (doc.openIn.session === target || (!target && doc.openIn.session.whose === "you"))
   )
     refusal = `${doc.title} is already open in Revit ${doc.openIn.session.row.year} (pid ${pidOf(doc.openIn.session.row)}).`;
   else if (!draft.target && doc)
@@ -439,10 +436,10 @@ export function jobsOf(
 
 /**
  * What the host says may write an SDK-listed document. The host projects access per product
- * document; the only correspondence drawn is an exact openId, so a mismatch reads as read-only
- * rather than guessing from a title.
+ * document; an unmatched SDK lifetime carries no product access observation.
  */
-export const accessOf = (session: MachineSession, document: SessionDocument): MachineAccess =>
-  session.attachment?.documents?.find((each) => each.openId === document.openId)?.access ?? {
-    level: "read",
-  };
+export const accessOf = (
+  session: MachineSession,
+  document: SessionDocument,
+): MachineAccess | undefined =>
+  session.attachment?.documents?.find((each) => each.openId === document.openId)?.access;

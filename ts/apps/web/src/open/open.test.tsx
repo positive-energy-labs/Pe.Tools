@@ -18,7 +18,7 @@ import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { PatchBay } from "./bay";
-import { jobsOf, whoseOf } from "./model";
+import { jobsOf } from "./model";
 import { runLifecycle } from "./lifecycle";
 import { EMPTY_DRAFT, launchPlan, modelRows, type DocRow } from "./model";
 import { OpenPage } from "./route";
@@ -501,10 +501,6 @@ test("a held document offers close with work kept, and discard beside it", async
   });
 });
 
-test("background posture does not override the host ownership projection", () => {
-  expect(whoseOf({ ...BAY_PEA_25, whose: "you" })).toBe("you");
-});
-
 const accessed = (access: MachineAccess) =>
   withSessions(
     world.revit.sessions!.map((session) =>
@@ -518,6 +514,9 @@ const accessed = (access: MachineAccess) =>
                   session: "bridge-18244",
                   openId: "18244-hospital",
                   title: "Hospital-MEP_kaitp.rvt",
+                  address: null,
+                  isFamilyDocument: false,
+                  isActive: true,
                   access,
                 },
               ],
@@ -536,7 +535,7 @@ test("thread heads alone draw no rw: the bay is not told by the heads it lists",
   expect(document.querySelector('[title^="Pea holds rw"]')).toBeNull();
   // A host reading that says read draws nothing either.
   cleanup();
-  render(<BayOf machine={accessed({ level: "read" })} />);
+  render(<BayOf machine={accessed({ kind: "read" })} />);
   expect(screen.queryByText(/^rw(?: |$)/)).toBeNull();
 });
 
@@ -544,11 +543,10 @@ test("a grant in the host's access draws rw on the document, its thread and its 
   render(
     <BayOf
       machine={accessed({
-        level: "rw",
-        via: "grant",
-        thread: "t-retag",
-        threadTitle: "Retag level 2 diffusers",
-        expiresAt: "2026-10-12T13:00:00.000Z",
+        kind: "rw",
+        context: "t-retag",
+        label: "Retag level 2 diffusers",
+        until: "2026-10-12T13:00:00.000Z",
       })}
     />,
   );
@@ -572,7 +570,10 @@ test("Pea's own session is rw by its access, with no thread or expiry", () => {
         session: pea.attachment!.session,
         openId: document.openId!,
         title: document.title ?? "",
-        access: { level: "rw", via: "pea-session" } as const,
+        address: null,
+        isFamilyDocument: false,
+        isActive: true,
+        access: { kind: "pea" } as const,
       })),
     },
   };

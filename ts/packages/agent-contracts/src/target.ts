@@ -209,11 +209,17 @@ export const emptyThreadHead: ThreadHead = {
   grant: null,
   lastHumanMessageAt: null,
 };
-/** A head as the host serves it: `hostNow` lets a chip count from the host clock. */
+export const grantViewSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("rw"), minutes: z.number() }),
+  z.object({ state: z.literal("expired") }),
+  z.object({ state: z.literal("revoked") }),
+]);
+export type GrantView = z.infer<typeof grantViewSchema>;
+/** The host projects expiry; a surface formats this observation without advancing its clock. */
 export const threadHeadReadingSchema = threadHeadSchema.and(
-  z.object({ hostNow: z.iso.datetime() }),
+  z.object({ hostNow: z.iso.datetime(), grantView: grantViewSchema.nullable() }),
 );
-export type ThreadHeadReading = ThreadHead & { hostNow: string };
+export type ThreadHeadReading = z.infer<typeof threadHeadReadingSchema>;
 
 /** `PUT /pe/scope/:thread`. */
 export const putTargetSchema = z.object({

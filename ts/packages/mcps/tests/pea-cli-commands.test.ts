@@ -1,3 +1,4 @@
+import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
 import { cli } from "gunshi";
 import { expect, test, vi } from "vite-plus/test";
 import type { HostOpResponse } from "@pe/host-contracts/operation-types";
@@ -205,12 +206,10 @@ test("pea script execute --json prints the whole result as one JSON object", asy
 
 test("pea find prints key, kind and title per row of the host's catalog; --mention prints the pointer", async () => {
   const at = "2026-10-12T12:00:00.000Z";
-  const sessions = [
+  const machine = machineFixture([
     {
-      sessionId: "b1",
-      custody: "controlled",
-      revitVersion: "2025",
-      openDocuments: [
+      session: "b1",
+      documents: [
         {
           openId: "o1",
           address: "C:\\Models\\Riser.rvt",
@@ -220,7 +219,7 @@ test("pea find prints key, kind and title per row of the host's catalog; --menti
         },
       ],
     },
-  ];
+  ]);
   const skill = {
     key: "skill:riser-check",
     kind: "skill",
@@ -260,14 +259,14 @@ test("pea find prints key, kind and title per row of the host's catalog; --menti
     urls.push(new URL(input instanceof Request ? input.url : String(input)));
     return Response.json({
       at,
-      sessions,
+      machine,
       recents,
       sources: {},
       capabilities: [
         skill,
         humanOnly,
-        ...documentRows({ sessions }),
-        ...recentRows({ sessions, recents }),
+        ...documentRows({ machine }),
+        ...recentRows({ machine, recents }),
       ],
     });
   });
@@ -315,7 +314,7 @@ test("pea find prints key, kind and title per row of the host's catalog; --menti
     await cli(["--mention", "recent:C:\\Jobs\\Plant.rvt"], command);
     expect(JSON.parse(output.mock.calls[0]![0] as string).facts).toMatchObject({
       year: 2025,
-      open: false,
+      open: null,
       openWith: "C:\\Jobs\\Plant.rvt",
     });
   } finally {

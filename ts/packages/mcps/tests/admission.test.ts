@@ -1,3 +1,4 @@
+import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
 import { withInvocationContext } from "../src/shared/invocation-context.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { peDo, peRead } from "../src/pea/capability-tools.ts";
@@ -48,7 +49,7 @@ function host(prior?: Record<string, unknown>) {
       return Response.json({
         at: new Date(0).toISOString(),
         sources: {},
-        sessions: [],
+        machine: machineFixture(),
         capabilities: buildCapabilities({ ops: operations, routes: [], pods: null, skills: [] }),
       });
     if (url.pathname === "/ops") return Response.json({ operations, bridgeSessionId: "A" });

@@ -16,7 +16,7 @@ import {
 
 // What the composer's menu reads: the seed catalog with open documents from the seed inventory.
 const seedCatalog = capabilityCatalogSchema.parse(CHAT_SEEDS.send.readings.capabilities);
-const catalog = liveCatalog(seedCatalog, CHAT_SEEDS.send.readings.inventory, seedCatalog.at);
+const catalog = liveCatalog(seedCatalog, seedCatalog.machine);
 
 test("@query at the caret finds a document first, a pick leaves the token and the mention, and deleting the token drops it", () => {
   expect(mentionQuery("mail me@x", 9)).toBeNull();
@@ -109,29 +109,34 @@ test("recent documents group after Documents, say their folder or cloud project,
   });
 
   // The person opened it: the inventory's doc: row wins and the recent one goes.
-  const inventory = CHAT_SEEDS.send.readings.inventory;
-  const [session] = inventory.sessions;
-  const opened = liveCatalog(
-    catalog,
-    {
+  const inventory = seedCatalog.machine;
+  const [session] = inventory.revit.sessions!;
+  const opened = liveCatalog(catalog, {
+    ...inventory,
+    revit: {
+      ...inventory.revit,
       sessions: [
         {
           ...session!,
-          openDocuments: [
-            ...(session!.openDocuments ?? []),
-            {
-              openId: "open-9",
-              title: "Boiler Plant Retrofit",
-              address: "C:\\Projects\\2611 Boiler Plant\\Boiler Plant Retrofit.rvt",
-              isFamilyDocument: false,
-              isActive: false,
-            },
-          ],
+          attachment: {
+            ...session!.attachment!,
+            documents: [
+              ...(session!.attachment!.documents ?? []),
+              {
+                session: session!.attachment!.session,
+                access: { kind: "read" },
+                openId: "open-9",
+                title: "Boiler Plant Retrofit",
+                address: "C:\\Projects\\2611 Boiler Plant\\Boiler Plant Retrofit.rvt",
+                isFamilyDocument: false,
+                isActive: false,
+              },
+            ],
+          },
         },
       ],
     },
-    catalog.at,
-  );
+  });
   expect(mentionRows(opened, "boiler").map((row) => row.kind)).toEqual(["document"]);
 });
 
@@ -140,19 +145,18 @@ test("open documents come from the live inventory, not the catalog's own rows", 
     ...catalog,
     capabilities: [...documentRows(catalog), ...catalog.capabilities],
   };
-  const inventory = CHAT_SEEDS.send.readings.inventory;
+  const inventory = seedCatalog.machine;
   const at = "2026-10-12T18:00:00.000Z";
-  const live = liveCatalog(stale, inventory, at);
+  const live = liveCatalog(stale, { ...inventory, observedAtUtc: at });
   expect(mentionRows(live, "ope")[0]).toMatchObject({ key: "doc:pe.app-26/open-1" });
   expect(live.at).toBe(at);
   // The document closed: its row goes, though the catalog read at mount still carries it.
-  const closed = liveCatalog(
-    stale,
-    { sessions: [{ ...inventory.sessions[0]!, connected: false }] },
-    at,
-  );
+  const closed = liveCatalog(stale, { ...inventory, revit: { ...inventory.revit, sessions: [] } });
   expect(mentionRows(closed, "ope").map((row) => row.kind)).not.toContain("document");
   expect(
-    mentionRows(liveCatalog(stale, undefined, at), "ope").map((row) => row.kind),
+    mentionRows(
+      liveCatalog(stale, { ...inventory, revit: { ...inventory.revit, sessions: null } }),
+      "ope",
+    ).map((row) => row.kind),
   ).not.toContain("document");
 });

@@ -5,7 +5,6 @@
  * the one capability catalog and builds a mention with `mentionOf`.
  */
 import { z } from "zod";
-import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
 import type { Capability, CapabilityCatalog, CapabilityRecent } from "./capability.ts";
 
 const factSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
@@ -36,28 +35,19 @@ export function parseDocumentKey(key: string): { session: string; openId: string
   return slash <= 0 ? null : { session: rest.slice(0, slash), openId: rest.slice(slash + 1) };
 }
 
-/** The bridge's session list as the catalog's session rows: the host catalog and the web's live
- * inventory project it the same way. */
-export function catalogSessions(
-  list: readonly BridgeSessionListEntry[],
-): CapabilityCatalog["sessions"] {
-  return list.map((session) => ({
-    sessionId: session.sessionId,
-    custody: session.custody ?? undefined,
-    sdkSessionId: session.sdkSessionId,
-    revitVersion: session.revitVersion,
-    activeDocumentTitle: session.activeDocumentTitle,
-    activeDocument: session.activeDocumentCloudModelGuid ?? session.activeDocumentPath,
-    openDocuments:
-      session.openDocuments?.map((doc) => ({ ...doc, address: doc.address ?? null })) ?? null,
-  }));
-}
+/** Product lifetimes only; SDK openIds remain in Machine's separate document evidence. */
+export const machineAttachments = (machine: CapabilityCatalog["machine"]) => [
+  ...(machine.revit.sessions ?? []).flatMap((session) =>
+    session.attachment ? [session.attachment] : [],
+  ),
+  ...machine.revit.unclassifiedAttachments,
+];
 
 /** Open documents of every answering session as capability rows, so one search finds them. */
-export function documentRows(catalog: Pick<CapabilityCatalog, "sessions">): Capability[] {
+export function documentRows(catalog: Pick<CapabilityCatalog, "machine">): Capability[] {
   // A session with no id has no key to point through; `doc:/<openId>` would not parse back.
-  return catalog.sessions.flatMap(({ sessionId, ...session }) =>
-    (sessionId ? (session.openDocuments ?? []) : []).map((document) => ({
+  return machineAttachments(catalog.machine).flatMap(({ session: sessionId, documents }) =>
+    (documents ?? []).map((document) => ({
       key: documentKey(sessionId ?? "", document.openId),
       kind: "document" as const,
       title: document.title,
@@ -65,7 +55,7 @@ export function documentRows(catalog: Pick<CapabilityCatalog, "sessions">): Capa
         Boolean,
       ),
       description:
-        `${document.isFamilyDocument ? "Family" : "Project"} document open in Revit ${session.revitVersion ?? ""}`.trim(),
+        `${document.isFamilyDocument ? "Family" : "Project"} document open in Revit ${catalog.machine.revit.sessions?.find((row) => row.attachment?.session === sessionId)?.row.year ?? ""}`.trim(),
       needs: "nothing" as const,
       mutates: false,
       actor: "any" as const,
@@ -98,53 +88,72 @@ export function recentSegments(recent: Pick<CapabilityRecent, "path" | "isCloud"
 const sameDocument = (value: string) =>
   value.replace(/\//g, "\\").replace(/[{}]/g, "").toLowerCase();
 
+const inventoryKnown = (machine: CapabilityCatalog["machine"]) =>
+  machine.revit.sessions !== null &&
+  !!machine.legs.sessions?.observedAtUtc &&
+  !!machine.legs.attachments?.observedAtUtc &&
+  !machine.legs.sessions.error &&
+  !machine.legs.attachments.error &&
+  machine.revit.sessions.every(
+    (s) => s.documents !== null && !s.documentsLeg.error && s.attachment?.documents !== null,
+  ) &&
+  machine.revit.unclassifiedAttachments.every((a) => a.documents !== null);
+
 /**
  * Revit's recent documents as capability rows. A recent document that is open now is dropped: its
  * `doc:` row wins. One row per key (a file in several years' lists keeps its most recent entry).
  * They rank below every open document: the SDK's rank 1 (most recent) is -1 here.
  */
-export function recentRows(catalog: Pick<CapabilityCatalog, "recents" | "sessions">): Capability[] {
-  const open = new Set(
-    catalog.sessions
-      .filter((session) => session.sessionId)
-      .flatMap((session) => session.openDocuments ?? [])
+export function recentRows(catalog: Pick<CapabilityCatalog, "recents" | "machine">): Capability[] {
+  const open = new Set([
+    ...machineAttachments(catalog.machine)
+      .flatMap((session) => session.documents ?? [])
       .flatMap((document) => (document.address ? [sameDocument(document.address)] : [])),
-  );
+    ...(catalog.machine.revit.sessions ?? [])
+      .flatMap((s) => s.documents ?? [])
+      .flatMap((doc) =>
+        [doc.path, "modelGuid" in doc ? doc.modelGuid : null]
+          .filter((path): path is string => !!path)
+          .map(sameDocument),
+      ),
+  ]);
   const seen = new Set<string>();
-  return [...(catalog.recents ?? [])]
-    .sort((a, b) => a.rank - b.rank || b.year - a.year)
-    // A template is never a document Pea acts on; families stay and say so.
-    .filter((recent) => !/\.rte$/i.test(recent.path))
-    .filter((recent) => {
-      const key = sameDocument(recentKey(recent));
-      const isOpen =
-        open.has(sameDocument(recent.path)) ||
-        (recent.modelGuid !== null && open.has(sameDocument(recent.modelGuid)));
-      if (isOpen || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .map((recent) => ({
-      key: recentKey(recent),
-      kind: "recent" as const,
-      title: recent.title,
-      // A local key already carries the path, so its words count once; a cloud key is guids, so its
-      // decoded project and model names are the search words. Open documents then win the tie on rank.
-      finds: recent.isCloud ? recentSegments(recent) : [],
-      description: `Recent ${recent.isCloud ? "cloud model" : /\.rfa$/i.test(recent.path) ? "family file" : "local file"} from Revit ${recent.year}'s recent list; not open. pe_read it for openWith, then open it before an op can target it.`,
-      needs: "nothing" as const,
-      mutates: false,
-      actor: "any" as const,
-      input: {},
-      source: "recents",
-      rank: -recent.rank,
-    }));
+  return (
+    [...(catalog.recents ?? [])]
+      .sort((a, b) => a.rank - b.rank || b.year - a.year)
+      // A template is never a document Pea acts on; families stay and say so.
+      .filter((recent) => !/\.rte$/i.test(recent.path))
+      .filter((recent) => {
+        const key = sameDocument(recentKey(recent));
+        const isOpen =
+          open.has(sameDocument(recent.path)) ||
+          (recent.modelGuid !== null && open.has(sameDocument(recent.modelGuid)));
+        if (isOpen || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((recent) => ({
+        key: recentKey(recent),
+        kind: "recent" as const,
+        title: recent.title,
+        // A local key already carries the path, so its words count once; a cloud key is guids, so its
+        // decoded project and model names are the search words. Open documents then win the tie on rank.
+        finds: recent.isCloud ? recentSegments(recent) : [],
+        description: `Recent ${recent.isCloud ? "cloud model" : /\.rfa$/i.test(recent.path) ? "family file" : "local file"} from Revit ${recent.year}'s recent list; ${inventoryKnown(catalog.machine) ? "not open" : "open state unknown"}. pe_read it for openWith, then resolve an open lifetime before an op can target it.`,
+        needs: "nothing" as const,
+        mutates: false,
+        actor: "any" as const,
+        input: {},
+        source: "recents",
+        rank: -recent.rank,
+      }))
+  );
 }
 
 /** Build the mention for a row, snapshotting the facts a first hop needs. Pure. */
 export function mentionOf(
   row: Capability,
-  catalog: Pick<CapabilityCatalog, "at" | "sessions" | "recents">,
+  catalog: Pick<CapabilityCatalog, "at" | "machine" | "recents">,
 ): Mention {
   if (row.kind === "recent") {
     const recent = catalog.recents?.find((entry) => recentKey(entry) === row.key);
@@ -165,7 +174,7 @@ export function mentionOf(
         modelGuid: recent?.modelGuid ?? null,
         year: recent?.year ?? null,
         savedYear: recent?.savedYear ?? null,
-        open: false,
+        open: inventoryKnown(catalog.machine) ? false : null,
         // The source `pe-revit doc open` and the Instances open launch take: a path or `cld://…`.
         openWith: path,
       },
@@ -173,8 +182,12 @@ export function mentionOf(
   }
   const doc = parseDocumentKey(row.key);
   if (doc) {
-    const session = catalog.sessions.find((s) => s.sessionId === doc.session);
-    const document = session?.openDocuments?.find((d) => d.openId === doc.openId);
+    const session = catalog.machine.revit.sessions?.find(
+      (s) => s.attachment?.session === doc.session,
+    );
+    const document = machineAttachments(catalog.machine)
+      .find((s) => s.session === doc.session)
+      ?.documents?.find((d) => d.openId === doc.openId);
     return {
       key: row.key,
       kind: row.kind,
@@ -186,8 +199,12 @@ export function mentionOf(
         address: document?.address ?? null,
         family: document?.isFamilyDocument ?? null,
         active: document?.isActive ?? null,
-        revit: session?.revitVersion ?? null,
-        custody: session?.custody ?? null,
+        revit: session ? String(session.row.year) : null,
+        custody: session
+          ? session.row.case === "observed-active"
+            ? "observed"
+            : "controlled"
+          : null,
       },
     };
   }

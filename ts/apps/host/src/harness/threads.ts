@@ -55,6 +55,7 @@ import {
   currentCaller,
   emitRevoke,
   grantExpiry,
+  grantDead,
   mintContext,
   Refused,
   requireHuman,
@@ -290,6 +291,7 @@ function writeJson(path: string, value: unknown) {
 export function createHarnessThreads(options: HarnessThreadsOptions) {
   const threads = new Map<string, Thread>();
   const headListeners = new Set<(threadId: string, head: ThreadHead) => void>();
+  const headTimers = new Set<ReturnType<typeof setInterval>>();
   const summaryListeners = new Set<() => void>();
   const notifySummaries = () => {
     for (const listener of summaryListeners) listener();
@@ -478,11 +480,24 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     if (!parsed.success) warn(`thread head ${threadId}: stored head no longer parses`);
     return parsed.data ?? emptyThreadHead;
   }
-  /** The head as served: `hostNow` lets a chip count from the host clock, not the browser's. */
-  const reading = (head: ThreadHead): ThreadHeadReading => ({
-    ...head,
-    hostNow: new Date().toISOString(),
-  });
+  const reading = (head: ThreadHead): ThreadHeadReading => {
+    const now = Date.now();
+    const dead = head.grant && grantDead(head.grant, now);
+    return {
+      ...head,
+      hostNow: new Date(now).toISOString(),
+      grantView: !head.grant
+        ? null
+        : dead === "grant.revoked"
+          ? { state: "revoked" }
+          : dead === "grant.expired"
+            ? { state: "expired" }
+            : {
+                state: "rw",
+                minutes: Math.ceil((Date.parse(head.grant.expiresAt) - now) / 60_000),
+              },
+    };
+  };
   function writeHead(threadId: string, head: ThreadHead) {
     const t = threads.get(threadId);
     if (t) {
@@ -578,15 +593,21 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       return () => void headListeners.delete(listener);
     },
     /** The `thread-head` Reading: the current head, then every set. */
-    observe(threadId: string, listener: (value: { value: ThreadHead }) => void) {
+    observe(threadId: string, listener: (value: { value: ThreadHeadReading }) => void) {
       const notify = (id: string, head: ThreadHead) => {
         if (id === threadId) listener({ value: reading(head) });
       };
       headListeners.add(notify);
+      const timer = setInterval(() => listener({ value: reading(readHead(threadId)) }), 15_000);
+      headTimers.add(timer);
       queueMicrotask(() => {
         if (headListeners.has(notify)) listener({ value: reading(readHead(threadId)) });
       });
-      return () => void headListeners.delete(notify);
+      return () => {
+        clearInterval(timer);
+        headTimers.delete(timer);
+        headListeners.delete(notify);
+      };
     },
   };
 
@@ -1586,6 +1607,8 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     /** Host shutdown: stop every harness child and its tree. */
     close: () => {
       clearInterval(sweep);
+      for (const timer of headTimers) clearInterval(timer);
+      headTimers.clear();
       return Promise.all([...threads.values()].map(stop));
     },
   };

@@ -9,7 +9,6 @@ import type {
   Access,
   ActionReceipt,
   MachineAccess,
-  DocumentRef,
   HeadGrant,
   Machine,
   MachineAttachment,
@@ -74,7 +73,7 @@ export interface GrantSource {
 
 /** What the bridge socket says; Machine adds `access`. */
 export type AttachmentRead = Omit<MachineAttachment, "documents"> & {
-  readonly documents: readonly (DocumentRef & { readonly title: string })[] | null;
+  readonly documents: readonly Omit<MachineAttachmentDocument, "access">[] | null;
 };
 
 /**
@@ -100,16 +99,15 @@ export function withAccess(
         );
         const access: MachineAccess =
           whose === "pea"
-            ? { level: "rw", via: "pea-session" }
+            ? { kind: "pea" }
             : held
               ? {
-                  level: "rw",
-                  via: "grant",
-                  thread: held.thread,
-                  threadTitle: held.title,
-                  expiresAt: held.grant.expiresAt,
+                  kind: "rw",
+                  context: held.thread,
+                  label: held.title,
+                  until: held.grant.expiresAt,
                 }
-              : { level: "read" };
+              : { kind: "read" };
         return { ...document, access };
       }) ?? null,
   };
@@ -338,7 +336,11 @@ export function createMachine(
               const previous = documents.get(key) ?? { value: null, leg: unreadLeg() };
               const attemptedAtUtc = now();
               try {
-                const result = await withDeadline(sources.documents(process), LEG_DEADLINE_MS, `documents:${key}`);
+                const result = await withDeadline(
+                  sources.documents(process),
+                  LEG_DEADLINE_MS,
+                  `documents:${key}`,
+                );
                 documents.set(key, {
                   value: result.documents.map((doc) => ({ ...doc, persistence: null })),
                   leg: { observedAtUtc: now(), attemptedAtUtc, error: null },
@@ -368,7 +370,14 @@ export function createMachine(
           return {
             row,
             whose,
-            attachment: attachment ? withAccess(attachment, whose, heldGrants, at) : null,
+            attachment: attachment
+              ? withAccess(
+                  attachment,
+                  row.execution?.allowed === true ? whose : "you",
+                  row.execution?.allowed === true ? heldGrants : [],
+                  at,
+                )
+              : null,
             documents: held?.value ?? null,
             documentsLeg: held?.leg ?? unreadLeg(),
           };
@@ -649,6 +658,9 @@ export function machineSources(
                           session: view.sessionId!,
                           openId: doc.openId,
                           title: doc.title,
+                          address: doc.address ?? null,
+                          isFamilyDocument: doc.isFamilyDocument,
+                          isActive: doc.isActive,
                         }))
                       : null,
                   },

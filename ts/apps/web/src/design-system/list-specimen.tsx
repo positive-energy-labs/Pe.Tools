@@ -35,9 +35,11 @@ interface LadderItem {
   failed?: boolean;
   refusal?: string;
 }
-const INVENTORY = CHAT_SEEDS.send.readings.inventory.sessions;
+const INVENTORY = CHAT_SEEDS.send.readings.machine.revit.sessions!.flatMap((s) =>
+  s.attachment ? [s.attachment] : [],
+);
 const SESSIONS: LadderItem[] = [
-  ...INVENTORY.map((s) => ({ key: s.sessionId, label: s.sessionId, sub: "connected" })),
+  ...INVENTORY.map((s) => ({ key: s.session, label: s.session, sub: "connected" })),
   { key: "pe.app-25", label: "pe.app-25", sub: "reading…", pending: true },
   { key: "pe.app-24", label: "pe.app-24", sub: "read failed: bridge closed", failed: true },
 ];
@@ -46,7 +48,7 @@ const LADDER = [
   {
     label: "document",
     items: (path: readonly LadderItem[]) =>
-      (INVENTORY.find((s) => s.sessionId === path[0]?.key)?.openDocuments ?? []).map((d) => ({
+      (INVENTORY.find((s) => s.session === path[0]?.key)?.documents ?? []).map((d) => ({
         key: d.openId,
         label: d.title,
         sub: d.isActive ? "active" : undefined,

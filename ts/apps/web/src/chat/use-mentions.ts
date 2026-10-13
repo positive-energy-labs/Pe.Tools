@@ -18,9 +18,9 @@ import {
   SquareTerminal,
   type LucideIcon,
 } from "lucide-react";
-import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
 import {
-  catalogSessions,
+  machineAttachments,
+  type Machine,
   documentRows,
   findCapabilities,
   mentionOf,
@@ -64,9 +64,9 @@ export function mentionFace(
 ): { title: string; fact: string | null; mono: boolean; detail: string } {
   const doc = parseDocumentKey(row.key);
   if (doc) {
-    const address = catalog.sessions
-      .find((session) => session.sessionId === doc.session)
-      ?.openDocuments?.find((document) => document.openId === doc.openId)?.address;
+    const address = machineAttachments(catalog.machine)
+      .find((session) => session.session === doc.session)
+      ?.documents?.find((document) => document.openId === doc.openId)?.address;
     const folders = address?.split(/[\\/]/).slice(0, -1).slice(-2).join("\\");
     return {
       title: row.title,
@@ -110,15 +110,11 @@ export function mentionQuery(text: string, caret: number): { start: number; quer
 /** The catalog the `@` menu reads: every other row as the catalog read it, the open documents
  * from the live inventory (a closed document is no target, and a catalog may be old), and the
  * recent ones less whatever the inventory says is open now. */
-export function liveCatalog(
-  catalog: CapabilityCatalog,
-  inventory: { sessions: readonly BridgeSessionListEntry[] } | undefined,
-  at: string,
-): CapabilityCatalog {
+export function liveCatalog(catalog: CapabilityCatalog, machine: Machine): CapabilityCatalog {
   const live = {
     ...catalog,
-    at,
-    sessions: catalogSessions(inventory?.sessions.filter((s) => s.connected) ?? []),
+    at: machine.observedAtUtc,
+    machine,
   };
   return {
     ...live,

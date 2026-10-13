@@ -1,3 +1,4 @@
+import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer as createNodeServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -11,6 +12,34 @@ import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
 import { makeHttpLive } from "../src/app.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
+
+vi.mock("../src/machine.ts", async (original) => {
+  const real = await original<typeof import("../src/machine.ts")>();
+  return {
+    ...real,
+    machineSources: (...args: Parameters<typeof real.machineSources>) => {
+      const sources = real.machineSources(...args);
+      const value = machineFixture();
+      return {
+        ...sources,
+        host: async () => {
+          throw Error("fixture has no host record");
+        },
+        peers: async () => [],
+        sessions: async () => [],
+        years: async () => [],
+        attachments: async () => [],
+        documents: async () => ({ state: "ok", documents: [] }),
+        update: {
+          current: () => value.update,
+          refresh: async () => value.update,
+          automaticPending: () => false,
+          apply: async () => value.update,
+        },
+      };
+    },
+  };
+});
 
 /**
  * Host boundary: on a no-Revit host, the one capability catalog answers
@@ -61,7 +90,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
     expect(elapsed).toBeLessThan(3_000);
     const catalog = (await response.json()) as {
       sources: Record<string, string>;
-      sessions: unknown[];
+      machine: { revit: { sessions: unknown[] } };
       capabilities: { key: string }[];
     };
     expect(catalog.sources["route registry"]).toBe("ok");
@@ -69,7 +98,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
     expect(catalog.sources.catalog).toMatch(/bridge catalog unavailable|did not answer/);
     // pod.list is host-local: the pods answer with Revit closed.
     expect(catalog.sources["pod.json"]).toBe("ok");
-    expect(catalog.sessions).toEqual([]);
+    expect(catalog.machine.revit.sessions).toEqual([]);
     // Recents read without Revit; whatever they answered in their own budget is named.
     expect(catalog.sources.recents).toMatch(/^(ok|still reading|did not answer)/);
     const keys = catalog.capabilities.map((row) => row.key);
@@ -142,10 +171,10 @@ test("GET /pe/capabilities serves each open document as a doc: row and each unop
       read: async () => ({
         at: "2026-10-12T12:00:00.000Z",
         sources: {},
-        sessions: [
+        machine: machineFixture([
           {
-            sessionId: "b1",
-            openDocuments: [
+            session: "b1",
+            documents: [
               {
                 openId: "o1",
                 address: "C:\\Models\\Riser.rvt",
@@ -155,7 +184,7 @@ test("GET /pe/capabilities serves each open document as a doc: row and each unop
               },
             ],
           },
-        ],
+        ]),
         recents: [
           { title: "Riser", path: "C:\\Models\\Riser.rvt", rank: 1 },
           { title: "Plant", path: "C:\\Models\\Plant.rvt", rank: 2 },

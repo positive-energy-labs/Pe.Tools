@@ -1,3 +1,4 @@
+import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { afterEach, expect, vi } from "vite-plus/test";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
@@ -85,7 +86,7 @@ export async function setup() {
       read: async () => ({
         at: new Date().toISOString(),
         sources: { catalog: "ok" },
-        sessions: [],
+        machine: machineFixture(),
         capabilities: buildCapabilities({
           ops: [],
           routes: [scheduleGridRouteState],

@@ -1,3 +1,4 @@
+import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
 import { withInvocationContext } from "../src/shared/invocation-context.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { settingsRouteState } from "@pe/agent-contracts";
@@ -41,7 +42,7 @@ test("Pea enumerates Pod members and proposes revision-checked Work without rout
         return Response.json({
           at: new Date(0).toISOString(),
           sources: {},
-          sessions: [],
+          machine: machineFixture(),
           capabilities: buildCapabilities({
             ops: tsOnlyOperationCatalog,
             routes: registrations.map((row) => row.spec),

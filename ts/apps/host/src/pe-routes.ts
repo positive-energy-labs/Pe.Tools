@@ -429,7 +429,11 @@ export function makeHostPeRoutes(
     if (registration.spec.route === "family")
       Object.assign(registration.handlers, familySpecHandlers());
   }
-  const catalog = createCapabilityCatalogSource({ hostBaseUrl, registrations });
+  const catalog = createCapabilityCatalogSource({
+    hostBaseUrl,
+    registrations,
+    machine: () => machine.refresh(),
+  });
   const routes = createPeRoutes({
     registrations,
     store: fileRouteDocumentStore(productRouteWorkPath()),

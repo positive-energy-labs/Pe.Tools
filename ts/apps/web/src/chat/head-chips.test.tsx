@@ -103,7 +103,11 @@ test("picking effort writes the draft and closes the picker", () => {
 
 const HOST_NOW = "2026-10-12T12:00:00.000Z";
 const lifetime = { session: "S1", openId: "A" };
-const headReading = (grant: object | null, hostNow = HOST_NOW): Reading<unknown> => ({
+const headReading = (
+  grant: object | null,
+  hostNow = HOST_NOW,
+  grantView: object | null = null,
+): Reading<unknown> => ({
   state: "ready",
   observation: {
     defaultTarget: { kind: "open", ref: lifetime },
@@ -111,6 +115,7 @@ const headReading = (grant: object | null, hostNow = HOST_NOW): Reading<unknown>
     grant,
     lastHumanMessageAt: null,
     hostNow,
+    grantView,
   },
 });
 const grantExpiring = (inMinutes: number, extra: object = {}) => ({
@@ -128,55 +133,23 @@ function Probe({ reading }: { reading: Reading<unknown> }) {
 const chip = () => screen.queryByTestId("grant-chip")?.textContent ?? null;
 const minutes = (n: number) => act(() => void vi.advanceTimersByTime(n * 60_000));
 
-test("the chip counts from the host's reading, not the browser's clock", () => {
-  // The browser believes it is three days later than the host: a Date.now() count would read
-  // this grant as long expired. The host's reading says 42 minutes remain.
+test("the chip keeps the host projection until the host republishes expiry", () => {
   vi.useFakeTimers({ now: Date.parse(HOST_NOW) + 3 * 86_400_000 });
-  render(<Probe reading={headReading(grantExpiring(42))} />);
-  expect(chip()).toBe("rw · 42m");
-  minutes(10);
-  expect(chip()).toBe("rw · 32m");
-  minutes(31);
-  expect(chip()).toBe("rw · 1m");
-  // Even a browser clock that jumps backwards cannot lengthen it: only elapsed time counts.
-  vi.setSystemTime(Date.parse(HOST_NOW) - 86_400_000);
-  minutes(2);
-  expect(chip()).toBe("read · renews on your next message");
-});
-
-test("a new host reading renews the count; an expired grant says when it renews", () => {
-  vi.useFakeTimers({ now: Date.parse(HOST_NOW) });
-  const view = render(<Probe reading={headReading(grantExpiring(1))} />);
-  minutes(2);
-  expect(chip()).toBe("read · renews on your next message");
-  // The next human message re-stamps expiresAt; the head reading arrives with the new pair.
-  const later = new Date(Date.parse(HOST_NOW) + 2 * 60_000).toISOString();
-  view.rerender(
-    <Probe
-      reading={headReading(
-        grantExpiring(62), // 60 min past the message at HOST_NOW + 2m
-        later,
-      )}
-    />,
+  const view = render(
+    <Probe reading={headReading(grantExpiring(42), HOST_NOW, { state: "rw", minutes: 42 })} />,
   );
-  expect(chip()).toBe("rw · 60m");
-});
-
-test("a revoked grant says revoked and how to grant again, whatever time is left", () => {
-  vi.useFakeTimers({ now: Date.parse(HOST_NOW) });
-  render(<Probe reading={headReading(grantExpiring(42, { revoked: { at: HOST_NOW } }))} />);
+  expect(chip()).toBe("rw · 42m");
+  minutes(90);
+  expect(chip()).toBe("rw · 42m");
+  view.rerender(<Probe reading={headReading(grantExpiring(42), HOST_NOW, { state: "expired" })} />);
+  expect(chip()).toBe("read · renews on your next message");
+  view.rerender(<Probe reading={headReading(grantExpiring(42), HOST_NOW, { state: "revoked" })} />);
   expect(chip()).toBe("revoked · point the thread at it again to grant");
-  // There is no button to press: pointing the thread elsewhere is the revoke.
   expect(screen.queryByRole("button")).toBeNull();
 });
 
-test("no grant, no chip; a head served without a host clock draws none", () => {
-  vi.useFakeTimers({ now: Date.parse(HOST_NOW) });
-  const view = render(<Probe reading={headReading(null)} />);
-  expect(chip()).toBeNull();
-  const bare = headReading(grantExpiring(42));
-  if (bare.state === "ready") delete (bare.observation as { hostNow?: string }).hostNow;
-  view.rerender(<Probe reading={bare} />);
+test("no projection, no chip; raw grant bytes never authorize the display", () => {
+  render(<Probe reading={headReading(grantExpiring(42))} />);
   expect(chip()).toBeNull();
 });
 

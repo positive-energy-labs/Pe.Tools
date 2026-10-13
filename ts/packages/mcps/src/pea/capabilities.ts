@@ -28,12 +28,11 @@ import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   isTsOnlyOperationKey,
   tsOnlyOperationCatalog,
-  type HostOpResponse,
   type PodList,
 } from "@pe/host-contracts/operation-types";
 import {
   capabilityRecentSchema,
-  catalogSessions,
+  type Machine,
   type Capability,
   type CapabilityCatalog,
   type CapabilityRecent,
@@ -47,7 +46,6 @@ type OpsCatalogEntry = HostOperationDefinition & {
   requestSchemaJson?: string;
   responseSchemaJson?: string;
 };
-type Sessions = HostOpResponse<"bridge.sessions.list">["sessions"];
 
 export interface CapabilitySources {
   ops: readonly OpsCatalogEntry[];
@@ -312,25 +310,31 @@ export interface CapabilityCatalogSource {
 export function createCapabilityCatalogSource(options: {
   hostBaseUrl: string;
   registrations: readonly RouteRegistration[];
+  machine: () => Promise<Machine>;
 }): CapabilityCatalogSource {
   const base = options.hostBaseUrl.replace(/\/$/, "");
   const routes = options.registrations.map((registration) => registration.spec);
-  const cache = new Map<string, { at: number; catalog: CapabilityCatalog }>();
+  const cache = new Map<string, { at: number; catalog: Omit<CapabilityCatalog, "machine"> }>();
   const recents = recentsSource(base);
   return {
     invalidate: () => cache.clear(),
     // Recents are the machine's, not the scope's: one source, its own cache and budget.
     read: async (scope = {}) => {
-      const [catalog, recent] = await Promise.all([readScoped(scope), recents()]);
+      const [catalog, recent, machine] = await Promise.all([
+        readScoped(scope),
+        recents(),
+        options.machine(),
+      ]);
       return {
         ...catalog,
+        machine,
         recents: recent.recents,
         sources: { ...catalog.sources, recents: recent.status },
       };
     },
   };
 
-  async function readScoped(scope: HostSessionScope): Promise<CapabilityCatalog> {
+  async function readScoped(scope: HostSessionScope): Promise<Omit<CapabilityCatalog, "machine">> {
     const cacheKey = JSON.stringify(scope);
     const hit = cache.get(cacheKey);
     const caller = new HostRpcCaller({
@@ -340,26 +344,11 @@ export function createCapabilityCatalogSource(options: {
       // Host-owned reads must not wait for the independent native catalog source.
       catalogOverride: tsOnlyOperationCatalog,
     });
-    if (hit && Date.now() - hit.at < CATALOG_TTL_MS) {
-      // Ops and pods may be 30 s old; the open documents never are (a closed one is no target).
-      const live = await caller.call("bridge.sessions.list").then(
-        (answer) => ({ sessions: catalogSessions(answer.sessions), status: "ok" }),
-        (error) => ({ sessions: [], status: `did not answer: ${message(error)}` }),
-      );
-      return {
-        ...hit.catalog,
-        at: new Date().toISOString(),
-        sessions: live.sessions,
-        sources: { ...hit.catalog.sources, sessions: live.status },
-      };
-    }
+    if (hit && Date.now() - hit.at < CATALOG_TTL_MS)
+      return { ...hit.catalog, at: new Date().toISOString() };
 
     const sources: Record<string, string> = { "route registry": "ok", skills: "ok" };
-    const [ops, pods, sessions] = await Promise.allSettled([
-      fetchOps(base, scope),
-      caller.call("pod.list"),
-      caller.call("bridge.sessions.list"),
-    ]);
+    const [ops, pods] = await Promise.allSettled([fetchOps(base, scope), caller.call("pod.list")]);
     const opsValue =
       ops.status === "fulfilled"
         ? ops.value
@@ -372,13 +361,9 @@ export function createCapabilityCatalogSource(options: {
           : "ok";
     sources["pod.json"] =
       pods.status === "rejected" ? `did not answer: ${message(pods.reason)}` : "ok";
-    sources.sessions =
-      sessions.status === "rejected" ? `did not answer: ${message(sessions.reason)}` : "ok";
-    const sessionList: Sessions = sessions.status === "fulfilled" ? sessions.value.sessions : [];
-    const catalog: CapabilityCatalog = {
+    const catalog: Omit<CapabilityCatalog, "machine"> = {
       at: new Date().toISOString(),
       bridgeSessionId: opsValue.bridgeSessionId,
-      sessions: catalogSessions(sessionList),
       sources,
       capabilities: buildCapabilities({
         ops: opsValue.operations ?? [],

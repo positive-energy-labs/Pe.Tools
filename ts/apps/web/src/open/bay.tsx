@@ -53,7 +53,6 @@ import {
   launchPlan,
   modelRows,
   pathRow,
-  whoseOf,
   jobsOf,
   type PeaJob,
   type DocRow,
@@ -144,7 +143,7 @@ export function PatchBay({
   const sessions = useMemo(
     () =>
       [...(machine?.revit.sessions ?? [])].sort(
-        (a, b) => Number(whoseOf(a) === "pea") - Number(whoseOf(b) === "pea"),
+        (a, b) => Number(a.whose === "pea") - Number(b.whose === "pea"),
       ),
     [machine],
   );
@@ -208,12 +207,12 @@ export function PatchBay({
     const labels = new Map<string, string>();
     const seen = new Map<string, number>();
     for (const session of sessions) {
-      const base = `${whoseOf(session) === "pea" ? "pea " : ""}${session.row.year}`;
+      const base = `${session.whose === "pea" ? "pea " : ""}${session.row.year}`;
       seen.set(base, (seen.get(base) ?? 0) + 1);
     }
     const used = new Set<string>();
     for (const session of sessions) {
-      const base = `${whoseOf(session) === "pea" ? "pea " : ""}${session.row.year}`;
+      const base = `${session.whose === "pea" ? "pea " : ""}${session.row.year}`;
       const label =
         (seen.get(base) ?? 0) > 1 || used.has(base)
           ? `${base} pid ${pidOf(session.row) ?? "?"}`
@@ -299,7 +298,7 @@ export function PatchBay({
           out.push({
             key: keyOf(session),
             label: socketLabels.get(keyOf(session))!,
-            hint: `${whoseOf(session) === "pea" ? "Pea's" : "your"} Revit · pid ${pidOf(session.row) ?? "?"}`,
+            hint: `${session.whose === "pea" ? "Pea's" : "your"} Revit · pid ${pidOf(session.row) ?? "?"}`,
             take: () => patch(keyOf(session)),
           });
         out.push({
@@ -394,7 +393,7 @@ export function PatchBay({
       const row = allRows.find((each) => each.openIn?.document === document);
       if (!row || !document.openId) continue;
       const openId = document.openId;
-      const pea = whoseOf(session) === "pea";
+      const pea = session.whose === "pea";
       const upgrade =
         row.savedYear && row.savedYear < session.row.year
           ? `${yy(row.savedYear)}→${yy(session.row.year)}`
@@ -769,7 +768,7 @@ function Socket({
   onHeld: (openId: string | null) => void;
 }) {
   const { verbs, strip: lifecycle } = useLifecycle({ session, refusal, hr });
-  const pea = whoseOf(session) === "pea";
+  const pea = session.whose === "pea";
   const facts = { ...factsOf(session), ...(pea ? { whose: "pea" as const } : {}) };
   return (
     <SessionCard

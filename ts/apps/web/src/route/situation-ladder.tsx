@@ -1,7 +1,13 @@
 /** The Situation's document ladder, its picker, and the contexts Chat hands a hosted route. */
 import { createContext, useContext, useEffect, useState } from "react";
-import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
-import { inventoryOf, previousOf } from "#/readings";
+import {
+  machineAttachments,
+  type MachineAttachment,
+  type Machine,
+  type Reading,
+} from "@pe/agent-contracts";
+import { useMachine } from "#/machine/use-machine";
+import { previousOf } from "#/readings";
 import { Ladder } from "./ladder";
 import { useChooseTarget } from "./shell";
 import type { ActionHandle, RouteHandle } from "./use-route";
@@ -46,7 +52,7 @@ export const ChatPlanIntent = createContext<{
 } | null>(null);
 
 /**
- * session › document, read from the bridge inventory: titles and pe-revit ids, not GUIDs.
+ * session › document, read from Machine: titles and pe-revit ids, not GUIDs.
  * A pick moves the thread head (the one target store) and drops a `?target` pin, so the route
  * shows what the thread shows. A route with no thread still binds through `?target`; Chat's
  * composer hands in its own `binding`.
@@ -61,12 +67,19 @@ export function useDocumentLadder(
 ) {
   const hosted = useContext(ChatHosted);
   const [pin, choose] = useChooseTarget();
-  // The kernel's own inventory: a route need not declare an `inventory` Reading to show sessions.
-  const inventory = handle.inventory;
-  const observed = previousOf(inventory) as
-    | { sessions?: readonly BridgeSessionListEntry[] }
-    | undefined;
-  const sessions = inventoryOf(observed?.sessions ?? []);
+  const shared = useMachine();
+  // A route's frozen seed supplies the same Machine contract as the shared host owner.
+  const inventory = (handle.readings.machine as Reading<Machine> | undefined) ?? shared.reading;
+  const observed = previousOf(inventory);
+  const sessions = observed ? machineAttachments(observed) : [];
+  const name = (attachment: MachineAttachment) => {
+    const session = observed?.revit.sessions?.find(
+      (s) => s.attachment?.session === attachment.session,
+    );
+    return session && session.row.case !== "observed-active"
+      ? session.row.id
+      : `Revit · pid ${attachment.pid}`;
+  };
   const bound = binding
     ? binding.bound
     : handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
@@ -77,8 +90,8 @@ export function useDocumentLadder(
   // title reopened there as its first row (F-X-1). Never taken for the person.
   const lost = binding ? null : handle.bindingLost;
   const sessionId = chosenSession ?? bound?.session ?? lost?.ref.session ?? null;
-  const session = sessions.find((item) => item.sessionId === sessionId) ?? null;
-  const doc = session?.openDocuments?.find((item) => item.openId === bound?.openId) ?? null;
+  const session = sessions.find((item) => item.session === sessionId) ?? null;
+  const doc = session?.documents?.find((item) => item.openId === bound?.openId) ?? null;
   const note =
     inventory.state === "failed"
       ? inventory.message
@@ -98,7 +111,7 @@ export function useDocumentLadder(
       });
     else choose(JSON.stringify({ kind: "open", ref }));
   };
-  const sessionWord = session ? (session.sdkSessionId ?? session.sessionId) : null;
+  const sessionWord = session ? name(session) : null;
   return {
     sessionWord,
     docWord: doc?.title ?? lost?.title ?? null,
@@ -115,9 +128,14 @@ export function useDocumentLadder(
             label: sessionWord,
             placeholder: "choose a session",
             options: sessions.map((item) => ({
-              id: item.sessionId,
-              label: item.sdkSessionId ?? item.sessionId,
-              sub: `${item.openDocumentCount} open${item.lane ? ` · ${item.lane}` : ""}`,
+              id: item.session,
+              label: name(item),
+              refusal:
+                observed?.revit.sessions?.find((s) => s.attachment?.session === item.session)?.row
+                  .execution?.allowed !== true
+                  ? "Runtime ownership is not verified"
+                  : undefined,
+              sub: item.documents === null ? "documents unknown" : `${item.documents.length} open`,
             })),
             note: note ?? "no Revit answers the host",
             picked: (id: string) => id === sessionId,
@@ -128,7 +146,7 @@ export function useDocumentLadder(
             label: doc?.title ?? null,
             placeholder: "choose a document",
             options: session
-              ? (session.openDocuments ?? [])
+              ? (session.documents ?? [])
                   .map((item) => ({
                     id: item.openId,
                     label: item.title,
@@ -145,7 +163,11 @@ export function useDocumentLadder(
                       Number(a.id === lost?.reopened?.openId),
                   )
               : null,
-            note: session ? "nothing open here" : "choose a session first",
+            note: session
+              ? session.documents === null
+                ? "documents unknown"
+                : "nothing open here"
+              : "choose a session first",
             picked: (id: string) => id === bound?.openId,
             pick,
           },

@@ -178,7 +178,7 @@ export const peFind = createTool({
         target,
         revision,
         bridgeSessionId: catalog.bridgeSessionId,
-        sessions: catalog.sessions,
+        machine: catalog.machine,
         defaultDocument: targetDocument(target),
         sources: catalog.sources,
         map: capabilityMap(offered),

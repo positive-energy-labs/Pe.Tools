@@ -1,3 +1,4 @@
+import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { createHash } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -14,7 +15,7 @@ test("kernel starts with live discovery and makes Revit orientation conditional"
   for (const door of ["pe_find", "pe_read", "pe_do", "target_set"])
     expect(peaAgentInstructions).toContain(door);
   expect(peaAgentInstructions).toContain("start with pe_find without a query");
-  expect(peaAgentInstructions).toContain("distinguish the selected target");
+  expect(peaAgentInstructions).toContain("Distinguish the thread's selected target");
   expect(peaAgentInstructions).toContain("When discovery shows connected Revit");
   expect(peaAgentInstructions).toContain("capture_view");
   expect(peaAgentInstructions).not.toContain("Revit is connected:");
@@ -33,14 +34,14 @@ test("one MCP connection discovers session and target changes without startup co
   // A harness child: the host minted its context at spawn, so its own scope answers.
   vi.stubEnv("PE_CONTEXT", "test-context");
   let head: ThreadHead = emptyThreadHead;
-  let sessions: Array<{ sessionId: string; activeDocumentTitle: string }> = [];
+  let machine = machineFixture();
   const fetch = vi.fn(async (input: string | URL | Request) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     if (url.pathname === "/pe/scope/self") return Response.json({ thread: "t1", ...head });
     if (url.pathname === "/pe/capabilities")
       return Response.json({
         at: new Date().toISOString(),
-        sessions,
+        machine,
         sources: { catalog: "ok" },
         capabilities: [],
       });
@@ -61,9 +62,9 @@ test("one MCP connection discovers session and target changes without startup co
       const content = result.content as Array<{ text: string }>;
       return JSON.parse(content[0]!.text);
     };
-    expect(await discover()).toMatchObject({ target: null, revision: 0, sessions: [] });
-    sessions = [{ sessionId: "s1", activeDocumentTitle: "A" }];
-    expect(await discover()).toMatchObject({ target: null, sessions });
+    expect(await discover()).toMatchObject({ target: null, revision: 0, machine });
+    machine = machineFixture([{ session: "s1", documents: null }]);
+    expect(await discover()).toMatchObject({ target: null, machine });
     for (const [index, openId] of ["a", "b"].entries()) {
       head = {
         ...head,
@@ -74,11 +75,11 @@ test("one MCP connection discovers session and target changes without startup co
         target: head.defaultTarget,
         revision: head.revision,
         defaultDocument: { session: "s1", openId },
-        sessions,
+        machine,
       });
     }
-    sessions = [];
-    expect(await discover()).toMatchObject({ target: head.defaultTarget, sessions: [] });
+    machine = machineFixture();
+    expect(await discover()).toMatchObject({ target: head.defaultTarget, machine });
     expect(client.getInstructions()).toBe(peaAgentInstructions);
   } finally {
     await client.close();
