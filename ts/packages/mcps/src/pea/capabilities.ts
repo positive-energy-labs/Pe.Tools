@@ -350,7 +350,8 @@ export function createCapabilityCatalogSource(options: {
     const sources: Record<string, string> = { "route registry": "ok", skills: "ok" };
     const [ops, admitted] = await Promise.allSettled([
       fetchOps(base, scope),
-      options.content?.() ?? Promise.resolve({ packages: [], skills: [], diagnostics: [] }),
+      options.content?.() ??
+        Promise.resolve<CapabilityContent>({ packages: [], skills: [], diagnostics: [] }),
     ]);
     const opsValue =
       ops.status === "fulfilled"
