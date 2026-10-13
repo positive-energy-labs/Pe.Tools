@@ -23,3 +23,6 @@
 ts/** text=auto eol=lf
 
 # Company acceptance inputs retain their original bytes, including mixed line endings.
+
+# Shipped example Pods are byte-exact fixtures (tests read them, products copy them): LF on every checkout.
+examples/pods/** text eol=lf
