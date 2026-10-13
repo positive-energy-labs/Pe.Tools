@@ -86,7 +86,11 @@ export function BindPicker({
           </EmptyState>
         )}
         {outcome ? (
-          <p className={`m-0 t-small ${outcome.ok ? "text-ink-2" : "text-alarm"}`} role="status">
+          <p
+            className={`m-0 t-small ${outcome.ok ? "text-ink-2" : ""}`}
+            data-tone={outcome.ok ? undefined : "alarm"}
+            role="status"
+          >
             {outcome.message}{" "}
             {outcome.ok ? (
               <a href={`/pages/${encodeURIComponent(slug)}/`}>Back to the Page</a>
