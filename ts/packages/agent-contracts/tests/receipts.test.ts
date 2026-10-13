@@ -1,5 +1,10 @@
 import { expect, test } from "vite-plus/test";
-import { receiptGoldenEnvelope, receiptMatches, receiptSchema } from "../src/receipts.ts";
+import {
+  receiptGoldenEnvelope,
+  receiptMatches,
+  receiptSchema,
+  receiptProducerSchema,
+} from "../src/receipts.ts";
 
 test("golden envelope survives JSON without losing wire identity", () => {
   expect(receiptSchema.parse(JSON.parse(JSON.stringify(receiptGoldenEnvelope)))).toEqual(
@@ -40,4 +45,28 @@ test("untrusted envelope fields, free faults, caller ids and MCP content fail cl
 });
 test("missing identity remains explicit local evidence", () => {
   expect(receiptSchema.parse({ ...receiptGoldenEnvelope, stamp: null }).stamp).toBeNull();
+});
+
+test("native producers share fact bodies but cannot claim reserved envelope identity", () => {
+  const r = receiptGoldenEnvelope;
+  const producer = {
+    schema: 1,
+    id: r.id,
+    at: r.at,
+    join: r.join,
+    body: r.body,
+    emitter: { version: r.stamp!.version, build: r.stamp!.build, commit: r.stamp!.commit },
+  };
+  expect(receiptProducerSchema.parse(producer)).toEqual(producer);
+  expect(receiptProducerSchema.safeParse({ ...producer, stamp: r.stamp }).success).toBe(false);
+  expect(
+    receiptProducerSchema.safeParse({
+      ...producer,
+      body: {
+        kind: "feedback",
+        explicitHumanSubmit: true,
+        localRef: { path: "secret", feedbackId: r.id },
+      },
+    }).success,
+  ).toBe(false);
 });

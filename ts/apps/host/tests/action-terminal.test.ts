@@ -230,7 +230,9 @@ async function restart(steps: ActionStep["state"][], prepared: boolean) {
   await writeFile(path, JSON.stringify({ version: 3, actions: [row] }));
   const journal = new ActionJournal(path);
   const reloaded = (await journal.list(undefined, id))[0]!;
-  expect(JSON.parse(await readFile(path, "utf8")).actions[0].state).toBe(reloaded.state);
+  expect(JSON.parse(await readFile(path, "utf8")).receipts[0].body.value.state).toBe(
+    reloaded.state,
+  );
   return reloaded;
 }
 const restarts: [ActionStep["state"][], boolean, Terminal][] = [

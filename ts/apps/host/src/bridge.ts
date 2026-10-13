@@ -1,7 +1,8 @@
 import { Context, Deferred, Effect, Layer, PubSub, Ref, Schema } from "effect";
 import type { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpServerResponse as Response } from "effect/unstable/http";
-import { capture } from "@pe/runtime";
+import { recordBridgeQueue } from "./gateway-owner.ts";
+import { receiptProducerSchema, type ReceiptProducer } from "@pe/agent-contracts";
 import { randomUUID } from "node:crypto";
 import { runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
 import { hostOwnership } from "./host-ownership.ts";
@@ -133,6 +134,27 @@ export type HostBridgeEvent = {
   readonly docChanged?: boolean;
   readonly prevDocTitle?: string | null;
 };
+
+export type NativeReceiptProducer = {
+  readonly fact: ReceiptProducer;
+  readonly connection: Readonly<{
+    sessionId: string;
+    processId: number;
+    processStartUtcUnixMs: number | null;
+    lane: Lane | null;
+    buildStamp: string | null;
+  }>;
+};
+const receiptProducers = new Set<(producer: NativeReceiptProducer) => void>();
+/** Host-only intake. The export owner validates emitter metadata and supplies opaque identity. */
+export function subscribeReceiptProducers(
+  consume: (producer: NativeReceiptProducer) => void,
+): () => void {
+  receiptProducers.add(consume);
+  return () => {
+    receiptProducers.delete(consume);
+  };
+}
 
 /** Backpressure cap for transient world notifications; current state remains query-owned. */
 const EVENT_STREAM_CAPACITY = 500;
@@ -427,6 +449,32 @@ export const RevitBridgeLive = Layer.effect(
               yield* Effect.logWarning("bridge Event frame missing event");
               return;
             }
+            // This is producer evidence, never a browser event, including when malformed.
+            if (frame.event.eventName === "receipt.producer") {
+              if (!session || (yield* Ref.get(sessions)).get(session.sessionId) !== session) return;
+              const raw = frame.event.payloadJson;
+              try {
+                if (!raw || raw.length > 256 * 1024) throw Error("Invalid producer size");
+                const fact = receiptProducerSchema.parse(JSON.parse(raw));
+                const connection = {
+                  sessionId: session.sessionId,
+                  processId: session.processId,
+                  processStartUtcUnixMs: session.processStartUtcUnixMs,
+                  lane: session.lane,
+                  buildStamp: session.buildStamp,
+                };
+                for (const consume of receiptProducers) {
+                  try {
+                    consume({ fact: structuredClone(fact), connection: { ...connection } });
+                  } catch {
+                    yield* Effect.logWarning("Native receipt subscriber failed");
+                  }
+                }
+              } catch {
+                yield* Effect.logWarning("Native receipt producer envelope refused");
+              }
+              return;
+            }
             yield* Effect.log(`bridge event: ${frame.event.eventName}`);
             if (session)
               yield* emit({
@@ -663,29 +711,33 @@ export const RevitBridgeLive = Layer.effect(
       const myGate = yield* Deferred.make<void>();
       const previousGate = yield* Ref.getAndSet(session.queueTail, myGate);
       const queuedAt = Date.now();
-      // Depth includes this op; a contended enqueue must stay visible even if the gate never opens.
-      if (depth > 1)
-        capture("bridge_queue", {
-          op: operationKey,
-          request_id: wireId,
-          session_id: session.sessionId,
-          queue_depth: depth,
-          phase: "queued",
-        });
-      yield* Effect.logInfo(
-        `Revit queue queued op=${operationKey} session=${session.sessionId} depth=${depth}`,
-      );
       return yield* Effect.gen(function* () {
+        // Depth includes this op; a contended enqueue stays visible even if the gate never opens.
+        if (depth > 1)
+          yield* Effect.promise(() =>
+            recordBridgeQueue(operationKey, wireId, session.sessionId, "queued", depth).catch(
+              (error) => {
+                console.error("Queue receipt persistence failed", error);
+              },
+            ),
+          );
+        yield* Effect.logInfo(
+          `Revit queue queued op=${operationKey} session=${session.sessionId} depth=${depth}`,
+        );
         yield* Deferred.await(previousGate);
         const startedAt = Date.now();
-        capture("bridge_queue", {
-          op: operationKey,
-          request_id: wireId,
-          session_id: session.sessionId,
-          queue_depth: depth,
-          phase: "started",
-          wait_ms: startedAt - queuedAt,
-        });
+        yield* Effect.promise(() =>
+          recordBridgeQueue(
+            operationKey,
+            wireId,
+            session.sessionId,
+            "started",
+            depth,
+            startedAt - queuedAt,
+          ).catch((error) => {
+            console.error("Queue receipt persistence failed", error);
+          }),
+        );
         yield* Effect.logInfo(
           `Revit queue started op=${operationKey} session=${session.sessionId} depth=${depth} wait_ms=${startedAt - queuedAt}`,
         );

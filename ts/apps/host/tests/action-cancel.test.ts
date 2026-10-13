@@ -225,8 +225,8 @@ test("an exact cancelled SDK receipt settles a lost reply once without replaying
       }),
     ]);
     const envelope = JSON.parse(await readFile(path, "utf8"));
-    const nativeId = envelope.actions[0].steps[1].id;
-    envelope.actions[0].steps.push({
+    const nativeId = envelope.receipts[0].body.value.steps[1].id;
+    envelope.receipts[0].body.value.steps.push({
       id: "22222222-2222-4222-8222-222222222222",
       key: "native.followup",
       kind: "native",

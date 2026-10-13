@@ -3,6 +3,7 @@ import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
+import { z } from "zod";
 import {
   canonicalRouteInput,
   actionReceiptSchema,
@@ -15,6 +16,18 @@ import {
   type DocumentRef,
   type ExecutionTarget,
   type ActionReceipt,
+  receiptSchema,
+  receiptBodySchema,
+  receiptJoinSchema,
+  receiptQuerySchema,
+  receiptStampSchema,
+  receiptMatches,
+  type Receipt,
+  type ReceiptFact,
+  type ReceiptJoin,
+  type ReceiptQuery,
+  type ReceiptReader,
+  type ReceiptStamp,
 } from "@pe/agent-contracts";
 import { live } from "./control.ts";
 
@@ -220,19 +233,150 @@ const unsettled = (row: ActionReceipt) => {
 };
 
 /** One host journal. Execution never holds the authored Work lock or the journal write tail. */
-export class ActionJournal {
+export class ActionJournal implements ReceiptReader {
   private rows: ActionReceipt[] = [];
-  private readonly loaded: Promise<void>;
+  private receipts: Receipt[] = [];
+  private mappings: Record<string, string> = {};
+  private committed: Receipt[] = [];
+  private readonly subscribers = new Set<(receipt: Receipt) => void>();
+  private loaded?: Promise<void>;
   private tail: Promise<unknown> = Promise.resolve();
   private readonly pending = new Map<string, Promise<ActionReceipt>>();
   private readonly listeners = new Set<() => void>();
   private readonly reads = new OwnerReads();
-  constructor(private readonly path: string) {
-    this.loaded = this.load();
+  constructor(
+    private readonly path: string,
+    private readonly stamp: () => ReceiptStamp | null = () => null,
+  ) {}
+  private loadOnce(): Promise<void> {
+    return (this.loaded ??= this.load());
+  }
+
+  async read(query: ReceiptQuery): Promise<Receipt[]> {
+    const q = receiptQuerySchema.parse(query);
+    await this.loadOnce();
+    await this.tail;
+    return structuredClone(this.receipts.filter((r) => receiptMatches(r, q)));
+  }
+  subscribe(query: ReceiptQuery, consume: (receipt: Receipt) => void): () => void {
+    const q = receiptQuerySchema.parse(query);
+    const listener = (r: Receipt) => {
+      if (receiptMatches(r, q)) consume(structuredClone(r));
+    };
+    this.subscribers.add(listener);
+    return () => {
+      this.subscribers.delete(listener);
+    };
+  }
+  private mapped(kind: string, localId: string): string {
+    const key = JSON.stringify([kind, localId]);
+    return (this.mappings[key] ??= randomUUID());
+  }
+  async opaqueId(
+    kind: "thread" | "turn" | "process" | "request",
+    localId: string,
+  ): Promise<string> {
+    return this.serial(async () => {
+      const id = this.mapped(kind, localId);
+      await this.persist();
+      this.notify();
+      return id;
+    });
+  }
+  private rootJoin(id: string): ReceiptJoin {
+    return { actionId: this.mapped("action", id), requestId: this.mapped("action-request", id) };
+  }
+  async actionJoin(id: string): Promise<ReceiptJoin> {
+    return this.serial(async () => {
+      const join = this.rootJoin(id);
+      await this.persist();
+      this.notify();
+      return join;
+    });
+  }
+  private joinForRequest(id: string): ReceiptJoin {
+    const row = this.rows.find((row) => row.steps.some((step) => step.id === id));
+    const root = row ? this.rootJoin(row.id) : null;
+    return {
+      requestId: z.uuid().safeParse(id).success ? id : this.mapped("request", id),
+      ...(root ? { actionId: root.actionId, parentRequestId: root.requestId } : {}),
+    };
+  }
+  async requestJoin(id: string): Promise<ReceiptJoin> {
+    return this.serial(async () => {
+      const join = this.joinForRequest(id);
+      await this.persist();
+      this.notify();
+      return join;
+    });
+  }
+  /** Only owner code admits stamps. HTTP producers submit facts through a verified adapter. */
+  async recordFact(
+    body: ReceiptFact,
+    join: ReceiptJoin = { requestId: randomUUID() },
+    stamp: ReceiptStamp | null = this.stamp(),
+    source?: Pick<Receipt, "id" | "at">,
+  ): Promise<Receipt> {
+    const fact = receiptBodySchema.parse(body);
+    if (fact.kind === "action") throw Error("Only action execution can settle an action receipt");
+    const admitted = {
+      body: fact,
+      join: receiptJoinSchema.parse(join),
+      stamp: stamp === null ? null : receiptStampSchema.parse(stamp),
+    };
+    const identity = source
+      ? { id: z.uuid().parse(source.id), at: z.iso.datetime().parse(source.at) }
+      : undefined;
+    return this.serial(() => this.appendFact(admitted, identity));
+  }
+  private async appendFact(
+    fact: Pick<Receipt, "body" | "join" | "stamp">,
+    source?: Pick<Receipt, "id" | "at">,
+  ): Promise<Receipt> {
+    const receipt = receiptSchema.parse({
+      schema: 1,
+      id: randomUUID(),
+      revision: 1,
+      at: new Date().toISOString(),
+      ...source,
+      ...fact,
+    });
+    const previous = this.receipts.find((r) => r.id === receipt.id);
+    if (previous) {
+      if (canonicalRouteInput(previous) !== canonicalRouteInput(receipt))
+        throw Error("Receipt id conflicts with its committed fact");
+      return structuredClone(previous);
+    }
+    await this.persist(this.rows, [...this.receipts, receipt]);
+    this.notify();
+    return structuredClone(receipt);
+  }
+  async recordQueue(
+    op: string,
+    requestId: string,
+    session: string,
+    phase: "queued" | "started",
+    depth: number,
+    waitMs?: number,
+  ): Promise<Receipt> {
+    return this.serial(() =>
+      this.appendFact({
+        body: {
+          kind: "queue",
+          op,
+          phase,
+          depth,
+          ...(waitMs === undefined ? {} : { waitMs }),
+          processSessionId: this.mapped("process", session),
+        },
+        join: this.joinForRequest(requestId),
+        stamp: this.stamp(),
+      }),
+    );
   }
 
   async list(target?: DocumentRef, id?: string): Promise<ActionReceipt[]> {
-    await this.loaded;
+    await this.loadOnce();
     await this.tail;
     return structuredClone(
       this.rows.filter(
@@ -263,10 +407,25 @@ export class ActionJournal {
     );
   }
   private notify() {
-    for (const listener of this.listeners) listener();
+    const committed = this.committed.splice(0);
+    for (const listener of this.listeners) {
+      try {
+        listener();
+      } catch (error) {
+        console.error("Action receipt listener failed", error);
+      }
+    }
+    for (const receipt of committed)
+      for (const listener of this.subscribers) {
+        try {
+          listener(receipt);
+        } catch (error) {
+          console.error("Receipt subscriber failed", error);
+        }
+      }
   }
   async wait(id: string): Promise<ActionReceipt> {
-    await this.loaded;
+    await this.loadOnce();
     const pending = this.pending.get(id);
     if (pending) return pending;
     const row = (await this.list(undefined, id))[0];
@@ -563,7 +722,14 @@ export class ActionJournal {
   }
   async recover(
     id: string,
-    read: (step: ActionStep, prepared: unknown) => Promise<{ step: ActionStep; evidence: unknown }>,
+    read: (
+      step: ActionStep,
+      prepared: unknown,
+    ) => Promise<{
+      step: ActionStep;
+      evidence: unknown;
+      observation?: Extract<ReceiptFact, { kind: "native" }>;
+    }>,
     revisit?: (step: ActionStep) => boolean,
   ): Promise<ActionReceipt> {
     const original = (await this.list(undefined, id))[0];
@@ -575,7 +741,11 @@ export class ActionJournal {
       original.preparation.state !== "ready"
     )
       return original;
-    const updates: { step: ActionStep; evidence: unknown }[] = [];
+    const updates: {
+      step: ActionStep;
+      evidence: unknown;
+      observation?: Extract<ReceiptFact, { kind: "native" }>;
+    }[] = [];
     for (const step of original.steps)
       if (
         step.kind === "native" &&
@@ -588,6 +758,7 @@ export class ActionJournal {
               ? {
                   step: update.step.state === "succeeded" ? update.step : step,
                   evidence: { previous: step, receipt: update.evidence },
+                  observation: update.observation,
                 }
               : update,
           );
@@ -619,7 +790,32 @@ export class ActionJournal {
       if (settled) nextRow = { ...unsettled(nextRow), ...settled } as ActionReceipt;
       nextRow = actionReceiptSchema.parse(nextRow);
       const next = this.rows.map((row) => (row.id === id ? nextRow : row));
-      await this.persist(next);
+      const native = updates.flatMap((update) => {
+        if (!update.observation) return [];
+        const body = update.observation;
+        const old = this.receipts.find(
+          (r) =>
+            r.body.kind === "native" &&
+            canonicalRouteInput(r.body.localRef) === canonicalRouteInput(body.localRef),
+        );
+        if (old && canonicalRouteInput(old.body) === canonicalRouteInput(body)) return [];
+        return [
+          receiptSchema.parse({
+            schema: 1,
+            id: old?.id ?? randomUUID(),
+            revision: (old?.revision ?? 0) + 1,
+            at: new Date().toISOString(),
+            // SDK recovery proves an outcome, not the build of the native producer.
+            stamp: null,
+            join: this.joinForRequest(update.step.id),
+            body,
+          }),
+        ];
+      });
+      await this.persist(next, [
+        ...this.receipts.filter((r) => !native.some((n) => n.id === r.id)),
+        ...native,
+      ]);
       this.rows = next;
       this.notify();
       return structuredClone(nextRow);
@@ -628,7 +824,7 @@ export class ActionJournal {
   private serial<A>(work: () => Promise<A>): Promise<A> {
     const next = this.tail
       .catch(() => undefined)
-      .then(() => this.loaded)
+      .then(() => this.loadOnce())
       .then(work);
     this.tail = next.then(
       () => undefined,
@@ -638,14 +834,51 @@ export class ActionJournal {
   }
   private async load(): Promise<void> {
     const raw = await readFile(this.path, "utf8").catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return JSON.stringify({ version: 3, actions: [] });
+      if (error.code === "ENOENT") return null;
       throw error;
     });
+    if (raw === null) return;
     const decoded = JSON.parse(raw);
-    if (decoded?.version !== 3 || !Array.isArray(decoded.actions))
-      throw Error("Invalid action journal envelope");
-    let changed = false;
-    const current = actionReceiptSchema.array().parse(decoded.actions);
+    const legacy = decoded?.version === 3;
+    let current: ActionReceipt[];
+    if (legacy) {
+      current = z
+        .strictObject({ version: z.literal(3), actions: actionReceiptSchema.array() })
+        .parse(decoded).actions;
+      // Preserve the exact consumed v3 bytes once, before replacing the envelope. No live v3 writer.
+      if (current.length) {
+        await writeFile(`${this.path}.v3.json`, raw, { encoding: "utf8", flag: "wx" }).catch(
+          async (error: NodeJS.ErrnoException) => {
+            if (error.code !== "EEXIST" || (await readFile(`${this.path}.v3.json`, "utf8")) !== raw)
+              throw error;
+          },
+        );
+      }
+    } else {
+      const envelope = z
+        .strictObject({
+          version: z.literal(4),
+          receipts: receiptSchema.array(),
+          mappings: z.record(z.string(), z.uuid()),
+        })
+        .parse(decoded);
+      this.receipts = envelope.receipts;
+      this.mappings = envelope.mappings;
+      if (new Set(Object.values(this.mappings)).size !== Object.keys(this.mappings).length)
+        throw Error("Duplicate opaque identity in action journal");
+      current = this.receipts.flatMap((r) => (r.body.kind === "action" ? [r.body.value] : []));
+      if (new Set(this.receipts.map((r) => r.id)).size !== this.receipts.length)
+        throw Error("Duplicate receipt id in action journal");
+      for (const r of this.receipts)
+        if (
+          r.body.kind === "action" &&
+          canonicalRouteInput(r.join) !== canonicalRouteInput(this.rootJoin(r.body.value.id))
+        )
+          throw Error("Action receipt join does not match its persisted mapping");
+    }
+    if (new Set(current.map((r) => r.id)).size !== current.length)
+      throw Error("Duplicate action id in action journal");
+    let changed = legacy && current.length > 0;
     const rows = current.map((row) => {
       let next = row;
       if (row.state === "running") {
@@ -663,14 +896,47 @@ export class ActionJournal {
       }
       return actionReceiptSchema.parse(next);
     });
-    if (changed) await this.persist(rows);
+    if (changed) await this.persist(rows, this.receipts, true);
     this.rows = rows;
+    this.notify();
   }
 
-  private async persist(rows = this.rows): Promise<void> {
+  private async persist(
+    rows = this.rows,
+    receipts = this.receipts,
+    historical = false,
+  ): Promise<void> {
+    const actions = rows.map((row) => {
+      const old = this.receipts.find((r) => r.body.kind === "action" && r.body.value.id === row.id);
+      if (
+        old?.body.kind === "action" &&
+        canonicalRouteInput(old.body.value) === canonicalRouteInput(row)
+      )
+        return old;
+      return receiptSchema.parse({
+        schema: 1,
+        id: old?.id ?? randomUUID(),
+        revision: (old?.revision ?? 0) + 1,
+        at: historical && !old ? row.startedAt : new Date().toISOString(),
+        stamp: old ? old.stamp : historical ? null : this.stamp(),
+        join: old?.join ?? this.rootJoin(row.id),
+        body: { kind: "action", value: row },
+      });
+    });
+    const next = [...actions, ...receipts.filter((r) => r.body.kind !== "action")];
     // ponytail: one bounded-use action receipt file; split by attempt when measured size requires it.
     await mkdir(dirname(this.path), { recursive: true });
-    await writeFile(`${this.path}.tmp`, JSON.stringify({ version: 3, actions: rows }), "utf8");
+    await writeFile(
+      `${this.path}.tmp`,
+      JSON.stringify({ version: 4, receipts: next, mappings: this.mappings }),
+      "utf8",
+    );
     await rename(`${this.path}.tmp`, this.path);
+    this.committed.push(
+      ...next.filter(
+        (r) => !this.receipts.some((old) => old.id === r.id && old.revision === r.revision),
+      ),
+    );
+    this.receipts = next;
   }
 }

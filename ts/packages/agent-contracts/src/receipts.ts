@@ -131,6 +131,20 @@ export const safeMcpMetadataSchema = z.strictObject({
   serverBuild: token,
   faultCode: receiptFaultCodeSchema.optional(),
 });
+const diagnosticReceipt = z.strictObject({
+  kind: z.literal("diagnostic"),
+  code: receiptFaultCodeSchema,
+  elapsedMs: milliseconds.optional(),
+  localRef: receiptEvidenceRefSchema.optional(),
+  readingKind: token.optional(),
+  streamKind: token.optional(),
+  routeCode: token.optional(),
+});
+const usageReceipt = z.strictObject({
+  kind: z.literal("usage"),
+  event: receiptUsageEventSchema,
+  counters: receiptCountersSchema,
+});
 export const receiptBodySchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("action"), value: actionReceiptSchema }),
   z.strictObject({
@@ -158,20 +172,8 @@ export const receiptBodySchema = z.discriminatedUnion("kind", [
     phase: z.enum(["asked", "resolved"]),
     localRef: z.strictObject({ threadId: z.string().min(1), eventId: z.string().min(1) }),
   }),
-  z.strictObject({
-    kind: z.literal("diagnostic"),
-    code: receiptFaultCodeSchema,
-    elapsedMs: milliseconds.optional(),
-    localRef: receiptEvidenceRefSchema.optional(),
-    readingKind: token.optional(),
-    streamKind: token.optional(),
-    routeCode: token.optional(),
-  }),
-  z.strictObject({
-    kind: z.literal("usage"),
-    event: receiptUsageEventSchema,
-    counters: receiptCountersSchema,
-  }),
+  diagnosticReceipt,
+  usageReceipt,
   z.strictObject({
     kind: z.literal("mcp"),
     event: z.enum(["$mcp_tool_call", "$mcp_initialize", "$exception"]),
@@ -185,6 +187,20 @@ export const receiptBodySchema = z.discriminatedUnion("kind", [
 ]);
 export type ReceiptBody = z.infer<typeof receiptBodySchema>;
 export type ReceiptFact = Exclude<ReceiptBody, { kind: "action" }>;
+/** Native Event payload; it cannot claim the host's installation, process identity or lane. */
+export const receiptProducerSchema = z.strictObject({
+  schema: z.literal(1),
+  id: uuid,
+  at: z.iso.datetime(),
+  join: z.strictObject({ requestId: uuid }),
+  body: z.discriminatedUnion("kind", [usageReceipt, diagnosticReceipt]),
+  emitter: z.strictObject({
+    version: z.string().max(128).nullable(),
+    build: z.string().max(128).nullable(),
+    commit: z.string().max(128).nullable(),
+  }),
+});
+export type ReceiptProducer = z.infer<typeof receiptProducerSchema>;
 export const receiptSchema = z
   .strictObject({
     schema: z.literal(1),
@@ -197,6 +213,10 @@ export const receiptSchema = z
     join: receiptJoinSchema,
     body: receiptBodySchema,
   })
+  .refine(
+    (r) => r.body.kind !== "native" || r.body.localRef.requestId === r.join.requestId,
+    "Native receipt joins must retain the exact SDK request UUID",
+  )
   .readonly();
 export type Receipt = z.infer<typeof receiptSchema>;
 export const receiptQuerySchema = z.strictObject({
