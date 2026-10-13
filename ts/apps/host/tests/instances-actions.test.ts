@@ -151,7 +151,10 @@ async function setup(
         documents: census.documents.map((openId) => ({
           session: "bridge-dev",
           openId,
+          address: openId,
           title: openId,
+          isFamilyDocument: false,
+          isActive: false,
         })),
       },
     ],
