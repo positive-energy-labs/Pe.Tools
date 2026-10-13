@@ -29,6 +29,7 @@ describe("fixture census", () => {
       fixtureKind: "live-route",
     });
     expect(census.nonFixtureLiveRoutes.map(({ route }) => route)).toEqual([
+      "/bind",
       "/captures",
       "/data-tables",
       "/ops",
@@ -42,7 +43,7 @@ describe("fixture census", () => {
       fixtureKind: "prototype-fixture",
     });
     expect(census.missingReviewUrls).toEqual([]);
-    expect(census.missingCanonicalFixtures).toBe(6);
+    expect(census.missingCanonicalFixtures).toBe(7);
   });
 
   it("uses real manifest seed names for every demo review URL", () => {
