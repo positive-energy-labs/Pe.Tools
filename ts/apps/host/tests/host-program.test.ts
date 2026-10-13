@@ -65,7 +65,11 @@ vi.mock("@pe/host-contracts/pe-service-host", async (original) => ({
   claimServiceHost: mocks.claim,
   rememberServicePort: async () => {},
 }));
-vi.mock("@pe/runtime", () => ({ capture: () => {} }));
+vi.mock("../src/receipt-export.ts", () => ({
+  hostReceiptExport: () => ({ record: async () => {}, close: async () => {} }),
+  bindNativeProducers: () => () => {},
+  recordUpdateFact: () => {},
+}));
 vi.mock("../src/update-route.ts", () => ({
   makeInstalledUpdateReader: () => ({}),
   updateWhenNoRevit: mocks.update,

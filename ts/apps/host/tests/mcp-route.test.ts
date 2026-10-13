@@ -1,6 +1,14 @@
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { Layer } from "effect";
+import { Layer, Effect, Deferred } from "effect";
+import { NodeHttpServer } from "@effect/platform-node";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { PostHog } from "posthog-node";
+import { receiptGoldenEnvelope } from "@pe/agent-contracts";
+import { ActionJournal } from "../src/action-journal.ts";
+import { createReceiptExport, type ReceiptExport } from "../src/receipt-export.ts";
 import { HttpRouter } from "effect/unstable/http";
 import { buildCapabilities } from "@pe/mcps";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
@@ -9,7 +17,7 @@ import { createPeaMcpServer } from "@pe/mcps/server";
 import { createMcpDoor, mcpRoute } from "../src/mcp-route.ts";
 import { requestIdentityLayer, type IdentityOptions } from "../src/request-identity.ts";
 import { withInvocationContext } from "@pe/mcps/context";
-import { createServer } from "node:http";
+import { createServer, request as httpRequest } from "node:http";
 import { once } from "node:events";
 import { callerOf, mintContext, retireContext } from "../src/control.ts";
 
@@ -43,7 +51,20 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function fixture() {
+async function fixture(telemetry?: ReceiptExport) {
+  if (!telemetry) {
+    const root = mkdtempSync(join(tmpdir(), "pe-mcp-local-"));
+    telemetry = createReceiptExport({
+      journal: new ActionJournal(join(root, "journal.json")),
+      root,
+      stamps: { host: null, web: null },
+    });
+    const exporter = telemetry;
+    dispose.push(async () => {
+      await exporter.close();
+      rmSync(root, { recursive: true, force: true });
+    });
+  }
   let beforePost: () => Promise<void> = async () => {};
   const posts: Record<string, unknown>[] = [];
   const seen: Array<{ path: string; login: string | null }> = [];
@@ -121,32 +142,74 @@ async function fixture() {
       backend.close((error) => (error ? reject(error) : resolve())),
     );
   });
-  const app = HttpRouter.toWebHandler(
-    Layer.mergeAll(
-      requestIdentityLayer(options),
-      mcpRoute(() => hostBase),
+  const server = createServer();
+  const port = () => {
+    const a = server.address();
+    return a && typeof a !== "string" ? a.port : 0;
+  };
+  const latch = Effect.runSync(Deferred.make<void>());
+  const done = Effect.runPromise(
+    Effect.raceFirst(
+      Layer.launch(
+        HttpRouter.serve(
+          Layer.mergeAll(
+            requestIdentityLayer({ ...options, port }),
+            mcpRoute(() => hostBase, telemetry),
+          ),
+          { disableLogger: true },
+        ).pipe(Layer.provide(NodeHttpServer.layer(() => server, { host: "127.0.0.1", port: 0 }))),
+      ),
+      Deferred.await(latch),
     ),
-    { disableLogger: true },
   );
-  dispose.push(app.dispose);
+  for (let i = 0; !port() && i < 200; i++) await new Promise((r) => setTimeout(r, 10));
+  const mcpBase = `http://127.0.0.1:${port()}`;
+  dispose.push(async () => {
+    Effect.runSync(Deferred.succeed(latch, undefined));
+    server.closeAllConnections();
+    await done.catch(() => {});
+  });
+  // Node fetch drops an overridden Host. Native HTTP carries the tailnet authority verbatim.
   const send = (
     body: unknown,
     headers: Record<string, string> = local,
     method = "POST",
     signal?: AbortSignal,
   ) =>
-    app.handler(
-      new Request(`${base}/mcp`, {
-        method,
-        headers: {
-          accept: "application/json, text/event-stream",
-          "content-type": "application/json",
-          ...headers,
+    new Promise<Response>((resolve, reject) => {
+      const req = httpRequest(
+        `${mcpBase}/mcp`,
+        {
+          method,
+          signal,
+          headers: {
+            accept: "application/json, text/event-stream",
+            "content-type": "application/json",
+            ...headers,
+            ...(headers.host === local.host ? { host: `127.0.0.1:${port()}` } : {}),
+          },
         },
-        ...(method === "POST" ? { body: JSON.stringify(body) } : {}),
-        signal,
-      }),
-    );
+        (response) => {
+          const chunks: Buffer[] = [];
+          response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+          response.on("end", () =>
+            resolve(
+              new Response(
+                response.statusCode === 204 || response.statusCode === 202
+                  ? null
+                  : Buffer.concat(chunks),
+                {
+                  status: response.statusCode,
+                  headers: response.headers as Record<string, string>,
+                },
+              ),
+            ),
+          );
+        },
+      );
+      req.on("error", reject);
+      req.end(method === "POST" ? JSON.stringify(body) : undefined);
+    });
   const init = async (headers: Record<string, string> = local) => {
     const response = await send(
       {
@@ -435,3 +498,72 @@ test("an MCP session cannot borrow another thread's context on the same local pr
     retireContext(second);
   }
 });
+
+test("real HTTP MCP schemas/results match off/on; the adapter never sends directly or exports sentinel content", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pe-mcp-analytics-"));
+  const journal = new ActionJournal(join(dir, "journal.json"));
+  const sent: { properties: Record<string, unknown>; event: string }[] = [];
+  const client = new PostHog("test-ingest", {
+    flushInterval: 0,
+    disableGeoip: true,
+    enableExceptionAutocapture: false,
+  });
+  const capture = vi.spyOn(client, "capture");
+  const exporter = createReceiptExport({
+    journal,
+    root: dir,
+    stamps: { host: { ...receiptGoldenEnvelope.stamp!, component: "host" }, web: null },
+    client,
+    send: async (e) => {
+      sent.push(e);
+    },
+  });
+  try {
+    const off = await fixture(
+      createReceiptExport({ journal, root: dir, stamps: { host: null, web: null } }),
+    );
+    const on = await fixture(exporter);
+    const a = await off.init(local);
+    const b = await on.init(local);
+    const list = (f: Awaited<ReturnType<typeof fixture>>, session: Record<string, string>) =>
+      f.send({ jsonrpc: "2.0", id: 20, method: "tools/list" }, session).then((r) => r.text());
+    expect(await list(on, b)).toEqual(await list(off, a));
+    const read = (f: Awaited<ReturnType<typeof fixture>>, session: Record<string, string>) =>
+      f
+        .call(
+          "pe_read",
+          { key: "op:pod.list", input: { sentinel: "PRIVATE_ARGUMENT" } },
+          session,
+          21,
+        )
+        .then((r) => r.text());
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1_800_000_000_000);
+    expect(await read(on, b)).toEqual(await read(off, a));
+    const failed = (f: Awaited<ReturnType<typeof fixture>>, session: Record<string, string>) =>
+      f.call("pe_read", { key: "PRIVATE_RESULT" }, session, 22).then((r) => r.text());
+    expect(await failed(on, b)).toEqual(await failed(off, a));
+    clock.mockRestore();
+    await expect.poll(() => sent.filter((e) => e.event === "$mcp_tool_call").length).toBe(2);
+    await expect.poll(() => sent.filter((e) => e.event === "$exception").length).toBe(1);
+    expect(capture).not.toHaveBeenCalled();
+    expect(JSON.stringify(sent)).not.toMatch(
+      /PRIVATE_|parameters|response|intent|conversation_id|llm_model|user-agent/,
+    );
+    const usage = sent.filter((e) => e.event === "$mcp_tool_call");
+    expect(usage[0]!.properties).toMatchObject({
+      $mcp_tool_name: "pe_read",
+      $mcp_is_error: false,
+      $mcp_input_keys: ["input", "key"],
+      component: "host",
+    });
+    expect(usage[1]!.properties.$mcp_is_error).toBe(true);
+    expect(sent.find((e) => e.event === "$exception")!.properties.request_id).toBe(
+      usage[1]!.properties.request_id,
+    );
+    expect(usage[0]!.properties.$session_id).not.toBe(usage[0]!.properties.process_session_id);
+    expect(sent).toHaveLength(4);
+  } finally {
+    await exporter.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 15_000);

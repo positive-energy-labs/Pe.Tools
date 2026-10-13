@@ -59,7 +59,8 @@ import {
   registerViewImage,
   type CaptureStore,
 } from "./captures-route.ts";
-import { boundedPayload, capture } from "@pe/runtime";
+import { randomUUID } from "node:crypto";
+import { recordHostFact } from "./receipt-export.ts";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
 import { RevitBridge, BridgeError, CANCEL_OPERATION_KEY, NoRevitSession } from "./bridge.ts";
 import { apsAuthLogin, apsAuthLogout, apsAuthStatus, apsAuthToken } from "./aps-auth.ts";
@@ -140,7 +141,7 @@ export function makeCallRoute(
   composition?: {
     readonly forwardBase: string | null;
     readonly dispatch: CallRouteDispatch;
-    readonly captureHostOp?: typeof captureHostOp;
+    readonly captureHostOp?: typeof recordHostOp;
     readonly local?: Parameters<typeof admitGatewayAction>[4];
   },
 ) {
@@ -149,7 +150,7 @@ export function makeCallRoute(
     throw Error(
       "Host forwarding is disabled: execution requires this runtime's own host and Revit.",
     );
-  const captureOperation = composition?.captureHostOp ?? captureHostOp;
+  const recordOperation = composition?.captureHostOp ?? recordHostOp;
   const dispatch: CallRouteDispatch = (...args) =>
     (composition?.dispatch ?? dispatchTsOnlyOperation)(...args);
   const observations = () => (captures ??= hostTakeoffCaptures());
@@ -194,14 +195,32 @@ export function makeCallRoute(
     let captureId: string | undefined;
     // Set once dispatch begins so the catch below can attribute failures to the op.
     let op:
-      | { key: string; request: unknown; tsOnly: boolean; startedAt: number; origin: string }
+      | {
+          key: string;
+          tsOnly: boolean;
+          startedAt: number;
+          origin: string;
+          originClass: "human" | "pea" | "page" | "external" | "system";
+          requestId: string;
+        }
       | undefined;
     // The caller lives in AsyncLocalStorage; the Node body read resumes outside it. Read first.
     const caller = currentCaller();
+    const requestId = randomUUID();
     return Effect.gen(function* () {
       // Lenient by ruling (queue-provenance §1): origin is attribution, not authorization —
       // a missing header is counted as "unknown", never rejected. No registry, no validation.
       const origin = req.headers[HOST_RPC_ORIGIN_HEADER]?.trim() || "unknown";
+      const originClass =
+        caller.kind === "human"
+          ? "human"
+          : caller.kind === "pea"
+            ? "pea"
+            : caller.kind === "page"
+              ? "page"
+              : caller.kind === "external-mcp"
+                ? "external"
+                : "system";
       const body = yield* req.json.pipe(Effect.mapError(() => invalidBody("unreadable JSON body")));
       if (!isRecord(body) || typeof body.key !== "string")
         return yield* Effect.fail(invalidBody("body must be { key: string, request?: object }"));
@@ -220,9 +239,9 @@ export function makeCallRoute(
       let openDocumentId: string | null | undefined = scope.openDocumentId;
 
       if (key === "takeoffs.saved") {
-        op = { key, request, tsOnly: true, startedAt: Date.now(), origin };
+        op = { key, tsOnly: true, startedAt: Date.now(), origin, originClass, requestId };
         const value = yield* savedTakeoffs(request, observations());
-        captureOperation(op, { ok: true });
+        recordOperation(op, { ok: true });
         return Response.jsonUnsafe(value);
       }
 
@@ -233,7 +252,14 @@ export function makeCallRoute(
           ? yield* sdkSession(bridge, scope, actionDeps.sdk)
           : undefined;
       bridgeSessionId = resolvedSession?.sessionId ?? bridgeSessionId;
-      op = { key, request, tsOnly: isTsOnlyOperationKey(key), startedAt: Date.now(), origin };
+      op = {
+        key,
+        tsOnly: isTsOnlyOperationKey(key),
+        startedAt: Date.now(),
+        origin,
+        originClass,
+        requestId,
+      };
       if (
         key !== "takeoffs.snapshot" &&
         key !== "host.ops.catalog" &&
@@ -298,7 +324,7 @@ export function makeCallRoute(
                   async () => {
                     const [result, index] = await Promise.all([
                       Effect.runPromise(
-                        bridge.invoke(key, request ?? {}, target.session, target.openId),
+                        bridge.invoke(key, request ?? {}, target.session, target.openId, requestId),
                       ),
                       Effect.runPromise(
                         bridge.invoke(
@@ -333,7 +359,7 @@ export function makeCallRoute(
               catch: (error) =>
                 error instanceof BridgeError ? error : new BridgeError(String(error), 409),
             })
-          : yield* bridge.invoke(key, request ?? {}, bridgeSessionId, openDocumentId);
+          : yield* bridge.invoke(key, request ?? {}, bridgeSessionId, openDocumentId, requestId);
       const kept =
         key === VIEW_IMAGE_KEY
           ? yield* registerViewImage(
@@ -345,7 +371,7 @@ export function makeCallRoute(
               { session: bridgeSessionId, openId: openDocumentId },
             )
           : null;
-      captureOperation(op, { ok: true });
+      recordOperation(op, { ok: true });
       // Every /call response names the target it actually ran against, so a tool card can show
       // what was touched rather than the selector that was typed. Headers, not a payload wrapper.
       // A TS-only op touched no Revit, so it stamps nothing rather than the latest session.
@@ -356,10 +382,23 @@ export function makeCallRoute(
       return Response.jsonUnsafe(result.value ?? null, { headers });
     }).pipe(
       Effect.catch((error) => {
-        if (op) captureOperation(op, { ok: false, problem: toProblem(error) });
+        const problem = toProblem(error);
+        if (op) recordOperation(op, { ok: false, problem });
+        else
+          recordHostFact(
+            {
+              kind: "usage",
+              event: problem.status < 500 ? "refusal_count" : "host_fault",
+              counters:
+                problem.status < 500
+                  ? { reasonCode: "refused", count: 1 }
+                  : { routeCode: "call", faultCode: "host.failed", status: problem.status },
+            },
+            { requestId },
+          );
         return Effect.succeed(
-          Response.jsonUnsafe(toProblem(error), {
-            status: toProblem(error).status,
+          Response.jsonUnsafe(problem, {
+            status: problem.status,
             headers: { "content-type": "application/problem+json" },
           }),
         );
@@ -825,26 +864,49 @@ const savedTakeoffs = Effect.fnUntraced(function* (request: unknown, captures: T
   });
 });
 
-/** The host_op event: input, outcome, duration. Outputs are deliberately NOT captured —
- * they doubled event volume for no diagnostic value (the op key + input reproduce them);
- * failures carry the problem message instead. */
-function captureHostOp(
-  op: { key: string; request: unknown; tsOnly: boolean; startedAt: number; origin: string },
-  outcome: { ok: true } | { ok: false; problem: { kind: string; message: string } },
+/** Reads are observations joined to the exact dispatch UUID; inputs and errors stay local. */
+function recordHostOp(
+  op: {
+    key: string;
+    tsOnly: boolean;
+    startedAt: number;
+    origin: string;
+    originClass: "human" | "pea" | "page" | "external" | "system";
+    requestId: string;
+  },
+  outcome: { ok: true } | { ok: false; problem: { kind: string; message: string; status: number } },
 ): void {
-  const input = boundedPayload(op.request ?? null);
-  capture("host_op", {
-    op: op.key,
-    origin: op.origin,
-    ts_only: op.tsOnly,
-    ok: outcome.ok,
-    error_kind: outcome.ok ? undefined : outcome.problem.kind,
-    error_message: outcome.ok ? undefined : outcome.problem.message,
-    duration_ms: Date.now() - op.startedAt,
-    input: input.json,
-    input_truncated: input.truncated,
-    input_bytes: input.bytes,
-  });
+  const refused = !outcome.ok && outcome.problem.status >= 400 && outcome.problem.status < 500;
+  const join = { requestId: op.requestId };
+  recordHostFact(
+    {
+      kind: "usage",
+      event: "host_op",
+      counters: {
+        op: op.key,
+        originClass: op.originClass,
+        tsOnly: op.tsOnly,
+        outcome: outcome.ok ? "incomplete" : refused ? "refused" : "failed",
+        ...(outcome.ok || refused ? {} : { faultCode: "host.failed" as const }),
+        durationMs: Date.now() - op.startedAt,
+      },
+    },
+    join,
+  );
+  if (refused)
+    recordHostFact(
+      { kind: "usage", event: "refusal_count", counters: { reasonCode: "refused", count: 1 } },
+      join,
+    );
+  else if (!outcome.ok)
+    recordHostFact(
+      {
+        kind: "usage",
+        event: "host_fault",
+        counters: { routeCode: "call", faultCode: "host.failed", status: outcome.problem.status },
+      },
+      join,
+    );
 }
 
 const RESOLVED_SESSION_HEADER = "x-pe-resolved-session";

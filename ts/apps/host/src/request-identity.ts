@@ -185,7 +185,7 @@ function remoteAdministration(path: string, method: string): boolean {
       method !== "HEAD" &&
       (path === "/pe/providers" || path.startsWith("/pe/providers/"))) ||
     (method === "PUT" && path === "/pe/access") ||
-    (method === "POST" && path === "/host/update")
+    (method === "POST" && (path === "/host/update" || path === "/host/update/automatic"))
   );
 }
 

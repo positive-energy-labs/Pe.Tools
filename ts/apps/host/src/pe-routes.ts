@@ -1,7 +1,7 @@
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
 import type { MachineShareAdapter } from "./machine.ts";
-import { Deferred, Effect, Option, Stream } from "effect";
+import { Deferred, Effect, Layer, Option, Stream } from "effect";
 import { HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http";
 import {
   addressSchema,
@@ -39,8 +39,6 @@ import {
   writePeaCodexProjectConfig,
 } from "./harness/user-shell.ts";
 import {
-  ANALYTICS_PAYLOAD_BUDGET,
-  captureNow,
   observeResources,
   resourceResponse,
   RouteViewStore,
@@ -92,21 +90,16 @@ import {
 } from "./page-libraries.ts";
 import { join } from "node:path";
 import { importShippedPods } from "./installed-pods.ts";
+import { receiptQuerySchema } from "@pe/agent-contracts";
+import {
+  feedbackSchema,
+  diagnosticsSchema,
+  hostReceiptExport,
+  createThreadReceiptAdapter,
+  type ReceiptExport,
+} from "./receipt-export.ts";
+import { createNotices } from "./notices.ts";
 export { fileRouteDocumentStore } from "./route-document-store.ts";
-
-// One user note on one picked element, bound for PostHog; the picture rides inline as a data URL.
-const feedbackSchema = z.object({
-  comment: z.string().trim().min(1).max(8000),
-  url: z.string().max(2048),
-  selector: z.string().max(2048).nullable(),
-  component: z.string().max(200).nullable(),
-  components: z.array(z.string().max(200)).max(64),
-  html: z.string().max(4000),
-  rect: z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }),
-  viewport: z.object({ width: z.number(), height: z.number(), dpr: z.number() }),
-  picture: z.string().startsWith("data:image/").max(ANALYTICS_PAYLOAD_BUDGET).nullable(),
-  picture_error: z.string().max(500).nullable(),
-});
 
 export interface PeRoutesOptions {
   registrations: readonly RouteWorkspaceRegistration[];
@@ -118,6 +111,7 @@ export interface PeRoutesOptions {
   observeHostResource?: ResourceObserver;
   /** Wraps every served Reading, Work included, e.g. with the host's document change mark. */
   markReadings?: (observe: ResourceObserver) => ResourceObserver;
+  telemetry?: ReceiptExport;
 }
 
 const applyBody = z.object({
@@ -185,6 +179,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
   >;
 
   async function handle(request: Request): Promise<Response> {
+    // Socket body callbacks resume outside AsyncLocalStorage. Capture carriage before any await.
+    const caller = currentCaller();
     const url = new URL(request.url);
     const method = request.method;
     if (method === "GET" && url.pathname === "/pe/family-spec") return familySpecAsset(url);
@@ -266,17 +262,101 @@ export function createPeRoutes(options: PeRoutesOptions) {
     }
     if (method === "GET" && url.pathname === "/pe/resources")
       return resourceResponse(request, observe);
-    if (method === "POST" && url.pathname === "/pe/feedback") {
+    if (
+      method === "POST" &&
+      (url.pathname === "/pe/feedback" ||
+        url.pathname === "/pe/diagnostics" ||
+        /^\/pe\/feedback\/[^/]+\/deliver$/.test(url.pathname))
+    ) {
+      if (caller.kind !== "human")
+        return json(
+          { error: "human.only: Feedback and browser diagnostics require a human caller." },
+          403,
+        );
+      const telemetry = options.telemetry ?? hostReceiptExport();
+      if (url.pathname === "/pe/diagnostics") {
+        const parsed = diagnosticsSchema.safeParse(await body());
+        if (!parsed.success) return json({ error: "invalid diagnostics" }, 400);
+        try {
+          await telemetry.diagnostics(parsed.data, request.headers.get("x-pe-web-build"));
+          return json({ accepted: true });
+        } catch {
+          return json({ error: "Diagnostic receipt persistence failed" }, 503);
+        }
+      }
+      if (parts[2] === "deliver") {
+        const id = z.uuid().safeParse(parts[1]);
+        if (!id.success) return json({ error: "invalid feedback id" }, 400);
+        const result = await telemetry.deliverFeedback(id.data);
+        return result ? json(result) : json({ error: "Feedback receipt unavailable" }, 404);
+      }
       const parsed = feedbackSchema.safeParse(await body());
       if (!parsed.success) return json({ error: "invalid feedback" }, 400);
       try {
-        // The browser sent it; its React component name rides as ui_component so `component` is never null.
-        const { component: uiComponent, ...rest } = parsed.data;
-        await captureNow("ui_feedback", { ...rest, ui_component: uiComponent, component: "web" });
-        return json({ ok: true });
-      } catch (error) {
-        return json({ error: message(error) }, 502);
+        return json(
+          await telemetry.submitFeedback(parsed.data, request.headers.get("x-pe-web-build")),
+        );
+      } catch {
+        return json({ error: "Feedback could not be kept locally" }, 503);
       }
+    }
+
+    // Web read of the receipt spine, including turn/permission facts. Local thread ids are mapped
+    // by the owner; query joins and the returned envelopes remain opaque.
+    if (method === "GET" && url.pathname === "/pe/receipt-facts") {
+      const journal = (options.telemetry ?? hostReceiptExport()).journal;
+      let query: unknown;
+      try {
+        query = JSON.parse(url.searchParams.get("query") ?? "{}");
+      } catch {
+        return json({ error: "invalid receipt query" }, 400);
+      }
+      const parsed = receiptQuerySchema.safeParse(query);
+      if (!parsed.success) return json({ error: "invalid receipt query" }, 400);
+      const q = { ...parsed.data };
+      if (url.searchParams.has("thread"))
+        q.threadId = await journal.opaqueId("thread", url.searchParams.get("thread")!);
+      if (!url.searchParams.has("stream")) return json(await journal.read(q));
+      const encoder = new TextEncoder();
+      let release = () => {};
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            let closed = false;
+            const seen = new Map<string, number>();
+            const push = (r: import("@pe/agent-contracts").Receipt) => {
+              if (closed || (seen.get(r.id) ?? 0) >= r.revision) return;
+              seen.set(r.id, r.revision);
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(r)}\n\n`));
+            };
+            const unsubscribe = journal.subscribe(q, push);
+            release = () => {
+              if (closed) return;
+              closed = true;
+              unsubscribe();
+              request.signal.removeEventListener("abort", release);
+              try {
+                controller.close();
+              } catch {}
+            };
+            request.signal.addEventListener("abort", release, { once: true });
+            controller.enqueue(encoder.encode(": receipts\n\n"));
+            void journal
+              .read(q)
+              .then((rows) => rows.forEach(push))
+              .catch((error) => {
+                if (!closed) {
+                  release();
+                  console.warn("Receipt read failed", error);
+                }
+              });
+          },
+          cancel() {
+            release();
+          },
+        }),
+        { headers: { "content-type": "text/event-stream", "cache-control": "no-cache" } },
+      );
     }
 
     if (parts[0] === "route-view" && parts[1] === "families") {
@@ -652,6 +732,8 @@ export function makeHostPeRoutes(
     });
   // Every provider is probed once in the background; the list says `unknown` until then.
   const providers = createProviders({ shellPath });
+  const telemetry = hostReceiptExport();
+  const receiptThreads = createThreadReceiptAdapter(telemetry, () => threads.receiptSnapshot());
   const threads = createHarnessThreads({
     prepare: () => content.read(),
     providers,
@@ -661,8 +743,30 @@ export function makeHostPeRoutes(
     // The same kernel the Pea MCP server declares, for the harness that cannot read it from there.
     developerInstructions: async () => peaAgentInstructions,
     mcpServer: (context) => peaMcpServer(sourceRoot, hostBaseUrl, context),
+    receiptFact: receiptThreads.accept,
+  });
+  const receiptContextReady = receiptThreads.hydrate();
+  const notices = createNotices({
+    source: {
+      read: async (q) => {
+        await receiptContextReady;
+        return telemetry.journal.read(q);
+      },
+      subscribe: (q, consume) => telemetry.journal.subscribe(q, consume),
+    },
+    context: receiptThreads.context,
+    onFault: (error) => console.warn("Notice receipt read failed", error),
   });
   const machine = createMachine(machineSources(bridge, providers, update, share, threads.heads), {
+    fault: (fault) =>
+      telemetry.track(
+        telemetry.record({
+          kind: "diagnostic",
+          code: fault.kind === "deadline" ? "reading.timeout" : "reading.failed",
+          readingKind: "machine",
+          elapsedMs: fault.elapsedMs,
+        }),
+      ),
     automaticUpdates:
       hostOwnership.lane === "installed" && updateHandoff
         ? { peaActive: threads.active, handoff: updateHandoff }
@@ -714,10 +818,11 @@ export function makeHostPeRoutes(
       machine,
     ),
     markReadings: markReadings(documentMarks(bridge)),
+    telemetry,
   });
   bindActionWorkspace(routes.workspace);
   sweepClosedDocuments(bridge, routes.workspace);
-  return { providers, threads, routes, catalog, machine };
+  return { providers, threads, routes, catalog, machine, notices };
 }
 
 /** {@link makeHostPeRoutes} on the host's router. Harness children die when the launch scope closes. */
@@ -732,7 +837,7 @@ export const peRoutesLayer = (
       const bridge = Option.getOrUndefined(yield* Effect.serviceOption(RevitBridge));
       const update = yield* UpdateReader;
       const lifecycle = Option.getOrUndefined(yield* Effect.serviceOption(HostLifecycle));
-      const { providers, threads, routes, catalog, machine } = makeHostPeRoutes(
+      const { providers, threads, routes, catalog, machine, notices } = makeHostPeRoutes(
         hostBaseUrl,
         bridge,
         registrationsFactory,
@@ -761,9 +866,11 @@ export const peRoutesLayer = (
           });
           useHostMachine(undefined);
           machine.close();
+          notices.close();
         }),
       );
       yield* Effect.addFinalizer(() => Effect.promise(() => threads.close()));
+      yield* Layer.build(notices.route);
       // Installed policy keeps observing even when every browser and tray drawer is closed.
       if (hostOwnership.lane === "installed") machine.observe(() => {});
       // With Revit present the op and pod rows describe the connected session, so a session
@@ -800,6 +907,9 @@ export const peRoutesLayer = (
         "/pe/page-libraries",
         "/pe/family-spec",
         "/pe/feedback",
+        "/pe/feedback/:id/deliver",
+        "/pe/diagnostics",
+        "/pe/receipt-facts",
         "/pe/resources",
         "/pe/route-state",
         "/pe/route-state/:route",

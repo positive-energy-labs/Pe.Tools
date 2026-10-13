@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { Deferred, Effect, Layer, type Scope } from "effect";
-import { capture } from "@pe/runtime";
+import { hostReceiptExport, bindNativeProducers, recordUpdateFact } from "./receipt-export.ts";
 import { serviceFilePath, type ServiceFile } from "@pe/host-contracts/pe-service";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { productRoot } from "@pe/host-contracts/service-identity";
@@ -20,8 +20,16 @@ export const hostProgram = (
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
-      yield* Effect.sync(() =>
-        capture("app_boot", { component: "host", version: resolveHostVersion() }),
+      const telemetry = hostReceiptExport();
+      const unbindNative = bindNativeProducers(telemetry);
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(async () => {
+          unbindNative();
+          await telemetry.close();
+        }),
+      );
+      yield* Effect.promise(() =>
+        telemetry.record({ kind: "usage", event: "app_boot", counters: {} }),
       );
       const open = process.argv.includes("--open");
       const reuse = (incumbent: ServiceFile) => {
@@ -40,7 +48,7 @@ export const hostProgram = (
       const latch = yield* Deferred.make<void>();
       const handle = yield* Deferred.make<ServiceHostHandle>();
       const webUrl = web ? yield* Deferred.make<string>() : undefined;
-      const updateReader = makeInstalledUpdateReader();
+      const updateReader = makeInstalledUpdateReader((fact) => recordUpdateFact(telemetry, fact));
       const HttpLive = makeHttpLive({
         port,
         webUrl,

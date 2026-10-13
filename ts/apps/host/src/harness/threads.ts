@@ -138,6 +138,8 @@ export type HarnessThreadsOptions = {
   updatePending?: () => boolean;
   /** Admission/import and skill publication must settle before either harness starts. */
   prepare?: () => Promise<unknown>;
+  /** Called only after the transcript owner commits this fact. No prompt or tool text is exported. */
+  receiptFact?: (threadId: string, title: string, event: HarnessEvent) => void;
 };
 
 /** A turn with no session update for this long gets a `waiting` marker, and again each period. */
@@ -418,6 +420,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     t.events.push(full);
     projectActivity(t, full);
     appendFileSync(join(options.root, t.meta.id, "events.jsonl"), `${redacted}\n`);
+    options.receiptFact?.(t.meta.id, t.meta.title, full);
     if (
       ["turn_end", "error", "permission_request", "question_request"].includes(full.kind) &&
       t.meta.lifecycle.snoozedUntil &&
@@ -1640,6 +1643,8 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   sweep.unref();
 
   return {
+    receiptSnapshot: () =>
+      [...threads.values()].map((t) => ({ id: t.meta.id, title: t.meta.title, events: t.events })),
     /** Explicit acceptance-lane operation; loading a thread never migrates user state. */
     migrateContributions,
     /** Automatic updates wait for every turn and harness action to finish. */

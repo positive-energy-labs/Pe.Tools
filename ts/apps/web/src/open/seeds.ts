@@ -299,6 +299,7 @@ const base = (over: Partial<Machine> = {}): Machine => ({
   },
   revit: { years: [2024, 2025, 2026], sessions: SESSIONS, unclassifiedAttachments: [] },
   update: {
+    automatic: true,
     plan: UP_TO_DATE,
     receipt: null,
     requestId: null,

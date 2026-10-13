@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { hostProgram } from "./host-program.ts";
 import { resolveHostVersion } from "./host-lifecycle.ts";
 import { hostOwnership, productRoot } from "./host-ownership.ts";
+import { hostReceiptExport, fatalReceipt } from "./receipt-export.ts";
 
 // The installer stub and the login Run key start the installed host with no stdio anyone reads, so
 // a host that dies before bind (a refused claim, a thrown binding) leaves nothing behind. Tee every
@@ -17,7 +18,10 @@ if (hostOwnership.lane === "installed") {
     stream.write = ((chunk: string | Uint8Array, ...rest: never[]) => {
       try {
         // eslint-disable-next-line no-control-regex -- the logger colors its console lines
-        appendFileSync(file, `${new Date().toISOString()} ${String(chunk).replace(/\x1b\[[0-9;]*m/g, "")}`);
+        appendFileSync(
+          file,
+          `${new Date().toISOString()} ${String(chunk).replace(/\x1b\[[0-9;]*m/g, "")}`,
+        );
       } catch {
         // The log is a courtesy; never let it take the host down.
       }
@@ -33,5 +37,16 @@ if (hostOwnership.lane === "installed") {
 console.log(
   `pe-host boot v${resolveHostVersion()} pid=${process.pid} lane=${process.env.PE_LANE ?? "?"}`,
 );
+
+let fatal = false;
+for (const [event, code] of [
+  ["uncaughtException", "process.uncaught"],
+  ["unhandledRejection", "process.unhandled-rejection"],
+] as const)
+  process.on(event, (error: unknown) => {
+    if (fatal) return;
+    fatal = true;
+    void fatalReceipt(hostReceiptExport(), code, error);
+  });
 
 NodeRuntime.runMain(hostProgram());

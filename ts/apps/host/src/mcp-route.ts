@@ -5,6 +5,8 @@ import { createPeaMcpServer, WebStandardStreamableHTTPServerTransport } from "@p
 import { invocationContext, type InvocationContext } from "@pe/mcps/context";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
 import { callerOf, mintContext, retireContext } from "./control.ts";
+import { hostReceiptExport, type ReceiptExport } from "./receipt-export.ts";
+import { instrumentHostMcp } from "./mcp-analytics.ts";
 
 const version = "2025-11-25";
 const principalKey = (context: InvocationContext) =>
@@ -12,13 +14,18 @@ const principalKey = (context: InvocationContext) =>
 const error = (status: number, message: string) =>
   Response.json({ jsonrpc: "2.0", id: null, error: { code: -32000, message } }, { status });
 
-export function createMcpDoor(hostBaseUrl: () => string, makeServer = createPeaMcpServer) {
+export function createMcpDoor(
+  hostBaseUrl: () => string,
+  makeServer = createPeaMcpServer,
+  telemetry?: ReceiptExport,
+) {
   type Session = {
     principal: string;
     context: InvocationContext;
     transport: WebStandardStreamableHTTPServerTransport;
     server: Awaited<ReturnType<typeof makeServer>>;
     mintedToken?: string;
+    analytics: ReturnType<typeof instrumentHostMcp>;
   };
   const sessions = new Map<string, Session>();
   return {
@@ -113,6 +120,9 @@ export function createMcpDoor(hostBaseUrl: () => string, makeServer = createPeaM
           transport,
           server,
           mintedToken,
+          analytics: telemetry
+            ? instrumentHostMcp(server, telemetry, context)
+            : { run: (work) => work() },
         };
         try {
           await server.connect(transport);
@@ -124,7 +134,9 @@ export function createMcpDoor(hostBaseUrl: () => string, makeServer = createPeaM
       }
       // HTTP disconnect does not cancel admitted work. The SDK owns protocol cancellation;
       // the session retains its admission context until explicit DELETE or host retirement.
-      const response = await session.transport.handleRequest(request, { parsedBody: body });
+      const response = await session.analytics.run(() =>
+        session!.transport.handleRequest(request, { parsedBody: body }),
+      );
       if (!session.transport.sessionId) {
         if (session.mintedToken) retireContext(session.mintedToken);
         await session.server.close();
@@ -143,10 +155,10 @@ export function createMcpDoor(hostBaseUrl: () => string, makeServer = createPeaM
   };
 }
 
-export const mcpRoute = (base: () => string) =>
+export const mcpRoute = (base: () => string, telemetry?: ReceiptExport) =>
   HttpRouter.use((router) =>
     Effect.gen(function* () {
-      const door = createMcpDoor(base);
+      const door = createMcpDoor(base, undefined, telemetry ?? hostReceiptExport());
       yield* Effect.addFinalizer(() => Effect.promise(() => door.close()));
       yield* router.add(
         "*",
