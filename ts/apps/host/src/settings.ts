@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { isUtf8 } from "node:buffer";
 import { join, win32 } from "node:path";
 import { Ajv, type ErrorObject, type ValidateFunction } from "ajv";
-import { Effect, FileSystem, Semaphore } from "effect";
+import { Effect, FileSystem, Option, Semaphore } from "effect";
 import type {
   MemberIssue,
   PodList,
@@ -557,19 +557,56 @@ const listMembers: (
   LocalOpError,
   FileSystem.FileSystem
 > = Effect.fnUntraced(function* (folder: string, relative: string) {
-  const members: PodList["pods"][number]["members"][number][] = [];
   const entries = yield* readDirectoryEntriesOrEmpty(join(folder, relative), "pod.list");
-  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-    const path = relative ? `${relative}/${entry.name}` : entry.name;
-    // Members only. `output/` is runs (dogma law 1) and answers to `pod.runs`; `pod.json` is the manifest.
-    if (path === "pod.json" || path === "output") continue;
-    if (entry.info.type === "Directory") members.push(...(yield* listMembers(folder, path)));
-    else if (entry.info.type === "File") {
-      const read = yield* readText(join(folder, path), "pod.list");
-      if (read) members.push({ path, sha256: read.sha256, schema: declaredSchema(path, read) });
-    }
+  const sorted = entries.sort((a, b) => a.name.localeCompare(b.name));
+  const found = yield* Effect.forEach(
+    sorted,
+    Effect.fnUntraced(function* (entry) {
+      const path = relative ? `${relative}/${entry.name}` : entry.name;
+      // Members only. `output/` is runs (dogma law 1) and answers to `pod.runs`; `pod.json` is the manifest.
+      if (path === "pod.json" || path === "output") return [];
+      if (entry.info.type === "Directory") return yield* listMembers(folder, path);
+      if (entry.info.type !== "File") return [];
+      const digest = yield* digestMember(join(folder, path), "pod.list");
+      return digest ? [{ path, ...digest }] : [];
+    }),
+    { concurrency: 8 },
+  );
+  return found.flat();
+});
+
+// ponytail: stat-keyed cache, unbounded; pods are dozens of files, revisit if a pod root grows to thousands.
+const digestCache = new Map<
+  string,
+  { mtimeMs: number; size: number; sha256: string; schema: string | null }
+>();
+
+/** The listing's view of a member: sha256 and declared schema, no base64; unchanged files are not re-read. */
+const digestMember = Effect.fnUntraced(function* (path: string, operationKey: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const stat = yield* Effect.result(fs.stat(path));
+  const mtimeMs =
+    stat._tag === "Success" ? (Option.getOrUndefined(stat.success.mtime)?.getTime() ?? null) : null;
+  const size = stat._tag === "Success" ? Number(stat.success.size) : null;
+  const hit = digestCache.get(path);
+  if (hit && mtimeMs !== null && hit.mtimeMs === mtimeMs && hit.size === size)
+    return { sha256: hit.sha256, schema: hit.schema };
+  const result = yield* Effect.result(fs.readFile(path));
+  if (result._tag === "Failure") {
+    digestCache.delete(path);
+    const error = localOpFileError(operationKey, result.failure);
+    if (error.statusCode === 404) return null;
+    return yield* Effect.fail(error);
   }
-  return members;
+  const bytes = result.success;
+  const digest = {
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    schema: declaredSchema(path, {
+      content: new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes),
+    }),
+  };
+  if (mtimeMs !== null && size !== null) digestCache.set(path, { mtimeMs, size, ...digest });
+  return digest;
 });
 
 /** Reads bytes once; a member that is not UTF-8 still lists, it just declares no schema. */

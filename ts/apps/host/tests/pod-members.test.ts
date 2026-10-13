@@ -521,3 +521,30 @@ test("partial temp write failure cleans only the acquired temp and preserves des
   expect(await readFile(file(), "utf8")).toBe("original");
   expect(await readdir(join(root, "Renamed In Explorer", "settings"))).toEqual(["file.json"]);
 });
+
+test("listing twice agrees and an unchanged member is not read again", async () => {
+  await mkdir(join(root, "Renamed In Explorer", "settings"), { recursive: true });
+  await writeFile(file(), '{"width":1}');
+  const reads: string[] = [];
+  const counting = (fs: FileSystem.FileSystem): FileSystem.FileSystem => ({
+    ...fs,
+    readFile: (path, ...rest) => {
+      reads.push(path);
+      return fs.readFile(path, ...rest);
+    },
+  });
+  const list = () =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        return yield* listPods(ctx()).pipe(
+          Effect.provideService(FileSystem.FileSystem, counting(fs)),
+        );
+      }).pipe(Effect.provide(NodeServices.layer)),
+    );
+  const first = await list();
+  const readsAfterFirst = reads.filter((path) => path === file()).length;
+  expect(await list()).toEqual(first);
+  expect(readsAfterFirst).toBe(1);
+  expect(reads.filter((path) => path === file()).length).toBe(1);
+});

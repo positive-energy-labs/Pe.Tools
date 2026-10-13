@@ -37,6 +37,12 @@ internal static class PostHogAnalytics {
 
     private static string? _reportedHostVersion;
 
+    private static readonly string ProductRoot = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Positive Energy", "Pe.Tools");
+
+    private static string? _installId;
+
     internal static bool Enabled => _apiKey != null;
 
     internal static void Initialize() {
@@ -44,9 +50,7 @@ internal static class PostHogAnalytics {
             // Installed product manifest is AUTHORITATIVE (the key rides the release, so
             // installed machines need zero seeding); preferences.json stays the dev/override
             // fallback. Mirrors analytics.ts — resolution order must match.
-            var manifest = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Positive Energy", "Pe.Tools", "product.payloads.json");
+            var manifest = Path.Combine(ProductRoot, "product.payloads.json");
             if (!TryAdopt(manifest, root => root["telemetry"]?["posthog"]))
                 TryAdopt(ProductUserContentLayout.ForCurrentUser().PreferencesPath, root => root["posthog"]);
         } catch {
@@ -68,6 +72,40 @@ internal static class PostHogAnalytics {
         }
     }
 
+    /// <summary>
+    ///     One stable id per machine install, shared with the host (analytics.ts):
+    ///     state\install.json = {"installId":"&lt;uuid v4&gt;"}. Exclusive create; a lost race re-reads. Never throws.
+    /// </summary>
+    private static string InstallId() => _installId ??= ReadOrCreateInstallId();
+
+    private static string ReadOrCreateInstallId() {
+        try {
+            var path = Path.Combine(ProductRoot, "state", "install.json");
+            string? Read() {
+                try {
+                    return File.Exists(path) ? JObject.Parse(File.ReadAllText(path))["installId"]?.ToString() : null;
+                } catch {
+                    return null;
+                }
+            }
+            var existing = Read();
+            if (!string.IsNullOrEmpty(existing)) return existing;
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var id = Guid.NewGuid().ToString();
+            try {
+                using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+                var bytes = new UTF8Encoding(false).GetBytes(new JObject { ["installId"] = id }.ToString(Formatting.None));
+                stream.Write(bytes, 0, bytes.Length);
+                return id;
+            } catch {
+                var raced = Read();
+                return string.IsNullOrEmpty(raced) ? "unknown" : raced;
+            }
+        } catch {
+            return "unknown";
+        }
+    }
+
     /// <summary>Fire-and-forget event capture. Never throws, never blocks the caller.</summary>
     internal static void Capture(string eventName, Dictionary<string, object?> properties) {
         if (_apiKey == null) return;
@@ -77,6 +115,7 @@ internal static class PostHogAnalytics {
             properties.TryAdd("component", "revit");
             properties["version"] = AppVersion;
             properties["lane"] = HostEndpoint.ConfiguredLane ?? "unknown";
+            properties["install_id"] = InstallId();
             if (CurrentDocumentTitle != null) properties["doc_title"] = CurrentDocumentTitle;
             var body = JsonConvert.SerializeObject(new {
                 api_key = _apiKey,

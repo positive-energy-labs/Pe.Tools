@@ -1,6 +1,7 @@
-import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { hostname } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { userDocumentsPath } from "@pe/host-contracts/product-paths";
 
 /**
@@ -123,6 +124,7 @@ function baseProperties(): Record<string, unknown> {
     component: "host",
     lane,
     version: lane === "installed" ? installedVersion() : "dev",
+    install_id: installId(),
   };
 }
 
@@ -168,10 +170,46 @@ function readJson(path: string): unknown {
 
 // Mirrors the SDK's installed layout (%LOCALAPPDATA%\<vendor>\<product>\product.payloads.json).
 // Kept local for the same reason as preferencesPath: runtime cannot import host code.
-function installedManifestPath(): string {
+function productRoot(): string {
   const localAppData =
     process.env.LOCALAPPDATA ?? join(process.env.USERPROFILE ?? "", "AppData", "Local");
-  return join(localAppData, "Positive Energy", "Pe.Tools", "product.payloads.json");
+  return join(localAppData, "Positive Energy", "Pe.Tools");
+}
+
+function installedManifestPath(): string {
+  return join(productRoot(), "product.payloads.json");
+}
+
+let cachedInstallId: string | undefined;
+
+/** One stable id per machine install, shared with the add-in (PostHogAnalytics.cs). Cached per process. */
+function installId(): string {
+  cachedInstallId ??= readOrCreateInstallId();
+  return cachedInstallId;
+}
+
+/**
+ * `%LOCALAPPDATA%\Positive Energy\Pe.Tools\state\install.json` = `{"installId":"<uuid v4>"}`.
+ * Exclusive create; a lost race re-reads the winner's file. Never throws ("unknown" on failure).
+ */
+export function readOrCreateInstallId(): string {
+  try {
+    const path = join(productRoot(), "state", "install.json");
+    const read = () => (readJson(path) as { installId?: unknown } | undefined)?.installId;
+    const existing = read();
+    if (typeof existing === "string" && existing) return existing;
+    mkdirSync(dirname(path), { recursive: true });
+    const id = randomUUID();
+    try {
+      writeFileSync(path, JSON.stringify({ installId: id }), { flag: "wx" });
+      return id;
+    } catch {
+      const raced = read();
+      return typeof raced === "string" && raced ? raced : "unknown";
+    }
+  } catch {
+    return "unknown";
+  }
 }
 
 // The one Documents resolver lives in @pe/host-contracts/product-paths; Documents may be
