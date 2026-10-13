@@ -218,44 +218,6 @@ internal static class ScriptFileTemplates {
         }
         """;
 
-    public static string CreateSampleScript() =>
-        """
-        // This file is declared as an entrypoint in pod.json, so it is a button on the
-        // Scripts tab of Revit's Do palette (run safe / run full). Its pod.json name and
-        // description are that button's label and subtitle.
-        //
-        // Outside the palette, run it from this pod's root:
-        // pea script execute --source-path src/SampleScript.cs
-        // Keep exactly one non-abstract PeScriptContainer per entrypoint file.
-
-        public sealed class SampleScript : PeScriptContainer
-        {
-            public override void Execute()
-            {
-                WriteLine($"Running in Revit {revitVersion}.");
-
-                if (doc == null)
-                {
-                    WriteLine("No active document.");
-                    return;
-                }
-
-                // Check ct in loops so timeouts and op.cancel can interrupt long work.
-                ThrowIfCancelled();
-
-                // Result(...) returns structured JSON to the caller; Artifacts writes durable files.
-                var report = new
-                {
-                    document = doc.Title,
-                    revitVersion,
-                    selectedElementCount = selection.Count
-                };
-                Artifacts.WriteJson("result.json", report);
-                Result(report);
-            }
-        }
-        """;
-
     public static string CreatePodManifest(string workspaceKey) =>
         $$"""
         {
@@ -263,14 +225,7 @@ internal static class ScriptFileTemplates {
           "id": "{{(ScriptingWorkspaceLayout.IsWorkspaceSlug(workspaceKey) ? workspaceKey : "pod-" + Guid.NewGuid().ToString("N"))}}",
           "name": "{{workspaceKey}}",
           "version": "0.1.0",
-          "entrypoints": [
-            {
-              "id": "sample",
-              "sourcePath": "src/SampleScript.cs",
-              "name": "Sample Script",
-              "description": "Minimal example: reports the active document as a structured result."
-            }
-          ]
+          "entrypoints": []
         }
         """;
 }

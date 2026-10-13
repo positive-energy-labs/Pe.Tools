@@ -20,7 +20,6 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
 
     private readonly ScriptWorkspaceBootstrapService _bootstrapService;
     private readonly ScriptPodPreparationService _pods = new();
-    private readonly ScriptPodArchiveService _podArchiveService;
     private readonly RevitScriptExecutionService _executionService;
     private readonly ExternalEvent _externalEvent;
     private readonly SemaphoreSlim _executionSlot = new(1, 1);
@@ -38,7 +37,6 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         var csProjReader = new CsProjReader();
         var projectGenerator = new ScriptProjectGenerator(csProjReader);
         this._bootstrapService = new ScriptWorkspaceBootstrapService(projectGenerator);
-        this._podArchiveService = new ScriptPodArchiveService(this._bootstrapService, projectGenerator, this._pods);
         this._executionService = RevitScriptExecutionService.CreateDefault(uiApplicationAccessor, notificationSink);
         this._externalEvent = ExternalEvent.Create(this);
     }
@@ -71,7 +69,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         pendingRequest.Execute(this);
     }
 
-    [Op("scripting.workspace.bootstrap", Does = "Create or update a C# Revit scripting pod workspace: pod.json, PeScripts.csproj, docs, and a sample entrypoint script.", Title = "Bootstrap Script Workspace", Finds = ["script", "workspace", "pod", "bootstrap", "files"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
+    [Op("scripting.workspace.bootstrap", Does = "Create or update a C# Revit scripting pod workspace for authoring: pod.json (no entrypoints until you declare one), PeScripts.csproj with this session's references for editor support, and docs. Existing files are kept.", Title = "Bootstrap Script Workspace", Finds = ["script", "workspace", "pod", "bootstrap", "files"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
     public Task<ScriptWorkspaceBootstrapData> BootstrapWorkspaceAsync(
         ScriptWorkspaceBootstrapRequest request,
         CancellationToken cancellationToken
@@ -84,7 +82,6 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
             var runtimeAssemblyPath = RevitRuntimeTargetFramework.GetRuntimeAssemblyPath();
             return this._bootstrapService.Bootstrap(
                 NormalizeWorkspaceKey(request.WorkspaceKey),
-                createSampleScript: true,
                 revitVersion,
                 targetFramework,
                 runtimeAssemblyPath
@@ -157,28 +154,6 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         var source = result.ToSource();
         return Task.FromResult(new PodMemberComposeData(result.Composed, source.Root, result.Diagnostics.ToList(), source.Dependencies));
     }
-
-    [Op("pod.export", Does = "Export an installed pod as a .zip archive. Every consumed foreign fragment is vendored under settings/_vendor/<id>/ and its reference rewritten to @local/_vendor/<id>/..., so the archive composes from its own bytes.", Title = "Export Pod", Finds = ["pod", "export", "publish", "zip", "archive", "vendor"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
-    public Task<PodExportData> ExportPodAsync(PodExportRequest request, CancellationToken cancellationToken) => this.EnqueueAsync(
-        "export pod",
-        () => this._podArchiveService.Export(request, RevitRuntimeTargetFramework.Resolve(this.RequireUiApplication().Application.VersionNumber ?? "unknown")),
-        cancellationToken
-    );
-
-    [Op("pod.import", Does = "Import a pod .zip archive into a new folder under Documents/Pe.Tools/Pods (default: the manifest id). Bytes are extracted unchanged and imported.json records the archive SHA-256, locator, and date.", Title = "Import Pod", Finds = ["pod", "import", "install", "zip", "archive"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation)]
-    public Task<PodImportData> ImportPodAsync(PodImportRequest request, CancellationToken cancellationToken) => this.EnqueueAsync(
-        "import pod",
-        () => {
-            var revitVersion = this.RequireUiApplication().Application.VersionNumber ?? "unknown";
-            return this._podArchiveService.Import(
-                request,
-                revitVersion,
-                RevitRuntimeTargetFramework.Resolve(revitVersion),
-                RevitRuntimeTargetFramework.GetRuntimeAssemblyPath()
-            );
-        },
-        cancellationToken
-    );
 
     private async Task<T> EnqueueAsync<T>(
         string operationName,

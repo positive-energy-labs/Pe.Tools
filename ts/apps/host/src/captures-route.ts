@@ -48,17 +48,7 @@ export class CaptureStore {
       throw Error(
         `the exported PNG hashes to ${sha}, not the registration's ${facts.registration.imageSha256}; the file changed after Revit registered it`,
       );
-    const path = this.blobPath(sha);
-    await mkdir(this.blobs, { recursive: true });
-    // Content-addressed: an existing blob already holds these bytes. A fresh one lands by rename so
-    // a reader never sees half a PNG under its sha.
-    // FOOTGUN: on Windows a rename over a file another process holds open fails EPERM, so never
-    // rename over an existing blob.
-    if (!(await stat(path).catch(() => null))) {
-      const partial = `${path}.${randomUUID()}.partial`;
-      await writeFile(partial, bytes);
-      await rename(partial, path);
-    }
+    await this.adopt(bytes);
     const receipt = captureReceiptSchema.parse({
       id: randomUUID(),
       sha,
@@ -71,6 +61,26 @@ export class CaptureStore {
     // not interleave a line. A lock arrives only if a torn line is ever seen.
     await appendFile(this.receipts, `${JSON.stringify(receipt)}\n`);
     return receipt;
+  }
+
+  /**
+   * Hold one blob by its hash with no receipt: an imported pod's capture is an old observation, not
+   * a taking on this host. Returns the sha.
+   */
+  async adopt(bytes: Buffer): Promise<string> {
+    const sha = createHash("sha256").update(bytes).digest("hex");
+    const path = this.blobPath(sha);
+    await mkdir(this.blobs, { recursive: true });
+    // Content-addressed: an existing blob already holds these bytes. A fresh one lands by rename so
+    // a reader never sees half a PNG under its sha.
+    // FOOTGUN: on Windows a rename over a file another process holds open fails EPERM, so never
+    // rename over an existing blob.
+    if (!(await stat(path).catch(() => null))) {
+      const partial = `${path}.${randomUUID()}.partial`;
+      await writeFile(partial, bytes);
+      await rename(partial, path);
+    }
+    return sha;
   }
 
   /** Every receipt, newest first. A line that is not a receipt is a corrupt store and throws. */

@@ -203,6 +203,66 @@ export const podCaptureResponseSchema = Schema.Struct({
 });
 export type PodCapture = Schema.Schema.Type<typeof podCaptureResponseSchema>;
 
+// --- Pod transport (host-only: no Revit session; pod-transfer.ts) ------------------------------
+
+const podMemberDigestSchema = Schema.Struct({ path: Schema.String, sha256: Schema.String });
+
+export const podExportRequestSchema = Schema.Struct({ pod: Schema.String, archivePath: Schema.String });
+export type PodExportRequest = Schema.Schema.Type<typeof podExportRequestSchema>;
+export const podExportResponseSchema = Schema.Struct({
+  id: Schema.String,
+  archivePath: Schema.String,
+  archiveSha256: Schema.String,
+  members: Schema.Array(podMemberDigestSchema),
+  /** Foreign fragments carried under settings/_vendor/<id>/, with the sha of their original bytes. */
+  vendored: Schema.Array(Schema.Struct({ id: Schema.String, path: Schema.String, sha256: Schema.String })),
+  /** Every member the crossing rewrote, with hashes before and after. */
+  transforms: Schema.Array(
+    Schema.Struct({
+      path: Schema.String,
+      transform: Schema.Literals(["vendor-references", "portable-project"]),
+      beforeSha256: Schema.String,
+      afterSha256: Schema.String,
+    }),
+  ),
+  /** Capture shas carried as captures/<sha>.png. */
+  captures: Schema.Array(Schema.String),
+});
+export type PodExport = Schema.Schema.Type<typeof podExportResponseSchema>;
+
+export const podImportRequestSchema = Schema.Struct({
+  archivePath: Schema.String,
+  /** Local folder under Pods/; the pod.json id when omitted. The folder is only an address. */
+  folder: Schema.optional(Schema.String),
+});
+export type PodImportRequest = Schema.Schema.Type<typeof podImportRequestSchema>;
+export const podImportResponseSchema = Schema.Struct({
+  id: Schema.String,
+  folder: Schema.String,
+  directory: Schema.String,
+  archiveSha256: Schema.String,
+  members: Schema.Array(podMemberDigestSchema),
+  diagnostics: Schema.Array(memberIssueSchema),
+});
+export type PodImport = Schema.Schema.Type<typeof podImportResponseSchema>;
+
+export const podPromoteRequestSchema = Schema.Struct({
+  /** The scratch Page folder under Pages/. */
+  page: Schema.String,
+  /** The new pod's manifest id. */
+  id: Schema.String,
+  name: Schema.optional(Schema.String),
+});
+export type PodPromoteRequest = Schema.Schema.Type<typeof podPromoteRequestSchema>;
+export const podPromoteResponseSchema = Schema.Struct({
+  id: Schema.String,
+  folder: Schema.String,
+  directory: Schema.String,
+  /** The promoted Page's canonical key, `page:@<id>/pages/<page>`. */
+  key: Schema.String,
+});
+export type PodPromote = Schema.Schema.Type<typeof podPromoteResponseSchema>;
+
 /** Runs of one pod, optionally narrowed to the member a route has open. */
 export const podRunsRequestSchema = Schema.Struct({
   pod: Schema.String,
@@ -793,6 +853,18 @@ export const tsOnlyOperationSchemas = {
     request: podCaptureRequestSchema,
     response: podCaptureResponseSchema,
   },
+  "pod.export": {
+    request: podExportRequestSchema,
+    response: podExportResponseSchema,
+  },
+  "pod.import": {
+    request: podImportRequestSchema,
+    response: podImportResponseSchema,
+  },
+  "pod.promote": {
+    request: podPromoteRequestSchema,
+    response: podPromoteResponseSchema,
+  },
   "pod.runs": {
     request: podRunsRequestSchema,
     response: podRunsResponseSchema,
@@ -1004,6 +1076,48 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     requestTypeName: "PodCaptureRequest",
     responseTypeName: "PodCapture",
     searchTerms: ["pod", "capture", "source", "bundle", "entrypoints", "palette"],
+  },
+  {
+    key: "pod.export",
+    origin: "host-local",
+    displayName: "Export Pod",
+    description:
+      "Export an installed pod (by manifest id) as a .zip archive at an absolute path, without Revit. Foreign $include/$preset fragments are vendored under settings/_vendor/<id>/ with references rewritten to @local/_vendor/<id>/...; PeScripts.csproj is made portable; captures a member names travel as captures/<sha>.png. Bindings, grants, output/ and imported.json never travel. Every rewrite is reported with hashes before and after; a missing capture or foreign member refuses.",
+    intent: "Mutate",
+    visibility: "DefaultVisible",
+    costTier: "Mutation",
+    needs: "nothing",
+    requestTypeName: "PodExportRequest",
+    responseTypeName: "PodExport",
+    searchTerms: ["pod", "export", "publish", "share", "zip", "archive", "vendor"],
+  },
+  {
+    key: "pod.import",
+    origin: "host-local",
+    displayName: "Import Pod",
+    description:
+      "Import a pod .zip archive into a new folder under Documents/Pe.Tools/Pods (default: the manifest id), without Revit. Bounded, all-or-nothing: refuses an installed id, an existing folder, host state, traversal, links, case twins or oversized entries. Bytes land unchanged plus imported.json (archive sha256, locator, date); Pages start unbound; carried captures join this host's store by hash.",
+    intent: "Mutate",
+    visibility: "DefaultVisible",
+    costTier: "Mutation",
+    needs: "nothing",
+    requestTypeName: "PodImportRequest",
+    responseTypeName: "PodImport",
+    searchTerms: ["pod", "import", "install", "zip", "archive"],
+  },
+  {
+    key: "pod.promote",
+    origin: "host-local",
+    displayName: "Promote Page to Pod",
+    description:
+      "Wrap a scratch Page (Documents/Pe.Tools/Pages/<page>/) as a new pod <id> holding pages/<page>/ byte for byte, so it can be exported and shared. The HTML is never rewritten; the scratch Page stays; the binding does not travel. Returns the promoted Page's key.",
+    intent: "Mutate",
+    visibility: "DefaultVisible",
+    costTier: "Mutation",
+    needs: "nothing",
+    requestTypeName: "PodPromoteRequest",
+    responseTypeName: "PodPromote",
+    searchTerms: ["pod", "promote", "page", "share", "publish", "wrap"],
   },
   {
     key: "pod.runs",

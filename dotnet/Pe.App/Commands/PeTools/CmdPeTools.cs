@@ -137,7 +137,6 @@ public class CmdPeTools : IExternalCommand {
 
         return bootstrapService.Bootstrap(
             DefaultWorkspaceKey,
-            true,
             revitVersion,
             targetFramework,
             runtimeAssemblyPath

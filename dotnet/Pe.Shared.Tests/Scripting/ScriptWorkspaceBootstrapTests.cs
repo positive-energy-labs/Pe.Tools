@@ -111,7 +111,6 @@ public sealed class ScriptWorkspaceBootstrapTests {
     ) =>
         service.Bootstrap(
             "sample-pod",
-            createSampleScript: true,
             revitVersion: "2026",
             targetFramework: "net8.0-windows",
             runtimeAssemblyPath: Path.Combine(Path.GetTempPath(), "Pe.Revit.Scripting.dll")
