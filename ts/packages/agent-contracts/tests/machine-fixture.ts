@@ -64,6 +64,8 @@ export function machineFixture(attachments: readonly Attachment[] = []): Machine
           },
         },
         documents: null,
+        holdings: null,
+        holdingsLeg: { observedAtUtc: null, attemptedAtUtc: null, error: null },
         documentsLeg: leg,
         attachment: {
           ...attachment,

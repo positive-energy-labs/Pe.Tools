@@ -117,6 +117,8 @@ export const CHECKOUT_HOT = {
     documents: null,
   },
   documents: [TOWER, SHELL],
+  holdings: null,
+  holdingsLeg: { observedAtUtc: null, attemptedAtUtc: null, error: null },
   documentsLeg: read,
 } satisfies MachineSession;
 
@@ -146,6 +148,8 @@ export const OBSERVED_ICON: MachineSession = {
       persistence: null,
     },
   ],
+  holdings: null,
+  holdingsLeg: { observedAtUtc: null, attemptedAtUtc: null, error: null },
   documentsLeg: read,
 };
 
@@ -176,6 +180,8 @@ export const BACKGROUND_BOOTING: MachineSession = {
   },
   attachment: null,
   documents: null,
+  holdings: null,
+  holdingsLeg: { observedAtUtc: null, attemptedAtUtc: null, error: null },
   documentsLeg: { observedAtUtc: null, attemptedAtUtc: null, error: null },
 };
 
@@ -453,6 +459,8 @@ export const BAY_YOURS_25: MachineSession = {
       persistence: null,
     },
   ],
+  holdings: null,
+  holdingsLeg: { observedAtUtc: null, attemptedAtUtc: null, error: null },
   documentsLeg: read,
 };
 
@@ -498,6 +506,8 @@ const peaSession = (
     documents: null,
   },
   documents,
+  holdings: null,
+  holdingsLeg: { observedAtUtc: null, attemptedAtUtc: null, error: null },
   documentsLeg: read,
 });
 

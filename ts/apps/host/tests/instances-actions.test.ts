@@ -166,6 +166,7 @@ async function setup(
         },
       })) as SessionObservation[];
     },
+    holdings: async () => null,
     documents: async () => ({ state: "ok", documents: [] }),
     attachments: async () => [
       {

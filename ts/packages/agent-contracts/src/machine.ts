@@ -1,5 +1,6 @@
 import type {
   DocumentInfo,
+  DocumentHoldings,
   ProcessIdentity,
   SessionDocument,
   SessionObservation,
@@ -104,6 +105,9 @@ export interface MachineSession {
     | readonly (DocumentInfo | (SessionDocument & { readonly persistence: null }))[]
     | null;
   readonly documentsLeg: MachineLeg;
+  /** SDK openId namespace. Null is unread, never an empty holdings census. */
+  readonly holdings: readonly DocumentHoldings[] | null;
+  readonly holdingsLeg: MachineLeg;
 }
 
 export interface MachineUpdate {

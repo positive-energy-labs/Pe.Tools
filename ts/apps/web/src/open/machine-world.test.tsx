@@ -46,6 +46,28 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
     process: { ...controlled.process, pid: 46 },
     bridge: { ...controlled.bridge, documents: null },
   };
+  const knownHoldings = [
+    {
+      openId: controlled.bridge.documents[0]!.openId!,
+      title: "Model",
+      holdings: {
+        empty: false,
+        unsaved: false,
+        workshared: true,
+        savedNotSynced: null,
+        worksets: ["Mechanical"],
+        elements: [
+          {
+            id: 17,
+            category: "Ducts",
+            name: "Supply",
+            changedSinceSync: null,
+            requesters: ["Alice", "Bob"],
+          },
+        ],
+      },
+    },
+  ];
   const attachment = (pid: number, session: string) => ({
     session,
     pid,
@@ -68,6 +90,7 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
     peers: async () => [],
     sessions: async () => [observed, foreign, disconnected, controlled, holdingsUnknown],
     documents: async () => new Promise(() => {}),
+    holdings: async (process) => (process.pid === controlled.process.pid ? knownHoldings : null),
     attachments: async () => [
       attachment(observed.process.pid, "exact-bridge"),
       attachment(43, "foreign-bridge"),
@@ -150,6 +173,8 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
   expect(map.machine.revit.sessions![2]!.attachment).toBeNull();
   expect(map.machine.revit.sessions![3]!.documents![0]!.persistence).toBeNull();
   expect(screen.getByText("persistence unknown")).toBeTruthy();
+  expect(map.machine.revit.sessions![3]!.holdings).toEqual(knownHoldings);
+  expect(map.machine.revit.sessions![4]!.holdings).toBeNull();
   expect(map.machine.revit.sessions![4]!.documents).toBeNull();
   expect(
     within(document.querySelector('[data-key="card-4"]')!).getByText("documents unknown"),

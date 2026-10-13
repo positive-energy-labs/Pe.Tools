@@ -25,6 +25,7 @@ import {
   doctorArgv,
   sessionListArgv,
   type DocListResult,
+  type DocHoldingsListResult,
   type DoctorResult,
   type Envelope,
   type ProcessIdentity,
@@ -122,6 +123,7 @@ export interface MachineSources {
   peers(this: void): Promise<readonly MachinePeer[]>;
   sessions(this: void): Promise<readonly SessionObservation[]>;
   documents(this: void, process: ProcessIdentity): Promise<DocListResult>;
+  holdings(this: void, process: ProcessIdentity): Promise<MachineSession["holdings"]>;
   attachments(this: void): Promise<readonly AttachmentRead[]>;
   years(this: void): Promise<readonly number[]>;
   providers(
@@ -186,6 +188,7 @@ export function createMachine(
   /** The last fold of the journal this Machine read; an unread actions leg folds nothing. */
   let acquisitions: readonly Acquisition[] = [];
   const documents = new Map<string, { value: MachineSession["documents"]; leg: MachineLeg }>();
+  const holdings = new Map<string, MachineSession["holdings"]>();
   let latest: Machine = {
     observedAtUtc: now(),
     host: null,
@@ -318,6 +321,11 @@ export function createMachine(
             const process = processOf(row);
             if (!process) return;
             const key = processKey(process);
+            await read(
+              `holdings:${key}`,
+              () => sources.holdings(process),
+              (value) => holdings.set(key, value),
+            );
             if (row.case === "controlled-active") {
               const previous = documents.get(key) ?? { value: null, leg: unreadLeg() };
               documents.set(
@@ -392,6 +400,10 @@ export function createMachine(
               : null,
             documents: held?.value ?? null,
             documentsLeg: held?.leg ?? unreadLeg(),
+            holdings: process ? (holdings.get(processKey(process)) ?? null) : null,
+            holdingsLeg: process
+              ? (legs[`holdings:${processKey(process)}`] ?? unreadLeg())
+              : unreadLeg(),
           };
         }) ?? null;
       // Receipt/gone rows cannot keep old documents or classify a socket as currently attached.
@@ -402,6 +414,11 @@ export function createMachine(
         }),
       );
       for (const key of documents.keys()) if (!currentKeys.has(key)) documents.delete(key);
+      for (const key of holdings.keys())
+        if (!currentKeys.has(key)) {
+          holdings.delete(key);
+          delete legs[`holdings:${key}`];
+        }
       latest = {
         observedAtUtc: now(),
         host: host ? { ...host, peers } : null,
@@ -666,6 +683,22 @@ export function machineSources(
         })
         .parse(envelope.result);
       return result;
+    },
+    holdings: async (process) => {
+      const envelope = await sdk<DocHoldingsListResult>(
+        docListArgv({ pid: process.pid, holdings: true }),
+      );
+      if (
+        envelope.resolved?.pid !== process.pid ||
+        envelope.resolved.processStartUtc !== process.processStartUtc
+      )
+        throw Error("Holdings read resolved a different process incarnation.");
+      if (
+        envelope.result.state !== "ok" ||
+        !(envelope.result.documents === null || Array.isArray(envelope.result.documents))
+      )
+        throw Error("SDK holdings census has no document evidence.");
+      return envelope.result.documents;
     },
     attachments: () => bridgeAttachments(bridge),
     // Doctor can report unrelated wiring refusals while still identifying installed years.

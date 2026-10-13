@@ -967,6 +967,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       },
       peers: async () => [],
       sessions: async () => [],
+      holdings: async () => null,
       documents: async () => ({ state: "ok", documents: [] }),
       attachments: () => bridgeAttachments(bridge),
       years: async () => [],

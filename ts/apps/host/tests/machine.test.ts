@@ -113,6 +113,7 @@ function fixture() {
     peers: vi.fn(async () => []),
     sessions: vi.fn(async (): Promise<readonly SessionObservation[]> => [row]),
     documents: vi.fn(async () => docs),
+    holdings: vi.fn(async () => null),
     attachments: vi.fn(async () => [attached]),
     years: vi.fn(async () => [2025]),
     providers: vi.fn(async () => ({
@@ -509,6 +510,31 @@ test("SDK adapter uses the all-row census and pid document read, refusing a diff
       envelope(docs, { ...row.process, processStartUtc: "a-new-process" }),
     );
     await expect(sources.documents(row.process)).rejects.toThrow("different process incarnation");
+    const holdings = [
+      {
+        openId: "sdk-open",
+        title: "Model",
+        holdings: {
+          empty: false,
+          unsaved: true,
+          workshared: false,
+          savedNotSynced: null,
+          elements: [],
+          worksets: [],
+        },
+      },
+    ];
+    sdkRun.mockResolvedValueOnce(envelope({ state: "ok", documents: holdings }, row.process));
+    expect(await sources.holdings(row.process)).toEqual(holdings);
+    expect(sdkRun).toHaveBeenLastCalledWith(["doc", "list", "--pid", "42", "--holdings", "--json"]);
+    sdkRun.mockResolvedValueOnce(envelope({ state: "ok", documents: null }, row.process));
+    expect(await sources.holdings(row.process)).toBeNull();
+    sdkRun.mockResolvedValueOnce(envelope({ state: "ok", documents: [] }, row.process));
+    expect(await sources.holdings(row.process)).toEqual([]);
+    sdkRun.mockResolvedValueOnce(
+      envelope({ state: "ok", documents: holdings }, { ...row.process, processStartUtc: "new" }),
+    );
+    await expect(sources.holdings(row.process)).rejects.toThrow("different process incarnation");
   } finally {
     sdkRun.mockReset();
     f.machine.close();
@@ -851,4 +877,42 @@ test("access: a head move re-reads the machine through the grant source", async 
   });
   stop();
   machine.close();
+});
+
+test("holdings retain nullable facts and last confirmed evidence after a failed read", async () => {
+  const f = fixture();
+  const value = [
+    {
+      openId: "sdk-open",
+      title: "Model",
+      holdings: {
+        empty: false,
+        unsaved: false,
+        workshared: true,
+        savedNotSynced: null,
+        elements: [
+          {
+            id: 1,
+            category: null,
+            name: null,
+            changedSinceSync: null,
+            requesters: ["Bob", "Alice"],
+          },
+        ],
+        worksets: [],
+      },
+    },
+  ];
+  try {
+    vi.mocked(f.sources.holdings).mockResolvedValue(value);
+    const first = (await f.machine.refresh()).revit.sessions![0]!;
+    expect(first.holdings).toEqual(value);
+    vi.mocked(f.sources.holdings).mockRejectedValueOnce(Error("holdings unavailable"));
+    const stale = (await f.machine.refresh()).revit.sessions![0]!;
+    expect(stale.holdings).toEqual(value);
+    expect(stale.holdingsLeg.observedAtUtc).toBe(first.holdingsLeg.observedAtUtc);
+    expect(stale.holdingsLeg.error).toContain("holdings unavailable");
+  } finally {
+    f.machine.close();
+  }
 });
