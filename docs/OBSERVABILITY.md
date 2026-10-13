@@ -27,6 +27,7 @@ events) uses, so one PostHog project carries product usage AND install-failure d
 | `tool_call` | runtime session events (`tool_end`) | full event payload |
 | `agent_turn` / `agent_error` | runtime session events (`agent_end`/`error`) | carries model usage/tokens when reported |
 | `host_op` | host `POST /call` dispatch | input, ok/error kind+message, duration — outputs deliberately not captured (op+input reproduce them) |
+| `bridge_queue` | host Revit queue | `phase: queued` only when another op is ahead at enqueue; `phase: started` whenever the gate opens, with `wait_ms`. Both carry `op`, `request_id` (wire id), `session_id`, and `queue_depth` (at enqueue, including this op). Join phases by `request_id`; a blocked op retains its queued event. |
 | `ribbon_click` | AdWindows `ItemExecuted`, filtered to `Pe.App.Commands` | carries `doc_title`; retires as buttons migrate into Tasks |
 | `palette_action` | the Do palette's tab actions (`CmdPltCommands`) | tab=commands\|tasks\|scripts, item id, ok; the funnel ribbon buttons migrate into |
 | `$exception` | Serilog Error/Fatal sink (Revit) | PostHog error tracking |

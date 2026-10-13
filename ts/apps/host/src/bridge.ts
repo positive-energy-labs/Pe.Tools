@@ -604,18 +604,28 @@ export const RevitBridgeLive = Layer.effect(
       const myGate = yield* Deferred.make<void>();
       const previousGate = yield* Ref.getAndSet(session.queueTail, myGate);
       const queuedAt = Date.now();
+      // Depth includes this op; a contended enqueue must stay visible even if the gate never opens.
+      if (depth > 1)
+        capture("bridge_queue", {
+          op: operationKey,
+          request_id: wireId,
+          session_id: session.sessionId,
+          queue_depth: depth,
+          phase: "queued",
+        });
       yield* Effect.logInfo(
         `Revit queue queued op=${operationKey} session=${session.sessionId} depth=${depth}`,
       );
       return yield* Effect.gen(function* () {
         yield* Deferred.await(previousGate);
         const startedAt = Date.now();
-        // One event per queued op: the enqueue-time twin made every row a duplicate in PostHog (2026-10-12).
         capture("bridge_queue", {
           op: operationKey,
+          request_id: wireId,
           session_id: session.sessionId,
           queue_depth: depth,
-          wait_ms: Date.now() - queuedAt,
+          phase: "started",
+          wait_ms: startedAt - queuedAt,
         });
         yield* Effect.logInfo(
           `Revit queue started op=${operationKey} session=${session.sessionId} depth=${depth} wait_ms=${startedAt - queuedAt}`,
