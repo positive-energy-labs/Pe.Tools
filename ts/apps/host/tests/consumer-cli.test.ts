@@ -61,7 +61,7 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
     id?: string;
   }[] = [];
   const partial = {
-    status: "partial",
+    status: "Succeeded",
     executionId: "native-original",
     revitVersion: "mock",
     output: "one item failed",
