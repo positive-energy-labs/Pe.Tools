@@ -203,7 +203,7 @@ export class Diagnostics {
   }
 }
 
-export const diagnostics = new Diagnostics();
+const diagnostics = new Diagnostics();
 
 /** Every caught fault in the web goes through this one call. */
 export const reportFault = (fact: DiagnosticFact, error?: unknown) =>

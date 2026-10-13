@@ -37,7 +37,7 @@ export function admitFiles(files: File[], held: number): { admitted: File[]; ref
   return { admitted, refusal: reasons.length ? `Not added: ${reasons.join("; ")}` : undefined };
 }
 
-export async function readAttachment(file: File): Promise<PromptAttachment> {
+async function readAttachment(file: File): Promise<PromptAttachment> {
   const textual =
     file.type.startsWith("text/") ||
     /\.(md|txt|json|jsonc|csv|tsv|ts|tsx|js|jsx|cs|py|rb|go|rs|java|yaml|yml|toml|xml|html|css)$/i.test(
@@ -59,7 +59,7 @@ export async function readAttachment(file: File): Promise<PromptAttachment> {
   };
 }
 
-export function base64FromBuffer(buffer: ArrayBuffer): string {
+function base64FromBuffer(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);

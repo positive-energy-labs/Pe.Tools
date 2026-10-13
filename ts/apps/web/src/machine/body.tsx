@@ -66,7 +66,7 @@ function RevitDesk({
  * This window's caught faults and whether the host heard them. It reads the diagnostic owner,
  * never `/host/status`, so a host that is down still has its silence drawn here.
  */
-export function DiagnosticsLine({ state }: { state: DiagnosticsState }) {
+function DiagnosticsLine({ state }: { state: DiagnosticsState }) {
   const counts = [
     state.pending ? `${state.pending} waiting` : null,
     state.dropped ? `${state.dropped} dropped` : null,

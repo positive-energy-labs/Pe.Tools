@@ -87,7 +87,7 @@ export function readThreadTarget<T extends HarnessThreadSummary>(
   };
 }
 /** The one Target-filter option every closed target collapses into. */
-export const CLOSED_TARGETS = "closed";
+const CLOSED_TARGETS = "closed";
 export const targetFacet = (thread: HarnessThreadSummary & TargetRead) =>
   thread.targetClosed ? CLOSED_TARGETS : navigationTargetKey(thread.head.defaultTarget);
 /** Live targets one by one; closed ones are never listed, only the single "Closed" option. */
@@ -145,18 +145,10 @@ export function activityWord(thread: HarnessThreadSummary): string | undefined {
   if (thread.activity.state === "failed") return "Failed";
   return undefined;
 }
-export function threadState(thread: HarnessThreadSummary): string {
-  const activity = activityWord(thread);
-  if (activity) return activity;
-  if (thread.lifecycle.status === "archived") return "Archived";
-  if (thread.lifecycle.status === "settled") return "Settled";
-  if (isUnread(thread)) return "Unread";
-  return "Ready";
-}
 /** What a thread is doing, as the roster's state filter asks it. */
 export const THREAD_STATES = ["working", "waiting", "failed", "idle"] as const;
 export type ThreadActivity = (typeof THREAD_STATES)[number];
-export function threadActivity(thread: HarnessThreadSummary): ThreadActivity {
+function threadActivity(thread: HarnessThreadSummary): ThreadActivity {
   if (thread.activity.pending || thread.activity.state === "waiting") return "waiting";
   if (thread.activity.state === "running") return "working";
   if (thread.activity.state === "failed") return "failed";

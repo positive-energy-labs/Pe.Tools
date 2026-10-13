@@ -29,7 +29,7 @@ export interface Pinnable {
 }
 
 /** What a write would do, in the chip's own words. */
-export const writeMark = (write: PageTargetReading["write"]) =>
+const writeMark = (write: PageTargetReading["write"]) =>
   !write ? "—" : write.kind === "rw" ? "rw" : write.kind;
 
 const subjectOf = (reading: PageTargetReading) =>

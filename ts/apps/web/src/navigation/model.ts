@@ -8,9 +8,8 @@ export const TASKS = [
   "Ask / automate",
   "Explore / maintain",
 ] as const;
-export type Task = (typeof TASKS)[number];
+type Task = (typeof TASKS)[number];
 export type Exposure = "Main" | "Preview" | "Archive";
-export type Tool = (typeof TOOLS)[number];
 export const routeKey = (path: string) =>
   path === "/pea" ? "chat" : path === "/open" ? "instances" : path.slice(1);
 export const routePath = (key: string) =>
@@ -70,7 +69,7 @@ export const CATALOGUE = TOOLS.map((tool) => ({
   aliases: ALIASES[tool.to] ?? tool.label,
   runtimeNeed: RUNTIME_NEEDS[tool.to] ?? "Revit for model actions; browsing saved data is separate",
 }));
-export function matches(text: string, query: string) {
+function matches(text: string, query: string) {
   return query
     .toLowerCase()
     .trim()

@@ -27,7 +27,7 @@
       "entry": ["src/index.ts", "src/dev.ts", "scripts/*.{ts,mjs}", "tests/fake-acp-agent.mjs"]
     },
     "apps/web": {
-      "entry": ["src/routes/**/*.{ts,tsx}!", "scripts/*"]
+      "entry": ["src/routes/**/*.{ts,tsx}!", "src/revit/revit.js", "scripts/*"]
     },
     "packages/factory": {
       "entry": ["actuators/*.ts", "sensors/*.ts"]

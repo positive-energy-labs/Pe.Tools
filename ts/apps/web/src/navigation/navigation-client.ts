@@ -1,7 +1,7 @@
 import { navigationSnapshotSchema } from "@pe/agent-contracts";
 import { hostFetch } from "#/host/runtime";
 
-export type { NavigationSnapshot, NavigationWork, NavigationThread } from "@pe/agent-contracts";
+export type { NavigationSnapshot, NavigationWork } from "@pe/agent-contracts";
 
 export function navigationClient(origin: string) {
   return {

@@ -22,7 +22,7 @@ import {
 import type { SessionDocument } from "#/components/lang/session";
 import { executionRefusal, keyOf, phaseOf, pidOf, selectionOf } from "#/machine/session";
 
-export type HeldModel = NonNullable<MachineSession["documents"]>[number];
+type HeldModel = NonNullable<MachineSession["documents"]>[number];
 
 export interface DocRow {
   readonly key: string;
@@ -43,7 +43,7 @@ export interface DocRow {
  * Revit.ini carries it. Never a bare title when identity exists — substring matching refused
  * `…ProjectA_R25` because the title prefixes its detached clones (field, 2026-09-01).
  */
-export const docSelectorOf = (recent: RecentDocument): string =>
+const docSelectorOf = (recent: RecentDocument): string =>
   !recent.isCloud
     ? recent.path
     : recent.region && recent.projectGuid && recent.modelGuid

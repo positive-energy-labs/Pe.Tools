@@ -61,7 +61,7 @@ type GrantedDocument = MachineAttachmentDocument & {
  * no head is read in the browser. Keyed by the product socket's own document (its bridge title),
  * since an SDK document id is a different namespace and is never guessed from a title.
  */
-export const grantsOf = (session: MachineSession): GrantedDocument[] =>
+const grantsOf = (session: MachineSession): GrantedDocument[] =>
   (session.attachment?.documents ?? []).filter(
     (document): document is GrantedDocument => document.access.kind === "rw",
   );

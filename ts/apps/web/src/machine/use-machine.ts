@@ -17,7 +17,7 @@ import { machineOf, planWaits } from "./model";
 const ABSENT: Reading<Machine> = { state: "absent" };
 
 /** The recorded machine a frozen demo draws: a machine fixture by name, else the Open seed's. */
-export function demoMachine(demo: string): Reading<Machine> {
+function demoMachine(demo: string): Reading<Machine> {
   if (Object.hasOwn(MACHINE_SEEDS, demo)) return MACHINE_SEEDS[demo as keyof typeof MACHINE_SEEDS];
   const seeded = OPEN_SEEDS[demo as keyof typeof OPEN_SEEDS]?.readings.machine as
     | Machine

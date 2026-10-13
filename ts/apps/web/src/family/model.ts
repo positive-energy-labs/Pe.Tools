@@ -81,7 +81,7 @@ export interface FamilyPageModel {
  * every list of types on this route sorts through this comparator.
  */
 const typeCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
-export const byTypeName = (a: string, b: string): number => typeCollator.compare(a, b);
+const byTypeName = (a: string, b: string): number => typeCollator.compare(a, b);
 
 export function buildFamilyPageModel(source: FamilySpecModel): FamilyPageModel {
   const params = source.profile.params;

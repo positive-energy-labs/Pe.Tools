@@ -10,7 +10,7 @@ import type { NavigationWork } from "./navigation-client";
 import { PrimaryRouteControls } from "./route-controls";
 import { RouteHelpButton } from "#/route/help";
 
-export function WorkItem({
+function WorkItem({
   work,
   onNavigate,
 }: {
@@ -54,7 +54,7 @@ export function WorkItem({
     </div>
   );
 }
-export function NavigationStatus() {
+function NavigationStatus() {
   const { snapshot, loading, error, refresh } = useNavigation();
   return (
     <div className="flex flex-wrap items-center gap-2 text-ink-2">

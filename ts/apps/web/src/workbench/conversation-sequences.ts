@@ -1,7 +1,7 @@
 import type { ChatMessage, ChatPart } from "./chat-state";
 
 export type CallPart = Extract<ChatPart, { type: "tool-call" }>;
-export type ThoughtPart = Extract<ChatPart, { type: "reasoning" }>;
+type ThoughtPart = Extract<ChatPart, { type: "reasoning" }>;
 /** Machinery: a tool call or the thought between calls. One uninterrupted run of these folds as one. */
 export type RunPart = CallPart | ThoughtPart;
 export type Segment =

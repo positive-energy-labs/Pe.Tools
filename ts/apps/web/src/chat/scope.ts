@@ -22,7 +22,7 @@ const scopeUrl = (threadId: string) =>
 export type { GrantView };
 
 /** A host door's refusal in the person's words: the door, the reason, then the remedy. */
-export const refusalSentence = ({ reason, remedy }: Refusal) =>
+const refusalSentence = ({ reason, remedy }: Refusal) =>
   remedy && !reason.includes(remedy) ? `${reason} ${remedy}` : reason;
 
 /**

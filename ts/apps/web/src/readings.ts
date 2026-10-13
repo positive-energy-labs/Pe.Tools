@@ -441,10 +441,6 @@ export interface SessionInventory {
 const CUSTODIES: readonly Custody[] = ["controlled", "observed"];
 const LANES: readonly Lane[] = ["dev", "installed"];
 
-/** The id a Target names: the pe-revit session id when the payload has one, else the broker's. */
-export const sessionKey = (session: SessionInventory): string =>
-  session.sdkSessionId ?? session.sessionId;
-
 /** Wire entry (bridge.sessions.list) into inventory. Disconnected entries are not targets. */
 export function inventoryOf(entries: readonly BridgeSessionListEntry[]): SessionInventory[] {
   return entries

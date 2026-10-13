@@ -261,7 +261,7 @@ export function peaState(machine: Machine): Said {
   return { text: `${ready.length} of ${providers.length} ready` };
 }
 
-export const hostOfUrl = (url: string) => url.replace(/^https?:\/\//, "").split(/[./]/)[0]!;
+const hostOfUrl = (url: string) => url.replace(/^https?:\/\//, "").split(/[./]/)[0]!;
 
 export const hhmm = (iso: string | null | undefined) => (iso ? iso.slice(11, 16) : "—");
 

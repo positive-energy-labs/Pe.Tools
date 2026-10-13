@@ -93,7 +93,7 @@ type Action = {
 
 /** T3's snooze presets in local calendar time: 1 h, 3 h, this evening (when > 1 h away),
  *  tomorrow 9 AM, next Monday 9 AM (dropped when it is tomorrow). */
-export function snoozePresets(now = new Date()): { id: string; label: string; at: Date }[] {
+function snoozePresets(now = new Date()): { id: string; label: string; at: Date }[] {
   const at = (days: number, hour: number) => {
     const day = new Date(now);
     day.setDate(day.getDate() + days);
@@ -117,14 +117,14 @@ export function snoozePresets(now = new Date()): { id: string; label: string; at
 }
 
 /** A wake time as a person says it: the time today, else the weekday and time. */
-export function wakeLabel(at: Date, now = new Date()): string {
+function wakeLabel(at: Date, now = new Date()): string {
   const time = at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   return at.toDateString() === now.toDateString()
     ? time
     : `${at.toLocaleDateString([], { weekday: "short" })} ${time}`;
 }
 
-export function ThreadActions({
+function ThreadActions({
   thread,
   open,
   setOpen,
