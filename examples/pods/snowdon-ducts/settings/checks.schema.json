@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Snowdon Ducts investigation limits",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "maxSystems": { "type": "integer", "minimum": 1, "maximum": 500, "description": "Systems listed by the census." },
+    "maxFittingsPerRun": { "type": "integer", "minimum": 1, "maximum": 500, "description": "Fittings read when inspecting one run." },
+    "eligibleFittingNameContains": { "type": "array", "items": { "type": "string" }, "description": "A fitting is eligible for the experiment when its family or type name contains one of these." },
+    "lossParameterNames": { "type": "array", "items": { "type": "string" }, "description": "Parameter names read as the fitting's loss." },
+    "experimentDelta": { "type": "number", "exclusiveMinimum": 0, "description": "Absolute change applied to one coefficient." },
+    "sandboxTitleMarkers": { "type": "array", "items": { "type": "string" }, "description": "The experiment runs only when the document title contains one of these (case-insensitive)." }
+  },
+  "required": ["maxSystems", "maxFittingsPerRun", "eligibleFittingNameContains", "lossParameterNames", "experimentDelta", "sandboxTitleMarkers"]
+}

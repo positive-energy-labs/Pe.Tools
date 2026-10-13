@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 2,
+  "id": "snowdon-ducts",
+  "name": "Snowdon Ducts",
+  "version": "0.1.0",
+  "description": "Investigate duct systems and fitting losses in Revit's Snowdon Towers mechanical sample, then adapt the Page and export your own Pod.",
+  "entrypoints": [
+    {
+      "id": "census",
+      "sourcePath": "src/Census.cs",
+      "name": "Duct census",
+      "description": "Read-only: list duct systems, their elements and flow, and the warnings that mention ducts."
+    },
+    {
+      "id": "inspect-run",
+      "sourcePath": "src/InspectRun.cs",
+      "name": "Inspect a run",
+      "description": "Read-only: walk the selected duct run (or the largest system) fitting by fitting with connector flow and loss readings."
+    },
+    {
+      "id": "coefficient-experiment",
+      "sourcePath": "src/CoefficientExperiment.cs",
+      "name": "Coefficient experiment",
+      "description": "Changes the model: on a disposable copy only, nudges one fitting's loss coefficient and reads the result back."
+    }
+  ]
+}

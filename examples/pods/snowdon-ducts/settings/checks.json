@@ -1,0 +1,9 @@
+{
+  "$schema": "./checks.schema.json",
+  "maxSystems": 25,
+  "maxFittingsPerRun": 60,
+  "eligibleFittingNameContains": ["Elbow", "Tee", "Transition"],
+  "lossParameterNames": ["Loss Coefficient", "Pressure Drop"],
+  "experimentDelta": 0.05,
+  "sandboxTitleMarkers": ["copy", "sandbox"]
+}
