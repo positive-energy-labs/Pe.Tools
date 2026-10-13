@@ -9,7 +9,7 @@ import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { createServer } from "node:http";
-import { NodeHttpServer } from "@effect/platform-node";
+import { NodeHttpClient, NodeHttpServer } from "@effect/platform-node";
 import { HttpRouter } from "effect/unstable/http";
 import { makeHttpLive } from "../src/app.ts";
 import { RevitBridge } from "../src/bridge.ts";
@@ -191,6 +191,7 @@ test("/call attributes a view-image capture to the caller it was carried by", as
           { disableLogger: true },
         ).pipe(
           Layer.provide(Layer.succeed(RevitBridge, bridge)),
+          Layer.provide(NodeHttpClient.layerUndici),
           Layer.provide(NodeHttpServer.layer(() => nodeServer, { host: "127.0.0.1", port: 0 })),
         ),
       ),
