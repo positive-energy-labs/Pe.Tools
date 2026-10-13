@@ -1192,6 +1192,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   const json = (value: unknown, status = 200) => Response.json(value, { status });
 
   async function handle(request: Request): Promise<Response> {
+    const caller = currentCaller();
     const url = new URL(request.url);
     const [, , , id, verb] = url.pathname.split("/"); // "", "pe", "threads", id, verb
     const method = request.method;
@@ -1259,7 +1260,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       return schema.parse(await request.json());
     };
     if (url.pathname === "/pe/threads/contribution-migration" && method === "POST") {
-      requireHuman(currentCaller(), url.pathname, "migrating typed contribution references");
+      requireHuman(caller, url.pathname, "migrating typed contribution references");
       const mapping = await input(
         z.array(
           z.strictObject({
@@ -1273,7 +1274,6 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       return json(result, result.ok ? 200 : 409);
     }
     if (url.pathname.startsWith("/pe/scope/")) {
-      const caller = currentCaller();
       const [named, scopeVerb, ...rest] = url.pathname.slice("/pe/scope/".length).split("/");
       // `self` is the caller's own thread: a pea context's, bound at spawn. No thread string travels.
       const self = named === "self";
@@ -1437,7 +1437,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         return new Response(null, { status: 204 });
       case "POST prompt": {
         // Only a human message moves a thread, and only it renews the grant: Pea cannot renew itself.
-        requireHuman(currentCaller(), `/pe/threads/${t.meta.id}/prompt`, "a thread message");
+        requireHuman(caller, `/pe/threads/${t.meta.id}/prompt`, "a thread message");
         const { text, attachments: sent, mentions: named } = await input(promptRequestSchema);
         const attachments = sent?.length ? sent : undefined;
         const mentions = named?.length ? named : undefined;

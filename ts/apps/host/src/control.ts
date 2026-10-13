@@ -148,7 +148,11 @@ export function callerOf(
 export const routeActorOf = (caller: Caller): "human" | "agent" =>
   caller.kind === "human" ? "human" : "agent";
 
-/** The caller the identity middleware minted for this request; anonymous outside one. */
+/**
+ * The caller the identity middleware minted for this request; anonymous outside one. A door reads
+ * it once, before its first suspension, and passes it down: an Effect fiber resumed by a socket or
+ * bridge callback runs outside the request's AsyncLocalStorage (`caller-carriage.test.ts`).
+ */
 export const currentCaller = (): Caller => invocationContext()?.caller ?? { kind: "anonymous" };
 
 /** A human-only door: anonymous is `context.missing`, any other caller `human.only`. */

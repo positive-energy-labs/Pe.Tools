@@ -1,13 +1,11 @@
 import { afterEach, expect, test } from "vite-plus/test";
 import { existsSync } from "node:fs";
-import { createServer } from "node:http";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { instancesActions, instancesSessionSelection } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
-import { Context, Layer } from "effect";
-import { HttpRouter } from "effect/unstable/http";
+import { HOST_CONTEXT_HEADER, HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
 import { admitInstancesAction, recoverInstancesAction } from "../src/instances-actions.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { RevitBridge } from "../src/bridge.ts";
@@ -19,11 +17,12 @@ import {
   useHostMachine,
   unavailableShare,
 } from "../src/machine.ts";
-import { bindControl } from "../src/control.ts";
+import { bindControl, mintContext } from "../src/control.ts";
 import type { ThreadHead } from "@pe/agent-contracts";
 import type { SessionObservation } from "@pe/host-contracts/pe-revit-contract";
 import { unreadLeg } from "../src/update-reader.ts";
-import { asCaller, crossingOf, human } from "./callers.ts";
+import { crossingOf } from "./callers.ts";
+import { serveRoutes } from "./real-server.ts";
 import {
   acquiredOpenIds,
   acquisitionSessionId,
@@ -1883,23 +1882,19 @@ test("/actions/cancel stops a running Instances step through the SDK op cancel, 
   );
   while (!f.calls.some((args) => args[1] === "save")) await new Promise((r) => setTimeout(r, 5));
   const step = (await f.owner.list(undefined, row.id))[0]!.steps.at(-1)!;
-  const web = HttpRouter.toWebHandler(
-    makeCallRoute(f.owner, undefined, { sdk: f.deps.sdk }).pipe(
-      Layer.provideMerge(Layer.succeed(RevitBridge, {} as RevitBridge["Service"])),
-    ),
-    { disableLogger: true },
+  const server = await serveRoutes(
+    makeCallRoute(f.owner, undefined, { sdk: f.deps.sdk }),
+    {} as RevitBridge["Service"],
   );
-  cleanup.push(() => web.dispose());
-  const response = await asCaller(human, () =>
-    web.handler(
-      new Request("http://host/actions/cancel", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: row.id }),
-      }),
-      Context.empty() as never,
-    ),
-  )();
+  cleanup.push(() => server.close());
+  const response = await fetch(`${server.base}/actions/cancel`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      [HOST_CONTEXT_HEADER]: mintContext({ kind: "human", via: "cli" }),
+    },
+    body: JSON.stringify({ id: row.id }),
+  });
   expect(response.status).toBe(202);
   expect(f.calls.at(-1)).toEqual(["op", "cancel", step.id, "--json"]);
   release();
@@ -1918,39 +1913,24 @@ test.each([
   "%s that omits a defaulted option reads back its own receipt over HTTP",
   async (key, verb) => {
     const f = await setup(() => ({ result: { id: "dev", state: "ok", phase: "stopped" } }));
-    const web = HttpRouter.toWebHandler(
-      makeCallRoute(f.owner, undefined, { sdk: f.deps.sdk }).pipe(
-        Layer.provideMerge(Layer.succeed(RevitBridge, {} as RevitBridge["Service"])),
-      ),
-      { disableLogger: true },
+    const server = await serveRoutes(
+      makeCallRoute(f.owner, undefined, { sdk: f.deps.sdk }),
+      {} as RevitBridge["Service"],
     );
-    cleanup.push(() => web.dispose());
-    const server = createServer(async (req, res) => {
-      const chunks: Buffer[] = [];
-      for await (const chunk of req) chunks.push(chunk as Buffer);
-      const response = await asCaller(human, () =>
-        web.handler(
-          new Request(`http://host${req.url}`, {
-            method: req.method,
-            headers: { "content-type": "application/json" },
-            ...(req.method === "POST" ? { body: Buffer.concat(chunks) } : {}),
-          }),
-          Context.empty() as never,
-        ),
-      )();
-      res.writeHead(response.status, { "content-type": "application/json" });
-      res.end(Buffer.from(await response.arrayBuffer()));
-    });
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-    cleanup.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
-    const { port } = server.address() as { port: number };
+    cleanup.push(() => server.close());
+    // The owner's terminal: its context rides every host call the client makes.
+    const prior = process.env[HOST_CONTEXT_VARIABLE];
+    process.env[HOST_CONTEXT_VARIABLE] = mintContext({ kind: "human", via: "cli" });
     const row = await runSemanticAction(
       key,
       { session, unsaved: "keep" },
       undefined,
       {},
-      `http://127.0.0.1:${port}`,
-    );
+      server.base,
+    ).finally(() => {
+      if (prior === undefined) delete process.env[HOST_CONTEXT_VARIABLE];
+      else process.env[HOST_CONTEXT_VARIABLE] = prior;
+    });
     expect(row).toMatchObject({ state: "succeeded", key });
     expect(f.calls.at(-1)!.slice(0, 2)).toEqual(["session", verb]);
   },

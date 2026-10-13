@@ -598,8 +598,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
    * Only the page itself (its own browser) or a person drives its doors. Pea reaches a page
    * through its shelf; a Pea or MCP context here would borrow a binding that is not its own.
    */
-  function doorRefusal(door: string): Refusal | null {
-    const caller = currentCaller();
+  function doorRefusal(door: string, caller: Caller): Refusal | null {
     if (caller.kind === "page" || caller.kind === "human") return null;
     return caller.kind === "anonymous"
       ? {
@@ -641,9 +640,10 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     dir: string,
     page: string,
     request: Request,
+    caller: Caller,
   ) {
     const at = `/pages/${slug}/${verb}`;
-    const who = doorRefusal(at);
+    const who = doorRefusal(at, caller);
     if (who) return refused(who);
     const raw: unknown = await request.json().catch(() => undefined);
     const slot = (await bindingOf(dir)).slots.default;
@@ -727,9 +727,8 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
    * `PUT /pe/pages/<slug>/binding`: a person binds anything; Pea (or an MCP client) only pins a
    * document open in one of Pea's own Revits.
    */
-  async function bind(slug: string, dir: string, page: string, request: Request) {
+  async function bind(slug: string, dir: string, page: string, request: Request, caller: Caller) {
     const at = `/pe/pages/${slug}/binding`;
-    const caller = currentCaller();
     const parsed = pageChoiceSchema.safeParse(await request.json().catch(() => undefined));
     if (!parsed.success)
       return problem(
@@ -783,6 +782,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
   };
 
   return async function handle(request: Request): Promise<Response> {
+    const caller = currentCaller();
     const url = new URL(request.url);
     const parts = url.pathname.split("/").filter(Boolean); // ["pages", slug?, ...rest]
     if (parts[0] === "pe") {
@@ -790,7 +790,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
       const where = SLUG.test(slug) ? await dirOf(slug) : null;
       if (!where || verb !== "binding" || more.length || request.method !== "PUT")
         return problem(404, "the binding door is PUT /pe/pages/<slug>/binding");
-      return bind(slug, where.dir, where.key, request);
+      return bind(slug, where.dir, where.key, request, caller);
     }
     const wantsHtml = (request.headers.get("accept") ?? "").includes("text/html");
     if (parts.length === 1)
@@ -841,12 +841,12 @@ ${asset("pe.css")}`,
       const event: unknown = await request.json().catch(() => undefined);
       if (typeof event !== "object" || event === null || Array.isArray(event))
         return problem(400, "an event is one JSON object");
-      return json(await state.append(event, originOf(currentCaller())), 201);
+      return json(await state.append(event, originOf(caller)), 201);
     }
     if (verb === "target" && request.method === "GET")
       return json(await target(where.key, where.dir));
     if ((verb === "call" || verb === "act") && request.method === "POST")
-      return door(verb, slug, where.dir, where.key, request);
+      return door(verb, slug, where.dir, where.key, request, caller);
     if (verb === "events" && request.method === "GET") {
       const after = Number(
         url.searchParams.get("after") ?? request.headers.get("last-event-id") ?? 0,

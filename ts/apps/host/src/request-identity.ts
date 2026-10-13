@@ -146,7 +146,7 @@ export async function readRequestIdentity(
     if (
       "principal" in result &&
       share.allowRemoteAdministration === false &&
-      remoteAdministration(pathname, method)
+      administration(pathname, method)
     )
       result = refuse(
         "identity.remote-administration",
@@ -171,19 +171,27 @@ export async function readRequestIdentity(
     result =
       "refusal" in minted
         ? refuse(minted.refusal.code, minted.refusal.detail)
-        : { ...result, caller: minted.caller };
+        : minted.caller.kind !== "human" && administration(pathname, method)
+          ? refuse(
+              minted.caller.kind === "anonymous" ? "context.missing" : "human.only",
+              `Machine administration is a person's act; a ${minted.caller.kind} call is refused (ADR 0017 D2).`,
+            )
+          : { ...result, caller: minted.caller };
   }
   options.share.observe(result, pathname, host);
   return result;
 }
 
-/** One boundary for machine control; HTTP/MCP product operations keep their own normal access. */
-function remoteAdministration(path: string, method: string): boolean {
+/**
+ * One boundary for machine control: human-only, and off for tailnet when remote administration is.
+ * HTTP/MCP product operations keep their own normal access.
+ */
+function administration(path: string, method: string): boolean {
   return (
     (method !== "GET" &&
       method !== "HEAD" &&
       (path === "/pe/providers" || path.startsWith("/pe/providers/"))) ||
-    (method === "PUT" && path === "/pe/access") ||
+    (method === "PUT" && (path === "/pe/access" || path === "/pe/share")) ||
     (method === "POST" && (path === "/host/update" || path === "/host/update/automatic"))
   );
 }

@@ -12,10 +12,12 @@ import { hostResourceObserver } from "../src/resource-adapters.ts";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import {
+  HOST_CONTEXT_HEADER,
   HOST_RUNTIME_SERVICE_HEADER,
   HOST_RUNTIME_SERVICE_QUERY,
 } from "@pe/host-contracts/contracts";
 import { hostOwnership } from "../src/host-ownership.ts";
+import { mintContext } from "../src/control.ts";
 
 test.each(["/call", "/revit-bridge", "/host/update", "/pe/action", "/mcp"])(
   "wrong checkout header refuses %s before routing",
@@ -372,17 +374,21 @@ test("remote administration Off denies only machine-control mutations, including
     ["POST", "/pe/providers/"],
     ["POST", "/x/../pe/providers?unused=true"],
   ]) {
+    // Administration is a person's act (ADR 0017 D2): the caller carries the owner's context.
+    const person = { [HOST_CONTEXT_HEADER]: mintContext({ kind: "human", via: "cli" }) };
     expect(
-      await readRequestIdentity(remote, path!, disabled, method),
+      await readRequestIdentity({ ...remote, ...person }, path!, disabled, method),
       `${method} ${path}`,
     ).toHaveProperty("refusal.code", "identity.remote-administration");
-    expect(await readRequestIdentity(local, path!, disabled, method)).toHaveProperty(
-      "principal.kind",
-      "local",
-    );
-    expect(await readRequestIdentity(remote, path!, options, method)).toHaveProperty(
-      "principal.kind",
-      "tailnet",
+    expect(
+      await readRequestIdentity({ ...local, ...person }, path!, disabled, method),
+    ).toHaveProperty("principal.kind", "local");
+    expect(
+      await readRequestIdentity({ ...remote, ...person }, path!, options, method),
+    ).toHaveProperty("principal.kind", "tailnet");
+    expect(await readRequestIdentity(local, path!, options, method)).toHaveProperty(
+      "refusal.code",
+      "context.missing",
     );
   }
   for (const [method, path] of [

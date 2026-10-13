@@ -204,7 +204,6 @@ export function makeCallRoute(
           requestId: string;
         }
       | undefined;
-    // The caller lives in AsyncLocalStorage; the Node body read resumes outside it. Read first.
     const caller = currentCaller();
     const requestId = randomUUID();
     return Effect.gen(function* () {
@@ -405,8 +404,9 @@ export function makeCallRoute(
       }),
     );
   });
-  const familiesReadings = HttpRouter.add("*", "/families/readings", (req) =>
-    RevitBridge.use((bridge) =>
+  const familiesReadings = HttpRouter.add("*", "/families/readings", (req) => {
+    const caller = currentCaller();
+    return RevitBridge.use((bridge) =>
       Effect.tryPromise({
         try: async () => {
           if (req.method === "GET") {
@@ -467,7 +467,7 @@ export function makeCallRoute(
             bridge,
             resolvedSession,
           );
-          requireEligibleCaller(definition, currentCaller(), "/families/readings");
+          requireEligibleCaller(definition, caller, "/families/readings");
           if (definition.intent !== "Read") throw Error("Matrix operation must be a read");
           const resolved = gatewayTarget(
             "revit.matrix.loaded-families",
@@ -530,8 +530,8 @@ export function makeCallRoute(
           Effect.succeed(Response.jsonUnsafe({ error: said(error) }, { status: 409 })),
         ),
       ),
-    ),
-  );
+    );
+  });
   const captured = HttpRouter.add("GET", "/takeoffs/observations", (req) =>
     Effect.tryPromise({
       try: async () => {
@@ -675,8 +675,9 @@ export function makeCallRoute(
     .filter((key) => key !== "action.read")
     .map((key) => key.slice("action.".length));
   const controls = controlVerbs.map((choice) =>
-    HttpRouter.add("POST", `/actions/${choice}`, (req) =>
-      RevitBridge.use((bridge) =>
+    HttpRouter.add("POST", `/actions/${choice}`, (req) => {
+      const caller = currentCaller();
+      return RevitBridge.use((bridge) =>
         Effect.tryPromise({
           try: async () => {
             const body = await Effect.runPromise(req.json);
@@ -685,7 +686,6 @@ export function makeCallRoute(
             const controlled = (await owner().list(undefined, body.id))[0];
             if (body.kind !== undefined && body.kind !== controlled?.kind)
               throw Error("Original admission kind mismatch");
-            const caller = currentCaller();
             if (!controlled) throw Error(`Action '${body.id}' has no admitted receipt`);
             // Cancel and recover belong to a human or the context that admitted the original.
             if (
@@ -773,8 +773,8 @@ export function makeCallRoute(
             ),
           ),
         ),
-      ),
-    ),
+      );
+    }),
   );
   const familyReadings = HttpRouter.add("*", "/family/readings", (req) =>
     RevitBridge.use((bridge) =>

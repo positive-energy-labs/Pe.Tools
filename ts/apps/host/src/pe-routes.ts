@@ -180,7 +180,6 @@ export function createPeRoutes(options: PeRoutesOptions) {
   >;
 
   async function handle(request: Request): Promise<Response> {
-    // Socket body callbacks resume outside AsyncLocalStorage. Capture carriage before any await.
     const caller = currentCaller();
     const url = new URL(request.url);
     const method = request.method;
@@ -400,7 +399,6 @@ export function createPeRoutes(options: PeRoutesOptions) {
     const [head, route, verb, extra] = parts;
     if (head === "route-state" && extra === undefined) {
       // Door 9: the author is the host-minted caller, never the path. Reads are free.
-      const caller = currentCaller();
       const actor = routeActorOf(caller);
       if (method === "GET" && !route) return json(work.list());
       if (method === "GET" && route && !verb) {

@@ -3,7 +3,6 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Effect } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
-import { invocationContext } from "@pe/mcps/context";
 import type { MachineShare } from "@pe/agent-contracts";
 import type { IdentityResult } from "./request-identity.ts";
 
@@ -305,11 +304,6 @@ export type ShareOwner = ReturnType<typeof createShare>;
 export const shareRoute = (share: ShareOwner) =>
   HttpRouter.add("PUT", "/pe/share", (request) =>
     Effect.gen(function* () {
-      if (invocationContext()?.principal?.kind !== "local")
-        return HttpServerResponse.jsonUnsafe(
-          { error: "Sharing is an installed local switch." },
-          { status: 403 },
-        );
       const parsed = yield* Effect.result(request.json);
       const body = parsed._tag === "Success" ? parsed.success : null;
       if (

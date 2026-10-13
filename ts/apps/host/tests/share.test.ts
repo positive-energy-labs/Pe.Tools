@@ -6,6 +6,8 @@ import { Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { createShare, shareIntentFile, tailscaleCommand, shareRoute } from "../src/share.ts";
 import { requestIdentityLayer } from "../src/request-identity.ts";
+import { mintContext } from "../src/control.ts";
+import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
 
 test("fake tailscale binary: foreign rule refused; own changes re-read status; observations stay bounded", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-share-fake-"));
@@ -109,7 +111,7 @@ else if(args.includes('--https=443')) {
   }
 });
 
-test("PUT share is local-only and validates the switch before invoking the owner", async () => {
+test("PUT share is local, human-only and validates the switch before invoking the owner", async () => {
   let commands = 0;
   const share = createShare({
     installed: false,
@@ -143,7 +145,11 @@ test("PUT share is local-only and validates the switch before invoking the owner
     ),
     { disableLogger: true },
   );
-  const put = (body: unknown, headers: Record<string, string> = { host: "127.0.0.1:5180" }) =>
+  const human = {
+    host: "127.0.0.1:5180",
+    [HOST_CONTEXT_HEADER]: mintContext({ kind: "human", via: "cli" }),
+  };
+  const put = (body: unknown, headers: Record<string, string> = human) =>
     app.handler(
       new Request("http://127.0.0.1:5180/pe/share", {
         method: "PUT",
@@ -156,6 +162,8 @@ test("PUT share is local-only and validates the switch before invoking the owner
       (await put({ on: true }, { host: "box.tailabc.ts.net", "tailscale-user-login": "one" }))
         .status,
     ).toBe(403);
+    // ADR 0017 D2: anonymous loopback is read-only.
+    expect((await put({ on: true }, { host: "127.0.0.1:5180" })).status).toBe(403);
     for (const body of [
       null,
       {},
