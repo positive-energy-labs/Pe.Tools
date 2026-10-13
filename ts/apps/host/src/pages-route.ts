@@ -35,7 +35,7 @@
  *   PUT  /pe/pages/<slug>/binding      a slot (PageChoice): the human picker, or Pea pinning its own document
  */
 import { readFileSync, watch } from "node:fs";
-import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -83,7 +83,8 @@ import { capturePackage, listPackages } from "./packages.ts";
 import {
   PAGE_FOLDER,
   PAGE_LIBRARIES,
-  readPageDescriptors,
+  packagePageDescriptors,
+  scratchPageDescriptors,
   scratchPageKey,
 } from "./page-libraries.ts";
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
@@ -174,7 +175,8 @@ export type PageRow = {
   key: string | null;
   title: string;
   url: string;
-  modifiedAt: string;
+  /** Null for a packaged Page. */
+  modifiedAt: string | null;
   pod: string | null;
 };
 type Listener = (row: PageEventRow) => void;
@@ -407,9 +409,12 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     return state;
   };
 
-  /** `GET /pages`: the one Page projection, as rows. */
+  /** `GET /pages`: the one Page projection, as rows: scratch newest first, then packaged by key. */
   const list = async (): Promise<PageRow[]> =>
-    (await readPageDescriptors(root, pods ?? null)).map((page) => ({
+    [
+      ...(await scratchPageDescriptors(root)),
+      ...packagePageDescriptors(pods ? (await listPackages(pods)).packages : []),
+    ].map((page) => ({
       slug: page.slug,
       key: page.key,
       title: page.title,
@@ -423,7 +428,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
       ? pages
           .map(
             (p) =>
-              `<li><a href="${p.url}">${escapeHtml(p.title)}</a> <code>${escapeHtml(p.slug)}</code>${p.pod ? ` <small>pod ${escapeHtml(p.pod)}</small>` : ""} <small>${escapeHtml(p.modifiedAt.slice(0, 16).replace("T", " "))}</small></li>`,
+              `<li><a href="${p.url}">${escapeHtml(p.title)}</a> <code>${escapeHtml(p.slug)}</code>${p.pod ? ` <small>pod ${escapeHtml(p.pod)}</small>` : ""} ${p.modifiedAt ? ` <small>${escapeHtml(p.modifiedAt.slice(0, 16).replace("T", " "))}</small>` : ""}</li>`,
           )
           .join("\n")
       : `<li><em>none yet</em></li>`;
@@ -778,7 +783,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
       const where = SLUG.test(slug) ? await dirOf(slug) : null;
       if (!where || verb !== "binding" || more.length || request.method !== "PUT")
         return problem(404, "the binding door is PUT /pe/pages/<slug>/binding");
-      if (!where.key) return problem(409, where.reason);
+      if (!where.key) return problem(409, where.reason ?? "this page has no key");
       return bind(slug, where.dir, where.key, request);
     }
     const wantsHtml = (request.headers.get("accept") ?? "").includes("text/html");
@@ -833,7 +838,7 @@ ${asset("pe.css")}`,
       return json(await state.append(event, originOf(currentCaller())), 201);
     }
     const keyed = verb === "target" || verb === "call" || verb === "act";
-    if (keyed && !where.key) return problem(409, where.reason);
+    if (keyed && !where.key) return problem(409, where.reason ?? "this page has no key");
     if (verb === "target" && request.method === "GET")
       return json(await target(where.key!, where.dir));
     if ((verb === "call" || verb === "act") && request.method === "POST")

@@ -7,8 +7,8 @@ import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { contributionKey } from "@pe/agent-contracts";
-import { listPackages } from "./packages.ts";
-import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
+import type { AdmittedPackage } from "./packages.ts";
+import { productPagesRootPath } from "./product-paths.ts";
 
 /**
  * Every library a Page loads from the host. `source` is relative to this file on the dev lane and
@@ -58,7 +58,8 @@ export type PageDescriptor = {
   pod: string | null;
   /** The admitted entry: the package member's bytes and hash, or the scratch file's. */
   entry: { path: string; sha256: string; bytes: Uint8Array };
-  modifiedAt: string;
+  /** The scratch file's mtime; null for a packaged Page (its hash is its freshness). */
+  modifiedAt: string | null;
   /** The local folder; host-internal, never a key. */
   directory: string;
 };
@@ -84,10 +85,9 @@ export function scratchPageKey(
   }
 }
 
-/** Every Page, newest first: scratch folders under the Pages root, and admitted packages' pages. */
-export async function readPageDescriptors(
+/** Scratch Pages: every folder under the Pages root holding an `index.html`, newest first. */
+export async function scratchPageDescriptors(
   pagesRoot = productPagesRootPath(),
-  podsRoot: string | null = productPodsRootPath(),
 ): Promise<PageDescriptor[]> {
   const pages: PageDescriptor[] = [];
   const folders = await readdir(pagesRoot, { withFileTypes: true }).catch((error) => {
@@ -113,24 +113,34 @@ export async function readPageDescriptors(
       directory,
     });
   }
-  for (const pod of podsRoot ? (await listPackages(podsRoot)).packages : [])
-    for (const row of pod.contributions) {
-      if (row.kind !== "page") continue;
-      const member = pod.members.find((one) => one.path === row.memberPath);
-      if (!member) continue;
-      const slug = `${pod.id}--${row.path.slice("pages/".length)}`;
-      const facts = await stat(join(pod.directory, row.memberPath));
-      pages.push({
-        key: row.key,
-        reason: null,
-        slug,
-        openUrl: `/pages/${slug}/`,
-        title: titleOf(Buffer.from(member.bytes).toString("utf8"), slug),
-        pod: pod.id,
-        entry: { path: member.path, sha256: member.sha256, bytes: member.bytes },
-        modifiedAt: facts.mtime.toISOString(),
-        directory: join(pod.directory, row.path),
-      });
-    }
-  return pages.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
+  return pages.sort((a, b) => (b.modifiedAt ?? "").localeCompare(a.modifiedAt ?? ""));
+}
+
+/**
+ * Packaged Pages, pure over one admitted snapshot (`listPackages()`): no read of its own, so every
+ * consumer of that snapshot sees the same keys, URLs and hashes. Ordered by key.
+ */
+export function packagePageDescriptors(packages: readonly AdmittedPackage[]): PageDescriptor[] {
+  return packages
+    .flatMap((pod) =>
+      pod.contributions.flatMap((row) => {
+        const member = pod.members.find((one) => one.path === row.memberPath);
+        if (row.kind !== "page" || !member) return [];
+        const slug = `${pod.id}--${row.path.slice("pages/".length)}`;
+        return [
+          {
+            key: row.key,
+            reason: null,
+            slug,
+            openUrl: `/pages/${slug}/`,
+            title: titleOf(Buffer.from(member.bytes).toString("utf8"), slug),
+            pod: pod.id,
+            entry: { path: member.path, sha256: member.sha256, bytes: member.bytes },
+            modifiedAt: null,
+            directory: join(pod.directory, row.path),
+          },
+        ];
+      }),
+    )
+    .sort((a, b) => a.key.localeCompare(b.key));
 }

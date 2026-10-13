@@ -12,7 +12,8 @@ import {
   type ThreadHead,
 } from "@pe/agent-contracts";
 import { createPagesHandler, type LiveSession, type PageLive } from "../src/pages-route.ts";
-import { readPageDescriptors } from "../src/page-libraries.ts";
+import { packagePageDescriptors, scratchPageDescriptors } from "../src/page-libraries.ts";
+import { listPackages } from "../src/packages.ts";
 import { createHash } from "node:crypto";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
@@ -78,7 +79,7 @@ describe("pages", () => {
     const listed = async () =>
       ((await (await fetch("/pages")).json()) as Listed).pages
         .map((p) => [p.slug, p.key, p.title, p.pod])
-        .sort();
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
     const expected = [
       ["ductkit--tour", "page:@ductkit/pages/tour", "Duct tour", "ductkit"],
       ["todo", "page:@pages/todo", "A todo page", null],
@@ -119,7 +120,10 @@ describe("pages", () => {
     await writeFile(join(pods, "kit", "pages", "tour", "index.html"), "<title>Tour</title>");
     await mkdir(join(root, "Odd_Name"), { recursive: true });
     await writeFile(join(root, "Odd_Name", "index.html"), "<title>Odd</title><p>odd</p>");
-    const pages = await readPageDescriptors(root, pods);
+    const pages = [
+      ...(await scratchPageDescriptors(root)),
+      ...packagePageDescriptors((await listPackages(pods)).packages),
+    ];
     const sha = (text: string) => createHash("sha256").update(text).digest("hex");
     expect(
       pages
@@ -451,10 +455,9 @@ ${source}`),
     };
     try {
       await read(1000, ": open");
-      await asCaller(human, (path, init) => handle(new Request(`http://host${path}`, init)))(
-        "/pe/pages/todo/binding",
-        { method: "PUT", body: JSON.stringify({ kind: "none" }) },
-      );
+      await asCaller(human, (path: string, init?: RequestInit) =>
+        handle(new Request(`http://host${path}`, init)),
+      )("/pe/pages/todo/binding", { method: "PUT", body: JSON.stringify({ kind: "none" }) });
       expect(await read(1000, "event: binding\n")).toContain("event: binding\n");
       await writeFile(join(root, "todo", "index.html"), "<!doctype html><title>v2</title>");
       const file = 'event: file\ndata: {"path":"index.html"}';
