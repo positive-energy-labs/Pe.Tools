@@ -4,6 +4,9 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
+import { withInvocationContext } from "../../../packages/mcps/src/shared/invocation-context.ts";
+import { createMcpDoor } from "../../host/src/mcp-route.ts";
+import { callerOf } from "../../host/src/control.ts";
 
 type Reply = {
   id: number;
@@ -18,21 +21,56 @@ type Reply = {
 
 test("pea mcp initializes, lists tools and reads its explicit host with no stdout banner", async () => {
   const paths: string[] = [];
+  let url = "";
+  // The host's real /mcp door: external stdio negotiates initialize through it, so the fixture does too.
+  const door = createMcpDoor(() => url);
   const host = createServer((request, response) => {
-    paths.push(request.url!);
-    response.setHeader("content-type", "application/json");
-    response.end(
-      JSON.stringify({
+    void (async () => {
+      paths.push(request.url!);
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const body = Buffer.concat(chunks).toString();
+      const headers = Object.fromEntries(
+        Object.entries(request.headers).map(([key, value]) => [
+          key,
+          Array.isArray(value) ? value.join(",") : (value ?? ""),
+        ]),
+      );
+      const path = new URL(request.url!, url).pathname;
+      if (path === "/mcp") {
+        const identity = callerOf({ kind: "local" }, headers);
+        if ("refusal" in identity) return Response.json(identity, { status: 403 });
+        return withInvocationContext(
+          { principal: { kind: "local" }, caller: identity.caller, headers: {} },
+          () =>
+            door.fetch(
+              new Request(new URL(request.url!, url), {
+                method: request.method,
+                headers,
+                ...(body ? { body } : {}),
+              }),
+            ),
+        );
+      }
+      return Response.json({
         at: "2026-10-08T00:00:00Z",
         sessions: [],
         sources: { catalog: "ok" },
         capabilities: [],
-      }),
-    );
+      });
+    })()
+      .then(async (reply) => {
+        response.writeHead(reply.status, Object.fromEntries(reply.headers));
+        response.end(Buffer.from(await reply.arrayBuffer()));
+      })
+      .catch((error) => {
+        response.writeHead(500);
+        response.end(String(error));
+      });
   });
   host.listen(0, "127.0.0.1");
   await once(host, "listening");
-  const url = `http://127.0.0.1:${(host.address() as AddressInfo).port}`;
+  url = `http://127.0.0.1:${(host.address() as AddressInfo).port}`;
   const workspace = join(import.meta.dirname, "../../..");
   const env: NodeJS.ProcessEnv = {
     ...process.env,
@@ -97,8 +135,9 @@ test("pea mcp initializes, lists tools and reads its explicit host with no stdou
       arguments: { key: "op:absent" },
     });
     expect(refused.isError).toBe(true);
-    expect(paths.length).toBeGreaterThanOrEqual(3);
-    expect(paths.every((path) => new URL(path, url).pathname === "/pe/capabilities")).toBe(true);
+    const pathnames = paths.map((path) => new URL(path, url).pathname);
+    expect(pathnames).toContain("/mcp");
+    expect(pathnames).toContain("/pe/capabilities");
     expect(invalid).toEqual([]);
     expect(buffered).toBe("");
     child.stdin.end();
