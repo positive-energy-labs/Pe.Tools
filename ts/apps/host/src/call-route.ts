@@ -80,6 +80,7 @@ import {
   type PodContext,
 } from "./settings.ts";
 import { LocalOpError, localOpHttpStatus } from "./local-error.ts";
+import { capturePackage } from "./packages.ts";
 import {
   rhvacAssemblies,
   rhvacLaunch,
@@ -913,6 +914,22 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
       return yield* openShellPath(yield* decodeRequest(key, request));
     case "pod.list":
       return yield* listPods();
+    case "pod.capture": {
+      const { pod } = yield* decodeRequest(key, request);
+      return yield* Effect.tryPromise({
+        try: () => capturePackage(pod),
+        catch: (error) => packageError(key, error),
+      }).pipe(
+        Effect.map(({ id, folder, directory, entrypoints, contributions, sourceBundle }) => ({
+          id,
+          folder,
+          directory,
+          entrypoints,
+          contributions,
+          sourceBundle,
+        })),
+      );
+    }
     case "pod.runs":
       return yield* listRuns(yield* decodeRequest(key, request));
     case "pod.member.read":
@@ -948,6 +965,16 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
       return yield* apsAuthToken(yield* decodeRequest(key, request));
   }
 });
+
+/** A package refusal keeps its own words; identity misses are 404, twins 409, bad members 422. */
+const packageError = (key: string, error: unknown) => {
+  const note = error instanceof Error ? error.message : String(error);
+  return new LocalOpError(
+    key,
+    note,
+    note.startsWith("No installed pod") ? 404 : note.includes("claimed by folders") ? 409 : 422,
+  );
+};
 
 /** A session-less host composes schema-only; it never pretends a bridge is there. */
 const podContext = Effect.fnUntraced(function* (

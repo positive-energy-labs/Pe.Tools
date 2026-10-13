@@ -143,6 +143,24 @@ export const memberIssueSchema = Schema.Struct({
 });
 export type MemberIssue = Schema.Schema.Type<typeof memberIssueSchema>;
 
+const podEntrypointSchema = Schema.Struct({
+  id: Schema.String,
+  sourcePath: Schema.String,
+  name: Schema.optional(Schema.NullOr(Schema.String)),
+  description: Schema.optional(Schema.NullOr(Schema.String)),
+});
+
+/** One admitted contribution (`packages.ts`): kind follows the path; `key` is the canonical host key. */
+export const podContributionSchema = Schema.Struct({
+  kind: Schema.Literals(["script", "page", "skill", "member"]),
+  path: Schema.String,
+  memberPath: Schema.String,
+  key: Schema.String,
+  name: Schema.String,
+  description: Schema.NullOr(Schema.String),
+});
+export type PodContribution = Schema.Schema.Type<typeof podContributionSchema>;
+
 export const podListResponseSchema = Schema.Struct({
   pods: Schema.Array(
     Schema.Struct({
@@ -150,14 +168,8 @@ export const podListResponseSchema = Schema.Struct({
       name: Schema.String,
       version: Schema.String,
       folder: Schema.String,
-      entrypoints: Schema.Array(
-        Schema.Struct({
-          id: Schema.String,
-          sourcePath: Schema.String,
-          name: Schema.optional(Schema.NullOr(Schema.String)),
-          description: Schema.optional(Schema.NullOr(Schema.String)),
-        }),
-      ),
+      entrypoints: Schema.Array(podEntrypointSchema),
+      contributions: Schema.Array(podContributionSchema),
       members: Schema.Array(
         Schema.Struct({
           path: Schema.String,
@@ -172,6 +184,24 @@ export const podListResponseSchema = Schema.Struct({
   unreadable: Schema.Array(Schema.Struct({ folder: Schema.String, message: Schema.String })),
 });
 export type PodList = Schema.Schema.Type<typeof podListResponseSchema>;
+
+/**
+ * One pod's frozen execution input, read once from its admitted package. The native palette reads
+ * this before it dispatches into Revit; the host never calls back into Revit to answer it.
+ */
+export const podCaptureRequestSchema = Schema.Struct({ pod: Schema.String });
+export type PodCaptureRequest = Schema.Schema.Type<typeof podCaptureRequestSchema>;
+export const podCaptureResponseSchema = Schema.Struct({
+  id: Schema.String,
+  folder: Schema.String,
+  directory: Schema.String,
+  entrypoints: Schema.Array(podEntrypointSchema),
+  contributions: Schema.Array(podContributionSchema),
+  sourceBundle: Schema.Struct({
+    files: Schema.Array(Schema.Struct({ path: Schema.String, bytesBase64: Schema.String })),
+  }),
+});
+export type PodCapture = Schema.Schema.Type<typeof podCaptureResponseSchema>;
 
 /** Runs of one pod, optionally narrowed to the member a route has open. */
 export const podRunsRequestSchema = Schema.Struct({
@@ -759,6 +789,10 @@ export const tsOnlyOperationSchemas = {
   "pod.list": {
     response: podListResponseSchema,
   },
+  "pod.capture": {
+    request: podCaptureRequestSchema,
+    response: podCaptureResponseSchema,
+  },
   "pod.runs": {
     request: podRunsRequestSchema,
     response: podRunsResponseSchema,
@@ -956,6 +990,20 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     requestTypeName: "NoRequest",
     responseTypeName: "PodList",
     searchTerms: ["pods", "members", "settings", "specs", "list", "browse"],
+  },
+  {
+    key: "pod.capture",
+    origin: "host-local",
+    displayName: "Capture Pod",
+    description:
+      "One installed pod's frozen execution input by manifest id: admitted source bytes (sourceBundle), entrypoints and canonical contribution keys, read once from its admitted package. A pod with error diagnostics refuses. No Revit session is needed.",
+    intent: "Read",
+    visibility: "ExpertOnly",
+    costTier: "Cheap",
+    needs: "nothing",
+    requestTypeName: "PodCaptureRequest",
+    responseTypeName: "PodCapture",
+    searchTerms: ["pod", "capture", "source", "bundle", "entrypoints", "palette"],
   },
   {
     key: "pod.runs",
