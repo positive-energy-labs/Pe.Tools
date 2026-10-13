@@ -29,6 +29,16 @@ const STARTED = "2026-10-08T14:10:00.000Z";
 const REGISTRY = "C:\\Users\\demo\\AppData\\Local\\pe-revit";
 const exe = (year: number) => `C:\\Program Files\\Autodesk\\Revit ${year}\\Revit.exe`;
 const read = { observedAtUtc: AT, attemptedAtUtc: AT, error: null };
+/** The SDK doc list's native facts when the seed does not say: unread, as a failed native read. */
+const unreadFacts = {
+  isWorkshared: null,
+  isDetached: null,
+  isCloud: null,
+  centralPath: null,
+  region: null,
+  projectGuid: null,
+  modelGuid: null,
+} as const;
 
 const shape = (over: Partial<SessionShape>): SessionShape => ({
   payload: "installed",
@@ -147,6 +157,7 @@ export const OBSERVED_ICON: MachineSession = {
       title: "Clinic Renovation.rvt",
       window: null,
       persistence: null,
+      ...unreadFacts,
     },
   ],
   holdings: null,
@@ -449,6 +460,7 @@ export const BAY_YOURS_25: MachineSession = {
       title: "Hospital-MEP_kaitp.rvt",
       window: null,
       persistence: null,
+      ...unreadFacts,
     },
     {
       isActive: false,
@@ -460,6 +472,7 @@ export const BAY_YOURS_25: MachineSession = {
       title: "SD-Diffuser-24x24.rfa",
       window: null,
       persistence: null,
+      ...unreadFacts,
     },
   ],
   holdings: null,

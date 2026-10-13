@@ -55,6 +55,7 @@ import {
   foldAcquisitions,
   heldProcess,
   planAcquisition,
+  unindependent,
   type Acquisition,
   type AcquisitionIntent,
 } from "./acquisition.ts";
@@ -785,10 +786,19 @@ async function admitAcquisitionRelease(
     const product = row.attachment?.documents?.find(
       (doc) => doc.access.kind === "pea" && doc.access.acquisition === id,
     );
-    if (!product)
+    if (!product) {
+      const sdk = row.documents?.filter((doc) => doc.openId === document.sdkOpenId) ?? [];
+      const why = sdk.length === 1 ? unindependent(sdk[0]!) : null;
       throw unproven(
-        `acquisition '${id}' is not open, natively certified independent and joined to one product document now.`,
+        `acquisition '${id}' ${
+          sdk.length !== 1
+            ? `has ${sdk.length} SDK documents with its openId in its process now.`
+            : why
+              ? `is not natively certified independent: ${why}.`
+              : "is natively independent but joins no single product document now."
+        }`,
       );
+    }
     if (crossing.caller.kind !== "human")
       basis = {
         kind: "acquisition",

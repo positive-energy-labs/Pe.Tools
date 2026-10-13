@@ -84,6 +84,13 @@ const docs: DocListResult = {
       isActive: true,
       isFamily: false,
       window: null,
+      isWorkshared: null,
+      isDetached: null,
+      isCloud: null,
+      centralPath: null,
+      region: null,
+      projectGuid: null,
+      modelGuid: null,
     },
   ],
 };

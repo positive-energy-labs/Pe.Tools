@@ -594,7 +594,9 @@ export async function readMachineSession(process: {
     ) ?? [];
   const row = rows.length === 1 ? rows[0] : undefined;
   if (!row || !row.documents || !row.documentsLeg.observedAtUtc || row.documentsLeg.error)
-    throw Error("Machine has no fresh document census for the exact process incarnation.");
+    throw Error(
+      `Machine has no fresh document census for the exact process incarnation${row?.documentsLeg.error ? `: ${row.documentsLeg.error}` : "."}`,
+    );
   if (machine.revit.unclassifiedAttachments.some((attachment) => matches(attachment, process)))
     throw Error("Machine cannot join the process to one exact bridge attachment.");
   if (row.attachment && row.attachment.documentIdentity !== DOCUMENT_IDENTITY_AUTHORITY)
@@ -730,6 +732,14 @@ export function machineSources(
               isActive: z.boolean(),
               isFamily: z.boolean(),
               window: z.string().nullable(),
+              // Native facts (beta.203): null is a read that failed, never independence.
+              isWorkshared: z.boolean().nullable(),
+              isDetached: z.boolean().nullable(),
+              isCloud: z.boolean().nullable(),
+              centralPath: z.string().nullable(),
+              region: z.string().nullable(),
+              projectGuid: z.string().nullable(),
+              modelGuid: z.string().nullable(),
             }),
           ),
         })

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { basename, extname, isAbsolute, join, win32 } from "node:path";
 import { z } from "zod";
 import { isCloudSource, type ActionReceipt, type InstancesLaunch } from "@pe/agent-contracts";
+import type { SessionDocument } from "@pe/host-contracts/pe-revit-contract";
 
 /** Intent is frozen before allocation; the journal fold is the sole acquisition authority (ADR 0017 D6). */
 
@@ -241,17 +242,26 @@ export const processWhose = (acquisitions: readonly Acquisition[], process: Acqu
     ? ("pea" as const)
     : ("you" as const);
 
+type NativeFacts = Pick<SessionDocument, "isWorkshared" | "isDetached">;
+
+/**
+ * Why one SDK document is not natively certified independent, or null when it is: not workshared,
+ * or detached. An unread fact is never independence. Central and cloud acquisition are owed.
+ */
+export function unindependent(doc: NativeFacts): string | null {
+  if (doc.isWorkshared === false || doc.isDetached === true) return null;
+  // Absent is a payload that never read the fact (beta.202's wire); null a native read that failed.
+  if (typeof doc.isWorkshared !== "boolean") return "the SDK has no native isWorkshared for it";
+  if (typeof doc.isDetached !== "boolean")
+    return "it is workshared and the SDK has no native isDetached for it";
+  return "it is workshared and not detached; central and cloud acquisition are not supported";
+}
+
 /** Writes require a held lifetime, native independence, and exactly one executor-attested product join. */
 export function acquiredOpenIds(
   acquisitions: readonly Acquisition[],
   process: AcquiredProcess,
-  sdkDocuments:
-    | readonly {
-        openId: string | null;
-        isWorkshared?: boolean | null;
-        isDetached?: boolean | null;
-      }[]
-    | null,
+  sdkDocuments: readonly ({ openId: string | null } & NativeFacts)[] | null,
   productOpenIds: readonly string[],
 ): Map<string, string> {
   const owned = new Map<string, string>();
@@ -259,8 +269,7 @@ export function acquiredOpenIds(
     const document = each.document;
     if (each.state !== "held" || !document || !sameProcess(document.process, process)) continue;
     const sdk = sdkDocuments?.filter((doc) => doc.openId === document.sdkOpenId) ?? [];
-    const independent =
-      sdk.length === 1 && (sdk[0]!.isWorkshared === false || sdk[0]!.isDetached === true);
+    const independent = sdk.length === 1 && unindependent(sdk[0]!) === null;
     const product = productOpenIds.filter((openId) => openId === document.sdkOpenId);
     if (independent && product.length === 1) owned.set(product[0]!, each.id);
   }
