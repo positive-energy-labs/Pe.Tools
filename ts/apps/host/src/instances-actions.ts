@@ -9,6 +9,7 @@ import {
   canonicalRouteInput,
   type InstancesActionKey,
   type InstancesLaunch,
+  type Basis,
 } from "@pe/agent-contracts";
 import type { ActionStep } from "@pe/agent-contracts";
 import { Effect } from "effect";
@@ -40,6 +41,8 @@ import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
 import { peaSourceOf, type PeaSource } from "./pea-source.ts";
 import { productPeaWorkPath } from "./product-paths.ts";
 import { resolveStartProject, runPeRevitCli } from "./session-route.ts";
+import { admitCrossing, live, Refused, requireHuman } from "./control.ts";
+import { readMachineSession } from "./machine.ts";
 import { whoseOf } from "./whose.ts";
 
 export type InstancesActionDependencies = {
@@ -221,6 +224,98 @@ export async function admitInstancesAction(
       : admission.destination.kind !== "host"
   )
     throw refuse("Instances destination must match the explicitly supplied session");
+  const door = "/actions";
+  const lifecycleRefusal = (reason: string) =>
+    new Refused({
+      code: "lifecycle.ungranted-documents",
+      door,
+      reason: `Refused at ${door}: '${key}' ${reason}`,
+    });
+  // Resolve before admission: the receipt must carry the basis that admits its effects.
+  const censusBasis = async (target: Target): Promise<Basis> => {
+    if (whoseOf(target, await owner.list()) === "pea")
+      return {
+        kind: "pea-session",
+        session: `${target.process.pid}:${target.process.processStartUtc}`,
+      };
+    if (launch) {
+      requireHuman(crossing.caller, door, `${key} into your Revit`);
+      return { kind: "human" };
+    }
+    let row;
+    try {
+      row = await readMachineSession(target.process);
+    } catch (error) {
+      throw lifecycleRefusal(`cannot prove which documents it would affect. ${String(error)}`);
+    }
+    const documents = row.documents!;
+    const attached = row.attachment;
+    if (
+      key !== "instances.close" &&
+      documents.length === 0 &&
+      (!attached || attached.documents?.length === 0)
+    )
+      return {
+        kind: "empty-user-session",
+        session: attached?.session ?? `${target.process.pid}:${target.process.processStartUtc}`,
+      };
+    const affected =
+      key === "instances.close"
+        ? documents.filter((doc) => doc.openId === control!.document?.openId)
+        : documents;
+    if (
+      !affected.length ||
+      !attached?.documents ||
+      (key !== "instances.close" && attached.documents.length !== documents.length)
+    )
+      throw lifecycleRefusal("has no complete SDK-to-bridge document census.");
+    const uncovered: string[] = [];
+    let basis: Basis | null = null;
+    for (const doc of affected) {
+      const matches = attached.documents.filter((item) => item.openId === doc.openId);
+      if (matches.length !== 1) {
+        uncovered.push(doc.title ?? doc.openId ?? "unknown document");
+        continue;
+      }
+      try {
+        basis = admitCrossing(
+          crossing.caller,
+          { kind: "document", ref: { session: matches[0]!.session, openId: matches[0]!.openId } },
+          door,
+        );
+      } catch (error) {
+        if (!(error instanceof Refused)) throw error;
+        if (key === "instances.close") throw error;
+        uncovered.push(doc.title ?? doc.openId ?? "unknown document");
+      }
+    }
+    if (uncovered.length || !basis)
+      throw lifecycleRefusal(
+        `would affect uncovered documents: ${uncovered.join(", ") || "unknown"}.`,
+      );
+    return basis;
+  };
+  let admittedTarget: Target | undefined;
+  if (crossing.caller.kind !== "human") {
+    // Also validates anonymous and Page callers before the empty-session case.
+    admitCrossing(crossing.caller, admission.destination, door);
+    if (selection) {
+      admittedTarget = await readTarget(selection, control?.session.process, read);
+      crossing = { ...crossing, basis: await censusBasis(admittedTarget) };
+    }
+  }
+  const recheck = async (target: Target | null) => {
+    if (!target || crossing.caller.kind === "human") return;
+    try {
+      const basis = await censusBasis(target);
+      const dead = live(crossing.basis);
+      if (dead) throw dead;
+      if (canonicalRouteInput(basis) !== canonicalRouteInput(crossing.basis))
+        throw lifecycleRefusal("no longer has its admitted census basis.");
+    } catch (error) {
+      throw new BridgeError(String(error), 403, { notDispatched: true });
+    }
+  };
   return owner.admit(
     { ...admission, ...crossing },
     async (): Promise<Prepared> => {
@@ -248,14 +343,14 @@ export async function admitInstancesAction(
       }
       // The session row is read once, here, and frozen with the attempt so a replay compares the
       // same bytes. A launch's posture is derived from it, never passed (ADR 0016).
-      const target = control
-        ? await readTarget(control.session.selection, control.session.process, read)
-        : launch && "session" in launch.into
-          ? await readTarget(launch.into.session, undefined, read)
-          : null;
+      const target =
+        admittedTarget ??
+        (control
+          ? await readTarget(control.session.selection, control.session.process, read)
+          : launch && "session" in launch.into
+            ? await readTarget(launch.into.session, undefined, read)
+            : null);
       const whose = target ? whoseOf(target, await owner.list()) : null;
-      if (control && crossing.caller.kind !== "human" && whose === "you")
-        throw refuse(`human.only: '${key}' on your Revit is yours to press.`);
       const peaLaunch =
         launch !== null &&
         ("start" in launch.into ? launch.into.start.owner === "pea" : whose === "pea");
@@ -292,8 +387,14 @@ export async function admitInstancesAction(
           : {
               argv: sessionStartArgv({ ...chosen, requestId }),
             };
-        const adoption = await execution.step("native", `${key}.adopt`, adoptionInput, (id) =>
-          dispatch(adoptionInput, id, read, true),
+        const adoption = await execution.step(
+          "native",
+          `${key}.adopt`,
+          adoptionInput,
+          async (id) => {
+            await recheck(target);
+            return dispatch(adoptionInput, id, read, true);
+          },
         );
         const envelope = parsePeRevitEnvelope<SessionStartResult, Resolved | null>(
           JSON.stringify(adoption),
@@ -383,9 +484,10 @@ export async function admitInstancesAction(
       };
       // The step id IS the SDK request id: one caller-owned identity from admission to receipt.
       const stepInput: StepInput = { expectSession, argv: argv() };
-      const native = await execution.step("native", mainKey, stepInput, (requestId) =>
-        dispatch(stepInput, requestId, read),
-      );
+      const native = await execution.step("native", mainKey, stepInput, async (requestId) => {
+        await recheck(target);
+        return dispatch(stepInput, requestId, read);
+      });
       if (!launch) return native;
       // A launch into a new Revit opens its source as its own receipted op in the session it just
       // started: `doc open --start` cannot name the session it would launch.

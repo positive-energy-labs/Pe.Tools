@@ -436,6 +436,12 @@ export function createMachine(
   }
   return {
     refresh,
+    // A mutation must not reuse a refresh that began before its request.
+    fresh: async () => {
+      await inFlight;
+      if (closed) throw Error("Machine owner is retired.");
+      return refresh();
+    },
     observe,
     current: () => latest,
     close: () => {
@@ -484,6 +490,33 @@ export function processCustody(
   return row ? (row.row.case === "observed-active" ? "observed" : "controlled") : null;
 }
 
+/** Fresh SDK documents and the exact process attachment, never retained error-leg data. */
+export async function readMachineSession(process: {
+  pid: number;
+  processStartUtc: string;
+}): Promise<MachineSession> {
+  if (!hostMachine) throw Error("Machine census is unavailable.");
+  const machine = await hostMachine.fresh();
+  for (const key of ["sessions", "attachments", "actions"]) {
+    const leg = machine.legs[key];
+    if (!leg?.observedAtUtc || leg.error)
+      throw Error(`Machine ${key} census is unavailable: ${leg?.error ?? "unread"}`);
+  }
+  const rows =
+    machine.revit.sessions?.filter(
+      ({ row }) =>
+        (row.case === "controlled-active" || row.case === "observed-active") &&
+        row.process.pid === process.pid &&
+        row.process.processStartUtc === process.processStartUtc,
+    ) ?? [];
+  const row = rows.length === 1 ? rows[0] : undefined;
+  if (!row || !row.documents || !row.documentsLeg.observedAtUtc || row.documentsLeg.error)
+    throw Error("Machine has no fresh document census for the exact process incarnation.");
+  if (machine.revit.unclassifiedAttachments.some((attachment) => matches(attachment, process)))
+    throw Error("Machine cannot join the process to one exact bridge attachment.");
+  return row;
+}
+
 /** Whose the Revit behind one bridge session is; unproven (no census, no row) is yours. */
 export function attachmentWhose(session: string): "you" | "pea" {
   return (
@@ -500,7 +533,10 @@ function processOf(row: SessionObservation): ProcessIdentity | null {
       : null;
 }
 const processKey = (process: ProcessIdentity) => `${process.pid}:${process.processStartUtc}`;
-const matches = (attachment: AttachmentRead, process: ProcessIdentity) =>
+const matches = (
+  attachment: AttachmentRead,
+  process: Pick<ProcessIdentity, "pid" | "processStartUtc">,
+) =>
   attachment.pid === process.pid &&
   attachment.processStartUtcUnixMs !== null &&
   attachment.processStartUtcUnixMs === Date.parse(process.processStartUtc);

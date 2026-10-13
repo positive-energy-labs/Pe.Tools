@@ -7,6 +7,11 @@ import { instancesActions, instancesSessionSelection } from "@pe/agent-contracts
 import { ActionJournal } from "../src/action-journal.ts";
 import { admitInstancesAction, recoverInstancesAction } from "../src/instances-actions.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
+import { createMachine, useHostMachine, unavailableShare } from "../src/machine.ts";
+import { bindControl } from "../src/control.ts";
+import type { ThreadHead } from "@pe/agent-contracts";
+import type { SessionObservation } from "@pe/host-contracts/pe-revit-contract";
+import { unreadLeg } from "../src/update-reader.ts";
 import { crossingOf } from "./callers.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
@@ -93,6 +98,64 @@ async function setup(
   const owner = new ActionJournal(join(dir, "actions.json"));
   const peaWork = join(dir, "pea-work");
   const deps = { sdk, peaWork };
+  const census = { documents: [openId], reads: 0, fail: false };
+  const update = {
+    plan: null,
+    receipt: null,
+    requestId: null,
+    admittedPlanId: null,
+    planLeg: unreadLeg(),
+    receiptLeg: unreadLeg(),
+  };
+  const machine = createMachine({
+    grants: { grants: () => [], subscribe: () => () => {} },
+    actions: () => owner.list(),
+    host: async () => {
+      throw Error("not needed");
+    },
+    peers: async () => [],
+    years: async () => [],
+    providers: async () => ({ providers: [], access: { guarded: true } }),
+    share: unavailableShare,
+    update: {
+      current: () => update,
+      refresh: async () => update,
+      apply: async () => update,
+      automaticPending: () => false,
+    },
+    sessions: async () => {
+      census.reads++;
+      if (census.fail) throw Error("census unavailable");
+      return sessionRows.map((row) => ({
+        ...(row as SessionObservation),
+        observedAtUtc: new Date().toISOString(),
+        bridge: {
+          bridge: "ready",
+          documents: census.documents.map((openId) => ({ openId, title: openId })),
+        },
+      })) as SessionObservation[];
+    },
+    documents: async () => ({ state: "ok", documents: [] }),
+    attachments: async () => [
+      {
+        session: "bridge-dev",
+        pid: originalProcess.pid,
+        processStartUtcUnixMs: Date.parse(originalProcess.processStartUtc),
+        documents: census.documents.map((openId) => ({
+          session: "bridge-dev",
+          openId,
+          title: openId,
+        })),
+      },
+    ],
+  });
+  useHostMachine(machine);
+  bindControl({ heads: null, whose: () => "you" });
+  cleanup.push(async () => {
+    useHostMachine(undefined);
+    machine.close();
+    bindControl({ heads: null, whose: () => "you" });
+  });
   let serial = 0;
   const admit = async (
     key: string,
@@ -123,7 +186,7 @@ async function setup(
     await writeFile(path, Buffer.from(text, "utf16le"));
     return path;
   };
-  return { calls, owner, deps, admit, dir, peaWork, file };
+  return { calls, owner, deps, admit, dir, peaWork, file, census, machine };
 }
 
 async function recordPeaLaunch(owner: ActionJournal) {
@@ -148,36 +211,84 @@ const newRevit = (over: Record<string, unknown> = {}) => ({
   start: { year: "2025", owner: "you", addins: "on", ...over },
 });
 
-test.each(["stop", "close", "restart"])(
-  "agent %s on your session is human.only and never dispatches",
+function grantHead(): ThreadHead {
+  const lifetime = { session: "bridge-dev", openId };
+  return {
+    defaultTarget: { kind: "open", ref: lifetime },
+    revision: 1,
+    lastHumanMessageAt: null,
+    grant: {
+      lifetime,
+      grantedVia: "local",
+      revoked: null,
+      grantedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    },
+  };
+}
+
+test.each(["stop", "restart"])(
+  "D3 %s refuses a granted document plus an uncovered document",
   async (verb) => {
     const f = await setup(() => ({ result: { state: "ok" } }));
-    const receipt = await f.admit(
-      `instances.${verb}`,
-      {
-        session,
-        ...(verb !== "restart" ? { unsaved: "keep" } : {}),
-        ...(verb === "close"
-          ? { document: { source: "sdk", session: session.selection, openId } }
-          : {}),
-      },
-      undefined,
-      "agent",
-    );
-    expect(receipt).toMatchObject({ state: "failed", notDispatched: true });
-    expect(receipt).toHaveProperty("error", expect.stringContaining("human.only"));
+    bindControl({ heads: grantHead });
+    f.census.documents = [openId, "b".repeat(32)];
+    await expect(
+      f.admit(
+        `instances.${verb}`,
+        { session, ...(verb === "stop" ? { unsaved: "keep" } : {}) },
+        undefined,
+        "agent",
+      ),
+    ).rejects.toMatchObject({ refusal: { code: "lifecycle.ungranted-documents" } });
     expect(f.calls.every((args) => args[1] === "list")).toBe(true);
   },
 );
 
-test("a user's own background run stays you and refuses agent stop", async () => {
+test.each(["stop", "restart"])(
+  "D3 %s carries the grant when only its lifetime is present",
+  async (verb) => {
+    const f = await setup(() => ({ result: { state: "ok" } }));
+    bindControl({ heads: grantHead });
+    const row = await f.admit(
+      `instances.${verb}`,
+      { session, ...(verb === "stop" ? { unsaved: "keep" } : {}) },
+      undefined,
+      "agent",
+    );
+    expect(row).toMatchObject({
+      state: "succeeded",
+      basis: { kind: "grant", lifetime: grantHead().grant!.lifetime },
+    });
+    expect(f.census.reads).toBeGreaterThanOrEqual(2);
+  },
+);
+
+test.each(["stop", "restart"])(
+  "D3 %s carries empty-user-session only after a fresh empty census",
+  async (verb) => {
+    const f = await setup(() => ({ result: { state: "ok" } }));
+    await f.machine.refresh();
+    f.census.documents = [];
+    const row = await f.admit(
+      `instances.${verb}`,
+      { session, ...(verb === "stop" ? { unsaved: "keep" } : {}) },
+      undefined,
+      "agent",
+    );
+    expect(row).toMatchObject({ state: "succeeded", basis: { kind: "empty-user-session" } });
+    expect(f.census.reads).toBeGreaterThanOrEqual(3);
+  },
+);
+
+test("a user's own background run stays you and refuses agent stop without a grant", async () => {
   const f = await setup(
     () => ({ result: { state: "ok" } }),
     [controlledRow({ shape: shape("background") })],
   );
-  const receipt = await f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "agent");
-  expect(receipt).toMatchObject({ state: "failed", notDispatched: true });
-  expect(receipt).toHaveProperty("error", expect.stringContaining("human.only"));
+  await expect(
+    f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "agent"),
+  ).rejects.toMatchObject({ refusal: { code: "lifecycle.ungranted-documents" } });
   expect(f.calls.every((args) => args[1] === "list")).toBe(true);
 });
 
@@ -439,7 +550,7 @@ test("a person's foreground session opens the file as given, with no copy", asyn
   const f = await setup(() => ({ result: { state: "ok", openId } }));
   const source = await f.file("Mine.rvt", "Worksharing: Not enabled");
   expect(
-    (await f.admit("instances.open", { source, into: into() }, undefined, "agent")).state,
+    (await f.admit("instances.open", { source, into: into() }, undefined, "human")).state,
   ).toBe("succeeded");
   expect(f.calls.at(-1)![2]).toBe(source);
   expect(f.calls.at(-1)).not.toContain("--detach");
@@ -984,4 +1095,65 @@ test("an action whose destination is not the supplied session is refused before 
     ),
   ).rejects.toThrow("destination must match");
   expect(f.calls).toEqual([]);
+});
+
+test("open into your session remains human-only even with a grant", async () => {
+  const f = await setup(() => ({ result: { state: "ok" } }));
+  bindControl({ heads: grantHead });
+  await expect(
+    f.admit("instances.open", { source: "C:/Mine.rvt", into: into() }, undefined, "agent"),
+  ).rejects.toMatchObject({ refusal: { code: "human.only" } });
+  expect(f.calls.every((args) => args[1] === "list")).toBe(true);
+});
+
+test("close checks only its exact document even with another ungranted document open", async () => {
+  const f = await setup(() => ({ result: { state: "ok" } }));
+  bindControl({ heads: grantHead });
+  f.census.documents = [openId, "b".repeat(32)];
+  const input = {
+    session,
+    document: { source: "sdk", session: session.selection, openId },
+    unsaved: "keep",
+  };
+  expect(await f.admit("instances.close", input, undefined, "agent")).toMatchObject({
+    state: "succeeded",
+    basis: { kind: "grant", lifetime: grantHead().grant!.lifetime },
+  });
+  await expect(
+    f.admit(
+      "instances.close",
+      { ...input, document: { ...input.document, openId: "b".repeat(32) } },
+      undefined,
+      "agent",
+    ),
+  ).rejects.toMatchObject({ refusal: { code: "grant.other-lifetime" } });
+});
+
+test("a stale empty census cannot admit an agent stop", async () => {
+  const f = await setup(() => ({ result: { state: "ok" } }));
+  f.census.documents = [];
+  await f.machine.refresh();
+  f.census.fail = true;
+  await expect(
+    f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "agent"),
+  ).rejects.toMatchObject({ refusal: { code: "lifecycle.ungranted-documents" } });
+  expect(f.calls.every((args) => args[1] === "list")).toBe(true);
+});
+
+test("a document arriving after admission refuses stop at effect entry", async () => {
+  const f = await setup(() => ({ result: { state: "ok" } }));
+  f.census.documents = [];
+  const admit = f.owner.admit.bind(f.owner);
+  f.owner.admit = (...args) => {
+    f.census.documents = [openId];
+    return admit(...args);
+  };
+  expect(
+    await f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "agent"),
+  ).toMatchObject({
+    state: "failed",
+    notDispatched: true,
+    error: expect.stringContaining("lifecycle.ungranted-documents"),
+  });
+  expect(f.calls.every((args) => args[1] === "list")).toBe(true);
 });
