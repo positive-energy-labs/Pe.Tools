@@ -17,6 +17,7 @@ import type { ThreadHead } from "@pe/agent-contracts";
 import type { SessionObservation } from "@pe/host-contracts/pe-revit-contract";
 import { unreadLeg } from "../src/update-reader.ts";
 import { asCaller, crossingOf, human } from "./callers.ts";
+import { acquiredOpenIds, foldAcquisitions, planAcquisition } from "../src/acquisition.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -199,7 +200,8 @@ async function setup(
   return { calls, owner, deps, admit, dir, peaWork, file, census, machine };
 }
 
-async function recordPeaLaunch(owner: ActionJournal) {
+/** A held process acquisition, as `instances.start` with owner pea records it. */
+async function recordPeaLaunch(owner: ActionJournal, peaWork = "C:/pea-work") {
   const launch = await owner.admit(
     {
       id: "pea-launch",
@@ -210,8 +212,18 @@ async function recordPeaLaunch(owner: ActionJournal) {
       input: { year: "2025", owner: "pea", addins: "on" },
       bases: {},
     },
-    async () => null,
-    async () => startedAnswer.result,
+    async () => ({
+      target: null,
+      acquisition: planAcquisition(
+        "pea-launch",
+        peaWork,
+        { kind: "create", year: "2025" },
+        null,
+        false,
+      ),
+    }),
+    (execution) =>
+      execution.step("native", "instances.start", { argv: [] }, async () => startedAnswer.result),
   );
   await owner.wait(launch.id);
 }
@@ -506,22 +518,23 @@ test("a Pea launch into a new Revit copies the file before the Revit starts", as
   expect(f.calls.filter((argv) => argv[1] === "start")[0]).toContain("--background");
 });
 
-test("a Pea launch of a workshared model opens detached and is not copied", async () => {
+test("a Pea launch of a workshared model copies first, then opens the copy detached", async () => {
   const f = await setup(
     () => ({ result: { state: "ok", openId } }),
     [controlledRow({ id: "pea-bg", shape: shape("background") })],
   );
   await recordPeaLaunch(f.owner);
   const source = await f.file("Central.rvt", "Worksharing: Local");
+  const before = await readFile(source);
   const receipt = await f.admit("instances.open", { source, into: into("pea-bg") });
   expect(receipt.state).toBe("succeeded");
   const open = f.calls.at(-1)!;
-  expect(open[2]).toBe(source);
+  expect(open[2]!.startsWith(f.peaWork)).toBe(true);
   expect(open).toContain("--detach");
-  expect(existsSync(f.peaWork)).toBe(false);
+  expect(await readFile(source)).toEqual(before);
   expect((receipt as { result?: unknown }).result).toMatchObject({
-    opened: source,
-    copiedFrom: null,
+    opened: open[2],
+    copiedFrom: source,
     detached: true,
   });
 });
@@ -886,6 +899,72 @@ test("a Pea copy is made once: resuming a lost open reuses the frozen copy", asy
   expect((resumed as { result?: { opened?: string } }).result?.opened?.startsWith(f.peaWork)).toBe(
     true,
   );
+});
+
+test("F7: an acquisition records its paths before writing; a crash at any boundary reconciles from receipts, never guessed", async () => {
+  let opened = "";
+  const f = await setup(
+    (args) =>
+      args[0] === "session"
+        ? startedAnswer
+        : ((opened = args[2]!),
+          { result: { state: "ok", document: { openId, path: args[2], title: "Tower" } } }),
+    [],
+  );
+  const source = await f.file("Tower.rvt", "Worksharing: Not enabled");
+  const before = await readFile(source);
+  const done = await f.admit("instances.open", { source, into: newRevit({ owner: "pea" }) });
+  expect(done.state).toBe("succeeded");
+  const intent = foldAcquisitions([done])[0]!.intent;
+  // Every path the action created was frozen in its preparation before the first step ran.
+  expect(done.steps.map((step) => step.key)).toEqual([
+    "acquisition.baseline",
+    "acquisition.work",
+    "instances.open.start",
+    "instances.open",
+  ]);
+  for (const step of done.steps.filter((each) => each.kind === "file"))
+    expect((step.input as { to: string }).to.startsWith(intent.root)).toBe(true);
+  expect(opened).toBe((intent.document!.origin as { work: string }).work);
+  const certified = [{ openId, isWorkshared: false, isDetached: false }];
+  expect(
+    acquiredOpenIds(foldAcquisitions([done]), originalProcess, certified, [openId]).get(openId),
+  ).toBe(done.id);
+  const disk = async () => (await readdir(f.peaWork, { recursive: true })).sort();
+  const allocated = await disk();
+  // The host died at each boundary: the step was recorded running, its outcome never persisted
+  // (also the case "the effect landed, then persistence failed").
+  for (let k = 0; k <= done.steps.length; k++) {
+    const crashed = {
+      ...done,
+      state: "running",
+      result: undefined,
+      steps: [
+        ...done.steps.slice(0, k),
+        ...(k < done.steps.length
+          ? [{ ...done.steps[k]!, state: "running", result: undefined }]
+          : []),
+      ],
+    };
+    const path = join(f.dir, `crash-${k}.json`);
+    await writeFile(path, JSON.stringify({ version: 3, actions: [crashed] }));
+    const restarted = await new ActionJournal(path).list();
+    const [acquisition] = foldAcquisitions(restarted);
+    if (k === done.steps.length) {
+      // every effect succeeded but completion never persisted: the receipts still bind it
+      expect(acquisition).toMatchObject({ state: "held", document: { sdkOpenId: openId } });
+      continue;
+    }
+    expect(restarted[0]!.state).toBe("unknown");
+    expect(acquisition).toMatchObject({ state: "reconciling", intent });
+    expect(
+      acquiredOpenIds(foldAcquisitions(restarted), originalProcess, certified, [openId]).size,
+    ).toBe(0);
+    // Reconciling read receipts only: nothing was copied, opened or deleted on the way back up.
+    expect(await disk()).toEqual(allocated);
+  }
+  expect(await readFile(source)).toEqual(before);
+  expect(f.calls.filter((argv) => argv[1] === "open" || argv[1] === "start")).toHaveLength(2);
 });
 
 test.each(["running", "missing-response", "wrong-request", "wrong-key", "conflicting-state"])(

@@ -12,6 +12,10 @@ import {
   type Basis,
 } from "@pe/agent-contracts";
 import type { ActionStep } from "@pe/agent-contracts";
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { constants, copyFile, mkdir, rename } from "node:fs/promises";
+import { dirname, extname, isAbsolute } from "node:path";
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import {
@@ -42,7 +46,13 @@ import { BridgeError } from "./bridge.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
 import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
-import { peaSourceOf, type PeaSource } from "./pea-source.ts";
+import { worksharingHint } from "./pea-source.ts";
+import {
+  foldAcquisitions,
+  heldProcess,
+  planAcquisition,
+  type AcquisitionIntent,
+} from "./acquisition.ts";
 import { productPeaWorkPath } from "./product-paths.ts";
 import { resolveStartProject, runPeRevitCli } from "./session-route.ts";
 import { admitCrossing, live, Refused, requireHuman } from "./control.ts";
@@ -121,9 +131,24 @@ type Target = {
 };
 type Prepared = {
   target: Target | null;
-  /** A launch that is Pea's: the path it opens and whether it opens detached. */
-  pea: PeaSource | null;
+  /** Frozen before any allocation: every path this acquisition may create (acquisition.ts). */
+  acquisition: AcquisitionIntent | null;
 };
+
+/** One recorded file step: saved bytes to a reserved path, never over a file, then its hash. */
+async function copyReserved({ from, to }: { from: string; to: string }) {
+  await mkdir(dirname(to), { recursive: true });
+  // A half-written copy never has the name an open would take.
+  await copyFile(from, `${to}.part`, constants.COPYFILE_EXCL);
+  await rename(`${to}.part`, to);
+  const hash = createHash("sha256");
+  let bytes = 0;
+  for await (const chunk of createReadStream(to)) {
+    hash.update(chunk as Buffer);
+    bytes += (chunk as Buffer).length;
+  }
+  return { sha256: hash.digest("hex"), bytes };
+}
 
 type RunningRow = Extract<SessionObservation, { case: "controlled-active" | "observed-active" }>;
 
@@ -367,20 +392,52 @@ export async function admitInstancesAction(
           : launch && "session" in launch.into
             ? await readTarget(launch.into.session, undefined, read)
             : null);
-      const whose = target ? whoseOf(target, await owner.list()) : null;
-      const peaLaunch =
-        launch !== null &&
-        ("start" in launch.into ? launch.into.start.owner === "pea" : whose === "pea");
-      let pea: PeaSource | null = null;
+      // An acquisition is planned, never allocated, here: a Pea background start, or a launch
+      // into one, or into a Revit an earlier acquisition holds. A reload is never one.
+      const held = target
+        ? heldProcess(foldAcquisitions(await owner.list()), target.process)
+        : null;
+      const process: AcquisitionIntent["process"] | null = start
+        ? start.owner === "pea"
+          ? { kind: "create", year: start.year }
+          : null
+        : held && !launch?.reload
+          ? { kind: "existing", process: target!.process, acquisition: held.id }
+          : null;
+      if (!process) return { target, acquisition: null };
       try {
-        pea = peaLaunch ? await peaSourceOf(launch!, deps.peaWork ?? productPeaWorkPath()) : null;
+        // The interim hint only picks --detach; native facts certify independence (pea-source.ts).
+        const hint =
+          launch &&
+          !launch.template &&
+          isAbsolute(launch.source) &&
+          extname(launch.source).toLowerCase() === ".rvt"
+            ? await worksharingHint(launch.source)
+            : false;
+        if (hint === null)
+          throw Error(
+            `Could not read the worksharing state of ${launch!.source}; open it with the person's own session instead.`,
+          );
+        const peaWork = deps.peaWork ?? productPeaWorkPath();
+        return {
+          target,
+          acquisition: planAcquisition(admission.id, peaWork, process, launch, hint),
+        };
       } catch (error) {
         throw refuse(error instanceof Error ? error.message : String(error));
       }
-      return { target, pea };
     },
     async (execution) => {
-      const { target, pea } = execution.prepared as Prepared;
+      const { target, acquisition } = execution.prepared as Prepared;
+      const origin = acquisition?.document?.origin ?? null;
+      // Allocation is recorded before it happens: baseline, then the work copy Revit opens.
+      if (origin?.kind === "file-copy") {
+        for (const [key, from, to] of [
+          ["acquisition.baseline", origin.source, origin.baseline],
+          ["acquisition.work", origin.baseline, origin.work],
+        ] as const)
+          await execution.step("file", key, { from, to }, () => copyReserved({ from, to }));
+      }
       if (key === "instances.dialogs") {
         const dismiss: StepInput = {
           argv: sessionDialogsArgv({ hwnd: control!.hwnd, ...target!.selection, dismiss: true }),
@@ -453,9 +510,16 @@ export async function admitInstancesAction(
         spec: InstancesLaunch,
       ) =>
         docOpenArgv({
-          ...(spec.template ? { template: spec.source } : { source: pea?.opened ?? spec.source }),
+          ...(spec.template
+            ? { template: spec.source }
+            : { source: origin?.kind === "file-copy" ? origin.work : spec.source }),
           ...session,
-          detach: pea?.detach ?? spec.detach,
+          detach:
+            origin?.kind === "file-copy"
+              ? origin.detach
+              : origin?.kind === "detached"
+                ? true
+                : spec.detach,
           upgrade: spec.upgrade,
           links: spec.links,
           reload: spec.reload,
@@ -551,9 +615,13 @@ export async function admitInstancesAction(
         );
       }
       return {
-        opened: pea?.opened ?? launch.source,
-        copiedFrom: pea?.copiedFrom ?? null,
-        detached: pea?.detach ?? launch.detach ?? false,
+        acquisition: acquisition?.id ?? null,
+        opened: origin?.kind === "file-copy" ? origin.work : launch.source,
+        copiedFrom: origin?.kind === "file-copy" ? origin.source : null,
+        detached:
+          origin?.kind === "file-copy"
+            ? origin.detach
+            : origin?.kind === "detached" || (launch.detach ?? false),
         ...(session !== undefined ? { session } : {}),
         document,
       };

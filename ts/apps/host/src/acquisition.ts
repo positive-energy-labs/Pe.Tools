@@ -12,7 +12,8 @@ import type { ActionReceipt, InstancesLaunch } from "@pe/agent-contracts";
  * is a label derived here; write authority is per document and minted only by `acquiredOpenIds`.
  */
 
-const processSchema = z.strictObject({ pid: z.number().int(), processStartUtc: z.string() });
+// Parsed, not strict: an SDK incarnation also names its executable; only pid/start bind.
+const processSchema = z.object({ pid: z.number().int(), processStartUtc: z.string() });
 export type AcquiredProcess = z.infer<typeof processSchema>;
 
 const originSchema = z.discriminatedUnion("kind", [
@@ -79,7 +80,7 @@ export type Acquisition = {
 export const acquisitionRoot = (peaWork: string, id: string) =>
   join(peaWork, createHash("sha256").update(id).digest("hex").slice(0, 32));
 
-const isCloud = (source: string) => /^(cld:\/\/|cloud:)/i.test(source);
+export const isCloud = (source: string) => /^(cld:\/\/|cloud:)/i.test(source);
 const resultName = (source: string) => {
   const ext = extname(source).toLowerCase();
   const stem = basename(source, extname(source)).replace(/[<>:"/\\|?*{}]/g, "_") || "document";
