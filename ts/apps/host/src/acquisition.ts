@@ -60,6 +60,8 @@ export type Acquisition = {
   readonly files: readonly string[];
   readonly baseline: Artifact | null;
   readonly handover: z.infer<typeof handedSchema> | null;
+  /** Files a Save As moved its document to, each from a receipted `acquisition.artifact` step. */
+  readonly artifacts: readonly Artifact[];
 };
 
 /** A deterministic exclusive root: action ids are caller text, never a path segment. */
@@ -127,6 +129,7 @@ const handedSchema = z.object({
   work: artifactSchema.nullable(),
 });
 const forAcquisition = z.object({ acquisition: z.string() });
+const artifactStep = z.object({ acquisition: z.string(), to: z.string() });
 
 const samePath = (a: string, b: string) =>
   win32.normalize(a).toLowerCase() === win32.normalize(b).toLowerCase();
@@ -192,7 +195,30 @@ export function foldAcquisitions(receipts: readonly ActionReceipt[]): Acquisitio
             ? "held"
             : "released";
     if (state === "released" && !cleanups.length) return [];
-    return [{ id: row.id, intent, state, process: created, document, files, baseline, handover }];
+    const artifacts = receipts.flatMap((each) =>
+      each.key !== "instances.save"
+        ? []
+        : each.steps.flatMap((step) =>
+            step.key === "acquisition.artifact" &&
+            step.state === "succeeded" &&
+            artifactStep.safeParse(step.input).data?.acquisition === row.id
+              ? (artifactSchema.safeParse(step.result).data ?? [])
+              : [],
+          ),
+    );
+    return [
+      {
+        id: row.id,
+        intent,
+        state,
+        process: created,
+        document,
+        files,
+        baseline,
+        handover,
+        artifacts,
+      },
+    ];
   });
 }
 

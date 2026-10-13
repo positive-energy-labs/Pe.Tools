@@ -1110,6 +1110,7 @@ async function acquisitionSetup(detached = false) {
       if (args[1] === "open")
         return { result: { state: "ok", document: { openId, path: args[2], title: "Tower" } } };
       if (args[1] === "save") {
+        if (!args.includes("--out")) return { result: { state: "ok" } };
         await mkdir(dirname(flag(args, "--out")!), { recursive: true });
         await writeFile(flag(args, "--out")!, "saved result", { flag: "wx" });
         return { result: { state: "ok" } };
@@ -1216,6 +1217,52 @@ test("handover saves the acquired copy to its create-only result with a diff pla
       "agent",
     ),
   ).rejects.toMatchObject({ refusal: { code: "acquisition.unproven" } });
+});
+
+/**
+ * R6 (acceptance 2026-10-13): a Save As moves the open document to its new file; the lifetime
+ * stays the acquisition's, and the new file is a receipted artifact of it that cleanup keeps.
+ */
+test("a Save As of an acquired document records its new file as the acquisition's artifact", async () => {
+  const { f, acquired } = await acquisitionSetup();
+  const out = join(f.dir, "Tower-saveas.rvt");
+  const saved = await f.admit(
+    "instances.save",
+    { session, document: sdkDocument, to: { kind: "save-as", out } },
+    undefined,
+    "agent",
+  );
+  expect(saved.state).toBe("succeeded");
+  expect(flag(f.calls.find((argv) => argv[1] === "save")!, "--out")).toBe(out);
+  expect(saved.steps.at(-1)).toMatchObject({
+    kind: "file",
+    key: "acquisition.artifact",
+    state: "succeeded",
+    input: { acquisition: acquired.id, to: out },
+    result: { path: out, bytes: "saved result".length },
+  });
+  const [acquisition] = foldAcquisitions(await f.owner.list());
+  expect(acquisition).toMatchObject({
+    state: "held",
+    document: { sdkOpenId: openId },
+    artifacts: [{ path: out, bytes: "saved result".length }],
+  });
+  // A save in place moves nothing: no artifact step.
+  const inPlace = await f.admit(
+    "instances.save",
+    { session, document: sdkDocument, to: { kind: "self" } },
+    undefined,
+    "agent",
+  );
+  expect(inPlace.steps.map((step) => step.key)).toEqual(["instances.save"]);
+  const cleaned = await f.admit(
+    "instances.cleanup",
+    { acquisition: acquired.id, unsaved: "discard" },
+    undefined,
+    "agent",
+  );
+  expect(cleaned.state).toBe("succeeded");
+  expect(existsSync(out)).toBe(true);
 });
 
 test("a detached handover preserves worksets", async () => {
@@ -1634,7 +1681,7 @@ const sdkDocument = { source: "sdk", session: session.selection, openId } as con
 test.each([
   [{ kind: "self" }, undefined, []],
   [
-    { kind: "copy", out: "C:/out/Tower-copy.rvt", worksets: "strip" },
+    { kind: "save-as", out: "C:/out/Tower-copy.rvt", worksets: "strip" },
     undefined,
     ["--out", "C:/out/Tower-copy.rvt", "--worksets", "strip"],
   ],
@@ -1660,12 +1707,14 @@ test.each([
   expect(flag(save, "--request-id")).toBe(row.steps.at(-1)!.id);
 });
 
-test("save refuses states the SDK would refuse: comment without central, worksets without a copy", () => {
+test("save refuses states the SDK would refuse: comment without central, worksets without a Save As", () => {
   const input = instancesActions["instances.save"].input;
   for (const to of [
     { kind: "self", comment: "x" },
     { kind: "central", out: "C:/x.rvt" },
     { kind: "self", worksets: "strip" },
+    // R6: the SDK's out is a Save As that retargets the open document; it is never called a copy.
+    { kind: "copy", out: "C:/x.rvt" },
   ])
     expect(input.safeParse({ session, document: sdkDocument, to }).success).toBe(false);
 });

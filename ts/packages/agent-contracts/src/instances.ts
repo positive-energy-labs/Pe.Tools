@@ -65,11 +65,15 @@ const sessionInput = z.strictObject({
 const unsaved = z.enum(["keep", "discard"]);
 /** Workshared ownership on the way out: all returns every borrow to central, none keeps them. */
 const release = z.enum(["none", "all"]);
-/** Where a save writes: in place, a new copy (never over a file), or a synchronize with central. */
+/** Where a save writes: in place, a Save As to a new file, or a synchronize with central. */
 const saveTo = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("self") }),
   z.strictObject({
-    kind: z.literal("copy"),
+    /**
+     * Revit's Save As: the open document becomes `out` (create-only, never over a file) and stays
+     * the same lifetime; the file it came from keeps its last save.
+     */
+    kind: z.literal("save-as"),
     out: z.string().trim().min(1),
     /** From a workshared model: preserve keeps a detached central, strip an independent copy. */
     worksets: z.enum(["preserve", "strip"]).optional(),
@@ -129,7 +133,7 @@ export const instancesActions = {
     input: sessionInput.extend({ hwnd: z.string().trim().min(1) }),
   },
   "instances.save": {
-    says: "Save the explicitly supplied document lifetime in place, as a new copy, or by synchronizing with central, optionally returning its workshared ownership.",
+    says: "Save the explicitly supplied document lifetime in place, by Save As to a new file (the open document then lives at that file and the old file keeps its last save), or by synchronizing with central, optionally returning its workshared ownership. A Save As of an acquired document records the new file as that acquisition's artifact; cleanup keeps it.",
     dirties: ["sdk"],
     needs: "document",
     actor: "any",

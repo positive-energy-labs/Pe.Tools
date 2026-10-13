@@ -124,7 +124,7 @@ type ControlInput = {
   hwnd?: string;
   to?:
     | { kind: "self" }
-    | { kind: "copy"; out: string; worksets?: "preserve" | "strip" }
+    | { kind: "save-as"; out: string; worksets?: "preserve" | "strip" }
     | { kind: "central"; comment?: string };
 };
 /** The SDK row an action acts on, resolved once at preparation and frozen with the attempt. */
@@ -138,6 +138,8 @@ type Prepared = {
   target: Target | null;
   /** Frozen before any allocation: every path this acquisition may create (acquisition.ts). */
   acquisition: AcquisitionIntent | null;
+  /** A Save As of this held acquisition's document: its new file becomes the acquisition's artifact. */
+  artifactOf?: string;
 };
 
 async function hashFile(path: string) {
@@ -438,9 +440,19 @@ export async function admitInstancesAction(
           : launch && "session" in launch.into
             ? await readTarget(launch.into.session, undefined, read)
             : null);
-      const held = target
-        ? heldProcess(foldAcquisitions(await owner.list()), target.process)
-        : null;
+      const acquisitions = target ? foldAcquisitions(await owner.list()) : [];
+      const held = target ? heldProcess(acquisitions, target.process) : null;
+      const savedAs =
+        control?.to?.kind === "save-as"
+          ? acquisitions.find(
+              (each) =>
+                each.state === "held" &&
+                each.document?.sdkOpenId === control.document?.openId &&
+                each.document?.process.pid === target!.process.pid &&
+                each.document.process.processStartUtc === target!.process.processStartUtc,
+            )?.id
+          : undefined;
+      if (savedAs) return { target, acquisition: null, artifactOf: savedAs };
       const process: AcquisitionIntent["process"] | null = start
         ? start.owner === "pea"
           ? { kind: "create", year: start.year }
@@ -472,7 +484,7 @@ export async function admitInstancesAction(
       }
     },
     async (execution) => {
-      const { target, acquisition } = execution.prepared as Prepared;
+      const { target, acquisition, artifactOf } = execution.prepared as Prepared;
       const origin = acquisition?.document?.origin ?? null;
       // Allocation is recorded before it happens: baseline, then the work copy Revit opens.
       if (origin?.kind === "file-copy") {
@@ -633,7 +645,7 @@ export async function admitInstancesAction(
             return docSaveArgv({
               doc: control!.document!.openId,
               ...chosen,
-              ...(to.kind === "copy" ? { out: to.out, worksets: to.worksets } : {}),
+              ...(to.kind === "save-as" ? { out: to.out, worksets: to.worksets } : {}),
               ...(to.kind === "central" ? { central: true, comment: to.comment } : {}),
               release: control!.release,
               requestId,
@@ -666,6 +678,19 @@ export async function admitInstancesAction(
         await recheck(target);
         return dispatch(stepInput, requestId, read);
       });
+      if (artifactOf && control?.to?.kind === "save-as") {
+        // Save As keeps the lifetime and moves it to a new file: a receipted artifact, never a guess.
+        const out = control.to.out;
+        await execution.step(
+          "file",
+          "acquisition.artifact",
+          { acquisition: artifactOf, to: out },
+          async () => ({
+            path: out,
+            ...(await hashFile(out)),
+          }),
+        );
+      }
       if (!launch) return native;
       // A launch into a new Revit opens its source as its own receipted op in the session it just
       // started: `doc open --start` cannot name the session it would launch.
