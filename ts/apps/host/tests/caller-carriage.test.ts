@@ -4,10 +4,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Deferred, Effect, Layer } from "effect";
 import { expect, test, vi } from "vite-plus/test";
-import {
-  HOST_CONTEXT_HEADER,
-  HOST_RUNTIME_SERVICE_HEADER,
-} from "@pe/host-contracts/contracts";
+import { HOST_CONTEXT_HEADER, HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
@@ -133,7 +130,12 @@ test("/call attributes a view-image capture to the caller it was carried by", as
         processStartUtcUnixMs: 1000,
         state: {
           openDocuments: [
-            { openId: "open-a", address: "C:/HVAC.rvt", title: "HVAC.rvt", isFamilyDocument: false },
+            {
+              openId: "open-a",
+              address: "C:/HVAC.rvt",
+              title: "HVAC.rvt",
+              isFamilyDocument: false,
+            },
           ],
         },
       },
@@ -145,7 +147,9 @@ test("/call attributes a view-image capture to the caller it was carried by", as
         return key === "host.ops.catalog"
           ? {
               value: {
-                operations: [{ key: "revit.context.view-image", intent: "Read", needs: "document" }],
+                operations: [
+                  { key: "revit.context.view-image", intent: "Read", needs: "document" },
+                ],
               },
               target: null,
             }
