@@ -1,10 +1,10 @@
 /* pe.js — a page's doors into Revit. One script tag, one global:
  *
  *   <script src="/pages/pe.js"></script>
- *   await pe.target();                                   // which Revit session and document the page talks to
+ *   await pe.target();                                   // the document this page's binding names: { session, openId, title }
  *   await pe.find("show elements");                      // rank the catalog by words → [{ key, intent, description }]
- *   await pe.read("revit.context.summary");              // run a read; the answer is the op's response
- *   await pe.do("revit.context.show-elements", { elementIds: [1234] });   // run a mutation; waits until it settles
+ *   await pe.read("revit.context.summary");              // run a read on the bound document; the answer is the op's response
+ *   await pe.do("revit.context.show-elements", { elementIds: [1234] });   // run a mutation as this page; waits until it settles
  *   await pe.script("checks/census.csx");                // run C# in Revit: a source string, or a .cs/.csx path beside the page
  *   await pe.state(kernel);                              // share a kit kernel's event log with every copy and every agent
  *   pe.describe(() => `# ${kernel.state.title}`);        // what the page says, as markdown, kept beside the snapshot for agents
@@ -12,19 +12,17 @@
  *   await pe.reading("checks/census.csx", run);          // one reading: { source, at, rows } with rows = what `run()` answered
  *   await pe.diff([1234], ["Mark"], run);                // read the parameters, run, read again: the rows that changed
  *
- * `find`, `read` and `do` are the same words and keys as Pea's `pe_find`, `pe_read` and `pe_do`, over the same
- * endpoints an agent uses by hand (`/ops`, `/call`, `/actions`). The script only adds what every page gets wrong
- * first time: the runtime identity, the target headers, the read-versus-write door, and the shared log.
+ * `find`, `read` and `do` are the same words and keys as Pea's `pe_find`, `pe_read` and `pe_do`. The host knows which
+ * page is calling from the page's own path (`pe.page` is the key it minted) and which document from the page's
+ * binding, set with the chip in the corner (Bind… opens the picker in the app). A page never names its own origin or
+ * target. Reads run on the bound document; a write runs as this page under the binding: a thread binding writes
+ * with that thread's rw grant, a pinned document only when it is Pea's own. Anything the host refuses is thrown with
+ * the host's words and shown across the top of the page.
  *
  * The host refuses a browser request that does not name the runtime that served the page. Every door here names
  * it; a page's own request to its host goes through `pe.fetch(url, init)` (same signature as `fetch`).
  */
 (() => {
-  const H = {
-    session: "x-pe-bridge-session-id",
-    doc: "x-pe-open-document-id",
-    origin: "x-pe-origin",
-  };
   // The serving host writes `{ header, query, service }` here (pages-route), so the page names the runtime that
   // served it, like the web app's `hostFetch`: a host that later takes over the port refuses this copy.
   const RUNTIME = /*pe:runtime*/ null;
@@ -32,9 +30,17 @@
   const pe = {
     /** The page's slug, from its URL. */
     slug: (location.pathname.match(/^\/pages\/([^/]+)/) || [])[1] || "",
-    /** The chosen document `{ session, openId, title }`, after `pe.target()`. */
+    /** The page key the host minted into `<meta name="pe-page">`: `page:@pages/<slug>` or `page:@<pod>/pages/<page>`. */
+    page:
+      (typeof document !== "undefined" &&
+        document.querySelector?.('meta[name="pe-page"]')?.getAttribute("content")) ||
+      null,
+    /** The bound document `{ session, openId, title }`, after `pe.target()`. */
     doc: null,
   };
+  const door = (verb) => `/pages/${pe.slug}/${verb}`;
+  /** The bind chip, drawn once the page has a body (below). */
+  let chip = null;
   /** `fetch` that names this page's runtime on same-origin requests; the host refuses a browser request without it. */
   pe.fetch = (input, init = {}) => {
     const url = new URL(
@@ -52,20 +58,45 @@
     url.searchParams.set(RUNTIME.query, RUNTIME.service);
     return url.href;
   };
-  const headers = () => ({
-    "content-type": "application/json",
-    [H.origin]: `page:${pe.slug}`,
-    ...(pe.doc ? { [H.session]: pe.doc.session, [H.doc]: pe.doc.openId } : {}),
-  });
-  // The host's own refusal, word for word, is the error message.
+  const headers = () => ({ "content-type": "application/json" });
+  /** The host's refusal across the top of the page, word for word; one banner, the latest refusal. */
+  const banner = (message) => {
+    if (typeof document === "undefined" || !document.body) return;
+    let note = document.getElementById("pe-refusal");
+    if (!note) {
+      note = document.createElement("div");
+      note.id = "pe-refusal";
+      note.setAttribute("role", "alert");
+      note.style.cssText =
+        "position:sticky;top:0;z-index:2147483647;padding:8px 12px;background:#7f1d1d;color:#fff;font:13px/1.4 system-ui,sans-serif;white-space:pre-wrap";
+      document.body.prepend(note);
+    }
+    note.textContent = message;
+  };
+  /**
+   * The host's own refusal, word for word, is the error message. A door refusal (`refusal.code`, e.g. `grant.required`,
+   * `page.unbound`) or a binding that names no one document (`resolution`, `choose: ambiguous`) is also shown on the
+   * page and carried on the error as `code`, `refusal` and `resolution`.
+   */
   const fail = async (r, body) => {
     const b = body === undefined ? await r.text().catch(() => "") : body;
     let m = typeof b === "string" ? b : "";
+    let j = null;
     try {
-      const j = typeof b === "string" ? JSON.parse(b) : b;
+      j = typeof b === "string" ? JSON.parse(b) : b;
       m = j.message || j.error || j.title || m;
     } catch {}
-    throw new Error(`${r.status} ${r.statusText}${m ? `: ${m}` : ""}`);
+    const error = new Error(`${r.status} ${r.statusText}${m ? `: ${m}` : ""}`);
+    if (j && (j.refusal || j.resolution)) {
+      Object.assign(error, {
+        name: "PeRefusal",
+        code: j.refusal ? j.refusal.code : j.resolution.reason || j.resolution.kind,
+        refusal: j.refusal || null,
+        resolution: j.resolution || null,
+      });
+      banner(m);
+    }
+    throw error;
   };
   // A capture's URL rides a response header (`x-pe-capture-url`); it is copied onto the answer so a page can `<img src>` it.
   const json = async (r) => {
@@ -79,81 +110,30 @@
   const post = (path, body) =>
     pe.fetch(path, { method: "POST", headers: headers(), body: JSON.stringify(body) });
 
-  /**
-   * A selector the page asked for that names nothing: thrown, and shown on the page, never swapped for another
-   * target. `code` uses the host resolver's words (`session-gone`, `document-closed`, `ambiguous`); `selector` is
-   * what failed and `available` what would have matched.
-   */
-  const refuse = (code, selector, available) => {
-    const error = new Error(
-      `pe.target refused ${selector} (${code}); available: ${available.join(", ") || "none"}`,
-    );
-    Object.assign(error, { name: "PeTargetRefusal", code, selector, available });
-    if (typeof document !== "undefined" && document.body) {
-      let note = document.getElementById("pe-refusal");
-      if (!note) {
-        note = document.createElement("div");
-        note.id = "pe-refusal";
-        note.setAttribute("role", "alert");
-        note.style.cssText =
-          "position:sticky;top:0;z-index:2147483647;padding:8px 12px;background:#7f1d1d;color:#fff;font:13px/1.4 system-ui,sans-serif;white-space:pre-wrap";
-        document.body.prepend(note);
-      }
-      note.textContent = error.message;
-    }
-    throw error;
+  /** The host's reading of this page's default slot: binding, resolution, document, and what a write would do. */
+  const readTarget = async () => {
+    const reading = await json(await pe.fetch(door("target")));
+    pe.doc = reading.document;
+    chip?.show(reading);
+    return reading;
   };
 
   /**
-   * Choose the Revit session and document. `?session=<id>`, `?doc=<openId>` or `?title=<part of the title>` on the
-   * page URL pins one, and a pin that matches nothing refuses (`refuse` above). With no pin: the only connected
-   * session, else the one with an active document, and its active document. Sets `pe.doc`.
+   * The document this page's binding names, as the host resolves it now; sets `pe.doc`. A binding that names no one
+   * document (two Revits and no binding, a pinned file open twice or closed, a thread pointed nowhere) is thrown as a
+   * `PeTargetRefusal` with the resolver's word as `code` (`ambiguous`, `document-closed`, `session-gone`, `missing`)
+   * and shown on the page; nothing is ever picked for it. Bind the page from the chip.
    */
-  pe.target = async (want = Object.fromEntries(new URLSearchParams(location.search))) => {
-    const { sessions } = await json(
-      await post("/call", { key: "bridge.sessions.list", request: {} }),
+  pe.target = async () => {
+    const reading = await readTarget();
+    if (reading.resolution.kind === "resolved") return pe.doc;
+    const code = reading.resolution.reason || reading.resolution.kind;
+    const error = new Error(
+      `pe.target: this page's binding names no one document (${code}). Bind it from the chip.`,
     );
-    let s;
-    if (want.session) {
-      s = sessions.find((x) => x.sessionId === want.session);
-      if (!s)
-        refuse(
-          "session-gone",
-          `session=${want.session}`,
-          sessions.map((x) => `session=${x.sessionId}`),
-        );
-    } else {
-      s =
-        sessions.length === 1
-          ? sessions[0]
-          : sessions.find((x) => (x.openDocuments || []).some((d) => d.isActive));
-      if (!s)
-        throw new Error(
-          sessions.length
-            ? `${sessions.length} Revit sessions are connected; add ?session=<id> to the page URL (${sessions.map((x) => x.sessionId).join(", ")})`
-            : "no Revit session is connected to the host (pe-revit session start, or open Revit with Pe.Tools installed)",
-        );
-    }
-    const docs = s.openDocuments || [];
-    const named = (x) => `doc=${x.openId} (${x.title})`;
-    let d;
-    if (want.doc) {
-      d = docs.find((x) => x.openId === want.doc);
-      if (!d) refuse("document-closed", `doc=${want.doc}`, docs.map(named));
-    } else if (want.title) {
-      const part = want.title.toLowerCase();
-      const hits = docs.filter((x) => x.title.toLowerCase().includes(part));
-      if (hits.length !== 1)
-        refuse(
-          hits.length ? "ambiguous" : "document-closed",
-          `title=${want.title}`,
-          (hits.length ? hits : docs).map(named),
-        );
-      d = hits[0];
-    } else d = docs.find((x) => x.isActive) || docs[0];
-    if (!d) throw new Error(`Revit session ${s.sessionId} has no open document`);
-    pe.doc = { session: s.sessionId, openId: d.openId, title: d.title };
-    return pe.doc;
+    Object.assign(error, { name: "PeTargetRefusal", code, resolution: reading.resolution });
+    banner(error.message);
+    throw error;
   };
 
   /** Rank the catalog by words, like `pe_find`. No words lists everything. */
@@ -178,37 +158,26 @@
       .map(({ score: _score, ...op }) => op);
   };
 
-  /** Run a read through `/call`. A mutation is refused here by the host; use `pe.do`. */
-  pe.read = async (key, request = {}) => {
-    if (!pe.doc) await pe.target();
-    return json(await post("/call", { key, request }));
-  };
+  /** Run a read on the bound document (`/pages/<slug>/call`). A mutation is refused here by the host; use `pe.do`. */
+  pe.read = async (key, request = {}) => json(await post(door("call"), { key, request }));
 
   /**
-   * Run any op. A read answers at once through `/call`; a mutation is admitted through `/actions` as a human act
-   * and this waits until its receipt settles. The answer is the op's response either way.
+   * Run any op. A read answers at once on the bound document; a mutation runs as this page through
+   * `/pages/<slug>/act`, under the binding (the bound thread's rw grant, or Pea's own document for a pin), and this
+   * waits until its receipt settles. The answer is the op's response either way.
    */
   pe.do = async (key, input = {}) => {
-    if (!pe.doc) await pe.target();
-    const r = await post("/call", { key, request: input });
+    const r = await post(door("call"), { key, request: input });
     if (r.ok) return json(r);
-    const refusal = await r.json().catch(() => null);
-    if (!(r.status === 409 && refusal && refusal.notDispatched)) return fail(r, refusal ?? "");
-    const id = crypto.randomUUID();
-    let row = await json(
-      await post("/actions", {
-        id,
-        kind: "operation",
-        key,
-        destination: { kind: "document", ref: { session: pe.doc.session, openId: pe.doc.openId } },
-        input,
-      }),
-    );
+    const answer = await r.json().catch(() => null);
+    // Only "this is a mutation" moves on to act; a binding that names no one document stops here.
+    if (!(r.status === 409 && answer && answer.notDispatched && !answer.resolution))
+      return fail(r, answer ?? "");
+    let row = await json(await post(door("act"), { key, input }));
+    const id = row.id;
     while (row.state === "running") {
       await new Promise((ok) => setTimeout(ok, 250));
-      [row = row] = await json(
-        await pe.fetch(`/actions?id=${encodeURIComponent(id)}`, { headers: headers() }),
-      );
+      [row = row] = await json(await pe.fetch(`/actions?id=${encodeURIComponent(id)}`));
     }
     if (row.state !== "succeeded")
       throw new Error(`${key} ${row.state}: ${row.message || row.error || ""}`.trim());
@@ -434,6 +403,79 @@
     // ponytail: undo stays local to one copy; a shared undo is an event of its own when a page needs it.
     return k;
   };
+
+  /**
+   * The bind chip: host-owned, drawn in its own shadow root in the corner of every page (page CSS never reaches it),
+   * styled by pe.css. It shows what the binding names and what a write would do (`rw · 42m` counted from the host's
+   * clock, `pea`, or `read` with the host's reason), and Bind… opens the picker in the app, where a person binds.
+   */
+  chip = (() => {
+    if (!pe.slug || typeof document === "undefined" || !document.createElement) return null;
+    const host = document.createElement("pe-bind");
+    if (typeof host.attachShadow !== "function") return null;
+    const root = host.attachShadow({ mode: "open" });
+    root.innerHTML =
+      '<link rel="stylesheet" href="/pages/pe.css"><div class="pe-bind"><span class="pe-bind-write"></span><span class="pe-bind-what"></span><button type="button">Bind…</button></div>';
+    const face = root.querySelector(".pe-bind");
+    const [write, what] = face.querySelectorAll("span");
+    root.querySelector("button").onclick = () =>
+      window.open(`/bind?page=${encodeURIComponent(pe.slug)}`, "pe-bind");
+    const mount = () => document.body.append(host);
+    if (document.body) mount();
+    else document.addEventListener("DOMContentLoaded", mount);
+    let reading = null;
+    let readAt = 0;
+    const draw = () => {
+      if (!reading) return;
+      const { binding, resolution, document: doc } = reading;
+      const w = reading.write;
+      const left =
+        w && w.kind === "rw"
+          ? Date.parse(w.expiresAt) - Date.parse(reading.hostNow) - (performance.now() - readAt)
+          : 0;
+      const mark = !w
+        ? "—"
+        : w.kind === "rw"
+          ? left > 0
+            ? `rw · ${Math.ceil(left / 60000)}m`
+            : "read"
+          : w.kind;
+      face.dataset.write = mark.startsWith("rw") ? "rw" : mark;
+      face.dataset.state = resolution.kind;
+      write.textContent = mark;
+      write.title = w && w.kind === "read" ? w.refusal.reason : "";
+      const named =
+        binding.kind === "thread"
+          ? `thread ${binding.thread.slice(0, 8)}`
+          : binding.kind === "pinned"
+            ? "pinned"
+            : "unbound";
+      const subject =
+        resolution.kind === "resolved"
+          ? doc
+            ? doc.title
+            : ""
+          : resolution.kind === "choose"
+            ? `choose: ${resolution.reason}`
+            : resolution.kind;
+      what.textContent = subject ? `${named} · ${subject}` : named;
+    };
+    setInterval(draw, 15000);
+    // The binding moves in another tab (the picker) and a thread's head moves in chat: read it again while seen.
+    const fresh = () => {
+      if (document.visibilityState !== "hidden") readTarget().catch(() => {});
+    };
+    setInterval(fresh, 5000);
+    window.addEventListener("focus", fresh);
+    queueMicrotask(fresh);
+    return {
+      show(next) {
+        reading = next;
+        readAt = performance.now();
+        draw();
+      },
+    };
+  })();
 
   // A tab never learns its page file changed, so a stale copy keeps running old code: kaitpw pressed pre-fix
   // buttons for two hours while the fix was on disk (2026-10-05). Re-read the page's own file and reload on change.

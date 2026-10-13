@@ -146,6 +146,10 @@ describe("pages", () => {
     const css = await (await fetch("/pages/pe.css")).text();
     expect(css).toContain("--pe-page:");
     expect(css).toContain("button:hover");
+    // The bind chip lives in pe.js's shadow root: the tokens reach it on :host, its look is here.
+    expect(css).toContain(":root, :host {");
+    expect(css).toContain(".pe-bind[data-write=\"rw\"]");
+    expect(text).toContain('attachShadow({ mode: "open" })');
   });
 
   it("serves the Revit facsimile as a classic script that defines rv", async () => {
@@ -607,18 +611,22 @@ ${source}`),
   });
 
   describe("pe.js as a browser runs it", () => {
-    type Sent = { url: string; headers: Record<string, string> };
-    const sessions = [
-      {
-        sessionId: "s1",
-        openDocuments: [
-          { openId: "d1", title: "Chadds MEP", isActive: true },
-          { openId: "d2", title: "Chadds Arch", isActive: false },
-        ],
+    type Sent = { url: string; method: string; headers: Record<string, string>; body: unknown };
+    const resolved = {
+      page: "page:@pages/todo",
+      slot: "default",
+      binding: { kind: "thread", thread: "t1-abcdef-123" },
+      resolution: {
+        kind: "resolved",
+        target: { kind: "document", ref: { session: "s1", openId: "d1" } },
       },
-    ];
-    /** The served bytes in a page at `/pages/todo/?<query>`, with fetch and EventSource recorded. */
-    async function page(query = "") {
+      document: { session: "s1", openId: "d1", title: "Chadds MEP" },
+      write: { kind: "rw", thread: "t1-abcdef-123", expiresAt: "2026-10-12T13:00:00.000Z" },
+      hostNow: "2026-10-12T12:00:00.000Z",
+    };
+    type Answer = (url: URL, init: RequestInit) => Response | undefined;
+    /** The served bytes in a page at `/pages/todo/`, with fetch and EventSource recorded and the host's answers. */
+    async function page(answer: Answer = () => undefined) {
       const { fetch } = await pagesRoot();
       const source = await (await fetch("/pages/pe.js")).text();
       const sent: Sent[] = [];
@@ -627,7 +635,7 @@ ${source}`),
         prepend: (n) => body.children.unshift(n),
       };
       const nodes = new Map<string, Record<string, unknown>>();
-      const location = new URL(`http://127.0.0.1:5180/pages/todo/${query ? `?${query}` : ""}`);
+      const location = new URL("http://127.0.0.1:5180/pages/todo/");
       const window: Record<string, unknown> = {};
       runInNewContext(source, {
         window,
@@ -645,6 +653,8 @@ ${source}`),
         clearInterval: () => {},
         document: {
           body,
+          querySelector: (selector: string) =>
+            selector === 'meta[name="pe-page"]' ? { getAttribute: () => "page:@pages/todo" } : null,
           getElementById: (id: string) => nodes.get(id) ?? null,
           createElement: () => {
             const node: Record<string, unknown> = {
@@ -659,22 +669,40 @@ ${source}`),
           const url = new URL(String(input), location);
           sent.push({
             url: url.pathname + url.search,
+            method: init.method ?? "GET",
             headers: Object.fromEntries(new Headers(init.headers)),
+            body: typeof init.body === "string" ? JSON.parse(init.body) : undefined,
           });
-          if (url.pathname === "/call") return Response.json({ sessions });
+          const mine = answer(url, init);
+          if (mine) return mine;
+          if (url.pathname === "/pages/todo/target") return Response.json(resolved);
+          if (url.pathname === "/pages/todo/call") return Response.json({ ok: true });
+          if (url.pathname === "/ops") return Response.json({ operations: [] });
           if (url.pathname.endsWith("/state"))
             return Response.json({ seq: 0, events: [], snapshot: null, text: null });
           return new Response("<p>page</p>");
         },
         EventSource: class {
           constructor(url: string) {
-            sent.push({ url: new URL(url).pathname + new URL(url).search, headers: {} });
+            sent.push({
+              url: new URL(url).pathname + new URL(url).search,
+              method: "GET",
+              headers: {},
+              body: undefined,
+            });
           }
           addEventListener() {}
           close() {}
         },
       });
-      return { pe: window.pe as Record<string, (...a: unknown[]) => Promise<unknown>>, sent, body };
+      return {
+        pe: window.pe as Record<string, (...a: unknown[]) => Promise<unknown>> & {
+          page: string | null;
+          doc: unknown;
+        },
+        sent,
+        body,
+      };
     }
     const options: IdentityOptions = {
       port: () => 5180,
@@ -699,19 +727,30 @@ ${source}`),
       "sec-fetch-dest": "empty",
     };
 
-    it("names the serving runtime on every door, so the identity gate admits the page", async () => {
+    it("names the serving runtime on every door and never its own origin or target", async () => {
       const { pe, sent } = await page();
+      expect(pe.page).toBe("page:@pages/todo");
       await pe.target!();
-      await pe.find!("x").catch(() => undefined);
+      await pe.find!("x");
+      await pe.read!("revit.context.summary");
       await pe.state!({ base: {}, state: {}, replay() {}, fire() {} });
       const paths = sent.map((r) => r.url);
       expect(paths).toEqual(
-        expect.arrayContaining(["/pages/todo/", "/call", "/ops?session=s1", "/pages/todo/state"]),
+        expect.arrayContaining([
+          "/pages/todo/",
+          "/pages/todo/target",
+          "/ops?session=s1",
+          "/pages/todo/call",
+          "/pages/todo/state",
+        ]),
       );
+      expect(paths).not.toContain("/call");
       expect(paths.some((p) => p.startsWith("/pages/todo/events?after=0&peRuntimeService="))).toBe(
         true,
       );
       for (const request of sent) {
+        expect(Object.keys(request.headers)).not.toEqual(expect.arrayContaining(["x-pe-origin"]));
+        expect(request.headers["x-pe-bridge-session-id"], request.url).toBeUndefined();
         expect(
           await readRequestIdentity({ ...browser, ...request.headers }, request.url, options),
           request.url,
@@ -728,35 +767,65 @@ ${source}`),
           request.url,
         ).toMatchObject({ refusal: { code: "runtime.owner-missing" } });
       }
-      expect(sent.find((r) => r.url === "/call")!.headers[HOST_RUNTIME_SERVICE_HEADER]).toBe(
-        hostOwnership.serviceName,
-      );
     });
 
-    it("keeps the implicit default, and refuses a pin that names nothing instead of retargeting", async () => {
+    it("pe.target is the host's resolution; a binding that names nothing refuses on the page, never a pick", async () => {
       expect(await (await page()).pe.target!()).toEqual({
         session: "s1",
         openId: "d1",
         title: "Chadds MEP",
       });
-      expect(await (await page("title=arch")).pe.target!()).toMatchObject({ openId: "d2" });
-      const cases: [string, string, string][] = [
-        ["session=gone", "session-gone", "session=s1"],
-        ["doc=closed", "document-closed", "doc=d1 (Chadds MEP), doc=d2 (Chadds Arch)"],
-        ["title=hvac", "document-closed", "doc=d1 (Chadds MEP)"],
-        ["title=chadds", "ambiguous", "doc=d2 (Chadds Arch)"],
-      ];
-      for (const [query, code, available] of cases) {
-        const { pe, body } = await page(query);
+      for (const reason of ["ambiguous", "document-closed", "session-gone", "missing"]) {
+        const { pe, body } = await page((url) =>
+          url.pathname === "/pages/todo/target"
+            ? Response.json({
+                ...resolved,
+                resolution: { kind: "choose", reason },
+                document: null,
+                write: null,
+              })
+            : undefined,
+        );
         const refusal = await pe.target!().then(
           () => null,
-          (error: Error & { code: string; selector: string }) => error,
+          (error: Error & { code: string }) => error,
         );
-        expect(refusal, query).toMatchObject({ name: "PeTargetRefusal", code, selector: query });
-        expect(refusal!.message).toContain(available);
+        expect(refusal, reason).toMatchObject({ name: "PeTargetRefusal", code: reason });
         expect(pe.doc).toBeNull();
         expect((body.children[0] as { textContent: string }).textContent).toBe(refusal!.message);
       }
+    });
+
+    it("pe.do acts through the page door and shows the host's refusal word for word", async () => {
+      const said =
+        "Refused at /pages/todo/act: this Page has no target. Bind it to a thread or pin a document from the chip.";
+      const { pe, sent, body } = await page((url) =>
+        url.pathname === "/pages/todo/call"
+          ? Response.json({ error: "mutation", notDispatched: true }, { status: 409 })
+          : url.pathname === "/pages/todo/act"
+            ? Response.json(
+                {
+                  error: said,
+                  message: said,
+                  refusal: { code: "page.unbound", door: "/pages/todo/act", reason: said },
+                  notDispatched: true,
+                },
+                { status: 403 },
+              )
+            : undefined,
+      );
+      const refusal = await pe.do!("revit.context.lens", { elementIds: [1] }).then(
+        () => null,
+        (error: Error & { code: string }) => error,
+      );
+      expect(refusal).toMatchObject({ name: "PeRefusal", code: "page.unbound" });
+      expect(refusal!.message).toContain(said);
+      expect((body.children[0] as { textContent: string }).textContent).toBe(said);
+      expect(sent.find((r) => r.url === "/pages/todo/act")!.body).toEqual({
+        key: "revit.context.lens",
+        input: { elementIds: [1] },
+      });
+      expect(sent.some((r) => r.url === "/actions")).toBe(false);
     });
   });
 });

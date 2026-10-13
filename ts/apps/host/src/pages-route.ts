@@ -110,6 +110,12 @@ ${source.replace(exports, "globalThis.rv = {$1};")}
 `;
 };
 const asset = (name: string) => readFileSync(assetPath(name), "utf8");
+/** The tokens also land on `:host`, so the bind chip's shadow root (pe.js) reads them on any page. */
+const chipTokens = (base: string) => {
+  if (!/^:root \{/m.test(base))
+    throw Error("base.css must open its tokens with one `:root {` line");
+  return base.replace(/^:root \{/m, ":root, :host {");
+};
 
 /**
  * The doors carry the runtime that served them: the request identity gate refuses a browser API
@@ -743,7 +749,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
       });
     if (slug === "pe.css")
       return new Response(
-        `${asset("base.css")}
+        `${chipTokens(asset("base.css"))}
 ${asset("pe.css")}`,
         {
           headers: { "content-type": MIME[".css"]!, "cache-control": "no-cache" },

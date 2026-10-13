@@ -111,3 +111,45 @@ hr {
 [hidden] {
   display: none !important;
 }
+
+/* The bind chip. pe.js draws it in its own shadow root on every page, so a page's CSS never reaches it and this
+ * file reaches it whether or not the page links pe.css (the host serves the tokens on :host too). */
+:host {
+  all: initial;
+  position: fixed;
+  right: var(--gutter, 8px);
+  bottom: var(--gutter, 8px);
+  z-index: 2147483646;
+}
+.pe-bind {
+  display: flex;
+  align-items: center;
+  gap: var(--gutter, 8px);
+  height: var(--control-h, 24px);
+  padding: 0 2px 0 var(--item-pad-x, 8px);
+  background: var(--pe-artifact);
+  border: 1px solid var(--pe-line);
+  border-radius: var(--radius, 2px);
+  color: var(--pe-ink-2);
+  font: var(--type-small-size, 12px) / var(--type-small-line-height, 20px)
+    var(--font-body, system-ui);
+}
+.pe-bind-write {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--pe-ink-mute);
+}
+.pe-bind[data-write="rw"] .pe-bind-write {
+  color: var(--pe-commit);
+}
+.pe-bind[data-write="pea"] .pe-bind-write {
+  color: var(--pe-pea);
+}
+.pe-bind[data-state="choose"] .pe-bind-what {
+  color: var(--pe-alarm);
+}
+.pe-bind button {
+  height: calc(var(--control-h, 24px) - 6px);
+  padding: 0 var(--control-pad-x, 6px);
+  font-size: inherit;
+  line-height: 1;
+}
