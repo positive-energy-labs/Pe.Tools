@@ -470,9 +470,10 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   the event/receipt its turn observed. Overlaying the current live `route.slice` onto an old
   card (today's `tool-names.tsx` behavior via `sessionState={{}}` at `aui.tsx`) is a defect —
   a receipt that changes after the fact is not a receipt. Falls to the chat reducer demiurge.
-- 2026-09-01 — APPROVAL SETTLEMENT is server-only (grill verdict kaitpw): the patched Mastra
-  settlement (`@mastra__core` `respondToToolApproval` wasArmed hunk) is the one authority; the
-  client never clears the gate itself — it renders in-flight until `display_state_changed`.
+- 2026-09-01 — APPROVAL SETTLEMENT is server-only (grill verdict kaitpw): the host is the one
+  authority; the client never clears the gate itself — it renders in-flight until the host's
+  `permission_resolved` event (`harness/threads.ts`). Superseded by ADR 0015 (2026-10-12): the
+  patched agent-runtime settlement and `display_state_changed` are deleted.
 - 2026-09-03 — CHAT PRIMITIVE (2026-09-01) is SUPERSEDED (verdict kaitpw): it named a mechanism
   (`{threadId, epoch, sequence}`, one reducer) and that mechanism was built and deleted in two
   days. The chat transport verdicts live in `docs/features/agent/LEDGER.md` (CHAT TRANSPORT S1).

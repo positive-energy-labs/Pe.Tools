@@ -668,11 +668,10 @@ scratch reference `packages/scratch-state-bakeoff/src/3-effect-atom.tsx`):
 
 ---
 
-## 5. AI note (we keep Mastra)
+## 5. AI note (we do not adopt it)
 
 Effect ships `effect/unstable/ai/*` (`LanguageModel`, `Tool`, `Toolkit`, `Chat`, `McpServer`, provider
-packages `@effect/ai-*`). **We are NOT adopting it** — Mastra stays the agent framework (see PLAN.md +
-MASTRA-DELTA.md). Mentioned only so you recognize it and don't accidentally wire it in. If a task ever needs
+packages `@effect/ai-*`). **We are NOT adopting it** — the lab harness is the agent (ADR 0015). Mentioned only so you recognize it and don't accidentally wire it in. If a task ever needs
 an Effect-native MCP server surface, `effect/unstable/ai/McpServer` exists — but that's out of scope for the
 rework.
 
