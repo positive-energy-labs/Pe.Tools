@@ -1,13 +1,15 @@
 /**
- * The per-Revit lifecycle verbs, one component for the Running list and the machine drawer: hr
- * (only when the SDK says `shape.reload === "hot"`), Open here, and Stop. Every verb is an
- * `instances.*` semantic action bound to the instances Work revision; the SDK resolves the Revit
- * from the selection (pid for an icon-started Revit, id otherwise).
+ * The per-Revit lifecycle, one hook for the Running desk and the machine drawer: `useLifecycle`
+ * returns the verbs (hr only when the SDK says `shape.reload === "hot"`, Open here, Stop) and the
+ * `ArmingStrip` the armed verb opens, as two slots a `SessionRow` or `SessionCard` places. Every
+ * verb is an `instances.*` semantic action bound to the instances Work revision; the SDK resolves
+ * the Revit from the selection (pid for an icon-started Revit, id otherwise).
  *
  * Stop always passes `--unsaved keep` for a lay user; discard is offered only for a checkout
  * session (host ledger 2026-10-09 ruling 9). hr restarts and discards, so it arms first too.
  */
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { Square } from "lucide-react";
 import {
   instancesActions,
   instancesRouteState,
@@ -17,17 +19,22 @@ import {
   type WorkKey,
 } from "@pe/agent-contracts";
 
+import { ArmingStrip } from "#/components/lang/arming-strip";
 import { Button } from "#/components/lang/button";
 import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
 import { PidChip } from "#/components/lang/process";
+import type { SessionFacts } from "#/components/lang/session";
 import {
+  custodyOf,
   executionRefusal,
+  nameOf,
   phaseOf,
   pidOf,
   processOf,
   selectionOf,
   selectorWords,
   unsavedOf,
+  PHASE_TONE,
 } from "#/machine/session";
 import { useAction } from "#/readings";
 import { useRouteWork } from "#/route/route-work";
@@ -38,7 +45,7 @@ export interface WorkBasis {
   readonly revision: number;
 }
 
-export const INSTANCES_WORK: WorkKey = {
+const INSTANCES_WORK: WorkKey = {
   binding: "workspace",
   route: "instances",
   target: null,
@@ -50,6 +57,21 @@ export function useInstancesBasis(enabled: boolean): WorkBasis | null {
   const work = useRouteWork(instancesRouteState, enabled ? INSTANCES_WORK : null);
   return work.revision !== null ? { key: INSTANCES_WORK, revision: work.revision } : null;
 }
+
+/** The kit's reading of one census row, derived here once for both densities. */
+export const factsOf = (session: MachineSession): SessionFacts => {
+  const row = session.row;
+  const phase = phaseOf(row);
+  return {
+    year: row.year,
+    name: row.case === "observed-active" ? null : nameOf(row),
+    pid: pidOf(row),
+    phase,
+    phaseTone: PHASE_TONE[phase],
+    custody: custodyOf(row),
+    dialog: row.case === "controlled-active" && Boolean(row.dialogs),
+  };
+};
 
 type Command = "open" | "restart" | "stop";
 
@@ -84,7 +106,7 @@ export async function runLifecycle(
 
 type Armed = "stop" | "hr" | null;
 
-export function RevitControls({
+export function useLifecycle({
   session,
   basis,
   refusal,
@@ -93,13 +115,13 @@ export function RevitControls({
 }: {
   session: MachineSession;
   basis: WorkBasis | null;
-  /** False where hr is not offered (the drawer and the tray keep it on the Running list). */
-  hr?: boolean;
   /** Present, every verb refuses with it (a fixture, no Work yet). */
   refusal?: string | null;
   /** Open here: make this Revit the launcher's target. Absent outside the Open route. */
   onHere?: () => void;
-}) {
+  /** False where hr is not offered (the drawer and the tray keep it on the Running list). */
+  hr?: boolean;
+}): { verbs: ReactNode; strip: ReactNode } {
   const [armed, setArmed] = useState<Armed>(null);
   const [outcome, setOutcome] = useState<{ kind: OutcomeKind; label: string } | null>(null);
   const row = session.row;
@@ -129,142 +151,119 @@ export function RevitControls({
   );
   const busy = action.isPending;
   const run = (command: Command, policy?: "keep" | "discard") => action.mutate({ command, policy });
+  /** One sentence per verb: its reason when it can run, its refusal when it cannot. */
+  const gate = (says: string, inert = false) => ({
+    reason: blocked ?? says,
+    refusal: blocked ?? (inert ? says : null),
+  });
+  const selector = selectorWords(row);
+  const stopLabel = phase === "unresponsive" ? "force stop" : "stop";
+  const hereSays =
+    ownershipRefusal ??
+    (phase === "ready"
+      ? "make this Revit the launcher's target"
+      : `this Revit is ${phase}; it opens nothing until it answers`);
+  const pid = pidOf(row);
+
+  const verbs = (
+    <>
+      {hr && row.shape.reload === "hot" ? (
+        <Button
+          label="hr"
+          kind="framed"
+          pressed={armed === "hr"}
+          {...gate(
+            `pe-revit session hr ${selector} --restart: restart this development Revit and reopen its documents; unsaved edits are discarded`,
+            busy,
+          )}
+          onClick={() => setArmed(armed === "hr" ? null : "hr")}
+        >
+          hr
+        </Button>
+      ) : null}
+      {onHere ? (
+        <Button
+          label="open here"
+          kind="framed"
+          reason={hereSays}
+          refusal={ownershipRefusal !== null || phase !== "ready" ? hereSays : null}
+          onClick={onHere}
+        >
+          open here
+        </Button>
+      ) : null}
+      <Button
+        label={stopLabel}
+        kind="framed"
+        pressed={armed === "stop"}
+        busy={busy && armed === "stop"}
+        {...gate(`pe-revit session stop ${selector}`, busy)}
+        onClick={() => setArmed(armed === "stop" ? null : "stop")}
+      >
+        {stopLabel}
+      </Button>
+    </>
+  );
+
   const said =
     session.documents === null
       ? "Its documents are unknown until it answers."
       : unsaved.length
         ? `Unsaved: ${unsaved.map((document) => document.title ?? document.path).join(", ")}.`
         : "Nothing is unsaved.";
-  return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <span className="flex flex-wrap items-center justify-end gap-1">
-        {hr && row.shape.reload === "hot" ? (
-          <Button
-            label="hr"
-            kind="framed"
-            reason={
-              blocked ??
-              `pe-revit session hr ${selectorWords(row)} --restart: restart this development Revit and reopen its documents; unsaved edits are discarded`
-            }
-            refusal={
-              blocked !== null || busy
-                ? (blocked ??
-                  `pe-revit session hr ${selectorWords(row)} --restart: restart this development Revit and reopen its documents; unsaved edits are discarded`)
-                : null
-            }
-            onClick={() => setArmed(armed === "hr" ? null : "hr")}
-          >
-            hr
-          </Button>
-        ) : null}
-        {onHere ? (
-          <Button
-            label="open here"
-            kind="framed"
-            reason={
-              ownershipRefusal ??
-              (phase === "ready"
-                ? "make this Revit the launcher's target"
-                : `this Revit is ${phase}; it opens nothing until it answers`)
-            }
-            refusal={
-              ownershipRefusal !== null || phase !== "ready"
-                ? (ownershipRefusal ??
-                  (phase === "ready"
-                    ? "make this Revit the launcher's target"
-                    : `this Revit is ${phase}; it opens nothing until it answers`))
-                : null
-            }
-            onClick={onHere}
-          >
-            open here
-          </Button>
-        ) : null}
-        <Button
-          label={phase === "unresponsive" ? "force stop" : "stop"}
-          kind="framed"
-          reason={blocked ?? `pe-revit session stop ${selectorWords(row)}`}
-          refusal={
-            blocked !== null || busy
-              ? (blocked ?? `pe-revit session stop ${selectorWords(row)}`)
-              : null
-          }
-          busy={busy && armed === "stop"}
-          onClick={() => setArmed(armed === "stop" ? null : "stop")}
-        >
-          {phase === "unresponsive" ? "force stop" : "stop"}
-        </Button>
-      </span>
-      {armed ? (
-        <div data-surface="recess" className="flex flex-col gap-1 px-2 py-1.5">
-          <span className="flex flex-wrap items-center gap-1.5">
-            {armed === "stop" ? "Stop" : "Restart"} Revit {row.year}
-            {pidOf(row) ? <PidChip pid={pidOf(row)!} /> : null}
-            <span className="text-ink-2">{said}</span>
-          </span>
-          {armed === "stop" ? (
-            <span className="text-ink-2">
-              Stop keeps work: unsaved documents are saved first, a cloud model syncs first, and
-              stop refuses if it cannot.
-              {row.case === "observed-active" ? " Stopping adopts this Revit by its pid." : ""}
-            </span>
-          ) : (
-            <span data-tone="caution">hr restarts this Revit; unsaved edits are discarded.</span>
-          )}
-          <span className="flex flex-wrap items-center gap-1.5">
-            {armed === "stop" ? (
-              <>
-                <Button
-                  kind="commit"
-                  label="stop, keep work"
-                  reason={`pe-revit session stop ${selectorWords(row)} --unsaved keep`}
-                  busy={busy}
-                  refusal={
-                    blocked !== null
-                      ? `pe-revit session stop ${selectorWords(row)} --unsaved keep`
-                      : null
-                  }
-                  onClick={() => run("stop", "keep")}
-                >
-                  stop, keep work
-                </Button>
-                {checkout ? (
-                  <Button
-                    label="stop, discard edits"
-                    kind="framed"
-                    reason={`pe-revit session stop ${selectorWords(row)} --unsaved discard; offered only for a checkout session`}
-                    refusal={
-                      blocked !== null || busy
-                        ? `pe-revit session stop ${selectorWords(row)} --unsaved discard; offered only for a checkout session`
-                        : null
-                    }
-                    onClick={() => run("stop", "discard")}
-                  >
-                    stop, discard edits
-                  </Button>
-                ) : null}
-              </>
-            ) : (
+  const target = `Revit ${row.year} ${nameOf(row)}`;
+  const facts = pid ? <PidChip pid={pid} /> : null;
+  const strip = (
+    <>
+      {armed === "stop" ? (
+        <ArmingStrip
+          verb={`${stopLabel}, keep work`}
+          target={target}
+          facts={facts}
+          icon={Square}
+          says={`${said} Stop keeps work: unsaved documents are saved first, a cloud model syncs first, and stop refuses if it cannot.${
+            row.case === "observed-active" ? " Stopping adopts this Revit by its pid." : ""
+          }`}
+          state={{ phase: "arming" }}
+          busy={busy}
+          refusal={blocked}
+          onCommit={() => run("stop", "keep")}
+          onCancel={() => setArmed(null)}
+          alternatives={
+            checkout ? (
               <Button
-                kind="commit"
-                label="restart"
-                reason={`pe-revit session hr ${selectorWords(row)} --restart`}
-                busy={busy}
-                refusal={
-                  blocked !== null ? `pe-revit session hr ${selectorWords(row)} --restart` : null
-                }
-                onClick={() => run("restart")}
+                label="stop, discard edits"
+                kind="framed"
+                {...gate(
+                  `pe-revit session stop ${selector} --unsaved discard; offered only for a checkout session`,
+                  busy,
+                )}
+                onClick={() => run("stop", "discard")}
               >
-                restart
+                stop, discard edits
               </Button>
-            )}
-            <Button label="cancel" kind="framed" reason="disarm" onClick={() => setArmed(null)}>
-              cancel
-            </Button>
-          </span>
-        </div>
+            ) : null
+          }
+        />
+      ) : armed === "hr" ? (
+        <ArmingStrip
+          verb="restart"
+          target={target}
+          facts={facts}
+          says={
+            <span data-tone="caution">
+              {said} hr restarts this Revit and reopens its documents; unsaved edits are discarded.
+            </span>
+          }
+          state={{ phase: "arming" }}
+          busy={busy}
+          refusal={blocked}
+          onCommit={() => run("restart")}
+          onCancel={() => setArmed(null)}
+        />
       ) : null}
       {outcome ? <OutcomeLine kind={outcome.kind} label={outcome.label} /> : null}
-    </div>
+    </>
   );
+  return { verbs, strip };
 }

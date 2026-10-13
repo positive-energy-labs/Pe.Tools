@@ -4,12 +4,16 @@
  * value, each offered in `ListPopup` with counts over the rows in scope (ruling 26). A free word
  * searches every searchable field and narrows while it is typed. The query text stays canonical:
  * a chip is a word of `state.query`, a sort chip is an entry of `state.sorts`.
+ *
+ * With a `command`, an arrow (`→` or `->`) ends the query and opens the caller's vocabulary: its
+ * chips follow the arrow chip, its tokens are offered for the word being typed, each complete word
+ * (a space, Tab, or a paste) goes through its token, and Enter on an empty word runs the command.
  */
 import { createContext, useEffect, useState, type ReactNode } from "react";
 
 import { NarrowChip } from "#/components/lang/chip";
 import { ListPopup } from "#/components/lang/list-popup";
-import type { QueryVocabulary, TableState } from "#/components/master-table/model";
+import type { QueryCommand, QueryVocabulary, TableState } from "#/components/master-table/model";
 import {
   QUERY_OPS,
   opSaid,
@@ -34,6 +38,22 @@ const join = (...words: string[]) => words.filter(Boolean).join(" ");
 const rowsSaid = (count: number) => `${count} row${count === 1 ? "" : "s"}`;
 
 const SAYS = "A word of the query, ANDed with every other chip. Click to edit it in the box.";
+const ARROW = /→|->/;
+
+/** The token a complete word (or words) is: an exact label first, else the one label it begins. */
+function tokenOf(words: readonly string[], command: QueryCommand) {
+  for (let take = Math.min(3, words.length); take >= 1; take--) {
+    const said = words.slice(0, take).join(" ").toLowerCase();
+    const offered = command.tokens(said);
+    const exact = offered.find((each) => each.label.toLowerCase() === said);
+    if (exact) return { token: exact, take };
+    if (take === 1) {
+      const begun = offered.filter((each) => each.label.toLowerCase().startsWith(said));
+      if (begun.length === 1) return { token: begun[0]!, take };
+    }
+  }
+  return null;
+}
 
 function chipOf(clause: QueryClause, { fields, rules }: QueryVocabulary) {
   const not = clause.not ? "not " : "";
@@ -66,6 +86,7 @@ export function QueryBox({
   onDraft,
   onInput,
   placeholder,
+  command,
   children,
 }: {
   vocabulary: QueryVocabulary;
@@ -76,6 +97,8 @@ export function QueryBox({
   onDraft: (draft: string) => void;
   onInput: (input: HTMLInputElement | null) => void;
   placeholder?: string;
+  /** The second vocabulary after `→`. */
+  command?: QueryCommand;
   /** Route-owned narrowings, drawn as chips ahead of the query's own. */
   children?: ReactNode;
 }) {
@@ -88,6 +111,23 @@ export function QueryBox({
   useEffect(() => {
     if (input && document.activeElement === input) setOpen(true);
   }, [input, draft]);
+  const armed = command?.armed === true;
+  // Typing resets the cursor to the top hit (or, after the arrow, to none).
+  useEffect(() => setCursor(null), [draft]);
+  // After the arrow, each complete word goes through its token, one word per render, so a pasted
+  // "2025 detach" lands as two chips with the second read against the state the first made.
+  useEffect(() => {
+    if (!command?.armed || !/\s/.test(draft)) return;
+    const words = draft.trim().split(/\s+/).filter(Boolean);
+    const done = /\s$/.test(draft) ? words.length : words.length - 1;
+    if (done < 1) return;
+    const hit = tokenOf(words.slice(0, done), command);
+    if (!hit) return;
+    hit.token.take();
+    onDraft(
+      words.slice(hit.take).join(" ") + (/\s$/.test(draft) && words.length > hit.take ? " " : ""),
+    );
+  }, [command, draft, onDraft]);
   const { fields, rules } = vocabulary;
   const named = (label: string) =>
     fields.find((each) => each.kind && each.label.toLowerCase() === label.toLowerCase());
@@ -103,7 +143,7 @@ export function QueryBox({
   const livens = (text: string) => readClause(text).kind === "word" && !naming(text);
   const words = queryWords(state.query);
   // A free draft narrows live as the query's last word; every other word is a chip.
-  const live = draft !== "" && livens(draft) && words.at(-1) === draft;
+  const live = !armed && draft !== "" && livens(draft) && words.at(-1) === draft;
   const committed = live ? words.slice(0, -1) : words;
   const base = committed.join(" ");
   const write = (query: string) => {
@@ -118,6 +158,16 @@ export function QueryBox({
     setEditing(null);
     write(join(base, text));
   };
+  /** The arrow typed or pasted: the words before it are the query's, the rest is the command's. */
+  const arm = (value: string) => {
+    const at = value.search(ARROW);
+    const left = value.slice(0, at).trim();
+    const right = value.slice(at).replace(ARROW, "").trimStart();
+    setEditing(null);
+    write(join(base, ...queryWords(left)));
+    command!.onArmed(true);
+    onDraft(right);
+  };
 
   const neg = draft.startsWith("!") ? "!" : "";
   const clause = readClause(draft);
@@ -125,7 +175,18 @@ export function QueryBox({
   const bare = draft.slice(neg.length).replace(/^"|"$/g, "");
   const exact = clause.kind === "field" ? undefined : named(bare);
   let picks: Pick[];
-  if (clause.kind === "field" && field?.kind) {
+  if (armed) {
+    picks = command!.tokens(draft.trim().toLowerCase()).map((token) => ({
+      key: `token:${token.key}`,
+      label: token.label,
+      hint: token.hint ?? "",
+      take: () => {
+        token.take();
+        setCursor(null);
+        onDraft("");
+      },
+    }));
+  } else if (clause.kind === "field" && field?.kind) {
     const kind = field.kind;
     const typed = clause.value.trim();
     const token = (value: string) => `${neg}${quoted(field.label)}${clause.op}${quoted(value)}`;
@@ -213,6 +274,9 @@ export function QueryBox({
     ];
   }
   const sortLabel = (key: string) => fields.find((each) => each.sort === key)?.label ?? key;
+  // Enter on an empty word after the arrow runs the command, unless the cursor was moved onto a token.
+  const cursored = picks.some((each) => each.key === cursor);
+  const runs = armed && draft === "" && !cursored;
 
   return (
     <div
@@ -250,6 +314,24 @@ export function QueryBox({
           title="A sort, applied in chip order; removing it keeps the others."
         />
       ))}
+      {armed ? (
+        <NarrowChip
+          label="→"
+          onRemove={() => command!.onArmed(false)}
+          title={`${command!.says}. Removing the arrow drops the command and keeps the query.`}
+        />
+      ) : null}
+      {armed
+        ? command!.chips.map((chip) => (
+            <NarrowChip
+              key={chip.key}
+              label={chip.label}
+              detail={chip.detail}
+              onRemove={chip.onRemove}
+              title={chip.title}
+            />
+          ))
+        : null}
       <input
         ref={(element) => {
           setInput(element);
@@ -269,11 +351,19 @@ export function QueryBox({
         autoComplete="off"
         className="t-small face-mono h-(--item-h) min-w-40 flex-1 bg-transparent outline-none placeholder:text-ink-2"
         value={draft}
-        placeholder={placeholder ?? "search any field, or type a field name"}
-        title="Words search every field (4 finds the number 4, not 14). A field name starts a step-by-step condition or sort; ! negates."
+        placeholder={
+          armed ? command!.placeholder : (placeholder ?? "search any field, or type a field name")
+        }
+        title={
+          command
+            ? "Words search every field; a field name starts a condition; ! negates. An arrow (→ or ->) ends the query and names what to do with the rows it keeps."
+            : "Words search every field (4 finds the number 4, not 14). A field name starts a step-by-step condition or sort; ! negates."
+        }
         onChange={(event) => {
           const value = event.target.value;
           setOpen(true);
+          if (armed) return onDraft(value);
+          if (command && ARROW.test(value)) return arm(value);
           const quoting = value.split('"').length % 2 === 0;
           // "Room Na" is still naming a field across its space: it stays one draft.
           if (quoting || !/\s/.test(value) || (!/[~=<>]/.test(value) && naming(value)))
@@ -287,9 +377,21 @@ export function QueryBox({
         onClick={() => setOpen(true)}
         onBlur={() => setOpen(false)}
         onKeyDown={(event) => {
+          if (event.key === "Enter" && runs) {
+            event.preventDefault();
+            return command!.onCommit();
+          }
           if (event.key !== "Backspace" || draft !== "") return;
           event.preventDefault();
           // Backspace on an empty box takes the last chip back into the box, as text.
+          if (armed) {
+            const last = command!.chips.at(-1);
+            if (last) {
+              last.onRemove();
+              onDraft(last.label);
+            } else command!.onArmed(false);
+            return;
+          }
           const last = committed.at(-1);
           if (last) type(last, committed.slice(0, -1).join(" "));
           else if (state.sorts.length) onStateChange({ ...state, sorts: state.sorts.slice(0, -1) });
@@ -303,16 +405,22 @@ export function QueryBox({
         onOpenChange={setOpen}
         query={draft}
         aria-label="query suggestions"
+        autoCursor={!runs}
         items={picks}
         keyOf={(entry) => entry.key}
         labelOf={(entry) => entry.label}
         filter="none"
         empty="no suggestions"
         maxHeight="14rem"
-        // Escape cancels the draft through the list's one door (MAP ruling 24).
-        onEscape={() => (editing ? commit(editing) : type(""))}
-        // Enter takes the highlighted suggestion, else the top one, at every step.
-        cursor={picks.some((each) => each.key === cursor) ? cursor : (picks[0]?.key ?? null)}
+        // Escape cancels the draft through the list's one door (MAP ruling 24); after the arrow an
+        // empty draft's Escape drops the command.
+        onEscape={() => {
+          if (armed) return draft === "" ? command!.onArmed(false) : onDraft("");
+          return editing ? commit(editing) : type("");
+        }}
+        // Enter takes the highlighted suggestion, else the top one, at every step; after the arrow
+        // an empty word has no top one, so Enter runs the command.
+        cursor={cursored ? cursor : runs ? null : (picks[0]?.key ?? null)}
         onCursorChange={setCursor}
         // Tab completes to the first suggestion; the typed row is what Enter already keeps.
         onTab={() => {

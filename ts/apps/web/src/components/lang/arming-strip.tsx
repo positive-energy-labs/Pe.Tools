@@ -1,9 +1,12 @@
 /**
  * The ceremony surface for a write that leaves the page. It carries state, so it draws its own
- * `ArtifactFrame` (do not wrap it). The reason is supplied before the verb arms and stays visible;
- * commit is the only filled blue.
+ * `ArtifactFrame` (do not wrap it). With `onReasonChange` the reason is required before the verb
+ * arms and stays visible; without it the strip is armed by being shown (a stop, a restart) and
+ * `says` states the consequence. Commit is the only filled blue.
  */
-import { RefreshCw, Upload } from "lucide-react";
+import { RefreshCw, Upload, type LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
+
 import { tv } from "#/lib/tv";
 
 import { ArtifactFrame } from "./artifact-frame";
@@ -22,6 +25,7 @@ export const armingStripRecipe = tv({
     input:
       "w-full border-0 border-l border-line-2 bg-on py-0.5 pr-0 pl-2 t-small text-ink italic outline-none placeholder:text-ink-mute",
     refusal: "m-0 max-w-[72ch] t-small",
+    says: "m-0 max-w-[72ch] t-small text-ink-2",
     controls: "flex flex-wrap items-center gap-2",
     caveat: "t-small t-upper tabular-nums",
   },
@@ -44,24 +48,37 @@ export type ArmingState =
   /** The plan no longer matches the model. The only way forward is a fresh plan. */
   | { phase: "refused"; refusal: string; onReplan: () => void };
 
-interface ArmingStripProps {
+type Reason =
+  /** Required before the verb arms; empty means unarmed. Stays visible and editable after. */
+  | { reason: string; onReasonChange: (reason: string) => void }
+  /** No reason to type: the strip is armed by being shown. */
+  | { reason?: undefined; onReasonChange?: undefined };
+
+type ArmingStripProps = Reason & {
   /** The verb being armed, e.g. "apply to Revit". Shown, and used as the commit label. */
   verb: string;
   /** What the write addresses, e.g. "Overhead Coiling Door 421 · 3 types". */
   target: string;
   /** Parameters this write will touch, counted from the plan. */
-  count: number;
+  count?: number;
   /** The plan this write was made against — the hash a refusal will cite. */
-  planHash: string;
-  /** Required before the verb arms; empty means unarmed. Stays visible and editable after. */
-  reason: string;
-  onReasonChange: (reason: string) => void;
+  planHash?: string;
+  /** Other machine facts beside the target (a pid). */
+  facts?: ReactNode;
+  /** What the verb will do, said before it is pressed (what is unsaved, what is discarded). */
+  says?: ReactNode;
+  icon?: LucideIcon;
   state: ArmingState;
   /** Fires only when armed. */
   onCommit: () => void;
   /** Disarms — nothing is written. */
   onCancel: () => void;
-}
+  busy?: boolean;
+  /** Present, the commit refuses with it (the Work is unread, a fixture). */
+  refusal?: string | null;
+  /** Other framed verbs beside the commit (stop, discard edits). */
+  alternatives?: ReactNode;
+};
 
 const REASON_PLACEHOLDER = "why this write is happening — required before the verb arms";
 
@@ -70,11 +87,17 @@ export function ArmingStrip({
   target,
   count,
   planHash,
+  facts,
+  says,
+  icon = Upload,
   reason,
   onReasonChange,
   state,
   onCommit,
   onCancel,
+  busy,
+  refusal,
+  alternatives,
 }: ArmingStripProps) {
   if (state.phase === "refused") {
     const slots = armingStripRecipe({ state: "refused" });
@@ -104,8 +127,12 @@ export function ArmingStrip({
     );
   }
 
-  const armed = reason.trim().length > 0;
+  const armed = reason === undefined || reason.trim().length > 0;
   const slots = armingStripRecipe({ state: armed ? "armed" : "unarmed" });
+  const writes = [
+    count != null ? `${count} parameters` : null,
+    planHash ? `against plan ${planHash}` : null,
+  ].filter(Boolean);
   return (
     <ArtifactFrame>
       <div className={slots.base()} data-phase={armed ? "armed" : "unarmed"}>
@@ -115,31 +142,46 @@ export function ArmingStrip({
           </span>
           <span className={slots.verb()}>{verb}</span>
           <span className={slots.target()}>{target}</span>
-          <FactChip title="The plan this write was made against.">plan {planHash}</FactChip>
-          <FactChip title="Parameters this write will touch, counted from the plan.">
-            {count} params
-          </FactChip>
+          {planHash ? (
+            <FactChip title="The plan this write was made against.">plan {planHash}</FactChip>
+          ) : null}
+          {count != null ? (
+            <FactChip title="Parameters this write will touch, counted from the plan.">
+              {count} params
+            </FactChip>
+          ) : null}
+          {facts}
         </div>
 
-        <input
-          className={slots.input()}
-          value={reason}
-          onChange={(e) => onReasonChange(e.target.value)}
-          placeholder={REASON_PLACEHOLDER}
-          aria-label="reason for this write"
-        />
+        {onReasonChange ? (
+          <input
+            className={slots.input()}
+            value={reason}
+            onChange={(e) => onReasonChange(e.target.value)}
+            placeholder={REASON_PLACEHOLDER}
+            aria-label="reason for this write"
+          />
+        ) : null}
+        {says != null ? <p className={slots.says()}>{says}</p> : null}
 
         <div className={slots.controls()}>
           <Button
             kind="commit"
             label={verb}
-            icon={Upload}
+            icon={icon}
             onClick={onCommit}
-            reason={`Writes ${count} parameters into the live model against plan ${planHash}`}
-            refusal={armed ? null : "supply a reason above — the verb arms when you do"}
+            busy={busy}
+            reason={
+              refusal ??
+              (writes.length ? `Writes ${writes.join(" ")} into the live model` : `${verb} now`)
+            }
+            refusal={
+              refusal ?? (armed ? null : "supply a reason above — the verb arms when you do")
+            }
           >
             {verb}
           </Button>
+          {armed ? alternatives : null}
           {armed ? (
             <Button
               kind="framed"
@@ -150,7 +192,7 @@ export function ArmingStrip({
               cancel
             </Button>
           ) : null}
-          {armed ? (
+          {armed && planHash ? (
             <span className={slots.caveat()}>armed against a plan of unknown age</span>
           ) : null}
         </div>

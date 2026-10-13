@@ -12,7 +12,12 @@ import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { NarrowChip } from "#/components/lang/chip";
 import { Button } from "#/components/lang/button";
 import { resolveStateColumn } from "#/components/master-table/master-table-columns";
-import type { Column, QueryVocabulary, TableState } from "#/components/master-table/model";
+import type {
+  Column,
+  QueryCommand,
+  QueryVocabulary,
+  TableState,
+} from "#/components/master-table/model";
 import { ConditionTarget, QueryBox } from "#/components/master-table/query";
 import { selectableKeys, type TableSelection } from "#/components/master-table/table";
 import { conditionValues, quoted, visibleRows } from "#/components/master-table/view";
@@ -31,6 +36,8 @@ export interface TableFrameProps<Row extends RowData> {
   /** A route's own vocabulary, for rows it narrows before the frame sees them (families); absent,
    * the box names the columns that declare a `condition`. */
   query?: QueryVocabulary;
+  /** A second vocabulary after `→`: the route's command over the rows the query keeps. */
+  command?: QueryCommand;
   /** Route-owned filters narrowing the rows before the table sees them: one chip each. Present
    * (even empty), the box reserves its line, so a chip appearing never moves the grid. */
   chips?: { label: string; onClear: () => void }[];
@@ -73,6 +80,7 @@ export function TableFrame<Row extends RowData>({
   summary,
   searchPlaceholder,
   query,
+  command,
   chips,
   modes,
   actions,
@@ -92,6 +100,7 @@ export function TableFrame<Row extends RowData>({
   const boxed =
     searchPlaceholder !== undefined ||
     query !== undefined ||
+    command !== undefined ||
     chips !== undefined ||
     conditioned ||
     Boolean(state.query);
@@ -149,6 +158,7 @@ export function TableFrame<Row extends RowData>({
             onDraft={setDraft}
             onInput={setBox}
             placeholder={searchPlaceholder}
+            command={command}
           >
             {chips?.map((chip) => (
               <NarrowChip

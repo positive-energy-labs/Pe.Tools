@@ -452,3 +452,49 @@ tr.dl-row[data-active]::before {
 .dl-control:is(:disabled, :has(input:disabled)) {
   background-color: transparent;
 }
+
+/* THE CONNECTOR: a line between two anchors, stroked in the current tone (ink-2 untoned), hairline
+   or the 2px boundary; an end clamped to a scroller's edge draws hollow; the band is the tone at a
+   quarter, under the line, for the fraction of the length a grant has left. */
+.dl-connector {
+  color: var(--pe-ink-2);
+}
+.dl-connector-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+}
+.dl-connector[data-strong] .dl-connector-line {
+  stroke-width: 2;
+}
+.dl-connector[data-dashed] .dl-connector-line {
+  stroke-dasharray: 4 3;
+}
+.dl-connector-band {
+  fill: none;
+  stroke: color-mix(in srgb, currentColor 24%, transparent);
+  stroke-width: 9;
+  stroke-linecap: butt;
+}
+.dl-connector-end {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1;
+}
+.dl-connector-end[data-off] {
+  fill: var(--pe-page);
+  stroke-dasharray: 1.5 1.5;
+}
+.dl-connector-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 12;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+.dl-connector-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  white-space: nowrap;
+}
