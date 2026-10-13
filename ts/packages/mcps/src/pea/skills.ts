@@ -122,7 +122,7 @@ The user asked to learn, not to be told. The master corrects the hand and never 
     name: "write-revit-csharp-script",
     content: String.raw`---
 name: write-revit-csharp-script
-description: Write and run a C# Revit script when code is the clearest way to inspect, mutate, or experiment against the model. Use for one-off probes, gaps in host operations, and durable multi-step work. Covers inline snippets, workspace files, and Pod rules. Not for changing values a route shows (family or type parameters, schedule cells, instances, takeoffs, parameter links); propose those with propose-changes, even under Trusted.
+description: Write and run a C# Revit script when code is the clearest way to inspect, mutate, or experiment against the model. Use for one-off probes, gaps in host operations, and durable multi-step work. Covers inline snippets, workspace files, and Pod rules. Not for changing values a route shows (family or type parameters, schedule cells, takeoffs, parameter links); propose those with propose-changes, even under Trusted.
 ---
 
 # Write Revit C# Script
@@ -264,7 +264,7 @@ When more than a sentence is needed, report what the Pod does in the user's word
     name: "propose-changes",
     content: String.raw`---
 name: propose-changes
-description: Propose value changes on a route. Use when the user asks to change, set, fill in, fix, rename, or adjust values on something a route shows - "set <parameter> on every type of <families>", family parameters, bulk families, schedule cells, a pod member or spec, instances, takeoff rooms, parameter links - or has such a route open. You propose; the person stages and commits.
+description: Propose value changes on a route. Use when the user asks to change, set, fill in, fix, rename, or adjust values on something a route shows - "set <parameter> on every type of <families>", family parameters, bulk families, schedule cells, a pod member or spec, takeoff rooms, parameter links - or has such a route open. You propose; the person stages and commits.
 ---
 
 # Propose Changes
@@ -278,7 +278,7 @@ Every route works the same way. You write proposals; the person stages them, and
 3. Write only proposals: pe_do key=route:<route>.propose with patches to proposal rungs and expectedRevision from your read. A patch path is an array of segments, e.g. ["cells","<key>","proposal"] or ["scope","proposal"], never pointer strings. Never write staged. If a route has no proposal rung, describe the change in chat and let the person make it.
 4. Propose even when the harness runs tools without asking. A change the person could review on a route goes through that route; do not reach the same values through a script, an op, or a file edit. A tool that runs unasked does not skip the person's review.
 5. What the person sees: each proposal sits on its own cell next to the current value, with accept and deny on that cell. The Chat head shows a compact summary and opens the route inside Chat. A staged value beside a different proposal of yours is a counter-proposal; do not overwrite it.
-6. Commit is the person's. Plan, apply, save, push, and sync are human verbs; do not press them or ask to. Say which verb to press and what it consumes: the staged values at the current revision, never open proposals. Instances is the one exception: open or start runs exactly what the person staged, so you may run it when they ask.
+6. Commit is the person's. Plan, apply, save, push, and sync are human verbs; do not press them or ask to. Say which verb to press and what it consumes: the staged values at the current revision, never open proposals. Opening and starting Revit are not proposals: run workflow:instances.open or workflow:instances.start yourself when the work needs a Revit, preferring owner pea and a copy over the person's own session.
 7. A proposal is not a permission request. When the harness asks the person to allow a tool call, that ask lives only as long as your turn and approves the call, not your proposal; a proposal waits in the route as Work and survives reload. For a decision only the person can make, ask in chat.
 
 ## Families

@@ -17,8 +17,10 @@ import type {
 import {
   createMachine,
   machineSources,
+  processCustody,
   readMachinePeers,
   unavailableShare,
+  useHostMachine,
   type MachineSources,
 } from "../src/machine.ts";
 import type { Providers } from "../src/harness/providers.ts";
@@ -544,4 +546,32 @@ test("a leg that never settles is a leg error after its deadline, not a frame th
     machine.close();
     vi.useRealTimers();
   }
+});
+
+test("process custody is the SDK census's word: observed without a receipt, controlled with one, null until read", async () => {
+  const f = fixture();
+  const start = Date.parse(row.process.processStartUtc);
+  const controlled = {
+    ...row,
+    case: "controlled-active",
+    id: "dev",
+    process: { ...row.process, pid: 77, processStartUtc: "2026-10-09T00:00:01.0000000Z" },
+  } as unknown as ControlledActive;
+  vi.mocked(f.sources.sessions).mockResolvedValue([row, controlled]);
+  vi.mocked(f.sources.attachments).mockResolvedValue([]);
+  useHostMachine(f.machine);
+  try {
+    // Nothing has read the census: unknown, and asking starts the first read.
+    expect(processCustody(42, start)).toBeNull();
+    await f.machine.refresh();
+    expect(processCustody(42, start)).toBe("observed");
+    expect(processCustody(77, Date.parse(controlled.process.processStartUtc))).toBe("controlled");
+    // A process the census does not list, or a reused pid with another start, is not guessed.
+    expect(processCustody(999, start)).toBeNull();
+    expect(processCustody(42, start + 1)).toBeNull();
+  } finally {
+    useHostMachine(undefined);
+    f.machine.close();
+  }
+  expect(processCustody(42, start)).toBeNull();
 });

@@ -566,11 +566,7 @@ export function makeCallRoute(
               continue;
             }
             if (scope.kind === "instances") {
-              if (
-                Object.hasOwn(instancesActions, row.key) &&
-                row.request.workspaceId === scope.workspaceId
-              )
-                selected.push(row);
+              if (Object.hasOwn(instancesActions, row.key)) selected.push(row);
               continue;
             }
             const member = (row.request.member ?? row.request.source) as

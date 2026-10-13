@@ -6,14 +6,14 @@
  * runs. The host footer closes it. Everything drawn is the host's one `Machine` reading.
  */
 import { useEffect, useState } from "react";
-import type { Machine, MachineSession, Reading } from "@pe/agent-contracts";
+import type { Machine, Reading } from "@pe/agent-contracts";
 
 import { Accordion } from "#/components/lang/accordion";
 import { Button } from "#/components/lang/button";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { PidChip } from "#/components/lang/process";
 import { hostAdmin } from "#/host/machine";
-import { RevitControls, useInstancesBasis } from "#/open/lifecycle";
+import { PatchBay, useBayReadings } from "#/open/bay";
 
 import {
   attention,
@@ -29,7 +29,6 @@ import {
   type GroupKey,
 } from "./model";
 import { PeaGroup } from "./pea";
-import { keyOf, nameOf, phaseOf, pidOf, PHASE_TONE } from "./session";
 import { ShareGroup } from "./share";
 import { UpdateGroup } from "./update";
 import { SEED_REFUSAL } from "./use-machine";
@@ -38,62 +37,27 @@ export type Shell = "drawer" | "tray";
 
 type InstallPrompt = Event & { prompt: () => Promise<void> };
 
-function RevitRow({
-  session,
-  basis,
+/** The Revit group: the patch bay, lanes stacked, over the same machine the route draws. */
+function RevitDesk({
+  machine,
+  fixture,
   refusal,
 }: {
-  session: MachineSession;
-  basis: ReturnType<typeof useInstancesBasis>;
+  machine: Machine;
+  fixture: boolean;
   refusal: string | null;
 }) {
-  const row = session.row;
-  const phase = phaseOf(row);
-  const pid = pidOf(row);
-  const documents = session.documents;
-  const active = documents?.find((document) => document.isActive) ?? documents?.[0];
-  const shape = [
-    row.shape.payload === "checkout" ? "checkout" : null,
-    row.shape.reload === "hot" ? "hot reload" : null,
-    row.shape.posture === "background" ? "background" : null,
-    row.shape.quarantine ? "add-ins off" : null,
-  ].filter(Boolean);
+  const { rows, threads, loading } = useBayReadings(machine, fixture);
   return (
-    <div className="flex flex-col py-1" aria-label={`Revit ${row.year}`}>
-      <span className="flex items-center gap-2">
-        <span className="w-9 shrink-0 face-mono">{row.year}</span>
-        <span className="min-w-0 flex-1 truncate">
-          {documents === null ? (
-            <span className="text-ink-2">documents unknown</span>
-          ) : active ? (
-            <>
-              <span className={active.isModified ? "font-semibold" : undefined}>
-                {active.title ?? active.path}
-              </span>
-              {documents.length > 1 ? (
-                <span className="text-ink-2"> +{documents.length - 1}</span>
-              ) : null}
-            </>
-          ) : (
-            <span className="text-ink-2">no document open</span>
-          )}
-        </span>
-        {pid ? <PidChip pid={pid} /> : null}
-        <span data-tone={PHASE_TONE[phase]}>{phase}</span>
-      </span>
-      <span className="flex items-start gap-2 pl-11">
-        <span className="min-w-0 flex-1 text-ink-2">
-          <span className={row.case === "observed-active" ? undefined : "face-mono"}>
-            {nameOf(row)}
-          </span>
-          {shape.length ? ` · ${shape.join(", ")}` : ""}
-          {row.case === "controlled-active" && row.dialogs ? (
-            <span data-tone="caution"> · dialog open</span>
-          ) : null}
-        </span>
-        <RevitControls session={session} basis={basis} refusal={refusal} hr={false} />
-      </span>
-    </div>
+    <PatchBay
+      machine={machine}
+      loading={loading}
+      rows={rows}
+      threads={threads}
+      fixture={fixture}
+      layout="stack"
+      refusal={refusal}
+    />
   );
 }
 
@@ -238,7 +202,6 @@ export function MachineBody({
 }) {
   const machine = machineOf(reading);
   const [picked, setPicked] = useState<GroupKey | null | undefined>(group);
-  const basis = useInstancesBasis(!fixture);
   if (!machine)
     return reading.state === "failed" ? (
       <OutcomeLine kind="error" label={`machine reading failed: ${reading.message}`} />
@@ -272,21 +235,7 @@ export function MachineBody({
             label: "Revit",
             state: revit.text,
             tone: revit.tone,
-            body:
-              machine.revit.sessions === null ? (
-                <span data-tone="caution">The Revit census has not been read.</span>
-              ) : machine.revit.sessions.length ? (
-                machine.revit.sessions.map((session) => (
-                  <RevitRow
-                    key={keyOf(session)}
-                    session={session}
-                    basis={basis}
-                    refusal={refusal}
-                  />
-                ))
-              ) : (
-                <span className="text-ink-2">No Revit is running. Start one from Open.</span>
-              ),
+            body: <RevitDesk machine={machine} fixture={fixture} refusal={refusal} />,
           },
           {
             key: "update",

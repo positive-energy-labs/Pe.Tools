@@ -369,6 +369,42 @@ export function createMachine(
 }
 export type MachineOwner = ReturnType<typeof createMachine>;
 
+/**
+ * The host process's one Machine owner, for the ops that answer with SDK facts (the session
+ * summary and list) but run outside the Machine's own routes. Set once at boot.
+ */
+let hostMachine: MachineOwner | undefined;
+export const useHostMachine = (owner: MachineOwner | undefined) => {
+  hostMachine = owner;
+};
+
+/**
+ * What the SDK census says about one process: `controlled` (pe-revit holds a receipt) or
+ * `observed` (it does not). Null while the census has not answered; asking starts the first
+ * read, so a host nobody is watching still learns the answer for the next ask.
+ */
+export function processCustody(
+  pid: number | null | undefined,
+  processStartUtcUnixMs: number | null | undefined,
+): "controlled" | "observed" | null {
+  const machine = hostMachine;
+  if (!machine || !pid) return null;
+  const latest = machine.current();
+  if (!latest.legs.sessions) {
+    void machine.refresh().catch(() => {});
+    return null;
+  }
+  const row = latest.revit.sessions?.find((session) => {
+    const process = processOf(session.row);
+    return (
+      process?.pid === pid &&
+      (processStartUtcUnixMs == null ||
+        Date.parse(process.processStartUtc) === processStartUtcUnixMs)
+    );
+  });
+  return row ? (row.row.case === "observed-active" ? "observed" : "controlled") : null;
+}
+
 function processOf(row: SessionObservation): ProcessIdentity | null {
   return row.case === "controlled-active" || row.case === "observed-active"
     ? row.process

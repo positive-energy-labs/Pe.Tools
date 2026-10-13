@@ -33,6 +33,7 @@ import { useWorkbench } from "#/workbench/provider";
 import { useHeadWorks } from "./head-works";
 import { targetClosure, targetLabel } from "./thread-navigation";
 import { ProposalHead } from "./proposal-head";
+import { ComposerOpenMode } from "./composer-open";
 import { ComposerPending } from "./composer-pending";
 import { HeadLadder } from "./head-chips";
 import { emptyPrompt, type ChatDraft } from "#/workbench/prompt";
@@ -263,18 +264,20 @@ export function ComposerControls({
   return (
     <section aria-label="Situation" className="contents" data-testid="composer-head">
       <HeadLadder />
-      <Ladder
-        face="control"
-        mark={<File className="size-3.5" data-tone={situation.bound ? "done" : undefined} />}
-        levels={levels}
-        caution={Boolean(health)}
-        disabled={targetDisabled}
-        title={
-          ladder.sessionWord
-            ? `${ladder.sessionWord} › ${ladder.docWord ?? "no document"}; pick to change`
-            : "choose a session and a document; Chat runs without one, Revit operations do not"
-        }
-      />
+      <ComposerOpenMode>
+        <Ladder
+          face="control"
+          mark={<File className="size-3.5" data-tone={situation.bound ? "done" : undefined} />}
+          levels={levels}
+          caution={Boolean(health)}
+          disabled={targetDisabled}
+          title={
+            ladder.sessionWord
+              ? `${ladder.sessionWord} › ${ladder.docWord ?? "no document"}; pick to change`
+              : "choose a session and a document; Chat runs without one, Revit operations do not"
+          }
+        />
+      </ComposerOpenMode>
       {status ? (
         <span
           aria-live="polite"

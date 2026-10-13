@@ -1,10 +1,10 @@
 /**
  * Open's derivations, pure: the documents table (recents of every installed year merged with what
- * each Revit holds now) and the launch plan (what the launcher would do, why it refuses, and the
+ * each Revit holds now) and the launch plan (what the patch bay would do, why it refuses, and the
  * exact commands the host runs). The argv comes from the SDK's own generated builders, so the
  * printed line and the dispatched line cannot drift.
  */
-import type { InstancesLaunch, Machine, MachineSession } from "@pe/agent-contracts";
+import type { InstancesLaunch, InstancesStart, Machine, MachineSession } from "@pe/agent-contracts";
 import {
   docOpenArgv,
   sessionStartArgv,
@@ -114,39 +114,79 @@ export function modelRows(
   return rows;
 }
 
-/** The launcher's own picks. `target` is a Running key, or "new" for a new Revit. */
+/** Whose a Revit is: a background posture is Pea's (the launch contract's `owner: "pea"`). */
+export const whoseOf = (session: MachineSession): "you" | "pea" =>
+  session.row.shape.posture === "background" ? "pea" : "you";
+
+/**
+ * A row for a pasted source the recents do not know: an absolute path, a UNC path, or a `cld://`
+ * identity. Null for anything else (a search word stays a search word).
+ */
+export function pathRow(text: string): DocRow | null {
+  const source = text.trim().replace(/^"|"$/g, "");
+  if (!/^(?:[A-Za-z]:[\\/]|\\\\|cld:\/\/)/i.test(source)) return null;
+  const cloud = source.toLowerCase().startsWith("cld://");
+  if (!cloud && !/\.(rvt|rfa|rte|rft)$/i.test(source)) return null;
+  return {
+    key: source,
+    title: decodeURIComponent(source.split(/[\\/]/).at(-1) ?? source).replace(/^\{[^}]*\}/, ""),
+    path: source,
+    selector: source,
+    cloud,
+    savedYear: null,
+    savedYearFailure: null,
+    lastYear: null,
+    openIn: null,
+  };
+}
+
+/** The patch bay's picks: a jack, a socket, and the free socket's shape. Nothing is derived. */
 export interface LaunchDraft {
-  /** A discovered row key or the staged SDK selector, preserved before discovery arrives. */
+  /** A discovered row key, or a pasted source the table does not list. */
   readonly doc: string | null;
-  readonly year: number | null;
+  /** A session key (`keyOf`), "new" for the free socket, or null: nothing patched yet. */
   readonly target: string | null;
-  readonly posture: "foreground" | "background";
-  readonly quarantine: boolean;
-  readonly name: string;
-  readonly missingLinks: "refuse" | "allow";
+  /** The free socket's year; null takes the default for the picked document. */
+  readonly year: number | null;
+  readonly owner: "you" | "pea";
+  readonly addins: "on" | "off";
+  /** The cable adapter: open detached from central (workshared and cloud models). */
+  readonly detach: boolean;
+  readonly links: "refuse" | "allow";
 }
 
 export const EMPTY_DRAFT: LaunchDraft = {
   doc: null,
-  year: null,
   target: null,
-  posture: "foreground",
-  quarantine: false,
-  name: "",
-  missingLinks: "refuse",
+  year: null,
+  owner: "you",
+  addins: "on",
+  detach: false,
+  links: "refuse",
 };
+
+/** The one action a press runs, with the input it takes (ADR 0016: nothing is staged first). */
+type PlannedLaunch =
+  | { readonly key: "instances.open"; readonly input: InstancesLaunch }
+  | { readonly key: "instances.start"; readonly input: InstancesStart };
 
 export interface LaunchPlan {
   readonly doc: DocRow | null;
+  /** The Revit year the plan opens in: the socket's, or the free socket's. */
   readonly year: number | null;
-  readonly live: readonly MachineSession[];
+  /** The patched running Revit; null for the free socket or nothing patched. */
   readonly target: MachineSession | null;
+  readonly whose: "you" | "pea";
+  readonly upgrade: boolean;
+  /** The one button: every consequence in its words. */
   readonly verb: string;
   readonly argv: readonly string[];
   readonly refusal: string | null;
-  readonly caution: string | null;
-  readonly note: string | null;
-  readonly launch: InstancesLaunch | null;
+  /** Nothing is wrong, but nothing is patched yet. */
+  readonly waiting: string | null;
+  /** What the press will also do, said before it is pressed. */
+  readonly cautions: readonly { tone: "caution" | "pea" | "commit"; text: string }[];
+  readonly launch: PlannedLaunch | null;
 }
 
 const cli = (argv: string[]) =>
@@ -155,14 +195,41 @@ const cli = (argv: string[]) =>
     .map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg))
     .join(" ")}`;
 
-/** `session start --id` accepts ≤64 chars of letters, digits, `.`, `-`, `_`. */
-export const sessionIdOf = (name: string) =>
-  name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64);
+/** A free socket's default year: the file's own when installed, else the lowest installed year
+ * that can open it, else the newest. A year the file cannot open is never a default. */
+export function defaultYear(doc: DocRow | null, years: readonly number[]): number | null {
+  if (!years.length) return null;
+  const sorted = [...years].sort((a, b) => a - b);
+  const saved = doc?.savedYear ?? null;
+  if (saved !== null) return sorted.find((year) => year >= saved) ?? sorted.at(-1)!;
+  if (doc?.lastYear && years.includes(doc.lastYear)) return doc.lastYear;
+  return sorted.at(-1)!;
+}
+
+/** The row a draft names: a discovered row, else a pasted source as its own row. */
+function docOf(draft: LaunchDraft, rows: readonly DocRow[]): DocRow | null {
+  if (!draft.doc) return null;
+  const identity = cloudIdentity({ path: draft.doc });
+  return (
+    rows.find(
+      (row) =>
+        same(row.key, draft.doc) ||
+        same(row.selector, draft.doc) ||
+        (identity !== null && identity === cloudIdentity({ path: row.selector })),
+    ) ??
+    pathRow(draft.doc) ?? {
+      key: draft.doc,
+      title: draft.doc.split(/[\\/]/).at(-1) ?? draft.doc,
+      path: draft.doc,
+      selector: draft.doc,
+      cloud: draft.doc.toLowerCase().startsWith("cld://"),
+      savedYear: null,
+      savedYearFailure: null,
+      lastYear: null,
+      openIn: null,
+    }
+  );
+}
 
 export function launchPlan(
   draft: LaunchDraft,
@@ -171,113 +238,141 @@ export function launchPlan(
 ): LaunchPlan {
   const sessions = machine?.revit.sessions ?? [];
   const years = machine?.revit.years ?? [];
-  const identity = cloudIdentity({ path: draft.doc });
-  const doc =
-    rows.find(
-      (row) =>
-        same(row.key, draft.doc) ||
-        same(row.selector, draft.doc) ||
-        (identity && identity === cloudIdentity({ path: row.selector })),
-    ) ??
-    (draft.doc
-      ? ({
-          key: draft.doc,
-          title: draft.doc.split(/[\\/]/).at(-1) ?? draft.doc,
-          path: draft.doc,
-          selector: draft.doc,
-          cloud: draft.doc.toLowerCase().startsWith("cld://"),
-          savedYear: null,
-          savedYearFailure: null,
-          lastYear: null,
-          openIn: null,
-        } satisfies DocRow)
-      : null);
-  const explicit = sessions.find((session) => keyOf(session) === draft.target);
-  // The default year is an installed one: the file's own, else the one that last opened it.
-  const installed = (candidate: number | null | undefined) =>
-    candidate != null && years.includes(candidate) ? candidate : null;
-  const year =
-    draft.year ??
-    explicit?.row.year ??
-    (doc?.openIn
-      ? doc.openIn.session.row.year
-      : (installed(doc?.savedYear) ?? installed(doc?.lastYear))) ??
-    (years.length ? Math.max(...years) : null);
-  const live = sessions.filter((session) => session.row.year === year && pidOf(session.row));
-  const ready = live.find(
-    (session) => phaseOf(session.row) === "ready" && !executionRefusal(session.row),
-  );
-  const picked =
-    draft.target === "new"
-      ? null
-      : (live.find((session) => keyOf(session) === draft.target) ??
-        (draft.target === null
-          ? doc?.openIn &&
-            doc.openIn.session.row.year === year &&
-            !executionRefusal(doc.openIn.session.row)
-            ? doc.openIn.session
-            : doc
-              ? (ready ?? null)
-              : null
-          : null));
-  const upgrade = !!(doc?.savedYear && year && doc.savedYear < year);
+  const doc = docOf(draft, rows);
+  const target =
+    draft.target && draft.target !== "new"
+      ? (sessions.find((session) => keyOf(session) === draft.target) ?? null)
+      : null;
+  const whose = target ? whoseOf(target) : draft.owner;
+  const pea = whose === "pea";
+  const year = target
+    ? target.row.year
+    : draft.target === "new"
+      ? (draft.year ?? defaultYear(doc, years))
+      : defaultYear(doc, years);
+  const saved = doc?.savedYear ?? null;
+  const upgrade = saved !== null && year !== null && saved < year;
+  const newest = years.length ? Math.max(...years) : null;
   const checkout = machine?.host?.payload === "checkout" && machine.host.sourceRoot;
   const project = checkout
     ? `${machine!.host!.sourceRoot}\\dotnet\\Pe.App\\Pe.App.csproj`
     : undefined;
-  const name = sessionIdOf(draft.name);
-  const background = draft.posture === "background";
-  const nonDefault = draft.posture === "background" || draft.quarantine;
+  // Pea's copy of a cloud or workshared model is detached by the host; the person chooses.
+  const detach = pea ? doc?.cloud === true || draft.detach : draft.detach;
+  const background = pea;
+  const links = draft.links;
+
   let refusal: string | null = null;
-  let caution: string | null = null;
-  let note: string | null = null;
-  const missingTarget = draft.target !== null && draft.target !== "new" && !picked;
-  if (missingTarget)
-    refusal = `Selected Revit '${draft.target}' is no longer available; choose another target or a new Revit.`;
-  else if (year === null)
+  let waiting: string | null = null;
+  if (year === null)
     refusal = "No installed Revit year is known yet; the machine reading has none.";
-  else if (doc?.savedYear && doc.savedYear > year)
-    refusal = `${doc.title} was saved in Revit ${doc.savedYear}; Revit ${year} cannot open a newer file.`;
-  else if (doc?.openIn)
+  else if (doc && saved !== null && newest !== null && saved > newest)
+    refusal = `${doc.title} was saved in Revit ${saved}; the newest Revit here is ${newest}.`;
+  else if (draft.target && draft.target !== "new" && !target)
+    refusal = `Revit '${draft.target}' is no longer running; patch another socket.`;
+  else if (doc && saved !== null && saved > year)
+    refusal = `${doc.title} was saved in Revit ${saved}; Revit ${year} cannot open a newer file.`;
+  else if (target && executionRefusal(target.row)) refusal = executionRefusal(target.row);
+  else if (target && phaseOf(target.row) !== "ready")
+    refusal = `Revit ${year} pid ${pidOf(target.row)} is ${phaseOf(target.row)}; it opens nothing until it answers.`;
+  else if (
+    doc?.openIn &&
+    !pea &&
+    (doc.openIn.session === target || (!target && whoseOf(doc.openIn.session) === "you"))
+  )
     refusal = `${doc.title} is already open in Revit ${doc.openIn.session.row.year} (pid ${pidOf(doc.openIn.session.row)}).`;
-  else if (picked && executionRefusal(picked.row)) refusal = executionRefusal(picked.row);
-  else if (picked && phaseOf(picked.row) !== "ready")
-    refusal = `Revit ${year} pid ${pidOf(picked.row)} is ${phaseOf(picked.row)}; it opens nothing until it answers.`;
-  else if (!doc && picked)
-    refusal = "Pick a document to open in this Revit, or choose a new Revit.";
-  if (upgrade)
-    caution = `Saved in ${doc!.savedYear}. Opening in ${year} upgrades it; once saved it will not open in ${doc!.savedYear} again.`;
-  else if (doc && !doc.savedYear && doc.savedYearFailure)
-    caution = `Saved year unknown (${doc.savedYearFailure}). Revit decides when it opens.`;
-  if (picked?.row.case === "observed-active")
-    note = `This Revit was started from its icon. Opening through it adopts it by pid ${picked.row.process.pid}.`;
-  else if (!picked && doc && nonDefault)
-    note =
-      "open --start takes no posture or add-ins flag, so this is two commands: start, then open.";
-  const links = draft.missingLinks;
-  let verb: string;
-  let argv: string[];
-  let launch: InstancesLaunch | null = null;
-  if (picked && doc) {
-    const selection = selectionOf(picked.row);
-    verb = `Open in Revit ${year}`;
+  else if (!draft.target && doc)
+    waiting = "Patch it into a Revit on the right, or the free socket.";
+  else if (!doc && target) waiting = "Pick a document on the left to open in this Revit.";
+
+  const cautions: { tone: "caution" | "pea" | "commit"; text: string }[] = [];
+  if (doc && upgrade && !pea)
+    cautions.push({
+      tone: "caution",
+      text: `Saved in ${saved}. Revit ${year} upgrades it; once saved it never opens in ${saved} again.`,
+    });
+  if (doc && upgrade && pea)
+    cautions.push({
+      tone: "pea",
+      text: `Pea's copy upgrades to ${year}. Your file stays ${saved}.`,
+    });
+  if (doc && !saved && doc.savedYearFailure)
+    cautions.push({
+      tone: "caution",
+      text: `Saved year unknown (${doc.savedYearFailure}). Revit decides when it opens.`,
+    });
+  if (doc && pea)
+    cautions.push({
+      tone: "pea",
+      text: doc.cloud
+        ? "Pea gets a detached copy. Nothing reaches central."
+        : "Pea works on a copy in its own folder; your file is untouched.",
+    });
+  if (doc && detach && !pea)
+    cautions.push({ tone: "caution", text: "Detached: your edits never sync to central." });
+  if (doc && links === "allow")
+    cautions.push({ tone: "caution", text: "Missing linked models open unloaded." });
+  if (target?.row.case === "observed-active")
+    cautions.push({
+      tone: "commit",
+      text: `This Revit was started from its icon. Opening through it adopts it by pid ${target.row.process.pid}.`,
+    });
+  if (!target && draft.target === "new" && draft.addins === "off")
+    cautions.push({ tone: "commit", text: "Third-party add-ins stay off in the new Revit." });
+
+  // The verb names every consequence; pressing it is the consent.
+  const where = target
+    ? `${pea ? "Pea's" : "your"} Revit ${year}`
+    : `a new ${pea ? "background " : ""}Revit ${year ?? ""}`.trim();
+  const consequences = [
+    upgrade && !pea ? `upgrade from ${saved}` : null,
+    detach && !pea ? "detached" : null,
+    links === "allow" ? "allowing missing links" : null,
+    !target && draft.addins === "off" ? "with add-ins off" : null,
+  ].filter((each): each is string => each !== null);
+  const tail = consequences.length ? ` and ${consequences.join(", ")}` : "";
+  const verb = !doc
+    ? target
+      ? `Open a document in ${where}`
+      : `Start ${where}${tail}`
+    : `${pea ? "Give Pea a copy in" : "Open in"} ${where}${tail}`;
+
+  let argv: string[] = [];
+  let launch: PlannedLaunch | null = null;
+  if (target && doc) {
+    const selection = selectionOf(target.row);
     argv = [
-      ...(picked.row.case === "observed-active"
-        ? [cli(sessionStartArgv({ pid: picked.row.process.pid }))]
+      ...(target.row.case === "observed-active"
+        ? [cli(sessionStartArgv({ pid: target.row.process.pid }))]
         : []),
-      cli(docOpenArgv({ source: doc.selector, ...selection, links, unsynced: "keep" })),
+      cli(
+        docOpenArgv({
+          source: doc.selector,
+          ...selection,
+          detach,
+          upgrade,
+          links,
+          unsynced: "keep",
+        }),
+      ),
     ];
-    launch = { kind: "open", session: selection, document: doc.selector, missingLinks: links };
-  } else {
-    verb = doc ? `Start Revit ${year} and open` : `Start Revit ${year ?? ""}`.trim();
+    launch = {
+      key: "instances.open",
+      input: { source: doc.selector, into: { session: selection }, detach, upgrade, links },
+    };
+  } else if (draft.target === "new" && year !== null) {
+    const start: InstancesStart = {
+      year: String(year),
+      owner: draft.owner,
+      addins: draft.addins,
+    };
     argv = [
       cli(
         sessionStartArgv({
           project,
-          year: year === null ? undefined : String(year),
-          id: name || undefined,
+          year: String(year),
           background,
-          quarantine: draft.quarantine,
+          quarantine: draft.addins === "off",
         }),
       ),
       ...(doc
@@ -285,7 +380,9 @@ export function launchPlan(
             cli(
               docOpenArgv({
                 source: doc.selector,
-                id: name || "<minted>",
+                id: "<minted>",
+                detach,
+                upgrade,
                 links,
                 unsynced: "keep",
               }),
@@ -293,27 +390,13 @@ export function launchPlan(
           ]
         : []),
     ];
-    launch =
-      year === null
-        ? null
-        : {
-            kind: "start",
-            year: String(year),
-            name,
-            document: doc?.selector,
-            quarantine: draft.quarantine,
-            posture: draft.posture,
-            missingLinks: links,
-          };
+    launch = doc
+      ? {
+          key: "instances.open",
+          input: { source: doc.selector, into: { start }, detach, upgrade, links },
+        }
+      : { key: "instances.start", input: start };
   }
-  if (missingTarget) {
-    launch = null;
-    argv = [];
-    verb = "Open in selected Revit";
-  }
-  if (picked && executionRefusal(picked.row)) {
-    launch = null;
-    argv = [];
-  }
-  return { doc, year, live, target: picked, verb, argv, refusal, caution, note, launch };
+  if (refusal || waiting) launch = null;
+  return { doc, year, target, whose, upgrade, verb, argv, refusal, waiting, cautions, launch };
 }

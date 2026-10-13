@@ -40,8 +40,8 @@ const captureView = createCaptureViewTool(async () => {
  * Pea's product surface: three capability doors over ONE catalog (`pe_find` ranks it, `pe_read`
  * runs rows that do not mutate, `pe_do` runs any row), one Target door (`target_set`), and the media
  * and docs helpers that do not fit a JSON row. Session lifecycle is in the catalog like everything
- * else: `route:instances.start` and `route:instances.open` run for any actor, the rest of the
- * lifecycle is `actor: human`. Every host-bound tool resolves its Revit session from the thread
+ * else: every lifecycle verb (`workflow:instances.start|open|restart|stop|close`) runs for any
+ * actor (ADR 0016). Every host-bound tool resolves its Revit session from the thread
  * head's default Target (`PE_THREAD`); no tool input names a session or a document.
  */
 export const peaProductTools = {

@@ -123,6 +123,35 @@ export interface QueryVocabulary {
   values: (label: string, query: string) => { value: string; count: number }[];
 }
 
+/** The query box's second vocabulary, after an arrow (`→` or `->`): a command the caller owns.
+ * Before the arrow the box narrows the table as ever; after it, the box draws the caller's chips,
+ * offers the caller's tokens for the word being typed (Tab completes, a space or a paste commits
+ * each complete word through its token, Backspace on an empty box pulls the last chip back as
+ * text) and Enter on an empty word runs the command. One state, two inputs: the caller derives
+ * `chips` and `tokens` from its own state, so a click elsewhere changes the chips too. */
+export interface QueryCommand {
+  /** Whether the arrow has been typed, or a click armed the command. */
+  armed: boolean;
+  onArmed: (armed: boolean) => void;
+  /** The command so far, as chips after the arrow; removing one is the caller's undo. */
+  chips: readonly {
+    key: string;
+    label: string;
+    detail?: string;
+    title: string;
+    onRemove: () => void;
+  }[];
+  /** The tokens the word typed so far may become ("" lists every token). */
+  tokens: (
+    typed: string,
+  ) => readonly { key: string; label: string; hint?: string; take: () => void }[];
+  /** Enter with nothing typed: run the command. */
+  onCommit: () => void;
+  /** What Enter runs, for the arrow chip's hover. */
+  says: string;
+  placeholder?: string;
+}
+
 /** Route-ownable table state. Supplying it lets Pea read and drive the exact visible model. */
 export interface TableState {
   sorts: SortKey[];

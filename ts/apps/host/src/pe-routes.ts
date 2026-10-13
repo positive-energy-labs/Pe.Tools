@@ -55,7 +55,7 @@ import { createHarnessThreads } from "./harness/threads.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { productHarnessThreadsPath, productRouteWorkPath } from "./product-paths.ts";
 import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
-import { createMachine, machineSources } from "./machine.ts";
+import { createMachine, machineSources, useHostMachine } from "./machine.ts";
 import { UpdateReader } from "./update-reader.ts";
 import { makeInstalledUpdateReader } from "./update-route.ts";
 import { HostLifecycle } from "./host-lifecycle.ts";
@@ -446,7 +446,13 @@ export const peRoutesLayer = (
         share,
         lifecycle ? () => Effect.runSync(Deferred.succeed(lifecycle.latch, undefined)) : undefined,
       );
-      yield* Effect.addFinalizer(() => Effect.sync(() => machine.close()));
+      useHostMachine(machine);
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          useHostMachine(undefined);
+          machine.close();
+        }),
+      );
       yield* Effect.addFinalizer(() => Effect.promise(() => threads.close()));
       // Installed policy keeps observing even when every browser and tray drawer is closed.
       if (hostOwnership.lane === "installed") machine.observe(() => {});

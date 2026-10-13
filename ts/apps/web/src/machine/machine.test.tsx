@@ -30,13 +30,6 @@ vi.mock("#/host/install", () => ({
   acknowledgeUpdate: vi.fn(async () => "request-1"),
   recheckUpdate: vi.fn(async () => {}),
 }));
-vi.mock("#/open/lifecycle", async (original) => {
-  const real = await original<typeof import("#/open/lifecycle")>();
-  return {
-    ...real,
-    useInstancesBasis: (enabled: boolean) => (enabled ? null : real.useInstancesBasis(false)),
-  };
-});
 vi.mock("#/components/feedback-picker", () => ({
   FeedbackPicker: () => <Button label="feedback">feedback</Button>,
 }));
