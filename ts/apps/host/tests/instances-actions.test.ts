@@ -49,7 +49,7 @@ const adoptionAnswer = {
   resolved: { id: adopted.id, pid: 4242, processStartUtc: observed.process.processStartUtc },
 };
 const startedAnswer = {
-  result: { state: "ok", phase: "ready", id: "dev", session: { receipt: { receiptPath } } },
+  result: { state: "ok", phase: "ready", id: "dev", session: controlledRow() },
 };
 
 type Answer =
@@ -125,10 +125,81 @@ async function setup(
   return { calls, owner, deps, admit, dir, peaWork, file };
 }
 
+async function recordPeaLaunch(owner: ActionJournal) {
+  const launch = await owner.admit(
+    {
+      id: "pea-launch",
+      kind: "workflow",
+      key: "instances.start",
+      actor: "human",
+      destination: { kind: "host" },
+      input: { year: "2025", owner: "pea", addins: "on" },
+      bases: {},
+    },
+    async () => null,
+    async () => startedAnswer.result,
+  );
+  await owner.wait(launch.id);
+}
+
 const into = (id = "dev") => ({ session: { id } });
 const newRevit = (over: Record<string, unknown> = {}) => ({
   start: { year: "2025", owner: "you", addins: "on", ...over },
 });
+
+test.each(["stop", "close", "restart"])(
+  "agent %s on your session is human.only and never dispatches",
+  async (verb) => {
+    const f = await setup(() => ({ result: { state: "ok" } }));
+    const receipt = await f.admit(
+      `instances.${verb}`,
+      {
+        session,
+        ...(verb !== "restart" ? { unsaved: "keep" } : {}),
+        ...(verb === "close"
+          ? { document: { source: "sdk", session: session.selection, openId } }
+          : {}),
+      },
+      undefined,
+      "agent",
+    );
+    expect(receipt).toMatchObject({ state: "failed", notDispatched: true });
+    expect(receipt).toHaveProperty("error", expect.stringContaining("human.only"));
+    expect(f.calls.every((args) => args[1] === "list")).toBe(true);
+  },
+);
+
+test("a user's own background run stays you and refuses agent stop", async () => {
+  const f = await setup(
+    () => ({ result: { state: "ok" } }),
+    [controlledRow({ shape: shape("background") })],
+  );
+  const receipt = await f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "agent");
+  expect(receipt).toMatchObject({ state: "failed", notDispatched: true });
+  expect(receipt).toHaveProperty("error", expect.stringContaining("human.only"));
+  expect(f.calls.every((args) => args[1] === "list")).toBe(true);
+});
+
+test.each(["start", "open"])(
+  "a succeeded Pea %s receipt admits agent stop of that background process",
+  async (verb) => {
+    const f = await setup(
+      (args) => (args[1] === "start" ? startedAnswer : { result: { state: "ok", openId } }),
+      [controlledRow({ shape: shape("background") })],
+    );
+    const launch = await f.admit(
+      `instances.${verb}`,
+      verb === "start"
+        ? { year: "2025", owner: "pea", addins: "on" }
+        : { source: "cld://US/{p}p/{m}Tower.rvt", into: newRevit({ owner: "pea" }) },
+    );
+    expect(launch.state).toBe("succeeded");
+    expect(
+      (await f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "agent")).state,
+    ).toBe("succeeded");
+    expect(f.calls.at(-1)!.slice(0, 2)).toEqual(["session", "stop"]);
+  },
+);
 
 test("the launch schema carries every open option and no staged state", () => {
   const launch = instancesActions["instances.open"].input;
@@ -278,6 +349,7 @@ test("a Pea launch copies a local, non-workshared file into Pea's work folder an
     () => ({ result: { state: "ok", openId } }),
     [controlledRow({ id: "pea-bg", shape: shape("background") })],
   );
+  await recordPeaLaunch(f.owner);
   const source = await f.file("Tower.rvt", "header Worksharing: Not enabled tail");
   const before = await readFile(source);
   const receipt = await f.admit("instances.open", { source, into: into("pea-bg") });
@@ -317,6 +389,7 @@ test("a Pea launch of a workshared model opens detached and is not copied", asyn
     () => ({ result: { state: "ok", openId } }),
     [controlledRow({ id: "pea-bg", shape: shape("background") })],
   );
+  await recordPeaLaunch(f.owner);
   const source = await f.file("Central.rvt", "Worksharing: Local");
   const receipt = await f.admit("instances.open", { source, into: into("pea-bg") });
   expect(receipt.state).toBe("succeeded");
@@ -336,6 +409,7 @@ test("a Pea launch of a cloud model opens detached", async () => {
     () => ({ result: { state: "ok", openId } }),
     [controlledRow({ id: "pea-bg", shape: shape("background") })],
   );
+  await recordPeaLaunch(f.owner);
   const source = "cld://US/{p}p/{m}Tower.rvt";
   expect((await f.admit("instances.open", { source, into: into("pea-bg") })).state).toBe(
     "succeeded",
@@ -350,6 +424,7 @@ test("Pea refuses, undispatched, a file whose worksharing it cannot read or a so
     () => ({ result: { state: "ok", openId } }),
     [controlledRow({ id: "pea-bg", shape: shape("background") })],
   );
+  await recordPeaLaunch(f.owner);
   const unread = await f.file("Unknown.rvt", "no marker here");
   for (const source of [unread, "recent:Tower.rvt"]) {
     const receipt = await f.admit("instances.open", { source, into: into("pea-bg") });
@@ -677,6 +752,7 @@ test("a Pea copy is made once: resuming a lost open reuses the frozen copy", asy
     },
     [controlledRow({ id: "pea-bg", shape: shape("background") })],
   );
+  await recordPeaLaunch(f.owner);
   const source = await f.file("Tower.rvt", "Worksharing: Not enabled");
   const input = { source, into: into("pea-bg") };
   const lost = await f.admit("instances.open", input);
@@ -846,7 +922,7 @@ test("SDK close refuses product references and wrong-source ids before mutation"
   expect(f.calls.map((args) => args.slice(0, 2))).toEqual([["doc", "list"]]);
 });
 
-test("restart, stop and close run for any actor; stop and close require an unsaved choice", async () => {
+test("restart, stop and close run for a human; stop and close require an unsaved choice", async () => {
   const f = await setup((args) =>
     args[0] === "session"
       ? { result: { id: "dev", state: "ok", phase: "ready" } }
@@ -860,7 +936,7 @@ test("restart, stop and close run for any actor; stop and close require an unsav
   await expect(f.admit("instances.restart", { session, unsaved: "keep" })).rejects.toThrow();
   expect(f.calls).toEqual([]);
 
-  expect((await f.admit("instances.restart", { session }, undefined, "agent")).state).toBe(
+  expect((await f.admit("instances.restart", { session }, undefined, "human")).state).toBe(
     "succeeded",
   );
   const restart = f.calls.at(-1)!;
@@ -870,7 +946,7 @@ test("restart, stop and close run for any actor; stop and close require an unsav
   expect(flag(restart, "--expect-session")).toBe(receiptPath);
 
   expect(
-    (await f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "agent")).state,
+    (await f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "human")).state,
   ).toBe("succeeded");
   const stop = f.calls.at(-1)!;
   expect(stop.slice(0, 4)).toEqual(["session", "stop", "--id", "dev"]);
@@ -880,7 +956,7 @@ test("restart, stop and close run for any actor; stop and close require an unsav
     "instances.close",
     { session, document, unsaved: "keep" },
     undefined,
-    "agent",
+    "human",
   );
   expect(close.state).toBe("succeeded");
   const closeArgv = f.calls.at(-1)!;

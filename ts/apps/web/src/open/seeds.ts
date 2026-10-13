@@ -77,6 +77,7 @@ const SHELL = doc("project-a Shell.rvt", "C:\\Models\\project-a Shell.rvt", {
 
 /** A checkout Revit this checkout's dev session controls, hot reload, one unsaved cloud model. */
 export const CHECKOUT_HOT = {
+  whose: "you",
   row: {
     case: "controlled-active",
     execution: { allowed: true, code: null, detail: null },
@@ -120,6 +121,7 @@ export const CHECKOUT_HOT = {
 
 /** A Revit someone started from its icon: observed, addressed by pid, documents from doc list. */
 export const OBSERVED_ICON: MachineSession = {
+  whose: "you",
   row: {
     case: "observed-active",
     execution: { allowed: true, code: null, detail: null },
@@ -148,6 +150,7 @@ export const OBSERVED_ICON: MachineSession = {
 
 /** A background Revit with add-ins quarantined, still inside its startup window. */
 export const BACKGROUND_BOOTING: MachineSession = {
+  whose: "you",
   row: {
     case: "controlled-pending",
     execution: { allowed: true, code: null, detail: null },
@@ -409,6 +412,7 @@ const CHADDS =
 
 /** The person's own Revit 2025, started from its icon: Hospital-MEP unsaved, a family beside it. */
 export const BAY_YOURS_25: MachineSession = {
+  whose: "you",
   row: {
     case: "observed-active",
     execution: { allowed: true, code: null, detail: null },
@@ -457,6 +461,7 @@ const peaSession = (
   pid: number,
   documents: DocumentInfo[],
 ): MachineSession => ({
+  whose: "pea",
   row: {
     case: "controlled-active",
     execution: { allowed: true, code: null, detail: null },

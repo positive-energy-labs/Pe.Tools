@@ -71,6 +71,7 @@ export interface MachineAttachment {
 }
 
 export interface MachineSession {
+  readonly whose: "you" | "pea";
   readonly row: SessionObservation;
   readonly attachment: MachineAttachment | null;
   /** Observed documents have no persistence metadata on beta.186's doc-list wire. */

@@ -2,19 +2,17 @@
  * THE PATCH BAY (host MAP round 4, promoted 2026-10-12): documents are jacks on the left (the
  * master table with its filters), Revits are sockets on the right (one `SessionCard` each, plus a
  * free "new Revit" card), and every open document is a cable between them, all the time. Pea's
- * cables are dashed pea green; the rw grant is the one lit cable, its band counting the grant
- * down. Patching a jack into a socket forces one `ArmingStrip` in that socket whose verb names
+ * cables are dashed pea green. Patching a jack into a socket forces one `ArmingStrip` in that socket whose verb names
  * every consequence; pressing it is the consent (ADR 0016). The table's query box is the command
  * line: before `→` it filters the documents, after it, it addresses a socket and its options. Every
  * token equals a click and clicks update the chips: one draft, two inputs.
  *
  * Each option has one home (Q16): the filters band holds source, search and saved year; the act of
  * patching holds the target; the free card holds a new Revit's year, whose and add-ins; the cable
- * adapter holds detach (workshared only) and missing links; a patched cable holds take back rw,
+ * adapter holds detach (workshared only) and missing links; a patched cable holds
  * reload and close. Window and headless are not human options.
  *
- * Everything drawn is the host's one `Machine` reading plus the recents; the grants and Pea's jobs
- * come from the thread list (`grants.ts`). The same component has three homes: `/open` side by
+ * Ownership comes from the host's `Machine` reading; Pea's job labels come from the thread list. The same component has three homes: `/open` side by
  * side (`layout="row"`), the machine drawer stacked, and the composer's open mode.
  */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -47,15 +45,6 @@ import { resolveWorkbenchConfig } from "#/workbench/config";
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 import { documentColumns, ModelTable } from "./documents";
-import {
-  GRANT_MINUTES,
-  grantLeft,
-  grantsOf,
-  jobsOf,
-  useThreadSummaries,
-  type Grant,
-  type PeaJob,
-} from "./grants";
 import { factsOf, useLifecycle } from "./lifecycle";
 import {
   defaultYear,
@@ -64,12 +53,27 @@ import {
   modelRows,
   pathRow,
   whoseOf,
+  jobsOf,
+  type PeaJob,
   type DocRow,
   type LaunchDraft,
   type LaunchPlan,
 } from "./model";
 import { BAY_THREADS } from "./seeds";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
+
+/** Thread activity labels only; thread heads do not grant browser-computed access. */
+export function useThreadSummaries(
+  enabled: boolean,
+  fixture: readonly HarnessThreadSummary[] | null,
+) {
+  const [threads, setThreads] = useState<readonly HarnessThreadSummary[] | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    return harnessClient(resolveWorkbenchConfig().origin).summaries(setThreads, () => {});
+  }, [enabled]);
+  return enabled ? threads : fixture;
+}
 
 export type BayLayout = "row" | "stack";
 
@@ -110,7 +114,7 @@ export function PatchBay({
   machine: Machine | null;
   loading: boolean;
   rows: readonly DocRow[];
-  /** The host's thread list (grants and Pea's jobs); null until it answers. */
+  /** The host's thread list (Pea's job labels); null until it answers. */
   threads: readonly HarnessThreadSummary[] | null;
   fixture: boolean;
   layout: BayLayout;
@@ -126,12 +130,6 @@ export function PatchBay({
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [bay, setBay] = useState<HTMLDivElement | null>(null);
   const [state, setState] = useTableState();
-  const [tick, setTick] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setTick(Date.now()), 30_000);
-    return () => clearInterval(timer);
-  }, []);
-
   const columns = useMemo(() => documentColumns(layout), [layout]);
   // A pasted path becomes a jack the table does not list, so it can be patched like any other.
   const allRows = useMemo(() => {
@@ -156,12 +154,6 @@ export function PatchBay({
     draft.doc === null && arrowed && visible[0] ? { ...draft, doc: visible[0].key } : draft;
   const plan = launchPlan(inHand, machine, allRows);
   const refusal = fixture ? "Fixture: nothing on this page reaches a host." : shellRefusal;
-  // The fixture's clock is the machine's observation; the grant clock has no live source yet.
-  const now = fixture && machine ? Date.parse(machine.observedAtUtc) : tick;
-  const grants = useMemo(
-    () => grantsOf(threads, sessions, fixture ? (thread) => thread.updatedAt : undefined),
-    [threads, sessions, fixture],
-  );
   const jobs = useMemo(() => jobsOf(threads, sessions), [threads, sessions]);
 
   const unplug = () => {
@@ -402,9 +394,7 @@ export function PatchBay({
       const row = allRows.find((each) => each.openIn?.document === document);
       if (!row || !document.openId) continue;
       const openId = document.openId;
-      const grant = grants.find((each) => each.openId === openId && each.session === session);
       const pea = whoseOf(session) === "pea";
-      const left = grant ? grantLeft(grant, now) : null;
       const upgrade =
         row.savedYear && row.savedYear < session.row.year
           ? `${yy(row.savedYear)}→${yy(session.row.year)}`
@@ -413,22 +403,16 @@ export function PatchBay({
         key: `cable:${openId}`,
         from: [row.key, "jacks"],
         to: docKey(document),
-        tone: pea ? "pea" : grant ? "commit" : undefined,
+        tone: pea ? "pea" : undefined,
         dashed: pea,
-        strong: Boolean(grant),
-        band: left !== null ? left / GRANT_MINUTES : undefined,
-        label: grant ? (
-          <span data-tone="commit">rw{left !== null ? ` · ${left} min` : ""}</span>
-        ) : upgrade ? (
+        label: upgrade ? (
           <span data-tone="caution" title={`opened in a newer Revit than it was saved in`}>
             {upgrade}
           </span>
         ) : undefined,
-        title: grant
-          ? `Pea holds rw on ${row.title} through "${grant.thread.title}"${left !== null ? `; ${left} min left` : ""}`
-          : pea
-            ? `Pea's copy of ${row.title}`
-            : `${row.title} is open in Revit ${session.row.year}; press for its verbs`,
+        title: pea
+          ? `Pea's copy of ${row.title}`
+          : `${row.title} is open in Revit ${session.row.year}; press for its verbs`,
         onClick: () => setHeld(held === openId ? null : openId),
       });
     }
@@ -487,7 +471,6 @@ export function PatchBay({
             onPatch={() => patch(key)}
             onHover={(over) => setHover(over ? key : null)}
             strip={draft.target === key ? strip : null}
-            grants={grants.filter((grant) => grant.session === session)}
             jobs={jobs.filter((job) => job.session === session)}
             held={held}
             onHeld={setHeld}
@@ -767,7 +750,6 @@ function Socket({
   onPatch,
   onHover,
   strip,
-  grants,
   jobs,
   held,
   onHeld,
@@ -782,7 +764,6 @@ function Socket({
   onPatch: () => void;
   onHover: (over: boolean) => void;
   strip: ReactNode;
-  grants: readonly Grant[];
   jobs: readonly PeaJob[];
   held: string | null;
   onHeld: (openId: string | null) => void;
@@ -807,7 +788,6 @@ function Socket({
           session={session}
           document={document}
           refusal={refusal}
-          grant={grants.find((grant) => grant.openId === document.openId) ?? null}
           held={held === document.openId}
           onHeld={() => onHeld(held === document.openId ? null : document.openId)}
         />
@@ -839,19 +819,17 @@ function Socket({
   );
 }
 
-/** A held document's row: the cable lands here; pressed, its verbs open (take back rw, reload, close). */
+/** A held document's row: the cable lands here; pressed, its verbs open (reload, close). */
 function CableRow({
   session,
   document,
   refusal,
-  grant,
   held,
   onHeld,
 }: {
   session: MachineSession;
   document: SessionDocument;
   refusal: string | null;
-  grant: Grant | null;
   held: boolean;
   onHeld: () => void;
 }) {
@@ -866,22 +844,8 @@ function CableRow({
     document.persistence === "cloud" ||
     ("isWorkshared" in document && document.isWorkshared === true);
   const action = useAction(
-    async (
-      verb:
-        | { kind: "close"; unsaved: "keep" | "discard" }
-        | { kind: "reload" }
-        | { kind: "release" },
-    ) => {
+    async (verb: { kind: "close"; unsaved: "keep" | "discard" } | { kind: "reload" }) => {
       try {
-        if (verb.kind === "release") {
-          if (!grant) return;
-          await harnessClient(resolveWorkbenchConfig().origin).target(grant.thread.id, {
-            defaultTarget: null,
-            revision: grant.thread.head.revision,
-          });
-          setOutcome({ kind: "receipt", label: `rw taken back from "${grant.thread.title}"` });
-          return;
-        }
         const selection = selectionOf(session.row);
         const key = verb.kind === "close" ? "instances.close" : "instances.open";
         const input =
@@ -928,18 +892,6 @@ function CableRow({
       onClick={onHeld}
       verbs={
         <>
-          {grant ? (
-            <Button
-              label="take back rw"
-              kind="framed"
-              {...gate(
-                `end Pea's write grant from "${grant.thread.title}"; the thread keeps running without a target`,
-              )}
-              onClick={() => action.mutate({ kind: "release" })}
-            >
-              take back rw
-            </Button>
-          ) : null}
           {cloud ? (
             <Button
               label="reload"
@@ -971,7 +923,11 @@ function CableRow({
               verb="close, keep work"
               target={title}
               icon={Square}
-              says={`${document.isModified ? "It has unsaved work: closing saves it first." : "Nothing is unsaved."}${grant ? " The rw grant lapses with it." : ""}`}
+              says={
+                document.isModified
+                  ? "It has unsaved work: closing saves it first."
+                  : "Nothing is unsaved."
+              }
               state={{ phase: "arming" }}
               busy={busy}
               refusal={blocked}

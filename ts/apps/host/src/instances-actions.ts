@@ -40,6 +40,7 @@ import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
 import { peaSourceOf, type PeaSource } from "./pea-source.ts";
 import { productPeaWorkPath } from "./product-paths.ts";
 import { resolveStartProject, runPeRevitCli } from "./session-route.ts";
+import { whoseOf } from "./whose.ts";
 
 export type InstancesActionDependencies = {
   sdk?: SdkReceiptReader;
@@ -251,14 +252,15 @@ export async function admitInstancesAction(
         : launch && "session" in launch.into
           ? await readTarget(launch.into.session, undefined, read)
           : null;
-      const forPea =
+      const whose = target ? whoseOf(target, await owner.list()) : null;
+      if (control && admission.actor === "agent" && whose === "you")
+        throw refuse(`human.only: '${key}' on your Revit is yours to press.`);
+      const peaLaunch =
         launch !== null &&
-        ("start" in launch.into
-          ? launch.into.start.owner === "pea"
-          : target?.posture === "background");
+        ("start" in launch.into ? launch.into.start.owner === "pea" : whose === "pea");
       let pea: PeaSource | null = null;
       try {
-        pea = forPea ? await peaSourceOf(launch!, deps.peaWork ?? productPeaWorkPath()) : null;
+        pea = peaLaunch ? await peaSourceOf(launch!, deps.peaWork ?? productPeaWorkPath()) : null;
       } catch (error) {
         throw refuse(error instanceof Error ? error.message : String(error));
       }

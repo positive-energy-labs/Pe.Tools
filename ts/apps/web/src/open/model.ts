@@ -4,7 +4,13 @@
  * exact commands the host runs). The argv comes from the SDK's own generated builders, so the
  * printed line and the dispatched line cannot drift.
  */
-import type { InstancesLaunch, InstancesStart, Machine, MachineSession } from "@pe/agent-contracts";
+import type {
+  HarnessThreadSummary,
+  InstancesLaunch,
+  InstancesStart,
+  Machine,
+  MachineSession,
+} from "@pe/agent-contracts";
 import {
   docOpenArgv,
   sessionStartArgv,
@@ -114,9 +120,8 @@ export function modelRows(
   return rows;
 }
 
-/** Whose a Revit is: a background posture is Pea's (the launch contract's `owner: "pea"`). */
-export const whoseOf = (session: MachineSession): "you" | "pea" =>
-  session.row.shape.posture === "background" ? "pea" : "you";
+/** Ownership is projected by the host from launch receipts and SDK process identity. */
+export const whoseOf = (session: MachineSession): "you" | "pea" => session.whose;
 
 /**
  * A row for a pasted source the recents do not know: an absolute path, a UNC path, or a `cld://`
@@ -399,4 +404,33 @@ export function launchPlan(
   }
   if (refusal || waiting) launch = null;
   return { doc, year, target, whose, upgrade, verb, argv, refusal, waiting, cautions, launch };
+}
+
+export interface PeaJob {
+  readonly thread: HarnessThreadSummary;
+  readonly session: MachineSession;
+  readonly openId: string | null;
+}
+
+/** Thread activity in Pea's sessions; this conveys no write grant. */
+export function jobsOf(
+  threads: readonly HarnessThreadSummary[] | null,
+  sessions: readonly MachineSession[],
+): PeaJob[] {
+  return (threads ?? []).flatMap((thread) => {
+    const ref = thread.head.defaultTarget?.kind === "open" ? thread.head.defaultTarget.ref : null;
+    if (!ref) return [];
+    const session = sessions.find(
+      (each) => each.whose === "pea" && each.attachment?.session === ref.session,
+    );
+    return session
+      ? [
+          {
+            thread,
+            session,
+            openId: session.documents?.some((doc) => doc.openId === ref.openId) ? ref.openId : null,
+          },
+        ]
+      : [];
+  });
 }

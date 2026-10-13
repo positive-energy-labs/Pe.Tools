@@ -7,6 +7,7 @@ import { z } from "zod";
 import { productIdentity } from "@pe/host-contracts/contracts";
 import type {
   Access,
+  ActionReceipt,
   Machine,
   MachineAttachment,
   MachineHost,
@@ -33,6 +34,8 @@ import { hostOwnership, productRoot } from "./host-ownership.ts";
 import type { RevitBridge } from "./bridge.ts";
 import type { Providers } from "./harness/providers.ts";
 import { unreadLeg, type UpdateReader } from "./update-reader.ts";
+import { hostActionJournal } from "./gateway-owner.ts";
+import { whoseOf } from "./whose.ts";
 
 export interface MachineShareAdapter {
   read(): Promise<MachineShare>;
@@ -52,6 +55,7 @@ export const unavailableShare: MachineShareAdapter = {
 };
 
 export interface MachineSources {
+  actions(this: void): Promise<readonly ActionReceipt[]>;
   host(this: void): Promise<Omit<MachineHost, "peers">>;
   peers(this: void): Promise<readonly MachinePeer[]>;
   sessions(this: void): Promise<readonly SessionObservation[]>;
@@ -145,12 +149,16 @@ export function createMachine(
     if (closed) return Promise.resolve(latest);
     if (inFlight) return inFlight;
     inFlight = (async () => {
+      let actions: readonly ActionReceipt[] = [];
       const [censusRead, attachmentsRead] = await Promise.all([
         read("sessions", sources.sessions, (value) => {
           sessions = value;
         }),
         read("attachments", sources.attachments, (value) => {
           attachments = value;
+        }),
+        read("actions", sources.actions, (value) => {
+          actions = value;
         }),
         read("host", sources.host, (value) => {
           host = value;
@@ -294,6 +302,7 @@ export function createMachine(
           const held = process ? documents.get(processKey(process)) : undefined;
           return {
             row,
+            whose: whoseOf({ posture: row.shape.posture, process }, actions),
             attachment,
             documents: held?.value ?? null,
             documentsLeg: held?.leg ?? unreadLeg(),
@@ -438,6 +447,7 @@ export function machineSources(
   share: MachineShareAdapter = unavailableShare,
 ): MachineSources {
   return {
+    actions: () => hostActionJournal().list(),
     host: async () => {
       const file = await readServiceFile(productRoot(), hostOwnership.serviceName);
       if (!file || file.pid !== process.pid)

@@ -7,7 +7,7 @@ import { HttpRouter } from "effect/unstable/http";
 import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { hostStatusRoute } from "../src/app.ts";
-import type { Machine, MachineAttachment } from "@pe/agent-contracts";
+import type { ActionReceipt, Machine, MachineAttachment } from "@pe/agent-contracts";
 import type {
   ControlledActive,
   DocListResult,
@@ -84,6 +84,7 @@ function fixture() {
     receiptLeg: unreadLeg(),
   };
   const sources: MachineSources = {
+    actions: vi.fn(async (): Promise<readonly ActionReceipt[]> => []),
     host: vi.fn(async () => ({
       serviceName: "host",
       instanceId: "this-launch",
@@ -128,6 +129,61 @@ function fixture() {
   };
   return { sources, machine: createMachine(sources, { periodMs: 60_000 }) };
 }
+
+test.each([
+  ["start", "pea", "succeeded", 42, row.process.processStartUtc, "background", "pea"],
+  ["open", "pea", "succeeded", 42, row.process.processStartUtc, "background", "pea"],
+  ["start", "you", "succeeded", 42, row.process.processStartUtc, "background", "you"],
+  ["start", "pea", "failed", 42, row.process.processStartUtc, "background", "you"],
+  ["start", "pea", "running", 42, row.process.processStartUtc, "background", "you"],
+  ["start", "pea", "succeeded", 43, row.process.processStartUtc, "background", "you"],
+  ["start", "pea", "succeeded", 42, "2026-10-09T00:00:01Z", "background", "you"],
+  ["start", "pea", "succeeded", 42, row.process.processStartUtc, "foreground", "you"],
+] as const)(
+  "whose: %s owner %s state %s pid %s start %s posture %s gives %s",
+  async (verb, owner, state, pid, processStartUtc, posture, whose) => {
+    const f = fixture();
+    const process = { ...row.process, pid, processStartUtc };
+    const start = { year: "2025", owner, addins: "on" };
+    const receipt = {
+      kind: "workflow",
+      id: "launch",
+      key: `instances.${verb}`,
+      actor: "human",
+      state,
+      destination: { kind: "host" },
+      request: verb === "start" ? start : { source: "C:/Tower.rvt", into: { start } },
+      result: verb === "start" ? { session: { process } } : { session: { session: { process } } },
+      bases: {},
+      steps: [],
+      preparation: { state: "unprepared" },
+      recovery: [],
+      startedAt: row.observedAtUtc,
+      publication: { state: "unrequested" },
+      ...(state === "failed" ? { error: "failed", status: 409 } : {}),
+    } as ActionReceipt;
+    vi.mocked(f.sources.sessions).mockResolvedValue([{ ...row, shape: { ...row.shape, posture } }]);
+    vi.mocked(f.sources.actions).mockResolvedValue([receipt]);
+    try {
+      const reading = await f.machine.refresh();
+      expect(reading.revit.sessions![0]).toHaveProperty("whose", whose);
+    } finally {
+      f.machine.close();
+    }
+  },
+);
+
+test("a background SDK row with no launch receipt projects whose you", async () => {
+  const f = fixture();
+  vi.mocked(f.sources.sessions).mockResolvedValue([
+    { ...row, shape: { ...row.shape, posture: "background" } },
+  ]);
+  try {
+    expect((await f.machine.refresh()).revit.sessions![0]).toHaveProperty("whose", "you");
+  } finally {
+    f.machine.close();
+  }
+});
 
 test("receipt recovery ticks independently of the feed and installed-years clocks", async () => {
   vi.useFakeTimers();

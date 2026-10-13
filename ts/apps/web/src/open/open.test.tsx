@@ -18,7 +18,7 @@ import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { PatchBay } from "./bay";
-import { grantsOf, jobsOf } from "./grants";
+import { jobsOf, whoseOf } from "./model";
 import { runLifecycle } from "./lifecycle";
 import { EMPTY_DRAFT, launchPlan, modelRows, type DocRow } from "./model";
 import { OpenPage } from "./route";
@@ -27,7 +27,6 @@ import {
   BAY_PEA_25,
   BAY_RECENTS,
   BAY_THREADS,
-  BAY_YOURS_25,
   CHECKOUT_HOT,
   MACHINE_SEEDS,
   OBSERVED_ICON,
@@ -297,13 +296,8 @@ describe("launch plan", () => {
   });
 });
 
-describe("grants and jobs from the thread list", () => {
-  test("a thread head on your open document is the grant; heads in Pea's Revits are her jobs", () => {
-    const grants = grantsOf(BAY_THREADS, world.revit.sessions!);
-    expect(grants.map((grant) => [grant.thread.title, grant.openId])).toEqual([
-      ["Retag level 2 diffusers", "18244-hospital"],
-    ]);
-    expect(grants[0]!.session).toBe(BAY_YOURS_25);
+describe("jobs from the thread list", () => {
+  test("heads in Pea's Revits are her jobs", () => {
     const jobs = jobsOf(BAY_THREADS, world.revit.sessions!);
     expect(jobs.map((job) => [job.thread.title, job.session.row.year])).toEqual([
       ["Schedule cleanup L1-L4", 2025],
@@ -500,4 +494,15 @@ test("a held document offers close with work kept, and discard beside it", async
     document: { source: "sdk", session: { pid: 18244 }, openId: "18244-hospital" },
     unsaved: "keep",
   });
+});
+
+test("background posture does not override the host ownership projection", () => {
+  expect(whoseOf({ ...BAY_PEA_25, whose: "you" })).toBe("you");
+});
+
+test("thread heads draw no rw grant or revoke control before host access projection", () => {
+  render(<Bay />);
+  expect(screen.queryByText(/^rw(?: |$)/)).toBeNull();
+  expect(screen.queryByRole("button", { name: "take back rw" })).toBeNull();
+  expect(document.querySelector('[title^="Pea holds rw"]')).toBeNull();
 });
