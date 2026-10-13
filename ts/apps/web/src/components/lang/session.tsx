@@ -224,7 +224,11 @@ export function SessionCard({
           </span>
           <PhaseWord facts={facts} />
           {session.row.execution?.allowed !== true ? (
-            <span data-tone="caution">
+            <span
+              data-tone="caution"
+              className="min-w-0 truncate"
+              title={session.row.execution?.detail ?? "Runtime ownership not verified"}
+            >
               {session.row.execution?.detail ?? "Runtime ownership not verified"}
             </span>
           ) : null}

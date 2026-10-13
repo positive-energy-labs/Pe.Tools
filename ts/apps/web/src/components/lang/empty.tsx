@@ -9,7 +9,7 @@ import "./lang.css";
 export const emptyStateRecipe = tv({
   slots: {
     // Sentence case in the reading ink: an empty is said, not stamped. The exit is the louder half.
-    base: "block t-small text-ink-2 first-letter:uppercase",
+    base: "block whitespace-normal wrap-anywhere t-small text-ink-2 first-letter:uppercase",
     exit: "text-ink before:text-ink-mute before:content-['_—_']",
   },
   variants: { state: { scope: {}, filter: {} } },
