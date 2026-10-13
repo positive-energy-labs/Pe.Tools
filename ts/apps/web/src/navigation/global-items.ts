@@ -44,7 +44,7 @@ export function globalItems(snapshot: NavigationSnapshot | null, kind: ResultKin
           kind: "Pea threads" as const,
           label: thread.label,
           context: thread.context,
-          aliases: "pea chat thread",
+          aliases: `pea chat thread ${thread.id}`,
           state: thread.state,
           url: thread.url,
           reason: thread.reason,

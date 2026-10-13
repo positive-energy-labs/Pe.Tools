@@ -53,6 +53,7 @@ import {
   activityWord,
   wokeFromSnooze,
   visibleThreads,
+  threadSearchText,
   THREAD_STATES,
   oneThreadRefusal,
   threadVerbs,
@@ -883,9 +884,7 @@ export function ThreadDialog({
       aria-label="Threads"
       items={roster}
       keyOf={(thread) => thread.id}
-      labelOf={(thread) =>
-        `${thread.title} ${targetLabel(thread)} ${thread.providerName} ${thread.modelId ?? ""}`
-      }
+      labelOf={threadSearchText}
       groupOf={(thread) => SHELF_WORD[shelfOf(thread, now)]}
       filter="fuzzy"
       searchAbove={0}

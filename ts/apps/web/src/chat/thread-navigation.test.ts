@@ -19,9 +19,24 @@ import {
   targetFacets,
   threadVerbs,
   visibleThreads,
+  threadSearchText,
 } from "./thread-navigation";
 
 const ALL = { provider: "*", state: "*", unread: false } as const;
+
+test("full and partial immutable IDs remain searchable after a title changes", () => {
+  const id = "019c6e27-e55b-73d1-87d8-4e01f1f75043";
+  const threads = demoThreads({ ...emptyChatState(), id, title: "Renamed title" });
+  const find = (query: string) =>
+    visibleThreads(threads, { query, filter: "all", target: "*", ...ALL }).map(
+      (thread) => thread.id,
+    );
+  expect(find(id)).toEqual([id]);
+  expect(find("E55B-73D1")).toEqual([id]);
+  expect(find("Renamed title")).toEqual([id]);
+  expect(find("no-such-thread-id")).toEqual([]);
+  expect(threadSearchText(threads[0]!)).toContain(id);
+});
 
 test("provider, state and the unread toggle narrow the roster and compose", () => {
   const threads = demoThreads({ ...emptyChatState(), id: "open", title: "Open" });

@@ -135,6 +135,17 @@ public class TrayLaunchTests {
     }
 
     [Test]
+    public void ExternalBrowserLinksRequireAUserClickAndWebAddress() {
+        const string pdf = "https://www.magicaire.com/wp-content/uploads/2014/01/HBB-Submittal-12142013.pdf";
+        Assert.That(TrayContext.TryGetExternalUrl(pdf, true, out var destination), Is.True);
+        Assert.That(destination, Is.EqualTo(pdf));
+        Assert.That(TrayContext.TryGetExternalUrl(pdf, false, out _), Is.False);
+        foreach (var refused in new[] { "file:///C:/secret.txt", "javascript:alert(1)", "data:text/html,test",
+                     "https://user:password@example.com/", "https://example.com/\n", "/relative" })
+            Assert.That(TrayContext.TryGetExternalUrl(refused, true, out _), Is.False, refused);
+    }
+
+    [Test]
     public void NativeTitlebarUsesMeasuredBoundsAndFailsClosedForUnavailableGeometry() {
         var client = new System.Drawing.Size(1100, 700);
         var buttons = new System.Drawing.Rectangle(796, 0, 292, 57);

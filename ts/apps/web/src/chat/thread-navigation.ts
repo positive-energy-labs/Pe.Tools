@@ -137,6 +137,21 @@ export function targetLabel(thread: Pick<HarnessThreadSummary, "head">): string 
   if (target.kind === "named") return target.address.split(/[\\/]/).at(-1) || target.address;
   return `Document in ${target.ref.session}`;
 }
+
+/** Title, target, provider/model, and immutable identity share one search surface. */
+export const threadSearchText = (
+  thread: Pick<HarnessThreadSummary, "id" | "title" | "providerName" | "modelId" | "head">,
+) =>
+  [
+    thread.title,
+    thread.providerName,
+    thread.modelId,
+    targetLabel(thread),
+    targetKey(thread.head.defaultTarget),
+    thread.id,
+  ]
+    .filter(Boolean)
+    .join(" ");
 /** The activity that asks for something; a resting thread has none (the sidebar says nothing). */
 export function activityWord(thread: HarnessThreadSummary): string | undefined {
   if (thread.activity.pending) return `${thread.activity.pending} waiting for you`;
@@ -188,17 +203,7 @@ export function visibleThreads<T extends HarnessThreadSummary & TargetRead>(
           : thread.lifecycle.status === "archived"
       )
         return false;
-      return [
-        thread.title,
-        thread.providerName,
-        thread.modelId,
-        targetLabel(thread),
-        targetKey(thread.head.defaultTarget),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(query);
+      return threadSearchText(thread).toLowerCase().includes(query);
     })
     .sort((a, b) => {
       const aShelf = shelfOf(a, options.now),

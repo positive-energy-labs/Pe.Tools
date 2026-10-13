@@ -170,10 +170,16 @@ internal sealed class TrayContext : ApplicationContext {
                 else e.Response = environment.CreateWebResourceResponse(null, 503, "Parent service retired", "");
             };
             core.NavigationStarting += (_, e) => {
-                if (!IsOriginalService() || !IsViewUrl(e.Uri)) e.Cancel = true;
+                if (!IsOriginalService()) { e.Cancel = true; return; }
+                if (!IsViewUrl(e.Uri)) { e.Cancel = true; OpenExternalUrl(e.Uri, e.IsUserInitiated); }
                 else _navigating = true;
             };
-            core.NewWindowRequested += (_, e) => e.Handled = true;
+            core.NewWindowRequested += (_, e) => {
+                e.Handled = true;
+                if (!IsOriginalService() || !e.IsUserInitiated) return;
+                if (IsViewUrl(e.Uri)) OpenWindow(e.Uri);
+                else OpenExternalUrl(e.Uri, true);
+            };
             core.WebMessageReceived += (_, e) => {
                 if (!IsOriginalService() || !IsViewUrl(e.Source)) return;
                 try {
@@ -196,6 +202,8 @@ internal sealed class TrayContext : ApplicationContext {
             };
             core.NavigationCompleted += async (_, e) => {
                 _navigating = false;
+                if (!e.IsSuccess && e.WebErrorStatus == CoreWebView2WebErrorStatus.OperationCanceled
+                    && IsOriginalService() && _hasPage) return;
                 _hasPage |= e.IsSuccess;
                 _recordDev |= e.IsSuccess;
                 if (e.IsSuccess) _pendingPath = null;
@@ -232,6 +240,23 @@ internal sealed class TrayContext : ApplicationContext {
         && uri.GetLeftPart(UriPartial.Authority) == _service.Origin;
     private bool IsViewUrl(string value) => Uri.TryCreate(value, UriKind.Absolute, out var uri)
         && uri.GetLeftPart(UriPartial.Authority) == _service.ViewOrigin;
+
+    internal static bool TryGetExternalUrl(string value, bool userInitiated, out string destination) {
+        destination = "";
+        if (!userInitiated || value.Any(char.IsControl) || !Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            || uri.Scheme is not ("http" or "https") || uri.UserInfo.Length != 0) return false;
+        destination = uri.AbsoluteUri;
+        return true;
+    }
+
+    private void OpenExternalUrl(string value, bool userInitiated) {
+        if (_web.Source is not { } source || !IsViewUrl(source.AbsoluteUri)
+            || !TryGetExternalUrl(value, userInitiated, out var destination)) return;
+        try { Process.Start(new ProcessStartInfo(destination) { UseShellExecute = true })?.Dispose(); }
+        catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException) {
+            _icon.Text = "Pe.Tools: browser link could not open";
+        }
+    }
 
     private async Task CheckHealthAsync() {
         if (_closing || _checking) return;

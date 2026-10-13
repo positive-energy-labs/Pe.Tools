@@ -5,7 +5,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { UpdateThreadRequest } from "@pe/agent-contracts";
 import { emptyChatState } from "#/workbench/chat-state";
 import { demoThreads } from "./thread-navigation";
-import { ThreadsSidebar } from "./thread-palette";
+import { ThreadDialog, ThreadsSidebar } from "./thread-palette";
 
 afterEach(cleanup);
 
@@ -69,6 +69,40 @@ test("the menu on a selected row acts on every selected thread and greys what ne
 });
 
 const selectedRows = () => document.querySelectorAll(".dl-row[data-selected]").length;
+
+test("sidebar search finds a renamed thread by partial immutable ID", () => {
+  mount();
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "fixture-local" } });
+  expect(screen.getByText("Draft the BIM handoff notes")).toBeTruthy();
+  expect(screen.queryByText("Trace the supply air path")).toBeNull();
+});
+
+test("Ctrl K thread dialog finds a renamed thread by full ID and selects that exact ID", async () => {
+  const id = "019c6e27-e55b-73d1-87d8-4e01f1f75043";
+  const onSelect = vi.fn();
+  render(
+    <ThreadDialog
+      threads={demoThreads({ ...emptyChatState(), id, title: "Renamed thread" }) as never}
+      currentThreadId={id}
+      open
+      onOpenChange={vi.fn()}
+      onSelect={onSelect}
+      onNew={vi.fn()}
+      providers={[]}
+      onFork={vi.fn()}
+      onRename={vi.fn()}
+      onDelete={vi.fn()}
+      onUpdate={vi.fn(async () => true)}
+      onNewTarget={vi.fn()}
+    />,
+  );
+  const search = await screen.findByPlaceholderText("Search every thread");
+  fireEvent.change(search, { target: { value: id } });
+  const option = screen.getByRole("option", { name: /Renamed thread/ });
+  expect(screen.queryByRole("option", { name: /Trace the supply air path/ })).toBeNull();
+  fireEvent.click(option);
+  expect(onSelect).toHaveBeenCalledWith(id);
+});
 
 test("ctrl-click toggles a row out, a plain click opens and clears, Escape and empty space clear", () => {
   mount();

@@ -229,10 +229,10 @@ export function AppBar() {
                   docs="Home opens the tool directory. The route search chooses tools, saved Works and Pea threads. The page palette belongs to the current page; global Find searches tools, saved Works and Pea threads. Settings opens the real theme, feedback and machine controls."
                 />
               )}
+              <span className="pe-appbar-command-seam hairline-l" aria-hidden />
+              <span id="pe-feedback-cancel" className="pe-feedback-cancel" />
+              <ChromeSettings />
             </div>
-            <span className="pe-appbar-command-seam hairline-l" aria-hidden />
-            <span id="pe-feedback-cancel" className="pe-feedback-cancel" />
-            <ChromeSettings />
           </div>
         </nav>
       </div>
