@@ -133,18 +133,11 @@ export function SessionCard({
       head={
         <>
           <span className="t-small t-upper">Revit {facts.year}</span>
-          {facts.name ? (
-            <FactChip title="the session name pe-revit addresses it by">{facts.name}</FactChip>
-          ) : (
-            <span>{ICON_STARTED}</span>
-          )}
-          {facts.pid ? <PidChip pid={facts.pid} /> : null}
+          {facts.name ? null : <span>{ICON_STARTED}</span>}
           <PhaseWord facts={facts} />
-          <span title={CUSTODY_SAYS[facts.custody]}>{facts.custody}</span>
         </>
       }
       headTrail={verbs}
-      foot={<ShapeCells shape={session.row.shape} />}
     >
       <div className="flex flex-col py-1" aria-label="documents">
         {documents === null ? (
@@ -179,6 +172,15 @@ export function SessionCard({
           ))
         )}
         {children}
+      </div>
+      {/* The machine facts wrap (a desk card is narrow); a rail would clip them. */}
+      <div className="flex flex-wrap items-center gap-1 px-(--gutter) pb-1 hairline-t pt-1">
+        {facts.name ? (
+          <FactChip title="the session name pe-revit addresses it by">{facts.name}</FactChip>
+        ) : null}
+        {facts.pid ? <PidChip pid={facts.pid} /> : null}
+        <FactChip title={CUSTODY_SAYS[facts.custody]}>{facts.custody}</FactChip>
+        <ShapeCells shape={session.row.shape} />
       </div>
       {strip}
     </ArtifactFrame>

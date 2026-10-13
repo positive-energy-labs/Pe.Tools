@@ -381,6 +381,9 @@ export function QueryBox({
             event.preventDefault();
             return command!.onCommit();
           }
+          // With the list closed, Escape still clears the word, then drops the command.
+          if (event.key === "Escape" && armed && !open)
+            return draft === "" ? command!.onArmed(false) : onDraft("");
           if (event.key !== "Backspace" || draft !== "") return;
           event.preventDefault();
           // Backspace on an empty box takes the last chip back into the box, as text.
