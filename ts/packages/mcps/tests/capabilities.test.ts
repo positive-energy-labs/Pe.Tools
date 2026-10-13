@@ -437,7 +437,11 @@ test.each(["http", "stdio"])(
             label: transport === "stdio" ? "pea-stdio" : "f-a",
           }),
           destination: { kind: "document", ref: own },
-          basis: { kind: "acquisition", id: "acq-copy", scope: { kind: "document", lifetime: own } },
+          basis: {
+            kind: "acquisition",
+            id: "acq-copy",
+            scope: { kind: "document", lifetime: own },
+          },
         },
       ]);
       expect(reads).toEqual(
