@@ -5,7 +5,7 @@
 import { useState } from "react";
 
 import { Switcher } from "#/components/lang/switcher";
-import { MachineBody } from "#/machine/body";
+import { SettingsBody } from "#/machine/body";
 import { MACHINE_SEEDS, type MachineSeed } from "#/open/seeds";
 
 import { Demo } from "./exhibit";
@@ -14,9 +14,9 @@ export function MachineSeedsDemo() {
   const [seed, setSeed] = useState<MachineSeed>("blocked-plan");
   return (
     <Demo
-      label="Machine body"
-      consumers="routes/machine.tsx (web, PWA and control window)"
-      spec="One canonical Machine renderer. Pick a recorded moment; the route owns section navigation and Settings owns configuration."
+      label="Settings body"
+      consumers="routes/settings.tsx (web, PWA and tray)"
+      spec="One canonical Settings renderer over the machine reading. Pick a recorded moment; the route owns section navigation."
     >
       <Switcher
         ariaLabel="machine seed"
@@ -29,7 +29,7 @@ export function MachineSeedsDemo() {
         }))}
       />
       <div data-surface="page" className="w-[380px] px-3 py-2">
-        <MachineBody key={seed} reading={MACHINE_SEEDS[seed]} fixture shell="tray" />
+        <SettingsBody key={seed} reading={MACHINE_SEEDS[seed]} fixture shell="tray" />
       </div>
     </Demo>
   );

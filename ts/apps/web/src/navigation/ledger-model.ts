@@ -165,7 +165,7 @@ export function ledgerRows(sources: LedgerSources, now: number): LedgerRow[] {
       where: "this computer",
       says: null,
       at: null,
-      url: "/machine",
+      url: "/settings",
     })),
     ...sources.threads
       .filter((thread) => thread.lifecycle.status === "active")

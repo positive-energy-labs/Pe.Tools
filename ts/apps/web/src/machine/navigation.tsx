@@ -1,36 +1,24 @@
 import { Button } from "@pe/kit/lang/button";
 import { useDestination } from "#/navigation/state";
-import { chipText, runtimeIdentity, type GroupKey } from "./model";
+import { chipText, runtimeIdentity, settingsDestination } from "./model";
 import { useMachine } from "./use-machine";
 
-const machineDestination = (section?: GroupKey) =>
-  `/machine${section ? `?section=${section}` : ""}`;
-
-export const settingsDestination = (section: "providers" | "sharing" | "startup") =>
-  `/settings?subject=machine&section=${section}`;
-
-function useMachineNavigation() {
-  const go = useDestination();
-  return (section?: GroupKey) => go(machineDestination(section));
-}
-
-/** Help enters the same address as search and the control window. */
-export function MachineHelpTrigger({ onOpen }: { onOpen?: () => void }) {
+/** Help enters the same Settings address as search and the tray's Settings door. */
+export function SettingsHelpTrigger({ onOpen }: { onOpen?: () => void }) {
   const { reading, fixture } = useMachine();
-  const go = useMachineNavigation();
+  const go = useDestination();
+  const chip = chipText(reading, fixture);
   return (
     <Button
-      label="This machine"
+      label="Settings"
       reason={runtimeIdentity(reading, fixture).detail}
       onClick={() => {
         onOpen?.();
-        go();
+        go(settingsDestination());
       }}
     >
-      This machine
-      {chipText(reading, fixture) ? (
-        <span className="face-mono"> · {chipText(reading, fixture)}</span>
-      ) : null}
+      Settings
+      {chip ? <span className="face-mono"> · {chip}</span> : null}
     </Button>
   );
 }

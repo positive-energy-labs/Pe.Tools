@@ -288,14 +288,14 @@ export const APP_ROUTES: readonly AppRoute[] = [
     key: "settings",
     path: "/settings",
     title: "Settings",
-    label: "Pea",
+    label: "Settings",
     iconKey: "Settings2",
     description:
-      "Whether Pea asks before each change. Providers and sign-in live in the machine drawer, behind the version chip.",
+      "This machine and this app: Revit sessions, update, sharing, Pea providers and approvals, host, notifications, appearance, and diagnostics.",
     task: "Explore / maintain",
     exposure: "Main",
-    aliases: "Pea",
-    runtimeNeed: "Host settings",
+    aliases: "machine Revit update share providers sign-in approvals host startup diagnostics theme",
+    runtimeNeed: "Host machine configuration",
     directory: true,
   },
   {
@@ -346,19 +346,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     runtimeNeed: "Host navigation",
     directory: false,
   },
-  {
-    key: "machine",
-    path: "/machine",
-    title: "Machine",
-    label: "Machine",
-    description: "Machine configuration and diagnostics",
-    iconKey: "Server",
-    task: "Explore / maintain",
-    exposure: "Main",
-    aliases: "providers sign-in diagnostics",
-    runtimeNeed: "Host machine configuration",
-    directory: false,
-  },
 ];
 
 export function appRouteByPath(path: string): AppRoute | undefined {
@@ -387,13 +374,13 @@ export interface SurfaceShell {
   routes: "all" | readonly string[];
   home: { path: string; label: string };
   /** Route icons after Home. Without a picker, the pressed icon is the location. */
-  icons: readonly { route: string; label: string; iconKey: "Inbox" | "MessageSquare" | "Server" }[];
+  icons: readonly { route: string; label: string; iconKey: "Inbox" | "MessageSquare" | "Settings2" }[];
   /**
    * The bar's field: `global` is the route field that opens the Ctrl+Shift+K open-work ledger;
    * `page` shows the route's name and opens its own Ctrl+K page palette, with no global search.
    */
   field: "global" | "page";
-  /** Settings door: the quick popover, or the Settings route. */
+  /** Settings door: the quick popover, or the Settings route. Either way Settings must be in `routes`. */
   settings: "quick" | "route";
   /** Back and Forward: the browser's own, or drawn in the bar. */
   history: "browser" | "window";
@@ -413,11 +400,11 @@ export const SURFACE_SHELLS: Readonly<Record<AppSurface, SurfaceShell>> = {
   pwa: { ...fullShell, history: "window" },
   tray: {
     mount: "compact",
-    routes: ["instances", "chat", "machine"],
+    routes: ["instances", "chat", "settings"],
     home: { path: "/open", label: "Home / open work" },
     icons: [
       { route: "chat", label: "Pea Inbox", iconKey: "Inbox" },
-      { route: "machine", label: "Machine", iconKey: "Server" },
+      { route: "settings", label: "Settings", iconKey: "Settings2" },
     ],
     field: "page",
     settings: "route",

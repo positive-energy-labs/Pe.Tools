@@ -1,10 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import {
-  ductLossManifest,
-  grillesManifest,
-  savedTakeoffsManifest,
-  settingsManifest,
-} from "./surface-manifests";
+import { ductLossManifest, grillesManifest, savedTakeoffsManifest } from "./surface-manifests";
 import { urlPage } from "./url";
 import { manifest as takeoffsManifest } from "#/takeoff/manifest";
 import { solve } from "#/duct/math";
@@ -31,10 +26,7 @@ test("grille Page owns profiles and export selection; saved review declares its 
   expect(capture({}, {} as never)).toBeNull();
 });
 
-test("Settings and Takeoffs read only their declared shareable navigation", () => {
-  expect(
-    urlPage(settingsManifest)!.read({ subject: "machine", section: "providers", noise: 9 }),
-  ).toEqual({ subject: "machine", section: "providers" });
+test("Takeoffs reads only its declared shareable navigation", () => {
   expect(urlPage(takeoffsManifest)!.read({ level: 42, work: "c1", room: "r" })).toEqual({
     level: "42",
     work: "c1",

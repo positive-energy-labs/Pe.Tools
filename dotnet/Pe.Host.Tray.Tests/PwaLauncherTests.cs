@@ -42,7 +42,7 @@ public class PwaLauncherTests {
         var installed=PwaLauncher.Launch("msedge.exe",origin,destination,app,@"C:\profile");
         Assert.That(installed.ArgumentList,Does.Contain("--app-launch-url-for-shortcuts-menu-item="+origin+"/pea?thread=one%2Ftwo#turn3"));
         var absent=PwaLauncher.Launch("msedge.exe",origin,destination,null,@"C:\profile");
-        Assert.That(absent.ArgumentList,Does.Contain(origin+"/settings?subject=machine&section=startup"));
+        Assert.That(absent.ArgumentList,Does.Contain(origin+"/settings?section=host"));
         Assert.That(absent.ArgumentList.Any(arg=>arg.StartsWith("--app")),Is.False);
         Assert.Throws<ArgumentException>(()=>PwaLauncher.Launch("msedge.exe",origin,origin+"/?token=secret",app,@"C:\profile"));
     }
