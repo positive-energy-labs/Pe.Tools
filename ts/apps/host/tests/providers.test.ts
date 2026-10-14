@@ -111,6 +111,7 @@ test("known auth overrides are removed case-insensitively while login homes and 
     CLAUDE_CODE_OAUTH_TOKEN: "synthetic",
     CODEX_CONFIG: "synthetic",
     MODEL_PROVIDER: "foreign",
+    DEFAULT_AUTH_REQUEST: "foreign-login",
     PEA_ENDPOINT_API_KEY: "synthetic",
     PATH: "tools",
     CODEX_HOME: "login-home",
@@ -164,6 +165,53 @@ const listen = async (server: Server) => {
   return `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 };
 const close = (server: Server) => new Promise<void>((resolve) => server.close(() => resolve()));
+
+test("Codex endpoints publish startup config without keys and retain separate stable homes", async () => {
+  vi.stubEnv("CODEX_HOME", join(root, "subscription-home"));
+  vi.stubEnv("PE_HARNESS_ADAPTER_CODEX", join(import.meta.dirname, "fake-acp-agent.mjs"));
+  const server = createServer((_req, res) =>
+    res.end(
+      JSON.stringify({
+        data: [{ id: "gpt-6.1-sol" }],
+        output: [{ type: "message", content: [{ type: "output_text", text: "OK" }] }],
+      }),
+    ),
+  );
+  const baseUrl = await listen(server);
+  const providers = createProviders({ probeOnStart: false });
+  try {
+    const homes: string[] = [];
+    for (const name of ["First", 'Second "quoted"']) {
+      const response = await providers.fetch(
+        request("providers", "POST", {
+          ...add,
+          harness: "codex",
+          name,
+          auth: { ...add.auth, baseUrl },
+        }),
+      );
+      expect(response.status).toBe(200);
+      const record = providers.get((await response.json()).id)!;
+      const env = await providers.env(record);
+      const config = JSON.parse(env.CODEX_CONFIG!);
+      const startup = await readFile(join(env.CODEX_HOME!, "config.toml"), "utf8");
+      expect(startup).toContain('model_provider = "pea_endpoint"');
+      for (const [key, value] of Object.entries(config.model_providers.pea_endpoint))
+        expect(startup).toContain(`${key} = ${JSON.stringify(value)}`);
+      expect(startup).not.toContain(add.auth.apiKey);
+      expect(env.PEA_ENDPOINT_API_KEY).toBe(add.auth.apiKey);
+      expect((await providers.env(record)).CODEX_HOME).toBe(env.CODEX_HOME);
+      homes.push(env.CODEX_HOME!);
+    }
+    expect(new Set(homes).size).toBe(2);
+    expect((await providers.env(providers.get("codex")!)).CODEX_HOME).toBe(process.env.CODEX_HOME);
+    expect(homes).not.toContain(process.env.CODEX_HOME);
+  } finally {
+    await providers.close();
+    await close(server);
+    vi.unstubAllEnvs();
+  }
+});
 
 test("Claude validation rejects redirects before forwarding its synthetic key", async () => {
   const received: unknown[] = [];

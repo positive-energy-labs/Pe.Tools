@@ -1,6 +1,6 @@
 import { matchPeRoute } from "@pe/agent-contracts/pe-api";
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { productScratchPath } from "@pe/host-contracts/service-identity";
 import { dirname, isAbsolute, join } from "node:path";
@@ -124,7 +124,7 @@ export function cleanHarnessEnv(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return Object.fromEntries(
     Object.entries(source).filter(
       ([key]) =>
-        !/^(?:ANTHROPIC_|OPENAI_|AZURE_OPENAI_|CLAUDE_CODE_(?:OAUTH_|API_KEY|USE_|SUBAGENT_MODEL)|CODEX_(?:API_KEY|CONFIG)$|MODEL_PROVIDER$|PEA_ENDPOINT_API_KEY$|AWS_BEARER_TOKEN_BEDROCK$|BEDROCK_BASE_URL$)/i.test(
+        !/^(?:ANTHROPIC_|OPENAI_|AZURE_OPENAI_|CLAUDE_CODE_(?:OAUTH_|API_KEY|USE_|SUBAGENT_MODEL)|CODEX_(?:API_KEY|CONFIG)$|MODEL_PROVIDER$|DEFAULT_AUTH_REQUEST$|PEA_ENDPOINT_API_KEY$|AWS_BEARER_TOKEN_BEDROCK$|BEDROCK_BASE_URL$)/i.test(
           key,
         ),
     ),
@@ -134,7 +134,9 @@ export function cleanHarnessEnv(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 /**
  * The auth part of a child's env. Codex ignores OPENAI_BASE_URL under a ChatGPT login (FALSIFIED
  * 2026-10-01), so an endpoint goes in as a custom model provider the way T3 Code does it: codex-acp
- * merges `CODEX_CONFIG` into every session config and `MODEL_PROVIDER` selects it. Claude takes
+ * merges `CODEX_CONFIG` into every session config and `MODEL_PROVIDER` selects it. Its app-server
+ * checks auth before those overrides, so the same provider must exist in its startup config.
+ * Endpoint homes belong to Pea; subscription login/config files are never modified. Claude takes
  * `ANTHROPIC_BASE_URL` plus `ANTHROPIC_AUTH_TOKEN` (PROVEN through claude-agent-acp 0.84.0 against
  * a local stub, 2026-10-08, agent LEDGER Owed).
  */
@@ -147,20 +149,39 @@ function authEnv(record: ProviderRecord, modelId?: string): Record<string, strin
       ANTHROPIC_AUTH_TOKEN: auth.apiKey,
       ...(modelId ? { ANTHROPIC_MODEL: modelId, ANTHROPIC_CUSTOM_MODEL_OPTION: modelId } : {}),
     };
+  const provider = {
+    name: `Pea endpoint ${record.name}`,
+    base_url: auth.baseUrl,
+    env_key: "PEA_ENDPOINT_API_KEY",
+    wire_api: "responses",
+    requires_openai_auth: false,
+    supports_websockets: false,
+  };
+  const codexHome = join(
+    dirname(productProvidersPath()),
+    "codex-endpoints",
+    createHash("sha256").update(record.id).digest("hex"),
+  );
+  mkdirSync(codexHome, { recursive: true });
+  const configPath = join(codexHome, "config.toml");
+  const config = [
+    `model_provider = "${CODEX_PROVIDER}"`,
+    `[model_providers.${CODEX_PROVIDER}]`,
+    ...Object.entries(provider).map(([key, value]) => `${key} = ${JSON.stringify(value)}`),
+    "",
+  ].join("\n");
+  // Atomic publication keeps a concurrent probe/session from reading a truncated config.
+  const pending = `${configPath}.${randomUUID()}.tmp`;
+  writeFileSync(pending, config);
+  renameSync(pending, configPath);
   return {
+    CODEX_HOME: codexHome,
     MODEL_PROVIDER: CODEX_PROVIDER,
     CODEX_CONFIG: JSON.stringify({
       ...(modelId ? { model: modelId } : {}),
       model_provider: CODEX_PROVIDER,
       model_providers: {
-        [CODEX_PROVIDER]: {
-          name: `Pea endpoint ${record.name}`,
-          base_url: auth.baseUrl,
-          env_key: "PEA_ENDPOINT_API_KEY",
-          wire_api: "responses",
-          requires_openai_auth: false,
-          supports_websockets: false,
-        },
+        [CODEX_PROVIDER]: provider,
       },
     }),
     PEA_ENDPOINT_API_KEY: auth.apiKey,
