@@ -80,7 +80,7 @@ test("Pea Schedule A/B/A reads honor the thread head and cannot perform human-on
       : inner(input as string, init),
   );
   vi.stubEnv("PE_CONTEXT", "test-context");
-  const run = (tool: typeof peRead, input: unknown) =>
+  const run = (tool: typeof peRead | typeof peDo, input: unknown) =>
     withInvocationContext({}, () =>
       tool.execute!(input as never, { agent: { toolCallId: "schedule-call" } } as never),
     );

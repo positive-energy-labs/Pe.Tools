@@ -258,7 +258,7 @@ test("kernel and bundled skills route visual explanations through a hosted Page"
   const page = bundledPeaSkills.find((skill) => skill.name === "make-page")?.content ?? "";
   const script =
     bundledPeaSkills.find((skill) => skill.name === "write-revit-csharp-script")?.content ?? "";
-  expect(page).toContain("return its openUrl with a short takeaway");
+  expect(page).toContain("Return its openUrl with a short takeaway");
   expect(page).toContain("page:@snowdon-ducts/pages/tour");
   expect(script).toContain("Do not create or register a script without a connected document");
 });

@@ -5,6 +5,44 @@ import { hostDescriptorSchema } from "./host-descriptor.ts";
 import { deviceListingSchema, deviceSessionSchema, pairingSchema } from "./remote-device.ts";
 export * from "./remote-device.ts";
 
+/** An authored scratch Page. Publication needs no document target. */
+export const pagePublicationSchema = z.strictObject({
+  kind: z.literal("page"),
+  slug: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[a-z0-9][a-z0-9_.-]*$/i)
+    .refine(
+      (slug) =>
+        !slug.includes("--") &&
+        !slug.endsWith(".") &&
+        !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(slug) &&
+        !["pe.js", "pe.css", "revit.js", "revit.css", "kit"].includes(slug.toLowerCase()),
+      "Invalid Page folder name",
+    ),
+  title: z.string().trim().min(1).max(200),
+  html: z.string().min(1).max(2_000_000),
+  width: z.number().int().min(240).max(1600).optional(),
+});
+export type PagePublication = z.infer<typeof pagePublicationSchema>;
+export const pagePublicationResultSchema = z.strictObject({
+  ok: z.literal(true),
+  kind: z.literal("page"),
+  key: z.string().startsWith("page:@pages/"),
+  slug: z.string(),
+  title: z.string(),
+  openUrl: z.url(),
+  capture: z.strictObject({
+    mimeType: z.literal("image/png"),
+    url: z.url(),
+    sha256: z.string().regex(/^[0-9a-f]{64}$/),
+    data: z.string().min(1),
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+  }),
+});
+
 export const peErrorSchema = z.object({
   error: z.object({
     code: z.string(),
@@ -699,6 +737,15 @@ export function definePeApi<
       "pages",
       "human-or-page",
       "asset",
+    ),
+    "page.publish": route(
+      "POST",
+      "/pe/pages/publish",
+      pagePublicationSchema,
+      pagePublicationResultSchema,
+      "human-or-pea",
+      "pages",
+      "human-or-pea",
     ),
     "page.target": route("GET", "/pages/:slug/target", none, object, "read", "pages", "read"),
     "page.call": route(

@@ -102,6 +102,8 @@ import {
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
 import { pageKitAsset } from "./page-kit.ts";
 import { exportPage } from "./page-export.ts";
+import { CaptureStore, hostCaptures } from "./captures-route.ts";
+import { publishPage, withPageKey } from "./page-publication.ts";
 
 /**
  * The libraries (`page-libraries.ts`): read beside their source on the dev lane, so an edit is live
@@ -395,7 +397,12 @@ const escapeHtml = (text: string) =>
  * The pages handler over the Pages root and the Pods root: a plain web handler, so tests need no
  * server and SSE is a ReadableStream. No pods root means no pod pages.
  */
-export function createPagesHandler(root: string, pods?: string, live: PageLive = noLive) {
+export function createPagesHandler(
+  root: string,
+  pods?: string,
+  live: PageLive = noLive,
+  captures = new CaptureStore(join(root, ".captures")),
+) {
   /**
    * Where a slug's folder is: `<root>/<slug>`, or for `<id>--<page>` the folder of the one admitted
    * package with that id that contributes `pages/<page>` (a duplicated id contributes nothing).
@@ -800,22 +807,23 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     return json(await target(page, dir));
   }
 
-  /** `index.html` names its page: the host mints the key; the page never claims one. */
-  const withPageKey = (html: string, page: string) => {
-    // Pages without an authored icon must not make a stray request to the product's /favicon.ico.
-    const icon = /<link\b[^>]*\brel=["'][^"']*\bicon\b/i.test(html)
-      ? ""
-      : '<link rel="icon" href="data:,">';
-    const meta = `<meta name="pe-page" content="${escapeHtml(page)}">${icon}`;
-    const head = /<head[^>]*>/i.exec(html) ?? /^\s*<!doctype[^>]*>/i.exec(html);
-    if (!head) return `${meta}${html}`;
-    const end = head.index + head[0].length;
-    return `${html.slice(0, end)}${meta}${html.slice(end)}`;
-  };
-
   return async function handle(request: Request): Promise<Response> {
     const caller = currentCaller();
     const url = new URL(request.url);
+    if (url.pathname === peRoutes["page.publish"].path && request.method === "POST") {
+      if (caller.kind !== "human" && caller.kind !== "pea")
+        return problem(403, "Page publication requires a human or Pea caller");
+      const input = peRoutes["page.publish"].body.safeParse(await request.json());
+      if (!input.success) return problem(400, input.error.message);
+      try {
+        // No caller headers enter preview; public libraries pass through the ordinary serving path.
+        servedPe();
+        const result = await publishPage(root, input.data, url.origin, handle, captures);
+        return json(result, 201);
+      } catch (error) {
+        return problem(422, error instanceof Error ? error.message : String(error));
+      }
+    }
     const parts = url.pathname.split("/").filter(Boolean); // ["pages", slug?, ...rest]
     if (parts[0] === "pe") {
       const [, , slug = "", verb, ...more] = parts;
@@ -989,7 +997,7 @@ export const pagesRoute = (root = productPagesRootPath, pods = productPodsRootPa
             body: JSON.stringify(body),
           }),
       };
-      const pages = createPagesHandler(root(), pods(), live);
+      const pages = createPagesHandler(root(), pods(), live, hostCaptures());
       const handler = HttpEffect.fromWebHandler((request) =>
         matchPeRoute(request.method, new URL(request.url).pathname)
           ? servePeRoute(request, pages)
@@ -998,5 +1006,6 @@ export const pagesRoute = (root = productPagesRootPath, pods = productPodsRootPa
       // One registration claims the bare `/pages` too (a second `add` is refused at boot; see captures).
       yield* router.add("*", "/pages/*", handler);
       yield* router.add(peRoutes["page.bind"].method, peRoutes["page.bind"].path, handler);
+      yield* router.add(peRoutes["page.publish"].method, peRoutes["page.publish"].path, handler);
     }),
   );
