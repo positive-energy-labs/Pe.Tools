@@ -130,7 +130,13 @@ export type AddProviderRequest = z.infer<typeof addProviderRequestSchema>;
 export const accessSchema = z.object({ guarded: z.boolean(), readError: z.string().optional() });
 export type Access = z.infer<typeof accessSchema>;
 
-/** One ACP `session/update` notification body, kept verbatim. The web switches on `sessionUpdate`. */
+/**
+ * One ACP `session/update` notification body, kept verbatim. The web switches on `sessionUpdate`.
+ * An update or permission ask over {@link HARNESS_EVENT_MAX_BYTES} is kept bounded: its long
+ * strings cut, or only its identity when that is not enough, with `truncated` naming the bytes the
+ * harness sent. The harness itself read the whole value; only the record is bounded.
+ */
+export const HARNESS_EVENT_MAX_BYTES = 64 * 1024;
 export const acpSessionUpdateSchema = z.object({ sessionUpdate: z.string() }).passthrough();
 
 export const permissionOptionSchema = z.object({

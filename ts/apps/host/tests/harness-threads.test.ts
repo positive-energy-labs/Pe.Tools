@@ -2,7 +2,7 @@ import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
 import { HostLog } from "../src/host-log.ts";
 import { createServer, type Server } from "node:http";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,7 +14,7 @@ import type {
   Provider,
   ThreadHead,
 } from "@pe/agent-contracts";
-import { emptyThreadHead } from "@pe/agent-contracts";
+import { emptyThreadHead, HARNESS_EVENT_MAX_BYTES } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { human } from "./callers.ts";
 import { admitCrossing, bindControl, onRevoke, Refused } from "../src/control.ts";
@@ -1972,4 +1972,29 @@ test("declared client and actual harness handler share input, output and refusal
   ).rejects.toMatchObject({ status: 409, message: "No pending question gone" });
   await client.call("thread.remove", { params });
   await expect(client.call("thread.get", { params })).rejects.toMatchObject({ status: 404 });
+});
+
+test("one huge tool result is kept bounded in the record, the log and every reader", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "huge" });
+  const body = await until(read, id, (b) => turnEnds(b).length === 1);
+  const updates = body.events.filter(
+    (e): e is Extract<HarnessEvent, { kind: "update" }> =>
+      e.kind === "update" && ["t-huge", "t-wide"].includes(String(e.update.toolCallId)),
+  );
+  expect(updates).toHaveLength(2);
+  for (const e of updates) {
+    expect(Buffer.byteLength(JSON.stringify(e))).toBeLessThan(HARNESS_EVENT_MAX_BYTES);
+    expect(e.update.truncated).toBeGreaterThan(HARNESS_EVENT_MAX_BYTES);
+  }
+  // A long string keeps its head; a wide structure keeps the call's identity.
+  expect(JSON.stringify(updates[0]!.update)).toContain("characters not kept");
+  expect(updates[1]!.update).toMatchObject({ toolCallId: "t-wide", status: "completed" });
+  expect((await stat(join(root, id, "events.jsonl"))).size).toBeLessThan(
+    4 * HARNESS_EVENT_MAX_BYTES,
+  );
+  expect(threads.log.read(0).entries.some((e) => e.event.kind === "oversize")).toBe(false);
 });

@@ -39,6 +39,7 @@ import {
   putTargetSchema,
   queueRequestSchema,
   TURN_WAIT_MAX_MS,
+  HARNESS_EVENT_MAX_BYTES,
   questionResponseSchema,
   threadHeadSchema,
   traitRequestSchema,
@@ -311,6 +312,32 @@ function promptBlocks(
   return blocks;
 }
 
+/** A string longer than this is cut when its event is over the record's bound. */
+const KEEP_CHARS = 4 * 1024;
+const IDENTITY = ["sessionUpdate", "toolCallId", "title", "kind", "status"];
+
+/** One huge tool result cannot bloat the record (`HARNESS_EVENT_MAX_BYTES`). */
+function bounded(event: Append): Append {
+  if (event.kind !== "update" && event.kind !== "permission_request") return event;
+  const bytes = Buffer.byteLength(JSON.stringify(event));
+  if (bytes <= HARNESS_EVENT_MAX_BYTES) return event;
+  const cut = (value: unknown): unknown =>
+    typeof value === "string"
+      ? value.length > KEEP_CHARS
+        ? `${value.slice(0, KEEP_CHARS)}… [${value.length - KEEP_CHARS} characters not kept]`
+        : value
+      : Array.isArray(value)
+        ? value.map(cut)
+        : value && typeof value === "object"
+          ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, cut(v)]))
+          : value;
+  const field = event.kind === "update" ? "update" : "toolCall";
+  let kept = cut((event as Record<string, unknown>)[field]) as Record<string, unknown>;
+  if (Buffer.byteLength(JSON.stringify(kept)) > HARNESS_EVENT_MAX_BYTES)
+    kept = Object.fromEntries(Object.entries(kept).filter(([k]) => IDENTITY.includes(k)));
+  return { ...event, [field]: { ...kept, truncated: bytes } } as Append;
+}
+
 /** tmp + rename, so a crash mid-write never leaves a torn file. */
 function writeJson(path: string, value: unknown) {
   writeFileSync(`${path}.tmp`, JSON.stringify(value, null, 2));
@@ -402,7 +429,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
 
   function append(t: Thread, event: Append): HarnessEvent {
     const line = JSON.stringify({
-      ...event,
+      ...bounded(event),
       seq: t.events.length + 1,
       at: new Date().toISOString(),
     });
