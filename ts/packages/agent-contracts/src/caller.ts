@@ -95,12 +95,15 @@ export type PageChoice = z.infer<typeof pageChoiceSchema>;
 /**
  * A Page's binding record, host-written to `<page>/.state/binding.json`. Named slots let a
  * cross-document report bind several documents later; wave 1 builds and renders `default` only.
+ * `boundBy` names who set each slot: a human's bind is their consent to the Page's ReadOnly
+ * scripts on that document. A slot with no entry was not bound by a human.
  */
 export const pageBindingSchema = z.strictObject({
   slots: z.object({ default: pageChoiceSchema }).catchall(pageChoiceSchema),
+  boundBy: z.record(z.string(), z.enum(["human", "agent"])).default({}),
 });
 export type PageBinding = z.infer<typeof pageBindingSchema>;
-export const unboundPage: PageBinding = { slots: { default: { kind: "none" } } };
+export const unboundPage: PageBinding = { slots: { default: { kind: "none" } }, boundBy: {} };
 
 /** What a write from a Page's slot would do now, decided as its act door decides. */
 export type PageWrite =
