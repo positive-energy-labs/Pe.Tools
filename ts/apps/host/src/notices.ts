@@ -117,12 +117,12 @@ export function noticeOf(r: Receipt, context: NoticeContext): MachineNotice | nu
 
 /**
  * Finished turns, Revit verb ends and updates wait this long after the first of a burst, so a burst
- * arrives as one paged card. An approval or question blocks Pea, so it never waits.
+ * arrives as one paged card. An approval or question blocks Pea, so it and its thread's response never wait.
  */
 const BUFFER_MS = 30_000;
 const SEEN = 256;
 
-type Entry = { notice: MachineNotice; request: string };
+type Entry = { notice: MachineNotice; request: string; thread: string };
 const asks = (r: Receipt) => r.body.kind === "permission" || r.body.kind === "question";
 const noticesRequest = (request: ReadingRequest) =>
   request.kind === "notices" ? request : undefined;
@@ -140,6 +140,7 @@ export function createNotices(deps: {
   const seen = new Map<string, number>();
   /** Answered requests, so a late delivery of the question cannot resurrect its card. */
   const answered = new Set<string>();
+  const openRequests = new Map<string, string>();
   /** Accepted, not yet announced: the open buffer window. */
   let pending: Entry[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -161,6 +162,7 @@ export function createNotices(deps: {
       // The question was answered elsewhere: it must not show as a new card.
       const request = r.join.requestId;
       answered.add(request);
+      openRequests.delete(request);
       if (answered.size > SEEN) answered.delete(answered.values().next().value!);
       pending = pending.filter((e) => e.request !== request);
       return;
@@ -171,9 +173,28 @@ export function createNotices(deps: {
     seen.delete(r.id);
     seen.set(r.id, r.revision);
     if (seen.size > SEEN) seen.delete(seen.keys().next().value!);
-    const entry = { notice, request: asks(r) ? r.join.requestId : "" };
+    const thread = r.join.threadId ?? "";
+    const entry = { notice, request: asks(r) ? r.join.requestId : "", thread };
     pending = pending.filter((e) => e.notice.id !== notice.id);
-    if (asks(r) || bufferMs <= 0) return announce(entry);
+    if (asks(r)) {
+      openRequests.set(r.join.requestId, thread);
+      if (openRequests.size > SEEN) openRequests.delete(openRequests.keys().next().value!);
+      announce(entry);
+      // An ask and its response share one card now, instead of arriving 30 seconds apart.
+      const related = pending.filter((e) => thread && e.thread === thread);
+      pending = pending.filter((e) => !related.includes(e));
+      related.forEach(announce);
+      if (!pending.length) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+      return;
+    }
+    if (
+      bufferMs <= 0 ||
+      (body.kind === "turn" && thread && [...openRequests.values()].includes(thread))
+    )
+      return announce(entry);
     pending.push(entry);
     timer ??= setTimeout(flush, bufferMs);
   }

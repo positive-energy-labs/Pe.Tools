@@ -20,6 +20,9 @@ export type PopoverContentProps = Omit<Primitive.Popup.Props, "className"> &
   FloatingPosition & {
     className?: string;
     anchor?: Primitive.Positioner.Props["anchor"];
+    collisionAvoidance?: Primitive.Positioner.Props["collisionAvoidance"];
+    collisionPadding?: Primitive.Positioner.Props["collisionPadding"];
+    positionerClassName?: string;
   };
 
 /** Portal owns lazy mounting; closed children do not render or run effects. */
@@ -29,6 +32,9 @@ export function PopoverContent({
   sideOffset = 6,
   alignOffset = 0,
   anchor,
+  collisionAvoidance,
+  collisionPadding = 8,
+  positionerClassName,
   className,
   ...props
 }: PopoverContentProps) {
@@ -40,8 +46,9 @@ export function PopoverContent({
         align={align}
         sideOffset={sideOffset}
         alignOffset={alignOffset}
-        collisionPadding={8}
-        className="isolate z-popup"
+        collisionPadding={collisionPadding}
+        collisionAvoidance={collisionAvoidance}
+        className={cn("isolate z-popup", positionerClassName)}
       >
         <Primitive.Popup
           data-surface="artifact"

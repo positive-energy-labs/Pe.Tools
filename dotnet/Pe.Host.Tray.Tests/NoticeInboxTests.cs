@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Text;
 using NUnit.Framework;
 using Pe.Host.Tray;
@@ -76,6 +77,16 @@ public class NoticeInboxTests {
     }
 
     [Test]
+    public async Task AQuestionAndResponseForOneThreadAreDeliveredAsDistinctItems() {
+        var inbox = new NoticeInbox(0, _ => { });
+        const string question = """{"id":"q","revision":1,"title":"Pea is asking","body":"Which next?","act":{"kind":"question","threadId":"t1","requestId":"r1","message":"Which next?","requestedSchema":{"type":"object"}}}""";
+        const string response = """{"id":"turn","revision":1,"title":"Ducts","body":"Done","act":{"kind":"reply","threadId":"t1"}}""";
+        Assert.That(await Read(inbox, Feed(Event(1, question), Event(2, response))), Is.Empty);
+        Assert.That(inbox.PageReady(), Is.EqualTo(new[] { question, response }));
+        Assert.That(await Read(inbox, Feed(Event(1, question), Event(2, response))), Is.Empty);
+    }
+
+    [Test]
     public async Task AGapFromAHostThatLostItsHistoryMovesTheCursorToTheLogAndShowsNothing() {
         long? saved = 90;
         var inbox = new NoticeInbox(90, id => saved = id);
@@ -114,6 +125,45 @@ public class NoticeInboxTests {
 }
 
 public class NoticeCardWindowTests {
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [Test, Apartment(ApartmentState.STA)]
+    public void AVisibleDraggedPanelReturnsToItsBoundsAfterTheCardAndResizesNeverReplaceThem() {
+        using var window = new TrayWindow();
+        window.Rehome();
+        var panel = new Rectangle(120, 80, 560, 560);
+        window.Bounds = panel;
+        var foreground = GetForegroundWindow();
+        window.Show();
+        try {
+            window.PositionCard(96);
+            Assert.That(window.Visible, Is.False, "hide the panel before lending its window");
+            window.Show();
+            Assert.That(GetForegroundWindow(), Is.EqualTo(foreground), "a notice never activates the tray HWND");
+            Assert.That(window.Bounds, Is.Not.EqualTo(panel));
+            window.PositionCard(300);
+            window.Hide();
+            window.LeaveCard();
+            Assert.That(window.Bounds, Is.EqualTo(panel));
+            Assert.That(window.Visible, Is.True, "an open panel returns without activation");
+            Assert.That(GetForegroundWindow(), Is.EqualTo(foreground), "restoring the panel never activates it");
+        } finally { window.Hide(); }
+    }
+
+    [Test, Apartment(ApartmentState.STA)]
+    public void AHiddenPanelStaysHiddenAfterItsCardEnds() {
+        using var window = new TrayWindow();
+        window.Rehome();
+        var panel = window.Bounds;
+        window.PositionCard(96);
+        window.Show();
+        window.Hide();
+        window.LeaveCard();
+        Assert.That(window.Bounds, Is.EqualTo(panel));
+        Assert.That(window.Visible, Is.False);
+    }
+
     [Test]
     public void TheCardIsPaddedFromTheScreenEdgeAndNeverOutgrowsTheWorkArea() {
         var work = new Rectangle(0, 0, 1920, 1032);

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import type { MachineNotice } from "@pe/agent-contracts";
 import type { NativeMessageEvent } from "@pe/host-contracts/native-adapter";
@@ -147,10 +147,39 @@ test("one card pages every pending item, and a new notice appends to the open ca
   expect(screen.getByText("Revit start failed")).toBeTruthy();
 });
 
+test("a pending question and the same thread's later response remain two paged items", () => {
+  vi.useFakeTimers();
+  render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture />);
+  show(level);
+  act(() => void vi.advanceTimersByTime(30_000));
+  expect(card()).not.toBeNull();
+  show(finished);
+  expect(screen.getByText("1/2")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "next" }));
+  expect(screen.getByText("2/2")).toBeTruthy();
+  expect(screen.getByRole("textbox", { name: "reply to Pea" })).toBeTruthy();
+  act(() => void vi.advanceTimersByTime(NOTICE_DRAIN_MS * 3));
+  expect(screen.getByText("2/2")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "previous" }));
+  expect(screen.getByText("Which level?")).toBeTruthy();
+});
+
+test("a reply preview opens by keyboard activation and exposes Markdown to the dialog", async () => {
+  render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture />);
+  show(finished);
+  const title = screen.getByRole("button", { name: "ducts" });
+  title.focus();
+  await act(async () => fireEvent.click(title));
+  await waitFor(() => expect(screen.getByRole("dialog").textContent).toContain("41 of 43"));
+  expect(sent("open-window")).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "Open thread" }));
+  expect(sent("open-window")).toBe(true);
+});
+
 test("the drain cycles item to item, hover pauses it, and the card dies after the last", () => {
   vi.useFakeTimers();
   render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture />);
-  show(revit, asking);
+  show(revit, finished);
   act(() => void vi.advanceTimersByTime(NOTICE_DRAIN_MS + 200));
   expect(screen.getByText("2/2")).toBeTruthy();
   fireEvent.mouseEnter(card()!);
@@ -289,5 +318,7 @@ test("snooze takes the item off the card for an hour and it returns once", () =>
   show(revit);
   expect(screen.getByText("1/1")).toBeTruthy();
   act(() => void vi.advanceTimersByTime(SNOOZE_MS + 60_000));
+  expect(screen.getByText("1/2")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "next" }));
   expect(screen.getByText("Revit start succeeded")).toBeTruthy();
 });

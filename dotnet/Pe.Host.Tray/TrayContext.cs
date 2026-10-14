@@ -59,6 +59,7 @@ internal sealed class TrayContext : ApplicationContext {
         _openWindow.Click += (_, _) => OpenWindow();
         _menu.Items.Add(_openWindow);
         _menu.Items.Add("Rehome", null, (_, _) => {
+            if (_card) HideCard();
             _window.Rehome();
             _window.WindowState = FormWindowState.Normal;
             _window.Show();
@@ -75,7 +76,8 @@ internal sealed class TrayContext : ApplicationContext {
         _window.FormClosing += (_, e) => {
             if (_closing || e.CloseReason != CloseReason.UserClosing) return;
             e.Cancel = true;
-            _window.Hide();
+            if (_card) HideCard();
+            else _window.Hide();
         };
         _window.TaskbarRestarted += (_, _) => { _icon.Visible = false; _icon.Visible = true; };
         _window.TitlebarGeometryChanged += (_, _) => PostTitlebarGeometry();
@@ -124,7 +126,11 @@ internal sealed class TrayContext : ApplicationContext {
                 _hasPage = false;
                 if (_ready && _connected) _web.CoreWebView2.Navigate(_service.ViewOrigin + _pendingPath);
             }
-            if (_card) { _card = false; _window.LeaveCard(); }
+            if (_card) {
+                _card = false;
+                PostNativeMessage(new { type = "notice", notice = (object?)null });
+                _window.LeaveCard();
+            }
             _window.PositionAboveTaskbar();
             _window.WindowState = FormWindowState.Normal;
             _window.Show();
@@ -135,8 +141,8 @@ internal sealed class TrayContext : ApplicationContext {
     private void HideCard() {
         _window.Hide();
         _card = false;
-        _window.LeaveCard();
         PostNativeMessage(new { type = "notice", notice = (object?)null });
+        _window.LeaveCard();
     }
 
     private static string NoticeCursorPath(TrayLaunch launch) => Path.Combine(ProductRuntimeLayout.ForCurrentUser().RootPath, $"tray-notices-{launch.ProfileKey}.cursor");
@@ -163,9 +169,9 @@ internal sealed class TrayContext : ApplicationContext {
         if (notices.Count == 0) return;
         try {
             _window.BeginInvoke(() => {
-                // A hidden page never lays out, so its card cannot measure itself: show first, then
-                // the page's first height report resizes the window. An open panel just shows the card.
-                if (!_window.Visible) {
+                // Lend the window even when the panel is open or dragged away from the taskbar.
+                // The page must be visible to measure the card, then its height report refines it.
+                if (!_card) {
                     _card = true;
                     _window.PositionCard(96);
                     _window.Show();
@@ -193,7 +199,6 @@ internal sealed class TrayContext : ApplicationContext {
                 ShowNotices(_inbox.PageReady());
                 return true;
             case "notice-card":
-                if (_window.Visible && !_card) return true;
                 var css = (int)payload.GetProperty("height").GetDouble();
                 _card = true;
                 _window.PositionCard(css);
@@ -608,6 +613,9 @@ internal sealed class TrayWindow : Form {
     private bool _positioned;
     /** The panel's bounds while the window is lent to a notice card. */
     private Rectangle? _panelBounds;
+    private bool _panelVisible;
+    private FormWindowState _panelState;
+    private int _cardCssHeight;
     /** Lent to the card: the page covers the whole window, caption buttons included. */
     private bool _card;
     public event EventHandler? TaskbarRestarted;
@@ -687,8 +695,12 @@ internal sealed class TrayWindow : Form {
         StartPosition = FormStartPosition.Manual;
         AutoScaleMode = AutoScaleMode.None;
         Text = "Pe.Tools";
-        DpiChanged += (_, e) => PositionAboveTaskbar(Screen.FromRectangle(e.SuggestedRectangle).WorkingArea,
-            e.DeviceDpiNew);
+        DpiChanged += (_, e) => {
+            // A DPI hop during borrowing/restoration must not rehome the dragged panel.
+            if (_card) { e.Cancel = true; PositionCard(_cardCssHeight); }
+            else if (_panelBounds is not null) e.Cancel = true;
+            else PositionAboveTaskbar(Screen.FromRectangle(e.SuggestedRectangle).WorkingArea, e.DeviceDpiNew);
+        };
     }
 
     /** The panel shows with Activate; a notice card never takes focus from Revit. */
@@ -696,9 +708,17 @@ internal sealed class TrayWindow : Form {
 
     /** Card-wide and as tall as the card says, in CSS pixels, at the taskbar's corner. */
     public void PositionCard(int cssHeight) {
-        if (_panelBounds is null && _positioned) _panelBounds = Bounds;
+        if (!_card) {
+            _panelBounds = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
+            _panelState = WindowState;
+            _panelVisible = Visible;
+            Hide();
+            _card = true;
+            WindowState = FormWindowState.Normal;
+        }
+        _cardCssHeight = cssHeight;
         Bounds = CardBoundsFor((Screen.PrimaryScreen ?? Screen.FromPoint(Cursor.Position)).WorkingArea, DeviceDpi, cssHeight);
-        if (!_card) { _card = true; RefreshTitlebar(); }
+        RefreshTitlebar();
     }
 
     /** The card's 420 CSS px, inset farther than the panel's 12 CSS px gutter. */
@@ -711,9 +731,14 @@ internal sealed class TrayWindow : Form {
 
     /** The panel returns to the bounds it had before the card borrowed the window. */
     public void LeaveCard() {
+        if (!_card) return;
+        Hide();
+        _card = false;
         if (_panelBounds is { } panel) Bounds = panel;
+        WindowState = _panelState;
         _panelBounds = null;
-        if (_card) { _card = false; RefreshTitlebar(); }
+        RefreshTitlebar();
+        if (_panelVisible) Show();
     }
 
     public void PositionAboveTaskbar() {
