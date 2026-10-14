@@ -18,6 +18,9 @@ import { targetKey, type DocumentRequest } from "@pe/agent-contracts";
 import { demoThreads } from "#/chat/thread-navigation";
 import { mergeThreadRoster, mergeThreadSummary } from "./thread-merge";
 import { emptyPrompt } from "../prompt";
+import { soleUserDocument } from "#/chat/scope";
+import { machineOf } from "#/machine/model";
+import { useMachine } from "#/machine/use-machine";
 
 export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const config = useMemo(() => resolveWorkbenchConfig(), []);
@@ -42,7 +45,13 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const [threads, setThreads] = useState<StoredThreadSummary[]>([]);
   const rosterEpoch = useRef(0);
   const [draft, setDraft] = useState<HeadDraft>(EMPTY_HEAD);
-  const [draftTarget, setDraftTarget] = useState<DocumentRequest | null>(null);
+  // Undefined until the human picks or clears: the draft then shows the sole user document, if any.
+  const [chosenTarget, setDraftTarget] = useState<DocumentRequest | null>();
+  const machine = machineOf(useMachine().reading);
+  const draftTarget = useMemo(
+    () => (chosenTarget === undefined ? soleUserDocument(machine) : chosenTarget),
+    [chosenTarget, machine],
+  );
   const [error, setError] = useState<string>();
 
   // `?demo=<seed>`: the transcript shows that seed's thread and nothing is fetched.
@@ -245,7 +254,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       operationError,
       sendPrompt,
       cancel: onThread((id) => client.cancel(id)),
-      newThread: async (target = null) => {
+      newThread: async (target) => {
         setDraftTarget(target);
         await navigate({ search: (previous) => ({ ...previous, thread: undefined }) });
       },
