@@ -7,8 +7,10 @@
   --pe-select: light-dark(#e4ded0, #262219);
   --pe-document: #fff;
   --pe-scrim: rgb(0 0 0 / 80%);
-  /* What a lifted plane casts: black in dark, where a pale shade would read as a glow. */
-  --pe-shade: light-dark(#38352d, #000);
+  /* What a lifted plane casts, and the lit top edge it wears. A dark ground swallows a 14% shade,
+     so dark casts near-black at 60% and adds the edge; light needs neither. */
+  --pe-shade: light-dark(rgb(56 53 45 / 14%), rgb(0 0 0 / 70%));
+  --pe-lift: light-dark(transparent, rgb(255 255 255 / 10%));
 
   /* Ink */
   --pe-ink: light-dark(#2b2721, #e6dfd2);
@@ -91,7 +93,8 @@
     transparent 2px 4px
   );
   --fill-veil: linear-gradient(var(--pe-veil), var(--pe-veil));
-  --shadow-float: 0 8px 24px color-mix(in srgb, var(--pe-shade) 14%, transparent);
+  --shadow-float:
+    inset 0 1px 0 var(--pe-lift), 0 0 0 1px var(--pe-lift), 0 8px 24px var(--pe-shade);
   --shadow-modal: 0 4px 24px color-mix(in srgb, var(--pe-scrim) 50%, transparent);
   --z-raised: 10;
   --z-sticky: 20;

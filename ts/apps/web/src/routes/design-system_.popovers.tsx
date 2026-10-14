@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Button } from "@pe/kit/lang/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@pe/kit/lang/tooltip";
@@ -45,35 +45,11 @@ const podFixture = {
   sha256: "a".repeat(64),
   trusted: false,
 } satisfies PodRouteDescriptor;
-const MOTIFS = [
-  {
-    id: "E",
-    name: "Bare hint",
-    kind: "Document",
-    epitaph: "Kill if identity and freshness cannot fit one glance.",
-  },
-  {
-    id: "F",
-    name: "Visual peek",
-    kind: "Page",
-    epitaph: "Kill if the miniature cannot identify the resource without reading its caption.",
-  },
-  {
-    id: "G",
-    name: "Status first",
-    kind: "Pod route",
-    epitaph: "Kill if the large state hides which resource it belongs to.",
-  },
-  {
-    id: "H",
-    name: "Content peek",
-    kind: "Reading",
-    epitaph: "Kill if scrolling this preview is harder than opening the resource.",
-  },
-] as const;
 type PagePeek = { title: string; url: string | null; slug: string };
 
-function ResourceLineup() {
+/** Owner rulings 2026-10-14: a resource previews as a bare hint unless it declares state (G) or
+ *  content (H); only a Page shows its miniature (F). */
+function ResourcePreviews() {
   const inventory = useInventory();
   const session = previousOf(inventory)?.sessions.find((entry) => entry.activeDocumentTitle);
   const machineReading = useReading<Machine>({ kind: "machine" });
@@ -91,7 +67,7 @@ function ResourceLineup() {
         setPages(rows);
         setPageState(
           rows.length
-            ? "Host Page"
+            ? "No Page on this host has an address."
             : "This host has no Pages. Import a Pod with a Page to inspect its render.",
         );
       })
@@ -103,138 +79,148 @@ function ResourceLineup() {
   const page = pages.find((row) => row.url);
   const title = session?.activeDocumentTitle ?? documentFixture.title;
   const freshness = session ? inventory.state : "fixture · unavailable";
-  const labels = [title, page?.title ?? "No Page", pod.name, "Machine observations"];
   return (
-    <section aria-label="Resource preview motifs" className="space-y-3">
-      <h2>Round 2 · four different kinds of preview</h2>
+    <section aria-label="Resource previews" className="space-y-3">
+      <h2>Resource previews</h2>
       <p className="text-ink-2">
-        Hover to inspect. Click or Enter holds interactive previews. Each resource names its source.
+        A bare hint by default. A resource that declares its state or content previews that; only a
+        Page shows its render.
       </p>
       <div className="hairline-rows">
-        {MOTIFS.map((motif, index) => (
-          <article key={motif.id} data-lineup={motif.id} className="space-y-1 py-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3>
-                {motif.id} · {motif.name} · {motif.kind}
-              </h3>
-              {motif.id === "E" ? (
-                <Tooltip>
-                  <TooltipTrigger aria-label="Preview E">{title}</TooltipTrigger>
-                  <TooltipContent data-motif="E">
-                    {title} · {freshness}
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <HoverCard>
-                  <HoverCardTrigger aria-label={`Preview ${motif.id}`}>
-                    {labels[index]}
-                  </HoverCardTrigger>
-                  <HoverCardContent
-                    data-motif={motif.id}
-                    aria-label={`${motif.name} preview`}
-                    className={
-                      motif.id === "H" ? "w-[42rem]" : motif.id === "F" ? "w-[28rem] p-0" : "w-80"
-                    }
-                  >
-                    {motif.id === "F" ? (
-                      <figure>
-                        {page?.url ? (
-                          <div className="h-56 overflow-hidden" aria-hidden="true">
-                            <iframe
-                              title={`Page miniature: ${page.title}`}
-                              src={page.url}
-                              sandbox=""
-                              className="h-[28rem] w-[200%] origin-top-left scale-50 pointer-events-none"
-                              tabIndex={-1}
-                            />
-                          </div>
-                        ) : (
-                          <p className="p-4">{pageState}</p>
-                        )}
-                        <figcaption className="flex items-center justify-between gap-3 p-3">
-                          <span>
-                            {page?.title ?? "Page unavailable"} · host render, scripts disabled
-                          </span>
-                          {page?.url ? (
-                            <a href={page.url} target="_blank" rel="noreferrer">
-                              Open Page
-                            </a>
-                          ) : null}
-                        </figcaption>
-                      </figure>
-                    ) : motif.id === "G" ? (
-                      <div className="space-y-3">
-                        <p className="t-display" data-tone={pod.trusted ? "done" : "caution"}>
-                          {pod.trusted ? "Trusted" : "Not trusted"}
-                        </p>
-                        <p>
-                          {pod.name} · {pod.packageId}
-                        </p>
-                        <p>
-                          {pod.trusted
-                            ? "Admitted to the route loader."
-                            : "Execution is blocked until you grant trust."}
-                        </p>
-                        <p className="text-ink-2">
-                          {routes?.rows.length
-                            ? "Host route inventory"
-                            : "Fixture · host has no Pod route"}
-                        </p>
-                        <Link to="/tool/$key" params={{ key: pod.key }}>
-                          Review route
-                        </Link>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="flex justify-between gap-2">
-                          <PopoverTitle>Machine observations</PopoverTitle>
-                          <span>{machineReading.state} · host Reading</span>
-                        </div>
-                        <p className="face-mono break-all">
-                          {machine?.host?.serviceName ?? "Waiting for host"}
-                        </p>
-                        <Table
-                          label="Reading rows"
-                          rows={Object.entries(machine?.legs ?? {}).map(([key, leg]) => ({
-                            key,
-                            ...leg,
-                          }))}
-                          rowKey={(row) => row.key}
-                          maxHeight="10rem"
-                          columns={[
-                            { key: "subject", label: "Subject", cell: (row) => row.key },
-                            {
-                              key: "observed",
-                              label: "Observed UTC",
-                              cell: (row) => (
-                                <span className="face-mono">{row.observedAtUtc ?? "Never"}</span>
-                              ),
-                            },
-                            {
-                              key: "result",
-                              label: "Result",
-                              cell: (row) =>
-                                row.error ?? (row.observedAtUtc ? "Observed" : "Not observed"),
-                            },
-                          ]}
-                          empty={
-                            machineReading.state === "failed"
-                              ? machineReading.message
-                              : "No observation yet."
-                          }
-                        />
-                        <Link to="/settings">Open Settings</Link>
-                      </div>
-                    )}
-                  </HoverCardContent>
-                </HoverCard>
-              )}
+        <PreviewRow motif="E" name="Default · bare hint · Document">
+          <Tooltip>
+            <TooltipTrigger aria-label="Preview E">{title}</TooltipTrigger>
+            <TooltipContent data-motif="E">
+              {title} · {freshness}
+            </TooltipContent>
+          </Tooltip>
+        </PreviewRow>
+        <PreviewRow motif="G" name="Declared state · Pod route" label={pod.name} width="w-80">
+          <div className="space-y-3">
+            <p className="t-display" data-tone={pod.trusted ? "done" : "caution"}>
+              {pod.trusted ? "Trusted" : "Not trusted"}
+            </p>
+            <p>
+              {pod.name} · {pod.packageId}
+            </p>
+            <p>
+              {pod.trusted
+                ? "Admitted to the route loader."
+                : "Execution is blocked until you grant trust."}
+            </p>
+            <p className="text-ink-2">
+              {routes?.rows.length ? "Host route inventory" : "Fixture · host has no Pod route"}
+            </p>
+            <Link to="/tool/$key" params={{ key: pod.key }}>
+              Review route
+            </Link>
+          </div>
+        </PreviewRow>
+        <PreviewRow
+          motif="H"
+          name="Declared content · Reading"
+          label="Machine observations"
+          width="w-[42rem]"
+        >
+          <div className="space-y-3">
+            <div className="flex justify-between gap-2">
+              <PopoverTitle>Machine observations</PopoverTitle>
+              <span>{machineReading.state} · host Reading</span>
             </div>
-            <p className="text-ink-2">{motif.epitaph}</p>
-          </article>
-        ))}
+            <p className="face-mono break-all">
+              {machine?.host?.serviceName ?? "Waiting for host"}
+            </p>
+            <Table
+              label="Reading rows"
+              rows={Object.entries(machine?.legs ?? {}).map(([key, leg]) => ({ key, ...leg }))}
+              rowKey={(row) => row.key}
+              maxHeight="10rem"
+              columns={[
+                { key: "subject", label: "Subject", cell: (row) => row.key },
+                {
+                  key: "observed",
+                  label: "Observed UTC",
+                  cell: (row) => <span className="face-mono">{row.observedAtUtc ?? "Never"}</span>,
+                },
+                {
+                  key: "result",
+                  label: "Result",
+                  cell: (row) => row.error ?? (row.observedAtUtc ? "Observed" : "Not observed"),
+                },
+              ]}
+              empty={
+                machineReading.state === "failed" ? machineReading.message : "No observation yet."
+              }
+            />
+            <Link to="/settings">Open Settings</Link>
+          </div>
+        </PreviewRow>
+        <PreviewRow
+          motif="F"
+          name="Page miniature"
+          label={page?.title ?? "No Page"}
+          width="w-[28rem] p-0"
+        >
+          <figure>
+            {page?.url ? (
+              <div className="h-56 overflow-hidden" aria-hidden="true">
+                {/* Pages draw with script; an opaque origin keeps the app out of their reach. */}
+                <iframe
+                  title={`Page miniature: ${page.title}`}
+                  src={page.url}
+                  sandbox="allow-scripts"
+                  className="h-[28rem] w-[200%] origin-top-left scale-50 pointer-events-none"
+                  tabIndex={-1}
+                />
+              </div>
+            ) : (
+              <p className="p-4">{pageState}</p>
+            )}
+            <figcaption className="flex items-center justify-between gap-3 p-3">
+              <span>{page?.title ?? "Page unavailable"} · live render, isolated from this app</span>
+              {page?.url ? (
+                <a href={page.url} target="_blank" rel="noreferrer">
+                  Open Page
+                </a>
+              ) : null}
+            </figcaption>
+          </figure>
+        </PreviewRow>
       </div>
     </section>
+  );
+}
+
+function PreviewRow({
+  motif,
+  name,
+  label,
+  width,
+  children,
+}: {
+  motif: string;
+  name: string;
+  /** Absent, `children` is the whole hover (a bare hint draws its own trigger). */
+  label?: string;
+  width?: string;
+  children: ReactNode;
+}) {
+  return (
+    <article data-lineup={motif} className="flex flex-wrap items-center justify-between gap-2 py-3">
+      <h3>
+        {motif} · {name}
+      </h3>
+      {label === undefined ? (
+        children
+      ) : (
+        <HoverCard>
+          <HoverCardTrigger aria-label={`Preview ${motif}`}>{label}</HoverCardTrigger>
+          <HoverCardContent data-motif={motif} aria-label={`${name} preview`} className={width}>
+            {children}
+          </HoverCardContent>
+        </HoverCard>
+      )}
+    </article>
   );
 }
 
@@ -389,7 +375,7 @@ function PopoverHarness() {
           <HoverSpecimen />
         </div>
       </section>
-      <ResourceLineup />
+      <ResourcePreviews />
       <section aria-label="Collision harness" className="space-y-2">
         <h2>Viewport edges</h2>
         <p className="text-ink-2">

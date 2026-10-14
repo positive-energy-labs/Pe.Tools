@@ -84,7 +84,7 @@ export function NoticePreview({
         data-surface="artifact"
         data-notice-preview=""
         aria-label={`Response · ${title}`}
-        className="hairline t-small max-h-80 w-[min(420px,100vw)] overflow-auto rounded-lg p-3"
+        className="t-small max-h-80 w-[min(420px,100vw)] overflow-auto p-3"
         style={
           {
             "--type-prose-size": "var(--type-small-size)",
