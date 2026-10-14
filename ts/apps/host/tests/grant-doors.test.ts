@@ -133,7 +133,15 @@ test("door 1: a read is free for every caller, anonymous included; a mutation is
     expect([as.kind, read.status]).toEqual([as.kind, 200]);
     expect(read.json).toEqual({ pods: [] });
   }
-  for (const as of [anonymous, pea(), human]) {
+  // An anonymous caller is refused before classification: it may only read Pods (Pe.App's callbacks).
+  const anonymousWrite = await send(anonymous, "/call", { key: "pod.member.write", request: {} });
+  expect([
+    anonymousWrite.status,
+    anonymousWrite.json.refusal?.code,
+    anonymousWrite.json.refusal?.door,
+  ]).toEqual([403, "context.missing", "/call"]);
+  expect(anonymousWrite.json.notDispatched).toBe(true);
+  for (const as of [pea(), human]) {
     const write = await send(as, "/call", { key: "pod.member.write", request: {} });
     expect([as.kind, write.status, write.json.notDispatched]).toEqual([as.kind, 409, true]);
     expect(write.json.message).toBe(
@@ -153,7 +161,12 @@ test("door 1: a body-borne or header-borne identity is not identity", async () =
     { key: "pod.member.write", request: {} },
     { "x-pe-action-actor": "human" },
   );
-  expect([header.status, header.json.notDispatched]).toEqual([409, true]);
+  expect([header.status, header.json.refusal?.code, header.json.refusal?.door]).toEqual([
+    403,
+    "context.missing",
+    "/call",
+  ]);
+  expect(header.json.notDispatched).toBe(true);
 });
 
 /* ── Door 2: POST /actions ─────────────────────────────────────────────────────────────── */
