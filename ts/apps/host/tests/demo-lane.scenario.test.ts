@@ -299,7 +299,7 @@ async function logged(page: Page, label: string, says: string) {
   const situation = page.locator('section[aria-label="Situation"]');
   const allTab = situation.getByTitle("all entries");
   if (await allTab.count()) await allTab.first().click();
-  const rows = situation.locator(`li[title$=" · ${says}"]`);
+  const rows = situation.locator(`li[aria-description$=" · ${says}"]`);
   const row = rows.filter({ hasText: new RegExp(`${label}$`) });
   await expect.poll(() => row.count(), { timeout: 30_000 }).toBeGreaterThan(0);
 }

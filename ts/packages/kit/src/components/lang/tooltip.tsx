@@ -28,6 +28,9 @@ export function TooltipHint({
         className=""
         id={children.props.id}
         tabIndex={children.props.tabIndex}
+        // A hint is always readable, not only on hover: what `title` gave assistive tech, and the
+        // hook a test locates a row by.
+        aria-description={typeof content === "string" ? content : undefined}
       />
       <TooltipContent>{content}</TooltipContent>
     </Tooltip>
