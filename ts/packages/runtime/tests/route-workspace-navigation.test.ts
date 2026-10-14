@@ -55,6 +55,7 @@ test("instance discovery validates actual persisted Work and never reads, create
       title: "Family",
       revision: 5,
       state: "ready",
+      proposals: 0,
     },
   ]);
   expect(JSON.stringify(result)).not.toContain("kept-private");
@@ -85,4 +86,51 @@ test("registration discovery cannot manufacture a persisted instance", async () 
   });
   expect(workspace.list()).toHaveLength(1);
   expect((await workspace.instances()).works).toEqual([]);
+});
+
+test("instance discovery counts each ready Work's pending Pea proposals and none for unreadable Work", async () => {
+  const ready = bindWork("takeoffs", address("C:\\Models\\A.rvt"));
+  const broken = bindWork("takeoffs", address("C:\\Models\\B.rvt"));
+  const cell = z.object({ proposal: z.unknown().nullish(), staged: z.unknown().nullish() });
+  const workspace = new RouteWorkspace({
+    store: {
+      getState: async () => null,
+      setState: async () => {},
+      listState: async () => ({
+        records: [
+          {
+            targetKey: workKey(ready),
+            route: "takeoffs",
+            value: {
+              version: 1,
+              revision: 2,
+              doc: { flags: { a: { proposal: { value: true } }, b: { staged: { value: true } } } },
+            },
+          },
+          { targetKey: workKey(broken), route: "takeoffs", value: { doc: { flags: 3 } } },
+        ],
+        unindexed: 0,
+        unreadable: 0,
+        truncated: false,
+      }),
+    },
+    registrations: [
+      {
+        spec: {
+          route: "takeoffs",
+          title: "Takeoffs",
+          description: "Test",
+          schema: z.object({ flags: z.record(z.string(), cell).default({}) }),
+          agentWriteMask: [],
+          commands: {},
+        },
+        handlers: {},
+      },
+    ],
+  });
+  const works = (await workspace.instances()).works;
+  expect(works.map((work) => [work.state, work.proposals])).toEqual([
+    ["ready", 1],
+    ["unreadable", 0],
+  ]);
 });

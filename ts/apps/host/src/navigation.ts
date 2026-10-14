@@ -106,6 +106,7 @@ export async function readNavigation(
     context: context(work.scope),
     state: work.state,
     revision: work.revision,
+    proposals: work.proposals,
     ...(work.state === "ready"
       ? destination(work.scope, documents ?? [], documents !== null)
       : {

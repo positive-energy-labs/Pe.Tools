@@ -58,7 +58,7 @@ export function GlobalSearch({
       searchAbove={0}
       maxHeight="min(32rem, 60dvh)"
       onPick={(item) => {
-        stay.current = item.kind === "more";
+        stay.current = item.kind === "note";
         ledger.props.onPick(item);
       }}
       footer={

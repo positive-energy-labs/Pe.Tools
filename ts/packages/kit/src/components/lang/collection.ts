@@ -7,7 +7,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 
 import { useScopeKeys, type ScopeKey } from "../../keys";
 
-type FilterMode = "none" | "substring" | "fuzzy";
+type FilterMode = "none" | "substring" | "fuzzy" | "words";
 type SelectMode = "none" | "single" | "multi";
 /** Empty (nothing in scope) is not no-match (the query hid everything): two exits. */
 type CollectionStatus = "ready" | "empty" | "no-match" | "pending" | "failed" | "refused";
@@ -35,6 +35,10 @@ export interface CollectionOptions<T> {
   keyOf: (item: T) => string;
   labelOf: (item: T) => string;
   groupOf?: (item: T) => string | undefined;
+  /** Groups drawn first, in this order, whatever the query ranks; the rest follow by rank. */
+  leadingGroups?: readonly string[];
+  /** `words` only: secondary text (a description); a query word may match by starting one of its words. */
+  detailOf?: (item: T) => string;
   /** A named group shows this many rows, then one "N more" row that opens the rest in place. */
   groupCap?: number;
   filter?: FilterMode;
@@ -110,12 +114,35 @@ export function filterItems<T>(
   labelOf: (item: T) => string,
   mode: FilterMode,
   query: string,
+  detailOf?: (item: T) => string,
 ): T[] {
   const q = query.trim();
   if (mode === "none" || !q) return [...items];
   if (mode === "substring") {
     const lower = q.toLowerCase();
     return items.filter((item) => labelOf(item).toLowerCase().includes(lower));
+  }
+  if (mode === "words") {
+    // Each query word starts a word of the label, sits in the label, or starts a word of the
+    // detail, best first. "duct" finds "Duct Loss", never "Identity and instruction" or "product".
+    const parts = (text: string) => text.toLowerCase().split(/[\s\-_./›()]+/);
+    return items
+      .map((item, index) => {
+        const label = labelOf(item).toLowerCase();
+        const labelWords = parts(label);
+        const detailWords = detailOf ? parts(detailOf(item)) : [];
+        let score = 0;
+        for (const word of q.toLowerCase().split(/\s+/)) {
+          if (labelWords.some((part) => part.startsWith(word))) score += 3;
+          else if (label.includes(word)) score += 2;
+          else if (detailWords.some((part) => part.startsWith(word))) score += 1;
+          else return null;
+        }
+        return { item, index, score };
+      })
+      .filter((hit) => hit !== null)
+      .sort((a, b) => b.score - a.score || a.index - b.index)
+      .map((hit) => hit.item);
   }
   return items
     .map((item, index) => ({ item, index, score: fuzzyScore(labelOf(item), q) }))
@@ -131,6 +158,8 @@ export function useCollection<T>(options: CollectionOptions<T>) {
     keyOf,
     labelOf,
     groupOf,
+    leadingGroups = [],
+    detailOf,
     groupCap,
     filter = "none",
     select = "none",
@@ -188,14 +217,18 @@ export function useCollection<T>(options: CollectionOptions<T>) {
           head: `${labelOf(parent)} › ${levels[level + 1]!.label}`,
         });
     for (const pool of pools) {
-      const hits = filterItems(pool.items, labelOf, filter, query);
+      const hits = filterItems(pool.items, labelOf, filter, query, detailOf);
       if (!hits.length) continue;
       const byGroup = new Map<string | undefined, T[]>();
       for (const item of hits) {
         const group = pool.head ?? groupOf?.(item);
         byGroup.set(group, [...(byGroup.get(group) ?? []), item]);
       }
-      for (const [group, members] of byGroup) {
+      const lead = (group: string | undefined) => {
+        const at = group === undefined ? -1 : leadingGroups.indexOf(group);
+        return at < 0 ? leadingGroups.length : at;
+      };
+      for (const [group, members] of [...byGroup].sort(([a], [b]) => lead(a) - lead(b))) {
         if (group !== undefined)
           rows.push({ kind: "head", key: `head:${group}`, label: group, count: members.length });
         const capped =
@@ -230,7 +263,18 @@ export function useCollection<T>(options: CollectionOptions<T>) {
       rows.push({ kind: "create", key: `create:${text}`, text });
     return rows;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- items are identified by the render
-  }, [levelItems, query, filter, path, level, levels, options.onCreate, groupCap, expanded]);
+  }, [
+    levelItems,
+    query,
+    filter,
+    path,
+    level,
+    levels,
+    options.onCreate,
+    groupCap,
+    expanded,
+    leadingGroups.join("|"),
+  ]);
 
   const pickable = visible.filter((row) => row.kind !== "head");
   const cursor =
