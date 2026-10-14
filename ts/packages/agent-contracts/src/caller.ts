@@ -5,7 +5,7 @@ import { addressSchema, documentRefSchema, type TargetResolution } from "./targe
 /* ── Caller identity (ADR 0017 D2) ───────────────────────────────────────────────────── */
 
 /** How a human reached the host: a browser on loopback or the tailnet, or their own terminal. */
-export const humanViaSchema = z.enum(["local", "tailnet", "cli"]);
+export const humanViaSchema = z.enum(["local", "tailnet", "lan", "ssh", "cli"]);
 export type HumanVia = z.infer<typeof humanViaSchema>;
 
 /**
@@ -15,10 +15,20 @@ export type HumanVia = z.infer<typeof humanViaSchema>;
  * destination, request id).
  */
 export const callerSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("human"), via: humanViaSchema, login: z.string().optional() }),
+  z.strictObject({
+    kind: z.literal("human"),
+    via: humanViaSchema,
+    login: z.string().optional(),
+    device: z.string().optional(),
+  }),
   // A harness child and its shell, bound to one thread at spawn.
   z.strictObject({ kind: z.literal("pea"), context: z.string(), thread: z.string() }),
-  z.strictObject({ kind: z.literal("external-mcp"), context: z.string(), label: z.string() }),
+  z.strictObject({
+    kind: z.literal("external-mcp"),
+    context: z.string(),
+    label: z.string(),
+    device: z.string().optional(),
+  }),
   z.strictObject({ kind: z.literal("page"), page: pageKeySchema }),
   // SDK claim token, scoped to its own shutdown/window doors.
   z.strictObject({ kind: z.literal("service"), service: z.string() }),
@@ -44,6 +54,7 @@ export const basisSchema = z.discriminatedUnion("kind", [
     kind: z.literal("grant"),
     thread: z.string(),
     headRevision: z.number().int(),
+    device: z.string().optional(),
     lifetime: documentRefSchema,
   }),
   z.strictObject({ kind: z.literal("empty-user-session"), session: z.string() }),
@@ -52,6 +63,10 @@ export type Basis = z.infer<typeof basisSchema>;
 
 export const refusalCodes = [
   "context.missing",
+  "device.unpaired",
+  "device.revoked",
+  "device.pairing",
+  "identity.remote-administration",
   "context.unknown",
   "context.foreign-thread",
   "permission.undeclared",

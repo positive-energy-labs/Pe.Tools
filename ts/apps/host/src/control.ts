@@ -47,7 +47,7 @@ const refuse = (
 
 type MintSpec =
   | { kind: "pea"; thread: string }
-  | { kind: "external-mcp"; label: string }
+  | { kind: "external-mcp"; label: string; device?: string }
   | { kind: "human"; via: "cli" };
 const contexts = new Map<string, Caller>();
 const BROWSER_CONTEXT_COOKIE = `pe-browser-${hostOwnership.serviceName}`;
@@ -65,7 +65,11 @@ export function mintBrowserContext(principal: RequestPrincipal): string {
     caller:
       principal.kind === "local"
         ? { kind: "human", via: "local" }
-        : { kind: "human", via: "tailnet", login: principal.login },
+        : {
+            kind: "human",
+            via: principal.kind === "tailnet" ? "tailnet" : principal.transport,
+            login: principal.login,
+          },
   });
   return `${BROWSER_CONTEXT_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/${principal.kind === "local" ? "" : "; Secure"}`;
 }
@@ -172,7 +176,24 @@ export type RoutePermission =
   | "mcp";
 
 /** Transport admission consumes the declared permission, independently of document rw admission. */
-export function admitRequest(caller: Caller, permission: RoutePermission, door: string): void {
+export function admitRequest(
+  caller: Caller,
+  permission: RoutePermission,
+  door: string,
+  remote?: { paired: boolean; allowAdministration: boolean },
+): void {
+  if (remote && !remote.paired)
+    throw refuse(
+      "device.unpaired",
+      door,
+      "Pair this device from Sharing settings on the host before using host control.",
+    );
+  if (remote && !remote.allowAdministration && (permission === "admin" || permission === "grant"))
+    throw refuse(
+      "identity.remote-administration",
+      door,
+      "Remote administration and remote rw consent are disabled on this host.",
+    );
   if (
     ![
       "read",
@@ -185,6 +206,7 @@ export function admitRequest(caller: Caller, permission: RoutePermission, door: 
       "human-or-page",
       "service",
       "mcp",
+      "pair",
     ].includes(permission)
   )
     throw refuse(
@@ -192,7 +214,7 @@ export function admitRequest(caller: Caller, permission: RoutePermission, door: 
       door,
       `Refused at ${door}: this route declares no permission.`,
     );
-  if (permission === "read" || permission === "mcp") return;
+  if (permission === "read" || permission === "mcp" || permission === "pair") return;
   if (caller.kind === "anonymous")
     throw refuse("context.missing", door, `Refused at ${door}: anonymous callers are read-only.`);
   if (permission === "human" || permission === "admin") {
@@ -266,6 +288,7 @@ type Sources = {
   acquired: (lifetime: DocumentRef) => string | null;
   /** The held acquisition that started the Revit behind this bridge session. */
   acquiredSession: (session: string) => string | null;
+  deviceThread?: (device: string) => string | null;
 };
 const sources: Sources = { heads: null, acquired: () => null, acquiredSession: () => null };
 /** Bound once at boot (and by tests): the harness head store and Machine's acquisitions. */
@@ -289,6 +312,12 @@ function acquisitionBasis(
 }
 /** The head a thread carries now; null before the head store is bound. */
 export const threadHead = (thread: string): ThreadHead | null => sources.heads?.(thread) ?? null;
+export const callerThread = (caller: Caller): string | null =>
+  caller.kind === "pea"
+    ? caller.thread
+    : caller.kind === "external-mcp" && caller.device
+      ? (sources.deviceThread?.(caller.device) ?? null)
+      : null;
 export const subscribeHeads = (notify: () => void) =>
   sources.subscribeHeads?.(notify) ?? (() => {});
 
@@ -399,6 +428,16 @@ export function admitCrossing(
     return admitPage(admitted.slot, destination, admitted.door, reads);
   }
   if (caller.kind === "human") return { kind: "human" };
+  if (caller.kind === "external-mcp" && caller.device) {
+    const thread = callerThread(caller);
+    if (!thread || destination.kind !== "document")
+      throw refuse(
+        "grant.context-cannot-hold",
+        door,
+        "This MCP device needs a host-approved thread with rw on this exact document.",
+      );
+    return { ...admitThread(thread, destination, door), device: caller.device };
+  }
   if (caller.kind === "service" || caller.kind === "external-mcp")
     throw refuse(
       "grant.context-cannot-hold",
@@ -416,7 +455,7 @@ function admitThread(
   thread: string,
   destination: Extract<ExecutionTarget, { kind: "session" | "document" }>,
   door: string,
-): Basis {
+): Extract<Basis, { kind: "grant" }> {
   if (destination.kind === "session")
     throw refuse(
       "grant.required",
@@ -511,6 +550,19 @@ export function mintPageDoor(
  * lifetime; every other basis holds for the attempt.
  */
 export function live(basis: Basis | null, door = "step begin"): Refused | null {
+  if (basis?.kind === "grant" && basis.device) {
+    try {
+      if (sources.deviceThread?.(basis.device) !== basis.thread)
+        return refuse(
+          "grant.revoked",
+          door,
+          "This device no longer holds the admitted thread binding.",
+        );
+    } catch (error) {
+      if (!(error instanceof Refused)) throw error;
+      return error;
+    }
+  }
   if (basis?.kind === "acquisition" && basis.scope.kind === "document")
     return sources.acquired(basis.scope.lifetime) === basis.id
       ? null

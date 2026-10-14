@@ -17,6 +17,7 @@ import {
   HOST_RUNTIME_SERVICE_QUERY,
 } from "@pe/host-contracts/contracts";
 import { hostOwnership } from "../src/host-ownership.ts";
+import { createDevices, DEVICE_COOKIE } from "../src/remote-device.ts";
 import { mintBrowserContext, mintContext } from "../src/control.ts";
 
 // Existing browser fixtures acquire a host-minted session before entering the API.
@@ -25,7 +26,9 @@ const readRequestIdentity: typeof rawReadRequestIdentity = (headers, ...rest) =>
     ? { kind: "tailnet" as const, login: headers["tailscale-user-login"], authority: headers.host! }
     : { kind: "local" as const };
   return rawReadRequestIdentity(
-    headers.origin ? { ...headers, cookie: mintBrowserContext(principal).split(";")[0] } : headers,
+    headers.origin && principal.kind === "local"
+      ? { ...headers, cookie: mintBrowserContext(principal).split(";")[0] }
+      : headers,
     ...rest,
   );
 };
@@ -59,13 +62,22 @@ const share: MachineShare = {
   callers: [],
   refused: [],
 };
+const devices = createDevices();
+const paired = devices.claim(
+  devices.pair("browser").code,
+  "Test browser",
+  "tailnet",
+  "operator@example.com",
+);
 const options: IdentityOptions = {
+  devices,
   port: () => 5180,
   frontendOrigin: () => "http://127.0.0.1:8123",
   share: { read: async () => share, observe: () => {} },
 };
 const local = { host: "127.0.0.1:5180", [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName };
 const remote = {
+  cookie: `${DEVICE_COOKIE}=${paired.token}`,
   host: "box.tailabc.ts.net",
   "tailscale-user-login": "operator@example.com",
   [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName,

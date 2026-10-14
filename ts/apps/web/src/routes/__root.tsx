@@ -20,6 +20,7 @@ import { SettingsProvider } from "#/settings/options";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { appRouteMount, appRouteByPath } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
+import { RemoteDeviceGate } from "#/machine/devices";
 
 import appCss from "../styles.css?url";
 
@@ -125,8 +126,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <body>
         <RegistryContext.Provider value={appAtomRegistry}>
           <SurfaceHostProvider>
-            {children}
-            <Chrome />
+            <RemoteDeviceGate>
+              {children}
+              <Chrome />
+            </RemoteDeviceGate>
           </SurfaceHostProvider>
         </RegistryContext.Provider>
         <Scripts />

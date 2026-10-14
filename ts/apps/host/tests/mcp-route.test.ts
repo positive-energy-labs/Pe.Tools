@@ -15,6 +15,7 @@ import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import type { InvocationContext } from "@pe/runtime/context";
 import { createPeaMcpServer } from "@pe/mcps/server";
 import { createMcpDoor, mcpRoute } from "../src/mcp-route.ts";
+import { createDevices } from "../src/remote-device.ts";
 import { requestIdentityLayer, type IdentityOptions } from "../src/request-identity.ts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { createServer, request as httpRequest } from "node:http";
@@ -35,7 +36,10 @@ const asPea = (headers: Record<string, string>) => {
   });
   return { ...headers, "x-pe-context": token };
 };
+const devices = createDevices();
 const options: IdentityOptions = {
+  devices,
+  remoteIngress: [{ origin: "http://localhost:65180", transport: "ssh" }],
   port: () => 5180,
   frontendOrigin: () => undefined,
   share: {
@@ -56,6 +60,23 @@ const operations: HostOperationDefinition[] = [
   { key: "pod.member.write", intent: "Mutate", needs: "nothing" },
 ];
 const dispose: Array<() => Promise<void>> = [];
+test("access-084/086: one paired MCP session crosses transports and revoke refuses its next HTTP request", async () => {
+  const f = await fixture();
+  const claimed = devices.claim(devices.pair("mcp").code, "Laptop MCP", "tailnet", "one");
+  const session = await f.init({ ...remote("one"), authorization: `Bearer ${claimed.token}` });
+  const tunneled: Record<string, string> = { ...session, host: "localhost:65180" };
+  delete tunneled["tailscale-user-login"];
+  const message = { jsonrpc: "2.0", id: 2, method: "tools/list" };
+  expect((await f.send(message, tunneled)).status).toBe(200);
+  expect(devices.list().sessions.find((row) => row.id === claimed.session.id)?.transports).toEqual([
+    "tailnet",
+    "ssh",
+  ]);
+  devices.revoke(claimed.session.id);
+  const refused = await f.send(message, tunneled);
+  expect(refused.status).toBe(403);
+  expect(await refused.json()).toMatchObject({ refusal: { code: "device.revoked" } });
+});
 afterEach(async () => {
   await Promise.all(dispose.splice(0).map((close) => close()));
   vi.unstubAllGlobals();

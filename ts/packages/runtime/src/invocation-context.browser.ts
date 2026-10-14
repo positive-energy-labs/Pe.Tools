@@ -4,6 +4,12 @@ import type { ActionAdmission, Caller } from "@pe/agent-contracts";
 
 export type RequestPrincipal =
   | { readonly kind: "local" }
+  | {
+      readonly kind: "remote";
+      readonly transport: "lan" | "ssh";
+      readonly authority: string;
+      readonly login?: string;
+    }
   | { readonly kind: "tailnet"; readonly login: string; readonly authority: string };
 
 export interface InvocationContext {
@@ -12,6 +18,7 @@ export interface InvocationContext {
   readonly principal?: RequestPrincipal;
   /** The host-minted caller of the request this context serves (host side only). */
   readonly caller?: Caller;
+  readonly device?: string;
   readonly headers?: Readonly<Record<string, string>>;
   readonly admissions?: Map<string, ActionAdmission>;
   readonly running?: Map<string, string>;

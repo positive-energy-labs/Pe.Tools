@@ -62,6 +62,7 @@ import {
 import { HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
 import {
   currentCaller,
+  callerThread,
   emitRevoke,
   grantExpiry,
   grantDead,
@@ -609,6 +610,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
               lifetime: target.ref,
               grantedAt: new Date(now).toISOString(),
               grantedVia: caller.via,
+              ...(caller.device ? { grantedDevice: caller.device } : {}),
               ...(caller.login ? { grantedLogin: caller.login } : {}),
               expiresAt: grantExpiry(now),
               revoked: null,
@@ -1298,7 +1300,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       const named = declared.params.id;
       // `self` is the caller's own thread: a pea context's, bound at spawn. No thread string travels.
       const self = named === "self";
-      const threadId = self ? (caller.kind === "pea" ? caller.thread : null) : (named ?? "");
+      const threadId = self ? callerThread(caller) : (named ?? "");
       const door = url.pathname;
       if (!threadId)
         return json(

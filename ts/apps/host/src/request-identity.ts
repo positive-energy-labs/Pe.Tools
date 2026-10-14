@@ -1,4 +1,4 @@
-import { Deferred, Effect } from "effect";
+import { Deferred, Effect, Option } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import {
   BRIDGE_PATH,
@@ -18,6 +18,8 @@ import {
 } from "./control.ts";
 import { HostLifecycle } from "./host-lifecycle.ts";
 import { authorizeShutdownFor } from "@pe/host-contracts/pe-service-host";
+import { deviceCredential, type Devices } from "./remote-device.ts";
+import type { DeviceTransport } from "@pe/host-contracts/pe-api";
 
 export type IdentityResult =
   | {
@@ -26,10 +28,15 @@ export type IdentityResult =
       /** Minted from the transport and `x-pe-context`; never from a body or page header. */
       readonly caller: Caller;
       readonly setCookie?: string;
+      readonly device?: string;
     }
   | { readonly refusal: { readonly code: string; readonly detail: string } };
 
 export interface IdentityOptions {
+  readonly devices?: Devices;
+  readonly remoteRequests?: WeakSet<object>;
+  /** Host-configured addresses. Never inferred from Forwarded or caller-supplied transport headers. */
+  readonly remoteIngress?: readonly { origin: string; transport: "lan" | "ssh" }[];
   readonly port: () => number;
   readonly frontendOrigin: () => string | undefined;
   readonly share: {
@@ -54,6 +61,8 @@ export async function readRequestIdentity(
   options: IdentityOptions,
   method = "GET",
   serviceAuthorized = false,
+  peerAddress?: string,
+  remoteOnly = false,
 ): Promise<IdentityResult> {
   const expectedService = headers[HOST_RUNTIME_SERVICE_HEADER];
   let queryServices: string[];
@@ -112,8 +121,29 @@ export async function readRequestIdentity(
       "Browser API requests require their original runtime service identity.",
     );
   const anonymous: Caller = { kind: "anonymous" };
+  const ingress = options.remoteIngress?.find((entry) => new URL(entry.origin).host === host);
+  if (remoteOnly && !ingress)
+    return refuse("identity.host", "Use a configured remote origin on the remote listener.");
+  const localPeer =
+    peerAddress === undefined || ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(peerAddress);
+  if (!localPeer && !ingress)
+    return refuse("identity.host", "A network peer must use a configured remote ingress.");
   let result: IdentityResult;
-  if (host === `127.0.0.1:${options.port()}`) {
+  if (ingress) {
+    const share = await options.share.read();
+    result =
+      share.desired !== "on"
+        ? refuse("identity.host", "Remote access is switched off.")
+        : origin !== undefined && origin !== new URL(ingress.origin).origin
+          ? refuse("identity.origin", "Origin is not the configured remote origin.")
+          : Object.keys(headers).some((key) => key.startsWith("tailscale-"))
+            ? refuse("identity.forged-proxy", "Tailnet identity is not accepted on this transport.")
+            : {
+                principal: { kind: "remote", transport: ingress.transport, authority: host },
+                headers: {},
+                caller: anonymous,
+              };
+  } else if (host === `127.0.0.1:${options.port()}`) {
     const proxyIdentity = Object.keys(headers).some((key) => key.startsWith("tailscale-"));
     result = proxyIdentity
       ? refuse("identity.forged-proxy", "Proxy identity is not accepted on the local authority.")
@@ -155,15 +185,6 @@ export async function readRequestIdentity(
                   ...(origin !== undefined ? { origin } : {}),
                 },
               };
-    if (
-      "principal" in result &&
-      share.allowRemoteAdministration === false &&
-      (permission === "admin" || permission === "grant")
-    )
-      result = refuse(
-        "identity.remote-administration",
-        "Remote machine administration is disabled on this host. Product operations remain available.",
-      );
   }
   if (
     "principal" in result &&
@@ -179,23 +200,125 @@ export async function readRequestIdentity(
       "The bridge, SDK shutdown, window and share switch are local-only.",
     );
   if ("principal" in result) {
+    const credential = deviceCredential(headers);
+    const publicNavigation =
+      navigation &&
+      (pathname === "/" ||
+        /^\/(?:chat|settings|open|machine|design-system|captures)(?:\/|$)/.test(pathname) ||
+        /^\/pages\/[^/]+\/?$/.test(pathname));
+    const publicAsset =
+      (staticResource && (pathname.startsWith("/assets/") || pathname.startsWith("/pages/"))) ||
+      (method === "GET" && /^\/captures\/[0-9a-f]{64}\.png$/.test(pathname));
+    const pairingDoor = pathname === "/pe/pair" || pathname === "/pe/environment";
+    const transport: DeviceTransport =
+      result.principal.kind === "tailnet"
+        ? "tailnet"
+        : result.principal.kind === "remote"
+          ? result.principal.transport
+          : "ssh";
+    let device: ReturnType<Devices["authenticate"]> | undefined;
+    if (credential) {
+      try {
+        if (!options.devices)
+          throw new Refused({
+            code: "device.unpaired",
+            door: pathname,
+            reason: "Device pairing is unavailable.",
+          });
+        device = options.devices.authenticate(
+          credential.token,
+          transport,
+          result.principal.kind === "tailnet" ? result.principal.login : undefined,
+        );
+        if (device.audience !== credential.audience)
+          throw new Refused({
+            code: "device.unpaired",
+            door: pathname,
+            reason: "Device credential has the wrong audience.",
+          });
+        if (
+          device.audience === "mcp" &&
+          pathname !== "/mcp" &&
+          headers["x-pe-context"] === undefined
+        )
+          throw new Refused({
+            code: "device.unpaired",
+            door: pathname,
+            reason: "This credential is for the MCP door only.",
+          });
+      } catch (error) {
+        if (!(error instanceof Refused)) throw error;
+        if (!pairingDoor && !publicNavigation && !publicAsset)
+          return refuse(error.refusal.code, error.refusal.reason);
+        device = undefined;
+      }
+    }
+    const isRemote = result.principal.kind !== "local" || !!credential;
+    if (
+      isRemote &&
+      (matchPeRoute(method, pathname)?.route.localOnly ||
+        pathname === BRIDGE_PATH ||
+        pathname.startsWith("/admin/"))
+    )
+      return refuse(
+        "identity.local-only",
+        "This control is available only to a human at the host.",
+      );
+    const publicDoor =
+      pathname === "/pe/pair" ||
+      pathname === "/pe/environment" ||
+      pathname === "/mcp" ||
+      publicNavigation ||
+      publicAsset;
     const minted =
       serviceAuthorized && result.principal.kind === "local"
         ? { caller: { kind: "service", service: hostOwnership.serviceName } as Caller }
         : callerOf(result.principal, headers);
+    if (
+      device?.audience === "browser" &&
+      "caller" in minted &&
+      (minted.caller.kind === "anonymous" || minted.caller.kind === "human")
+    )
+      minted.caller = {
+        kind: "human",
+        via: transport,
+        device: device.id,
+        ...(device.login ? { login: device.login } : {}),
+      };
     result =
       "refusal" in minted
         ? refuse(minted.refusal.code, minted.refusal.detail)
-        : { ...result, caller: minted.caller };
+        : {
+            ...result,
+            caller: minted.caller,
+            device: device?.id,
+            headers: {
+              ...result.headers,
+              ...(credential?.audience === "mcp"
+                ? { authorization: `Bearer ${credential.token}` }
+                : {}),
+            },
+          };
     if ("principal" in result) {
       try {
-        admitRequest(result.caller, permission, `${method} ${pathname}`);
+        const share = isRemote ? await options.share.read() : undefined;
+        admitRequest(
+          result.caller,
+          permission,
+          `${method} ${pathname}`,
+          isRemote && !publicDoor
+            ? {
+                paired: !!device || result.caller.kind === "external-mcp",
+                allowAdministration: share?.allowRemoteAdministration === true,
+              }
+            : undefined,
+        );
       } catch (error) {
         if (!(error instanceof Refused)) throw error;
         result = refuse(error.refusal.code, error.refusal.reason);
       }
     }
-    if ("principal" in result && navigation && !pathname.startsWith("/pages"))
+    if ("principal" in result && !isRemote && navigation && !pathname.startsWith("/pages"))
       result = { ...result, setCookie: mintBrowserContext(result.principal) };
   }
   options.share.observe(result, pathname, host);
@@ -242,6 +365,8 @@ export const requestIdentityLayer = (options: IdentityOptions) =>
             options,
             request.method,
             serviceAuthorized,
+            Option.getOrUndefined(request.remoteAddress),
+            options.remoteRequests?.has(request.source),
           ),
         );
         if ("refusal" in identity) return HttpServerResponse.jsonUnsafe(identity, { status: 403 });
@@ -252,6 +377,7 @@ export const requestIdentityLayer = (options: IdentityOptions) =>
               hostBaseUrl: `http://127.0.0.1:${options.port()}`,
               principal: identity.principal,
               caller: identity.caller,
+              device: identity.device,
               headers: identity.headers,
             },
             () => Effect.runPromiseExitWith(services)(handler, { signal }),
