@@ -1,11 +1,11 @@
 import { existsSync } from "node:fs";
-import { readdir } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { lstat, readdir } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { isSea } from "node:sea";
 import type { CaptureStore } from "./captures-route.ts";
 import { pagePublicationSchema, type PagePublication } from "@pe/host-contracts/pe-api";
-import { ordinaryPath, validatePageHtml, writeArtifact } from "./page-artifacts.ts";
+import { validatePageHtml, writeArtifact } from "./page-artifacts.ts";
 
 /** Serving and preview use the same host-minted identity without changing authored bytes. */
 export function withPageKey(html: string, page: string) {
@@ -23,20 +23,23 @@ export function withPageKey(html: string, page: string) {
   return `${html.slice(0, end)}${meta}${html.slice(end)}`;
 }
 
-const libraryPaths = new Set([
-  "/pages/pe.js",
-  "/pages/pe.css",
-  "/pages/revit.js",
-  "/pages/revit.css",
-  "/pages/kit/pe-kit.js",
-  "/pages/kit/pe-kit.css",
-]);
+/** Publication cannot follow a redirected ancestor, including its configured Pages root. */
+async function ordinaryPath(path: string) {
+  for (let current = resolve(path); ; current = dirname(current)) {
+    const info = await lstat(current).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+      return null;
+    });
+    if (info?.isSymbolicLink()) throw Error(`Page publication refuses a symlink: ${current}`);
+    if (dirname(current) === current) return;
+  }
+}
 
 /** A fresh ephemeral context receives only authored HTML and public libraries, never caller auth. */
 async function capturePage(
   input: PagePublication,
   origin: string,
-  library: (request: Request) => Promise<Response>,
+  library: (path: string) => string | null,
 ) {
   const executablePath = [
     "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
@@ -68,46 +71,35 @@ async function capturePage(
     await context.route("**/*", async (route) => {
       const request = route.request();
       const destination = new URL(request.url());
-      if (destination.origin !== origin || request.method() !== "GET") {
+      const blocked = (why: string) => {
         if (
           ["document", "script", "stylesheet", "image", "font", "media"].includes(
             request.resourceType(),
           )
         )
-          failures.push(`Preview blocked asset: ${request.url()}`);
+          failures.push(`${why}: ${request.url()}`);
         return route.abort("blockedbyclient");
-      }
+      };
+      if (destination.origin !== origin || request.method() !== "GET")
+        return blocked("Preview blocked asset");
       if (request.url() === url)
         return route.fulfill({
           contentType: "text/html; charset=utf-8",
           body: withPageKey(input.html, `page:@pages/${input.slug}`),
         });
-      if (!libraryPaths.has(destination.pathname)) {
-        if (
-          ["document", "script", "stylesheet", "image", "font", "media"].includes(
-            request.resourceType(),
-          )
-        )
-          failures.push(
-            `Preview requires self-contained HTML or a public Page library: ${destination.pathname}`,
-          );
-        return route.abort("blockedbyclient");
-      }
+      let body: string | null;
       try {
-        const response = await library(new Request(request.url()));
-        if (!response.ok)
-          failures.push(
-            `Page library ${destination.pathname}: ${response.status} ${await response.clone().text()}`,
-          );
-        await route.fulfill({
-          status: response.status,
-          headers: Object.fromEntries(response.headers),
-          body: await response.text(),
-        });
+        body = library(destination.pathname);
       } catch (error) {
-        failures.push((error as Error).message);
-        await route.abort("failed");
+        failures.push(`Page library ${destination.pathname}: ${(error as Error).message}`);
+        return route.abort("failed");
       }
+      if (body === null)
+        return blocked("Preview requires self-contained HTML or a public Page library");
+      await route.fulfill({
+        contentType: destination.pathname.endsWith(".css") ? "text/css" : "text/javascript",
+        body,
+      });
     });
     await page.goto(url, { waitUntil: "load", timeout: 10_000 });
     await page.evaluate(async () => {
@@ -153,11 +145,12 @@ export async function publishPage(
   root: string,
   raw: unknown,
   origin: string,
-  library: (request: Request) => Promise<Response>,
+  library: (path: string) => string | null,
   captures: Pick<CaptureStore, "adopt">,
 ) {
   const input = pagePublicationSchema.parse(raw);
   validatePageHtml(input.html);
+  library("/pages/pe.js"); // The host's own Page client must render before any browser starts.
   const directory = join(resolve(root), input.slug);
   const index = join(directory, "index.html");
   await ordinaryPath(index);
@@ -172,7 +165,7 @@ export async function publishPage(
   const capture = { ...captured, sha256, url: `${origin}/captures/${sha256}.png` };
   // Recheck after the browser yields: another writer must not redirect the publication.
   await ordinaryPath(index);
-  await writeArtifact(root, index, input.html, true, true);
+  await writeArtifact(root, index, input.html, true);
   return {
     ok: true as const,
     kind: "page" as const,

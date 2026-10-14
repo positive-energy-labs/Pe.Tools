@@ -9,7 +9,7 @@
  * the installed host draw the same `<img src="/captures/<sha>.png">`.
  */
 import { createHash, randomUUID } from "node:crypto";
-import { appendFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { appendFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
@@ -23,6 +23,7 @@ import { productPathNames } from "@pe/host-contracts/contracts";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
 import { productRoot } from "./host-ownership.ts";
 import { isNavigation, type SpaFallback } from "./ops-catalog.ts";
+import { writeArtifact } from "./page-artifacts.ts";
 
 const isMissing = (error: unknown) => (error as { code?: string } | null)?.code === "ENOENT";
 
@@ -70,16 +71,8 @@ export class CaptureStore {
   async adopt(bytes: Buffer): Promise<string> {
     const sha = createHash("sha256").update(bytes).digest("hex");
     const path = this.blobPath(sha);
-    await mkdir(this.blobs, { recursive: true });
-    // Content-addressed: an existing blob already holds these bytes. A fresh one lands by rename so
-    // a reader never sees half a PNG under its sha.
-    // FOOTGUN: on Windows a rename over a file another process holds open fails EPERM, so never
-    // rename over an existing blob.
-    if (!(await stat(path).catch(() => null))) {
-      const partial = `${path}.${randomUUID()}.partial`;
-      await writeFile(partial, bytes);
-      await rename(partial, path);
-    }
+    // Content-addressed and never renamed over: Windows refuses that while a reader holds the blob.
+    await writeArtifact(this.blobs, path, bytes);
     return sha;
   }
 

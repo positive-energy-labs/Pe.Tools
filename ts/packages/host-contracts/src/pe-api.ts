@@ -542,7 +542,6 @@ export function definePeApi<
       "read",
     ),
     "contributions.read": route("GET", "/pe/contributions", none, object, "read", "pe", "read"),
-    "pages.libraries": route("GET", "/pe/page-libraries", none, z.unknown(), "read", "pe", "read"),
     "family.spec": route(
       "GET",
       "/pe/family-spec",

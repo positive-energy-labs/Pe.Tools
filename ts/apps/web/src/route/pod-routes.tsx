@@ -12,7 +12,6 @@ import { useRouterState } from "@tanstack/react-router";
 import { peClient } from "#/host/pe-client";
 import { readPeError } from "@pe/host-contracts/pe-api";
 import { publicRoutes } from "./builtin-routes";
-import { defineRoutePlugin } from "@pe/kit/route-registry";
 import { createPodRouteLoader, verifyBundle } from "./pod-loader";
 import { makePodRoute, type PodRouteBundle } from "./pod-view";
 import { setPodAddresses } from "./pod-address";
@@ -48,7 +47,7 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
           try {
             const bundle = (await import(/* @vite-ignore */ url)) as PodRouteBundle;
             const route = makePodRoute(row, bundle);
-            return publicRoutes.register(defineRoutePlugin(route));
+            return publicRoutes.register(route);
           } finally {
             URL.revokeObjectURL(url);
           }

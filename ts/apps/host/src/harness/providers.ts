@@ -210,13 +210,12 @@ async function upstream(
   url: string,
   headers: Record<string, string>,
   body?: unknown,
-  signal?: AbortSignal,
 ): Promise<Record<string, any>> {
   const response = await fetch(url, {
     method: body ? "POST" : "GET",
     headers: { ...headers, "content-type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.any([AbortSignal.timeout(PROBE_MS), ...(signal ? [signal] : [])]),
+    signal: AbortSignal.timeout(PROBE_MS),
     redirect: "error",
   }).catch((e: unknown) => {
     throw new Refusal(`${step}: ${url} unreachable: ${String(e)}`);
@@ -248,14 +247,13 @@ async function checkEndpoint(
   apiKey: string,
   selectedModel?: string,
   codexModels?: readonly HarnessModel[],
-  signal?: AbortSignal,
 ) {
   const claude = harness === "claude";
   const headers: Record<string, string> = claude
     ? { authorization: `Bearer ${apiKey}`, "x-api-key": apiKey, "anthropic-version": "2023-06-01" }
     : { authorization: `Bearer ${apiKey}` };
   const root = claude ? `${baseUrl}/v1` : baseUrl;
-  const listed = await upstream("models", `${root}/models`, headers, undefined, signal);
+  const listed = await upstream("models", `${root}/models`, headers);
   const models: HarnessModel[] = Array.isArray(listed.data)
     ? [
         ...new Set<string>(
@@ -302,28 +300,16 @@ async function checkEndpoint(
   for (const { modelId: model } of candidates) {
     try {
       const reply = claude
-        ? await upstream(
-            "messages",
-            `${root}/messages`,
-            headers,
-            {
-              model,
-              max_tokens: 16,
-              messages: [{ role: "user", content: prompt }],
-            },
-            signal,
-          )
-        : await upstream(
-            "responses",
-            `${root}/responses`,
-            headers,
-            {
-              model,
-              input: prompt,
-              max_output_tokens: 64,
-            },
-            signal,
-          );
+        ? await upstream("messages", `${root}/messages`, headers, {
+            model,
+            max_tokens: 16,
+            messages: [{ role: "user", content: prompt }],
+          })
+        : await upstream("responses", `${root}/responses`, headers, {
+            model,
+            input: prompt,
+            max_output_tokens: 64,
+          });
       const text: unknown = claude
         ? reply.content?.find((c: { type?: string }) => c?.type === "text")?.text
         : reply.output
@@ -357,16 +343,21 @@ type AuthStatus = { kind?: string; label?: string };
 async function acpProbe(
   record: ProviderRecord,
   env: Record<string, string | undefined>,
-  signal: AbortSignal,
+  stop: ProbeStop,
 ): Promise<Omit<Probed, "probedAt">> {
   const none = { models: [], traits: [] };
+  const closed: Omit<Probed, "probedAt"> = {
+    readiness: { state: "unknown", message: "The provider manager closed." },
+    ...none,
+  };
+  // A probe child's cwd is the product scratch folder: none may outlive the manager.
+  if (stop.closed) return closed;
   let reportAuth!: (status: AuthStatus) => void;
   const authReported = new Promise<AuthStatus>((resolve) => {
     reportAuth = resolve;
   });
   let opened: ReturnType<typeof openAdapter>;
   try {
-    signal.throwIfAborted();
     mkdirSync(productScratchPath(), { recursive: true });
     opened = openAdapter(record.harness, productScratchPath(), env, () => ({
       sessionUpdate: async () => {},
@@ -443,25 +434,14 @@ async function acpProbe(
       .sort((x, y) => Number(y.modelId === current) - Number(x.modelId === current));
     return { readiness: { state: "ready" }, models, traits: offer.traits };
   })();
-  let timer: ReturnType<typeof setTimeout>;
-  const timeout = new Promise<Omit<Probed, "probedAt">>((resolve) => {
-    timer = setTimeout(resolve, PROBE_MS, {
+  const timeout = new Promise<Omit<Probed, "probedAt">>((resolve) =>
+    setTimeout(resolve, PROBE_MS, {
       readiness: { state: "unknown", message: `The probe timed out after ${PROBE_MS / 1000} s.` },
       ...none,
-    }).unref();
-  });
-  let abort!: () => void;
-  const interrupted = new Promise<Omit<Probed, "probedAt">>((resolve) => {
-    abort = () =>
-      resolve({
-        readiness: { state: "unknown", message: "The provider manager closed." },
-        ...none,
-      });
-    signal.addEventListener("abort", abort, { once: true });
-    if (signal.aborted) abort();
-  });
+    }).unref(),
+  );
   try {
-    return await Promise.race([work, timeout, interrupted]);
+    return await Promise.race([work, timeout, stop.promise.then(() => closed)]);
   } catch (error) {
     return {
       readiness: {
@@ -472,8 +452,6 @@ async function acpProbe(
       ...none,
     };
   } finally {
-    clearTimeout(timer!);
-    signal.removeEventListener("abort", abort);
     await stopChild(child);
   }
 }
@@ -573,12 +551,11 @@ function openConsole(
   });
 }
 
+type ProbeStop = { closed: boolean } & PromiseWithResolvers<void>;
+
 export function createProviders(options: ProvidersOptions) {
-  const lifecycle = new AbortController();
-  const stopped = new Promise<void>((resolve) =>
-    lifecycle.signal.addEventListener("abort", () => resolve(), { once: true }),
-  );
-  const pendingRecords = new Set<Promise<Probed>>();
+  const stop: ProbeStop = { closed: false, ...Promise.withResolvers<void>() };
+  const probing = new Set<Promise<unknown>>();
   const cache = new Map<string, Probed>();
   const knownKeys = new Set<string>();
   const inFlight = new Map<string, Promise<Provider>>();
@@ -659,8 +636,7 @@ export function createProviders(options: ProvidersOptions) {
   });
 
   const userPath = async (): Promise<Record<string, string>> => {
-    const path = await Promise.race([options.shellPath?.(), stopped]);
-    lifecycle.signal.throwIfAborted();
+    const path = await options.shellPath?.();
     const key = Object.keys(process.env).find((k) => k.toUpperCase() === "PATH") ?? "Path";
     return path ? { [key]: mergePath(path, process.env[key]) } : {};
   };
@@ -684,17 +660,15 @@ export function createProviders(options: ProvidersOptions) {
     return { ...out, ...authEnv(record) };
   }
 
-  async function readRecord(record: ProviderRecord): Promise<Probed> {
+  async function probeRecord(record: ProviderRecord): Promise<Probed> {
     const probedAt = () => new Date().toISOString();
-    const probed = await acpProbe(
+    const running = acpProbe(
       record,
-      {
-        ...cleanHarnessEnv(process.env),
-        ...(await userPath()),
-        ...authEnv(record),
-      },
-      lifecycle.signal,
+      { ...cleanHarnessEnv(process.env), ...(await userPath()), ...authEnv(record) },
+      stop,
     );
+    probing.add(running);
+    const probed = await running.finally(() => probing.delete(running));
     if (probed.readiness.state !== "ready") return { ...probed, probedAt: probedAt() };
     let endpointModels: HarnessModel[] | null = null;
     try {
@@ -705,7 +679,6 @@ export function createProviders(options: ProvidersOptions) {
           record.auth.apiKey,
           record.auth.modelId,
           record.harness === "codex" ? probed.models : undefined,
-          lifecycle.signal,
         );
     } catch (error) {
       if (!(error instanceof Refusal)) throw error;
@@ -728,12 +701,6 @@ export function createProviders(options: ProvidersOptions) {
     };
   }
 
-  function probeRecord(record: ProviderRecord): Promise<Probed> {
-    const pending = readRecord(record).finally(() => pendingRecords.delete(pending));
-    pendingRecords.add(pending);
-    return pending;
-  }
-
   function probe(record: ProviderRecord): Promise<Provider> {
     const running = inFlight.get(record.id);
     if (running) return running;
@@ -750,7 +717,6 @@ export function createProviders(options: ProvidersOptions) {
         }),
       )
       .then((probed) => {
-        if (lifecycle.signal.aborted) return view(record);
         const current = get(record.id);
         if (!current || JSON.stringify(current) !== JSON.stringify(record)) return view(record);
         cache.set(record.id, probed);
@@ -943,9 +909,10 @@ export function createProviders(options: ProvidersOptions) {
 
   return {
     close: async () => {
-      lifecycle.abort();
+      stop.closed = true;
       listeners.clear();
-      await Promise.allSettled([...pendingRecords, ...inFlight.values()]);
+      stop.resolve();
+      await Promise.allSettled(probing);
     },
     get,
     /** Every shell receives the same safe provider views and the same read failure. */
@@ -1002,7 +969,6 @@ export function createProviders(options: ProvidersOptions) {
             record.auth.apiKey,
             modelId,
             record.harness === "codex" ? cache.get(record.id)?.models : undefined,
-            lifecycle.signal,
           );
         } catch (error) {
           cache.set(record.id, {

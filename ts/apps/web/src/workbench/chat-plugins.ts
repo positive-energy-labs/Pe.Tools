@@ -10,6 +10,7 @@ import {
 } from "@pe/agent-contracts";
 
 import { publicRoutes } from "#/route/builtin-routes";
+import { isRecord } from "#/route/route-owner";
 
 export type ChatPluginRoute = string;
 export const chatPluginRoutes = () => publicRoutes.keys();
@@ -18,8 +19,9 @@ export const chatPluginTitle = (route: ChatPluginRoute) => {
   return manifest ? (manifest.work?.title ?? manifest.name) : `Unavailable route: ${route}`;
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+/** A tool result's payload: its MCP `structuredContent` when it carries one. */
+const payload = (result: unknown) =>
+  isRecord(result) && isRecord(result.structuredContent) ? result.structuredContent : result;
 
 const parsed = (value: unknown): unknown => {
   if (typeof value !== "string") return value;
@@ -52,8 +54,7 @@ export function proposedRecord(
   const call = routeCallOf(toolName, args);
   const route = chatPluginRoutes().find((name) => name === call?.route);
   if (!route || call?.member !== "propose") return null;
-  const outer =
-    isRecord(result) && isRecord(result.structuredContent) ? result.structuredContent : result;
+  const outer = payload(result);
   if (!isRecord(outer) || outer.ok !== true) return null;
   const request = isRecord(args) ? args : {};
   const input = parsed(request.input);
@@ -100,8 +101,7 @@ export function actionCall(toolName: string, args: unknown, result: unknown): Ac
     args.key.startsWith("op:") ||
     parseContributionKey(args.key)?.kind === "script";
   if (!known) return null;
-  const outer =
-    isRecord(result) && isRecord(result.structuredContent) ? result.structuredContent : result;
+  const outer = payload(result);
   const row = isRecord(outer) && isRecord(outer.result) ? outer.result : outer;
   const input = parsed(args.input);
   const id =

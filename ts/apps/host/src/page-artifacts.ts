@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { link, lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { link, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { Script } from "node:vm";
 import { parse, parseFragment, type DefaultTreeAdapterMap } from "parse5";
@@ -46,46 +46,25 @@ export function artifactRelative(root: string, path: string) {
   return from.replaceAll("\\", "/");
 }
 
-/** Publication cannot follow a redirected ancestor, including its configured Pages root. */
-export async function ordinaryPath(path: string) {
-  for (let current = resolve(path); ; current = dirname(current)) {
-    const info = await lstat(current).catch((error: NodeJS.ErrnoException) => {
-      if (error.code !== "ENOENT") throw error;
-      return null;
-    });
-    if (info?.isSymbolicLink()) throw Error(`Page publication refuses a symlink: ${current}`);
-    if (dirname(current) === current) return;
-  }
-}
-
-/** Replace atomically or retain one immutable artifact; neither mode changes supplied bytes. */
+/** The one artifact writer, for Pages, exports and Pods: no directory it creates or writes into
+ * resolves outside `root`. `replace` swaps atomically; otherwise an existing artifact must already
+ * hold the same bytes. Neither mode changes the supplied bytes. */
 export async function writeArtifact(
   root: string,
   path: string,
   source: string | Uint8Array,
   replace = false,
-  rejectLinks = false,
 ) {
   const bytes = Buffer.from(source);
-  root = resolve(root);
-  path = resolve(path);
   const parts = artifactRelative(root, dirname(path)).split("/").filter(Boolean);
-  if (rejectLinks) await ordinaryPath(path);
   await mkdir(root, { recursive: true });
-  const actualRoot = await realpath(root);
-  if (rejectLinks && actualRoot.toLowerCase() !== root.toLowerCase())
-    throw Error("Page publication resolves outside its folder");
-  root = actualRoot;
-  let directory = root;
+  let directory = (root = await realpath(root));
   for (const part of parts) {
     directory = join(directory, part);
     await mkdir(directory).catch((error: NodeJS.ErrnoException) => {
       if (error.code !== "EEXIST") throw error;
     });
-    const actual = await realpath(directory);
-    artifactRelative(root, actual);
-    if (rejectLinks && actual.toLowerCase() !== directory.toLowerCase())
-      throw Error("Page publication resolves outside its folder");
+    artifactRelative(root, await realpath(directory));
   }
   const temporary = join(directory, `.artifact-${randomUUID()}`);
   try {

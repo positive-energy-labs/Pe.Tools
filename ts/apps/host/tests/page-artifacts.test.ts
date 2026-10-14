@@ -45,7 +45,7 @@ test("replacement retains adjacent state; publication validation stays strict wh
   const root = await fixture();
   await mkdir(join(root, "page", ".state"), { recursive: true });
   await writeFile(join(root, "page", ".state", "binding.json"), "retained");
-  await writeArtifact(root, join(root, "page", "index.html"), "exact authored bytes", true, true);
+  await writeArtifact(root, join(root, "page", "index.html"), "exact authored bytes", true);
   expect(await readFile(join(root, "page", "index.html"), "utf8")).toBe("exact authored bytes");
   expect(await readFile(join(root, "page", ".state", "binding.json"), "utf8")).toBe("retained");
   expect(() => validatePageHtml("<title>fragment</title>")).toThrow("HTML");

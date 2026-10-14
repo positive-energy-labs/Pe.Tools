@@ -57,7 +57,6 @@ import {
 import { capturePackage, listPackages } from "./packages.ts";
 import { activePackages, requirePackageEnabled } from "./package-lifecycle.ts";
 import {
-  PAGE_LIBRARIES,
   packagePageDescriptors,
   pageFolderCollisions,
   scratchPageDescriptors,
@@ -65,22 +64,28 @@ import {
   scratchPageKey,
 } from "./page-libraries.ts";
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
-import { pageKitAsset } from "./page-kit.ts";
 import { exportPage } from "./page-export.ts";
 import { CaptureStore, hostCaptures } from "./captures-route.ts";
 import { publishPage, withPageKey } from "./page-publication.ts";
 
 /**
- * The libraries (`page-libraries.ts`): read beside their source on the dev lane, so an edit is live
- * on the next request; staged to `<exeDir>/pages` when installed (`scripts/stage-web.mjs`).
+ * Each library file beside its source on the dev lane, so an edit is live on the next request;
+ * staged under `<exeDir>/pages` when installed (`scripts/stage-web.mjs`).
  */
+const LIBRARY_SOURCES = {
+  "pe.js": "./pages/pe.js",
+  "pe.css": "./pages/pe.css",
+  "base.css": "../../../packages/kit/src/base.css",
+  "revit.js": "../../web/src/revit/revit.js",
+  "revit.css": "../../web/src/revit/revit.css",
+  "kit/pe-kit.js": "../../../packages/kit/dist/pe-kit.js",
+  "kit/pe-kit.css": "../../../packages/kit/dist/pe-kit.css",
+} as const;
+type PageLibraryFile = keyof typeof LIBRARY_SOURCES;
 const assetPath = (name: PageLibraryFile) =>
   hostOwnership.lane === "installed"
     ? join(dirname(process.execPath), "pages", name)
-    : fileURLToPath(
-        new URL(PAGE_LIBRARIES.find((library) => library.file === name)!.source, import.meta.url),
-      );
-type PageLibraryFile = (typeof PAGE_LIBRARIES)[number]["file"];
+    : fileURLToPath(new URL(LIBRARY_SOURCES[name], import.meta.url));
 
 /**
  * The facsimile is an ES module for the web app; pages load classic scripts (their inline handlers
@@ -97,7 +102,14 @@ ${source.replace(exports, "globalThis.rv = {$1};")}
 })();
 `;
 };
-const asset = (name: PageLibraryFile) => readFileSync(assetPath(name), "utf8");
+const asset = (name: PageLibraryFile) => {
+  try {
+    return readFileSync(assetPath(name), "utf8");
+  } catch (error) {
+    if (isMissing(error)) throw Error(`Page library ${name} is missing; build @pe/kit first`);
+    throw error;
+  }
+};
 
 /**
  * The doors carry the runtime that served them: the request identity gate refuses a browser API
@@ -119,6 +131,17 @@ const servedPe = () => {
   const unfilled = rendered.match(/\/\*pe:[^*]+\*\/\s*null\b/);
   if (unfilled) throw Error(`Unfilled pe.js slot: ${unfilled[0]}`);
   return rendered;
+};
+
+/** A host library by URL, or null: serving, export and publication preview read the same bytes. */
+const pageLibrary = (path: string): string | null => {
+  if (path === "/pages/pe.js") return servedPe();
+  if (path === "/pages/pe.css") return `${asset("base.css")}\n${asset("pe.css")}`;
+  if (path === "/pages/revit.js") return classicRevit();
+  const file = path.slice("/pages/".length);
+  return file === "revit.css" || file === "kit/pe-kit.js" || file === "kit/pe-kit.css"
+    ? asset(file)
+    : null;
 };
 
 /** One file segment: a leading dot is refused, so `.state/` and editor droppings stay private. */
@@ -395,7 +418,6 @@ export function createPagesHandler(
     return null;
   };
   const states = new Map<string, PageState>();
-  const streams = new Set<() => void>();
   /** By folder: a renamed pod's page keeps its slug and opens its state where it lives now. */
   const stateOf = (dir: string) => {
     let state = states.get(dir);
@@ -507,7 +529,7 @@ export function createPagesHandler(
           HEARTBEAT_MS,
         );
         stop = () => {
-          streams.delete(stop);
+          last = Infinity;
           request.signal.removeEventListener("abort", stop);
           clearInterval(beat);
           unfollow();
@@ -519,10 +541,10 @@ export function createPagesHandler(
             /* already closed by the consumer */
           }
         };
-        streams.add(stop);
+        // Listen before the replay's await: an abort during it still closes the folder watcher.
         request.signal.addEventListener("abort", stop);
         if (request.signal.aborted) stop();
-        else for (const row of await state.rows()) if (streams.has(stop)) send(row);
+        for (const row of await state.rows()) send(row);
       },
       cancel() {
         stop();
@@ -777,12 +799,7 @@ export function createPagesHandler(
     return json(await target(page, dir));
   }
 
-  return Object.assign(handle, {
-    close: () => {
-      for (const stop of streams) stop();
-    },
-  });
-  async function handle(request: Request): Promise<Response> {
+  return async function handle(request: Request): Promise<Response> {
     const caller = currentCaller();
     const url = new URL(request.url);
     if (url.pathname === peRoutes["page.publish"].path && request.method === "POST") {
@@ -791,9 +808,7 @@ export function createPagesHandler(
       const input = peRoutes["page.publish"].body.safeParse(await request.json());
       if (!input.success) return problem(400, input.error.message);
       try {
-        // No caller headers enter preview; public libraries pass through the ordinary serving path.
-        servedPe();
-        const result = await publishPage(root, input.data, url.origin, handle, captures);
+        const result = await publishPage(root, input.data, url.origin, pageLibrary, captures);
         return json(result, 201);
       } catch (error) {
         return problem(422, error instanceof Error ? error.message : String(error));
@@ -814,43 +829,11 @@ export function createPagesHandler(
     if (parts.length === 1)
       return wantsHtml ? listPage(await list()) : json({ root, pages: await list() });
     const [, slug = "", ...rest] = parts;
-    if (slug === "kit" && rest.length === 1 && request.method === "GET") {
-      const name = rest[0]!;
-      if (name !== "pe-kit.js" && name !== "pe-kit.css")
-        return problem(404, "no such Page kit asset");
-      try {
-        return new Response(await pageKitAsset(name), {
-          headers: {
-            "content-type": MIME[extname(name)]!,
-            "cache-control": "no-cache",
-          },
-        });
-      } catch (error) {
-        if (isMissing(error))
-          return problem(503, "Page kit is not built; build @pe/kit before serving Pages");
-        throw error;
-      }
-    }
-    if (slug === "pe.js")
-      return new Response(servedPe(), {
-        headers: { "content-type": MIME[".js"]!, "cache-control": "no-cache" },
+    const library = request.method === "GET" ? pageLibrary(url.pathname) : null;
+    if (library !== null)
+      return new Response(library, {
+        headers: { "content-type": MIME[extname(url.pathname)]!, "cache-control": "no-cache" },
       });
-    if (slug === "revit.js")
-      return new Response(classicRevit(), {
-        headers: { "content-type": MIME[".js"]!, "cache-control": "no-cache" },
-      });
-    if (slug === "revit.css")
-      return new Response(asset("revit.css"), {
-        headers: { "content-type": MIME[".css"]!, "cache-control": "no-cache" },
-      });
-    if (slug === "pe.css")
-      return new Response(
-        `${asset("base.css")}
-${asset("pe.css")}`,
-        {
-          headers: { "content-type": MIME[".css"]!, "cache-control": "no-cache" },
-        },
-      );
     if (!pageKeyOf(slug))
       return problem(
         400,
@@ -878,13 +861,9 @@ ${asset("pe.css")}`,
             parsed.data.snapshot === undefined ? await state.snapshot() : parsed.data.snapshot,
           events: await state.rows(),
           library: async (path) => {
-            if (path === "/pages/pe.js") return asset("pe.js");
-            if (path.startsWith("/pages/kit/"))
-              return pageKitAsset(path.slice("/pages/kit/".length));
-            if (path === "/pages/pe.css") return `${asset("base.css")}\n${asset("pe.css")}`;
-            if (path === "/pages/revit.js") return classicRevit();
-            if (path === "/pages/revit.css") return asset("revit.css");
-            throw Error(`Page export has an unsupported host library: ${path}`);
+            const text = pageLibrary(path);
+            if (text === null) throw Error(`Page export has an unsupported host library: ${path}`);
+            return text;
           },
         });
         return new Response(result.html, {
@@ -946,7 +925,7 @@ ${asset("pe.css")}`,
         headers: { location: `/bind?page=${encodeURIComponent(slug)}&view=1` },
       });
     return file(slug, where.dir, where.key, rest.length ? rest : ["index.html"]);
-  }
+  };
 }
 
 export const pagesRoute = (root = productPagesRootPath, pods = productPodsRootPath) =>
@@ -973,7 +952,6 @@ export const pagesRoute = (root = productPagesRootPath, pods = productPodsRootPa
           }),
       };
       const pages = createPagesHandler(root(), pods(), live, hostCaptures());
-      yield* Effect.addFinalizer(() => Effect.sync(() => pages.close()));
       const handler = HttpEffect.fromWebHandler((request) =>
         matchPeRoute(request.method, new URL(request.url).pathname)
           ? servePeRoute(request, pages)

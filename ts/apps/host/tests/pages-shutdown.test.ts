@@ -1,9 +1,6 @@
-import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { existsSync } from "node:fs";
 import { expect, test, vi } from "vite-plus/test";
 import { bootHost } from "./real-server.ts";
-import { createPagesHandler } from "../src/pages-route.ts";
 
 const watched = vi.hoisted(() => [] as { close: ReturnType<typeof vi.fn> }[]);
 vi.mock("node:fs", async (original) => {
@@ -18,26 +15,8 @@ vi.mock("node:fs", async (original) => {
   };
 });
 
-test("the Page handler closes active streams and watchers without waiting for clients", async () => {
-  const root = mkdtempSync(join(tmpdir(), "pe-pages-close-"));
-  mkdirSync(join(root, "tour"));
-  writeFileSync(join(root, "tour", "index.html"), "<!doctype html><title>Tour</title>");
-  const handle = createPagesHandler(root);
-  const response = await handle(new Request("http://host/pages/tour/events"));
-  const reader = response.body!.getReader();
-  try {
-    await reader.read();
-    handle.close();
-    expect(await reader.read()).toEqual({ done: true, value: undefined });
-    expect(watched.at(-1)!.close).toHaveBeenCalled();
-    handle.close();
-  } finally {
-    await reader.cancel();
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
-  }
-});
-
-test("real host shutdown releases its product home before process exit", async () => {
+// The provider probe child (cwd under the home) was the pin; a Page stream's watcher ends with its request.
+test("real host shutdown closes Page watchers and releases its product home before process exit", async () => {
   watched.length = 0;
   const host = await bootHost();
   const response = await fetch(`${host.base}/pages/carriage/events`, {

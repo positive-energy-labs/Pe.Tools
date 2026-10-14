@@ -10,8 +10,9 @@
  * before the catalog, skill publication and harness threads read the pods root.
  */
 import { join, dirname } from "node:path";
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
-import { createHash, randomUUID } from "node:crypto";
+import { readFile, readdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { writeArtifact } from "./page-artifacts.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { hostOwnership, productRoot } from "./host-ownership.ts";
 import {
@@ -86,10 +87,12 @@ async function run(
       outcome: outcomes.at(-1)!.outcome,
     };
   }
-  await mkdir(dirname(ledgerFile), { recursive: true });
-  const partial = `${ledgerFile}.${randomUUID()}.partial`;
-  await writeFile(partial, `${JSON.stringify(ledger, null, 2)}\n`);
-  await rename(partial, ledgerFile);
+  await writeArtifact(
+    dirname(ledgerFile),
+    ledgerFile,
+    `${JSON.stringify(ledger, null, 2)}\n`,
+    true,
+  );
   return { shippedRoot, outcomes };
 }
 

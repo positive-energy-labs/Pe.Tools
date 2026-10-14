@@ -97,7 +97,6 @@ import {
   packagePageDescriptors,
   pageFolderCollisions,
   scratchPageDescriptors,
-  PAGE_LIBRARIES,
   type PageDescriptor,
 } from "./page-libraries.ts";
 import { join } from "node:path";
@@ -215,7 +214,6 @@ export function createPeRoutes(options: PeRoutesOptions) {
             409,
           );
     }
-    if (method === "GET" && declared.id === "pages.libraries") return json(PAGE_LIBRARIES);
 
     if (method === "GET" && declared.id === "navigation.get") {
       try {

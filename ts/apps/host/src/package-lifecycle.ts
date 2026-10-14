@@ -1,9 +1,10 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { createPluginRuntime, type PluginContext } from "@pe/agent-contracts";
 import { z } from "zod";
 import { listPackages, type AdmittedPackage } from "./packages.ts";
+import { writeArtifact } from "./page-artifacts.ts";
 import { productPluginDecisionsPath, productPodsRootPath } from "./product-paths.ts";
 import {
   builtinPeaSkillSnapshots,
@@ -81,10 +82,7 @@ export function createPackageLifecycle(
     changed: options.changed,
     persist: async (id, enabled) => {
       const next = { ...decisions, [id]: enabled };
-      await mkdir(dirname(decisionsPath), { recursive: true });
-      const partial = `${decisionsPath}.${randomUUID()}.partial`;
-      await writeFile(partial, JSON.stringify(next));
-      await rename(partial, decisionsPath);
+      await writeArtifact(dirname(decisionsPath), decisionsPath, JSON.stringify(next), true);
       decisions = next;
     },
   });

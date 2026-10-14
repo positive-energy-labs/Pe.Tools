@@ -1,11 +1,11 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { podRouteWorkSpec, type PodRouteDescriptor } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
 import type { createPackageLifecycle } from "./package-lifecycle.ts";
 import { productRouteTrustPath } from "./product-paths.ts";
+import { writeArtifact } from "./page-artifacts.ts";
 
 const trustSchema = z.record(z.string(), z.string().regex(/^[a-f0-9]{64}$/));
 
@@ -74,10 +74,7 @@ export function createPodRoutes(
         const trust = await decisions();
         if (trusted) trust[key] = hash;
         else delete trust[key];
-        await mkdir(dirname(path), { recursive: true });
-        const partial = `${path}.${randomUUID()}.partial`;
-        await writeFile(partial, JSON.stringify(trust));
-        await rename(partial, path);
+        await writeArtifact(dirname(path), path, JSON.stringify(trust), true);
       });
       tail = write.catch(() => {});
       await write;

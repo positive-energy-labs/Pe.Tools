@@ -55,7 +55,7 @@ test("under a test run no product home may resolve outside the temp directory", 
   const original = process.env[homeVariable];
   try {
     expect(process.env[testHomeRootVariable]).toBeTruthy();
-    process.env[homeVariable] = "C:\Users\someone\Documents\Pe.Tools";
+    process.env[homeVariable] = "C:UserssomeoneDocumentsPe.Tools";
     expect(() => productHomePath()).toThrow("Test isolation");
     delete process.env[homeVariable];
     expect(() => productHomePath()).toThrow("Test isolation"); // the unset override is the real home
