@@ -202,7 +202,10 @@ export function useLedgerList(
         : { ...item.row, fact: item.row.at ? relativeThreadAge(item.row.at) : "" };
     return {
       lead: (
-        <span className="inline-block w-[11ch] face-mono" data-tone={TONE[shown.verb]}>
+        <span
+          className={`inline-block w-[11ch] face-mono${TONE[shown.verb] ? " font-semibold" : ""}`}
+          data-tone={TONE[shown.verb]}
+        >
           {shown.verb}
         </span>
       ),

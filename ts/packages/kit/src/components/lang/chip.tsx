@@ -20,7 +20,7 @@ export const chipRecipe = tv({
     count: "text-ink-mute tabular-nums",
     remove:
       "veil grid size-3 cursor-pointer place-items-center border-0 bg-transparent text-ink-2 focus-visible:outline focus-visible:outline-line-2 [&>svg]:size-[9px]",
-    tag: "t-small t-upper tabular-nums",
+    tag: "t-small tabular-nums",
   },
   variants: {
     tone: {
@@ -134,8 +134,9 @@ export function NarrowChip({
   );
 }
 
-/** The small mono tag that names a state or an object: quiet caption-size caps,
- *  tabular numerals. A phase may tint it inside the arming strip; nowhere else. */
+/** The small tag that names a state or an object: caption size in the body face, as authored
+ *  (caps belong to section heads), tabular numerals. A phase may tint it inside the arming strip;
+ *  nowhere else. */
 export function Tag({ children }: { children: React.ReactNode }) {
   const { tag } = chipRecipe();
   return <span className={tag()}>{children}</span>;

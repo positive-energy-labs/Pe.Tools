@@ -101,6 +101,39 @@
   --z-dev: 9999;
 }
 
+/* The tray's compact scale. surface-host marks <html data-shell>. Review-only: S0 is :root, and
+   data-tray-scale picks S1 or S2 live; the verdict keeps one block as [data-shell="tray"] alone. */
+[data-shell="tray"][data-tray-scale="s1"] {
+  --type-small-size: 11.5px;
+  --type-small-line-height: 18px;
+  --type-prose-size: 12.5px;
+  --type-prose-line-height: 19px;
+  --type-title-size: 14px;
+  --type-title-line-height: 22px;
+  --type-head-size: 20px;
+  --type-display-size: 32px;
+  --item-h: 22px;
+  --control-h: 22px;
+  --gutter: 6px;
+  --rail-h: 36px;
+}
+[data-shell="tray"][data-tray-scale="s2"] {
+  --type-small-size: 11px;
+  --type-small-line-height: 16px;
+  --type-prose-size: 12px;
+  --type-prose-line-height: 18px;
+  --type-title-size: 13px;
+  --type-title-line-height: 20px;
+  --type-head-size: 18px;
+  --type-display-size: 28px;
+  --item-h: 20px;
+  --control-h: 20px;
+  --gutter: 4px;
+  --rail-h: 32px;
+  --item-pad-x: 6px;
+  --control-pad-x: 4px;
+}
+
 @layer base {
   [data-pe],
   [data-pe] * {

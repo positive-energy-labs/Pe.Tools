@@ -15,6 +15,7 @@ import {
   type AppSurface,
   type SurfaceShell,
 } from "@pe/agent-contracts";
+import { Button } from "@pe/kit/lang/button";
 import { admittedDestination } from "./model";
 import {
   nativeMessageSchema,
@@ -216,6 +217,9 @@ export function SurfaceHostProvider({ children }: { children: ReactNode }) {
   const open = useCallback(openFullWindow, []);
   const surface: AppSurface = shell === "tray" ? "tray" : standalone || overlay ? "pwa" : "web";
   const local = SURFACE_SHELLS[surface].routes !== "all";
+  useEffect(() => {
+    document.documentElement.dataset.shell = surface;
+  }, [surface]);
   const handoff = useCallback((destination: string) => {
     const opened = openFullWindow(destination);
     setNavigationRefusal(
@@ -295,7 +299,39 @@ export function SurfaceHostProvider({ children }: { children: ReactNode }) {
     }),
     [surface, overlay, titlebarArea, native, nativeHistory, open, navigationRefusal],
   );
-  return <Context value={value}>{children}</Context>;
+  return (
+    <Context value={value}>
+      {children}
+      {surface === "tray" ? <TrayScaleToggle /> : null}
+    </Context>
+  );
+}
+
+// ponytail: review-only. The tray type scale flips live (the corner badge, Ctrl+Alt+S, or ?scale=s1
+// on load); a reload returns to S0. Delete this and the losing base.css block with the verdict.
+const TRAY_SCALES = ["s0", "s1", "s2"];
+function TrayScaleToggle() {
+  const [scale, setScale] = useState("s0");
+  useEffect(() => {
+    const asked = new URLSearchParams(window.location.search).get("scale") ?? "";
+    if (TRAY_SCALES.includes(asked)) setScale(asked);
+    const key = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.altKey && event.code === "KeyS") next();
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, []);
+  useEffect(() => {
+    document.documentElement.dataset.trayScale = scale;
+  }, [scale]);
+  const next = () => setScale((s) => TRAY_SCALES[(TRAY_SCALES.indexOf(s) + 1) % 3]!);
+  return (
+    <div className="fixed bottom-0 left-0 z-dev">
+      <Button label="Type scale" reason="Review only: S0 today, S1, S2 (Ctrl+Alt+S)" onClick={next}>
+        {scale.toUpperCase()}
+      </Button>
+    </div>
+  );
 }
 
 export const useSurfaceHost = () => use(Context);
