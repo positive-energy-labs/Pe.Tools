@@ -4,7 +4,8 @@ import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Script } from "node:vm";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
-import { chromium } from "playwright-core";
+import { createRequire } from "node:module";
+import { isSea } from "node:sea";
 import { pagePublicationSchema, type PagePublication } from "@pe/host-contracts/pe-api";
 
 /** Serving and preview use the same host-minted identity without changing authored bytes. */
@@ -95,6 +96,11 @@ async function capturePage(
   ].find(existsSync);
   if (!executablePath)
     throw Error("Page capture requires an installed Microsoft Edge; no browser was downloaded");
+  // Jiti rewrites Playwright's prebundled CJS interop; native require keeps source calls intact.
+  // The SEA branch remains a declared import so the host packer includes Playwright.
+  const { chromium } = isSea()
+    ? await import("playwright-core")
+    : (createRequire(import.meta.url)("playwright-core") as typeof import("playwright-core"));
   const browser = await chromium.launch({ executablePath, headless: true, timeout: 10_000 });
   let timedOut = false;
   const timer = setTimeout(() => {
