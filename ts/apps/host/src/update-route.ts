@@ -1,8 +1,7 @@
 ﻿import { spawn } from "node:child_process";
 import { join } from "node:path";
-import { Deferred, Effect, Layer } from "effect";
+import { Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
-import { HostLifecycle } from "./host-lifecycle.ts";
 import { hostOwnership, productRoot } from "./host-ownership.ts";
 import { parsePeRevitEnvelope, peRevitLauncher, withStderr } from "./pe-revit-launch.ts";
 import {
@@ -60,8 +59,12 @@ export const updateVerb: UpdateRunner = (verbArgs, detached = false) => {
   });
 };
 
-export const makeInstalledUpdateReader = (fact?: (fact: UpdateFact) => void) =>
+export const makeInstalledUpdateReader = (
+  fact?: (fact: UpdateFact) => void,
+  handoff?: () => void,
+) =>
   createUpdateReader({
+    handoff,
     path: join(productRoot(), "state", "host-update.json"),
     automaticOffPath: join(productRoot(), "state", "host-update-automatic-off"),
     fact,
@@ -121,18 +124,12 @@ export const updateRoutes = Layer.mergeAll(
       if ("error" in outcome) return Response.jsonUnsafe(outcome, { status: 409 });
       const receipt = outcome.receipt;
       const refused = receipt?.state === "refused" || receipt?.state === "failed";
-      if (
-        receipt?.state === "running" &&
-        receipt.legs.some((leg) => leg.name === "handoff" && leg.status === "ok")
-      ) {
-        const { latch } = yield* HostLifecycle;
-        yield* Effect.forkDetach(
-          Effect.sleep("1 second").pipe(Effect.andThen(Deferred.succeed(latch, undefined))),
-        );
-      }
+      // No receipt means the acknowledgement was lost: the request exists (requestId) and its
+      // outcome is unknown. Recovery and the exit handoff belong to the reader, never to this reply.
       return Response.jsonUnsafe(
         {
-          accepted: !refused,
+          accepted: receipt !== null && !refused,
+          status: receipt?.state ?? "unknown",
           requestId: outcome.requestId,
           planId,
           receiptPath: receipt?.receiptPath ?? null,

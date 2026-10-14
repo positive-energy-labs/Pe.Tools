@@ -822,6 +822,7 @@ export function recordUpdateFact(exporter: ReceiptExport, fact: UpdateFact) {
             ? { phase: "available", candidateVersion: fact.version }
             : {
                 phase: fact.state === "ok" ? "finished" : "failed",
+                ...(fact.version ? { candidateVersion: fact.version } : {}),
                 outcome: fact.state === "ok" ? "succeeded" : fact.state,
                 ...(fact.state === "failed" ? { faultCode: "update.failed" as const } : {}),
               },

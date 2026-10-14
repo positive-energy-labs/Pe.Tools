@@ -752,7 +752,6 @@ export function makeHostPeRoutes(
   registrationsFactory: typeof createRouteRegistrations = createRouteRegistrations,
   update: UpdateReader["Service"] = makeInstalledUpdateReader(),
   share?: MachineShareAdapter,
-  updateHandoff?: () => void,
 ) {
   const sourceRoot = hostOwnership.sourceRoot;
   const worldRoot = resolvePeaProductHomePath();
@@ -826,9 +825,7 @@ export function makeHostPeRoutes(
         }),
       ),
     automaticUpdates:
-      hostOwnership.lane === "installed" && updateHandoff
-        ? { peaActive: threads.active, handoff: updateHandoff }
-        : undefined,
+      hostOwnership.lane === "installed" ? { peaActive: threads.active } : undefined,
   });
   const registrations = registrationsFactory({ hostBaseUrl });
   for (const registration of registrations) {
@@ -929,14 +926,12 @@ export const peRoutesLayer = (
       const hostBaseUrl = `http://127.0.0.1:${address._tag === "TcpAddress" ? address.port : 0}`;
       const bridge = Option.getOrUndefined(yield* Effect.serviceOption(RevitBridge));
       const update = yield* UpdateReader;
-      const lifecycle = Option.getOrUndefined(yield* Effect.serviceOption(HostLifecycle));
       const { providers, threads, routes, catalog, machine, notices, plugins } = makeHostPeRoutes(
         hostBaseUrl,
         bridge,
         registrationsFactory,
         update,
         share,
-        lifecycle ? () => Effect.runSync(Deferred.succeed(lifecycle.latch, undefined)) : undefined,
       );
       useHostMachine(machine);
       bindControl({

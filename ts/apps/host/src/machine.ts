@@ -146,6 +146,8 @@ export interface MachineSources {
  * "reading this machine" forever (DELL_PE, 2026-10-12). Now it is a leg error in the frame.
  */
 const LEG_DEADLINE_MS = 15_000;
+const FEED_RETRY_MS = 2 * 60_000;
+const ATTEMPT_CAP_MS = 6 * 60 * 60_000;
 
 class LegDeadline extends Error {}
 
@@ -175,7 +177,7 @@ export function createMachine(
     now?: () => string;
     periodMs?: number;
     updatePeriodMs?: number;
-    automaticUpdates?: { peaActive(): boolean; handoff(): void };
+    automaticUpdates?: { peaActive(): boolean };
     /** The spine's intake for leg faults; absent where nothing observes them. */
     fault?: (fault: MachineLegFault) => void;
   } = {},
@@ -189,7 +191,10 @@ export function createMachine(
   let yearsDueAt = 0;
   let noRevitSince: number | null = null;
   let eligibleBefore = false;
-  let automaticPlan: string | null = null;
+  /** Feed-failure backoff: retry sooner than the 30 min cadence, never faster than 2 min. */
+  let feedFailures = 0;
+  /** Automatic attempts keyed by candidate version, not plan UUID (every feed check mints a plan). */
+  let attempt: { candidate: string; count: number; notBefore: number } | null = null;
   let announced: string | null = null;
   const listeners = new Set<(value: Machine) => void>();
   let inFlight: Promise<Machine> | undefined;
@@ -292,7 +297,15 @@ export function createMachine(
           () => {
             const checkFeed = Date.now() >= updateDueAt;
             if (checkFeed) updateDueAt = Date.now() + updatePeriodMs;
-            return sources.update.refresh(checkFeed);
+            return sources.update.refresh(checkFeed).then((value) => {
+              if (checkFeed) {
+                feedFailures = value.planLeg.error ? feedFailures + 1 : 0;
+                if (feedFailures)
+                  updateDueAt =
+                    Date.now() + Math.min(updatePeriodMs, FEED_RETRY_MS * 2 ** (feedFailures - 1));
+              }
+              return value;
+            });
           },
           () => {},
         ),
@@ -334,27 +347,31 @@ export function createMachine(
       if (eligible && policy && !policy.peaActive() && !closed) {
         const update = sources.update.current();
         const plan = update.plan;
+        const candidate = plan?.latest ?? plan?.planId ?? "";
         if (
           plan?.available &&
           !plan.revits.length &&
           !plan.blockers.length &&
           !update.planLeg.error &&
-          plan.planId !== automaticPlan &&
+          (attempt?.candidate !== candidate || Date.now() >= attempt.notBefore) &&
           (!update.requestId ||
             (update.receipt && ["ok", "failed", "refused"].includes(update.receipt.state)))
         ) {
-          automaticPlan = plan.planId;
-          await read(
-            "automatic-update",
-            () => sources.update.apply(plan.planId, true),
-            (applied) => {
-              if (
-                applied.receipt?.state === "running" &&
-                applied.receipt?.legs.some((leg) => leg.name === "handoff" && leg.status === "ok")
-              )
-                policy.handoff();
-            },
-          );
+          const count = attempt?.candidate === candidate ? attempt.count + 1 : 1;
+          attempt = {
+            candidate,
+            count,
+            notBefore: Date.now() + Math.min(ATTEMPT_CAP_MS, updatePeriodMs * 2 ** (count - 1)),
+          };
+          // The mutation outlives every observation deadline: the reader owns it and its exit
+          // handoff. This tick never awaits it, so a long download is not a failed read.
+          sources.update.apply(plan.planId, true).catch((error) => {
+            legs["automatic-update"] = {
+              ...(legs["automatic-update"] ?? unreadLeg()),
+              attemptedAtUtc: now(),
+              error: String(error),
+            };
+          });
         }
       }
       if (censusRead)
