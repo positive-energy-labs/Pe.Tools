@@ -12,5 +12,10 @@ export default function isolateProductHome() {
   process.env.PE_TEST_HOME_ROOT = root;
   process.env.PE_TOOLS_PRODUCT_HOME = join(root, "product");
   process.env.LOCALAPPDATA = join(root, "local");
-  return () => rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  // Best effort: a directory a lingering handle pins is the OS temp cleaner's, not a test failure.
+  return () => {
+    try {
+      rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    } catch {}
+  };
 }
