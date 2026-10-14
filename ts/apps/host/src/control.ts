@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
 import {
@@ -74,7 +74,8 @@ export function writeTerminalContext(serviceName: string) {
   return {
     retire() {
       retireContext(token);
-      rmSync(path, { force: true });
+      // A competing host may have written the path since (acceptance R4d): remove only our own.
+      if (existsSync(path) && readFileSync(path, "utf8") === token) rmSync(path);
     },
   };
 }
