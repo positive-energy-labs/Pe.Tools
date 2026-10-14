@@ -294,7 +294,8 @@ export const APP_ROUTES: readonly AppRoute[] = [
       "This machine and this app: Revit sessions, update, sharing, Pea providers and approvals, host, notifications, appearance, and diagnostics.",
     task: "Explore / maintain",
     exposure: "Main",
-    aliases: "machine Revit update share providers sign-in approvals host startup diagnostics theme",
+    aliases:
+      "machine Revit update share providers sign-in approvals host startup diagnostics theme",
     runtimeNeed: "Host machine configuration",
     directory: true,
   },
@@ -374,7 +375,11 @@ export interface SurfaceShell {
   routes: "all" | readonly string[];
   home: { path: string; label: string };
   /** Route icons after Home. Without a picker, the pressed icon is the location. */
-  icons: readonly { route: string; label: string; iconKey: "Inbox" | "MessageSquare" | "Settings2" }[];
+  icons: readonly {
+    route: string;
+    label: string;
+    iconKey: "Inbox" | "MessageSquare" | "Settings2";
+  }[];
   /**
    * The bar's field: `global` is the route field that opens the Ctrl+Shift+K open-work ledger;
    * `page` shows the route's name and opens its own Ctrl+K page palette, with no global search.
