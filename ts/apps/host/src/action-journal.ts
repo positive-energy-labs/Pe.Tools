@@ -922,10 +922,16 @@ export class ActionJournal implements ReceiptReader {
         else mappings.push(entry.mapping);
       });
       this.lines = lines.length - 1;
-    } else
-      throw Error(
-        `${this.path} is journal version ${String(head?.version)}; this host reads version 5: archive or delete it, then restart.`,
+    } else {
+      // An older or unknown journal never stops a host: archive it beside itself and start fresh.
+      // Receipts are durable evidence of past actions, so the file is kept, never deleted.
+      const archived = `${this.path}.v${String(head?.version)}.${Date.now()}.archived`;
+      await renameReplacing(this.path, archived);
+      console.warn(
+        `${this.path} is journal version ${String(head?.version)}; this host reads version 5. Archived it as ${archived} and started a fresh journal.`,
       );
+      return;
+    }
     this.header = true;
     for (const [key, id] of mappings) this.mappings.set(key, id);
     if (new Set(this.mappings.values()).size !== this.mappings.size)
