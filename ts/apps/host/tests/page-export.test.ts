@@ -76,6 +76,7 @@ it("pins local scripts, imported CSS and relative assets, snapshot, document and
       state(k: unknown): Promise<unknown>;
       kernel(reduce: (s: unknown, e: unknown) => unknown, base: unknown): { state: unknown };
       read?: unknown;
+      target(...selector: unknown[]): Promise<unknown>;
     };
   } = {};
   runInNewContext(runtime, {
@@ -86,6 +87,10 @@ it("pins local scripts, imported CSS and relative assets, snapshot, document and
   await window.pe!.state(kernel);
   expect(kernel.state).toEqual(basis.snapshot);
   expect(window.pe!.read).toBeUndefined();
+  // Shipped Snowdon ducts calls this while opening. It resolves snapshot provenance, never a live binding.
+  expect(typeof window.pe!.target).toBe("function");
+  expect(await window.pe!.target()).toEqual(basis.document);
+  await expect(window.pe!.target("another document")).rejects.toThrow("snapshot");
 });
 
 it("downloads the same host-persisted artifact and rejects destination path injection", async () => {

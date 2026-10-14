@@ -788,7 +788,11 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
 
   /** `index.html` names its page: the host mints the key; the page never claims one. */
   const withPageKey = (html: string, page: string) => {
-    const meta = `<meta name="pe-page" content="${escapeHtml(page)}">`;
+    // Pages without an authored icon must not make a stray request to the product's /favicon.ico.
+    const icon = /<link\b[^>]*\brel=["'][^"']*\bicon\b/i.test(html)
+      ? ""
+      : '<link rel="icon" href="data:,">';
+    const meta = `<meta name="pe-page" content="${escapeHtml(page)}">${icon}`;
     const head = /<head[^>]*>/i.exec(html) ?? /^\s*<!doctype[^>]*>/i.exec(html);
     if (!head) return `${meta}${html}`;
     const end = head.index + head[0].length;

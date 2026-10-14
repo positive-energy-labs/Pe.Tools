@@ -753,6 +753,7 @@ ${source}`),
       await as(human).put("/pe/pages/todo/binding", { kind: "pinned", address: MODEL });
       const html = await (await fetch("/pages/todo/")).text();
       expect(html).toContain('<meta name="pe-page" content="page:@pages/todo">');
+      expect(html).toContain('<link rel="icon" href="data:,">');
       expect(html.indexOf("pe-page")).toBeLessThan(html.indexOf("<p>hi</p>"));
       // A forged x-pe-origin names neither the row nor the crossing.
       const row = await page.post("/pages/todo/events", { type: "x" }, { "x-pe-origin": "human" });
