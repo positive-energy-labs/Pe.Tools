@@ -4,7 +4,8 @@
  * and the Ctrl+Shift+K overlay spreads the same props into the anchored palette.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { RotateCcw } from "lucide-react";
+import { Copy, RotateCcw } from "lucide-react";
+import { useCopy } from "@pe/kit/lib/use-copy";
 import { List } from "@pe/kit/lang/list-popup";
 import { Button } from "@pe/kit/lang/button";
 import type { HarnessThreadSummary } from "@pe/agent-contracts";
@@ -153,6 +154,7 @@ export function useLedgerList(
   const go = useDestination();
   const [open, setOpen] = useState<ReadonlySet<LedgerGroup>>(new Set());
   const [resuming, setResuming] = useState<string | null>(null);
+  const { copied, copy } = useCopy();
   const [refusal, setRefusal] = useState<string | null>(null);
   const searching = query.trim() !== "";
   const items: Item[] = [
@@ -207,6 +209,8 @@ export function useLedgerList(
       meta: <span className="face-mono tabular-nums">{shown.fact}</span>,
       ...(presentation.says && shown.says ? { lines: 2 as const, sub: shown.says } : {}),
       refusal: shown.refusal,
+      // The failure's raw text folds behind the row: its tooltip, and the copy press.
+      title: item.kind === "row" ? item.row.detail : undefined,
       actions:
         item.kind === "row" && item.row.resume ? (
           <Button
@@ -214,6 +218,12 @@ export function useLedgerList(
             icon={RotateCcw}
             busy={resuming === item.row.resume}
             onClick={() => resume(item.row)}
+          />
+        ) : item.kind === "row" && item.row.detail ? (
+          <Button
+            label={copied ? "Copied the details" : "Copy the details"}
+            icon={Copy}
+            onClick={() => copy(item.row.detail!)}
           />
         ) : undefined,
     };
