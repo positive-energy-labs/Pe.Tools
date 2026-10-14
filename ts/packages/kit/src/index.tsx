@@ -23,3 +23,19 @@ export function Mermaid({ source, title = "Diagram" }: { source: string; title?:
 export { ThemeToggle } from "./components/lang/theme-toggle";
 export { readTheme, writeTheme, useThemeMode, type ThemeMode } from "./theme";
 export type { Column, TableState } from "./components/master-table/model";
+
+export {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "./components/lang/tooltip";
+export {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  PopoverTitle,
+  PopoverDescription,
+  PopoverClose,
+} from "./components/lang/popover";
+export { HoverCard, HoverCardTrigger, HoverCardContent } from "./components/lang/hover-card";

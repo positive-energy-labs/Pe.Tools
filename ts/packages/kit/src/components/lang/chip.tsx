@@ -4,11 +4,10 @@
  * the meaning tokens only, and `dashed` means seam (typed but unproven) and nothing else.
  */
 import { Fragment, type ReactNode } from "react";
-import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 import { X } from "lucide-react";
 
 import { Button } from "./button";
-import { Tooltip } from "./tooltip";
+import { HoverCard, HoverCardTrigger, HoverCardContent } from "./hover-card";
 
 import { tv } from "../../lib/tv";
 
@@ -175,9 +174,10 @@ export function MentionChip({ label, kind, pointer, facts, takenAt, onRemove }: 
   const { base, label: name, count } = chipRecipe();
   const rows = Object.entries(facts).filter(([, value]) => value !== null && value !== "");
   return (
-    <Tooltip.Root>
-      <TooltipPrimitive.Trigger
+    <HoverCard>
+      <HoverCardTrigger
         render={<span tabIndex={0} />}
+        nativeButton={false}
         // A title plus its kind word: wider than a fact, still one line.
         className={base({ class: "max-w-[48ch]" })}
         data-surface="artifact"
@@ -186,28 +186,24 @@ export function MentionChip({ label, kind, pointer, facts, takenAt, onRemove }: 
         <span className={name()}>@{label}</span>
         <span className={count()}>{kind}</span>
         {onRemove ? <Button icon={X} label={`Remove @${label}`} onClick={onRemove} /> : null}
-      </TooltipPrimitive.Trigger>
-      <Tooltip.Portal>
-        <Tooltip.Positioner side="top" align="start" sideOffset={4}>
-          <Tooltip.Popup>
-            <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5">
-              <span className="text-ink-2">what Pea received</span>
-              <span className="face-mono break-all">{pointer}</span>
-              {rows.map(([fact, value]) => (
-                <Fragment key={fact}>
-                  <span className="text-ink-2">{fact}</span>
-                  <span className="face-mono break-words">{String(value)}</span>
-                </Fragment>
-              ))}
-              <span className="text-ink-2">read</span>
-              <time className="face-mono" dateTime={takenAt}>
-                {new Date(takenAt).toLocaleString()}
-              </time>
-            </div>
-          </Tooltip.Popup>
-        </Tooltip.Positioner>
-      </Tooltip.Portal>
-    </Tooltip.Root>
+      </HoverCardTrigger>
+      <HoverCardContent side="top" aria-label={`Snapshot of ${label}`}>
+        <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5">
+          <span className="text-ink-2">what Pea received</span>
+          <span className="face-mono break-all">{pointer}</span>
+          {rows.map(([fact, value]) => (
+            <Fragment key={fact}>
+              <span className="text-ink-2">{fact}</span>
+              <span className="face-mono break-words">{String(value)}</span>
+            </Fragment>
+          ))}
+          <span className="text-ink-2">read</span>
+          <time className="face-mono" dateTime={takenAt}>
+            {new Date(takenAt).toLocaleString()}
+          </time>
+        </div>
+      </HoverCardContent>
+    </HoverCard>
   );
 }
 

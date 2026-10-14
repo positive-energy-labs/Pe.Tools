@@ -23,6 +23,8 @@ import { Button } from "@pe/kit/lang/button";
 import { RemoteDeviceGate } from "#/machine/devices";
 import { PodRoutesProvider } from "#/route/pod-routes";
 
+import { TooltipProvider } from "@pe/kit/lang/tooltip";
+
 import appCss from "../styles.css?url";
 
 if (import.meta.env.DEV)
@@ -129,10 +131,12 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <body>
         <RegistryContext.Provider value={appAtomRegistry}>
           <SurfaceHostProvider>
-            <RemoteDeviceGate>
-              {children}
-              <Chrome />
-            </RemoteDeviceGate>
+            <TooltipProvider>
+              <RemoteDeviceGate>
+                {children}
+                <Chrome />
+              </RemoteDeviceGate>
+            </TooltipProvider>
           </SurfaceHostProvider>
         </RegistryContext.Provider>
         <Scripts />

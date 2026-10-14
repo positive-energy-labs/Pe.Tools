@@ -2,9 +2,8 @@
  *  `refusal` keeps it focusable, inert, and says why. No children draws an icon-only square. */
 import { isValidElement, type ComponentProps, type ReactElement, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, ExternalLink, type LucideIcon } from "lucide-react";
-import { Tooltip as Primitive } from "@base-ui/react/tooltip";
 
-import { Tooltip } from "./tooltip";
+import { Tooltip, TooltipTrigger, TooltipContent } from "./tooltip";
 
 import "./button.css";
 
@@ -47,7 +46,7 @@ export function Button({
   const tone = toneProp ?? (kind === "commit" && !inert ? "commit" : undefined);
   const Glyph = direction ? NAV_ICON[direction] : icon;
   const iconOnly = children == null || children === false;
-  const tipped = iconOnly || refusal !== undefined;
+  const tipped = iconOnly || refusal !== undefined || reason != null;
   const tip = refusal ?? reason ?? (iconOnly ? label : null);
   const named = busy ? `${label}…` : label;
   const button = (
@@ -67,9 +66,8 @@ export function Button({
       aria-pressed={pressed}
       aria-disabled={inert || undefined}
       aria-busy={busy || undefined}
-      title={tipped ? undefined : reason}
       onClick={inert ? undefined : onClick}
-      id={tipped ? undefined : id}
+      {...(!tipped && id ? { id } : {})}
       {...props}
     >
       {Glyph == null ? null : isValidElement(Glyph) ? (
@@ -82,18 +80,12 @@ export function Button({
   );
   if (!tipped) return button;
   return (
-    <Primitive.Root>
+    <Tooltip>
       {/* A composing trigger's id (a Popover's) is the tooltip trigger's id too: Base UI finds
           its hovered trigger by id, so two ids on one button silently kill the tooltip. */}
-      <Primitive.Trigger render={button} id={id} />
-      {tip == null ? null : (
-        <Tooltip.Portal>
-          <Tooltip.Positioner side="top" sideOffset={6}>
-            <Tooltip.Popup>{tip}</Tooltip.Popup>
-          </Tooltip.Positioner>
-        </Tooltip.Portal>
-      )}
-    </Primitive.Root>
+      <TooltipTrigger render={button} id={id} />
+      {tip == null ? null : <TooltipContent>{tip}</TooltipContent>}
+    </Tooltip>
   );
 }
 

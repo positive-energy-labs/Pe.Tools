@@ -41,7 +41,9 @@
     "./table/query": "./src/components/master-table/query.tsx",
     "./table/table": "./src/components/master-table/table.tsx",
     "./table/view": "./src/components/master-table/view.ts",
-    "./theme": "./src/theme.ts"
+    "./theme": "./src/theme.ts",
+    "./lang/popover": "./src/components/lang/popover.tsx",
+    "./lang/hover-card": "./src/components/lang/hover-card.tsx"
   },
   "scripts": {
     "build": "vp build && node scripts/page.mjs",

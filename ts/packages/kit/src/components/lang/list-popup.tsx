@@ -4,7 +4,7 @@
  * `cell` (CellListSelect: mounts no popup machinery at rest, opens from its td).
  */
 import { useContext, useEffect, useState, type ComponentProps, type ReactNode } from "react";
-import { Popover } from "@base-ui/react/popover";
+import { Popover, PopoverTrigger, PopoverContent } from "./popover";
 import { ChevronDown, Ellipsis } from "lucide-react";
 
 import { CellHost } from "./cell";
@@ -246,28 +246,18 @@ export function PopupFrame({
   wide,
 }: PopupFrameProps) {
   return (
-    <Popover.Portal>
-      <Popover.Positioner
-        anchor={anchor ?? undefined}
-        side={side}
-        align={align}
-        sideOffset={6}
-        className="isolate z-popup"
-      >
-        <Popover.Popup
-          aria-label={label}
-          initialFocus={owned ? false : undefined}
-          finalFocus={owned ? false : undefined}
-          data-list-popup=""
-          data-surface="artifact"
-          // A caret menu holds one width while its query narrows it; a field's suggestions match
-          // the field; a triggered list is as wide as its rows.
-          className={`block overflow-hidden p-1 text-ink float-surface ${wide ? "w-[min(52rem,var(--available-width))]" : atCaret ? "w-[min(28rem,var(--available-width))]" : owned ? "w-(--anchor-width) min-w-48" : "min-w-48 max-w-[min(36rem,var(--available-width))]"}`}
-        >
-          {children}
-        </Popover.Popup>
-      </Popover.Positioner>
-    </Popover.Portal>
+    <PopoverContent
+      anchor={anchor ?? undefined}
+      side={side}
+      align={align}
+      aria-label={label}
+      initialFocus={owned ? false : undefined}
+      finalFocus={owned ? false : undefined}
+      data-list-popup=""
+      className={`block w-auto overflow-hidden p-1 ${wide ? "w-[min(52rem,var(--available-width))]" : atCaret ? "w-[min(28rem,var(--available-width))]" : owned ? "w-(--anchor-width) min-w-48" : "min-w-48 max-w-[min(36rem,var(--available-width))]"}`}
+    >
+      {children}
+    </PopoverContent>
   );
 }
 
@@ -297,19 +287,19 @@ const TRIGGER_FACE = {
 type TriggerFace = keyof typeof TRIGGER_FACE;
 
 /** A popup's trigger in one of the kit's faces; the chevron is the face's own. Any Base UI
- *  `Popover.Root` takes it, so a non-list popup opens from the same face. */
+ *  `Popover` takes it, so a non-list popup opens from the same face. */
 function PopupTrigger({
   face = "inline",
   children,
   ...props
-}: Omit<ComponentProps<typeof Popover.Trigger>, "className" | "children"> & {
+}: Omit<ComponentProps<typeof PopoverTrigger>, "className" | "children"> & {
   face?: TriggerFace;
   children: ReactNode;
   "data-derived"?: string;
   "data-tone"?: string;
 }) {
   return (
-    <Popover.Trigger className={TRIGGER_FACE[face]} data-list-trigger={face} {...props}>
+    <PopoverTrigger className={TRIGGER_FACE[face]} data-list-trigger={face} {...props}>
       {face === "word" || face === "icon" ? (
         children
       ) : (
@@ -318,7 +308,7 @@ function PopupTrigger({
           <ChevronDown aria-hidden className="size-3 shrink-0 text-ink-2" />
         </>
       )}
-    </Popover.Trigger>
+    </PopoverTrigger>
   );
 }
 
@@ -364,7 +354,7 @@ export function ListPopup<T>({
     onOpenChange?.(next);
   };
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen}>
       {anchor === "trigger" ? (
         <PopupTrigger
           face={face}
@@ -399,7 +389,7 @@ export function ListPopup<T>({
           />
         </PopupFrame>
       ) : null}
-    </Popover.Root>
+    </Popover>
   );
 }
 
@@ -561,7 +551,7 @@ export function CellListSelect<T>({
         </span>
       </button>
       {open ? (
-        <Popover.Root open onOpenChange={(next) => (next ? undefined : close())}>
+        <Popover open onOpenChange={(next) => (next ? undefined : close())}>
           <PopupFrame anchor={host?.current} label={list["aria-label"]}>
             <List
               {...list}
@@ -579,7 +569,7 @@ export function CellListSelect<T>({
               }}
             />
           </PopupFrame>
-        </Popover.Root>
+        </Popover>
       ) : null}
     </>
   );

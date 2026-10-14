@@ -297,7 +297,7 @@ test("Yes/No stays a closed choice and says when staging is refused", async () =
   );
   expect(view.container.textContent).toContain("Reading changed; retry.");
   const refusal = view.container.querySelector<HTMLButtonElement>(
-    'button[title="Reading changed; retry. — click to dismiss"]',
+    'button[aria-label="Reading changed; retry."]',
   );
   expect(refusal).not.toBeNull();
   expect(refusal?.closest("[data-cell-editor]")).toBeNull();

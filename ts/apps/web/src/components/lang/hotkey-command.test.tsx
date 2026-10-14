@@ -76,7 +76,7 @@ test("Alt and Escape use drawn paths rather than font modifier words", () => {
     ),
   ).toEqual(["Alt", "Escape"]);
 });
-test("compact period is a prominent centered circle while the written chord and accessibility retain punctuation", () => {
+test("compact period is a prominent centered circle while the written chord and accessibility retain punctuation", async () => {
   render(
     <HotkeyCommand
       label="Situation punctuation"
@@ -97,7 +97,10 @@ test("compact period is a prominent centered circle while the written chord and 
   ]);
   expect(button.querySelector("[data-command-chord]")?.textContent).toBe("Ctrl+.");
   expect(button.getAttribute("aria-keyshortcuts")).toBe("Control+.");
-  expect(button.getAttribute("title")).toContain("Ctrl+.");
+  expect(button.hasAttribute("title")).toBe(false);
+  fireEvent.keyDown(document.body, { key: "Tab" });
+  await act(async () => button.focus());
+  expect((await screen.findByRole("tooltip")).textContent).toContain("Ctrl+.");
 });
 test("click and real shifted punctuation share admission even with input focus", () => {
   const invoke = vi.fn();

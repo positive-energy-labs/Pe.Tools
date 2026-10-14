@@ -1050,7 +1050,11 @@ const SPECIMEN_JSX = new Set<string>();
 const RECIPE_GRID_USES = new Map<string, number>();
 const SPECIMEN_PATH_USES = new Map<string, number>();
 for (const specimen of FILES.filter(
-  (file) => file.rel.startsWith("design-system/specimens/") && file.rel.endsWith(".tsx"),
+  // The popup satellite is an executable specimen. Its delay provider lives once at the app root.
+  (file) =>
+    (file.rel.startsWith("design-system/specimens/") && file.rel.endsWith(".tsx")) ||
+    file.rel === "routes/design-system_.popovers.tsx" ||
+    file.rel === "routes/__root.tsx",
 )) {
   const source = ts.createSourceFile(
     specimen.rel,

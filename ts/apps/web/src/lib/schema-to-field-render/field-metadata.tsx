@@ -3,7 +3,7 @@ import { FactChip, Tag } from "@pe/kit/lang/chip";
 import { Code, stringify } from "@pe/kit/lang/code";
 import { Label } from "#/components/lang/label";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Tooltip, UiTooltipProvider } from "@pe/kit/lang/tooltip";
+import { HoverCard, HoverCardTrigger, HoverCardContent } from "@pe/kit/lang/hover-card";
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { type FieldOptionState, useFieldChangeSummary } from "./shared";
 
@@ -65,32 +65,29 @@ function FieldMetadataTooltip({
   }
 
   return (
-    <UiTooltipProvider>
-      <Tooltip.Root>
-        <Tooltip.Trigger aria-label="Field details" kind="icon">
-          <CircleHelp className="h-4 w-4" />
-        </Tooltip.Trigger>
-        <Tooltip.Portal>
-          <Tooltip.Positioner sideOffset={8}>
-            <Tooltip.Popup>
-              <div className="space-y-2">
-                {description ? (
-                  <div className="space-y-1">
-                    <div className="t-small t-upper text-ink">Description</div>
-                    <p className="whitespace-pre-wrap t-small text-ink-2">{description}</p>
-                  </div>
-                ) : null}
-                {formattedDefault !== undefined ? (
-                  <div className="space-y-1">
-                    <Code code={formattedDefault} lang="json" title="Default" clamp={false} />
-                  </div>
-                ) : null}
-              </div>
-            </Tooltip.Popup>
-          </Tooltip.Positioner>
-        </Tooltip.Portal>
-      </Tooltip.Root>
-    </UiTooltipProvider>
+    <HoverCard>
+      <HoverCardTrigger
+        aria-label="Field details"
+        className="inline-flex size-5 items-center justify-center"
+      >
+        <CircleHelp className="h-4 w-4" />
+      </HoverCardTrigger>
+      <HoverCardContent aria-label="Field details">
+        <div className="space-y-2">
+          {description ? (
+            <div className="space-y-1">
+              <div className="t-small t-upper text-ink">Description</div>
+              <p className="whitespace-pre-wrap t-small text-ink-2">{description}</p>
+            </div>
+          ) : null}
+          {formattedDefault !== undefined ? (
+            <div className="space-y-1">
+              <Code code={formattedDefault} lang="json" title="Default" clamp={false} />
+            </div>
+          ) : null}
+        </div>
+      </HoverCardContent>
+    </HoverCard>
   );
 }
 
@@ -115,35 +112,29 @@ function FieldChangeBadge({ path, compact = false }: { path?: string; compact?: 
       : "Changed";
 
   return (
-    <UiTooltipProvider>
-      <Tooltip.Root>
-        <Tooltip.Trigger aria-label="View change details" size={compact ? "compact" : "default"}>
-          <FactChip tone="caution" title="Open the saved and staged values.">
-            {label}
-          </FactChip>
-        </Tooltip.Trigger>
-        <Tooltip.Portal>
-          <Tooltip.Positioner sideOffset={8}>
-            <Tooltip.Popup>
-              <div className="space-y-2">
-                {change.isComposite && nestedChanges > 0 ? (
-                  <p className="t-small text-ink-2">
-                    {nestedChanges} nested field
-                    {nestedChanges === 1 ? "" : "s"} changed.
-                  </p>
-                ) : null}
-                <div className="space-y-1">
-                  <Code code={beforeDisplay} lang="json" title="Before" clamp={false} />
-                </div>
-                <div className="space-y-1">
-                  <Code code={afterDisplay} lang="json" title="After" clamp={false} />
-                </div>
-              </div>
-            </Tooltip.Popup>
-          </Tooltip.Positioner>
-        </Tooltip.Portal>
-      </Tooltip.Root>
-    </UiTooltipProvider>
+    <HoverCard>
+      <HoverCardTrigger aria-label="View change details" className={compact ? "px-1" : "px-1.5"}>
+        <FactChip tone="caution" title="Open the saved and staged values.">
+          {label}
+        </FactChip>
+      </HoverCardTrigger>
+      <HoverCardContent aria-label="Field details">
+        <div className="space-y-2">
+          {change.isComposite && nestedChanges > 0 ? (
+            <p className="t-small text-ink-2">
+              {nestedChanges} nested field
+              {nestedChanges === 1 ? "" : "s"} changed.
+            </p>
+          ) : null}
+          <div className="space-y-1">
+            <Code code={beforeDisplay} lang="json" title="Before" clamp={false} />
+          </div>
+          <div className="space-y-1">
+            <Code code={afterDisplay} lang="json" title="After" clamp={false} />
+          </div>
+        </div>
+      </HoverCardContent>
+    </HoverCard>
   );
 }
 
