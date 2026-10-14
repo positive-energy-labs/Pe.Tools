@@ -3,6 +3,7 @@ import { podRouteDescriptorSchema } from "./pod-route.ts";
 export * from "./pod-route.ts";
 import { hostDescriptorSchema } from "./host-descriptor.ts";
 import { deviceListingSchema, deviceSessionSchema, pairingSchema } from "./remote-device.ts";
+import type { SessionObservation } from "./vendor/generated/pe-revit-contract.ts";
 export * from "./remote-device.ts";
 
 /** An authored scratch Page. Publication needs no document target. */
@@ -51,6 +52,33 @@ export const peErrorSchema = z.object({
   }),
 });
 const none = z.undefined();
+export const bootstrapAlignmentSchema = z.strictObject({
+  id: z.string().min(1).max(200),
+  year: z.string().regex(/^20\d{2}$/),
+  confirmedVersion: z.string().min(1),
+});
+
+/** A journal failure is still a running incarnation; only gone and persisted failures are history. */
+export function bootstrapBlockers(rows: readonly SessionObservation[]): string[] {
+  return rows.flatMap((row) => {
+    if (
+      row.case === "gone-receipt" ||
+      (row.case === "failed-receipt" && row.failure.source === "receipt")
+    )
+      return [];
+    const process =
+      "process" in row
+        ? row.process
+        : row.case === "failed-receipt" && row.failure.source === "journal"
+          ? row.failure.process
+          : row.case === "controlled-pending" && row.attempt.attempt === "launched"
+            ? row.attempt.process
+            : null;
+    return [
+      `Revit ${row.year} ${"id" in row ? row.id : "started from its icon"}${process ? ` pid ${process.pid}` : " (starting)"}`,
+    ];
+  });
+}
 const object = z.record(z.string(), z.unknown());
 const ok = z.object({ ok: z.boolean() }).passthrough();
 type Principal = "read" | "caller" | "human" | "human-or-pea" | "human-or-page";
@@ -202,6 +230,15 @@ export function definePeApi<
   /** Public HTTP transport authority. Domain schemas stay with their domain owners. */
   const peRoutes = {
     "features.get": route("GET", "/pe/features", none, hostDescriptorSchema, "read", "pe", "read"),
+    "machine.bootstrap": route(
+      "POST",
+      "/pe/machine/bootstrap",
+      bootstrapAlignmentSchema,
+      schemas.actionReceiptSchema as S["actionReceiptSchema"],
+      "human",
+      "pe",
+      "admin",
+    ),
     "operation.call": route(
       "POST",
       "/call",
