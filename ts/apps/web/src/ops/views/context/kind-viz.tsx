@@ -1,6 +1,6 @@
-import { token } from "#/lib/token";
-import { FactChip } from "#/components/lang/chip";
-import { EmptyState } from "#/components/lang/empty";
+import { token } from "@pe/kit/lib/token";
+import { FactChip } from "@pe/kit/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
 import { KVGrid, VizChip, type VizIndex } from "#/ops/primitives";
 import {

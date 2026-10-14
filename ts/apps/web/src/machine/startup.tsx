@@ -1,7 +1,7 @@
 /** Existing Windows startup observation and browser install capability. */
 import { useEffect, useState } from "react";
 import type { Machine } from "@pe/agent-contracts";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { useSurfaceHost } from "#/navigation/surface-host";
 
 type InstallChoice = { outcome: "accepted" | "dismissed" };

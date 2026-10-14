@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { RouteStatePatch, ScheduleGridDocument } from "@pe/agent-contracts";
 import type { CellWire } from "#/components/work/band";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { staleAnswer } from "./columns";
 
 const values = (n: number) => `${n} changed value${n === 1 ? "" : "s"}`;

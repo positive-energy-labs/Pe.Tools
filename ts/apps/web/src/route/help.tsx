@@ -11,11 +11,11 @@ import { Fragment, useLayoutEffect, useMemo, useRef, useState, type ReactNode } 
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 
 import { Kbd } from "#/components/lang/kbd";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { startFeedback } from "#/components/feedback-picker";
 import { MachineHelpTrigger } from "#/machine/navigation";
-import { readKeyMeta, useHotkeyRegistrations, type KeyMeta } from "./keys";
+import { readKeyMeta, useHotkeyRegistrations, type KeyMeta } from "@pe/kit/keys";
 
 interface Region {
   id: string;

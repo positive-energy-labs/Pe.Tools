@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useCanGoBack, useRouter, useRouterState } from "@tanstack/react-router";
 import { ArrowLeft, ArrowRight, Search, MessageSquare, Inbox, Server } from "lucide-react";
-import { Button } from "#/components/lang/button";
-import { Input } from "#/components/lang/input";
+import { Button } from "@pe/kit/lang/button";
+import { Input } from "@pe/kit/lang/input";
 import { HotkeyHint } from "#/components/lang/hotkey-command";
-import { useScopeKeys } from "#/route/keys";
+import { useScopeKeys } from "@pe/kit/keys";
 import { ChromeSettings } from "./chrome-settings";
 import { SituationDrawer } from "./situation-drawer";
 import { locationLabel, admittedDestination, shellButtons } from "./model";

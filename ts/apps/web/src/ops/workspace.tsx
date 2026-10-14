@@ -6,10 +6,10 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { ActionReceiptView } from "#/actions/receipt";
-import { FactChip } from "#/components/lang/chip";
-import { EmptyState } from "#/components/lang/empty";
+import { FactChip } from "@pe/kit/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { Pane } from "#/components/lang/pane";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { Provenance } from "#/components/lang/section";
 import { Surface } from "#/components/lang/surface";
 import { previousOf, useReading } from "#/readings";
@@ -23,7 +23,7 @@ import { OpForm, requestOf, seedValues, type FormValues } from "#/ops/form";
 import { isMutation, opsManifest, type HostOperationCatalogEntry } from "#/ops/manifest";
 import { outputRenderers } from "#/ops/renderers";
 import { runOp } from "#/ops/run";
-import { Code, stringify } from "#/components/lang/code";
+import { Code, stringify } from "@pe/kit/lang/code";
 
 type Catalog = { operations?: HostOperationCatalogEntry[]; bridgeCatalogError?: string };
 type Value = { op: string; request: unknown; value: unknown; elapsedMs: number };

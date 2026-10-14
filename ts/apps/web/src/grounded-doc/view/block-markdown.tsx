@@ -1,15 +1,15 @@
 import { FileUp, Link2 } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { EmptyState } from "#/components/lang/empty";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Button } from "#/components/lang/button";
-import { Input } from "#/components/lang/input";
+import { Button } from "@pe/kit/lang/button";
+import { Input } from "@pe/kit/lang/input";
 import type { GroundedDocEngine } from "#/grounded-doc/engine";
 import { Markdown } from "#/workbench/prose";
-import { cn } from "#/lib/utils";
+import { cn } from "@pe/kit/lib/utils";
 import { ImagesPane, MarkdownBlock } from "./images-pane";
 import { PagePane } from "./page-pane";
-import { PressContent } from "#/components/anatomy/press-content";
+import { PressContent } from "@pe/kit/anatomy/press-content";
 
 export const BlockMarkdown = memo(function BlockMarkdown({ md }: { md: string }) {
   return <Markdown text={md} className="[&_table]:my-1 [&_:first-child]:mt-0" />;

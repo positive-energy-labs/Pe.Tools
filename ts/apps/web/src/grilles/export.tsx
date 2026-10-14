@@ -1,4 +1,4 @@
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 /**
  * EXPORT SHEET — what the mechanical engineer hands the architect: one page, one or many grille
  * drawings, a title block, the numbers that matter under each. Native-first: the browser's own
@@ -10,8 +10,8 @@ import { token } from "#/lib/token";
 import type { SheetRow } from "./sheet";
 import { SpecDrawing } from "./spec-drawing";
 import { frac, pct } from "./math";
-import { Button } from "#/components/lang/button";
-import { Input } from "#/components/lang/input";
+import { Button } from "@pe/kit/lang/button";
+import { Input } from "@pe/kit/lang/input";
 
 export function ExportSheet({
   rows,

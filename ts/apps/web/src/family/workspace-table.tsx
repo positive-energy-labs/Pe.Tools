@@ -1,15 +1,15 @@
-import { EmptyState } from "#/components/lang/empty";
-import { FactChip } from "#/components/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { FactChip } from "@pe/kit/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { Switcher } from "#/components/lang/switcher";
-import { Button } from "#/components/lang/button";
-import { Table } from "#/components/master-table/table";
+import { Button } from "@pe/kit/lang/button";
+import { Table } from "@pe/kit/table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
 import { Pane } from "#/components/lang/pane";
 
 import { OVERLAY_LABEL, OVERLAY_TITLE, type PRow } from "#/family/model";
 import { useFamilyWorkspace } from "#/family/workspace-context";
-import { cn } from "#/lib/utils";
+import { cn } from "@pe/kit/lib/utils";
 
 export function FamilyWorkspaceTable() {
   const {

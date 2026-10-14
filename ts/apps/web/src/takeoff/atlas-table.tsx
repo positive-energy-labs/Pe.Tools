@@ -1,15 +1,15 @@
 import { Suspense } from "react";
-import { FactChip } from "#/components/lang/chip";
-import { EmptyState } from "#/components/lang/empty";
-import { Button } from "#/components/lang/button";
-import { Table } from "#/components/master-table/table";
+import { FactChip } from "@pe/kit/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { Button } from "@pe/kit/lang/button";
+import { Table } from "@pe/kit/table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
-import { fmtNum } from "#/components/master-table/model";
+import { fmtNum } from "@pe/kit/table/model";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { RoomPanelFromStore } from "#/takeoff/room-panel";
 import type { AtlasRow as Row } from "#/takeoff/controller";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
-import { ScopeKeys } from "#/route/keys";
+import { ScopeKeys } from "@pe/kit/keys";
 
 export function AtlasTable() {
   const {

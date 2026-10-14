@@ -1,6 +1,6 @@
 import { contentViewport, fitFrame, type Bounds2 } from "#/lib/affine-frame";
 import { pathD } from "#/takeoff/model";
-import { cn } from "#/lib/utils";
+import { cn } from "@pe/kit/lib/utils";
 
 export function ZoneThumb({
   zone,

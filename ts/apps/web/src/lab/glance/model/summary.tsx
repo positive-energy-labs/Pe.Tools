@@ -1,6 +1,6 @@
-import { FactChip } from "#/components/lang/chip";
+import { FactChip } from "@pe/kit/lang/chip";
 import { CoverageBar } from "#/components/lang/coverage-bar";
-import { EmptyState } from "#/components/lang/empty";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
 import { VizChip } from "#/ops/primitives";
 import { UnrecognizedShape, asNumber, asRecord, asRecords, asString, text } from "#/ops/registry";

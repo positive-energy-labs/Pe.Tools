@@ -7,7 +7,7 @@ import type { RevitContextViewImage } from "@pe/host-contracts/generated";
 import { Link } from "@tanstack/react-router";
 import { captureUrl } from "@pe/agent-contracts";
 
-import { FactChip } from "#/components/lang/chip";
+import { FactChip } from "@pe/kit/lang/chip";
 import { Provenance, Section } from "#/components/lang/section";
 import { type OpViewProps, UnrecognizedShape, asRecord } from "#/ops/registry";
 

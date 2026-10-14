@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { chordLabel } from "#/route/keys";
+import { chordLabel } from "@pe/kit/keys";
 
 /**
  * A key or chord. Pass a registered chord as `hotkey` ("Mod+K") and it prints the way this

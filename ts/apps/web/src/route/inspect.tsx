@@ -8,7 +8,7 @@ import { useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { actionAdmissionSchema } from "@pe/agent-contracts";
 
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 export interface Inspectable {

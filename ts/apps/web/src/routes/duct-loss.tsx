@@ -7,8 +7,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 
-import { FactChip } from "#/components/lang/chip";
-import { Input } from "#/components/lang/input";
+import { FactChip } from "@pe/kit/lang/chip";
+import { Input } from "@pe/kit/lang/input";
 import { Surface } from "#/components/lang/surface";
 import { Switcher } from "#/components/lang/switcher";
 import { DuctCharts } from "#/duct/charts";

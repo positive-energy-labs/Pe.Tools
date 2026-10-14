@@ -1,13 +1,6 @@
 import { CellStateKey, cellStateKeyRecipe } from "#/components/lang/cell-key";
-import { StateCell, stateCellRecipe } from "#/components/lang/cell";
-import {
-  FactChip,
-  FileChip,
-  MentionChip,
-  NarrowChip,
-  Tag,
-  chipRecipe,
-} from "#/components/lang/chip";
+import { StateCell, stateCellRecipe } from "@pe/kit/lang/cell";
+import { FactChip, FileChip, MentionChip, NarrowChip, Tag, chipRecipe } from "@pe/kit/lang/chip";
 
 import { RecipeGrid } from "./recipe-grid";
 
@@ -18,7 +11,7 @@ export function LangCellSpecimens() {
     <>
       <RecipeGrid
         name="StateCell"
-        importPath="#/components/lang/cell"
+        importPath="@pe/kit/lang/cell"
         recipe={stateCellRecipe}
         render={(props) => {
           const row = props.size === "row";
@@ -43,7 +36,7 @@ export function LangCellSpecimens() {
       />
       <RecipeGrid
         name="FactChip · NarrowChip · FileChip · MentionChip · Tag"
-        importPath="#/components/lang/chip"
+        importPath="@pe/kit/lang/chip"
         recipe={chipRecipe}
         render={(props) => (
           <div className="flex flex-wrap items-center gap-2">

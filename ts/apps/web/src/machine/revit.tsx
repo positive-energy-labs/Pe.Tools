@@ -1,6 +1,6 @@
 /** Runtime census and repair controls. Open owns document selection and binding. */
 import type { Machine, MachineSession } from "@pe/agent-contracts";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { PidChip } from "#/components/lang/process";
 import { useLifecycle } from "#/open/lifecycle";
 import { useDestination } from "#/navigation/state";

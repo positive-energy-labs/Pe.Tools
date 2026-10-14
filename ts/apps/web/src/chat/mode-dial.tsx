@@ -1,4 +1,4 @@
-import { PaneTabs } from "#/components/lang/pane-tabs";
+import { PaneTabs } from "@pe/kit/lang/pane-tabs";
 import { MODE_HINT, MODES, type Mode } from "#/workbench/depth";
 
 /** Pane views retain URL-owned depth and every choice's explanation. */

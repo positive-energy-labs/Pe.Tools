@@ -5,10 +5,10 @@
  */
 import { useId } from "react";
 
-import { Tooltip, UiTooltipProvider } from "#/components/lang/tooltip";
-import { tv } from "#/lib/tv";
+import { Tooltip, UiTooltipProvider } from "@pe/kit/lang/tooltip";
+import { tv } from "@pe/kit/lib/tv";
 
-import "./lang.css";
+import "@pe/kit/lang/lang.css";
 
 export const helpTipRecipe = tv({
   slots: {

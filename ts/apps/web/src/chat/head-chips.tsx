@@ -2,7 +2,7 @@
  *  thread exists every rung edits the draft, which the first send binds; after, the provider is
  *  fixed (fork to change) and the model and traits go to the thread. */
 import { useState } from "react";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { useDestination } from "#/navigation/state";
 import { settingsDestination } from "#/machine/navigation";
 import type { TraitOption } from "@pe/agent-contracts";

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { ParameterReference } from "@pe/agent-contracts";
 import { type FieldOption } from "#/host/field-options";
-import { ListPopup } from "#/components/lang/list-popup";
+import { ListPopup } from "@pe/kit/lang/list-popup";
 
 export function findParameterOption(items: FieldOption[], reference: ParameterReference) {
   return items.find(

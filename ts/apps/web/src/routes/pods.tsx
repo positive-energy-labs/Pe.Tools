@@ -7,12 +7,12 @@ import { frozenDemo } from "#/host/demo-client";
 import { useEffect, useState } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 
-import { FactChip } from "#/components/lang/chip";
-import { EmptyState } from "#/components/lang/empty";
+import { FactChip } from "@pe/kit/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Pane, PaneSplit } from "#/components/lang/pane";
-import { List } from "#/components/lang/list-popup";
-import { Button } from "#/components/lang/button";
+import { List } from "@pe/kit/lang/list-popup";
+import { Button } from "@pe/kit/lang/button";
 import { RunsList } from "#/route/runs-list";
 import { Surface } from "#/components/lang/surface";
 import {

@@ -6,10 +6,10 @@ import { useState, type ReactNode } from "react";
 import { Plug } from "lucide-react";
 import type { EndpointFailure, HarnessId, Machine } from "@pe/agent-contracts";
 
-import { Input } from "#/components/lang/input";
-import { ListSegmentInput } from "#/components/lang/list-popup";
+import { Input } from "@pe/kit/lang/input";
+import { ListSegmentInput } from "@pe/kit/lang/list-popup";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { readinessSub, useProviders, type ProvidersState } from "#/workbench/provider/providers";
 import { EndpointError } from "#/workbench/endpoint-error";
 import { errorMessage } from "#/workbench/provider/use-workbench";

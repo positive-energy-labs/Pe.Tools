@@ -1,13 +1,8 @@
 import { useId, useState } from "react";
 import { ChevronRight, Hand } from "lucide-react";
 import { toolTitle } from "@pe/agent-contracts";
-import { Button } from "#/components/lang/button";
-import {
-  toolDetail,
-  type Approval,
-  type Question,
-  type ToolCall,
-} from "@pe/agent-contracts/chat-state";
+import { Button } from "@pe/kit/lang/button";
+import { toolDetail, type Approval, type Question, type ToolCall } from "@pe/agent-contracts/chat-state";
 import { QuestionForm } from "./question-form";
 
 /** Pending requests keep their own identities and targets; the composer pickers name the next turn. */

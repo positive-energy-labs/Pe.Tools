@@ -91,6 +91,8 @@ import {
   scratchPageKey,
 } from "./page-libraries.ts";
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
+import { pageKitAsset } from "./page-kit.ts";
+import { exportPage } from "./page-export.ts";
 
 /**
  * The libraries (`page-libraries.ts`): read beside their source on the dev lane, so an edit is live
@@ -801,6 +803,23 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     if (parts.length === 1)
       return wantsHtml ? listPage(await list()) : json({ root, pages: await list() });
     const [, slug = "", ...rest] = parts;
+    if (slug === "kit" && rest.length === 1 && request.method === "GET") {
+      const name = rest[0]!;
+      if (name !== "pe-kit.js" && name !== "pe-kit.css")
+        return problem(404, "no such Page kit asset");
+      try {
+        return new Response(await pageKitAsset(name), {
+          headers: {
+            "content-type": MIME[extname(name)]!,
+            "cache-control": "no-cache",
+          },
+        });
+      } catch (error) {
+        if (isMissing(error))
+          return problem(503, "Page kit is not built; build @pe/kit before serving Pages");
+        throw error;
+      }
+    }
     if (slug === "pe.js")
       return new Response(servedPe(), {
         headers: { "content-type": MIME[".js"]!, "cache-control": "no-cache" },
@@ -832,6 +851,44 @@ ${asset("pe.css")}`,
       return Response.redirect(`${url.origin}/pages/${slug}/${url.search}`, 308); // relative links need the slash
     const state = stateOf(where.dir);
     const verb = rest.length === 1 ? rest[0] : undefined;
+    if (verb === "export" && (request.method === "GET" || request.method === "POST")) {
+      const sent: unknown =
+        request.method === "POST" ? await request.json().catch(() => undefined) : {};
+      const parsed = z.strictObject({ snapshot: z.unknown().optional() }).safeParse(sent);
+      if (!parsed.success)
+        return problem(400, "a Page export is { snapshot? }; destination paths are host-owned");
+      try {
+        const result = await exportPage({
+          directory: where.dir,
+          page: where.key,
+          exportedAt: new Date().toISOString(),
+          document: (await target(where.key, where.dir)).document,
+          snapshot:
+            parsed.data.snapshot === undefined ? await state.snapshot() : parsed.data.snapshot,
+          events: await state.rows(),
+          library: async (path) => {
+            if (path === "/pages/pe.js") return asset("pe.js");
+            if (path.startsWith("/pages/kit/"))
+              return pageKitAsset(path.slice("/pages/kit/".length));
+            if (path === "/pages/pe.css")
+              return `${chipTokens(asset("base.css"))}\n${asset("pe.css")}`;
+            if (path === "/pages/revit.js") return classicRevit();
+            if (path === "/pages/revit.css") return asset("revit.css");
+            throw Error(`Page export has an unsupported host library: ${path}`);
+          },
+        });
+        return new Response(result.html, {
+          headers: {
+            "content-type": MIME[".html"]!,
+            "content-disposition": `attachment; filename="${slug}.html"`,
+            "x-pe-export-sha256": result.sha256,
+            "cache-control": "no-store",
+          },
+        });
+      } catch (error) {
+        return problem(422, error instanceof Error ? error.message : "Page export failed");
+      }
+    }
     if (verb === "state" && request.method === "GET") {
       const rows = await state.rows();
       return json({

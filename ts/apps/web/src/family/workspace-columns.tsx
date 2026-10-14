@@ -1,9 +1,9 @@
 import { useMemo } from "react";
-import { Button } from "#/components/lang/button";
-import { ListPopup } from "#/components/lang/list-popup";
-import { ReadCell, StateDot, VERDICT_INK, VerdictCell } from "#/components/master-table/cells";
-import type { Column, TableState, Verdict } from "#/components/master-table/model";
-import { visibleRows } from "#/components/master-table/view";
+import { Button } from "@pe/kit/lang/button";
+import { ListPopup } from "@pe/kit/lang/list-popup";
+import { ReadCell, StateDot, VERDICT_INK, VerdictCell } from "@pe/kit/table/cells";
+import type { Column, TableState, Verdict } from "@pe/kit/table/model";
+import { visibleRows } from "@pe/kit/table/view";
 import {
   AGREEMENT_TONE,
   MARK,

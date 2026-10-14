@@ -13,8 +13,8 @@ import ReactMarkdown, { type Components, type ExtraProps } from "react-markdown"
 import remarkGfm from "remark-gfm";
 import { createContext, isValidElement, memo, useContext, type ReactNode } from "react";
 
-import { Code } from "#/components/lang/code";
-import { cn } from "#/lib/utils";
+import { Code } from "@pe/kit/lang/code";
+import { cn } from "@pe/kit/lib/utils";
 
 const PROSE_CLASS = [
   "prose min-w-0 max-w-none text-ink [overflow-wrap:anywhere]",

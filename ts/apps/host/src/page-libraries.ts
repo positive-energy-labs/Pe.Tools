@@ -40,7 +40,12 @@ export const PAGE_LIBRARIES = [
     url: "/pages/revit.css",
     says: "The Revit facsimile's styles.",
   },
-  { file: "base.css", source: "../../web/src/base.css", url: null, says: "The product tokens." },
+  {
+    file: "base.css",
+    source: "../../../packages/kit/src/base.css",
+    url: null,
+    says: "The product tokens.",
+  },
 ] as const;
 
 /** One Page the host serves, as anything that lists, ranks or opens Pages reads it. */

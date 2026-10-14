@@ -10,7 +10,7 @@
  */
 import { useLayoutEffect, useState, type ReactNode } from "react";
 
-import "./lang.css";
+import "@pe/kit/lang/lang.css";
 
 type ConnectorTone = "commit" | "pea" | "caution" | "alarm" | "done";
 

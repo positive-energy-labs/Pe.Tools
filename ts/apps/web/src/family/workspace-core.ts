@@ -17,7 +17,7 @@ import {
 } from "#/family/model";
 import type { ProtoProposal } from "#/family/world";
 import { useMeasuredParse } from "#/host/measured-parse";
-import { useScopeKeys } from "#/route/keys";
+import { useScopeKeys } from "@pe/kit/keys";
 
 export function useFamilyWorkspaceCore(store: FamilyStore) {
   const profile = store.profile;

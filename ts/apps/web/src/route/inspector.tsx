@@ -17,10 +17,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { exportSeed, type Reading } from "@pe/agent-contracts";
 
-import { FactChip } from "#/components/lang/chip";
-import { Code, stringify } from "#/components/lang/code";
+import { FactChip } from "@pe/kit/lang/chip";
+import { Code, stringify } from "@pe/kit/lang/code";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { Section } from "#/components/lang/section";
 
 import { PageLog } from "./situation-grids";

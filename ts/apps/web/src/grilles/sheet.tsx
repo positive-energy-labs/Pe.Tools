@@ -3,16 +3,16 @@
  * editable in the row, derived columns live; the active row is what the drawing and chart show.
  * No drawing in the row: per-slot information lives only in the drawing pane.
  */
-import { NumberCell } from "#/components/master-table/cells";
-import { Table } from "#/components/master-table/table";
+import { NumberCell } from "@pe/kit/table/cells";
+import { Table } from "@pe/kit/table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
-import { useTableState } from "#/components/master-table/view";
-import type { Column } from "#/components/master-table/model";
-import { Tag } from "#/components/lang/chip";
+import { useTableState } from "@pe/kit/table/view";
+import type { Column } from "@pe/kit/table/model";
+import { Tag } from "@pe/kit/lang/chip";
 
 import type { Grille, GrilleInput } from "./math";
 import { SHEET_ROWS, frac, pct, solve } from "./math";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 
 export type SheetRow = Grille & { id: string };
 

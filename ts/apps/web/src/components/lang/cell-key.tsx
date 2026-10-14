@@ -3,11 +3,11 @@
  * `StateCell`, so the key cannot teach a treatment the table does not use. Mount it inside the
  * artifact frame of the thing it describes.
  */
-import { tv } from "#/lib/tv";
+import { tv } from "@pe/kit/lib/tv";
 
-import { StateCell } from "./cell";
+import { StateCell } from "@pe/kit/lang/cell";
 
-import "./lang.css";
+import "@pe/kit/lang/lang.css";
 
 export const cellStateKeyRecipe = tv({
   slots: {

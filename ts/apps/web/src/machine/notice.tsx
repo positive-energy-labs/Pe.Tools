@@ -14,10 +14,10 @@ import { ArrowUp, Square, X } from "lucide-react";
 import type { Machine, MachineNotice, Reading } from "@pe/agent-contracts";
 
 import { QuestionForm } from "#/chat/question-form";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { ComposerBox, ComposerFrame, ComposerRow } from "#/components/lang/conversation";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Row } from "#/components/lang/row";
+import { Row } from "@pe/kit/lang/row";
 import { Textarea } from "#/components/lang/textarea";
 import { harnessClient } from "#/workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "#/workbench/config";

@@ -8,20 +8,20 @@ import {
   type MeasuredDisplayUnit,
 } from "@pe/agent-contracts";
 import { reviewTransitions, type CellWire } from "#/components/work/band";
-import { ReadCell } from "#/components/master-table/cells";
-import { useCellNavigation } from "#/components/master-table/cell-navigation";
+import { ReadCell } from "@pe/kit/table/cells";
+import { useCellNavigation } from "@pe/kit/table/cell-navigation";
 import {
   cellFromTrichotomy,
   StateCell,
   type CellRefusal,
   type CellTransition,
-} from "#/components/lang/cell";
+} from "@pe/kit/lang/cell";
 import type { MeasuredAnswer } from "#/host/measured-parse";
-import { CellListSelect } from "#/components/lang/list-popup";
-import { Button } from "#/components/lang/button";
+import { CellListSelect } from "@pe/kit/lang/list-popup";
+import { Button } from "@pe/kit/lang/button";
 import type { FamilyParameterSnapshot } from "#/host/loaded-families-view";
 import type { FamiliesStore } from "#/families/store";
-import { cn } from "#/lib/utils";
+import { cn } from "@pe/kit/lib/utils";
 
 export interface TypeRow {
   key: string;

@@ -10,7 +10,8 @@ import { usePublishPagePalette } from "#/navigation/route-controls";
 
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Switcher } from "#/components/lang/switcher";
-import { KeysNode, stageChords } from "#/route/keys";
+import { stageChords } from "#/route/keys";
+import { KeysNode } from "@pe/kit/keys";
 import { Surface } from "#/components/lang/surface";
 import { previousOf } from "#/readings";
 

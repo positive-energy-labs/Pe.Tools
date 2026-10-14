@@ -1,0 +1,137 @@
+/**
+ * MASTER-TABLE CELL RENDERERS — thin wrappers over the language, not a second editor.
+ *
+ * RULED 2026-08-16 (fit reviews, #2 — "the editable cell fractured into parallel editors"):
+ * `BaseCell` was a parallel implementation of `StateCell`'s keyboard/commit contract, and it
+ * silently swallowed refused numeric commits (§3's named defect, in canon). It is deleted.
+ * `TextCell`/`NumberCell` now RENDER `StateCell` at row scale — one editor, one refusal
+ * mechanism (the visible dismissible note), one focus treatment (the inset hairline, per the
+ * focus law). A select-shaped cell is the list grammar's `CellListSelect` (lang/list-popup).
+ */
+
+import { useCellNavigation } from "./cell-navigation";
+import { StateCell, fmtNum } from "../lang/cell";
+import type { Verdict, VerdictTone } from "./model";
+import { token } from "../../lib/token";
+import { cn } from "../../lib/utils";
+
+export function TextCell({
+  value,
+  onCommit,
+  placeholder,
+  title,
+}: {
+  value: string;
+  onCommit: (value: string) => void;
+  className?: string;
+  placeholder?: string;
+  title?: string;
+}) {
+  const move = useCellNavigation();
+  return (
+    <StateCell
+      scale="row"
+      value={value}
+      placeholder={placeholder}
+      note={title}
+      onCommit={onCommit}
+      onNavigate={(direction) => move?.(direction) ?? false}
+    />
+  );
+}
+
+export function NumberCell({
+  value,
+  onCommit,
+  digits = 2,
+  integer = false,
+  min,
+  title,
+}: {
+  value: number;
+  onCommit: (value: number) => void;
+  digits?: number;
+  integer?: boolean;
+  min?: number;
+  className?: string;
+  title?: string;
+}) {
+  const move = useCellNavigation();
+  return (
+    <StateCell
+      scale="row"
+      value={fmtNum(value, digits)}
+      numeric={{ integer, min, digits }}
+      note={title}
+      // `numeric` already parsed, clamped and normalized — a refused parse never reaches here.
+      onCommit={(text) => onCommit(Number(text))}
+      onNavigate={(direction) => move?.(direction) ?? false}
+    />
+  );
+}
+
+/**
+ * A cell the user may not edit. `reason` surfaces as the title — a value that refuses editing
+ * should say why (e.g. "detected area — geometry is edited in Revit"). OPTIONAL since the fit
+ * reviews (ruled 2026-08-16): requiring it farmed ceremony on identity columns ("a tooltip
+ * that tells you what a table is"); supply it where the refusal is a fact worth stating.
+ */
+export function ReadCell({
+  value,
+  reason,
+  className,
+  "data-tone": dataTone,
+}: {
+  value: React.ReactNode;
+  reason?: string;
+  className?: string;
+  "data-tone"?: "alarm" | "caution" | "done" | "commit" | "nav" | "pea";
+}) {
+  return (
+    <span
+      title={reason}
+      className={cn("face-mono block truncate px-(--item-pad-x)", className)}
+      data-tone={dataTone}
+    >
+      {value}
+    </span>
+  );
+}
+
+/** The verdict swatch. Tone is the NARROW meaning-role union — never a raw CSS colour
+ * (takeoffs #11, ruled 2026-08-16 R5; `stateColumn`, which took any string, died with it). */
+export function StateDot({ tone, dim, bar }: { tone: VerdictTone; dim?: boolean; bar?: boolean }) {
+  return (
+    <span
+      className={
+        bar ? "h-full min-w-0 flex-1" : "inline-block size-2 shrink-0 rounded-[1px] align-middle"
+      }
+      style={{ backgroundColor: VERDICT_INK[tone], opacity: dim ? 0.35 : 1 }}
+    />
+  );
+}
+
+export const VERDICT_INK: Record<VerdictTone, string> = {
+  alarm: token("alarm"),
+  caution: token("caution"),
+  done: token("done"),
+  ink: token("ink-2"),
+  mute: token("ink-mute"),
+};
+
+/** How a `verdict:` column draws — the table calls this itself (master-table.tsx resolve). The
+ * WORD wears its tone only at alarm rank (the one alarm must be unmissable); every quieter
+ * verdict keeps the word in secondary ink and lets the dot carry the tone. */
+export function VerdictCell({ verdict }: { verdict: Verdict }) {
+  return (
+    <span className="face-mono block truncate px-(--item-pad-x)" title={verdict.note}>
+      <StateDot tone={verdict.tone} dim={verdict.dim} />{" "}
+      <span
+        className={verdict.tone === "alarm" ? undefined : "text-ink-2"}
+        data-tone={verdict.tone === "alarm" ? "alarm" : undefined}
+      >
+        {verdict.word}
+      </span>
+    </span>
+  );
+}

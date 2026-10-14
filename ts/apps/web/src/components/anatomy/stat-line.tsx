@@ -1,4 +1,4 @@
-import { cn } from "#/lib/utils";
+import { cn } from "@pe/kit/lib/utils";
 
 export function StatLine({
   label,

@@ -9,13 +9,13 @@ import {
   type MeasuredValue,
   type ScheduleGridSnapshot,
 } from "@pe/agent-contracts";
-import { FactChip } from "#/components/lang/chip";
-import { EmptyState } from "#/components/lang/empty";
+import { FactChip } from "@pe/kit/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { readMeasuredText } from "#/components/lang/cell";
-import { Table } from "#/components/master-table/table";
+import { readMeasuredText } from "@pe/kit/lang/cell";
+import { Table } from "@pe/kit/table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
-import { emptyTableState, useTableState } from "#/components/master-table/view";
+import { emptyTableState, useTableState } from "@pe/kit/table/view";
 import { Pane } from "#/components/lang/pane";
 import { useMeasuredParse } from "#/host/measured-parse";
 import type { HostCallOptions } from "#/host/client";

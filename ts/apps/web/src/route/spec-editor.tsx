@@ -26,11 +26,11 @@ import {
   type SettingsSnapshot,
 } from "@pe/agent-contracts";
 
-import { Button } from "#/components/lang/button";
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { FactChip, Tag } from "#/components/lang/chip";
-import { Code, JsonEditor } from "#/components/lang/code";
-import { EmptyState } from "#/components/lang/empty";
+import { Button } from "@pe/kit/lang/button";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { FactChip, Tag } from "@pe/kit/lang/chip";
+import { Code, JsonEditor } from "@pe/kit/lang/code";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Switcher } from "#/components/lang/switcher";
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";

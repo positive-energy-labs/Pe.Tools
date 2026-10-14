@@ -1,6 +1,6 @@
 import { Dialog, DialogContent } from "./dialog";
 import { Popover } from "@base-ui/react/popover";
-import { List } from "./list-popup";
+import { List } from "@pe/kit/lang/list-popup";
 
 /** One destination-picker body; callers supply the catalogue, row anatomy and verbs. */
 export function CommandPalette<T>({

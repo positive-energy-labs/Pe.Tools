@@ -3,9 +3,9 @@ import {
   Link,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { EmptyState } from "#/components/lang/empty";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { routeTree } from "./routeTree.gen";
 
 function NotFound() {

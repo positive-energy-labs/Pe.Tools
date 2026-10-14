@@ -1,8 +1,8 @@
 import { useCallback, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { ChevronRight, Info, RefreshCw } from "lucide-react";
-import { Button } from "#/components/lang/button";
-import { Input } from "#/components/lang/input";
+import { Button } from "@pe/kit/lang/button";
+import { Input } from "@pe/kit/lang/input";
 import { NavigationGroup } from "#/components/lang/navigation";
 import { TASKS, matchingTools, routeKey, friendlyObservation, resumeRefusal } from "./model";
 import { useDestination, useNavigation } from "./state";

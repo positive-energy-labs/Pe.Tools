@@ -2,8 +2,8 @@ import { RouteShell, emptyManifest } from "#/route";
 import { createFileRoute } from "@tanstack/react-router";
 import { FlaskConical, X } from "lucide-react";
 
-import { FactChip } from "#/components/lang/chip";
-import { Button } from "#/components/lang/button";
+import { FactChip } from "@pe/kit/lang/chip";
+import { Button } from "@pe/kit/lang/button";
 import { Pane } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
 import { GroundedDocView } from "#/grounded-doc/GroundedDocView";

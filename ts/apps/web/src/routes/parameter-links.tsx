@@ -12,15 +12,15 @@ import {
 } from "@pe/agent-contracts";
 
 import { ArmingStrip } from "#/components/lang/arming-strip";
-import { FactChip } from "#/components/lang/chip";
+import { FactChip } from "@pe/kit/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
 import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
 import { ProfileEditor } from "#/parameter-links/ProfileEditor";
 import { ActivityDisclosure } from "#/components/lang/activity";
-import { Row } from "#/components/lang/row";
+import { Row } from "@pe/kit/lang/row";
 import {
   applyRefusal,
   isDraftDirty,

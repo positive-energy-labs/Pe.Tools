@@ -1,7 +1,7 @@
-import { FactChip } from "#/components/lang/chip";
-import { StateCell } from "#/components/lang/cell";
-import { Button } from "#/components/lang/button";
-import { Input } from "#/components/lang/input";
+import { FactChip } from "@pe/kit/lang/chip";
+import { StateCell } from "@pe/kit/lang/cell";
+import { Button } from "@pe/kit/lang/button";
+import { Input } from "@pe/kit/lang/input";
 import { Kbd } from "#/components/lang/kbd";
 import { ProviderMark } from "#/components/lang/provider-mark";
 import { Switcher } from "#/components/lang/switcher";

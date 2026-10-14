@@ -4,7 +4,7 @@
  * Claude desktop, Claude Code or Codex to Pea's tools over MCP.
  */
 import { useState } from "react";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { ProviderSetup } from "#/machine/pea";
 import { Switch } from "#/components/lang/switch";
 import { Switcher } from "#/components/lang/switcher";

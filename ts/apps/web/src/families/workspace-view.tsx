@@ -23,7 +23,7 @@ import type { Rung } from "#/route/ladder";
 import { Ladder } from "#/route/ladder";
 import type { FamiliesObservationSummary } from "#/families/host";
 import { inventoryOf, previousOf } from "#/readings";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 
 const archiveDocument = (
   read: FamiliesObservationSummary,

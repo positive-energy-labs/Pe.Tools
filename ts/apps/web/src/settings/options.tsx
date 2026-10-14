@@ -8,7 +8,7 @@ import {
 } from "react";
 import { Switch } from "#/components/lang/switch";
 import { Switcher } from "#/components/lang/switcher";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { useDestination } from "#/navigation/state";
 import { useIsPrimaryRoute } from "#/navigation/route-controls";
 import { useSurfaceHost } from "#/navigation/surface-host";
@@ -19,7 +19,7 @@ import {
   type PageOption,
   type SettingsPanel,
 } from "./option-state";
-import { readTheme, useThemeMode, writeTheme } from "./option-theme";
+import { readTheme, useThemeMode, writeTheme } from "@pe/kit/theme";
 import {
   readGlobalOptions,
   subscribeGlobalOptions,

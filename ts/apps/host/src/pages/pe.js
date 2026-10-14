@@ -502,4 +502,31 @@
   })();
 
   window.pe = pe;
+  /** One host-served presentation bundle; pages await this before mounting their instruments. */
+  pe.kitReady = new Promise((resolve, reject) => {
+    if (!document.head || !document.createElement) return resolve(null);
+    const style = document.createElement("link");
+    style.rel = "stylesheet";
+    style.href = "/pages/kit/pe-kit.css";
+    const script = document.createElement("script");
+    script.src = "/pages/kit/pe-kit.js";
+    let styled = false;
+    let loaded = false;
+    const ready = () => {
+      if (!styled || !loaded) return;
+      if (pe.kit) resolve(pe.kit);
+      else reject(new Error("Page kit did not expose pe.kit"));
+    };
+    style.onload = () => {
+      styled = true;
+      ready();
+    };
+    style.onerror = () => reject(new Error("Page kit styles could not load from this host"));
+    script.onload = () => {
+      loaded = true;
+      ready();
+    };
+    script.onerror = () => reject(new Error("Page kit could not load from this host"));
+    document.head.append(style, script);
+  });
 })();

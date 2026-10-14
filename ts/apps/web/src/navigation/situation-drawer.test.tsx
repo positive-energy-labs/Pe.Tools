@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { Button } from "#/components/lang/button";
-import { Input } from "#/components/lang/input";
+import { Button } from "@pe/kit/lang/button";
+import { Input } from "@pe/kit/lang/input";
 import {
   RouteControlsProvider,
   PrimaryRouteControls,

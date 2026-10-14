@@ -25,9 +25,9 @@
  *                                 `Scope` is the hotkey tree's node, so neither is dead.
  *                                 Allowlist holds only the Revit Document/Link senses.
  *  7. no hand-written keymap      no `Alt+${` / `Ctrl+${` / `Mod+${` / `Cmd+${` template
- *                                 outside route/keys.tsx.
+ *                                 outside kit/keys.tsx.
  *  8. one hotkey door             nothing under apps/web names @tanstack/react-hotkeys except
- *                                 route/keys.tsx: every chord is bound by `useScopeKeys` on a
+ *                                 kit/keys.tsx: every chord is bound by `useScopeKeys` on a
  *                                 scope node, so help can say which region owns it and a hidden
  *                                 node can switch it off (ledger 2026-09-22).
  *  9. a target draws the Situation N1 (MAP ruling 29): a routes/*.tsx whose own module or a direct
@@ -52,6 +52,7 @@ const REPO = execFileSync("git", ["rev-parse", "--show-toplevel"], {
 }).trim();
 
 const WEB_SRC = resolve(REPO, "ts/apps/web/src");
+const KIT_SRC = resolve(REPO, "ts/packages/kit/src");
 const AGENT_CONTRACTS_SRC = resolve(REPO, "ts/packages/agent-contracts/src");
 const PE_TOOLS_ROOT = resolve(REPO, "ts");
 
@@ -87,6 +88,7 @@ const collect = (
 };
 
 const WEB_FILES = collect(WEB_SRC, /\.(?:tsx?|css)$/);
+const KIT_FILES = collect(KIT_SRC, /\.(?:tsx?|css)$/);
 const WEB_PROD_FILES = WEB_FILES.filter((f) => !/\.test\.tsx?$/.test(f.rel));
 const AGENT_CONTRACTS_FILES = collect(AGENT_CONTRACTS_SRC, /\.tsx?$/);
 const PACKAGE_JSONS = collect(PE_TOOLS_ROOT, /^package\.json$/);
@@ -286,7 +288,7 @@ describe("route primitive guard — dead-word grep", () => {
     // Catch the whole exported name, either case style; the segment split decides, not the regex.
     const re = /export\s+(?:type|interface|const|function|class)\s+([A-Za-z_$][A-Za-z0-9_$]*)/g;
     const offences: string[] = [];
-    for (const f of [...WEB_FILES, ...AGENT_CONTRACTS_FILES]) {
+    for (const f of [...WEB_FILES, ...KIT_FILES, ...AGENT_CONTRACTS_FILES]) {
       if (/\.test\.tsx?$/.test(f.rel)) continue;
       for (const m of f.text.matchAll(re)) {
         const symbol = m[1] ?? "";
@@ -307,32 +309,32 @@ describe("route primitive guard — dead-word grep", () => {
 // ── 8. one hotkey door ───────────────────────────────────────────────────────────────────────
 
 describe("route primitive guard — one hotkey door", () => {
-  it("only route/keys.tsx names @tanstack/react-hotkeys; every other chord goes through useScopeKeys", () => {
+  it("only kit/keys.tsx names @tanstack/react-hotkeys; every other chord goes through useScopeKeys", () => {
     const offences = hits(
-      WEB_FILES.filter((f) => f.rel !== "route/keys.tsx"),
+      [...WEB_FILES, ...KIT_FILES.filter((f) => f.rel !== "keys.tsx")],
       /@tanstack\/react-hotkeys/g,
     );
     expect(
       offences.length,
-      `A hotkey bound outside the scope tree — import \`useScopeKeys\` from \`#/route/keys\` instead (ledger 2026-09-22):
+      `A hotkey bound outside the scope tree — import \`useScopeKeys\` from \`@pe/kit/keys\` instead (ledger 2026-09-22):
 ${list(offences)}`,
     ).toBe(0);
   });
 });
 
 describe("route primitive guard — no hand-written keymap", () => {
-  it("no Alt+${ / Ctrl+${ / Mod+${ / Cmd+${ template outside route/keys.tsx", () => {
+  it("no Alt+${ / Ctrl+${ / Mod+${ / Cmd+${ template outside kit/keys.tsx", () => {
     const re = /\b(?:Alt|Ctrl|Mod|Cmd)\+\$\{/g;
     const offences: string[] = [];
-    for (const f of WEB_FILES) {
-      if (f.rel === "route/keys.tsx") continue;
+    for (const f of [...WEB_FILES, ...KIT_FILES]) {
+      if (f.abs === join(KIT_SRC, "keys.tsx")) continue;
       for (const m of f.text.matchAll(re)) {
         offences.push(`${f.rel}:${lineOf(f.text, m.index ?? 0)}`);
       }
     }
     expect(
       offences.length,
-      `Hand-written keymap string found outside route/keys.tsx (fable §6, one authority for chord rendering):\n${list(offences)}`,
+      `Hand-written keymap string found outside kit/keys.tsx (fable §6, one authority for chord rendering):\n${list(offences)}`,
     ).toBe(0);
   });
 });

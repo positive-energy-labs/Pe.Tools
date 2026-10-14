@@ -1,7 +1,7 @@
 import { Popover } from "@base-ui/react/popover";
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 
 export function Information({
   label,

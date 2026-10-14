@@ -11,9 +11,9 @@ import {
   type PageTargetReading,
 } from "@pe/agent-contracts";
 
-import { Button } from "#/components/lang/button";
-import { EmptyState } from "#/components/lang/empty";
-import { Row } from "#/components/lang/row";
+import { Button } from "@pe/kit/lang/button";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { Row } from "@pe/kit/lang/row";
 import { Section } from "#/components/lang/section";
 import { Surface } from "#/components/lang/surface";
 import { useThreadSummaries } from "#/open/bay";

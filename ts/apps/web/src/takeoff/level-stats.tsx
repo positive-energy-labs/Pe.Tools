@@ -1,7 +1,7 @@
 import { StatLine } from "#/components/anatomy";
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { Button } from "#/components/lang/button";
-import { fmtNum } from "#/components/master-table/model";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { Button } from "@pe/kit/lang/button";
+import { fmtNum } from "@pe/kit/table/model";
 import { ROOM_STATES, STATE_META, stateInk, type RoomState } from "#/takeoff/room-state";
 import type { ModelRoom, ModelZone } from "#/takeoff/world";
 

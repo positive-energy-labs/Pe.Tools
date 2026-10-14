@@ -2,7 +2,7 @@ import type { TrichotomyCellLike } from "@pe/agent-contracts";
 import { Save } from "lucide-react";
 
 import { ArmingStrip, armingStripRecipe } from "#/components/lang/arming-strip";
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import {
   reviewAddresses,
   ReviewRow,
@@ -12,11 +12,11 @@ import {
   workSummary,
   type CellWire,
 } from "#/components/work/band";
-import { StateCell } from "#/components/lang/cell";
-import { Tag } from "#/components/lang/chip";
+import { StateCell } from "@pe/kit/lang/cell";
+import { Tag } from "@pe/kit/lang/chip";
 import { Kbd } from "#/components/lang/kbd";
-import { Button } from "#/components/lang/button";
-import { Verdict } from "#/components/lang/verdict";
+import { Button } from "@pe/kit/lang/button";
+import { Verdict } from "@pe/kit/lang/verdict";
 import { ARMING_SPECIMEN } from "#/design-system/specimens-data";
 
 import { RecipeGrid, SpecimenFrame, type GridVariantProps } from "./recipe-grid";
@@ -43,7 +43,7 @@ export function LangWorkflowSpecimens() {
           <Kbd mute>Esc</Kbd>
         </div>
       </SpecimenFrame>
-      <SpecimenFrame name="Verdict" importPath="#/components/lang/verdict">
+      <SpecimenFrame name="Verdict" importPath="@pe/kit/lang/verdict">
         <div className="flex items-center gap-1">
           <Verdict kind="accept" title="Stage Pea's proposal" onClick={noop} />
           <Verdict kind="deny" title="Clear Pea's proposal" onClick={noop} />
@@ -97,7 +97,7 @@ export function LangWorkflowSpecimens() {
         recipe={armingStripRecipe}
         render={(props) => <ArmingSpecimen props={props} />}
       />
-      <SpecimenFrame name="ArtifactFrame" importPath="#/components/lang/artifact-frame">
+      <SpecimenFrame name="ArtifactFrame" importPath="@pe/kit/lang/artifact-frame">
         <ArtifactFrame
           head={<Tag>door 421</Tag>}
           foot={

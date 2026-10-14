@@ -33,6 +33,7 @@ import { fileURLToPath } from "node:url";
 import { expect, it } from "vite-plus/test";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../apps/web/src");
+const KIT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../packages/kit/src");
 const ALLOWED = new Set([
   "components/lang/row.tsx",
   "components/lang/collection.ts",
@@ -91,17 +92,21 @@ const files = (dir: string, rel = ""): string[] =>
   });
 
 // latin1 keeps every byte, NULs included: nothing is ever skipped as binary.
-const text = (rel: string) => readFileSync(join(ROOT, rel), "latin1");
+const SOURCES = new Map([
+  ...files(ROOT).map((rel) => [rel, join(ROOT, rel)] as const),
+  ...files(KIT_ROOT).map((rel) => [rel, join(KIT_ROOT, rel)] as const),
+]);
+const text = (rel: string) => readFileSync(SOURCES.get(rel)!, "latin1");
 
 it("list census: no old list component site outside the one primitive", () => {
-  const sites = files(ROOT).filter((rel) => !ALLOWED.has(rel) && OLD.test(text(rel)));
+  const sites = [...SOURCES.keys()].filter((rel) => !ALLOWED.has(rel) && OLD.test(text(rel)));
   console.info(`list census: ${sites.length} old-component files\n  ${sites.join("\n  ")}`);
   // The census at a7e6988 counted 33; the cutover took it to zero.
   expect(sites).toEqual([]);
 });
 
 it("list census tier 2: no hand-rolled selectable .map rows outside lang and the named toggles", () => {
-  const found = files(ROOT)
+  const found = [...SOURCES.keys()]
     .filter((rel) => !rel.startsWith("components/lang/"))
     .map((rel) => [rel, tier2(text(rel))] as const)
     .filter(([, hits]) => hits.length > 0);

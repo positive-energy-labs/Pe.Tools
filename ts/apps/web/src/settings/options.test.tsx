@@ -15,7 +15,7 @@ import {
   type GlobalOption,
   type SettingsPanel,
 } from "./option-state";
-import { useThemeMode, writeTheme } from "./option-theme";
+import { useThemeMode, writeTheme } from "@pe/kit/theme";
 import {
   registerGlobalOptions,
   readGlobalOptions,

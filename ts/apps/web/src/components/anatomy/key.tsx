@@ -1,4 +1,4 @@
-import { cn } from "#/lib/utils";
+import { cn } from "@pe/kit/lib/utils";
 
 export function Key({ tone, label, seam }: { tone: string; label: string; seam?: boolean }) {
   return (

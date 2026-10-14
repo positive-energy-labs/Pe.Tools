@@ -2,14 +2,14 @@ import { useContext, useEffect, useRef } from "react";
 import { ChatFocus } from "#/route/situation-ladder";
 import { showFamilyCell, type FamiliesPatchCell, type PodDraftSource } from "@pe/agent-contracts";
 
-import { FactChip } from "#/components/lang/chip";
-import { EmptyState } from "#/components/lang/empty";
+import { FactChip } from "@pe/kit/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { ReviewRow } from "#/components/work/band";
 import { ValueDiff } from "#/components/lang/value-diff";
-import type { Column } from "#/components/master-table/model";
-import { Table } from "#/components/master-table/table";
+import type { Column } from "@pe/kit/table/model";
+import { Table } from "@pe/kit/table/table";
 import { familyCellEntries } from "#/families/staged";
 import type { SalvagedExclusion } from "#/families/store";
 import { filterWords } from "#/families/scope-band";
@@ -17,7 +17,7 @@ import { useFamiliesWorkspace } from "#/families/workspace-context";
 import { ParamCell } from "#/families/matrix-columns";
 import { ARTIFACT } from "#/families/manifest";
 import { Inspect } from "#/route/inspect";
-import { cn } from "#/lib/utils";
+import { cn } from "@pe/kit/lib/utils";
 
 /** THE RECEIPTS: one bare `Table` row per family, as the op reported it. */
 type Receipt = NonNullable<

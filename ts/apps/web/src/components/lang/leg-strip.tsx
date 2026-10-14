@@ -2,7 +2,7 @@
  * The update receipt as the legs the SDK recorded. An observed leg is a fact chip in its status's
  * meaning; stages not yet observed follow it, dashed while the host is gone (not observed is never success).
  */
-import { FactChip } from "./chip";
+import { FactChip } from "@pe/kit/lang/chip";
 
 export interface Leg {
   readonly name: string;

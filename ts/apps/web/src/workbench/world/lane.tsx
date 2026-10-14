@@ -1,10 +1,10 @@
 import { useAtomValue } from "@effect/atom-react";
 import { Key } from "#/components/anatomy";
 import type { ContextBreakdown, ContextItem } from "@pe/agent-contracts/chat-state";
-import { EmptyState } from "#/components/lang/empty";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { Switcher } from "#/components/lang/switcher";
-import { cn } from "#/lib/utils";
-import { token } from "#/lib/token";
+import { cn } from "@pe/kit/lib/utils";
+import { token } from "@pe/kit/lib/token";
 import { useCurrentThreadView } from "../thread-view";
 import {
   blastOf,
@@ -14,7 +14,7 @@ import {
   type Blast,
   type CacheView,
 } from "../world-cache";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import {
   BLAST_BASE,
   BLAST_TONE,
@@ -30,8 +30,8 @@ import {
   tone,
 } from "./cap";
 import { whySentence } from "./bar";
-import { PressContent } from "#/components/anatomy/press-content";
-import { Code } from "#/components/lang/code";
+import { PressContent } from "@pe/kit/anatomy/press-content";
+import { Code } from "@pe/kit/lang/code";
 
 export function SessionStrip({
   breakdown,

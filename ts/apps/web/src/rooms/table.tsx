@@ -13,11 +13,11 @@ import {
 } from "@pe/agent-contracts";
 
 import { reviewTransitions, type CellWire } from "#/components/work/band";
-import { cellFromTrichotomy, type StateCellProps } from "#/components/lang/cell";
-import { EmptyState } from "#/components/lang/empty";
-import { CellListSelect } from "#/components/lang/list-popup";
-import type { Column, Verdict } from "#/components/master-table/model";
-import { Table } from "#/components/master-table/table";
+import { cellFromTrichotomy, type StateCellProps } from "@pe/kit/lang/cell";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { CellListSelect } from "@pe/kit/lang/list-popup";
+import type { Column, Verdict } from "@pe/kit/table/model";
+import { Table } from "@pe/kit/table/table";
 import {
   REGION_INK,
   regionLabel,

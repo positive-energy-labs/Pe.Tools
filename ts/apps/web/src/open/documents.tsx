@@ -7,15 +7,15 @@
  */
 import { useMemo, type ReactNode } from "react";
 
-import { EmptyState } from "#/components/lang/empty";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { PidChip } from "#/components/lang/process";
-import { StateCell } from "#/components/lang/cell";
+import { StateCell } from "@pe/kit/lang/cell";
 import { Switcher } from "#/components/lang/switcher";
-import type { Column, QueryCommand, TableState } from "#/components/master-table/model";
-import { Table } from "#/components/master-table/table";
+import type { Column, QueryCommand, TableState } from "@pe/kit/table/model";
+import { Table } from "@pe/kit/table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
-import { queryWords, quoted, readClause } from "#/components/master-table/view";
+import { queryWords, quoted, readClause } from "@pe/kit/table/view";
 import { pidOf } from "#/machine/session";
 import { accessOf, type DocRow } from "#/open/model";
 

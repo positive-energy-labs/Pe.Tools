@@ -20,10 +20,10 @@ import {
   type CellTransition,
   type CellTransitionKind,
   type StateCellProps,
-} from "#/components/lang/cell";
-import { Button } from "#/components/lang/button";
-import { Verdict } from "#/components/lang/verdict";
-import { useScopeKeys } from "#/route/keys";
+} from "@pe/kit/lang/cell";
+import { Button } from "@pe/kit/lang/button";
+import { Verdict } from "@pe/kit/lang/verdict";
+import { useScopeKeys } from "@pe/kit/keys";
 
 interface WorkStandingProps {
   conflict?: boolean;

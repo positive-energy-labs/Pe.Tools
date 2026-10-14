@@ -7,8 +7,8 @@ import { useMemo } from "react";
 import { applySchemaDefaultsToValue, parseSchema } from "@pe/schema-core";
 import type { ExecutionTarget } from "@pe/agent-contracts";
 
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { JsonEditor } from "#/components/lang/code";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { JsonEditor } from "@pe/kit/lang/code";
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
 
 export type FormValues = Record<string, unknown>;

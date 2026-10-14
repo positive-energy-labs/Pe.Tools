@@ -1,9 +1,9 @@
-import type { StateCellProps } from "#/components/lang/cell";
-import { fmtNum } from "#/components/lang/cell";
-import type { Column } from "#/components/master-table/model";
-import { Table } from "#/components/master-table/table";
-import { useTableState } from "#/components/master-table/view";
-import { token } from "#/lib/token";
+import type { StateCellProps } from "@pe/kit/lang/cell";
+import { fmtNum } from "@pe/kit/lang/cell";
+import type { Column } from "@pe/kit/table/model";
+import { Table } from "@pe/kit/table/table";
+import { useTableState } from "@pe/kit/table/view";
+import { token } from "@pe/kit/lib/token";
 import type { FcRow } from "#/param-tables/variants/data";
 import type { Link, TypeGroup, TypeWrite } from "./type-values";
 import { GROUPS, LINKS, muted, secondary } from "./type-values";

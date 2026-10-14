@@ -1,4 +1,4 @@
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 import type { ReactNode } from "react";
 import { type CoverageSegment } from "#/components/lang/coverage-bar";
 import { type VizIndex } from "#/ops/primitives";
