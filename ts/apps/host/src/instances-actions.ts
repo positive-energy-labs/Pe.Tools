@@ -185,6 +185,23 @@ async function removeReserved(root: string, path: string) {
   return { removed: true };
 }
 
+/**
+ * Create the one folder a handover saves into, because the SDK saves only into an existing folder
+ * (DocCommand.NewOutput): inside its acquisition root, reached through no link or junction.
+ */
+async function reserveFolder(root: string, folder: string) {
+  const inside = relative(resolve(root), resolve(folder));
+  if (!inside || inside.startsWith("..") || isAbsolute(inside))
+    throw refuse(`${folder} is outside its acquisition root`);
+  for (let at = resolve(folder); ; at = dirname(at)) {
+    const stat = await lstat(at).catch(() => null);
+    if (stat?.isSymbolicLink())
+      throw refuse(`${at} is a link, not the folder the acquisition planned`);
+    if (at === resolve(root)) break;
+  }
+  return { created: (await mkdir(folder, { recursive: true })) ?? null };
+}
+
 type RunningRow = Extract<SessionObservation, { case: "controlled-active" | "observed-active" }>;
 
 /**
@@ -861,6 +878,10 @@ async function admitAcquisitionRelease(
         const detached =
           intent.origin.kind === "detached" ||
           (intent.origin.kind === "file-copy" && intent.origin.detach);
+        const folder = dirname(intent.result);
+        await execution.step("file", "acquisition.result-folder", { to: folder }, () =>
+          reserveFolder(acquired!.intent.root, folder),
+        );
         const save: StepInput = {
           expectSession,
           argv: docSaveArgv({

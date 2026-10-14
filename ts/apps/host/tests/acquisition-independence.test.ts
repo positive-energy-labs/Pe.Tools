@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -29,10 +29,20 @@ import { crossingOf } from "./callers.ts";
 const fakeSdk = join(mkdtempSync(join(tmpdir(), "pe-fake-sdk-")), "pe-revit.mjs");
 writeFileSync(
   fakeSdk,
-  `import { readFileSync } from "node:fs";
+  `import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 const world = JSON.parse(readFileSync(process.env.PE_FAKE_SDK, "utf8"));
 const args = process.argv.slice(2);
 const [noun, verb] = args;
+const out = noun === "doc" && verb === "save" && args.includes("--out") ? args[args.indexOf("--out") + 1] : null;
+// The SDK's own rule (DocCommand.NewOutput): --out names a new file in an existing folder.
+if (out && !existsSync(dirname(out))) {
+  process.stdout.write(JSON.stringify({ result: {}, resolved: null, diagnostics: [{ code: "doc.bad-invocation",
+    detail: "--out parent directory does not exist: '" + dirname(out) + "'.", fix: null }], binary: {}, command: {},
+    nextSteps: [], guide: "doc", related: [], exitCode: 2 }));
+  process.exit(2);
+}
+if (out) writeFileSync(out, "saved result", { flag: "wx" });
 const result =
   noun === "session" && verb === "list"
     ? { state: "ok", sessions: world.sessions, processReadErrors: [] }
@@ -150,6 +160,7 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
   };
   // Two held acquisitions, as `instances.open` with into.start owner pea records them.
   const work: Record<string, string> = {};
+  const planned: Record<string, { result: string; diffPlan: string }> = {};
   const journal = hostActionJournal();
   for (const [id, openId] of [
     ["acq-controlled", controlledId],
@@ -165,6 +176,10 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
       false,
     );
     work[openId] = (intent.document!.origin as { work: string }).work;
+    planned[id] = intent.document!;
+    // The copy the acquisition's file steps made; its folder is the only one that exists.
+    mkdirSync(dirname(work[openId]), { recursive: true });
+    writeFileSync(work[openId], "work copy");
     const row = await journal.admit(
       {
         id,
@@ -271,8 +286,11 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
           input: { acquisition },
         }),
       });
-      const body = (await response.json()) as { refusal?: { code: string; reason: string } };
-      return { status: response.status, refusal: body.refusal ?? null };
+      const body = (await response.json()) as {
+        id?: string;
+        refusal?: { code: string; reason: string };
+      };
+      return { status: response.status, refusal: body.refusal ?? null, id: body.id };
     };
     const refused = async (acquisition: string, fact: RegExp) => {
       const answer = await handover(acquisition);
@@ -301,6 +319,21 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
       const admitted = await handover(acquisition);
       expect(admitted.refusal, `${custody}: ${JSON.stringify(admitted)}`).toBeNull();
       expect(admitted.status).toBeLessThan(300);
+      // An observed Revit is admitted here but never saved into: release needs a controlled row.
+      if (custody === "observed") continue;
+      // Acceptance R4b (d3aaaef1): the SDK refuses a save into a folder that does not exist, so
+      // the host creates exactly the planned result folder, receipted, before it asks.
+      const settled = await journal.wait(admitted.id!);
+      expect(settled, JSON.stringify(settled)).toMatchObject({ state: "succeeded" });
+      const plan = planned[acquisition]!;
+      expect(settled.steps.map((step) => [step.key, step.state])).toEqual([
+        ["acquisition.result-folder", "succeeded"],
+        ["instances.handover.save", "succeeded"],
+        ["acquisition.handover", "succeeded"],
+      ]);
+      expect(settled.steps[0]!.input).toEqual({ to: dirname(plan.result) });
+      expect(readFileSync(plan.result, "utf8")).toBe("saved result");
+      expect(existsSync(plan.diffPlan)).toBe(true);
     }
   } finally {
     if (socket && socket.readyState === WebSocket.OPEN) socket.close();

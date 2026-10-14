@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "vite-plus/test";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { instancesActions, instancesSessionSelection } from "@pe/agent-contracts";
@@ -1138,8 +1138,21 @@ async function acquisitionSetup(detached = false) {
         return { result: { state: "ok", document: { openId, path: args[2], title: "Tower" } } };
       if (args[1] === "save") {
         if (!args.includes("--out")) return { result: { state: "ok" } };
-        await mkdir(dirname(flag(args, "--out")!), { recursive: true });
-        await writeFile(flag(args, "--out")!, "saved result", { flag: "wx" });
+        // The SDK's own rule (DocCommand.NewOutput): --out names a new file in an existing folder.
+        const out = flag(args, "--out")!;
+        if (!existsSync(dirname(out)))
+          return {
+            result: {},
+            exitCode: 2,
+            diagnostics: [
+              {
+                code: "doc.bad-invocation",
+                detail: `--out parent directory does not exist: '${dirname(out)}'.`,
+                fix: null,
+              },
+            ],
+          };
+        await writeFile(out, "saved result", { flag: "wx" });
         return { result: { state: "ok" } };
       }
       if (args[1] === "close") {
