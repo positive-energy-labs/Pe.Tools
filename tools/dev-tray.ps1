@@ -124,7 +124,7 @@ if ($matches.Count -eq 1) {
     try {
         $response = $client.GetAsync(('http://127.0.0.1:' + $match.Record.port + '/')).GetAwaiter().GetResult()
         $destination = $response.Headers.Location
-        if (-not $destination -or $destination.GetLeftPart([UriPartial]::Authority) -ne 'http://127.0.0.1:5175') {
+        if (-not $destination -or $destination.GetLeftPart([UriPartial]::Authority) -notmatch '^http://127\.0\.0\.1:\d+$') {
             throw 'The verified host did not disclose its actual Vite frontend.'
         }
         $frontendOrigin = $destination.GetLeftPart([UriPartial]::Authority)
@@ -159,7 +159,7 @@ if ($Window) {
             $hostRecord = Get-Content -LiteralPath $pair.serviceFile -Raw | ConvertFrom-Json
             $frontendProcess = Get-Process -Id $pair.frontendPid -ErrorAction Stop
             $hostProcess = Get-Process -Id $hostRecord.pid -ErrorAction Stop
-            $ready = $pair.schemaVersion -eq 1 -and $pair.sourceRoot -eq $checkoutRoot -and $pair.frontendOrigin -eq 'http://127.0.0.1:5175' -and
+            $ready = $pair.schemaVersion -eq 1 -and $pair.sourceRoot -eq $checkoutRoot -and $pair.frontendOrigin -match '^http://127\.0\.0\.1:\d+$' -and
                 $hostRecord.schemaVersion -eq 3 -and $hostRecord.sourceRoot -eq $checkoutRoot -and $hostRecord.lane -eq 'dev' -and $hostRecord.instanceId -eq $pair.hostInstanceId -and
                 [Math]::Abs(($frontendProcess.StartTime.ToUniversalTime() - [DateTime]::Parse($pair.frontendStartUtc).ToUniversalTime()).TotalMilliseconds) -le 2000 -and
                 [Math]::Abs(($hostProcess.StartTime.ToUniversalTime() - [DateTime]::Parse($hostRecord.processStartUtc).ToUniversalTime()).TotalMilliseconds) -le 2000 -and
@@ -169,7 +169,7 @@ if ($Window) {
         if ([DateTime]::UtcNow -ge $until) { throw 'Dev frontend startup timed out. Read .artifacts/dev-tray logs before retrying.' }
         Start-Sleep -Milliseconds 200
     } while ($true)
-    $launcher = Start-Process -FilePath $binary -ArgumentList @('--launch-window', 'http://127.0.0.1:5175/open') -WindowStyle Hidden -PassThru
+    $launcher = Start-Process -FilePath $binary -ArgumentList @('--launch-window', ($pair.frontendOrigin + '/open')) -WindowStyle Hidden -PassThru
     if (-not $launcher.WaitForExit(10000)) { throw 'Dev PWA launcher timed out.' }
     if ($launcher.ExitCode -ne 0) { throw 'Dev PWA launcher refused the frontend or PWA registration.' }
 }

@@ -62,6 +62,19 @@ export function sourceHostServiceName(sourceRoot: string): string {
 }
 
 /**
+ * The dev frontend's preferred port for a checkout: a stable slot in 5200-5999 derived from the
+ * same hash as the dev host's service name, so checkouts run side by side and each keeps its own
+ * browser origin (and installed Dev PWA identity) across restarts. Vite walks to the next free
+ * port on a collision; the host learns the origin that actually bound, never this number.
+ */
+export const DEV_FRONTEND_PORTS = { first: 5200, count: 800 } as const;
+export function devFrontendPort(sourceRoot: string): number {
+  const hash = /([0-9a-f]{8})[0-9a-f]*$/.exec(sourceHostServiceName(sourceRoot))?.[1];
+  if (!hash) throw new Error("Dev host service name carries no checkout hash.");
+  return DEV_FRONTEND_PORTS.first + (Number.parseInt(hash, 16) % DEV_FRONTEND_PORTS.count);
+}
+
+/**
  * The checkout's language roots, named once. C# mirror: `TsHostLauncher` (the one C# spelling of
  * the TS root). Everything else derives paths from a checkout root through these.
  */

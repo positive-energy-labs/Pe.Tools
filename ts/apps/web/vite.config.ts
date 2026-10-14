@@ -1,9 +1,9 @@
 import path, { dirname, resolve } from "node:path";
-import { familyFixturesDir } from "./checkout-paths.ts";
+import { checkoutRoot, familyFixturesDir } from "./checkout-paths.ts";
 import { devIcons } from "./dev-icons.ts";
 import { checkoutIngress, checkoutServiceName, devHostProxy } from "./dev-proxy.ts";
 import { receiptBuildDefines } from "../host/src/build-stamp.ts";
-import { hostProcessIdentity } from "@pe/host-contracts/service-identity";
+import { devFrontendPort, hostProcessIdentity } from "@pe/host-contracts/service-identity";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { devtools } from "@tanstack/devtools-vite";
@@ -65,8 +65,10 @@ const config = defineConfig(({ mode, command }) => {
     ],
     server: {
       host: "127.0.0.1",
-      port: 5175,
-      strictPort: true,
+      // Per checkout, so worktrees run dev side by side. A collision walks to the next free port; the
+      // host records the origin that actually bound (dev.ts), so nothing else names this number.
+      port: devFrontendPort(checkoutRoot),
+      strictPort: false,
       allowedHosts: ["127.0.0.1"],
       cors: false,
       fs: {
