@@ -17,7 +17,14 @@ import {
   gatewayTarget,
   requireEligibleCaller,
 } from "./gateway-actions.ts";
-import { admitCrossing, consentedRead, currentCaller, readsOnly, Refused } from "./control.ts";
+import {
+  admitCrossing,
+  admitScript,
+  consentedRead,
+  currentCaller,
+  readsOnly,
+  Refused,
+} from "./control.ts";
 import type { Caller } from "@pe/agent-contracts";
 import { actionBasesSchema, actionListFilterSchema } from "@pe/agent-contracts";
 import {
@@ -271,7 +278,11 @@ export function makeCallRoute(
           try: () => operationDefinition(key, bridge, resolvedSession),
           catch: (error) => error,
         });
-        const intent = consentedRead(caller, key, request) ? "Read" : definition.intent;
+        const ref =
+          resolvedSession && typeof openDocumentId === "string"
+            ? { session: resolvedSession.sessionId, openId: openDocumentId }
+            : undefined;
+        const intent = consentedRead(caller, key, request, ref) ? "Read" : definition.intent;
         if (intent === "Mutate") {
           return yield* Effect.fail(
             new BridgeError(
@@ -298,6 +309,29 @@ export function makeCallRoute(
           if (target.kind !== "host")
             bridgeSessionId = target.kind === "document" ? target.ref.session : target.session;
           openDocumentId = target.kind === "document" ? target.ref.openId : null;
+          if (key === "scripting.execute" && resolvedSession) {
+            const current = yield* sdkSession(
+              bridge,
+              {
+                bridgeSessionId: resolvedSession.sessionId,
+                openDocumentId: openDocumentId ?? undefined,
+              },
+              actionDeps.sdk,
+            );
+            yield* Effect.try({
+              try: () =>
+                admitScript(
+                  caller,
+                  current.state?.openDocuments.map((doc) => ({
+                    session: current.sessionId,
+                    openId: doc.openId,
+                  })) ?? [],
+                  "/call",
+                  target.kind === "document" && readsOnly(key, request) ? target.ref : undefined,
+                ),
+              catch: (error) => error,
+            });
+          }
         }
       }
       const result = isTsOnlyOperationKey(key)
@@ -400,10 +434,12 @@ export function makeCallRoute(
             { requestId },
           );
         return Effect.succeed(
-          Response.jsonUnsafe(problem, {
-            status: problem.status,
-            headers: { "content-type": "application/problem+json" },
-          }),
+          error instanceof Refused
+            ? refusedResponse(error)
+            : Response.jsonUnsafe(problem, {
+                status: problem.status,
+                headers: { "content-type": "application/problem+json" },
+              }),
         );
       }),
     );
@@ -1121,6 +1157,8 @@ function toProblem(error: unknown): {
   result?: unknown;
   resolvedTarget?: BridgeError["evidence"]["resolvedTarget"];
 } {
+  if (error instanceof Refused)
+    return { kind: "InvalidRequest", message: error.message, status: 403, notDispatched: true };
   if (error instanceof Error) return { kind: "HostFailure", message: error.message, status: 500 };
   if (
     !(

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
   emptyThreadHead,
+  address,
   type Caller,
   type DocumentRef,
   type HeadGrant,
@@ -21,6 +22,8 @@ import {
   Refused,
   retireContext,
   admitScript,
+  mintPageDoor,
+  consentedRead,
 } from "../src/control.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 
@@ -60,6 +63,41 @@ let heads: Record<string, ThreadHead> = {};
 /** Pea acquired one copy in Revit "P"; a user document opened there later is not acquired. */
 const acquiredCopy = (ref: DocumentRef) =>
   ref.session === "P" && ref.openId === "copy" ? "acq-copy" : null;
+
+test("a human Page pin consents only to the exact minted document lifetime", () => {
+  bind();
+  const minted = mintPageDoor(
+    "page:@pages/pin",
+    { kind: "pinned", address: address("C:/Jobs/Pin.rvt") },
+    "/pages/pin/act",
+    true,
+    docA,
+  );
+  try {
+    const identity = callerOf({ kind: "local" }, { "x-pe-context": minted.token });
+    if ("refusal" in identity) throw Error(identity.refusal.detail);
+    expect(consentedRead(identity.caller, "scripting.execute", {}, docA)).toBe(true);
+    expect(consentedRead(identity.caller, "scripting.execute", {}, docB)).toBe(false);
+    expect(
+      consentedRead(
+        identity.caller,
+        "scripting.execute",
+        { permissionMode: "WriteTransaction" },
+        docA,
+      ),
+    ).toBe(false);
+    expect(
+      refusal(() =>
+        admitCrossing(identity.caller, { kind: "document", ref: docB }, "/actions", true),
+      ),
+    ).toBe("grant.required");
+    expect(refusal(() => admitScript(identity.caller, [docA, docB], "/actions", docB))).toBe(
+      "script.ungranted-documents",
+    );
+  } finally {
+    minted.retire();
+  }
+});
 const bind = (acquired: (ref: DocumentRef) => string | null = () => null) =>
   bindControl({
     heads: (thread) => heads[thread] ?? emptyThreadHead,
