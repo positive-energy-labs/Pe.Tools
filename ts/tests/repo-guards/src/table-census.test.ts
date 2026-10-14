@@ -26,6 +26,8 @@ const DOMAIN: Record<string, string> = {
     "a printed-sheet exhibit with merged header cells",
   "design-system/action-demo-catalogue.tsx": "a specimen page's plain seed index",
   "workbench/prose.tsx": "GFM tables in prose; the markdown renderer owns them",
+  "machine/devices.tsx":
+    "wave K's paired-device ledger: five fixed columns, no sort or filter; conversion to Table is owed",
 };
 
 const files = (dir: string, rel = ""): string[] =>

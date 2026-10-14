@@ -87,6 +87,7 @@ export function DeviceSettings({
         <p>No paired devices. Pair a browser or MCP client above.</p>
       )}
       {!!listing?.sessions.length && (
+        {/* DOMAIN: a five-column device ledger with no sort or filter; Table conversion is owed. */}
         <table className="w-full text-left" aria-label="Device sessions">
           <thead className="t-small text-ink-2">
             <tr>
