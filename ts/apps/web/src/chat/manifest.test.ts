@@ -58,3 +58,11 @@ test("send runs while Pea answers (the host interrupts), and Stop runs only then
     "Nothing is running",
   );
 });
+
+test("send refuses in the provider's own words while the harness it runs on is not ready", () => {
+  const sendRefusal = "Codex is not ready: Codex sign-in expired. Sign in again.";
+  const live = { head: head("pe.app-26"), machine };
+  expect(ready(live, { sendRefusal })).toBe(sendRefusal);
+  expect(ready(live, { thread: "", sendRefusal })).toBe(sendRefusal);
+  expect(ready(live, {})).toBeNull();
+});

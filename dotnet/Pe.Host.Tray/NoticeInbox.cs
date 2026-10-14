@@ -64,10 +64,8 @@ internal sealed class NoticeInbox {
         try {
             using var document = JsonDocument.Parse(json);
             var root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Object
-                || !root.TryGetProperty("id", out var id) || id.ValueKind != JsonValueKind.String
-                || !root.TryGetProperty("revision", out var revision) || !revision.TryGetInt32(out var number)) return false;
-            notice = (id.GetString() + ":" + number, root.GetRawText());
+            if (!NativeAdapterContract.Accepts("notice", root) || root.ValueKind == JsonValueKind.Null) return false;
+            notice = (root.GetProperty("id").GetString() + ":" + (long)root.GetProperty("revision").GetDouble(), root.GetRawText());
             return true;
         } catch (Exception error) when (error is JsonException or InvalidOperationException or FormatException) {
             return false;

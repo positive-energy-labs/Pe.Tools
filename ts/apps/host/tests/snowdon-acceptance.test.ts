@@ -24,7 +24,7 @@ async function authored(root: string, directory = root): Promise<[string, string
 // Runtime state and exported artifacts are created only in temp copies.
 test.each([
   ["snowdon-ducts", "0860ce4e13340f99810f71229a38450bf9d7bb8828216fd434f25f531fa9a70e"],
-  ["snowdon-circuits", "1d13cfe127bda7c6de7ebed7aab9dc45d12d9d31eff00fd9b3475b3940c1ca30"],
+  ["snowdon-circuits", "8241821453b85218a1e0108efd1067d06a3fc7ec2705e55acd7e05150e0a69ce"],
 ])(
   "%s survives production transfer, hosted serving and standalone export unchanged",
   async (id, hash) => {

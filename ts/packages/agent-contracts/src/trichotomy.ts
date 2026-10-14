@@ -38,6 +38,17 @@ export function persistedProposal<P extends z.ZodType>(proposal: P) {
   }, proposal);
 }
 
+/** Cells Pea proposed on and nobody has answered yet, anywhere in a Work document. */
+export function pendingProposals(doc: unknown): number {
+  if (Array.isArray(doc)) return doc.reduce<number>((sum, item) => sum + pendingProposals(item), 0);
+  if (!isRecord(doc)) return 0;
+  return Object.entries(doc).reduce<number>(
+    (sum, [key, value]) =>
+      sum + (key === "proposal" ? (value == null ? 0 : 1) : pendingProposals(value)),
+    0,
+  );
+}
+
 /*
  * What a rung writes. Every route sets values, and an empty value is a value. Deleting the
  * addressed property is opt-in per route, kept only where a shipped consumer stages it (rulings

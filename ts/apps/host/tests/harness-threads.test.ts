@@ -1,10 +1,12 @@
 import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
+import { HostLog } from "../src/host-log.ts";
 import { createServer, type Server } from "node:http";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import type {
   Caller,
   HarnessEvent,
@@ -14,8 +16,8 @@ import type {
   PluginHookName,
   PluginHooks,
 } from "@pe/agent-contracts";
-import { emptyThreadHead, createPluginRuntime } from "@pe/agent-contracts";
-import { withInvocationContext } from "@pe/mcps/context";
+import { emptyThreadHead, createPluginRuntime, HARNESS_EVENT_MAX_BYTES } from "@pe/agent-contracts";
+import { withInvocationContext } from "@pe/runtime/context";
 import { human } from "./callers.ts";
 import { admitCrossing, bindControl, onRevoke, Refused } from "../src/control.ts";
 import { createProviders } from "../src/harness/providers.ts";
@@ -38,6 +40,8 @@ type Host = {
   /** Who every request crosses as: the identity middleware's stand-in. */
   as: Caller;
   heads: ReturnType<typeof createHarnessThreads>["heads"];
+  observe: ReturnType<typeof createHarnessThreads>["observe"];
+  log: HostLog;
   close: () => Promise<unknown>;
   consoles: string[];
 };
@@ -47,15 +51,22 @@ const mcpServer = () => ({ name: "pea", command: "unused", args: [], env: [] });
 const host = (
   updatePending?: () => boolean,
   prepare?: () => Promise<unknown>,
+  openConsole: (command: string, opened: () => void) => Promise<void> = async (_, opened) =>
+    opened(),
   pluginHook?: <N extends PluginHookName>(name: N, event: PluginHooks[N]) => Promise<void>,
 ): Host => {
   const consoles: string[] = [];
   const providers = createProviders({
     shellPath: async () => "C:\\canary-bin;C:\\also",
     probeOnStart: false,
-    openConsole: async (command) => void consoles.push(command),
+    openConsole: (command, _env, opened) => {
+      consoles.push(command);
+      return openConsole(command, opened);
+    },
   });
+  const log = new HostLog(join(root, ".log", randomUUID()));
   const threads = createHarnessThreads({
+    log,
     prepare,
     pluginHook,
     updatePending,
@@ -74,6 +85,8 @@ const host = (
           : threads.fetch(request),
       ),
     heads: threads.heads,
+    observe: threads.observe,
+    log,
     close: threads.close,
     consoles,
   };
@@ -108,6 +121,9 @@ afterAll(async () => {
 });
 
 const caller = (threads: Host) => async (method: string, path: string, body?: unknown) => {
+  // A client mints one id per prompt; a test that names none sends a fresh one.
+  if (path.endsWith("/prompt") && body && typeof body === "object" && !("id" in body))
+    body = { id: randomUUID(), ...body };
   const response = await threads.fetch(
     new Request(`http://host${path}`, {
       method,
@@ -154,7 +170,7 @@ test("production harness boundary emits scoped turn and ACP session hooks", asyn
         });
     },
   });
-  const threads = host(undefined, undefined, plugins.emit);
+  const threads = host(undefined, undefined, undefined, plugins.emit);
   const call = caller(threads);
   const created = await call("POST", "/pe/threads", { providerId: "claude" });
   const id = created.json.id;
@@ -346,7 +362,7 @@ test("idle reaping keeps history and choices, and a prompt waits for exact-child
     });
     await realStop(child);
   });
-  const stream = await threads.fetch(new Request(`http://host/pe/threads/${id}/stream`));
+  const following = threads.observe({ kind: "thread", thread: id }, () => {}, null)!;
   try {
     await vi.advanceTimersByTimeAsync(IDLE_CHILD_MS - 1);
     expect((await read(id)).session).toBe("started");
@@ -377,7 +393,7 @@ test("idle reaping keeps history and choices, and a prompt waits for exact-child
   } finally {
     release?.();
     stop.mockRestore();
-    await stream.body?.cancel();
+    following();
     await threads.close();
   }
 });
@@ -673,52 +689,24 @@ test("a thread prompts, parks a permission, cancels, interrupts, renames, and re
 
   // A route that reads a body refuses one without a JSON content type.
   expect((await bare(threads, "POST", `/pe/threads/${id}/prompt`)).status).toBe(415);
+});
 
-  // SSE replays after `after`, then tails live.
-  body = await read(id);
-  const after = body.events.length - 1;
-  const response = await threads.fetch(
-    new Request(`http://host/pe/threads/${id}/stream?after=${after}`),
-  );
-  expect(response.headers.get("content-type")).toBe("text/event-stream");
-  const stream = response.body!.getReader();
-  const seen: HarnessEvent[] = [];
-  let buffer = "";
-  const pump = async (count: number) => {
-    while (seen.length < count) {
-      buffer += new TextDecoder().decode((await stream.read()).value);
-      for (const match of buffer.matchAll(/^data: (.*)$/gm)) seen.push(JSON.parse(match[1]!));
-      buffer = buffer.slice(buffer.lastIndexOf("\n\n") + 2);
-    }
-  };
-  await pump(1);
-  expect(seen.map((e) => e.seq)).toEqual([after + 1]);
-  await call("POST", `/pe/threads/${id}/prompt`, { text: "live" });
-  await pump(5);
-  expect(kinds(seen)).toEqual([
-    "title_changed",
-    "prompt",
-    "update:agent_message_chunk",
-    "update:tool_call",
-    "turn_end",
-  ]);
-  await stream.cancel();
-
-  // A client that drops mid-stream ends its stream only; the thread keeps logging.
-  const abort = new AbortController();
-  const dropped = await threads.fetch(
-    new Request(`http://host/pe/threads/${id}/stream`, { signal: abort.signal }),
-  );
-  const droppedReader = dropped.body!.getReader();
-  await droppedReader.read();
-  await call("POST", `/pe/threads/${id}/prompt`, { text: "hang" });
-  await until(read, id, (b) => b.running);
-  abort.abort();
-  await call("POST", `/pe/threads/${id}/cancel`);
-  body = await until(read, id, (b) => !b.running);
-  expect(turnEnds(body).at(-1)).toMatchObject({ stopReason: "cancelled" });
-  let done = false;
-  while (!done) done = (await droppedReader.read()).done;
+test("every committed thread event lands in the host log in order; a delete forgets them", async () => {
+  process.env.FAKE_ACP_SHAPE = "config";
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "hello" });
+  const body = await until(read, id, (b) => turnEnds(b).length === 1);
+  const logged = threads.log
+    .read(0)
+    .entries.flatMap((e) =>
+      e.event.kind === "thread" && e.event.thread === id ? [e.event.event] : [],
+    );
+  expect(logged).toEqual(body.events);
+  await call("DELETE", `/pe/threads/${id}`);
+  expect(JSON.stringify(threads.log.read(0).entries)).not.toContain(id);
 });
 
 test("the thread head lives in meta.json, falls back for unknown ids, and is observable", async () => {
@@ -1135,6 +1123,62 @@ test("providers list from the probe: readiness follows the adapter's own auth re
 
   expect((await call("DELETE", "/pe/providers/claude")).status).toBe(409);
   expect((await call("POST", "/pe/providers/nope/probe")).status).toBe(404);
+});
+
+test("Sign in answers only once a console opened, and says why when none could", async () => {
+  const failing = caller(
+    host(undefined, undefined, async () => {
+      throw Error("spawn cmd.exe ENOENT");
+    }),
+  );
+  const refused = await failing("POST", "/pe/providers/codex/open-login");
+  expect(refused.status).toBe(502);
+  expect(refused.json.error).toMatch(
+    /^Could not open the Codex .* console: spawn cmd\.exe ENOENT$/,
+  );
+  expect(((await failing("GET", "/pe/providers/codex")).json as Provider).readiness).toEqual({
+    state: "unknown",
+    message: "Not probed yet.",
+  });
+
+  // A console that stays open keeps the answer honest: opened, and the re-probe waits for close.
+  let close!: () => void;
+  const open = caller(
+    host(
+      undefined,
+      undefined,
+      (_command, opened) =>
+        new Promise<void>((resolve) => {
+          opened();
+          close = resolve;
+        }),
+    ),
+  );
+  expect((await open("POST", "/pe/providers/claude/open-login")).json).toEqual({ opened: true });
+  expect(((await open("GET", "/pe/providers/claude")).json as Provider).probedAt).toBeNull();
+  close();
+  await expect
+    .poll(async () => ((await open("GET", "/pe/providers/claude")).json as Provider).probedAt)
+    .not.toBeNull();
+});
+
+test("a login that expires between turns reads expired, not ready, and says how to repair it", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const readiness = async () =>
+    ((await call("GET", "/pe/providers/claude")).json as Provider).readiness;
+  await call("POST", "/pe/providers/claude/probe");
+  expect(await readiness()).toEqual({ state: "ready" });
+  const created = await call("POST", "/pe/threads", { providerId: "claude" });
+  await call("POST", `/pe/threads/${created.json.id}/prompt`, { text: "auth-expired" });
+  await until(reader(threads), created.json.id, (body) =>
+    body.events.some((e) => e.kind === "error"),
+  );
+  expect(await readiness()).toEqual({
+    state: "refused",
+    step: "signed-in",
+    message: "Claude Code sign-in expired. Sign in again.",
+  });
 });
 
 test("an endpoint provider is checked before save, and every thread carries its provider's env", async () => {
@@ -1612,6 +1656,35 @@ const peaAcquiredCopy = {
 const userInPeas = { kind: "open", ref: { session: "P", openId: "B" } } as const;
 const peaOf = (thread: string): Caller => ({ kind: "pea", context: `ctx-${thread}`, thread });
 const onDoc = (ref: { session: string; openId: string }) => ({ kind: "document", ref }) as const;
+
+test("access-050: fork retains the target but never inherits grant or human-message evidence", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const created = await call("POST", "/pe/threads", { providerId: "claude" });
+  const id = created.json.id;
+  await call("PUT", `/pe/scope/${id}`, { defaultTarget: yours, expectedRevision: 0 });
+  const forked = await call("POST", `/pe/threads/${id}/fork`, {});
+  expect(forked.status).toBe(200);
+  expect(threads.heads.read(forked.json.id)).toMatchObject({
+    defaultTarget: yours,
+    grant: null,
+    lastHumanMessageAt: null,
+    revision: 0,
+  });
+});
+
+test.each(["permission", "question"])(
+  "access-048/049: %s answers require a human before looking up a card",
+  async (verb) => {
+    const threads = host();
+    const call = caller(threads);
+    const created = await call("POST", "/pe/threads", { providerId: "claude" });
+    threads.as = peaOf(created.json.id);
+    const denied = await call("POST", `/pe/threads/${created.json.id}/${verb}`, {});
+    expect(denied.status).toBe(403);
+    expect(denied.json.refusal.code).toBe("human.only");
+  },
+);
 const crossing = (caller: Caller, ref: { session: string; openId: string }) => {
   try {
     return admitCrossing(caller, onDoc(ref), "/actions");
@@ -1781,6 +1854,141 @@ test("door 7: revoke is human-only, keeps evidence, fires onRevoke, and only a f
   release();
 });
 
+/* ── The prompt inbox: client ids, queue and steer, and wait ─────────────────────────────── */
+
+const story = (body: HarnessThreadBody) =>
+  body.events.flatMap((e) =>
+    e.kind === "prompt"
+      ? [`prompt ${e.text}`]
+      : e.kind === "prompt_queued"
+        ? [`queued ${e.text}`]
+        : e.kind === "prompt_dropped"
+          ? [`dropped ${e.by}`]
+          : e.kind === "turn_end"
+            ? [`end ${e.stopReason}`]
+            : [],
+  );
+
+test("a prompt id is the turn id: a retry never sends twice, other content under it is refused", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  const turnId = randomUUID();
+  const first = await call("POST", `/pe/threads/${id}/prompt`, { id: turnId, text: "hello" });
+  expect(first.json).toMatchObject({ turnId, state: "running" });
+  const retry = await call("POST", `/pe/threads/${id}/prompt`, { id: turnId, text: "hello" });
+  expect([retry.status, retry.json.turnId]).toEqual([200, turnId]);
+  const other = await call("POST", `/pe/threads/${id}/prompt`, { id: turnId, text: "other" });
+  expect(other.status).toBe(409);
+  const body = await until(read, id, (b) => turnEnds(b).length === 1 && !b.running);
+  expect(story(body)).toEqual(["prompt hello", "end end_turn"]);
+  expect(body.events.find((e) => e.kind === "prompt")).toMatchObject({ turnId });
+  const unnamed = await threads.fetch(
+    new Request(`http://host/pe/threads/${id}/prompt`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "no id" }),
+    }),
+  );
+  expect(unnamed.status).toBe(400);
+});
+
+test("queue order holds under steer: the steer runs next, then the queue in order", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  const prompt = (text: string, delivery: "steer" | "queue") =>
+    call("POST", `/pe/threads/${id}/prompt`, { id: randomUUID(), text, delivery });
+  await prompt("hang", "steer");
+  await until(read, id, (b) => lastEcho(b) === "echo: hang");
+  expect((await prompt("one", "queue")).json.state).toBe("queued");
+  expect((await prompt("two", "queue")).json.state).toBe("queued");
+  const steered = await prompt("slow", "steer");
+  expect(steered.json.state).toBe("running");
+  const body = await until(read, id, (b) => turnEnds(b).length === 4 && !b.running);
+  expect(story(body)).toEqual([
+    "prompt hang",
+    "queued one",
+    "queued two",
+    "end cancelled",
+    "prompt slow",
+    "end end_turn",
+    "prompt one",
+    "end end_turn",
+    "prompt two",
+    "end end_turn",
+  ]);
+});
+
+test("a queued prompt can be dropped or promoted to a steer, and wait answers each turn", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  const [hang, one, two] = [randomUUID(), randomUUID(), randomUUID()];
+  await call("POST", `/pe/threads/${id}/prompt`, { id: hang, text: "hang" });
+  await until(read, id, (b) => lastEcho(b) === "echo: hang");
+  await call("POST", `/pe/threads/${id}/prompt`, { id: one, text: "one", delivery: "queue" });
+  await call("POST", `/pe/threads/${id}/prompt`, { id: two, text: "two", delivery: "queue" });
+  const wait = (turn: string, timeoutMs = 10_000) =>
+    call("GET", `/pe/threads/${id}/wait?turn=${turn}&timeoutMs=${timeoutMs}`);
+  expect((await wait(hang, 50)).json).toEqual({ turnId: hang, state: "running" });
+  expect((await wait(one, 50)).json).toEqual({ turnId: one, state: "queued" });
+  expect((await wait(randomUUID(), 50)).status).toBe(404);
+  const dropped = await call("POST", `/pe/threads/${id}/queue`, { turnId: one, action: "cancel" });
+  expect(dropped.json).toEqual({ turnId: one, state: "dropped" });
+  const waitingOnTwo = wait(two);
+  const promoted = await call("POST", `/pe/threads/${id}/queue`, { turnId: two, action: "steer" });
+  expect(promoted.json).toEqual({ turnId: two, state: "running" });
+  expect((await waitingOnTwo).json).toEqual({
+    turnId: two,
+    state: "ended",
+    stopReason: "end_turn",
+  });
+  expect((await wait(hang)).json).toEqual({
+    turnId: hang,
+    state: "ended",
+    stopReason: "cancelled",
+  });
+  expect(
+    (await call("POST", `/pe/threads/${id}/queue`, { turnId: one, action: "steer" })).status,
+  ).toBe(409);
+  expect(story(await read(id))).toEqual([
+    "prompt hang",
+    "queued one",
+    "queued two",
+    "dropped user",
+    "end cancelled",
+    "prompt two",
+    "end end_turn",
+  ]);
+});
+
+test("a restarted host drops the prompts it had queued, saying so", async () => {
+  const first = host();
+  const call = caller(first);
+  const read = reader(first);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await call("POST", `/pe/threads/${id}/prompt`, { id: randomUUID(), text: "hang" });
+  await until(read, id, (b) => lastEcho(b) === "echo: hang");
+  const queued = randomUUID();
+  await call("POST", `/pe/threads/${id}/prompt`, { id: queued, text: "later", delivery: "queue" });
+  await first.close();
+  const second = host();
+  const body = await reader(second)(id);
+  expect(body.events.at(-1)).toMatchObject({
+    kind: "prompt_dropped",
+    turnId: queued,
+    by: "expired",
+  });
+  expect((await caller(second)("GET", `/pe/threads/${id}/wait?turn=${queued}`)).json).toEqual({
+    turnId: queued,
+    state: "dropped",
+  });
+});
+
 test("declared client and actual harness handler share input, output and refusal contracts", async () => {
   const owner = host();
   const client = createPeClient("http://host", (url, init) =>
@@ -1800,4 +2008,29 @@ test("declared client and actual harness handler share input, output and refusal
   ).rejects.toMatchObject({ status: 409, message: "No pending question gone" });
   await client.call("thread.remove", { params });
   await expect(client.call("thread.get", { params })).rejects.toMatchObject({ status: 404 });
+});
+
+test("one huge tool result is kept bounded in the record, the log and every reader", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "huge" });
+  const body = await until(read, id, (b) => turnEnds(b).length === 1);
+  const updates = body.events.filter(
+    (e): e is Extract<HarnessEvent, { kind: "update" }> =>
+      e.kind === "update" && ["t-huge", "t-wide"].includes(String(e.update.toolCallId)),
+  );
+  expect(updates).toHaveLength(2);
+  for (const e of updates) {
+    expect(Buffer.byteLength(JSON.stringify(e))).toBeLessThan(HARNESS_EVENT_MAX_BYTES);
+    expect(e.update.truncated).toBeGreaterThan(HARNESS_EVENT_MAX_BYTES);
+  }
+  // A long string keeps its head; a wide structure keeps the call's identity.
+  expect(JSON.stringify(updates[0]!.update)).toContain("characters not kept");
+  expect(updates[1]!.update).toMatchObject({ toolCallId: "t-wide", status: "completed" });
+  expect((await stat(join(root, id, "events.jsonl"))).size).toBeLessThan(
+    4 * HARNESS_EVENT_MAX_BYTES,
+  );
+  expect(threads.log.read(0).entries.some((e) => e.event.kind === "oversize")).toBe(false);
 });

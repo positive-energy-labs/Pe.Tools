@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { hostDescriptorSchema } from "./host-descriptor.ts";
 
 export const peErrorSchema = z.object({
   error: z.object({
@@ -10,7 +11,8 @@ export const peErrorSchema = z.object({
 const none = z.undefined();
 const object = z.record(z.string(), z.unknown());
 const ok = z.object({ ok: z.boolean() }).passthrough();
-type Principal = "read" | "caller" | "human" | "human-or-pea" | "page";
+type Principal = "read" | "caller" | "human" | "human-or-pea" | "human-or-page";
+export type PeRoutePermission = Principal | "admin" | "grant" | "operation";
 type Owner = "pe" | "threads" | "providers" | "share" | "pages" | "gateway" | "plugins";
 
 function route<const P extends string, B extends z.ZodType, O extends z.ZodType>(
@@ -20,6 +22,7 @@ function route<const P extends string, B extends z.ZodType, O extends z.ZodType>
   output: O,
   principal: Principal,
   owner: Owner,
+  permission: PeRoutePermission,
   format: "json" | "stream" | "asset" = "json",
   encoding: "json" | "text" = "json",
 ) {
@@ -39,6 +42,9 @@ function route<const P extends string, B extends z.ZodType, O extends z.ZodType>
     output,
     error: peErrorSchema,
     principal,
+    permission,
+    // Share is the one door a remote caller may never reach, whatever its principal.
+    localOnly: owner === "share",
     owner,
     format,
     encoding,
@@ -58,6 +64,9 @@ export function definePeApi<
     | "threadExportSchema"
     | "pluginStatusSchema"
     | "promptRequestSchema"
+    | "turnStateSchema"
+    | "queueRequestSchema"
+    | "hostLogPageSchema"
     | "permissionResponseSchema"
     | "questionResponseSchema"
     | "forkThreadRequestSchema"
@@ -92,6 +101,9 @@ export function definePeApi<
     schemas.harnessThreadSummarySchema as S["harnessThreadSummarySchema"];
   const harnessThreadBodySchema = schemas.harnessThreadBodySchema as S["harnessThreadBodySchema"];
   const promptRequestSchema = schemas.promptRequestSchema as S["promptRequestSchema"];
+  const turnStateSchema = schemas.turnStateSchema as S["turnStateSchema"];
+  const queueRequestSchema = schemas.queueRequestSchema as S["queueRequestSchema"];
+  const hostLogPageSchema = schemas.hostLogPageSchema as S["hostLogPageSchema"];
   const permissionResponseSchema =
     schemas.permissionResponseSchema as S["permissionResponseSchema"];
   const questionResponseSchema = schemas.questionResponseSchema as S["questionResponseSchema"];
@@ -147,6 +159,7 @@ export function definePeApi<
   });
   /** Public HTTP transport authority. Domain schemas stay with their domain owners. */
   const peRoutes = {
+    "features.get": route("GET", "/pe/features", none, hostDescriptorSchema, "read", "pe", "read"),
     "operation.call": route(
       "POST",
       "/call",
@@ -154,6 +167,7 @@ export function definePeApi<
       z.unknown(),
       "read",
       "gateway",
+      "operation",
     ),
     "actions.admit": route(
       "POST",
@@ -162,8 +176,9 @@ export function definePeApi<
       schemas.actionReceiptSchema as S["actionReceiptSchema"],
       "caller",
       "gateway",
+      "caller",
     ),
-    "actions.read": route("GET", "/actions", none, z.unknown(), "read", "gateway"),
+    "actions.read": route("GET", "/actions", none, z.unknown(), "read", "gateway", "read"),
     "action.cancel": route(
       "POST",
       "/actions/cancel",
@@ -171,6 +186,7 @@ export function definePeApi<
       schemas.actionReceiptSchema as S["actionReceiptSchema"],
       "caller",
       "gateway",
+      "caller",
     ),
     "action.recover": route(
       "POST",
@@ -179,6 +195,7 @@ export function definePeApi<
       schemas.actionReceiptSchema as S["actionReceiptSchema"],
       "caller",
       "gateway",
+      "caller",
     ),
     "action.resume": route(
       "POST",
@@ -187,6 +204,7 @@ export function definePeApi<
       schemas.actionReceiptSchema as S["actionReceiptSchema"],
       "caller",
       "gateway",
+      "caller",
     ),
     "providers.list": route(
       "GET",
@@ -195,6 +213,7 @@ export function definePeApi<
       z.array(providerSchema),
       "read",
       "providers",
+      "read",
     ),
     "providers.add": route(
       "POST",
@@ -203,9 +222,26 @@ export function definePeApi<
       providerSchema,
       "human",
       "providers",
+      "admin",
     ),
-    "provider.get": route("GET", "/pe/providers/:id", none, providerSchema, "read", "providers"),
-    "provider.remove": route("DELETE", "/pe/providers/:id", none, none, "human", "providers"),
+    "provider.get": route(
+      "GET",
+      "/pe/providers/:id",
+      none,
+      providerSchema,
+      "read",
+      "providers",
+      "read",
+    ),
+    "provider.remove": route(
+      "DELETE",
+      "/pe/providers/:id",
+      none,
+      none,
+      "human",
+      "providers",
+      "admin",
+    ),
     "provider.probe": route(
       "POST",
       "/pe/providers/:id/probe",
@@ -213,6 +249,7 @@ export function definePeApi<
       providerSchema,
       "human",
       "providers",
+      "admin",
     ),
     "provider.login": route(
       "POST",
@@ -221,8 +258,18 @@ export function definePeApi<
       z.object({ opened: z.literal(true) }),
       "human",
       "providers",
+      "admin",
     ),
-    "access.get": route("GET", "/pe/access", none, accessSchema, "read", "providers"),
+    "access.get": route("GET", "/pe/access", none, accessSchema, "read", "providers", "read"),
+    "access.set": route(
+      "PUT",
+      "/pe/access",
+      accessSchema,
+      accessSchema,
+      "human",
+      "providers",
+      "admin",
+    ),
     "plugins.list": route(
       "GET",
       "/pe/plugins",
@@ -230,6 +277,7 @@ export function definePeApi<
       z.array(pluginStatusSchema),
       "read",
       "plugins",
+      "read",
     ),
     "plugin.update": route(
       "PUT",
@@ -238,6 +286,7 @@ export function definePeApi<
       z.array(pluginStatusSchema),
       "human",
       "plugins",
+      "admin",
     ),
     "plugin.remove": route(
       "DELETE",
@@ -246,8 +295,8 @@ export function definePeApi<
       z.array(pluginStatusSchema),
       "human",
       "plugins",
+      "admin",
     ),
-    "access.set": route("PUT", "/pe/access", accessSchema, accessSchema, "human", "providers"),
     "threads.list": route(
       "GET",
       "/pe/threads",
@@ -255,6 +304,7 @@ export function definePeApi<
       z.array(harnessThreadSummarySchema),
       "read",
       "threads",
+      "read",
     ),
     "threads.create": route(
       "POST",
@@ -263,17 +313,17 @@ export function definePeApi<
       harnessThreadSummarySchema,
       "caller",
       "threads",
+      "caller",
     ),
-    "threads.stream": route(
+    "thread.get": route(
       "GET",
-      "/pe/threads/stream",
+      "/pe/threads/:id",
       none,
-      z.array(harnessThreadSummarySchema),
+      harnessThreadBodySchema,
       "read",
       "threads",
-      "stream",
+      "read",
     ),
-    "thread.get": route("GET", "/pe/threads/:id", none, harnessThreadBodySchema, "read", "threads"),
     "thread.export": route(
       "GET",
       "/pe/threads/:id/export",
@@ -281,6 +331,7 @@ export function definePeApi<
       schemas.threadExportSchema,
       "read",
       "threads",
+      "read",
       "asset",
     ),
     "thread.update": route(
@@ -290,15 +341,36 @@ export function definePeApi<
       harnessThreadSummarySchema,
       "caller",
       "threads",
+      "caller",
     ),
-    "thread.remove": route("DELETE", "/pe/threads/:id", none, none, "caller", "threads"),
+    "thread.remove": route("DELETE", "/pe/threads/:id", none, none, "caller", "threads", "caller"),
     "thread.prompt": route(
       "POST",
       "/pe/threads/:id/prompt",
       promptRequestSchema,
-      z.object({ turnId: z.string() }),
+      turnStateSchema,
       "human",
       "threads",
+      "human",
+    ),
+    "thread.queue": route(
+      "POST",
+      "/pe/threads/:id/queue",
+      queueRequestSchema,
+      turnStateSchema,
+      "human",
+      "threads",
+      "human",
+    ),
+    /** Query `turn` and `timeoutMs`: answers once the turn settles, or as it stands at the timeout. */
+    "thread.wait": route(
+      "GET",
+      "/pe/threads/:id/wait",
+      none,
+      turnStateSchema,
+      "read",
+      "threads",
+      "read",
     ),
     "thread.cancel": route(
       "POST",
@@ -307,6 +379,7 @@ export function definePeApi<
       z.object({ cancelled: z.boolean() }),
       "caller",
       "threads",
+      "caller",
     ),
     "thread.permission": route(
       "POST",
@@ -315,6 +388,7 @@ export function definePeApi<
       ok,
       "human",
       "threads",
+      "human",
     ),
     "thread.question": route(
       "POST",
@@ -323,6 +397,7 @@ export function definePeApi<
       ok,
       "human",
       "threads",
+      "human",
     ),
     "thread.fork": route(
       "POST",
@@ -331,6 +406,7 @@ export function definePeApi<
       harnessThreadSummarySchema,
       "caller",
       "threads",
+      "caller",
     ),
     "thread.model": route(
       "POST",
@@ -339,6 +415,7 @@ export function definePeApi<
       harnessThreadSummarySchema,
       "caller",
       "threads",
+      "caller",
     ),
     "thread.trait": route(
       "POST",
@@ -347,15 +424,7 @@ export function definePeApi<
       harnessThreadBodySchema,
       "caller",
       "threads",
-    ),
-    "thread.stream": route(
-      "GET",
-      "/pe/threads/:id/stream",
-      none,
-      schemas.harnessEventSchema as S["harnessEventSchema"],
-      "read",
-      "threads",
-      "stream",
+      "caller",
     ),
     "scope.get": route(
       "GET",
@@ -364,6 +433,7 @@ export function definePeApi<
       threadHeadReadingSchema.and(z.object({ thread: z.string().optional() })),
       "read",
       "threads",
+      "read",
     ),
     "scope.set": route(
       "PUT",
@@ -372,6 +442,7 @@ export function definePeApi<
       putTargetResultSchema,
       "human-or-pea",
       "threads",
+      "grant",
     ),
     "scope.revoke": route(
       "POST",
@@ -380,8 +451,17 @@ export function definePeApi<
       threadHeadReadingSchema,
       "human",
       "threads",
+      "human",
     ),
-    "navigation.get": route("GET", "/pe/navigation", none, navigationSnapshotSchema, "read", "pe"),
+    "navigation.get": route(
+      "GET",
+      "/pe/navigation",
+      none,
+      navigationSnapshotSchema,
+      "read",
+      "pe",
+      "read",
+    ),
     "capabilities.find": route(
       "GET",
       "/pe/capabilities",
@@ -389,10 +469,20 @@ export function definePeApi<
       capabilityCatalogSchema,
       "read",
       "pe",
+      "read",
     ),
-    "contributions.read": route("GET", "/pe/contributions", none, object, "read", "pe"),
-    "pages.libraries": route("GET", "/pe/page-libraries", none, z.unknown(), "read", "pe"),
-    "family.spec": route("GET", "/pe/family-spec", none, z.unknown(), "read", "pe", "asset"),
+    "contributions.read": route("GET", "/pe/contributions", none, object, "read", "pe", "read"),
+    "pages.libraries": route("GET", "/pe/page-libraries", none, z.unknown(), "read", "pe", "read"),
+    "family.spec": route(
+      "GET",
+      "/pe/family-spec",
+      none,
+      z.unknown(),
+      "read",
+      "pe",
+      "read",
+      "asset",
+    ),
     "feedback.submit": route(
       "POST",
       "/pe/feedback",
@@ -400,6 +490,7 @@ export function definePeApi<
       feedbackReceiptSchema,
       "human",
       "pe",
+      "human",
     ),
     "feedback.deliver": route(
       "POST",
@@ -408,6 +499,7 @@ export function definePeApi<
       feedbackReceiptSchema,
       "human",
       "pe",
+      "human",
     ),
     "diagnostics.submit": route(
       "POST",
@@ -416,12 +508,23 @@ export function definePeApi<
       z.object({ accepted: z.boolean() }),
       "human",
       "pe",
+      "human",
     ),
-    "receipts.read": route("GET", "/pe/receipt-facts", none, z.array(object), "read", "pe"),
-    "resources.stream": route("GET", "/pe/resources", none, object, "read", "pe", "stream"),
-    "work.list": route("GET", "/pe/route-state", none, z.array(object), "read", "pe"),
-    "work.get": route("GET", "/pe/route-state/:route", none, object, "read", "pe"),
-    "work.salvage": route("GET", "/pe/route-state/:route/salvage", none, object, "human", "pe"),
+    "receipts.read": route("GET", "/pe/receipt-facts", none, z.array(object), "read", "pe", "read"),
+    "resources.stream": route("GET", "/pe/resources", none, object, "read", "pe", "read", "stream"),
+    /** Query `after`, `kind`, `thread`, `limit`: one page of the host log after a cursor. */
+    "log.read": route("GET", "/pe/log", none, hostLogPageSchema, "read", "pe", "read"),
+    "work.list": route("GET", "/pe/route-state", none, z.array(object), "read", "pe", "read"),
+    "work.get": route("GET", "/pe/route-state/:route", none, object, "read", "pe", "read"),
+    "work.salvage": route(
+      "GET",
+      "/pe/route-state/:route/salvage",
+      none,
+      object,
+      "human",
+      "pe",
+      "human",
+    ),
     "work.apply": route(
       "POST",
       "/pe/route-state/:route/apply",
@@ -432,6 +535,7 @@ export function definePeApi<
       object,
       "caller",
       "pe",
+      "caller",
     ),
     "work.command": route(
       "POST",
@@ -444,6 +548,7 @@ export function definePeApi<
       object,
       "caller",
       "pe",
+      "caller",
     ),
     "work.fresh": route(
       "POST",
@@ -452,8 +557,9 @@ export function definePeApi<
       object,
       "human",
       "pe",
+      "human",
     ),
-    "view.get": route("GET", "/pe/route-view/families", none, object, "read", "pe"),
+    "view.get": route("GET", "/pe/route-view/families", none, object, "read", "pe", "read"),
     "view.publish": route(
       "PUT",
       "/pe/route-view/families",
@@ -461,6 +567,7 @@ export function definePeApi<
       object,
       "caller",
       "pe",
+      "caller",
     ),
     "view.query": route(
       "POST",
@@ -469,6 +576,7 @@ export function definePeApi<
       object,
       "caller",
       "pe",
+      "caller",
     ),
     "view.ack": route(
       "POST",
@@ -477,8 +585,17 @@ export function definePeApi<
       object,
       "caller",
       "pe",
+      "caller",
     ),
-    "view.remove": route("DELETE", "/pe/route-view/families/:instance", none, ok, "caller", "pe"),
+    "view.remove": route(
+      "DELETE",
+      "/pe/route-view/families/:instance",
+      none,
+      ok,
+      "caller",
+      "pe",
+      "caller",
+    ),
     "share.set": route(
       "PUT",
       "/pe/share",
@@ -489,28 +606,56 @@ export function definePeApi<
       object,
       "human",
       "share",
+      "admin",
     ),
-    "page.target": route("GET", "/pages/:slug/target", none, object, "read", "pages"),
+    "page.target": route("GET", "/pages/:slug/target", none, object, "read", "pages", "read"),
     "page.call": route(
       "POST",
       "/pages/:slug/call",
       z.strictObject({ key: z.string().min(1), request: z.unknown().optional() }),
       z.unknown(),
-      "page",
+      "human-or-page",
       "pages",
+      "human-or-page",
     ),
     "page.act": route(
       "POST",
       "/pages/:slug/act",
       z.strictObject({ key: z.string().min(1), input: z.unknown().optional() }),
       object,
-      "page",
+      "human-or-page",
       "pages",
+      "human-or-page",
     ),
-    "page.state": route("GET", "/pages/:slug/state", none, object, "read", "pages"),
-    "page.append": route("POST", "/pages/:slug/events", object, object, "caller", "pages"),
-    "page.events": route("GET", "/pages/:slug/events", none, object, "read", "pages", "stream"),
-    "page.snapshot": route("PUT", "/pages/:slug/snapshot", z.json(), none, "caller", "pages"),
+    "page.state": route("GET", "/pages/:slug/state", none, object, "read", "pages", "read"),
+    "page.append": route(
+      "POST",
+      "/pages/:slug/events",
+      object,
+      object,
+      "caller",
+      "pages",
+      "caller",
+    ),
+    "page.events": route(
+      "GET",
+      "/pages/:slug/events",
+      none,
+      object,
+      "read",
+      "pages",
+      "read",
+      "stream",
+    ),
+    "page.snapshot": route(
+      "PUT",
+      "/pages/:slug/snapshot",
+      z.json(),
+      none,
+      "caller",
+      "pages",
+      "caller",
+    ),
     "page.text": route(
       "PUT",
       "/pages/:slug/text",
@@ -518,6 +663,7 @@ export function definePeApi<
       none,
       "caller",
       "pages",
+      "caller",
       "json",
       "text",
     ),
@@ -528,6 +674,7 @@ export function definePeApi<
       object,
       "human-or-pea",
       "pages",
+      "human-or-pea",
     ),
   } as const;
 
@@ -548,7 +695,11 @@ export function definePeApi<
   type PeOutput<K extends PeRouteId> = z.output<(typeof peRoutes)[K]["output"]>;
   const isPeRouteId = (id: string): id is PeRouteId => Object.hasOwn(peRoutes, id);
 
-  function peRouteUrl<K extends PeRouteId>(id: K, input: PeInput<K>, base = ""): string {
+  function peRouteUrl<K extends PeRouteId>(
+    id: K,
+    input: Omit<PeInput<K>, "body">,
+    base = "",
+  ): string {
     return createPeWire(peRoutes, base, globalThis.fetch).url(id, input);
   }
 

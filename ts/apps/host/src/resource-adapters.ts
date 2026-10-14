@@ -1,4 +1,5 @@
-import { invocationContext, hostFetch as fetch } from "@pe/mcps/context";
+import { invocationContext, hostFetch as fetch } from "@pe/runtime/context";
+import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { Effect } from "effect";
 import { readingKey, actionStatusSchema, type ReadingFrame } from "@pe/agent-contracts";
 import { OwnerReads, resourceSnapshot, type ResourceObserver, type OwnerValue } from "@pe/runtime";
@@ -20,7 +21,7 @@ import type { MachineOwner } from "./machine.ts";
 const ONE_SHOT: Record<string, (r: never) => readonly [string, RequestInit?]> = {
   "host-status": () => ["/host/status"],
   capabilities: (r: { doc?: string }) => [
-    `/pe/capabilities${r.doc ? `?doc=${encodeURIComponent(r.doc)}` : ""}`,
+    peRouteUrl("capabilities.find", { query: { doc: r.doc } }),
   ],
   "ops-catalog": (r: { session?: string }) => [
     `/ops${r.session ? `?session=${encodeURIComponent(r.session)}` : ""}`,
@@ -105,7 +106,7 @@ const documentIn = (value: unknown): DocumentRef | null => {
 export const markReadings =
   (marks: DocumentMarks) =>
   (observe: ResourceObserver): ResourceObserver =>
-  (request, rawPublish) => {
+  (request, rawPublish, after) => {
     let bound = documentOf(request as never);
     let servedAt = Number.POSITIVE_INFINITY;
     let latest: (ReadingFrame & { kind: "snapshot" }) | null = null;
@@ -118,17 +119,21 @@ export const markReadings =
       changed = markedNow();
       rawPublish({ ...latest, changed });
     });
-    const release = observe(request, (frame) => {
-      if (frame.kind !== "snapshot") return rawPublish(frame);
-      // A request that does not name the document (a workspace id, a capture id) is still one
-      // document's Reading: the served value names the document it was read from.
-      bound ??= documentIn(frame.value);
-      if (bound === null) return rawPublish(frame);
-      servedAt = takenIn(frame.value) ?? Date.now();
-      changed = markedNow();
-      latest = frame;
-      rawPublish({ ...frame, changed });
-    });
+    const release = observe(
+      request,
+      (frame) => {
+        if (frame.kind !== "snapshot") return rawPublish(frame);
+        // A request that does not name the document (a workspace id, a capture id) is still one
+        // document's Reading: the served value names the document it was read from.
+        bound ??= documentIn(frame.value);
+        if (bound === null) return rawPublish(frame);
+        servedAt = takenIn(frame.value) ?? Date.now();
+        changed = markedNow();
+        latest = frame;
+        rawPublish({ ...frame, changed });
+      },
+      after,
+    );
     return () => {
       release();
       unwatch();

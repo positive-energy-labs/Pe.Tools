@@ -8,14 +8,14 @@ import {
   type ShareOwner,
 } from "./share.ts";
 import { mcpRoute } from "./mcp-route.ts";
-import { Deferred, Effect, Layer, Stream, Option } from "effect";
+import { Deferred, Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
 import { NodeHttpClient, NodeHttpServer, NodeServices } from "@effect/platform-node";
 import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
-import type { PeaRuntimeCapabilities } from "@pe/mcps";
+import type { PeaRuntimeCapabilities } from "@pe/runtime";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
 import { getHostStatus } from "./local-ops.ts";
 import { isSettingsSchemaUrl } from "./settings.ts";
@@ -96,30 +96,9 @@ const noRevitHostStatusRoute = HttpRouter.add("GET", hostProcessIdentity.healthP
 
 const emptyNotFound = Effect.succeed(Response.empty({ status: 404 }));
 
-const bridgeEventsRoute = HttpRouter.add("GET", "/events", () =>
-  Effect.gen(function* () {
-    const bridge = yield* RevitBridge;
-    const encoder = new TextEncoder();
-    const body = Stream.make(encoder.encode(": open\n\n")).pipe(
-      Stream.concat(
-        Stream.fromPubSub(bridge.events).pipe(
-          Stream.map((event) =>
-            encoder.encode(`data: ${JSON.stringify({ ...event, atMs: Date.now() })}\n\n`),
-          ),
-        ),
-      ),
-    );
-    return Response.stream(body, {
-      contentType: "text/event-stream",
-      headers: { "cache-control": "no-cache", connection: "keep-alive" },
-    });
-  }),
-);
-
 const noRevitBoundary = () =>
   Layer.mergeAll(
     HttpRouter.add("*", BRIDGE_PATH, emptyNotFound),
-    HttpRouter.add("*", "/events", emptyNotFound),
     HttpRouter.add("*", "/schemas/settings/*", emptyNotFound),
     HttpRouter.add("*", "/host/install", emptyNotFound),
   );
@@ -142,7 +121,6 @@ function makeRevitComposition(spa: SpaFallback = () => emptyNotFound) {
     provider: RevitBridgeLive,
     routes: Layer.mergeAll(
       bridgeWsRoute,
-      bridgeEventsRoute,
       opsCatalogRoute(spa),
       settingsSchemaRoute,
       hostStatusRoute,

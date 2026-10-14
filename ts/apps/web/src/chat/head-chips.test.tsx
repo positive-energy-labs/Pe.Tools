@@ -154,6 +154,22 @@ test("no projection, no chip; raw grant bytes never authorize the display", () =
   expect(chip()).toBeNull();
 });
 
+test("access-062: a stale reading cannot keep painting rw from its previous value", () => {
+  const ready = headReading(grantExpiring(42), HOST_NOW, { state: "rw", minutes: 42 });
+  if (ready.state !== "ready") throw Error("fixture is not ready");
+  render(
+    <Probe reading={{ state: "stale", previous: ready.observation, reason: "disconnected" }} />,
+  );
+  expect(chip()).toBeNull();
+});
+
+test("access-008: one click on rw revokes without a second confirmation", () => {
+  const revoke = vi.fn();
+  render(<GrantChip grant={{ state: "rw", minutes: 42 }} onRevoke={revoke} />);
+  fireEvent.click(screen.getByRole("button", { name: "Revoke rw" }));
+  expect(revoke).toHaveBeenCalledTimes(1);
+});
+
 test("a refused head write shows the door, the reason and the remedy, not an unknown outcome", async () => {
   const refusal = {
     code: "context.foreign-thread",

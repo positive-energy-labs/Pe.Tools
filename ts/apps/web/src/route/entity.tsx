@@ -105,11 +105,11 @@ export function EntityRouteView({
   const ladder = useDocumentLadder(handle);
   // The Situation palette is the sentence's ladder, opened by Ctrl K or its own trigger.
   const [palette, setPalette] = useState(false);
-  usePublishPagePalette(handle.manifest.key, palette);
   const openPalette = (open: boolean) => {
     setPalette(open && handle.busy === null);
     if (open) onPalette?.();
   };
+  usePublishPagePalette(handle.manifest.key, palette, openPalette);
   const pods = (previousOf(handle.readings.pods) as readonly PodRow[] | undefined) ?? [];
   const pod = pods.find((row) => row.id === page.pod) ?? null;
   const specs = pod?.members.filter((member) => isSpecOf(member.schema, def.schema)) ?? [];

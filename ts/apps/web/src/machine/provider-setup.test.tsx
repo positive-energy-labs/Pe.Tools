@@ -11,7 +11,12 @@ import { FirstOpenCard } from "#/chat/first-open";
 import { HeadLadder } from "#/chat/head-chips";
 import { Route as Settings } from "#/routes/settings";
 
-const state = vi.hoisted(() => ({ machine: null as Machine | null, login: vi.fn(), go: vi.fn() }));
+const state = vi.hoisted(() => ({
+  machine: null as Machine | null,
+  login: vi.fn(),
+  logins: {} as Record<string, import("#/workbench/provider/providers").Login>,
+  go: vi.fn(),
+}));
 vi.mock("#/navigation/state", () => ({ useDestination: () => state.go }));
 vi.mock("#/machine/use-machine", () => ({
   useMachine: () => ({ reading: { state: "ready", observation: state.machine }, fixture: false }),
@@ -44,6 +49,7 @@ function providers() {
     error: undefined,
     probe: vi.fn(),
     openLogin: state.login,
+    login: state.logins,
     remove: vi.fn(),
     add: vi.fn(),
     setAccess: vi.fn(),
@@ -74,6 +80,7 @@ function setup() {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  state.logins = {};
 });
 
 test("Machine shows provider health and real repair actions while Settings owns credentials", () => {
@@ -97,7 +104,8 @@ test("settings still exists and projects the provider setup", async () => {
   await act(async () => {
     render(<Component />);
   });
-  await screen.findByLabelText("providers");
+  // The route loads lazily; under a whole-workspace run the default 1 s wait is marginal.
+  await screen.findByLabelText("providers", undefined, { timeout: 10_000 });
   setup();
   search.mockRestore();
 });
@@ -165,7 +173,9 @@ test("endpoint add shows one classified line and reveals the raw body only on de
       }}
     />,
   );
-  fireEvent.change(screen.getByPlaceholderText("name"), { target: { value: "test endpoint" } });
+  fireEvent.change(screen.getByPlaceholderText("OpenAI API"), {
+    target: { value: "test endpoint" },
+  });
   fireEvent.change(screen.getByPlaceholderText("API key"), { target: { value: "test-key" } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await screen.findByText(failure.message);
@@ -180,4 +190,35 @@ test("Manage providers from the model picker navigates to canonical Settings", (
   fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
   fireEvent.click(screen.getByRole("button", { name: "Manage providers" }));
   expect(state.go).toHaveBeenCalledWith("/settings?subject=machine&section=providers");
+});
+test("a blank name saves under the endpoint's own name, and the key is the only thing to type", () => {
+  seed();
+  const add = vi.fn();
+  render(<ProviderSetup providers={{ ...providers(), add }} />);
+  fireEvent.change(screen.getByPlaceholderText("API key"), { target: { value: "sk-test" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  expect(add).toHaveBeenCalledWith({
+    harness: "codex",
+    name: "OpenAI API",
+    auth: { kind: "endpoint", baseUrl: "https://api.openai.com/v1", apiKey: "sk-test" },
+  });
+});
+test("Sign in says what it is doing under its row, then goes quiet once a probe answers", () => {
+  seed();
+  state.logins = { codex: { state: "open", probedAt: null } };
+  const view = render(<ProviderSetup providers={providers()} />);
+  expect(screen.getByText(/Finish installer in the console that opened/)).toBeTruthy();
+  state.logins = {
+    codex: { state: "failed", message: "Could not open the Codex installer console: nope" },
+  };
+  view.rerender(<ProviderSetup providers={providers()} />);
+  expect(screen.getByText(/Could not open the Codex installer console: nope/)).toBeTruthy();
+});
+test("the model picker offers each unavailable harness's own Install or Sign in", () => {
+  seed();
+  render(<HeadLadder />);
+  fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
+  fireEvent.click(screen.getByRole("button", { name: "Install Codex" }));
+  expect(state.login).toHaveBeenCalledWith("codex");
+  expect(screen.queryByRole("button", { name: /^(Install|Sign in) Claude/ })).toBeNull();
 });

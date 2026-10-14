@@ -9,7 +9,7 @@ import {
   type Caller,
   type ExecutionTarget,
 } from "@pe/agent-contracts";
-import { Refused } from "./control.ts";
+import { admitScript, consentedRead, Refused } from "./control.ts";
 import { hostOperationDefinitionSchema } from "@pe/host-contracts/contracts";
 import {
   isTsOnlyOperationKey,
@@ -96,6 +96,10 @@ export async function admitGatewayAction(
   resume = false,
 ) {
   const admission = actionAdmissionSchema.parse(raw);
+  const target = admission.destination.kind === "document" ? admission.destination.ref : undefined;
+  const readTarget = consentedRead(crossing.caller, admission.key, admission.input, target)
+    ? target
+    : undefined;
   if (admission.kind !== "operation") throw refused("Operation admission kind required");
   if (Object.keys(admission.bases).length)
     throw refused("Independent operations do not consume Work bases");
@@ -164,6 +168,16 @@ export async function admitGatewayAction(
       if (JSON.stringify(expected) !== JSON.stringify(admission.destination))
         throw refused("Destination does not match operation needs");
       if (!session) return { kind: "host-leaf", actor };
+      if (admission.key === "scripting.execute")
+        admitScript(
+          crossing.caller,
+          session.state?.openDocuments.map((doc) => ({
+            session: session.sessionId,
+            openId: doc.openId,
+          })) ?? [],
+          "/actions",
+          readTarget,
+        );
       const process = await readOriginalProcess(
         session.processId,
         session.processStartUtcUnixMs ?? NaN,
@@ -210,11 +224,21 @@ export async function admitGatewayAction(
         admission.key,
         input,
         async (requestId) => {
-          await validate(
+          const session = await validate(
             prepared.kind === "native-leaf"
               ? nativeProcessSchema.parse(prepared.process)
               : undefined,
           );
+          if (admission.key === "scripting.execute" && session)
+            admitScript(
+              crossing.caller,
+              session.state?.openDocuments.map((doc) => ({
+                session: session.sessionId,
+                openId: doc.openId,
+              })) ?? [],
+              "script step begin",
+              readTarget,
+            );
           if (admission.destination.kind === "host") return local(admission.key, input);
           const target = admission.destination;
           if (target.kind === "sdk-session")

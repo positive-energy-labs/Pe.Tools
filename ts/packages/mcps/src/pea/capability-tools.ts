@@ -4,7 +4,7 @@ import {
   carriesCallerContext,
   contextFetch as fetch,
   invocationContext,
-} from "#invocation-context";
+} from "@pe/runtime/context";
 import {
   sdkSessionSelectionSchema,
   instancesReading,
@@ -173,7 +173,10 @@ export const peFind = createTool({
     });
     if ("isError" in catalog) return catalog;
     // A human-only row is the person's press, never Pea's move: it is not offered at all.
-    const offered = catalog.capabilities.filter((row) => row.actor !== "human");
+    const principal = invocationContext()?.caller?.kind ?? "pea";
+    const offered = catalog.capabilities.filter(
+      (row) => principal !== "anonymous" && row.principal.includes(principal),
+    );
     const filtered = input.query || input.kind || input.needs || input.mutates !== undefined;
     if (!filtered)
       return {
@@ -200,7 +203,7 @@ export const peFind = createTool({
         description: row.description,
         needs: row.needs,
         mutates: row.mutates,
-        actor: row.actor,
+        principal: row.principal,
         input: row.input,
         package: row.package,
         projection: row.projection,
@@ -374,12 +377,15 @@ async function executeTool(
       revision,
       `Unknown capability '${input.key}'. Find keys with pe_find.`,
     );
-  if (row.actor === "human")
+  const principal = invocationContext()?.caller?.kind ?? "pea";
+  if (principal === "anonymous" || !row.principal.includes(principal))
     return refuse(
       row.key,
       defaultTarget,
       revision,
-      `'${row.key}' is human-only. Ask the user to press it in the ${row.title.split(":")[0]} workspace.`,
+      principal === "external-mcp"
+        ? "grant.context-cannot-hold: external MCP is read-only until human pairing exists."
+        : `'${row.key}' is human-only. Ask the user to press it in the ${row.title.split(":")[0]} workspace.`,
     );
   if (row.kind === "page" && !replayOperations && input.input)
     return refuse(

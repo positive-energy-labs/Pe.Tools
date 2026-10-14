@@ -30,8 +30,8 @@ export interface WorkbenchContextValue {
   setDraft: (draft: HeadDraft) => void;
   draftTarget: DocumentRequest | null;
   setDraftTarget: (target: DocumentRequest | null) => void;
-  /** Why the first send cannot create a thread now (none ready, the pick refused); else undefined. */
-  newRefusal?: string;
+  /** Why a send cannot go now (none ready, the pick or the bound provider not ready); else undefined. */
+  sendRefusal?: string;
   /** The URL's thread is one the host does not know (404). */
   missingThread: boolean;
   /** Empty until a thread exists: the first send or a "new" creates one. */

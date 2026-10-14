@@ -14,7 +14,8 @@ const navigationRowSchema = z.object({
 /** Small read-only summaries. A null URL is an explicit refusal to invent a resume address. */
 export const navigationSnapshotSchema = z.object({
   observedAt: z.string(),
-  works: z.array(navigationRowSchema),
+  /** `proposals`: cells Pea proposed on that nobody has answered; a Work with any waits on you. */
+  works: z.array(navigationRowSchema.extend({ proposals: z.number().int().nonnegative() })),
   threads: z.array(navigationRowSchema),
   observations: z.array(z.string()),
   truncated: z.boolean(),

@@ -37,6 +37,7 @@
     "@pe/agent-contracts": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/mcps": "workspace:*",
+    "@pe/runtime": "workspace:*",
     "gunshi": "^0.29.5"
   },
   "devDependencies": {

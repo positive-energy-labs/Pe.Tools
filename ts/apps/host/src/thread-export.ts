@@ -3,6 +3,8 @@ import { lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 
 import { isAbsolute, join, relative } from "node:path";
 import { harnessEventSchema, threadExportSchema } from "@pe/agent-contracts";
 
+import type { HostLog } from "./host-log.ts";
+
 const sha = (bytes: string | Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 const inside = (root: string, path: string) => {
   const from = relative(root, realpathSync(path));
@@ -13,7 +15,7 @@ const inside = (root: string, path: string) => {
 
 /** The durable thread writer is synchronous. These reads occupy the same JS turn, so a live
  * append or metadata write cannot interleave. The captured tail may still be a running turn. */
-export function exportThread(root: string, threadId: string) {
+export function exportThread(root: string, threadId: string, hostLog: HostLog) {
   if (!/^[a-z0-9][a-z0-9_-]*$/i.test(threadId)) throw Error("Invalid thread export id");
   const store = realpathSync(root);
   const directory = inside(store, join(store, threadId));
@@ -48,6 +50,15 @@ export function exportThread(root: string, threadId: string) {
     capturedAt: new Date().toISOString(),
     threadId,
     lastSeq: events.at(-1)?.seq ?? 0,
+    hostLog: {
+      cursor: hostLog.last,
+      ...hostLog.read(
+        0,
+        ({ event }) =>
+          (event.kind === "thread" && event.thread === threadId) ||
+          (event.kind === "oversize" && event.of === "thread" && event.ref.thread === threadId),
+      ),
+    },
     metadata,
     events,
     sources: sources.map(({ bytes: _bytes, ...source }) => source),

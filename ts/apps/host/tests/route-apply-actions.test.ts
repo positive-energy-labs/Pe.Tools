@@ -29,7 +29,7 @@ import { HttpRouter } from "effect/unstable/http";
 import { z } from "zod";
 import { takeoffsRouteState, type Caller } from "@pe/agent-contracts";
 import type { RouteWorkspaceRegistration } from "@pe/runtime";
-import { withInvocationContext } from "@pe/mcps/context";
+import { withInvocationContext } from "@pe/runtime/context";
 import { makeCallRoute } from "../src/call-route.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";

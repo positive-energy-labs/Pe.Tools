@@ -49,7 +49,7 @@ it("documentRows makes one row per open document of each identified session", ()
     description: "Project document open in Revit 2025",
     needs: "nothing",
     mutates: false,
-    actor: "any",
+    principal: ["human", "pea", "page", "external-mcp"],
   });
   expect(findCapabilities(rows, { query: "riser" }).map((row) => row.key)).toEqual(["doc:b1/o1"]);
   expect(findCapabilities(rows, { query: "family" }).map((row) => row.key)).toEqual(["doc:b1/o2"]);
@@ -92,7 +92,7 @@ it("mentionOf snapshots a document's session facts and any other row's routing f
     description: "Build a Pod.",
     needs: "nothing",
     mutates: false,
-    actor: "any",
+    principal: ["human", "pea", "page", "external-mcp"],
     input: {},
     source: "skills",
     rank: 0,
@@ -161,7 +161,7 @@ it("recentRows keys local files by path and cloud models by guids, drops open on
     description: expect.stringMatching(/^Recent cloud model from Revit 2023/),
     needs: "nothing",
     mutates: false,
-    actor: "any",
+    principal: ["human", "pea", "page", "external-mcp"],
     source: "recents",
   });
   // A local key already carries its path; the words count once, through the key.

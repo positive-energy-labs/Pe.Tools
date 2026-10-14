@@ -115,20 +115,32 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const drafted = draft.providerId
     ? providers.list?.find((item) => item.id === draft.providerId)
     : providers.list?.find(isReady);
-  /** Why the first send cannot create a thread now, or undefined when it can. */
-  const newRefusal = demo
+  /** The provider the open thread is bound to; a thread never changes provider. */
+  const bound = currentThreadId
+    ? providers.list?.find(
+        (item) =>
+          item.id ===
+          (chat.providerId || threads.find((t) => t.id === currentThreadId)?.providerId),
+      )
+    : undefined;
+  /** Why a send cannot go now, in the provider's own words, or undefined when it can. */
+  const sendRefusal = demo
     ? undefined
     : !providers.list
       ? "Providers are loading"
-      : !providers.list.some(isReady)
-        ? "no provider is ready"
-        : drafted && !isReady(drafted)
-          ? `${drafted.name} is not ready`
-          : undefined;
+      : currentThreadId
+        ? bound && !isReady(bound)
+          ? `${bound.name} is not ready: ${bound.readiness.state === "ready" ? "" : bound.readiness.message}`
+          : undefined
+        : !providers.list.some(isReady)
+          ? "no provider is ready"
+          : drafted && !isReady(drafted)
+            ? `${drafted.name} is not ready`
+            : undefined;
 
   /** Binds the draft: the thread is created on its provider, then takes the draft's model and traits. */
   const createThread = useCallback(async () => {
-    if (newRefusal || !drafted) throw Error(newRefusal ?? "no provider is ready");
+    if (sendRefusal || !drafted) throw Error(sendRefusal ?? "no provider is ready");
     const created = await client.create(drafted.id);
     if (draftTarget) {
       const displayLabel = threads.find(
@@ -149,7 +161,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     await refreshThreads();
     await gotoThread(created.id);
     return created.id;
-  }, [client, draft, draftTarget, drafted, gotoThread, newRefusal, refreshThreads]);
+  }, [client, draft, draftTarget, drafted, gotoThread, sendRefusal, refreshThreads]);
 
   const sendPrompt = useCallback(
     async (input: PromptRequest) => {
@@ -221,7 +233,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       setDraft,
       draftTarget,
       setDraftTarget,
-      newRefusal,
+      sendRefusal,
       missingThread,
       currentThreadId,
       turn: search.turn,
@@ -303,7 +315,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       isRunning,
       loading,
       missingThread,
-      newRefusal,
+      sendRefusal,
       onThread,
       operationError,
       patchThreadView,

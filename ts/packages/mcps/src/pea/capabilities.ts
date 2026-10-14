@@ -1,6 +1,7 @@
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
-import { contextFetch as fetch } from "#invocation-context";
+import { contextFetch as fetch } from "@pe/runtime/context";
 import {
+  capabilityPrincipals,
   instancesReading,
   scheduleReads,
   actionControls,
@@ -57,7 +58,7 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
       // Named, not spread: an action row also carries `says`/`dirties`, which a Capability is not.
       description: instancesReading.says,
       needs: instancesReading.needs,
-      actor: instancesReading.actor,
+      principal: capabilityPrincipals(instancesReading.mutates, instancesReading.actor),
       mutates: instancesReading.mutates,
       input: z.toJSONSchema(instancesReading.input),
       source: "SDK reading",
@@ -70,7 +71,7 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
         title: key,
         description: action.says,
         needs: action.needs,
-        actor: action.actor,
+        principal: capabilityPrincipals(true, action.actor),
         mutates: true,
         input: z.toJSONSchema(
           action.input.extend({
@@ -89,7 +90,7 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
         title: key,
         description: reading.says,
         needs: reading.needs,
-        actor: reading.actor,
+        principal: capabilityPrincipals(false, reading.actor),
         mutates: false,
         input: z.toJSONSchema(
           reading.input.extend({ scope: z.record(z.string(), z.unknown()) }),
@@ -105,7 +106,7 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
         title: key,
         description: action.says,
         needs: action.needs,
-        actor: action.actor,
+        principal: capabilityPrincipals("mutates" in action ? action.mutates : true, action.actor),
         mutates: action.mutates,
         input: z.toJSONSchema(action.input) as Record<string, unknown>,
         source: "semantic action",
@@ -122,7 +123,7 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
       finds: ["families", "visible", "archive", "rules"],
       needs: "nothing",
       mutates: false,
-      actor: "any",
+      principal: capabilityPrincipals(false),
       input: z.toJSONSchema(z.object({ instance: z.uuid().optional() })) as Record<string, unknown>,
       source: "browser Page",
       rank: 2,
@@ -136,7 +137,7 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
       finds: ["families", "filter", "rules", "visible"],
       needs: "nothing",
       mutates: true,
-      actor: "any",
+      principal: capabilityPrincipals(true),
       input: z.toJSONSchema(
         z.object({
           instance: z.uuid(),
@@ -170,7 +171,10 @@ function opRow(op: OpsCatalogEntry): Capability {
     ...(op.searchTerms?.length ? { finds: [...op.searchTerms] } : {}),
     needs: op.needs === "nothing" && !isTsOnlyOperationKey(op.key) ? "session" : op.needs,
     mutates: op.intent !== "Read",
-    actor: (op as { actor?: "any" | "human" | "agent" }).actor ?? "any",
+    principal: capabilityPrincipals(
+      op.intent !== "Read",
+      (op as { actor?: "any" | "human" | "agent" }).actor,
+    ),
     input: parseSchema(op.requestSchemaJson),
     output: op.responseSchemaJson ? parseSchema(op.responseSchemaJson) : undefined,
     source: "catalog",
@@ -190,7 +194,7 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
     description: `Read the ${spec.title} document you co-edit with the user: current doc, revision, JSON Schema, agent write mask, and commands. ${spec.description} ${spec.route === "families" ? "For the currently visible matrix or archived reading, use route:families.view first. Work scope can differ from the visible reading. This does not start a matrix read." : ""} ${scopeHint}`,
     needs: "nothing",
     mutates: false,
-    actor: "any",
+    principal: capabilityPrincipals(false),
     input: {},
     source: "route registry",
     rank: 1,
@@ -203,7 +207,7 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
     finds: spec.finds ? [...spec.finds] : undefined,
     needs: "nothing",
     mutates: true,
-    actor: "any",
+    principal: capabilityPrincipals(true),
     input: z.toJSONSchema(
       z.object({
         patches: z
@@ -222,7 +226,7 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
       description: `${command.description} ${scopeHint}`,
       needs: "nothing",
       mutates: false,
-      actor: command.actor,
+      principal: capabilityPrincipals(true, command.actor),
       input: z.toJSONSchema(command.input) as Record<string, unknown>,
       source: "route registry",
       rank: 0,
@@ -252,7 +256,7 @@ function packageRows(pod: PackageProjection): Capability[] {
               : "Read this Page's shared state and binding; append events or request your own binding through pe_do."),
         needs: reference.kind === "script" ? "document" : "nothing",
         mutates: reference.kind === "script",
-        actor: "any",
+        principal: capabilityPrincipals(reference.kind === "script"),
         input: reference.kind === "script" ? podInputSchema : {},
         package: { id: pod.id, path: member.path, sha256: member.sha256 },
         projection: entry.projection,
@@ -277,7 +281,7 @@ function skillRow(skill: SkillSnapshot): Capability {
     description: /^description:\s*(.+)$/m.exec(skill.content)?.[1]?.trim() ?? "",
     needs: "nothing",
     mutates: false,
-    actor: "any",
+    principal: capabilityPrincipals(false),
     input: {},
     source: "skills",
     package: skill.package,

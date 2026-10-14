@@ -37,6 +37,9 @@ import {
   permissionResponseSchema,
   promptRequestSchema,
   putTargetSchema,
+  queueRequestSchema,
+  TURN_WAIT_MAX_MS,
+  HARNESS_EVENT_MAX_BYTES,
   questionResponseSchema,
   threadHeadSchema,
   traitRequestSchema,
@@ -48,6 +51,11 @@ import {
   type PutTargetResult,
   type ThreadHead,
   type ThreadHeadReading,
+  type TurnState,
+  readingKey,
+  type HostLogEntry,
+  type ReadingFrame,
+  type ReadingRequest,
   type Caller,
   emptyThreadHead,
 } from "@pe/agent-contracts";
@@ -66,14 +74,15 @@ import {
 } from "../control.ts";
 import { Effect } from "effect";
 import { z } from "zod";
+import type { HostLog } from "../host-log.ts";
 import { openAdapter, stopChild } from "./adapter.ts";
-import { accessModes, sessionOffer, type Providers } from "./providers.ts";
+import { accessModes, isAuthRefusal, sessionOffer, type Providers } from "./providers.ts";
 import type { PluginHookName, PluginHooks } from "@pe/agent-contracts";
 import { exportThread } from "../thread-export.ts";
 
 /** The thread wire of ADR 0015; contract and route list in `@pe/agent-contracts` `harness-thread.ts`. */
 
-type Meta = Omit<HarnessThreadSummary, "lastSeq" | "activity"> & {
+type Meta = Omit<HarnessThreadSummary, "lastSeq" | "cursor" | "activity" | "head"> & {
   acpSessionId: string | null;
   models: HarnessThreadBody["models"];
   traits: HarnessThreadBody["traits"];
@@ -88,6 +97,13 @@ type Meta = Omit<HarnessThreadSummary, "lastSeq" | "activity"> & {
 };
 type Live = { conn: ClientSideConnection; sessionId: string; configOptions: SessionConfigOption[] };
 type Pending<R> = { turnId: string | null; resolve: (response: R) => void };
+/** A prompt waiting its turn; `turnId` is the client's prompt id. */
+type Prompt = {
+  turnId: string;
+  text: string;
+  attachments?: PromptAttachment[];
+  mentions?: Mention[];
+};
 type Thread = {
   meta: Meta;
   child: ChildProcess | null;
@@ -101,6 +117,12 @@ type Thread = {
   running: string | null;
   /** Settles when the running turn has logged its end; an interrupting prompt waits on it. */
   turn: Promise<void>;
+  /** `queue` prompts in delivery order, and steers interrupting the running turn: while one is
+   * waiting, the queue holds so the steer runs next. */
+  queue: Prompt[];
+  steers: number;
+  /** Prompt ids admitted but not yet logged: a concurrent retry of one is refused, never doubled. */
+  admitting: Set<string>;
   pending: Map<string, Pending<RequestPermissionResponse>>;
   questions: Map<string, Pending<CreateElicitationResponse>>;
   listeners: Set<(event: HarnessEvent) => void>;
@@ -139,6 +161,8 @@ export type HarnessThreadsOptions = {
   updatePending?: () => boolean;
   /** Admission/import and skill publication must settle before either harness starts. */
   prepare?: () => Promise<unknown>;
+  /** The host log: every committed event is appended in commit order, after the thread's own file. */
+  log: HostLog;
   /** Called only after the transcript owner commits this fact. No prompt or tool text is exported. */
   receiptFact?: (threadId: string, title: string, event: HarnessEvent) => void;
   pluginHook?: <N extends PluginHookName>(name: N, event: PluginHooks[N]) => Promise<void>;
@@ -291,6 +315,32 @@ function promptBlocks(
   return blocks;
 }
 
+/** A string longer than this is cut when its event is over the record's bound. */
+const KEEP_CHARS = 4 * 1024;
+const IDENTITY = ["sessionUpdate", "toolCallId", "title", "kind", "status"];
+
+/** One huge tool result cannot bloat the record (`HARNESS_EVENT_MAX_BYTES`). */
+function bounded(event: Append): Append {
+  if (event.kind !== "update" && event.kind !== "permission_request") return event;
+  const bytes = Buffer.byteLength(JSON.stringify(event));
+  if (bytes <= HARNESS_EVENT_MAX_BYTES) return event;
+  const cut = (value: unknown): unknown =>
+    typeof value === "string"
+      ? value.length > KEEP_CHARS
+        ? `${value.slice(0, KEEP_CHARS)}… [${value.length - KEEP_CHARS} characters not kept]`
+        : value
+      : Array.isArray(value)
+        ? value.map(cut)
+        : value && typeof value === "object"
+          ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, cut(v)]))
+          : value;
+  const field = event.kind === "update" ? "update" : "toolCall";
+  let kept = cut((event as Record<string, unknown>)[field]) as Record<string, unknown>;
+  if (Buffer.byteLength(JSON.stringify(kept)) > HARNESS_EVENT_MAX_BYTES)
+    kept = Object.fromEntries(Object.entries(kept).filter(([k]) => IDENTITY.includes(k)));
+  return { ...event, [field]: { ...kept, truncated: bytes } } as Append;
+}
+
 /** tmp + rename, so a crash mid-write never leaves a torn file. */
 function writeJson(path: string, value: unknown) {
   writeFileSync(`${path}.tmp`, JSON.stringify(value, null, 2));
@@ -345,6 +395,9 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       stopped: false,
       running: null,
       turn: Promise.resolve(),
+      queue: [],
+      steers: 0,
+      admitting: new Set(),
       pending: new Map(),
       questions: new Map(),
       listeners: new Set(),
@@ -379,7 +432,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
 
   function append(t: Thread, event: Append): HarnessEvent {
     const line = JSON.stringify({
-      ...event,
+      ...bounded(event),
       seq: t.events.length + 1,
       at: new Date().toISOString(),
     });
@@ -391,6 +444,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     t.events.push(full);
     projectActivity(t, full);
     appendFileSync(join(options.root, t.meta.id, "events.jsonl"), `${redacted}\n`);
+    options.log.append({ kind: "thread", thread: t.meta.id, event: full });
     options.receiptFact?.(t.meta.id, t.meta.title, full);
     if (
       ["turn_end", "error", "permission_request", "question_request"].includes(full.kind) &&
@@ -461,7 +515,8 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     updatedAt: t.events.at(-1)?.at ?? t.meta.updatedAt,
     modelId: t.meta.modelId,
     lastSeq: t.events.length,
-    head: t.meta.head,
+    cursor: options.log.last,
+    head: reading(t.meta.head),
     lifecycle: t.meta.lifecycle,
     activity: activity(t),
   });
@@ -557,6 +612,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
               lifetime: target.ref,
               grantedAt: new Date(now).toISOString(),
               grantedVia: caller.via,
+              ...(caller.login ? { grantedLogin: caller.login } : {}),
               expiresAt: grantExpiry(now),
               revoked: null,
             }
@@ -572,7 +628,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     const current = readHead(threadId);
     if (!current.grant || current.grant.revoked) return reading(current);
     const grant = { ...current.grant, revoked: { at: new Date().toISOString() } };
-    writeHead(threadId, { ...current, grant });
+    writeHead(threadId, { ...current, revision: current.revision + 1, grant });
     emitRevoke(threadId, grant);
     return reading(readHead(threadId));
   }
@@ -875,14 +931,18 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           if (t.live !== connecting || t.stopped) return;
           t.live = null;
           t.session = "closed";
-          options.providers.invalidate(
-            t.meta.providerId,
-            "The harness failed to start; probe again.",
-          );
+          const expired = isAuthRefusal(error) ? options.providers.expire(t.meta.providerId) : null;
+          if (!expired)
+            options.providers.invalidate(
+              t.meta.providerId,
+              "The harness failed to start; probe again.",
+            );
           append(t, {
             kind: "error",
             turnId: t.running,
-            message: `${t.meta.harness} harness failed to start: ${String(error?.message ?? error)}`,
+            message:
+              expired ??
+              `${t.meta.harness} harness failed to start: ${String(error?.message ?? error)}`,
           });
         },
       );
@@ -1091,7 +1151,9 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     } catch (error) {
       // A stopped thread's open turn is ended by restart recovery, not by "connection closed".
       if (!t.stopped) {
-        options.providers.invalidate(t.meta.providerId, "The harness turn failed; probe again.");
+        const expired = isAuthRefusal(error) ? options.providers.expire(t.meta.providerId) : null;
+        if (!expired)
+          options.providers.invalidate(t.meta.providerId, "The harness turn failed; probe again.");
         const raw = String((error as Error)?.message ?? error);
         const failure =
           options.providers.get(t.meta.providerId)?.auth.kind === "endpoint"
@@ -1100,7 +1162,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         append(t, {
           kind: "error",
           turnId,
-          message: failure?.message ?? raw,
+          message: expired ?? failure?.message ?? raw,
           ...(failure ? { failure } : {}),
         });
       }
@@ -1109,6 +1171,110 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     await options.pluginHook?.("turn.after", { threadId: t.meta.id, turnId, outcome });
     t.running = null;
     scheduleIdle(t);
+    drain(t);
+  }
+
+  /** Deliver the oldest queued prompt once nothing runs and no steer is waiting. */
+  function drain(t: Thread) {
+    const next = !t.running && !t.steers && !t.stopped ? t.queue.shift() : undefined;
+    if (next) t.turn = run(t, next.turnId, next.text, next.attachments, next.mentions);
+  }
+
+  /** A human message reopens a settled, snoozed or archived-then-restored thread. */
+  function reopen(t: Thread) {
+    if (t.meta.lifecycle.status === "settled" || t.meta.lifecycle.snoozedUntil)
+      t.meta.lifecycle.reopenedAt = new Date().toISOString();
+    t.meta.lifecycle.status = "active";
+    t.meta.lifecycle.settledAt = null;
+    t.meta.lifecycle.snoozedUntil = null;
+    t.meta.lifecycle.revision++;
+    heardHuman(t);
+  }
+
+  /**
+   * Steer: interrupt the running turn, holding the queue, then run this prompt now. When the turn
+   * will not stop, `refused` puts the prompt back where it was and the queue resumes.
+   */
+  async function steer(
+    t: Thread,
+    by: Caller,
+    door: string,
+    prompt: Prompt,
+    refused = () => {},
+  ): Promise<Response> {
+    t.steers++;
+    let stopped = true;
+    try {
+      while (t.running)
+        if (!(await interrupt(t, by, door))) {
+          stopped = false;
+          break;
+        }
+    } catch (error) {
+      t.steers--;
+      refused();
+      drain(t);
+      throw error;
+    }
+    t.steers--;
+    if (!stopped) {
+      refused();
+      drain(t);
+      return json(
+        {
+          error: `${t.meta.providerName} did not stop the running turn within ${INTERRUPT_MS / 1000} s; press Stop, then send again`,
+        },
+        409,
+      );
+    }
+    if (t.stopped) return json({ error: `No thread ${t.meta.id}` }, 404);
+    reopen(t);
+    t.turn = run(t, prompt.turnId, prompt.text, prompt.attachments, prompt.mentions);
+    return json(turnState(t, prompt.turnId));
+  }
+
+  /** One prompt's content, so a retry under its id is told apart from other words. */
+  const same = (a: Prompt, b: Prompt) =>
+    JSON.stringify([a.text, a.attachments ?? null, a.mentions ?? null]) ===
+    JSON.stringify([b.text, b.attachments ?? null, b.mentions ?? null]);
+
+  /** Where one turn stands, or null for an id this thread never admitted. */
+  function turnState(t: Thread, turnId: string): TurnState | null {
+    if (t.running === turnId) return { turnId, state: "running" };
+    if (t.queue.some((q) => q.turnId === turnId)) return { turnId, state: "queued" };
+    const end = t.events.findLast(
+      (e) =>
+        "turnId" in e &&
+        e.turnId === turnId &&
+        (e.kind === "turn_end" || e.kind === "error" || e.kind === "prompt_dropped"),
+    );
+    if (end?.kind === "turn_end") return { turnId, state: "ended", stopReason: end.stopReason };
+    if (end?.kind === "error") return { turnId, state: "failed", message: end.message };
+    if (end?.kind === "prompt_dropped") return { turnId, state: "dropped" };
+    return null;
+  }
+
+  /** The turn's state once it settles, or as it stands when `signal` ends the wait. */
+  async function waitTurn(t: Thread, turnId: string, signal: AbortSignal) {
+    for (;;) {
+      const state = turnState(t, turnId);
+      if (!state || signal.aborted || (state.state !== "queued" && state.state !== "running"))
+        return state;
+      await new Promise<void>((resolve) => {
+        const done = () => {
+          t.listeners.delete(listener);
+          signal.removeEventListener("abort", done);
+          resolve();
+        };
+        const listener = (e: HarnessEvent) => {
+          if ("turnId" in e && e.turnId === turnId) done();
+        };
+        signal.addEventListener("abort", done, { once: true });
+        t.listeners.add(listener);
+        // A running turn settles when its run returns, after its last event.
+        if (state.state === "running") void t.turn.then(done);
+      });
+    }
   }
 
   /**
@@ -1137,56 +1303,6 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     return ended;
   }
 
-  function stream(t: Thread, after: number, signal: AbortSignal): Response {
-    let cleanup = () => {};
-    const encoder = new TextEncoder();
-    const frame = (event: HarnessEvent) =>
-      encoder.encode(`id: ${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
-    return new Response(
-      new ReadableStream<Uint8Array>({
-        start(controller) {
-          let heartbeat: ReturnType<typeof setInterval> | undefined;
-          // A client gone without `cancel` makes enqueue throw; that ends this stream, nothing else.
-          const send = (bytes: Uint8Array) => {
-            try {
-              controller.enqueue(bytes);
-            } catch {
-              cleanup();
-            }
-          };
-          const listener = (event: HarnessEvent) => send(frame(event));
-          const close = () => {
-            cleanup();
-            try {
-              controller.close();
-            } catch {
-              // already closed or errored
-            }
-          };
-          cleanup = () => {
-            clearInterval(heartbeat);
-            t.listeners.delete(listener);
-            signal.removeEventListener("abort", close);
-          };
-          send(encoder.encode(": open\n\n"));
-          for (const event of t.events.slice(after)) send(frame(event));
-          heartbeat = setInterval(() => send(encoder.encode(": heartbeat\n\n")), 15_000);
-          t.listeners.add(listener);
-          if (signal.aborted) close();
-          else signal.addEventListener("abort", close, { once: true });
-        },
-        cancel: () => cleanup(),
-      }),
-      {
-        headers: {
-          "content-type": "text/event-stream",
-          "cache-control": "no-cache",
-          connection: "keep-alive",
-        },
-      },
-    );
-  }
-
   const json = (value: unknown, status = 200) => Response.json(value, { status });
 
   async function handle(request: Request): Promise<Response> {
@@ -1197,64 +1313,6 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       return json({ error: "Unknown thread route" }, 404);
     const id = declared.params.id;
     const method = request.method;
-    if (declared.id === "threads.stream") {
-      const encoder = new TextEncoder();
-      let cleanup = () => {};
-      return new Response(
-        new ReadableStream<Uint8Array>({
-          start(controller) {
-            let scheduled: ReturnType<typeof setTimeout> | undefined;
-            const send = () => {
-              scheduled = undefined;
-              try {
-                controller.enqueue(
-                  encoder.encode(`data: ${JSON.stringify([...threads.values()].map(summary))}\n\n`),
-                );
-              } catch {
-                cleanup();
-              }
-            };
-            // Coalesce token bursts; this is one projection stream, never one child stream per row.
-            const dirty = () => {
-              scheduled ??= setTimeout(send, 100);
-            };
-            const close = () => {
-              cleanup();
-              try {
-                controller.close();
-              } catch {}
-            };
-            const heartbeat = setInterval(() => {
-              try {
-                controller.enqueue(encoder.encode(": heartbeat\n\n"));
-              } catch {
-                cleanup();
-              }
-            }, 15_000);
-            cleanup = () => {
-              clearTimeout(scheduled);
-              clearInterval(heartbeat);
-              summaryListeners.delete(dirty);
-              request.signal.removeEventListener("abort", close);
-            };
-            summaryListeners.add(dirty);
-            send();
-            if (request.signal.aborted) close();
-            else request.signal.addEventListener("abort", close, { once: true });
-          },
-          cancel() {
-            cleanup();
-          },
-        }),
-        {
-          headers: {
-            "content-type": "text/event-stream",
-            "cache-control": "no-cache",
-            connection: "keep-alive",
-          },
-        },
-      );
-    }
     // Only routes that read a body require JSON; cancel and delete take none.
     const input = async <T>(schema: z.ZodType<T>) => {
       if (!request.headers.get("content-type")?.startsWith("application/json")) throw new NotJson();
@@ -1345,7 +1403,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         return json(body(t));
       case "thread.export":
         try {
-          return exportThread(options.root, t.meta.id);
+          return exportThread(options.root, t.meta.id, options.log);
         } catch (error) {
           return json(
             { error: error instanceof Error ? error.message : "Thread export failed" },
@@ -1425,14 +1483,41 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         threads.delete(t.meta.id);
         await stop(t);
         rmSync(join(options.root, t.meta.id), { recursive: true, force: true });
+        options.log.forget(
+          ({ event }) =>
+            (event.kind === "thread" && event.thread === t.meta.id) ||
+            (event.kind === "oversize" && event.ref.thread === t.meta.id),
+        );
         notifySummaries();
         return new Response(null, { status: 204 });
       case "thread.prompt": {
         // Only a human message moves a thread, and only it renews the grant: Pea cannot renew itself.
         requireHuman(caller, url.pathname, "a thread message");
-        const { text, attachments: sent, mentions: named } = await input(promptRequestSchema);
+        const {
+          id: turnId,
+          delivery,
+          text,
+          attachments: sent,
+          mentions: named,
+        } = await input(promptRequestSchema);
         const attachments = sent?.length ? sent : undefined;
         const mentions = named?.length ? named : undefined;
+        const prompt: Prompt = {
+          turnId,
+          text,
+          ...(attachments ? { attachments } : {}),
+          ...(mentions ? { mentions } : {}),
+        };
+        const known = t.events.find(
+          (e): e is Extract<HarnessEvent, { kind: "prompt" | "prompt_queued" }> =>
+            (e.kind === "prompt" || e.kind === "prompt_queued") && e.turnId === turnId,
+        );
+        if (known)
+          return same(known, prompt)
+            ? json(turnState(t, turnId))
+            : json({ error: `Prompt ${turnId} was already sent with other content` }, 409);
+        if (t.admitting.has(turnId))
+          return json({ error: `Prompt ${turnId} is already being sent` }, 409);
         if (options.updatePending?.())
           return json({ error: "Pe.Tools is updating; send this after the update finishes." }, 409);
         if (t.meta.lifecycle.status === "archived")
@@ -1447,36 +1532,61 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           );
           if (refusal) return json({ error: refusal }, 400);
         }
-        // A prompt on a running turn interrupts it: that turn ends cancelled, then this one starts.
-        while (t.running)
-          if (!(await interrupt(t, caller, url.pathname)))
-            return json(
-              {
-                error: `${t.meta.providerName} did not stop the running turn within ${INTERRUPT_MS / 1000} s; press Stop, then send again`,
-              },
-              409,
-            );
-        if (t.stopped) return json({ error: `No thread ${id}` }, 404);
-        if (t.meta.lifecycle.status === "settled" || t.meta.lifecycle.snoozedUntil)
-          t.meta.lifecycle.reopenedAt = new Date().toISOString();
-        t.meta.lifecycle.status = "active";
-        t.meta.lifecycle.settledAt = null;
-        t.meta.lifecycle.snoozedUntil = null;
-        t.meta.lifecycle.revision++;
-        heardHuman(t);
-        const turnId = randomUUID();
-        t.turn = run(t, turnId, text, attachments, mentions);
-        return json({ turnId });
+        // Queue waits behind the running turn and any steer; with nothing running it starts now.
+        if (delivery === "queue" && (t.running || t.steers)) {
+          reopen(t);
+          append(t, { kind: "prompt_queued", ...prompt });
+          t.queue.push(prompt);
+          return json(turnState(t, turnId));
+        }
+        t.admitting.add(turnId);
+        try {
+          return await steer(t, caller, url.pathname, prompt);
+        } finally {
+          t.admitting.delete(turnId);
+        }
+      }
+      case "thread.queue": {
+        requireHuman(caller, url.pathname, "a queued message");
+        const { turnId, action } = await input(queueRequestSchema);
+        const index = t.queue.findIndex((q) => q.turnId === turnId);
+        if (index < 0)
+          return json(
+            { error: `No queued prompt ${turnId}`, turn: turnState(t, turnId) },
+            turnState(t, turnId) ? 409 : 404,
+          );
+        const [prompt] = t.queue.splice(index, 1);
+        if (action === "cancel") {
+          append(t, { kind: "prompt_dropped", turnId, by: "user" });
+          return json(turnState(t, turnId));
+        }
+        return steer(t, caller, url.pathname, prompt!, () => t.queue.splice(index, 0, prompt!));
+      }
+      case "thread.wait": {
+        const turnId = url.searchParams.get("turn") ?? "";
+        const timeoutMs = Number(url.searchParams.get("timeoutMs") ?? 30_000);
+        const signal = AbortSignal.any([
+          request.signal,
+          AbortSignal.timeout(
+            Math.min(Number.isFinite(timeoutMs) ? timeoutMs : 0, TURN_WAIT_MAX_MS),
+          ),
+        ]);
+        const state = await waitTurn(t, turnId, signal);
+        return state
+          ? json(state)
+          : json({ error: `No turn ${turnId} in thread ${t.meta.id}` }, 404);
       }
       case "thread.cancel":
         return json({ cancelled: await cancel(t, caller, url.pathname) });
       case "thread.permission": {
+        requireHuman(caller, url.pathname, "answering a harness approval");
         const { requestId, optionId } = await input(permissionResponseSchema);
         return resolvePermission(t, requestId, optionId, "user")
           ? json({ ok: true })
           : json({ error: `No pending permission ${requestId}` }, 409);
       }
       case "thread.question": {
+        requireHuman(caller, url.pathname, "answering a human question");
         const { requestId, ...answer } = await input(questionResponseSchema);
         return resolveQuestion(t, requestId, answer, "user")
           ? json({ ok: true })
@@ -1494,6 +1604,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         const forked = create(
           {
             ...t.meta,
+            head: { ...t.meta.head, grant: null, lastHumanMessageAt: null, revision: 0 },
             id: randomUUID(),
             harness: record.harness,
             providerId: record.id,
@@ -1557,14 +1668,56 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         await useLive(t, (live) => setTrait(t, live, traitId, value));
         return json(body(t));
       }
-      case "thread.stream": {
-        const after = Number(
-          url.searchParams.get("after") ?? request.headers.get("last-event-id") ?? 0,
-        );
-        return stream(t, Number.isFinite(after) ? after : 0, request.signal);
-      }
     }
     return json({ error: `No route ${method} ${url.pathname}` }, 404);
+  }
+
+  /**
+   * The `threads` Reading (every summary, coalesced) and the `thread` Reading (one thread's events
+   * from the host log, after the connection's cursor); undefined for any other kind.
+   */
+  function observe(
+    request: ReadingRequest,
+    publish: (frame: ReadingFrame) => void,
+    after?: number | null,
+  ): (() => void) | undefined {
+    const key = readingKey(request);
+    if (request.kind === "threads") {
+      let scheduled: ReturnType<typeof setTimeout> | undefined;
+      const send = () => {
+        scheduled = undefined;
+        publish({ kind: "snapshot", key, value: [...threads.values()].map(summary) });
+      };
+      // Coalesce token bursts; this is one projection, never one stream per row.
+      const dirty = () => {
+        scheduled ??= setTimeout(send, 100);
+      };
+      // Republish on the host clock too: a grant's expiry changes the head with no thread event.
+      const tick = setInterval(send, 15_000);
+      summaryListeners.add(dirty);
+      send();
+      return () => {
+        clearTimeout(scheduled);
+        clearInterval(tick);
+        summaryListeners.delete(dirty);
+      };
+    }
+    if (request.kind !== "thread") return undefined;
+    const mine = ({ event }: HostLogEntry) =>
+      (event.kind === "thread" && event.thread === request.thread) ||
+      (event.kind === "oversize" && event.ref.thread === request.thread);
+    // An oversize entry names an event the log does not carry: the reader re-reads the body.
+    const frame = ({ id, event }: HostLogEntry): ReadingFrame =>
+      event.kind === "thread"
+        ? { kind: "event", key, value: event.event, id }
+        : { kind: "gap", key, dropped: null, id };
+    const replay = after == null ? null : options.log.read(after, mine);
+    if (!replay || replay.gap) publish({ kind: "gap", key, dropped: null, id: options.log.last });
+    else replay.entries.forEach((entry) => publish(frame(entry)));
+    // Read and subscribe run in one synchronous step, so no entry falls between them.
+    return options.log.subscribe((entry) => {
+      if (mine(entry)) publish(frame(entry));
+    });
   }
 
   // Restart recovery: a turn open in the log ended with the host that ran it. Its open asks expire
@@ -1592,6 +1745,15 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     const last = t.events.findLast((e) => e.kind === "prompt");
     if (last?.kind === "prompt" && !ended.has(last.turnId))
       append(t, { kind: "error", turnId: last.turnId, message: "host restarted during this turn" });
+    // A queued prompt never reached the harness; it is dropped and says so, never sent unasked.
+    const settledPrompts = new Set(
+      t.events.flatMap((e) =>
+        e.kind === "prompt" || e.kind === "prompt_dropped" ? [e.turnId] : [],
+      ),
+    );
+    for (const e of t.events)
+      if (e.kind === "prompt_queued" && !settledPrompts.has(e.turnId))
+        append(t, { kind: "prompt_dropped", turnId: e.turnId, by: "expired" });
   }
 
   const sweep = setInterval(() => {
@@ -1645,6 +1807,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     active: () => [...threads.values()].some((t) => t.running !== null || t.busy > 0),
     /** The thread head store; the `thread-head` Reading observes it. */
     heads,
+    observe,
     /** The web handler for `/pe/threads*` and `/pe/scope/:id`. Bad input is 400; a harness refusal 502. */
     fetch: (request: Request) =>
       handle(request).catch((error) =>

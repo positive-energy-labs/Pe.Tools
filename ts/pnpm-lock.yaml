@@ -143,6 +143,9 @@ importers:
       '@pe/mcps':
         specifier: workspace:*
         version: link:../../packages/mcps
+      '@pe/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
       gunshi:
         specifier: ^0.29.5
         version: 0.29.5
@@ -419,6 +422,9 @@ importers:
       '@pe/host-contracts':
         specifier: workspace:*
         version: link:../host-contracts
+      '@pe/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       effect:
         specifier: 4.0.0-beta.92
         version: 4.0.0-beta.92

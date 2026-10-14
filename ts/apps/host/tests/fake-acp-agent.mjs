@@ -155,6 +155,7 @@ new AgentSideConnection(
     cancel: () => cancelled(),
     async prompt({ sessionId, prompt }) {
       const text = prompt.map((block) => block.text ?? "").join("");
+      if (text === "auth-expired") throw RequestError.authRequired();
       if (text === "credit-refusal")
         throw new Error(
           JSON.stringify({
@@ -204,6 +205,28 @@ new AgentSideConnection(
       }
       if (text === "pid") {
         await say(`PID=${process.pid}`);
+        return { stopReason: "end_turn" };
+      }
+      if (text === "huge") {
+        // One enormous tool result: a long text and a wide structure of small values.
+        await conn.sessionUpdate({
+          sessionId,
+          update: {
+            sessionUpdate: "tool_call_update",
+            toolCallId: "t-huge",
+            status: "completed",
+            content: [{ type: "content", content: { type: "text", text: "x".repeat(2_000_000) } }],
+          },
+        });
+        await conn.sessionUpdate({
+          sessionId,
+          update: {
+            sessionUpdate: "tool_call_update",
+            toolCallId: "t-wide",
+            status: "completed",
+            rawOutput: { rows: Array.from({ length: 30_000 }, (_, i) => ({ i })) },
+          },
+        });
         return { stopReason: "end_turn" };
       }
       if (text === "hang")

@@ -7,8 +7,9 @@
  */
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { partitionFixture } from "./partition-fixture.ts";
+import { readJournal, writeJournalFile } from "./journal-fixture.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Fiber, Layer, Queue } from "effect";
@@ -224,7 +225,10 @@ test("an exact cancelled SDK receipt settles a lost reply once without replaying
         throw Error(`Action settled before native entry: ${JSON.stringify(row)}`);
       }),
     ]);
-    const envelope = JSON.parse(await readFile(path, "utf8"));
+    const envelope = (await readJournal(path)) as {
+      receipts: any[];
+      mappings: Record<string, string>;
+    };
     const nativeId = envelope.receipts[0].body.value.steps[1].id;
     envelope.receipts[0].body.value.steps.push({
       id: "22222222-2222-4222-8222-222222222222",
@@ -233,7 +237,7 @@ test("an exact cancelled SDK receipt settles a lost reply once without replaying
       input: {},
       state: "running",
     });
-    await writeFile(path, JSON.stringify(envelope));
+    await writeJournalFile(path, envelope);
 
     const recovered = new ActionJournal(path);
     const read = (_args: readonly string[]) => {

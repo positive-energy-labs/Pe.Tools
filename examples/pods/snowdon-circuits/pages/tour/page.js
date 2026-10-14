@@ -2,7 +2,7 @@
 (async () => {
 await pe.kitReady;
 const { h, createRoot, useEffect, useState, ArtifactFrame, PaneTabs, Picker, Input, Table, Code, Mermaid, Button } = pe.kit;
-const offline = !pe.target;
+const offline = Boolean(pe.exported);
 const sources = JSON.parse(document.getElementById('page-source').textContent);
 const base = pe.exported?.snapshot?.v === SCHEMA_VERSION ? pe.exported.snapshot : structuredClone(initialCircuitState);
 const params = new URLSearchParams(location.hash.slice(1));

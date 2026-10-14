@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { HostLog } from "../src/host-log.ts";
 import { mkdir, mkdtemp, open, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -228,6 +229,7 @@ test("Pea navigation reads real persisted harness summaries and preserves thread
   } as unknown as HarnessThreadsOptions["providers"];
   const options: HarnessThreadsOptions = {
     root: join(directory, "threads"),
+    log: new HostLog(join(directory, "log")),
     worldRoot: directory,
     providers,
     mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }),

@@ -1,4 +1,5 @@
 import { normalizePeError } from "@pe/host-contracts/pe-api";
+import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
 import { peRoutes, peRouteUrl, servePeRoute, matchPeRoute } from "@pe/agent-contracts/pe-api";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
@@ -32,6 +33,7 @@ import {
   type Capability,
   type CapabilityCatalog,
   type WorkKey,
+  HOST_LOG_PAGE_MAX,
 } from "@pe/agent-contracts";
 import {
   createCapabilityCatalogSource,
@@ -74,10 +76,11 @@ import {
 } from "./machine.ts";
 import { bindControl, currentCaller, routeActorOf, writeTerminalContext } from "./control.ts";
 import { bindRevoke } from "./revoke.ts";
-import { hostActionJournal } from "./gateway-owner.ts";
+import { hostActionJournal, hostLog } from "./gateway-owner.ts";
+import type { HostLog } from "./host-log.ts";
 import { UpdateReader } from "./update-reader.ts";
 import { makeInstalledUpdateReader } from "./update-route.ts";
-import { HostLifecycle } from "./host-lifecycle.ts";
+import { HostLifecycle, resolveHostVersion } from "./host-lifecycle.ts";
 import { bindActionWorkspace } from "./takeoff-actions.ts";
 import { familySpecAsset, familySpecHandlers } from "./family-spec.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
@@ -122,6 +125,8 @@ export interface PeRoutesOptions {
   /** Wraps every served Reading, Work included, e.g. with the host's document change mark. */
   markReadings?: (observe: ResourceObserver) => ResourceObserver;
   telemetry?: ReceiptExport;
+  /** The host log `log.read` pages; the host's own when absent. */
+  log?: HostLog;
 }
 
 const feedbackSchema = peRoutes["feedback.submit"].body;
@@ -138,8 +143,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
   const views = new RouteViewStore();
   const resources = observeResources(work, options.heads, options.observeHostResource);
   const observeBase = options.markReadings ? options.markReadings(resources) : resources;
-  const observe: ResourceObserver = (request, publish) => {
-    const release = observeBase(request, publish);
+  const observe: ResourceObserver = (request, publish, after) => {
+    const release = observeBase(request, publish, after);
     if (request.kind !== "world") return release;
     const releaseViews = views.subscribe((intent) =>
       publish({ kind: "event", key: readingKey(request), value: intent }),
@@ -189,6 +194,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
     const method = request.method;
     const declared = matchPeRoute(method, url.pathname);
     if (!declared || declared.route.owner !== "pe") return json({ error: "Unknown Pe route" }, 404);
+    if (declared.id === "features.get") return json(hostDescriptor(resolveHostVersion()));
     if (method === "GET" && declared.id === "family.spec") return familySpecAsset(url);
     const parts = url.pathname.split("/").slice(2).map(decodeURIComponent); // drop "", "pe"
     const body = () => request.json().catch(() => null);
@@ -322,47 +328,38 @@ export function createPeRoutes(options: PeRoutesOptions) {
       const q = { ...parsed.data };
       if (url.searchParams.has("thread"))
         q.threadId = await journal.opaqueId("thread", url.searchParams.get("thread")!);
-      if (!url.searchParams.has("stream")) return json(await journal.read(q));
-      const encoder = new TextEncoder();
-      let release = () => {};
-      return new Response(
-        new ReadableStream({
-          start(controller) {
-            let closed = false;
-            const seen = new Map<string, number>();
-            const push = (r: import("@pe/agent-contracts").Receipt) => {
-              if (closed || (seen.get(r.id) ?? 0) >= r.revision) return;
-              seen.set(r.id, r.revision);
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(r)}\n\n`));
-            };
-            const unsubscribe = journal.subscribe(q, push);
-            release = () => {
-              if (closed) return;
-              closed = true;
-              unsubscribe();
-              request.signal.removeEventListener("abort", release);
-              try {
-                controller.close();
-              } catch {}
-            };
-            request.signal.addEventListener("abort", release, { once: true });
-            controller.enqueue(encoder.encode(": receipts\n\n"));
-            void journal
-              .read(q)
-              .then((rows) => rows.forEach(push))
-              .catch((error) => {
-                if (!closed) {
-                  release();
-                  console.warn("Receipt read failed", error);
-                }
-              });
-          },
-          cancel() {
-            release();
-          },
-        }),
-        { headers: { "content-type": "text/event-stream", "cache-control": "no-cache" } },
-      );
+      return json(await journal.read(q));
+    }
+
+    // The host log after a cursor, one bounded page: the read door for every ordered history.
+    if (method === "GET" && declared.id === "log.read") {
+      const query = z
+        .object({
+          after: z.coerce.number().int().nonnegative().default(0),
+          kind: z.enum(["thread", "receipt"]).optional(),
+          thread: z.string().min(1).optional(),
+          limit: z.coerce.number().int().min(1).max(HOST_LOG_PAGE_MAX).default(500),
+        })
+        .safeParse(Object.fromEntries(url.searchParams));
+      if (!query.success) return json({ error: "invalid log query" }, 400);
+      const { after, kind, thread, limit } = query.data;
+      const { gap, entries } = (options.log ?? hostLog()).read(after, ({ event }) => {
+        const of = event.kind === "oversize" ? event.of : event.kind;
+        const owner =
+          event.kind === "thread"
+            ? event.thread
+            : event.kind === "oversize"
+              ? event.ref.thread
+              : null;
+        return (!kind || of === kind) && (!thread || owner === thread);
+      });
+      const page = entries.slice(0, limit);
+      return json({
+        entries: page,
+        gap,
+        next: page.at(-1)?.id ?? after,
+        more: entries.length > limit,
+      });
     }
 
     if (parts[0] === "route-view" && parts[1] === "families") {
@@ -577,7 +574,7 @@ export function createContributionContent(options: {
           description: "Page shared state and binding.",
           needs: "nothing",
           mutates: false,
-          actor: "any",
+          principal: ["human", "pea", "page", "external-mcp"],
           input: {},
           source: "pages",
           rank: 1,
@@ -810,6 +807,7 @@ export function makeHostPeRoutes(
     providers,
     updatePending: update.automaticPending,
     root: productHarnessThreadsPath(),
+    log: hostLog(),
     worldRoot,
     // The same kernel the Pea MCP server declares, for the harness that cannot read it from there.
     developerInstructions: async () => peaAgentInstructions,
@@ -857,6 +855,14 @@ export function makeHostPeRoutes(
     pages: content.pages,
   });
   invalidateCatalog = () => catalog.invalidate();
+  const hostObserve = hostResourceObserver(
+    bridge,
+    undefined,
+    undefined,
+    hostBaseUrl,
+    undefined,
+    machine,
+  );
   const routes = createPeRoutes({
     registrations,
     store: fileRouteDocumentStore(productRouteWorkPath()),
@@ -885,14 +891,9 @@ export function makeHostPeRoutes(
     },
     capabilityCatalog: catalog,
     contributionRead: content.member,
-    observeHostResource: hostResourceObserver(
-      bridge,
-      undefined,
-      undefined,
-      hostBaseUrl,
-      undefined,
-      machine,
-    ),
+    // Thread Readings (the list, and one thread's log) are the thread store's; the rest the host's.
+    observeHostResource: (request, publish, after) =>
+      threads.observe(request, publish, after) ?? hostObserve(request, publish, after),
     markReadings: markReadings(documentMarks(bridge)),
     telemetry,
   });

@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { withInvocationContext } from "@pe/mcps/context";
+import { withInvocationContext } from "@pe/runtime/context";
 import { human } from "./callers.ts";
 import { createContributionContent } from "../src/pe-routes.ts";
 import { createPluginsHandler } from "../src/plugins-handler.ts";

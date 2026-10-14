@@ -1,5 +1,5 @@
 import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
-import { withInvocationContext } from "../src/shared/invocation-context.ts";
+import { withInvocationContext } from "@pe/runtime/context";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { settingsRouteState } from "@pe/agent-contracts";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";

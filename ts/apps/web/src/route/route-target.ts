@@ -53,16 +53,17 @@ export function parseTarget(
   | { kind: "address"; address: Address }
   | { kind: "session"; session: string }
   | { kind: "request"; request: DocumentRequest }
+  | { kind: "invalid"; raw: string }
   | null {
   if (!target) return null;
-  if (target.startsWith("{")) {
+  if (/^[{["]/.test(target.trimStart())) {
     try {
       const request = documentRequestSchema.safeParse(JSON.parse(target));
       return request.success
         ? { kind: "request", request: request.data }
-        : { kind: "session", session: target };
+        : { kind: "invalid", raw: target };
     } catch {
-      return { kind: "session", session: target };
+      return { kind: "invalid", raw: target };
     }
   }
   const parsed = addressSchema.safeParse(target);
@@ -70,6 +71,11 @@ export function parseTarget(
     ? { kind: "address", address: parsed.data }
     : { kind: "session", session: target };
 }
+
+export type TargetProvenance =
+  | { source: "url-pin"; raw: string }
+  | { source: "thread-head"; thread: string; revision: number; current: boolean }
+  | { source: "fixture" | "none" };
 
 /**
  * The route's Target: the thread head or a `?target` pin, resolved against the live inventory,
@@ -135,6 +141,11 @@ export function useRouteTarget(
 
     // A chosen `?target` beats the thread head; see `parseTarget` for the grammar.
     const chosen = parseTarget(target);
+    if (chosen?.kind === "invalid")
+      return {
+        kind: "failed",
+        message: "?target is invalid JSON; choose an exact document again.",
+      };
     let request: DocumentRequest | null = defaultDocument;
     if (chosen && inventory.kind === "ready") {
       if (chosen.kind === "request") {
@@ -232,5 +243,20 @@ export function useRouteTarget(
       : null;
   }, [resolution, inventoryResult]);
   const head = headRequest && headResult ? { thread: headRequest.thread, ...scope } : null;
-  return { inventoryResult, head, resolution, bindingLost, bindingLostRef, resolvedAddress };
+  const targetProvenance: TargetProvenance = seed
+    ? { source: "fixture" }
+    : target
+      ? { source: "url-pin", raw: target }
+      : thread
+        ? { source: "thread-head", thread, revision: scope.revision, current: !scope.stale }
+        : { source: "none" };
+  return {
+    inventoryResult,
+    head,
+    resolution,
+    bindingLost,
+    bindingLostRef,
+    resolvedAddress,
+    targetProvenance,
+  };
 }

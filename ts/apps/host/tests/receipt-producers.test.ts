@@ -1,4 +1,5 @@
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
+import { HostLog } from "../src/host-log.ts";
 import { createServer, request as httpRequest } from "node:http";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -209,6 +210,7 @@ test("real HTTP prompt and permission produce joined receipts; remote automatic-
   const adapter = createThreadReceiptAdapter(telemetry, () => threads.receiptSnapshot());
   const threads = createHarnessThreads({
     root: join(dir, "threads"),
+    log: new HostLog(join(dir, "log")),
     worldRoot: dir,
     providers,
     mcpServer: () => ({ name: "pea", command: "unused", args: [], env: [] }),
@@ -293,7 +295,10 @@ test("real HTTP prompt and permission produce joined receipts; remote automatic-
     const created = await post("/pe/threads", { providerId: "claude", title: "local thread" });
     expect(created.status, await created.clone().text()).toBe(200);
     const id = ((await created.json()) as { id: string }).id;
-    const prompt = await post(`/pe/threads/${id}/prompt`, { text: "ask permission" });
+    const prompt = await post(`/pe/threads/${id}/prompt`, {
+      id: randomUUID(),
+      text: "ask permission",
+    });
     expect(prompt.status, await prompt.clone().text()).toBe(200);
     await expect.poll(async () => (await journal.read({ kinds: ["permission"] })).length).toBe(1);
     const asked = (await journal.read({ kinds: ["permission"] }))[0]!;

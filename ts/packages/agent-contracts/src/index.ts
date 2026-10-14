@@ -17,6 +17,7 @@ export * from "./schedule-grid-data.ts";
 export * from "./world.ts";
 export * from "./target.ts";
 export * from "./caller.ts";
+export * from "./principal.ts";
 export * from "./instances.ts";
 export * from "./capability.ts";
 export * from "./contribution.ts";
@@ -34,6 +35,7 @@ export * from "./seed.ts";
 export * from "./diagram.ts";
 
 export * from "./harness-thread.ts";
+export * from "./host-log.ts";
 
 export * from "./capture.ts";
 
@@ -42,3 +44,5 @@ export * from "./navigation.ts";
 export * from "./app-routes.ts";
 export * from "./plugin.ts";
 export * from "./plugin-runtime.ts";
+
+export * from "./thread-export.ts";

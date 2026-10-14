@@ -8,7 +8,7 @@ import {
   type ReceiptJoin,
   type ReceiptFact,
 } from "@pe/agent-contracts";
-import type { InvocationContext } from "@pe/mcps/context";
+import type { InvocationContext } from "@pe/runtime/context";
 import type { ReceiptExport } from "./receipt-export.ts";
 
 const token = (value: unknown) =>

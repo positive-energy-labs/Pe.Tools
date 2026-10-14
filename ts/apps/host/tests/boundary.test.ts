@@ -1,4 +1,6 @@
-﻿import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Deferred, Effect, Layer } from "effect";
@@ -37,15 +39,17 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
   writeFileSync(join(webDir, "a.txt"), "alpha");
 
   const prevLocalAppData = process.env.LOCALAPPDATA;
+  const prevProductHome = process.env.PE_TOOLS_PRODUCT_HOME;
   const prevWebDist = process.env.PE_TOOLS_WEB_DIST;
   process.env.LOCALAPPDATA = localAppData;
+  process.env.PE_TOOLS_PRODUCT_HOME = join(localAppData, "content");
   process.env.PE_TOOLS_WEB_DIST = webDir;
   // appBase is resolved the same way the running host resolves it (LOCALAPPDATA now = temp).
   const appBase = productRoot();
 
+  const latch = Effect.runSync(Deferred.make<void>());
   const program = Effect.scoped(
     Effect.gen(function* () {
-      const latch = yield* Deferred.make<void>();
       const handle = yield* Deferred.make<ServiceHostHandle>();
       const HttpLive = makeHttpLive({
         capabilities: { revit: true },
@@ -68,6 +72,7 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     expect(file.lane).toBe("dev");
 
     const base = `http://127.0.0.1:${file.port}`;
+    const terminal = readFileSync(hostContextTokenPath(hostOwnership.serviceName), "utf8");
 
     // (2) GET /host/status â†’ 200 (confirms the recorded port is the real bound one).
     const status = await fetch(`${base}/host/status`);
@@ -93,7 +98,7 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     // once silently mis-routed to the user's live Revit â€” it must 400 and point at the header.
     const misTargeted = await fetch(`${base}/call`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "x-pe-context": terminal },
       body: JSON.stringify({ key: "host.status", bridgeSessionId: "session-abc" }),
     });
     expect(misTargeted.status).toBe(400);
@@ -104,7 +109,7 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     // A clean TS-only envelope still passes the key gate (no Revit session â†’ Disconnected, not 400).
     const cleanCall = await fetch(`${base}/call`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "x-pe-context": terminal },
       body: JSON.stringify({ key: "host.status" }),
     });
     expect(cleanCall.status).toBe(200);
@@ -142,14 +147,28 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     });
     expect(shutdown.status).toBe(200);
 
+    // Host bootstrap config belongs to the fixture's content home, never the user's Documents.
+    expect(
+      await waitFor(async () => {
+        try {
+          return readFileSync(join(localAppData, "content", ".codex", "config.toml"), "utf8");
+        } catch {
+          return null;
+        }
+      }),
+    ).toContain("Written by Pea");
+
     await done; // scope teardown: graceful server close + service-file delete.
 
     expect(await readServiceFile(appBase, hostOwnership.serviceName)).toBeNull();
     await expect(fetch(`${base}/host/status`)).rejects.toBeDefined();
   } finally {
+    Effect.runSync(Deferred.succeed(latch, undefined));
     await done.catch(() => {});
     if (prevLocalAppData === undefined) delete process.env.LOCALAPPDATA;
     else process.env.LOCALAPPDATA = prevLocalAppData;
+    if (prevProductHome === undefined) delete process.env.PE_TOOLS_PRODUCT_HOME;
+    else process.env.PE_TOOLS_PRODUCT_HOME = prevProductHome;
     if (prevWebDist === undefined) delete process.env.PE_TOOLS_WEB_DIST;
     else process.env.PE_TOOLS_WEB_DIST = prevWebDist;
     rmSync(localAppData, { recursive: true, force: true });

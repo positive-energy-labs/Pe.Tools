@@ -7,8 +7,13 @@ import { BindRoute } from "#/pages-bind/picker";
 const manifest = defineRoute({
   key: "bind",
   name: "Bind",
-  page: z.object({ page: z.string().default("") }),
-  url: ["page"],
+  page: z.object({
+    page: z.string().default(""),
+    view: z
+      .preprocess((value) => value === true || value === "1" || value === 1, z.boolean())
+      .default(false),
+  }),
+  url: ["page", "view"],
 });
 const url = urlPage(manifest)!;
 
@@ -20,6 +25,6 @@ export const Route = createFileRoute("/bind")({
 });
 
 function Bind() {
-  const { page } = Route.useSearch();
-  return <BindRoute slug={page} />;
+  const { page, view } = Route.useSearch();
+  return <BindRoute slug={page} view={view} />;
 }

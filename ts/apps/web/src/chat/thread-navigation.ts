@@ -9,6 +9,7 @@ import {
   type TargetInventory,
   type UpdateThreadRequest,
   emptyThreadHead,
+  type ThreadHead,
 } from "@pe/agent-contracts";
 
 export type ThreadShelf = "active" | "pinned" | "snoozed" | "settled" | "archived";
@@ -143,7 +144,7 @@ export const shelfOf = (thread: HarnessThreadSummary, now = Date.now()): ThreadS
           ? "pinned"
           : "active";
 
-export function targetLabel(thread: Pick<HarnessThreadSummary, "head">): string {
+export function targetLabel(thread: { head: ThreadHead }): string {
   const target = thread.head.defaultTarget;
   if (!target) return "Untargeted";
   if (thread.head.displayLabel) return thread.head.displayLabel;
@@ -360,7 +361,13 @@ export function demoThreads(body: HarnessThreadBody): HarnessThreadSummary[] {
   const at = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
   const base = {
     ...body,
-    head: { ...emptyThreadHead, defaultTarget: target, revision: 3 },
+    head: {
+      ...emptyThreadHead,
+      hostNow: at(0),
+      grantView: null,
+      defaultTarget: target,
+      revision: 3,
+    },
     lifecycle: emptyThreadLifecycle(),
     activity: { state: "idle" as const, pending: 0, lastSeq: 2, message: null },
     lastSeq: 2,
@@ -391,7 +398,7 @@ export function demoThreads(body: HarnessThreadBody): HarnessThreadSummary[] {
       id: "fixture-local",
       title: "Draft the BIM handoff notes",
       updatedAt: at(12),
-      head: emptyThreadHead,
+      head: { ...emptyThreadHead, hostNow: at(0), grantView: null },
       lifecycle: { ...base.lifecycle, readSeq: 2 },
     },
     {
@@ -401,6 +408,8 @@ export function demoThreads(body: HarnessThreadBody): HarnessThreadSummary[] {
       updatedAt: at(30),
       head: {
         ...emptyThreadHead,
+        hostNow: at(0),
+        grantView: null,
         defaultTarget: { ...target, address: address("C:/Families/Air Handling Unit.rfa") },
         revision: 1,
       },
@@ -440,7 +449,13 @@ export function demoThreads(body: HarnessThreadBody): HarnessThreadSummary[] {
       id: "fixture-ended",
       title: "Resize the ductwork on Level 1",
       updatedAt: at(75),
-      head: { ...emptyThreadHead, defaultTarget: { ...target, session: "pe.app-25" }, revision: 2 },
+      head: {
+        ...emptyThreadHead,
+        hostNow: at(0),
+        grantView: null,
+        defaultTarget: { ...target, session: "pe.app-25" },
+        revision: 2,
+      },
       lifecycle: { ...base.lifecycle, readSeq: 2 },
     },
   ];

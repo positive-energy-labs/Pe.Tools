@@ -421,6 +421,47 @@ const HANDOFF = withUpdate(
   },
 );
 
+/** An admitted apply, read at a different point of its receipt. */
+const receiptAt = (
+  state: UpdateReceipt["state"],
+  legs: UpdateReceipt["legs"],
+  over: Partial<Machine["update"]> = {},
+) =>
+  withUpdate({
+    plan: plan(SESSIONS, false),
+    receipt: { ...RECEIPT, state, legs },
+    requestId: RECEIPT.requestId,
+    admittedPlanId: RECEIPT.planId,
+    receiptLeg: read,
+    ...over,
+  });
+const DOWNLOADING = receiptAt("running", [
+  {
+    name: "download",
+    status: "running",
+    observedAtUtc: "2026-10-08T17:20:04.000Z",
+    detail: "41% of 84 MB",
+    exitCode: null,
+  },
+]);
+const FAILED = receiptAt("failed", [
+  {
+    name: "download",
+    status: "failed",
+    observedAtUtc: "2026-10-08T17:20:19.000Z",
+    detail: "digest mismatch: the download is not the published installer",
+    exitCode: 1,
+  },
+]);
+const CHECK_FAILED = withUpdate({
+  plan: null,
+  planLeg: {
+    observedAtUtc: null,
+    attemptedAtUtc: AT,
+    error: "The update feed did not answer: connection refused",
+  },
+});
+
 /* ── The patch bay's world: one person's Revit, two of Pea's, recents from 2022 to 2027 ─────── */
 
 const PEA_WORK = "C:\\Users\\demo\\AppData\\Local\\Positive Energy\\Pe.Tools\\pea\\work";
@@ -573,6 +614,9 @@ export const MACHINE_SEEDS = {
   "blocked-plan": ready(withUpdate({ plan: BLOCKED })),
   "waiting-plan": ready(withUpdate({ plan: plan(SESSIONS, false) })),
   "receipt-handoff": ready(HANDOFF),
+  "update-downloading": ready(DOWNLOADING),
+  "update-failed": ready(FAILED),
+  "update-check-failed": ready(CHECK_FAILED),
   disconnected: { state: "stale", previous: HANDOFF, reason: "disconnected" },
   "no-revit": ready(
     base({ revit: { years: [2024, 2025, 2026], sessions: [], unclassifiedAttachments: [] } }),
@@ -663,8 +707,11 @@ const thread = (
   updatedAt,
   modelId: null,
   lastSeq: activity.lastSeq,
+  cursor: 0,
   head: {
     ...emptyThreadHead,
+    hostNow: "1970-01-01T00:00:00.000Z",
+    grantView: null,
     defaultTarget: { kind: "open", ref },
     revision: 3,
     displayLabel: title,

@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 
 const page = new URL("../../../../examples/pods/snowdon-circuits/pages/tour/", import.meta.url);
-const read = (name) => readFile(new URL(name, page), "utf8");
+const read = async (name) => (await readFile(new URL(name, page), "utf8")).replaceAll("\r\n", "\n");
 const [template, calc, circuits, app] = await Promise.all([
   read("index.source.html"),
   read("calc.mjs"),

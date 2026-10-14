@@ -1,8 +1,10 @@
 import { asCaller, human } from "./callers.ts";
+import { HostLog } from "../src/host-log.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { emptyThreadLifecycle, type HarnessEvent } from "@pe/agent-contracts";
 import { createHarnessThreads } from "../src/harness/threads.ts";
 import type { Providers } from "../src/harness/providers.ts";
@@ -39,6 +41,7 @@ function fixture(events: HarnessEvent[] = []) {
   );
   const options = {
     root,
+    log: new HostLog(join(root, ".log")),
     worldRoot: root,
     mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }),
     providers: {
@@ -183,7 +186,7 @@ test("a real prompt reopens settled work with a new anchor; active prompts retai
       new Request("http://host/pe/threads/thread/prompt", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: "Continue" }),
+        body: JSON.stringify({ id: randomUUID(), text: "Continue" }),
       }),
     );
   await send();
@@ -206,17 +209,14 @@ test("an opted-in old conversation does not auto-settle immediately after reopen
   expect((await call()).value.lifecycle.status).toBe("active");
 });
 
-test("summary stream projects scope and lifecycle changes for an off-thread reader", async () => {
+test("the threads Reading projects scope and lifecycle changes for an off-thread reader", async () => {
   const { host, call } = fixture();
   vi.useFakeTimers();
-  const abort = new AbortController();
-  const response = await host.fetch(
-    new Request("http://host/pe/threads/stream", { signal: abort.signal }),
-  );
-  const reader = response.body!.getReader();
-  expect(new TextDecoder().decode((await reader.read()).value)).toContain('"pinned":false');
+  const seen: string[] = [];
+  const release = host.observe({ kind: "threads" }, (frame) => seen.push(JSON.stringify(frame)))!;
+  expect(seen.at(-1)).toContain('"pinned":false');
   await call({ expectedRevision: 0, pinned: true });
   await vi.advanceTimersByTimeAsync(100);
-  expect(new TextDecoder().decode((await reader.read()).value)).toContain('"pinned":true');
-  abort.abort();
+  expect(seen.at(-1)).toContain('"pinned":true');
+  release();
 });

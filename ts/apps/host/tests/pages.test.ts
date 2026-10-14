@@ -62,6 +62,15 @@ async function pagesRoot(live?: PageLive) {
 }
 
 describe("pages", () => {
+  it("access-007: browser Page navigation enters SPA chrome while iframe assets remain Page bytes", async () => {
+    const { fetch } = await pagesRoot();
+    const navigation = await fetch("/pages/todo/", { headers: { "sec-fetch-dest": "document" } });
+    expect(navigation.status).toBe(302);
+    expect(navigation.headers.get("location")).toBe("/bind?page=todo&view=1");
+    const frame = await fetch("/pages/todo/", { headers: { "sec-fetch-dest": "iframe" } });
+    expect(frame.status).toBe(200);
+    expect(await frame.text()).toContain("A todo page");
+  });
   it("lists every folder with an index.html, as JSON or as a list page", async () => {
     const { fetch } = await pagesRoot();
     const listing = await fetch("/pages");
@@ -312,10 +321,9 @@ describe("pages", () => {
     const css = await (await fetch("/pages/pe.css")).text();
     expect(css).toContain("--pe-page:");
     expect(css).toContain("button:hover");
-    // The bind chip lives in pe.js's shadow root: the tokens reach it on :host, its look is here.
-    expect(css).toContain(":root, :host {");
-    expect(css).toContain('.pe-bind[data-write="rw"]');
-    expect(text).toContain('attachShadow({ mode: "open" })');
+    // Consent moved to the SPA kit; Page CSS and JS draw no second consent control.
+    expect(css).not.toContain(".pe-bind");
+    expect(text).not.toContain("attachShadow");
   });
 
   it("serves the Revit facsimile as a classic script that defines rv", async () => {
@@ -1022,6 +1030,8 @@ ${source}`),
         JSON.parse(await readFile(join(root, "todo", ".state", "binding.json"), "utf8")),
       ).toEqual({
         slots: { default: { kind: "pinned", address: "C:\\Pea\\Copy.rvt" } },
+        // Pea set it, so it is no person's consent to the Page's ReadOnly scripts.
+        boundBy: { default: "agent" },
       });
       expect((await put(human, { kind: "thread", thread: "t1" })).status).toBe(200);
       expect((await put(human, { kind: "thread" })).status).toBe(400);
@@ -1070,7 +1080,7 @@ ${source}`),
       };
       const nodes = new Map<string, Record<string, unknown>>();
       const location = new URL("http://127.0.0.1:5180/pages/todo/");
-      const window: Record<string, unknown> = {};
+      const window: Record<string, unknown> = { addEventListener: () => {} };
       runInNewContext(source, {
         window,
         location,

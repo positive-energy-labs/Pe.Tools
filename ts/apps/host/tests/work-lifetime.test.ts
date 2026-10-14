@@ -14,7 +14,7 @@ import { RouteWorkspace, type RouteWorkspaceRegistration } from "@pe/runtime";
 import { Effect, PubSub } from "effect";
 import type { RevitBridge, HostBridgeEvent, BridgeSessionView } from "../src/bridge.ts";
 import { createPeRoutes, fileRouteDocumentStore, makeHostPeRoutes } from "../src/pe-routes.ts";
-import { withInvocationContext } from "@pe/mcps/context";
+import { withInvocationContext } from "@pe/runtime/context";
 import type { Caller } from "@pe/agent-contracts";
 import { human, pea } from "./callers.ts";
 

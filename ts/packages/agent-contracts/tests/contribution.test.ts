@@ -77,7 +77,7 @@ test("packaged catalog rows and mentions preserve admitted revision and refuse c
     description: "Read checks",
     needs: "nothing" as const,
     mutates: false,
-    actor: "any" as const,
+    principal: ["human" as const, "pea" as const, "page" as const, "external-mcp" as const],
     input: {},
     source: "packages",
     rank: 0,

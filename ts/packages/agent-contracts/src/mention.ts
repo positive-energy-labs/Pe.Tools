@@ -7,6 +7,7 @@
 import { z } from "zod";
 import {
   capabilityKindSchema,
+  capabilityPrincipals,
   type Capability,
   type CapabilityCatalog,
   type CapabilityRecent,
@@ -70,7 +71,7 @@ export function documentRows(catalog: Pick<CapabilityCatalog, "machine">): Capab
         `${document.isFamilyDocument ? "Family" : "Project"} document open in Revit ${catalog.machine.revit.sessions?.find((row) => row.attachment?.session === sessionId)?.row.year ?? ""}`.trim(),
       needs: "nothing" as const,
       mutates: false,
-      actor: "any" as const,
+      principal: capabilityPrincipals(false),
       input: {},
       source: "inventory",
       rank: document.isActive ? 1 : 0,
@@ -154,7 +155,7 @@ export function recentRows(catalog: Pick<CapabilityCatalog, "recents" | "machine
         description: `Recent ${recent.isCloud ? "cloud model" : /\.rfa$/i.test(recent.path) ? "family file" : "local file"} from Revit ${recent.year}'s recent list; ${inventoryKnown(catalog.machine) ? "not open" : "open state unknown"}. pe_read it for openWith, then resolve an open lifetime before an op can target it.`,
         needs: "nothing" as const,
         mutates: false,
-        actor: "any" as const,
+        principal: capabilityPrincipals(false),
         input: {},
         source: "recents",
         rank: -recent.rank,

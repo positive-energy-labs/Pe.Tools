@@ -15,9 +15,11 @@ export interface ThreadHeadSource {
   observe(threadId: string, listener: (value: OwnerValue<ThreadHead>) => void): () => void;
 }
 
+/** `after` is the connection's host log cursor (absent: none); only log-backed Readings read it. */
 export type ResourceObserver = (
   request: ReadingRequest,
   publish: (frame: ReadingFrame) => void,
+  after?: number | null,
 ) => () => void;
 export const resourceSnapshot = (key: string, result: OwnerValue<unknown>): ReadingFrame =>
   "error" in result
@@ -29,7 +31,7 @@ export function observeResources(
   heads: ThreadHeadSource,
   host?: ResourceObserver,
 ): ResourceObserver {
-  return (request, publish) => {
+  return (request, publish, after) => {
     const key = readingKey(request);
     const accept = (value: OwnerValue<unknown>) => publish(resourceSnapshot(key, value));
     if (request.kind === "work") return work.observe(request, request.route, accept);
@@ -41,25 +43,43 @@ export function observeResources(
         if (event.action === "discard")
           publish({ kind: "event", key, value: { ...event, atMs: Date.now() } });
       });
-      const releaseHost = host?.(request, publish);
+      const releaseHost = host?.(request, publish, after);
       return () => {
         releaseWork();
         releaseHost?.();
       };
     }
-    if (host) return host(request, publish);
+    if (host) return host(request, publish, after);
     publish({ kind: "failure", key, error: `Resource '${request.kind}' is unavailable` });
     return () => {};
   };
 }
 
-/** One bounded connection mailbox. Producers only offer; they never await the socket. */
+/** The pseudo-key of the one host log lane in the ready set. */
+const LOG = "\u0000log";
+
+/**
+ * One bounded connection mailbox. Producers only offer; they never await the socket. Snapshot keys
+ * keep their latest frame; `world` keeps a bounded tail with gap frames; host log frames (those
+ * carrying an `id`) share one lane in id order, and a reader that falls `logFrames` behind loses
+ * the connection: it reconnects from its cursor and the durable log replays what it missed.
+ */
 export function resourceResponse(
   request: Request,
   observe: ResourceObserver,
-  limits = { frameBytes: READING_MAX_FRAME_BYTES, worldEvents: 64, stallMs: 10_000 },
+  limits = {
+    frameBytes: READING_MAX_FRAME_BYTES,
+    worldEvents: 64,
+    stallMs: 10_000,
+    logFrames: 4096,
+  },
 ): Response {
-  const raw = new URL(request.url).searchParams.get("keys") ?? "";
+  const url = new URL(request.url);
+  const raw = url.searchParams.get("keys") ?? "";
+  const cursor = url.searchParams.get("after") ?? request.headers.get("last-event-id");
+  const after = cursor === null || cursor === "" ? null : Number(cursor);
+  if (after !== null && !(Number.isSafeInteger(after) && after >= 0))
+    return Response.json({ error: "Invalid resource cursor" }, { status: 400 });
   if (new TextEncoder().encode(raw).byteLength > READING_MAX_REQUEST_BYTES)
     return Response.json({ error: "Resource request is too large" }, { status: 400 });
   let requests: ReadingRequest[];
@@ -73,6 +93,7 @@ export function resourceResponse(
   const pending = new Map<string, Uint8Array>();
   const ready = new Set<string>();
   const world: Uint8Array[] = [];
+  const lane: Uint8Array[] = [];
   let dropped: number | null = null;
   let gap = false;
   let closed = false;
@@ -80,7 +101,10 @@ export function resourceResponse(
   let stalled: ReturnType<typeof setTimeout> | undefined;
   const releases: Array<() => void> = [];
   let controller: ReadableStreamDefaultController<Uint8Array>;
-  const encode = (frame: ReadingFrame) => encoder.encode(`data: ${JSON.stringify(frame)}\n\n`);
+  const encode = (frame: ReadingFrame) =>
+    encoder.encode(
+      `${"id" in frame && frame.id !== undefined ? `id: ${frame.id}\n` : ""}data: ${JSON.stringify(frame)}\n\n`,
+    );
   const rejected = new Map(
     [...requested.keys()].map((key) => [
       key,
@@ -105,6 +129,7 @@ export function resourceResponse(
     pending.clear();
     ready.clear();
     world.length = 0;
+    lane.length = 0;
     demand?.();
     demand = undefined;
   };
@@ -118,7 +143,10 @@ export function resourceResponse(
       const key = ready.values().next().value!;
       ready.delete(key);
       let bytes: Uint8Array;
-      if (requested.get(key)?.kind === "world") {
+      if (key === LOG) {
+        bytes = lane.shift()!;
+        if (lane.length) ready.add(LOG);
+      } else if (requested.get(key)?.kind === "world") {
         if (gap) {
           bytes = encode({ kind: "gap", key, dropped });
           gap = false;
@@ -150,7 +178,12 @@ export function resourceResponse(
       // A bad owner value fails only this key; healthy resources keep the same connection.
     }
     try {
-      if (requested.get(frame.key)?.kind === "world") {
+      if ("id" in frame && frame.id !== undefined) {
+        if (lane.length === limits.logFrames) return abort();
+        lane.push(bytes);
+        ready.add(LOG);
+        return drain();
+      } else if (requested.get(frame.key)?.kind === "world") {
         if (frame.kind === "gap") {
           gap = true;
           dropped = frame.dropped;
@@ -182,7 +215,7 @@ export function resourceResponse(
           if (closed) break;
           if (value.kind === "world") publish({ kind: "gap", key, dropped: null });
           try {
-            const release = observe(value, publish);
+            const release = observe(value, publish, after);
             if (closed) release();
             else releases.push(release);
           } catch (error) {

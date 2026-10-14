@@ -1,3 +1,4 @@
+import { useRouterState } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { ModeDial } from "#/chat/mode-dial";
@@ -32,6 +33,8 @@ import { useScopeKeys } from "@pe/kit/keys";
 import { PagePaletteButton } from "#/route/situation-marks";
 import { PrimaryRouteControls, usePublishPagePalette } from "#/navigation/route-controls";
 import { useSurfaceHost } from "#/navigation/surface-host";
+import { Ledger } from "#/navigation/ledger";
+import { LEDGER_PRESENTATIONS } from "#/navigation/ledger-model";
 import { chatManifest } from "#/chat/manifest";
 import { readThreadTarget } from "#/chat/thread-navigation";
 import "#/workbench/lens.css";
@@ -77,7 +80,12 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
     measure();
     return () => observer.disconnect();
   }, []);
-  const compact = useSurfaceHost().surface === "tray";
+  const compact = useSurfaceHost().shell.mount === "compact";
+  // The tray's Inbox: with no thread in the address, the body is the open-work ledger.
+  const addressedThread = useRouterState({
+    select: (state) => (state.location.search as { thread?: string }).thread,
+  });
+  const inbox = compact && !addressedThread;
   const {
     store,
     chat,
@@ -94,7 +102,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
     cancel,
     newThread,
     forkThread,
-    newRefusal,
+    sendRefusal,
     missingThread,
     draftTarget,
     openThread,
@@ -126,7 +134,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
         cancel,
         newThread: () => newThread(),
         forkThread: () => forkThread(),
-        newRefusal,
+        sendRefusal,
         promptCapabilities: chat.promptCapabilities,
         providerName: chat.providerName,
         draftTarget,
@@ -139,7 +147,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
       cancel,
       newThread,
       forkThread,
-      newRefusal,
+      sendRefusal,
       chat.promptCapabilities,
       chat.providerName,
       draftTarget,
@@ -160,7 +168,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
     if (await deleteThread(id)) setDeletedThreadIds((previous) => new Set([...previous, id]));
   };
   const paletteOpen = useAtomValue(store.atoms.paletteOpen);
-  usePublishPagePalette(handle.manifest.key, paletteOpen);
+  usePublishPagePalette(handle.manifest.key, paletteOpen, store.actions.setPaletteOpen);
   const sideOpen = useAtomValue(store.atoms.sideOpen);
   const pluginOpen = useAtomValue(store.atoms.pluginOpen);
   useEffect(() => {
@@ -390,7 +398,22 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
                         },
                       }
                 }
-                start={chatColumn}
+                start={
+                  inbox ? (
+                    <Ledger
+                      presentation={LEDGER_PRESENTATIONS.tray}
+                      head={
+                        <p className="m-0 flex justify-end px-2 py-1 hairline-b">
+                          <Button label="Start a new Pea thread" onClick={() => void newThread()}>
+                            New thread
+                          </Button>
+                        </p>
+                      }
+                    />
+                  ) : (
+                    chatColumn
+                  )
+                }
                 end={
                   !compact && plugin ? (
                     <Pane flush id="plugin">

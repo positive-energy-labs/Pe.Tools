@@ -1,18 +1,19 @@
 import { z } from "zod";
-import { currentCaller, requireHuman } from "./control.ts";
+import { matchPeRoute } from "@pe/agent-contracts/pe-api";
 import type { createContributionContent } from "./pe-routes.ts";
 export function createPluginsHandler(content: ReturnType<typeof createContributionContent>) {
   return async (request: Request) => {
-    const caller = currentCaller();
+    const declared = matchPeRoute(request.method, new URL(request.url).pathname);
+    if (!declared || declared.route.owner !== "plugins")
+      return Response.json({ error: "Unknown plugin route" }, { status: 404 });
     await content.lifecycle.ready;
     const json = (value: unknown, status = 200) => Response.json(value, { status });
     if (request.method === "GET") {
       await content.lifecycle.refresh();
       return json(content.lifecycle.inventory());
     }
-    requireHuman(caller, "/pe/plugins", "manage plugin lifecycle");
     await content.lifecycle.refresh();
-    const id = decodeURIComponent(new URL(request.url).pathname.slice("/pe/plugins/".length));
+    const id = declared.params.id;
     if (!content.lifecycle.inventory().some((p) => p.id === id))
       return json({ error: "Unknown plugin" }, 404);
     if (request.method === "DELETE") await content.lifecycle.remove(id);

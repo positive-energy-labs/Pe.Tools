@@ -32,7 +32,7 @@ describe("the declared host door", () => {
     ).rejects.toMatchObject({ status: 409, message: "No pending question" });
     expect(matchPeRoute("POST", "/pe/threads/t/question")?.id).toBe("thread.question");
   });
-  it("every route has schemas, a principal, and a unique method/path", () => {
+  it("access-085: every route has schemas, principal, permission and a unique method/path", () => {
     const signatures = Object.values(peRoutes).map((r) => `${r.method} ${r.path}`);
     expect(new Set(signatures).size).toBe(signatures.length);
     for (const route of Object.values(peRoutes)) {
@@ -40,7 +40,17 @@ describe("the declared host door", () => {
       expect(route.output).toBeDefined();
       expect(route.error).toBeDefined();
       expect(route.principal).toBeDefined();
+      expect(route.permission).toBeDefined();
     }
+  });
+  it("access-084: administration and grant policy are declared on the route", () => {
+    expect(peRoutes["provider.login"].permission).toBe("admin");
+    expect(peRoutes["plugin.update"].permission).toBe("admin");
+    expect(peRoutes["plugin.remove"].permission).toBe("admin");
+    expect(peRoutes["plugins.list"].permission).toBe("read");
+    expect(peRoutes["thread.export"].permission).toBe("read");
+    expect(peRoutes["scope.set"].permission).toBe("grant");
+    expect(peRoutes["page.act"].principal).toBe("human-or-page");
   });
 });
 
@@ -98,7 +108,7 @@ it("dynamic callers can consume declared streams and assets without JSON decodin
     "http://host",
     async () => new Response("data: []\n\n", { headers: { "content-type": "text/event-stream" } }),
   );
-  const result = await client.invoke("threads.stream", {});
+  const result = await client.invoke("resources.stream", {});
   expect(result).toBeInstanceOf(Response);
   expect(await (result as Response).text()).toBe("data: []\n\n");
 });
@@ -136,4 +146,41 @@ it("an empty Page text update crosses the contract", async () => {
     },
   );
   expect(answer.status).toBe(204);
+});
+
+it("route consumers cannot recreate Pe paths beside the contract", () => {
+  const root = join(import.meta.dirname, "../../../apps/host");
+  for (const file of [
+    "src/plugins-handler.ts",
+    "src/thread-export.ts",
+    "src/resource-adapters.ts",
+    "src/demo-owner.ts",
+    "src/pages-route.ts",
+    "tests/schedule-test-fixture.ts",
+  ]) {
+    expect(readFileSync(join(root, file), "utf8"), file).not.toMatch(/\/pe\//);
+  }
+});
+
+it("admission metadata: one explicit permission per route, and share stays local", () => {
+  for (const route of Object.values(peRoutes)) {
+    expect(typeof route.permission).toBe("string");
+    expect(typeof route.localOnly).toBe("boolean");
+  }
+  expect(peRoutes["providers.add"]).toMatchObject({
+    principal: "human",
+    permission: "admin",
+    localOnly: false,
+  });
+  expect(peRoutes["share.set"]).toMatchObject({
+    principal: "human",
+    permission: "admin",
+    localOnly: true,
+  });
+  expect(peRoutes["page.bind"]).toMatchObject({
+    principal: "human-or-pea",
+    permission: "human-or-pea",
+    localOnly: false,
+  });
+  expect(peRoutes["scope.revoke"]).toMatchObject({ principal: "human", permission: "human" });
 });

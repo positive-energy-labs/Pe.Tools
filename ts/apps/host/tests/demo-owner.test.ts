@@ -127,8 +127,8 @@ test.each(["success", "token-conflict", "publication-refusal"] as const)(
     const path = await f.owner.settings.memberPath(f.owner.member!);
     const file = JSON.parse(await readFile(path, "utf8"));
     expect(file.family.name).toBe(scenario === "token-conflict" ? "Box" : "Saved Demo");
-    const stored = JSON.parse(await readFile(join(f.owner.root, "journal.json"), "utf8"));
-    expect(JSON.stringify(stored)).toContain(`${f.owner.id}:save`);
+    const stored = await readFile(join(f.owner.root, "journal.json"), "utf8");
+    expect(stored).toContain(`${f.owner.id}:save`);
     if (scenario === "publication-refusal")
       expect(
         JSON.stringify(await f.owner.work.read(f.owner.scope, settingsRouteState.route)),

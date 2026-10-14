@@ -15,6 +15,8 @@ import { expect, test } from "vite-plus/test";
 import { emptyThreadHead, emptyThreadLifecycle, type HarnessEvent } from "@pe/agent-contracts";
 import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { createHarnessThreads } from "../src/harness/threads.ts";
+import { exportThread } from "../src/thread-export.ts";
+import { HostLog } from "../src/host-log.ts";
 import type { Providers } from "../src/harness/providers.ts";
 
 const sha = (bytes: string | Uint8Array) => createHash("sha256").update(bytes).digest("hex");
@@ -87,7 +89,11 @@ test("public export pins the full durable thread, including tool results, withou
   const log = events.map((event) => JSON.stringify(event)).join("\r\n") + "\r\n";
   writeFileSync(join(dir, "meta.json"), meta);
   writeFileSync(join(dir, "events.jsonl"), log);
+  const durableLog = new HostLog(join(root, ".log"));
+  for (const event of events) durableLog.append({ kind: "thread", thread: "thread-1", event });
+  durableLog.append({ kind: "thread", thread: "unrelated", event: events[0]! });
   const host = createHarnessThreads({
+    log: durableLog,
     root,
     worldRoot: root,
     mcpServer: () => {
@@ -112,6 +118,14 @@ test("public export pins the full durable thread, including tool results, withou
     expect(archive.metadata).toEqual(JSON.parse(meta));
     expect(archive.events).toEqual(events);
     expect(archive.lastSeq).toBe(4);
+    expect(archive.hostLog).toEqual({
+      cursor: 5,
+      gap: false,
+      entries: durableLog.read(
+        0,
+        (entry) => entry.event.kind === "thread" && entry.event.thread === "thread-1",
+      ).entries,
+    });
     for (const [name, bytes] of [
       ["meta.json", meta],
       ["events.jsonl", log],
@@ -156,5 +170,37 @@ test("public export pins the full durable thread, including tool results, withou
     await host.close();
     rmSync(root, { recursive: true, force: true });
     rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test("export reports host retention gaps and oversize pointers without truncating the transcript", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pe-export-retention-"));
+  try {
+    mkdirSync(join(root, "thread"));
+    writeFileSync(join(root, "thread/meta.json"), JSON.stringify({ id: "thread" }));
+    const log = new HostLog(join(root, ".log"), { segmentBytes: 1, segments: 1, entryBytes: 256 });
+    const events: HarnessEvent[] = [1, 2].map((seq) => ({
+      kind: "prompt",
+      seq,
+      at: new Date().toISOString(),
+      turnId: `turn-${seq}`,
+      text: "full tool context ".repeat(100),
+    }));
+    writeFileSync(
+      join(root, "thread/events.jsonl"),
+      events.map((e) => JSON.stringify(e) + "\n").join(""),
+    );
+    for (const event of events) log.append({ kind: "thread", thread: "thread", event });
+    const archive = await exportThread(root, "thread", log).json();
+    expect(archive.events).toEqual(events);
+    expect(archive.hostLog).toMatchObject({
+      cursor: 2,
+      gap: true,
+      entries: [
+        { id: 2, event: { kind: "oversize", of: "thread", ref: { thread: "thread", seq: 2 } } },
+      ],
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });

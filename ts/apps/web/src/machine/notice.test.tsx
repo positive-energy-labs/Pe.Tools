@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import type { MachineNotice } from "@pe/agent-contracts";
+import type { NativeMessageEvent } from "@pe/host-contracts/native-adapter";
 
 import { MACHINE_SEEDS } from "#/open/seeds";
 
@@ -62,9 +63,16 @@ const level: MachineNotice = {
 };
 
 let postMessage: ReturnType<typeof vi.fn<(message: string) => void>>;
+let listeners: Set<(event: NativeMessageEvent) => void>;
 const sent = (type: string) => postMessage.mock.calls.some(([m]) => JSON.parse(m).type === type);
 const show = (...notices: MachineNotice[]) =>
-  act(() => notices.forEach((notice) => window.peNotice?.(notice)));
+  act(() =>
+    notices.forEach((notice) =>
+      listeners.forEach((receive) =>
+        receive(new MessageEvent("message", { data: { type: "notice", notice } })),
+      ),
+    ),
+  );
 const card = () => screen.queryByRole("status", { name: "notice" });
 beforeEach(() => {
   vi.stubGlobal(
@@ -75,7 +83,14 @@ beforeEach(() => {
     },
   );
   postMessage = vi.fn<(message: string) => void>();
-  window.chrome = { webview: { postMessage } };
+  listeners = new Set();
+  window.chrome = {
+    webview: {
+      postMessage,
+      addEventListener: (_event, receive) => void listeners.add(receive),
+      removeEventListener: (_event, receive) => void listeners.delete(receive),
+    },
+  };
   for (const door of [permission, question, prompt, cancel]) door.mockReset();
 });
 afterEach(() => {
@@ -86,10 +101,22 @@ afterEach(() => {
 });
 
 test("the card tells the tray it can take notices only once it listens", () => {
-  expect(window.peNotice).toBeUndefined();
+  expect(listeners.size).toBe(0);
   render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture />);
-  expect(window.peNotice).toBeTypeOf("function");
+  expect(listeners.size).toBe(1);
   expect(postMessage).toHaveBeenCalledWith(JSON.stringify({ type: "notice-ready" }));
+});
+
+test("malformed native notices never enter the card", () => {
+  render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture />);
+  act(() =>
+    listeners.forEach((receive) =>
+      receive({ data: { type: "notice", notice: { id: "bad", revision: 1 } } }),
+    ),
+  );
+  expect(card()).toBeNull();
+  show(revit);
+  expect(screen.getByText("1/1")).toBeTruthy();
 });
 
 test("one card pages every pending item, and a new notice appends to the open card", () => {
