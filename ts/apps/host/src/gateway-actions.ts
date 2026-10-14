@@ -9,7 +9,7 @@ import {
   type Caller,
   type ExecutionTarget,
 } from "@pe/agent-contracts";
-import { admitScript, Refused } from "./control.ts";
+import { admitScript, consentedRead, Refused } from "./control.ts";
 import { hostOperationDefinitionSchema } from "@pe/host-contracts/contracts";
 import {
   isTsOnlyOperationKey,
@@ -96,6 +96,10 @@ export async function admitGatewayAction(
   resume = false,
 ) {
   const admission = actionAdmissionSchema.parse(raw);
+  const target = admission.destination.kind === "document" ? admission.destination.ref : undefined;
+  const readTarget = consentedRead(crossing.caller, admission.key, admission.input, target)
+    ? target
+    : undefined;
   if (admission.kind !== "operation") throw refused("Operation admission kind required");
   if (Object.keys(admission.bases).length)
     throw refused("Independent operations do not consume Work bases");
@@ -172,6 +176,7 @@ export async function admitGatewayAction(
             openId: doc.openId,
           })) ?? [],
           "/actions",
+          readTarget,
         );
       const process = await readOriginalProcess(
         session.processId,
@@ -232,6 +237,7 @@ export async function admitGatewayAction(
                 openId: doc.openId,
               })) ?? [],
               "script step begin",
+              readTarget,
             );
           if (admission.destination.kind === "host") return local(admission.key, input);
           const target = admission.destination;

@@ -8,9 +8,11 @@ import { createPeClient } from "@pe/agent-contracts/pe-api";
  * questions as the response; the next `--thread` prompt carries the answers. Prints `{ ok, host,
  * threadId, harness, model, stopReason, response }`.
  */
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import type { HarnessEvent, HarnessId } from "@pe/agent-contracts";
+import type { HarnessEvent, HarnessId, ReadingFrame } from "@pe/agent-contracts";
+import { followThread } from "@pe/agent-contracts/chat-state";
 import { hostProcessIdentity, productInstallLayout } from "@pe/host-contracts/contracts";
 import {
   checkoutLayout,
@@ -96,8 +98,7 @@ export async function runPeaPromptTurn(request: PeaPromptRequest): Promise<PeaPr
         body: { providerId: request.harness ?? "claude", title: "Pea prompt" },
       });
   const params = { id: thread.id };
-  const after = thread.lastSeq;
-  trace(`thread ${thread.id} harness=${thread.harness} after=${after}`);
+  trace(`thread ${thread.id} harness=${thread.harness} cursor=${thread.cursor}`);
 
   const result: PeaPromptResult = {
     ok: false,
@@ -121,12 +122,14 @@ export async function runPeaPromptTurn(request: PeaPromptRequest): Promise<PeaPr
       await client.call("thread.model", { params, body: { modelId: request.modelId } });
     const { turnId } = await client.call("thread.prompt", {
       params,
-      body: { text: request.prompt },
+      body: { id: randomUUID(), text: request.prompt },
     });
     trace(`turn ${turnId}`);
-    // The log is durable and replayable from `after`, so following it after the POST misses nothing.
-    for await (const event of streamEvents(
-      client.url("thread.stream", { params, query: { after } }),
+    // The host log is durable and replays from the thread's cursor, so following it after the
+    // POST misses nothing.
+    for await (const event of followEvents(
+      client,
+      thread,
       AbortSignal.any([signal, streamAbort.signal]),
     )) {
       trace(`event ${event.kind}`);
@@ -215,9 +218,24 @@ function renderQuestions(message: string, schema: Record<string, unknown>): stri
   return lines.join("\n");
 }
 
-async function* streamEvents(url: string, signal: AbortSignal): AsyncGenerator<HarnessEvent> {
+/**
+ * The thread's events after `from`, by its `thread` Reading over the host log and the shared rule
+ * (`followThread`). A gap or a hole re-reads the body and yields what it holds past the last seq.
+ */
+async function* followEvents(
+  client: ReturnType<typeof createPeClient>,
+  from: { id: string; cursor: number; lastSeq: number },
+  signal: AbortSignal,
+): AsyncGenerator<HarnessEvent> {
+  const url = client.url("resources.stream", {
+    query: {
+      keys: JSON.stringify([{ kind: "thread", thread: from.id }]),
+      after: String(from.cursor),
+    },
+  });
   const response = await fetch(url, { signal, headers: { accept: "text/event-stream" } });
   if (!response.ok || !response.body) throw new Error(`GET ${url} -> ${response.status}`);
+  let last = from.lastSeq;
   let buffer = "";
   for await (const text of response.body.pipeThrough(new TextDecoderStream())) {
     buffer += text;
@@ -229,7 +247,18 @@ async function* streamEvents(url: string, signal: AbortSignal): AsyncGenerator<H
         .map((line) => line.slice(5).trimStart())
         .join("\n");
       buffer = buffer.slice(end + 2);
-      if (data) yield JSON.parse(data) as HarnessEvent;
+      if (!data) continue;
+      const step = followThread(last, JSON.parse(data) as ReadingFrame);
+      if (step.kind === "apply") {
+        last = step.event.seq;
+        yield step.event;
+      } else if (step.kind === "reread") {
+        const body = await client.call("thread.get", { params: { id: from.id } });
+        for (const event of body.events.filter((candidate) => candidate.seq > last)) {
+          last = event.seq;
+          yield event;
+        }
+      }
     }
   }
 }

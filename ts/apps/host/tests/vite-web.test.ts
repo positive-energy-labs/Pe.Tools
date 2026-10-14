@@ -121,9 +121,10 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
     expect(await fetch(`${browser}/pe/access`).then((r) => r.json())).toEqual(
       await fetch(`${backend}/pe/access`).then((r) => r.json()),
     );
-    const events = await fetch(`${browser}/events`);
+    const world = encodeURIComponent(JSON.stringify([{ kind: "world" }]));
+    const events = await fetch(`${browser}/pe/resources?keys=${world}`);
     const reader = events.body!.getReader();
-    expect(new TextDecoder().decode((await reader.read()).value)).toContain(": open");
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain('"kind":"gap"');
     await reader.cancel();
     const bridge = new WebSocket(browser.replace("http:", "ws:") + "/api/bridge");
     await new Promise<void>((resolve, reject) => {

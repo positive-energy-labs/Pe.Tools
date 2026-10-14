@@ -53,7 +53,7 @@ it("a draft holding only mentions is a prompt: the composer, the route and the h
   const draft = { text: " ", attachments: [], mentions: [mention] };
   expect(emptyPrompt(draft)).toBeNull();
   expect(send.ready(ctx, draft as never)).toBeNull();
-  expect(promptRequestSchema.safeParse(draft).success).toBe(true);
+  expect(promptRequestSchema.safeParse({ id: crypto.randomUUID(), ...draft }).success).toBe(true);
   expect(emptyPrompt({ ...draft, mentions: [] })).toBe("Enter a prompt, attachment or mention");
 });
 
@@ -74,10 +74,15 @@ it("the client posts the attachments in the prompt body the host parses", async 
   const bodies: unknown[] = [];
   vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
     bodies.push(JSON.parse(String(init.body)));
-    return Response.json({ turnId: "t1" });
+    return Response.json({ turnId: "t1", state: "running" });
   });
   await harnessClient("http://host").prompt("t", { text: "look", attachments: [png, csv] });
-  expect(promptRequestSchema.parse(bodies[0])).toEqual({ text: "look", attachments: [png, csv] });
+  expect(promptRequestSchema.parse(bodies[0])).toEqual({
+    id: expect.any(String),
+    delivery: "steer",
+    text: "look",
+    attachments: [png, csv],
+  });
 });
 
 it("the user turn draws a prompt event's image as a thumbnail and its text file as a chip", () => {

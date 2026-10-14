@@ -213,7 +213,7 @@ test("a background outcome cannot reveal a closed drawer or leak its body-portal
 test("the real page picker opens an unpinned Situation, owns first Escape and releases its hold", async () => {
   function Body() {
     const [open, setOpen] = useState(false);
-    usePublishPagePalette("family", open);
+    usePublishPagePalette("family", open, setOpen);
     return (
       <>
         <Button label="Open page picker" onClick={() => setOpen(true)}>

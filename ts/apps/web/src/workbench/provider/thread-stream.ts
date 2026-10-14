@@ -46,7 +46,7 @@ export function chatLoading(hostStatus: Reading<unknown>, threadPending: boolean
 }
 
 /**
- * One thread: its body on mount, then the SSE tail from the body's last seq. Live events append
+ * One thread: its body on mount, then its `thread` Reading from the body's host log cursor. Live events append
  * to one current-thread slot; the body re-reads on events that change its own fields, and the
  * two merge by seq so neither replays the other.
  */
@@ -74,13 +74,16 @@ export function useThreadStream(options: {
   const stored: ThreadBody | undefined = body._tag === "Success" ? body.value : undefined;
   const storedRef = useRef(stored);
   storedRef.current = stored;
-  const loaded = stored !== undefined;
+  // A re-read body carries a new cursor: the follow restarts from it, and seq skips the overlap.
+  const cursor = stored?.cursor;
   useEffect(() => {
-    if (threadId === null || !loaded) return;
+    if (threadId === null || cursor === undefined) return;
     return streamThread({
       origin,
       threadId,
-      after: lastSeq(storedRef.current?.events ?? []),
+      cursor,
+      lastSeq: lastSeq(storedRef.current?.events ?? []),
+      onReread: invalidate,
       onEvent: (event) => {
         setLive((previous) =>
           previous.key === key
@@ -95,7 +98,7 @@ export function useThreadStream(options: {
       onFault: (fault) =>
         setLive((previous) => (previous.key === key ? { ...previous, fault } : previous)),
     });
-  }, [invalidate, key, loaded, origin, threadId]);
+  }, [cursor, invalidate, key, origin, threadId]);
 
   const chat = useMemo<ChatState>(() => {
     if (!stored) return EMPTY;

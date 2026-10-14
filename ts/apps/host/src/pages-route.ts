@@ -65,6 +65,7 @@ import {
   resolvePinned,
   unboundPage,
   type Caller,
+  type DocumentRef,
   type PageBinding,
   type PageChoice,
   type PageTargetReading,
@@ -82,6 +83,7 @@ import {
   mintPageDoor,
   pageActDoor,
   pageKeyOf,
+  readsOnly,
   Refused,
   documentAcquisition,
   threadHead,
@@ -624,12 +626,14 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
   async function cross(
     page: string,
     slot: PageChoice,
+    humanBound: boolean,
+    target: DocumentRef | null,
     door: string,
     path: "/call" | "/actions",
     headers: Record<string, string>,
     body: unknown,
   ) {
-    const minted = mintPageDoor(page, slot, door);
+    const minted = mintPageDoor(page, slot, door, humanBound, target);
     try {
       return await live.forward(
         path,
@@ -653,7 +657,10 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     const who = doorRefusal(at, caller);
     if (who) return refused(who);
     const raw: unknown = await request.json().catch(() => undefined);
-    const slot = (await bindingOf(dir)).slots.default;
+    const binding = await bindingOf(dir);
+    const slot = binding.slots.default;
+    // Only a person's pin consents to ReadOnly on its resolved document; thread bindings need rw.
+    const humanBound = binding.boundBy.default === "human" && slot.kind === "pinned";
     try {
       if (verb === "call") {
         const body = callBodySchema.safeParse(raw);
@@ -664,6 +671,8 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
         return await cross(
           page,
           slot,
+          humanBound,
+          ref,
           at,
           "/call",
           ref
@@ -683,13 +692,15 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
       if (slot.kind === "none") return refused(unboundRefusal(at));
       const resolution = resolveSlot(slot, await live.sessions());
       if (resolution.kind !== "resolved") return unresolved(at, resolution);
-      // Decided here first, so a refusal names this door; `/actions` decides again under the same slot.
-      admitPage(slot, resolution.target, at);
       const action = await operationOf(body.data.key, body.data.input);
       if ("problem" in action) return problem(400, action.problem);
+      // Decided here first, so a refusal names this door; `/actions` decides again under the same slot.
+      admitPage(slot, resolution.target, at, humanBound && readsOnly(action.key, action.input));
       return await cross(
         page,
         slot,
+        humanBound,
+        resolution.target.kind === "document" ? resolution.target.ref : null,
         at,
         "/actions",
         {},
@@ -773,7 +784,10 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     }
     const current = await bindingOf(dir);
     await mkdir(join(dir, ".state"), { recursive: true });
-    const next: PageBinding = { slots: { ...current.slots, default: slot } };
+    const next: PageBinding = {
+      slots: { ...current.slots, default: slot },
+      boundBy: { ...current.boundBy, default: caller.kind === "human" ? "human" : "agent" },
+    };
     await writeFile(bindingFile(dir), JSON.stringify(next, null, 2), "utf8");
     stateOf(dir).signal("binding", {});
     return json(await target(page, dir));

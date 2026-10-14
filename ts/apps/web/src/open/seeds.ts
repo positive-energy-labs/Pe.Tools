@@ -707,6 +707,7 @@ const thread = (
   updatedAt,
   modelId: null,
   lastSeq: activity.lastSeq,
+  cursor: 0,
   head: {
     ...emptyThreadHead,
     hostNow: "1970-01-01T00:00:00.000Z",

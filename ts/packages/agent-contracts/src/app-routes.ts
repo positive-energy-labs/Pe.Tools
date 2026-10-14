@@ -388,8 +388,11 @@ export interface SurfaceShell {
   home: { path: string; label: string };
   /** Route icons after Home. Without a picker, the pressed icon is the location. */
   icons: readonly { route: string; label: string; iconKey: "Inbox" | "MessageSquare" | "Server" }[];
-  /** The route field and its Ctrl+Shift+K global search. */
-  picker: boolean;
+  /**
+   * The bar's field: `global` is the route field that opens the Ctrl+Shift+K open-work ledger;
+   * `page` shows the route's name and opens its own Ctrl+K page palette, with no global search.
+   */
+  field: "global" | "page";
   /** Settings door: the quick popover, or the Settings route. */
   settings: "quick" | "route";
   /** Back and Forward: the browser's own, or drawn in the bar. */
@@ -401,7 +404,7 @@ const fullShell = {
   routes: "all",
   home: { path: "/", label: "Home / tool directory" },
   icons: [{ route: "chat", label: "Open Pea", iconKey: "MessageSquare" }],
-  picker: true,
+  field: "global",
   settings: "quick",
 } as const;
 
@@ -416,7 +419,7 @@ export const SURFACE_SHELLS: Readonly<Record<AppSurface, SurfaceShell>> = {
       { route: "chat", label: "Pea Inbox", iconKey: "Inbox" },
       { route: "machine", label: "Machine", iconKey: "Server" },
     ],
-    picker: false,
+    field: "page",
     settings: "route",
     history: "window",
   },

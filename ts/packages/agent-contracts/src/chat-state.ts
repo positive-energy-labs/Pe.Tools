@@ -5,6 +5,7 @@ import {
   type HarnessThreadBody,
   type Mention,
   type PromptAttachment,
+  type ReadingFrame,
   emptyThreadHead,
 } from "./index.ts";
 import { stringify } from "./code-format.ts";
@@ -27,6 +28,7 @@ export function emptyChatState(): ChatState {
     traits: [],
     running: false,
     lastSeq: 0,
+    cursor: 0,
     session: "closed",
     promptCapabilities: null,
     events: [],
@@ -34,6 +36,23 @@ export function emptyChatState(): ChatState {
     lifecycle: emptyThreadLifecycle(),
     activity: { state: "idle", pending: 0, lastSeq: 0, message: null },
   };
+}
+
+export type ThreadFollow =
+  | { kind: "apply"; event: HarnessEvent }
+  | { kind: "skip" }
+  | { kind: "reread" };
+/**
+ * The one rule every client follows the host log by: a `thread` Reading frame (`reading.ts`)
+ * against the last `seq` its state holds. An event applies once, in `seq` order; a repeat is
+ * skipped. A gap frame, or a hole in `seq`, says re-read the body and follow from its `cursor`.
+ */
+export function followThread(lastSeq: number, frame: ReadingFrame): ThreadFollow {
+  if (frame.kind === "gap") return { kind: "reread" };
+  if (frame.kind !== "event") return { kind: "skip" };
+  const event = frame.value as HarnessEvent;
+  if (event.seq <= lastSeq) return { kind: "skip" };
+  return event.seq === lastSeq + 1 ? { kind: "apply", event } : { kind: "reread" };
 }
 
 /** `result` is whatever the call has produced so far: partial while running, raw on failure. */
@@ -378,7 +397,7 @@ interface Fold {
 }
 
 /** The host's error for a turn its own restart cut off (apps/host src/harness/threads.ts). */
-const HOST_RESTARTED = "host restarted during this turn";
+export const HOST_RESTARTED = "host restarted during this turn";
 
 /** Every selector reads one fold per state object. */
 const folds = new WeakMap<ChatState, Fold>();

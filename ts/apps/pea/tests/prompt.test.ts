@@ -72,9 +72,13 @@ function append(...drafts: Draft[]): void {
   for (const draft of drafts) {
     const event = { seq: log.length + 1, at: new Date().toISOString(), ...draft } as HarnessEvent;
     log.push(event);
-    for (const response of subscribers) response.write(`data: ${JSON.stringify(event)}\n\n`);
+    for (const response of subscribers) response.write(frame(event));
   }
 }
+
+/** One `thread` Reading frame; in this one-thread host the log id is the seq. */
+const frame = (event: HarnessEvent) =>
+  `id: ${event.seq}\ndata: ${JSON.stringify({ kind: "event", key: "t1", value: event, id: event.seq })}\n\n`;
 
 const chunk = (turnId: string, text: string): Draft => ({
   kind: "update",
@@ -88,6 +92,7 @@ const summary = (): HarnessThreadSummary => ({
   head: { ...emptyThreadHead, hostNow: "1970-01-01T00:00:00.000Z", grantView: null },
   lifecycle: emptyThreadLifecycle(),
   activity: { state: "idle", pending: 0, lastSeq: log.length, message: null },
+  cursor: log.length,
   id: "t1",
   harness: "codex",
   title: "Pea prompt",
@@ -134,7 +139,7 @@ const server = createServer(async (request, response) => {
     const turnId = `turn-${++turns}`;
     if (JSON.parse(body).text === "hang") {
       append({ kind: "prompt", turnId, text: "hang" });
-      return json({ turnId });
+      return json({ turnId, state: "running" });
     }
     if (JSON.parse(body).text === "ask") {
       append({ kind: "prompt", turnId, text: "ask" }, chunk(turnId, "Two decisions:"), {
@@ -157,7 +162,7 @@ const server = createServer(async (request, response) => {
           },
         },
       });
-      return json({ turnId });
+      return json({ turnId, state: "running" });
     }
     append(
       { kind: "prompt", turnId, text: JSON.parse(body).text },
@@ -177,7 +182,7 @@ const server = createServer(async (request, response) => {
         ],
       },
     );
-    return json({ turnId });
+    return json({ turnId, state: "running" });
   }
   if (route === "POST /pe/threads/t1/permission") {
     const { requestId, optionId } = JSON.parse(body);
@@ -190,11 +195,12 @@ const server = createServer(async (request, response) => {
     );
     return json({ ok: true });
   }
-  if (route === "GET /pe/threads/t1/stream") {
+  if (route === "GET /pe/resources") {
+    expect(JSON.parse(url.searchParams.get("keys")!)).toEqual([{ kind: "thread", thread: "t1" }]);
     response.writeHead(200, { "content-type": "text/event-stream" });
     const after = Number(url.searchParams.get("after"));
     for (const event of log.filter((candidate) => candidate.seq > after))
-      response.write(`data: ${JSON.stringify(event)}\n\n`);
+      response.write(frame(event));
     subscribers.add(response);
     response.on("close", () => subscribers.delete(response));
     return;

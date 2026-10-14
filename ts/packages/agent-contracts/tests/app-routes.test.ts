@@ -71,11 +71,11 @@ describe("application route identities and surfaces", () => {
         { route: "chat", label: "Pea Inbox", iconKey: "Inbox" },
         { route: "machine", label: "Machine", iconKey: "Server" },
       ],
-      picker: false,
+      field: "page",
       settings: "route",
       history: "window",
     });
-    expect([SURFACE_SHELLS.web.picker, SURFACE_SHELLS.web.settings]).toEqual([true, "quick"]);
+    expect([SURFACE_SHELLS.web.field, SURFACE_SHELLS.web.settings]).toEqual(["global", "quick"]);
     expect([SURFACE_SHELLS.web.history, SURFACE_SHELLS.pwa.history]).toEqual(["browser", "window"]);
     for (const [surface, shell] of Object.entries(SURFACE_SHELLS)) {
       const doors = [shell.home.path, ...shell.icons.map((icon) => routePath(icon.route))];

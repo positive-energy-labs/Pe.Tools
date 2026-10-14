@@ -305,10 +305,18 @@ export function grantDead(
 }
 export const grantExpiry = (from: number) => new Date(from + GRANT_MS).toISOString();
 
-/** K9: arbitrary code sees the entire Revit process; every open lifetime needs write authority. */
-export function admitScript(caller: Caller, documents: readonly DocumentRef[], door: string): void {
+/** K9: a human pin consents to a ReadOnly target; every other lifetime still needs write authority. */
+export function admitScript(
+  caller: Caller,
+  documents: readonly DocumentRef[],
+  door: string,
+  readTarget?: DocumentRef,
+): void {
   if (caller.kind === "human") return;
+  const consent = caller.kind === "page" ? pageDoors.get(caller)?.readConsent : null;
   const ungranted = documents.filter((ref) => {
+    if (consent && readTarget && sameRef(consent, readTarget) && sameRef(ref, readTarget))
+      return false;
     try {
       admitCrossing(caller, { kind: "document", ref }, door);
       return false;
@@ -333,13 +341,40 @@ const deadReason = (code: "grant.revoked" | "grant.expired", grant: HeadGrant | 
 /* ── The crossing ─────────────────────────────────────────────────────────────────────── */
 
 /**
- * Admit one crossing at `door`, or throw `Refused`. Null means the crossing touches no Revit
- * session (a host leaf) or is a lifecycle selection whose census belongs to the Instances action.
+ * A script whose requested mode is ReadOnly (the contract default). Revit rolls back its changes to
+ * the target document, but the policy does not stop a library's commit on another document, files
+ * or the network, so it is a read only under a person's consent: a human caller, or a Page pinned
+ * by a human to this exact document. For every other caller it stays a write. NoTransaction and
+ * WriteTransaction are always writes.
+ */
+export const readsOnly = (key: string, input: unknown): boolean =>
+  key === "scripting.execute" &&
+  ((input as { permissionMode?: unknown } | null)?.permissionMode ?? "ReadOnly") === "ReadOnly";
+
+/** A person's pin is read consent for that exact resolved lifetime, never its process or a thread. */
+export const consentedRead = (
+  caller: Caller,
+  key: string,
+  input: unknown,
+  target?: DocumentRef,
+): boolean => {
+  const consent = caller.kind === "page" ? pageDoors.get(caller)?.readConsent : null;
+  return (
+    readsOnly(key, input) &&
+    (caller.kind === "human" || !!(consent && target && sameRef(consent, target)))
+  );
+};
+
+/**
+ * Admit one crossing at `door`, or throw `Refused`. Null means the crossing needs no basis: a
+ * consented read, a host leaf, or a lifecycle selection whose census belongs to the Instances
+ * action. `scriptReads` is `readsOnly`; only a human-pinned Page's exact target turns it into a read.
  */
 export function admitCrossing(
   caller: Caller,
   destination: ExecutionTarget,
   door: string,
+  scriptReads = false,
 ): Basis | null {
   if (caller.kind === "anonymous")
     throw refuse(
@@ -355,7 +390,12 @@ export function admitCrossing(
         door,
         `Pages act through ${pageActDoor(caller.page)}, not ${door}.`,
       );
-    return admitPage(admitted.slot, destination, admitted.door);
+    const reads =
+      scriptReads &&
+      destination.kind === "document" &&
+      admitted.readConsent !== null &&
+      sameRef(admitted.readConsent, destination.ref);
+    return admitPage(admitted.slot, destination, admitted.door, reads);
   }
   if (caller.kind === "human") return { kind: "human" };
   if (caller.kind === "service" || caller.kind === "external-mcp")
@@ -415,6 +455,7 @@ export function admitPage(
   slot: PageChoice,
   destination: ExecutionTarget,
   door: string,
+  reads = false,
 ): Basis | null {
   if (slot.kind === "none")
     throw refuse(
@@ -422,7 +463,7 @@ export function admitPage(
       door,
       `Refused at ${door}: this Page has no target. Bind it to a thread or pin a document from the chip.`,
     );
-  if (destination.kind === "host" || destination.kind === "sdk-session") return null;
+  if (reads || destination.kind === "host" || destination.kind === "sdk-session") return null;
   const acquired = acquisitionBasis(destination);
   if (acquired) return acquired;
   const session = destination.kind === "session" ? destination.session : destination.ref.session;
@@ -441,12 +482,25 @@ export function admitPage(
  * request. Only a caller minted here is admitted under a slot; a page's own browser request to
  * `/actions` (a Referer-minted `page`) is `page.use-page-door`.
  */
-const pageDoors = new WeakMap<Caller, { slot: PageChoice; door: string }>();
-export function mintPageDoor(page: string, slot: PageChoice, door: string) {
+const pageDoors = new WeakMap<
+  Caller,
+  { slot: PageChoice; door: string; readConsent: DocumentRef | null }
+>();
+export function mintPageDoor(
+  page: string,
+  slot: PageChoice,
+  door: string,
+  humanBound: boolean,
+  target: DocumentRef | null,
+) {
   const caller: Caller = { kind: "page", page };
   const token = randomBytes(24).toString("base64url");
   contexts.set(token, caller);
-  pageDoors.set(caller, { slot, door });
+  pageDoors.set(caller, {
+    slot,
+    door,
+    readConsent: humanBound && slot.kind === "pinned" ? target : null,
+  });
   return { token, retire: () => retireContext(token) };
 }
 

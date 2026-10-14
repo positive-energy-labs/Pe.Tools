@@ -134,6 +134,9 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
   the payload/pattern to a file (harness Read/Grep tools where available) — see the `execute` skill.
 - Background + poll anything minutes-scale, and read `status` before any retry. (Client-kill orphans
   were field-disproven at beta.118 — the SDK reaps its own children.)
+- `git stash` is one stack shared by every worktree of this repo: a `stash pop` in one worktree applies
+  another agent's work (2026-10-13, wave C popped wave B's event-spine WIP). Never stash in a worktree;
+  commit WIP on your branch instead.
 
 ### Non-Doc Artifacts
 
