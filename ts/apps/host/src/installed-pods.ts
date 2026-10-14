@@ -4,10 +4,10 @@
  * overwritten. Callers await this before anything reads the pods root.
  */
 import { join, dirname } from "node:path";
-import { readFile, readdir } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { writeArtifact } from "./page-artifacts.ts";
-import { productPathNames } from "@pe/host-contracts/contracts";
+import { productPathNames, scriptingWorkspaceIdentity } from "@pe/host-contracts/contracts";
 import { hostOwnership, productRoot } from "./host-ownership.ts";
 import {
   archiveId,
@@ -49,9 +49,29 @@ export const importShippedPods = (
   return (firstRun ??= run(options));
 };
 
+/**
+ * The default pod: where inline scripts land their runs and traces. A fresh install has none, and
+ * an inline probe then fails before it runs ("No unique admitted pod owns output folder", Cody,
+ * 2026-10-14). Written once; an existing manifest is never touched.
+ */
+export async function ensureDefaultPod(podsRoot = productPodsRootPath()): Promise<void> {
+  const key = scriptingWorkspaceIdentity.defaultWorkspaceKey;
+  const manifest = join(podsRoot, key, "pod.json");
+  await mkdir(dirname(manifest), { recursive: true });
+  await writeFile(
+    manifest,
+    `${JSON.stringify({ schemaVersion: 2, id: key, name: key, version: "0.1.0", entrypoints: [] }, null, 2)}
+`,
+    { flag: "wx" },
+  ).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "EEXIST") throw error;
+  });
+}
+
 async function run(
   options: TransferOptions & { shippedRoot?: string | null; ledger?: string },
 ): Promise<ShippedPodsReport> {
+  await ensureDefaultPod(options.podsRoot);
   const shippedRoot = options.shippedRoot === undefined ? shippedPodsRoot() : options.shippedRoot;
   if (!shippedRoot) return { shippedRoot, outcomes: [] };
   const archives = (await readdir(shippedRoot).catch(() => [] as string[]))

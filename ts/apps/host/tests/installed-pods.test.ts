@@ -49,6 +49,7 @@ test("first boot imports the shipped pod; a restart offers nothing again, even a
   const first = await boot();
   expect(first.outcomes.map((o) => o.outcome)).toEqual(["imported"]);
   expect((await listPackages(pods)).packages.map((p) => [p.id, p.folder])).toEqual([
+    ["default", "default"],
     ["example", "example"],
   ]);
   expect(JSON.parse(await readFile(join(pods, "example", "imported.json"), "utf8")).locator).toBe(
@@ -58,7 +59,16 @@ test("first boot imports the shipped pod; a restart offers nothing again, even a
   expect((await boot()).outcomes.map((o) => o.outcome)).toEqual(["offered-before"]);
   await rm(join(pods, "example"), { recursive: true });
   expect((await boot()).outcomes.map((o) => o.outcome)).toEqual(["offered-before"]);
-  expect((await listPackages(pods)).packages).toEqual([]);
+  expect((await listPackages(pods)).packages.map((p) => p.id)).toEqual(["default"]);
+});
+
+test("every boot seeds the default pod once and never rewrites it", async () => {
+  await boot();
+  const manifest = join(pods, "default", "pod.json");
+  expect(JSON.parse(await readFile(manifest, "utf8"))).toMatchObject({ id: "default" });
+  await writeFile(manifest, '{ "mine": true }');
+  await boot();
+  expect(await readFile(manifest, "utf8")).toBe('{ "mine": true }');
 });
 
 test("a user's pod with the shipped id, or a folder with its name, is never overwritten", async () => {
