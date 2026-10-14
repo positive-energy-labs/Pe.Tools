@@ -22,13 +22,11 @@ import {
 
 import { QuestionForm } from "#/chat/question-form";
 import { Button } from "@pe/kit/lang/button";
-import { ComposerBox, ComposerFrame, ComposerRow } from "#/components/lang/conversation";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Row } from "@pe/kit/lang/row";
 import { Textarea } from "#/components/lang/textarea";
 import { harnessClient } from "#/workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "#/workbench/config";
-import { Markdown } from "#/workbench/prose";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { useDestination } from "#/navigation/state";
 import { FailureNote } from "#/components/failure-note";
@@ -45,6 +43,7 @@ import {
   type NoticeLedger,
 } from "./notice-policy";
 import { AutomaticUpdates } from "./update";
+import { NoticePreview } from "./notice-preview";
 
 declare global {
   interface Window {
@@ -69,7 +68,9 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
   const [held, setHeld] = useState(false);
   const [typed, setTyped] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [previewHeight, setPreviewHeight] = useState(0);
   const card = useRef<HTMLDivElement>(null);
+  const shell = useRef<HTMLDivElement>(null);
   const host = useSurfaceHost();
   const go = useDestination();
   const ledger = useRef<NoticeLedger | null>(null);
@@ -89,6 +90,7 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
     setElapsed(0);
     setTyped(false);
     setError(null);
+    setPreviewHeight(0);
   };
   useEffect(() => {
     const webview = window.chrome?.webview;
@@ -129,10 +131,10 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
   const live = items.length > 0;
   const last = at >= items.length - 1;
   useEffect(() => {
-    if (!live || held || typed) return;
+    if (!live || held || typed || previewHeight > 0) return;
     const timer = setInterval(() => setElapsed((e) => e + TICK_MS), TICK_MS);
     return () => clearInterval(timer);
-  }, [live, held, typed]);
+  }, [live, held, typed, previewHeight]);
   useEffect(() => {
     if (elapsed < NOTICE_DRAIN_MS) return;
     setElapsed(0);
@@ -145,14 +147,16 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
   useLayoutEffect(() => {
     const element = card.current;
     if (!element) return;
-    const observer = new ResizeObserver(() =>
-      tray({ type: "notice-card", height: Math.ceil(element.getBoundingClientRect().height) }),
-    );
-    observer.observe(element);
+    const report = () =>
+      tray({ type: "notice-card", height: Math.ceil(element.getBoundingClientRect().height) });
+    report();
+    const observer = new ResizeObserver(report);
+    observer.observe(element, { box: "border-box" });
     return () => observer.disconnect();
-  }, [live]);
+  }, [live, previewHeight]);
 
   const item = items[Math.min(at, items.length - 1)];
+  useLayoutEffect(() => setPreviewHeight(0), [item?.id, item?.revision]);
   if (!item) return null;
   const close = (message: TrayMessage) => {
     end();
@@ -206,35 +210,50 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
       ref={card}
       role="status"
       aria-label="notice"
-      data-surface="artifact"
-      className="hairline fixed right-0 bottom-0 z-notice flex max-h-[min(24rem,100dvh)] w-[min(420px,100vw)] flex-col gap-1.5 px-3 pt-2"
+      className="fixed right-0 bottom-0 z-notice w-[min(420px,100vw)]"
+      style={{ paddingTop: previewHeight }}
       onMouseEnter={() => setHeld(true)}
       onMouseLeave={() => setHeld(false)}
       onFocusCapture={() => setHeld(true)}
       onBlurCapture={() => setHeld(false)}
     >
-      <div className="flex min-w-0 items-center gap-1">
-        <div className="min-w-0 grow">
-          <Row
-            role="button"
-            tabIndex={0}
-            label={item.title}
-            title={item.href ? "open it in the app window" : "open the tray panel"}
-            onClick={open}
-            onKeyDown={(event) => event.key === "Enter" && open()}
-          />
+      <div
+        ref={shell}
+        data-surface="artifact"
+        className="hairline t-small flex max-h-96 flex-col gap-1.5 overflow-auto rounded-lg px-2 pt-1.5"
+      >
+        <div data-row="" className="flex min-w-0 shrink-0 items-center gap-1">
+          {act?.kind === "reply" ? (
+            <>
+              <span className="t-small text-ink-2">Pea</span>
+              <NoticePreview
+                key={`${item.id}:${item.revision}`}
+                title={item.title}
+                body={item.body}
+                anchor={shell}
+                onOpen={open}
+                onSize={setPreviewHeight}
+              />
+            </>
+          ) : (
+            <div className="min-w-0 grow">
+              <Row
+                role="button"
+                tabIndex={0}
+                label={item.title}
+                title={item.href ? "open it in the app window" : "open the tray panel"}
+                onClick={open}
+                onKeyDown={(event) => event.key === "Enter" && open()}
+              />
+            </div>
+          )}
+          <span className="t-small face-mono text-ink-2">{`${at + 1}/${items.length}`}</span>
+          <Button kind="nav" direction="back" label="previous" onClick={() => step(-1)} />
+          <Button kind="nav" direction="forward" label="next" onClick={() => step(1)} />
+          <Button icon={AlarmClockOff} label="snooze for an hour" onClick={snoozeItem} />
+          <Button icon={X} label="dismiss" onClick={() => close({ type: "notice-hide" })} />
         </div>
-        <span className="t-small face-mono text-ink-2">{`${at + 1}/${items.length}`}</span>
-        <Button kind="nav" direction="back" label="previous" onClick={() => step(-1)} />
-        <Button kind="nav" direction="forward" label="next" onClick={() => step(1)} />
-        <Button icon={AlarmClockOff} label="snooze for an hour" onClick={snoozeItem} />
-        <Button icon={X} label="dismiss" onClick={() => close({ type: "notice-hide" })} />
-      </div>
-      {act?.kind === "reply" ? (
-        <>
-          <div className="max-h-64 min-h-0 overflow-auto">
-            <Markdown text={item.body} />
-          </div>
+        {act?.kind === "reply" ? (
           <Reply
             key={item.id}
             threadId={act.threadId}
@@ -242,58 +261,58 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
             onTyped={() => setTyped(true)}
             onError={setError}
           />
-        </>
-      ) : act?.kind === "question" ? (
-        <QuestionForm
-          key={act.requestId}
-          question={act}
-          onAnswer={(action, content) =>
-            fixture
-              ? setError(FIXTURE)
-              : harness()
-                  .question(act.threadId, act.requestId, action, content)
-                  .then(() => settle(item.id), refused)
-          }
+        ) : act?.kind === "question" ? (
+          <QuestionForm
+            key={act.requestId}
+            question={act}
+            onAnswer={(action, content) =>
+              fixture
+                ? setError(FIXTURE)
+                : harness()
+                    .question(act.threadId, act.requestId, action, content)
+                    .then(() => settle(item.id), refused)
+            }
+          />
+        ) : (
+          <div className="min-h-0 overflow-auto">
+            <FailureNote text={item.body} onDoor={door} />
+          </div>
+        )}
+        {act?.kind === "permission" ? (
+          <span className="flex flex-wrap gap-1.5">
+            {act.options.map((option) => (
+              <Button
+                key={option.optionId}
+                kind={option.kind.startsWith("allow") ? "commit" : "framed"}
+                label={option.name}
+                reason={fixture ? FIXTURE : `answer Pea: ${option.name}`}
+                refusal={fixture ? FIXTURE : null}
+                onClick={() =>
+                  void harness()
+                    .permission(act.threadId, act.requestId, option.optionId)
+                    .then(() => settle(item.id), refused)
+                }
+              >
+                {option.name}
+              </Button>
+            ))}
+          </span>
+        ) : act?.kind === "automatic-updates" ? (
+          <AutomaticUpdates reading={reading} fixture={fixture} />
+        ) : null}
+        {error ? <OutcomeLine kind="refused" label={error} /> : null}
+        {/* The drain: what is left of this item's hold; gone once typing stopped it for good. */}
+        <div
+          aria-hidden
+          className="boundary-t -mx-2 shrink-0"
+          style={{ width: typed ? 0 : `${100 - (elapsed / NOTICE_DRAIN_MS) * 100}%` }}
         />
-      ) : (
-        <div className="min-h-0 overflow-auto">
-          <FailureNote text={item.body} onDoor={door} />
-        </div>
-      )}
-      {act?.kind === "permission" ? (
-        <span className="flex flex-wrap gap-1.5">
-          {act.options.map((option) => (
-            <Button
-              key={option.optionId}
-              kind={option.kind.startsWith("allow") ? "commit" : "framed"}
-              label={option.name}
-              reason={fixture ? FIXTURE : `answer Pea: ${option.name}`}
-              refusal={fixture ? FIXTURE : null}
-              onClick={() =>
-                void harness()
-                  .permission(act.threadId, act.requestId, option.optionId)
-                  .then(() => settle(item.id), refused)
-              }
-            >
-              {option.name}
-            </Button>
-          ))}
-        </span>
-      ) : act?.kind === "automatic-updates" ? (
-        <AutomaticUpdates reading={reading} fixture={fixture} />
-      ) : null}
-      {error ? <OutcomeLine kind="refused" label={error} /> : null}
-      {/* The drain: what is left of this item's hold; gone once typing stopped it for good. */}
-      <div
-        aria-hidden
-        className="boundary-t -mx-3"
-        style={{ width: typed ? 0 : `${100 - (elapsed / NOTICE_DRAIN_MS) * 100}%` }}
-      />
+      </div>
     </div>
   );
 }
 
-/** The compact composer: the chat composer's own box, row and one Send/Stop slot. */
+/** A small reply field and one Send/Stop slot; the response lives in the title preview. */
 function Reply({
   threadId,
   fixture,
@@ -331,45 +350,40 @@ function Reply({
         (caught: unknown) => onError(`Pea did not stop: ${String(caught)}`),
       );
   return (
-    <ComposerFrame>
-      <ComposerBox>
-        <Textarea
-          surface="embedded"
-          size="compact"
-          rows={1}
-          aria-label="reply to Pea"
-          placeholder="Reply to Pea"
-          value={text}
-          onChange={(event) => {
-            setText(event.currentTarget.value);
-            onTyped();
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              send();
-            }
-          }}
-        />
-        <ComposerRow
-          lead={null}
-          trail={
-            /* One slot: Stop replaces Send while the reply runs, so the two never coexist. */
-            turn ? (
-              <Button kind="framed" icon={Square} label="Stop" data-tone="alarm" onClick={stop} />
-            ) : (
-              <Button
-                kind="commit"
-                icon={ArrowUp}
-                label="Send"
-                busy={reply.isPending}
-                refusal={fixture ? FIXTURE : text.trim() ? null : "Write a reply first."}
-                onClick={send}
-              />
-            )
+    <div className="flex min-w-0 items-end gap-1 pb-1">
+      <Textarea
+        surface="field"
+        size="compact"
+        rows={1}
+        aria-label="reply to Pea"
+        placeholder="Reply to Pea"
+        value={text}
+        onChange={(event) => {
+          setText(event.currentTarget.value);
+          onTyped();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            send();
           }
-        />
-      </ComposerBox>
-    </ComposerFrame>
+        }}
+      />
+      {
+        /* One slot: Stop replaces Send while the reply runs. */
+        turn ? (
+          <Button kind="framed" icon={Square} label="Stop" data-tone="alarm" onClick={stop} />
+        ) : (
+          <Button
+            kind="commit"
+            icon={ArrowUp}
+            label="Send"
+            busy={reply.isPending}
+            refusal={fixture ? FIXTURE : text.trim() ? null : "Write a reply first."}
+            onClick={send}
+          />
+        )
+      }
+    </div>
   );
 }

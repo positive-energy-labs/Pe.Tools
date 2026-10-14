@@ -114,7 +114,7 @@ test("each shared fact projects to one card and nothing else speaks", () => {
 
   expect(noticeOf(turn("started"), context)).toBeNull();
   expect(noticeOf(turn("finished"), context)).toMatchObject({
-    title: "Pea finished · Wiring",
+    title: "Wiring",
     href: "/pea?thread=t1",
   });
   expect(noticeOf(turn("failed"), context)?.title).toBe("Pea stopped · Wiring");
@@ -129,7 +129,7 @@ test("each shared fact projects to one card and nothing else speaks", () => {
       ),
       context,
     ),
-  ).toMatchObject({ title: "Pea finished · a thread", href: undefined });
+  ).toMatchObject({ title: "a thread", href: undefined });
 
   expect(noticeOf(permission("resolved"), context)).toBeNull();
   expect(noticeOf(permission("asked"), context)).toMatchObject({
@@ -169,7 +169,7 @@ test("a finished turn carries Pea's final response and the thread's reply door",
     { kind: "turn", phase: "finished" },
   );
   expect(noticeOf(finished, context)).toMatchObject({
-    title: "Pea finished · Wiring",
+    title: "Wiring",
     body: "Retagged **41 of 43**.",
     href: "/pea?thread=t1",
     act: { kind: "reply", threadId: "t1" },
