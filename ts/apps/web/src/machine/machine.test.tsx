@@ -245,10 +245,8 @@ test("the chip says the version, or the update that waits", () => {
 test("the version chip badges a waiting plan and clears it otherwise", () => {
   const setAppBadge = vi.fn().mockResolvedValue(undefined);
   const clearAppBadge = vi.fn().mockResolvedValue(undefined);
-  vi.stubGlobal(
-    "navigator",
-    Object.assign(Object.create(navigator), { setAppBadge, clearAppBadge }),
-  );
+  // On the real navigator: a prototype-chained copy throws from jsdom's own getters (`platform`).
+  Object.assign(navigator, { setAppBadge, clearAppBadge });
   history.replaceState(null, "", "/open?demo=waiting-plan");
   render(<AppChrome />);
   expect(setAppBadge).toHaveBeenCalledOnce();
@@ -257,6 +255,7 @@ test("the version chip badges a waiting plan and clears it otherwise", () => {
   render(<AppChrome />);
   expect(clearAppBadge).toHaveBeenCalledOnce();
   history.replaceState(null, "", "/");
+  for (const name of ["setAppBadge", "clearAppBadge"]) Reflect.deleteProperty(navigator, name);
 });
 
 test("a host that went away is the honest gap: last confirmed leg, then disconnected", () => {

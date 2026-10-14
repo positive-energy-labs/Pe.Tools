@@ -1,6 +1,16 @@
-/** The transcript turn (head, body, bubble, tool status) and the composer (frame, box, bottom row).
- *  Presentation only; the logic lives in workbench/ and chat/. Painted in conversation.css. */
-import type { ComponentProps, ReactNode } from "react";
+/** The transcript turn (head, body, bubble, tool status) and the composer (frame, box). Presentation
+ *  only, the box's open/rest motion included; the logic lives in workbench/ and chat/. Painted in
+ *  conversation.css. */
+import {
+  useImperativeHandle,
+  useRef,
+  useState,
+  type ComponentProps,
+  type KeyboardEvent,
+  type ReactNode,
+  type Ref,
+} from "react";
+import { Textarea } from "./textarea";
 import { ProviderMark } from "./provider-mark";
 import "@pe/kit/lang/lang.css";
 import "./conversation.css";
@@ -82,31 +92,107 @@ export function ToolStatus({
 export function ComposerFrame({ children }: { children: ReactNode }) {
   return <div className="dl-composer-frame">{children}</div>;
 }
-/** The box's bottom row: pickers and state lead (wrapping first); fork, attach, cancel and send
- *  trail. Every control in it is a Button or a `control`-face picker. */
-export function ComposerRow({ lead, trail }: { lead: ReactNode; trail: ReactNode }) {
-  return (
-    <div className="dl-composer-row">
-      <div className="dl-composer-lead">{lead}</div>
-      <div className="dl-composer-trail">{trail}</div>
-    </div>
-  );
+
+type ComposerVariant = "full" | "compact" | "reply";
+export interface ComposerHandle {
+  /** A send was accepted: outside `full`, rest at one line and give focus back to the page. */
+  rest: () => void;
 }
-/** The one object you write in: work it carries, the text, its controls. A file drag over it
- *  takes the recess ground. */
-export function ComposerBox({
+
+/**
+ * The one box you write in. At rest the draft is one line, the pickers' marks stacked on its left
+ * and Send on its right; open while you write, it grows to five lines over a bottom row of
+ * pickers, tools and Send (conversation.css draws the motion). `full` is the page's, `compact` the
+ * tray panel's, `reply` the notice card's: the draft and the Send/Stop slot alone. Enter sends
+ * unless `onKey` takes the key; focus leaving the box (React focus bubbles through its portalled
+ * popups) rests it, a window losing focus does not.
+ */
+export function Composer({
+  ref,
+  variant,
+  areaRef,
   dragging,
-  children,
-  ...props
-}: Omit<ComponentProps<"div">, "className"> & { dragging?: boolean }) {
+  drop,
+  menus,
+  work,
+  pickers,
+  tools,
+  send,
+  onSend,
+  onKey,
+  ...field
+}: Omit<ComponentProps<typeof Textarea>, "ref" | "rows" | "surface" | "size" | "onKeyDown"> & {
+  ref?: Ref<ComposerHandle>;
+  variant: ComposerVariant;
+  areaRef?: (area: HTMLTextAreaElement | null) => void;
+  /** A file drag over the box takes the recess ground. */
+  dragging?: boolean;
+  drop?: ComponentProps<"div">;
+  /** Popups anchored on the form (slash and `@` menus). */
+  menus?: ReactNode;
+  /** The box's top section: asks, chips, refusals. */
+  work?: ReactNode;
+  pickers?: (open: boolean) => ReactNode;
+  tools?: ReactNode;
+  /** The one Send/Stop slot. */
+  send: ReactNode;
+  onSend: () => void;
+  /** True when the key belongs to an open menu, not the draft. */
+  onKey?: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const form = useRef<HTMLFormElement>(null);
+  useImperativeHandle(ref, () => ({
+    rest: () => {
+      if (variant === "full") return;
+      setOpen(false);
+      const focused = document.activeElement;
+      if (focused instanceof HTMLElement && form.current?.contains(focused)) focused.blur();
+    },
+  }));
+  const timer = useRef<number>(undefined);
+  const hold = () => window.clearTimeout(timer.current);
+  const release = () => {
+    hold();
+    timer.current = window.setTimeout(() => {
+      if (!document.hasFocus()) return;
+      setOpen(false);
+      const area = form.current?.querySelector("textarea");
+      if (area) area.scrollTop = 0;
+    });
+  };
   return (
-    <div
-      className="dl-composer-box"
-      data-surface={dragging ? "recess" : "artifact"}
-      data-drop-zone=""
-      {...props}
-    >
-      {children}
-    </div>
+    <form ref={form} onFocus={hold} onBlur={release} className="relative w-full">
+      {menus}
+      {/* The one object you write in: work it carries, the text, its controls. */}
+      <div
+        className="dl-composer-box"
+        data-surface={dragging ? "recess" : "artifact"}
+        data-drop-zone=""
+        data-variant={variant}
+        data-open={open || undefined}
+        {...drop}
+      >
+        <div data-composer-work="">{work}</div>
+        {pickers ? <div data-composer-pickers="">{pickers(open)}</div> : null}
+        <Textarea
+          {...field}
+          ref={areaRef}
+          surface="embedded"
+          rows={1}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing || onKey?.(event)) return;
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              onSend();
+            }
+          }}
+        />
+        {tools ? <div data-composer-tools="">{tools}</div> : null}
+        {/* One slot: Stop replaces Send while a turn runs, so the two never coexist. */}
+        <div data-composer-send="">{send}</div>
+      </div>
+    </form>
   );
 }

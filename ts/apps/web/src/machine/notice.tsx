@@ -24,7 +24,7 @@ import { QuestionForm } from "#/chat/question-form";
 import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Row } from "@pe/kit/lang/row";
-import { Textarea } from "#/components/lang/textarea";
+import { Composer, type ComposerHandle } from "#/components/lang/conversation";
 import { harnessClient } from "#/workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "#/workbench/config";
 import { useSurfaceHost } from "#/navigation/surface-host";
@@ -324,7 +324,7 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
   );
 }
 
-/** A small reply field and one Send/Stop slot; the response lives in the title preview. */
+/** The reply composer (draft and one Send/Stop slot); the response lives in the title preview. */
 function Reply({
   threadId,
   fixture,
@@ -339,6 +339,7 @@ function Reply({
   const [text, setText] = useState("");
   /** The turn this reply started: Stop holds the slot until it is stopped. */
   const [turn, setTurn] = useState<string | null>(null);
+  const box = useRef<ComposerHandle>(null);
   const harness = () => harnessClient(resolveWorkbenchConfig().origin);
   const reply = useAction(
     (input: string) => harness().prompt(threadId, { text: input }),
@@ -346,6 +347,7 @@ function Reply({
       setText("");
       setTurn(turnId);
       onError(null);
+      box.current?.rest();
     },
   );
   const send = () => {
@@ -362,11 +364,10 @@ function Reply({
         (caught: unknown) => onError(`Pea did not stop: ${String(caught)}`),
       );
   return (
-    <div className="flex min-w-0 items-end gap-1 pb-1">
-      <Textarea
-        surface="field"
-        size="compact"
-        rows={1}
+    <div className="pb-1.5">
+      <Composer
+        ref={box}
+        variant="reply"
         aria-label="reply to Pea"
         placeholder="Reply to Pea"
         value={text}
@@ -374,28 +375,23 @@ function Reply({
           setText(event.currentTarget.value);
           onTyped();
         }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-            event.preventDefault();
-            send();
-          }
-        }}
+        onSend={send}
+        send={
+          /* One slot: Stop replaces Send while the reply runs. */
+          turn ? (
+            <Button kind="framed" icon={Square} label="Stop" data-tone="alarm" onClick={stop} />
+          ) : (
+            <Button
+              kind="commit"
+              icon={ArrowUp}
+              label="Send"
+              busy={reply.isPending}
+              refusal={fixture ? FIXTURE : text.trim() ? null : "Write a reply first."}
+              onClick={send}
+            />
+          )
+        }
       />
-      {
-        /* One slot: Stop replaces Send while the reply runs. */
-        turn ? (
-          <Button kind="framed" icon={Square} label="Stop" data-tone="alarm" onClick={stop} />
-        ) : (
-          <Button
-            kind="commit"
-            icon={ArrowUp}
-            label="Send"
-            busy={reply.isPending}
-            refusal={fixture ? FIXTURE : text.trim() ? null : "Write a reply first."}
-            onClick={send}
-          />
-        )
-      }
     </div>
   );
 }

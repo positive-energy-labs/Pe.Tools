@@ -9,9 +9,8 @@ import {
 } from "#/components/lang/navigation";
 import { Pane } from "#/components/lang/pane";
 import {
-  ComposerBox,
+  Composer,
   ComposerFrame,
-  ComposerRow,
   ConversationBody,
   MessageBubble,
   MessageHead,
@@ -21,7 +20,6 @@ import { useState } from "react";
 import { ArrowUp, GitFork, Paperclip } from "lucide-react";
 import { Ladder } from "#/route/ladder";
 import { ProviderMark } from "#/components/lang/provider-mark";
-import { Textarea } from "#/components/lang/textarea";
 import { Button } from "@pe/kit/lang/button";
 import { PaneTabs } from "@pe/kit/lang/pane-tabs";
 import { SpecimenFrame } from "./recipe-grid";
@@ -186,28 +184,21 @@ export function LangChatSpecimens() {
             )}
           </div>
           <ComposerFrame>
-            <ComposerBox>
-              <Textarea
-                aria-label="Specimen message"
-                surface="embedded"
-                placeholder="Ask Pea, or type / for a skill"
-              />
-              <ComposerRow
-                lead={
-                  <>
-                    <PickerSpecimen />
-                    <span>Ready</span>
-                  </>
-                }
-                trail={
-                  <>
-                    <Button kind="framed" icon={GitFork} label="Fork this thread" />
-                    <Button kind="framed" icon={Paperclip} label="Attach files" />
-                    <Button kind="commit" icon={ArrowUp} label="send" />
-                  </>
-                }
-              />
-            </ComposerBox>
+            <Composer
+              variant="full"
+              aria-label="Specimen message"
+              placeholder="Ask Pea, or type / for a skill"
+              pickers={() => <PickerSpecimen />}
+              tools={
+                <>
+                  <span>Ready</span>
+                  <Button kind="framed" icon={GitFork} label="Fork this thread" />
+                  <Button kind="framed" icon={Paperclip} label="Attach files" />
+                </>
+              }
+              send={<Button kind="commit" icon={ArrowUp} label="send" />}
+              onSend={() => undefined}
+            />
           </ComposerFrame>
         </div>
       </SpecimenFrame>

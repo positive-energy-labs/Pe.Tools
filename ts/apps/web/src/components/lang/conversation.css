@@ -82,8 +82,6 @@
 }
 .dl-composer-box {
   position: relative;
-  display: flex;
-  flex-direction: column;
   border: 1px solid var(--pe-line);
   outline: 3px solid transparent;
   /* Chrome is one rung; only the message text reads at prose. */
@@ -98,39 +96,154 @@
   border-color: var(--pe-line-2);
   outline-color: color-mix(in srgb, var(--pe-line-2) 22%, transparent);
 }
-.dl-composer-box textarea {
-  min-width: 0;
-  min-height: calc(var(--control-h) * 2);
-  padding: var(--gutter) var(--gutter) 4px;
-  font-size: var(--type-prose-size);
-  line-height: var(--type-prose-line-height);
+/* The box: one line at rest, the pickers' marks stacked on its left and Send on its
+   right; open while you write, the draft grows to its content (five lines, then it scrolls) over a
+   bottom row of pickers, tools and Send. Both states are one grid template: at rest the bottom
+   row is zero tall, Send rides up into the text row by `translate` and the marks sit over its
+   left edge, so the motion is plain transitions (block sizes, translate, opacity) on one easing,
+   and the box's height moves monotonically with no second paint. The template itself never animates: Chrome
+   hands interpolated `fr` slack to the auto rows, and the box wobbled. */
+.dl-composer-box {
+  --composer-mark: 20px;
+  --composer-rest: calc(var(--composer-mark) * 2);
+  --composer-pad: calc(var(--gutter) / 2);
+  --composer-ease: var(--motion-control) ease-out;
+  /* Lets the draft's `block-size` move between one line and `auto`. */
+  interpolate-size: allow-keywords;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "work work work"
+    "text text text"
+    "pick tools send";
+  column-gap: var(--composer-pad);
+  padding: var(--composer-pad);
 }
-/* The bottom row: pickers and state lead and wrap; fork, attach, cancel and send trail at the right. */
-.dl-composer-row {
+/* Asks and attachments line up with the marks and Send: the box's padding is their inset. */
+.dl-composer-box > [data-composer-work] {
+  grid-area: work;
   display: flex;
   min-width: 0;
-  align-items: flex-end;
-  gap: var(--gutter);
-  padding: var(--gutter);
+  flex-direction: column;
+  gap: var(--composer-pad);
+  padding-bottom: var(--composer-pad);
+}
+.dl-composer-box > [data-composer-work] > * {
+  padding-inline: 0;
+  padding-top: 0;
+}
+.dl-composer-box > [data-composer-work]:empty {
+  display: none;
+}
+.dl-composer-box > textarea {
+  grid-area: text;
+  inline-size: 100%;
+  field-sizing: content;
+  min-block-size: 0;
+  block-size: var(--type-prose-line-height);
+  max-block-size: calc(var(--type-prose-line-height) * 5 + var(--composer-pad) * 2);
+  /* Centred in the rest row; room on the sides for the marks and Send riding over it. */
+  margin-block: calc((var(--composer-rest) - var(--type-prose-line-height)) / 2);
+  padding: 0 calc(var(--control-h) + var(--composer-pad)) 0
+    calc(var(--composer-mark) + var(--composer-pad));
+  overflow: hidden;
+  transition:
+    block-size var(--composer-ease),
+    margin-block var(--composer-ease),
+    padding var(--composer-ease);
+}
+.dl-composer-box[data-open] > textarea {
+  block-size: auto;
+  margin-block: 0;
+  padding: var(--composer-pad);
+  overflow-y: auto;
+}
+/* The bottom row: each item grows from zero to its own height, so the row moves on one curve. */
+.dl-composer-box > [data-composer-pickers],
+.dl-composer-box > [data-composer-tools],
+.dl-composer-box > [data-composer-send] {
+  block-size: auto;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--composer-pad);
+  transition:
+    block-size var(--composer-ease),
+    translate var(--composer-ease),
+    opacity var(--composer-ease),
+    visibility var(--composer-ease);
+}
+.dl-composer-box > [data-composer-pickers] {
+  grid-area: pick;
+  flex-wrap: wrap;
+  /* The marks restack between states; each flip fades them in where they now sit. */
+  animation: composer-marks-rest var(--composer-ease);
+}
+/* At rest the row's items are zero tall; Send overflows it, ridden up a row. */
+.dl-composer-box:not([data-open]) > [data-composer-tools],
+.dl-composer-box:not([data-open]) > [data-composer-send] {
+  block-size: 0;
+  align-items: flex-start;
+}
+/* Out of the row at rest: a closing row then measures tools and Send alone, whose heights hold,
+   instead of the restacked marks (the first frame of a close swelled by their column). */
+.dl-composer-box:not([data-open]) > [data-composer-pickers] {
+  /* Placed in its own (zero-tall) cell, which is its containing block: the rest row's corner. */
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-end: 0;
+  /* Drawn the rest row's height, held at zero underneath so an open grows them from nothing. */
+  block-size: 0;
+  min-block-size: var(--composer-rest);
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 0;
+}
+.dl-composer-box:not([data-open]) > [data-composer-pickers] [data-list-trigger] {
+  width: var(--composer-mark);
+  height: var(--composer-mark);
+}
+.dl-composer-box[data-open] > [data-composer-pickers] {
+  animation-name: composer-marks-open;
+}
+.dl-composer-box > [data-composer-tools] {
+  grid-area: tools;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   color: var(--pe-ink-2);
 }
-.dl-composer-lead {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: calc(var(--gutter) / 2);
+.dl-composer-box:not([data-open]) > [data-composer-tools] {
+  visibility: hidden;
+  opacity: 0;
 }
-.dl-composer-lead > * {
-  min-width: 0;
-  max-width: 100%;
+.dl-composer-box > [data-composer-send] {
+  grid-area: send;
 }
-.dl-composer-trail {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: calc(var(--gutter) / 2);
+.dl-composer-box:not([data-open]) > [data-composer-send] {
+  translate: 0 calc((var(--composer-rest) - var(--control-h)) / 2 - var(--composer-rest));
+}
+/* Two names, one fade: changing the name restarts the animation on every flip. */
+@keyframes composer-marks-rest {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes composer-marks-open {
+  from {
+    opacity: 0;
+  }
+}
+/* The reply has no marks: its rest draft keeps only the open inset, so the text never slides. */
+.dl-composer-box[data-variant="reply"]:not([data-open]) > textarea {
+  padding-inline-start: var(--composer-pad);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dl-composer-box,
+  .dl-composer-box > * {
+    transition: none;
+    animation: none;
+  }
 }
 /* Work at the top of the box: the pending requests' disclosure, then its panel. */
 .dl-composer-pending {

@@ -1,10 +1,11 @@
 /**
- * Machine attention and feedback exist once around every surface's route outlet.
+ * Machine attention, feedback and the help chord exist once around every surface's route outlet.
  * Their doors are projections in the shared topbar, not separate floating controls.
  * On the tray surface the receipt notice card mounts here too, whatever route the panel shows; on a
  * web surface with no tray following, the same items can raise OS notifications (opt-in).
  */
 import { FeedbackPicker } from "#/components/feedback-picker";
+import { HelpChord } from "#/route/help";
 import { MachineAttention } from "#/machine/attention";
 import { NoticeCard } from "#/machine/notice";
 import { OsNotices } from "#/machine/os-notices";
@@ -21,6 +22,7 @@ export function AppChrome() {
       <OsNotices />
       <TrayNotice />
       <FeedbackPicker hideTrigger />
+      <HelpChord />
     </>
   );
 }
