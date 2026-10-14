@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
-import { consoleScript } from "../src/harness/providers";
+import { consoleScript } from "../src/harness/providers.ts";
 
 /** Runs the console script in real Windows PowerShell with Enter on stdin (decline the admin run). */
 function run(command: string) {
