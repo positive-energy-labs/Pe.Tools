@@ -104,7 +104,9 @@ export function FirstRunSeedsDemo() {
   const [name, setName] = useState<SeedName>("fresh install");
   const seed: Seed = SEEDS[name];
   const providers = seeded(seed);
-  const repairing = seed.repair ? seed.providers.find((item) => item.id === seed.repair) : undefined;
+  const repairing = seed.repair
+    ? seed.providers.find((item) => item.id === seed.repair)
+    : undefined;
   return (
     <Demo
       label="First run · provider repair"

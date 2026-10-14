@@ -859,7 +859,9 @@ export function createProviders(options: ProvidersOptions) {
         const closed = (options.openConsole ?? openConsole)(command, childEnv, opened);
         closed
           .then(() => probe(record))
-          .catch((error) => log.warn(`provider ${record.id} console or re-probe failed: ${String(error)}`));
+          .catch((error) =>
+            log.warn(`provider ${record.id} console or re-probe failed: ${String(error)}`),
+          );
         // Answer once a console exists; a console that cannot start is the user's dead click.
         const failure = await Promise.race([
           gotConsole.then(() => null),

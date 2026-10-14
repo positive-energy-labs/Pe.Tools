@@ -1113,7 +1113,9 @@ test("Sign in answers only once a console opened, and says why when none could",
   );
   const refused = await failing("POST", "/pe/providers/codex/open-login");
   expect(refused.status).toBe(502);
-  expect(refused.json.error).toMatch(/^Could not open the Codex .* console: spawn cmd\.exe ENOENT$/);
+  expect(refused.json.error).toMatch(
+    /^Could not open the Codex .* console: spawn cmd\.exe ENOENT$/,
+  );
   expect(((await failing("GET", "/pe/providers/codex")).json as Provider).readiness).toEqual({
     state: "unknown",
     message: "Not probed yet.",
@@ -1149,7 +1151,9 @@ test("a login that expires between turns reads expired, not ready, and says how 
   expect(await readiness()).toEqual({ state: "ready" });
   const created = await call("POST", "/pe/threads", { providerId: "claude" });
   await call("POST", `/pe/threads/${created.json.id}/prompt`, { text: "auth-expired" });
-  await until(reader(threads), created.json.id, (body) => body.events.some((e) => e.kind === "error"));
+  await until(reader(threads), created.json.id, (body) =>
+    body.events.some((e) => e.kind === "error"),
+  );
   expect(await readiness()).toEqual({
     state: "refused",
     step: "signed-in",

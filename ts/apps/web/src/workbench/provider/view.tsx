@@ -119,7 +119,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const bound = currentThreadId
     ? providers.list?.find(
         (item) =>
-          item.id === (chat.providerId || threads.find((t) => t.id === currentThreadId)?.providerId),
+          item.id ===
+          (chat.providerId || threads.find((t) => t.id === currentThreadId)?.providerId),
       )
     : undefined;
   /** Why a send cannot go now, in the provider's own words, or undefined when it can. */

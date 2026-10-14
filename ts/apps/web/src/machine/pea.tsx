@@ -315,7 +315,11 @@ function AddEndpoint({ providers }: { providers: ProvidersState }) {
         />
       </span>
       <span className="flex items-center gap-1">
-        <Input placeholder={endpoint.defaultName} value={name} onChange={(event) => setName(event.target.value)} />
+        <Input
+          placeholder={endpoint.defaultName}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+        />
         <Button label="Save" kind="framed" busy={busy} onClick={() => void save()}>
           Save
         </Button>

@@ -172,7 +172,10 @@ export function attention(machine: Machine): string[] {
   const plan = planWaits(machine);
   if (plan && plan.blockers.length) out.push(`Update ${plan.latest} blocked by ${blockedBy(plan)}`);
   else if (plan) out.push(`Update ${plan.latest} waits for you`);
-  else if (machine.update.receipt?.state === "failed" || machine.update.receipt?.state === "refused")
+  else if (
+    machine.update.receipt?.state === "failed" ||
+    machine.update.receipt?.state === "refused"
+  )
     out.push(`Update ${machine.update.receipt.state}`);
   for (const session of machine.revit.sessions ?? [])
     if (session.row.case === "controlled-active" && session.row.dialogs)

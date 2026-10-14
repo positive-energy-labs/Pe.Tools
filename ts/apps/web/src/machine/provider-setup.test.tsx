@@ -194,7 +194,9 @@ test("Sign in says what it is doing under its row, then goes quiet once a probe 
   state.logins = { codex: { state: "open", probedAt: null } };
   const view = render(<ProviderSetup providers={providers()} />);
   expect(screen.getByText(/Finish installer in the console that opened/)).toBeTruthy();
-  state.logins = { codex: { state: "failed", message: "Could not open the Codex installer console: nope" } };
+  state.logins = {
+    codex: { state: "failed", message: "Could not open the Codex installer console: nope" },
+  };
   view.rerender(<ProviderSetup providers={providers()} />);
   expect(screen.getByText(/Could not open the Codex installer console: nope/)).toBeTruthy();
 });
