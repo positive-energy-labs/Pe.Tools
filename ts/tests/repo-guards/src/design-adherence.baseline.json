@@ -6,12 +6,12 @@
     }
   },
   "hostBelowRoute": {
-    "total": 5,
+    "total": 6,
     "byArea": {
       "grounded-doc": 1,
       "lab": 2,
       "(root)": 1,
-      "route": 1
+      "route": 2
     }
   },
   "escHandler": {

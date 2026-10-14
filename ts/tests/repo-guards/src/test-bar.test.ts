@@ -27,10 +27,10 @@ const CONTRACT =
   /from "@pe\/(agent|host)-contracts[^"]*"[\s\S]*\.parse\(|\.parse\([\s\S]*from "@pe\/(agent|host)-contracts/;
 
 // ponytail: a ceiling, not an allowlist. The 2026-09-22 value (16) assumed a sweep that never ran;
-// the web suite grew to 103, then 108, scaffolded files while this guard sat red. It now holds the measured
+// the web suite grew to 103 scaffolded files (93 after wave G round 4 deleted some) while this guard sat red. It now holds the measured
 // count, so a new SCAFFOLD file fails and a removed one lowers the ceiling. Sweep to zero is still
 // owed; then delete this constant and assert zero.
-const SCAFFOLD_CEILING = 108;
+const SCAFFOLD_CEILING = 93;
 
 type Kind = "SURFACE" | "CONTRACT" | "SCAFFOLD";
 
