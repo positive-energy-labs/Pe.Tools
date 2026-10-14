@@ -28,6 +28,8 @@ internal sealed class TrayContext : ApplicationContext {
     private bool _checking;
     private bool _retired;
     private volatile bool _closing;
+    /** The person asked the host to stop: its exit is a quit, not an update to come back from. */
+    private volatile bool _quitRequested;
     private bool _connected;
     private string? _showRequest;
     private string? _pendingPath;
@@ -41,7 +43,9 @@ internal sealed class TrayContext : ApplicationContext {
         _launch = launch;
         _service = service;
         _parent = parent;
-        _pendingPath = launch.Route is { } route ? TrayPath(route) : null;
+        // No route asked for: a predecessor tray that went away with its host left where the person was.
+        var resumed = launch.Route is null ? TrayResume.Take(ResumePath, DateTimeOffset.UtcNow) : null;
+        _pendingPath = (launch.Route ?? resumed) is { } route ? TrayPath(route) : null;
         _window.Controls.Add(_web);
         _ = _window.Handle;
         var favicon = launch.IsDev ? Path.Combine(launch.SourceRoot!, "ts", "apps", "web", "public", "favicon-dev.ico")
@@ -76,7 +80,7 @@ internal sealed class TrayContext : ApplicationContext {
         _window.TitlebarGeometryChanged += (_, _) => PostTitlebarGeometry();
         _health.Tick += async (_, _) => await CheckHealthAsync();
         _health.Start();
-        if (_launch.ShowOnStart) RequestShow(null);
+        if (_launch.ShowOnStart || resumed is not null) RequestShow(null);
         _window.BeginInvoke(async () => await InitializeWebAsync());
         _ = Task.Run(WatchParentAsync);
         _ = Task.Run(WatchDisposalAsync);
@@ -89,8 +93,19 @@ internal sealed class TrayContext : ApplicationContext {
     private async Task WatchParentAsync() {
         try {
             await _parent.WaitForExitAsync(_stop.Token);
-            ExitOnUiThread();
+            // An update replaces the host and its tray: leave the route the window was showing for the successor.
+            try {
+                if (!_closing) _window.BeginInvoke(() => { RememberWhereTheWindowWas(); ExitThread(); });
+            } catch (InvalidOperationException) { }
         } catch (OperationCanceledException) { }
+    }
+
+    private string ResumePath => Path.Combine(ProductRuntimeLayout.ForCurrentUser().RootPath, $"tray-resume-{_launch.ProfileKey}.json");
+
+    private void RememberWhereTheWindowWas() {
+        if (_quitRequested || !_ready || !_window.Visible || _card || _window.WindowState == FormWindowState.Minimized
+            || _web.Source is not { } source || !IsViewUrl(source.AbsoluteUri)) return;
+        TrayResume.Save(ResumePath, TrayResume.RouteOf(source), DateTimeOffset.UtcNow);
     }
 
     private static string TrayPath(string route) {
@@ -544,10 +559,18 @@ internal sealed class TrayContext : ApplicationContext {
     private async Task QuitHostAsync() {
         if (!IsOriginalService()) return;
         try {
+            // Quitting cuts every turn in flight: ask first. A list the host will not give is not a reason to hold the quit.
+            using var threads = new HttpRequestMessage(HttpMethod.Get, _service.Origin + "/pe/threads");
+            threads.Headers.Add(TokenHeader, _service.Token);
+            using var listed = await _http.SendAsync(threads, _stop.Token);
+            var turns = listed.IsSuccessStatusCode ? TrayQuit.ActiveTurns(await listed.Content.ReadAsStringAsync(_stop.Token)) : 0;
+            if (turns > 0 && MessageBox.Show(_window, TrayQuit.Question(turns), "Quit Pe.Tools host",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+            _quitRequested = true;
             using var request = new HttpRequestMessage(HttpMethod.Post, _service.Origin + "/admin/shutdown");
             request.Headers.Add(TokenHeader, _service.Token);
             using var response = await _http.SendAsync(request, _stop.Token);
-            if (!response.IsSuccessStatusCode) _icon.Text = "Pe.Tools: shutdown refused";
+            if (!response.IsSuccessStatusCode) { _quitRequested = false; _icon.Text = "Pe.Tools: shutdown refused"; }
         } catch (Exception error) when (error is HttpRequestException or OperationCanceledException) {
             if (!_closing) _icon.Text = "Pe.Tools: shutdown unavailable";
         }
