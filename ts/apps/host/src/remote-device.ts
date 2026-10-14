@@ -9,13 +9,14 @@ import {
   type Pairing,
 } from "@pe/host-contracts/pe-api";
 import { Refused } from "./control.ts";
+import { hostOwnership } from "./host-ownership.ts";
 
 const persistedSchema = z.strictObject({
   environmentId: z.uuid(),
   sessions: z.array(deviceSessionSchema.extend({ digest: z.string() })),
 });
 const digest = (token: string) => createHash("sha256").update(token).digest("hex");
-export const DEVICE_COOKIE = "pe-device";
+export const DEVICE_COOKIE = `pe-device-${hostOwnership.serviceName}`;
 const denied = (code: "device.unpaired" | "device.revoked" | "device.pairing", reason: string) =>
   new Refused({
     code,

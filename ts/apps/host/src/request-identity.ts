@@ -34,6 +34,7 @@ export type IdentityResult =
 
 export interface IdentityOptions {
   readonly devices?: Devices;
+  readonly remoteRequests?: WeakSet<object>;
   /** Host-configured addresses. Never inferred from Forwarded or caller-supplied transport headers. */
   readonly remoteIngress?: readonly { origin: string; transport: "lan" | "ssh" }[];
   readonly port: () => number;
@@ -61,6 +62,7 @@ export async function readRequestIdentity(
   method = "GET",
   serviceAuthorized = false,
   peerAddress?: string,
+  remoteOnly = false,
 ): Promise<IdentityResult> {
   const expectedService = headers[HOST_RUNTIME_SERVICE_HEADER];
   let queryServices: string[];
@@ -120,6 +122,8 @@ export async function readRequestIdentity(
     );
   const anonymous: Caller = { kind: "anonymous" };
   const ingress = options.remoteIngress?.find((entry) => new URL(entry.origin).host === host);
+  if (remoteOnly && !ingress)
+    return refuse("identity.host", "Use a configured remote origin on the remote listener.");
   const localPeer =
     peerAddress === undefined || ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(peerAddress);
   if (!localPeer && !ingress)
@@ -197,6 +201,15 @@ export async function readRequestIdentity(
     );
   if ("principal" in result) {
     const credential = deviceCredential(headers);
+    const publicNavigation =
+      navigation &&
+      (pathname === "/" ||
+        /^\/(?:chat|settings|open|machine|design-system|captures)(?:\/|$)/.test(pathname) ||
+        /^\/pages\/[^/]+\/?$/.test(pathname));
+    const publicAsset =
+      (staticResource && (pathname.startsWith("/assets/") || pathname.startsWith("/pages/"))) ||
+      (method === "GET" && /^\/captures\/[0-9a-f]{64}\.png$/.test(pathname));
+    const pairingDoor = pathname === "/pe/pair" || pathname === "/pe/environment";
     const transport: DeviceTransport =
       result.principal.kind === "tailnet"
         ? "tailnet"
@@ -235,10 +248,12 @@ export async function readRequestIdentity(
           });
       } catch (error) {
         if (!(error instanceof Refused)) throw error;
-        return refuse(error.refusal.code, error.refusal.reason);
+        if (!pairingDoor && !publicNavigation && !publicAsset)
+          return refuse(error.refusal.code, error.refusal.reason);
+        device = undefined;
       }
     }
-    const isRemote = result.principal.kind !== "local" || !!device;
+    const isRemote = result.principal.kind !== "local" || !!credential;
     if (
       isRemote &&
       (matchPeRoute(method, pathname)?.route.localOnly ||
@@ -249,13 +264,6 @@ export async function readRequestIdentity(
         "identity.local-only",
         "This control is available only to a human at the host.",
       );
-    const publicNavigation =
-      navigation &&
-      (pathname === "/" ||
-        /^\/(?:chat|settings|open|machine|design-system|captures)(?:\/|$)/.test(pathname) ||
-        /^\/pages\/[^/]+\/?$/.test(pathname));
-    const publicAsset =
-      staticResource && (pathname.startsWith("/assets/") || pathname.startsWith("/pages/"));
     const publicDoor =
       pathname === "/pe/pair" ||
       pathname === "/pe/environment" ||
@@ -358,6 +366,7 @@ export const requestIdentityLayer = (options: IdentityOptions) =>
             request.method,
             serviceAuthorized,
             Option.getOrUndefined(request.remoteAddress),
+            options.remoteRequests?.has(request.source),
           ),
         );
         if ("refusal" in identity) return HttpServerResponse.jsonUnsafe(identity, { status: 403 });

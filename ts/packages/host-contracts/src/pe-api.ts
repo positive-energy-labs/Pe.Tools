@@ -14,7 +14,7 @@ const none = z.undefined();
 const object = z.record(z.string(), z.unknown());
 const ok = z.object({ ok: z.boolean() }).passthrough();
 type Principal = "read" | "caller" | "human" | "human-or-pea" | "human-or-page";
-export type PeRoutePermission = Principal | "admin" | "grant" | "operation";
+export type PeRoutePermission = Principal | "admin" | "grant" | "operation" | "pair";
 type Owner = "pe" | "threads" | "providers" | "share" | "pages" | "gateway";
 
 function route<const P extends string, B extends z.ZodType, O extends z.ZodType>(
@@ -609,7 +609,7 @@ export function definePeApi<
       }),
       "read",
       "gateway",
-      "read",
+      "pair",
     ),
     "device.environment": route(
       "GET",

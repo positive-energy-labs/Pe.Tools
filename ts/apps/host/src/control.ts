@@ -205,6 +205,7 @@ export function admitRequest(
       "human-or-page",
       "service",
       "mcp",
+      "pair",
     ].includes(permission)
   )
     throw refuse(
@@ -212,7 +213,7 @@ export function admitRequest(
       door,
       `Refused at ${door}: this route declares no permission.`,
     );
-  if (permission === "read" || permission === "mcp") return;
+  if (permission === "read" || permission === "mcp" || permission === "pair") return;
   if (caller.kind === "anonymous")
     throw refuse("context.missing", door, `Refused at ${door}: anonymous callers are read-only.`);
   if (permission === "human" || permission === "admin") {

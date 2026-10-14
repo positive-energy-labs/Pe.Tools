@@ -1,5 +1,16 @@
 import { expect, test } from "vite-plus/test";
-import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
+import {
+  readRequestIdentity,
+  requestIdentityLayer,
+  type IdentityOptions,
+} from "../src/request-identity.ts";
+import { remoteListener } from "../src/remote-ingress.ts";
+import { deviceRoutes } from "../src/device-routes.ts";
+import { createServer, request as httpRequest } from "node:http";
+import { once } from "node:events";
+import { Effect, Layer, Deferred } from "effect";
+import { NodeHttpServer } from "@effect/platform-node";
+import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
 import { createDevices, DEVICE_COOKIE } from "../src/remote-device.ts";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -24,6 +35,101 @@ const options: IdentityOptions = {
   },
 };
 const remote = { host: "box.tailabc.ts.net", "tailscale-user-login": "person@example.com" };
+
+test("a dedicated SSH ingress cannot claim local human authority by changing Host", async () => {
+  expect(
+    await readRequestIdentity(
+      { host: "127.0.0.1:5180", accept: "text/html", "sec-fetch-mode": "navigate" },
+      "/",
+      options,
+      "GET",
+      false,
+      "127.0.0.1",
+      true,
+    ),
+  ).toMatchObject({ refusal: { code: "identity.host" } });
+});
+
+test("remote listener marks real loopback tunnel requests before the identity middleware", async () => {
+  const server = createServer();
+  const requests = new WeakSet<object>();
+  const remoteServer = remoteListener(server, requests);
+  const devices = createDevices();
+  const device = devices.claim(devices.pair("browser").code, "Tunnel browser", "ssh");
+  const port = () => (server.address() as { port: number }).port;
+  const latch = Effect.runSync(Deferred.make<void>());
+  const listening = once(server, "listening");
+  const done = Effect.runPromise(
+    Effect.raceFirst(
+      Layer.launch(
+        HttpRouter.serve(
+          Layer.mergeAll(
+            requestIdentityLayer({
+              ...options,
+              port,
+              devices,
+              remoteRequests: requests,
+              remoteIngress: [{ origin: "http://ssh.test:65180", transport: "ssh" }],
+            }),
+            deviceRoutes(devices),
+            HttpRouter.add("GET", "/pe/threads", () =>
+              Effect.succeed(HttpServerResponse.jsonUnsafe({ admitted: true })),
+            ),
+          ),
+          { disableLogger: true },
+        ).pipe(Layer.provide(NodeHttpServer.layer(() => server, { host: "127.0.0.1", port: 0 }))),
+      ),
+      Deferred.await(latch),
+    ),
+  );
+  await listening;
+  const address = (await remoteServer.start("127.0.0.1", 0)) as { port: number };
+  const read = (host: string, cookie?: string) =>
+    new Promise<number>((resolve, reject) => {
+      const req = httpRequest(
+        `http://127.0.0.1:${address.port}/pe/threads`,
+        { headers: { host, ...(cookie ? { cookie } : {}) } },
+        (res) => {
+          res.resume();
+          res.on("end", () => resolve(res.statusCode!));
+        },
+      );
+      req.on("error", reject);
+      req.end();
+    });
+  try {
+    const invalidPair = await new Promise<{ status: number; body: unknown }>((resolve, reject) => {
+      const req = httpRequest(
+        `http://127.0.0.1:${address.port}/pe/pair`,
+        {
+          method: "POST",
+          headers: { host: "ssh.test:65180", "content-type": "application/json" },
+        },
+        (res) => {
+          let body = "";
+          res.on("data", (data) => {
+            body += data;
+          });
+          res.on("end", () => resolve({ status: res.statusCode!, body: JSON.parse(body) }));
+        },
+      );
+      req.on("error", reject);
+      req.end(JSON.stringify({ code: "invalid", label: "Unpaired" }));
+    });
+    expect(invalidPair.status).toBe(403);
+    expect(invalidPair.body).toMatchObject({ error: { code: "device.pairing" } });
+    expect(await read(`127.0.0.1:${port()}`)).toBe(403);
+    expect(await read("ssh.test:65180")).toBe(403);
+    expect(await read("ssh.test:65180", `${DEVICE_COOKIE}=${device.token}`)).toBe(200);
+    devices.revoke(device.session.id);
+    expect(await read("ssh.test:65180", `${DEVICE_COOKIE}=${device.token}`)).toBe(403);
+  } finally {
+    await remoteServer.close();
+    server.closeAllConnections();
+    Effect.runSync(Deferred.succeed(latch, undefined));
+    await done;
+  }
+});
 
 test("access-084: an unpaired remote device cannot read host state", async () => {
   expect(await readRequestIdentity(remote, "/pe/threads", options)).toMatchObject({

@@ -22,60 +22,76 @@ export const deviceRoutes = (devices: Devices) =>
           route.path,
           HttpEffect.fromWebHandler((request) =>
             servePeRoute(request, async () => {
-              const context = invocationContext();
-              if (id === "device.environment")
-                return Response.json({
-                  environmentId: devices.list().environmentId,
-                  paired: !!context?.device,
-                  local: context?.principal?.kind === "local" && !context.device,
-                });
-              if (id === "device.list") return Response.json(devices.list());
-              if (id === "device.pair")
-                return Response.json(
-                  devices.pair(peRoutes[id].body.parse(await request.json()).audience),
+              try {
+                const context = invocationContext();
+                if (id === "device.environment")
+                  return Response.json({
+                    environmentId: devices.list().environmentId,
+                    paired: !!context?.device,
+                    local: context?.principal?.kind === "local" && !context.device,
+                  });
+                if (id === "device.list") return Response.json(devices.list());
+                if (id === "device.pair")
+                  return Response.json(
+                    devices.pair(peRoutes[id].body.parse(await request.json()).audience),
+                    { headers: { "cache-control": "no-store" } },
+                  );
+                if (id === "device.claim") {
+                  const body = peRoutes[id].body.parse(await request.json());
+                  const principal = context?.principal;
+                  const transport =
+                    principal?.kind === "tailnet"
+                      ? "tailnet"
+                      : principal?.kind === "remote"
+                        ? principal.transport
+                        : "ssh";
+                  const claimed = devices.claim(
+                    body.code,
+                    body.label,
+                    transport,
+                    principal?.kind === "tailnet" ? principal.login : undefined,
+                  );
+                  if (claimed.session.audience === "mcp")
+                    return Response.json(claimed, { headers: { "cache-control": "no-store" } });
+                  return Response.json(
+                    { environmentId: claimed.environmentId, session: claimed.session },
+                    {
+                      headers: {
+                        "set-cookie": `${DEVICE_COOKIE}=${claimed.token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000${new URL(request.url).protocol === "https:" || principal?.kind === "tailnet" ? "; Secure" : ""}`,
+                        "cache-control": "no-store",
+                      },
+                    },
+                  );
+                }
+                const sessionId = decodeURIComponent(
+                  new URL(request.url).pathname.split("/").at(-1)!,
                 );
-              if (id === "device.claim") {
-                const body = peRoutes[id].body.parse(await request.json());
-                const principal = context?.principal;
-                const transport =
-                  principal?.kind === "tailnet"
-                    ? "tailnet"
-                    : principal?.kind === "remote"
-                      ? principal.transport
-                      : "ssh";
-                const claimed = devices.claim(
-                  body.code,
-                  body.label,
-                  transport,
-                  principal?.kind === "tailnet" ? principal.login : undefined,
-                );
-                if (claimed.session.audience === "mcp") return Response.json(claimed);
+                if (id === "device.revoke") devices.revoke(sessionId);
+                else {
+                  const { thread } = peRoutes["device.bind"].body.parse(await request.json());
+                  if (thread && !threadHead(thread))
+                    throw new Refused({
+                      code: "device.pairing",
+                      door: route.path,
+                      reason:
+                        "Choose an existing thread. Its current head grant is the only write authority.",
+                    });
+                  devices.bind(sessionId, thread);
+                }
+                return Response.json({ ok: true });
+              } catch (error) {
+                if (!(error instanceof Refused)) throw error;
                 return Response.json(
-                  { environmentId: claimed.environmentId, session: claimed.session },
                   {
-                    headers: {
-                      "set-cookie": `${DEVICE_COOKIE}=${claimed.token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000${new URL(request.url).protocol === "https:" || principal?.kind === "tailnet" ? "; Secure" : ""}`,
-                      "cache-control": "no-store",
+                    error: {
+                      code: error.refusal.code,
+                      message: error.refusal.reason,
+                      details: error.refusal,
                     },
                   },
+                  { status: 403 },
                 );
               }
-              const sessionId = decodeURIComponent(
-                new URL(request.url).pathname.split("/").at(-1)!,
-              );
-              if (id === "device.revoke") devices.revoke(sessionId);
-              else {
-                const { thread } = peRoutes["device.bind"].body.parse(await request.json());
-                if (thread && !threadHead(thread))
-                  throw new Refused({
-                    code: "device.pairing",
-                    door: route.path,
-                    reason:
-                      "Choose an existing thread. Its current head grant is the only write authority.",
-                  });
-                devices.bind(sessionId, thread);
-              }
-              return Response.json({ ok: true });
             }),
           ),
         );
