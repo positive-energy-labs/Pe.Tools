@@ -135,8 +135,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
   const views = new RouteViewStore();
   const resources = observeResources(work, options.heads, options.observeHostResource);
   const observeBase = options.markReadings ? options.markReadings(resources) : resources;
-  const observe: ResourceObserver = (request, publish) => {
-    const release = observeBase(request, publish);
+  const observe: ResourceObserver = (request, publish, after) => {
+    const release = observeBase(request, publish, after);
     if (request.kind !== "world") return release;
     const releaseViews = views.subscribe((intent) =>
       publish({ kind: "event", key: readingKey(request), value: intent }),
@@ -825,6 +825,14 @@ export function makeHostPeRoutes(
     content: content.read,
     pages: content.pages,
   });
+  const hostObserve = hostResourceObserver(
+    bridge,
+    undefined,
+    undefined,
+    hostBaseUrl,
+    undefined,
+    machine,
+  );
   const routes = createPeRoutes({
     registrations,
     store: fileRouteDocumentStore(productRouteWorkPath()),
@@ -851,14 +859,9 @@ export function makeHostPeRoutes(
     },
     capabilityCatalog: catalog,
     contributionRead: content.member,
-    observeHostResource: hostResourceObserver(
-      bridge,
-      undefined,
-      undefined,
-      hostBaseUrl,
-      undefined,
-      machine,
-    ),
+    // Thread Readings (the list, and one thread's log) are the thread store's; the rest the host's.
+    observeHostResource: (request, publish, after) =>
+      threads.observe(request, publish, after) ?? hostObserve(request, publish, after),
     markReadings: markReadings(documentMarks(bridge)),
     telemetry,
   });

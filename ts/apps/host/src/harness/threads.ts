@@ -50,6 +50,10 @@ import {
   type ThreadHead,
   type ThreadHeadReading,
   type TurnState,
+  readingKey,
+  type HostLogEntry,
+  type ReadingFrame,
+  type ReadingRequest,
   type Caller,
   emptyThreadHead,
 } from "@pe/agent-contracts";
@@ -1711,6 +1715,51 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     return json({ error: `No route ${method} ${url.pathname}` }, 404);
   }
 
+  /**
+   * The `threads` Reading (every summary, coalesced) and the `thread` Reading (one thread's events
+   * from the host log, after the connection's cursor); undefined for any other kind.
+   */
+  function observe(
+    request: ReadingRequest,
+    publish: (frame: ReadingFrame) => void,
+    after?: number | null,
+  ): (() => void) | undefined {
+    const key = readingKey(request);
+    if (request.kind === "threads") {
+      let scheduled: ReturnType<typeof setTimeout> | undefined;
+      const send = () => {
+        scheduled = undefined;
+        publish({ kind: "snapshot", key, value: [...threads.values()].map(summary) });
+      };
+      // Coalesce token bursts; this is one projection, never one stream per row.
+      const dirty = () => {
+        scheduled ??= setTimeout(send, 100);
+      };
+      summaryListeners.add(dirty);
+      send();
+      return () => {
+        clearTimeout(scheduled);
+        summaryListeners.delete(dirty);
+      };
+    }
+    if (request.kind !== "thread") return undefined;
+    const mine = ({ event }: HostLogEntry) =>
+      (event.kind === "thread" && event.thread === request.thread) ||
+      (event.kind === "oversize" && event.ref.thread === request.thread);
+    // An oversize entry names an event the log does not carry: the reader re-reads the body.
+    const frame = ({ id, event }: HostLogEntry): ReadingFrame =>
+      event.kind === "thread"
+        ? { kind: "event", key, value: event.event, id }
+        : { kind: "gap", key, dropped: null, id };
+    const replay = after == null ? null : options.log.read(after, mine);
+    if (!replay || replay.gap) publish({ kind: "gap", key, dropped: null, id: options.log.last });
+    else replay.entries.forEach((entry) => publish(frame(entry)));
+    // Read and subscribe run in one synchronous step, so no entry falls between them.
+    return options.log.subscribe((entry) => {
+      if (mine(entry)) publish(frame(entry));
+    });
+  }
+
   // Restart recovery: a turn open in the log ended with the host that ran it. Its open asks expire
   // and the turn ends in an error.
   for (const t of threads.values()) {
@@ -1798,6 +1847,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     active: () => [...threads.values()].some((t) => t.running !== null || t.busy > 0),
     /** The thread head store; the `thread-head` Reading observes it. */
     heads,
+    observe,
     /** The web handler for `/pe/threads*` and `/pe/scope/:id`. Bad input is 400; a harness refusal 502. */
     fetch: (request: Request) =>
       handle(request).catch((error) =>
