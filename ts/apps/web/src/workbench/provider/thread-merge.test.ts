@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { emptyChatState } from "../chat-state";
+import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { mergeThreadRoster, mergeThreadSummary } from "./thread-merge";
 
 test("delayed mutations cannot rewind an independently streamed target, lifecycle or activity", () => {

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { emptyChatState } from "../chat-state";
+import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { Lens } from "./view";
 
 const wire = vi.hoisted(() => ({

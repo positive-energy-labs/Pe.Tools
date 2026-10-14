@@ -19,7 +19,7 @@ import { previousOf } from "#/readings";
 import { targetClosure } from "#/chat/thread-navigation";
 import type { PromptRequest } from "#/workbench/provider/harness-client";
 import { emptyPrompt } from "#/workbench/prompt";
-import type { ChatState } from "#/workbench/chat-state";
+import type { ChatState } from "@pe/agent-contracts/chat-state";
 import { CHAT_SEEDS, type ChatPage } from "#/chat/seeds";
 
 export type ChatReading = "head" | "machine" | "receipts" | "capabilities";

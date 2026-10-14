@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatPart } from "./chat-state";
+import type { ChatMessage, ChatPart } from "@pe/agent-contracts/chat-state";
 
 export type CallPart = Extract<ChatPart, { type: "tool-call" }>;
 type ThoughtPart = Extract<ChatPart, { type: "reasoning" }>;

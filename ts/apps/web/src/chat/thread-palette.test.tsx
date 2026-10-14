@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import type { UpdateThreadRequest } from "@pe/agent-contracts";
-import { emptyChatState } from "#/workbench/chat-state";
+import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { demoThreads } from "./thread-navigation";
 import { ThreadDialog, ThreadsSidebar } from "./thread-palette";
 
