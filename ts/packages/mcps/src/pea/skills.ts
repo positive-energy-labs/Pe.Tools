@@ -11,20 +11,24 @@ export const bundledPeaSkills: readonly BundledPeaSkill[] = [
     name: "make-page",
     content: String.raw`---
 name: make-page
-description: Deliver explanations of mechanisms, comparisons, and calculations as hosted Pe.Tools Pages. Use for explain, show, teach, charts, tables, diagrams, visual comparisons, calculation walks, mockups, and bound HTML tools, even without a Revit model.
+description: Use for a chart, table, diagram, comparison, calculation walk, or mechanism explanation with one pe_do Page call. It validates and publishes HTML and returns a visible PNG plus an open URL. No Revit model needed for illustrations.
 ---
 
 # Make a Page
 
-Create or adapt a hosted Page as the explanation, then return its openUrl with a short takeaway. A prose explanation with a link to an unbound example is not delivery. Neither is an HTML file in .artifacts or output. A teaching illustration needs no Revit target; label assumed inputs and keep model actions unbound.
+Use pe_do({kind: "page", slug, title, html}) before the final reply when a visual would explain a mechanism, comparison, or calculation. Send a complete self-contained HTML document with inline style and script. The host checks it, captures it, and writes Pages/<slug>/index.html under its product home. Its result includes the canonical Page key, absolute openUrl, and a PNG shown in the conversation. Return its openUrl with a short takeaway; the person already sees the picture. No terminal, file-write, discovery, library-source, or browser loop is needed. If the call refuses, fix the stated problem and resubmit the HTML.
 
-Worked examples: page:@snowdon-ducts/pages/tour and its duct-loss skill show the duct-pressure shape; page:@snowdon-circuits/pages/tour and its circuit-drop skill show the voltage-drop shape. Discover and read the relevant example, then adapt the shape into the Page the person asked for. Without a model, create a scratch illustration with assumed inputs; do not stop at the example's missing binding. A shipped model-backed Page still requires a real binding, real observations through pe.js, and matching Page and Revit evidence.
+Worked example, the Snowdon duct-loss shape (page:@snowdon-ducts/pages/tour): explain the pressure budget as straight duct plus fittings plus a VAV allowance. For a teaching illustration, publish it directly with assumed inputs rather than waiting for that example's model binding:
 
-1. Discover existing Pages, scripts, skills and members with pe_find. Read their canonical keys with pe_read before adapting them. Use the catalog's openUrl; package folders are local locators, never identity.
-2. Your harness cwd is the product home. Author arbitrary HTML there in Pages/<slug>/index.html or a Pod's pages/<page>/index.html; do not use the checkout, .artifacts/output, or another Documents folder. Include /pages/pe.js. Consult the host Page library list at /pe/page-libraries for its typed doors and staged browser libraries.
-3. Use pe.target(), pe.read(key), pe.do(key, input), pe.script(path), pe.describe() and shared Page state. Keep the host Bind chip. Never choose Revit session/document headers, imitate Pea, or hide a refusal. Binding is required before model reads or actions, not for an assumed-input illustration.
+    pe_do({kind: "page", slug: "duct-pressure-lesson", title: "Duct pressure budget", html: '<!doctype html><html><head><title>Duct pressure budget</title><style>body{font:18px system-ui;padding:24px}section{display:flex;gap:12px}article{padding:16px;background:#eee;flex:1}output{font-weight:bold}</style></head><body><h1>Where the pressure goes</h1><p>Illustrative inputs, not a model reading.</p><section><article>120 ft duct<br>0.12 in. wg</article><article>Two elbows<br>0.06 in. wg</article><article>VAV allowance<br>0.25 in. wg</article></section><p>Losses in series add: <output>0.43 in. wg</output>.</p></body></html>'})
+
+The one result supplies the open URL and screenshot. Replace the assumed values only after an actual model reading. A prose-only explanation or an unbound-example link is not delivery.
+
+1. For a new explanation, call pe_do with kind page directly. For adapting an existing Page, discover and read its canonical key first. Update a scratch Page by publishing its slug again; the host keeps its shared state and binding.
+2. Inline CSS, JavaScript, and SVG are sufficient. /pages/pe.js and pe.kit are available when the Page needs host state or richer controls. Keep the explanation focused; do not fetch their source for a simple illustration.
+3. For model-backed work, use pe.target(), pe.read(key), pe.do(key, input), pe.script(path), pe.describe() and shared Page state. Keep the host Bind chip. Never choose Revit session/document headers, imitate Pea, or hide a refusal. Binding is required before model reads or actions, not for an assumed-input illustration.
 4. script:@<manifest-id>/src/File.cs selects the admitted source file. member:@<manifest-id>/settings/file.json is data and cannot execute. Pea reads a Page through pe_read, and appends an event or requests its own pinned binding through pe_do; the Page's action door belongs to the Page.
-5. Read actual observations before presenting model claims. Label illustrations and stale observations. Discover the authored Page and resolve projection.openUrl against Machine.host.canonicalUrl. Check it on that host; if its app shell is unavailable, report that limitation with the Page URL rather than scanning other ports. After an authorized edit, obtain an independent reading and its receipt.
+5. Read actual observations before presenting model claims. Label illustrations and stale observations. The publication call already validates and captures the Page; use its returned URL and image instead of rediscovering or reopening it. A capture proves what rendered, not engineering correctness or a Revit action. After a model edit, obtain an independent reading and its receipt.
 6. Share a scratch Page through op:pod.promote, or adapt an installed Pod under a distinct manifest id. Export with op:pod.export and import with op:pod.import. These archive doors need no Revit. Keep authored support files; binding authority and runtime output never travel.
 `,
   },
