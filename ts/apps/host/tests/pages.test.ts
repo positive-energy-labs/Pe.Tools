@@ -25,6 +25,17 @@ import { admitCrossing, bindControl, callerOf, grantExpiry, Refused } from "../s
 import { asCaller, human, pea } from "./callers.ts";
 
 const cleanup: (() => Promise<unknown>)[] = [];
+type Facsimile = {
+  render: (spec: unknown, options?: { notes: { at: string; text: string }[] }) => string;
+  fromElement: (
+    element: unknown,
+    options?: { groups: string[] },
+  ) => { groups: { text: string; rows: unknown[] }[] };
+  fromRouting: (rows: unknown[], options?: { preferred: string }) => unknown;
+  diff: (before: unknown, after: unknown) => unknown[];
+  compare: (before: unknown, after: unknown) => string;
+  set: (spec: unknown, id: string, patch: Record<string, unknown>) => unknown;
+};
 afterEach(async () => {
   while (cleanup.length) await cleanup.pop()!();
 });
@@ -393,6 +404,119 @@ ${source}`),
     expect(warnings).toContain('data-rv="warnings/Error: Invalid flow"');
     expect(warnings).toContain('data-rv="warnings/Duct is not connected/12"'); // 12 twice: path ids
     expect(warnings).toContain('data-rv="warnings/13"');
+  });
+
+  it("keeps unknown facsimile notes as text and preserves badge numbers on known ids", async () => {
+    const { fetch } = await pagesRoot();
+    const scope: { rv?: Facsimile } = {};
+    runInNewContext(await (await fetch("/pages/revit.js")).text(), scope);
+    const rv = scope.rv!;
+    const spec = rv.fromElement({
+      className: "Duct",
+      requestedParameters: [{ name: "Flow", value: "200" }],
+    });
+    const html = rv.render(spec, {
+      notes: [
+        { at: "Dimensions/Length", text: "Missing <length>" },
+        { at: "Parameters/Flow", text: "Known flow" },
+      ],
+    });
+    expect(html).toContain("Missing &lt;length&gt;");
+    expect(html).toContain("Known flow");
+    expect(html.match(/class="rv-badge"/g)).toHaveLength(1);
+    expect(html).toContain('class="rv-badge">2</span>');
+  });
+
+  it("groups facsimile parameter rows from typed group ids with explicit fallbacks", async () => {
+    const { fetch } = await pagesRoot();
+    const scope: { rv?: Facsimile } = {};
+    runInNewContext(await (await fetch("/pages/revit.js")).text(), scope);
+    const rv = scope.rv!;
+    const spec = rv.fromElement({
+      className: "Duct",
+      requestedParameters: [
+        {
+          name: "Mark",
+          displayValue: "D1",
+          definition: { groupTypeId: "autodesk.parameter.group:identityData-1.0.0" },
+        },
+        {
+          name: "Length",
+          displayValue: "12 ft",
+          rawValue: "12",
+          isReadOnly: true,
+          definition: { groupTypeId: "autodesk.parameter.group:dimensions-1.0.0" },
+        },
+        { name: "Custom", value: "1", definition: { groupTypeId: "vendor:odd-group" } },
+        { name: "Flow", value: "200" },
+        {
+          name: "Localized",
+          value: "yes",
+          definition: {
+            groupTypeId: "autodesk.parameter.group:identityData-1.0.0",
+            groupTypeLabel: "Données d’identité",
+          },
+        },
+      ],
+    });
+    expect(spec.groups.map((group) => group.text)).toEqual([
+      "Identity Data",
+      "Dimensions",
+      "vendor:odd-group",
+      "Parameters",
+      "Données d’identité",
+    ]);
+    expect(rv.render(spec)).toContain('data-rv="Identity Data/Mark"');
+    expect(spec.groups[1]!.rows[0]).toMatchObject({
+      name: "Length",
+      value: "12 ft",
+      disabled: true,
+    });
+    expect(
+      rv.fromElement(
+        {
+          className: "Duct",
+          requestedParameters: [
+            {
+              name: "Mark",
+              definition: { groupTypeId: "autodesk.parameter.group:identityData-1.0.0" },
+            },
+          ],
+        },
+        { groups: ["Identity Data"] },
+      ).groups,
+    ).toHaveLength(1);
+  });
+
+  it("compares routing projections across groups while keeping existing row and control ids", async () => {
+    const { fetch } = await pagesRoot();
+    const scope: { rv?: Facsimile; structuredClone: typeof structuredClone } = { structuredClone };
+    runInNewContext(await (await fetch("/pages/revit.js")).text(), scope);
+    const rv = scope.rv!;
+    const rows = [
+      { group: "Elbows", i: 0, part: "Elbow : Radius", crit: "all" },
+      { group: "Junctions", i: 0, part: "Tee : Standard", crit: "all" },
+    ];
+    const before = rv.fromRouting(rows);
+    const after = rv.fromRouting(
+      rows.map((row) => (row.group === "Elbows" ? { ...row, crit: "4-12 in" } : row)),
+      { preferred: "Tap" },
+    );
+    const changes = rv.diff(before, after);
+    expect(changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ at: "Elbows/Elbow : Radius", prop: "cells" }),
+        expect.objectContaining({
+          at: "field:Preferred Junction Type",
+          prop: "text",
+          from: "Tee",
+          to: "Tap",
+        }),
+      ]),
+    );
+    expect(rv.compare(before, after)).toContain("rv-compare");
+    expect(rv.render(before)).toContain('data-rv="Junctions/Tee : Standard"');
+    expect(() => rv.set(before, "field:Preferred Junction Type", { text: "Tap" })).not.toThrow();
   });
 
   it("keeps one event log per page, with origin and seq, and a snapshot the page writes", async () => {
