@@ -82,7 +82,7 @@ export function StartupSettings({
               : host.surface === "pwa"
                 ? host.overlay
                   ? "This is an app window. "
-                  : "This is an app window. Edge's title bar is showing. Click the chevron beside Minimize once to hide it; Edge remembers the choice. "
+                  : "This is an app window under Edge's title bar. If the bar has a chevron beside Minimize, click it once to hide the bar; with no chevron, Edge installed it without the app manifest: uninstall it in Edge and use Install to taskbar again. "
                 : "Install Pe.Tools in this Edge profile. "}
             {!edge
               ? ""
