@@ -1,4 +1,5 @@
 import {
+  message,
   contributionKey,
   packageIdSchema,
   packageMemberPathSchema,
@@ -381,5 +382,3 @@ const problem = (code: string, path: string, message: string): MemberIssue => ({
   message,
   severity: "error",
 });
-const message = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);

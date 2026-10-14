@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { lstat, readFile, rename, rm, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
-import { packageIdSchema, packageMemberPathSchema } from "@pe/agent-contracts";
+import { message, packageIdSchema, packageMemberPathSchema } from "@pe/agent-contracts";
 import { scriptPodMemberBounds } from "@pe/host-contracts/generated";
 import type { PodExport, PodImport, PodPromote } from "@pe/host-contracts/operation-types";
 import { hostCaptures, type CaptureStore } from "./captures-route.ts";
@@ -51,7 +51,7 @@ export async function exportPod(
   const listing = await listPackages(options.podsRoot ?? productPodsRootPath());
   const pod = unique(listing, request.pod);
   const captured = await capturePackage(pod).catch((error: unknown) => {
-    throw new TransferRefused(`Pod '${request.pod}' is not exportable: ${said(error)}`);
+    throw new TransferRefused(`Pod '${request.pod}' is not exportable: ${message(error)}`);
   });
   const files = new Map<string, Buffer>(
     captured.members.map((m) => [m.path, Buffer.from(m.bytes)]),
@@ -110,7 +110,7 @@ function vendor(
       root = JSON.parse(bytes.toString("utf8").replace(/^﻿/, ""));
     } catch (error) {
       throw new TransferRefused(
-        `Cannot publish '${source}': it is not valid JSON (${said(error)}).`,
+        `Cannot publish '${source}': it is not valid JSON (${message(error)}).`,
       );
     }
     let changed = false;
@@ -288,7 +288,7 @@ export function archiveId(entries: ReadonlyMap<string, Buffer>): string {
   try {
     id = (JSON.parse(manifest.toString("utf8").replace(/^﻿/, "")) as { id?: unknown }).id;
   } catch (error) {
-    throw new TransferRefused(`Pod archive has an invalid pod.json: ${said(error)}`);
+    throw new TransferRefused(`Pod archive has an invalid pod.json: ${message(error)}`);
   }
   const parsed = packageIdSchema.safeParse(id);
   if (!parsed.success)
@@ -418,7 +418,7 @@ export function readZip(archive: Buffer): Map<string, Buffer> {
     try {
       path = packageMemberPathSchema.parse(name);
     } catch (error) {
-      throw refuse(said(error));
+      throw refuse(message(error));
     }
     if (!isPackageMember(path)) throw refuse(`pod archives never carry '${path}'`);
     if (folded.has(path.toLowerCase())) throw refuse(`duplicate or case-colliding entry '${path}'`);
@@ -448,7 +448,7 @@ export function readZip(archive: Buffer): Map<string, Buffer> {
                 throw Error(`compression method ${method}`);
               })();
     } catch (error) {
-      throw refuse(`'${path}' does not inflate within its declared size (${said(error)})`);
+      throw refuse(`'${path}' does not inflate within its declared size (${message(error)})`);
     }
     if (bytes.length !== size || crc32(bytes) !== crc)
       throw refuse(`'${path}' fails its size or CRC check`);
@@ -601,4 +601,3 @@ function localFolder(folder: string): string {
 }
 
 const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
-const said = (error: unknown) => (error instanceof Error ? error.message : String(error));

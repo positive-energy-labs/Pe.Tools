@@ -183,10 +183,6 @@ export function createPackageLifecycle(
       await ready;
       await runtime.setEnabled(id, enabled);
     },
-    remove: async (id: string) => {
-      await ready;
-      await runtime.setEnabled(id, false);
-    },
     packages: () =>
       runtime.contributions().flatMap((c) => (c.kind === "package" ? [c.package] : [])),
     skills: () => runtime.contributions().flatMap((c) => (c.kind === "skill" ? [c.skill] : [])),

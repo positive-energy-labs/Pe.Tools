@@ -554,21 +554,19 @@ export function createContributionContent(options: {
     if (versions.size > 4) versions.delete(versions.keys().next().value!);
     latest.set(key, value);
   };
+  const memberValue = (bytes: Uint8Array, sha256: string) => ({
+    content: new TextDecoder().decode(bytes),
+    bytesBase64: Buffer.from(bytes).toString("base64"),
+    sha256,
+  });
   /** Scratch Page rows with their content remembered for member reads. */
-  function pageRows(
-    descriptors: readonly PageDescriptor[],
-    projections: ReadonlyMap<string | null, { openUrl: string; pane: string }>,
-  ): Capability[] {
+  function pageRows(descriptors: readonly PageDescriptor[]): Capability[] {
     return descriptors
       .filter((p) => p.key !== null && p.openUrl !== null)
       .filter((p) => parseContributionKey(p.key!)?.packageId === "pages")
       .map((p) => {
         const ref = parseContributionKey(p.key!)!;
-        remember(p.key!, {
-          content: new TextDecoder().decode(p.entry.bytes),
-          bytesBase64: Buffer.from(p.entry.bytes).toString("base64"),
-          sha256: p.entry.sha256,
-        });
+        remember(p.key!, memberValue(p.entry.bytes, p.entry.sha256));
         return {
           key: p.key!,
           kind: "page",
@@ -581,7 +579,7 @@ export function createContributionContent(options: {
           source: "pages",
           rank: 1,
           package: { id: "pages", path: `${ref.path}/index.html`, sha256: p.entry.sha256 },
-          projection: projections.get(p.key),
+          projection: { openUrl: p.openUrl!, pane: "page" },
         };
       });
   }
@@ -682,11 +680,7 @@ export function createContributionContent(options: {
       if (pod.diagnostics.some((d) => d.severity === "error")) continue;
       const frozen = await capturePackage(pod);
       for (const member of pod.members) {
-        const value = {
-          content: new TextDecoder().decode(member.bytes),
-          bytesBase64: Buffer.from(member.bytes).toString("base64"),
-          sha256: member.sha256,
-        };
+        const value = memberValue(member.bytes, member.sha256);
         remember(contributionKey({ kind: "member", packageId: pod.id, path: member.path }), value);
         for (const c of pod.contributions.filter((c) => c.memberPath === member.path))
           remember(c.key, {
@@ -704,7 +698,7 @@ export function createContributionContent(options: {
         sha256: entry.sha256,
       });
     }
-    const pages = pageRows(descriptors, pageProjections);
+    const pages = pageRows(descriptors);
     return {
       packages,
       skills: publication.skills,
@@ -740,16 +734,7 @@ export function createContributionContent(options: {
       const descriptors = options.pages
         ? await options.pages(admitted)
         : await scratchPageDescriptors(join(options.worldRoot, "Pages"));
-      return pageRows(
-        descriptors,
-        new Map(
-          descriptors.flatMap((p) =>
-            p.key !== null && p.openUrl !== null
-              ? [[p.key, { openUrl: p.openUrl, pane: "page" }] as const]
-              : [],
-          ),
-        ),
-      );
+      return pageRows(descriptors);
     },
     member: (key: string, sha256?: string) =>
       latest.has(key) ? (sha256 ? revisions.get(key)?.get(sha256) : latest.get(key)) : undefined,
