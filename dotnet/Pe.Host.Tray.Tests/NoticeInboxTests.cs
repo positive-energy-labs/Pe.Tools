@@ -117,8 +117,8 @@ public class NoticeCardWindowTests {
     [Test]
     public void TheCardIsPaddedFromTheScreenEdgeAndNeverOutgrowsTheWorkArea() {
         var work = new Rectangle(0, 0, 1920, 1032);
-        Assert.That(TrayWindow.CardBoundsFor(work, 96, 300), Is.EqualTo(new Rectangle(1920 - 12 - 420, 1032 - 12 - 300, 420, 300)));
-        Assert.That(TrayWindow.CardBoundsFor(work, 192, 300), Is.EqualTo(new Rectangle(1920 - 24 - 840, 1032 - 24 - 600, 840, 600)));
-        Assert.That(TrayWindow.CardBoundsFor(new Rectangle(0, 0, 400, 300), 96, 900), Is.EqualTo(new Rectangle(12, 12, 376, 276)));
+        Assert.That(TrayWindow.CardBoundsFor(work, 96, 300), Is.EqualTo(new Rectangle(1920 - 20 - 420, 1032 - 20 - 300, 420, 300)));
+        Assert.That(TrayWindow.CardBoundsFor(work, 192, 300), Is.EqualTo(new Rectangle(1920 - 40 - 840, 1032 - 40 - 600, 840, 600)));
+        Assert.That(TrayWindow.CardBoundsFor(new Rectangle(0, 0, 400, 300), 96, 900), Is.EqualTo(new Rectangle(20, 20, 360, 260)));
     }
 }

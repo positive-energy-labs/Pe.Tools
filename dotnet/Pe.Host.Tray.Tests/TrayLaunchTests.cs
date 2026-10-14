@@ -34,7 +34,7 @@ public class TrayLaunchTests {
     public void RehomeScalesItsScreenGutterAndClampsOnSmallAndOffsetMonitors() {
         var work = new System.Drawing.Rectangle(-1920, -100, 1920, 1080);
         var at96 = TrayWindow.HomeBoundsFor(work, 96);
-        Assert.That(at96.Size, Is.EqualTo(new System.Drawing.Size(760, 560)));
+        Assert.That(at96.Size, Is.EqualTo(new System.Drawing.Size(560, 560)));
         Assert.That(at96.Right, Is.EqualTo(work.Right - 12));
         Assert.That(at96.Bottom, Is.EqualTo(work.Bottom - 12));
         var at192 = TrayWindow.HomeBoundsFor(work, 192);
@@ -221,7 +221,7 @@ public class TrayLaunchTests {
     [Test]
     public void TraySizeScalesWithMonitorDpiAndClampsToWorkArea() {
         Assert.That(TrayWindow.SizeFor(new System.Drawing.Size(3840, 2200), 192),
-            Is.EqualTo(new System.Drawing.Size(1520, 1120)));
+            Is.EqualTo(new System.Drawing.Size(1120, 1120)));
         Assert.That(TrayWindow.SizeFor(new System.Drawing.Size(600, 500), 192),
             Is.EqualTo(new System.Drawing.Size(600, 500)));
     }
@@ -250,6 +250,47 @@ public class TrayLaunchTests {
                      new System.Drawing.Rectangle(796, -1, 292, 57), new System.Drawing.Rectangle(796, 0, 400, 57),
                      new System.Drawing.Rectangle(796, 0, 292, 701) })
             Assert.That(TrayWindow.ProjectTitlebar(invalid, client, 192, true), Is.EqualTo(NativeTitlebarGeometry.Hidden));
+    }
+
+    [Test, Apartment(ApartmentState.STA)]
+    public void CustomFrameKeepsNativeEdgesAndCaptionGeometryAcrossCardAndWindowStates() {
+        using var window = new TrayWindow();
+        using var view = new Microsoft.Web.WebView2.WinForms.WebView2 { Dock = System.Windows.Forms.DockStyle.Fill };
+        window.Controls.Add(view);
+        window.ConfigureTitlebar(view);
+        window.Rehome();
+        try {
+            window.Show();
+            System.Windows.Forms.Application.DoEvents();
+            var geometry = window.ReadTitlebarGeometry();
+            TestContext.WriteLine(JsonSerializer.Serialize(geometry));
+            Assert.That(geometry.visible, Is.True);
+            Assert.DoesNotThrow(() => NativeAdapterContract.SerializeNative(geometry));
+            Assert.That(DwmGetWindowAttribute(window.Handle, 1, out var rendering, sizeof(int)), Is.Zero);
+            Assert.That(rendering, Is.EqualTo(1), "DWM non-client rendering is enabled");
+            Assert.That(window.Region, Is.Null, "top-level HWND is never region-clipped");
+            Assert.That(view.Region, Is.Not.Null);
+            window.PositionCard(120);
+            System.Windows.Forms.Application.DoEvents();
+            Assert.That(view.Region, Is.Not.Null, "card keeps the DWM edge uncovered");
+            Assert.That(view.Region!.IsVisible(0, 0), Is.False);
+            Assert.That(DwmGetWindowAttribute(window.Handle, 1, out rendering, sizeof(int)), Is.Zero);
+            Assert.That(rendering, Is.EqualTo(1), "card retains native non-client rendering");
+            Assert.That(window.Region, Is.Null);
+            window.LeaveCard();
+            System.Windows.Forms.Application.DoEvents();
+            Assert.That(window.ReadTitlebarGeometry().visible, Is.True, "panel returns from card");
+            window.WindowState = System.Windows.Forms.FormWindowState.Maximized;
+            System.Windows.Forms.Application.DoEvents();
+            var maximized = window.ReadTitlebarGeometry();
+            TestContext.WriteLine("maximized " + JsonSerializer.Serialize(maximized));
+            Assert.That(maximized.visible, Is.True, "maximized caption");
+            window.WindowState = System.Windows.Forms.FormWindowState.Minimized;
+            Assert.That(window.ReadTitlebarGeometry().visible, Is.False);
+            window.WindowState = System.Windows.Forms.FormWindowState.Normal;
+            System.Windows.Forms.Application.DoEvents();
+            Assert.That(window.ReadTitlebarGeometry().visible, Is.True, "restored caption");
+        } finally { window.Hide(); }
     }
 
     [Test]

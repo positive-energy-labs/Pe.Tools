@@ -625,8 +625,7 @@ internal sealed class TrayWindow : Form {
         var round = 2; // DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND, panel and card alike
         if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000)) DwmSetWindowAttribute(Handle, 33, ref round, sizeof(int));
         SetWindowPos(Handle, IntPtr.Zero, 0, 0, 0, 0, 0x37); // NOMOVE|NOSIZE|NOZORDER|NOACTIVATE|FRAMECHANGED
-        var margins = new NativeMargins { Top = (int)Math.Round(40 * DeviceDpi / 96d) };
-        DwmExtendFrameIntoClientArea(Handle, ref margins);
+        ExtendNativeFrame();
         SizeChanged += (_, _) => RefreshTitlebar();
         VisibleChanged += (_, _) => RefreshTitlebar();
         DpiChanged += (_, _) => RefreshTitlebar();
@@ -662,9 +661,10 @@ internal sealed class TrayWindow : Form {
         _refreshingFrame = true;
         try {
             var geometry = ReadTitlebarGeometry();
-            Region? next = null;
+            // Clip only the child so DWM owns the top-level frame and shadow in both modes.
+            ExtendNativeFrame();
+            var next = new Region(ContentClipBounds(ClientSize, VisibleFrameBorder));
             if (geometry.visible && !_card) {
-                next = new Region(ContentClipBounds(ClientSize, VisibleFrameBorder));
                 var scale = DeviceDpi / 96d;
                 next.Exclude(new Rectangle((int)Math.Round(geometry.rect.width * scale), 0,
                     ClientSize.Width - (int)Math.Round(geometry.rect.width * scale), (int)Math.Ceiling(geometry.rect.height * scale)));
@@ -672,6 +672,12 @@ internal sealed class TrayWindow : Form {
             var old = _frameView.Region; _frameView.Region = next; old?.Dispose();
             TitlebarGeometryChanged?.Invoke(this, EventArgs.Empty);
         } finally { _refreshingFrame = false; }
+    }
+
+    private void ExtendNativeFrame() {
+        var margins = new NativeMargins { Left = 1, Right = 1, Bottom = 1,
+            Top = _card ? 1 : Math.Max(ResizeBorder, (int)Math.Round(40 * DeviceDpi / 96d)) };
+        DwmExtendFrameIntoClientArea(Handle, ref margins);
     }
 
     public TrayWindow() {
@@ -695,9 +701,9 @@ internal sealed class TrayWindow : Form {
         if (!_card) { _card = true; RefreshTitlebar(); }
     }
 
-    /** The card's 420 CSS px, padded from the screen edge by the panel's own gutter. */
+    /** The card's 420 CSS px, inset farther than the panel's 12 CSS px gutter. */
     internal static Rectangle CardBoundsFor(Rectangle work, int dpi, int cssHeight) {
-        var gutter = Math.Max(0, (int)Math.Round(12 * dpi / 96d));
+        var gutter = Math.Max(0, (int)Math.Round(20 * dpi / 96d));
         var width = Math.Min((int)Math.Round(420 * dpi / 96d), Math.Max(0, work.Width - 2 * gutter));
         var height = Math.Min((int)Math.Ceiling(cssHeight * dpi / 96d), Math.Max(0, work.Height - 2 * gutter));
         return new Rectangle(work.Right - gutter - width, work.Bottom - gutter - height, width, height);
@@ -734,7 +740,7 @@ internal sealed class TrayWindow : Form {
     }
 
     internal static Size SizeFor(Size work, int dpi) =>
-        new(Math.Min((int)Math.Round(760 * dpi / 96f), work.Width),
+        new(Math.Min((int)Math.Round(560 * dpi / 96f), work.Width),
             Math.Min((int)Math.Round(560 * dpi / 96f), work.Height));
 
     internal static bool TryReadChromeTheme(JsonElement payload, out int background, out int foreground, out bool dark) {
@@ -763,7 +769,7 @@ internal sealed class TrayWindow : Form {
         if (_customFrame) {
             if (DwmDefWindowProc(message.HWnd, (uint)message.Msg, message.WParam, message.LParam, out var result)) { message.Result = result; return; }
             if (message.Msg == 0x83 && message.WParam != IntPtr.Zero) { message.Result = IntPtr.Zero; return; }
-            if (message.Msg == 6) { var margins = new NativeMargins { Top = Math.Max(ResizeBorder, (int)Math.Round(40 * DeviceDpi / 96d)) }; DwmExtendFrameIntoClientArea(Handle, ref margins); }
+            if (message.Msg == 6) ExtendNativeFrame();
             if (message.Msg == 0x84 && WindowState != FormWindowState.Maximized) {
                 var packed = message.LParam.ToInt64();
                 var p = PointToClient(new Point((short)(packed & 65535), (short)((packed >> 16) & 65535)));
