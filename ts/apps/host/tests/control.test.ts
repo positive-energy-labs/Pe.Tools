@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,7 +25,10 @@ import {
   admitScript,
   mintPageDoor,
   consentedRead,
+  writeTerminalContext,
 } from "../src/control.ts";
+import { HOST_CONTEXT_HEADER, productPathNames } from "@pe/host-contracts/contracts";
+import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
 import { ActionJournal } from "../src/action-journal.ts";
 
 const T0 = Date.parse("2026-10-12T12:00:00.000Z");
@@ -310,5 +314,33 @@ test("revoke between steps: the begun step reports, the next is refused grant.re
     expect((row.steps[1] as { error: string }).error).toContain("grant.revoked");
   } finally {
     await rm(dir, { recursive: true, force: true });
+  }
+});
+
+/**
+ * Acceptance R4d: surviving Revit spawned an attach host while a replacement host started; the
+ * first retired and removed the shared `.context` the settled host had written, so the owner's
+ * CLI could no longer act as human. A host removes the file only while it still holds its token.
+ */
+test("a retiring host leaves the terminal context another host wrote since", async () => {
+  const home = await mkdtemp(join(tmpdir(), "pe-terminal-context-"));
+  const prior = process.env[productPathNames.productHomeVariable];
+  process.env[productPathNames.productHomeVariable] = home;
+  try {
+    const path = hostContextTokenPath("host-dev");
+    const first = writeTerminalContext("host-dev");
+    const settled = writeTerminalContext("host-dev");
+    const token = readFileSync(path, "utf8");
+    first.retire();
+    expect(readFileSync(path, "utf8")).toBe(token);
+    expect(callerOf({ kind: "local" }, { [HOST_CONTEXT_HEADER]: token })).toEqual({
+      caller: { kind: "human", via: "cli" },
+    });
+    settled.retire();
+    expect(existsSync(path)).toBe(false);
+  } finally {
+    if (prior === undefined) delete process.env[productPathNames.productHomeVariable];
+    else process.env[productPathNames.productHomeVariable] = prior;
+    await rm(home, { recursive: true, force: true });
   }
 });

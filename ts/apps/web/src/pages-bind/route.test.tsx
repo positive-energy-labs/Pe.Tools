@@ -1,6 +1,6 @@
 ﻿import { expect, test, vi } from "vite-plus/test";
 vi.mock("#/pages-bind/picker", () => ({ BindRoute: () => null }));
-import { Route } from "./bind";
+import { Route } from "../routes/bind";
 
 test("the bind manifest preserves Page viewing links and defaults to the binding picker", () => {
   const read = Route.options.validateSearch as (search: Record<string, unknown>) => unknown;
