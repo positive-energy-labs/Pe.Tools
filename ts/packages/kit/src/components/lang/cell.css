@@ -76,6 +76,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: var(--font-mono);
+  font-size-adjust: var(--mono-adjust);
+  font-weight: var(--weight-mono);
   font-size: var(--type-small-size);
   font-style: normal;
   color: var(--pe-pea-ink);
@@ -181,6 +183,8 @@
   white-space: nowrap;
   text-overflow: ellipsis;
   font-family: var(--font-mono);
+  font-size-adjust: var(--mono-adjust);
+  font-weight: var(--weight-mono);
   font-size: var(--type-small-size);
   font-style: italic;
   color: var(--pe-caution);
@@ -308,6 +312,8 @@
 /* drift's second half: the other side's value, struck, inline at zero row height. */
 .dl-ghost {
   font-family: var(--font-mono);
+  font-size-adjust: var(--mono-adjust);
+  font-weight: var(--weight-mono);
   font-size: var(--type-small-size);
   color: var(--pe-alarm);
   text-decoration: line-through;
@@ -328,10 +334,11 @@
   display: block;
   margin-top: 1px;
   font-family: var(--font-mono);
+  font-size-adjust: var(--mono-adjust);
+  font-weight: var(--weight-mono);
   font-size: var(--type-small-size);
   letter-spacing: 0.02em;
   font-style: normal;
-  font-weight: var(--weight-regular);
   line-height: var(--type-small-line-height);
   color: var(--pe-ink-2);
   overflow: hidden;

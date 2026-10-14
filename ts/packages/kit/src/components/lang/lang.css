@@ -174,20 +174,19 @@ tr.dl-row[data-active]::before {
   overflow: hidden;
   color: var(--pe-ink-2);
   font-family: var(--font-mono);
+  font-size-adjust: var(--mono-adjust);
+  font-weight: var(--weight-mono);
   font-size: var(--type-small-size);
 }
 .dl-row-meta [data-fact="word"] {
   font-family: var(--font-body);
 }
 /* INLINE CODE: a machine token inside a sentence, and the quietest mark in it. It sizes off its
-   sentence, not off a rung: base.css pins every face to one x-height (font-size-adjust 0.54), so
-   at 1em mono sits on the sans x-height exactly, yet Cascadia's wide caps then read a size large;
-   0.9em seats it just under the line. The small rung read as a footnote, a step-down rung sat
-   well below it. Cascadia's strokes are heavier than Open Sans at one nominal weight, so it takes
-   --weight-mono. A soft wash, no stroke: a bordered chip outshouted the prose around it. A token
-   split across lines keeps its padding and corners on every fragment. Bold stays unsaved. */
+   sentence at 1em; the mono tokens in base.css seat it just under the sans and lighten it. A soft
+   wash, no stroke: a bordered chip outshouted the prose around it. A token split across lines
+   keeps its padding and corners on every fragment. Bold stays unsaved. */
 [data-pe] .prose-pe :not(pre) > code {
-  font-size: var(--type-mono-inline);
+  /* The typography plugin bolds code; this beats it. */
   font-weight: var(--weight-mono);
   padding: 0.05em 0.3em;
   border: 0;
@@ -314,6 +313,8 @@ tr.dl-row[data-active]::before {
   align-items: center;
   justify-items: end;
   font-family: var(--font-mono);
+  font-size-adjust: var(--mono-adjust);
+  font-weight: var(--weight-mono);
   color: var(--pe-ink-2);
   white-space: nowrap;
 }
@@ -409,10 +410,6 @@ tr.dl-row[data-active]::before {
 .dl-row-aside {
   margin-left: 0.5em;
   color: var(--pe-ink-2);
-}
-/* A key in the aside sits a step under the title, as inline code sits under its sentence. */
-.dl-row-aside > .face-mono {
-  font-size: var(--type-mono-inline);
 }
 /* A list's DETAIL: the cursor row's description, said once under the rows. Two lines are always
    held, so the popup never moves as the cursor does. */

@@ -62,6 +62,8 @@
   & .dl-sq,
   & .dl-cite {
     font-family: var(--font-mono);
+    font-size-adjust: var(--mono-adjust);
+    font-weight: var(--weight-mono);
     font-size: var(--type-small-size);
     font-variant-numeric: tabular-nums;
     letter-spacing: var(--track-mono);
