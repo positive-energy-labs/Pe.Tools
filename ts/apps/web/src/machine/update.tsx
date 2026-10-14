@@ -223,6 +223,7 @@ export function UpdateGroup({
     );
   const plan = status.plan;
   const blockers = blockersOf(plan);
+  const blockedByRevit = blockers.some(({ revit }) => revit !== null);
   const closing = plan.effects.close.length;
   const reopening = plan.effects.reopen.length;
   const unknown = plan.revits.filter((revit) => revit.unknown);
@@ -265,22 +266,34 @@ export function UpdateGroup({
         </div>
       ))}
       <span className="text-ink-2">
-        Closes {closing} Revit{closing === 1 ? "" : "s"} keeping their work, installs, then reopens{" "}
-        {reopening} document{reopening === 1 ? "" : "s"}.
-        {unknown.length
-          ? ` Revit ${unknown.map((revit) => revit.year).join(", ")} is not answering yet; its documents are unknown and are kept if it answers.`
-          : ""}
+        {blockedByRevit ? (
+          "Revit is open. Update saves your work, restarts Revit and reopens your documents."
+        ) : (
+          <>
+            Closes {closing} Revit{closing === 1 ? "" : "s"} keeping their work, installs, then
+            reopens {reopening} document{reopening === 1 ? "" : "s"}.
+            {unknown.length
+              ? ` Revit ${unknown.map((revit) => revit.year).join(", ")} is not answering yet; its documents are unknown and are kept if it answers.`
+              : ""}
+          </>
+        )}
       </span>
       <span className="flex flex-wrap items-center gap-2">
         <Button
           kind="commit"
-          label={`close ${closing} Revit${closing === 1 ? "" : "s"} and update`}
+          label={
+            blockedByRevit
+              ? "Update"
+              : `close ${closing} Revit${closing === 1 ? "" : "s"} and update`
+          }
           reason={consent.refusal ?? `pe-revit update apply ${plan.planId}`}
           refusal={consent.refusal}
           busy={consent.pending}
           onClick={() => void consent.consent()}
         >
-          {`close ${closing} Revit${closing === 1 ? "" : "s"} and update`}
+          {blockedByRevit
+            ? "Update"
+            : `close ${closing} Revit${closing === 1 ? "" : "s"} and update`}
         </Button>
         {recheck}
       </span>

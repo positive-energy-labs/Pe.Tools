@@ -254,7 +254,12 @@ describe("consent", () => {
     const blocker = screen.getByLabelText("blocker");
     expect(blocker.textContent).toContain("pid 2501");
     expect(blocker.textContent).toContain("project-a Tower.rvt");
-    const consent = screen.getByRole("button", { name: "close 3 Revits and update" });
+    expect(
+      screen.getByText(
+        "Revit is open. Update saves your work, restarts Revit and reopens your documents.",
+      ),
+    ).toBeTruthy();
+    const consent = screen.getByRole("button", { name: /^Update$/ });
     expect(
       consent.getAttribute("aria-disabled") === "true" || consent.hasAttribute("disabled"),
     ).toBe(true);
