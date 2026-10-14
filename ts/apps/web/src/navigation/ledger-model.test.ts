@@ -91,7 +91,7 @@ describe("open-work ledger rows", () => {
       verb: "unknown",
       where: "workflow · human",
       says: "Revit's add-ins are a newer Pe.Revit build (beta.208) than this checkout (beta.207)",
-      url: "/machine?section=revit",
+      url: "/machine?section=revit#align-addins",
     });
     expect(row?.refusal).toBeUndefined();
     expect(row?.detail).toContain("version skew");

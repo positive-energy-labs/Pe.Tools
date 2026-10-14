@@ -200,13 +200,12 @@ const cli = (argv: string[]) =>
     .map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg))
     .join(" ")}`;
 
-/** A free socket's default year: the file's own when installed, else the lowest installed year
- * that can open it, else the newest. A year the file cannot open is never a default. */
+/** A known file year requires an exact installed match. An upgrade is an explicit choice. */
 export function defaultYear(doc: DocRow | null, years: readonly number[]): number | null {
   if (!years.length) return null;
   const sorted = [...years].sort((a, b) => a - b);
   const saved = doc?.savedYear ?? null;
-  if (saved !== null) return sorted.find((year) => year >= saved) ?? sorted.at(-1)!;
+  if (saved !== null) return years.includes(saved) ? saved : null;
   if (doc?.lastYear && years.includes(doc.lastYear)) return doc.lastYear;
   return sorted.at(-1)!;
 }
@@ -269,17 +268,23 @@ export function launchPlan(
 
   let refusal: string | null = null;
   let waiting: string | null = null;
-  if (year === null)
-    refusal = "No installed Revit year is known yet; the machine reading has none.";
-  else if (doc && saved !== null && newest !== null && saved > newest)
+  if (doc && saved !== null && newest !== null && saved > newest)
     refusal = `${doc.title} was saved in Revit ${saved}; the newest Revit here is ${newest}.`;
   else if (draft.target && draft.target !== "new" && !target)
     refusal = `Revit '${draft.target}' is no longer running; patch another socket.`;
+  else if (year === null)
+    refusal =
+      saved !== null && years.length
+        ? `Revit ${saved} is not installed. Choose an installed year explicitly to upgrade a copy.`
+        : "No installed Revit year is known yet; the machine reading has none.";
   else if (doc && saved !== null && saved > year)
     refusal = `${doc.title} was saved in Revit ${saved}; Revit ${year} cannot open a newer file.`;
   else if (target && executionRefusal(target.row)) refusal = executionRefusal(target.row);
   else if (target && phaseOf(target.row) !== "ready")
     refusal = `Revit ${year} pid ${pidOf(target.row)} is ${phaseOf(target.row)}; it opens nothing until it answers.`;
+  else if (doc?.cloud && pea)
+    refusal =
+      "A cloud copy requires an explicit immutable APS version. Version selection is not available here yet.";
   else if (
     doc?.openIn &&
     !pea &&
@@ -310,7 +315,7 @@ export function launchPlan(
     cautions.push({
       tone: "pea",
       text: doc.cloud
-        ? "Pea gets a detached copy. Nothing reaches central."
+        ? "An immutable APS version is required before Pea can acquire a cloud copy."
         : "Pea works on a copy in its own folder; your file is untouched.",
     });
   if (doc && detach && !pea)

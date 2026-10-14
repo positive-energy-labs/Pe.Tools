@@ -186,7 +186,10 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
   expect(custodyOf(map.machine.revit.sessions![5]!.row)).toBe("controlled");
   expect(pidOf(map.machine.revit.sessions![5]!.row)).toBe(47);
   expect(within(document.querySelector('[data-key="card-5"]')!).getByText("failed")).toBeTruthy();
-  expect(screen.getByText("Review ducts")).toBeTruthy();
+  expect(screen.queryByText("Review ducts")).toBeNull();
+  expect(map.machine.revit.sessions![0]!.attachment!.documents![0]!.access).toEqual({
+    kind: "read",
+  });
   expect(screen.getAllByText(/documents unread: Error: documents:.*leg exceeded/)).toHaveLength(3);
   expect(screen.queryByText("no document open")).toBeNull();
   expect(screen.getAllByText("observed")).toHaveLength(3);

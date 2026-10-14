@@ -19,6 +19,14 @@ export const instancesStartSchema = z.strictObject({
 });
 export type InstancesStart = z.infer<typeof instancesStartSchema>;
 
+/** APS version identity, selected explicitly; a cloud model GUID alone is not a baseline. */
+export const cloudVersionSchema = z.strictObject({
+  projectId: z.string().regex(/^b\.[0-9a-f-]{36}$/i),
+  itemId: z.string().min(1),
+  versionId: z.string().regex(/^urn:adsk\.[^:]+:fs\.file:vf\.[^?]+\?version=\d+$/),
+});
+export type CloudVersion = z.infer<typeof cloudVersionSchema>;
+
 /**
  * One launch: a source opened into a running session or into a new Revit. Every option is the
  * SDK's own `doc open` flag; the press that named it is the consent (ADR 0016), so nothing is
@@ -28,6 +36,8 @@ export type InstancesStart = z.infer<typeof instancesStartSchema>;
 export const instancesLaunchSchema = z.strictObject({
   /** A local path, a `cld://` identity, `recent:<title>`, or an openId (with `reload`). */
   source: z.string().trim().min(1),
+  /** Pea downloads this immutable version; it never opens the connected cloud model. */
+  cloudVersion: cloudVersionSchema.optional(),
   /** `source` is a .rte or .rft template path: a new unsaved document is created from it. */
   template: z.boolean().optional(),
   into: z.union([
@@ -94,7 +104,7 @@ export const instancesActions = {
     input: instancesStartSchema,
   },
   "instances.open": {
-    says: "Open a source into a running session (into.session) or into a new Revit (into.start). Into a new Revit with owner pea, or into a Revit Pea's acquisition started, the open is an acquisition: a local file is copied into Pea's work folder first and the copy opens (detached when workshared); a cloud model opens detached. Pea writes the document only once its native facts certify it independent. The receipt names the acquisition id and the opened path.",
+    says: "Open a source into a running session (into.session) or a new Revit (into.start). A Pea acquisition copies local bytes, or downloads an explicit immutable APS cloudVersion, into its baseline/work folder. Only the local work copy opens, detached when workshared. Pea writes only after native facts certify independence. The receipt names the acquisition and baseline.",
     dirties: ["sdk"],
     needs: "nothing",
     actor: "any",
@@ -180,7 +190,7 @@ export function instancesSessionSelection(input: unknown): SdkSessionSelection |
 }
 
 export const instancesReading = {
-  says: "Read SDK sessions, installed years, recents, open documents, or one session's visible windows (dialogs).",
+  says: "Read SDK sessions, installed years, recents, documents, visible windows (dialogs), session-journal logs, or op receipts including work outside the host journal. Logs and ops accept tail (1–500, default 100); the SDK owns their lineage and envelopes.",
   dirties: [],
   needs: "nothing",
   actor: "any",

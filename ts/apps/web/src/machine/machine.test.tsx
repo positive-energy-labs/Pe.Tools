@@ -9,9 +9,11 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vite-plus/tes
 import type { Machine, Reading } from "@pe/agent-contracts";
 
 import { acknowledgeUpdate } from "#/host/install";
-import { switchRemoteAdministration, switchShare } from "#/host/machine";
+import { alignRevitBootstrap, switchRemoteAdministration, switchShare } from "#/host/machine";
 import { Button } from "@pe/kit/lang/button";
-import { MACHINE_SEEDS } from "#/open/seeds";
+import { GENERATED_FROM } from "@pe/host-contracts/pe-revit-contract";
+import { BootstrapAlignment } from "./bootstrap";
+import { MACHINE_SEEDS, BAY_YOURS_25 } from "#/open/seeds";
 import { AppChrome, AppDevtools } from "#/route/app-chrome";
 
 import { MachineBody } from "./body";
@@ -29,6 +31,7 @@ vi.mock("#/navigation/surface-host", () => ({ useSurfaceHost: () => surface }));
 
 vi.mock("#/host/machine", async (original) => ({
   ...(await original<typeof import("#/host/machine")>()),
+  alignRevitBootstrap: vi.fn(async () => ({ id: "alignment", state: "succeeded" })),
   switchShare: vi.fn(async () => {}),
   switchRemoteAdministration: vi.fn(async () => {}),
 }));
@@ -433,4 +436,35 @@ test("canonical Machine section selection follows the address without hidden acc
   view.rerender(tree());
   expect(header("Host").getAttribute("aria-expanded")).toBe("false");
   expect(header("Update").getAttribute("aria-expanded")).toBe("false");
+});
+
+const bootstrapBase = Object.values(MACHINE_SEEDS).find((seed) => seed.state === "ready")!;
+const bootstrapEmpty = {
+  ...(bootstrapBase as { observation: Machine }).observation,
+  revit: { years: [2025], sessions: [], unclassifiedAttachments: [] },
+} as Machine;
+
+test("Machine installs the selected year only after explicit confirmation of the pinned SDK", async () => {
+  render(<BootstrapAlignment machine={bootstrapEmpty} refusal={null} />);
+  fireEvent.click(screen.getByRole("button", { name: "Align Revit 2025 add-ins with this build" }));
+  expect(alignRevitBootstrap).not.toHaveBeenCalled();
+  fireEvent.click(
+    screen.getByRole("button", { name: `Install Revit 2025 add-ins for SDK ${GENERATED_FROM}` }),
+  );
+  expect(alignRevitBootstrap).toHaveBeenCalledWith("2025", GENERATED_FROM);
+  expect(await screen.findByText(/receipt alignment/)).toBeTruthy();
+});
+
+test("Machine names the open Revit that refuses alignment", () => {
+  render(
+    <BootstrapAlignment
+      machine={{ ...bootstrapEmpty, revit: { ...bootstrapEmpty.revit, sessions: [BAY_YOURS_25] } }}
+      refusal={null}
+    />,
+  );
+  const button = screen.getByRole("button", { name: "Align Revit 2025 add-ins with this build" });
+  expect(button.getAttribute("aria-disabled")).toBe("true");
+  fireEvent.click(button);
+  expect(alignRevitBootstrap).not.toHaveBeenCalled();
+  expect(screen.getByText(/Close.*Revit 2025.*18244/)).toBeTruthy();
 });

@@ -5,6 +5,21 @@ import { hostFetch } from "#/host/runtime";
  * host verbs. Each is a plain call; the Machine reading is the only state, so success dirties it.
  */
 import { dirty } from "#/readings";
+import type { ActionReceipt } from "@pe/agent-contracts";
+
+export async function alignRevitBootstrap(
+  year: string,
+  confirmedVersion: string,
+): Promise<ActionReceipt> {
+  const response = await peClient.response("machine.bootstrap", {
+    body: { id: crypto.randomUUID(), year, confirmedVersion },
+  });
+  if (!response.ok)
+    throw Error((await response.text()) || `Alignment refused (${response.status}).`);
+  const receipt = (await response.json()) as ActionReceipt;
+  dirty({ kind: "machine" });
+  return receipt;
+}
 
 /** `PUT /pe/share`. A 409 is the host's refusal, drawn from the reading it updates. */
 export async function switchShare(on: boolean): Promise<void> {

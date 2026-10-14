@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 import { basename, extname, isAbsolute, join, win32 } from "node:path";
 import { z } from "zod";
-import { isCloudSource, type ActionReceipt, type InstancesLaunch } from "@pe/agent-contracts";
+import {
+  cloudVersionSchema,
+  isCloudSource,
+  type ActionReceipt,
+  type InstancesLaunch,
+} from "@pe/agent-contracts";
 import type { SessionDocument } from "@pe/host-contracts/pe-revit-contract";
 
 /** Intent is frozen before allocation; the journal fold is the sole acquisition authority (ADR 0017 D6). */
@@ -19,8 +24,14 @@ const originSchema = z.discriminatedUnion("kind", [
     work: z.string(),
   }),
   z.strictObject({ kind: z.literal("new"), template: z.string() }),
-  /** A cloud model opened detached: no baseline version is recorded (handover says so). */
-  z.strictObject({ kind: z.literal("detached"), source: z.string() }),
+  z.strictObject({
+    kind: z.literal("version-copy"),
+    source: z.string(),
+    version: cloudVersionSchema,
+    detach: z.literal(true),
+    baseline: z.string(),
+    work: z.string(),
+  }),
 ]);
 
 const acquisitionIntentSchema = z.strictObject({
@@ -90,11 +101,31 @@ export function planAcquisition(
 ): AcquisitionIntent {
   const root = acquisitionRoot(peaWork, id);
   if (!launch) return { id, root, process, document: null };
+  if (launch.cloudVersion && (launch.template || launch.reload || !isCloudSource(launch.source)))
+    throw Error(
+      "An immutable APS version requires a cloud model source, never a template, reload or local file.",
+    );
+  if (launch.cloudVersion && launch.links === "allow")
+    throw Error(
+      "Immutable-version acquisition requires links refuse until a linked package is certified.",
+    );
   if (launch.reload) throw Error("A reload acts on an open document; it is never an acquisition.");
   let origin: z.infer<typeof originSchema>;
   if (launch.template) origin = { kind: "new", template: launch.source };
-  else if (isCloudSource(launch.source)) origin = { kind: "detached", source: launch.source };
-  else {
+  else if (isCloudSource(launch.source)) {
+    if (!launch.cloudVersion)
+      throw Error(
+        "Cloud acquisition requires an explicit immutable APS version; connected model opens are refused.",
+      );
+    origin = {
+      kind: "version-copy",
+      source: launch.source,
+      version: launch.cloudVersion,
+      detach: true,
+      baseline: join(root, "baseline", "model.rvt"),
+      work: join(root, "work", "model.rvt"),
+    };
+  } else {
     if (!isAbsolute(launch.source))
       throw Error(
         `Pea opens a local path or a cloud identity; '${launch.source}' is neither. Read recents for the path it opens with.`,
@@ -174,7 +205,9 @@ export function foldAcquisitions(receipts: readonly ActionReceipt[]): Acquisitio
     const document =
       opened &&
       docProcess &&
-      (origin?.kind !== "file-copy" || (opened.path !== null && samePath(opened.path, origin.work)))
+      (!origin ||
+        !("work" in origin) ||
+        (opened.path !== null && samePath(opened.path, origin.work)))
         ? { process: docProcess, sdkOpenId: opened.openId }
         : null;
     const files = row.steps.flatMap((step) =>
@@ -184,7 +217,7 @@ export function foldAcquisitions(receipts: readonly ActionReceipt[]): Acquisitio
     const copied =
       baselineStep?.state === "succeeded" ? copiedSchema.safeParse(baselineStep.result).data : null;
     const baseline =
-      copied && origin?.kind === "file-copy" ? { path: origin.baseline, ...copied } : null;
+      copied && origin && "baseline" in origin ? { path: origin.baseline, ...copied } : null;
     const handovers = linked("instances.handover", row.id);
     const cleanups = linked("instances.cleanup", row.id);
     const handed = handovers.find((each) => each.state === "succeeded");
@@ -243,7 +276,8 @@ export const processWhose = (acquisitions: readonly Acquisition[], process: Acqu
     ? ("pea" as const)
     : ("you" as const);
 
-type NativeFacts = Pick<SessionDocument, "isWorkshared" | "isDetached">;
+type NativeFacts = Pick<SessionDocument, "isWorkshared" | "isDetached"> &
+  Partial<Pick<SessionDocument, "isCloud">>;
 
 /**
  * Why one SDK document is not natively certified independent, or null when it is: not workshared,
@@ -270,7 +304,10 @@ export function acquiredOpenIds(
     const document = each.document;
     if (each.state !== "held" || !document || !sameProcess(document.process, process)) continue;
     const sdk = sdkDocuments?.filter((doc) => doc.openId === document.sdkOpenId) ?? [];
-    const independent = sdk.length === 1 && unindependent(sdk[0]!) === null;
+    const independent =
+      sdk.length === 1 &&
+      unindependent(sdk[0]!) === null &&
+      (each.intent.document?.origin.kind !== "version-copy" || sdk[0]!.isCloud === false);
     const product = productOpenIds.filter((openId) => openId === document.sdkOpenId);
     if (independent && product.length === 1) owned.set(product[0]!, each.id);
   }

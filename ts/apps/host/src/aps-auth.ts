@@ -128,35 +128,47 @@ export const apsAuthLogout: () => ApsAuthEffect<ApsLogoutResult> = Effect.fnUntr
   );
 });
 
-export const apsAuthToken: (input: ApsTokenRequest) => ApsAuthEffect<ApsTokenResult> =
-  Effect.fnUntraced(function* (input: ApsTokenRequest) {
-    return yield* tokenStoreLock.withPermit(
-      Effect.gen(function* () {
-        const request = normalizeApsTokenRequest(input);
-        const credentials = yield* readApsCredentials("aps.auth.token", true);
-        const tokenKey = createApsTokenStoreKey(credentials.clientId, request);
-        const current = yield* loadPersistedToken(tokenKey);
-        if (current && isTokenFresh(current)) return toTokenResult(request, current);
+export const apsAuthToken: (
+  input: ApsTokenRequest,
+  interactive?: boolean,
+) => ApsAuthEffect<ApsTokenResult> = Effect.fnUntraced(function* (
+  input: ApsTokenRequest,
+  interactive = true,
+) {
+  return yield* tokenStoreLock.withPermit(
+    Effect.gen(function* () {
+      const request = normalizeApsTokenRequest(input);
+      const credentials = yield* readApsCredentials("aps.auth.token", true);
+      const tokenKey = createApsTokenStoreKey(credentials.clientId, request);
+      const current = yield* loadPersistedToken(tokenKey);
+      if (current && isTokenFresh(current)) return toTokenResult(request, current);
 
-        if (request.flowKind === ApsAuthFlowKind.ThreeLeggedConfidential && current?.refreshToken) {
-          const refreshed = yield* Effect.result(
-            refreshApsToken(credentials, request, current.refreshToken),
-          );
-          if (refreshed._tag === "Success") {
-            yield* savePersistedToken(tokenKey, refreshed.success);
-            return toTokenResult(request, refreshed.success);
-          }
+      if (request.flowKind === ApsAuthFlowKind.ThreeLeggedConfidential && current?.refreshToken) {
+        const refreshed = yield* Effect.result(
+          refreshApsToken(credentials, request, current.refreshToken),
+        );
+        if (refreshed._tag === "Success") {
+          yield* savePersistedToken(tokenKey, refreshed.success);
+          return toTokenResult(request, refreshed.success);
         }
+      }
 
-        const token =
-          request.flowKind === ApsAuthFlowKind.TwoLegged
-            ? yield* acquireClientCredentialsToken(credentials, request)
-            : yield* acquireInteractiveToken(credentials, request);
-        yield* savePersistedToken(tokenKey, token);
-        return toTokenResult(request, token);
-      }),
-    );
-  });
+      if (!interactive && request.flowKind === ApsAuthFlowKind.ThreeLeggedConfidential)
+        return yield* Effect.fail(
+          new LocalOpError(
+            "aps.auth.token",
+            "APS sign-in is required before unattended cloud acquisition. Sign in explicitly, then retry.",
+          ),
+        );
+      const token =
+        request.flowKind === ApsAuthFlowKind.TwoLegged
+          ? yield* acquireClientCredentialsToken(credentials, request)
+          : yield* acquireInteractiveToken(credentials, request);
+      yield* savePersistedToken(tokenKey, token);
+      return toTokenResult(request, token);
+    }),
+  );
+});
 
 function normalizeApsTokenRequest(input: ApsTokenRequest): NormalizedApsTokenRequest {
   return {

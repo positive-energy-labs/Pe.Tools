@@ -4,6 +4,7 @@ import { Button } from "@pe/kit/lang/button";
 import { PidChip } from "#/components/lang/process";
 import { useLifecycle } from "#/open/lifecycle";
 import { useDestination } from "#/navigation/state";
+import { BootstrapAlignment } from "./bootstrap";
 import {
   custodyOf,
   executionRefusal,
@@ -61,6 +62,7 @@ export function RevitGroup({
   const selected = session ? sessions?.filter((entry) => keyOf(entry) === session) : sessions;
   return (
     <div className="flex flex-col gap-2" aria-label="Revit runtime">
+      <BootstrapAlignment machine={machine} refusal={refusal} />
       <Button label="Open documents and binding" onClick={() => go("/open")}>
         Open documents and binding
       </Button>

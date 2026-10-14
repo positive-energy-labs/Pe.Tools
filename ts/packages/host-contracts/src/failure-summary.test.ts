@@ -12,7 +12,10 @@ describe("one failure presentation", () => {
     expect(failure.summary).toBe(
       "Revit's add-ins are a newer Pe.Revit build (beta.208) than this checkout (beta.207)",
     );
-    expect(failure.door).toEqual({ label: "Revit on Machine", href: "/machine?section=revit" });
+    expect(failure.door).toEqual({
+      label: "Align Revit add-ins with this build",
+      href: "/machine?section=revit#align-addins",
+    });
     expect(failure.detail).toBe(BOOTSTRAP);
   });
   it("says the older direction when the checkout is ahead", () => {
