@@ -12,7 +12,8 @@ class FakeSource {
   close() {
     this.closed = true;
   }
-  emit(seq: number) {
+  /** One `thread` Reading frame, carrying its host log id as the SSE id. */
+  emit(seq: number, id: number) {
     const event = harnessEventSchema.parse({
       seq,
       at: "2026-10-01T12:00:00.000Z",
@@ -20,7 +21,11 @@ class FakeSource {
       turnId: "t1",
       stopReason: "end_turn",
     });
-    this.onmessage?.({ data: JSON.stringify(event) } as MessageEvent<string>);
+    const frame = { kind: "event", key: "k", value: event, id };
+    this.onmessage?.({
+      data: JSON.stringify(frame),
+      lastEventId: String(id),
+    } as MessageEvent<string>);
   }
 }
 
@@ -71,7 +76,15 @@ describe("harnessClient", () => {
 });
 
 describe("streamThread", () => {
-  it("resumes from the last delivered seq after the stream drops", () => {
+  const cursorOf = (url: string) => {
+    const parsed = new URL(url);
+    expect(parsed.pathname).toBe("/pe/resources");
+    expect(JSON.parse(parsed.searchParams.get("keys")!)).toEqual([
+      { kind: "thread", thread: "th 1" },
+    ]);
+    return Number(parsed.searchParams.get("after"));
+  };
+  it("follows the thread Reading from the body's cursor and resumes from the last log id", () => {
     vi.useFakeTimers();
     const sources: FakeSource[] = [];
     const open = ((url: string) => {
@@ -80,31 +93,35 @@ describe("streamThread", () => {
       return source;
     }) as unknown as OpenEvents;
     const seen: number[] = [];
+    let rereads = 0;
     const stop = streamThread({
       origin: "http://host",
       threadId: "th 1",
-      after: 4,
+      cursor: 40,
+      lastSeq: 4,
       open,
       onEvent: (event) => seen.push(event.seq),
+      onReread: () => rereads++,
     });
 
-    expect(sources[0]!.url).toBe("http://host/pe/threads/th%201/stream?after=4");
-    sources[0]!.emit(4); // already in the body: dropped
-    sources[0]!.emit(5);
-    sources[0]!.emit(6);
+    expect(cursorOf(sources[0]!.url)).toBe(40);
+    sources[0]!.emit(4, 40); // already in the body: skipped
+    sources[0]!.emit(5, 41);
+    sources[0]!.emit(6, 42);
     sources[0]!.onerror?.();
     expect(sources[0]!.closed).toBe(true);
     vi.advanceTimersByTime(1_000);
 
-    expect(sources[1]!.url).toBe("http://host/pe/threads/th%201/stream?after=6");
-    sources[1]!.emit(6); // a replay across the reconnect: dropped
-    sources[1]!.emit(7);
+    expect(cursorOf(sources[1]!.url)).toBe(42);
+    sources[1]!.emit(6, 42); // a replay across the reconnect: skipped
+    sources[1]!.emit(7, 43);
     expect(seen).toEqual([5, 6, 7]);
 
-    stop();
-    expect(sources[1]!.closed).toBe(true);
-    sources[1]!.onerror?.();
+    // A hole in seq: re-read the body; this stream is done.
+    sources[1]!.emit(9, 45);
+    expect([rereads, sources[1]!.closed]).toEqual([1, true]);
     vi.advanceTimersByTime(5_000);
     expect(sources).toHaveLength(2);
+    stop();
   });
 });

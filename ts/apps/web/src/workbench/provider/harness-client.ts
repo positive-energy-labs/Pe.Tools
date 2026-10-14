@@ -10,8 +10,11 @@ import type {
   HarnessEvent,
   HarnessThreadSummary,
   promptRequestSchema,
+  ReadingFrame,
+  ReadingRequest,
   UpdateThreadRequest,
 } from "@pe/agent-contracts";
+import { followThread } from "@pe/agent-contracts/chat-state";
 import type { z } from "zod";
 import { openEventSource } from "#/readings";
 
@@ -40,8 +43,11 @@ export function harnessClient(origin: string) {
       onChange: (threads: HarnessThreadSummary[]) => void,
       onFault: (error: Error) => void,
     ) => {
-      const events = openEventSource(client.url("threads.stream", {}));
-      events.onmessage = (message) => onChange(JSON.parse(message.data) as HarnessThreadSummary[]);
+      const events = openEventSource(readingsUrl(origin, { kind: "threads" }));
+      events.onmessage = (message) => {
+        const frame = JSON.parse(message.data) as ReadingFrame;
+        if (frame.kind === "snapshot") onChange(frame.value as HarnessThreadSummary[]);
+      };
       events.onerror = () => onFault(new Error("Thread list disconnected; reconnecting."));
       return () => events.close();
     },
@@ -84,35 +90,61 @@ export const notFound = (error: unknown) => (error as { status?: unknown } | nul
 /** The browser's EventSource, or a test's stand-in with the same three members. */
 export type OpenEvents = (url: string) => Pick<EventSource, "onmessage" | "onerror" | "close">;
 
+/** One Readings connection (`resources.stream`) for one key, resumed after a host log cursor. */
+const readingsUrl = (origin: string, key: ReadingRequest, after?: number) =>
+  peRouteUrl(
+    "resources.stream",
+    {
+      query: {
+        keys: JSON.stringify([key]),
+        ...(after === undefined ? {} : { after: String(after) }),
+      },
+    },
+    origin,
+  );
+
 /**
- * Tail one thread's log from `after`. On any stream error it closes and reopens from the last
- * seq it delivered, so a reconnect never replays or skips; a stale or repeated seq is dropped.
+ * Follow one thread's `thread` Reading from the body's `cursor`, applying events past `lastSeq` by
+ * the shared rule (`followThread`). A dropped stream reopens after the last host log id it saw, so
+ * a reconnect neither replays nor skips. A gap or a hole in seq ends this stream with `onReread`:
+ * read the body again and follow from its cursor.
  */
 export function streamThread(options: {
   origin: string;
   threadId: string;
-  after: number;
+  cursor: number;
+  lastSeq: number;
   onEvent: (event: HarnessEvent) => void;
+  onReread: () => void;
   onFault?: (error: Error) => void;
   open?: OpenEvents;
   retryMs?: number;
 }): () => void {
-  const { origin, threadId, onEvent, onFault, retryMs = 1_000 } = options;
+  const { origin, threadId, onEvent, onReread, onFault, retryMs = 1_000 } = options;
   const open = options.open ?? openEventSource;
-  let last = options.after;
+  let cursor = options.cursor;
+  let last = options.lastSeq;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let source: ReturnType<OpenEvents> | undefined;
+  const stop = () => {
+    stopped = true;
+    clearTimeout(timer);
+    source?.close();
+  };
   const connect = () => {
-    const events = open(
-      peRouteUrl("thread.stream", { params: { id: threadId }, query: { after: last } }, origin),
-    );
+    const events = open(readingsUrl(origin, { kind: "thread", thread: threadId }, cursor));
     source = events;
     events.onmessage = (message: MessageEvent<string>) => {
-      const event = JSON.parse(message.data) as HarnessEvent;
-      if (event.seq <= last) return;
-      last = event.seq;
-      onEvent(event);
+      if (message.lastEventId) cursor = Number(message.lastEventId);
+      const step = followThread(last, JSON.parse(message.data) as ReadingFrame);
+      if (step.kind === "apply") {
+        last = step.event.seq;
+        onEvent(step.event);
+      } else if (step.kind === "reread") {
+        stop();
+        onReread();
+      }
     };
     events.onerror = () => {
       events.close();
@@ -122,9 +154,5 @@ export function streamThread(options: {
     };
   };
   connect();
-  return () => {
-    stopped = true;
-    clearTimeout(timer);
-    source?.close();
-  };
+  return stop;
 }

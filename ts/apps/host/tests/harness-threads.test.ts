@@ -38,6 +38,7 @@ type Host = {
   /** Who every request crosses as: the identity middleware's stand-in. */
   as: Caller;
   heads: ReturnType<typeof createHarnessThreads>["heads"];
+  observe: ReturnType<typeof createHarnessThreads>["observe"];
   log: HostLog;
   close: () => Promise<unknown>;
   consoles: string[];
@@ -72,6 +73,7 @@ const host = (updatePending?: () => boolean, prepare?: () => Promise<unknown>): 
           : threads.fetch(request),
       ),
     heads: threads.heads,
+    observe: threads.observe,
     log,
     close: threads.close,
     consoles,
@@ -316,7 +318,7 @@ test("idle reaping keeps history and choices, and a prompt waits for exact-child
     });
     await realStop(child);
   });
-  const stream = await threads.fetch(new Request(`http://host/pe/threads/${id}/stream`));
+  const following = threads.observe({ kind: "thread", thread: id }, () => {}, null)!;
   try {
     await vi.advanceTimersByTimeAsync(IDLE_CHILD_MS - 1);
     expect((await read(id)).session).toBe("started");
@@ -347,7 +349,7 @@ test("idle reaping keeps history and choices, and a prompt waits for exact-child
   } finally {
     release?.();
     stop.mockRestore();
-    await stream.body?.cancel();
+    following();
     await threads.close();
   }
 });
@@ -643,52 +645,6 @@ test("a thread prompts, parks a permission, cancels, interrupts, renames, and re
 
   // A route that reads a body refuses one without a JSON content type.
   expect((await bare(threads, "POST", `/pe/threads/${id}/prompt`)).status).toBe(415);
-
-  // SSE replays after `after`, then tails live.
-  body = await read(id);
-  const after = body.events.length - 1;
-  const response = await threads.fetch(
-    new Request(`http://host/pe/threads/${id}/stream?after=${after}`),
-  );
-  expect(response.headers.get("content-type")).toBe("text/event-stream");
-  const stream = response.body!.getReader();
-  const seen: HarnessEvent[] = [];
-  let buffer = "";
-  const pump = async (count: number) => {
-    while (seen.length < count) {
-      buffer += new TextDecoder().decode((await stream.read()).value);
-      for (const match of buffer.matchAll(/^data: (.*)$/gm)) seen.push(JSON.parse(match[1]!));
-      buffer = buffer.slice(buffer.lastIndexOf("\n\n") + 2);
-    }
-  };
-  await pump(1);
-  expect(seen.map((e) => e.seq)).toEqual([after + 1]);
-  await call("POST", `/pe/threads/${id}/prompt`, { text: "live" });
-  await pump(5);
-  expect(kinds(seen)).toEqual([
-    "title_changed",
-    "prompt",
-    "update:agent_message_chunk",
-    "update:tool_call",
-    "turn_end",
-  ]);
-  await stream.cancel();
-
-  // A client that drops mid-stream ends its stream only; the thread keeps logging.
-  const abort = new AbortController();
-  const dropped = await threads.fetch(
-    new Request(`http://host/pe/threads/${id}/stream`, { signal: abort.signal }),
-  );
-  const droppedReader = dropped.body!.getReader();
-  await droppedReader.read();
-  await call("POST", `/pe/threads/${id}/prompt`, { text: "hang" });
-  await until(read, id, (b) => b.running);
-  abort.abort();
-  await call("POST", `/pe/threads/${id}/cancel`);
-  body = await until(read, id, (b) => !b.running);
-  expect(turnEnds(body).at(-1)).toMatchObject({ stopReason: "cancelled" });
-  let done = false;
-  while (!done) done = (await droppedReader.read()).done;
 });
 
 test("every committed thread event lands in the host log in order; a delete forgets them", async () => {

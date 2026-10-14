@@ -243,15 +243,6 @@ export function definePeApi<
       "caller",
       "threads",
     ),
-    "threads.stream": route(
-      "GET",
-      "/pe/threads/stream",
-      none,
-      z.array(harnessThreadSummarySchema),
-      "read",
-      "threads",
-      "stream",
-    ),
     "thread.get": route("GET", "/pe/threads/:id", none, harnessThreadBodySchema, "read", "threads"),
     "thread.update": route(
       "PUT",
@@ -327,15 +318,6 @@ export function definePeApi<
       harnessThreadBodySchema,
       "caller",
       "threads",
-    ),
-    "thread.stream": route(
-      "GET",
-      "/pe/threads/:id/stream",
-      none,
-      schemas.harnessEventSchema as S["harnessEventSchema"],
-      "read",
-      "threads",
-      "stream",
     ),
     "scope.get": route(
       "GET",

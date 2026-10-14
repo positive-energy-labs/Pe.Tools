@@ -79,7 +79,7 @@ import { accessModes, sessionOffer, type Providers } from "./providers.ts";
 
 /** The thread wire of ADR 0015; contract and route list in `@pe/agent-contracts` `harness-thread.ts`. */
 
-type Meta = Omit<HarnessThreadSummary, "lastSeq" | "activity"> & {
+type Meta = Omit<HarnessThreadSummary, "lastSeq" | "cursor" | "activity"> & {
   acpSessionId: string | null;
   models: HarnessThreadBody["models"];
   traits: HarnessThreadBody["traits"];
@@ -485,6 +485,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     updatedAt: t.events.at(-1)?.at ?? t.meta.updatedAt,
     modelId: t.meta.modelId,
     lastSeq: t.events.length,
+    cursor: options.log.last,
     head: t.meta.head,
     lifecycle: t.meta.lifecycle,
     activity: activity(t),
@@ -1244,56 +1245,6 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     return ended;
   }
 
-  function stream(t: Thread, after: number, signal: AbortSignal): Response {
-    let cleanup = () => {};
-    const encoder = new TextEncoder();
-    const frame = (event: HarnessEvent) =>
-      encoder.encode(`id: ${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
-    return new Response(
-      new ReadableStream<Uint8Array>({
-        start(controller) {
-          let heartbeat: ReturnType<typeof setInterval> | undefined;
-          // A client gone without `cancel` makes enqueue throw; that ends this stream, nothing else.
-          const send = (bytes: Uint8Array) => {
-            try {
-              controller.enqueue(bytes);
-            } catch {
-              cleanup();
-            }
-          };
-          const listener = (event: HarnessEvent) => send(frame(event));
-          const close = () => {
-            cleanup();
-            try {
-              controller.close();
-            } catch {
-              // already closed or errored
-            }
-          };
-          cleanup = () => {
-            clearInterval(heartbeat);
-            t.listeners.delete(listener);
-            signal.removeEventListener("abort", close);
-          };
-          send(encoder.encode(": open\n\n"));
-          for (const event of t.events.slice(after)) send(frame(event));
-          heartbeat = setInterval(() => send(encoder.encode(": heartbeat\n\n")), 15_000);
-          t.listeners.add(listener);
-          if (signal.aborted) close();
-          else signal.addEventListener("abort", close, { once: true });
-        },
-        cancel: () => cleanup(),
-      }),
-      {
-        headers: {
-          "content-type": "text/event-stream",
-          "cache-control": "no-cache",
-          connection: "keep-alive",
-        },
-      },
-    );
-  }
-
   const json = (value: unknown, status = 200) => Response.json(value, { status });
 
   async function handle(request: Request): Promise<Response> {
@@ -1304,64 +1255,6 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       return json({ error: "Unknown thread route" }, 404);
     const id = declared.params.id;
     const method = request.method;
-    if (declared.id === "threads.stream") {
-      const encoder = new TextEncoder();
-      let cleanup = () => {};
-      return new Response(
-        new ReadableStream<Uint8Array>({
-          start(controller) {
-            let scheduled: ReturnType<typeof setTimeout> | undefined;
-            const send = () => {
-              scheduled = undefined;
-              try {
-                controller.enqueue(
-                  encoder.encode(`data: ${JSON.stringify([...threads.values()].map(summary))}\n\n`),
-                );
-              } catch {
-                cleanup();
-              }
-            };
-            // Coalesce token bursts; this is one projection stream, never one child stream per row.
-            const dirty = () => {
-              scheduled ??= setTimeout(send, 100);
-            };
-            const close = () => {
-              cleanup();
-              try {
-                controller.close();
-              } catch {}
-            };
-            const heartbeat = setInterval(() => {
-              try {
-                controller.enqueue(encoder.encode(": heartbeat\n\n"));
-              } catch {
-                cleanup();
-              }
-            }, 15_000);
-            cleanup = () => {
-              clearTimeout(scheduled);
-              clearInterval(heartbeat);
-              summaryListeners.delete(dirty);
-              request.signal.removeEventListener("abort", close);
-            };
-            summaryListeners.add(dirty);
-            send();
-            if (request.signal.aborted) close();
-            else request.signal.addEventListener("abort", close, { once: true });
-          },
-          cancel() {
-            cleanup();
-          },
-        }),
-        {
-          headers: {
-            "content-type": "text/event-stream",
-            "cache-control": "no-cache",
-            connection: "keep-alive",
-          },
-        },
-      );
-    }
     // Only routes that read a body require JSON; cancel and delete take none.
     const input = async <T>(schema: z.ZodType<T>) => {
       if (!request.headers.get("content-type")?.startsWith("application/json")) throw new NotJson();
@@ -1704,12 +1597,6 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         const { id: traitId, value } = await input(traitRequestSchema);
         await useLive(t, (live) => setTrait(t, live, traitId, value));
         return json(body(t));
-      }
-      case "thread.stream": {
-        const after = Number(
-          url.searchParams.get("after") ?? request.headers.get("last-event-id") ?? 0,
-        );
-        return stream(t, Number.isFinite(after) ? after : 0, request.signal);
       }
     }
     return json({ error: `No route ${method} ${url.pathname}` }, 404);

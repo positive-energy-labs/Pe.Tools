@@ -5,6 +5,7 @@ import { harnessEventSchema, type HarnessEvent } from "@pe/agent-contracts";
 import { z } from "zod";
 
 import {
+  followThread,
   emptyChatState,
   selectApprovals,
   selectMessages,
@@ -435,5 +436,30 @@ describe.each(["claude", "codex"])("%s fixture log", (harness) => {
       .filter((part) => part.type === "text")
       .at(-1);
     expect(lastText?.type === "text" && lastText.text).toContain("workflow:rooms.merge");
+  });
+});
+
+describe("following the host log", () => {
+  const event = (seq: number): HarnessEvent => ({
+    seq,
+    at: "2026-10-13T00:00:00.000Z",
+    kind: "title_changed",
+    title: `t${seq}`,
+  });
+  const key = '{"kind":"thread","thread":"a"}';
+  it("applies each event once, in seq order; a gap or a hole says re-read the body", () => {
+    expect(followThread(1, { kind: "event", key, value: event(2), id: 9 })).toEqual({
+      kind: "apply",
+      event: event(2),
+    });
+    expect(followThread(2, { kind: "event", key, value: event(2), id: 9 })).toEqual({
+      kind: "skip",
+    });
+    expect(followThread(2, { kind: "event", key, value: event(4), id: 11 })).toEqual({
+      kind: "reread",
+    });
+    expect(followThread(2, { kind: "gap", key, dropped: null, id: 11 })).toEqual({
+      kind: "reread",
+    });
   });
 });

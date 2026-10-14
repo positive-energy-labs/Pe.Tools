@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { HOST_LOG_MAX_ENTRY_BYTES, type HostEvent, type HostLogEntry } from "@pe/agent-contracts";
 
 /** 8 segments of 8 MiB: the newest ~64 MiB of host history replays; older reads as a gap. */
-export const HOST_LOG_LIMITS = {
+const HOST_LOG_LIMITS = {
   segmentBytes: 8 * 1024 * 1024,
   segments: 8,
   entryBytes: HOST_LOG_MAX_ENTRY_BYTES,

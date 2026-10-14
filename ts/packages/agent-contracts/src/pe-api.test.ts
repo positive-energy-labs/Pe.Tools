@@ -98,7 +98,7 @@ it("dynamic callers can consume declared streams and assets without JSON decodin
     "http://host",
     async () => new Response("data: []\n\n", { headers: { "content-type": "text/event-stream" } }),
   );
-  const result = await client.invoke("threads.stream", {});
+  const result = await client.invoke("resources.stream", {});
   expect(result).toBeInstanceOf(Response);
   expect(await (result as Response).text()).toBe("data: []\n\n");
 });

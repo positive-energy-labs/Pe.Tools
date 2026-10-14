@@ -49,7 +49,8 @@ import { threadHeadSchema } from "./target.ts";
  *            (copies the log; same provider forks the ACP session, another re-feeds the transcript)
  *   POST   /pe/threads/:id/model {modelId}
  *   POST   /pe/threads/:id/trait {id, value}    (ACP `session/set_config_option`)
- *   GET    /pe/threads/:id/stream  (SSE; each `data:` is one HarnessEvent, from `?after=<seq>`)
+ *   A thread's events are followed as the `thread` Reading (`reading.ts`) over the host log,
+ *   from the summary's `cursor`; the list is the `threads` Reading.
  */
 
 export const harnessIds = ["claude", "codex"] as const;
@@ -408,6 +409,8 @@ export const harnessThreadSummarySchema = z.object({
   modelId: z.string().nullable(),
   /** Last event seq; a client continues its stream from here without reading the whole log. */
   lastSeq: z.number(),
+  /** The host log id this record was read at: follow the `thread` Reading from it. */
+  cursor: z.number().int().nonnegative(),
   head: threadHeadSchema,
   lifecycle: threadLifecycleSchema,
   activity: z.object({

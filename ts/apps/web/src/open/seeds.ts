@@ -663,6 +663,7 @@ const thread = (
   updatedAt,
   modelId: null,
   lastSeq: activity.lastSeq,
+  cursor: 0,
   head: {
     ...emptyThreadHead,
     defaultTarget: { kind: "open", ref },

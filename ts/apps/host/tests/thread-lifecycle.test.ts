@@ -209,17 +209,14 @@ test("an opted-in old conversation does not auto-settle immediately after reopen
   expect((await call()).value.lifecycle.status).toBe("active");
 });
 
-test("summary stream projects scope and lifecycle changes for an off-thread reader", async () => {
+test("the threads Reading projects scope and lifecycle changes for an off-thread reader", async () => {
   const { host, call } = fixture();
   vi.useFakeTimers();
-  const abort = new AbortController();
-  const response = await host.fetch(
-    new Request("http://host/pe/threads/stream", { signal: abort.signal }),
-  );
-  const reader = response.body!.getReader();
-  expect(new TextDecoder().decode((await reader.read()).value)).toContain('"pinned":false');
+  const seen: string[] = [];
+  const release = host.observe({ kind: "threads" }, (frame) => seen.push(JSON.stringify(frame)))!;
+  expect(seen.at(-1)).toContain('"pinned":false');
   await call({ expectedRevision: 0, pinned: true });
   await vi.advanceTimersByTimeAsync(100);
-  expect(new TextDecoder().decode((await reader.read()).value)).toContain('"pinned":true');
-  abort.abort();
+  expect(seen.at(-1)).toContain('"pinned":true');
+  release();
 });
