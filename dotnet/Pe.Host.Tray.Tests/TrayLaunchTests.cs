@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Diagnostics;
 using NUnit.Framework;
@@ -113,6 +114,43 @@ public class TrayLaunchTests {
             using var json = JsonDocument.Parse(invalid);
             Assert.That(TrayWindow.TryReadChromeTheme(json.RootElement, out _, out _, out _), Is.False, invalid);
         }
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmGetWindowAttribute(IntPtr window, int attribute, out int value, int size);
+
+    /** The message the page sends reaches the DWM caption: the dark flag is read back; the colors have no DWM getter. */
+    [Test, Apartment(ApartmentState.STA)]
+    public void AThemeMessageTheRendererSendsReachesTheWindowsCaption() {
+        Assume.That(OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000), "caption colors need Windows 11");
+        const string sent = "{\"type\":\"chrome-theme\",\"background\":1710618,\"foreground\":16777215,\"dark\":true}";
+        using var message = JsonDocument.Parse(sent);
+        Assert.That(NativeAdapterContract.Accepts("renderer", message.RootElement), Is.True);
+        Assert.That(TrayWindow.TryReadChromeTheme(message.RootElement, out var background, out var foreground, out var dark), Is.True);
+        using var window = new TrayWindow();
+        _ = window.Handle;
+        window.ApplyChromeTheme(background, foreground, dark);
+        Assert.That(window.ChromeThemeResult, Is.EqualTo(new CaptionThemeResult(0, 0, 0)));
+        Assert.That(DwmGetWindowAttribute(window.Handle, 20, out var immersive, sizeof(int)), Is.Zero);
+        // DWM answers E_INVALIDARG to a read of the caption and text colors: their accepted set is the proof.
+        Assert.That(immersive, Is.EqualTo(1));
+    }
+
+    [DllImport("shell32.dll")]
+    private static extern int GetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] out string appId);
+
+    [Test]
+    public void EachTraySurfaceHasOneDistinctAppUserModelIdTheProcessSetsOnce() {
+        var installed = new TrayLaunch(1, DateTimeOffset.UnixEpoch, "service.json");
+        var devA = new TrayLaunch(1, DateTimeOffset.UnixEpoch, "service.json") { SupervisorFile = "a.json", SourceRoot = @"C:\work\Pe.Tools" };
+        var devB = devA with { SourceRoot = @"C:\work\Pe.Tools-other" };
+        var ids = new[] { installed, devA, devB }.Select(TrayIdentity.AppUserModelId).ToArray();
+        Assert.That(ids.Distinct().Count(), Is.EqualTo(3));
+        Assert.That(TrayIdentity.AppUserModelId(devA), Is.EqualTo(TrayIdentity.AppUserModelId(devA with { SourceRoot = @"C:\WORK\pe.tools" })));
+        Assert.That(ids, Has.All.Matches<string>(id => id.Length <= 128 && id.StartsWith("PositiveEnergy.PeTools.Tray") && !id.Contains(' ')));
+        TrayIdentity.Apply(devA);
+        Assert.That(GetCurrentProcessExplicitAppUserModelID(out var set), Is.Zero);
+        Assert.That(set, Is.EqualTo(TrayIdentity.AppUserModelId(devA)));
     }
 
     [Test]
