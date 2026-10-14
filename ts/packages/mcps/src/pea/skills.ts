@@ -11,20 +11,20 @@ export const bundledPeaSkills: readonly BundledPeaSkill[] = [
     name: "make-page",
     content: String.raw`---
 name: make-page
-description: Make or adapt an interactive Pe.Tools Page. Use when an explanation needs a chart, table, diagram, comparison, calculation walk, mockup, or a bound HTML tool.
+description: Deliver explanations of mechanisms, comparisons, and calculations as hosted Pe.Tools Pages. Use for explain, show, teach, charts, tables, diagrams, visual comparisons, calculation walks, mockups, and bound HTML tools, even without a Revit model.
 ---
 
 # Make a Page
 
-Use a Page first when the person needs to see relationships, choices, or a sequence. Return the Page openUrl after checking it, so they can revisit the result instead of receiving a one-shot explanation.
+Create or adapt a hosted Page as the explanation, then return its openUrl with a short takeaway. A prose explanation with a link to an unbound example is not delivery. Neither is an HTML file in .artifacts or output. A teaching illustration needs no Revit target; label assumed inputs and keep model actions unbound.
 
-Worked example: for a duct-pressure explanation, discover and read page:@snowdon-ducts/pages/tour, then use its duct-loss skill and Page shape instead of drawing a separate diagram. It is a client-scrubbed shipped example. A shipped Page is done only when it binds to a real document, reads real elements through pe.js, and shows those same elements in its Page and Revit evidence. An illustration or calculator alone is a scratch Page, not a shipped example.
+Worked examples: page:@snowdon-ducts/pages/tour and its duct-loss skill show the duct-pressure shape; page:@snowdon-circuits/pages/tour and its circuit-drop skill show the voltage-drop shape. Discover and read the relevant example, then adapt the shape into the Page the person asked for. Without a model, create a scratch illustration with assumed inputs; do not stop at the example's missing binding. A shipped model-backed Page still requires a real binding, real observations through pe.js, and matching Page and Revit evidence.
 
 1. Discover existing Pages, scripts, skills and members with pe_find. Read their canonical keys with pe_read before adapting them. Use the catalog's openUrl; package folders are local locators, never identity.
-2. Author arbitrary HTML in a scratch Pages/<slug>/index.html or a Pod's pages/<page>/index.html. Include /pages/pe.js. Consult the host Page library list at /pe/page-libraries for its typed doors and staged browser libraries.
-3. Use pe.target(), pe.read(key), pe.do(key, input), pe.script(path), pe.describe() and shared Page state. Keep the host Bind chip. Never choose Revit session/document headers, imitate Pea, or hide a refusal. An unbound Page must ask for a binding.
+2. Your harness cwd is the product home. Author arbitrary HTML there in Pages/<slug>/index.html or a Pod's pages/<page>/index.html; do not use the checkout, .artifacts/output, or another Documents folder. Include /pages/pe.js. Consult the host Page library list at /pe/page-libraries for its typed doors and staged browser libraries.
+3. Use pe.target(), pe.read(key), pe.do(key, input), pe.script(path), pe.describe() and shared Page state. Keep the host Bind chip. Never choose Revit session/document headers, imitate Pea, or hide a refusal. Binding is required before model reads or actions, not for an assumed-input illustration.
 4. script:@<manifest-id>/src/File.cs selects the admitted source file. member:@<manifest-id>/settings/file.json is data and cannot execute. Pea reads a Page through pe_read, and appends an event or requests its own pinned binding through pe_do; the Page's action door belongs to the Page.
-5. Read actual observations before presenting model claims. Label illustrations and stale observations. After an authorized edit, obtain an independent reading and its receipt.
+5. Read actual observations before presenting model claims. Label illustrations and stale observations. Discover the authored Page and resolve projection.openUrl against Machine.host.canonicalUrl. Check it on that host; if its app shell is unavailable, report that limitation with the Page URL rather than scanning other ports. After an authorized edit, obtain an independent reading and its receipt.
 6. Share a scratch Page through op:pod.promote, or adapt an installed Pod under a distinct manifest id. Export with op:pod.export and import with op:pod.import. These archive doors need no Revit. Keep authored support files; binding authority and runtime output never travel.
 `,
   },
@@ -148,7 +148,7 @@ description: Write and run a C# Revit script when code is the clearest way to in
 
 ## Method
 
-- Start with pe_find to establish the exact connected document and capability. Do not create or register a script without a connected document. If there is no document, report the missing target and return a proposed script contract: purpose, inputs, read/write mode, expected artifact, and the readback that will prove it.
+- Start with pe_find to establish the exact connected document and capability. Do not create or register a script without a connected document. This includes .cs drafts, reusable audits, ReadOnly scripts, and Pod entrypoints for future models. If discovery fails or there is no document, report the missing target and return the proposed contract in the reply only: purpose, inputs, read/write mode, expected artifact, and the readback that will prove it. Write no source file yet.
 - Choose a script when no host operation is the smallest capable surface. Bootstrap the workspace when paths or references are unknown.
 - Inline snippets for tiny probes; workspace files for durable or multi-step work.
 - Default to ReadOnly. Use WriteTransaction only for an explicit, user-authorized mutation. Use NoTransaction only for APIs that reject an open transaction.
@@ -230,6 +230,8 @@ description: Turn a repeated workflow or an add-in idea into a shareable Pod, or
 # Build Pod
 
 The user supplies intent and ideas; you handle the code. Nothing that does not connect to the workflow, nothing longer than it must be.
+
+For a Pod with Revit script entrypoints, pe_find must first establish an exact connected document target. Without it, return the proposed workflow and script contract in the reply; create no source, manifest entrypoint, or registration yet. Preparing reusable code for future models is subject to the same preflight.
 
 ## What a Pod is
 
