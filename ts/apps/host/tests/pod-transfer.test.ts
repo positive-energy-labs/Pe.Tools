@@ -115,6 +115,33 @@ const mixed = {
   "output/run-1/receipt.json": "{}",
 };
 
+test("import refuses broken authored Page syntax before installing any member", async () => {
+  const archivePath = join(root, "broken-page.zip");
+  await writeFile(
+    archivePath,
+    writeZip(
+      new Map([
+        [
+          "pod.json",
+          Buffer.from(
+            JSON.stringify({
+              schemaVersion: 2,
+              id: "broken-page",
+              name: "Broken",
+              entrypoints: [],
+            }),
+          ),
+        ],
+        ["pages/tour/index.html", Buffer.from("<script>const = ;</script>")],
+      ]),
+    ),
+  );
+  await expect(importPod({ archivePath })).rejects.toThrow(/JavaScript/);
+  await expect(readFile(join(pods, "broken-page", "pod.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+
 test("pod.capture answers the admitted bundle by manifest id from a renamed folder, with no native call", async () => {
   await writePod("Renamed In Explorer", mixed);
 

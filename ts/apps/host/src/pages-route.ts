@@ -5,42 +5,7 @@ import {
   matchPeRoute,
   peRouteUrl,
 } from "@pe/agent-contracts/pe-api";
-/**
- * PAGES — disposable HTML as a working surface between an agent and a person (pages ledger,
- * 2026-10-04). A page is a folder `Documents/Pe.Tools/Pages/<slug>/` holding an `index.html`,
- * served at `/pages/<slug>/` with no registration: a dropped folder appears. Its doors into Revit
- * are `/pages/pe.js` (`find`, `read`, `do` through the page doors below, the bind chip, and
- * `state`) and `/pages/pe.css` (the house tokens, opt-in).
- *
- * Shared state is one event log per page under `<slug>/.state/`: the page appends, an agent appends
- * over HTTP, the host fans out over SSE, and the page writes its own snapshot and a text projection
- * (`pe.describe`) so an agent reads the state, and what the page says, without running the reducer.
- * The log lives beside the page, so deleting or sharing the folder deletes or shares its state.
- *
- * A Pod may carry pages (pages ledger, ruling 5): a `pages/<page>/index.html` member of an admitted
- * package (`packages.ts`) lists and serves as the slug `<id>--<page>`, where `<id>` is the manifest's
- * package id, never its folder: renaming the folder keeps the slug, the key and the state. Its
- * `.state/` sits beside the page inside the pod, so publishing the pod carries it. A plain page
- * whose folder name contains `--` is skipped.
- *
- *   GET  /pages                        every page, newest first (JSON, rows carry `pod`; a list page when a browser navigates)
- *   GET  /pages/pe.js | /pages/pe.css  the doors and the house look
- *   GET  /pages/<slug>/[file]          the folder's files (`index.html` by default; dot-files are private)
- *   GET  /pages/<slug>/state           { seq, events, snapshot, text }
- *   POST /pages/<slug>/events          append one event (the body); answers the stored row
- *   GET  /pages/<slug>/events?after=N  SSE: rows after N (or Last-Event-ID), then live
- *   PUT  /pages/<slug>/snapshot        the page's current state, as the page computed it
- *   PUT  /pages/<slug>/text            the page's current state as markdown, as the page describes it
- *
- * The page doors (ADR 0017 D9/D10). Identity is the path: the host mints the page key into
- * `<meta name="pe-page">` and stamps it on every row and crossing; a header a page sends never
- * names it. What a page targets is its binding, `<page>/.state/binding.json`, written only here.
- *
- *   GET  /pages/<slug>/target          the default slot: binding, resolution, document, what a write would do
- *   POST /pages/<slug>/call            { key, request? }: a read on the bound document (host `/call`)
- *   POST /pages/<slug>/act             { key, input? }: a write as the page under its binding (host `/actions`)
- *   page.bind      a slot (PageChoice): the human picker, or Pea pinning its own document
- */
+/** Scratch Pages and admitted Pod Pages share serving, binding and event state. See pe.js for the author API. */
 import { readFileSync, watch } from "node:fs";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
@@ -430,6 +395,7 @@ export function createPagesHandler(
     return null;
   };
   const states = new Map<string, PageState>();
+  const streams = new Set<() => void>();
   /** By folder: a renamed pod's page keeps its slug and opens its state where it lives now. */
   const stateOf = (dir: string) => {
     let state = states.get(dir);
@@ -534,7 +500,6 @@ export function createPagesHandler(
         const unhear = state.hear((event, data) =>
           controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)),
         );
-        for (const row of await state.rows()) send(row);
         // A named heartbeat, so pe.js can tell a quiet stream from a dead one (a browser's own
         // EventSource retry was seen to never fire after a dev host restart, 2026-10-04).
         const beat = setInterval(
@@ -542,6 +507,8 @@ export function createPagesHandler(
           HEARTBEAT_MS,
         );
         stop = () => {
+          streams.delete(stop);
+          request.signal.removeEventListener("abort", stop);
           clearInterval(beat);
           unfollow();
           unhead();
@@ -552,7 +519,10 @@ export function createPagesHandler(
             /* already closed by the consumer */
           }
         };
+        streams.add(stop);
         request.signal.addEventListener("abort", stop);
+        if (request.signal.aborted) stop();
+        else for (const row of await state.rows()) if (streams.has(stop)) send(row);
       },
       cancel() {
         stop();
@@ -807,7 +777,12 @@ export function createPagesHandler(
     return json(await target(page, dir));
   }
 
-  return async function handle(request: Request): Promise<Response> {
+  return Object.assign(handle, {
+    close: () => {
+      for (const stop of streams) stop();
+    },
+  });
+  async function handle(request: Request): Promise<Response> {
     const caller = currentCaller();
     const url = new URL(request.url);
     if (url.pathname === peRoutes["page.publish"].path && request.method === "POST") {
@@ -971,7 +946,7 @@ ${asset("pe.css")}`,
         headers: { location: `/bind?page=${encodeURIComponent(slug)}&view=1` },
       });
     return file(slug, where.dir, where.key, rest.length ? rest : ["index.html"]);
-  };
+  }
 }
 
 export const pagesRoute = (root = productPagesRootPath, pods = productPodsRootPath) =>
@@ -998,6 +973,7 @@ export const pagesRoute = (root = productPagesRootPath, pods = productPodsRootPa
           }),
       };
       const pages = createPagesHandler(root(), pods(), live, hostCaptures());
+      yield* Effect.addFinalizer(() => Effect.sync(() => pages.close()));
       const handler = HttpEffect.fromWebHandler((request) =>
         matchPeRoute(request.method, new URL(request.url).pathname)
           ? servePeRoute(request, pages)

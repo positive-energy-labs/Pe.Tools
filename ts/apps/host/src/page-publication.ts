@@ -1,13 +1,11 @@
 import { existsSync } from "node:fs";
-import { lstat, mkdir, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
-import { randomUUID } from "node:crypto";
-import { Script } from "node:vm";
-import { parse, type DefaultTreeAdapterMap } from "parse5";
+import { readdir } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { isSea } from "node:sea";
 import type { CaptureStore } from "./captures-route.ts";
 import { pagePublicationSchema, type PagePublication } from "@pe/host-contracts/pe-api";
+import { ordinaryPath, validatePageHtml, writeArtifact } from "./page-artifacts.ts";
 
 /** Serving and preview use the same host-minted identity without changing authored bytes. */
 export function withPageKey(html: string, page: string) {
@@ -23,57 +21,6 @@ export function withPageKey(html: string, page: string) {
   if (!head) return `${meta}${html}`;
   const end = head.index + head[0].length;
   return `${html.slice(0, end)}${meta}${html.slice(end)}`;
-}
-
-/** Parse without executing author code. The browser checks module syntax and runtime errors. */
-function validatePageHtml(html: string) {
-  const errors: string[] = [];
-  const document = parse(html, { onParseError: (error) => errors.push(error.code) });
-  if (errors.length) throw Error(`Invalid HTML: ${errors.join(", ")}`);
-  if (/\/\*pe:[^*]+\*\/\s*null\b/.test(html)) throw Error("Unfilled pe.js slot in Page HTML");
-  const visit = (node: DefaultTreeAdapterMap["node"]) => {
-    if ("tagName" in node) {
-      const type = node.attrs.find((attribute) => attribute.name === "type")?.value ?? "";
-      if (
-        node.tagName === "script" &&
-        !node.attrs.some((a) => a.name === "src") &&
-        ["", "text/javascript", "application/javascript"].includes(type)
-      ) {
-        const source = node.childNodes
-          .map((child) => ("value" in child ? child.value : ""))
-          .join("");
-        try {
-          new Script(source);
-        } catch (error) {
-          throw Error(`Invalid inline JavaScript: ${(error as Error).message}`);
-        }
-      }
-      for (const attribute of node.attrs.filter((a) => a.name.startsWith("on"))) {
-        try {
-          new Script(`(function(event){${attribute.value}\n})`);
-        } catch (error) {
-          throw Error(`Invalid handler JavaScript: ${(error as Error).message}`);
-        }
-      }
-    }
-    if ("childNodes" in node) for (const child of node.childNodes) visit(child);
-  };
-  visit(document);
-}
-
-/** Reject links in every existing ancestor, including a redirected Pages root. */
-async function ordinaryPath(path: string) {
-  let current = resolve(path);
-  while (true) {
-    const info = await lstat(current).catch((error) => {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-      throw error;
-    });
-    if (info?.isSymbolicLink()) throw Error(`Page publication refuses a symlink: ${current}`);
-    const parent = dirname(current);
-    if (parent === current) return;
-    current = parent;
-  }
 }
 
 const libraryPaths = new Set([
@@ -225,16 +172,7 @@ export async function publishPage(
   const capture = { ...captured, sha256, url: `${origin}/captures/${sha256}.png` };
   // Recheck after the browser yields: another writer must not redirect the publication.
   await ordinaryPath(index);
-  await mkdir(directory, { recursive: true });
-  if ((await realpath(directory)).toLowerCase() !== directory.toLowerCase())
-    throw Error("Page publication resolves outside its folder");
-  const temporary = join(directory, `.publish-${randomUUID()}.html`);
-  try {
-    await writeFile(temporary, input.html, { encoding: "utf8", flag: "wx" });
-    await rename(temporary, index);
-  } finally {
-    await rm(temporary, { force: true });
-  }
+  await writeArtifact(root, index, input.html, true, true);
   return {
     ok: true as const,
     kind: "page" as const,

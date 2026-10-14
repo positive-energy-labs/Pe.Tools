@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
-import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { readFile, realpath } from "node:fs/promises";
+import { dirname, extname, join, resolve } from "node:path";
+import { artifactRelative, validatePageHtml, writeArtifact } from "./page-artifacts.ts";
 
 export type PageExportInput = {
   directory: string;
@@ -56,16 +57,7 @@ const media: Record<string, string> = {
 export async function exportPage(input: PageExportInput) {
   const root = await realpath(input.directory);
   const files = new Map<string, PinnedFile>();
-  const inside = (path: string) => {
-    const from = relative(root, path);
-    if (
-      from === ".." ||
-      from.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) ||
-      isAbsolute(from)
-    )
-      throw Error(`Page export refuses a dependency outside its Page: ${path}`);
-    return from.replaceAll("\\", "/");
-  };
+  const inside = (path: string) => artifactRelative(root, path);
   const pin = (path: string, bytes: string | Uint8Array) => {
     files.set(path, { path, sha256: sha(bytes) });
     return bytes;
@@ -154,6 +146,7 @@ export async function exportPage(input: PageExportInput) {
   inside(entryPath);
   const entryBytes = await readFile(entryPath);
   const original = entryBytes.toString("utf8");
+  validatePageHtml(original, true);
   pin("index.html", entryBytes);
   if (/<(?:base|iframe|object|embed)\b/i.test(original))
     throw Error("Page export has an unsupported base, iframe, object or embed element");
@@ -259,19 +252,6 @@ window.pe = pe;
     ? html.replace(/<head\b[^>]*>/i, (head) => head + pinned)
     : pinned + html;
   const sha256 = sha(html);
-  let directory = root;
-  for (const part of [".state", "exports"]) {
-    directory = join(directory, part);
-    await mkdir(directory).catch((error: unknown) => {
-      if ((error as { code?: string }).code !== "EEXIST") throw error;
-    });
-    inside(await realpath(directory));
-  }
-  const path = join(directory, `${sha256}.html`);
-  await writeFile(path, html, { encoding: "utf8", flag: "wx" }).catch(async (error: unknown) => {
-    if ((error as { code?: string }).code !== "EEXIST") throw error;
-    inside(await realpath(path));
-    if ((await readFile(path, "utf8")) !== html) throw Error("Page export artifact hash collision");
-  });
+  const path = await writeArtifact(root, join(root, ".state", "exports", `${sha256}.html`), html);
   return { html, sha256, path, provenance };
 }

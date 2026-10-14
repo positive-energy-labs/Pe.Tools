@@ -976,6 +976,7 @@ export const peRoutesLayer = (
       );
       yield* Effect.addFinalizer(() => Effect.promise(() => threads.close()));
       yield* Effect.addFinalizer(() => Effect.promise(() => plugins.close()));
+      yield* Effect.addFinalizer(() => Effect.promise(() => providers.close()));
       // Installed policy keeps observing even when every browser and tray drawer is closed.
       if (hostOwnership.lane === "installed") machine.observe(() => {});
       // With Revit present the op and pod rows describe the connected session, so a session

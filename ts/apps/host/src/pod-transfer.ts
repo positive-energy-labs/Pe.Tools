@@ -1,19 +1,6 @@
-/**
- * Pod archive transport, host-only: export, import and Page promotion with zero Revit calls.
- *
- * Membership is `packages.ts`: export consumes its captured bytes, import admits the staged folder
- * through the same reader before it lands. Transport adds only what crossing machines needs:
- * - foreign `$include`/`$preset` fragments vendored under `settings/_vendor/<id>/` with the
- *   reference rewritten to `@local/_vendor/<id>/...` (no precomposition);
- * - a portable `PeScripts.csproj` (machine `<Reference>` hint paths dropped);
- * - every capture a member names (`/captures/<sha>.png`) carried as `captures/<sha>.png` plus its
- *   receipt as a stale observation, installed into the importing host's store by hash.
- * Each rewritten member is reported with its hashes before and after. Host-owned state (bindings,
- * grants, `output/`, `imported.json`) never crosses: `packages.ts` does not admit it, and an archive
- * that carries it is refused.
- */
+/** Transport consumes packages.ts's captured members; source bytes and local custody stay distinct. */
 import { createHash, randomUUID } from "node:crypto";
-import { lstat, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { lstat, readFile, rename, rm, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
 import { packageIdSchema, packageMemberPathSchema } from "@pe/agent-contracts";
@@ -30,6 +17,7 @@ import {
 } from "./packages.ts";
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
 import { activateImportedPackage } from "./package-lifecycle.ts";
+import { validatePageHtml, writeArtifact } from "./page-artifacts.ts";
 
 const VENDOR_DIRECTORY = "_vendor";
 const IMPORTED_FILE = "imported.json";
@@ -54,8 +42,6 @@ export class TransferRefused extends Error {
     super(message);
   }
 }
-
-// --- export -----------------------------------------------------------------------------------
 
 export async function exportPod(
   request: { pod: string; archivePath: string },
@@ -89,14 +75,7 @@ export async function exportPod(
 
   bounded([...files].map(([path, bytes]) => ({ path, bytes })));
   const archive = writeZip(files);
-  await mkdir(dirname(archivePath), { recursive: true });
-  const partial = `${archivePath}.${randomUUID()}.partial`;
-  try {
-    await writeFile(partial, archive);
-    await rename(partial, archivePath);
-  } finally {
-    await rm(partial, { force: true });
-  }
+  await writeArtifact(dirname(archivePath), archivePath, archive, true);
   return {
     id: pod.id,
     archivePath,
@@ -227,8 +206,6 @@ async function closeCaptures(files: Map<string, Buffer>, store: CaptureStore): P
   return [...named.keys()].sort();
 }
 
-// --- import -----------------------------------------------------------------------------------
-
 export async function importPod(
   request: { archivePath: string; folder?: string },
   options: TransferOptions = {},
@@ -263,6 +240,7 @@ export async function installArchive(
   if (await lstat(directory).catch(() => null))
     throw new TransferRefused(`Pod folder already exists: ${directory}`, 409);
   for (const [path, bytes] of entries) {
+    if (/^pages\/[^/]+\/index\.html$/.test(path)) validatePageHtml(bytes.toString("utf8"), true);
     const sha = CAPTURE_MEMBER.exec(path);
     if (sha?.[2] === "png" && sha256(bytes) !== sha[1])
       throw new TransferRefused(`Archive member '${path}' does not hash to its name.`);
@@ -273,10 +251,10 @@ export async function installArchive(
   const staging = join(podsRoot, `.importing-${randomUUID()}`);
   try {
     for (const [path, bytes] of entries) {
-      await mkdir(dirname(join(staging, folder, path)), { recursive: true });
-      await writeFile(join(staging, folder, path), bytes);
+      await writeArtifact(staging, join(staging, folder, path), bytes);
     }
-    await writeFile(
+    await writeArtifact(
+      staging,
       join(staging, folder, IMPORTED_FILE),
       `${JSON.stringify({ archiveSha256, locator, date: new Date().toISOString() }, null, 2)}\n`,
     );
@@ -320,8 +298,6 @@ export function archiveId(entries: ReadonlyMap<string, Buffer>): string {
   return parsed.data;
 }
 
-// --- promotion --------------------------------------------------------------------------------
-
 /**
  * Wrap a scratch Page (`Pages/<page>/`) as a new Pod `<id>` holding `pages/<page>/`, byte for byte.
  * The scratch Page stays; its binding does not travel (the promoted Page starts unbound).
@@ -351,8 +327,6 @@ export async function promotePage(
   const installed = await installArchive(writeZip(files), source, id.data, options);
   return { ...installed, key: `page:@${installed.id}/pages/${request.page}` };
 }
-
-// --- zip codec (stored/deflate, no zip64, deterministic output) -------------------------------
 
 const DOS_DATE = (1 << 5) | 1; // 1980-01-01: archives hash the same for the same bytes.
 const UTF8_FLAG = 0x0800;
@@ -483,8 +457,6 @@ export function readZip(archive: Buffer): Map<string, Buffer> {
   return entries;
 }
 
-// --- helpers ----------------------------------------------------------------------------------
-
 /**
  * Portable project: a project with machine `<Reference>` hint paths is regenerated without them
  * (framework, packages and usings kept); one without any already travels and keeps its bytes.
@@ -535,9 +507,6 @@ function portableProject(project: Buffer): Buffer {
     "  </ItemGroup>",
     "",
     "  <ItemGroup>",
-    "  </ItemGroup>",
-    "",
-    "  <ItemGroup>",
     ...[...packages]
       .sort(([a], [b]) => ordinal(a.toUpperCase(), b.toUpperCase()))
       .map(([include, version]) =>
@@ -545,9 +514,6 @@ function portableProject(project: Buffer): Buffer {
           ? `    <PackageReference Include="${escapeXml(include)}" Version="${escapeXml(version)}" />`
           : `    <PackageReference Include="${escapeXml(include)}" />`,
       ),
-    "  </ItemGroup>",
-    "",
-    "  <ItemGroup>",
     "  </ItemGroup>",
     "",
     "  <ItemGroup>",

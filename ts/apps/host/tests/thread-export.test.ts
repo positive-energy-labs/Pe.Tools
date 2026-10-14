@@ -191,7 +191,9 @@ test("export reports host retention gaps and oversize pointers without truncatin
       events.map((e) => JSON.stringify(e) + "\n").join(""),
     );
     for (const event of events) log.append({ kind: "thread", thread: "thread", event });
-    const archive = await exportThread(root, "thread", log).json();
+    const exporting = exportThread(root, "thread", log);
+    writeFileSync(join(root, "thread/events.jsonl"), "later write\n");
+    const archive = await (await exporting).json();
     expect(archive.events).toEqual(events);
     expect(archive.hostLog).toMatchObject({
       cursor: 2,
