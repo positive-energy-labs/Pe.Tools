@@ -23,7 +23,12 @@ export const callerSchema = z.discriminatedUnion("kind", [
   }),
   // A harness child and its shell, bound to one thread at spawn.
   z.strictObject({ kind: z.literal("pea"), context: z.string(), thread: z.string() }),
-  z.strictObject({ kind: z.literal("external-mcp"), context: z.string(), label: z.string() }),
+  z.strictObject({
+    kind: z.literal("external-mcp"),
+    context: z.string(),
+    label: z.string(),
+    device: z.string().optional(),
+  }),
   z.strictObject({ kind: z.literal("page"), page: pageKeySchema }),
   // SDK claim token, scoped to its own shutdown/window doors.
   z.strictObject({ kind: z.literal("service"), service: z.string() }),
@@ -49,6 +54,7 @@ export const basisSchema = z.discriminatedUnion("kind", [
     kind: z.literal("grant"),
     thread: z.string(),
     headRevision: z.number().int(),
+    device: z.string().optional(),
     lifetime: documentRefSchema,
   }),
   z.strictObject({ kind: z.literal("empty-user-session"), session: z.string() }),

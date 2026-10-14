@@ -47,7 +47,7 @@ const refuse = (
 
 type MintSpec =
   | { kind: "pea"; thread: string }
-  | { kind: "external-mcp"; label: string }
+  | { kind: "external-mcp"; label: string; device?: string }
   | { kind: "human"; via: "cli" };
 const contexts = new Map<string, Caller>();
 const BROWSER_CONTEXT_COOKIE = `pe-browser-${hostOwnership.serviceName}`;
@@ -286,6 +286,7 @@ type Sources = {
   acquired: (lifetime: DocumentRef) => string | null;
   /** The held acquisition that started the Revit behind this bridge session. */
   acquiredSession: (session: string) => string | null;
+  deviceThread?: (device: string) => string | null;
 };
 const sources: Sources = { heads: null, acquired: () => null, acquiredSession: () => null };
 /** Bound once at boot (and by tests): the harness head store and Machine's acquisitions. */
@@ -309,6 +310,12 @@ function acquisitionBasis(
 }
 /** The head a thread carries now; null before the head store is bound. */
 export const threadHead = (thread: string): ThreadHead | null => sources.heads?.(thread) ?? null;
+export const callerThread = (caller: Caller): string | null =>
+  caller.kind === "pea"
+    ? caller.thread
+    : caller.kind === "external-mcp" && caller.device
+      ? (sources.deviceThread?.(caller.device) ?? null)
+      : null;
 export const subscribeHeads = (notify: () => void) =>
   sources.subscribeHeads?.(notify) ?? (() => {});
 
@@ -419,6 +426,16 @@ export function admitCrossing(
     return admitPage(admitted.slot, destination, admitted.door, reads);
   }
   if (caller.kind === "human") return { kind: "human" };
+  if (caller.kind === "external-mcp" && caller.device) {
+    const thread = callerThread(caller);
+    if (!thread || destination.kind !== "document")
+      throw refuse(
+        "grant.context-cannot-hold",
+        door,
+        "This MCP device needs a host-approved thread with rw on this exact document.",
+      );
+    return { ...admitThread(thread, destination, door), device: caller.device };
+  }
   if (caller.kind === "service" || caller.kind === "external-mcp")
     throw refuse(
       "grant.context-cannot-hold",
@@ -436,7 +453,7 @@ function admitThread(
   thread: string,
   destination: Extract<ExecutionTarget, { kind: "session" | "document" }>,
   door: string,
-): Basis {
+): Extract<Basis, { kind: "grant" }> {
   if (destination.kind === "session")
     throw refuse(
       "grant.required",
@@ -531,6 +548,19 @@ export function mintPageDoor(
  * lifetime; every other basis holds for the attempt.
  */
 export function live(basis: Basis | null, door = "step begin"): Refused | null {
+  if (basis?.kind === "grant" && basis.device) {
+    try {
+      if (sources.deviceThread?.(basis.device) !== basis.thread)
+        return refuse(
+          "grant.revoked",
+          door,
+          "This device no longer holds the admitted thread binding.",
+        );
+    } catch (error) {
+      if (!(error instanceof Refused)) throw error;
+      return error;
+    }
+  }
   if (basis?.kind === "acquisition" && basis.scope.kind === "document")
     return sources.acquired(basis.scope.lifetime) === basis.id
       ? null

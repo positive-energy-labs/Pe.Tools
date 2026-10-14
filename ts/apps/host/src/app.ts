@@ -2,6 +2,7 @@ import { sdkSession } from "./sdk-session.ts";
 import { requestIdentityLayer } from "./request-identity.ts";
 import { createDevices, type Devices } from "./remote-device.ts";
 import { deviceRoutes } from "./device-routes.ts";
+import { bindControl } from "./control.ts";
 import {
   createShare,
   shareIntentFile,
@@ -201,7 +202,10 @@ export function makeHttpLive(options: HttpLiveOptions) {
       run: tailscaleCommand(),
       ...shareIntentFile(join(productRoot(), "state", "share.json")),
     });
-  const devices = options.devices ?? createDevices(join(productRoot(), "state", "devices.json"));
+  const devices =
+    options.devices ??
+    createDevices(join(productRoot(), "state", hostOwnership.serviceName, "devices.json"));
+  bindControl({ deviceThread: (device) => devices.active(device).thread });
   const identity = requestIdentityLayer({
     devices,
     remoteIngress: options.remoteIngress,
