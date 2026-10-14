@@ -75,6 +75,7 @@ import {
   mintPageDoor,
   pageActDoor,
   pageKeyOf,
+  readsOnly,
   Refused,
   documentAcquisition,
   threadHead,
@@ -680,10 +681,10 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
       if (slot.kind === "none") return refused(unboundRefusal(at));
       const resolution = resolveSlot(slot, await live.sessions());
       if (resolution.kind !== "resolved") return unresolved(at, resolution);
-      // Decided here first, so a refusal names this door; `/actions` decides again under the same slot.
-      admitPage(slot, resolution.target, at);
       const action = await operationOf(body.data.key, body.data.input);
       if ("problem" in action) return problem(400, action.problem);
+      // Decided here first, so a refusal names this door; `/actions` decides again under the same slot.
+      admitPage(slot, resolution.target, at, readsOnly(action.key, action.input));
       return await cross(
         page,
         slot,

@@ -105,9 +105,10 @@ const admission = (ref: DocumentRef = docA, id = "door-2") => ({
   id,
   kind: "workflow",
   // A human-only key would answer human.only first for a Pea caller; this one is open to both.
+  // NoTransaction makes it a write; a ReadOnly script is a read and needs no grant.
   key: "scripting.execute",
   destination: { kind: "document", ref },
-  input: {},
+  input: { permissionMode: "NoTransaction" },
   bases: {},
 });
 

@@ -228,13 +228,23 @@ const deadReason = (code: "grant.revoked" | "grant.expired", grant: HeadGrant | 
 /* ── The crossing ─────────────────────────────────────────────────────────────────────── */
 
 /**
- * Admit one crossing at `door`, or throw `Refused`. Null means the crossing touches no Revit
- * session (a host leaf) or is a lifecycle selection whose census belongs to the Instances action.
+ * A script whose requested mode is ReadOnly (the contract default) is a read at every door: Revit
+ * judges it under the ReadOnly policy and rolls back its document changes. NoTransaction and
+ * WriteTransaction are writes. Reads never need a grant (ADR 0017 D8).
+ */
+export const readsOnly = (key: string, input: unknown): boolean =>
+  key === "scripting.execute" &&
+  ((input as { permissionMode?: unknown } | null)?.permissionMode ?? "ReadOnly") === "ReadOnly";
+
+/**
+ * Admit one crossing at `door`, or throw `Refused`. Null means the crossing needs no basis: a read,
+ * a host leaf, or a lifecycle selection whose census belongs to the Instances action.
  */
 export function admitCrossing(
   caller: Caller,
   destination: ExecutionTarget,
   door: string,
+  reads = false,
 ): Basis | null {
   if (caller.kind === "anonymous")
     throw refuse(
@@ -250,10 +260,10 @@ export function admitCrossing(
         door,
         `Pages act through ${pageActDoor(caller.page)}, not ${door}.`,
       );
-    return admitPage(admitted.slot, destination, admitted.door);
+    return admitPage(admitted.slot, destination, admitted.door, reads);
   }
   if (caller.kind === "human") return { kind: "human" };
-  if (destination.kind === "host" || destination.kind === "sdk-session") return null;
+  if (reads || destination.kind === "host" || destination.kind === "sdk-session") return null;
   const acquired = acquisitionBasis(destination);
   if (acquired) return acquired;
   if (caller.kind === "external-mcp")
@@ -310,6 +320,7 @@ export function admitPage(
   slot: PageChoice,
   destination: ExecutionTarget,
   door: string,
+  reads = false,
 ): Basis | null {
   if (slot.kind === "none")
     throw refuse(
@@ -317,7 +328,7 @@ export function admitPage(
       door,
       `Refused at ${door}: this Page has no target. Bind it to a thread or pin a document from the chip.`,
     );
-  if (destination.kind === "host" || destination.kind === "sdk-session") return null;
+  if (reads || destination.kind === "host" || destination.kind === "sdk-session") return null;
   const acquired = acquisitionBasis(destination);
   if (acquired) return acquired;
   const session = destination.kind === "session" ? destination.session : destination.ref.session;
