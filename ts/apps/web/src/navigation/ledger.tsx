@@ -9,17 +9,23 @@ import { List } from "@pe/kit/lang/list-popup";
 import { Button } from "@pe/kit/lang/button";
 import type { HarnessThreadSummary } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
-import { readCaptures } from "#/captures/host";
 import { useMachine } from "#/machine/use-machine";
 import { attention, machineOf } from "#/machine/model";
 import { harnessClient } from "#/workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "#/workbench/config";
-import { globalItems, type Destination, type ResultKind } from "./global-items";
+import { relativeThreadAge } from "#/chat/thread-navigation";
+import {
+  destinationDetail,
+  destinationLabel,
+  globalItems,
+  type Destination,
+  type ResultKind,
+} from "./global-items";
 import { resumeRefusal } from "./model";
 import { useDestination, useNavigation } from "./state";
 import {
-  counterGroups,
   GROUP_NAME,
+  LEDGER_GROUPS,
   ledgerRows,
   openAsk,
   presentLedger,
@@ -30,31 +36,25 @@ import {
   type LedgerSources,
 } from "./ledger-model";
 
-const age = (iso: string | null) => {
-  if (!iso) return "";
-  const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
-  if (s < 90) return `${Math.round(s)}s`;
-  if (s < 5400) return `${Math.round(s / 60)}m`;
-  if (s < 129600) return `${Math.round(s / 3600)}h`;
-  return `${Math.round(s / 86400)}d`;
-};
 const TONE: Partial<Record<string, "caution" | "alarm">> = {
   asks: "caution",
   approve: "caution",
+  review: "caution",
   unknown: "caution",
   incomplete: "caution",
   machine: "caution",
   interrupted: "caution",
   failed: "alarm",
 };
+/** Open work stays above tools, Works and threads while a query ranks them. */
+const LEADING_GROUPS = LEDGER_GROUPS.map((group) => GROUP_NAME[group]);
 
-/** The host's open work, live: thread summaries stream; receipts and captures are read. */
+/** The host's open work, live: thread summaries stream; receipts are read. */
 function useLedgerRows() {
   const [threads, setThreads] = useState<HarnessThreadSummary[] | null>(null);
   const [fault, setFault] = useState<string | null>(null);
   const [asks, setAsks] = useState<LedgerSources["asks"]>(new Map());
   const [receipts, setReceipts] = useState<LedgerSources["receipts"]>([]);
-  const [captures, setCaptures] = useState<LedgerSources["captures"]>([]);
   const { snapshot } = useNavigation();
   const machine = machineOf(useMachine().reading);
   const asked = useRef(new Map<string, number>());
@@ -79,9 +79,6 @@ function useLedgerRows() {
         )
         .catch(() => {});
     read();
-    void readCaptures()
-      .then(setCaptures)
-      .catch(() => {});
     const timer = setInterval(read, 15_000);
     window.addEventListener("focus", read);
     return () => {
@@ -114,11 +111,10 @@ function useLedgerRows() {
           receipts,
           works: snapshot?.works ?? [],
           attention: attentionLines,
-          captures,
         },
         Date.now(),
       ),
-    [threads, asks, receipts, snapshot, attentionLines.join("\n"), captures],
+    [threads, asks, receipts, snapshot, attentionLines.join("\n")],
   );
   return {
     rows,
@@ -155,7 +151,7 @@ export function useLedgerList(
   const searching = query.trim() !== "";
   const items: Item[] = [
     ...(kind === "All"
-      ? presentLedger(rows, presentation, searching ? new Set(presentation.groups) : open)
+      ? presentLedger(rows, presentation, searching ? new Set(LEDGER_GROUPS) : open)
       : []),
     ...(presentation.destinations && (searching || kind !== "All")
       ? globalItems(snapshot, kind).map((destination) => ({
@@ -165,7 +161,6 @@ export function useLedgerList(
         }))
       : []),
   ];
-  const unfold = (group: LedgerGroup) => setOpen((prior) => new Set(prior).add(group));
   const resume = (row: LedgerRow) => {
     setResuming(row.resume!);
     resumeThread(row.resume!)
@@ -173,26 +168,50 @@ export function useLedgerList(
       .catch((cause: unknown) => setRefusal(String(cause)))
       .finally(() => setResuming(null));
   };
-  const rowParts = (row: LedgerRow) => ({
-    lead: (
-      <span className="inline-block w-[11ch] face-mono" data-tone={TONE[row.verb]}>
-        {row.verb}
-      </span>
-    ),
-    label: row.what,
-    aside: row.where,
-    meta: <span className="face-mono tabular-nums">{age(row.at)}</span>,
-    ...(presentation.says && row.says ? { lines: 2 as const, sub: row.says } : {}),
-    refusal: row.refusal,
-    actions: row.resume ? (
-      <Button
-        label={`Resume ${row.what}: re-send the turn the host restart cut off`}
-        icon={RotateCcw}
-        busy={resuming === row.resume}
-        onClick={() => resume(row)}
-      />
-    ) : undefined,
-  });
+  /** One row shape for ledger rows, destinations and notes: verb column, what, where, fact. */
+  const row = (item: Item) => {
+    if (item.kind === "note")
+      return {
+        lead: <span className="inline-block w-[11ch]" />,
+        label: <span className="text-ink-2">{item.text}</span>,
+        refusal: item.count ? undefined : "Nothing to open",
+      };
+    const shown =
+      item.kind === "go"
+        ? {
+            verb: "go to",
+            what: item.destination.label,
+            where: item.destination.context,
+            fact: item.destination.state,
+            says: null,
+            refusal: resumeRefusal(
+              item.destination,
+              item.destination.kind === "Works" && !!(loading || error),
+            ),
+          }
+        : { ...item.row, fact: item.row.at ? relativeThreadAge(item.row.at) : "" };
+    return {
+      lead: (
+        <span className="inline-block w-[11ch] face-mono" data-tone={TONE[shown.verb]}>
+          {shown.verb}
+        </span>
+      ),
+      label: shown.what,
+      aside: shown.where,
+      meta: <span className="face-mono tabular-nums">{shown.fact}</span>,
+      ...(presentation.says && shown.says ? { lines: 2 as const, sub: shown.says } : {}),
+      refusal: shown.refusal,
+      actions:
+        item.kind === "row" && item.row.resume ? (
+          <Button
+            label={`Resume ${item.row.what}: re-send the turn the host restart cut off`}
+            icon={RotateCcw}
+            busy={resuming === item.row.resume}
+            onClick={() => resume(item.row)}
+          />
+        ) : undefined,
+    };
+  };
   return {
     rows,
     refusal,
@@ -200,62 +219,34 @@ export function useLedgerList(
       "aria-label": presentation.label,
       items,
       keyOf: (item: Item) => item.key,
+      // Name first, then the rest at word starts (kit `words` mode with `detailOf`).
       labelOf: (item: Item) =>
-        item.kind === "row"
-          ? `${item.row.verb} ${item.row.what} ${item.row.where} ${item.row.says ?? ""}`
-          : item.kind === "go"
-            ? `${item.destination.label} ${item.destination.context} ${item.destination.aliases} ${item.destination.state}`
-            : item.kind === "empty"
-              ? `nothing ${GROUP_NAME[item.group]}`
-              : `${item.count} more ${GROUP_NAME[item.group]}`,
+        item.kind === "go"
+          ? destinationLabel(item.destination)
+          : item.kind === "row"
+            ? item.row.what
+            : "",
+      detailOf: (item: Item) =>
+        item.kind === "go"
+          ? destinationDetail(item.destination)
+          : item.kind === "row"
+            ? `${item.row.verb} ${item.row.where} ${item.row.says ?? ""}`
+            : "",
       groupOf: (item: Item) =>
         item.kind === "go"
           ? item.destination.kind
           : GROUP_NAME[item.kind === "row" ? item.row.group : item.group],
+      leadingGroups: LEADING_GROUPS,
       groupCounts: false as const,
-      filter: searching ? ("fuzzy" as const) : ("none" as const),
+      filter: searching ? ("words" as const) : ("none" as const),
       query,
       status,
       failure: fault ?? undefined,
       empty: "Nothing open: no thread waits, works, failed or is unread",
       noMatch: "No matching open work, tools, Works or Pea threads",
-      row: (item: Item) =>
-        item.kind === "row"
-          ? rowParts(item.row)
-          : item.kind === "go"
-            ? {
-                lead: <span className="inline-block w-[11ch] face-mono text-ink-2">go to</span>,
-                label: item.destination.label,
-                aside: item.destination.context,
-                meta: item.destination.state,
-                refusal: resumeRefusal(
-                  item.destination,
-                  item.destination.kind === "Works" && !!(loading || error),
-                ),
-              }
-            : item.kind === "empty"
-              ? {
-                  lead: <span className="inline-block w-[11ch]" />,
-                  label: (
-                    <span className="text-ink-2">
-                      {item.group === "waits" ? "Nothing waits on you" : "Nothing is working"}
-                    </span>
-                  ),
-                  refusal: "Nothing to open",
-                }
-              : {
-                  lead: <span className="inline-block w-[11ch]" />,
-                  label: (
-                    <span className="text-ink-2">
-                      {(presentation.caps?.[item.group] ?? presentation.cap) === 0
-                        ? `${item.count} ${GROUP_NAME[item.group]}`
-                        : `${item.count} more ${GROUP_NAME[item.group]}`}
-                    </span>
-                  ),
-                },
-      /** Picks a row's address, unfolds a group; returns false when the pick stays in the list. */
+      row,
       onPick: (item: Item) => {
-        if (item.kind === "more") unfold(item.group);
+        if (item.kind === "note") setOpen((prior) => new Set(prior).add(item.group));
         else if (item.kind === "row" && item.row.url) go(item.row.url);
         else if (item.kind === "go" && item.destination.url) go(item.destination.url);
       },
@@ -263,17 +254,11 @@ export function useLedgerList(
   };
 }
 
-/** The tray's counter strip: group counts, waits and working first. The list's fold rows unfold. */
-function Counters({
-  rows,
-  presentation,
-}: {
-  rows: readonly LedgerRow[];
-  presentation: LedgerPresentation;
-}) {
+/** The tray's counter strip: one count per group, waits and working first. */
+function Counters({ rows }: { rows: readonly LedgerRow[] }) {
   return (
     <dl className="m-0 flex hairline-b" aria-label="Open work by group">
-      {counterGroups(presentation).map((group) => {
+      {LEDGER_GROUPS.map((group) => {
         const count = rows.filter((row) => row.group === group).length;
         return (
           <div key={group} className="flex min-w-0 flex-1 flex-col-reverse px-2 py-1 hairline-r">
@@ -307,7 +292,7 @@ export function Ledger({
       className="flex min-h-0 flex-col"
     >
       {head}
-      {presentation.counters && <Counters rows={ledger.rows} presentation={presentation} />}
+      {presentation.counters && <Counters rows={ledger.rows} />}
       {ledger.refusal && <p className="m-0 px-2 py-1 text-ink-2">{ledger.refusal}</p>}
       <div className="min-h-0 flex-1 overflow-auto">
         <List {...ledger.props} />

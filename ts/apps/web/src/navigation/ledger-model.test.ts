@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { HarnessThreadSummary } from "@pe/agent-contracts";
 import { HOST_RESTARTED } from "@pe/agent-contracts/chat-state";
-import { counterGroups, ledgerRows, LEDGER_PRESENTATIONS, presentLedger } from "./ledger-model";
+import { LEDGER_GROUPS, ledgerRows, LEDGER_PRESENTATIONS, presentLedger } from "./ledger-model";
 
 const now = Date.parse("2026-10-14T12:00:00Z");
 const hoursAgo = (h: number) => new Date(now - h * 3_600_000).toISOString();
@@ -44,7 +44,6 @@ const sources = (threads: HarnessThreadSummary[]) => ({
   receipts: [],
   works: [],
   attention: [],
-  captures: [],
 });
 
 describe("open-work ledger rows", () => {
@@ -95,6 +94,30 @@ describe("open-work ledger rows", () => {
     });
     expect(row?.refusal).toBeTruthy();
   });
+  it("puts a Work with pending Pea proposals in waits with its resume address, and leaves other Works to Home's directory", () => {
+    const work = (id: string, proposals: number, url: string | null) => ({
+      id,
+      route: "takeoffs",
+      label: "Takeoffs",
+      context: id,
+      state: "ready",
+      url,
+      reason: url ? null : "Open that document to resume.",
+      revision: 1,
+      proposals,
+    });
+    const rows = ledgerRows(
+      {
+        ...sources([]),
+        works: [work("A.rvt", 2, "/takeoffs?target=a"), work("B.rvt", 0, null)],
+      },
+      now,
+    );
+    expect(rows.map((row) => [row.group, row.verb, row.url])).toEqual([
+      ["waits", "review", "/takeoffs?target=a"],
+    ]);
+    expect(rows[0]?.says).toBe("2 Pea proposals to review");
+  });
   it("leads with waits and working whatever their age", () => {
     const rows = ledgerRows(
       sources([
@@ -143,7 +166,7 @@ describe("ledger presentations", () => {
       Record<string, string>
     >((groups, item) => {
       const group = item.kind === "row" ? item.row.group : item.group;
-      if (item.kind !== "empty")
+      if (item.kind === "row" || item.count)
         groups[group] = `${groups[group] ?? ""}${item.kind === "row" ? "r" : `+${item.count}`}`;
       return groups;
     }, {});
@@ -166,8 +189,14 @@ describe("ledger presentations", () => {
     for (const id of ["tray", "overlay", "home"] as const) {
       const items = presentLedger(quiet, LEDGER_PRESENTATIONS[id], new Set());
       expect(items.slice(0, 2)).toEqual([
-        { kind: "empty", key: "empty:waits", group: "waits" },
-        { kind: "empty", key: "empty:working", group: "working" },
+        { kind: "note", key: "note:waits", group: "waits", count: 0, text: "Nothing waits on you" },
+        {
+          kind: "note",
+          key: "note:working",
+          group: "working",
+          count: 0,
+          text: "Nothing is working",
+        },
       ]);
     }
   });
@@ -175,6 +204,6 @@ describe("ledger presentations", () => {
     expect(LEDGER_PRESENTATIONS.tray.counters).toBe(true);
     expect(LEDGER_PRESENTATIONS.home.counters).toBe(false);
     expect(LEDGER_PRESENTATIONS.overlay.counters).toBe(false);
-    expect(counterGroups(LEDGER_PRESENTATIONS.tray).slice(0, 2)).toEqual(["waits", "working"]);
+    expect(LEDGER_GROUPS.slice(0, 2)).toEqual(["waits", "working"]);
   });
 });

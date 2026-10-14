@@ -5,22 +5,14 @@
  */
 import type {
   ActionReceipt,
-  CaptureReceipt,
   HarnessEvent,
   HarnessThreadSummary,
   NavigationWork,
 } from "@pe/agent-contracts";
 import { HOST_RESTARTED } from "@pe/agent-contracts/chat-state";
 
-const LEDGER_GROUPS = [
-  "waits",
-  "working",
-  "interrupted",
-  "failed",
-  "unread",
-  "works",
-  "recent",
-] as const;
+/** In the order the eye takes them; waits and working lead and never fold. */
+export const LEDGER_GROUPS = ["waits", "working", "interrupted", "failed", "unread"] as const;
 export type LedgerGroup = (typeof LEDGER_GROUPS)[number];
 export const GROUP_NAME: Record<LedgerGroup, string> = {
   waits: "waits on you",
@@ -28,11 +20,8 @@ export const GROUP_NAME: Record<LedgerGroup, string> = {
   interrupted: "interrupted",
   failed: "failed",
   unread: "unread",
-  works: "saved work",
-  recent: "recent",
 };
-/** Groups no presentation may fold. */
-const LEADING: readonly LedgerGroup[] = ["waits", "working"];
+const LEADING = new Set<LedgerGroup>(["waits", "working"]);
 /** A host-restart death leaves the ledger after this long; Pea's thread list still holds it. */
 const INTERRUPTED_FOR_MS = 24 * 3_600_000;
 
@@ -61,7 +50,6 @@ export interface LedgerSources {
   works: readonly NavigationWork[];
   /** Machine attention lines (update waits, a Revit dialog). */
   attention: readonly string[];
-  captures: readonly CaptureReceipt[];
 }
 
 /** A waiting thread's open ask, in its own words: the question, or the tool asking permission. */
@@ -84,37 +72,37 @@ export function openAsk(events: readonly HarnessEvent[]): { verb: string; says: 
   return null;
 }
 
-const NO_ADDRESS = "No address yet: this receipt has no page";
-
-function threadRow(thread: HarnessThreadSummary, sources: LedgerSources, now: number) {
+function threadRow(
+  thread: HarnessThreadSummary,
+  asks: LedgerSources["asks"],
+  now: number,
+): LedgerRow | null {
   const { state, pending, message } = thread.activity;
-  const base = {
+  const row = (group: LedgerGroup, verb: string, says: string | null): LedgerRow => ({
     key: `thread:${thread.id}`,
+    group,
+    verb,
     what: thread.title,
     where: thread.providerName,
+    says,
     at: thread.updatedAt,
     url: `/pea?thread=${thread.id}`,
-  };
+  });
   if (state === "waiting" || pending > 0) {
-    const ask = sources.asks.get(thread.id);
-    return { ...base, group: "waits", verb: ask?.verb ?? "asks", says: ask?.says ?? message };
+    const ask = asks.get(thread.id);
+    return row("waits", ask?.verb ?? "asks", ask?.says ?? message);
   }
-  if (state === "running") return { ...base, group: "working", verb: "running", says: null };
+  if (state === "running") return row("working", "running", null);
   if (state === "failed" && message === HOST_RESTARTED)
     return now - Date.parse(thread.updatedAt) > INTERRUPTED_FOR_MS
       ? null
       : {
-          ...base,
-          group: "interrupted",
-          verb: "interrupted",
-          says: "The host restarted during this turn.",
+          ...row("interrupted", "interrupted", "The host restarted during this turn."),
           resume: thread.id,
         };
-  if (state === "failed") return { ...base, group: "failed", verb: "failed", says: message };
+  if (state === "failed") return row("failed", "failed", message);
   const unread = thread.lifecycle.explicitUnread || thread.lifecycle.readSeq < thread.lastSeq;
-  return unread && thread.lastSeq > 0
-    ? { ...base, group: "unread", verb: "done", says: null }
-    : null;
+  return unread && thread.lastSeq > 0 ? row("unread", "done", null) : null;
 }
 
 /** Who admitted the action, in words: a principal, never a password. */
@@ -127,22 +115,20 @@ const callerWord = (caller: ActionReceipt["caller"]) =>
         ? caller.label
         : caller.kind;
 
+const RECEIPT_GROUP: Partial<Record<ActionReceipt["state"], LedgerGroup>> = {
+  unknown: "waits",
+  incomplete: "waits",
+  running: "working",
+  failed: "failed",
+};
+
 function receiptRow(receipt: ActionReceipt): LedgerRow | null {
-  const group: LedgerGroup | null =
-    receipt.state === "unknown" || receipt.state === "incomplete"
-      ? "waits"
-      : receipt.state === "failed"
-        ? "failed"
-        : receipt.state === "running"
-          ? "working"
-          : receipt.state === "succeeded"
-            ? "recent"
-            : null;
+  const group = RECEIPT_GROUP[receipt.state];
   if (!group) return null;
   return {
     key: `action:${receipt.id}`,
     group,
-    verb: receipt.state === "succeeded" ? "done" : receipt.state,
+    verb: receipt.state,
     what: receipt.key,
     where: `${receipt.kind} · ${callerWord(receipt.caller)}`,
     says:
@@ -153,7 +139,7 @@ function receiptRow(receipt: ActionReceipt): LedgerRow | null {
           : null,
     at: receipt.startedAt,
     url: null,
-    refusal: NO_ADDRESS,
+    refusal: "No address yet: this receipt has no page",
   };
 }
 
@@ -172,29 +158,22 @@ export function ledgerRows(sources: LedgerSources, now: number): LedgerRow[] {
     })),
     ...sources.threads
       .filter((thread) => thread.lifecycle.status === "active")
-      .flatMap((thread) => (threadRow(thread, sources, now) as LedgerRow | null) ?? []),
+      .flatMap((thread) => threadRow(thread, sources.asks, now) ?? []),
     ...sources.receipts.flatMap((receipt) => receiptRow(receipt) ?? []),
-    ...sources.works.map((work) => ({
-      key: `work:${work.id}`,
-      group: "works" as const,
-      verb: work.state === "ready" ? "saved" : work.state,
-      what: work.label,
-      where: work.context,
-      says: work.reason,
-      at: null,
-      url: work.url,
-      refusal: work.url ? undefined : (work.reason ?? "No resumable destination"),
-    })),
-    ...sources.captures.slice(0, 12).map((capture) => ({
-      key: `capture:${capture.id}`,
-      group: "recent" as const,
-      verb: "captured",
-      what: capture.view?.name ?? "a view",
-      where: [capture.document?.title, capture.origin].filter(Boolean).join(" · "),
-      says: null,
-      at: capture.at,
-      url: `/captures?sha=${capture.sha}`,
-    })),
+    // A Work enters only when Pea proposed on it; Home's directory already lists every saved Work.
+    ...sources.works
+      .filter((work) => work.proposals > 0)
+      .map((work) => ({
+        key: `work:${work.id}`,
+        group: "waits" as const,
+        verb: "review",
+        what: work.label,
+        where: work.context,
+        says: `${work.proposals} Pea proposal${work.proposals === 1 ? "" : "s"} to review`,
+        at: null,
+        url: work.url,
+        refusal: work.url ? undefined : (work.reason ?? "No resumable destination"),
+      })),
   ];
   return rows.sort(
     (a, b) =>
@@ -206,11 +185,10 @@ export function ledgerRows(sources: LedgerSources, now: number): LedgerRow[] {
 export interface LedgerPresentation {
   id: "home" | "overlay" | "tray";
   label: string;
-  /** Groups shown, in order. */
-  groups: readonly LedgerGroup[];
-  /** Rows a foldable group shows before one "n more" row; per-group overrides (0 = a count only). */
+  /** Rows a foldable group shows before one "n more" note. */
   cap: number;
-  caps?: Partial<Record<LedgerGroup, number>>;
+  /** Unread as rows (capped like the rest) or as one count that unfolds on pick. */
+  unread: "rows" | "count";
   /** The group counter strip on top. */
   counters: boolean;
   /** Tools, Works and threads join the rows while a query is typed. */
@@ -219,13 +197,12 @@ export interface LedgerPresentation {
   says: boolean;
 }
 
-const OPEN_GROUPS: readonly LedgerGroup[] = ["waits", "working", "interrupted", "failed", "unread"];
 export const LEDGER_PRESENTATIONS: Record<LedgerPresentation["id"], LedgerPresentation> = {
   home: {
     id: "home",
     label: "Open work",
-    groups: LEDGER_GROUPS,
     cap: 5,
+    unread: "rows",
     counters: false,
     destinations: false,
     says: true,
@@ -233,9 +210,8 @@ export const LEDGER_PRESENTATIONS: Record<LedgerPresentation["id"], LedgerPresen
   overlay: {
     id: "overlay",
     label: "Find open work, tools, Works and Pea threads",
-    groups: OPEN_GROUPS,
     cap: 3,
-    caps: { unread: 0 },
+    unread: "count",
     counters: false,
     destinations: true,
     says: false,
@@ -243,9 +219,8 @@ export const LEDGER_PRESENTATIONS: Record<LedgerPresentation["id"], LedgerPresen
   tray: {
     id: "tray",
     label: "Inbox",
-    groups: OPEN_GROUPS,
     cap: 30,
-    caps: { unread: 0 },
+    unread: "count",
     counters: true,
     destinations: false,
     says: true,
@@ -254,10 +229,8 @@ export const LEDGER_PRESENTATIONS: Record<LedgerPresentation["id"], LedgerPresen
 
 export type LedgerItem =
   | { kind: "row"; key: string; row: LedgerRow }
-  /** A folded group's tail: `count` rows hidden; picking it opens the group in place. */
-  | { kind: "more"; key: string; group: LedgerGroup; count: number }
-  /** A leading group with no rows still shows, so "nothing waits" is said, never implied. */
-  | { kind: "empty"; key: string; group: LedgerGroup };
+  /** A group's note: its folded tail ("4 more failed", "58 unread") or a stated nothing (0). */
+  | { kind: "note"; key: string; group: LedgerGroup; count: number; text: string };
 
 /** The rows a presentation draws, folded: waits and working never fold; `open` groups unfold. */
 export function presentLedger(
@@ -265,24 +238,28 @@ export function presentLedger(
   presentation: LedgerPresentation,
   open: ReadonlySet<LedgerGroup>,
 ): LedgerItem[] {
-  return presentation.groups.flatMap((group) => {
+  return LEDGER_GROUPS.flatMap((group): LedgerItem[] => {
     const members = rows.filter((row) => row.group === group);
-    if (!members.length && LEADING.includes(group))
-      return [{ kind: "empty" as const, key: `empty:${group}`, group }];
+    const note = (count: number, text: string): LedgerItem => ({
+      kind: "note",
+      key: `note:${group}`,
+      group,
+      count,
+      text,
+    });
+    if (!members.length)
+      return LEADING.has(group)
+        ? [note(0, group === "waits" ? "Nothing waits on you" : "Nothing is working")]
+        : [];
+    const counted = group === "unread" && presentation.unread === "count";
     const cap =
-      LEADING.includes(group) || open.has(group)
-        ? members.length
-        : (presentation.caps?.[group] ?? presentation.cap);
-    const shown: LedgerItem[] = members
-      .slice(0, cap)
-      .map((row) => ({ kind: "row", key: row.key, row }));
-    return members.length > cap
-      ? [...shown, { kind: "more", key: `more:${group}`, group, count: members.length - cap }]
-      : shown;
+      LEADING.has(group) || open.has(group) ? members.length : counted ? 0 : presentation.cap;
+    const hidden = members.length - cap;
+    return [
+      ...members.slice(0, cap).map((row): LedgerItem => ({ kind: "row", key: row.key, row })),
+      ...(hidden > 0
+        ? [note(hidden, `${hidden}${counted ? "" : " more"} ${GROUP_NAME[group]}`)]
+        : []),
+    ];
   });
-}
-
-/** The counter strip's groups: waits and working first, then the presentation's own order. */
-export function counterGroups(presentation: LedgerPresentation): LedgerGroup[] {
-  return [...LEADING, ...presentation.groups.filter((group) => !LEADING.includes(group))];
 }
