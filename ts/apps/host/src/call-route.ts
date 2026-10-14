@@ -24,6 +24,7 @@ import {
   currentCaller,
   readsOnly,
   Refused,
+  admitAnonymousCall,
 } from "./control.ts";
 import type { Caller } from "@pe/agent-contracts";
 import { actionBasesSchema, actionListFilterSchema } from "@pe/agent-contracts";
@@ -239,6 +240,7 @@ export function makeCallRoute(
       const unknownKey = Object.keys(body).find((k) => k !== "key" && k !== "request");
       if (unknownKey) return yield* Effect.fail(invalidBody(unknownBodyKeyMessage(unknownKey)));
       const key = body.key;
+      yield* Effect.try({ try: () => admitAnonymousCall(caller, key), catch: (error) => error });
       const request = "request" in body ? body.request : undefined;
       const scope = yield* Effect.try({
         try: () => readSessionScope(req.headers),

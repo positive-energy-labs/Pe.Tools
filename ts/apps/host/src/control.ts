@@ -192,9 +192,9 @@ export function admitRequest(caller: Caller, permission: RoutePermission, door: 
       door,
       `Refused at ${door}: this route declares no permission.`,
     );
-  // `operation` is the /call door: it classifies each op itself (Mutate is never raw-dispatched,
-  // human-only ops refuse other callers), so anonymous transport reads like any read route.
-  if (permission === "read" || permission === "mcp" || permission === "operation") return;
+  if (permission === "read" || permission === "mcp") return;
+  // The add-in's context-free callbacks reach /call; its door admits them by key (`admitAnonymousCall`).
+  if (permission === "operation" && caller.kind === "anonymous") return;
   if (caller.kind === "anonymous")
     throw refuse("context.missing", door, `Refused at ${door}: anonymous callers are read-only.`);
   if (permission === "human" || permission === "admin") {
@@ -208,7 +208,7 @@ export function admitRequest(caller: Caller, permission: RoutePermission, door: 
       door,
       `Refused at ${door}: the service caller is limited to shutdown and window.`,
     );
-  if (caller.kind === "external-mcp")
+  if (caller.kind === "external-mcp" && permission !== "operation")
     throw refuse(
       "grant.context-cannot-hold",
       door,
@@ -229,6 +229,19 @@ export function admitRequest(caller: Caller, permission: RoutePermission, door: 
       "page.binding-not-yours",
       door,
       `Refused at ${door}: only a Page or human may use this binding.`,
+    );
+}
+
+/** What Pe.App's `TsHostCallClient` asks with no context: host-local Pod reads for native scripts. */
+const ANONYMOUS_CALL_KEYS = new Set(["pod.list", "pod.capture"]);
+
+/** At /call an anonymous caller runs only the add-in's two Pod reads; every other key refuses. */
+export function admitAnonymousCall(caller: Caller, key: string): void {
+  if (caller.kind === "anonymous" && !ANONYMOUS_CALL_KEYS.has(key))
+    throw refuse(
+      "context.missing",
+      "/call",
+      `Refused at /call: an anonymous caller may only read Pods, not '${key}'.`,
     );
 }
 

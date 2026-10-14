@@ -259,8 +259,8 @@ test("an anonymous local process cannot read a human document with a ReadOnly sc
         },
         { key: "scripting.execute", request: script(mode) },
       );
-      expect(call.status, call.text).toBe(409);
-      expect(call.text).toContain("/actions");
+      expect(call.status, call.text).toBe(403);
+      expect(call.text).toContain("context.missing");
     }
     expect(host.sent).toEqual([]);
   } finally {
