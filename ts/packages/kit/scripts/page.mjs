@@ -1,31 +1,25 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { createHash } from "node:crypto";
 
-const page = new URL("../../../../examples/pages/voltage-drop/", import.meta.url);
+const page = new URL("../../../../examples/pods/snowdon-circuits/pages/tour/", import.meta.url);
 const read = (name) => readFile(new URL(name, page), "utf8");
-const [template, calc, app, css, script] = await Promise.all([
+const [template, calc, circuits, app] = await Promise.all([
   read("index.source.html"),
   read("calc.mjs"),
+  read("circuits.mjs"),
   read("page.js"),
-  readFile(new URL("../dist/pe-kit.css", import.meta.url), "utf8"),
-  readFile(new URL("../dist/pe-kit.js", import.meta.url), "utf8"),
 ]);
-const sha = createHash("sha256").update(script).update(css).digest("hex");
 const safeScript = (text) => text.replace(/<\/script/gi, "<\\/script");
 const html = template
-  .replace(
-    "<!-- KIT -->",
-    () =>
-      `<meta name="pe-kit-sha256" content="${sha}"><style>${css}</style><script>${safeScript(script)}</script>`,
-  )
+  .replace("<!-- KIT -->", () => '<script src="/pages/pe.js"></script>')
   .replace(
     "<!-- SOURCE -->",
     () =>
-      `<script id="page-source" type="application/json">${safeScript(JSON.stringify({ calc, app }))}</script>`,
+      `<script id="page-source" type="application/json">${safeScript(JSON.stringify({ calc, circuits, app }))}</script>`,
   )
   .replace(
     "<!-- PAGE -->",
-    () => `<script>${safeScript(calc.replace(/^export /gm, ""))}\n${safeScript(app)}</script>`,
+    () =>
+      `<script>${safeScript(calc.replace(/^export /gm, ""))}\n${safeScript(circuits.replace(/^import[^\n]*\n/gm, "").replace(/^export /gm, ""))}\n${safeScript(app)}</script>`,
   );
 await writeFile(new URL("index.html", page), html);
-console.log(`Portable Page: ${Buffer.byteLength(html)} bytes; kit sha256 ${sha}`);
+console.log(`Hosted Page: ${Buffer.byteLength(html)} bytes; portable export is owned by the host`);
