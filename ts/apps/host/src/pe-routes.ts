@@ -900,6 +900,10 @@ export function makeHostPeRoutes(
   const fetchRoute = routes.fetch;
   routes.fetch = async (request) => {
     const declared = matchPeRoute(request.method, new URL(request.url).pathname);
+    if (declared?.id === "notices.presence") {
+      notices.beat(declared.params.caller!, await request.json());
+      return Response.json({ ok: true });
+    }
     if (declared?.params.route?.startsWith("pod.")) await podRoutes.list();
     return fetchRoute(request);
   };

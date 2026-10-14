@@ -7,6 +7,21 @@ using Pe.Host.Tray;
 namespace Pe.Host.Tray.Tests;
 
 public class NoticeInboxTests {
+    [Test]
+    public async Task AttendedItemsAdvanceWithoutShowingOrSkippingAnEarlierHeldItem() {
+        long saved = 0;
+        var inbox = new NoticeInbox(0, id => saved = id);
+        var attended = "{\"id\":\"t\",\"revision\":1,\"title\":\"Done\",\"body\":\"\",\"attended\":true}";
+        Assert.That(await Read(inbox, Feed(Event(1, attended))), Is.Empty);
+        Assert.That(saved, Is.EqualTo(1));
+        Assert.That(await Read(inbox, Feed(Event(2, Notice("unattended")), Event(3, attended))), Is.Empty);
+        Assert.That(saved, Is.EqualTo(1), "held items remain owed across a crash");
+        Assert.That(inbox.Received, Is.EqualTo(3));
+        Assert.That(inbox.PageReady(), Has.Count.EqualTo(1));
+        Assert.That(saved, Is.EqualTo(3));
+        Assert.That(await Read(inbox, Feed(Event(4, attended))), Is.Empty);
+        Assert.That(saved, Is.EqualTo(4));
+    }
     private static string Notice(string id, int revision = 1) =>
         $$"""{"id":"{{id}}","revision":{{revision}},"title":"Revit start succeeded","body":"Done."}""";
 

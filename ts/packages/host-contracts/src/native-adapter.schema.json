@@ -260,6 +260,9 @@
         "href": {
           "$ref": "#/$defs/__schema0"
         },
+        "attended": {
+          "type": "boolean"
+        },
         "act": {
           "oneOf": [
             {

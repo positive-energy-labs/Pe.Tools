@@ -58,7 +58,7 @@ internal sealed class NoticeInbox {
     /** The notices to hand the page now: none while no page listens. */
     public IReadOnlyList<string> Receive(string frame) {
         // Parsed first, so only a JSON value ever reaches the page as script.
-        if (!TryRead(frame, out var id, out var notice)) return [];
+        if (!TryRead(frame, out var id, out var notice, out var attended)) return [];
         lock (_gate) {
             if (notice is null) {
                 // A gap is the log's own word for where it is, even when that is behind a cursor from a lost
@@ -69,6 +69,10 @@ internal sealed class NoticeInbox {
             }
             if (id <= (_received ?? -1)) return [];
             _received = id;
+            if (attended) {
+                if (_held.Count == 0) Advance(id);
+                return [];
+            }
             if (_ready) { Advance(id); return [notice]; }
             if (_held.Count == Bound) _held.RemoveAt(0);
             _held.Add((id, notice));
@@ -97,8 +101,8 @@ internal sealed class NoticeInbox {
         _persist(id);
     }
 
-    private static bool TryRead(string frame, out long id, out string? notice) {
-        id = 0; notice = null;
+    private static bool TryRead(string frame, out long id, out string? notice, out bool attended) {
+        id = 0; notice = null; attended = false;
         try {
             using var document = JsonDocument.Parse(frame);
             var root = document.RootElement;
@@ -109,6 +113,7 @@ internal sealed class NoticeInbox {
             if (kind.GetString() != "event" || !root.TryGetProperty("value", out var value)
                 || !NativeAdapterContract.Accepts("notice", value) || value.ValueKind == JsonValueKind.Null) return false;
             notice = value.GetRawText();
+            attended = value.TryGetProperty("attended", out var attention) && attention.ValueKind == JsonValueKind.True;
             return true;
         } catch (Exception error) when (error is JsonException or InvalidOperationException or FormatException) {
             return false;

@@ -226,6 +226,7 @@ function harness(bufferMs = 0) {
   }
   return {
     follow,
+    beat: notices.beat,
     log,
     // The journal commits a receipt into the log and to its subscribers alike.
     deliver: (r: Receipt) => {
@@ -236,6 +237,36 @@ function harness(bufferMs = 0) {
     close: () => notices.close(),
   };
 }
+
+test("only a live focused beat for this thread attends the tray item; the log stays whole", () => {
+  vi.useFakeTimers();
+  const h = harness();
+  try {
+    const tray = h.follow(null, { kind: "notices", as: "tray" });
+    const web = h.follow();
+    h.beat("pwa", { thread: "t1", visible: true, focused: true });
+    h.deliver(turn("finished"));
+    expect(tray.items().at(-1)?.attended).toBe(true);
+    expect(web.items().at(-1)?.attended).toBeUndefined();
+    h.beat("pwa", { thread: "other-thread", visible: true, focused: true });
+    h.deliver(turn("finished", uid(20)));
+    expect(tray.items().at(-1)?.attended).toBeUndefined();
+    h.beat("flyout", { thread: "t1", visible: true, focused: true });
+    h.beat("pwa", { thread: "t1", visible: false, focused: false });
+    h.deliver(turn("finished", uid(21)));
+    expect(tray.items().at(-1)?.attended).toBe(true);
+    vi.advanceTimersByTime(10_000);
+    h.deliver(turn("finished", uid(22)));
+    expect(tray.items().at(-1)?.attended).toBeUndefined();
+    h.beat("flyout", { thread: "t1", visible: true, focused: false });
+    h.deliver(turn("finished", uid(23)));
+    expect(tray.items().at(-1)?.attended).toBeUndefined();
+    expect(tray.items()).toHaveLength(5);
+  } finally {
+    h.close();
+    vi.useRealTimers();
+  }
+});
 
 test("a duplicate delivery is one card and a higher revision is its successor", () => {
   const h = harness();

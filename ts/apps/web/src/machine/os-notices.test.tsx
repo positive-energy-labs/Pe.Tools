@@ -4,7 +4,55 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { readingFrameSchema } from "@pe/agent-contracts";
 import { machineNoticeSchema } from "@pe/host-contracts/native-adapter";
 
-import { OsNotices, setOsNotices } from "./os-notices";
+import { OsNotices, setOsNotices, useThreadPresence } from "./os-notices";
+const presenceCall = vi.hoisted(() =>
+  vi.fn<(name: string, input: unknown) => Promise<{ ok: boolean }>>(async () => ({ ok: true })),
+);
+vi.mock("#/host/pe-client", () => ({ peClient: { call: presenceCall } }));
+
+test("thread presence beats on focus and every 5 seconds, and stops on route departure", () => {
+  vi.useFakeTimers();
+  presenceCall.mockClear();
+  Object.defineProperty(document, "hasFocus", { configurable: true, value: () => true });
+  function Surface({ thread }: { thread: string | null }) {
+    useThreadPresence(thread);
+    return null;
+  }
+  const view = render(<Surface thread="t1" />);
+  expect(presenceCall).toHaveBeenLastCalledWith("notices.presence", {
+    params: { caller: expect.any(String) },
+    body: { thread: "t1", visible: true, focused: true },
+  });
+  act(() => {
+    vi.advanceTimersByTime(5_000);
+  });
+  expect(presenceCall).toHaveBeenCalledTimes(2);
+  Object.defineProperty(document, "hasFocus", { configurable: true, value: () => false });
+  act(() => {
+    window.dispatchEvent(new Event("blur"));
+  });
+  expect(presenceCall.mock.calls.at(-1)).toEqual([
+    "notices.presence",
+    {
+      params: { caller: expect.any(String) },
+      body: { thread: "t1", visible: true, focused: false },
+    },
+  ]);
+  view.rerender(<Surface thread="t2" />);
+  expect(presenceCall.mock.calls.at(-2)?.[1]).toMatchObject({
+    body: { thread: "t1", visible: false, focused: false },
+  });
+  view.unmount();
+  const count = presenceCall.mock.calls.length;
+  act(() => {
+    vi.advanceTimersByTime(15_000);
+  });
+  expect(presenceCall).toHaveBeenCalledTimes(count);
+  expect(presenceCall.mock.calls.at(-1)?.[1]).toMatchObject({
+    body: { thread: "t2", visible: false, focused: false },
+  });
+  vi.useRealTimers();
+});
 
 /** The host's `notices` stream as the browser sees it: real Reading frames over a stand-in EventSource. */
 const streams: { url: string; onmessage: ((m: MessageEvent<string>) => void) | null }[] = [];

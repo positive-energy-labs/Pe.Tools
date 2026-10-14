@@ -46,6 +46,7 @@ import { Surface as PageSurface } from "#/components/lang/surface";
 import { ThreadBody } from "#/workbench/lens/thread-body";
 import { ComposerBank } from "#/chat/composer-bank";
 import { Dialog, DialogContent, DialogTitle } from "#/components/lang/dialog";
+import { useThreadPresence } from "#/machine/os-notices";
 
 type Plugin = { plugin?: ChatPluginRoute; focus?: string; target?: string };
 
@@ -120,6 +121,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
     deleteThread,
     updateThread,
   } = useWorkbench();
+  useThreadPresence(inbox ? null : currentThreadId);
   const newThread = useCallback(
     (target?: Parameters<typeof startThread>[0]) => {
       setComposing(true);
