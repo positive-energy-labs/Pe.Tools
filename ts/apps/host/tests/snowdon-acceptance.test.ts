@@ -20,16 +20,20 @@ async function authored(root: string, directory = root): Promise<[string, string
   return files.sort(([a], [b]) => a.localeCompare(b));
 }
 
-// f45fdc44 authored bytes. Runtime state and exported artifacts are created only in temp copies.
+// f45fdc44 authored bytes, except the owner-approved explicit export flag in circuits (2026-10-14).
+// Runtime state and exported artifacts are created only in temp copies.
 test.each([
   ["snowdon-ducts", "0860ce4e13340f99810f71229a38450bf9d7bb8828216fd434f25f531fa9a70e"],
-  ["snowdon-circuits", "d985ecda657be49f9b51d5fa948229dc9d79b86d7fac66f2324c15b72eee19cf"],
+  ["snowdon-circuits", "1d13cfe127bda7c6de7ebed7aab9dc45d12d9d31eff00fd9b3475b3940c1ca30"],
 ])(
   "%s survives production transfer, hosted serving and standalone export unchanged",
   async (id, hash) => {
     const source = join(examples, id);
     const before = await authored(source);
-    expect(sha(JSON.stringify(before)), "authored example bytes differ from f45fdc44").toBe(hash);
+    expect(
+      sha(JSON.stringify(before)),
+      "authored example bytes differ from the reviewed source pin",
+    ).toBe(hash);
     const root = await mkdtemp(join(tmpdir(), "pe-snowdon-acceptance-"));
     try {
       const from = join(root, "from"),
