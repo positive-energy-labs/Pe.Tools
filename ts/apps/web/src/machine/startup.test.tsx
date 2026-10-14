@@ -5,7 +5,7 @@ import { StartupSettings } from "./startup";
 import { machineOf } from "./model";
 import { MACHINE_SEEDS } from "#/open/seeds";
 
-const host = vi.hoisted(() => ({ surface: "web", native: false }));
+const host = vi.hoisted(() => ({ surface: "web", native: false, overlay: false }));
 vi.mock("#/navigation/surface-host", () => ({ useSurfaceHost: () => host }));
 beforeEach(() => {
   vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(
@@ -16,6 +16,7 @@ afterEach(() => {
   cleanup();
   host.surface = "web";
   host.native = false;
+  host.overlay = false;
   vi.restoreAllMocks();
 });
 
@@ -115,4 +116,16 @@ test("app display mode alone says window mode without certifying installed state
   expect(screen.getByText(/This is an app window/)).toBeTruthy();
   expect(screen.queryByRole("status")).toBeNull();
   expect(screen.queryByRole("button", { name: "Install in Edge" })).toBeNull();
+});
+
+test("an app window under Edge's title bar names the one toggle that hides it", () => {
+  host.surface = "pwa";
+  render(<StartupSettings machine={machineOf(MACHINE_SEEDS["no-revit"])} fixture={false} />);
+  expect(screen.getByLabelText("startup settings").textContent).toContain(
+    "Edge's title bar is showing. Click the chevron beside Minimize once to hide it",
+  );
+  host.overlay = true;
+  cleanup();
+  render(<StartupSettings machine={machineOf(MACHINE_SEEDS["no-revit"])} fixture={false} />);
+  expect(screen.getByLabelText("startup settings").textContent).not.toContain("chevron");
 });

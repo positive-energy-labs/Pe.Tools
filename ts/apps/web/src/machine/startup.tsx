@@ -80,7 +80,9 @@ export function StartupSettings({
             {!edge
               ? "Open this address in Microsoft Edge and install there. Other Chromium browsers create separate Windows app entries. "
               : host.surface === "pwa"
-                ? "This is an app window. "
+                ? host.overlay
+                  ? "This is an app window. "
+                  : "This is an app window. Edge's title bar is showing. Click the chevron beside Minimize once to hide it; Edge remembers the choice. "
                 : "Install Pe.Tools in this Edge profile. "}
             {!edge
               ? ""

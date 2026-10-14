@@ -56,7 +56,7 @@ internal sealed class TrayContext : ApplicationContext {
             Text = $"Pe.Tools {service.Version}", ContextMenuStrip = _menu, Visible = true
         };
         if (launch.IsDev) { _window.Text = "Pe.Tools Dev · " + Path.GetFileName(launch.SourceRoot); _window.Icon = _icon.Icon; }
-        _openWindow.Click += (_, _) => OpenWindow();
+        _openWindow.Click += (_, _) => OpenWindow(install: true);
         _menu.Items.Add(_openWindow);
         _menu.Items.Add("Rehome", null, (_, _) => {
             _window.Rehome();
@@ -542,7 +542,7 @@ internal sealed class TrayContext : ApplicationContext {
         }
     }
 
-    private async void OpenWindow(string? destination = null) {
+    private async void OpenWindow(string? destination = null, bool install = false) {
         if (!IsOriginalService()) return;
         var service = _service;
         destination ??= _service.ViewOrigin + "/";
@@ -551,7 +551,9 @@ internal sealed class TrayContext : ApplicationContext {
             var installed = await FindPwaAsync();
             if (!IsOriginalService() || service != _service) return;
             _openWindow.Text = "Open window";
-            var start = PwaLauncher.Launch(edge, service.ViewOrigin, destination, installed, PwaLauncher.StandardProfileRoot);
+            var start = install && installed is null
+                ? PwaLauncher.Install(edge, service.ViewOrigin, PwaLauncher.StandardProfileRoot)
+                : PwaLauncher.Launch(edge, service.ViewOrigin, destination, installed, PwaLauncher.StandardProfileRoot);
             Process.Start(start)?.Dispose();
         } catch (Exception error) when (error is System.ComponentModel.Win32Exception or IOException or HttpRequestException
                                        or JsonException or UnauthorizedAccessException or ArgumentException or OperationCanceledException
