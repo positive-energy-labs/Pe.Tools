@@ -1,55 +1,85 @@
-import type { ReactNode } from "react";
+import { createContext, useContext, useId, useState } from "react";
 import { Tooltip as Primitive } from "@base-ui/react/tooltip";
+import { cn } from "../../lib/utils";
+import { floatingSurface, type FloatingPosition } from "./popover";
 
-import { tv, type VariantProps } from "../../lib/tv";
+const Description = createContext<{ id: string; open: boolean } | null>(null);
 
-export const tooltipRecipe = tv({
-  slots: {
-    trigger: "inline-flex items-center justify-center transition-colors",
-    positioner: "isolate z-popup outline-none",
-    popup:
-      "max-h-(--available-height) max-w-[min(24rem,var(--available-width))] overflow-y-auto overscroll-contain px-3 py-2 t-small text-ink float-surface",
-  },
-  variants: {
-    kind: {
-      icon: { trigger: "size-5 cursor-help rounded-sm" },
-      label: { trigger: "px-1.5 py-0.5" },
-    },
-    size: {
-      default: {},
-      compact: { trigger: "px-1 py-0" },
-    },
-  },
-  defaultVariants: { kind: "label", size: "default" },
-});
-
-export function UiTooltipProvider({ children }: { children: ReactNode }) {
-  return <Primitive.Provider delay={150}>{children}</Primitive.Provider>;
-}
-
-function TooltipTrigger({
-  kind,
-  size,
+export function Tooltip({
+  open: controlled,
+  defaultOpen = false,
+  onOpenChange,
   ...props
-}: Omit<Primitive.Trigger.Props, "className"> & VariantProps<typeof tooltipRecipe>) {
-  const { trigger } = tooltipRecipe({ kind, size });
-  return <Primitive.Trigger className={trigger()} {...props} />;
+}: Primitive.Root.Props) {
+  const id = useId();
+  const [uncontrolled, setOpen] = useState(defaultOpen);
+  const open = controlled ?? uncontrolled;
+  return (
+    <Description.Provider value={{ id, open }}>
+      <Primitive.Root
+        {...props}
+        open={open}
+        onOpenChange={(next, event) => {
+          onOpenChange?.(next, event);
+          if (!event.isCanceled) setOpen(next);
+        }}
+      />
+    </Description.Provider>
+  );
 }
 
-function TooltipPositioner(props: Omit<Primitive.Positioner.Props, "className">) {
-  const { positioner } = tooltipRecipe();
-  return <Primitive.Positioner className={positioner()} {...props} />;
+export function TooltipTrigger(props: Primitive.Trigger.Props) {
+  const description = useContext(Description);
+  return (
+    <Primitive.Trigger
+      className="dl-button"
+      {...props}
+      aria-describedby={
+        [props["aria-describedby"], description?.open ? description.id : undefined]
+          .filter(Boolean)
+          .join(" ") || undefined
+      }
+    />
+  );
 }
 
-function TooltipPopup(props: Omit<Primitive.Popup.Props, "className">) {
-  const { popup } = tooltipRecipe();
-  return <Primitive.Popup className={popup()} {...props} data-surface="artifact" />;
+/** Mount once around the app. Adjacent hints share the warm-up window. */
+export function TooltipProvider({ delay = 350, ...props }: Primitive.Provider.Props) {
+  return <Primitive.Provider delay={delay} {...props} />;
 }
 
-export const Tooltip = {
-  Root: Primitive.Root,
-  Trigger: TooltipTrigger,
-  Portal: Primitive.Portal,
-  Positioner: TooltipPositioner,
-  Popup: TooltipPopup,
-};
+export function TooltipContent({
+  side = "top",
+  align = "center",
+  sideOffset = 6,
+  alignOffset = 0,
+  className,
+  ...props
+}: Omit<Primitive.Popup.Props, "className"> & FloatingPosition & { className?: string }) {
+  const description = useContext(Description);
+  return (
+    <Primitive.Portal>
+      <Primitive.Positioner
+        side={side}
+        align={align}
+        sideOffset={sideOffset}
+        alignOffset={alignOffset}
+        collisionPadding={8}
+        className="isolate z-popup"
+      >
+        <Primitive.Popup
+          id={description?.id}
+          role="tooltip"
+          data-surface="artifact"
+          data-slot="tooltip-content"
+          className={cn(
+            floatingSurface,
+            "max-w-[min(24rem,var(--available-width))] px-2 py-1",
+            className,
+          )}
+          {...props}
+        />
+      </Primitive.Positioner>
+    </Primitive.Portal>
+  );
+}
