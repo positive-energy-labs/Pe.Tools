@@ -49,7 +49,7 @@ type MintSpec =
   | { kind: "external-mcp"; label: string }
   | { kind: "human"; via: "cli" };
 const contexts = new Map<string, Caller>();
-export const BROWSER_CONTEXT_COOKIE = "pe-browser-context";
+const BROWSER_CONTEXT_COOKIE = "pe-browser-context";
 const browserContexts = new Map<
   string,
   { caller: Extract<Caller, { kind: "human" }>; transport: string }
@@ -272,6 +272,26 @@ export function grantDead(
   return Date.parse(grant.expiresAt) <= now ? "grant.expired" : null;
 }
 export const grantExpiry = (from: number) => new Date(from + GRANT_MS).toISOString();
+
+/** K9: arbitrary code sees the entire Revit process; every open lifetime needs write authority. */
+export function admitScript(caller: Caller, documents: readonly DocumentRef[], door: string): void {
+  if (caller.kind === "human") return;
+  const ungranted = documents.filter((ref) => {
+    try {
+      admitCrossing(caller, { kind: "document", ref }, door);
+      return false;
+    } catch (error) {
+      if (!(error instanceof Refused)) throw error;
+      return true;
+    }
+  });
+  if (ungranted.length)
+    throw refuse(
+      "script.ungranted-documents",
+      door,
+      `Refused at ${door}: scripts can access every open document. Close the ungranted documents or run on a separate copy: ${ungranted.map((ref) => `${ref.session}/${ref.openId}`).join(", ")}.`,
+    );
+}
 
 const deadReason = (code: "grant.revoked" | "grant.expired", grant: HeadGrant | null) =>
   code === "grant.revoked"

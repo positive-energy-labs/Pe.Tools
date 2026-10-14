@@ -9,7 +9,7 @@ import {
   type Caller,
   type ExecutionTarget,
 } from "@pe/agent-contracts";
-import { Refused } from "./control.ts";
+import { admitScript, Refused } from "./control.ts";
 import { hostOperationDefinitionSchema } from "@pe/host-contracts/contracts";
 import {
   isTsOnlyOperationKey,
@@ -164,6 +164,15 @@ export async function admitGatewayAction(
       if (JSON.stringify(expected) !== JSON.stringify(admission.destination))
         throw refused("Destination does not match operation needs");
       if (!session) return { kind: "host-leaf", actor };
+      if (admission.key === "scripting.execute")
+        admitScript(
+          crossing.caller,
+          session.state?.openDocuments.map((doc) => ({
+            session: session.sessionId,
+            openId: doc.openId,
+          })) ?? [],
+          "/actions",
+        );
       const process = await readOriginalProcess(
         session.processId,
         session.processStartUtcUnixMs ?? NaN,
@@ -210,11 +219,20 @@ export async function admitGatewayAction(
         admission.key,
         input,
         async (requestId) => {
-          await validate(
+          const session = await validate(
             prepared.kind === "native-leaf"
               ? nativeProcessSchema.parse(prepared.process)
               : undefined,
           );
+          if (admission.key === "scripting.execute" && session)
+            admitScript(
+              crossing.caller,
+              session.state?.openDocuments.map((doc) => ({
+                session: session.sessionId,
+                openId: doc.openId,
+              })) ?? [],
+              "script step begin",
+            );
           if (admission.destination.kind === "host") return local(admission.key, input);
           const target = admission.destination;
           if (target.kind === "sdk-session")

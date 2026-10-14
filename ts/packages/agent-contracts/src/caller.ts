@@ -63,6 +63,7 @@ export const refusalCodes = [
   "acquisition.unproven",
   "acquisition.changed-after-handover",
   "lifecycle.ungranted-documents",
+  "script.ungranted-documents",
   "page.unbound",
   "page.binding-not-yours",
   "page.use-page-door",

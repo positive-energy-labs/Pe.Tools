@@ -20,6 +20,7 @@ import {
   mintBrowserContext,
   Refused,
   retireContext,
+  admitScript,
 } from "../src/control.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 
@@ -36,6 +37,18 @@ const grantOn = (lifetime: DocumentRef, extra: Partial<HeadGrant> = {}): HeadGra
   expiresAt: grantExpiry(T0),
   revoked: null,
   ...extra,
+});
+
+test("access-004 K9: a granted script refuses another ungranted open document", () => {
+  bind(acquiredCopy);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(T0 + 1000);
+  heads.t1 = headWith(grantOn(docA));
+  expect(
+    refusal(() => admitScript(pea, [docA, { session: "S1", openId: "other" }], "/actions")),
+  ).toBe("script.ungranted-documents");
+  expect(() => admitScript(pea, [docA], "/actions")).not.toThrow();
+  expect(() => admitScript(pea, [{ session: "P", openId: "copy" }], "/actions")).not.toThrow();
 });
 const headWith = (grant: HeadGrant | null): ThreadHead => ({
   ...emptyThreadHead,

@@ -227,7 +227,7 @@ test("pea find prints key, kind and title per row of the host's catalog; --menti
     description: "Check a riser.",
     needs: "nothing",
     mutates: false,
-    actor: "any",
+    principal: ["human", "pea", "page", "external-mcp"],
     input: {},
     source: "skills",
     package: { id: "skills", path: "skills/riser-check/SKILL.md", sha256: "a".repeat(64) },
@@ -239,7 +239,7 @@ test("pea find prints key, kind and title per row of the host's catalog; --menti
     key: "route:riser.apply",
     kind: "route-command",
     title: "Riser: apply",
-    actor: "human",
+    principal: ["human"],
     package: undefined,
   } as const;
   const recents = [
