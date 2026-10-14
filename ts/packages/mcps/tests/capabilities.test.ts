@@ -1728,3 +1728,36 @@ test("Pea doors author native JSON and plan both family routes under the turn Ta
     vi.unstubAllEnvs();
   }
 });
+
+test("settled thread history is discoverable and pe_read uses its bounded host read door", async () => {
+  fakeRuntimeHost("http://127.0.0.1:9");
+  const history = catalog().capabilities.find((row) => row.key === "route:threads.history");
+  expect(history).toMatchObject({ needs: "nothing", mutates: false, principal: ["human", "pea"] });
+  const query = {
+    since: "2026-10-13T00:00:00.000Z",
+    before: "2026-10-14T00:00:00.000Z",
+    limit: 1,
+    offset: 0,
+  };
+  const calls: string[] = [];
+  vi.stubGlobal("fetch", async (input: string | URL | Request) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    calls.push(url.pathname);
+    if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+    if (url.pathname === "/pe/thread-history") {
+      expect(JSON.parse(url.searchParams.get("query")!)).toEqual(query);
+      return Response.json({ items: [{ id: "settled-thread" }], hasMore: false });
+    }
+    throw Error(`Unexpected history request ${url.pathname}`);
+  });
+  const result = await run(peRead, {
+    key: "route:threads.history",
+    input: query,
+    timeoutSeconds: 30,
+  });
+  expect(result).toMatchObject({
+    ok: true,
+    result: { items: [{ id: "settled-thread" }], hasMore: false },
+  });
+  expect(calls).toEqual(["/pe/capabilities", "/pe/thread-history"]);
+});

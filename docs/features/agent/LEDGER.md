@@ -11,6 +11,8 @@ restated here.
 
 ## Decided
 
+- 2026-10-14, owner: scheduler P1 follows T3 Code's persisted clock tasks: interval and local fixed time only, a fresh thread per run, no bound threads or agent scheduler controls. The shipped Feedback miner aggregates settled local threads; it does not react to individual events. Volume admission happens inside the run before a thread or model turn exists. Skipped attempts retain the prior dispatched mining window so low-volume coworkers can accumulate evidence. The initial policy is 03:00 local and 25 native receipts excluding missing/running/rejected verdicts; source and deterministic vectors live in [scheduled-tasks.ts](../../../ts/apps/host/src/scheduled-tasks.ts) and [scheduled-tasks.test.ts](../../../ts/apps/host/tests/scheduled-tasks.test.ts).
+
 - 2026-10-14, wave Y round 2 / FIELD-0725: one sanitized provider refusal record feeds the host log and the UI's Copy the details action. It retains the readiness step/message, executable candidates and per-candidate Win32 errors, resolved executable identity, and console/installer exit codes with an 8192-character output tail. A launcher's zero exit cannot erase an installer failure; missing command-exit evidence also refuses success. Discovery and console errors must remain distinguishable because the 0.7.25 field harvest could not establish the failed layer.
 
 - 2026-10-14, wave Y: Pea installs the complete checksum-verified OpenAI Windows release package in a physical directory under the product root, `<productRoot>\harnesses\Codex` (`harness/install.ts` `codexPackagePath`, resolved through `productRoot()`; moved 2026-10-14 from `%LOCALAPPDATA%\Programs\Pe.Tools\Harnesses\Codex`, wave GF). The upstream installer's junctions reproduce both coworker failures under RedirectionGuard. The unproved elevated `[A]` retry is removed. Claude keeps its official installer, downloaded and run with `-NoProfile -ExecutionPolicy Bypass -File`. `adapterCli` re-checks the official install locations and the freshly captured shell PATH (`shellPath`, which reads the registry) after the console closes; it no longer runs its own `reg.exe` query (wave GF, so tests isolate through the existing `shellPath` seam); no host restart or manual PATH edit is required.
@@ -190,6 +192,10 @@ restated here.
 - 2026-08-25 — One object-valued `page/lens-intent` atom for `inspectKey` and `following`: the `Lens` controller wrote fresh identities during its subscribed effect and caused an unbounded React notification loop. Replaced by primitive atoms.
 
 ## Owed
+
+- 2026-10-14, scheduler P1 cleanup: Git unregistered the implementation worktree, but dependency residue remains at `C:/Users/kaitp/source/repos/Pe.Tools-feedback-scheduler/ts`. Automatic approval review rejected recursive cleanup with "blocked by policy"; remove that residue when permitted.
+
+- 2026-10-14, scheduler P1: real miner acceptance waits for the parallel `pe_feedback` tool and an explicitly authorized model run on coworker-machine evidence. Deterministic scheduler and fake-ACP tests do not prove finding quality or feedback delivery.
 
 - Wave Y round 2: prove the refusal details and clipboard on the installed host in the field, including the actual failed installer console. Windows filesystem/PowerShell fixtures and DOM clipboard tests cover the local contract; they do not reproduce the coworker's host security context or certify browser presentation.
 
