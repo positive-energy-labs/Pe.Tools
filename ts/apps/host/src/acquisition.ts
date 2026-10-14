@@ -122,11 +122,13 @@ export function planAcquisition(
 
 const preparedSchema = z.object({ acquisition: acquisitionIntentSchema.nullable() });
 const startedSchema = z.object({ session: z.object({ process: processSchema }) });
-const docView = z.object({
-  document: z.object({ openId: z.string().min(1), path: z.string().nullable() }),
-});
-// Recovery wraps the same request's DocOpResult under response.result.
-const openedSchema = z.union([docView, z.object({ result: docView }).transform((r) => r.result)]);
+const openedDoc = z.object({ openId: z.string().min(1), path: z.string().nullable() });
+// A live open records the CLI's DocOpResult; recovery records the op response, whose `result` is
+// the bridge's document itself (`{requestId,key,verdict,result:{openId,path,…}}`, acceptance R4d).
+const openedSchema = z.union([
+  z.object({ document: openedDoc }).transform((r) => r.document),
+  z.object({ result: openedDoc }).transform((r) => r.result),
+]);
 const copiedSchema = z.object({ sha256: z.string(), bytes: z.number() });
 const fileStepInput = z.object({ to: z.string() });
 const handedSchema = z.object({
@@ -173,8 +175,8 @@ export function foldAcquisitions(receipts: readonly ActionReceipt[]): Acquisitio
       opened &&
       docProcess &&
       (origin?.kind !== "file-copy" ||
-        (opened.document.path !== null && samePath(opened.document.path, origin.work)))
-        ? { process: docProcess, sdkOpenId: opened.document.openId }
+        (opened.path !== null && samePath(opened.path, origin.work)))
+        ? { process: docProcess, sdkOpenId: opened.openId }
         : null;
     const files = row.steps.flatMap((step) =>
       step.kind === "file" ? [fileStepInput.parse(step.input).to] : [],

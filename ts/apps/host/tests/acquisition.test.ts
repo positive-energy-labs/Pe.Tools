@@ -105,7 +105,7 @@ test("only a held, bound, natively certified lifetime mints a Pea write; planned
   ).toBe(0);
   // an open that names a path other than the reserved work copy binds nothing
   const elsewhere = step("instances.open", "succeeded", {
-    result: { document: { openId, path: source } },
+    result: { openId, path: source },
   });
   expect(mint([receipt("succeeded", [started, elsewhere])]).size).toBe(0);
 });

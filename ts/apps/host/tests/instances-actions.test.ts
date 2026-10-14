@@ -101,7 +101,8 @@ async function setup(
         sessions: sessionRows,
       });
     if (args[0] === "doc" && args[1] === "list") {
-      const process = args.includes("--pid") ? observed.process : originalProcess;
+      const process =
+        census.process ?? (args.includes("--pid") ? observed.process : originalProcess);
       return JSON.stringify({
         ...JSON.parse(
           sdkEnvelope({
@@ -148,6 +149,8 @@ async function setup(
     modified: false,
     /** The bridge snapshot's SDK identity marker; null is a payload that did not attest. */
     identity: "sdk-open-v1" as "sdk-open-v1" | null,
+    /** The incarnation `doc list` resolves; the default fixture process when null. */
+    process: null as null | { pid: number; processStartUtc: string },
   };
   const update = {
     plan: null,
@@ -1107,7 +1110,8 @@ test("F7: an acquisition records its paths before writing; a crash at any bounda
   const journal = new ActionJournal(lostOpen);
   const openStep = done.steps.at(-1)!;
   const reads: string[][] = [];
-  const response = { state: "ok", document: { openId, path: opened } };
+  // The SDK's recorded op response carries the bridge's document itself (acceptance R4d journal).
+  const response = { openId, path: opened, title: "Tower" };
   await recoverInstancesAction(done.id, journal, {
     sdk: async (args) => {
       reads.push([...args]);
@@ -1478,6 +1482,14 @@ async function crashWorld() {
             exitCode: 1,
             diagnostics: [{ code: "doc.bridge-unreachable", detail: "gone", fix: null }],
           };
+    if (verb === "close") {
+      f.census.documents = f.census.documents.filter((each) => each !== flag(args, "--doc"));
+      return { result: { state: "ok", document: null } };
+    }
+    if (verb === "stop" && named) {
+      rows[rows.indexOf(named)] = { ...named, case: "gone-receipt" };
+      return { result: { state: "ok", id: named.id, phase: "stopped" } };
+    }
     return Error(`unexpected ${args.join(" ")}`);
   }, rows);
   const die = () => rows.forEach((each, i) => (rows[i] = { ...each, case: "gone-receipt" }));
@@ -1601,6 +1613,90 @@ test("W2 20 (c): an open whose Revit died is not done, and cleanup releases what
   });
   // Nothing to close or stop: the dead Revit took its lifetime with it.
   expect(f.calls.slice(before).filter((argv) => argv[1] !== "list")).toEqual([]);
+  expect(foldAcquisitions(await f.owner.list())[0]!.state).toBe("released");
+});
+
+/**
+ * Acceptance R4d (beta.207): our host died during the open, Pea's Revit SURVIVED with the work copy
+ * open, recovery read the SDK's answer and resume completed. Cleanup then ran only
+ * `acquisition.remove` and failed EBUSY on the open work copy: it must close and stop what the SDK
+ * still reports alive. The recovered op response is `{requestId,key,verdict,result:<document>}`.
+ */
+test("R4d: after recovery over HTTP, cleanup closes and stops the Revit that survived our host", async () => {
+  const { f, world, row, input } = await crashWorld();
+  world.crash = "open";
+  const server = await serveRoutes(
+    makeCallRoute(f.owner, undefined, f.deps),
+    {} as RevitBridge["Service"],
+  );
+  cleanup.push(() => server.close());
+  const human = { [HOST_CONTEXT_HEADER]: mintContext({ kind: "human", via: "cli" }) };
+  const post = async (path: string, body: unknown) => {
+    const response = await fetch(`${server.base}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...human },
+      body: JSON.stringify(body),
+    });
+    const text = await response.text();
+    expect(response.status, text).toBeLessThan(300);
+    return JSON.parse(text) as { id: string; state: string; steps: { key: string }[] };
+  };
+  const admitted = await post("/actions", {
+    id: "r4d-open",
+    kind: "workflow",
+    key: "instances.open",
+    destination: { kind: "host" },
+    input,
+    bases: {},
+  });
+  const lost = await f.owner.wait(admitted.id);
+  expect(lost.state).toBe("unknown");
+  const open = lost.steps.at(-1)!;
+  const revit = row(acquisitionSessionId(lost.id))!;
+  f.census.process = revit.process;
+  const work = world.opens[0]![2]!;
+  world.ops[open.id] = {
+    result: {
+      state: "ok",
+      requestId: open.id,
+      receipt: { requestId: open.id, key: "doc.open", verdict: "ok" },
+      response: {
+        requestId: open.id,
+        key: "doc.open",
+        verdict: "ok",
+        result: { openId, title: "Tower", path: work, isModified: false },
+      },
+    },
+  };
+  expect(stepStates(await post("/actions/recover", { id: lost.id })).at(-1)).toBe(
+    "instances.open:succeeded",
+  );
+  await post("/actions/resume", { id: lost.id });
+  expect((await f.owner.wait(lost.id)).state).toBe("succeeded");
+  expect(foldAcquisitions(await f.owner.list())[0]).toMatchObject({
+    state: "held",
+    document: { sdkOpenId: openId },
+  });
+  const cleaning = await post("/actions", {
+    id: "r4d-cleanup",
+    kind: "workflow",
+    key: "instances.cleanup",
+    destination: { kind: "host" },
+    input: { acquisition: lost.id, unsaved: "discard" },
+    bases: {},
+  });
+  const cleaned = await f.owner.wait(cleaning.id);
+  expect(cleaned.state, JSON.stringify(cleaned)).toBe("succeeded");
+  expect(cleaned.steps.map((step) => step.key)).toEqual([
+    "instances.cleanup.close",
+    "acquisition.remove",
+    "acquisition.remove",
+    "instances.cleanup.stop",
+  ]);
+  expect(cleaned).toMatchObject({
+    result: { closed: openId, stopped: { pid: revit.process.pid } },
+  });
+  expect(row(acquisitionSessionId(lost.id))!.case).toBe("gone-receipt");
   expect(foldAcquisitions(await f.owner.list())[0]!.state).toBe("released");
 });
 
