@@ -173,7 +173,9 @@ test("endpoint add shows one classified line and reveals the raw body only on de
       }}
     />,
   );
-  fireEvent.change(screen.getByPlaceholderText("OpenAI API"), { target: { value: "test endpoint" } });
+  fireEvent.change(screen.getByPlaceholderText("OpenAI API"), {
+    target: { value: "test endpoint" },
+  });
   fireEvent.change(screen.getByPlaceholderText("API key"), { target: { value: "test-key" } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await screen.findByText(failure.message);
