@@ -1,6 +1,12 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { productPathNames } from "../src/contracts/product.ts";
-import { parseDocumentsKnownFolder, productHomePath } from "../src/product-paths.ts";
+import {
+  parseDocumentsKnownFolder,
+  productHomePath,
+  testHomeRootVariable,
+} from "../src/product-paths.ts";
 
 const homeVariable = productPathNames.productHomeVariable;
 
@@ -35,10 +41,24 @@ test("an unreadable known folder fails loudly instead of falling back to the pro
 test("the product home override names the home itself, read live, never from the cache", () => {
   const original = process.env[homeVariable];
   try {
-    process.env[homeVariable] = "D:\\override";
-    expect(productHomePath()).toBe("D:\\override");
-    process.env[homeVariable] = "D:\\second";
-    expect(productHomePath()).toBe("D:\\second");
+    process.env[homeVariable] = join(tmpdir(), "override");
+    expect(productHomePath()).toBe(join(tmpdir(), "override"));
+    process.env[homeVariable] = join(tmpdir(), "second");
+    expect(productHomePath()).toBe(join(tmpdir(), "second"));
+  } finally {
+    if (original === undefined) delete process.env[homeVariable];
+    else process.env[homeVariable] = original;
+  }
+});
+
+test("under a test run no product home may resolve outside the temp directory", () => {
+  const original = process.env[homeVariable];
+  try {
+    expect(process.env[testHomeRootVariable]).toBeTruthy();
+    process.env[homeVariable] = "C:\Users\someone\Documents\Pe.Tools";
+    expect(() => productHomePath()).toThrow("Test isolation");
+    delete process.env[homeVariable];
+    expect(() => productHomePath()).toThrow("Test isolation"); // the unset override is the real home
   } finally {
     if (original === undefined) delete process.env[homeVariable];
     else process.env[homeVariable] = original;

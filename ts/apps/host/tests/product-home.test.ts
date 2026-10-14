@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from "vite-plus/test";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { join } from "node:path";
 import { resolvePeaProductHomePath, resolvePeaSkillPaths } from "@pe/mcps";
 import { productPathNames } from "@pe/host-contracts/contracts";
@@ -16,6 +16,9 @@ import {
   productUserContentRootPath,
 } from "../src/product-paths.ts";
 
+// These tests compute paths from invented roots and touch no disk, so the test-isolation tripwire
+// (which only polices real resolution) stands down for this file.
+beforeEach(() => vi.stubEnv("PE_TEST_HOME_ROOT", ""));
 afterEach(() => vi.unstubAllEnvs());
 
 // F6 (acceptance round 3): one override names the whole product home. Pods followed a second

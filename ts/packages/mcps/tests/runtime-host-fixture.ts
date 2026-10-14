@@ -19,6 +19,7 @@ export function fakeRuntimeHost(base = "http://127.0.0.1:19999"): string {
   const local = mkdtempSync(join(tmpdir(), "pe-fake-runtime-host-"));
   roots.push(local);
   vi.stubEnv("LOCALAPPDATA", local);
+  vi.stubEnv("PE_TOOLS_PRODUCT_HOME", ""); // this fixture is the LOCALAPPDATA-rooted lane
   vi.stubEnv("PE_TOOLS_HOST_BASE_URL", base);
   const path = serviceFilePath(join(local, "Positive Energy", "Pe.Tools"), owner.serviceName);
   mkdirSync(dirname(path), { recursive: true });

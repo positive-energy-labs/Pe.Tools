@@ -16,6 +16,11 @@ export default defineConfig({
   // schedule-callers.test.ts drives the real host fixture, whose module graph resolves the host
   // lane at import; PE_LANE is the SDK-owned signal and the host refuses to guess it.
   // A 0.1 s skills write took 5 s on a loaded box; 15 s still fails a hang within the minute.
-  test: { env: { PE_LANE: "dev" }, testTimeout: 15_000 },
+  test: {
+    env: { PE_LANE: "dev" },
+    testTimeout: 15_000,
+    globalSetup: ["../../tests/isolated-home/global-setup.ts"],
+    setupFiles: ["../../tests/isolated-home/setup.ts"],
+  },
   fmt: {},
 });

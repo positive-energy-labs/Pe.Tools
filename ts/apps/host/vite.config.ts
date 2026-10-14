@@ -45,5 +45,11 @@ export default defineConfig({
   // one test take over another test's server instead of testing either lifecycle.
   // Real processes and files on Windows: the 5 s default fails honest tests under load. Heavy ones
   // carry their own 30 s.
-  test: { env: { PE_LANE: "dev" }, fileParallelism: false, testTimeout: 15_000 },
+  test: {
+    env: { PE_LANE: "dev" },
+    fileParallelism: false,
+    testTimeout: 15_000,
+    globalSetup: ["../../tests/isolated-home/global-setup.ts"],
+    setupFiles: ["../../tests/isolated-home/setup.ts"],
+  },
 });
