@@ -128,9 +128,9 @@ test("probeSuccessor reads a refusal by the old service or a new version as the 
     Response.json({ error: { code: "identity.host", message: "Invalid host" } }, { status: 403 }),
   );
   expect(await probeSuccessor("0.7.0")).toBe("down");
-  answer(Response.json({ version: "0.7.1", features: { peApi: 1, nativeAdapter: 1 } }));
+  answer(Response.json({ version: "0.7.1", features: { peApi: 1, nativeAdapter: 2 } }));
   expect(await probeSuccessor("0.7.0")).toBe("successor");
-  answer(Response.json({ version: "0.7.0", features: { peApi: 1, nativeAdapter: 1 } }));
+  answer(Response.json({ version: "0.7.0", features: { peApi: 1, nativeAdapter: 2 } }));
   expect(await probeSuccessor("0.7.0")).toBe("same");
   answer(new TypeError("fetch failed"));
   expect(await probeSuccessor("0.7.0")).toBe("down");

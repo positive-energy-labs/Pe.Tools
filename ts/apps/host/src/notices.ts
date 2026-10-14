@@ -116,8 +116,8 @@ export function noticeOf(r: Receipt, context: NoticeContext): MachineNotice | nu
 }
 
 /**
- * Finished turns, Revit verb ends and updates wait this long after the first of a burst, so a burst
- * arrives as one paged card. An approval or question blocks Pea, so it and its thread's response never wait.
+ * Finished turns and Revit verb ends wait after the first of a burst, so a burst arrives as one
+ * paged card. Updates, approvals and questions speak at once; an open ask also releases its thread's response.
  */
 const BUFFER_MS = 30_000;
 const SEEN = 256;
@@ -191,7 +191,8 @@ export function createNotices(deps: {
       return;
     }
     if (
-      bufferMs <= 0 || body.kind === "usage" ||
+      bufferMs <= 0 ||
+      body.kind === "usage" ||
       (body.kind === "turn" && thread && [...openRequests.values()].includes(thread))
     )
       return announce(entry);

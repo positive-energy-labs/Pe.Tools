@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /** Protocol support does not establish that a native shell is present. */
-export const NATIVE_ADAPTER_VERSION = 1;
+export const NATIVE_ADAPTER_VERSION = 2;
 const text = z.string().min(1);
 const color = z.int().min(0).max(0xffffff);
 
@@ -46,7 +46,7 @@ export const rendererMessageSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("notice-ready") }),
   z.strictObject({ type: z.literal("notice-card"), height: z.int().min(0).max(2147483647) }),
   z.strictObject({ type: z.literal("notice-hide") }),
-  z.strictObject({ type: z.literal("notice-panel") }),
+  z.strictObject({ type: z.literal("notice-panel"), url: text.optional() }),
 ]);
 export const nativeMessageSchema = z.discriminatedUnion("type", [
   z.strictObject({
@@ -65,7 +65,18 @@ export const nativeMessageSchema = z.discriminatedUnion("type", [
     canGoForward: z.boolean(),
   }),
   z.strictObject({ type: z.literal("navigation-request"), url: text }),
-  z.strictObject({ type: z.literal("notice"), notice: machineNoticeSchema.nullable() }),
+  z.strictObject({
+    type: z.literal("notice"),
+    notice: machineNoticeSchema.nullable(),
+    view: z
+      .strictObject({
+        visible: z.boolean(),
+        focused: z.boolean(),
+        pathname: z.string(),
+        thread: z.string().nullable(),
+      })
+      .optional(),
+  }),
 ]);
 export const nativeAdapterSchema = z.strictObject({
   renderer: rendererMessageSchema,

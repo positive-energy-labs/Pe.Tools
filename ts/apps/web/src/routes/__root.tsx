@@ -10,8 +10,8 @@ import { RegistryContext } from "@effect/atom-react";
 
 import { inspectAtomRegistry } from "../state/atom-inspect";
 import { appAtomRegistry, routeSearch } from "../route/route-owner";
-import { AppChrome, AppDevtools } from "../route/app-chrome";
-import { InstallScrim } from "../machine/install-scrim";
+import { AppUtilities } from "../route/app-chrome";
+import { NoticeShell } from "#/machine/notice-shell";
 import { AppBar } from "#/navigation/app-bar";
 import { NavigationProvider } from "#/navigation/state";
 import { RouteControlsProvider, SituationPinnedControl } from "#/navigation/route-controls";
@@ -37,9 +37,9 @@ const THEME_INIT_SCRIPT = `(function(){try{var stored=window.localStorage.getIte
 export const Route = createRootRouteWithContext<MyRouterContext>()({
   validateSearch: (
     search: Record<string, unknown>,
-  ): ReturnType<typeof routeSearch> & { shell?: "tray" } => ({
+  ): ReturnType<typeof routeSearch> & { shell?: "tray" | "card" } => ({
     ...routeSearch(search),
-    shell: search.shell === "tray" ? ("tray" as const) : undefined,
+    shell: search.shell === "tray" || search.shell === "card" ? search.shell : undefined,
   }),
   // The URL carries the thread (its head is the target store) and a `?target` pin across every link.
   search: { middlewares: [retainSearchParams(["thread", "target", "shell"])] },
@@ -69,6 +69,8 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 });
 
 export function RootComponent() {
+  const shell = useRouterState({ select: (state) => state.location.search.shell });
+  if (shell === "card") return <NoticeShell />;
   return (
     <PodRoutesProvider>
       <NavigationProvider>
@@ -110,18 +112,8 @@ function SurfaceOutlet() {
   );
 }
 
-function Chrome() {
-  const location = useRouterState({ select: (state) => state.location });
-  return (
-    <>
-      <AppChrome />
-      <InstallScrim />
-      <AppDevtools pathname={location.pathname} shell={String(location.search.shell ?? "")} />
-    </>
-  );
-}
-
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const card = useRouterState({ select: (state) => state.location.search.shell === "card" });
   return (
     <html lang="en" data-pe data-pe-app suppressHydrationWarning>
       <head>
@@ -130,14 +122,18 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <RegistryContext.Provider value={appAtomRegistry}>
-          <SurfaceHostProvider>
-            <TooltipProvider>
-              <RemoteDeviceGate>
-                {children}
-                <Chrome />
-              </RemoteDeviceGate>
-            </TooltipProvider>
-          </SurfaceHostProvider>
+          {card ? (
+            <TooltipProvider>{children}</TooltipProvider>
+          ) : (
+            <SurfaceHostProvider>
+              <TooltipProvider>
+                <RemoteDeviceGate>
+                  {children}
+                  <AppUtilities />
+                </RemoteDeviceGate>
+              </TooltipProvider>
+            </SurfaceHostProvider>
+          )}
         </RegistryContext.Provider>
         <Scripts />
       </body>

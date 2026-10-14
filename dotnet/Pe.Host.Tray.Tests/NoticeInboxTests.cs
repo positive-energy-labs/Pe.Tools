@@ -129,46 +129,57 @@ public class NoticeCardWindowTests {
     private static extern IntPtr GetForegroundWindow();
 
     [Test, Apartment(ApartmentState.STA)]
-    public void AVisibleDraggedPanelReturnsToItsBoundsAfterTheCardAndResizesNeverReplaceThem() {
-        using var window = new TrayWindow();
-        window.Rehome();
-        var panel = new Rectangle(120, 80, 560, 560);
-        window.Bounds = panel;
+    public void ShowingACardKeepsTheDraggedPanelVisibleAndUnchanged() {
+        using var panel = new TrayWindow();
+        using var card = new NoticeWindow();
+        panel.Rehome();
+        var bounds = new Rectangle(120, 80, 560, 560);
+        panel.Bounds = bounds;
+        panel.Show();
         var foreground = GetForegroundWindow();
-        window.Show();
         try {
-            window.PositionCard(96);
-            Assert.That(window.Visible, Is.False, "hide the panel before lending its window");
-            window.Show();
-            Assert.That(GetForegroundWindow(), Is.EqualTo(foreground), "a notice never activates the tray HWND");
-            Assert.That(window.Bounds, Is.Not.EqualTo(panel));
-            window.PositionCard(300);
-            window.Hide();
-            window.LeaveCard();
-            Assert.That(window.Bounds, Is.EqualTo(panel));
-            Assert.That(window.Visible, Is.True, "an open panel returns without activation");
-            Assert.That(GetForegroundWindow(), Is.EqualTo(foreground), "restoring the panel never activates it");
-        } finally { window.Hide(); }
+            card.PositionCard(96);
+            card.Show();
+            System.Windows.Forms.Application.DoEvents();
+            Assert.That(panel.Visible, Is.True, "a card must never hide the panel");
+            Assert.That(panel.Bounds, Is.EqualTo(bounds), "the panel stays where it was dragged");
+            Assert.That(card.Visible, Is.True);
+            Assert.That(card.Handle, Is.Not.EqualTo(panel.Handle));
+            Assert.That(GetForegroundWindow(), Is.EqualTo(foreground), "showing a card never activates it");
+            var bottom = card.Bottom;
+            var corner = card.Bounds;
+            panel.Location = new Point(260, 140);
+            card.PositionCard(300);
+            Assert.That(card.Bottom, Is.EqualTo(bottom), "hover grows upward");
+            Assert.That(card.Right, Is.EqualTo(corner.Right));
+            Assert.That(panel.Bounds, Is.EqualTo(new Rectangle(260, 140, 560, 560)));
+            card.Hide();
+            Assert.That(panel.Visible, Is.True);
+            Assert.That(GetForegroundWindow(), Is.EqualTo(foreground));
+            Assert.That(card.ShowInTaskbar, Is.False);
+            Assert.That(card.TopMost, Is.True);
+        } finally { card.Hide(); panel.Hide(); }
     }
 
     [Test, Apartment(ApartmentState.STA)]
-    public void AHiddenPanelStaysHiddenAfterItsCardEnds() {
-        using var window = new TrayWindow();
-        window.Rehome();
-        var panel = window.Bounds;
-        window.PositionCard(96);
-        window.Show();
-        window.Hide();
-        window.LeaveCard();
-        Assert.That(window.Bounds, Is.EqualTo(panel));
-        Assert.That(window.Visible, Is.False);
+    public void AHiddenPanelStaysHiddenWhileItsSeparateCardShows() {
+        using var panel = new TrayWindow();
+        using var card = new NoticeWindow();
+        panel.Rehome();
+        var bounds = panel.Bounds;
+        card.PositionCard(96);
+        card.Show();
+        Assert.That(panel.Visible, Is.False);
+        Assert.That(panel.Bounds, Is.EqualTo(bounds));
+        card.Hide();
+        Assert.That(panel.Visible, Is.False);
     }
 
     [Test]
     public void TheCardIsPaddedFromTheScreenEdgeAndNeverOutgrowsTheWorkArea() {
         var work = new Rectangle(0, 0, 1920, 1032);
-        Assert.That(TrayWindow.CardBoundsFor(work, 96, 300), Is.EqualTo(new Rectangle(1920 - 20 - 420, 1032 - 20 - 300, 420, 300)));
-        Assert.That(TrayWindow.CardBoundsFor(work, 192, 300), Is.EqualTo(new Rectangle(1920 - 40 - 840, 1032 - 40 - 600, 840, 600)));
-        Assert.That(TrayWindow.CardBoundsFor(new Rectangle(0, 0, 400, 300), 96, 900), Is.EqualTo(new Rectangle(20, 20, 360, 260)));
+        Assert.That(NoticeWindow.CardBoundsFor(work, 96, 300), Is.EqualTo(new Rectangle(1920 - 20 - 420, 1032 - 20 - 300, 420, 300)));
+        Assert.That(NoticeWindow.CardBoundsFor(work, 192, 300), Is.EqualTo(new Rectangle(1920 - 40 - 840, 1032 - 40 - 600, 840, 600)));
+        Assert.That(NoticeWindow.CardBoundsFor(new Rectangle(0, 0, 400, 300), 96, 900), Is.EqualTo(new Rectangle(20, 20, 360, 260)));
     }
 }

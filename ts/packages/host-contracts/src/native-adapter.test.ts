@@ -51,7 +51,7 @@ test("tray embeds the JSON schema generated from the same TypeScript authority",
 test("host features travel with the release version", () => {
   expect(hostDescriptorSchema.parse(hostDescriptor("2026.10.13"))).toEqual({
     version: "2026.10.13",
-    features: { peApi: 1, nativeAdapter: 1 },
+    features: { peApi: 1, nativeAdapter: 2 },
   });
   expect(hostDescriptorSchema.safeParse({ version: "v1" }).success).toBe(false);
 });

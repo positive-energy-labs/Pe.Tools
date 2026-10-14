@@ -253,7 +253,7 @@ public class TrayLaunchTests {
     }
 
     [Test, Apartment(ApartmentState.STA)]
-    public void CustomFrameKeepsNativeEdgesAndCaptionGeometryAcrossCardAndWindowStates() {
+    public void CustomFrameKeepsNativeEdgesAndCaptionGeometryAcrossWindowStates() {
         using var window = new TrayWindow();
         using var view = new Microsoft.Web.WebView2.WinForms.WebView2 { Dock = System.Windows.Forms.DockStyle.Fill };
         window.Controls.Add(view);
@@ -270,16 +270,6 @@ public class TrayLaunchTests {
             Assert.That(rendering, Is.EqualTo(1), "DWM non-client rendering is enabled");
             Assert.That(window.Region, Is.Null, "top-level HWND is never region-clipped");
             Assert.That(view.Region, Is.Not.Null);
-            window.PositionCard(120);
-            System.Windows.Forms.Application.DoEvents();
-            Assert.That(view.Region, Is.Not.Null, "card keeps the DWM edge uncovered");
-            Assert.That(view.Region!.IsVisible(0, 0), Is.False);
-            Assert.That(DwmGetWindowAttribute(window.Handle, 1, out rendering, sizeof(int)), Is.Zero);
-            Assert.That(rendering, Is.EqualTo(1), "card retains native non-client rendering");
-            Assert.That(window.Region, Is.Null);
-            window.LeaveCard();
-            System.Windows.Forms.Application.DoEvents();
-            Assert.That(window.ReadTitlebarGeometry().visible, Is.True, "panel returns from card");
             window.WindowState = System.Windows.Forms.FormWindowState.Maximized;
             System.Windows.Forms.Application.DoEvents();
             var maximized = window.ReadTitlebarGeometry();
