@@ -1,5 +1,6 @@
 import { expect, test } from "vite-plus/test";
-import { globalItems } from "./global-items";
+import { filterItems } from "@pe/kit/lang/collection";
+import { destinationDetail, destinationLabel, globalItems } from "./global-items";
 import { matches } from "./model";
 
 test("global navigation includes Machine without adding it to the engineering directory", () => {
@@ -38,4 +39,18 @@ test("global thread search matches full and partial ID while retaining human tit
   expect(matches(searchText, "renamed conversation")).toBe(true);
   expect(matches(searchText, "pea chat")).toBe(true);
   expect(item!.url).toBe(`/pea?thread=${id}`);
+});
+
+test('"duct" finds Duct Loss first and no tool that only scatters its letters', () => {
+  const hits = filterItems(
+    globalItems(null, "Tools"),
+    destinationLabel,
+    "words",
+    "duct",
+    destinationDetail,
+  ).map((tool) => tool.label);
+  expect(hits[0]).toBe("Duct Loss");
+  for (const stray of ["Schedules", "Data Tables", "Doc Lab", "Parameter Tables", "Design System"])
+    expect(hits).not.toContain(stray);
+  expect(hits).toEqual(["Duct Loss"]);
 });

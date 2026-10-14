@@ -1,4 +1,10 @@
-import { bindWork, workKey, workKeySchema, type WorkKey } from "@pe/agent-contracts";
+import {
+  bindWork,
+  pendingProposals,
+  workKey,
+  workKeySchema,
+  type WorkKey,
+} from "@pe/agent-contracts";
 import { z } from "zod";
 import { OwnerReads, type OwnerValue } from "./owner-read.ts";
 import {
@@ -112,10 +118,13 @@ export class RouteWorkspace {
         }
         const spec = this.#registry.get(record.route)?.spec;
         let revision: number | null = null;
+        let proposals = 0;
         let state: "ready" | "unreadable" | "unregistered" = spec ? "unreadable" : "unregistered";
         if (spec) {
           try {
-            revision = parseEnvelope(record.value, spec).revision;
+            const envelope = parseEnvelope(record.value, spec);
+            revision = envelope.revision;
+            proposals = pendingProposals(envelope.doc);
             state = "ready";
           } catch {
             // Keep the address discoverable without exposing the unreadable document.
@@ -129,6 +138,7 @@ export class RouteWorkspace {
             title: spec?.title ?? record.route,
             revision,
             state,
+            proposals,
           },
         ];
       });

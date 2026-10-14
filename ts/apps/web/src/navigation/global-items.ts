@@ -52,3 +52,8 @@ export function globalItems(snapshot: NavigationSnapshot | null, kind: ResultKin
       : []),
   ];
 }
+/** What a destination is called: matched first, at word starts or as a substring. */
+export const destinationLabel = (destination: Destination) => destination.label;
+/** Its group, aliases, description and state: matched only where a query word starts a word. */
+export const destinationDetail = (destination: Destination) =>
+  `${destination.context} ${destination.aliases} ${destination.state}`;
