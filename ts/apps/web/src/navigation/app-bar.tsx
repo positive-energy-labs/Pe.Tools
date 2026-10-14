@@ -45,7 +45,10 @@ export function AppBar() {
   const { snapshot, refresh } = useNavigation();
   const go = useDestination();
   const bar = useRef<HTMLElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   const [compact, setCompact] = useState(false);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const [captionOverflow, setCaptionOverflow] = useState(false);
   useEffect(() => {
     const node = bar.current;
     if (!node) return;
@@ -55,6 +58,29 @@ export function AppBar() {
     observer?.observe(node);
     return () => observer?.disconnect();
   }, []);
+  useEffect(() => {
+    const row = rowRef.current;
+    const area = host.titlebarArea;
+    if (!row || !area) {
+      setCaptionOverflow(false);
+      return;
+    }
+    const measure = () => {
+      const style = getComputedStyle(row);
+      const children = Array.from(row.children) as HTMLElement[];
+      const width =
+        children.reduce((sum, child) => sum + child.getBoundingClientRect().width, 0) +
+        Math.max(0, children.length - 1) * parseFloat(style.columnGap) +
+        parseFloat(style.paddingLeft) +
+        parseFloat(style.paddingRight);
+      const height = Math.max(...children.map((child) => child.getBoundingClientRect().height));
+      setCaptionOverflow(width > area.width || height > area.height);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    for (const child of row.children) observer.observe(child);
+    return () => observer.disconnect();
+  }, [host.titlebarArea, compact, captionOverflow]);
   // One palette state: the global ledger and the route's page palette never stack.
   const palette = usePalette();
   const open = palette.open === "global";
@@ -176,9 +202,113 @@ export function AppBar() {
   useEffect(() => {
     document.title = `${import.meta.env.DEV ? "Pe.Tools Dev" : "Positive Energy"} / ${label}${currentWork ? ` / ${currentWork.label}` : ""}`;
   }, [label, currentWork?.label]);
+  const row = (
+    <div ref={rowRef} className="pe-appbar-row">
+      {shell.history === "window" && (
+        <>
+          <Button
+            label="Back"
+            icon={ArrowLeft}
+            refusal={
+              (host.native ? host.nativeHistory?.canGoBack : canGoBack)
+                ? undefined
+                : "No previous entry in this window's history"
+            }
+            onClick={() =>
+              host.native ? host.navigateNativeHistory("back") : router.history.back()
+            }
+          />
+          <Button
+            label="Forward"
+            icon={ArrowRight}
+            refusal={
+              (host.native ? host.nativeHistory?.canGoForward : historyIndex < furthestHistory)
+                ? undefined
+                : "No forward entry has been observed in this window"
+            }
+            onClick={() =>
+              host.native ? host.navigateNativeHistory("forward") : router.history.forward()
+            }
+          />
+        </>
+      )}
+      {shellButtons(shell, location.pathname).map((button) => (
+        <Button
+          key={button.path}
+          label={button.label}
+          icon={
+            button.iconKey ? (
+              ICONS[button.iconKey]
+            ) : (
+              <img src="/favicon.ico" alt="" aria-hidden width={16} height={16} />
+            )
+          }
+          pressed={button.pressed}
+          onClick={() => navigateTo(button.path)}
+        />
+      ))}
+      {shell.field === "page" && (
+        <Button
+          kind="framed"
+          label={`${label}: open this page's palette · Ctrl+K`}
+          aria-keyshortcuts="Control+K"
+          pressed={palette.open === "page"}
+          refusal={palette.hasPage ? undefined : `${label} has no page palette`}
+          onClick={() => palette.show("page")}
+        >
+          {label}
+          <HotkeyHint hotkey="Mod+K" />
+        </Button>
+      )}
+      {shell.field === "global" && (
+        <div
+          className="pe-appbar-route-search dl-control"
+          data-selected={open || undefined}
+          onClick={showSearch}
+        >
+          <Search aria-hidden className="pe-appbar-route-search-icon" />
+          <Input
+            ref={setSearchField}
+            surface="embedded"
+            role="combobox"
+            aria-label="Open work, tools, Works and Pea threads"
+            aria-autocomplete="list"
+            aria-keyshortcuts="Control+Shift+K"
+            title="Open work; type to find tools, Works and Pea threads · Ctrl+Shift+K"
+            aria-expanded={open}
+            placeholder={`${label}${currentWork ? ` / ${currentWork.label}` : ""}`}
+            value={open ? query : ""}
+            onKeyDown={(event) => {
+              if (!open && (event.key === "ArrowDown" || event.key === "Enter")) {
+                event.preventDefault();
+                showSearch();
+              }
+            }}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              palette.show("global");
+            }}
+          />
+          <span className="pe-appbar-search-hint" aria-hidden>
+            <HotkeyHint hotkey="Mod+Shift+K" />
+          </span>
+        </div>
+      )}
+      <div
+        className="pe-appbar-commands"
+        data-compact={compact || undefined}
+        role="group"
+        aria-label="Situation, Page and Tutorial shortcuts"
+      >
+        <SituationDrawer barAnchor={shellRef.current} rail={compact ? actions : undefined} />
+        {pageSlug && <PageBindingChip slug={pageSlug} />}
+        {!compact && actions}
+      </div>
+    </div>
+  );
   return (
     <>
-      <div className="pe-appbar-shell hairline-b" data-surface="page">
+      <div ref={shellRef} className="pe-appbar-shell hairline-b" data-surface="page">
         <nav
           ref={bar}
           aria-label="Global navigation"
@@ -196,113 +326,9 @@ export function AppBar() {
               : undefined
           }
         >
-          <div className="pe-appbar-row">
-            {shell.history === "window" && (
-              <>
-                <Button
-                  label="Back"
-                  icon={ArrowLeft}
-                  refusal={
-                    (host.native ? host.nativeHistory?.canGoBack : canGoBack)
-                      ? undefined
-                      : "No previous entry in this window's history"
-                  }
-                  onClick={() =>
-                    host.native ? host.navigateNativeHistory("back") : router.history.back()
-                  }
-                />
-                <Button
-                  label="Forward"
-                  icon={ArrowRight}
-                  refusal={
-                    (
-                      host.native
-                        ? host.nativeHistory?.canGoForward
-                        : historyIndex < furthestHistory
-                    )
-                      ? undefined
-                      : "No forward entry has been observed in this window"
-                  }
-                  onClick={() =>
-                    host.native ? host.navigateNativeHistory("forward") : router.history.forward()
-                  }
-                />
-              </>
-            )}
-            {shellButtons(shell, location.pathname).map((button) => (
-              <Button
-                key={button.path}
-                label={button.label}
-                icon={
-                  button.iconKey ? (
-                    ICONS[button.iconKey]
-                  ) : (
-                    <img src="/favicon.ico" alt="" aria-hidden width={16} height={16} />
-                  )
-                }
-                pressed={button.pressed}
-                onClick={() => navigateTo(button.path)}
-              />
-            ))}
-            {shell.field === "page" && (
-              <Button
-                kind="framed"
-                label={`${label}: open this page's palette · Ctrl+K`}
-                aria-keyshortcuts="Control+K"
-                pressed={palette.open === "page"}
-                refusal={palette.hasPage ? undefined : `${label} has no page palette`}
-                onClick={() => palette.show("page")}
-              >
-                {label}
-                <HotkeyHint hotkey="Mod+K" />
-              </Button>
-            )}
-            {shell.field === "global" && (
-              <div
-                className="pe-appbar-route-search dl-control"
-                data-selected={open || undefined}
-                onClick={showSearch}
-              >
-                <Search aria-hidden className="pe-appbar-route-search-icon" />
-                <Input
-                  ref={setSearchField}
-                  surface="embedded"
-                  role="combobox"
-                  aria-label="Open work, tools, Works and Pea threads"
-                  aria-autocomplete="list"
-                  aria-keyshortcuts="Control+Shift+K"
-                  title="Open work; type to find tools, Works and Pea threads · Ctrl+Shift+K"
-                  aria-expanded={open}
-                  placeholder={`${label}${currentWork ? ` / ${currentWork.label}` : ""}`}
-                  value={open ? query : ""}
-                  onKeyDown={(event) => {
-                    if (!open && (event.key === "ArrowDown" || event.key === "Enter")) {
-                      event.preventDefault();
-                      showSearch();
-                    }
-                  }}
-                  onChange={(event) => {
-                    setQuery(event.target.value);
-                    palette.show("global");
-                  }}
-                />
-                <span className="pe-appbar-search-hint" aria-hidden>
-                  <HotkeyHint hotkey="Mod+Shift+K" />
-                </span>
-              </div>
-            )}
-            <div
-              className="pe-appbar-commands"
-              data-compact={compact || undefined}
-              role="group"
-              aria-label="Situation, Page and Tutorial shortcuts"
-            >
-              <SituationDrawer barAnchor={bar.current} rail={compact ? actions : undefined} />
-              {pageSlug && <PageBindingChip slug={pageSlug} />}
-              {!compact && actions}
-            </div>
-          </div>
+          {!captionOverflow && row}
         </nav>
+        {captionOverflow && row}
       </div>
       {(launchRefusal || host.navigationRefusal) && (
         <p role="status" className="px-3 py-1 text-ink-2">

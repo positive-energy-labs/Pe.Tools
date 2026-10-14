@@ -630,6 +630,7 @@ internal sealed class TrayWindow : Form {
         SizeChanged += (_, _) => RefreshTitlebar();
         VisibleChanged += (_, _) => RefreshTitlebar();
         DpiChanged += (_, _) => RefreshTitlebar();
+        view.ZoomFactorChanged += (_, _) => RefreshTitlebar();
         RefreshTitlebar();
     }
 
@@ -638,14 +639,14 @@ internal sealed class TrayWindow : Form {
             || DwmGetWindowAttribute(Handle, 5, out NativeRect bounds, Marshal.SizeOf<NativeRect>()) != 0)
             return NativeTitlebarGeometry.Hidden;
         return ProjectTitlebar(new Rectangle(bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top),
-            ClientSize, DeviceDpi, Visible);
+            ClientSize, DeviceDpi, Visible, _frameView?.ZoomFactor ?? 1);
     }
 
-    internal static NativeTitlebarGeometry ProjectTitlebar(Rectangle buttons, Size client, int dpi, bool visible) {
-        if (!visible || dpi <= 0 || client.Width <= 0 || client.Height <= 0 || buttons.Left <= 0 || buttons.Top < 0
+    internal static NativeTitlebarGeometry ProjectTitlebar(Rectangle buttons, Size client, int dpi, bool visible, double zoomFactor = 1) {
+        if (!visible || dpi <= 0 || !double.IsFinite(zoomFactor) || zoomFactor <= 0 || client.Width <= 0 || client.Height <= 0 || buttons.Left <= 0 || buttons.Top < 0
             || buttons.Width <= 0 || buttons.Height <= 0 || buttons.Right > client.Width || buttons.Bottom > client.Height)
             return NativeTitlebarGeometry.Hidden;
-        var scale = dpi / 96d;
+        var scale = dpi / 96d * zoomFactor;
         return new("titlebar-geometry", true, new(0, 0, buttons.Left / scale, buttons.Bottom / scale));
     }
 
@@ -665,7 +666,7 @@ internal sealed class TrayWindow : Form {
             Region? next = null;
             if (geometry.visible && !_card) {
                 next = new Region(ContentClipBounds(ClientSize, VisibleFrameBorder));
-                var scale = DeviceDpi / 96d;
+                var scale = DeviceDpi / 96d * _frameView.ZoomFactor;
                 next.Exclude(new Rectangle((int)Math.Round(geometry.rect.width * scale), 0,
                     ClientSize.Width - (int)Math.Round(geometry.rect.width * scale), (int)Math.Ceiling(geometry.rect.height * scale)));
             }
