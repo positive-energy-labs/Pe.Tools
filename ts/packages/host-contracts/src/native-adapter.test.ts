@@ -14,7 +14,8 @@ test("native commands reject malformed and unknown fields before dispatch", () =
     { type: "chrome-ready", admin: true },
     { type: "notice-card", height: -1 },
     { type: "notice-card", height: 1.5 },
-    { type: "chrome-theme", background: 0x1000000, foreground: 0, dark: true },
+    { type: "panel-pin", pinned: 1 },
+    { type: "panel-hide", unpinnedOnly: "false" },
     { type: "open-window", url: "" },
     { type: "unknown" },
   ])
@@ -25,11 +26,11 @@ test("native commands reject malformed and unknown fields before dispatch", () =
   });
 });
 
-test("native events reject incomplete notices and geometry", () => {
+test("native events reject incomplete notices and panel state", () => {
   for (const value of [
     { type: "navigation-request", url: 1 },
     { type: "navigation-history", canGoBack: true },
-    { type: "titlebar-geometry", visible: true, rect: { x: 0, y: 0, width: -1, height: 40 } },
+    { type: "panel-state", pinned: "true" },
     { type: "notice", notice: { id: "n", revision: 1 } },
   ])
     expect(nativeMessageSchema.safeParse(value).success).toBe(false);

@@ -43,6 +43,9 @@ export interface SurfaceHost {
   overlay: boolean;
   titlebarArea: Pick<DOMRect, "x" | "y" | "width" | "height"> | null;
   native: boolean;
+  pinned: boolean;
+  setPinned(pinned: boolean): void;
+  hidePanel(unpinnedOnly?: boolean): void;
   nativeHistory: { canGoBack: boolean; canGoForward: boolean } | null;
   navigateNativeHistory(direction: "back" | "forward"): boolean;
   openFullWindow(destination: string): boolean;
@@ -88,22 +91,6 @@ export function usableOverlay(
   );
 }
 
-/** Native frame measurements are a separate surface capability, not a browser WCO polyfill. */
-export function nativeTitlebarArea(
-  message: unknown,
-  viewport: { width: number; height: number },
-): SurfaceHost["titlebarArea"] {
-  const parsed = nativeMessageSchema.safeParse(message);
-  if (!parsed.success || parsed.data.type !== "titlebar-geometry" || !parsed.data.visible)
-    return null;
-  const area = parsed.data.rect;
-  return usableOverlay(true, area) &&
-    area.x + area.width <= viewport.width &&
-    area.y + area.height <= viewport.height
-    ? { x: area.x, y: area.y, width: area.width, height: area.height }
-    : null;
-}
-
 /** Presentation state never changes the resource address handed to another surface. */
 export function fullWindowDestination(destination: string, origin: string): string | null {
   const admitted = admittedDestination(destination, origin);
@@ -132,6 +119,9 @@ const webHost: SurfaceHost = {
   overlay: false,
   titlebarArea: null,
   native: false,
+  pinned: false,
+  setPinned,
+  hidePanel,
   nativeHistory: null,
   navigateNativeHistory,
   openFullWindow,
@@ -139,21 +129,14 @@ const webHost: SurfaceHost = {
 };
 const Context = createContext<SurfaceHost>(webHost);
 
-/** Windows COLORREF uses red in the low byte. Reject translucent or invalid CSS colors. */
-export function captionColor(color: string): number | null {
-  const match = /^rgb\(\s*(\d+),\s*(\d+),\s*(\d+)\s*\)$/.exec(color);
-  if (!match) return null;
-  const [red, green, blue] = match.slice(1).map(Number);
-  if ([red, green, blue].some((channel) => channel > 255)) return null;
-  return red! | (green! << 8) | (blue! << 16);
+function setPinned(pinned: boolean) {
+  postRendererMessage((window as NativeWindow).chrome?.webview, { type: "panel-pin", pinned });
 }
-
-export function projectCaptionTheme(backgroundColor: string, foreground: string, dark: boolean) {
-  const native = (window as NativeWindow).chrome?.webview;
-  const background = captionColor(backgroundColor);
-  const ink = captionColor(foreground);
-  if (native && background !== null && ink !== null)
-    postRendererMessage(native, { type: "chrome-theme", background, foreground: ink, dark });
+function hidePanel(unpinnedOnly = false) {
+  postRendererMessage((window as NativeWindow).chrome?.webview, {
+    type: "panel-hide",
+    unpinnedOnly,
+  });
 }
 
 export function SurfaceHostProvider({ children }: { children: ReactNode }) {
@@ -165,7 +148,7 @@ export function SurfaceHostProvider({ children }: { children: ReactNode }) {
   const [navigationRefusal, setNavigationRefusal] = useState<string | null>(null);
   const [standalone, setStandalone] = useState(false);
   const [browserArea, setBrowserArea] = useState<SurfaceHost["titlebarArea"]>(null);
-  const [nativeArea, setNativeArea] = useState<SurfaceHost["titlebarArea"]>(null);
+  const [pinned, syncPinned] = useState(false);
   const [native, setNative] = useState(false);
   const [nativeHistory, setNativeHistory] = useState<SurfaceHost["nativeHistory"]>(null);
   useEffect(() => {
@@ -183,10 +166,7 @@ export function SurfaceHostProvider({ children }: { children: ReactNode }) {
         setNativeHistory(history);
         return;
       }
-      if (parsed.data.type !== "titlebar-geometry") return;
-      setNativeArea(
-        nativeTitlebarArea(data, { width: window.innerWidth, height: window.innerHeight }),
-      );
+      if (parsed.data.type === "panel-state") syncPinned(parsed.data.pinned);
     };
     webview?.addEventListener("message", syncNative);
     postRendererMessage(webview, { type: "chrome-ready" });
@@ -211,7 +191,7 @@ export function SurfaceHostProvider({ children }: { children: ReactNode }) {
       controls?.removeEventListener("geometrychange", syncOverlay);
     };
   }, []);
-  const titlebarArea = native ? nativeArea : browserArea;
+  const titlebarArea = native || shell === "tray" ? null : browserArea;
   const overlay = titlebarArea !== null;
   const open = useCallback(openFullWindow, []);
   const surface: AppSurface = shell === "tray" ? "tray" : standalone || overlay ? "pwa" : "web";
@@ -291,12 +271,15 @@ export function SurfaceHostProvider({ children }: { children: ReactNode }) {
       overlay,
       titlebarArea,
       native,
+      pinned,
+      setPinned,
+      hidePanel,
       nativeHistory,
       navigateNativeHistory,
       openFullWindow: open,
       navigationRefusal,
     }),
-    [surface, overlay, titlebarArea, native, nativeHistory, open, navigationRefusal],
+    [surface, overlay, titlebarArea, native, pinned, nativeHistory, open, navigationRefusal],
   );
   return <Context value={value}>{children}</Context>;
 }

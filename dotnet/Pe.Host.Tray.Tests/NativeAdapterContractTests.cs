@@ -6,7 +6,8 @@ namespace Pe.Host.Tray.Tests;
 
 public class NativeAdapterContractTests {
     [TestCase("""{"type":"chrome-ready"}""")]
-    [TestCase("""{"type":"chrome-theme","background":0,"foreground":16777215,"dark":true}""")]
+    [TestCase("""{"type":"panel-pin","pinned":true}""")]
+    [TestCase("""{"type":"panel-hide","unpinnedOnly":false}""")]
     [TestCase("""{"type":"navigate-history","direction":"back"}""")]
     [TestCase("""{"type":"open-window","url":"http://127.0.0.1/open"}""")]
     [TestCase("""{"type":"notice-ready"}""")]
@@ -41,8 +42,7 @@ public class NativeAdapterContractTests {
 
     [Test]
     public void JsonNumericAndStringRepresentationsDoNotChangeMessageMeaning() {
-        using var value = JsonDocument.Parse("""{"type":"chrome-\u0074heme","background":1.0,"foreground":2e0,"dark":false}""");
-        Assert.That(TrayWindow.TryReadChromeTheme(value.RootElement, out var background, out var foreground, out _), Is.True);
-        Assert.That((background, foreground), Is.EqualTo((1, 2)));
+        using var value = JsonDocument.Parse("""{"type":"panel-\u0070in","pinned":false}""");
+        Assert.That(NativeAdapterContract.Accepts("renderer", value.RootElement), Is.True);
     }
 }

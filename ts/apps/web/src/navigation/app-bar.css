@@ -346,3 +346,15 @@
 .pe-appbar-shell > .pe-appbar-row {
   flex-wrap: wrap;
 }
+
+.pe-tray-chrome {
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+.pe-tray-chrome button {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}

@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useCanGoBack, useRouter, useRouterState } from "@tanstack/react-router";
-import { ArrowLeft, ArrowRight, Search, MessageSquare, Inbox, Settings2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Search,
+  MessageSquare,
+  Inbox,
+  Settings2,
+  Pin,
+  X,
+  ExternalLink,
+} from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
 import { HotkeyHint } from "#/components/lang/hotkey-command";
@@ -13,7 +23,7 @@ import { GlobalSearch } from "./global-search";
 import { RouteControlsOutlet, usePalette } from "./route-controls";
 import { useRouteControlPresence } from "./route-controls";
 import { RouteHelpButton } from "#/route/help";
-import { projectCaptionTheme, useSurfaceHost } from "./surface-host";
+import { useSurfaceHost } from "./surface-host";
 import { startFeedback } from "#/components/feedback-picker";
 import "./app-bar.css";
 import { PageBindingChip } from "#/pages-bind/chip";
@@ -26,6 +36,25 @@ const ICONS = { Inbox, MessageSquare, Settings2 };
 export function AppBar() {
   const host = useSurfaceHost();
   const { shell } = host;
+  useScopeKeys(
+    host.surface === "tray" && !host.pinned
+      ? [
+          {
+            hotkey: "Escape",
+            callback: (event) => {
+              if (!event.defaultPrevented) host.hidePanel(true);
+            },
+            label: "Hide tray panel",
+            options: {
+              ignoreInputs: false,
+              preventDefault: false,
+              stopPropagation: false,
+              target: typeof window === "undefined" ? undefined : window,
+            },
+          },
+        ]
+      : [],
+  );
   const router = useRouter();
   const location = useRouterState({ select: (state) => state.location });
   const pageSlug =
@@ -138,11 +167,6 @@ export function AppBar() {
         document.head.append(meta);
       }
       meta.content = color;
-      projectCaptionTheme(
-        color,
-        getComputedStyle(node).color,
-        document.documentElement.classList.contains("dark"),
-      );
     };
     syncColor();
     const observer = new MutationObserver(syncColor);
@@ -311,6 +335,26 @@ export function AppBar() {
   return (
     <>
       <div ref={shellRef} className="pe-appbar-shell hairline-b" data-surface="page">
+        {host.surface === "tray" && (
+          <div className="pe-tray-chrome" role="group" aria-label="Tray panel">
+            <Button
+              icon={Pin}
+              label={host.pinned ? "Unpin panel" : "Pin panel"}
+              pressed={host.pinned}
+              onClick={() => host.setPinned(!host.pinned)}
+            />
+            <span className="flex-1" />
+            <Button
+              icon={ExternalLink}
+              reason="Open this page in a window"
+              label="Open in window"
+              onClick={() => host.openFullWindow(window.location.href)}
+            >
+              Open in window
+            </Button>
+            <Button icon={X} label="Hide panel" onClick={() => host.hidePanel()} />
+          </div>
+        )}
         <nav
           ref={bar}
           aria-label="Global navigation"

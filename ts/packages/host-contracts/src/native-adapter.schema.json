@@ -20,19 +20,27 @@
           "properties": {
             "type": {
               "type": "string",
-              "const": "chrome-theme"
+              "const": "panel-pin"
             },
-            "background": {
-              "$ref": "#/$defs/__schema0"
-            },
-            "foreground": {
-              "$ref": "#/$defs/__schema0"
-            },
-            "dark": {
+            "pinned": {
               "type": "boolean"
             }
           },
-          "required": ["type", "background", "foreground", "dark"],
+          "required": ["type", "pinned"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "panel-hide"
+            },
+            "unpinnedOnly": {
+              "type": "boolean"
+            }
+          },
+          "required": ["type", "unpinnedOnly"],
           "additionalProperties": false
         },
         {
@@ -58,7 +66,7 @@
               "const": "open-window"
             },
             "url": {
-              "$ref": "#/$defs/__schema1"
+              "$ref": "#/$defs/__schema0"
             }
           },
           "required": ["type", "url"],
@@ -110,7 +118,7 @@
               "const": "notice-panel"
             },
             "url": {
-              "$ref": "#/$defs/__schema1"
+              "$ref": "#/$defs/__schema0"
             }
           },
           "required": ["type"],
@@ -125,36 +133,13 @@
           "properties": {
             "type": {
               "type": "string",
-              "const": "titlebar-geometry"
+              "const": "panel-state"
             },
-            "visible": {
+            "pinned": {
               "type": "boolean"
-            },
-            "rect": {
-              "type": "object",
-              "properties": {
-                "x": {
-                  "type": "number",
-                  "minimum": 0
-                },
-                "y": {
-                  "type": "number",
-                  "minimum": 0
-                },
-                "width": {
-                  "type": "number",
-                  "minimum": 0
-                },
-                "height": {
-                  "type": "number",
-                  "minimum": 0
-                }
-              },
-              "required": ["x", "y", "width", "height"],
-              "additionalProperties": false
             }
           },
-          "required": ["type", "visible", "rect"],
+          "required": ["type", "pinned"],
           "additionalProperties": false
         },
         {
@@ -182,7 +167,7 @@
               "const": "navigation-request"
             },
             "url": {
-              "$ref": "#/$defs/__schema1"
+              "$ref": "#/$defs/__schema0"
             }
           },
           "required": ["type", "url"],
@@ -198,7 +183,7 @@
             "notice": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/__schema2"
+                  "$ref": "#/$defs/__schema1"
                 },
                 {
                   "type": "null"
@@ -240,7 +225,7 @@
     "notice": {
       "anyOf": [
         {
-          "$ref": "#/$defs/__schema2"
+          "$ref": "#/$defs/__schema1"
         },
         {
           "type": "null"
@@ -252,19 +237,14 @@
   "additionalProperties": false,
   "$defs": {
     "__schema0": {
-      "type": "integer",
-      "minimum": 0,
-      "maximum": 16777215
-    },
-    "__schema1": {
       "type": "string",
       "minLength": 1
     },
-    "__schema2": {
+    "__schema1": {
       "type": "object",
       "properties": {
         "id": {
-          "$ref": "#/$defs/__schema1"
+          "$ref": "#/$defs/__schema0"
         },
         "revision": {
           "type": "integer",
@@ -278,7 +258,7 @@
           "type": "string"
         },
         "href": {
-          "$ref": "#/$defs/__schema1"
+          "$ref": "#/$defs/__schema0"
         },
         "act": {
           "oneOf": [
@@ -290,10 +270,10 @@
                   "const": "permission"
                 },
                 "threadId": {
-                  "$ref": "#/$defs/__schema1"
+                  "$ref": "#/$defs/__schema0"
                 },
                 "requestId": {
-                  "$ref": "#/$defs/__schema1"
+                  "$ref": "#/$defs/__schema0"
                 },
                 "options": {
                   "type": "array",
@@ -301,13 +281,13 @@
                     "type": "object",
                     "properties": {
                       "optionId": {
-                        "$ref": "#/$defs/__schema1"
+                        "$ref": "#/$defs/__schema0"
                       },
                       "name": {
                         "type": "string"
                       },
                       "kind": {
-                        "$ref": "#/$defs/__schema1"
+                        "$ref": "#/$defs/__schema0"
                       }
                     },
                     "required": ["optionId", "name", "kind"],
@@ -326,10 +306,10 @@
                   "const": "question"
                 },
                 "threadId": {
-                  "$ref": "#/$defs/__schema1"
+                  "$ref": "#/$defs/__schema0"
                 },
                 "requestId": {
-                  "$ref": "#/$defs/__schema1"
+                  "$ref": "#/$defs/__schema0"
                 },
                 "message": {
                   "type": "string"
@@ -353,7 +333,7 @@
                   "const": "reply"
                 },
                 "threadId": {
-                  "$ref": "#/$defs/__schema1"
+                  "$ref": "#/$defs/__schema0"
                 }
               },
               "required": ["kind", "threadId"],
