@@ -1,5 +1,5 @@
 import { useRouterState } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { ModeDial } from "#/chat/mode-dial";
 import { NewThreadButton, ThreadDialog, ThreadsSidebar } from "#/chat/thread-palette";
@@ -86,7 +86,16 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
   const addressedThread = useRouterState({
     select: (state) => (state.location.search as { thread?: string }).thread,
   });
-  const inbox = compact && !addressedThread;
+  // "New thread" in the tray: no address would show the Inbox again, so the draft is its own state
+  // until the first send addresses the thread it creates.
+  const [composing, setComposing] = useState(false);
+  useEffect(() => {
+    if (addressedThread) setComposing(false);
+  }, [addressedThread]);
+  useEffect(() => {
+    if (composing) composerRef.current?.querySelector("textarea")?.focus();
+  }, [composing]);
+  const inbox = compact && !addressedThread && !composing;
   const {
     store,
     chat,
@@ -101,7 +110,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
     operationError,
     sendPrompt,
     cancel,
-    newThread,
+    newThread: startThread,
     forkThread,
     sendRefusal,
     missingThread,
@@ -111,6 +120,13 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
     deleteThread,
     updateThread,
   } = useWorkbench();
+  const newThread = useCallback(
+    (target?: Parameters<typeof startThread>[0]) => {
+      setComposing(true);
+      return startThread(target);
+    },
+    [startThread],
+  );
   const [mode, setMode] = useMode();
   const [viewportNarrow, setViewportNarrow] = useState(false);
   const narrow = compact || viewportNarrow;
