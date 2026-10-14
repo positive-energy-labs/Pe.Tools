@@ -82,6 +82,9 @@ interface CodeProps {
   title?: string;
   /** The copy icon's name, when `Copy <title>` reads badly (a title of `in`). */
   copyLabel?: string;
+  /** `copy`: the head keeps only its copy press (no tag, no line count) for raw text a caller
+   * already names, such as a failure's Details. */
+  head?: "full" | "copy";
   decorations?: readonly HighlightDecoration[];
   lineNumbers?: boolean;
   /** Default true: cap at 32rem and scroll. `false` lets the block run its full height. */
@@ -112,6 +115,7 @@ export function Code({
   wrap,
   tone,
   complete = true,
+  head = "full",
 }: CodeProps) {
   const { copied, copy } = useCopy();
   const [showAll, setShowAll] = useState(false);
@@ -151,30 +155,37 @@ export function Code({
       className={FRAME_CLASS}
       label={title ?? lang ?? "code"}
       head={
-        <>
-          {/* A caller's title is a label; a fence's tag is what the author typed, said verbatim. */}
-          {title ? (
-            <span className="t-small t-upper text-ink-2">{title}</span>
-          ) : lang ? (
-            <span className="t-small face-mono">{lang}</span>
-          ) : null}
-          {noGrammar ? (
-            <span className="t-small face-mono" data-tone="caution">
-              no grammar
-            </span>
-          ) : null}
-          {mermaid && complete && !drawable ? (
-            <span className="t-small face-mono" data-tone="caution">
-              source only
-            </span>
-          ) : null}
-        </>
+        head === "copy" ? (
+          // An empty lead keeps the head row, which holds the copy press.
+          <span />
+        ) : (
+          <>
+            {/* A caller's title is a label; a fence's tag is what the author typed, said verbatim. */}
+            {title ? (
+              <span className="t-small t-upper text-ink-2">{title}</span>
+            ) : lang ? (
+              <span className="t-small face-mono">{lang}</span>
+            ) : null}
+            {noGrammar ? (
+              <span className="t-small face-mono" data-tone="caution">
+                no grammar
+              </span>
+            ) : null}
+            {mermaid && complete && !drawable ? (
+              <span className="t-small face-mono" data-tone="caution">
+                source only
+              </span>
+            ) : null}
+          </>
+        )
       }
       headTrail={
         <span className="flex items-center gap-2">
-          <span className="t-small face-mono tabular-nums text-ink-mute">
-            {lines} {lines === 1 ? "line" : "lines"}
-          </span>
+          {head === "full" && (
+            <span className="t-small face-mono tabular-nums text-ink-mute">
+              {lines} {lines === 1 ? "line" : "lines"}
+            </span>
+          )}
           {gated && !showAll ? (
             <Button label="show all" onClick={() => setShowAll(true)}>
               show all

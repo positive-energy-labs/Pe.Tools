@@ -15,6 +15,7 @@ import { Pane, PaneSplit } from "#/components/lang/pane";
 import { List } from "@pe/kit/lang/list-popup";
 import { Button } from "@pe/kit/lang/button";
 import { RunsList } from "#/route/runs-list";
+import { PodPlugins } from "#/route/pod-plugins";
 import { Surface } from "#/components/lang/surface";
 import {
   RouteShell,
@@ -248,6 +249,7 @@ export function PodsRouteContent({
         resize={{ target: "start", defaultSize: 300, minSize: 220, persist: "pods:members" }}
         start={
           <Pane flush title="members" meta={String(pods.length)}>
+            {!demo && pods.length > 0 && <PodPlugins pods={pods} />}
             {pods
               .filter((item) => item.diagnostics.length)
               .map((item) => (
