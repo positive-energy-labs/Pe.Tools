@@ -192,7 +192,9 @@ export function admitRequest(caller: Caller, permission: RoutePermission, door: 
       door,
       `Refused at ${door}: this route declares no permission.`,
     );
-  if (permission === "read" || permission === "mcp") return;
+  // `operation` is the /call door: it classifies each op itself (Mutate is never raw-dispatched,
+  // human-only ops refuse other callers), so anonymous transport reads like any read route.
+  if (permission === "read" || permission === "mcp" || permission === "operation") return;
   if (caller.kind === "anonymous")
     throw refuse("context.missing", door, `Refused at ${door}: anonymous callers are read-only.`);
   if (permission === "human" || permission === "admin") {
@@ -206,7 +208,7 @@ export function admitRequest(caller: Caller, permission: RoutePermission, door: 
       door,
       `Refused at ${door}: the service caller is limited to shutdown and window.`,
     );
-  if (caller.kind === "external-mcp" && permission !== "operation")
+  if (caller.kind === "external-mcp")
     throw refuse(
       "grant.context-cannot-hold",
       door,

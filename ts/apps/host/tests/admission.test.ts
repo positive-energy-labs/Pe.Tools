@@ -28,15 +28,17 @@ const options: IdentityOptions = {
 };
 const local = { host: "127.0.0.1:5180", "x-pe-runtime-service": hostOwnership.serviceName };
 
-test.each(Object.entries(peRoutes).filter(([, route]) => route.method !== "GET"))(
-  "access-041/085: anonymous declared write %s is refused before routing",
-  async (_id, route) => {
-    const path = route.path.replace(/:[\w]+/g, "fixture");
-    expect(await readRequestIdentity(local, path, options, route.method)).toMatchObject({
-      refusal: { code: "context.missing" },
-    });
-  },
-);
+// `/call` is the one POST that reads: its door refuses Mutate and human-only ops itself.
+test.each(
+  Object.entries(peRoutes).filter(
+    ([, route]) => route.method !== "GET" && route.permission !== "operation",
+  ),
+)("access-041/085: anonymous declared write %s is refused before routing", async (_id, route) => {
+  const path = route.path.replace(/:[\w]+/g, "fixture");
+  expect(await readRequestIdentity(local, path, options, route.method)).toMatchObject({
+    refusal: { code: "context.missing" },
+  });
+});
 
 test("the table's human read and consent requirements are enforced at admission", async () => {
   expect(
@@ -83,7 +85,6 @@ test("access-085: an omitted route permission fails closed even for a human", ()
 
 // Paths cover each write family, including unknown future routes. Admission precedes routing.
 test.each([
-  "/call",
   "/actions",
   "/pe/threads",
   "/pe/threads/t/prompt",
