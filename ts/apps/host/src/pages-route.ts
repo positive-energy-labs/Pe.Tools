@@ -65,6 +65,7 @@ import {
   resolvePinned,
   unboundPage,
   type Caller,
+  type DocumentRef,
   type PageBinding,
   type PageChoice,
   type PageTargetReading,
@@ -626,12 +627,13 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     page: string,
     slot: PageChoice,
     humanBound: boolean,
+    target: DocumentRef | null,
     door: string,
     path: "/call" | "/actions",
     headers: Record<string, string>,
     body: unknown,
   ) {
-    const minted = mintPageDoor(page, slot, door, humanBound);
+    const minted = mintPageDoor(page, slot, door, humanBound, target);
     try {
       return await live.forward(
         path,
@@ -657,8 +659,8 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     const raw: unknown = await request.json().catch(() => undefined);
     const binding = await bindingOf(dir);
     const slot = binding.slots.default;
-    // A person's bind is their consent to this Page's ReadOnly scripts on its document.
-    const humanBound = binding.boundBy.default === "human";
+    // Only a person's pin consents to ReadOnly on its resolved document; thread bindings need rw.
+    const humanBound = binding.boundBy.default === "human" && slot.kind === "pinned";
     try {
       if (verb === "call") {
         const body = callBodySchema.safeParse(raw);
@@ -670,6 +672,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
           page,
           slot,
           humanBound,
+          ref,
           at,
           "/call",
           ref
@@ -697,6 +700,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
         page,
         slot,
         humanBound,
+        resolution.target.kind === "document" ? resolution.target.ref : null,
         at,
         "/actions",
         {},

@@ -26,10 +26,16 @@ const MODEL = "C:/Jobs/HVAC.rvt";
 const doc = { session: "bridge-a", openId: "open-a" };
 const census = "Result(new { types = 2 });";
 type Sent = { key: string; request: Record<string, unknown>; openId: string | null };
+const other = {
+  openId: "open-other",
+  address: "C:/Jobs/Other.rvt",
+  title: "Other",
+  isFamilyDocument: false,
+};
 
-function humanRevit(sent: Sent[]) {
+function humanRevit(sent: Sent[], openDocuments: (typeof other)[], onCatalog: () => void) {
   return {
-    list: Effect.succeed([
+    list: Effect.sync(() => [
       {
         sessionId: doc.session,
         connected: true,
@@ -39,16 +45,15 @@ function humanRevit(sent: Sent[]) {
         processId: 42,
         processStartUtcUnixMs: 1000,
         state: {
-          openDocuments: [
-            { openId: doc.openId, address: MODEL, title: "HVAC", isFamilyDocument: false },
-          ],
+          openDocuments: [...openDocuments],
         },
       },
     ]),
     invoke: (key: string, request: Record<string, unknown>, _s: string, openId: string | null) =>
       Effect.promise(async () => {
         await new Promise((resolve) => setTimeout(resolve, 5));
-        if (key === "host.ops.catalog")
+        if (key === "host.ops.catalog") {
+          onCatalog();
           return {
             value: {
               operations: [
@@ -63,18 +68,22 @@ function humanRevit(sent: Sent[]) {
             },
             target: null,
           };
+        }
         sent.push({ key, request, openId });
         return { value: { status: "Succeeded", data: { types: 2 } }, target: null };
       }),
   } as unknown as RevitBridge["Service"];
 }
 
-async function serve() {
+async function serve(onCatalog?: (documents: (typeof other)[]) => void) {
   const dir = mkdtempSync(join(tmpdir(), "pe-host-readonly-script-"));
   const pages = join(dir, "pages");
   mkdirSync(join(pages, "route-prefs"), { recursive: true });
   writeFileSync(join(pages, "route-prefs", "index.html"), "<!doctype html><title>rp</title>");
   const sent: Sent[] = [];
+  const openDocuments = [
+    { openId: doc.openId, address: MODEL, title: "HVAC", isFamilyDocument: false },
+  ];
   const server = await serveRoutes(
     Layer.mergeAll(
       makeCallRoute(new ActionJournal(join(dir, "attempts.json")), undefined, {
@@ -85,7 +94,7 @@ async function serve() {
         () => join(dir, "pods"),
       ),
     ),
-    humanRevit(sent),
+    humanRevit(sent, openDocuments, () => onCatalog?.(openDocuments)),
   );
   const send = async (
     path: string,
@@ -101,6 +110,7 @@ async function serve() {
     const text = await response.text();
     const json = JSON.parse(text) as {
       refusal?: { code: string; door: string };
+      error?: { code: string; details?: { refusal?: { code: string } } };
       state?: string;
       id?: string;
     };
@@ -119,6 +129,7 @@ async function serve() {
   };
   return {
     sent,
+    openDocuments,
     send,
     settle,
     page: {
@@ -175,7 +186,8 @@ test("a human-pinned Page reads a human document with a ReadOnly script and writ
       input: script("ReadOnly"),
     });
     expect(acted.status, acted.text).toBeLessThan(300);
-    expect(await host.settle(acted.json.id!)).toMatchObject({
+    const settled = await host.settle(acted.json.id!);
+    expect(settled, JSON.stringify(settled)).toMatchObject({
       state: "succeeded",
       result: { status: "Succeeded", data: { types: 2 } },
     });
@@ -187,7 +199,10 @@ test("a human-pinned Page reads a human document with a ReadOnly script and writ
         key: "scripting.execute",
         input: script(mode),
       });
-      expect([write.status, write.json.refusal?.code], write.text).toEqual([403, "grant.required"]);
+      expect([write.status, write.json.error?.details?.refusal?.code], write.text).toEqual([
+        403,
+        "grant.required",
+      ]);
       const call = await host.send("/pages/route-prefs/call", host.page, {
         key: "scripting.execute",
         request: script(mode),
@@ -231,6 +246,72 @@ test("Pea and an external MCP client cannot read a human document with a ReadOnl
   }
 }, 30_000);
 
+test("a human pin consents only to its document: an ungranted sibling refuses ReadOnly at call and act", async () => {
+  const host = await serve();
+  host.openDocuments.push(other);
+  try {
+    expect(
+      (
+        await host.send(
+          "/pe/pages/route-prefs/binding",
+          as({ kind: "human", via: "cli" }),
+          { kind: "pinned", address: MODEL },
+          true,
+        )
+      ).status,
+    ).toBe(200);
+    for (const mode of ["ReadOnly", undefined]) {
+      const call = await host.send("/pages/route-prefs/call", host.page, {
+        key: "scripting.execute",
+        request: script(mode),
+      });
+      expect(call.status, call.text).toBe(403);
+      expect(call.text).toContain("script.ungranted-documents");
+      expect(call.text).toContain(other.openId);
+      expect(host.sent).toEqual([]);
+      const act = await host.send("/pages/route-prefs/act", host.page, {
+        key: "scripting.execute",
+        input: script(mode),
+      });
+      expect(act.status, act.text).toBeLessThan(300);
+      const row = await host.settle(act.json.id!);
+      expect(row, JSON.stringify(row)).toMatchObject({ state: "failed" });
+      expect(JSON.stringify(row)).toContain("script.ungranted-documents");
+      expect(JSON.stringify(row)).toContain(other.openId);
+      expect(host.sent).toEqual([]);
+    }
+  } finally {
+    await host.close();
+  }
+}, 30_000);
+
+test("a Page ReadOnly call rechecks siblings after its catalog read and before dispatch", async () => {
+  const host = await serve((documents) => {
+    if (!documents.some((one) => one.openId === other.openId)) documents.push(other);
+  });
+  try {
+    expect(
+      (
+        await host.send(
+          "/pe/pages/route-prefs/binding",
+          as({ kind: "human", via: "cli" }),
+          { kind: "pinned", address: MODEL },
+          true,
+        )
+      ).status,
+    ).toBe(200);
+    const call = await host.send("/pages/route-prefs/call", host.page, {
+      key: "scripting.execute",
+      request: script("ReadOnly"),
+    });
+    expect(call.status, call.text).toBe(403);
+    expect(call.json.error?.code).toBe("script.ungranted-documents");
+    expect(host.sent).toEqual([]);
+  } finally {
+    await host.close();
+  }
+}, 30_000);
+
 test("a Page Pea bound, now on a human document, cannot read it with a ReadOnly script", async () => {
   const host = await serve();
   // Pea pins its own acquired document; the acquisition then ends (a handover) and the person owns it.
@@ -255,9 +336,50 @@ test("a Page Pea bound, now on a human document, cannot read it with a ReadOnly 
         key: "scripting.execute",
         input: script(mode),
       });
-      expect([act.status, act.json.refusal?.code], act.text).toEqual([403, "grant.required"]);
+      expect([act.status, act.json.error?.details?.refusal?.code], act.text).toEqual([
+        403,
+        "grant.required",
+      ]);
     }
     expect(host.sent).toEqual([]);
+  } finally {
+    bindControl({ acquired: () => null });
+    await host.close();
+  }
+}, 30_000);
+
+test("a human-pinned Page's ReadOnly script can run beside a sibling it has write authority for", async () => {
+  const host = await serve();
+  host.openDocuments.push(other);
+  bindControl({
+    acquired: (ref) =>
+      ref.session === doc.session && ref.openId === other.openId ? "acq-other" : null,
+  });
+  try {
+    expect(
+      (
+        await host.send(
+          "/pe/pages/route-prefs/binding",
+          as({ kind: "human", via: "cli" }),
+          { kind: "pinned", address: MODEL },
+          true,
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await host.send("/pages/route-prefs/call", host.page, {
+          key: "scripting.execute",
+          request: script("ReadOnly"),
+        })
+      ).status,
+    ).toBe(200);
+    const act = await host.send("/pages/route-prefs/act", host.page, {
+      key: "scripting.execute",
+      input: script("ReadOnly"),
+    });
+    expect(await host.settle(act.json.id!)).toMatchObject({ state: "succeeded" });
+    expect(host.sent.map((one) => one.openId)).toEqual([doc.openId, doc.openId]);
   } finally {
     bindControl({ acquired: () => null });
     await host.close();
