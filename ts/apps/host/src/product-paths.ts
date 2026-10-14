@@ -37,6 +37,7 @@ export const productPeaWorkPath = () => productStatePath("pea-work");
 
 /** User-added endpoint providers (`harness/providers.ts`). Holds keys: state, not Documents. */
 export const productProvidersPath = () => productStatePath("providers.json");
+export const productPluginDecisionsPath = () => productStatePath("plugins.json");
 
 /** The access setting, `{ guarded }` (`harness/providers.ts`). */
 export const productAccessPath = () => productStatePath("access.json");

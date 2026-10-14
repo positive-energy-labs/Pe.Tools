@@ -29,6 +29,7 @@ import {
   type PackageListing,
 } from "./packages.ts";
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
+import { activateImportedPackage } from "./package-lifecycle.ts";
 
 const VENDOR_DIRECTORY = "_vendor";
 const IMPORTED_FILE = "imported.json";
@@ -286,6 +287,7 @@ export async function installArchive(
     const store = options.captures ?? hostCaptures();
     for (const [path, bytes] of entries)
       if (CAPTURE_MEMBER.exec(path)?.[2] === "png") await store.adopt(bytes);
+    await activateImportedPackage(id, podsRoot);
     return {
       id,
       folder,

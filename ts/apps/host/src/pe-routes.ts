@@ -98,6 +98,9 @@ import {
   type PageDescriptor,
 } from "./page-libraries.ts";
 import { join } from "node:path";
+import { createPackageLifecycle, bindPackageLifecycle } from "./package-lifecycle.ts";
+import { createPluginsHandler } from "./plugins-handler.ts";
+import { observePluginOperations } from "./plugin-receipts.ts";
 import { importShippedPods } from "./installed-pods.ts";
 import { receiptQuerySchema } from "@pe/agent-contracts";
 import {
@@ -522,6 +525,8 @@ export function createContributionContent(options: {
   packages?: typeof listPackages;
   pages?: (packages: readonly AdmittedPackage[]) => Promise<readonly PageDescriptor[]>;
   bootstrap?: () => Promise<unknown>;
+  decisionsPath?: string;
+  changed?: () => void;
 }) {
   const revisions = new Map<string, Map<string, unknown>>();
   const latest = new Map<string, unknown>();
@@ -529,7 +534,20 @@ export function createContributionContent(options: {
   let observedAt = 0;
   let pending = false;
   let initialized: Promise<unknown> | undefined;
+  let firstBuild = true;
   let admitted: readonly AdmittedPackage[] = [];
+  const lifecycle = createPackageLifecycle({
+    decisionsPath: options.decisionsPath,
+    packages: async () => {
+      await (initialized ??= options.bootstrap?.() ?? Promise.resolve());
+      return (options.packages ?? listPackages)();
+    },
+    changed: () => {
+      snapshot = undefined;
+      latest.clear();
+      options.changed?.();
+    },
+  });
   const remember = (key: string, value: { sha256: string } & Record<string, unknown>) => {
     let versions = revisions.get(key);
     if (!versions) revisions.set(key, (versions = new Map()));
@@ -570,13 +588,14 @@ export function createContributionContent(options: {
   }
   async function build(): Promise<CapabilityContent> {
     await (initialized ??= options.bootstrap?.() ?? Promise.resolve());
-    const listing = await (options.packages ?? listPackages)();
-    admitted = listing.packages;
+    const listing = await lifecycle.refresh(firstBuild);
+    firstBuild = false;
+    admitted = lifecycle.packages();
     const allDescriptors = options.pages
-      ? await options.pages(listing.packages)
+      ? await options.pages(admitted)
       : [
           ...(await scratchPageDescriptors(join(options.worldRoot, "Pages"))),
-          ...packagePageDescriptors(listing.packages),
+          ...packagePageDescriptors(admitted),
         ];
     const descriptors = allDescriptors.filter((p) => p.key !== null && p.openUrl !== null);
     const scratch = allDescriptors.filter((p) => p.pod === null).map((p) => p.slug);
@@ -610,7 +629,7 @@ export function createContributionContent(options: {
     const pageProjections = new Map(
       descriptors.map((p) => [p.key, { openUrl: p.openUrl!, pane: "page" }]),
     );
-    const packages = listing.packages.map((pod) =>
+    const packages = admitted.map((pod) =>
       packageProjectionSchema.parse({
         id: pod.id,
         folder: pod.folder,
@@ -634,7 +653,7 @@ export function createContributionContent(options: {
         })),
       }),
     );
-    const packagedSkills = listing.packages.flatMap((pod) =>
+    const packagedSkills = admitted.flatMap((pod) =>
       pod.diagnostics.some((d) => d.severity === "error")
         ? []
         : pod.contributions
@@ -657,9 +676,10 @@ export function createContributionContent(options: {
     const publication = await publishPeaSkills(
       { productHomePath: options.worldRoot, captureDirectory },
       packagedSkills,
+      lifecycle.skills(),
     );
     latest.clear();
-    for (const pod of listing.packages) {
+    for (const pod of admitted) {
       if (pod.diagnostics.some((d) => d.severity === "error")) continue;
       const frozen = await capturePackage(pod);
       for (const member of pod.members) {
@@ -697,10 +717,15 @@ export function createContributionContent(options: {
         ...listing.packages.flatMap((p) =>
           p.diagnostics.map((d) => `${p.id}/${d.path}: ${d.message}`),
         ),
+        ...lifecycle
+          .inventory()
+          .filter((p) => p.status !== "active")
+          .map((p) => `${p.id}: ${p.status}${p.error ? `: ${p.error}` : ""}`),
       ],
     };
   }
   return {
+    lifecycle,
     read: () => {
       if (!snapshot || (!pending && Date.now() - observedAt >= 30_000)) {
         pending = true;
@@ -728,7 +753,7 @@ export function createContributionContent(options: {
       );
     },
     member: (key: string, sha256?: string) =>
-      sha256 ? revisions.get(key)?.get(sha256) : latest.get(key),
+      latest.has(key) ? (sha256 ? revisions.get(key)?.get(sha256) : latest.get(key)) : undefined,
   };
 }
 
@@ -742,8 +767,10 @@ export function makeHostPeRoutes(
 ) {
   const sourceRoot = hostOwnership.sourceRoot;
   const worldRoot = resolvePeaProductHomePath();
+  let invalidateCatalog = () => {};
   const content = createContributionContent({
     worldRoot,
+    changed: () => invalidateCatalog(),
     bootstrap: async () => {
       const imported = await importShippedPods();
       const refused = imported.outcomes.filter((outcome) => outcome.outcome === "refused");
@@ -753,6 +780,7 @@ export function makeHostPeRoutes(
         );
     },
   });
+  bindPackageLifecycle(content.lifecycle);
   // The user's own Codex MCP servers stay out of Pea threads: a project-level config in the world root.
   void userCodexMcpServers(userCodexConfigPath())
     .then((names) => writePeaCodexProjectConfig(worldRoot, names))
@@ -775,6 +803,7 @@ export function makeHostPeRoutes(
   // Every provider is probed once in the background; the list says `unknown` until then.
   const providers = createProviders({ shellPath });
   const telemetry = hostReceiptExport();
+  const stopOperationHooks = observePluginOperations(telemetry.journal, content.lifecycle.emit);
   const receiptThreads = createThreadReceiptAdapter(telemetry, () => threads.receiptSnapshot());
   const threads = createHarnessThreads({
     prepare: () => content.read(),
@@ -786,6 +815,7 @@ export function makeHostPeRoutes(
     developerInstructions: async () => peaAgentInstructions,
     mcpServer: (context) => peaMcpServer(sourceRoot, hostBaseUrl, context),
     receiptFact: receiptThreads.accept,
+    pluginHook: content.lifecycle.emit,
   });
   const receiptContextReady = receiptThreads.hydrate();
   const notices = createNotices({
@@ -826,6 +856,7 @@ export function makeHostPeRoutes(
     content: content.read,
     pages: content.pages,
   });
+  invalidateCatalog = () => catalog.invalidate();
   const routes = createPeRoutes({
     registrations,
     store: fileRouteDocumentStore(productRouteWorkPath()),
@@ -867,7 +898,15 @@ export function makeHostPeRoutes(
   });
   bindActionWorkspace(routes.workspace);
   sweepClosedDocuments(bridge, routes.workspace);
-  return { providers, threads, routes, catalog, machine, notices };
+  const plugins = {
+    close: async () => {
+      stopOperationHooks();
+      await content.lifecycle.close();
+      bindPackageLifecycle(undefined);
+    },
+    fetch: createPluginsHandler(content),
+  };
+  return { providers, threads, routes, catalog, machine, notices, plugins };
 }
 
 /** {@link makeHostPeRoutes} on the host's router. Harness children die when the launch scope closes. */
@@ -882,7 +921,7 @@ export const peRoutesLayer = (
       const bridge = Option.getOrUndefined(yield* Effect.serviceOption(RevitBridge));
       const update = yield* UpdateReader;
       const lifecycle = Option.getOrUndefined(yield* Effect.serviceOption(HostLifecycle));
-      const { providers, threads, routes, catalog, machine, notices } = makeHostPeRoutes(
+      const { providers, threads, routes, catalog, machine, notices, plugins } = makeHostPeRoutes(
         hostBaseUrl,
         bridge,
         registrationsFactory,
@@ -915,6 +954,7 @@ export const peRoutesLayer = (
         }),
       );
       yield* Effect.addFinalizer(() => Effect.promise(() => threads.close()));
+      yield* Effect.addFinalizer(() => Effect.promise(() => plugins.close()));
       yield* Layer.build(notices.route);
       // Installed policy keeps observing even when every browser and tray drawer is closed.
       if (hostOwnership.lane === "installed") machine.observe(() => {});
@@ -927,7 +967,12 @@ export const peRoutesLayer = (
             Stream.runForEach(() => Effect.sync(() => catalog.invalidate())),
           ),
         );
-      const handlers = { threads: threads.fetch, pe: routes.fetch, providers: providers.fetch };
+      const handlers = {
+        threads: threads.fetch,
+        pe: routes.fetch,
+        providers: providers.fetch,
+        plugins: plugins.fetch,
+      };
       for (const route of Object.values(peRoutes)) {
         if (!(route.owner in handlers)) continue;
         const handle = handlers[route.owner as keyof typeof handlers];

@@ -11,7 +11,7 @@ const none = z.undefined();
 const object = z.record(z.string(), z.unknown());
 const ok = z.object({ ok: z.boolean() }).passthrough();
 type Principal = "read" | "caller" | "human" | "human-or-pea" | "page";
-type Owner = "pe" | "threads" | "providers" | "share" | "pages" | "gateway";
+type Owner = "pe" | "threads" | "providers" | "share" | "pages" | "gateway" | "plugins";
 
 function route<const P extends string, B extends z.ZodType, O extends z.ZodType>(
   method: "GET" | "POST" | "PUT" | "DELETE",
@@ -56,6 +56,7 @@ export function definePeApi<
     | "harnessThreadBodySchema"
     | "harnessEventSchema"
     | "threadExportSchema"
+    | "pluginStatusSchema"
     | "promptRequestSchema"
     | "permissionResponseSchema"
     | "questionResponseSchema"
@@ -79,6 +80,7 @@ export function definePeApi<
   >,
 >(schemas: S) {
   const accessSchema = schemas.accessSchema as S["accessSchema"];
+  const pluginStatusSchema = schemas.pluginStatusSchema as S["pluginStatusSchema"];
   const addProviderRequestSchema =
     schemas.addProviderRequestSchema as S["addProviderRequestSchema"];
   const providerSchema = schemas.providerSchema as S["providerSchema"];
@@ -221,6 +223,30 @@ export function definePeApi<
       "providers",
     ),
     "access.get": route("GET", "/pe/access", none, accessSchema, "read", "providers"),
+    "plugins.list": route(
+      "GET",
+      "/pe/plugins",
+      none,
+      z.array(pluginStatusSchema),
+      "read",
+      "plugins",
+    ),
+    "plugin.update": route(
+      "PUT",
+      "/pe/plugins/:id",
+      z.strictObject({ enabled: z.boolean() }),
+      z.array(pluginStatusSchema),
+      "human",
+      "plugins",
+    ),
+    "plugin.remove": route(
+      "DELETE",
+      "/pe/plugins/:id",
+      none,
+      z.array(pluginStatusSchema),
+      "human",
+      "plugins",
+    ),
     "access.set": route("PUT", "/pe/access", accessSchema, accessSchema, "human", "providers"),
     "threads.list": route(
       "GET",

@@ -11,8 +11,10 @@ import type {
   HarnessThreadBody,
   Provider,
   ThreadHead,
+  PluginHookName,
+  PluginHooks,
 } from "@pe/agent-contracts";
-import { emptyThreadHead } from "@pe/agent-contracts";
+import { emptyThreadHead, createPluginRuntime } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/mcps/context";
 import { human } from "./callers.ts";
 import { admitCrossing, bindControl, onRevoke, Refused } from "../src/control.ts";
@@ -42,7 +44,11 @@ type Host = {
 const hosts: Host[] = [];
 const mcpServer = () => ({ name: "pea", command: "unused", args: [], env: [] });
 /** Threads and providers behind one fetch, as the host's router mounts them. No probe at start. */
-const host = (updatePending?: () => boolean, prepare?: () => Promise<unknown>): Host => {
+const host = (
+  updatePending?: () => boolean,
+  prepare?: () => Promise<unknown>,
+  pluginHook?: <N extends PluginHookName>(name: N, event: PluginHooks[N]) => Promise<void>,
+): Host => {
   const consoles: string[] = [];
   const providers = createProviders({
     shellPath: async () => "C:\\canary-bin;C:\\also",
@@ -51,6 +57,7 @@ const host = (updatePending?: () => boolean, prepare?: () => Promise<unknown>): 
   });
   const threads = createHarnessThreads({
     prepare,
+    pluginHook,
     updatePending,
     root,
     worldRoot: tmpdir(),
@@ -129,6 +136,38 @@ async function until(
 }
 const kinds = (events: HarnessEvent[]) =>
   events.map((e) => (e.kind === "update" ? `update:${e.update.sessionUpdate}` : e.kind));
+
+test("production harness boundary emits scoped turn and ACP session hooks", async () => {
+  const seen: string[] = [];
+  const plugins = createPluginRuntime<string>();
+  await plugins.install({
+    id: "observer",
+    setup(context) {
+      for (const name of [
+        "turn.before",
+        "turn.after",
+        "harness.session.started",
+        "harness.session.stopped",
+      ] as const)
+        context.hook(name, () => {
+          seen.push(name);
+        });
+    },
+  });
+  const threads = host(undefined, undefined, plugins.emit);
+  const call = caller(threads);
+  const created = await call("POST", "/pe/threads", { providerId: "claude" });
+  const id = created.json.id;
+  await until(reader(threads), id, (b) => b.models.length > 0);
+  expect(seen).toContain("harness.session.started");
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "hello" });
+  await until(reader(threads), id, (b) => b.events.some((e) => e.kind === "turn_end"));
+  expect(seen).toContain("turn.before");
+  expect(seen).toContain("turn.after");
+  await threads.close();
+  expect(seen).toContain("harness.session.stopped");
+  await plugins.close();
+});
 
 test.each(["claude", "codex"])(
   "%s waits for admitted skill publication before starting its child",
