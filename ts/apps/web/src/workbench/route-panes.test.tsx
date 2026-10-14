@@ -2,7 +2,6 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { useEffect } from "react";
-import { defineRoutePlugin } from "@pe/kit/route-registry";
 
 vi.mock("#/route/builtin-routes", async () => {
   const { createRouteRegistry } = await import("@pe/kit/route-registry");
@@ -19,12 +18,10 @@ test("removing a public route unmounts its kept pane and removes its discovery a
     useEffect(() => stopped, []);
     return <span>Registered public surface</span>;
   }
-  const remove = publicRoutes.register(
-    defineRoutePlugin({
-      manifest: { key: "external", name: "External", runs: ["external.apply"] },
-      hosted: Hosted,
-    }),
-  );
+  const remove = publicRoutes.register({
+    manifest: { key: "external", name: "External", runs: ["external.apply"] },
+    hosted: Hosted,
+  });
   function Pane() {
     const { slot, kept } = useChatPluginHost("external", "thread1");
     return (
@@ -37,7 +34,7 @@ test("removing a public route unmounts its kept pane and removes its discovery a
   render(<Pane />);
   expect(screen.getByText("Registered public surface")).toBeTruthy();
   act(() => {
-    void remove();
+    remove();
   });
   expect(screen.queryByText("Registered public surface")).toBeNull();
   expect(stopped).toHaveBeenCalledOnce();

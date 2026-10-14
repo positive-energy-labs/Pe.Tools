@@ -67,9 +67,10 @@ export async function serveRoutes<E, R>(
  * context the host writes beside its receipt, as the owner's own `pea` reads it.
  */
 export async function bootHost() {
-  const localAppData = mkdtempSync(join(tmpdir(), "pe-host-real-"));
-  const home = mkdtempSync(join(tmpdir(), "pe-host-real-home-"));
-  const webDir = mkdtempSync(join(tmpdir(), "pe-host-real-web-"));
+  const base = process.env.PE_TEST_HOME_ROOT ?? tmpdir();
+  const localAppData = mkdtempSync(join(base, "pe-host-real-"));
+  const home = mkdtempSync(join(base, "pe-host-real-home-"));
+  const webDir = mkdtempSync(join(base, "pe-host-real-web-"));
   writeFileSync(join(webDir, "index.html"), "<!doctype html><title>pe-spa</title>");
   mkdirSync(join(home, productPathNames.pagesDirectoryName, "carriage"), { recursive: true });
   writeFileSync(
@@ -115,7 +116,8 @@ export async function bootHost() {
       for (const [name, value] of Object.entries(prior))
         if (value === undefined) delete process.env[name];
         else process.env[name] = value;
-      for (const dir of [localAppData, home, webDir]) rmSync(dir, { recursive: true, force: true });
+      for (const dir of [localAppData, home, webDir])
+        rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     },
   };
 }

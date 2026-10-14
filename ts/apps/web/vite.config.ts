@@ -1,9 +1,9 @@
 import path, { dirname, resolve } from "node:path";
-import { familyFixturesDir } from "./checkout-paths.ts";
+import { checkoutRoot, familyFixturesDir } from "./checkout-paths.ts";
 import { devIcons } from "./dev-icons.ts";
 import { checkoutIngress, checkoutServiceName, devHostProxy } from "./dev-proxy.ts";
 import { receiptBuildDefines } from "../host/src/build-stamp.ts";
-import { hostProcessIdentity } from "@pe/host-contracts/service-identity";
+import { devFrontendPort, hostProcessIdentity } from "@pe/host-contracts/service-identity";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { devtools } from "@tanstack/devtools-vite";
@@ -65,9 +65,10 @@ const config = defineConfig(({ mode, command }) => {
     ],
     server: {
       host: "127.0.0.1",
-      // A second checkout's registered frontend (acceptance runs, worktrees) names its own port.
-      port: Number(process.env.PE_TOOLS_WEB_PORT ?? 5175),
-      strictPort: true,
+      // Per checkout, so worktrees run dev side by side. A collision walks to the next free port; the
+      // host records the origin that actually bound (dev.ts), so nothing else names this number.
+      port: devFrontendPort(checkoutRoot),
+      strictPort: false,
       allowedHosts: ["127.0.0.1"],
       cors: false,
       fs: {
@@ -111,7 +112,13 @@ const config = defineConfig(({ mode, command }) => {
       },
     },
     fmt: {},
-    test: { setupFiles: ["./src/test-setup.ts"] },
+    // Vitest's 5 s default fails honest tests when this box runs several suites at once (a 1.2 s grid
+    // test took 5 s). 15 s still fails a hang within the minute.
+    test: {
+      setupFiles: ["../../tests/isolated-home/setup.ts", "./src/test-setup.ts"],
+      testTimeout: 15_000,
+      globalSetup: ["../../tests/isolated-home/global-setup.ts"],
+    },
   };
 });
 

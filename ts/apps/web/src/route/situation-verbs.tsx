@@ -7,7 +7,7 @@ import { Kbd } from "#/components/lang/kbd";
 import { Button } from "@pe/kit/lang/button";
 import { changedInRevit } from "#/readings";
 import type { RouteAction } from "./manifest";
-import type { ActionHandle, RouteHandle } from "./use-route";
+import type { ActionHandle, RouteHandle } from "./handle";
 import { useSituationPresentation } from "#/navigation/route-controls";
 
 const DONE_FADE_MS = 5000;

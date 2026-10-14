@@ -591,7 +591,9 @@ test("an answered refusal is failed, not uncertain: the note was not taken", asy
 test("a hanging fatal flush leaves local raw evidence and exits nonzero by the hard deadline", async () => {
   const f = fixture();
   const prior = process.env.LOCALAPPDATA;
+  const priorHome = process.env.PE_TOOLS_PRODUCT_HOME;
   process.env.LOCALAPPDATA = f.dir;
+  process.env.PE_TOOLS_PRODUCT_HOME = ""; // the LOCALAPPDATA-rooted lane
   try {
     const exit: number[] = [];
     const stalled = { ...f.exporter, close: () => new Promise<void>(() => {}) };
@@ -614,6 +616,8 @@ test("a hanging fatal flush leaves local raw evidence and exits nonzero by the h
   } finally {
     if (prior === undefined) delete process.env.LOCALAPPDATA;
     else process.env.LOCALAPPDATA = prior;
+    if (priorHome === undefined) delete process.env.PE_TOOLS_PRODUCT_HOME;
+    else process.env.PE_TOOLS_PRODUCT_HOME = priorHome;
     await f.close();
   }
 });

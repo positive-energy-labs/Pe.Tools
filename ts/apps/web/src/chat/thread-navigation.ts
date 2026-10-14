@@ -236,7 +236,7 @@ const isAsking = (thread: HarnessThreadSummary) => thread.activity.pending > 0;
 
 /** One lifecycle verb over a selection of one or many threads: its word, the threads it would
  *  change (`targets`), and, when none can take it, why (`refusal`). */
-export interface ThreadVerb<T extends HarnessThreadSummary = HarnessThreadSummary> {
+export interface ThreadAction<T extends HarnessThreadSummary = HarnessThreadSummary> {
   /** `snooze` is also its undo: "Wake now" when every selected thread is snoozed. */
   id: "pin" | "settle" | "snooze" | "unread" | "archive" | "new-target";
   label: string;
@@ -253,17 +253,17 @@ export interface ThreadVerb<T extends HarnessThreadSummary = HarnessThreadSummar
  * row menu and the many-thread menu share this rule. A verb is on when at least one selected
  * thread can take it (and applies to those); it refuses, with a reason, only when none can.
  */
-export function threadVerbs<T extends HarnessThreadSummary & TargetRead>(
+export function threadActions<T extends HarnessThreadSummary & TargetRead>(
   threads: T[],
-): ThreadVerb<T>[] {
+): ThreadAction<T>[] {
   const many = threads.length > 1;
   const verb = (
-    id: ThreadVerb["id"],
+    id: ThreadAction["id"],
     label: string,
     targets: T[],
     why: string,
-    change?: ThreadVerb<T>["change"],
-  ): ThreadVerb<T> => ({
+    change?: ThreadAction<T>["change"],
+  ): ThreadAction<T> => ({
     id,
     label,
     targets,

@@ -43,7 +43,7 @@ export function AtlasVisual() {
         <ScopeKeys keys={scopeShortcuts} />
         {/* The plan is a drawing: it sits on the artifact plane under the page header. */}
         <div data-surface="artifact" className="relative flex min-h-0 flex-1 flex-col">
-          <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-1">
+          <div className="flex min-w-0 shrink-0 flex-wrap items-center hairline-b gap-1 px-2 py-1">
             {/* The lanes are a segmented choose-one in the toolbar, not a list. */}
             <Switcher
               ariaLabel="level"

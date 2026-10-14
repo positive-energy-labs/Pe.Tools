@@ -343,8 +343,15 @@ type AuthStatus = { kind?: string; label?: string };
 async function acpProbe(
   record: ProviderRecord,
   env: Record<string, string | undefined>,
+  stop: ProbeStop,
 ): Promise<Omit<Probed, "probedAt">> {
   const none = { models: [], traits: [] };
+  const closed: Omit<Probed, "probedAt"> = {
+    readiness: { state: "unknown", message: "The provider manager closed." },
+    ...none,
+  };
+  // A probe child's cwd is the product scratch folder: none may outlive the manager.
+  if (stop.closed) return closed;
   let reportAuth!: (status: AuthStatus) => void;
   const authReported = new Promise<AuthStatus>((resolve) => {
     reportAuth = resolve;
@@ -434,7 +441,7 @@ async function acpProbe(
     }).unref(),
   );
   try {
-    return await Promise.race([work, timeout]);
+    return await Promise.race([work, timeout, stop.promise.then(() => closed)]);
   } catch (error) {
     return {
       readiness: {
@@ -544,7 +551,11 @@ function openConsole(
   });
 }
 
+type ProbeStop = { closed: boolean } & PromiseWithResolvers<void>;
+
 export function createProviders(options: ProvidersOptions) {
+  const stop: ProbeStop = { closed: false, ...Promise.withResolvers<void>() };
+  const probing = new Set<Promise<unknown>>();
   const cache = new Map<string, Probed>();
   const knownKeys = new Set<string>();
   const inFlight = new Map<string, Promise<Provider>>();
@@ -651,11 +662,13 @@ export function createProviders(options: ProvidersOptions) {
 
   async function probeRecord(record: ProviderRecord): Promise<Probed> {
     const probedAt = () => new Date().toISOString();
-    const probed = await acpProbe(record, {
-      ...cleanHarnessEnv(process.env),
-      ...(await userPath()),
-      ...authEnv(record),
-    });
+    const running = acpProbe(
+      record,
+      { ...cleanHarnessEnv(process.env), ...(await userPath()), ...authEnv(record) },
+      stop,
+    );
+    probing.add(running);
+    const probed = await running.finally(() => probing.delete(running));
     if (probed.readiness.state !== "ready") return { ...probed, probedAt: probedAt() };
     let endpointModels: HarnessModel[] | null = null;
     try {
@@ -895,6 +908,12 @@ export function createProviders(options: ProvidersOptions) {
   }
 
   return {
+    close: async () => {
+      stop.closed = true;
+      listeners.clear();
+      stop.resolve();
+      await Promise.allSettled(probing);
+    },
     get,
     /** Every shell receives the same safe provider views and the same read failure. */
     snapshot: async () => {

@@ -1,6 +1,12 @@
-import { createHash } from "node:crypto";
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
-import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { readFile, realpath } from "node:fs/promises";
+import { dirname, extname, join, resolve } from "node:path";
+import {
+  artifactRelative,
+  PAGE_MEDIA,
+  sha256Hex as sha,
+  validatePageHtml,
+  writeArtifact,
+} from "./page-artifacts.ts";
 
 export type PageExportInput = {
   directory: string;
@@ -13,7 +19,6 @@ export type PageExportInput = {
   library(path: string): Promise<string>;
 };
 type PinnedFile = { path: string; sha256: string };
-const sha = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 const safeScript = (value: string) => value.replace(/<\/script/gi, "<\\/script");
 const safeJson = (value: unknown) => JSON.stringify(value).replace(/</g, "\\u003c");
 const attributes = (tag: string) =>
@@ -37,35 +42,12 @@ const replaceAsync = async (
   }
   return result + source.slice(at);
 };
-const media: Record<string, string> = {
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".ico": "image/x-icon",
-  ".woff": "font/woff",
-  ".woff2": "font/woff2",
-  ".ttf": "font/ttf",
-  ".mp4": "video/mp4",
-  ".mp3": "audio/mpeg",
-};
 
 /** Pin the source graph and a host-stamped snapshot into one network-independent presentation. */
 export async function exportPage(input: PageExportInput) {
   const root = await realpath(input.directory);
   const files = new Map<string, PinnedFile>();
-  const inside = (path: string) => {
-    const from = relative(root, path);
-    if (
-      from === ".." ||
-      from.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) ||
-      isAbsolute(from)
-    )
-      throw Error(`Page export refuses a dependency outside its Page: ${path}`);
-    return from.replaceAll("\\", "/");
-  };
+  const inside = (path: string) => artifactRelative(root, path);
   const pin = (path: string, bytes: string | Uint8Array) => {
     files.set(path, { path, sha256: sha(bytes) });
     return bytes;
@@ -93,7 +75,7 @@ export async function exportPage(input: PageExportInput) {
   const data = async (url: string, from: string) => {
     if (/^(?:data:|#)/i.test(url)) return url;
     const { path, bytes } = await local(url, from);
-    return `data:${media[extname(path).toLowerCase()] ?? "application/octet-stream"};base64,${bytes.toString("base64")}`;
+    return `data:${PAGE_MEDIA[extname(path).toLowerCase()]?.split(";")[0] ?? "application/octet-stream"};base64,${bytes.toString("base64")}`;
   };
   const css = async (source: string, from: string, chain: string[] = []): Promise<string> => {
     if (chain.includes(from))
@@ -154,6 +136,7 @@ export async function exportPage(input: PageExportInput) {
   inside(entryPath);
   const entryBytes = await readFile(entryPath);
   const original = entryBytes.toString("utf8");
+  validatePageHtml(original, true);
   pin("index.html", entryBytes);
   if (/<(?:base|iframe|object|embed)\b/i.test(original))
     throw Error("Page export has an unsupported base, iframe, object or embed element");
@@ -259,19 +242,6 @@ window.pe = pe;
     ? html.replace(/<head\b[^>]*>/i, (head) => head + pinned)
     : pinned + html;
   const sha256 = sha(html);
-  let directory = root;
-  for (const part of [".state", "exports"]) {
-    directory = join(directory, part);
-    await mkdir(directory).catch((error: unknown) => {
-      if ((error as { code?: string }).code !== "EEXIST") throw error;
-    });
-    inside(await realpath(directory));
-  }
-  const path = join(directory, `${sha256}.html`);
-  await writeFile(path, html, { encoding: "utf8", flag: "wx" }).catch(async (error: unknown) => {
-    if ((error as { code?: string }).code !== "EEXIST") throw error;
-    inside(await realpath(path));
-    if ((await readFile(path, "utf8")) !== html) throw Error("Page export artifact hash collision");
-  });
+  const path = await writeArtifact(root, join(root, ".state", "exports", `${sha256}.html`), html);
   return { html, sha256, path, provenance };
 }

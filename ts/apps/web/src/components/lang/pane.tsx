@@ -53,7 +53,7 @@ interface PaneProps extends VariantProps<typeof paneRecipe> {
   children: ReactNode;
 }
 
-class PaneErrorBoundary extends Component<
+export class PaneErrorBoundary extends Component<
   { children: ReactNode; what?: ReactNode; onRetry?: () => void },
   { failed: boolean; message: string }
 > {

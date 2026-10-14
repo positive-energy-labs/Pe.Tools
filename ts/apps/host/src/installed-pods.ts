@@ -1,17 +1,12 @@
 /**
- * First-run import of the Pods the product ships (`<dir of Pe.Host.exe>/pods/*.zip`, staged by
- * scripts/stage-web.mjs from examples/pods through the production exporter). Ordinary import,
- * nothing special: the shipped Pod lands in Documents/Pe.Tools/Pods like any shared archive.
- *
- * Idempotent and never destructive: an archive whose sha is in the ledger was offered once and is
- * not offered again (a user who deletes the example keeps it deleted); an archive whose id is
- * already installed, or whose folder exists, is recorded as present and never overwritten. The
- * ledger is product state, not Documents. No catalog, HTTP or Revit dependency: callers await this
- * before the catalog, skill publication and harness threads read the pods root.
+ * First-run import of the shipped Pods (`<exeDir>/pods/*.zip`) as ordinary archives. Each sha is
+ * offered once (a deleted example stays deleted); an installed id or existing folder is never
+ * overwritten. Callers await this before anything reads the pods root.
  */
 import { join, dirname } from "node:path";
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
-import { createHash, randomUUID } from "node:crypto";
+import { readFile, readdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { writeArtifact } from "./page-artifacts.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { hostOwnership, productRoot } from "./host-ownership.ts";
 import {
@@ -86,10 +81,12 @@ async function run(
       outcome: outcomes.at(-1)!.outcome,
     };
   }
-  await mkdir(dirname(ledgerFile), { recursive: true });
-  const partial = `${ledgerFile}.${randomUUID()}.partial`;
-  await writeFile(partial, `${JSON.stringify(ledger, null, 2)}\n`);
-  await rename(partial, ledgerFile);
+  await writeArtifact(
+    dirname(ledgerFile),
+    ledgerFile,
+    `${JSON.stringify(ledger, null, 2)}\n`,
+    true,
+  );
   return { shippedRoot, outcomes };
 }
 

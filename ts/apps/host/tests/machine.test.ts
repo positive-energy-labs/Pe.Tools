@@ -840,6 +840,42 @@ const accessesAt = async (
 const accessAt = async (grants: readonly HeldGrant[], at: string) =>
   (await accessesAt(grants, at))[0];
 
+test.each(["sessions", "attachments", "documents"] as const)(
+  "access: a failed %s census retains evidence but removes Pea and rw labels",
+  async (leg) => {
+    const f = fixture();
+    vi.mocked(f.sources.actions).mockResolvedValue([acquiring("open", "succeeded", row.process)]);
+    vi.mocked(f.sources.documents).mockResolvedValue({
+      ...docs,
+      documents: [
+        { ...docs.documents[0]!, openId: "product-id", isWorkshared: false },
+        { ...docs.documents[0]!, openId: "user-b", isWorkshared: false },
+      ],
+    });
+    vi.mocked(f.sources.attachments).mockResolvedValue([
+      {
+        ...attached,
+        documents: [attached.documents![0]!, { ...attached.documents![0]!, openId: "user-b" }],
+      },
+    ]);
+    vi.mocked(f.sources.grants.grants).mockReturnValue([
+      grantHeld({ lifetime: { session: "product-open", openId: "user-b" } }),
+    ]);
+    const machine = createMachine(f.sources, { now: () => "2026-10-12T12:30:00.000Z" });
+    const labels = (value: Machine) =>
+      value.revit.sessions![0]!.attachment!.documents!.map((d) => d.access.kind);
+    try {
+      expect(labels(await machine.refresh())).toEqual(["pea", "rw"]);
+      vi.mocked(f.sources[leg]).mockRejectedValueOnce(Error("census unavailable"));
+      expect(labels(await machine.refresh())).toEqual(["read", "read"]);
+      expect(labels(await machine.refresh())).toEqual(["pea", "rw"]);
+    } finally {
+      machine.close();
+      f.machine.close();
+    }
+  },
+);
+
 test("access: a live grant on the exact lifetime draws rw with its thread and expiry", async () => {
   expect(await accessAt([grantHeld()], "2026-10-12T12:30:00.000Z")).toEqual({
     kind: "rw",

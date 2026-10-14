@@ -254,7 +254,7 @@
   }
 }
 [data-situation-pulse] [data-tone] {
-  animation: situation-state-pulse 600ms ease-out 1;
+  animation: situation-state-pulse calc(var(--motion-control) * 5) ease-out 1;
 }
 @keyframes situation-state-pulse {
   0%,

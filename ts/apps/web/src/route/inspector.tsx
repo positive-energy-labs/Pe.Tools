@@ -25,7 +25,7 @@ import { Section } from "#/components/lang/section";
 
 import { PageLog } from "./situation-grids";
 import type { RouteAction } from "./manifest";
-import type { RouteHandle } from "./use-route";
+import type { RouteHandle } from "./handle";
 
 /* ── Marks ─────────────────────────────────────────────────────────────────── */
 

@@ -43,9 +43,15 @@ export default defineConfig({
   // fail-fast (IPC-SEAM-SPEC D7) sees a valid signal instead of throwing at module load.
   // Host boundary scenarios claim the same source service identity; parallel files would make
   // one test take over another test's server instead of testing either lifecycle.
+  // Real processes and files on Windows: the 5 s default fails honest tests under load. Heavy ones
+  // carry their own 30 s.
   test: {
     env: { PE_LANE: "dev" },
     fileParallelism: false,
-    setupFiles: ["tests/sdk-contract-setup.ts"],
+    testTimeout: 15_000,
+    // expect.poll waits 1 s by default; real HTTP and child processes need more when the box is busy.
+    expect: { poll: { timeout: 10_000 } },
+    globalSetup: ["../../tests/isolated-home/global-setup.ts"],
+    setupFiles: ["../../tests/isolated-home/setup.ts", "tests/sdk-contract-setup.ts"],
   },
 });

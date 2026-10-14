@@ -5,42 +5,7 @@ import {
   matchPeRoute,
   peRouteUrl,
 } from "@pe/agent-contracts/pe-api";
-/**
- * PAGES — disposable HTML as a working surface between an agent and a person (pages ledger,
- * 2026-10-04). A page is a folder `Documents/Pe.Tools/Pages/<slug>/` holding an `index.html`,
- * served at `/pages/<slug>/` with no registration: a dropped folder appears. Its doors into Revit
- * are `/pages/pe.js` (`find`, `read`, `do` through the page doors below, the bind chip, and
- * `state`) and `/pages/pe.css` (the house tokens, opt-in).
- *
- * Shared state is one event log per page under `<slug>/.state/`: the page appends, an agent appends
- * over HTTP, the host fans out over SSE, and the page writes its own snapshot and a text projection
- * (`pe.describe`) so an agent reads the state, and what the page says, without running the reducer.
- * The log lives beside the page, so deleting or sharing the folder deletes or shares its state.
- *
- * A Pod may carry pages (pages ledger, ruling 5): a `pages/<page>/index.html` member of an admitted
- * package (`packages.ts`) lists and serves as the slug `<id>--<page>`, where `<id>` is the manifest's
- * package id, never its folder: renaming the folder keeps the slug, the key and the state. Its
- * `.state/` sits beside the page inside the pod, so publishing the pod carries it. A plain page
- * whose folder name contains `--` is skipped.
- *
- *   GET  /pages                        every page, newest first (JSON, rows carry `pod`; a list page when a browser navigates)
- *   GET  /pages/pe.js | /pages/pe.css  the doors and the house look
- *   GET  /pages/<slug>/[file]          the folder's files (`index.html` by default; dot-files are private)
- *   GET  /pages/<slug>/state           { seq, events, snapshot, text }
- *   POST /pages/<slug>/events          append one event (the body); answers the stored row
- *   GET  /pages/<slug>/events?after=N  SSE: rows after N (or Last-Event-ID), then live
- *   PUT  /pages/<slug>/snapshot        the page's current state, as the page computed it
- *   PUT  /pages/<slug>/text            the page's current state as markdown, as the page describes it
- *
- * The page doors (ADR 0017 D9/D10). Identity is the path: the host mints the page key into
- * `<meta name="pe-page">` and stamps it on every row and crossing; a header a page sends never
- * names it. What a page targets is its binding, `<page>/.state/binding.json`, written only here.
- *
- *   GET  /pages/<slug>/target          the default slot: binding, resolution, document, what a write would do
- *   POST /pages/<slug>/call            { key, request? }: a read on the bound document (host `/call`)
- *   POST /pages/<slug>/act             { key, input? }: a write as the page under its binding (host `/actions`)
- *   page.bind      a slot (PageChoice): the human picker, or Pea pinning its own document
- */
+/** Scratch Pages and admitted Pod Pages share serving, binding and event state. See pe.js for the author API. */
 import { readFileSync, watch } from "node:fs";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
@@ -92,7 +57,6 @@ import {
 import { capturePackage, listPackages } from "./packages.ts";
 import { activePackages, requirePackageEnabled } from "./package-lifecycle.ts";
 import {
-  PAGE_LIBRARIES,
   packagePageDescriptors,
   pageFolderCollisions,
   scratchPageDescriptors,
@@ -100,20 +64,29 @@ import {
   scratchPageKey,
 } from "./page-libraries.ts";
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
-import { pageKitAsset } from "./page-kit.ts";
 import { exportPage } from "./page-export.ts";
+import { CaptureStore, hostCaptures } from "./captures-route.ts";
+import { escapeHtml, publishPage, withPageKey } from "./page-publication.ts";
+import { PAGE_MEDIA, readJson } from "./page-artifacts.ts";
 
 /**
- * The libraries (`page-libraries.ts`): read beside their source on the dev lane, so an edit is live
- * on the next request; staged to `<exeDir>/pages` when installed (`scripts/stage-web.mjs`).
+ * Each library file beside its source on the dev lane, so an edit is live on the next request;
+ * staged under `<exeDir>/pages` when installed (`scripts/stage-web.mjs`).
  */
+const LIBRARY_SOURCES = {
+  "pe.js": "./pages/pe.js",
+  "pe.css": "./pages/pe.css",
+  "base.css": "../../../packages/kit/src/base.css",
+  "revit.js": "../../web/src/revit/revit.js",
+  "revit.css": "../../web/src/revit/revit.css",
+  "kit/pe-kit.js": "../../../packages/kit/dist/pe-kit.js",
+  "kit/pe-kit.css": "../../../packages/kit/dist/pe-kit.css",
+} as const;
+type PageLibraryFile = keyof typeof LIBRARY_SOURCES;
 const assetPath = (name: PageLibraryFile) =>
   hostOwnership.lane === "installed"
     ? join(dirname(process.execPath), "pages", name)
-    : fileURLToPath(
-        new URL(PAGE_LIBRARIES.find((library) => library.file === name)!.source, import.meta.url),
-      );
-type PageLibraryFile = (typeof PAGE_LIBRARIES)[number]["file"];
+    : fileURLToPath(new URL(LIBRARY_SOURCES[name], import.meta.url));
 
 /**
  * The facsimile is an ES module for the web app; pages load classic scripts (their inline handlers
@@ -130,7 +103,14 @@ ${source.replace(exports, "globalThis.rv = {$1};")}
 })();
 `;
 };
-const asset = (name: PageLibraryFile) => readFileSync(assetPath(name), "utf8");
+const asset = (name: PageLibraryFile) => {
+  try {
+    return readFileSync(assetPath(name), "utf8");
+  } catch (error) {
+    if (isMissing(error)) throw Error(`Page library ${name} is missing; build @pe/kit first`);
+    throw error;
+  }
+};
 
 /**
  * The doors carry the runtime that served them: the request identity gate refuses a browser API
@@ -154,25 +134,19 @@ const servedPe = () => {
   return rendered;
 };
 
+/** A host library by URL, or null: serving, export and publication preview read the same bytes. */
+const pageLibrary = (path: string): string | null => {
+  if (path === "/pages/pe.js") return servedPe();
+  if (path === "/pages/pe.css") return `${asset("base.css")}\n${asset("pe.css")}`;
+  if (path === "/pages/revit.js") return classicRevit();
+  const file = path.slice("/pages/".length);
+  return file === "revit.css" || file === "kit/pe-kit.js" || file === "kit/pe-kit.css"
+    ? asset(file)
+    : null;
+};
+
 /** One file segment: a leading dot is refused, so `.state/` and editor droppings stay private. */
 const SEGMENT = /^[a-z0-9_-][a-z0-9_.-]*$/i;
-const MIME: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".mjs": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".md": "text/markdown; charset=utf-8",
-  ".txt": "text/plain; charset=utf-8",
-  ".csv": "text/csv; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".woff2": "font/woff2",
-};
 const HEARTBEAT_MS = 15_000;
 const isMissing = (error: unknown) => (error as { code?: string } | null)?.code === "ENOENT";
 
@@ -297,11 +271,8 @@ class PageState {
     this.queue = job.catch(() => undefined);
     return job;
   }
-  async snapshot(): Promise<unknown> {
-    return readFile(join(this.dir, "snapshot.json"), "utf8").then(JSON.parse, (error) => {
-      if (isMissing(error)) return null;
-      throw error;
-    });
+  snapshot(): Promise<unknown> {
+    return readJson(join(this.dir, "snapshot.json"), z.unknown(), null);
   }
   async writeSnapshot(value: unknown) {
     await mkdir(this.dir, { recursive: true });
@@ -364,11 +335,7 @@ class PageState {
   }
 }
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json; charset=utf-8" },
-  });
+const json = (body: unknown, status = 200) => Response.json(body, { status });
 const problem = (status: number, message: string) => json({ error: message, message }, status);
 /** A door refusal, the shape `/actions` answers: 403, named, never dispatched. */
 const refused = (refusal: Refusal) =>
@@ -388,14 +355,16 @@ const unresolved = (door: string, resolution: Exclude<TargetResolution, { kind: 
 /** A catalog row's `op:<key>` (what `pe.find` answers) names the operation `<key>`. */
 const bareOp = (key: string) => key.replace(/^op:/, "");
 
-const escapeHtml = (text: string) =>
-  text.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
-
 /**
  * The pages handler over the Pages root and the Pods root: a plain web handler, so tests need no
  * server and SSE is a ReadableStream. No pods root means no pod pages.
  */
-export function createPagesHandler(root: string, pods?: string, live: PageLive = noLive) {
+export function createPagesHandler(
+  root: string,
+  pods?: string,
+  live: PageLive = noLive,
+  captures = new CaptureStore(join(root, ".captures")),
+) {
   /**
    * Where a slug's folder is: `<root>/<slug>`, or for `<id>--<page>` the folder of the one admitted
    * package with that id that contributes `pages/<page>` (a duplicated id contributes nothing).
@@ -489,7 +458,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
           : raw;
       return new Response(bytes, {
         headers: {
-          "content-type": MIME[extname(path).toLowerCase()] ?? "application/octet-stream",
+          "content-type": PAGE_MEDIA[extname(path).toLowerCase()] ?? "application/octet-stream",
           "cache-control": "no-cache",
         },
       });
@@ -527,7 +496,6 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
         const unhear = state.hear((event, data) =>
           controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)),
         );
-        for (const row of await state.rows()) send(row);
         // A named heartbeat, so pe.js can tell a quiet stream from a dead one (a browser's own
         // EventSource retry was seen to never fire after a dev host restart, 2026-10-04).
         const beat = setInterval(
@@ -535,6 +503,8 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
           HEARTBEAT_MS,
         );
         stop = () => {
+          last = Infinity;
+          request.signal.removeEventListener("abort", stop);
           clearInterval(beat);
           unfollow();
           unhead();
@@ -545,7 +515,10 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
             /* already closed by the consumer */
           }
         };
+        // Listen before the replay's await: an abort during it still closes the folder watcher.
         request.signal.addEventListener("abort", stop);
+        if (request.signal.aborted) stop();
+        for (const row of await state.rows()) send(row);
       },
       cancel() {
         stop();
@@ -561,14 +534,8 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
   }
 
   const bindingFile = (dir: string) => join(dir, ".state", "binding.json");
-  const bindingOf = async (dir: string): Promise<PageBinding> =>
-    readFile(bindingFile(dir), "utf8").then(
-      (text) => pageBindingSchema.parse(JSON.parse(text)),
-      (error) => {
-        if (isMissing(error)) return unboundPage;
-        throw error;
-      },
-    );
+  const bindingOf = (dir: string): Promise<PageBinding> =>
+    readJson(bindingFile(dir), pageBindingSchema, unboundPage);
 
   async function target(page: string, dir: string): Promise<PageTargetReading> {
     const actDoor = pageActDoor(page);
@@ -733,7 +700,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     if (!ref) return { key: bareOp(key), input: sent };
     if (ref.kind !== "script")
       return { problem: `${key} is a ${ref.kind}: it reads and mentions, it never runs.` };
-    await requirePackageEnabled(ref.packageId, undefined, pods);
+    await requirePackageEnabled(ref.packageId, pods);
     const pod = pods
       ? (await listPackages(pods)).packages.find((one) => one.id === ref.packageId)
       : undefined;
@@ -800,22 +767,21 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     return json(await target(page, dir));
   }
 
-  /** `index.html` names its page: the host mints the key; the page never claims one. */
-  const withPageKey = (html: string, page: string) => {
-    // Pages without an authored icon must not make a stray request to the product's /favicon.ico.
-    const icon = /<link\b[^>]*\brel=["'][^"']*\bicon\b/i.test(html)
-      ? ""
-      : '<link rel="icon" href="data:,">';
-    const meta = `<meta name="pe-page" content="${escapeHtml(page)}">${icon}`;
-    const head = /<head[^>]*>/i.exec(html) ?? /^\s*<!doctype[^>]*>/i.exec(html);
-    if (!head) return `${meta}${html}`;
-    const end = head.index + head[0].length;
-    return `${html.slice(0, end)}${meta}${html.slice(end)}`;
-  };
-
   return async function handle(request: Request): Promise<Response> {
     const caller = currentCaller();
     const url = new URL(request.url);
+    if (url.pathname === peRoutes["page.publish"].path && request.method === "POST") {
+      if (caller.kind !== "human" && caller.kind !== "pea")
+        return problem(403, "Page publication requires a human or Pea caller");
+      const input = peRoutes["page.publish"].body.safeParse(await request.json());
+      if (!input.success) return problem(400, input.error.message);
+      try {
+        const result = await publishPage(root, input.data, url.origin, pageLibrary, captures);
+        return json(result, 201);
+      } catch (error) {
+        return problem(422, error instanceof Error ? error.message : String(error));
+      }
+    }
     const parts = url.pathname.split("/").filter(Boolean); // ["pages", slug?, ...rest]
     if (parts[0] === "pe") {
       const [, , slug = "", verb, ...more] = parts;
@@ -831,43 +797,14 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     if (parts.length === 1)
       return wantsHtml ? listPage(await list()) : json({ root, pages: await list() });
     const [, slug = "", ...rest] = parts;
-    if (slug === "kit" && rest.length === 1 && request.method === "GET") {
-      const name = rest[0]!;
-      if (name !== "pe-kit.js" && name !== "pe-kit.css")
-        return problem(404, "no such Page kit asset");
-      try {
-        return new Response(await pageKitAsset(name), {
-          headers: {
-            "content-type": MIME[extname(name)]!,
-            "cache-control": "no-cache",
-          },
-        });
-      } catch (error) {
-        if (isMissing(error))
-          return problem(503, "Page kit is not built; build @pe/kit before serving Pages");
-        throw error;
-      }
-    }
-    if (slug === "pe.js")
-      return new Response(servedPe(), {
-        headers: { "content-type": MIME[".js"]!, "cache-control": "no-cache" },
-      });
-    if (slug === "revit.js")
-      return new Response(classicRevit(), {
-        headers: { "content-type": MIME[".js"]!, "cache-control": "no-cache" },
-      });
-    if (slug === "revit.css")
-      return new Response(asset("revit.css"), {
-        headers: { "content-type": MIME[".css"]!, "cache-control": "no-cache" },
-      });
-    if (slug === "pe.css")
-      return new Response(
-        `${asset("base.css")}
-${asset("pe.css")}`,
-        {
-          headers: { "content-type": MIME[".css"]!, "cache-control": "no-cache" },
+    const library = request.method === "GET" ? pageLibrary(url.pathname) : null;
+    if (library !== null)
+      return new Response(library, {
+        headers: {
+          "content-type": PAGE_MEDIA[extname(url.pathname)]!,
+          "cache-control": "no-cache",
         },
-      );
+      });
     if (!pageKeyOf(slug))
       return problem(
         400,
@@ -895,18 +832,14 @@ ${asset("pe.css")}`,
             parsed.data.snapshot === undefined ? await state.snapshot() : parsed.data.snapshot,
           events: await state.rows(),
           library: async (path) => {
-            if (path === "/pages/pe.js") return asset("pe.js");
-            if (path.startsWith("/pages/kit/"))
-              return pageKitAsset(path.slice("/pages/kit/".length));
-            if (path === "/pages/pe.css") return `${asset("base.css")}\n${asset("pe.css")}`;
-            if (path === "/pages/revit.js") return classicRevit();
-            if (path === "/pages/revit.css") return asset("revit.css");
-            throw Error(`Page export has an unsupported host library: ${path}`);
+            const text = pageLibrary(path);
+            if (text === null) throw Error(`Page export has an unsupported host library: ${path}`);
+            return text;
           },
         });
         return new Response(result.html, {
           headers: {
-            "content-type": MIME[".html"]!,
+            "content-type": PAGE_MEDIA[".html"]!,
             "content-disposition": `attachment; filename="${slug}.html"`,
             "x-pe-export-sha256": result.sha256,
             "cache-control": "no-store",
@@ -989,7 +922,7 @@ export const pagesRoute = (root = productPagesRootPath, pods = productPodsRootPa
             body: JSON.stringify(body),
           }),
       };
-      const pages = createPagesHandler(root(), pods(), live);
+      const pages = createPagesHandler(root(), pods(), live, hostCaptures());
       const handler = HttpEffect.fromWebHandler((request) =>
         matchPeRoute(request.method, new URL(request.url).pathname)
           ? servePeRoute(request, pages)
@@ -998,5 +931,6 @@ export const pagesRoute = (root = productPagesRootPath, pods = productPodsRootPa
       // One registration claims the bare `/pages` too (a second `add` is refused at boot; see captures).
       yield* router.add("*", "/pages/*", handler);
       yield* router.add(peRoutes["page.bind"].method, peRoutes["page.bind"].path, handler);
+      yield* router.add(peRoutes["page.publish"].method, peRoutes["page.publish"].path, handler);
     }),
   );

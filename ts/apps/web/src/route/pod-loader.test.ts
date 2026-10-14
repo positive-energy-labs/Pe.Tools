@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { createPodRouteLoader, verifyBundle } from "./pod-loader";
-import { podRouteDescriptorSchema } from "@pe/agent-contracts";
+import { actionReceiptSchema, podRouteDescriptorSchema, bindWork } from "@pe/agent-contracts";
+import { executePodAction } from "./pod-view";
 
 const row = podRouteDescriptorSchema.parse({
   key: "route:@test/routes/tool/index.js",
@@ -14,6 +15,47 @@ const row = podRouteDescriptorSchema.parse({
 });
 
 describe("Pod route byte custody", () => {
+  it("rejects a schema-valid receipt for a different document than the route action admitted", async () => {
+    const work = {
+      key: bindWork(row.workRoute, null, "calculator"),
+      revision: 3,
+      doc: null,
+      refusal: null,
+    };
+    vi.stubGlobal("fetch", async (_url: unknown, request: RequestInit) => {
+      const sent = JSON.parse(request.body as string);
+      return Response.json(
+        actionReceiptSchema.parse({
+          id: sent.id,
+          kind: "operation",
+          key: sent.key,
+          request: sent.input,
+          bases: sent.bases,
+          destination: { kind: "document", ref: { session: "s", openId: "different" } },
+          caller: { kind: "human", via: "local" },
+          basis: { kind: "human" },
+          state: "succeeded",
+          result: {},
+          steps: [],
+          recovery: [],
+          preparation: { state: "ready", value: {} },
+          publication: { state: "unrequested" },
+          startedAt: "2026-10-14T00:00:00.000Z",
+        }),
+      );
+    });
+    try {
+      await expect(
+        executePodAction(
+          { target: { kind: "document", ref: { session: "s", openId: "original" } }, work },
+          "revit.context.lens",
+          {},
+        ),
+      ).rejects.toThrow("conflicts with the requested intent");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
   it("never imports untrusted bytes and disposes a changed or disabled route", async () => {
     const events: string[] = [];
     const loader = createPodRouteLoader(async (entry) => {

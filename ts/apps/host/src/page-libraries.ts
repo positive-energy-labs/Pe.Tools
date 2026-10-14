@@ -1,52 +1,10 @@
-/**
- * The Page projection, with no HTTP and no catalog: the libraries every Page may load, and one
- * descriptor per Page the host serves. `pages-route.ts` serves from both; the catalog (slice D)
- * teaches both; the installer staging (slice C) copies the libraries.
- */
-import { createHash } from "node:crypto";
+/** The Page projection, with no HTTP: one descriptor per Page the host serves. */
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { contributionKey, parseContributionKey } from "@pe/agent-contracts";
 import type { AdmittedPackage } from "./packages.ts";
 import { productPagesRootPath } from "./product-paths.ts";
-
-/**
- * Every library a Page loads from the host. `source` is relative to this file on the dev lane and
- * staged flat beside `Pe.Host.exe` under `pages/` when installed. `url` null: served only inside
- * another library (the tokens land in `pe.css`).
- */
-export const PAGE_LIBRARIES = [
-  {
-    file: "pe.js",
-    source: "./pages/pe.js",
-    url: "/pages/pe.js",
-    says: "The doors: pe.target, pe.find, pe.read, pe.do, pe.script, pe.state, pe.describe, and the bind chip.",
-  },
-  {
-    file: "pe.css",
-    source: "./pages/pe.css",
-    url: "/pages/pe.css",
-    says: "The house look and the product tokens, opt-in.",
-  },
-  {
-    file: "revit.js",
-    source: "../../web/src/revit/revit.js",
-    url: "/pages/revit.js",
-    says: "The Revit facsimile as a classic script defining `rv`.",
-  },
-  {
-    file: "revit.css",
-    source: "../../web/src/revit/revit.css",
-    url: "/pages/revit.css",
-    says: "The Revit facsimile's styles.",
-  },
-  {
-    file: "base.css",
-    source: "../../../packages/kit/src/base.css",
-    url: null,
-    says: "The product tokens.",
-  },
-] as const;
+import { sha256Hex as sha } from "./page-artifacts.ts";
 
 /** One Page the host serves, as anything that lists, ranks or opens Pages reads it. */
 export type PageDescriptor = {
@@ -70,7 +28,6 @@ export type PageDescriptor = {
 
 const titleOf = (html: string, slug: string) =>
   /<title>([^<]*)<\/title>/i.exec(html)?.[1]?.trim() || slug;
-const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
 /** Scratch folder names that differ only by case, each group sorted: none of them is a Page. */
 export function pageFolderCollisions(names: readonly string[]): string[][] {

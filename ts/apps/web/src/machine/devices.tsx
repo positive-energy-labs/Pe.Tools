@@ -8,7 +8,8 @@ import {
 } from "react";
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
-import { Row } from "@pe/kit/lang/row";
+import type { Column } from "@pe/kit/table/model";
+import { Table } from "@pe/kit/table/table";
 import QRCode from "qrcode";
 import type { DeviceListing, Pairing } from "@pe/host-contracts/pe-api";
 import { peClient } from "#/host/pe-client";
@@ -16,6 +17,9 @@ import { peClient } from "#/host/pe-client";
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const LocalDevice = createContext(true);
 export const useLocalDevice = () => useContext(LocalDevice);
+type DeviceSession = DeviceListing["sessions"][number];
+const endedDevice = (session: DeviceSession) =>
+  session.revokedAt ? "Revoked" : Date.parse(session.expiresAt) <= Date.now() ? "Expired" : null;
 
 export function DeviceSettings({
   refusal,
@@ -51,6 +55,68 @@ export function DeviceSettings({
       }
     });
   const unavailable = refusal ?? (pending ? "Waiting for the host." : null);
+  const columns: Column<DeviceSession>[] = [
+    {
+      key: "device",
+      label: "Device",
+      cell: (session) => <DeviceName session={session} refusal={unavailable} act={act} />,
+    },
+    {
+      key: "transport",
+      label: "Transport",
+      cell: (session) => <span className="face-mono">{session.transports.join(" / ")}</span>,
+    },
+    {
+      key: "lastSeen",
+      label: "Last seen",
+      cell: (session) => (
+        <span className="text-ink-2">
+          {session.lastSeenAt
+            ? new Date(session.lastSeenAt).toLocaleString(undefined, {
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "Not yet"}
+        </span>
+      ),
+    },
+    {
+      key: "rw",
+      label: "rw",
+      cell: (session) => (
+        <span data-tone={session.rw && !endedDevice(session) ? "commit" : undefined}>
+          {endedDevice(session) ??
+            (session.audience === "browser"
+              ? allowRemoteAdministration
+                ? "Can grant rw"
+                : "Consent off"
+              : session.rw
+                ? "rw active"
+                : "Read only")}
+        </span>
+      ),
+    },
+    {
+      key: "revoke",
+      label: "Actions",
+      header: <span className="sr-only">Actions</span>,
+      right: true,
+      cell: (session) =>
+        !endedDevice(session) && (
+          <Button
+            label={`Revoke ${session.label}`}
+            refusal={unavailable}
+            onClick={() =>
+              act(() => peClient.call("device.revoke", { params: { id: session.id } }))
+            }
+          >
+            Revoke
+          </Button>
+        ),
+    },
+  ];
   return (
     <section className="flex flex-col gap-4 hairline-t pt-5" aria-label="Paired devices">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -87,30 +153,13 @@ export function DeviceSettings({
         <p>No paired devices. Pair a browser or MCP client above.</p>
       )}
       {!!listing?.sessions.length && (
-        <table className="w-full text-left" aria-label="Device sessions">
-          <thead className="t-small text-ink-2">
-            <tr>
-              <th scope="col">Device</th>
-              <th scope="col">Transport</th>
-              <th scope="col">Last seen</th>
-              <th scope="col">rw</th>
-              <th scope="col">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="hairline-rows">
-            {listing?.sessions.map((session) => (
-              <DeviceRow
-                key={session.id}
-                session={session}
-                refusal={unavailable}
-                act={act}
-                allowRemoteAdministration={allowRemoteAdministration}
-              />
-            ))}
-          </tbody>
-        </table>
+        <Table
+          rows={listing.sessions}
+          columns={columns}
+          rowKey={(session) => session.id}
+          label="Device sessions"
+          maxHeight="none"
+        />
       )}
       {listing && (
         <details className="t-small text-ink-2">
@@ -187,96 +236,51 @@ function PairingInvite({ pairing, remoteUrl }: { pairing: Pairing; remoteUrl: st
   );
 }
 
-function DeviceRow({
+function DeviceName({
   session,
   refusal,
   act,
-  allowRemoteAdministration,
 }: {
-  session: DeviceListing["sessions"][number];
+  session: DeviceSession;
   refusal: string | null;
   act: (work: () => Promise<unknown>) => void;
-  allowRemoteAdministration: boolean;
 }) {
   const [thread, setThread] = useState(session.thread ?? "");
-  const ended = session.revokedAt
-    ? "Revoked"
-    : Date.parse(session.expiresAt) <= Date.now()
-      ? "Expired"
-      : null;
   return (
-    <Row as="tr">
-      <td className="py-3 pr-4">
-        <p>{session.label}</p>
-        <span className="t-small text-ink-2">{session.audience}</span>
-        {session.audience === "mcp" && !ended && (
-          <details className="t-small mt-1">
-            <summary>{session.thread ? "Thread binding" : "Bind a thread"}</summary>
-            <div className="flex flex-wrap items-center gap-2 py-2">
-              <Input
-                aria-label={`Thread for ${session.label}`}
-                value={thread}
-                onChange={(event) => setThread(event.target.value)}
-                placeholder="Thread id"
-              />
-              <Button
-                label={`Bind thread for ${session.label}`}
-                refusal={refusal}
-                onClick={() =>
-                  act(() =>
-                    peClient.call("device.bind", {
-                      params: { id: session.id },
-                      body: { thread: thread.trim() || null },
-                    }),
-                  )
-                }
-              >
-                Bind
-              </Button>
-            </div>
-            <p className="text-ink-2">
-              Uses the thread's current grant. Clear to return to read-only.
-            </p>
-          </details>
-        )}
-      </td>
-      <td className="pr-4 face-mono t-small">{session.transports.join(" / ")}</td>
-      <td className="pr-4 t-small text-ink-2">
-        {session.lastSeenAt
-          ? new Date(session.lastSeenAt).toLocaleString(undefined, {
-              month: "short",
-              day: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-          : "Not yet"}
-      </td>
-      <td className="pr-4 t-small">
-        <span data-tone={session.rw && !ended ? "commit" : undefined}>
-          {ended ??
-            (session.audience === "browser"
-              ? allowRemoteAdministration
-                ? "Can grant rw"
-                : "Consent off"
-              : session.rw
-                ? "rw active"
-                : "Read only")}
-        </span>
-      </td>
-      <td className="text-right">
-        {!ended && (
-          <Button
-            label={`Revoke ${session.label}`}
-            refusal={refusal}
-            onClick={() =>
-              act(() => peClient.call("device.revoke", { params: { id: session.id } }))
-            }
-          >
-            Revoke
-          </Button>
-        )}
-      </td>
-    </Row>
+    <div className="py-2">
+      <p>{session.label}</p>
+      <span className="t-small text-ink-2">{session.audience}</span>
+      {session.audience === "mcp" && !endedDevice(session) && (
+        <details className="t-small mt-1">
+          <summary>{session.thread ? "Thread binding" : "Bind a thread"}</summary>
+          <div className="flex flex-wrap items-center gap-2 py-2">
+            <Input
+              aria-label={`Thread for ${session.label}`}
+              value={thread}
+              onChange={(event) => setThread(event.target.value)}
+              placeholder="Thread id"
+            />
+            <Button
+              label={`Bind thread for ${session.label}`}
+              refusal={refusal}
+              onClick={() =>
+                act(() =>
+                  peClient.call("device.bind", {
+                    params: { id: session.id },
+                    body: { thread: thread.trim() || null },
+                  }),
+                )
+              }
+            >
+              Bind
+            </Button>
+          </div>
+          <p className="text-ink-2">
+            Uses the thread's current grant. Clear to return to read-only.
+          </p>
+        </details>
+      )}
+    </div>
   );
 }
 

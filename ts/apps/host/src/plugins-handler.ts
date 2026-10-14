@@ -1,15 +1,15 @@
-import { z } from "zod";
-import { matchPeRoute } from "@pe/agent-contracts/pe-api";
+import { matchPeRoute, peRoutes } from "@pe/agent-contracts/pe-api";
+import { message } from "@pe/agent-contracts";
 import type { createContributionContent } from "./pe-routes.ts";
 import { createPodRoutes } from "./pod-routes.ts";
+
+/** Served behind `servePeRoute`: the route matched and its input parsed before this runs. */
 export function createPluginsHandler(
   content: ReturnType<typeof createContributionContent>,
   routes = createPodRoutes(content.lifecycle),
 ) {
   return async (request: Request) => {
-    const declared = matchPeRoute(request.method, new URL(request.url).pathname);
-    if (!declared || declared.route.owner !== "plugins")
-      return Response.json({ error: "Unknown plugin route" }, { status: 404 });
+    const declared = matchPeRoute(request.method, new URL(request.url).pathname)!;
     await content.lifecycle.ready;
     const json = (value: unknown, status = 200) => Response.json(value, { status });
     try {
@@ -23,28 +23,22 @@ export function createPluginsHandler(
           },
         });
       if (declared.id === "plugins.routeTrust") {
-        const body = z
-          .strictObject({ sha256: z.string().regex(/^[a-f0-9]{64}$/), trusted: z.boolean() })
-          .parse(await request.json());
+        const body = peRoutes["plugins.routeTrust"].body.parse(await request.json());
         return json(await routes.trust(declared.params.key, body.sha256, body.trusted));
       }
     } catch (error) {
-      return json({ error: error instanceof Error ? error.message : String(error) }, 409);
-    }
-    if (request.method === "GET") {
-      await content.lifecycle.refresh();
-      return json(content.lifecycle.inventory());
+      return json({ error: message(error) }, 409);
     }
     await content.lifecycle.refresh();
+    if (request.method === "GET") return json(content.lifecycle.inventory());
     const id = declared.params.id;
     if (!content.lifecycle.inventory().some((p) => p.id === id))
       return json({ error: "Unknown plugin" }, 404);
-    if (request.method === "DELETE") await content.lifecycle.remove(id);
-    else {
-      const parsed = z.strictObject({ enabled: z.boolean() }).safeParse(await request.json());
-      if (!parsed.success) return json({ error: "Expected {enabled: boolean}" }, 400);
-      await content.lifecycle.setEnabled(id, parsed.data.enabled);
-    }
+    // DELETE is disable: a Pod's folder is the user's, and only its activation is host state.
+    const enabled =
+      request.method === "PUT" &&
+      peRoutes["plugin.update"].body.parse(await request.json()).enabled;
+    await content.lifecycle.setEnabled(id, enabled);
     await content.read();
     await routes.list();
     return json(content.lifecycle.inventory());

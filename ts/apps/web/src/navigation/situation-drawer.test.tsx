@@ -8,12 +8,12 @@ import { Input } from "@pe/kit/lang/input";
 import {
   RouteControlsProvider,
   PrimaryRouteControls,
-  SituationPinnedSlot,
+  SituationPinnedControl,
   usePublishPagePalette,
 } from "./route-controls";
 import { SituationDrawer } from "./situation-drawer";
 import { SituationAction } from "#/route/situation-verbs";
-import type { RouteHandle, ActionHandle } from "#/route/use-route";
+import type { RouteHandle, ActionHandle } from "#/route/handle";
 
 vi.mock("@tanstack/react-router", () => ({
   useRouterState: ({
@@ -40,7 +40,7 @@ test("hover, pin and Escape fold a mounted body without resetting its local stat
       <nav className="pe-appbar">
         <SituationDrawer />
       </nav>
-      <SituationPinnedSlot />
+      <SituationPinnedControl />
       <PrimaryRouteControls route="family" slot="situation">
         <Body />
       </PrimaryRouteControls>
@@ -239,7 +239,7 @@ test("the real page picker opens an unpinned Situation, owns first Escape and re
       <nav className="pe-appbar">
         <SituationDrawer />
       </nav>
-      <SituationPinnedSlot />
+      <SituationPinnedControl />
       <Body />
     </RouteControlsProvider>,
   );

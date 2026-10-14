@@ -6,10 +6,11 @@ import { readOrCreateInstallId, analyticsConfig } from "../src/analytics.ts";
 
 /** install_id is one file per machine install, created once and honoured thereafter. */
 test("install id is created once, stable on re-read, and a pre-existing file wins", () => {
-  const previous = process.env.LOCALAPPDATA;
+  const previous = { local: process.env.LOCALAPPDATA, home: process.env.PE_TOOLS_PRODUCT_HOME };
   const dir = mkdtempSync(join(tmpdir(), "pe-install-id-"));
   try {
     process.env.LOCALAPPDATA = dir;
+    process.env.PE_TOOLS_PRODUCT_HOME = ""; // the LOCALAPPDATA-rooted lane
     const path = join(dir, "Positive Energy", "Pe.Tools", "state", "install.json");
 
     const first = readOrCreateInstallId();
@@ -27,8 +28,10 @@ test("install id is created once, stable on re-read, and a pre-existing file win
     expect(readOrCreateInstallId()).toBeNull();
     rmSync(other, { recursive: true, force: true });
   } finally {
-    if (previous === undefined) delete process.env.LOCALAPPDATA;
-    else process.env.LOCALAPPDATA = previous;
+    if (previous.local === undefined) delete process.env.LOCALAPPDATA;
+    else process.env.LOCALAPPDATA = previous.local;
+    if (previous.home === undefined) delete process.env.PE_TOOLS_PRODUCT_HOME;
+    else process.env.PE_TOOLS_PRODUCT_HOME = previous.home;
     rmSync(dir, { recursive: true, force: true });
   }
 });

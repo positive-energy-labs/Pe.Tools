@@ -1,0 +1,35 @@
+{
+  "result": {
+    "verb": "verify",
+    "addinsBase": "C:\\Users\\kaitp\\source\\repos\\Pe.Tools-we2\\.artifacts\\reorient-20261013\\e2\\empty-addins\\addins",
+    "years": ["2025"],
+    "actions": [
+      {
+        "year": "2025",
+        "op": "check",
+        "dest": "C:\\Users\\kaitp\\source\\repos\\Pe.Tools-we2\\.artifacts\\reorient-20261013\\e2\\empty-addins\\addins\\2025\\Pe.Revit.Sdk.Bootstrap",
+        "status": "missing"
+      }
+    ],
+    "ok": false
+  },
+  "resolved": null,
+  "diagnostics": [],
+  "binary": {
+    "origin": "checkout",
+    "assembly": "C:\\Users\\kaitp\\source\\repos\\Pe.Revit.Sdk\\source\\Pe.Revit.Cli\\bin\\Release\\net8.0\\Pe.Revit.Cli.dll",
+    "sha256": "86045A00C2005AA23E690EA04140D3E855FF64DDD019A6505A660F4F71B807DA",
+    "informationalVersion": "0.1.0-beta.209\u002Bca7613fc7f5fd39cacb8196707cfe39595a79124",
+    "hostExecutable": "C:\\Program Files\\dotnet\\dotnet.exe"
+  },
+  "command": {
+    "cwd": "C:\\Users\\kaitp\\source\\repos\\Pe.Tools-we2",
+    "commandRoot": "C:\\Users\\kaitp\\source\\repos\\Pe.Tools-we2",
+    "commandRule": "checkout-manifest",
+    "commandManifest": "C:\\Users\\kaitp\\source\\repos\\Pe.Tools-we2\\product.payloads.json"
+  },
+  "nextSteps": [],
+  "guide": "install",
+  "related": ["pe-revit bootstrap verify", "pe-revit session list"],
+  "exitCode": 3
+}

@@ -27,6 +27,19 @@ const basis = {
   events: [],
 };
 
+it.each(["<script>const = ;</script>", "<div a='1' a='2'></div>"])(
+  "refuses invalid authored Page syntax before retaining an export: %s",
+  async (html) => {
+    const { directory } = await fixture(html);
+    await expect(exportPage({ directory, ...basis, library: async () => "" })).rejects.toThrow(
+      /Invalid .*HTML|Invalid .*JavaScript/,
+    );
+    await expect(readFile(join(directory, ".state", "exports"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  },
+);
+
 it("pins local scripts, imported CSS and relative assets, snapshot, document and exact source hashes", async () => {
   const { directory } = await fixture(
     '<head><link rel="stylesheet" href="assets/main.css"><script src="/pages/pe.js"></script><script src="app.js"></script></head><img src="assets/icon.svg">',

@@ -11,7 +11,7 @@ import { z } from "zod";
 import { instancesActions, type ReadingRequest } from "@pe/agent-contracts";
 
 import { defineRoute } from "#/route/manifest";
-import type { RouteHandle } from "#/route/use-route";
+import type { RouteHandle } from "#/route/handle";
 import { dirty } from "#/readings";
 import { OPEN_SEEDS } from "#/open/seeds";
 

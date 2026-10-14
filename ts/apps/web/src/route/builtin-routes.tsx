@@ -1,5 +1,5 @@
-import { lazy, useState } from "react";
-import { createRouteRegistry, defineRoutePlugin } from "@pe/kit/route-registry";
+import { lazy, useState, type ComponentType } from "react";
+import { createRouteRegistry } from "@pe/kit/route-registry";
 import { manifest as families } from "#/families/manifest";
 import { familyManifest } from "#/family/manifest";
 import { openManifest } from "#/open/manifest";
@@ -9,73 +9,50 @@ import { schedulesManifest } from "#/route/schedules/manifest";
 import { manifest as pods } from "#/routes/pods";
 import { manifest as takeoffs } from "#/takeoff/manifest";
 
-const LiveScheduleGridWorkspace = lazy(() =>
-  import("#/route/schedules/live").then((module) => ({
-    default: module.LiveScheduleGridWorkspace,
-  })),
+/** A route body stays out of the shell chunk until a pane mounts it. */
+const named = <K extends string, P>(load: () => Promise<Record<K, ComponentType<P>>>, name: K) =>
+  lazy(() => load().then((module) => ({ default: module[name] })));
+const LiveScheduleGridWorkspace = named(
+  () => import("#/route/schedules/live"),
+  "LiveScheduleGridWorkspace",
 );
-const FamilyRouteView = lazy(() =>
-  import("#/family/live").then((module) => ({ default: module.FamilyRouteView })),
+const FamilyRouteView = named(() => import("#/family/live"), "FamilyRouteView");
+const PodsRouteContent = named(() => import("#/routes/pods"), "PodsRouteContent");
+const FamiliesRouteContent = named(() => import("#/routes/families"), "FamiliesRouteContent");
+const ParameterLinksRouteContent = named(
+  () => import("#/routes/parameter-links"),
+  "ParameterLinksRouteContent",
 );
-const PodsRouteContent = lazy(() =>
-  import("#/routes/pods").then((module) => ({ default: module.PodsRouteContent })),
-);
-const FamiliesRouteContent = lazy(() =>
-  import("#/routes/families").then((module) => ({ default: module.FamiliesRouteContent })),
-);
-const ParameterLinksRouteContent = lazy(() =>
-  import("#/routes/parameter-links").then((module) => ({
-    default: module.ParameterLinksRouteContent,
-  })),
-);
-const TakeoffsPane = lazy(() =>
-  import("#/takeoff/pane").then((module) => ({ default: module.TakeoffsPane })),
-);
-const OpenPage = lazy(() =>
-  import("#/open/route").then((module) => ({ default: module.OpenPage })),
-);
-const RoomsRoute = lazy(() =>
-  import("#/rooms/route").then((module) => ({ default: module.RoomsRoute })),
-);
+const TakeoffsPane = named(() => import("#/takeoff/pane"), "TakeoffsPane");
+const OpenPage = named(() => import("#/open/route"), "OpenPage");
+const RoomsRoute = named(() => import("#/rooms/route"), "RoomsRoute");
 
 export const publicRoutes = createRouteRegistry();
-publicRoutes.register(defineRoutePlugin({ manifest: openManifest, hosted: () => <OpenPage /> }));
-publicRoutes.register(
-  defineRoutePlugin({
-    manifest: takeoffs,
-    hosted: ({ thread }) => <TakeoffsPane thread={thread} />,
-  }),
-);
-publicRoutes.register(
-  defineRoutePlugin({
-    manifest: familyManifest(),
-    hosted: ({ thread }) => <FamilyRouteView thread={thread} url={false} />,
-  }),
-);
-publicRoutes.register(
-  defineRoutePlugin({
-    manifest: families,
-    hosted: ({ thread, visible }) => (
-      <FamiliesRouteContent thread={thread} visible={visible} surface="chat" />
-    ),
-  }),
-);
-publicRoutes.register(
-  defineRoutePlugin({ manifest: pods, hosted: ({ thread }) => <HostedPods thread={thread} /> }),
-);
-publicRoutes.register(
-  defineRoutePlugin({
-    manifest: parameterLinks,
-    hosted: ({ thread }) => <ParameterLinksRouteContent thread={thread} />,
-  }),
-);
-publicRoutes.register(
-  defineRoutePlugin({
-    manifest: schedulesManifest(),
-    hosted: ({ thread }) => <LiveScheduleGridWorkspace framed url={false} thread={thread} />,
-  }),
-);
-publicRoutes.register(defineRoutePlugin({ manifest: rooms, hosted: () => <HostedRooms /> }));
+publicRoutes.register({ manifest: openManifest, hosted: () => <OpenPage /> });
+publicRoutes.register({
+  manifest: takeoffs,
+  hosted: ({ thread }) => <TakeoffsPane thread={thread} />,
+});
+publicRoutes.register({
+  manifest: familyManifest(),
+  hosted: ({ thread }) => <FamilyRouteView thread={thread} url={false} />,
+});
+publicRoutes.register({
+  manifest: families,
+  hosted: ({ thread, visible }) => (
+    <FamiliesRouteContent thread={thread} visible={visible} surface="chat" />
+  ),
+});
+publicRoutes.register({ manifest: pods, hosted: ({ thread }) => <HostedPods thread={thread} /> });
+publicRoutes.register({
+  manifest: parameterLinks,
+  hosted: ({ thread }) => <ParameterLinksRouteContent thread={thread} />,
+});
+publicRoutes.register({
+  manifest: schedulesManifest(),
+  hosted: ({ thread }) => <LiveScheduleGridWorkspace framed url={false} thread={thread} />,
+});
+publicRoutes.register({ manifest: rooms, hosted: () => <HostedRooms /> });
 
 function HostedRooms() {
   const [layers, setLayers] = useState("");

@@ -1,11 +1,10 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-const page = new URL("../../../../examples/pods/snowdon-circuits/pages/tour/", import.meta.url);
-const read = async (name) => (await readFile(new URL(name, page), "utf8")).replaceAll("\r\n", "\n");
-const route = new URL(
-  "../../../../examples/pods/snowdon-circuits/routes/voltage-drop/",
-  import.meta.url,
-);
+const pod = new URL("../../../../examples/pods/snowdon-circuits/", import.meta.url);
+const page = new URL("pages/tour/", pod);
+const route = new URL("routes/voltage-drop/", pod);
+const read = async (name, base = page) =>
+  (await readFile(new URL(name, base), "utf8")).replaceAll("\r\n", "\n");
 const [template, calc, circuits, styles, instruments, app, routeSource] = await Promise.all([
   read("index.source.html"),
   read("calc.mjs"),
@@ -13,9 +12,7 @@ const [template, calc, circuits, styles, instruments, app, routeSource] = await 
   read("styles.mjs"),
   read("instruments.mjs"),
   read("page.js"),
-  readFile(new URL("index.source.mjs", route), "utf8").then((text) =>
-    text.replaceAll("\r\n", "\n"),
-  ),
+  read("index.source.mjs", route),
 ]);
 // This authored graph contains only local, single-line imports. React and kit belong to each shell.
 const body = (source) => source.replace(/^import[^\n]*\n/gm, "").replace(/^export /gm, "");

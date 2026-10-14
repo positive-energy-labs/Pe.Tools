@@ -1,5 +1,6 @@
 import { BridgeError } from "./bridge.ts";
-import { appendFile, mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { renameReplacing } from "./rename-retry.ts";
 import { dirname, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
@@ -504,7 +505,7 @@ export class ActionJournal implements ReceiptReader {
     const file = join(this.home(id), name);
     await mkdir(dirname(file), { recursive: true });
     await writeFile(`${file}.tmp`, JSON.stringify(value, null, 2), "utf8");
-    await rename(`${file}.tmp`, file);
+    await renameReplacing(`${file}.tmp`, file);
   }
   async admit(
     raw: ActionAdmission & Crossing,
@@ -1064,7 +1065,7 @@ export class ActionJournal implements ReceiptReader {
       `{"version":5}\n${lines.map((line) => `${JSON.stringify(line)}\n`).join("")}`,
       "utf8",
     );
-    await rename(`${this.path}.tmp`, this.path);
+    await renameReplacing(`${this.path}.tmp`, this.path);
     this.header = true;
     this.torn = false;
     this.fresh = [];

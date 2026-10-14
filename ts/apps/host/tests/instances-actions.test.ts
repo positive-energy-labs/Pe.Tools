@@ -398,7 +398,7 @@ test.each(["start", "open"])(
           : {
               result:
                 args[0] === "doc"
-                  ? { state: "ok", document: { openId, path: null } }
+                  ? { state: "ok", document: { openId, path: args[2] } }
                   : { state: "ok" },
             },
       [controlledRow({ shape: shape("background") })],
@@ -407,7 +407,10 @@ test.each(["start", "open"])(
       `instances.${verb}`,
       verb === "start"
         ? { year: "2025", owner: "pea", addins: "on" }
-        : { source: "cld://US/{p}p/{m}Tower.rvt", into: newRevit({ owner: "pea" }) },
+        : {
+            source: await f.file("Independent.rvt", "Worksharing: Not enabled"),
+            into: newRevit({ owner: "pea" }),
+          },
     );
     expect(launch.state).toBe("succeeded");
     const stop = () => f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "agent");
@@ -682,21 +685,19 @@ test("a Pea launch of a workshared model copies first, then opens the copy detac
   });
 });
 
-test("a Pea launch of a cloud model opens detached", async () => {
+test("a Pea launch of a cloud model without a version refuses before connected open", async () => {
   const f = await setup(
     () => ({ result: { state: "ok", document: { openId } } }),
     [controlledRow({ id: "pea-bg", shape: shape("background") })],
   );
   await recordPeaLaunch(f.owner);
   const source = "cld://US/{p}p/{m}Tower.rvt";
-  expect((await f.admit("instances.open", { source, into: into("pea-bg") })).state).toBe(
-    "succeeded",
-  );
-  const open = f.calls.at(-1)!;
-  expect(open[2]).toBe(source);
-  expect(open).toContain("--detach");
-  // A cloud open has no default for unsaved local work; the launch keeps it.
-  expect(flag(open, "--unsynced")).toBe("keep");
+  expect(await f.admit("instances.open", { source, into: into("pea-bg") })).toMatchObject({
+    state: "failed",
+    notDispatched: true,
+    error: expect.stringContaining("immutable APS version"),
+  });
+  expect(f.calls.some((args) => args[0] === "doc" && args[1] === "open")).toBe(false);
 });
 
 test("Pea refuses, undispatched, a file whose worksharing it cannot read or a source it cannot resolve", async () => {

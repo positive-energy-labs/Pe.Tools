@@ -29,12 +29,13 @@
     "@posthog/mcp": "0.22.3",
     "ajv": "catalog:",
     "effect": "4.0.0-beta.92",
+    "parse5": "^8.0.1",
+    "playwright-core": "1.60.0",
     "posthog-node": "5.55.2",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",
-    "playwright-core": "1.60.0",
     "typescript": "^6.0.3",
     "vite-plus": "catalog:"
   },

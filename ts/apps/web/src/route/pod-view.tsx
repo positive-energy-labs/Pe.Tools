@@ -1,24 +1,22 @@
 import * as React from "react";
 import * as kit from "@pe/kit";
 import { z } from "zod";
-import {
-  podRouteWorkSpec,
-  parseContributionKey,
-  actionReceiptSchema,
-  type ActionReceipt,
-  type ExecutionTarget,
-} from "@pe/agent-contracts";
+import { podRouteWorkSpec, parseContributionKey, message } from "@pe/agent-contracts";
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
 import { peClient } from "#/host/pe-client";
 import { callHostRpc } from "#/host/client";
 import { defineRoute, type Ctx } from "./manifest";
-import { RouteShell, useChooseTarget, useRouteThread } from "./shell";
+import { RouteShell, useChooseTarget } from "./shell";
 import { useRoute } from "./use-route";
 import { useDocumentLadder, LadderPicker } from "./situation-ladder";
 import { usePublishPagePalette } from "#/navigation/route-controls";
 import { KeysNode } from "@pe/kit/keys";
-import type { PodRouteDescriptor } from "./pod-loader";
+import type { PodRouteDescriptor } from "@pe/agent-contracts";
 import { CommandPalette } from "#/components/lang/command-palette";
+import {
+  submitAction,
+  actionResult,
+} from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 type State = Record<string, unknown>;
 type Work = { version: 1; state: State };
@@ -41,7 +39,11 @@ export interface PodRouteBundle {
   create(api: PodApi): React.ComponentType;
 }
 
-async function execute(ctx: Ctx<Work, never, Page>, key: string, input: State) {
+export async function executePodAction(
+  ctx: Pick<Ctx<Work, never, Page>, "target" | "work">,
+  key: string,
+  input: State,
+) {
   const reference = parseContributionKey(key);
   if (reference) {
     if (reference.kind !== "script") throw Error(`${key} is not an executable script.`);
@@ -58,33 +60,23 @@ async function execute(ctx: Ctx<Work, never, Page>, key: string, input: State) {
       ),
     };
   } else if (!isAnyOperationKey(key)) throw Error(`Unknown operation ${key}`);
-  const receipt = await peClient.call("actions.admit", {
-    body: {
-      id: crypto.randomUUID(),
-      kind: "operation",
-      key,
-      destination: ctx.target,
-      input,
-      bases:
-        ctx.work.revision === null
-          ? {}
-          : { work: { key: ctx.work.key, revision: ctx.work.revision } },
-    },
-  });
-  let current: ActionReceipt = actionReceiptSchema.parse(receipt);
-  const deadline = Date.now() + 120_000;
-  while (current.state === "running") {
-    if (Date.now() > deadline)
-      throw Error(`Action ${current.id} is still running. Read its receipt before retrying.`);
-    await new Promise((resolve) => setTimeout(resolve, 250));
-    const readings = await peClient.call("actions.read", { query: { id: current.id } });
-    const next = Array.isArray(readings) ? readings[0] : null;
-    if (!next) throw Error(`Action ${current.id} has no receipt.`);
-    current = actionReceiptSchema.parse(next);
-  }
-  if (current.state !== "succeeded")
-    throw Error("error" in current ? current.error : "Action did not succeed.");
-  return current.result;
+  return actionResult(
+    await submitAction(
+      {
+        id: crypto.randomUUID(),
+        kind: "operation",
+        key,
+        destination: ctx.target,
+        input,
+        bases:
+          ctx.work.revision === null
+            ? {}
+            : { work: { key: ctx.work.key, revision: ctx.work.revision } },
+      },
+      "",
+      120_000,
+    ),
+  );
 }
 
 export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
@@ -122,17 +114,17 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
         ready: () => null,
         run: async (ctx, raw) => {
           const input = raw as { id: string; key: string; input: State };
-          responses.set(input.id, await execute(ctx, input.key, input.input));
+          responses.set(input.id, await executePodAction(ctx, input.key, input.input));
         },
       },
     },
   });
-  function View({ thread, url }: { thread?: string; url?: boolean }) {
+  function View({ thread }: { thread: string }) {
     const [chosen] = useChooseTarget();
     const handle = useRoute(manifest, {
       target: chosen,
       thread,
-      url,
+      url: false,
       work: (_page, target) => (target === null ? "calculator" : undefined),
     });
     const latest = React.useRef(handle);
@@ -172,7 +164,7 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
         });
       }
     }, [handle.work.key, handle.work.current, handle.work.doc, handle.work.refusal]);
-    const api = React.useMemo<PodApi>(
+    const api: PodApi = React.useMemo<PodApi>(
       () => ({
         React,
         kit,
@@ -201,7 +193,7 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
               queued.current = { state: next, revision: revision + 1, key: identity };
             });
             queue.current = run.catch((cause: unknown) => {
-              setError(cause instanceof Error ? cause.message : String(cause));
+              setError(message(cause));
             });
             return run;
           },
@@ -225,12 +217,10 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
         },
         read: async (key, input) => {
           if (!isAnyOperationKey(key)) throw Error(`Unknown operation ${key}`);
-          const target: ExecutionTarget | null =
-            latest.current.resolution.kind === "resolved" ? latest.current.resolution.target : null;
-          if (target?.kind !== "document") throw Error("Choose an exact document before reading.");
+          const target = await api.target();
           return callHostRpc(key, input as never, {
-            bridgeSessionId: target.ref.session,
-            openDocumentId: target.ref.openId,
+            bridgeSessionId: target.session,
+            openDocumentId: target.openId,
           });
         },
         do: async (key, input) => {
@@ -334,13 +324,8 @@ export function makePodRoute(row: PodRouteDescriptor, bundle: PodRouteBundle) {
       </RouteShell>
     );
   }
-  function Primary() {
-    const thread = useRouteThread();
-    return <View thread={thread} />;
-  }
   return {
     manifest,
-    hosted: ({ thread }: { thread: string }) => <View thread={thread} url={false} />,
-    Primary,
+    hosted: View,
   };
 }

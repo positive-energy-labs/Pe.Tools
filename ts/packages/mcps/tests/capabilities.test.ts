@@ -1595,6 +1595,18 @@ test("the doors ride the host under the turn Target and name the revision and re
     expect(reading.ok).toBe(true);
     expect(calls.at(-1)?.url.pathname).toBe("/instances/readings");
     expect(calls.at(-1)?.url.search).toBe("?read=sessions");
+    for (const read of ["logs", "ops"]) {
+      const sdkRead = (await run(peRead, {
+        key: "op:instances.read",
+        input: { read, session: { pid: 4242 }, tail: 25 },
+        timeoutSeconds: 30,
+      })) as { ok: boolean };
+      expect(sdkRead.ok).toBe(true);
+      expect(calls.at(-1)?.url.pathname).toBe("/instances/readings");
+      expect(calls.at(-1)?.url.searchParams.get("read")).toBe(read);
+      expect(calls.at(-1)?.url.searchParams.get("session")).toBe('{"pid":4242}');
+      expect(calls.at(-1)?.url.searchParams.get("tail")).toBe("25");
+    }
 
     const pod = (await run(peDo, { key: "script:@sheets/src/Rename.cs", timeoutSeconds: 30 })) as {
       ok: boolean;

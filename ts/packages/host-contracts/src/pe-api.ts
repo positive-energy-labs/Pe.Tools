@@ -3,7 +3,46 @@ import { podRouteDescriptorSchema } from "./pod-route.ts";
 export * from "./pod-route.ts";
 import { hostDescriptorSchema } from "./host-descriptor.ts";
 import { deviceListingSchema, deviceSessionSchema, pairingSchema } from "./remote-device.ts";
+import type { SessionObservation } from "./vendor/generated/pe-revit-contract.ts";
 export * from "./remote-device.ts";
+
+/** An authored scratch Page. Publication needs no document target. */
+export const pagePublicationSchema = z.strictObject({
+  kind: z.literal("page"),
+  slug: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(/^[a-z0-9][a-z0-9_.-]*$/i)
+    .refine(
+      (slug) =>
+        !slug.includes("--") &&
+        !slug.endsWith(".") &&
+        !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(slug) &&
+        !["pe.js", "pe.css", "revit.js", "revit.css", "kit"].includes(slug.toLowerCase()),
+      "Invalid Page folder name",
+    ),
+  title: z.string().trim().min(1).max(200),
+  html: z.string().min(1).max(2_000_000),
+  width: z.number().int().min(240).max(1600).optional(),
+});
+export type PagePublication = z.infer<typeof pagePublicationSchema>;
+export const pagePublicationResultSchema = z.strictObject({
+  ok: z.literal(true),
+  kind: z.literal("page"),
+  key: z.string().startsWith("page:@pages/"),
+  slug: z.string(),
+  title: z.string(),
+  openUrl: z.url(),
+  capture: z.strictObject({
+    mimeType: z.literal("image/png"),
+    url: z.url(),
+    sha256: z.string().regex(/^[0-9a-f]{64}$/),
+    data: z.string().min(1),
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+  }),
+});
 
 export const peErrorSchema = z.object({
   error: z.object({
@@ -13,6 +52,33 @@ export const peErrorSchema = z.object({
   }),
 });
 const none = z.undefined();
+export const bootstrapAlignmentSchema = z.strictObject({
+  id: z.string().min(1).max(200),
+  year: z.string().regex(/^20\d{2}$/),
+  confirmedVersion: z.string().min(1),
+});
+
+/** A journal failure is still a running incarnation; only gone and persisted failures are history. */
+export function bootstrapBlockers(rows: readonly SessionObservation[]): string[] {
+  return rows.flatMap((row) => {
+    if (
+      row.case === "gone-receipt" ||
+      (row.case === "failed-receipt" && row.failure.source === "receipt")
+    )
+      return [];
+    const process =
+      "process" in row
+        ? row.process
+        : row.case === "failed-receipt" && row.failure.source === "journal"
+          ? row.failure.process
+          : row.case === "controlled-pending" && row.attempt.attempt === "launched"
+            ? row.attempt.process
+            : null;
+    return [
+      `Revit ${row.year} ${"id" in row ? row.id : "started from its icon"}${process ? ` pid ${process.pid}` : " (starting)"}`,
+    ];
+  });
+}
 const object = z.record(z.string(), z.unknown());
 const ok = z.object({ ok: z.boolean() }).passthrough();
 type Principal = "read" | "caller" | "human" | "human-or-pea" | "human-or-page";
@@ -164,6 +230,15 @@ export function definePeApi<
   /** Public HTTP transport authority. Domain schemas stay with their domain owners. */
   const peRoutes = {
     "features.get": route("GET", "/pe/features", none, hostDescriptorSchema, "read", "pe", "read"),
+    "machine.bootstrap": route(
+      "POST",
+      "/pe/machine/bootstrap",
+      bootstrapAlignmentSchema,
+      schemas.actionReceiptSchema as S["actionReceiptSchema"],
+      "human",
+      "pe",
+      "admin",
+    ),
     "operation.call": route(
       "POST",
       "/call",
@@ -504,7 +579,6 @@ export function definePeApi<
       "read",
     ),
     "contributions.read": route("GET", "/pe/contributions", none, object, "read", "pe", "read"),
-    "pages.libraries": route("GET", "/pe/page-libraries", none, z.unknown(), "read", "pe", "read"),
     "family.spec": route(
       "GET",
       "/pe/family-spec",
@@ -699,6 +773,15 @@ export function definePeApi<
       "pages",
       "human-or-page",
       "asset",
+    ),
+    "page.publish": route(
+      "POST",
+      "/pe/pages/publish",
+      pagePublicationSchema,
+      pagePublicationResultSchema,
+      "human-or-pea",
+      "pages",
+      "human-or-pea",
     ),
     "page.target": route("GET", "/pages/:slug/target", none, object, "read", "pages", "read"),
     "page.call": route(

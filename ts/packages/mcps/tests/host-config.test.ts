@@ -24,6 +24,7 @@ const sourceRoot = checkoutRootFrom(import.meta.dirname)!;
 beforeEach(() => {
   appBase = mkdtempSync(join(tmpdir(), "pe-runtime-discovery-"));
   vi.stubEnv("LOCALAPPDATA", appBase);
+  vi.stubEnv("PE_TOOLS_PRODUCT_HOME", ""); // the LOCALAPPDATA-rooted lane
   vi.stubEnv("PE_LANE", "dev");
   vi.stubEnv("PE_TOOLS_SOURCE_ROOT", "");
   vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "");

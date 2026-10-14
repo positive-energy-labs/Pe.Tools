@@ -2,12 +2,12 @@ import { Gauge, MessageCircle, Server } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
 import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { startFeedback } from "#/components/feedback-picker";
-import { RouteControlsSlot, useRouteSlotPresence } from "#/navigation/route-controls";
+import { RouteControlsOutlet, useRouteControlPresence } from "#/navigation/route-controls";
 import { useDestination } from "#/navigation/state";
 
 /** Commands retain their real callbacks and never become persisted options. */
 export function SettingsActions({ close }: { close?: () => void }) {
-  const inspector = useRouteSlotPresence("inspector");
+  const inspector = useRouteControlPresence("inspector");
   const go = useDestination();
   const feedback = () => {
     close?.();
@@ -15,7 +15,7 @@ export function SettingsActions({ close }: { close?: () => void }) {
   };
   return (
     <div className="flex flex-col gap-1" aria-label="Settings commands">
-      <RouteControlsSlot slot="inspector" className="pe-settings-row" />
+      <RouteControlsOutlet slot="inspector" className="pe-settings-row" />
       {!inspector && (
         <span className="pe-settings-row">
           <Button label="Inspector" icon={Gauge} refusal="This page exposes no route inspector">

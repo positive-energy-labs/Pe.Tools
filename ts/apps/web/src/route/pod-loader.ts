@@ -1,5 +1,4 @@
 import type { PodRouteDescriptor } from "@pe/agent-contracts";
-export type { PodRouteDescriptor } from "@pe/agent-contracts";
 
 /** Verify the authenticated response before evaluating any module code. */
 export async function verifyBundle(bytes: Uint8Array, hash: string) {
@@ -23,13 +22,8 @@ export function createPodRouteLoader(load: (row: PodRouteDescriptor) => Promise<
     async sync(rows: readonly PodRouteDescriptor[]) {
       const trusted = new Map(rows.filter((row) => row.trusted).map((row) => [row.key, row]));
       for (const [key, entry] of active) if (trusted.get(key)?.sha256 !== entry.hash) remove(key);
-      const pending: Promise<void>[] = [];
       for (const row of trusted.values()) {
-        const present = active.get(row.key);
-        if (present) {
-          if (present.pending) pending.push(present.pending);
-          continue;
-        }
+        if (active.has(row.key)) continue;
         const entry: { hash: string; dispose?: () => void; pending?: Promise<void> } = {
           hash: row.sha256,
         };
@@ -43,9 +37,10 @@ export function createPodRouteLoader(load: (row: PodRouteDescriptor) => Promise<
             if (active.get(row.key) === entry) active.delete(row.key);
             throw error;
           });
-        pending.push(entry.pending);
       }
-      return Promise.allSettled(pending);
+      return Promise.allSettled(
+        [...active.values()].flatMap((entry) => (entry.pending ? [entry.pending] : [])),
+      );
     },
     dispose() {
       for (const key of active.keys()) remove(key);

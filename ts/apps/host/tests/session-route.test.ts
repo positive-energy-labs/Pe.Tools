@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { expect, test, vi } from "vite-plus/test";
 import { sessionStartArgv } from "@pe/host-contracts/pe-revit-contract";
+import { sdkReadingSchema } from "@pe/agent-contracts";
 import {
   docListArgs,
   docRecentsArgs,
@@ -21,6 +22,25 @@ import { validatePeRevitEnvelope } from "@pe/host-contracts/pe-revit-cli";
 import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
 
 const execFileAsync = promisify(execFile);
+
+test("SDK logs and op lineage are bounded Pea readings, with the original session selector", () => {
+  for (const [read, noun, verb] of [
+    ["logs", "session", "logs"],
+    ["ops", "op", "list"],
+  ] as const) {
+    const request = sdkReadingSchema.parse({ kind: "sdk", read, session: { pid: 4242 }, tail: 50 });
+    expect(sdkReadingArgs(request)).toEqual([
+      noun,
+      verb,
+      "--pid",
+      "4242",
+      "--tail",
+      "50",
+      "--json",
+    ]);
+    expect(sdkReadingSchema.safeParse({ kind: "sdk", read, tail: 501 }).success).toBe(false);
+  }
+});
 
 // --- payload routing and reads → CLI args -----------------------------------------------------
 

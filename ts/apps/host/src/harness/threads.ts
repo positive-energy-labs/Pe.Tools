@@ -1407,7 +1407,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         return json(body(t));
       case "thread.export":
         try {
-          return exportThread(options.root, t.meta.id, options.log);
+          return await exportThread(options.root, t.meta.id, options.log);
         } catch (error) {
           return json(
             { error: error instanceof Error ? error.message : "Thread export failed" },
