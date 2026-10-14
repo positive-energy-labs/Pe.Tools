@@ -9,7 +9,7 @@ import { makeHttpLive } from "../src/app.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
-import { devHostProxy } from "../../web/dev-proxy.ts";
+import { checkoutIngress, devHostProxy } from "../../web/dev-proxy.ts";
 
 function socketMessage(socket: WebSocket, predicate: (data: string) => boolean) {
   return new Promise<string>((resolve, reject) => {
@@ -34,7 +34,9 @@ function socketMessage(socket: WebSocket, predicate: (data: string) => boolean) 
 test("Vite owns HMR, proxies the claimed backend, and restarts without replacing it", async () => {
   const localAppData = mkdtempSync(join(tmpdir(), "pe-host-vite-"));
   const previousLocalAppData = process.env.LOCALAPPDATA;
+  const previousProductHome = process.env.PE_TOOLS_PRODUCT_HOME;
   process.env.LOCALAPPDATA = localAppData;
+  process.env.PE_TOOLS_PRODUCT_HOME = join(localAppData, "content");
   const webRoot = join(localAppData, "web");
   mkdirSync(webRoot);
   writeFileSync(
@@ -75,6 +77,7 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
       configFile: false,
       root: webRoot,
       cacheDir: join(localAppData, "cache"),
+      plugins: [checkoutIngress()],
       server: { host: "127.0.0.1", port: 0, proxy: devHostProxy(backend) },
     });
     await vite.listen();
@@ -82,7 +85,9 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
     await Effect.runPromise(Deferred.succeed(webUrl, browser));
     expect(browser).not.toBe(backend);
     expect(await fetch(browser).then((r) => r.text())).toContain("frontend");
-    const navigation = { headers: { accept: "text/html", "sec-fetch-mode": "navigate" } };
+    const navigation = {
+      headers: { accept: "text/html", "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" },
+    };
     const redirected = await fetch(`${backend}/pea?thread=kept`, {
       ...navigation,
       redirect: "manual",
@@ -95,6 +100,20 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
     let html = "";
     for await (const chunk of document) html += chunk;
     expect(html).toContain("frontend");
+    const cookie = document.headers["set-cookie"]?.[0]?.split(";")[0];
+    expect(cookie).toContain(hostOwnership.serviceName);
+    const approval = await fetch(`${browser}/pe/access`, {
+      method: "PUT",
+      headers: {
+        origin: browser,
+        referer: `${browser}/ops`,
+        cookie: cookie!,
+        "content-type": "application/json",
+        "x-pe-runtime-service": hostOwnership.serviceName,
+      },
+      body: JSON.stringify({ guarded: true }),
+    });
+    expect(approval.status).toBe(200);
     expect(await fetch(`${browser}/ops`).then((r) => r.json())).toHaveProperty("operations");
     expect(await fetch(`${browser}/host/status`).then((r) => r.json())).toEqual(
       await fetch(`${backend}/host/status`).then((r) => r.json()),
@@ -147,6 +166,8 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
     await done;
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;
     else process.env.LOCALAPPDATA = previousLocalAppData;
+    if (previousProductHome === undefined) delete process.env.PE_TOOLS_PRODUCT_HOME;
+    else process.env.PE_TOOLS_PRODUCT_HOME = previousProductHome;
     rmSync(localAppData, { force: true, recursive: true });
   }
 }, 30_000);

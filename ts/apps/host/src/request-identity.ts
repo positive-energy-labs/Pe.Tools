@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Deferred, Effect } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import {
   BRIDGE_PATH,
@@ -8,7 +8,16 @@ import {
 import { hostOwnership } from "./host-ownership.ts";
 import { withInvocationContext, type RequestPrincipal } from "@pe/runtime/context";
 import type { Caller, MachineShare } from "@pe/agent-contracts";
-import { callerOf } from "./control.ts";
+import { matchPeRoute } from "@pe/agent-contracts/pe-api";
+import {
+  admitRequest,
+  callerOf,
+  mintBrowserContext,
+  Refused,
+  type RoutePermission,
+} from "./control.ts";
+import { HostLifecycle } from "./host-lifecycle.ts";
+import { authorizeShutdownFor } from "@pe/host-contracts/pe-service-host";
 
 export type IdentityResult =
   | {
@@ -16,6 +25,7 @@ export type IdentityResult =
       readonly headers: Readonly<Record<string, string>>;
       /** Minted from the transport and `x-pe-context`; never from a body or page header. */
       readonly caller: Caller;
+      readonly setCookie?: string;
     }
   | { readonly refusal: { readonly code: string; readonly detail: string } };
 
@@ -43,6 +53,7 @@ export async function readRequestIdentity(
   path: string,
   options: IdentityOptions,
   method = "GET",
+  serviceAuthorized = false,
 ): Promise<IdentityResult> {
   const expectedService = headers[HOST_RUNTIME_SERVICE_HEADER];
   let queryServices: string[];
@@ -76,6 +87,7 @@ export async function readRequestIdentity(
     return { refusal: { code: "identity.path", detail: "Request path cannot be normalized." } };
   }
   const host = headers.host ?? "";
+  const permission = requestPermission(pathname, method);
   const origin = headers.origin;
   const refuse = (code: string, detail: string): IdentityResult => ({ refusal: { code, detail } });
   const browser = origin !== undefined || headers["sec-fetch-site"] !== undefined;
@@ -146,7 +158,7 @@ export async function readRequestIdentity(
     if (
       "principal" in result &&
       share.allowRemoteAdministration === false &&
-      administration(pathname, method)
+      (permission === "admin" || permission === "grant")
     )
       result = refuse(
         "identity.remote-administration",
@@ -167,33 +179,39 @@ export async function readRequestIdentity(
       "The bridge, SDK shutdown, window and share switch are local-only.",
     );
   if ("principal" in result) {
-    const minted = callerOf(result.principal, headers);
+    const minted =
+      serviceAuthorized && result.principal.kind === "local"
+        ? { caller: { kind: "service", service: hostOwnership.serviceName } as Caller }
+        : callerOf(result.principal, headers);
     result =
       "refusal" in minted
         ? refuse(minted.refusal.code, minted.refusal.detail)
-        : minted.caller.kind !== "human" && administration(pathname, method)
-          ? refuse(
-              minted.caller.kind === "anonymous" ? "context.missing" : "human.only",
-              `Machine administration is a person's act; a ${minted.caller.kind} call is refused (ADR 0017 D2).`,
-            )
-          : { ...result, caller: minted.caller };
+        : { ...result, caller: minted.caller };
+    if ("principal" in result) {
+      try {
+        admitRequest(result.caller, permission, `${method} ${pathname}`);
+      } catch (error) {
+        if (!(error instanceof Refused)) throw error;
+        result = refuse(error.refusal.code, error.refusal.reason);
+      }
+    }
+    if ("principal" in result && navigation && !pathname.startsWith("/pages"))
+      result = { ...result, setCookie: mintBrowserContext(result.principal) };
   }
   options.share.observe(result, pathname, host);
   return result;
 }
 
-/**
- * One boundary for machine control: human-only, and off for tailnet when remote administration is.
- * HTTP/MCP product operations keep their own normal access.
- */
-function administration(path: string, method: string): boolean {
-  return (
-    (method !== "GET" &&
-      method !== "HEAD" &&
-      (path === "/pe/providers" || path.startsWith("/pe/providers/"))) ||
-    (method === "PUT" && (path === "/pe/access" || path === "/pe/share")) ||
-    (method === "POST" && (path === "/host/update" || path === "/host/update/automatic"))
-  );
+/** The declared API owns product permissions; protocol and machine lifecycle are separate transports. */
+function requestPermission(path: string, method: string): RoutePermission {
+  const declared = matchPeRoute(method === "HEAD" ? "GET" : method, path);
+  if (declared) return declared.route.permission;
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") return "read";
+  if (path === "/mcp") return "mcp";
+  if (path === "/admin/shutdown" || path === "/admin/window") return "service";
+  if (method === "POST" && (path === "/host/update" || path === "/host/update/automatic"))
+    return "admin";
+  return "caller";
 }
 
 /** A global router middleware also covers unmatched/static requests and WebSocket upgrades. */
@@ -202,8 +220,29 @@ export const requestIdentityLayer = (options: IdentityOptions) =>
     (handler) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
+        let serviceAuthorized = false;
+        if (
+          request.method === "POST" &&
+          ["/admin/shutdown", "/admin/window"].includes(request.url.split("?")[0]!)
+        ) {
+          const lifecycle = yield* Effect.serviceOption(HostLifecycle);
+          if (lifecycle._tag === "Some") {
+            const ready = yield* Deferred.poll(lifecycle.value.handle);
+            if (ready._tag === "Some") {
+              const handle = yield* ready.value;
+              const body = yield* Effect.orElseSucceed(request.json, () => null);
+              serviceAuthorized = authorizeShutdownFor(handle)(request.headers, body);
+            }
+          }
+        }
         const identity = yield* Effect.promise(() =>
-          readRequestIdentity(request.headers, request.originalUrl, options, request.method),
+          readRequestIdentity(
+            request.headers,
+            request.originalUrl,
+            options,
+            request.method,
+            serviceAuthorized,
+          ),
         );
         if ("refusal" in identity) return HttpServerResponse.jsonUnsafe(identity, { status: 403 });
         const services = yield* Effect.context<never>();
@@ -218,7 +257,10 @@ export const requestIdentityLayer = (options: IdentityOptions) =>
             () => Effect.runPromiseExitWith(services)(handler, { signal }),
           ),
         );
-        return yield* exit;
+        const response = yield* exit;
+        return identity.setCookie
+          ? HttpServerResponse.setHeader(response, "set-cookie", identity.setCookie)
+          : response;
       }),
     { global: true },
   );

@@ -218,7 +218,7 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
   ).toMatchObject({ sessions: { unknown: { kind: "checking" } } });
 });
 
-test("the standalone Page chip renders the host write verdict without expiring it locally", async () => {
+test("Page bytes resolve the document and leave the bind chip to SPA chrome", async () => {
   vi.useFakeTimers();
   const source = pageSource
     .replace("/*pe:client*/ null", peClientScript())
@@ -226,7 +226,6 @@ test("the standalone Page chip renders the host write verdict without expiring i
       "/*pe:runtime*/ null",
       JSON.stringify({ header: "x-pe-runtime", query: "runtime", service: "fixture" }),
     );
-  let write: object = { kind: "rw", thread: "t1", expiresAt: "2000-01-01T00:00:00.000Z" };
   const fakeWindow = { addEventListener() {}, open() {}, pe: undefined as any };
   runInNewContext(source, {
     window: fakeWindow,
@@ -253,18 +252,14 @@ test("the standalone Page chip renders the host write verdict without expiring i
             binding: { kind: "thread", thread: "t1" },
             resolution: { kind: "resolved" },
             document: { title: "Ducts" },
-            write,
+            write: { kind: "rw", thread: "t1", expiresAt: "2000-01-01T00:00:00.000Z" },
             hostNow: "2000-01-01T00:00:00.000Z",
           })
         : new Response("page"),
   });
-  await fakeWindow.pe.target();
-  const chip = () =>
-    document.querySelector("pe-bind")!.shadowRoot!.querySelector(".pe-bind-write")!.textContent;
-  expect(chip()).toMatch(/^rw/);
+  expect(await fakeWindow.pe.target()).toEqual({ title: "Ducts" });
+  expect(document.querySelector("pe-bind")).toBeNull();
   await vi.advanceTimersByTimeAsync(90_000);
-  expect(chip()).toMatch(/^rw/);
-  write = { kind: "read", refusal: { reason: "Host expired the grant" } };
-  await fakeWindow.pe.target();
-  expect(chip()).toBe("read");
+  expect(await fakeWindow.pe.target()).toEqual({ title: "Ducts" });
+  expect(document.querySelector("pe-bind")).toBeNull();
 });

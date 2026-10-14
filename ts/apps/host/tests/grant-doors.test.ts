@@ -233,7 +233,7 @@ test("door 2: an external MCP client cannot hold rw on your document", async () 
   refused(
     await send(mcp, "/actions", admission()),
     "grant.context-cannot-hold",
-    "Refused at /actions: this external MCP client can read any document and write Pea's own; rw grants for external clients are not in this release.",
+    "Refused at /actions: external-mcp has no product write authority.",
   );
 });
 

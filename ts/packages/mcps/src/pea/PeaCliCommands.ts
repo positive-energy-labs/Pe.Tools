@@ -193,7 +193,7 @@ export class PeaCliCommands {
         }
         // Same filter as pe_find: a human-only row is the person's press, never offered.
         const rows = findCapabilities(
-          catalog.capabilities.filter((row) => row.actor !== "human"),
+          catalog.capabilities.filter((row) => row.principal.includes("pea")),
           {
             query: firstNonBlank(ctx.positionals.slice(ctx.commandPath.length).join(" ")),
             kind: capabilityKindSchema.optional().parse(firstNonBlank(ctx.values.kind)),

@@ -48,7 +48,7 @@ import {
   useRouteOwner,
 } from "./route-owner";
 import { docAtom, docWriter, notHydrated } from "./route-work";
-import { useRouteTarget, type BindingLost } from "./route-target";
+import { useRouteTarget, type BindingLost, type TargetProvenance } from "./route-target";
 
 export interface ActionHandle extends ActionFacts {
   readonly label: string;
@@ -74,6 +74,7 @@ interface RouteOutcome<A extends string> {
 export interface RouteHandle<W, R extends string, P, A extends string> {
   readonly manifest: RouteManifest<W, R, P, A>;
   readonly resolution: TargetResolution;
+  readonly targetProvenance: TargetProvenance;
   /** The `?target` pin: a view over one document, never written by the route; null reads the head. */
   readonly chosen: string | null;
   /** The thread head, the one target store; null on a route that names no thread. */
@@ -178,8 +179,15 @@ export function useRoute<W, R extends string, P, A extends string>(
   const target = typeof requestedTarget === "function" ? requestedTarget(page) : requestedTarget;
   const spec = manifest.work;
   const conflictNow = useOwned(owner.registry, owner.conflict) ?? false;
-  const { inventoryResult, head, resolution, bindingLost, bindingLostRef, resolvedAddress } =
-    useRouteTarget(manifest, owner.registry, seed, target, options.thread);
+  const {
+    inventoryResult,
+    head,
+    resolution,
+    bindingLost,
+    bindingLostRef,
+    resolvedAddress,
+    targetProvenance,
+  } = useRouteTarget(manifest, owner.registry, seed, target, options.thread);
   const work =
     typeof requestedWork === "function" ? requestedWork(page, resolvedAddress) : requestedWork;
   const boundDocument =
@@ -590,6 +598,7 @@ export function useRoute<W, R extends string, P, A extends string>(
   return {
     manifest,
     resolution,
+    targetProvenance,
     chosen: target,
     head,
     work: workHandle,

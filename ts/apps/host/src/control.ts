@@ -8,6 +8,7 @@ import {
   HOST_RUNTIME_SERVICE_HEADER,
 } from "@pe/host-contracts/contracts";
 import { invocationContext, type RequestPrincipal } from "@pe/runtime/context";
+import { hostOwnership } from "./host-ownership.ts";
 import { parseContributionKey } from "@pe/agent-contracts";
 import type {
   Basis,
@@ -49,6 +50,25 @@ type MintSpec =
   | { kind: "external-mcp"; label: string }
   | { kind: "human"; via: "cli" };
 const contexts = new Map<string, Caller>();
+const BROWSER_CONTEXT_COOKIE = `pe-browser-${hostOwnership.serviceName}`;
+const browserContexts = new Map<
+  string,
+  { caller: Extract<Caller, { kind: "human" }>; transport: string }
+>();
+const transportKey = (principal: RequestPrincipal) => JSON.stringify(principal);
+
+/** Mint on a verified SPA navigation; headers on a later API request cannot create a human. */
+export function mintBrowserContext(principal: RequestPrincipal): string {
+  const token = randomBytes(24).toString("base64url");
+  browserContexts.set(token, {
+    transport: transportKey(principal),
+    caller:
+      principal.kind === "local"
+        ? { kind: "human", via: "local" }
+        : { kind: "human", via: "tailnet", login: principal.login },
+  });
+  return `${BROWSER_CONTEXT_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/${principal.kind === "local" ? "" : "; Secure"}`;
+}
 
 /** A secret bearer token for one caller. The receipt names `context` (an id), never the token. */
 export function mintContext(spec: MintSpec): string {
@@ -99,8 +119,8 @@ export const pageActDoor = (page: string) => {
 
 /**
  * Mint the caller from the transport. A token wins and must be one this host minted; a browser
- * may never present one. A browser request carrying the runtime marker is a human when its
- * Referer is present and outside `/pages/`, a Page inside it; everything else is anonymous.
+ * may never present one. A browser needs a host-minted, transport-bound HttpOnly cookie.
+ * Page Referers still act as Pages; a missing Referer is anonymous.
  */
 export function callerOf(
   principal: RequestPrincipal,
@@ -136,12 +156,77 @@ export function callerOf(
     const page = slug ? pageKeyOf(decodeURIComponent(slug)) : null;
     return page ? { caller: { kind: "page", page } } : anonymous;
   }
-  return {
-    caller:
-      principal.kind === "local"
-        ? { kind: "human", via: "local" }
-        : { kind: "human", via: "tailnet", login: principal.login },
-  };
+  const cookie = headers.cookie
+    ?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${BROWSER_CONTEXT_COOKIE}=`))
+    ?.slice(BROWSER_CONTEXT_COOKIE.length + 1);
+  const minted = cookie ? browserContexts.get(cookie) : undefined;
+  return minted?.transport === transportKey(principal) ? { caller: minted.caller } : anonymous;
+}
+
+export type RoutePermission =
+  | import("@pe/host-contracts/pe-api").PeRoutePermission
+  | "service"
+  | "mcp";
+
+/** Transport admission consumes the declared permission, independently of document rw admission. */
+export function admitRequest(caller: Caller, permission: RoutePermission, door: string): void {
+  if (
+    ![
+      "read",
+      "caller",
+      "operation",
+      "human",
+      "admin",
+      "grant",
+      "human-or-pea",
+      "human-or-page",
+      "service",
+      "mcp",
+    ].includes(permission)
+  )
+    throw refuse(
+      "permission.undeclared",
+      door,
+      `Refused at ${door}: this route declares no permission.`,
+    );
+  if (permission === "read" || permission === "mcp") return;
+  if (caller.kind === "anonymous")
+    throw refuse("context.missing", door, `Refused at ${door}: anonymous callers are read-only.`);
+  if (permission === "human" || permission === "admin") {
+    requireHuman(caller, door, "this route");
+    return;
+  }
+  if (permission === "service" && caller.kind === "service") return;
+  if (caller.kind === "service" || permission === "service")
+    throw refuse(
+      "human.only",
+      door,
+      `Refused at ${door}: the service caller is limited to shutdown and window.`,
+    );
+  if (caller.kind === "external-mcp" && permission !== "operation")
+    throw refuse(
+      "grant.context-cannot-hold",
+      door,
+      `Refused at ${door}: external MCP is read-only until human pairing exists.`,
+    );
+  if (
+    (permission === "grant" || permission === "human-or-pea") &&
+    caller.kind !== "human" &&
+    caller.kind !== "pea"
+  )
+    throw refuse(
+      "human.only",
+      door,
+      `Refused at ${door}: only a human or Pea may select a binding.`,
+    );
+  if (permission === "human-or-page" && caller.kind !== "page" && caller.kind !== "human")
+    throw refuse(
+      "page.binding-not-yours",
+      door,
+      `Refused at ${door}: only a Page or human may use this binding.`,
+    );
 }
 
 /** Route Work keeps its two-valued author: a human, or anything acting for one. */
@@ -220,6 +305,26 @@ export function grantDead(
 }
 export const grantExpiry = (from: number) => new Date(from + GRANT_MS).toISOString();
 
+/** K9: arbitrary code sees the entire Revit process; every open lifetime needs write authority. */
+export function admitScript(caller: Caller, documents: readonly DocumentRef[], door: string): void {
+  if (caller.kind === "human") return;
+  const ungranted = documents.filter((ref) => {
+    try {
+      admitCrossing(caller, { kind: "document", ref }, door);
+      return false;
+    } catch (error) {
+      if (!(error instanceof Refused)) throw error;
+      return true;
+    }
+  });
+  if (ungranted.length)
+    throw refuse(
+      "script.ungranted-documents",
+      door,
+      `Refused at ${door}: scripts can access every open document. Close the ungranted documents or run on a separate copy: ${ungranted.map((ref) => `${ref.session}/${ref.openId}`).join(", ")}.`,
+    );
+}
+
 const deadReason = (code: "grant.revoked" | "grant.expired", grant: HeadGrant | null) =>
   code === "grant.revoked"
     ? `rw was revoked${grant?.revoked ? ` at ${hhmm(grant.revoked.at)}` : ""}. Steps already running finish; nothing new starts. Re-point the head to grant again.`
@@ -253,15 +358,15 @@ export function admitCrossing(
     return admitPage(admitted.slot, destination, admitted.door);
   }
   if (caller.kind === "human") return { kind: "human" };
-  if (destination.kind === "host" || destination.kind === "sdk-session") return null;
-  const acquired = acquisitionBasis(destination);
-  if (acquired) return acquired;
-  if (caller.kind === "external-mcp")
+  if (caller.kind === "service" || caller.kind === "external-mcp")
     throw refuse(
       "grant.context-cannot-hold",
       door,
-      `Refused at ${door}: this external MCP client can read any document and write Pea's own; rw grants for external clients are not in this release.`,
+      `Refused at ${door}: ${caller.kind} has no product write authority.`,
     );
+  if (destination.kind === "host" || destination.kind === "sdk-session") return null;
+  const acquired = acquisitionBasis(destination);
+  if (acquired) return acquired;
   return admitThread(caller.thread, destination, door);
 }
 
@@ -361,9 +466,12 @@ export function live(basis: Basis | null, door = "step begin"): Refused | null {
           { lifetime: basis.scope.lifetime },
         );
   if (basis?.kind !== "grant") return null;
-  const grant = sources.heads?.(basis.thread).grant ?? null;
+  const head = sources.heads?.(basis.thread);
+  const grant = head?.grant ?? null;
   const code =
-    !grant || !sameRef(grant.lifetime, basis.lifetime) ? "grant.revoked" : grantDead(grant);
+    !grant || head?.revision !== basis.headRevision || !sameRef(grant.lifetime, basis.lifetime)
+      ? "grant.revoked"
+      : grantDead(grant);
   return code
     ? refuse(code, door, `Refused at ${door}: ${deadReason(code, grant)}`, {
         lifetime: basis.lifetime,

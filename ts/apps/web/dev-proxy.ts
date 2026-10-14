@@ -40,10 +40,55 @@ export function checkoutIngress(): Plugin {
   return {
     name: "pe:checkout-ingress",
     configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        if (isCheckoutRequest(req)) return next();
-        res.statusCode = 403;
-        res.end("Use the exact checkout frontend origin, or the installed Share switch.");
+      server.middlewares.use(async (req, res, next) => {
+        if (!isCheckoutRequest(req)) {
+          res.statusCode = 403;
+          res.end("Use the exact checkout frontend origin, or the installed Share switch.");
+          return;
+        }
+        const target = process.env[hostProcessIdentity.hostBaseUrlVariable];
+        const navigation =
+          req.method === "GET" &&
+          req.headers["sec-fetch-mode"] === "navigate" &&
+          req.headers["sec-fetch-dest"] === "document" &&
+          req.headers.accept?.includes("text/html") &&
+          !/^\/pages(?:\/|\?|$)/.test(req.url ?? "");
+        if (target && navigation) {
+          // Vite serves the SPA document. Its navigation must visit the host's existing human mint.
+          const headers = new Headers({ [HOST_RUNTIME_SERVICE_HEADER]: checkoutServiceName() });
+          for (const key of [
+            "accept",
+            "origin",
+            "referer",
+            "cookie",
+            "sec-fetch-mode",
+            "sec-fetch-dest",
+            "sec-fetch-site",
+          ]) {
+            const value = req.headers[key];
+            if (typeof value === "string") headers.set(key, value);
+          }
+          try {
+            const minted = await fetch(new URL("/", target), {
+              headers,
+              redirect: "manual",
+              signal: AbortSignal.timeout(5000),
+            });
+            const cookie = minted.headers.get("set-cookie");
+            await minted.body?.cancel();
+            if (!cookie) throw Error("The host did not mint this browser session.");
+            res.setHeader("set-cookie", cookie);
+          } catch (error) {
+            res.statusCode = 503;
+            res.end(
+              error instanceof Error
+                ? error.message
+                : "The host could not mint this browser session.",
+            );
+            return;
+          }
+        }
+        next();
       });
     },
   };

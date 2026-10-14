@@ -15,7 +15,7 @@
  *
  * `find`, `read` and `do` are the same words and keys as Pea's `pe_find`, `pe_read` and `pe_do`. The host knows which
  * page is calling from the page's own path (`pe.page` is the key it minted) and which document from the page's
- * binding, set with the chip in the corner (Bind… opens the picker in the app). A page never names its own origin or
+ * binding, set with the chip in SPA chrome (Bind… opens the picker in the app). A page never names its own origin or
  * target. Reads run on the bound document; a write runs as this page under the binding: a thread binding writes
  * with that thread's rw grant, a pinned document only when it is Pea's own. Anything the host refuses is thrown with
  * the host's words and shown across the top of the page.
@@ -43,8 +43,6 @@
     params: { slug: pe.slug },
     ...(body === undefined ? {} : { body }),
   });
-  /** The bind chip, drawn once the page has a body (below). */
-  let chip = null;
   /** `fetch` that names this page's runtime on same-origin requests; the host refuses a browser request without it. */
   pe.fetch = (input, init = {}) => {
     const url = new URL(
@@ -118,7 +116,6 @@
   const readTarget = async () => {
     const reading = await json(await client.response("page.target", pageInput()));
     pe.doc = reading.document;
-    chip?.show(reading);
     return reading;
   };
 
@@ -411,95 +408,25 @@
     return k;
   };
 
-  /**
-   * The bind chip: host-owned, drawn in its own shadow root in the corner of every page (page CSS never reaches it),
-   * styled by pe.css. It shows what the binding names and what a write would do (`rw · 42m` counted from the host's
-   * clock, `pea`, or `read` with the host's reason), and Bind… opens the picker in the app, where a person binds.
-   */
-  chip = (() => {
-    if (!pe.slug || typeof document === "undefined" || !document.createElement) return null;
-    const host = document.createElement("pe-bind");
-    if (typeof host.attachShadow !== "function") return null;
-    const root = host.attachShadow({ mode: "open" });
-    root.innerHTML =
-      '<link rel="stylesheet" href="/pages/pe.css"><div class="pe-bind"><span class="pe-bind-write"></span><span class="pe-bind-what"></span><button type="button">Bind…</button></div>';
-    const face = root.querySelector(".pe-bind");
-    const [write, what] = face.querySelectorAll("span");
-    root.querySelector("button").onclick = () =>
-      window.open(`/bind?page=${encodeURIComponent(pe.slug)}`, "pe-bind");
-    const mount = () => document.body.append(host);
-    if (document.body) mount();
-    else document.addEventListener("DOMContentLoaded", mount);
-    let reading = null;
-    const draw = () => {
-      if (!reading) return;
-      const { binding, resolution, document: doc } = reading;
-      const w = reading.write;
-      const mark = !w
-        ? "—"
-        : w.kind === "rw"
-          ? `rw · until ${new Date(w.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-          : w.kind;
-      face.dataset.write = mark.startsWith("rw") ? "rw" : mark;
-      face.dataset.state = resolution.kind;
-      write.textContent = mark;
-      write.title = w && w.kind === "read" ? w.refusal.reason : "";
-      const named =
-        binding.kind === "thread"
-          ? `thread ${binding.thread.slice(0, 8)}`
-          : binding.kind === "pinned"
-            ? "pinned"
-            : "unbound";
-      const subject =
-        resolution.kind === "resolved"
-          ? doc
-            ? doc.title
-            : ""
-          : resolution.kind === "choose"
-            ? `choose: ${resolution.reason}`
-            : resolution.kind;
-      what.textContent = subject ? `${named} · ${subject}` : named;
-    };
-    // Nothing polls: the host pushes `binding` (the picker, another tab), `head` (a thread's head moved in chat) and
-    // `file` on this page's stream; a grant's expiry is read again at its own minute. A dropped stream reopens.
-    let expiry = 0;
-    const fresh = () => readTarget().catch(() => {});
-    const follow = () => {
-      // Live only: the log's rows belong to `pe.state`.
-      const es = new EventSource(
+  // Keep the Page's source fresh. Binding and grant controls belong to SPA chrome.
+  if (pe.slug && typeof EventSource === "function") {
+    const followFiles = () => {
+      const events = new EventSource(
         streamUrl(
           client.url("page.events", { ...pageInput(), query: { after: Number.MAX_SAFE_INTEGER } }),
         ),
       );
-      es.onopen = fresh;
-      es.addEventListener("head", fresh);
-      es.addEventListener("binding", fresh);
-      // A tab never learned its page file changed, so a stale copy ran old code: kaitpw pressed pre-fix buttons for
-      // two hours while the fix was on disk (2026-10-05). A changed page, script or style reloads it.
-      es.addEventListener("file", (m) => {
-        if (/\.(html|m?js|css)$/i.test(JSON.parse(m.data).path)) location.reload();
+      events.addEventListener("file", (message) => {
+        if (/\.(html|m?js|css)$/i.test(JSON.parse(message.data).path)) location.reload();
       });
-      es.onerror = () => {
-        es.close();
-        setTimeout(follow, 2000);
+      events.onerror = () => {
+        events.close();
+        setTimeout(followFiles, 2000);
       };
-      window.addEventListener("pagehide", () => es.close(), { once: true });
+      window.addEventListener("pagehide", () => events.close(), { once: true });
     };
-    follow();
-    window.addEventListener("focus", fresh);
-    return {
-      show(next) {
-        reading = next;
-        clearTimeout(expiry);
-        if (next.write && next.write.kind === "rw")
-          expiry = setTimeout(
-            fresh,
-            Math.max(0, Date.parse(next.write.expiresAt) - Date.now()) + 500,
-          );
-        draw();
-      },
-    };
-  })();
+    followFiles();
+  }
 
   window.pe = pe;
   /** One host-served presentation bundle; pages await this before mounting their instruments. */

@@ -189,11 +189,10 @@ export function HeadLadder() {
 
 /**
  * Whether Pea may write the document this thread points at, counted on the host's clock. Words
- * only, no button: pointing the thread elsewhere ends the grant, and the next message you send
- * renews it. Nothing when the thread holds no grant (no document, a named target, Pea's own).
+ * with one-click revoke. Nothing when the thread holds no grant.
  * The copy is lowercase by ruling (`rw · 42m`), so the chip takes no sentence casing.
  */
-export function GrantChip({ grant }: { grant: GrantView | null }) {
+export function GrantChip({ grant, onRevoke }: { grant: GrantView | null; onRevoke?: () => void }) {
   if (!grant) return null;
   const [tone, text, title] =
     grant.state === "rw"
@@ -213,6 +212,18 @@ export function GrantChip({ grant }: { grant: GrantView | null }) {
             "revoked · point the thread at it again to grant",
             "rw on this document was revoked. Steps already running finish; nothing new starts until you point the thread at the document again.",
           ];
+  if (grant.state === "rw" && onRevoke)
+    return (
+      <Button
+        label="Revoke rw"
+        reason="Revoke rw. Running steps finish; no new step begins."
+        data-testid="grant-chip"
+        data-tone={tone}
+        onClick={onRevoke}
+      >
+        <span className="face-mono">{text}</span>
+      </Button>
+    );
   return (
     <span className="face-mono" data-tone={tone} data-testid="grant-chip" title={title}>
       {text}

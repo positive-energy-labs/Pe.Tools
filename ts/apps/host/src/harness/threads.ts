@@ -71,7 +71,7 @@ import { accessModes, isAuthRefusal, sessionOffer, type Providers } from "./prov
 
 /** The thread wire of ADR 0015; contract and route list in `@pe/agent-contracts` `harness-thread.ts`. */
 
-type Meta = Omit<HarnessThreadSummary, "lastSeq" | "activity"> & {
+type Meta = Omit<HarnessThreadSummary, "lastSeq" | "activity" | "head"> & {
   acpSessionId: string | null;
   models: HarnessThreadBody["models"];
   traits: HarnessThreadBody["traits"];
@@ -458,7 +458,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     updatedAt: t.events.at(-1)?.at ?? t.meta.updatedAt,
     modelId: t.meta.modelId,
     lastSeq: t.events.length,
-    head: t.meta.head,
+    head: reading(t.meta.head),
     lifecycle: t.meta.lifecycle,
     activity: activity(t),
   });
@@ -554,6 +554,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
               lifetime: target.ref,
               grantedAt: new Date(now).toISOString(),
               grantedVia: caller.via,
+              ...(caller.login ? { grantedLogin: caller.login } : {}),
               expiresAt: grantExpiry(now),
               revoked: null,
             }
@@ -569,7 +570,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     const current = readHead(threadId);
     if (!current.grant || current.grant.revoked) return reading(current);
     const grant = { ...current.grant, revoked: { at: new Date().toISOString() } };
-    writeHead(threadId, { ...current, grant });
+    writeHead(threadId, { ...current, revision: current.revision + 1, grant });
     emitRevoke(threadId, grant);
     return reading(readHead(threadId));
   }
@@ -1208,7 +1209,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
             };
             const heartbeat = setInterval(() => {
               try {
-                controller.enqueue(encoder.encode(": heartbeat\n\n"));
+                send(); // Republish grant expiry from hostNow even without thread activity.
               } catch {
                 cleanup();
               }
@@ -1444,12 +1445,14 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       case "thread.cancel":
         return json({ cancelled: await cancel(t, caller, url.pathname) });
       case "thread.permission": {
+        requireHuman(caller, url.pathname, "answering a harness approval");
         const { requestId, optionId } = await input(permissionResponseSchema);
         return resolvePermission(t, requestId, optionId, "user")
           ? json({ ok: true })
           : json({ error: `No pending permission ${requestId}` }, 409);
       }
       case "thread.question": {
+        requireHuman(caller, url.pathname, "answering a human question");
         const { requestId, ...answer } = await input(questionResponseSchema);
         return resolveQuestion(t, requestId, answer, "user")
           ? json({ ok: true })
@@ -1467,6 +1470,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         const forked = create(
           {
             ...t.meta,
+            head: { ...t.meta.head, grant: null, lastHumanMessageAt: null, revision: 0 },
             id: randomUUID(),
             harness: record.harness,
             providerId: record.id,

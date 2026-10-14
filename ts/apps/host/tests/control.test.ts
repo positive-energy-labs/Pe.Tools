@@ -17,8 +17,10 @@ import {
   grantExpiry,
   live,
   mintContext,
+  mintBrowserContext,
   Refused,
   retireContext,
+  admitScript,
 } from "../src/control.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 
@@ -35,6 +37,18 @@ const grantOn = (lifetime: DocumentRef, extra: Partial<HeadGrant> = {}): HeadGra
   expiresAt: grantExpiry(T0),
   revoked: null,
   ...extra,
+});
+
+test("access-004 K9: a granted script refuses another ungranted open document", () => {
+  bind(acquiredCopy);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(T0 + 1000);
+  heads.t1 = headWith(grantOn(docA));
+  expect(
+    refusal(() => admitScript(pea, [docA, { session: "S1", openId: "other" }], "/actions")),
+  ).toBe("script.ungranted-documents");
+  expect(() => admitScript(pea, [docA], "/actions")).not.toThrow();
+  expect(() => admitScript(pea, [{ session: "P", openId: "copy" }], "/actions")).not.toThrow();
 });
 const headWith = (grant: HeadGrant | null): ThreadHead => ({
   ...emptyThreadHead,
@@ -68,7 +82,11 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const browser = { origin: "http://127.0.0.1:5180", "x-pe-runtime-service": "pe-host" };
+const browser = {
+  cookie: mintBrowserContext({ kind: "local" }).split(";")[0],
+  origin: "http://127.0.0.1:5180",
+  "x-pe-runtime-service": "pe-host",
+};
 
 test("callerOf mints from the transport: token, Referer, or anonymous", () => {
   const local = { kind: "local" } as const;
@@ -83,7 +101,15 @@ test("callerOf mints from the transport: token, Referer, or anonymous", () => {
   expect(
     callerOf(
       { kind: "tailnet", login: "kait@example.com", authority: "box" },
-      { ...browser, referer: "https://box/open" },
+      {
+        ...browser,
+        cookie: mintBrowserContext({
+          kind: "tailnet",
+          login: "kait@example.com",
+          authority: "box",
+        }).split(";")[0],
+        referer: "https://box/open",
+      },
     ),
   ).toEqual({ caller: { kind: "human", via: "tailnet", login: "kait@example.com" } });
   expect(callerOf(local, { ...browser, referer: "http://127.0.0.1:5180/pages/todo/" })).toEqual({
@@ -161,14 +187,14 @@ test("pea needs the grant on the exact lifetime; only a document Pea acquired ne
   });
   // F-b: two Revits hold the same Address; the grant names one lifetime, never the Address.
   expect(refusal(() => admitCrossing(pea, on(docB), "/actions"))).toBe("grant.other-lifetime");
-  // External clients cannot hold rw in wave 1, but write Pea's documents.
+  // External MCP remains read-only, including Pea's documents.
   const external: Caller = { kind: "external-mcp", context: "x", label: "Claude Desktop" };
   expect(refusal(() => admitCrossing(external, on(docA), "mcp:pe_do"))).toBe(
     "grant.context-cannot-hold",
   );
-  expect(admitCrossing(external, on({ session: "P", openId: "copy" }), "mcp:pe_do")).toMatchObject({
-    kind: "acquisition",
-  });
+  expect(
+    refusal(() => admitCrossing(external, on({ session: "P", openId: "copy" }), "mcp:pe_do")),
+  ).toBe("grant.context-cannot-hold");
   // The step-begin check holds only while that acquisition still holds that exact lifetime.
   const basis = admitCrossing(pea, on({ session: "P", openId: "copy" }), "/actions");
   expect(live(basis)).toBeNull();
@@ -195,6 +221,16 @@ test("a grant expires 60 minutes after it was stamped, and a revoked one is refu
   heads.t1 = headWith(grantOn(docB));
   expect(live(basis)?.refusal.code).toBe("grant.revoked");
   expect(live({ kind: "human" })).toBeNull();
+});
+
+test("access-052: re-grant on the same lifetime cannot revive an older admission", () => {
+  bind();
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(T0 + 1000);
+  heads.t1 = headWith(grantOn(docA));
+  const basis = admitCrossing(pea, { kind: "document", ref: docA }, "/actions");
+  heads.t1 = { ...headWith(grantOn(docA)), revision: 5 };
+  expect(live(basis)?.refusal.code).toBe("grant.revoked");
 });
 
 test("revoke between steps: the begun step reports, the next is refused grant.revoked unsent", async () => {

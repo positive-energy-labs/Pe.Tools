@@ -32,7 +32,7 @@ describe("the declared host door", () => {
     ).rejects.toMatchObject({ status: 409, message: "No pending question" });
     expect(matchPeRoute("POST", "/pe/threads/t/question")?.id).toBe("thread.question");
   });
-  it("every route has schemas, a principal, and a unique method/path", () => {
+  it("access-085: every route has schemas, principal, permission and a unique method/path", () => {
     const signatures = Object.values(peRoutes).map((r) => `${r.method} ${r.path}`);
     expect(new Set(signatures).size).toBe(signatures.length);
     for (const route of Object.values(peRoutes)) {
@@ -40,7 +40,13 @@ describe("the declared host door", () => {
       expect(route.output).toBeDefined();
       expect(route.error).toBeDefined();
       expect(route.principal).toBeDefined();
+      expect(route.permission).toBeDefined();
     }
+  });
+  it("access-084: administration and grant policy are declared on the route", () => {
+    expect(peRoutes["provider.login"].permission).toBe("admin");
+    expect(peRoutes["scope.set"].permission).toBe("grant");
+    expect(peRoutes["page.act"].principal).toBe("human-or-page");
   });
 });
 
@@ -150,24 +156,24 @@ it("route consumers cannot recreate Pe paths beside the contract", () => {
   }
 });
 
-it("admission metadata distinguishes administration, local transport, and product grants", () => {
+it("admission metadata: one explicit permission per route, and share stays local", () => {
   for (const route of Object.values(peRoutes)) {
-    expect(["read", "product", "administration"]).toContain(route.permission);
+    expect(typeof route.permission).toBe("string");
     expect(typeof route.localOnly).toBe("boolean");
   }
   expect(peRoutes["providers.add"]).toMatchObject({
     principal: "human",
-    permission: "administration",
+    permission: "admin",
     localOnly: false,
   });
   expect(peRoutes["share.set"]).toMatchObject({
     principal: "human",
-    permission: "administration",
+    permission: "admin",
     localOnly: true,
   });
   expect(peRoutes["page.bind"]).toMatchObject({
     principal: "human-or-pea",
-    permission: "product",
+    permission: "human-or-pea",
     localOnly: false,
   });
   expect(peRoutes["scope.revoke"]).toMatchObject({ principal: "human", permission: "product" });

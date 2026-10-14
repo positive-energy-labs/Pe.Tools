@@ -561,7 +561,7 @@ export function createContributionContent(options: {
           description: "Page shared state and binding.",
           needs: "nothing",
           mutates: false,
-          actor: "any",
+          principal: ["human", "pea", "page", "external-mcp"],
           input: {},
           source: "pages",
           rank: 1,

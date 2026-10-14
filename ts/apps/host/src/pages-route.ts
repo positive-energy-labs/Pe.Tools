@@ -128,12 +128,6 @@ ${source.replace(exports, "globalThis.rv = {$1};")}
 `;
 };
 const asset = (name: PageLibraryFile) => readFileSync(assetPath(name), "utf8");
-/** The tokens also land on `:host`, so the bind chip's shadow root (pe.js) reads them on any page. */
-const chipTokens = (base: string) => {
-  if (!/^:root \{/m.test(base))
-    throw Error("base.css must open its tokens with one `:root {` line");
-  return base.replace(/^:root \{/m, ":root, :host {");
-};
 
 /**
  * The doors carry the runtime that served them: the request identity gate refuses a browser API
@@ -843,7 +837,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
       });
     if (slug === "pe.css")
       return new Response(
-        `${chipTokens(asset("base.css"))}
+        `${asset("base.css")}
 ${asset("pe.css")}`,
         {
           headers: { "content-type": MIME[".css"]!, "cache-control": "no-cache" },
@@ -935,6 +929,15 @@ ${asset("pe.css")}`,
     }
     if (request.method !== "GET")
       return problem(405, `${request.method} has no meaning on a page file`);
+    if (
+      request.method === "GET" &&
+      request.headers.get("sec-fetch-dest") === "document" &&
+      (rest.length === 0 || (rest.length === 1 && rest[0] === "index.html"))
+    )
+      return new Response(null, {
+        status: 302,
+        headers: { location: `/bind?page=${encodeURIComponent(slug)}&view=1` },
+      });
     return file(slug, where.dir, where.key, rest.length ? rest : ["index.html"]);
   };
 }

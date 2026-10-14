@@ -709,6 +709,8 @@ const thread = (
   lastSeq: activity.lastSeq,
   head: {
     ...emptyThreadHead,
+    hostNow: "1970-01-01T00:00:00.000Z",
+    grantView: null,
     defaultTarget: { kind: "open", ref },
     revision: 3,
     displayLabel: title,

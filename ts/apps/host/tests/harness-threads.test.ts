@@ -1637,6 +1637,35 @@ const peaAcquiredCopy = {
 const userInPeas = { kind: "open", ref: { session: "P", openId: "B" } } as const;
 const peaOf = (thread: string): Caller => ({ kind: "pea", context: `ctx-${thread}`, thread });
 const onDoc = (ref: { session: string; openId: string }) => ({ kind: "document", ref }) as const;
+
+test("access-050: fork retains the target but never inherits grant or human-message evidence", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const created = await call("POST", "/pe/threads", { providerId: "claude" });
+  const id = created.json.id;
+  await call("PUT", `/pe/scope/${id}`, { defaultTarget: yours, expectedRevision: 0 });
+  const forked = await call("POST", `/pe/threads/${id}/fork`, {});
+  expect(forked.status).toBe(200);
+  expect(threads.heads.read(forked.json.id)).toMatchObject({
+    defaultTarget: yours,
+    grant: null,
+    lastHumanMessageAt: null,
+    revision: 0,
+  });
+});
+
+test.each(["permission", "question"])(
+  "access-048/049: %s answers require a human before looking up a card",
+  async (verb) => {
+    const threads = host();
+    const call = caller(threads);
+    const created = await call("POST", "/pe/threads", { providerId: "claude" });
+    threads.as = peaOf(created.json.id);
+    const denied = await call("POST", `/pe/threads/${created.json.id}/${verb}`, {});
+    expect(denied.status).toBe(403);
+    expect(denied.json.refusal.code).toBe("human.only");
+  },
+);
 const crossing = (caller: Caller, ref: { session: string; openId: string }) => {
   try {
     return admitCrossing(caller, onDoc(ref), "/actions");

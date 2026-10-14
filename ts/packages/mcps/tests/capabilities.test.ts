@@ -69,6 +69,14 @@ const ops = [
   })),
 ];
 
+test("access-505: catalog names admitted principals rather than a binary actor", () => {
+  const rows = buildCapabilities({ ops, routes: [], packages: [], skills: [] });
+  const script = rows.find((row) => row.key === "op:scripting.execute")!;
+  expect(script).not.toHaveProperty("actor");
+  expect(script).toHaveProperty("principal", ["human", "pea", "page"]);
+  expect(rows.find((row) => row.key === "op:families.plan")).toHaveProperty("principal", ["human"]);
+});
+
 const pods = {
   pods: [
     {
@@ -171,7 +179,7 @@ test("Page shelf reads state and pins through the binding door without borrowing
             description: "Page",
             needs: "nothing",
             mutates: false,
-            actor: "any",
+            principal: ["human", "pea", "page", "external-mcp"],
             input: {},
             source: "pages",
             rank: 1,
@@ -257,7 +265,7 @@ test("contextFetch carries the process token, isolates bound MCP contexts, and k
 });
 
 test.each(["http", "stdio"])(
-  "F-a %s: an MCP-only client reads user documents, refuses their writes, and writes Pea lifetimes",
+  "F-a %s: an MCP-only client reads documents and refuses every write until pairing",
   async (transport) => {
     vi.stubEnv("PE_CONTEXT", "");
     const user = { session: "you", openId: "a" };
@@ -498,23 +506,8 @@ test.each(["http", "stdio"])(
         target: { kind: "open", ref: own },
         input: { scriptContent: "WriteLine(1);" },
       });
-      expect(JSON.parse((result.content as Array<{ text: string }>)[0]!.text)).toMatchObject({
-        ok: true,
-      });
-      expect(writes).toEqual([
-        {
-          caller: expect.objectContaining({
-            kind: "external-mcp",
-            label: transport === "stdio" ? "pea-stdio" : "f-a",
-          }),
-          destination: { kind: "document", ref: own },
-          basis: {
-            kind: "acquisition",
-            id: "acq-copy",
-            scope: { kind: "document", lifetime: own },
-          },
-        },
-      ]);
+      expect(JSON.stringify(result)).toContain("grant.context-cannot-hold");
+      expect(writes).toEqual([]);
       expect(reads).toEqual(
         expect.arrayContaining([{ key: "revit.context.view-image", ref: user }]),
       );
@@ -560,7 +553,7 @@ test.each(["http", "stdio"])(
         JSON.parse(((await chatCall(own)).content as Array<{ text: string }>)[0]!.text),
       ).toMatchObject({ ok: true });
       expect(head.defaultTarget).toEqual({ kind: "open", ref: user });
-      expect(writes[1]).toMatchObject({ basis: { kind: "grant", thread: "chat", lifetime: user } });
+      expect(writes[0]).toMatchObject({ basis: { kind: "grant", thread: "chat", lifetime: user } });
     } finally {
       for (const client of clients) await client.close();
       await door.close();
@@ -764,7 +757,8 @@ test("F-H6-3: plan and capture over loaded families are human verbs; Pea never f
     `op:${key}`,
     `workflow:${key}`,
   ]);
-  for (const key of verbs) expect(rows.find((row) => row.key === key)?.actor).toBe("human");
+  for (const key of verbs)
+    expect(rows.find((row) => row.key === key)?.principal).toEqual(["human"]);
   fakeRuntimeHost("http://127.0.0.1:9");
   vi.stubGlobal("fetch", async () => Response.json(catalog()));
   try {
@@ -774,7 +768,7 @@ test("F-H6-3: plan and capture over loaded families are human verbs; Pea never f
     expect(found.matches.length).toBeGreaterThan(0);
     for (const key of verbs) expect(found.matches.map((row) => row.key)).not.toContain(key);
     const map = (await run(peFind, {})) as { map: { total: number } };
-    expect(map.map.total).toBe(rows.filter((row) => row.actor !== "human").length);
+    expect(map.map.total).toBe(rows.filter((row) => row.principal.includes("pea")).length);
     for (const key of verbs)
       for (const tool of [peDo, peRead]) {
         const refused = (await run(tool, { key, timeoutSeconds: 30 })) as {

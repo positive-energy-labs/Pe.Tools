@@ -9,6 +9,7 @@ import {
   type HarnessThreadSummary,
   type PageChoice,
   type PageTargetReading,
+  threadHeadReadingSchema,
 } from "@pe/agent-contracts";
 
 import { Button } from "@pe/kit/lang/button";
@@ -26,6 +27,7 @@ export interface Pinnable {
   title: string;
   address: string | null;
   revit: string;
+  ref: { session: string; openId: string };
 }
 
 /** What a write would do, in the chip's own words. */
@@ -119,7 +121,14 @@ export function BindPicker({
               aside={thread.head.displayLabel ?? "no target"}
               meta={
                 <span className="face-mono">
-                  {thread.head.grant && !thread.head.grant.revoked ? "rw" : "read"}
+                  {threadHeadReadingSchema.safeParse(thread.head).data?.grantView?.state === "rw" &&
+                  documents?.some(
+                    (doc) =>
+                      doc.ref.session === thread.head.grant?.lifetime.session &&
+                      doc.ref.openId === thread.head.grant.lifetime.openId,
+                  )
+                    ? "rw"
+                    : "read"}
                 </span>
               }
               active={binding?.kind === "thread" && binding.thread === thread.id}
@@ -164,7 +173,7 @@ export function BindPicker({
 }
 
 /** The route body: the live threads, the open documents, and the host's reading of the Page. */
-export function BindRoute({ slug }: { slug: string }) {
+function BindingPickerRoute({ slug }: { slug: string }) {
   const [reading, setReading] = useState<PageTargetReading | null>(null);
   const [outcome, setOutcome] = useState<{ ok: boolean; message: string } | null>(null);
   const threads = useThreadSummaries(true, null);
@@ -178,6 +187,7 @@ export function BindRoute({ slug }: { slug: string }) {
               title: doc.title,
               address: doc.address ?? null,
               revit: `Revit ${session.year ?? ""} · pid ${session.processId}`.replace("  ", " "),
+              ref: { session: session.sessionId, openId: doc.openId },
             })),
           )
         : null,
@@ -210,5 +220,20 @@ export function BindRoute({ slug }: { slug: string }) {
         onBind={onBind}
       />
     </Surface>
+  );
+}
+
+/** The existing SPA shell supplies chrome; Page bytes stay in their own document. */
+export function BindRoute({ slug, view = false }: { slug: string; view?: boolean }) {
+  return view ? (
+    <Surface>
+      <iframe
+        className="size-full flex-1"
+        title={`Page ${slug}`}
+        src={`/pages/${encodeURIComponent(slug)}/`}
+      />
+    </Surface>
+  ) : (
+    <BindingPickerRoute slug={slug} />
   );
 }

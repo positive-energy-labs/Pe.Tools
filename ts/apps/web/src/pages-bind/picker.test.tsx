@@ -50,8 +50,18 @@ test("the picker shows what the host resolved and binds a thread, a pin, or noth
       reading={reading}
       threads={[thread("t-duct-1", "Duct loss walk")]}
       documents={[
-        { title: "Chadds MEP", address: MODEL, revit: "Revit 2025 · pid 10" },
-        { title: "Project1", address: null, revit: "Revit 2025 · pid 10" },
+        {
+          title: "Chadds MEP",
+          address: MODEL,
+          revit: "Revit 2025 · pid 10",
+          ref: { session: "S", openId: "A" },
+        },
+        {
+          title: "Project1",
+          address: null,
+          revit: "Revit 2025 · pid 10",
+          ref: { session: "S", openId: "B" },
+        },
       ]}
       outcome={null}
       onBind={onBind}

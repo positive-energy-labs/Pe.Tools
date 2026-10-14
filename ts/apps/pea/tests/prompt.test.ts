@@ -85,7 +85,7 @@ const chunk = (turnId: string, text: string): Draft => ({
 const summary = (): HarnessThreadSummary => ({
   providerId: "codex",
   providerName: "Codex",
-  head: { ...emptyThreadHead },
+  head: { ...emptyThreadHead, hostNow: "1970-01-01T00:00:00.000Z", grantView: null },
   lifecycle: emptyThreadLifecycle(),
   activity: { state: "idle", pending: 0, lastSeq: log.length, message: null },
   id: "t1",
