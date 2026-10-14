@@ -101,23 +101,9 @@
   --z-dev: 9999;
 }
 
-/* The tray's compact scale. surface-host marks <html data-shell>. Review-only: S0 is :root, and
-   data-tray-scale picks S1 or S2 live; the verdict keeps one block as [data-shell="tray"] alone. */
-[data-shell="tray"][data-tray-scale="s1"] {
-  --type-small-size: 11.5px;
-  --type-small-line-height: 18px;
-  --type-prose-size: 12.5px;
-  --type-prose-line-height: 19px;
-  --type-title-size: 14px;
-  --type-title-line-height: 22px;
-  --type-head-size: 20px;
-  --type-display-size: 32px;
-  --item-h: 22px;
-  --control-h: 22px;
-  --gutter: 6px;
-  --rail-h: 36px;
-}
-[data-shell="tray"][data-tray-scale="s2"] {
+/* The tray's compact scale (owner verdict S2, 2026-10-14). surface-host marks <html data-shell>.
+   The app top bar keeps its own pixel sizes on purpose. */
+[data-shell="tray"] {
   --type-small-size: 11px;
   --type-small-line-height: 16px;
   --type-prose-size: 12px;
