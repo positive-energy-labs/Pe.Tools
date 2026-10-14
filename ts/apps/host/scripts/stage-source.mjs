@@ -1,6 +1,5 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,16 +20,15 @@ const dirty = execFileSync("git", ["status", "--porcelain", "--untracked-files=n
 }).trim();
 if (dirty) throw new Error(`source staging requires a clean checkout:\n${dirty}`);
 
-const archive = join(tmpdir(), `pe-tools-source-${process.pid}-${Date.now()}.tar`);
-try {
-  rmSync(source, { recursive: true, force: true });
-  mkdirSync(source, { recursive: true });
-  execFileSync("git", ["archive", "--format=tar", `--output=${archive}`, commit], { cwd: repo });
-  execFileSync("tar", ["-xf", archive, "-C", source]);
-  if (!existsSync(join(source, "Pe.Tools.slnx")))
-    throw new Error("source staging: extracted archive has no Pe.Tools.slnx");
-  writeFileSync(manifest, `${JSON.stringify({ commit }, null, 2)}\n`);
-  console.log(`staged tracked source ${commit} -> ${source}`);
-} finally {
-  rmSync(archive, { force: true });
-}
+rmSync(source, { recursive: true, force: true });
+mkdirSync(source, { recursive: true });
+// The archive streams through memory into tar; the tree is ~22 MB, so no scratch file is needed.
+const archive = execFileSync("git", ["archive", "--format=tar", commit], {
+  cwd: repo,
+  maxBuffer: 1 << 30,
+});
+execFileSync("tar", ["-xf", "-", "-C", source], { input: archive });
+if (!existsSync(join(source, "Pe.Tools.slnx")))
+  throw new Error("source staging: extracted archive has no Pe.Tools.slnx");
+writeFileSync(manifest, `${JSON.stringify({ commit }, null, 2)}\n`);
+console.log(`staged tracked source ${commit} -> ${source}`);

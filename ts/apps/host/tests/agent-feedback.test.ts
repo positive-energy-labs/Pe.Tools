@@ -91,7 +91,7 @@ test("the export event carries the content and the stamps, with opaque thread an
     });
     expect(sent[0]!.properties.thread_id).toBe(await f.journal.opaqueId("thread", "thread-1"));
     expect(sent[0]!.properties.turn_id).toBe(await f.journal.opaqueId("turn", "thread-1:turn-1"));
-    expect(JSON.stringify(sent[0])).not.toContain("thread-1\"");
+    expect(JSON.stringify(sent[0])).not.toContain('thread-1"');
   } finally {
     await f.close();
   }

@@ -194,15 +194,23 @@ test("missed fixed time reschedules, interval catches up once, launch failures p
   expect(f.launch).not.toHaveBeenCalled();
   expect(service.list()[0]?.runCount).toBe(0);
   await service.close();
-  row.schedule = { type: "interval", everyMs: 60_000 };
-  row.gate = null;
-  writeFileSync(f.path, JSON.stringify([row]));
+  // A non-shipped task: the shipped miner's definition always comes from the build.
+  const custom = {
+    ...row,
+    id: "custom",
+    schedule: { type: "interval", everyMs: 60_000 },
+    gate: null,
+  };
+  writeFileSync(f.path, JSON.stringify([custom]));
   f.launch.mockImplementation(() => {
     throw Error("No ready provider");
   });
   const intervals = createScheduledTasks(f.options);
   await intervals.poll();
-  expect(intervals.list()[0]).toMatchObject({ lastStatus: "failed", runCount: 1 });
+  expect(intervals.list().find((r) => r.id === "custom")).toMatchObject({
+    lastStatus: "failed",
+    runCount: 1,
+  });
   await intervals.poll();
   expect(f.launch).toHaveBeenCalledOnce();
   await intervals.close();
@@ -290,4 +298,21 @@ test("human run-now honors the gate unless explicitly forced and preserves async
   expect(service.list()[0]?.lastError).toContain("fake turn failed");
   expect(f.launch).toHaveBeenCalledOnce();
   await service.close();
+});
+
+test("a stored shipped miner takes this build's definition and keeps its enabled flag and run state", () => {
+  const f = fixture();
+  const stale = {
+    ...feedbackMiner(at),
+    prompt: "an older release's prompt",
+    gate: { minRevitReceipts: 1 },
+    enabled: false,
+    runCount: 4,
+  };
+  writeFileSync(f.path, JSON.stringify([stale]));
+  const [miner] = createScheduledTasks(f.options).list();
+  expect(miner!.prompt).toBe(feedbackMiner(at).prompt);
+  expect(miner!.gate).toEqual(feedbackMiner(at).gate);
+  expect(miner!.enabled).toBe(false);
+  expect(miner!.runCount).toBe(4);
 });

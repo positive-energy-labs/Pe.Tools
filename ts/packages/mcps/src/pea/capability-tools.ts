@@ -1149,7 +1149,10 @@ export const peFeedback = createTool({
       const answer = (await response.json()) as { feedbackId?: unknown };
       if (response.ok && typeof answer.feedbackId === "string")
         return { feedbackId: answer.feedbackId };
-      return { isError: true, content: `Feedback was not kept (${response.status}); keep working.` };
+      return {
+        isError: true,
+        content: `Feedback was not kept (${response.status}); keep working.`,
+      };
     } catch (error) {
       return { isError: true, content: `Feedback was not kept (${message(error)}); keep working.` };
     }

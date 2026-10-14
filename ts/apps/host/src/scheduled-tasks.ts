@@ -30,6 +30,7 @@ export function nextRun(schedule: Schedule, from: Date): string {
   }
   throw Error("No next scheduled occurrence");
 }
+const isSameSchedule = (a: Schedule, b: Schedule) => JSON.stringify(a) === JSON.stringify(b);
 export const missedRun = (schedule: Schedule, due: string, now: Date) =>
   schedule.type === "fixed_time" && +now - Date.parse(due) > 10 * 60_000;
 
@@ -104,9 +105,29 @@ export function createScheduledTasks(options: {
   launch: (input: ScheduledLaunch) => { threadId: string; completion: Promise<void> };
 }) {
   const now = options.now ?? (() => new Date());
-  const rows = existsSync(options.path)
+  const stored = existsSync(options.path)
     ? z.array(taskSchema).parse(JSON.parse(readFileSync(options.path, "utf8")))
-    : [feedbackMiner(now())];
+    : [];
+  // A shipped task's definition comes from this build; only its enabled flag and run state persist,
+  // so a release can change the miner's prompt, gate or schedule on machines that already ran it.
+  const shipped = feedbackMiner(now());
+  const kept = stored.find((r) => r.id === shipped.id);
+  const rows = [
+    ...stored.filter((r) => r.id !== shipped.id),
+    kept
+      ? {
+          ...kept,
+          title: shipped.title,
+          prompt: shipped.prompt,
+          gate: shipped.gate,
+          selection: shipped.selection,
+          schedule: shipped.schedule,
+          nextRunAt: isSameSchedule(kept.schedule, shipped.schedule)
+            ? kept.nextRunAt
+            : shipped.nextRunAt,
+        }
+      : shipped,
+  ];
   const save = () => {
     mkdirSync(dirname(options.path), { recursive: true });
     writeFileSync(`${options.path}.tmp`, JSON.stringify(rows, null, 2));
