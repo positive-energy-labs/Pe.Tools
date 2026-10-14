@@ -1,7 +1,7 @@
 import { useLayoutEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { CommandPalette } from "#/components/lang/command-palette";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { Kbd } from "#/components/lang/kbd";
 import { useNavigation } from "./state";
 import { globalItems, type Destination, type ResultKind } from "./global-items";

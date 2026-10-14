@@ -1,6 +1,6 @@
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 import type { ReactNode } from "react";
-import { EmptyState } from "#/components/lang/empty";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
 import { type TreeNode, TreeView } from "#/ops/primitives";
 import {

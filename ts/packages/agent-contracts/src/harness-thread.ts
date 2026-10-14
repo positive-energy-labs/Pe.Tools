@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { callerSchema } from "./caller.ts";
 import { mentionSchema } from "./mention.ts";
-import { threadHeadSchema } from "./target.ts";
+import { threadHeadReadingSchema } from "./target.ts";
 
 /**
  * The harness-thread wire (ADR 0015: the harness drives; Pea is tools and UI).
@@ -11,8 +11,8 @@ import { threadHeadSchema } from "./target.ts";
  * durable record: an append-only log of `HarnessEvent`s per thread. The web renders that log and
  * the live tail of it over SSE; it never talks to a harness directly.
  *
- * Trust: the host binds loopback and these routes carry no token. Every mutating route requires
- * `content-type: application/json`, so a cross-origin simple request cannot reach it.
+ * Trust: admission requires a host-minted caller for writes and a human for consent.
+ * Browser human sessions use HttpOnly cookies; terminal and harness children carry scoped bearers.
  *
  * A provider is one harness with one auth source: the harness's own login (`subscription`, one per
  * harness, id = harness id) or a user-added `endpoint` (URL plus key, id `<harness>-<slug>`). The key
@@ -126,7 +126,7 @@ export const addProviderRequestSchema = z.object({
 });
 export type AddProviderRequest = z.infer<typeof addProviderRequestSchema>;
 
-/** Guarded starts a session in the harness's own auto mode; unguarded in its full-access mode. */
+/** Harness approval policy only. Guarded starts auto mode; unguarded starts full access. Neither grants Revit rw. */
 export const accessSchema = z.object({ guarded: z.boolean(), readError: z.string().optional() });
 export type Access = z.infer<typeof accessSchema>;
 
@@ -411,7 +411,7 @@ export const harnessThreadSummarySchema = z.object({
   lastSeq: z.number(),
   /** The host log id this record was read at: follow the `thread` Reading from it. */
   cursor: z.number().int().nonnegative(),
-  head: threadHeadSchema,
+  head: threadHeadReadingSchema,
   lifecycle: threadLifecycleSchema,
   activity: z.object({
     state: z.enum(["idle", "running", "waiting", "failed"]),

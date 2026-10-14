@@ -1,15 +1,15 @@
 /** /design-system/band — one proposal language over a Families matrix: every verb is the cell's. */
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { fanOutWord, WorkSentence, workSummary, type FanOutOutcome } from "#/components/work/band";
-import { FactChip } from "#/components/lang/chip";
+import { FactChip } from "@pe/kit/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Section } from "#/components/lang/section";
-import { ThemeToggle } from "#/components/lang/theme-toggle";
-import { Table } from "#/components/master-table/table";
+import { ThemeToggle } from "@pe/kit/lang/theme-toggle";
+import { Table } from "@pe/kit/table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
-import { useTableState } from "#/components/master-table/view";
+import { useTableState } from "@pe/kit/table/view";
 import { applyPatches, MATRIX, MATRIX_CELLS } from "#/design-system/band-matrix";
 import {
   ChatScale,

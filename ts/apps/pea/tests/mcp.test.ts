@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
-import { withInvocationContext } from "../../../packages/mcps/src/shared/invocation-context.ts";
+import { withInvocationContext } from "@pe/runtime/context";
 import { createMcpDoor } from "../../host/src/mcp-route.ts";
 import { callerOf } from "../../host/src/control.ts";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";

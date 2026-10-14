@@ -10,7 +10,7 @@ import { expect, it } from "vite-plus/test";
 
 const WEB = resolve(dirname(fileURLToPath(import.meta.url)), "../../../apps/web");
 // Spelled with a class so this file never matches itself; covers `\`, `\`, `/` and JSON-escaped forms.
-const LEAK = /C:[\/]+Users[\/]+kait[p]\b/i;
+const LEAK = /C:[/]+Users[/]+kait[p]\b/i;
 const TEXT = /\.(?:[cm]?[jt]sx?|json|css|html|md|svg)$/;
 
 function* walk(dir: string): Generator<string> {

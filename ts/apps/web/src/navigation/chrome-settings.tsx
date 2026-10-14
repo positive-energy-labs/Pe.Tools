@@ -3,7 +3,7 @@ import { Popover } from "@base-ui/react/popover";
 import { useRouterState } from "@tanstack/react-router";
 import { Settings2 } from "lucide-react";
 import { appRouteByPath } from "@pe/agent-contracts";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { SettingsProjection } from "#/settings/options";
 import { SettingsActions } from "#/settings/options-actions";
 import { useSurfaceHost } from "./surface-host";

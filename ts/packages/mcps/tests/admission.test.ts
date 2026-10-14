@@ -1,5 +1,5 @@
 import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
-import { withInvocationContext } from "../src/shared/invocation-context.ts";
+import { withInvocationContext } from "@pe/runtime/context";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { peDo, peRead } from "../src/pea/capability-tools.ts";
 import { buildCapabilities } from "../src/pea/capabilities.ts";
@@ -78,7 +78,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const call = (tool: typeof peDo | typeof peRead, input: Record<string, unknown>, id = "attempt") =>
+const call = (tool: typeof peDo, input: Record<string, unknown>, id = "attempt") =>
   withInvocationContext({ hostBaseUrl: "http://admission.test" }, () =>
     tool.execute!(
       { timeoutSeconds: 30, ...input } as never,

@@ -2,7 +2,7 @@ import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { readPeError } from "@pe/host-contracts/pe-api";
 import { z } from "zod";
 import { instancesSessionSelection, refusalSchema } from "@pe/agent-contracts";
-import { contextFetch as fetch, invocationContext } from "#invocation-context";
+import { contextFetch as fetch, invocationContext } from "@pe/runtime/context";
 import { actionListFilterSchema, type ActionListFilter } from "@pe/agent-contracts";
 import {
   canonicalRouteInput,

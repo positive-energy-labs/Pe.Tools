@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import { RefreshCw, Save, Upload } from "lucide-react";
 
-import { ActionGroup, Button } from "#/components/lang/button";
+import { ActionGroup, Button } from "@pe/kit/lang/button";
 import { HotkeyCommand, HotkeyHint } from "#/components/lang/hotkey-command";
 import { Section } from "#/components/lang/section";
 
@@ -54,7 +54,7 @@ export function LangPressSpecimens() {
       </SpecimenFrame>
       <SpecimenFrame
         name="Button · kind × state (rest, pressed, refused, busy, icon-only)"
-        importPath="#/components/lang/button"
+        importPath="@pe/kit/lang/button"
       >
         <div className="grid grid-cols-[auto_repeat(5,auto)] items-center justify-start gap-x-4 gap-y-2">
           {KINDS.map((kind) => (

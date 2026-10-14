@@ -1,6 +1,6 @@
 import { Switch as SwitchPrimitive } from "@base-ui/react/switch";
 
-import { tv, type VariantProps } from "#/lib/tv";
+import { tv, type VariantProps } from "@pe/kit/lib/tv";
 
 export const switchRecipe = tv({
   slots: {

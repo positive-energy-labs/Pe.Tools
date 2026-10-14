@@ -11,10 +11,14 @@ export const bundledPeaSkills: readonly BundledPeaSkill[] = [
     name: "make-page",
     content: String.raw`---
 name: make-page
-description: Make or adapt an interactive Pe.Tools Page. Use when the user asks for an interactive Page, a bound HTML tool, or a portable Pod containing it.
+description: Make or adapt an interactive Pe.Tools Page. Use when an explanation needs a chart, table, diagram, comparison, calculation walk, mockup, or a bound HTML tool.
 ---
 
 # Make a Page
+
+Use a Page first when the person needs to see relationships, choices, or a sequence. Return the Page openUrl after checking it, so they can revisit the result instead of receiving a one-shot explanation.
+
+Worked example: for a duct-pressure explanation, discover and read page:@snowdon-ducts/pages/tour, then use its duct-loss skill and Page shape instead of drawing a separate diagram. It is a client-scrubbed shipped example. A shipped Page is done only when it binds to a real document, reads real elements through pe.js, and shows those same elements in its Page and Revit evidence. An illustration or calculator alone is a scratch Page, not a shipped example.
 
 1. Discover existing Pages, scripts, skills and members with pe_find. Read their canonical keys with pe_read before adapting them. Use the catalog's openUrl; package folders are local locators, never identity.
 2. Author arbitrary HTML in a scratch Pages/<slug>/index.html or a Pod's pages/<page>/index.html. Include /pages/pe.js. Consult the host Page library list at /pe/page-libraries for its typed doors and staged browser libraries.
@@ -137,13 +141,14 @@ The user asked to learn, not to be told. The master corrects the hand and never 
     name: "write-revit-csharp-script",
     content: String.raw`---
 name: write-revit-csharp-script
-description: Write and run a C# Revit script when code is the clearest way to inspect, mutate, or experiment against the model. Use for one-off probes, gaps in host operations, and durable multi-step work. Covers inline snippets, workspace files, and Pod rules. Not for changing values a route shows (family or type parameters, schedule cells, takeoffs, parameter links); propose those with propose-changes, even under Trusted.
+description: Write and run a C# Revit script when code is the clearest way to inspect, mutate, or experiment against a connected model. Use for one-off probes, gaps in host operations, and durable multi-step work. Covers inline snippets, workspace files, and Pod rules. Not for changing values a route shows (family or type parameters, schedule cells, takeoffs, parameter links); propose those with propose-changes, even under Trusted.
 ---
 
 # Write Revit C# Script
 
 ## Method
 
+- Start with pe_find to establish the exact connected document and capability. Do not create or register a script without a connected document. If there is no document, report the missing target and return a proposed script contract: purpose, inputs, read/write mode, expected artifact, and the readback that will prove it.
 - Choose a script when no host operation is the smallest capable surface. Bootstrap the workspace when paths or references are unknown.
 - Inline snippets for tiny probes; workspace files for durable or multi-step work.
 - Default to ReadOnly. Use WriteTransaction only for an explicit, user-authorized mutation. Use NoTransaction only for APIs that reject an open transaction.
@@ -155,6 +160,8 @@ Building or fixing a family from a cut sheet follows build-revit-family.
 A Pod is a workspace with a root pod.json declaring entrypoints; the build-pod skill defines it and owns building or adapting one.
 
 For a probe, report the answer and the permission mode it ran under. For a mutation, add the script path, diagnostics, and the verification readback.
+
+Worked example: to audit missing diffuser neck sizes, first read the connected project and identify the exact neck parameter. Only then create a ReadOnly script that returns grouped rows by family and type; do not register a Pod entrypoint until that first run produces the expected artifact.
 `,
   },
   {

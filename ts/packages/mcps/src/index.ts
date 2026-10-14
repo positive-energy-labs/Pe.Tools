@@ -36,4 +36,4 @@ export {
   scriptPodExportInputSchema,
   scriptPodImportInputSchema,
 } from "./shared/scripting.ts";
-export { peaAgentInstructions, type PeaRuntimeCapabilities } from "./pea/instructions.ts";
+export { peaAgentInstructions } from "./pea/instructions.ts";

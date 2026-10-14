@@ -11,12 +11,12 @@ import { familySource } from "#/family/source";
 import type { FamilyStore } from "#/family/store";
 import { FamilyWorkspaceProvider } from "#/family/workspace-context";
 import { useFamilyIdentityColumns } from "#/family/workspace-identity-columns";
-import type { TableState } from "#/components/master-table/model";
+import type { TableState } from "@pe/kit/table/model";
 import { useFamilyWorkspaceCore } from "#/family/workspace-core";
 import { FamilyWorkspaceDocPane } from "#/family/workspace-doc-pane";
 import { useFamilyTypeColumn } from "#/family/workspace-type-column";
 
-vi.mock("#/lib/token", () => ({ token: () => "currentColor", dash: () => "none" }));
+vi.mock("@pe/kit/lib/token", () => ({ token: () => "currentColor", dash: () => "none" }));
 afterEach(cleanup);
 
 const raw = JSON.stringify({

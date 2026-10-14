@@ -14,8 +14,8 @@ import {
   selectStarting,
   selectWaitingSeconds,
 } from "@pe/agent-contracts/chat-state";
-import { EmptyState } from "#/components/lang/empty";
-import { Button } from "#/components/lang/button";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { Button } from "@pe/kit/lang/button";
 import { Menu, X } from "lucide-react";
 import { chatPluginTitle, type ChatPluginRoute } from "#/workbench/chat-plugins";
 import { useChatPluginHost } from "#/workbench/route-panes";
@@ -28,7 +28,7 @@ import {
 } from "#/chat/composer-head";
 import { RouteShell, useRoute } from "#/route";
 import { appAtomRegistry } from "#/route/route-owner";
-import { useScopeKeys } from "#/route/keys";
+import { useScopeKeys } from "@pe/kit/keys";
 import { PagePaletteButton } from "#/route/situation-marks";
 import { PrimaryRouteControls, usePublishPagePalette } from "#/navigation/route-controls";
 import { useSurfaceHost } from "#/navigation/surface-host";
@@ -94,7 +94,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
     cancel,
     newThread,
     forkThread,
-    newRefusal,
+    sendRefusal,
     missingThread,
     draftTarget,
     openThread,
@@ -126,7 +126,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
         cancel,
         newThread: () => newThread(),
         forkThread: () => forkThread(),
-        newRefusal,
+        sendRefusal,
         promptCapabilities: chat.promptCapabilities,
         providerName: chat.providerName,
         draftTarget,
@@ -139,7 +139,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
       cancel,
       newThread,
       forkThread,
-      newRefusal,
+      sendRefusal,
       chat.promptCapabilities,
       chat.providerName,
       draftTarget,

@@ -1,4 +1,7 @@
 import { hostFetch } from "#/host/runtime";
+import { peClient } from "./pe-client";
+import { readPeError } from "@pe/host-contracts/pe-api";
+import { hostDescriptorSchema } from "@pe/host-contracts/host-descriptor";
 /** Update mutation only. Machine owns checks and durable receipt recovery. */
 export async function acknowledgeUpdate(planId: string): Promise<string> {
   const response = await hostFetch("/host/update", {
@@ -34,14 +37,17 @@ export type SuccessorProbe = "down" | "same" | "successor";
  */
 export async function probeSuccessor(version: string | null): Promise<SuccessorProbe> {
   try {
-    const response = await hostFetch("/host/status", { signal: AbortSignal.timeout(3_000) });
+    const response = await peClient.response(
+      "features.get",
+      {},
+      { signal: AbortSignal.timeout(3_000) },
+    );
     if (response.status === 403)
-      return ((await response.json()) as { refusal?: { code?: string } }).refusal?.code ===
-        "runtime.owner-mismatch"
-        ? "successor"
-        : "down";
+      return (await readPeError(response)).code === "runtime.owner-mismatch" ? "successor" : "down";
     if (!response.ok) return "down";
-    return (await response.json()).version !== version ? "successor" : "same";
+    return hostDescriptorSchema.parse(await response.json()).version !== version
+      ? "successor"
+      : "same";
   } catch {
     return "down";
   }

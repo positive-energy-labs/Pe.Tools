@@ -10,7 +10,7 @@ import {
 import { productInstallLayout } from "@pe/host-contracts/contracts";
 import { discoverHostBaseUrl, resolveLaneAndRoot } from "../src/shared/host-config.ts";
 import { serviceFilePath } from "@pe/host-contracts/pe-service";
-import { contextFetch } from "@pe/mcps/context";
+import { contextFetch } from "@pe/runtime/context";
 
 const { sea } = vi.hoisted(() => ({ sea: { bundled: false } }));
 vi.mock("node:sea", async (original) => ({

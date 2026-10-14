@@ -1,9 +1,9 @@
 import { settingsFieldPointer, type MeasuredValue } from "@pe/agent-contracts";
-import type { Column } from "#/components/master-table/model";
-import { ReadCell } from "#/components/master-table/cells";
-import { cellFromTrichotomy, type StateCellProps } from "#/components/lang/cell";
-import { PressContent } from "#/components/anatomy/press-content";
-import { Button } from "#/components/lang/button";
+import type { Column } from "@pe/kit/table/model";
+import { ReadCell } from "@pe/kit/table/cells";
+import { cellFromTrichotomy, type StateCellProps } from "@pe/kit/lang/cell";
+import { PressContent } from "@pe/kit/anatomy/press-content";
+import { Button } from "@pe/kit/lang/button";
 import { NavStateCell } from "#/family/marks";
 import { parameterText } from "#/family/family-model";
 import {

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { PaneTabs } from "./pane-tabs";
+import { PaneTabs } from "@pe/kit/lang/pane-tabs";
 
 afterEach(cleanup);
 

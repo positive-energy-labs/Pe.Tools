@@ -1,4 +1,4 @@
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 import { type OutcomeKind } from "#/components/lang/outcome";
 import { FC_UNITS, PARAM_META, type FcRow, type ParamMeta } from "#/param-tables/variants/data";
 

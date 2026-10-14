@@ -75,11 +75,11 @@ import { Effect } from "effect";
 import { z } from "zod";
 import type { HostLog } from "../host-log.ts";
 import { openAdapter, stopChild } from "./adapter.ts";
-import { accessModes, sessionOffer, type Providers } from "./providers.ts";
+import { accessModes, isAuthRefusal, sessionOffer, type Providers } from "./providers.ts";
 
 /** The thread wire of ADR 0015; contract and route list in `@pe/agent-contracts` `harness-thread.ts`. */
 
-type Meta = Omit<HarnessThreadSummary, "lastSeq" | "cursor" | "activity"> & {
+type Meta = Omit<HarnessThreadSummary, "lastSeq" | "cursor" | "activity" | "head"> & {
   acpSessionId: string | null;
   models: HarnessThreadBody["models"];
   traits: HarnessThreadBody["traits"];
@@ -486,7 +486,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     modelId: t.meta.modelId,
     lastSeq: t.events.length,
     cursor: options.log.last,
-    head: t.meta.head,
+    head: reading(t.meta.head),
     lifecycle: t.meta.lifecycle,
     activity: activity(t),
   });
@@ -582,6 +582,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
               lifetime: target.ref,
               grantedAt: new Date(now).toISOString(),
               grantedVia: caller.via,
+              ...(caller.login ? { grantedLogin: caller.login } : {}),
               expiresAt: grantExpiry(now),
               revoked: null,
             }
@@ -597,7 +598,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     const current = readHead(threadId);
     if (!current.grant || current.grant.revoked) return reading(current);
     const grant = { ...current.grant, revoked: { at: new Date().toISOString() } };
-    writeHead(threadId, { ...current, grant });
+    writeHead(threadId, { ...current, revision: current.revision + 1, grant });
     emitRevoke(threadId, grant);
     return reading(readHead(threadId));
   }
@@ -896,14 +897,18 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           if (t.live !== connecting || t.stopped) return;
           t.live = null;
           t.session = "closed";
-          options.providers.invalidate(
-            t.meta.providerId,
-            "The harness failed to start; probe again.",
-          );
+          const expired = isAuthRefusal(error) ? options.providers.expire(t.meta.providerId) : null;
+          if (!expired)
+            options.providers.invalidate(
+              t.meta.providerId,
+              "The harness failed to start; probe again.",
+            );
           append(t, {
             kind: "error",
             turnId: t.running,
-            message: `${t.meta.harness} harness failed to start: ${String(error?.message ?? error)}`,
+            message:
+              expired ??
+              `${t.meta.harness} harness failed to start: ${String(error?.message ?? error)}`,
           });
         },
       );
@@ -1096,7 +1101,9 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     } catch (error) {
       // A stopped thread's open turn is ended by restart recovery, not by "connection closed".
       if (!t.stopped) {
-        options.providers.invalidate(t.meta.providerId, "The harness turn failed; probe again.");
+        const expired = isAuthRefusal(error) ? options.providers.expire(t.meta.providerId) : null;
+        if (!expired)
+          options.providers.invalidate(t.meta.providerId, "The harness turn failed; probe again.");
         const raw = String((error as Error)?.message ?? error);
         const failure =
           options.providers.get(t.meta.providerId)?.auth.kind === "endpoint"
@@ -1105,7 +1112,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         append(t, {
           kind: "error",
           turnId,
-          message: failure?.message ?? raw,
+          message: expired ?? failure?.message ?? raw,
           ...(failure ? { failure } : {}),
         });
       }
@@ -1512,12 +1519,14 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       case "thread.cancel":
         return json({ cancelled: await cancel(t, caller, url.pathname) });
       case "thread.permission": {
+        requireHuman(caller, url.pathname, "answering a harness approval");
         const { requestId, optionId } = await input(permissionResponseSchema);
         return resolvePermission(t, requestId, optionId, "user")
           ? json({ ok: true })
           : json({ error: `No pending permission ${requestId}` }, 409);
       }
       case "thread.question": {
+        requireHuman(caller, url.pathname, "answering a human question");
         const { requestId, ...answer } = await input(questionResponseSchema);
         return resolveQuestion(t, requestId, answer, "user")
           ? json({ ok: true })
@@ -1535,6 +1544,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         const forked = create(
           {
             ...t.meta,
+            head: { ...t.meta.head, grant: null, lastHumanMessageAt: null, revision: 0 },
             id: randomUUID(),
             harness: record.harness,
             providerId: record.id,
@@ -1622,10 +1632,13 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       const dirty = () => {
         scheduled ??= setTimeout(send, 100);
       };
+      // Republish on the host clock too: a grant's expiry changes the head with no thread event.
+      const tick = setInterval(send, 15_000);
       summaryListeners.add(dirty);
       send();
       return () => {
         clearTimeout(scheduled);
+        clearInterval(tick);
         summaryListeners.delete(dirty);
       };
     }

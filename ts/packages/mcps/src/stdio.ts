@@ -5,7 +5,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
 import { resolveHostBaseUrl } from "./shared/host-config.ts";
-import { contextFetch } from "./shared/invocation-context.ts";
+import { contextFetch } from "@pe/runtime/context";
 
 /** Harness stdio carries PE_CONTEXT; external stdio initializes at the host's one MCP door. */
 export async function startPeaMcp(hostBaseUrl?: string) {

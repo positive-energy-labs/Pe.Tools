@@ -1,6 +1,6 @@
-/**
+﻿/**
  * The chat route, declared once. The thread head is a Reading, so the route's default Target is
- * whatever the head says — `useRoute` reads it back out of `readings` and no component keeps a
+ * whatever the head says â€” `useRoute` reads it back out of `readings` and no component keeps a
  * second copy. Every action runs the provider's verb over the harness-thread wire.
  */
 import { z } from "zod";
@@ -34,8 +34,8 @@ export interface ChatRouteDeps {
   cancel?: () => Promise<void>;
   newThread?: () => Promise<void>;
   forkThread?: () => Promise<void>;
-  /** Why the first send cannot create a thread now (providers loading, none ready). */
-  newRefusal?: string;
+  /** Why a send cannot go now: providers loading, none ready, or the provider this head runs on is not. */
+  sendRefusal?: string;
   /** What the thread's harness reads (null until its first session) and its name, for the
    * attachment refusal; the host enforces the same rule. */
   promptCapabilities?: PromptCapabilities | null;
@@ -81,8 +81,7 @@ export const chatManifest = (
         ready: (ctx, input) => {
           if (!deps.send) return "Chat is not ready";
           if (!deps.ready) return "Thread state is loading";
-          // The first send creates the thread.
-          if (!deps.thread && deps.newRefusal) return deps.newRefusal;
+          if (deps.sendRefusal) return deps.sendRefusal;
           const target = deps.thread
             ? (threadHeadSchema.safeParse(previousOf(ctx.readings.head)).data?.defaultTarget ??
               null)

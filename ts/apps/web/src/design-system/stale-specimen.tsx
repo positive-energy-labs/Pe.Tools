@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { RouteStatePatch, ScheduleGridDocument } from "@pe/agent-contracts";
 
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { Section } from "#/components/lang/section";
 import { reviewAddresses } from "#/components/work/band";
 import { ScheduleProposals } from "#/route/schedules/review";

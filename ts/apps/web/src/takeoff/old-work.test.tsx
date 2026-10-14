@@ -17,10 +17,9 @@ import { readingKey, type ReadingRequest } from "@pe/agent-contracts";
 vi.mock("#/host/client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#/host/client")>()),
   callHostRpc: (key: string) => Promise.reject(new Error(`no host in test: ${key}`)),
-  callHostDynamic: () => Promise.reject(new Error("no host in test")),
 }));
-vi.mock("#/lib/token", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("#/lib/token")>()),
+vi.mock("@pe/kit/lib/token", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@pe/kit/lib/token")>()),
   token: () => "currentColor",
 }));
 

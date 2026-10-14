@@ -13,7 +13,6 @@ import {
   peaState,
   revitState,
   shareState,
-  updateState,
   type GroupKey,
 } from "./model";
 import { RevitGroup } from "./revit";
@@ -21,6 +20,7 @@ import { HostGroup } from "./host";
 import { PeaGroup } from "./pea";
 import { ShareGroup } from "./share";
 import { UpdateGroup } from "./update";
+import { updateSaid } from "./update-state";
 import { SEED_REFUSAL } from "./use-machine";
 
 /**
@@ -98,7 +98,7 @@ export function MachineBody({
       ? "The machine reading is not current; wait for the host."
       : null;
   const revit = revitState(machine),
-    update = updateState(machine),
+    update = updateSaid(machine),
     share = shareState(machine),
     pea = peaState(machine);
   return (

@@ -154,12 +154,23 @@ test("shelves derive overlays without merging targets or provider identities", (
     "active",
   ]);
   const exact = { kind: "open" as const, ref: { session: "a", openId: "one" } };
-  const a = { ...threads[0]!, head: { ...emptyThreadHead, defaultTarget: exact, revision: 1 } };
+  const a = {
+    ...threads[0]!,
+    head: {
+      ...emptyThreadHead,
+      hostNow: "1970-01-01T00:00:00.000Z",
+      grantView: null,
+      defaultTarget: exact,
+      revision: 1,
+    },
+  };
   const b = {
     ...a,
     id: "other",
     head: {
       ...emptyThreadHead,
+      hostNow: "1970-01-01T00:00:00.000Z",
+      grantView: null,
       defaultTarget: { ...exact, ref: { session: "a", openId: "two" } },
       revision: 1,
     },
@@ -243,6 +254,8 @@ test("unread comes from actual activity or explicit mark, never generic lastSeq/
     ...thread,
     head: {
       ...emptyThreadHead,
+      hostNow: "1970-01-01T00:00:00.000Z",
+      grantView: null,
       defaultTarget: { kind: "named" as const, session: "s", address: address("C:/Model.rvt") },
       revision: 1,
     },

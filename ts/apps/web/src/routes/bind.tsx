@@ -6,11 +6,12 @@ import { BindRoute } from "#/pages-bind/picker";
 export const Route = createFileRoute("/bind")({
   validateSearch: (search: Record<string, unknown>) => ({
     page: typeof search.page === "string" ? search.page : "",
+    view: search.view === "1" || search.view === 1,
   }),
   component: Bind,
 });
 
 function Bind() {
-  const { page } = Route.useSearch();
-  return <BindRoute slug={page} />;
+  const { page, view } = Route.useSearch();
+  return <BindRoute slug={page} view={view} />;
 }

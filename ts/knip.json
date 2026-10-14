@@ -35,6 +35,9 @@
     "packages/host-contracts": {
       "entry": ["scripts/*.ts"]
     },
+    "packages/kit": {
+      "entry": ["tests/browser.mjs"]
+    },
     "packages/mcps": {
       "entry": ["src/server.ts"]
     },

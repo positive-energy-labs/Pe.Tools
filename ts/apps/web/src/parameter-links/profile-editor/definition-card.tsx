@@ -4,10 +4,10 @@ import type {
   ParameterLinkDefinition,
   ParameterLinkProfile,
 } from "@pe/agent-contracts";
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { EmptyState } from "#/components/lang/empty";
-import { Button } from "#/components/lang/button";
-import { Input } from "#/components/lang/input";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { Button } from "@pe/kit/lang/button";
+import { Input } from "@pe/kit/lang/input";
 import {
   FieldOptionPicker,
   FieldOptionSelect,

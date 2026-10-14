@@ -4,11 +4,12 @@
  * Claude desktop, Claude Code or Codex to Pea's tools over MCP.
  */
 import { useState } from "react";
-import { Button } from "#/components/lang/button";
-import { ProviderSetup } from "#/machine/pea";
+import { Button } from "@pe/kit/lang/button";
+import { LoginLine, ProviderSetup } from "#/machine/pea";
+import type { Provider } from "@pe/agent-contracts";
 import { Switch } from "#/components/lang/switch";
 import { Switcher } from "#/components/lang/switcher";
-import { type ProvidersState } from "#/workbench/provider/providers";
+import { repairWord, type ProvidersState } from "#/workbench/provider/providers";
 
 /** Agent approvals choose the harness mode for new sessions. HTTP and MCP access are separate. */
 export function AccessSwitch({ providers }: { providers: ProvidersState }) {
@@ -66,6 +67,46 @@ export function FirstOpenCard({
       ) : (
         <OwnAppDoor host={origin} />
       )}
+    </section>
+  );
+}
+
+/**
+ * The provider this head runs on is not ready while another is: the composer carries that one
+ * provider's words and its one repair, so a logged-out harness is never a silent Send.
+ */
+export function ProviderRepair({
+  provider,
+  providers,
+}: {
+  provider: Provider;
+  providers: ProvidersState;
+}) {
+  const word = repairWord(provider);
+  return (
+    <section aria-label={`repair ${provider.name}`} className="hairline-b flex flex-col px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold">{provider.name}</span>
+        <span className="min-w-0 truncate" data-tone="caution">
+          {provider.readiness.state === "ready" ? "" : provider.readiness.message}
+        </span>
+        <span className="ml-auto flex gap-1">
+          <Button label="Probe" onClick={() => void providers.probe(provider.id)}>
+            Probe
+          </Button>
+          {word ? (
+            <Button
+              label={word}
+              kind="framed"
+              reason="open the harness installer or login in a console on this machine"
+              onClick={() => void providers.openLogin(provider.id)}
+            >
+              {word}
+            </Button>
+          ) : null}
+        </span>
+      </div>
+      <LoginLine provider={provider} providers={providers} />
     </section>
   );
 }

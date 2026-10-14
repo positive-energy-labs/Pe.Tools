@@ -22,7 +22,12 @@ console.log(`staged web SPA -> ${dest}; ${split.length} private maps -> ${maps}`
 const pages = join(here, "..", "dist-installed", "pages");
 rmSync(pages, { recursive: true, force: true });
 cpSync(join(here, "..", "src", "pages"), pages, { recursive: true });
-cpSync(join(here, "..", "..", "web", "src", "base.css"), join(pages, "base.css"));
+cpSync(join(here, "..", "..", "..", "packages", "kit", "src", "base.css"), join(pages, "base.css"));
+const kit = join(here, "..", "..", "..", "packages", "kit", "dist");
+for (const name of ["pe-kit.js", "pe-kit.css"])
+  if (!existsSync(join(kit, name)))
+    throw new Error(`Page kit build not found at ${kit}; build @pe/kit first`);
+cpSync(kit, join(pages, "kit"), { recursive: true });
 for (const name of ["revit.js", "revit.css"])
   cpSync(join(here, "..", "..", "web", "src", "revit", name), join(pages, name));
 console.log(`staged page assets -> ${pages}`);

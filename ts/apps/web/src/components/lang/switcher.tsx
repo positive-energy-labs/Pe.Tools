@@ -4,9 +4,9 @@
  */
 import type { ReactNode } from "react";
 
-import { tv } from "#/lib/tv";
+import { tv } from "@pe/kit/lib/tv";
 
-import "./lang.css";
+import "@pe/kit/lang/lang.css";
 
 export const switcherRecipe = tv({
   slots: {

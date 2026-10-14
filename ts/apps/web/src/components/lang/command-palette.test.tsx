@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { CommandPalette } from "./command-palette";
 import { useState } from "react";
-import { Input } from "./input";
+import { Input } from "@pe/kit/lang/input";
 
 afterEach(cleanup);
 test("the shared palette focuses search, filters and opens through one selection callback", async () => {

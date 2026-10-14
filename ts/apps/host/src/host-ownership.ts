@@ -7,7 +7,7 @@ import {
   installedRuntimeRoot,
   type HostLane,
 } from "@pe/host-contracts/service-identity";
-import type { PeaRuntimeCapabilities } from "@pe/mcps";
+import type { PeaRuntimeCapabilities } from "@pe/runtime";
 
 export { productRoot } from "@pe/host-contracts/service-identity";
 

@@ -2,14 +2,14 @@
  *  thread exists every rung edits the draft, which the first send binds; after, the provider is
  *  fixed (fork to change) and the model and traits go to the thread. */
 import { useState } from "react";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { useDestination } from "#/navigation/state";
 import { settingsDestination } from "#/machine/navigation";
 import type { TraitOption } from "@pe/agent-contracts";
 import { Ladder, type Rung } from "#/route/ladder";
 import { ProviderMark } from "#/components/lang/provider-mark";
 import { useWorkbench } from "#/workbench/provider";
-import { isReady, readinessSub } from "#/workbench/provider/providers";
+import { isReady, readinessSub, repairWord } from "#/workbench/provider/providers";
 import type { GrantView } from "./scope";
 
 /** A two-way on/off select is a toggle, as a boolean is. */
@@ -98,16 +98,32 @@ export function HeadLadder() {
   const go = useDestination();
   const head = useHead();
   const [open, setOpen] = useState(false);
+  const { providers } = useWorkbench();
+  // The picker is where a missing harness is noticed, so it carries the one press that repairs it.
   const manage = (
-    <Button
-      label="Manage providers"
-      onClick={() => {
-        setOpen(false);
-        go(settingsDestination("providers"));
-      }}
-    >
-      Manage providers
-    </Button>
+    <>
+      {head.list.map((provider) => {
+        const word = !isReady(provider) && repairWord(provider);
+        return word ? (
+          <Button
+            key={provider.id}
+            label={`${word} ${provider.name}`}
+            onClick={() => void providers.openLogin(provider.id)}
+          >
+            {`${word} ${provider.name}`}
+          </Button>
+        ) : null;
+      })}
+      <Button
+        label="Manage providers"
+        onClick={() => {
+          setOpen(false);
+          go(settingsDestination("providers"));
+        }}
+      >
+        Manage providers
+      </Button>
+    </>
   );
   const fixed = head.bound ? "fork to change" : undefined;
   const modelName = head.modelId
@@ -173,11 +189,10 @@ export function HeadLadder() {
 
 /**
  * Whether Pea may write the document this thread points at, counted on the host's clock. Words
- * only, no button: pointing the thread elsewhere ends the grant, and the next message you send
- * renews it. Nothing when the thread holds no grant (no document, a named target, Pea's own).
+ * with one-click revoke. Nothing when the thread holds no grant.
  * The copy is lowercase by ruling (`rw · 42m`), so the chip takes no sentence casing.
  */
-export function GrantChip({ grant }: { grant: GrantView | null }) {
+export function GrantChip({ grant, onRevoke }: { grant: GrantView | null; onRevoke?: () => void }) {
   if (!grant) return null;
   const [tone, text, title] =
     grant.state === "rw"
@@ -197,6 +212,18 @@ export function GrantChip({ grant }: { grant: GrantView | null }) {
             "revoked · point the thread at it again to grant",
             "rw on this document was revoked. Steps already running finish; nothing new starts until you point the thread at the document again.",
           ];
+  if (grant.state === "rw" && onRevoke)
+    return (
+      <Button
+        label="Revoke rw"
+        reason="Revoke rw. Running steps finish; no new step begins."
+        data-testid="grant-chip"
+        data-tone={tone}
+        onClick={onRevoke}
+      >
+        <span className="face-mono">{text}</span>
+      </Button>
+    );
   return (
     <span className="face-mono" data-tone={tone} data-testid="grant-chip" title={title}>
       {text}

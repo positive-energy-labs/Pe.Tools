@@ -5,11 +5,11 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "#/components/lang/switcher";
 import type { Point2, Viewport2 } from "#/lib/affine-frame";
-import { useScopeKeys } from "#/route/keys";
-import { token } from "#/lib/token";
+import { useScopeKeys } from "@pe/kit/keys";
+import { token } from "@pe/kit/lib/token";
 import { CARD_META, CARD_STATES, inLoop, rdp, shoelace, type Card, type CardState } from "./cards";
 import { PIN_R } from "./callouts";
 import type { RoomsRegion } from "./plan";

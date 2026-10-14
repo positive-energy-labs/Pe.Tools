@@ -1,8 +1,8 @@
 import { Pin } from "lucide-react";
 import type { GroundedDocEngine } from "#/grounded-doc/engine";
 import type { DocImage, GroundedBlock } from "#/grounded-doc/types";
-import { cn } from "#/lib/utils";
-import { List } from "#/components/lang/list-popup";
+import { cn } from "@pe/kit/lib/utils";
+import { List } from "@pe/kit/lang/list-popup";
 import { BlockMarkdown, VEIL_HOVER, anchorRef, pageKey } from "./block-markdown";
 
 /** The figures, one List grouped by page: the thumbnail is each Row's lead (R10). The one focus

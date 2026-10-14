@@ -13,8 +13,8 @@ import {
 import type { ReactNode } from "react";
 
 import { ReviewRow, reviewTransitions, type CellWire } from "#/components/work/band";
-import { cellFromTrichotomy, fmtNum, StateCell } from "#/components/lang/cell";
-import { useCellNavigation } from "#/components/master-table/cell-navigation";
+import { cellFromTrichotomy, fmtNum, StateCell } from "@pe/kit/lang/cell";
+import { useCellNavigation } from "@pe/kit/table/cell-navigation";
 
 /** An adoption choice said as the person reads it. */
 export const showAdopt = (value: unknown) => {

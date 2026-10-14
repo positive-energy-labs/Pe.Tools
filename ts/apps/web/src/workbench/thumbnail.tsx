@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Dialog, DialogContent } from "#/components/lang/dialog";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 
 /**
  * The one image thumbnail in chat: composer chips, sent attachments, and the images a tool call

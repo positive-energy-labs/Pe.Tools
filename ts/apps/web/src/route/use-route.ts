@@ -29,7 +29,8 @@ import { situationCells } from "./cells";
 import { DEFAULT_WAIT_S, type RouteManifest } from "./manifest";
 import { urlPage, useInitialUrlPage, useUrlPage } from "./url";
 import { actionFacts, staticNeed, type ActionFacts } from "./facts";
-import { callHostDynamic } from "#/host/client";
+import { callHostRpc, type HostCallOptions } from "#/host/client";
+import type { OpKey, OpCallArgs } from "@pe/host-contracts/operation-types";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
 import { useThreadScope } from "#/chat/scope";
 import {
@@ -47,7 +48,7 @@ import {
   useRouteOwner,
 } from "./route-owner";
 import { docAtom, docWriter, notHydrated } from "./route-work";
-import { useRouteTarget, type BindingLost } from "./route-target";
+import { useRouteTarget, type BindingLost, type TargetProvenance } from "./route-target";
 
 export interface ActionHandle extends ActionFacts {
   readonly label: string;
@@ -73,6 +74,7 @@ interface RouteOutcome<A extends string> {
 export interface RouteHandle<W, R extends string, P, A extends string> {
   readonly manifest: RouteManifest<W, R, P, A>;
   readonly resolution: TargetResolution;
+  readonly targetProvenance: TargetProvenance;
   /** The `?target` pin: a view over one document, never written by the route; null reads the head. */
   readonly chosen: string | null;
   /** The thread head, the one target store; null on a route that names no thread. */
@@ -177,8 +179,15 @@ export function useRoute<W, R extends string, P, A extends string>(
   const target = typeof requestedTarget === "function" ? requestedTarget(page) : requestedTarget;
   const spec = manifest.work;
   const conflictNow = useOwned(owner.registry, owner.conflict) ?? false;
-  const { inventoryResult, head, resolution, bindingLost, bindingLostRef, resolvedAddress } =
-    useRouteTarget(manifest, owner.registry, seed, target, options.thread);
+  const {
+    inventoryResult,
+    head,
+    resolution,
+    bindingLost,
+    bindingLostRef,
+    resolvedAddress,
+    targetProvenance,
+  } = useRouteTarget(manifest, owner.registry, seed, target, options.thread);
   const work =
     typeof requestedWork === "function" ? requestedWork(page, resolvedAddress) : requestedWork;
   const boundDocument =
@@ -423,8 +432,11 @@ export function useRoute<W, R extends string, P, A extends string>(
       readings,
       page,
       note: owner.verbNote,
-      call: (operation: string, input?: unknown) =>
-        callHostDynamic(operation, input, targetHeaders(ctx.target)),
+      call: <K extends OpKey>(operation: K, ...[input]: OpCallArgs<K, never>) =>
+        callHostRpc(
+          operation,
+          ...([input, targetHeaders(ctx.target)] as OpCallArgs<K, HostCallOptions>),
+        ),
       // Bound to the action's snapshot, through the queue: it follows this owner's own landed
       // writes past that snapshot, and a foreign write still refuses it.
       write: async (patches: RouteStatePatch[]) => {
@@ -586,6 +598,7 @@ export function useRoute<W, R extends string, P, A extends string>(
   return {
     manifest,
     resolution,
+    targetProvenance,
     chosen: target,
     head,
     work: workHandle,

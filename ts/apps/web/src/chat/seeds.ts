@@ -461,7 +461,7 @@ function row(
     description,
     needs: kind === "op" || kind === "script" ? "document" : "nothing",
     mutates: kind === "route-command" || kind === "script",
-    actor: "any",
+    principal: ["human", "pea", "page", "external-mcp"],
     input: {},
     source: "seed",
     // A packaged row names its admitted entry, as the host's catalog does.

@@ -6,9 +6,9 @@
  */
 import { useRef, useState } from "react";
 
-import { Input } from "#/components/lang/input";
-import { Button } from "#/components/lang/button";
-import { useScopeKeys } from "#/route/keys";
+import { Input } from "@pe/kit/lang/input";
+import { Button } from "@pe/kit/lang/button";
+import { useScopeKeys } from "@pe/kit/keys";
 import type { Question } from "@pe/agent-contracts/chat-state";
 
 type Option = { const: unknown; title?: string; description?: string };

@@ -1,11 +1,11 @@
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 import { useState } from "react";
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { fmtNum, StateCell, type StateCellProps } from "#/components/lang/cell";
-import { FactChip } from "#/components/lang/chip";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { fmtNum, StateCell, type StateCellProps } from "@pe/kit/lang/cell";
+import { FactChip } from "@pe/kit/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { Switcher } from "#/components/lang/switcher";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { Pane } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
 import { FC_UNITS } from "#/param-tables/variants/data";

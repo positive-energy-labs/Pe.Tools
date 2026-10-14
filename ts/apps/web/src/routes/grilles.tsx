@@ -1,5 +1,5 @@
 import { RouteShell, emptyManifest } from "#/route";
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 /**
  * /grilles — the custom wood floor grille calculator.
  *
@@ -21,8 +21,8 @@ import { token } from "#/lib/token";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
-import { FactChip } from "#/components/lang/chip";
-import { Button } from "#/components/lang/button";
+import { FactChip } from "@pe/kit/lang/chip";
+import { Button } from "@pe/kit/lang/button";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
 import { FieldChart, stepField } from "#/grilles/chart";

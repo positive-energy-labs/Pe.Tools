@@ -1,8 +1,8 @@
 import type { TrichotomyCellLike } from "@pe/agent-contracts";
-import { token } from "#/lib/token";
-import { EmptyState } from "#/components/lang/empty";
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { FactChip, Tag } from "#/components/lang/chip";
+import { token } from "@pe/kit/lib/token";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { FactChip, Tag } from "@pe/kit/lang/chip";
 import { useEffect, useRef } from "react";
 import { useGroundedDoc } from "#/grounded-doc/engine";
 import { PagePane } from "#/grounded-doc/view/page-pane";
@@ -10,7 +10,7 @@ import { ReviewRow, type CellWire } from "#/components/work/band";
 import { Switcher } from "#/components/lang/switcher";
 
 import type { ProtoProposal, ProtoSpec } from "#/family/world";
-import { Code } from "#/components/lang/code";
+import { Code } from "@pe/kit/lang/code";
 
 export function SpecText({
   spec,

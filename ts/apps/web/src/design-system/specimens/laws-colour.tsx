@@ -1,6 +1,6 @@
-import { FactChip } from "#/components/lang/chip";
-import { StateCell } from "#/components/lang/cell";
-import { Button } from "#/components/lang/button";
+import { FactChip } from "@pe/kit/lang/chip";
+import { StateCell } from "@pe/kit/lang/cell";
+import { Button } from "@pe/kit/lang/button";
 import { CounterExample, Law } from "#/design-system/exhibit";
 
 const noop = () => {};

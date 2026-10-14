@@ -1,4 +1,5 @@
 import { normalizePeError } from "@pe/host-contracts/pe-api";
+import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
 import { peRoutes, peRouteUrl, servePeRoute, matchPeRoute } from "@pe/agent-contracts/pe-api";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
@@ -79,7 +80,7 @@ import { hostActionJournal, hostLog } from "./gateway-owner.ts";
 import type { HostLog } from "./host-log.ts";
 import { UpdateReader } from "./update-reader.ts";
 import { makeInstalledUpdateReader } from "./update-route.ts";
-import { HostLifecycle } from "./host-lifecycle.ts";
+import { HostLifecycle, resolveHostVersion } from "./host-lifecycle.ts";
 import { bindActionWorkspace } from "./takeoff-actions.ts";
 import { familySpecAsset, familySpecHandlers } from "./family-spec.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
@@ -190,6 +191,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
     const method = request.method;
     const declared = matchPeRoute(method, url.pathname);
     if (!declared || declared.route.owner !== "pe") return json({ error: "Unknown Pe route" }, 404);
+    if (declared.id === "features.get") return json(hostDescriptor(resolveHostVersion()));
     if (method === "GET" && declared.id === "family.spec") return familySpecAsset(url);
     const parts = url.pathname.split("/").slice(2).map(decodeURIComponent); // drop "", "pe"
     const body = () => request.json().catch(() => null);
@@ -554,7 +556,7 @@ export function createContributionContent(options: {
           description: "Page shared state and binding.",
           needs: "nothing",
           mutates: false,
-          actor: "any",
+          principal: ["human", "pea", "page", "external-mcp"],
           input: {},
           source: "pages",
           rank: 1,

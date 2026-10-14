@@ -1,4 +1,5 @@
-import { invocationContext, hostFetch as fetch } from "@pe/mcps/context";
+import { invocationContext, hostFetch as fetch } from "@pe/runtime/context";
+import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { Effect } from "effect";
 import { readingKey, actionStatusSchema, type ReadingFrame } from "@pe/agent-contracts";
 import { OwnerReads, resourceSnapshot, type ResourceObserver, type OwnerValue } from "@pe/runtime";
@@ -20,7 +21,7 @@ import type { MachineOwner } from "./machine.ts";
 const ONE_SHOT: Record<string, (r: never) => readonly [string, RequestInit?]> = {
   "host-status": () => ["/host/status"],
   capabilities: (r: { doc?: string }) => [
-    `/pe/capabilities${r.doc ? `?doc=${encodeURIComponent(r.doc)}` : ""}`,
+    peRouteUrl("capabilities.find", { query: { doc: r.doc } }),
   ],
   "ops-catalog": (r: { session?: string }) => [
     `/ops${r.session ? `?session=${encodeURIComponent(r.session)}` : ""}`,

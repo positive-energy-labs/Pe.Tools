@@ -1,6 +1,6 @@
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 import { type ReactNode, useState } from "react";
-import { cn } from "#/lib/utils";
+import { cn } from "@pe/kit/lib/utils";
 
 export type VizIndex = 1 | 2 | 3 | 4 | 5 | 6;
 

@@ -1,7 +1,7 @@
 import { RouteShell, emptyManifest } from "#/route";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
-import { FactChip } from "#/components/lang/chip";
+import { FactChip } from "@pe/kit/lang/chip";
 import { DesignSystemLaws, LAW_POINTERS } from "#/design-system/laws";
 import { DesignSystemSpecimens } from "#/design-system/specimens/index";
 import { ThesisSpecimen } from "#/design-system/specimens/thesis";

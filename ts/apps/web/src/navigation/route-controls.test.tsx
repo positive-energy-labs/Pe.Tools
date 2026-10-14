@@ -3,7 +3,7 @@ import { Activity } from "react";
 import { render, cleanup } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { HostedChrome } from "#/route/hosted-chrome";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import {
   PrimaryRouteControls,
   RouteControlsProvider,

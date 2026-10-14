@@ -1,9 +1,9 @@
 import { useState } from "react";
 
-import { Button } from "#/components/lang/button";
-import { ListChips, ListPopup } from "#/components/lang/list-popup";
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { JsonEditor, stringify } from "#/components/lang/code";
+import { Button } from "@pe/kit/lang/button";
+import { ListChips, ListPopup } from "@pe/kit/lang/list-popup";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { JsonEditor, stringify } from "@pe/kit/lang/code";
 import { FieldRenderer } from "./field-renderer";
 import { FieldLabelRow, FieldMessages, FieldOptions } from "./field-metadata";
 import {

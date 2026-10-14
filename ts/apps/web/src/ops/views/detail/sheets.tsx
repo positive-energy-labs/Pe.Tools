@@ -1,5 +1,5 @@
 import type { RevitDetailParameterLinks, RevitDetailSheets } from "@pe/host-contracts/generated";
-import { EmptyState } from "#/components/lang/empty";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
 import { VizChip } from "#/ops/primitives";
 import { type OpViewProps, UnrecognizedShape, asRecord } from "#/ops/registry";

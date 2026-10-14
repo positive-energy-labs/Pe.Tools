@@ -17,7 +17,7 @@ import {
   gatewayTarget,
   requireEligibleCaller,
 } from "./gateway-actions.ts";
-import { admitCrossing, currentCaller, Refused } from "./control.ts";
+import { admitCrossing, consentedRead, currentCaller, readsOnly, Refused } from "./control.ts";
 import type { Caller } from "@pe/agent-contracts";
 import { actionBasesSchema, actionListFilterSchema } from "@pe/agent-contracts";
 import {
@@ -164,7 +164,8 @@ export function makeCallRoute(
     resume = false,
   ) => {
     const input = actionAdmissionSchema.parse(raw);
-    const crossing = { caller, basis: admitCrossing(caller, input.destination, "/actions") };
+    const reads = readsOnly(input.key, input.input);
+    const crossing = { caller, basis: admitCrossing(caller, input.destination, "/actions", reads) };
     return input.kind === "workflow" && Object.hasOwn(scheduleActions, input.key)
       ? admitScheduleAction(input, crossing, owner(), observations(), bridge, actionDeps, resume)
       : input.kind === "workflow" && Object.hasOwn(instancesActions, input.key)
@@ -270,7 +271,8 @@ export function makeCallRoute(
           try: () => operationDefinition(key, bridge, resolvedSession),
           catch: (error) => error,
         });
-        if (definition.intent === "Mutate") {
+        const intent = consentedRead(caller, key, request) ? "Read" : definition.intent;
+        if (intent === "Mutate") {
           return yield* Effect.fail(
             new BridgeError(
               "Submit the original exact admission to /actions; raw mutation dispatch is retired",
@@ -279,7 +281,7 @@ export function makeCallRoute(
             ),
           );
         }
-        if (definition.intent !== "Read")
+        if (intent !== "Read")
           return yield* Effect.fail(
             new BridgeError("Unknown operation intent", 409, { notDispatched: true }),
           );

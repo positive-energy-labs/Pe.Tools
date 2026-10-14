@@ -14,6 +14,17 @@ import {
   parseContributionKey,
 } from "./contribution.ts";
 import type { Machine } from "./machine.ts";
+import { principalSchema, type Principal } from "./principal.ts";
+
+/** Native/Work metadata projects to actual callers; service contexts never operate the product. */
+export function capabilityPrincipals(
+  mutates: boolean,
+  actor: "any" | "human" | "agent" = "any",
+): Principal[] {
+  if (actor === "human") return ["human"];
+  const permitted: Principal[] = actor === "agent" ? ["pea", "page"] : ["human", "pea", "page"];
+  return mutates ? permitted : [...permitted, "external-mcp"];
+}
 
 export const capabilityKindSchema = z.enum([
   "op",
@@ -46,7 +57,7 @@ export const capabilitySchema = z
     description: z.string(),
     needs: capabilityNeedsSchema,
     mutates: z.boolean(),
-    actor: z.enum(["any", "human", "agent"]),
+    principal: z.array(principalSchema).min(1),
     /** JSON Schema of the row's input. */
     input: z.record(z.string(), z.unknown()),
     output: z.record(z.string(), z.unknown()).optional(),

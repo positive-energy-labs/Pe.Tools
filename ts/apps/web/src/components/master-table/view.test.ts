@@ -1,8 +1,8 @@
 import { expect, test } from "vite-plus/test";
 
-import { resolveStateColumn } from "#/components/master-table/master-table-columns";
-import type { Column } from "#/components/master-table/model";
-import { conditionValues, visibleRows, wordMatches } from "#/components/master-table/view";
+import { resolveStateColumn } from "@pe/kit/table/master-table-columns";
+import type { Column } from "@pe/kit/table/model";
+import { conditionValues, visibleRows, wordMatches } from "@pe/kit/table/view";
 
 interface Room {
   id: string;

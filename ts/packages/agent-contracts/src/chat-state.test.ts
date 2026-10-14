@@ -250,8 +250,8 @@ describe("harness event projection", () => {
       update(3, "t1", {
         sessionUpdate: "tool_call_update",
         toolCallId: "g1",
-        title: 'grep "clone" C:\Pods',
-        rawInput: { pattern: "clone", path: "C:\Pods" },
+        title: 'grep "clone" C:Pods',
+        rawInput: { pattern: "clone", path: "C:Pods" },
       }),
       update(4, "t1", {
         sessionUpdate: "tool_call",
@@ -262,8 +262,8 @@ describe("harness event projection", () => {
       }),
     ] satisfies HarnessEvent[];
     const [grep, ask] = selectToolCalls(state(log));
-    expect(grep).toMatchObject({ title: "Grep", target: "C:\Pods" });
-    expect(toolDetail(grep!)).toEqual({ text: 'grep "clone" C:\Pods', emitted: true });
+    expect(grep).toMatchObject({ title: "Grep", target: "C:Pods" });
+    expect(toolDetail(grep!)).toEqual({ text: 'grep "clone" C:Pods', emitted: true });
     expect(toolDetail(ask!)).toEqual({ text: "Which clone should open?", emitted: false });
   });
 

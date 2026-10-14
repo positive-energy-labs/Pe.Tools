@@ -4,13 +4,19 @@
  */
 import { useState, type ReactNode } from "react";
 import { Plug } from "lucide-react";
-import type { EndpointFailure, HarnessId, Machine } from "@pe/agent-contracts";
+import type { EndpointFailure, HarnessId, Machine, Provider } from "@pe/agent-contracts";
 
-import { Input } from "#/components/lang/input";
-import { ListSegmentInput } from "#/components/lang/list-popup";
+import { Input } from "@pe/kit/lang/input";
+import { ListSegmentInput } from "@pe/kit/lang/list-popup";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Button } from "#/components/lang/button";
-import { readinessSub, useProviders, type ProvidersState } from "#/workbench/provider/providers";
+import { Button } from "@pe/kit/lang/button";
+import {
+  loginLine,
+  readinessSub,
+  repairWord,
+  useProviders,
+  type ProvidersState,
+} from "#/workbench/provider/providers";
 import { EndpointError } from "#/workbench/endpoint-error";
 import { errorMessage } from "#/workbench/provider/use-workbench";
 import { useDestination } from "#/navigation/state";
@@ -48,21 +54,18 @@ export function PeaGroup({
             >
               Probe
             </Button>
-            {provider.auth.kind === "subscription" && (
+            {repairWord(provider) && (
               <Button
-                label={
-                  provider.readiness.state === "refused" && provider.readiness.step === "installed"
-                    ? "Install"
-                    : "Sign in"
-                }
+                label={repairWord(provider)!}
                 refusal={refusal}
                 onClick={() => void providers.openLogin(provider.id)}
               >
-                {provider.readiness.state === "refused" && provider.readiness.step === "installed"
-                  ? "Install"
-                  : "Sign in"}
+                {repairWord(provider)}
               </Button>
             )}
+          </span>
+          <span className="basis-full">
+            <LoginLine provider={provider} providers={providers} />
           </span>
         </div>
       ))}
@@ -75,6 +78,18 @@ export function PeaGroup({
       {providers.list && providers.error && <OutcomeLine kind="refused" label={providers.error} />}
     </div>
   );
+}
+
+/** What Sign in or Install is doing right now, under the row it was pressed on. */
+export function LoginLine({
+  provider,
+  providers,
+}: {
+  provider: Provider;
+  providers: ProvidersState;
+}) {
+  const line = loginLine(provider, providers.login[provider.id]);
+  return line ? <OutcomeLine kind={line.kind} label={line.label} /> : null;
 }
 
 export function ProviderSetup({ providers }: { providers: ProvidersState }) {
@@ -91,7 +106,7 @@ export function ProviderSetup({ providers }: { providers: ProvidersState }) {
           <span className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{provider.name}</span>
             <span
-              className="min-w-0 truncate face-mono"
+              className="min-w-0 break-words face-mono"
               data-tone={provider.readiness.state === "ready" ? undefined : "caution"}
               title={readinessSub(provider)}
             >
@@ -103,20 +118,13 @@ export function ProviderSetup({ providers }: { providers: ProvidersState }) {
               <Button label="Probe" onClick={() => void providers.probe(provider.id)}>
                 Probe
               </Button>
-              {provider.auth.kind === "subscription" ? (
+              {repairWord(provider) ? (
                 <Button
-                  label={
-                    provider.readiness.state === "refused" &&
-                    provider.readiness.step === "installed"
-                      ? "Install"
-                      : "Sign in"
-                  }
+                  label={repairWord(provider)!}
                   reason="open the harness installer or login in a console on this machine"
                   onClick={() => void providers.openLogin(provider.id)}
                 >
-                  {provider.readiness.state === "refused" && provider.readiness.step === "installed"
-                    ? "Install"
-                    : "Sign in"}
+                  {repairWord(provider)}
                 </Button>
               ) : (
                 <Button label="Remove" onClick={() => void providers.remove(provider.id)}>
@@ -125,6 +133,7 @@ export function ProviderSetup({ providers }: { providers: ProvidersState }) {
               )}
             </span>
           </span>
+          <LoginLine provider={provider} providers={providers} />
           {provider.readiness.state === "refused" && provider.readiness.failure ? (
             <EndpointError
               message={provider.readiness.message}
@@ -181,6 +190,8 @@ const ENDPOINTS: readonly {
   harness: HarnessId;
   label: string;
   name: string;
+  /** What the provider is called when the person types no name: the lab API, or the wire for a custom one. */
+  defaultName: string;
   lab?: string;
   mark: ReactNode;
 }[] = [
@@ -188,6 +199,7 @@ const ENDPOINTS: readonly {
     key: "codex",
     harness: "codex",
     label: "Codex",
+    defaultName: "OpenAI API",
     name: "Codex · OpenAI API",
     lab: "https://api.openai.com/v1",
     mark: <CodexMark />,
@@ -196,6 +208,7 @@ const ENDPOINTS: readonly {
     key: "claude",
     harness: "claude",
     label: "Claude",
+    defaultName: "Anthropic API",
     name: "Claude · Anthropic API",
     lab: "https://api.anthropic.com",
     mark: <ClaudeMark />,
@@ -204,6 +217,7 @@ const ENDPOINTS: readonly {
     key: "custom-codex",
     harness: "codex",
     label: "Custom (OpenAI)",
+    defaultName: "Custom OpenAI",
     name: "Custom endpoint speaking the Responses API",
     mark: custom(CodexMark),
   },
@@ -211,6 +225,7 @@ const ENDPOINTS: readonly {
     key: "custom-claude",
     harness: "claude",
     label: "Custom (Anthropic)",
+    defaultName: "Custom Anthropic",
     name: "Custom endpoint speaking the Messages API",
     mark: custom(ClaudeMark),
   },
@@ -233,7 +248,7 @@ function AddEndpoint({ providers }: { providers: ProvidersState }) {
     try {
       await providers.add({
         harness,
-        name,
+        name: name.trim() || endpoint.defaultName,
         auth: {
           kind: "endpoint",
           baseUrl,
@@ -300,7 +315,11 @@ function AddEndpoint({ providers }: { providers: ProvidersState }) {
         />
       </span>
       <span className="flex items-center gap-1">
-        <Input placeholder="name" value={name} onChange={(event) => setName(event.target.value)} />
+        <Input
+          placeholder={endpoint.defaultName}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+        />
         <Button label="Save" kind="framed" busy={busy} onClick={() => void save()}>
           Save
         </Button>

@@ -5,12 +5,12 @@
  * TanStack `Route`, so the type is `RouteManifest` and the per-route export is `manifest`.
  */
 import { noteCaptured, type Inspectable, type InspectableRef } from "./inspect";
-import type { PodList } from "@pe/host-contracts/operation-types";
+import type { OpKey, OpCallArgs, OpResponseOf, PodList } from "@pe/host-contracts/operation-types";
 import { previousOf } from "#/readings";
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type { ReactNode } from "react";
 import { z } from "zod";
-import type { Chord } from "./keys";
+import type { Chord } from "@pe/kit/keys";
 import {
   hostActions,
   sameValue,
@@ -46,7 +46,10 @@ type ReadingSpec<P> = ReadingRequest | ((page: P, work: WorkKey) => ReadingReque
 type WorkSpec<W> = RouteStateSpec<z.ZodType<W>>;
 
 /** A call bound to a resolved ExecutionTarget. */
-export type HostCaller = (operation: string, input?: unknown) => Promise<unknown>;
+export type HostCaller = <K extends OpKey>(
+  operation: K,
+  ...args: OpCallArgs<K, never>
+) => Promise<OpResponseOf<K>>;
 
 /** What `ready` and `run` receive. No React, no render state. */
 export interface Ctx<W, R extends string, P> {

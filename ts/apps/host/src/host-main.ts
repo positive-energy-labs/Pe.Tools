@@ -1,4 +1,5 @@
 import { NodeRuntime } from "@effect/platform-node";
+import { productPathNames } from "@pe/host-contracts/contracts";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { hostProgram } from "./host-program.ts";
@@ -8,11 +9,11 @@ import { hostReceiptExport, fatalReceipt } from "./receipt-export.ts";
 
 // The installer stub and the login Run key start the installed host with no stdio anyone reads, so
 // a host that dies before bind (a refused claim, a thrown binding) leaves nothing behind. Tee every
-// console line to logs/host.log on the installed lane; the dev lane keeps its launcher redirect.
+// console line to the shared log path on the installed lane; the dev lane keeps its launcher redirect.
 if (hostOwnership.lane === "installed") {
-  const dir = join(productRoot(), "logs");
+  const dir = join(productRoot(), productPathNames.logsDirectoryName);
   mkdirSync(dir, { recursive: true });
-  const file = join(dir, "host.log");
+  const file = join(dir, productPathNames.hostLogFileName);
   for (const stream of [process.stdout, process.stderr] as const) {
     const write = stream.write.bind(stream);
     stream.write = ((chunk: string | Uint8Array, ...rest: never[]) => {
@@ -31,7 +32,7 @@ if (hostOwnership.lane === "installed") {
 }
 
 // Boot breadcrumb (pre-bind). The installed boot is otherwise silent until the "Listening" line, so a
-// launcher-killed slow/crashed boot leaves a 0-byte host.log that could mean five different things.
+// launcher-killed slow/crashed boot leaves an empty host log that could mean five different things.
 // This one line — version, pid, lane — lands in the SDK service log via the launcher's redirect
 // and distinguishes "never started" from "started but died before bind". Plain console.log by design.
 console.log(

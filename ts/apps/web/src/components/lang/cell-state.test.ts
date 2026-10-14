@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { cellFromTrichotomy, cellStateLabel } from "./cell-state";
+import { cellFromTrichotomy, cellStateLabel } from "@pe/kit/lang/cell-state";
 
 /** The ONE reader's whole contract — the four readings a trichotomy cell can produce. */
 describe("cellFromTrichotomy", () => {

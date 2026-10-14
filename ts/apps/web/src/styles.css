@@ -4,6 +4,6 @@
 @plugin '@tailwindcss/typography';
 
 @import "tw-animate-css";
-@import "./base.css";
-@import "./design-lang.css";
+@import "@pe/kit/base.css";
+@import "@pe/kit/design-lang.css";
 @import "./revit/revit.css";

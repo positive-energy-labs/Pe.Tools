@@ -1,15 +1,15 @@
 import { Suspense } from "react";
-import { FactChip } from "#/components/lang/chip";
-import { List } from "#/components/lang/list-popup";
-import { StateDot } from "#/components/master-table/cells";
+import { FactChip } from "@pe/kit/lang/chip";
+import { List } from "@pe/kit/lang/list-popup";
+import { StateDot } from "@pe/kit/table/cells";
 import { Pane } from "#/components/lang/pane";
-import { fmtNum } from "#/components/master-table/model";
+import { fmtNum } from "@pe/kit/table/model";
 import { ROOM_STATES, STATE_META } from "#/takeoff/room-state";
 import { onPlan } from "#/takeoff/room-actions";
 import { ZoneStateBar } from "#/takeoff/zone-state-bar";
 import { ZoneThumb } from "#/takeoff/zone-plan";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
-import { ScopeKeys } from "#/route/keys";
+import { ScopeKeys } from "@pe/kit/keys";
 import { levelsOf } from "#/takeoff/plan-image";
 
 export function AtlasNavigation() {

@@ -14,12 +14,13 @@ import {
   useHasGlobalNavigation,
   useIsPrimaryRoute,
 } from "#/navigation/route-controls";
-import { ThemeToggle } from "#/components/lang/theme-toggle";
+import { ThemeToggle } from "@pe/kit/lang/theme-toggle";
 import { usePublishRouteOptions } from "#/settings/options";
 
 import { RouteHelpButton } from "./help";
 import { HostedChrome } from "./hosted-chrome";
-import { KeysNode, manifestChords } from "./keys";
+import { KeysNode } from "@pe/kit/keys";
+import { manifestChords } from "./keys";
 import type { RouteManifest } from "./manifest";
 import { SituationAction } from "./situation-verbs";
 import { useRoute, type RouteHandle } from "./use-route";

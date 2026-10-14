@@ -1,6 +1,6 @@
 import { createTool } from "./tool.ts";
 import { createHash } from "node:crypto";
-import { contextFetch as fetch } from "#invocation-context";
+import { contextFetch as fetch } from "@pe/runtime/context";
 import { defaultReadImageMaxBytes, readImage, type ReadImageResult } from "./read-image.ts";
 import z from "zod";
 import type { HostRpcCaller } from "./host-rpc-caller.ts";

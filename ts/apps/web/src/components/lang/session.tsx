@@ -11,13 +11,13 @@
 import type { ReactNode } from "react";
 import type { MachineAccess, MachineAttachmentDocument, MachineSession } from "@pe/agent-contracts";
 
-import { ArtifactFrame } from "./artifact-frame";
-import { FactChip } from "./chip";
-import { EmptyState } from "./empty";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { FactChip } from "@pe/kit/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { PidChip, ShapeCells } from "./process";
-import { Row } from "./row";
+import { Row } from "@pe/kit/lang/row";
 
-import "./lang.css";
+import "@pe/kit/lang/lang.css";
 
 type Phase = "ready" | "booting" | "no add-in" | "unresponsive" | "gone" | "failed";
 

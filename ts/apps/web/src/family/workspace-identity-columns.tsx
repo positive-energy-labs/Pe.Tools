@@ -1,8 +1,8 @@
-import type { Column, TableState } from "#/components/master-table/model";
-import { token } from "#/lib/token";
-import { PressContent } from "#/components/anatomy/press-content";
-import { Button } from "#/components/lang/button";
-import { cellFromTrichotomy } from "#/components/lang/cell";
+import type { Column, TableState } from "@pe/kit/table/model";
+import { token } from "@pe/kit/lib/token";
+import { PressContent } from "@pe/kit/anatomy/press-content";
+import { Button } from "@pe/kit/lang/button";
+import { cellFromTrichotomy } from "@pe/kit/lang/cell";
 import { parameterText } from "#/family/family-model";
 import { NavStateCell } from "#/family/marks";
 import {

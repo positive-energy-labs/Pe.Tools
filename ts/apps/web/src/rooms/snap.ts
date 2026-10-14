@@ -4,7 +4,7 @@
  * a data URL (an SVG drawn to a canvas loads nothing external); if it cannot be read the picture
  * goes without it and says so.
  */
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 
 const NS = "http://www.w3.org/2000/svg";
 

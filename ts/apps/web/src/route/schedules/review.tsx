@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { showCellValue, splitScheduleCellKey } from "@pe/agent-contracts";
 import { ReviewRow, type CellWire } from "#/components/work/band";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { ValueDiff } from "#/components/lang/value-diff";
 import type { ScheduleGridDocument } from "@pe/agent-contracts";
-import { StateCell } from "#/components/lang/cell";
+import { StateCell } from "@pe/kit/lang/cell";
 import {
   cellText,
   scheduleCellState,

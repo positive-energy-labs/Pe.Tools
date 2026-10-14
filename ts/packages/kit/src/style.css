@@ -1,0 +1,14 @@
+@import "tailwindcss";
+@import "./base.css";
+@import "./design-lang.css";
+@source "./";
+
+/* A standalone Page follows the device until its author chooses an explicit theme. */
+@media (prefers-color-scheme: dark) {
+  [data-pe]:not([data-theme="light"]) {
+    color-scheme: dark;
+  }
+}
+[data-pe][data-theme="dark"] {
+  color-scheme: dark;
+}

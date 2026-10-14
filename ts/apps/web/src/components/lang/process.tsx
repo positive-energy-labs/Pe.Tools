@@ -5,7 +5,7 @@
  */
 import type { SessionShape } from "@pe/host-contracts/pe-revit-contract";
 
-import { FactChip } from "./chip";
+import { FactChip } from "@pe/kit/lang/chip";
 
 export function PidChip({ pid, title }: { pid: number; title?: string }) {
   return (

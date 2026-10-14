@@ -23,12 +23,12 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
-import { ThemeToggle } from "#/components/lang/theme-toggle";
+import { ThemeToggle } from "@pe/kit/lang/theme-toggle";
 import { ArmingStrip } from "#/components/lang/arming-strip";
-import { FactChip, Tag } from "#/components/lang/chip";
+import { FactChip, Tag } from "@pe/kit/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Section } from "#/components/lang/section";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { Gap } from "#/design-system/exhibit";
 import { ARMING_SPECIMEN } from "#/design-system/specimens-data";
 

@@ -3,13 +3,13 @@
  * commit that sends exactly the rows still included. It is apply's last page, never a stage.
  * Rows are the one `Table`; inclusion is its selection, and a flagged row refuses it.
  */
-import { Button } from "#/components/lang/button";
-import { FactChip, Tag } from "#/components/lang/chip";
-import { EmptyState } from "#/components/lang/empty";
+import { Button } from "@pe/kit/lang/button";
+import { FactChip, Tag } from "@pe/kit/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import type { Column } from "#/components/master-table/model";
-import { Table } from "#/components/master-table/table";
-import { cn } from "#/lib/utils";
+import type { Column } from "@pe/kit/table/model";
+import { Table } from "@pe/kit/table/table";
+import { cn } from "@pe/kit/lib/utils";
 
 import { STALE_PLAN, type PlanEntry, type PlanSheet } from "./manifest";
 

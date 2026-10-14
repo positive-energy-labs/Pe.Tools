@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { HotkeyCommand } from "#/components/lang/hotkey-command";
-import { useScopeKeys } from "./keys";
+import { useScopeKeys } from "@pe/kit/keys";
 
 /** A slot in the sentence: an operable value with its io mark (`r`, `w`, `rw`) as a superscript. */
 export function SituationCell({

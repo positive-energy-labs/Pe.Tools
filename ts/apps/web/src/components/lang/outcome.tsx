@@ -5,9 +5,9 @@
  */
 import { Ban, Check, Info, LoaderCircle, TriangleAlert, type LucideIcon } from "lucide-react";
 
-import { tv } from "#/lib/tv";
+import { tv } from "@pe/kit/lib/tv";
 
-import "./lang.css";
+import "@pe/kit/lang/lang.css";
 
 export const outcomeLineRecipe = tv({
   slots: {

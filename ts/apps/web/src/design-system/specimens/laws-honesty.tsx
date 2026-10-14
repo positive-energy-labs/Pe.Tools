@@ -1,10 +1,10 @@
 import { useState } from "react";
 
 import { ArmingStrip } from "#/components/lang/arming-strip";
-import { StateCell } from "#/components/lang/cell";
-import { FactChip } from "#/components/lang/chip";
+import { StateCell } from "@pe/kit/lang/cell";
+import { FactChip } from "@pe/kit/lang/chip";
 import { Provenance } from "#/components/lang/section";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { CounterExample, Gap, Law } from "#/design-system/exhibit";
 import { ARMING_SPECIMEN, PARAM_ROWS, cellProps } from "#/design-system/specimens-data";
 

@@ -6,7 +6,7 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { MACHINE_SEEDS } from "#/open/seeds";
 
 import { InstallGate, SUCCESSOR_POLL_MS, SUCCESSOR_WAIT_MS } from "./install-scrim";
@@ -117,13 +117,20 @@ test("probeSuccessor reads a refusal by the old service or a new version as the 
       "fetch",
       vi.fn(async () => (response instanceof Error ? Promise.reject(response) : response)),
     );
-  answer(Response.json({ refusal: { code: "runtime.owner-mismatch" } }, { status: 403 }));
+  answer(
+    Response.json(
+      { error: { code: "runtime.owner-mismatch", message: "Owner changed" } },
+      { status: 403 },
+    ),
+  );
   expect(await probeSuccessor("0.7.0")).toBe("successor");
-  answer(Response.json({ refusal: { code: "identity.host" } }, { status: 403 }));
+  answer(
+    Response.json({ error: { code: "identity.host", message: "Invalid host" } }, { status: 403 }),
+  );
   expect(await probeSuccessor("0.7.0")).toBe("down");
-  answer(Response.json({ version: "0.7.1" }));
+  answer(Response.json({ version: "0.7.1", features: { peApi: 1, nativeAdapter: 1 } }));
   expect(await probeSuccessor("0.7.0")).toBe("successor");
-  answer(Response.json({ version: "0.7.0" }));
+  answer(Response.json({ version: "0.7.0", features: { peApi: 1, nativeAdapter: 1 } }));
   expect(await probeSuccessor("0.7.0")).toBe("same");
   answer(new TypeError("fetch failed"));
   expect(await probeSuccessor("0.7.0")).toBe("down");

@@ -13,12 +13,12 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import { Row } from "./row";
-import { Input } from "./input";
-import { Button } from "./button";
-import { ListPopup } from "./list-popup";
-import { KeyScope, useScopeKeys } from "#/route/keys";
-import "./lang.css";
+import { Row } from "@pe/kit/lang/row";
+import { Input } from "@pe/kit/lang/input";
+import { Button } from "@pe/kit/lang/button";
+import { ListPopup } from "@pe/kit/lang/list-popup";
+import { KeyScope, useScopeKeys } from "@pe/kit/keys";
+import "@pe/kit/lang/lang.css";
 import "./navigation.css";
 
 export function NavigationSearch({

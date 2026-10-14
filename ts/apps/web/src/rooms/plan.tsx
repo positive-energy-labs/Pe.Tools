@@ -7,9 +7,9 @@
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
-import { FactChip } from "#/components/lang/chip";
-import { Button } from "#/components/lang/button";
-import { EmptyState } from "#/components/lang/empty";
+import { FactChip } from "@pe/kit/lang/chip";
+import { Button } from "@pe/kit/lang/button";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import {
   boundsOf,
@@ -19,7 +19,7 @@ import {
   type Point2,
   type Viewport2,
 } from "#/lib/affine-frame";
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 import { PlanImageLayer, type TakeoffPlanImage } from "#/takeoff/level-plan";
 import { pathD } from "#/takeoff/model";
 import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan-image";

@@ -7,20 +7,20 @@ import {
   type Machine,
   type Reading,
 } from "@pe/agent-contracts";
-import { FirstOpenCard } from "#/chat/first-open";
+import { FirstOpenCard, ProviderRepair } from "#/chat/first-open";
 import { isReady } from "#/workbench/provider/providers";
 import { Textarea } from "#/components/lang/textarea";
 import { Pane } from "#/components/lang/pane";
-import { ScopeKeys, type ScopeKey } from "#/route/keys";
+import { ScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import { useWorkbench } from "#/workbench/provider";
 import { EMPTY_CHAT_DRAFT, type ChatDraft } from "#/workbench/prompt";
 import { selectRunStatus, selectSkillCommands } from "@pe/agent-contracts/chat-state";
-import { ListPopup } from "#/components/lang/list-popup";
+import { ListPopup } from "@pe/kit/lang/list-popup";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
 import { SituationAction } from "#/route/situation-verbs";
 import { ComposerBox, ComposerFrame, ComposerRow } from "#/components/lang/conversation";
-import { Button } from "#/components/lang/button";
-import { MentionChip } from "#/components/lang/chip";
+import { Button } from "@pe/kit/lang/button";
+import { MentionChip } from "@pe/kit/lang/chip";
 import { previousOf } from "#/readings";
 import { AttachmentChip } from "./attachment-chip";
 import { useAttachments } from "./use-attachments";
@@ -50,9 +50,15 @@ export function ThreadComposer({
   initialDraft?: ChatDraft;
 }) {
   const [draft, setDraft] = useState(initialDraft);
-  const { chat, providers, config } = useWorkbench();
+  const { chat, providers, config, currentThreadId, threads, draft: head } = useWorkbench();
   // Loaded and none ready: the composer carries the first-open doors and Send says why it waits.
   const noneReady = providers.list !== undefined && !providers.list.some(isReady);
+  // Some ready, but not the one this head runs on: that provider carries its own repair.
+  const headId = currentThreadId
+    ? chat.providerId || threads.find((item) => item.id === currentThreadId)?.providerId
+    : head.providerId;
+  const unready = noneReady ? undefined : providers.list?.find((item) => item.id === headId);
+  const repairing = unready && !isReady(unready) ? unready : undefined;
   const isRunning = selectRunStatus(chat) !== "idle";
   const send = useSend(handle, draft, (sent) =>
     setDraft((current) => (current === sent ? EMPTY_CHAT_DRAFT : current)),
@@ -182,6 +188,7 @@ export function ThreadComposer({
           <ComposerBox dragging={files.dragging} {...files.dropProps}>
             {work}
             {noneReady ? <FirstOpenCard providers={providers} origin={config.origin} /> : null}
+            {repairing ? <ProviderRepair provider={repairing} providers={providers} /> : null}
             {files.attachments.length > 0 || draft.mentions.length > 0 ? (
               <div className="flex flex-wrap items-end gap-1.5 px-(--gutter) pt-(--gutter)">
                 {draft.mentions.map((mention) => (

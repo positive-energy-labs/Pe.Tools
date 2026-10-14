@@ -1,4 +1,4 @@
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { useState } from "react";
 import {
   Dialog,
@@ -8,13 +8,13 @@ import {
   dialogRecipe,
 } from "#/components/lang/dialog";
 import { ValueDiff, valueDiffRecipe } from "#/components/lang/value-diff";
-import { Rail } from "#/components/lang/rail";
+import { Rail } from "@pe/kit/lang/rail";
 import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
 export function UiSurfaceSpecimens() {
   return (
     <>
-      <SpecimenFrame name="Rail" importPath="#/components/lang/rail">
+      <SpecimenFrame name="Rail" importPath="@pe/kit/lang/rail">
         <div className="grid w-80 gap-2">
           <Rail lead={<span className="t-small t-upper">lead only</span>} />
           <Rail

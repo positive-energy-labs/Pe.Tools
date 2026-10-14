@@ -2,8 +2,8 @@
 import { useContext, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { Gauge } from "lucide-react";
-import { Button } from "#/components/lang/button";
-import { StateDot } from "#/components/master-table/cells";
+import { Button } from "@pe/kit/lang/button";
+import { StateDot } from "@pe/kit/table/cells";
 import {
   PrimaryRouteControls,
   useHasGlobalNavigation,
@@ -11,7 +11,7 @@ import {
   usePublishSituationSignal,
   type SituationSignal,
 } from "#/navigation/route-controls";
-import { ThemeToggle } from "#/components/lang/theme-toggle";
+import { ThemeToggle } from "@pe/kit/lang/theme-toggle";
 import { RouteHelpButton } from "./help";
 import { FlowMatrix } from "./flow";
 import { HostedChrome } from "./hosted-chrome";

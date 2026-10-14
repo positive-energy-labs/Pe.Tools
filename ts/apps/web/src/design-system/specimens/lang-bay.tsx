@@ -7,14 +7,14 @@ import { useState } from "react";
 import { Square } from "lucide-react";
 
 import { ArmingStrip } from "#/components/lang/arming-strip";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { Connectors, type Connection } from "#/components/lang/connector";
 import { PidChip } from "#/components/lang/process";
-import { Row } from "#/components/lang/row";
+import { Row } from "@pe/kit/lang/row";
 import { HeldRow, SessionCard, SessionRow, type SessionFacts } from "#/components/lang/session";
-import type { QueryCommand, QueryVocabulary } from "#/components/master-table/model";
-import { QueryBox } from "#/components/master-table/query";
-import { useTableState } from "#/components/master-table/view";
+import type { QueryCommand, QueryVocabulary } from "@pe/kit/table/model";
+import { QueryBox } from "@pe/kit/table/query";
+import { useTableState } from "@pe/kit/table/view";
 import { BACKGROUND_BOOTING, CHECKOUT_HOT, OBSERVED_ICON } from "#/open/seeds";
 
 import { SpecimenFrame } from "./recipe-grid";
@@ -215,7 +215,7 @@ export function LangBaySpecimens() {
           <Bay layout="stack" />
         </div>
       </SpecimenFrame>
-      <SpecimenFrame name="QueryBox · command after →" importPath="#/components/master-table/query">
+      <SpecimenFrame name="QueryBox · command after →" importPath="@pe/kit/table/query">
         <CommandBox />
       </SpecimenFrame>
       <SpecimenFrame name="SessionRow · SessionCard" importPath="#/components/lang/session">

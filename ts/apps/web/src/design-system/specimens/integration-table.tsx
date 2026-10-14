@@ -1,16 +1,16 @@
 import { useMemo, useState } from "react";
 import { Upload } from "lucide-react";
 
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { CellStateKey } from "#/components/lang/cell-key";
-import { FactChip, Tag } from "#/components/lang/chip";
+import { FactChip, Tag } from "@pe/kit/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { Provenance, Section } from "#/components/lang/section";
-import { Button } from "#/components/lang/button";
-import { Table } from "#/components/master-table/table";
+import { Button } from "@pe/kit/lang/button";
+import { Table } from "@pe/kit/table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
-import { useTableState } from "#/components/master-table/view";
-import type { Column } from "#/components/master-table/model";
+import { useTableState } from "@pe/kit/table/view";
+import type { Column } from "@pe/kit/table/model";
 import { Gap } from "#/design-system/exhibit";
 import { PARAM_ROWS, ageText, cellProps, type ParamRow } from "#/design-system/specimens-data";
 

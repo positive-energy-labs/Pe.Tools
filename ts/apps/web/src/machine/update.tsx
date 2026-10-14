@@ -6,7 +6,7 @@
  */
 import type { Machine, Reading } from "@pe/agent-contracts";
 
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { LegStrip } from "#/components/lang/leg-strip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { PidChip } from "#/components/lang/process";
@@ -15,7 +15,8 @@ import { dirty, useAction } from "#/readings";
 import { recheckUpdate } from "#/host/install";
 import { hostFetch } from "#/host/runtime";
 
-import { blockersOf, disconnected, hhmm, machineOf, receiptRunning } from "./model";
+import { blockersOf, disconnected, hhmm, legWords, machineOf } from "./model";
+import { updateStatus } from "./update-state";
 import { SEED_REFUSAL, useUpdateConsent } from "./use-machine";
 
 const mb = (bytes: number) => `${Math.round(bytes / 1_048_576)} MB`;
@@ -120,7 +121,16 @@ function Receipt({ machine, gap }: { machine: Machine; gap: boolean }) {
   );
 }
 
-export function UpdateGroup({ reading, fixture }: { reading: Reading<Machine>; fixture: boolean }) {
+export function UpdateGroup({
+  reading,
+  fixture,
+  checking = false,
+}: {
+  reading: Reading<Machine>;
+  fixture: boolean;
+  /** A recheck is in flight somewhere this group cannot see (a specimen draws it). */
+  checking?: boolean;
+}) {
   const machine = machineOf(reading);
   const consent = useUpdateConsent(reading, fixture);
   const check = useAction<void, void>(async () => {
@@ -132,7 +142,7 @@ export function UpdateGroup({ reading, fixture }: { reading: Reading<Machine>; f
   });
   if (!machine) return null;
   const gap = disconnected(reading);
-  const { plan, planLeg } = machine.update;
+  const status = updateStatus(machine, check.isPending || checking);
   const recheck = (
     <>
       <Button
@@ -156,41 +166,61 @@ export function UpdateGroup({ reading, fixture }: { reading: Reading<Machine>; f
       {check.error ? <OutcomeLine kind="refused" label={check.error.message} /> : null}
     </>
   );
-  if (!plan)
+  if (status.state === "idle" || status.state === "checking" || status.state === "failed") {
+    // Nothing waits on this person: up to date, unread, a check in flight, or a failure to read.
+    const plan = machine.update.plan;
     return (
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1" aria-label={`update ${status.state}`}>
         <span className="flex items-center gap-2">
-          {planLeg.error ? (
-            <span data-tone="caution">Update check failed: {planLeg.error}</span>
-          ) : (
+          {status.state === "checking" ? (
+            <OutcomeLine kind="busy" label="Reading the update feed" />
+          ) : status.state === "failed" ? (
+            // An apply's reason is the receipt's own line below; a check has no receipt to say it.
+            <span data-tone={status.during === "check" ? "caution" : "alarm"}>
+              {status.during === "check"
+                ? `Update check failed: ${status.message}`
+                : "Update failed. Recheck to plan again."}
+            </span>
+          ) : status.state === "idle" && plan ? (
+            <>
+              <span>
+                Up to date <span className="face-mono">{plan.current}</span>
+              </span>
+              <span className="text-ink-2">checked {hhmm(plan.observedAtUtc)}</span>
+            </>
+          ) : status.state === "idle" ? (
             <span className="text-ink-2">The update feed has not been read yet.</span>
-          )}
+          ) : null}
           <span className="ml-auto">{recheck}</span>
         </span>
+        {status.state === "idle" && status.checkError ? (
+          <span data-tone="caution">Update check failed: {status.checkError}</span>
+        ) : null}
         <AutomaticUpdates reading={reading} fixture={fixture} />
         <Receipt machine={machine} gap={gap} />
       </div>
     );
-  if (!plan.available || receiptRunning(machine))
+  }
+  if (status.state === "downloading" || status.state === "applying")
     return (
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1" aria-label={`update ${status.state}`}>
         <span className="flex items-center gap-2">
-          {plan.available ? (
-            <span>
-              Updating to <span className="face-mono">{plan.latest}</span>
-            </span>
-          ) : (
-            <span>
-              Up to date <span className="face-mono">{plan.current}</span>
-            </span>
-          )}
-          <span className="text-ink-2">checked {hhmm(plan.observedAtUtc)}</span>
+          <OutcomeLine
+            kind="busy"
+            label={
+              status.state === "downloading"
+                ? `Downloading ${status.to ?? "the update"}`
+                : legWords(status.leg, status.to)
+            }
+            says={machine.update.receipt?.legs.at(-1)?.detail ?? undefined}
+          />
           <span className="ml-auto">{recheck}</span>
         </span>
         <AutomaticUpdates reading={reading} fixture={fixture} />
         <Receipt machine={machine} gap={gap} />
       </div>
     );
+  const plan = status.plan;
   const blockers = blockersOf(plan);
   const closing = plan.effects.close.length;
   const reopening = plan.effects.reopen.length;

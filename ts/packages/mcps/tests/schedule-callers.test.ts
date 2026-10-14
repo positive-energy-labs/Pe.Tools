@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { setup } from "../../../apps/host/tests/schedule-test-fixture.ts";
 import { PeaCliCommands } from "../src/pea/PeaCliCommands.ts";
 import { peRead, peDo } from "../src/pea/capability-tools.ts";
-import { withInvocationContext } from "../src/shared/invocation-context.ts";
+import { withInvocationContext } from "@pe/runtime/context";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -80,7 +80,7 @@ test("Pea Schedule A/B/A reads honor the thread head and cannot perform human-on
       : inner(input as string, init),
   );
   vi.stubEnv("PE_CONTEXT", "test-context");
-  const run = (tool: typeof peRead | typeof peDo, input: unknown) =>
+  const run = (tool: typeof peRead, input: unknown) =>
     withInvocationContext({}, () =>
       tool.execute!(input as never, { agent: { toolCallId: "schedule-call" } } as never),
     );

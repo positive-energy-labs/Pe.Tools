@@ -8,19 +8,14 @@
 import { useState, type ReactNode } from "react";
 import type { RowData } from "@tanstack/react-table";
 
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { NarrowChip } from "#/components/lang/chip";
-import { Button } from "#/components/lang/button";
-import { resolveStateColumn } from "#/components/master-table/master-table-columns";
-import type {
-  Column,
-  QueryCommand,
-  QueryVocabulary,
-  TableState,
-} from "#/components/master-table/model";
-import { ConditionTarget, QueryBox } from "#/components/master-table/query";
-import { selectableKeys, type TableSelection } from "#/components/master-table/table";
-import { conditionValues, quoted, visibleRows } from "#/components/master-table/view";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { NarrowChip } from "@pe/kit/lang/chip";
+import { Button } from "@pe/kit/lang/button";
+import { resolveStateColumn } from "@pe/kit/table/master-table-columns";
+import type { Column, QueryCommand, QueryVocabulary, TableState } from "@pe/kit/table/model";
+import { ConditionTarget, QueryBox } from "@pe/kit/table/query";
+import { selectableKeys, type TableSelection } from "@pe/kit/table/table";
+import { conditionValues, quoted, visibleRows } from "@pe/kit/table/view";
 
 export interface TableFrameProps<Row extends RowData> {
   /** What is in scope, said as the strip's lead. */

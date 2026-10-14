@@ -1,6 +1,6 @@
-import { cn } from "#/lib/utils";
-import { FactChip } from "#/components/lang/chip";
-import { StateDot } from "#/components/master-table/cells";
+import { cn } from "@pe/kit/lib/utils";
+import { FactChip } from "@pe/kit/lang/chip";
+import { StateDot } from "@pe/kit/table/cells";
 import type { ModelZone } from "#/takeoff/world";
 import { ROOM_STATES, STATE_META, stateMeta, type RoomState } from "#/takeoff/room-state";
 

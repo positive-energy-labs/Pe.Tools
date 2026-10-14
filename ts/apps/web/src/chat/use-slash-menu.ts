@@ -1,7 +1,7 @@
 // The composer's slash menu, headless: detection from the draft text, dismissal, Tab-picks-cursor.
 // ↑/↓, Enter and Escape belong to the open list (R14); Tab is the composer's second pick key.
 import { useRef, useState, type KeyboardEvent } from "react";
-import { filterItems, type Collection } from "#/components/lang/collection";
+import { filterItems, type Collection } from "@pe/kit/lang/collection";
 
 export interface SlashCommand {
   name: string;

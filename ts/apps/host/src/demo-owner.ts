@@ -28,7 +28,8 @@ import {
 } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
 import { ActionJournal } from "./action-journal.ts";
-import { withInvocationContext } from "@pe/mcps/context";
+import { withInvocationContext } from "@pe/runtime/context";
+import { matchPeRoute } from "@pe/agent-contracts/pe-api";
 import { TakeoffCaptures } from "./takeoff-captures.ts";
 import { RevitBridge, BridgeError, type HostBridgeEvent } from "./bridge.ts";
 import { makeCallRoute, type CallRouteDispatch } from "./call-route.ts";
@@ -1063,7 +1064,8 @@ export async function createDemoOwner(parent: string, raw: unknown) {
     async function handle(request: Request): Promise<Response> {
       if (retired) return json({ error: "Demo instance retired" }, 410);
       const url = new URL(request.url);
-      if (url.pathname === "/pe/resources") {
+      const declared = matchPeRoute(request.method, url.pathname);
+      if (declared?.id === "resources.stream") {
         const controller = new AbortController();
         streams.add(controller);
         request.signal.addEventListener(
@@ -1245,10 +1247,9 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           );
         }
       }
-      // The browser's Work writes (`/pe/route-state/<route>/<apply|command>`), fenced to this owner.
-      const write = /^\/pe\/route-state\/([^/]+)\/(apply|command)$/.exec(url.pathname);
-      if (write && request.method === "POST") {
-        const [, written, operation] = write as unknown as [string, string, "apply" | "command"];
+      // The browser's declared Work writes, fenced to this owner.
+      if (declared?.id === "work.apply" || declared?.id === "work.command") {
+        const written = declared.params.route!;
         const target = url.searchParams.get("target");
         const workId = url.searchParams.get("work");
         const key = bindWork(written, target ? address(target) : null, workId ?? undefined);
@@ -1261,7 +1262,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           expectedRevision: number;
         };
         return json(
-          operation === "apply"
+          declared.id === "work.apply"
             ? await work.apply(key, written, "human", body.patches, body.expectedRevision)
             : await work.command(
                 key,
@@ -1323,7 +1324,7 @@ const isMemberWrite = (value: unknown) =>
   "sha256" in value &&
   !("content" in value);
 
-/** Explicit routes are more specific than the production /pe/* tenant; no second listener. */
+/** Explicit routes are more specific than the production declared route tenant; no second listener. */
 export function demoRoutes(parent = resolve(".artifacts/tmp/demos")) {
   return HttpRouter.use((router) =>
     Effect.gen(function* () {

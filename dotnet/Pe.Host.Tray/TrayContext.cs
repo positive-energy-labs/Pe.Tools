@@ -28,6 +28,8 @@ internal sealed class TrayContext : ApplicationContext {
     private bool _checking;
     private bool _retired;
     private volatile bool _closing;
+    /** The person asked the host to stop: its exit is a quit, not an update to come back from. */
+    private volatile bool _quitRequested;
     private bool _connected;
     private string? _showRequest;
     private string? _pendingPath;
@@ -41,7 +43,9 @@ internal sealed class TrayContext : ApplicationContext {
         _launch = launch;
         _service = service;
         _parent = parent;
-        _pendingPath = launch.Route is { } route ? TrayPath(route) : null;
+        // No route asked for: a predecessor tray that went away with its host left where the person was.
+        var resumed = launch.Route is null ? TrayResume.Take(ResumePath, DateTimeOffset.UtcNow) : null;
+        _pendingPath = (launch.Route ?? resumed) is { } route ? TrayPath(route) : null;
         _window.Controls.Add(_web);
         _ = _window.Handle;
         var favicon = launch.IsDev ? Path.Combine(launch.SourceRoot!, "ts", "apps", "web", "public", "favicon-dev.ico")
@@ -76,7 +80,7 @@ internal sealed class TrayContext : ApplicationContext {
         _window.TitlebarGeometryChanged += (_, _) => PostTitlebarGeometry();
         _health.Tick += async (_, _) => await CheckHealthAsync();
         _health.Start();
-        if (_launch.ShowOnStart) RequestShow(null);
+        if (_launch.ShowOnStart || resumed is not null) RequestShow(null);
         _window.BeginInvoke(async () => await InitializeWebAsync());
         _ = Task.Run(WatchParentAsync);
         _ = Task.Run(WatchDisposalAsync);
@@ -89,8 +93,19 @@ internal sealed class TrayContext : ApplicationContext {
     private async Task WatchParentAsync() {
         try {
             await _parent.WaitForExitAsync(_stop.Token);
-            ExitOnUiThread();
+            // An update replaces the host and its tray: leave the route the window was showing for the successor.
+            try {
+                if (!_closing) _window.BeginInvoke(() => { RememberWhereTheWindowWas(); ExitThread(); });
+            } catch (InvalidOperationException) { }
         } catch (OperationCanceledException) { }
+    }
+
+    private string ResumePath => Path.Combine(ProductRuntimeLayout.ForCurrentUser().RootPath, $"tray-resume-{_launch.ProfileKey}.json");
+
+    private void RememberWhereTheWindowWas() {
+        if (_quitRequested || !_ready || !_window.Visible || _card || _window.WindowState == FormWindowState.Minimized
+            || _web.Source is not { } source || !IsViewUrl(source.AbsoluteUri)) return;
+        TrayResume.Save(ResumePath, TrayResume.RouteOf(source), DateTimeOffset.UtcNow);
     }
 
     private static string TrayPath(string route) {
@@ -120,7 +135,7 @@ internal sealed class TrayContext : ApplicationContext {
         _window.Hide();
         _card = false;
         _window.LeaveCard();
-        _ = RunScriptAsync("window.peNotice?.(null)");
+        PostNativeMessage(new { type = "notice", notice = (object?)null });
     }
 
     /** The host's notice feed (`/host/notices`, SSE): each `data:` line is one card item. */
@@ -144,7 +159,7 @@ internal sealed class TrayContext : ApplicationContext {
     private void ShowNotices(IReadOnlyList<string> notices) {
         if (notices.Count == 0) return;
         try {
-            _window.BeginInvoke(async () => {
+            _window.BeginInvoke(() => {
                 // A hidden page never lays out, so its card cannot measure itself: show first, then
                 // the page's first height report resizes the window. An open panel just shows the card.
                 if (!_window.Visible) {
@@ -152,28 +167,31 @@ internal sealed class TrayContext : ApplicationContext {
                     _window.PositionCard(96);
                     _window.Show();
                 }
-                foreach (var notice in notices) await RunScriptAsync($"window.peNotice?.({notice})");
+                foreach (var notice in notices) {
+                    using var value = JsonDocument.Parse(notice);
+                    PostNativeMessage(new { type = "notice", notice = value.RootElement });
+                }
             });
         } catch (InvalidOperationException) { }
     }
 
-    private async Task RunScriptAsync(string script) {
+    private void PostNativeMessage<T>(T message) {
         if (_closing || !_ready) return;
-        try { await _web.ExecuteScriptAsync(script); }
+        try { _web.CoreWebView2.PostWebMessageAsJson(NativeAdapterContract.SerializeNative(message)); }
         catch (Exception error) when (error is InvalidOperationException or COMException) { }
     }
 
     /** The card's side of the page protocol: its height, done, and expand to the panel. */
     private bool TryNoticeMessage(JsonElement payload) {
-        if (payload.ValueKind != JsonValueKind.Object || !payload.TryGetProperty("type", out var type)
-            || type.ValueKind != JsonValueKind.String) return false;
+        if (!NativeAdapterContract.Accepts("renderer", payload)) return false;
+        var type = payload.GetProperty("type");
         switch (type.GetString()) {
             case "notice-ready":
                 ShowNotices(_inbox.PageReady());
                 return true;
             case "notice-card":
-                if ((_window.Visible && !_card) || !payload.TryGetProperty("height", out var height)
-                    || height.ValueKind != JsonValueKind.Number || !height.TryGetInt32(out var css)) return true;
+                if (_window.Visible && !_card) return true;
+                var css = (int)payload.GetProperty("height").GetDouble();
                 _card = true;
                 _window.PositionCard(css);
                 _window.Show();
@@ -277,6 +295,7 @@ internal sealed class TrayContext : ApplicationContext {
                 try {
                     using var message = JsonDocument.Parse(e.TryGetWebMessageAsString());
                     var payload = message.RootElement;
+                    if (!NativeAdapterContract.Accepts("renderer", payload)) return;
                     if (payload.ValueKind == JsonValueKind.Object
                         && payload.TryGetProperty("type", out var readyType) && readyType.ValueKind == JsonValueKind.String
                         && readyType.GetString() == "chrome-ready") {
@@ -335,15 +354,14 @@ internal sealed class TrayContext : ApplicationContext {
 
     private void PostTitlebarGeometry() {
         if (!_ready || _closing || !IsOriginalService() || _web.Source is not { } source || !IsViewUrl(source.AbsoluteUri)) return;
-        try { _web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(_window.ReadTitlebarGeometry())); }
-        catch (Exception error) when (error is InvalidOperationException or COMException) { }
+        PostNativeMessage(_window.ReadTitlebarGeometry());
     }
 
     private void PostNavigationHistory() {
         if (!_ready || _closing || !IsOriginalService() || _web.Source is not { } source || !IsViewUrl(source.AbsoluteUri)) return;
-        try { _web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new {
+        PostNativeMessage(new {
             type = "navigation-history", canGoBack = _web.CoreWebView2.CanGoBack, canGoForward = _web.CoreWebView2.CanGoForward
-        })); } catch (Exception error) when (error is InvalidOperationException or COMException) { }
+        });
     }
 
     private void RelayNavigation(string value) {
@@ -351,9 +369,9 @@ internal sealed class TrayContext : ApplicationContext {
         _pendingPath = null; _navigating = false; _hasPage = true;
         if (_closing || !IsOriginalService()
             || !TryGetNavigationRequest(_rendererReady, value, _service.ViewOrigin, out var destination)) return;
-        try { _web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new {
+        PostNativeMessage(new {
             type = "navigation-request", url = destination
-        })); } catch (Exception error) when (error is InvalidOperationException or COMException) { }
+        });
     }
 
     internal static bool TryGetNavigationRequest(bool rendererReady, string value, string origin, out string destination) {
@@ -366,11 +384,9 @@ internal sealed class TrayContext : ApplicationContext {
 
     internal static bool TryReadHistoryCommand(JsonElement payload, bool canGoBack, bool canGoForward, out bool back) {
         back = false;
-        if (payload.ValueKind != JsonValueKind.Object
-            || !payload.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String || type.GetString() != "navigate-history"
-            || !payload.TryGetProperty("direction", out var direction) || direction.ValueKind != JsonValueKind.String) return false;
-        back = direction.GetString() == "back";
-        return back ? canGoBack : direction.GetString() == "forward" && canGoForward;
+        if (!NativeAdapterContract.Accepts("renderer", payload) || payload.GetProperty("type").GetString() != "navigate-history") return false;
+        back = payload.GetProperty("direction").GetString() == "back";
+        return back ? canGoBack : canGoForward;
     }
 
     private bool IsHostUrl(string value) => Uri.TryCreate(value, UriKind.Absolute, out var uri)
@@ -544,10 +560,18 @@ internal sealed class TrayContext : ApplicationContext {
     private async Task QuitHostAsync() {
         if (!IsOriginalService()) return;
         try {
+            // Quitting cuts every turn in flight: ask first. A list the host will not give is not a reason to hold the quit.
+            using var threads = new HttpRequestMessage(HttpMethod.Get, _service.Origin + "/pe/threads");
+            threads.Headers.Add(TokenHeader, _service.Token);
+            using var listed = await _http.SendAsync(threads, _stop.Token);
+            var turns = listed.IsSuccessStatusCode ? TrayQuit.ActiveTurns(await listed.Content.ReadAsStringAsync(_stop.Token)) : 0;
+            if (turns > 0 && MessageBox.Show(_window, TrayQuit.Question(turns), "Quit Pe.Tools host",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+            _quitRequested = true;
             using var request = new HttpRequestMessage(HttpMethod.Post, _service.Origin + "/admin/shutdown");
             request.Headers.Add(TokenHeader, _service.Token);
             using var response = await _http.SendAsync(request, _stop.Token);
-            if (!response.IsSuccessStatusCode) _icon.Text = "Pe.Tools: shutdown refused";
+            if (!response.IsSuccessStatusCode) { _quitRequested = false; _icon.Text = "Pe.Tools: shutdown refused"; }
         } catch (Exception error) when (error is HttpRequestException or OperationCanceledException) {
             if (!_closing) _icon.Text = "Pe.Tools: shutdown unavailable";
         }
@@ -712,16 +736,10 @@ internal sealed class TrayWindow : Form {
 
     internal static bool TryReadChromeTheme(JsonElement payload, out int background, out int foreground, out bool dark) {
         background = foreground = 0; dark = false;
-        if (payload.ValueKind != JsonValueKind.Object
-            || !payload.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String
-            || type.GetString() != "chrome-theme"
-            || !payload.TryGetProperty("background", out var bg) || bg.ValueKind != JsonValueKind.Number
-            || !bg.TryGetInt32(out background) || background is < 0 or > 0xFFFFFF
-            || !payload.TryGetProperty("foreground", out var fg) || fg.ValueKind != JsonValueKind.Number
-            || !fg.TryGetInt32(out foreground) || foreground is < 0 or > 0xFFFFFF
-            || !payload.TryGetProperty("dark", out var mode) || mode.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
-            return false;
-        dark = mode.GetBoolean();
+        if (!NativeAdapterContract.Accepts("renderer", payload) || payload.GetProperty("type").GetString() != "chrome-theme") return false;
+        background = (int)payload.GetProperty("background").GetDouble();
+        foreground = (int)payload.GetProperty("foreground").GetDouble();
+        dark = payload.GetProperty("dark").GetBoolean();
         return true;
     }
 

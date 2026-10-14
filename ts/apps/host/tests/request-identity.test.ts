@@ -1,9 +1,9 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
-import { invocationContext, withInvocationContext, contextFetch } from "@pe/mcps/context";
+import { invocationContext, withInvocationContext, contextFetch } from "@pe/runtime/context";
 import {
-  readRequestIdentity,
+  readRequestIdentity as rawReadRequestIdentity,
   requestIdentityLayer,
   type IdentityOptions,
 } from "../src/request-identity.ts";
@@ -17,7 +17,18 @@ import {
   HOST_RUNTIME_SERVICE_QUERY,
 } from "@pe/host-contracts/contracts";
 import { hostOwnership } from "../src/host-ownership.ts";
-import { mintContext } from "../src/control.ts";
+import { mintBrowserContext, mintContext } from "../src/control.ts";
+
+// Existing browser fixtures acquire a host-minted session before entering the API.
+const readRequestIdentity: typeof rawReadRequestIdentity = (headers, ...rest) => {
+  const principal = headers["tailscale-user-login"]
+    ? { kind: "tailnet" as const, login: headers["tailscale-user-login"], authority: headers.host! }
+    : { kind: "local" as const };
+  return rawReadRequestIdentity(
+    headers.origin ? { ...headers, cookie: mintBrowserContext(principal).split(";")[0] } : headers,
+    ...rest,
+  );
+};
 
 test.each(["/call", "/revit-bridge", "/host/update", "/pe/action", "/mcp"])(
   "wrong checkout header refuses %s before routing",
@@ -398,10 +409,17 @@ test("remote administration Off denies only machine-control mutations, including
     ["POST", "/actions"],
     ["POST", "/mcp"],
   ])
-    expect(await readRequestIdentity(remote, path!, disabled, method)).toHaveProperty(
-      "principal.kind",
-      "tailnet",
-    );
+    expect(
+      await readRequestIdentity(
+        {
+          ...remote,
+          [HOST_CONTEXT_HEADER]: mintContext({ kind: "pea", thread: "remote-product" }),
+        },
+        path!,
+        disabled,
+        method,
+      ),
+    ).toHaveProperty("principal.kind", "tailnet");
 });
 
 test("the actual router supplies the mutation method to the remote administration boundary", async () => {
@@ -439,13 +457,22 @@ test("the actual router supplies the mutation method to the remote administratio
     ["POST", "/call"],
   ])
     expect(
-      (await app.handler(new Request(`http://127.0.0.1:5180${path}`, { method, headers: remote })))
-        .status,
+      (
+        await app.handler(
+          new Request(`http://127.0.0.1:5180${path}`, {
+            method,
+            headers: {
+              ...remote,
+              [HOST_CONTEXT_HEADER]: mintContext({ kind: "pea", thread: "remote-product" }),
+            },
+          }),
+        )
+      ).status,
     ).toBe(200);
   expect(reached).toBe(2);
 });
 
-test("identity mints the caller: browser Referer is human, an actor header is nobody, a browser context is refused", async () => {
+test("identity mints the caller: minted browser cookie is human, an actor header is nobody, a browser context is refused", async () => {
   const browser = { ...local, origin: "http://127.0.0.1:5180", "sec-fetch-site": "same-origin" };
   expect(
     await readRequestIdentity(
@@ -462,7 +489,7 @@ test("identity mints the caller: browser Referer is human, an actor header is no
       options,
       "POST",
     ),
-  ).toMatchObject({ caller: { kind: "anonymous" } });
+  ).toMatchObject({ refusal: { code: "context.missing" } });
   expect(
     await readRequestIdentity(
       { ...browser, referer: "http://127.0.0.1:5180/pages/todo/" },

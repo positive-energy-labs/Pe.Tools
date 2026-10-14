@@ -1,6 +1,6 @@
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { readPeError } from "@pe/host-contracts/pe-api";
-import { contextFetch as fetch } from "#invocation-context";
+import { contextFetch as fetch } from "@pe/runtime/context";
 import { type ActionReceipt } from "@pe/agent-contracts";
 import { readAction, type DetachedAction } from "./takeoff-action-client.ts";
 import { runCapability, CANCEL_KEY } from "./admission.ts";

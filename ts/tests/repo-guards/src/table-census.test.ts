@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { expect, it } from "vite-plus/test";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../apps/web/src");
+const KIT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../packages/kit/src");
 const PRIMITIVE = new Set([
   "components/master-table/table.tsx",
   "components/master-table/master-table-body.tsx",
@@ -36,8 +37,14 @@ const files = (dir: string, rel = ""): string[] =>
   });
 
 it("table census: every <table> is the one Table or a named DOMAIN table", () => {
-  const text = (rel: string) => readFileSync(join(ROOT, rel), "latin1");
-  const tables = files(ROOT).filter((rel) => !PRIMITIVE.has(rel) && /<table\b/.test(text(rel)));
+  const sources = new Map([
+    ...files(ROOT).map((rel) => [rel, join(ROOT, rel)] as const),
+    ...files(KIT_ROOT).map((rel) => [rel, join(KIT_ROOT, rel)] as const),
+  ]);
+  const text = (rel: string) => readFileSync(sources.get(rel)!, "latin1");
+  const tables = [...sources.keys()].filter(
+    (rel) => !PRIMITIVE.has(rel) && /<table\b/.test(text(rel)),
+  );
   const stray = tables.filter((rel) => !(rel in DOMAIN));
   const unsaid = tables.filter((rel) => rel in DOMAIN && !/\bDOMAIN\b/.test(text(rel)));
   const stale = Object.keys(DOMAIN).filter((rel) => !tables.includes(rel));

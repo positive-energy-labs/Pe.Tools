@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useCanGoBack, useRouter, useRouterState } from "@tanstack/react-router";
 import { ArrowLeft, ArrowRight, Search, MessageSquare, Inbox, Server } from "lucide-react";
-import { Button } from "#/components/lang/button";
-import { Input } from "#/components/lang/input";
+import { Button } from "@pe/kit/lang/button";
+import { Input } from "@pe/kit/lang/input";
 import { HotkeyHint } from "#/components/lang/hotkey-command";
-import { useScopeKeys } from "#/route/keys";
+import { useScopeKeys } from "@pe/kit/keys";
 import { ChromeSettings } from "./chrome-settings";
 import { SituationDrawer } from "./situation-drawer";
 import { locationLabel, admittedDestination, shellButtons } from "./model";
@@ -16,6 +16,7 @@ import { RouteHelpButton } from "#/route/help";
 import { projectCaptionTheme, useSurfaceHost } from "./surface-host";
 import { startFeedback } from "#/components/feedback-picker";
 import "./app-bar.css";
+import { PageBindingChip } from "#/pages-bind/chip";
 
 type LaunchWindow = Window & {
   launchQueue?: { setConsumer: (consumer: (params: { targetURL?: string }) => void) => void };
@@ -26,6 +27,10 @@ export function AppBar() {
   const { shell } = host;
   const router = useRouter();
   const location = useRouterState({ select: (state) => state.location });
+  const pageSlug =
+    typeof (location.search as Record<string, unknown>).page === "string"
+      ? String((location.search as Record<string, unknown>).page)
+      : null;
   const canGoBack = useCanGoBack();
   const historyIndex = location.state.__TSR_index;
   const [furthestHistory, setFurthestHistory] = useState(historyIndex);
@@ -275,6 +280,7 @@ export function AppBar() {
               aria-label="Situation, Page and Tutorial shortcuts"
             >
               <SituationDrawer barAnchor={bar.current} rail={compact ? actions : undefined} />
+              {pageSlug && <PageBindingChip slug={pageSlug} />}
               {!compact && actions}
             </div>
           </div>

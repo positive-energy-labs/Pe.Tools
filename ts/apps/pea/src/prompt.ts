@@ -21,7 +21,7 @@ import {
 } from "@pe/host-contracts/service-identity";
 import { ensureRunning, readServiceFile } from "@pe/host-contracts/pe-service";
 import { discoverHostBaseUrl, resolveHostBaseUrl, resolveLaneAndRoot } from "@pe/mcps";
-import { contextFetch as fetch, invocationContext } from "@pe/mcps/context";
+import { contextFetch as fetch, invocationContext } from "@pe/runtime/context";
 
 const sourceHostStartupTimeoutMs = 45_000;
 

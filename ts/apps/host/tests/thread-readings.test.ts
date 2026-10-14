@@ -10,7 +10,7 @@ import type {
   ReadingFrame,
 } from "@pe/agent-contracts";
 import { resourceResponse, type ResourceObserver } from "@pe/runtime";
-import { withInvocationContext } from "@pe/mcps/context";
+import { withInvocationContext } from "@pe/runtime/context";
 import { human } from "./callers.ts";
 import { HostLog } from "../src/host-log.ts";
 import { createProviders } from "../src/harness/providers.ts";
