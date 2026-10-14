@@ -9,7 +9,12 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter, useRouterState } from "@tanstack/react-router";
-import { appRouteMount, type AppSurface } from "@pe/agent-contracts";
+import {
+  appRouteMount,
+  SURFACE_SHELLS,
+  type AppSurface,
+  type SurfaceShell,
+} from "@pe/agent-contracts";
 import { admittedDestination } from "./model";
 
 type Overlay = {
@@ -30,9 +35,8 @@ type NativeWindow = Window & {
 
 export interface SurfaceHost {
   surface: AppSurface;
-  history: "browser" | "window";
-  homePath: "/" | "/open";
-  settingsDoor: "quick" | "route";
+  /** What this surface's shell may do; the bar and the router read it, never the surface name. */
+  shell: SurfaceShell;
   /** Caption drawing alone is insufficient: the page must receive usable geometry. */
   overlay: boolean;
   titlebarArea: Pick<DOMRect, "x" | "y" | "width" | "height"> | null;
@@ -51,9 +55,7 @@ export function surfaceDestination(
 ): "local" | "window" | null {
   const admitted = admittedDestination(destination, origin);
   if (!admitted) return null;
-  return surface === "tray" && !appRouteMount(new URL(admitted, origin).pathname, "tray")
-    ? "window"
-    : "local";
+  return appRouteMount(new URL(admitted, origin).pathname, surface) ? "local" : "window";
 }
 
 export function nativeNavigationHistory(message: unknown): SurfaceHost["nativeHistory"] {
@@ -132,9 +134,7 @@ function openFullWindow(destination: string): boolean {
 
 const webHost: SurfaceHost = {
   surface: "web",
-  history: "browser",
-  homePath: "/",
-  settingsDoor: "quick",
+  shell: SURFACE_SHELLS.web,
   overlay: false,
   titlebarArea: null,
   native: false,
@@ -232,6 +232,7 @@ export function SurfaceHostProvider({ children }: { children: ReactNode }) {
   const overlay = titlebarArea !== null;
   const open = useCallback(openFullWindow, []);
   const surface: AppSurface = shell === "tray" ? "tray" : standalone || overlay ? "pwa" : "web";
+  const local = SURFACE_SHELLS[surface].routes !== "all";
   const handoff = useCallback((destination: string) => {
     const opened = openFullWindow(destination);
     setNavigationRefusal(
@@ -258,7 +259,7 @@ export function SurfaceHostProvider({ children }: { children: ReactNode }) {
     });
   };
   useEffect(() => {
-    if (surface !== "tray") return;
+    if (!local) return;
     const decide = (destination: string) =>
       surfaceDestination(surface, destination, window.location.origin);
     const unblock = router.history.block({
@@ -287,22 +288,20 @@ export function SurfaceHostProvider({ children }: { children: ReactNode }) {
       unblock();
       document.removeEventListener("click", click);
     };
-  }, [surface, router, handoff]);
+  }, [surface, local, router, handoff]);
   useEffect(() => {
-    if (surface !== "tray") return;
+    if (!local) return;
     if (surfaceDestination(surface, location.href, window.location.origin) === "local") {
       lastTrayLocation.current = location.href;
       return;
     }
     navigationRequest.current(location.href);
     void router.navigate({ href: lastTrayLocation.current, replace: true, ignoreBlocker: true });
-  }, [surface, location.href, router]);
+  }, [surface, local, location.href, router]);
   const value = useMemo<SurfaceHost>(
     () => ({
       surface,
-      history: surface === "web" ? "browser" : "window",
-      homePath: surface === "tray" ? "/open" : "/",
-      settingsDoor: surface === "tray" ? "route" : "quick",
+      shell: SURFACE_SHELLS[surface],
       overlay,
       titlebarArea,
       native,

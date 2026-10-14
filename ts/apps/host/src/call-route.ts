@@ -1,3 +1,4 @@
+import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { sdkSession, readSessionScope } from "./sdk-session.ts";
 import { admitScheduleAction, recoverScheduleAction, readSchedule } from "./schedule-actions.ts";
 import {
@@ -191,7 +192,8 @@ export function makeCallRoute(
                 resume,
               );
   };
-  const post = HttpRouter.add("POST", "/call", (req) => {
+  const callDoor = peRoutes["operation.call"];
+  const post = HttpRouter.add(callDoor.method, callDoor.path, (req) => {
     let captureId: string | undefined;
     // Set once dispatch begins so the catch below can attribute failures to the op.
     let op:
@@ -568,7 +570,8 @@ export function makeCallRoute(
       ),
     ),
   );
-  const actions = HttpRouter.add("POST", "/actions", (req) =>
+  const admitDoor = peRoutes["actions.admit"];
+  const actions = HttpRouter.add(admitDoor.method, admitDoor.path, (req) =>
     Effect.gen(function* () {
       // The caller lives in AsyncLocalStorage; the Node body read resumes outside it. Read first.
       const caller = currentCaller();
@@ -598,7 +601,8 @@ export function makeCallRoute(
       ),
     ),
   );
-  const actionReads = HttpRouter.add("GET", "/actions", (req) =>
+  const readDoor = peRoutes["actions.read"];
+  const actionReads = HttpRouter.add(readDoor.method, readDoor.path, (req) =>
     Effect.tryPromise({
       try: async () => {
         const query = new URL(req.url, "http://host").searchParams;
@@ -671,11 +675,12 @@ export function makeCallRoute(
     ),
   );
   // action.read is GET /actions; every other control is POST /actions/<verb>, the path the client builds.
-  const controlVerbs = Object.keys(actionControls)
-    .filter((key) => key !== "action.read")
-    .map((key) => key.slice("action.".length));
-  const controls = controlVerbs.map((choice) =>
-    HttpRouter.add("POST", `/actions/${choice}`, (req) => {
+  const controlVerbs = Object.keys(actionControls).filter(
+    (key): key is Exclude<keyof typeof actionControls, "action.read"> => key !== "action.read",
+  );
+  const controls = controlVerbs.map((id) => {
+    const choice = id.slice("action.".length);
+    return HttpRouter.add(peRoutes[id].method, peRoutes[id].path, (req) => {
       const caller = currentCaller();
       return RevitBridge.use((bridge) =>
         Effect.tryPromise({
@@ -774,8 +779,8 @@ export function makeCallRoute(
           ),
         ),
       );
-    }),
-  );
+    });
+  });
   const familyReadings = HttpRouter.add("*", "/family/readings", (req) =>
     RevitBridge.use((bridge) =>
       Effect.tryPromise({

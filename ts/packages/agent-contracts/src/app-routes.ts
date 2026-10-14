@@ -40,11 +40,7 @@ export interface AppRoute {
   satellites?: readonly { to: string; label: string }[];
   directory: boolean;
   resume?: "document";
-  mounts: Readonly<Partial<Record<AppSurface, AppRouteMount>>>;
 }
-
-const fullMounts = { web: "full", pwa: "full" } as const;
-const compactMounts = { ...fullMounts, tray: "compact" } as const;
 
 export const APP_ROUTES: readonly AppRoute[] = [
   {
@@ -60,7 +56,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     aliases: "launcher model session documents",
     runtimeNeed: "Revit for model actions; browsing saved data is separate",
     directory: true,
-    mounts: compactMounts,
   },
   {
     key: "family",
@@ -76,7 +71,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     runtimeNeed: "Revit for capture/apply; portable authoring is separate",
     directory: true,
     resume: "document",
-    mounts: fullMounts,
   },
   {
     key: "chat",
@@ -90,7 +84,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     aliases: "chat agent assistant threads",
     runtimeNeed: "Host for conversation; Revit depends on the requested capability",
     directory: true,
-    mounts: compactMounts,
   },
   {
     key: "families",
@@ -106,7 +99,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     runtimeNeed: "Revit for model actions; browsing saved data is separate",
     directory: true,
     resume: "document",
-    mounts: fullMounts,
   },
   {
     key: "takeoffs",
@@ -122,7 +114,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     runtimeNeed: "Revit for model actions; browsing saved data is separate",
     directory: true,
     resume: "document",
-    mounts: fullMounts,
   },
   {
     key: "rooms",
@@ -138,7 +129,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     runtimeNeed: "Revit for model actions; browsing saved data is separate",
     directory: true,
     resume: "document",
-    mounts: fullMounts,
   },
   {
     key: "grilles",
@@ -153,7 +143,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     aliases: "wood floor submittal calculator pdf svg",
     runtimeNeed: "Browser calculation and export",
     directory: true,
-    mounts: fullMounts,
   },
   {
     key: "duct-loss",
@@ -168,7 +157,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     aliases: "friction airflow pressure calculator",
     runtimeNeed: "Browser calculation",
     directory: true,
-    mounts: fullMounts,
   },
   {
     key: "pods",
@@ -183,7 +171,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     aliases: "Pods",
     runtimeNeed: "Host catalogue; Revit depends on the pod",
     directory: true,
-    mounts: fullMounts,
   },
   {
     key: "doc-lab",
@@ -198,7 +185,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     aliases: "Experimental",
     runtimeNeed: "Host document parsing",
     directory: true,
-    mounts: fullMounts,
   },
   {
     key: "lab",
@@ -213,7 +199,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     aliases: "Experimental",
     runtimeNeed: "Revit for model actions; browsing saved data is separate",
     directory: true,
-    mounts: fullMounts,
   },
   {
     key: "captures",
@@ -228,7 +213,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     aliases: "Revit data",
     runtimeNeed: "Revit for model actions; browsing saved data is separate",
     directory: true,
-    mounts: fullMounts,
   },
   {
     key: "ops",
@@ -242,7 +226,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     aliases: "host api operations playground",
     runtimeNeed: "Host operation; Revit depends on the operation",
     directory: true,
-    mounts: fullMounts,
   },
   {
     key: "schedules",
@@ -258,7 +241,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     runtimeNeed: "Revit for model actions; browsing saved data is separate",
     directory: true,
     resume: "document",
-    mounts: fullMounts,
   },
   {
     key: "data-tables",
@@ -273,7 +255,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     aliases: "Revit data",
     runtimeNeed: "Revit for model actions; browsing saved data is separate",
     directory: true,
-    mounts: fullMounts,
   },
   {
     key: "param-tables",
@@ -288,7 +269,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     aliases: "Incubating product",
     runtimeNeed: "Browser parameter-table workspace",
     directory: true,
-    mounts: fullMounts,
   },
   {
     key: "parameter-links",
@@ -303,7 +283,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     aliases: "Revit data",
     runtimeNeed: "Revit for model actions; browsing saved data is separate",
     directory: true,
-    mounts: fullMounts,
   },
   {
     key: "settings",
@@ -318,7 +297,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     aliases: "Pea",
     runtimeNeed: "Host settings",
     directory: true,
-    mounts: fullMounts,
   },
   {
     key: "design-system",
@@ -341,7 +319,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     aliases: "Design language",
     runtimeNeed: "Browser component catalogue",
     directory: true,
-    mounts: fullMounts,
   },
   {
     key: "bind",
@@ -355,7 +332,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     aliases: "document binding",
     runtimeNeed: "Host document bindings",
     directory: false,
-    mounts: fullMounts,
   },
   {
     key: "index",
@@ -369,7 +345,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     aliases: "home tools directory",
     runtimeNeed: "Host navigation",
     directory: false,
-    mounts: fullMounts,
   },
   {
     key: "machine",
@@ -383,7 +358,6 @@ export const APP_ROUTES: readonly AppRoute[] = [
     aliases: "providers sign-in diagnostics",
     runtimeNeed: "Host machine configuration",
     directory: false,
-    mounts: compactMounts,
   },
 ];
 
@@ -401,6 +375,57 @@ export function routePath(key: string): string {
 export function routeKey(path: string): string {
   return APP_ROUTES.find((route) => route.path === path)?.key ?? path.slice(1);
 }
+
+/**
+ * What one surface's shell may do. The app bar and the router read this record and never branch
+ * on the surface name: a surface ruling is a change to this data, not a new `if`.
+ */
+export interface SurfaceShell {
+  /** How a route mounts here. */
+  mount: AppRouteMount;
+  /** Route keys mounted locally; every other registered route opens a full window. */
+  routes: "all" | readonly string[];
+  home: { path: string; label: string };
+  /** Route icons after Home. Without a picker, the pressed icon is the location. */
+  icons: readonly { route: string; label: string; iconKey: "Inbox" | "MessageSquare" | "Server" }[];
+  /** The route field and its Ctrl+Shift+K global search. */
+  picker: boolean;
+  /** Settings door: the quick popover, or the Settings route. */
+  settings: "quick" | "route";
+  /** Back and Forward: the browser's own, or drawn in the bar. */
+  history: "browser" | "window";
+}
+
+const fullShell = {
+  mount: "full",
+  routes: "all",
+  home: { path: "/", label: "Home / tool directory" },
+  icons: [{ route: "chat", label: "Open Pea", iconKey: "MessageSquare" }],
+  picker: true,
+  settings: "quick",
+} as const;
+
+export const SURFACE_SHELLS: Readonly<Record<AppSurface, SurfaceShell>> = {
+  web: { ...fullShell, history: "browser" },
+  pwa: { ...fullShell, history: "window" },
+  tray: {
+    mount: "compact",
+    routes: ["instances", "chat", "machine"],
+    home: { path: "/open", label: "Home / open work" },
+    icons: [
+      { route: "chat", label: "Pea Inbox", iconKey: "Inbox" },
+      { route: "machine", label: "Machine", iconKey: "Server" },
+    ],
+    picker: false,
+    settings: "route",
+    history: "window",
+  },
+};
+
 export function appRouteMount(path: string, surface: AppSurface): AppRouteMount | undefined {
-  return appRouteByPath(path)?.mounts[surface];
+  const route = appRouteByPath(path);
+  const shell = SURFACE_SHELLS[surface];
+  return route && (shell.routes === "all" || shell.routes.includes(route.key))
+    ? shell.mount
+    : undefined;
 }

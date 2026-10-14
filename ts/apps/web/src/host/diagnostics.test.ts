@@ -50,7 +50,11 @@ test("a host with no intake is visible silence, and the facts stay pending", asy
 
 test("a refusal is shown, counted and never resent", async () => {
   const { sent, diagnostics } = owner(
-    async () => new Response(JSON.stringify({ error: "invalid diagnostic" }), { status: 400 }),
+    async () =>
+      new Response(
+        JSON.stringify({ error: { code: "route.input", message: "invalid diagnostic" } }),
+        { status: 400 },
+      ),
   );
   diagnostics.report({ code: "pane.failed" });
   await vi.advanceTimersByTimeAsync(60_000);

@@ -14,7 +14,7 @@ import { CHAT_SEEDS, CHAT_SEED_STATE, CHAT_SEED_THREADS } from "#/chat/seeds";
 import { DEMO_FAMILIES } from "#/families/seeds";
 import { DEMO_PODS } from "#/route/seeds";
 import { ZoneThumb } from "#/takeoff/zone-plan";
-import { selectSkillCommands } from "#/workbench/chat-state";
+import { selectSkillCommands } from "@pe/agent-contracts/chat-state";
 
 /* ── fixtures ────────────────────────────────────────────────────────────────────────────── */
 

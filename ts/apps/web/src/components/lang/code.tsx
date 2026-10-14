@@ -53,7 +53,7 @@ const highlighter = createHighlighter({
 });
 
 export type { HighlightDecoration };
-export { stringify } from "./code-format";
+export { stringify } from "@pe/agent-contracts/code-format";
 
 /**
  * Does the highlighter hold a grammar for this tag? `normalizeLanguage` is the highlighter's own

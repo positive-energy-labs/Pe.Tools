@@ -92,7 +92,8 @@ export function RootComponent() {
 function SurfaceOutlet() {
   const host = useSurfaceHost();
   const location = useRouterState({ select: (state) => state.location });
-  if (host.surface !== "tray" || appRouteMount(location.pathname, "tray")) return <Outlet />;
+  if (host.shell.routes === "all" || appRouteMount(location.pathname, host.surface))
+    return <Outlet />;
   return (
     <div className="flex flex-col gap-3 p-3">
       <p>{appRouteByPath(location.pathname)?.label ?? "This tool"} opens in a full window.</p>

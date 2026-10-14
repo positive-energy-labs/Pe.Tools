@@ -1,3 +1,4 @@
+import { peClientScript } from "@pe/agent-contracts/pe-api";
 /// <reference lib="es2023.array" />
 // @vitest-environment jsdom
 import { cleanup, render, screen, within } from "@testing-library/react";
@@ -219,16 +220,19 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
 
 test("Page bytes resolve the document and leave the bind chip to SPA chrome", async () => {
   vi.useFakeTimers();
-  const source = pageSource.replace(
-    "/*pe:runtime*/ null",
-    JSON.stringify({ header: "x-pe-runtime", query: "runtime", service: "fixture" }),
-  );
+  const source = pageSource
+    .replace("/*pe:client*/ null", peClientScript())
+    .replace(
+      "/*pe:runtime*/ null",
+      JSON.stringify({ header: "x-pe-runtime", query: "runtime", service: "fixture" }),
+    );
   const fakeWindow = { addEventListener() {}, open() {}, pe: undefined as any };
   runInNewContext(source, {
     window: fakeWindow,
     document,
     location: new URL("http://127.0.0.1:9/pages/ducts/"),
     URL,
+    URLSearchParams,
     Headers,
     Request,
     performance,

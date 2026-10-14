@@ -1,8 +1,16 @@
+import { normalizePeError } from "@pe/host-contracts/pe-api";
+import { peRoutes, peRouteUrl, servePeRoute, matchPeRoute } from "@pe/agent-contracts/pe-api";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
 import type { MachineShareAdapter } from "./machine.ts";
 import { Deferred, Effect, Layer, Option, Stream } from "effect";
-import { HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http";
+import {
+  HttpEffect,
+  HttpRouter,
+  HttpServer,
+  HttpServerRequest,
+  HttpServerResponse,
+} from "effect/unstable/http";
 import {
   addressSchema,
   bindWork,
@@ -13,7 +21,6 @@ import {
   familiesViewSchema,
   readingKey,
   recentRows,
-  routeStatePatchSchema,
   START_FRESH,
   contributionKey,
   isCanonicalSlug,
@@ -94,8 +101,6 @@ import { join } from "node:path";
 import { importShippedPods } from "./installed-pods.ts";
 import { receiptQuerySchema } from "@pe/agent-contracts";
 import {
-  feedbackSchema,
-  diagnosticsSchema,
   hostReceiptExport,
   createThreadReceiptAdapter,
   type ReceiptExport,
@@ -116,15 +121,10 @@ export interface PeRoutesOptions {
   telemetry?: ReceiptExport;
 }
 
-const applyBody = z.object({
-  patches: z.array(routeStatePatchSchema),
-  expectedRevision: z.number().int().nonnegative(),
-});
-const commandBody = z.object({
-  command: z.string(),
-  input: z.unknown().optional(),
-  expectedRevision: z.number().int().nonnegative(),
-});
+const feedbackSchema = peRoutes["feedback.submit"].body;
+const diagnosticsSchema = peRoutes["diagnostics.submit"].body;
+const applyBody = peRoutes["work.apply"].body;
+const commandBody = peRoutes["work.command"].body;
 
 const json = (value: unknown, status = 200) => Response.json(value, { status });
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -184,11 +184,13 @@ export function createPeRoutes(options: PeRoutesOptions) {
     const caller = currentCaller();
     const url = new URL(request.url);
     const method = request.method;
-    if (method === "GET" && url.pathname === "/pe/family-spec") return familySpecAsset(url);
+    const declared = matchPeRoute(method, url.pathname);
+    if (!declared || declared.route.owner !== "pe") return json({ error: "Unknown Pe route" }, 404);
+    if (method === "GET" && declared.id === "family.spec") return familySpecAsset(url);
     const parts = url.pathname.split("/").slice(2).map(decodeURIComponent); // drop "", "pe"
     const body = () => request.json().catch(() => null);
 
-    if (method === "GET" && url.pathname === "/pe/contributions") {
+    if (method === "GET" && declared.id === "contributions.read") {
       const key = url.searchParams.get("key") ?? "";
       if (!parseContributionKey(key))
         return json({ error: "Expected a canonical contribution key" }, 400);
@@ -200,16 +202,16 @@ export function createPeRoutes(options: PeRoutesOptions) {
             409,
           );
     }
-    if (method === "GET" && url.pathname === "/pe/page-libraries") return json(PAGE_LIBRARIES);
+    if (method === "GET" && declared.id === "pages.libraries") return json(PAGE_LIBRARIES);
 
-    if (method === "GET" && url.pathname === "/pe/navigation") {
+    if (method === "GET" && declared.id === "navigation.get") {
       try {
         return json(await readNavigation(work, options.navigation));
       } catch (error) {
         return json({ error: message(error) }, 502);
       }
     }
-    if (method === "GET" && url.pathname === "/pe/capabilities") {
+    if (method === "GET" && declared.id === "capabilities.find") {
       if (!options.capabilityCatalog) return json({ error: "no capability catalog" }, 503);
       const scope = workKey(url, "", "read");
       if (scope instanceof Response) return scope;
@@ -261,13 +263,13 @@ export function createPeRoutes(options: PeRoutesOptions) {
         return json({ error: message(error) }, 502);
       }
     }
-    if (method === "GET" && url.pathname === "/pe/resources")
+    if (method === "GET" && declared.id === "resources.stream")
       return resourceResponse(request, observe);
     if (
       method === "POST" &&
-      (url.pathname === "/pe/feedback" ||
-        url.pathname === "/pe/diagnostics" ||
-        /^\/pe\/feedback\/[^/]+\/deliver$/.test(url.pathname))
+      (declared.id === "feedback.submit" ||
+        declared.id === "diagnostics.submit" ||
+        declared.id === "feedback.deliver")
     ) {
       if (caller.kind !== "human")
         return json(
@@ -275,7 +277,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
           403,
         );
       const telemetry = options.telemetry ?? hostReceiptExport();
-      if (url.pathname === "/pe/diagnostics") {
+      if (declared.id === "diagnostics.submit") {
         const parsed = diagnosticsSchema.safeParse(await body());
         if (!parsed.success) return json({ error: "invalid diagnostics" }, 400);
         try {
@@ -304,7 +306,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
 
     // Web read of the receipt spine, including turn/permission facts. Local thread ids are mapped
     // by the owner; query joins and the returned envelopes remain opaque.
-    if (method === "GET" && url.pathname === "/pe/receipt-facts") {
+    if (method === "GET" && declared.id === "receipts.read") {
       const journal = (options.telemetry ?? hostReceiptExport()).journal;
       let query: unknown;
       try {
@@ -432,7 +434,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
                 : "context.missing: Refused at /pe/route-state: no caller context. Anonymous loopback calls are read-only; run this from Pea, the web app, or a bound Page.",
             refusal: {
               code: caller.kind === "page" ? "page.use-page-door" : "context.missing",
-              door: `/pe/route-state/${route}/${verb}`,
+              door: url.pathname,
               reason:
                 caller.kind === "page"
                   ? "Pages act through /pages/<slug>/act."
@@ -830,7 +832,9 @@ export function makeHostPeRoutes(
     heads: threads.heads,
     navigation: {
       threads: async () => {
-        const response = await threads.fetch(new Request(`${hostBaseUrl}/pe/threads`));
+        const response = await threads.fetch(
+          new Request(peRouteUrl("threads.list", {}, hostBaseUrl)),
+        );
         if (!response.ok) throw new Error(`Thread summaries unavailable (${response.status})`);
         return response.json();
       },
@@ -923,42 +927,16 @@ export const peRoutesLayer = (
             Stream.runForEach(() => Effect.sync(() => catalog.invalidate())),
           ),
         );
-      const harness = HttpEffect.fromWebHandler((request) => threads.fetch(request));
-      const pe = HttpEffect.fromWebHandler((request) => routes.fetch(request));
-      const provider = HttpEffect.fromWebHandler((request) => providers.fetch(request));
-      for (const path of [
-        "/pe/providers",
-        "/pe/providers/:id",
-        "/pe/providers/:id/:verb",
-        "/pe/access",
-      ] as const)
-        yield* router.add("*", path, provider);
-      for (const path of [
-        "/pe/threads",
-        "/pe/threads/:id",
-        "/pe/threads/:id/:verb",
-        "/pe/scope/:id",
-        "/pe/scope/:id/:verb",
-      ] as const)
-        yield* router.add("*", path, harness);
-      for (const path of [
-        "/pe/navigation",
-        "/pe/capabilities",
-        "/pe/contributions",
-        "/pe/page-libraries",
-        "/pe/family-spec",
-        "/pe/feedback",
-        "/pe/feedback/:id/deliver",
-        "/pe/diagnostics",
-        "/pe/receipt-facts",
-        "/pe/resources",
-        "/pe/route-state",
-        "/pe/route-state/:route",
-        "/pe/route-state/:route/:verb",
-        "/pe/route-view/families",
-        "/pe/route-view/families/:instance",
-      ] as const)
-        yield* router.add("*", path, pe);
+      const handlers = { threads: threads.fetch, pe: routes.fetch, providers: providers.fetch };
+      for (const route of Object.values(peRoutes)) {
+        if (!(route.owner in handlers)) continue;
+        const handle = handlers[route.owner as keyof typeof handlers];
+        yield* router.add(
+          route.method,
+          route.path,
+          HttpEffect.fromWebHandler((request) => servePeRoute(request, handle)),
+        );
+      }
     }),
   );
 
@@ -990,3 +968,18 @@ function sweepClosedDocuments(bridge: RevitBridge["Service"] | undefined, work: 
   bridge.subscribe(sweep);
   sweep();
 }
+
+/** Outside request admission too: every declared HTTP door has the same refusal envelope. */
+export const peApiErrorsLayer = HttpRouter.middleware(
+  (handler) =>
+    Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      const response = yield* handler;
+      const path = new URL(request.originalUrl, "http://host").pathname;
+      if (response.status < 400 || !matchPeRoute(request.method, path)) return response;
+      return HttpServerResponse.fromWeb(
+        yield* Effect.promise(() => normalizePeError(HttpServerResponse.toWeb(response))),
+      );
+    }),
+  { global: true },
+);

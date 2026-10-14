@@ -3,8 +3,8 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Moments } from "./moments";
 import { transcriptSegments, type CallPart, type Segment } from "./conversation-sequences";
-import type { ChatMessage } from "./chat-state";
-import { emptyChatState, selectMessages } from "./chat-state";
+import type { ChatMessage } from "@pe/agent-contracts/chat-state";
+import { emptyChatState, selectMessages } from "@pe/agent-contracts/chat-state";
 import { harnessEventSchema } from "@pe/agent-contracts";
 
 const wire = vi.hoisted(() => ({

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
-import { admittedDestination, CATALOGUE, matchingTools, routeKey, routePath } from "./model";
+import { SURFACE_SHELLS } from "@pe/agent-contracts";
+import {
+  admittedDestination,
+  CATALOGUE,
+  matchingTools,
+  routeKey,
+  routePath,
+  shellButtons,
+} from "./model";
 
 describe("global navigation admission and catalogue", () => {
   it("admits an explicit same-origin destination without inventing target or thread state", () => {
@@ -34,5 +42,17 @@ describe("global navigation admission and catalogue", () => {
     expect(routePath("chat")).toBe("/pea");
     expect(routePath("instances")).toBe("/open");
     expect(routePath("index")).toBe("/");
+  });
+  it("draws Home and the shell's icons, pressing the location only where no picker shows it", () => {
+    const pressed = (surface: keyof typeof SURFACE_SHELLS, path: string) =>
+      shellButtons(SURFACE_SHELLS[surface], path).map(
+        (button) => `${button.label}${button.pressed ? "*" : ""}`,
+      );
+    expect(pressed("tray", "/pea")).toEqual(["Home / open work", "Pea Inbox*", "Machine"]);
+    expect(pressed("tray", "/open")).toEqual(["Home / open work*", "Pea Inbox", "Machine"]);
+    expect(pressed("tray", "/machine")).toEqual(["Home / open work", "Pea Inbox", "Machine*"]);
+    expect(pressed("web", "/pea")).toEqual(["Home / tool directory", "Open Pea"]);
+    expect(pressed("pwa", "/")).toEqual(["Home / tool directory", "Open Pea"]);
+    expect(shellButtons(SURFACE_SHELLS.tray, "/pea")[1]?.path).toBe("/pea");
   });
 });

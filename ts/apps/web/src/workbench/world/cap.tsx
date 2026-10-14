@@ -1,7 +1,7 @@
 import { token } from "#/lib/token";
 import { useEffect } from "react";
 import { useAtomValue } from "@effect/atom-react";
-import type { ContextBreakdown, ContextItem } from "../chat-state";
+import type { ContextBreakdown, ContextItem } from "@pe/agent-contracts/chat-state";
 import { useCurrentThreadView } from "../thread-view";
 import {
   computeCacheView,

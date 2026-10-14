@@ -7,7 +7,7 @@ import { Moments } from "../moments";
 import { EmptyState, emptyMark } from "#/components/lang/empty";
 import { formatTime } from "./moments";
 import { useLensModel } from "./model";
-import type { ChatState } from "../chat-state";
+import type { ChatState } from "@pe/agent-contracts/chat-state";
 
 export function Lens({ state }: { state: ChatState }) {
   const {

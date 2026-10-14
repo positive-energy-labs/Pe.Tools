@@ -100,9 +100,9 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
       body: JSON.stringify({ key: "host.status", bridgeSessionId: "session-abc" }),
     });
     expect(misTargeted.status).toBe(400);
-    const misTargetedBody = (await misTargeted.json()) as { message?: string };
-    expect(misTargetedBody.message).toContain("bridgeSessionId");
-    expect(misTargetedBody.message).toContain(HOST_RPC_BRIDGE_SESSION_HEADER);
+    const misTargetedBody = (await misTargeted.json()) as { error: { message: string } };
+    expect(misTargetedBody.error.message).toContain("bridgeSessionId");
+    expect(misTargetedBody.error.message).toContain(HOST_RPC_BRIDGE_SESSION_HEADER);
 
     // A clean TS-only envelope still passes the key gate (no Revit session â†’ Disconnected, not 400).
     const cleanCall = await fetch(`${base}/call`, {

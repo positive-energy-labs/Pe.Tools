@@ -1,3 +1,5 @@
+import { createPeClient } from "@pe/agent-contracts/pe-api";
+import { readPeError } from "@pe/host-contracts/pe-api";
 import { z } from "zod";
 import { instancesSessionSelection, refusalSchema } from "@pe/agent-contracts";
 import { contextFetch as fetch, invocationContext } from "#invocation-context";
@@ -24,17 +26,10 @@ import { readTakeoffObservation } from "./takeoff-capture-client.ts";
  * A refused admission. A door's typed refusal rides on the error (`refusal`) and its sentence is
  * the message; any other body stays text, because only a host door speaks the typed shape.
  */
-const parsedOrNull = (text: string): unknown => {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-};
 async function refusedAdmission(id: string, response: Response) {
-  const text = await response.text();
-  const typed = z.object({ refusal: refusalSchema }).safeParse(parsedOrNull(text));
-  if (!typed.success) return Error(`Action '${id}' refused: ${text}`);
+  const problem = await readPeError(response);
+  const typed = z.object({ refusal: refusalSchema }).safeParse(problem.details);
+  if (!typed.success) return Error(`Action '${id}' refused: ${problem.message}`);
   const { reason, remedy } = typed.data.refusal;
   const said = remedy && !reason.includes(remedy) ? `${reason} ${remedy}` : reason;
   return Object.assign(Error(`Action '${id}' refused. ${said}`), { refusal: typed.data.refusal });
@@ -83,20 +78,15 @@ export const runningAdmissions = () => [...inFlight()].map(([id, base]) => ({ id
  * the row settles `cancelled` at the operation's next checkpoint. Work already written stands.
  */
 export async function cancelAction(id: string, base = "") {
-  const response = await fetch(`${base}/actions/cancel`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id }),
-    signal: AbortSignal.timeout(30_000),
-  });
+  const response = await createPeClient(base, fetch).response(
+    "action.cancel",
+    { body: { id } },
+    {
+      signal: AbortSignal.timeout(30_000),
+    },
+  );
   if (!response.ok) {
-    // The host refuses with `{ error }`; anything else (a dev server's 404 page) never reached it.
-    const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
-    throw Error(
-      typeof body?.error === "string"
-        ? body.error
-        : `The stop did not reach the host (${response.status} ${response.statusText}).`,
-    );
+    throw Error((await readPeError(response)).message);
   }
   return actionReceiptSchema.parse(await response.json());
 }
@@ -105,7 +95,11 @@ export async function cancelAction(id: string, base = "") {
 export const cancelRunningAdmissions = () =>
   Promise.allSettled(runningAdmissions().map(({ id, base }) => cancelAction(id, base)));
 export async function readAction(id: string, base = "", signal?: AbortSignal) {
-  const response = await fetch(`${base}/actions?id=${encodeURIComponent(id)}`, { signal });
+  const response = await createPeClient(base, fetch).response(
+    "actions.read",
+    { query: { id } },
+    { signal },
+  );
   if (!response.ok) throw Error(`Action recovery failed (${response.status})`);
   return actionReceiptSchema.array().parse(await response.json())[0];
 }
@@ -140,9 +134,9 @@ export async function runSemanticAction(
         consumed.captureId = observation.capture.id;
       }
       if (!consumed.fileVersion) {
-        const response = await fetch(
-          `${base}/actions?file=${encodeURIComponent(String(input.path))}`,
-        );
+        const response = await createPeClient(base, fetch).response("actions.read", {
+          query: { file: String(input.path) },
+        });
         if (!response.ok) throw Error("Could not read the RHVAC file base");
         consumed.fileVersion = ((await response.json()) as { fileVersion: string }).fileVersion;
       }
@@ -192,12 +186,13 @@ export async function submitAction(
   let row: ActionReceipt | undefined;
   let response: Response | undefined;
   try {
-    response = await fetch(`${base}/actions`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(admission),
-      signal: admitted(),
-    });
+    response = await createPeClient(base, fetch).response(
+      "actions.admit",
+      { body: admission },
+      {
+        signal: admitted(),
+      },
+    );
   } catch (error) {
     if (Date.now() >= deadline) return detached("unknown");
     row = await readAction(admission.id, base, signal()).catch(() => undefined);
@@ -269,12 +264,13 @@ export async function controlAction(
     if (!row) throw Error("Original action not found");
     return row;
   }
-  const response = await fetch(`${base}/actions/${key.slice("action.".length)}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id }),
-    signal: AbortSignal.timeout(30_000),
-  });
+  const response = await createPeClient(base, fetch).response(
+    key,
+    { body: { id } },
+    {
+      signal: AbortSignal.timeout(30_000),
+    },
+  );
   if (!response.ok) throw Error(await response.text());
   return actionReceiptSchema.parse(await response.json());
 }
@@ -324,7 +320,11 @@ export async function readScopedActionStatuses(
 ) {
   const query = new URLSearchParams({ scope: JSON.stringify(actionListFilterSchema.parse(scope)) });
   if (include) query.set("include", include);
-  const response = await fetch(`${base}/actions?${query.toString()}`, { signal });
+  const response = await createPeClient(base, fetch).response(
+    "actions.read",
+    { query: Object.fromEntries(query) },
+    { signal },
+  );
   if (!response.ok)
     throw Error(`Action list failed (${response.status}): ${await response.text()}`);
   return actionStatusSchema.array().parse(await response.json());

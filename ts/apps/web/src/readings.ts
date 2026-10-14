@@ -1,3 +1,4 @@
+import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { runtimeStreamUrl } from "#/host/runtime";
 /**
  * The read layer. One EventSource, one AtomRegistry, one vocabulary (fable law 5).
@@ -37,7 +38,7 @@ import type {
 import { callHostRpc } from "#/host/client.ts";
 import { reportFault } from "#/host/diagnostics";
 import { HOST_READ_WAIT_S } from "#/route/waits";
-import { peUrl, resolveWorkbenchConfig } from "#/workbench/config.ts";
+import { resolveWorkbenchConfig } from "#/workbench/config.ts";
 
 export type { Lane };
 
@@ -215,7 +216,9 @@ export class PeReadings {
   }
 }
 
-export const peReadings = new PeReadings(() => peUrl(resolveWorkbenchConfig(), "/resources"));
+export const peReadings = new PeReadings(() =>
+  peRouteUrl("resources.stream", {}, resolveWorkbenchConfig().origin),
+);
 
 export type Readings = Pick<PeReadings, "subscribe" | "dirty">;
 

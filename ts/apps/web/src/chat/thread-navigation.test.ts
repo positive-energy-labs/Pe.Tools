@@ -5,7 +5,7 @@ import {
   type TargetInventory,
   emptyThreadHead,
 } from "@pe/agent-contracts";
-import { emptyChatState } from "#/workbench/chat-state";
+import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import {
   demoThreads,
   activityWord,

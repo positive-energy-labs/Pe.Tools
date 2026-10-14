@@ -8,7 +8,7 @@ import {
 
 import { chatManifest } from "#/chat/manifest";
 import { emptyPrompt } from "#/workbench/prompt";
-import { emptyChatState, selectMessages } from "#/workbench/chat-state";
+import { emptyChatState, selectMessages } from "@pe/agent-contracts/chat-state";
 import { harnessClient, type PromptRequest } from "#/workbench/provider/harness-client";
 
 const png: PromptAttachment = { name: "riser.png", mimeType: "image/png", size: 4, data: "iVBO" };

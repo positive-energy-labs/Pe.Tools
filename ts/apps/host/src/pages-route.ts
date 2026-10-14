@@ -1,3 +1,4 @@
+import { peRoutes, servePeRoute, peClientScript, matchPeRoute } from "@pe/agent-contracts/pe-api";
 /**
  * PAGES — disposable HTML as a working surface between an agent and a person (pages ledger,
  * 2026-10-04). A page is a folder `Documents/Pe.Tools/Pages/<slug>/` holding an `index.html`,
@@ -129,7 +130,7 @@ const RUNTIME_SLOT = "/*pe:runtime*/ null";
 const servedPe = () => {
   const source = asset("pe.js");
   if (!source.includes(RUNTIME_SLOT)) throw Error(`pe.js must hold one \`${RUNTIME_SLOT}\` slot`);
-  return source.replace(
+  return source.replace("/*pe:client*/ null", peClientScript()).replace(
     RUNTIME_SLOT,
     JSON.stringify({
       header: HOST_RUNTIME_SERVICE_HEADER,
@@ -898,9 +899,14 @@ export const pagesRoute = (root = productPagesRootPath, pods = productPodsRootPa
             body: JSON.stringify(body),
           }),
       };
-      const handler = HttpEffect.fromWebHandler(createPagesHandler(root(), pods(), live));
+      const pages = createPagesHandler(root(), pods(), live);
+      const handler = HttpEffect.fromWebHandler((request) =>
+        matchPeRoute(request.method, new URL(request.url).pathname)
+          ? servePeRoute(request, pages)
+          : pages(request),
+      );
       // One registration claims the bare `/pages` too (a second `add` is refused at boot; see captures).
       yield* router.add("*", "/pages/*", handler);
-      yield* router.add("PUT", "/pe/pages/:slug/binding", handler);
+      yield* router.add(peRoutes["page.bind"].method, peRoutes["page.bind"].path, handler);
     }),
   );

@@ -1,4 +1,4 @@
-import { hostFetch } from "#/host/runtime";
+import { peClient } from "#/host/pe-client";
 import { useEffect, useRef, useState } from "react";
 import { peReadings, previousOf, useReading } from "#/readings";
 import {
@@ -13,11 +13,6 @@ import {
   type ThreadHead,
   emptyThreadHead,
 } from "@pe/agent-contracts";
-
-import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
-
-const scopeUrl = (threadId: string) =>
-  peUrl(resolveWorkbenchConfig(), `/scope/${encodeURIComponent(threadId)}`);
 
 export type { GrantView };
 
@@ -67,16 +62,16 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
       return false;
     }
     try {
-      const response = await hostFetch(scopeUrl(threadId), {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+      const response = await peClient.response("scope.set", {
+        params: { id: threadId },
+        body: {
           defaultTarget,
           expectedRevision: parsed.data.revision,
           displayLabel,
-        }),
+        },
       });
-      const body = await response.json().catch(() => null);
+      const wire = await response.json().catch(() => null);
+      const body = response.ok ? wire : wire?.error?.details;
       const result = putTargetResultSchema.safeParse(body).data;
       const refused = refusalSchema.safeParse(body?.refusal).data;
       if (attempt !== generation.current) return false;

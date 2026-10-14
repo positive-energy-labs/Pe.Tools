@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, expect, test, vi } from "vite-plus/test";
-import type { HarnessEvent } from "@pe/agent-contracts";
+import {
+  emptyThreadHead,
+  emptyThreadLifecycle,
+  type HarnessThreadSummary,
+  type HarnessEvent,
+} from "@pe/agent-contracts";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import {
   checkoutRootFrom,
@@ -77,7 +82,12 @@ const chunk = (turnId: string, text: string): Draft => ({
   update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } },
 });
 
-const summary = () => ({
+const summary = (): HarnessThreadSummary => ({
+  providerId: "codex",
+  providerName: "Codex",
+  head: { ...emptyThreadHead },
+  lifecycle: emptyThreadLifecycle(),
+  activity: { state: "idle", pending: 0, lastSeq: log.length, message: null },
   id: "t1",
   harness: "codex",
   title: "Pea prompt",
@@ -105,10 +115,19 @@ const server = createServer(async (request, response) => {
     return json([]);
   }
   if (route === "POST /pe/threads") return json(summary());
-  if (route === "GET /pe/threads/t1") return json({ ...summary(), events: log });
+  if (route === "GET /pe/threads/t1")
+    return json({
+      ...summary(),
+      events: log,
+      models: [],
+      traits: [],
+      running: false,
+      session: "started",
+      promptCapabilities: null,
+    });
   if (route === "POST /pe/threads/t1/model") {
     append({ kind: "model_changed", modelId: JSON.parse(body).modelId });
-    return json({});
+    return json(summary());
   }
   if (route === "POST /pe/threads/t1/cancel") return json({ cancelled: true });
   if (route === "POST /pe/threads/t1/prompt") {
@@ -169,7 +188,7 @@ const server = createServer(async (request, response) => {
       chunk(turnId, " world"),
       { kind: "turn_end", turnId, stopReason: "end_turn" },
     );
-    return json({});
+    return json({ ok: true });
   }
   if (route === "GET /pe/threads/t1/stream") {
     response.writeHead(200, { "content-type": "text/event-stream" });
