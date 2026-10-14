@@ -208,6 +208,7 @@ design-system ledger, not restated here.
 - 2026-08-16 — (/settings) Hand-rolled busy/error state per command: replaced by `useVerb`, which serializes open/re-read/validate/save.
 
 ## Owed
+- 2026-10-14, owed (owner ruling, next release, not now): a hand-run MSI while Revit is open shows Windows Installer's stock Files-in-Use dialog; Restart Manager closing Revit does not save models the way the tray's update path does. (1) The SDK MSI authoring refuses when Revit is running, with one sentence: use Pe.Tools in the tray → Update, which saves your work, restarts Revit and reopens your documents, or close Revit and run the MSI again. No orchestration inside msiexec (RedirectionGuard, UI-sequence-only, elevation). (2) The tray's update chip says that same sentence with one button when a plan is blocked by open Revits. Field case: Andrea, 0.7.26 MSI over 0.7.25, 2026-10-14.
 - Tray UX note round 3: mixed-DPI second-monitor acceptance and Revit-focused acceptance remain unproven. The isolated WebView2 run proves simultaneous windows and unchanged foreground HWND; it uses controlled notice and device-environment fixtures, not installed-host behavior.
 - Tray UX merge gate: repo guards inherited two failures at c25f8737: harness/install.ts product-environment paths and scaffold count 94 above 93. Fix in the owning campaign; note wave does not raise the ceiling or change installer storage policy.
 

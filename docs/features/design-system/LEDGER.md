@@ -7,6 +7,7 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 **This ledger owns every cross-route design-language and primitive gap.** Route ledgers name their own applications and evidence; they never restate a ruling or a gap that lives here. A rule lives in exactly one home: a type, a check, a swatch specimen, or `.agents/skills/lens.house/SKILL.md`. `docs/design/SURFACE-PHILOSOPHY.md` indexes those homes.
 
 ## Decided
+- 2026-10-14, tray pop round 2 rulings (owner, live on the tray frontend): E the bare hint is the default hover preview; H the content peek stays; F the page miniature stays in principle but its render was empty for the owner (owed); G status-first not yet ruled.
 - 2026-10-14, tray pop round 2: owner accepts 350 ms hints, 500 ms preview opening and 200 ms closing, with hover inspection and click/Enter interaction. Native hint titles across web and kit become kit Tooltips; semantic iframe titles and aria-label names remain. The native-title guard holds hints at zero.
 
 - 2026-10-14 (round 2), with no installed app a tray hand-off opens an Edge app window (`--app=`) at the exact page asked for, never the startup page; the install prompt lives only in Settings > Host. Settings with no section opens what waits, else the first group whose header disagrees (caution/alarm), else nothing; a group the person closes stays closed.
@@ -530,6 +531,7 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
 - 2026-10-08, react-grab `freeze()` during feedback picking (halts the note popover); `.pick-mark` in `--pe-line-2` (vanishes); rasterizing `document.body` (drops `<html>` styles, 10px crop error; rasterize `document.documentElement`).
 
 ## Owed
+- 2026-10-14, owed: dark-mode popovers, hover cards and tooltips have no visible shadow, so a floating surface reads as flat; the rule needs a dark elevation treatment (shadow plus a hairline or lift) in the kit, not per-popover tweaks. Also owed: the F page miniature rendered empty on the owner's tray frontend.
 
 - 2026-10-14, wave T: recheck installed tray caption exclusion at actual 100/125/150% monitor DPI. Checkout WebView2 proof uses zoom equivalents on a 200% monitor; `TrayWindow.ProjectTitlebar` and `navigation/app-bar.css` own the rule.
 - 2026-10-13, installed acceptance for the shared shell: real Edge PWA geometry and native tray resize/minimize/close, compact Pea and same-address full-window handoff. Dev native SPA single-row framing is observed; installed behavior remains separate. Experimental WebView2 WCO still reports zero browser geometry on runtime155; production uses stable WebView2 and measured DWM frame geometry through the explicit surface adapter. Thin-border resize and multimonitor DPI acceptance remain owed.
