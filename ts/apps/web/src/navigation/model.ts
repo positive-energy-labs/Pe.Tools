@@ -26,12 +26,12 @@ export function matchingTools(query: string) {
     ),
   );
 }
-/** Home and the shell's route icons. Without a picker, the pressed icon is the location. */
+/** Home and the shell's route icons. Without the global field, the pressed icon is the location. */
 export function shellButtons(shell: SurfaceShell, pathname: string) {
   return [
     { path: shell.home.path, label: shell.home.label, iconKey: null },
     ...shell.icons.map((icon) => ({ ...icon, path: routePath(icon.route) })),
-  ].map((button) => ({ ...button, pressed: !shell.picker && button.path === pathname }));
+  ].map((button) => ({ ...button, pressed: shell.field !== "global" && button.path === pathname }));
 }
 export function locationLabel(path: string) {
   if (path === "/") return "Tools";

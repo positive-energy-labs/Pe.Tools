@@ -25,9 +25,13 @@ type Slot = {
   claim: (slot: RouteSlotName, owner: symbol) => void;
   release: (slot: RouteSlotName, owner: symbol) => void;
   setElement: (slot: RouteSlotName, element: HTMLElement | null) => void;
-  pagePaletteOwner: symbol | null;
-  setPagePaletteOwner: (owner: symbol) => void;
-  clearPagePaletteOwner: (owner: symbol) => void;
+  /** The primary route's page palette (Ctrl+K): its open state and its own setter. */
+  pagePalette: PagePalette | null;
+  setPagePalette: (palette: PagePalette) => void;
+  clearPagePalette: (owner: symbol) => void;
+  /** The shell's global palette (Ctrl+Shift+K). */
+  globalOpen: boolean;
+  setGlobalOpen: (open: boolean) => void;
   drawerOpen: boolean;
   setDrawerOpen: (open: boolean) => void;
   dockHost: HTMLDivElement | null;
@@ -38,6 +42,7 @@ type Slot = {
   setSignal: (signal: Slot["signal"]) => void;
   clearSignal: (owner: symbol) => void;
 };
+type PagePalette = { owner: symbol; open: boolean; set: (open: boolean) => void };
 const Context = createContext<Slot | null>(null);
 export function useHasGlobalNavigation() {
   return useContext(Context) != null;
@@ -46,11 +51,17 @@ export function RouteControlsProvider({ children }: { children: ReactNode }) {
   const [elements, setElements] = useState<Slot["elements"]>({});
   const [owners, setOwners] = useState<Slot["owners"]>({});
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [pagePaletteOwner, setPagePaletteOwner] = useState<symbol | null>(null);
-  const clearPagePaletteOwner = useCallback(
-    (owner: symbol) => setPagePaletteOwner((prior) => (prior === owner ? null : prior)),
+  const [pagePalette, setPagePalette] = useState<PagePalette | null>(null);
+  const clearPagePalette = useCallback(
+    (owner: symbol) => setPagePalette((prior) => (prior?.owner === owner ? null : prior)),
     [],
   );
+  const [globalOpen, setGlobalOpen] = useState(false);
+  // One palette at a time: a page palette opening by its own key closes the global one.
+  const pageOpen = pagePalette?.open ?? false;
+  useEffect(() => {
+    if (pageOpen) setGlobalOpen(false);
+  }, [pageOpen]);
   const [dockHost, setDockHost] = useState<HTMLDivElement | null>(null);
   const [pinned, setPinned] = useState(false);
   const [signal, setSignal] = useState<Slot["signal"]>(null);
@@ -81,9 +92,11 @@ export function RouteControlsProvider({ children }: { children: ReactNode }) {
         owners,
         claim,
         release,
-        pagePaletteOwner,
-        setPagePaletteOwner,
-        clearPagePaletteOwner,
+        pagePalette,
+        setPagePalette,
+        clearPagePalette,
+        globalOpen,
+        setGlobalOpen,
         drawerOpen,
         setDrawerOpen,
         dockHost,
@@ -109,20 +122,49 @@ export function useSituationDock() {
   return { dockHost: context.dockHost, pinned: context.pinned, setPinned: context.setPinned };
 }
 export function usePagePaletteOpen() {
-  return useContext(Context)?.pagePaletteOwner != null;
+  return useContext(Context)?.pagePalette?.open ?? false;
 }
-/** Publish the real picker lifecycle; hidden Activities release the primary route claim. */
-export function usePublishPagePalette(route: string, open: boolean) {
+/**
+ * Publish the real picker: its lifecycle and its setter, so the shell can open it from the bar
+ * and close it when the global palette opens. Hidden Activities release the primary route claim.
+ */
+export function usePublishPagePalette(route: string, open: boolean, set: (open: boolean) => void) {
   const context = useContext(Context);
   const primary = useIsPrimaryRoute(route);
   const owner = useRef(Symbol(route)).current;
-  const publish = context?.setPagePaletteOwner;
-  const clear = context?.clearPagePaletteOwner;
+  const setter = useRef(set);
+  setter.current = set;
+  const publish = context?.setPagePalette;
+  const clear = context?.clearPagePalette;
   useEffect(() => {
-    if (!primary || !open || !publish || !clear) return;
-    publish(owner);
-    return () => clear(owner);
+    if (!primary || !publish || !clear) return;
+    publish({ owner, open, set: (next) => setter.current(next) });
   }, [primary, open, publish, clear, owner]);
+  useEffect(() => {
+    if (!primary || !clear) return;
+    return () => clear(owner);
+  }, [primary, clear, owner]);
+}
+/** The shell's one palette state: at most one of the page palette and the global palette is open. */
+export function usePalette() {
+  const context = useContext(Context);
+  if (!context) throw new Error("usePalette requires RouteControlsProvider");
+  const { pagePalette, globalOpen, setGlobalOpen } = context;
+  const open: "page" | "global" | null = pagePalette?.open ? "page" : globalOpen ? "global" : null;
+  return {
+    open,
+    /** The current route publishes a page palette the bar may open. */
+    hasPage: pagePalette != null,
+    show(kind: "page" | "global") {
+      if (kind === "global") pagePalette?.set(false);
+      else pagePalette?.set(true);
+      setGlobalOpen(kind === "global");
+    },
+    hide() {
+      pagePalette?.set(false);
+      setGlobalOpen(false);
+    },
+  };
 }
 export function useSituationSignal() {
   return useContext(Context)?.signal ?? null;

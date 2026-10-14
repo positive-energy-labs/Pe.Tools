@@ -378,7 +378,7 @@ interface Fold {
 }
 
 /** The host's error for a turn its own restart cut off (apps/host src/harness/threads.ts). */
-const HOST_RESTARTED = "host restarted during this turn";
+export const HOST_RESTARTED = "host restarted during this turn";
 
 /** Every selector reads one fold per state object. */
 const folds = new WeakMap<ChatState, Fold>();
