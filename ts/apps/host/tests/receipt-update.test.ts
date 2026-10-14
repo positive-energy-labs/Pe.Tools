@@ -55,6 +55,7 @@ const receipt = (requestId: string, state: string, detail = "confirmed leg"): Up
     receiptPath: "exact.receipt.json",
     reopen: [],
     restartYears: [],
+    stub: null,
     legs: [
       {
         name: state === "running" ? "handoff" : "done",

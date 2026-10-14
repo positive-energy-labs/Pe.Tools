@@ -367,6 +367,7 @@ const withUpdate = (update: Partial<Machine["update"]>, over: Partial<Machine> =
 
 const BLOCKED = plan(SESSIONS, true);
 const RECEIPT: UpdateReceipt = {
+  stub: null,
   legs: [
     {
       name: "download",

@@ -49,6 +49,7 @@ const receipt = (requestId: string, state = "running"): UpdateReceipt => ({
   receiptPath: "exact.receipt.json",
   reopen: ["C:/saved.rvt"],
   restartYears: [2025],
+  stub: null,
   legs: [
     {
       name: state === "ok" ? "done" : "handoff",

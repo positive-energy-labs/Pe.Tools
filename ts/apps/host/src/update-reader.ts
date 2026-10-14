@@ -31,6 +31,8 @@ const receiptSchema: z.ZodType<UpdateReceipt> = z.object({
   reopen: z.array(z.string()),
   restartYears: z.array(z.number().int()),
   legs: z.array(leg),
+  // beta.210: the stub's identity lets the SDK read a lost stub as abandoned; older receipts lack it.
+  stub: processIdentity.nullable().default(null),
 });
 const planSchema: z.ZodType<UpdatePlan> = z.object({
   installedRoot: z.string(),
