@@ -40,6 +40,7 @@ type Host = {
   fetch: (request: Request) => Promise<Response>;
   /** Who every request crosses as: the identity middleware's stand-in. */
   as: Caller;
+  launchScheduled: ReturnType<typeof createHarnessThreads>["launchScheduled"];
   heads: ReturnType<typeof createHarnessThreads>["heads"];
   observe: ReturnType<typeof createHarnessThreads>["observe"];
   log: HostLog;
@@ -86,6 +87,7 @@ const host = (
           ? providers.fetch(request)
           : threads.fetch(request),
       ),
+    launchScheduled: threads.launchScheduled,
     heads: threads.heads,
     observe: threads.observe,
     log,
@@ -2077,4 +2079,32 @@ test("one huge tool result is kept bounded in the record, the log and every read
     4 * HARNESS_EVENT_MAX_BYTES,
   );
   expect(threads.log.read(0).entries.some((e) => e.event.kind === "oversize")).toBe(false);
+});
+
+test("scheduled launches create fresh threads with persisted origin before the fake ACP turn", async () => {
+  const service = host();
+  const first = service.launchScheduled({
+    taskId: "feedback-miner",
+    runId: randomUUID(),
+    title: "Miner",
+    prompt: "hello",
+    selection: { providerId: "claude", modelId: null },
+  });
+  await first.completion;
+  const second = service.launchScheduled({
+    taskId: "feedback-miner",
+    runId: randomUUID(),
+    title: "Miner",
+    prompt: "hello again",
+    selection: { providerId: "claude", modelId: null },
+  });
+  await second.completion;
+  expect(first.threadId).not.toBe(second.threadId);
+  for (const launched of [first, second]) {
+    const meta = JSON.parse(await readFile(join(root, launched.threadId, "meta.json"), "utf8"));
+    expect(meta.origin).toMatchObject({ kind: "scheduled", taskId: "feedback-miner" });
+    const body = await reader(service)(launched.threadId);
+    expect(body.origin).toEqual(meta.origin);
+    expect(body.events.find((e) => e.kind === "prompt")?.turnId).toBe(meta.origin.runId);
+  }
 });

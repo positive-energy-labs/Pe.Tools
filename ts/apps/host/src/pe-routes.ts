@@ -1,3 +1,6 @@
+import { createScheduledTasks } from "./scheduled-tasks.ts";
+import { threadHistory } from "./thread-history.ts";
+import { productRoot } from "@pe/host-contracts/service-identity";
 import { normalizePeError } from "@pe/host-contracts/pe-api";
 import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
 import { peRoutes, peRouteUrl, servePeRoute, matchPeRoute } from "@pe/agent-contracts/pe-api";
@@ -828,6 +831,24 @@ export function makeHostPeRoutes(
     receiptFact: receiptThreads.accept,
     pluginHook: content.lifecycle.emit,
   });
+  const scheduler = createScheduledTasks({
+    path: join(productRoot(), "state", hostOwnership.serviceName, "scheduled-tasks.json"),
+    receipts: telemetry.journal,
+    launch: threads.launchScheduled,
+  });
+  const readHistory = threadHistory({
+    snapshot: threads.historySnapshot,
+    receipts: telemetry.journal,
+    threadJoin: (id) => telemetry.journal.opaqueId("thread", id),
+  });
+  const tasks = {
+    fetch: (request: Request) =>
+      new URL(request.url).pathname === "/pe/thread-history"
+        ? readHistory(request)
+        : scheduler.fetch(request),
+    close: scheduler.close,
+    start: scheduler.start,
+  };
   receiptThreads
     .hydrate()
     .catch((error: unknown) => console.warn("Receipt thread context failed to hydrate", error));
@@ -935,7 +956,7 @@ export function makeHostPeRoutes(
     },
     fetch: createPluginsHandler(content, podRoutes),
   };
-  return { providers, threads, routes, catalog, machine, notices, plugins };
+  return { providers, threads, routes, catalog, machine, notices, plugins, tasks };
 }
 
 /** {@link makeHostPeRoutes} on the host's router. Harness children die when the launch scope closes. */
@@ -949,13 +970,8 @@ export const peRoutesLayer = (
       const hostBaseUrl = `http://127.0.0.1:${address._tag === "TcpAddress" ? address.port : 0}`;
       const bridge = Option.getOrUndefined(yield* Effect.serviceOption(RevitBridge));
       const update = yield* UpdateReader;
-      const { providers, threads, routes, catalog, machine, notices, plugins } = makeHostPeRoutes(
-        hostBaseUrl,
-        bridge,
-        registrationsFactory,
-        update,
-        share,
-      );
+      const { providers, threads, routes, catalog, machine, notices, plugins, tasks } =
+        makeHostPeRoutes(hostBaseUrl, bridge, registrationsFactory, update, share);
       useHostMachine(machine);
       bindControl({
         heads: threads.heads.read,
@@ -978,7 +994,6 @@ export const peRoutesLayer = (
           notices.close();
         }),
       );
-      yield* Effect.addFinalizer(() => Effect.promise(() => threads.close()));
       yield* Effect.addFinalizer(() => Effect.promise(() => plugins.close()));
       yield* Effect.addFinalizer(() => Effect.promise(() => providers.close()));
       // Installed policy keeps observing even when every browser and tray drawer is closed.
@@ -992,7 +1007,16 @@ export const peRoutesLayer = (
             Stream.runForEach(() => Effect.sync(() => catalog.invalidate())),
           ),
         );
+      tasks.start();
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(async () => {
+          const closing = tasks.close();
+          await threads.close();
+          await closing;
+        }),
+      );
       const handlers = {
+        tasks: tasks.fetch,
         threads: threads.fetch,
         pe: routes.fetch,
         providers: providers.fetch,

@@ -719,6 +719,16 @@ async function dispatch(
     }
     case "route-doc":
     case "route-command": {
+      if (row.key === "route:threads.history") {
+        const response = await createPeClient(base(), fetch).response("threads.history", {
+          query: { query: JSON.stringify(payload) },
+        });
+        return {
+          ok: response.ok,
+          target: { session: null, document: null },
+          result: await response.json(),
+        };
+      }
       if (row.key === "route:families.view" || row.key === "route:families.set-query") {
         if (!viewThread) throw Error("This MCP server has no thread (no harness context).");
         const query = new URLSearchParams({ thread: viewThread });

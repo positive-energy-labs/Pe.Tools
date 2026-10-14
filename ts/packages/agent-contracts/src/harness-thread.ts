@@ -444,6 +444,9 @@ export const updateThreadRequestSchema = z
 export type UpdateThreadRequest = z.infer<typeof updateThreadRequestSchema>;
 
 export const harnessThreadSummarySchema = z.object({
+  origin: z
+    .strictObject({ kind: z.literal("scheduled"), taskId: z.string().min(1), runId: z.uuid() })
+    .optional(),
   id: z.string(),
   harness: harnessIdSchema,
   providerId: z.string(),
