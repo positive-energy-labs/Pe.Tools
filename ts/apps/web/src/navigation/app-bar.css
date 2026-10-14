@@ -280,18 +280,16 @@
 .pe-appbar[data-overlay="true"] {
   margin-left: var(--app-titlebar-x, env(titlebar-area-x, 0px));
   width: var(--app-titlebar-width, env(titlebar-area-width, 100%));
-  min-height: var(
-    --app-titlebar-height,
-    env(titlebar-area-height, calc(var(--control-h) + 0.5rem))
-  );
+  height: var(--app-titlebar-height, env(titlebar-area-height, calc(var(--control-h) + 0.5rem)));
+  min-height: 0;
+  overflow: clip;
   -webkit-app-region: drag;
   app-region: drag;
 }
 .pe-appbar[data-overlay="true"] > .pe-appbar-row {
-  min-height: var(
-    --app-titlebar-height,
-    env(titlebar-area-height, calc(var(--control-h) + 0.5rem))
-  );
+  height: var(--app-titlebar-height, env(titlebar-area-height, calc(var(--control-h) + 0.5rem)));
+  min-height: 0;
+  flex-wrap: nowrap;
   padding-block: 0;
   -webkit-app-region: drag;
   app-region: drag;
@@ -335,11 +333,16 @@
   .pe-appbar-route-search:is(:focus-within, [data-selected]) {
     flex: 1 1 9rem;
   }
-  .pe-appbar[data-overlay="true"][data-shell="tray"] .pe-appbar-commands:not([data-compact]) {
-    flex-basis: calc(100vw - var(--app-titlebar-x, 0px) - 8px);
-    margin-block-start: max(0px, calc(var(--app-titlebar-height, 32px) - var(--control-h) - 2px));
-  }
   .pe-appbar-command-seam {
     display: none;
   }
+}
+.pe-appbar[data-overlay="true"] > .pe-appbar-row > * {
+  flex-shrink: 0;
+}
+.pe-appbar-shell > .pe-appbar-row .pe-appbar-commands {
+  margin-inline-start: auto;
+}
+.pe-appbar-shell > .pe-appbar-row {
+  flex-wrap: wrap;
 }

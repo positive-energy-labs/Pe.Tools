@@ -252,6 +252,33 @@ public class TrayLaunchTests {
             Assert.That(TrayWindow.ProjectTitlebar(invalid, client, 192, true), Is.EqualTo(NativeTitlebarGeometry.Hidden));
     }
 
+    [TestCase(96, 760, 560, 608, 146, 29, 29)]
+    [TestCase(120, 950, 700, 760, 183, 36, 28.8)]
+    [TestCase(144, 1140, 840, 912, 219, 43, 28.6666666666667)]
+    [TestCase(192, 1520, 1120, 1216, 292, 57, 28.5)]
+    public void CaptionProjectionPreservesMeasuredDpiRounding(int dpi, int width, int height,
+        int left, int buttonsWidth, int buttonsHeight, double cssHeight) {
+        var geometry = TrayWindow.ProjectTitlebar(new System.Drawing.Rectangle(left, 0, buttonsWidth, buttonsHeight),
+            new System.Drawing.Size(width, height), dpi, true);
+        Assert.That(geometry.rect.width, Is.EqualTo(608));
+        Assert.That(geometry.rect.height, Is.EqualTo(cssHeight).Within(0.00001));
+    }
+
+    [TestCase(0.5, 1216, 57)]
+    [TestCase(0.625, 972.8, 45.6)]
+    [TestCase(0.75, 810.6666666666666, 38)]
+    [TestCase(1, 608, 28.5)]
+    [TestCase(2, 304, 14.25)]
+    public void CaptionGeometryUsesTheWebViewsZoomedCssPixels(double zoom, double width, double height) {
+        var geometry = TrayWindow.ProjectTitlebar(new System.Drawing.Rectangle(1216, 0, 292, 57),
+            new System.Drawing.Size(1520, 1120), 192, true, zoom);
+        Assert.That(geometry.rect.width, Is.EqualTo(width).Within(0.00001));
+        Assert.That(geometry.rect.height, Is.EqualTo(height).Within(0.00001));
+        foreach (var invalid in new[] { 0, -1, double.NaN, double.PositiveInfinity })
+            Assert.That(TrayWindow.ProjectTitlebar(new System.Drawing.Rectangle(1216, 0, 292, 57),
+                new System.Drawing.Size(1520, 1120), 192, true, invalid), Is.EqualTo(NativeTitlebarGeometry.Hidden));
+    }
+
     [Test]
     public void NativeFrameClipPreservesAppBarControlsInsideTheVisibleBorder() {
         var clip = TrayWindow.ContentClipBounds(new System.Drawing.Size(1100, 700), 2);
