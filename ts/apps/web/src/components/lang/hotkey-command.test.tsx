@@ -101,7 +101,7 @@ test("compact period is a prominent centered circle while the written chord and 
 });
 test("click and real shifted punctuation share admission even with input focus", () => {
   const invoke = vi.fn();
-  const tree = (busy = false, refusal: string | undefined = undefined) => (
+  const tree = (busy = false, refusal?: string | undefined) => (
     <>
       <HotkeyCommand
         label="Fixture command"

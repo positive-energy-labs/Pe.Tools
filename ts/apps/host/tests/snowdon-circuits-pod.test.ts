@@ -75,7 +75,7 @@ test("the skill has valid frontmatter and no seed fingerprints or recorded resul
   expect(skill).toMatch(/^---\r?\nname: circuit-drop\r?\n/);
   expect(/^description: (.*)$/m.exec(skill)?.[1]).not.toContain(': "');
   for (const path of await files()) {
-    if (/index\.html$/.test(path)) continue;
+    if (path.endsWith("index.html")) continue;
     expect(await text(path), path).not.toMatch(
       /chadds|kaitpw|pdrop|proven\[|\b20\d\d-\d\d-\d\d\b/i,
     );

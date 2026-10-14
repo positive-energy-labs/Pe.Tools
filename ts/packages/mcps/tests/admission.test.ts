@@ -78,7 +78,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const call = (tool: typeof peDo | typeof peRead, input: Record<string, unknown>, id = "attempt") =>
+const call = (tool: typeof peDo, input: Record<string, unknown>, id = "attempt") =>
   withInvocationContext({ hostBaseUrl: "http://admission.test" }, () =>
     tool.execute!(
       { timeoutSeconds: 30, ...input } as never,
