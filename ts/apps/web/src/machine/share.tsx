@@ -9,6 +9,7 @@ import { useDestination } from "#/navigation/state";
 import { hhmm } from "./model";
 import { SEED_REFUSAL } from "./use-machine";
 import { settingsDestination } from "./navigation";
+import { DeviceSettings, useLocalDevice } from "./devices";
 
 const NEEDS_TAILSCALE =
   "Sharing needs Tailscale. Install it from tailscale.com/download, then sign in.";
@@ -87,13 +88,16 @@ export function ShareSettings({
   stale: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
+  const local = useLocalDevice();
   const share = machine.share;
   if (!share) return <ShareStatus machine={machine} />;
   const unavailable = fixture
     ? SEED_REFUSAL
     : stale
       ? "The host is not answering; the switch waits for it."
-      : null;
+      : !local
+        ? "Open Sharing settings on the host to change this control."
+        : null;
   const refusal =
     unavailable ??
     (share.state === "refused" && share.desired !== "on"
@@ -110,20 +114,23 @@ export function ShareSettings({
         checked={share.desired === "on"}
         refusal={refusal}
         disabled={share.state === "needs-tailscale" && share.desired !== "on"}
-        says="serve this host to people on your tailnet; their tailnet identity is the credential"
+        says="serve this host over the tailnet; host control also requires device pairing"
         onCheckedChange={(on) => change(switchShare(on))}
       />
       <SwitchRow
         label="Allow remote machine administration"
         checked={share.allowRemoteAdministration}
         refusal={unavailable}
-        says="local switch; remote callers can manage providers, agent approvals and host updates when on"
+        says="local switch; paired remote browsers may administer this host and grant document rw when on"
         onCheckedChange={(allowed) => change(switchRemoteAdministration(allowed))}
       />
       <span className="text-ink-2">
-        Turning administration off keeps shared HTTP and MCP product operations available.
+        Remote rw consent requires remote administration. It starts off. Shared Pages and captures
+        do not grant host control. MCP pairing starts read-only and can use a thread grant only
+        after a human binds it here.
       </span>
       <ShareStatus machine={machine} />
+      <DeviceSettings refusal={unavailable} />
       {error && <OutcomeLine kind="refused" label={error} />}
     </div>
   );
