@@ -15,6 +15,7 @@ internal static class Program {
             var service = launch.ReadService();
             using var singleton = new TraySingleton(launch);
             if (!singleton.IsOwner) return !launch.ShowOnStart || singleton.ShowAsync(launch.Route).GetAwaiter().GetResult() ? 0 : 1;
+            TrayIdentity.Apply(launch);
             ApplicationConfiguration.Initialize();
             using var tray = new TrayContext(launch, service, parent);
             _ = Task.Run(() => singleton.ListenAsync(tray.RequestShow));
