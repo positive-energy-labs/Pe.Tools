@@ -14,6 +14,7 @@ test("pea exposes three capability doors, one Scope door, and the media and docs
     "pe_read",
     "pe_do",
     "target_set",
+    "pe_feedback",
     "capture_view",
     "read_image",
     "diagram",

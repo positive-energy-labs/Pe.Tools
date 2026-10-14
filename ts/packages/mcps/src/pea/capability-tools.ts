@@ -1121,6 +1121,31 @@ export const targetSet = createTool({
   },
 });
 
+/**
+ * A direct tool, not a catalog row: it mutates nothing in Revit, so it crosses no document grant
+ * and no principal filter. The host stamps commit, install, thread and turn (owner ruling
+ * 2026-10-14: agent feedback leaves the machine automatically while users are coworkers).
+ */
+export const peFeedback = createTool({
+  id: "pe_feedback",
+  description:
+    "Report a defect or gap in Pea's own tooling to the Pe.Tools maintainers: a tool that returned something false, a failure whose error did not explain itself, a description or doc that misled you, a capability you needed and could not find, a slow or flaky path, or a workaround you had to invent. File it the moment you notice, then keep working; it never blocks the turn and never reaches the user as a question. Name the surface exactly (tool name, op key, route, skill, or repo path:line from the shipped source tree), say what you expected and what happened, and attach any receipt or request ids you hold. The host stamps commit, install, thread and turn; never fill those. Not for the user's model, drawing or design problems, and not for asking the user anything: the reply owns those. Not a substitute for reading a failure before retrying. Returns a feedbackId. One report per distinct defect per thread.",
+  inputSchema: peRoutes["agent-feedback.submit"].body,
+  execute: async (input) => {
+    try {
+      const response = await createPeClient(base(), fetch).response("agent-feedback.submit", {
+        body: input,
+      });
+      const answer = (await response.json()) as { feedbackId?: unknown };
+      if (response.ok && typeof answer.feedbackId === "string")
+        return { feedbackId: answer.feedbackId };
+      return { isError: true, content: `Feedback was not kept (${response.status}); keep working.` };
+    } catch (error) {
+      return { isError: true, content: `Feedback was not kept (${message(error)}); keep working.` };
+    }
+  },
+});
+
 // File.ReadAllText/StreamReader BOM rules also apply when identifying a sealed Pod receipt.
 function decodeCapturedManifest(encoded: string): string {
   const bytes = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));

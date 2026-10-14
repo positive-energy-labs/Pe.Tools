@@ -1824,6 +1824,13 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   return {
     receiptSnapshot: () =>
       [...threads.values()].map((t) => ({ id: t.meta.id, title: t.meta.title, events: t.events })),
+    /** What an agent's report stamps for this thread: the running turn and the harness behind it. */
+    reportContext: (id: string) => {
+      const t = threads.get(id);
+      return t
+        ? { turnId: t.running, provider: t.meta.providerId, model: t.meta.modelId ?? null }
+        : null;
+    },
     /** Automatic updates wait for every turn and harness action to finish. */
     active: () => [...threads.values()].some((t) => t.running !== null || t.busy > 0),
     /** The thread head store; the `thread-head` Reading observes it. */

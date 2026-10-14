@@ -59,7 +59,7 @@ it("serializes publication as a real MCP PNG block without scope/catalog scans",
         .map((tool) => tool.name)
         .filter((name) => name.startsWith("pe_") || name === "target_set")
         .sort(),
-    ).toEqual(["pe_do", "pe_find", "pe_read", "target_set"]);
+    ).toEqual(["pe_do", "pe_feedback", "pe_find", "pe_read", "target_set"]);
     expect(tools.tools.find((tool) => tool.name === "pe_do")?.inputSchema.type).toBe("object");
     const result = await client.callTool({ name: "pe_do", arguments: input });
     expect(result.isError).not.toBe(true);
