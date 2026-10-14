@@ -17,7 +17,7 @@ import {
   shelfOf,
   oneThreadRefusal,
   targetFacets,
-  threadVerbs,
+  threadActions,
   visibleThreads,
   threadSearchText,
   inThreadInbox,
@@ -199,7 +199,7 @@ test("many-thread verbs apply to the threads that can take them and refuse only 
     id: "open",
   });
   const byId = (threads: HarnessThreadSummary[], id: string) =>
-    threadVerbs(threads).find((verb) => verb.id === id)!;
+    threadActions(threads).find((verb) => verb.id === id)!;
   const ids = (verb: ReturnType<typeof byId>) => verb.targets.map((thread) => thread.id);
 
   // Two threads, one working: settle and archive skip it, snooze/unread take both or the quiet one.
@@ -298,7 +298,7 @@ test("a closed target is read from the inventory, never offered, and collapses t
 
   // One verb rule for one or many: a closed target refuses "New thread on this target" with why.
   const newTarget = (threads: (typeof open)[]) =>
-    threadVerbs(threads as never).find((verb) => verb.id === "new-target")!;
+    threadActions(threads as never).find((verb) => verb.id === "new-target")!;
   expect(newTarget([open!])).toMatchObject({
     refusal: undefined,
     label: "New thread on this target",

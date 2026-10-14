@@ -43,10 +43,7 @@ const OLD =
   /from "(#\/components\/lang\/(pick-list|combobox|command)|(#\/route|\.)\/picker|cmdk|@base-ui\/react\/(combobox|select|menu|autocomplete))"|role="(listbox|option|menu|menuitem)"|<(datalist|select)[ >]|threadRowRecipe\(|export (function|const) (PickList|Picker|Combobox|Command|CellSelect|ThreadList|ThreadPalette)\b/;
 
 /** Tier 2's allowlist: toggles, not lists (ix-list-result wave 4, "census-excluded toggles"). */
-const TOGGLES: Record<string, string> = {
-  "grounded-doc/view/page-pane.tsx":
-    "bbox overlays drawn where each block sits on the page screenshot: spatial, not a list",
-};
+const TOGGLES: Record<string, string> = {};
 
 const PICKED =
   /aria-(?:selected|pressed|current)=|data-(?:selected|active)=|\w*(?:selected|active|focused|pinned)\s*\?(?![.?])|\?\s*"selected"/i;

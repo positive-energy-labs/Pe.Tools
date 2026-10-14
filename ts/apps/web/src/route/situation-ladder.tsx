@@ -10,7 +10,7 @@ import { useMachine } from "#/machine/use-machine";
 import { previousOf } from "#/readings";
 import { Ladder } from "./ladder";
 import { useChooseTarget } from "./shell";
-import type { ActionHandle, RouteHandle } from "./use-route";
+import type { ActionHandle, RouteHandle } from "./handle";
 
 /**
  * True inside Chat's plugin pane. The pane's target is the thread head's, and Chat's composer head

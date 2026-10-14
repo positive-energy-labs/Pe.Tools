@@ -1,9 +1,22 @@
-import { afterEach, expect, test } from "vite-plus/test";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+// Linearity is counted in bytes the journal writes, not milliseconds: wall time here swung 10x with
+// whatever else the machine was running, bytes do not.
+const io = vi.hoisted(() => ({ bytes: 0 }));
+vi.mock("node:fs/promises", async (original) => {
+  const fs = await original<typeof import("node:fs/promises")>();
+  const counted =
+    <A extends unknown[]>(write: (path: never, data: never, ...rest: A) => Promise<void>) =>
+    (path: never, data: never, ...rest: A) => {
+      io.bytes += Buffer.byteLength(String(data));
+      return write(path, data, ...rest);
+    };
+  return { ...fs, appendFile: counted(fs.appendFile), writeFile: counted(fs.writeFile) };
+});
 import { ActionJournal } from "../src/action-journal.ts";
 import { writeJournal } from "./journal-fixture.ts";
 import { human } from "./callers.ts";
@@ -18,18 +31,18 @@ const file = () => {
   return join(dir, "journal.json");
 };
 
-test("the journal stays linear at 10k receipts: the last thousand cost what the first did", async () => {
+test("the journal stays linear at 10k receipts: the last thousand write what the first did", async () => {
   const path = file();
   const journal = new ActionJournal(path);
   const batch = async () => {
-    const started = performance.now();
+    const before = io.bytes;
     for (let i = 0; i < 1000; i++) await journal.recordFact({ kind: "turn", phase: "started" });
-    return performance.now() - started;
+    return io.bytes - before;
   };
   const first = await batch();
   for (let i = 0; i < 8; i++) await batch();
   const last = await batch();
-  expect(last).toBeLessThan(first * 3 + 250);
+  expect(last).toBeLessThan(first * 3);
   // One line per revision: the file grows with what was written, never with its square.
   expect((await stat(path)).size).toBeLessThan(10_000 * 1024);
   expect((await new ActionJournal(path).read({})).length).toBe(10_000);

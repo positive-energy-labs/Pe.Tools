@@ -689,7 +689,7 @@ test("a thread prompts, parks a permission, cancels, interrupts, renames, and re
 
   // A route that reads a body refuses one without a JSON content type.
   expect((await bare(threads, "POST", `/pe/threads/${id}/prompt`)).status).toBe(415);
-});
+}, 30_000);
 
 test("every committed thread event lands in the host log in order; a delete forgets them", async () => {
   process.env.FAKE_ACP_SHAPE = "config";

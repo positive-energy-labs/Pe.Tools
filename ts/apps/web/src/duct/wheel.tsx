@@ -5,6 +5,7 @@
  * straight across. Geometry in `ductulator.ts`; a `Face` is one printing of the wheel.
  */
 import { useMemo, useRef, type PointerEvent, type ReactNode } from "react";
+import { dash } from "@pe/kit/lib/token";
 
 import {
   WINDOW,
@@ -130,7 +131,7 @@ export function Ductulator({
       <text y={-52} fontSize={7} letterSpacing={1} opacity={0.7}>
         ROUND DUCT
       </text>
-      <text y={-28} fontSize={24} fontWeight={600}>
+      <text y={-28} fontSize={24} style={{ fontWeight: "var(--weight-strong)" }}>
         {fmt(diameter, 1)}″
       </text>
       <text y={-10}>
@@ -240,7 +241,7 @@ export function Ductulator({
         <circle cy={-318} r={5} fill={CURSOR} />
       </g>
       <g transform={`rotate(${g.disk.cfmVelocity(cfm) + spin})`} pointerEvents="none">
-        <line y1={-262} y2={-200} stroke={CURSOR} strokeWidth={1} strokeDasharray="2 2" />
+        <line y1={-262} y2={-200} stroke={CURSOR} strokeWidth={1} strokeDasharray={dash("seam")} />
       </g>
     </svg>
   );

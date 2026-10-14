@@ -61,12 +61,12 @@ import {
   threadSearchText,
   THREAD_STATES,
   oneThreadRefusal,
-  threadVerbs,
+  threadActions,
   type ThreadActivity,
   type ThreadFilter,
   type ThreadShelf,
   type TargetRead,
-  type ThreadVerb,
+  type ThreadAction,
 } from "./thread-navigation";
 
 /** What the roster holds: stored summaries, read against the live inventory by the shell. */
@@ -164,7 +164,7 @@ function ThreadActions({
   const group = selection && selection.length > 1 ? selection : [thread];
   const count = group.length;
   const apply = (
-    verb: ThreadVerb<RosterThread>,
+    verb: ThreadAction<RosterThread>,
     change: (thread: RosterThread) => UpdateThreadRequest = verb.change!,
   ) =>
     count > 1
@@ -175,9 +175,13 @@ function ThreadActions({
   const lifecycle = thread.lifecycle;
   const forks = verbs.providers.filter(isReady);
   const now = new Date();
-  const plan = threadVerbs(group);
-  const verbOf = (id: ThreadVerb["id"]) => plan.find((verb) => verb.id === id)!;
-  const lifecycleAction = (id: ThreadVerb["id"], icon: LucideIcon, groupName?: string): Action => {
+  const plan = threadActions(group);
+  const verbOf = (id: ThreadAction["id"]) => plan.find((verb) => verb.id === id)!;
+  const lifecycleAction = (
+    id: ThreadAction["id"],
+    icon: LucideIcon,
+    groupName?: string,
+  ): Action => {
     const verb = verbOf(id);
     return {
       id: verb.id,

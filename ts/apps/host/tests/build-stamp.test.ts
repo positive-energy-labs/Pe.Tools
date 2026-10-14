@@ -7,18 +7,35 @@ import { receiptBuildDefines, receiptBuildStamp } from "../src/build-stamp.ts";
 import { admitBuild } from "../src/receipt-export.ts";
 
 const repo = resolve(import.meta.dirname, "../../../..");
-const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
+const headNow = () =>
+  execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
+// The stamps baked into the configs are read when this file loads; HEAD may move before a test
+// runs, so those are checked as a real commit in this repo, never as "HEAD right now".
+const isCommit = (commit: string) => {
+  execFileSync("git", ["cat-file", "-e", `${commit}^{commit}`], { cwd: repo });
+  return true;
+};
 const version = (await import(`${repo}/product.payloads.json`, { with: { type: "json" } })).default
   .version as string;
 const baked = (defines: Record<string, string>, key: string) => JSON.parse(defines[key]!);
 
 test("release stamps carry the product version and the current commit; dev carries `dev`", () => {
-  expect(receiptBuildStamp("release")).toEqual({ version, build: head.slice(0, 12), commit: head });
-  expect(receiptBuildStamp("dev")).toEqual({
-    version: "dev",
-    build: head.slice(0, 12),
-    commit: head,
-  });
+  // HEAD is read on both sides of the stamp so a commit landing mid-run cannot fail the test.
+  const before = headNow();
+  const release = receiptBuildStamp("release");
+  const dev = receiptBuildStamp("dev");
+  const after = headNow();
+  for (const [stamp, stampVersion] of [
+    [release, version],
+    [dev, "dev"],
+  ] as const) {
+    expect(stamp).toEqual({
+      version: stampVersion,
+      build: stamp.commit.slice(0, 12),
+      commit: stamp.commit,
+    });
+    expect([before, after]).toContain(stamp.commit);
+  }
 });
 
 test("the built host and web carry the same stamp and the admission accepts it", () => {
@@ -30,13 +47,16 @@ test("the built host and web carry the same stamp and the admission accepts it",
   }).define;
   const host = (hostConfig as { pack: { define: Record<string, string> } }).pack.define;
   const id = "00000000-0000-4000-8000-000000000001";
+  // One source, read once per bundle: the host bundle's two defines are the same string.
+  expect(host.__PE_HOST_RECEIPT_BUILD__).toBe(host.__PE_WEB_RECEIPT_BUILD__);
   for (const [component, defines, key] of [
     ["host", host, "__PE_HOST_RECEIPT_BUILD__"],
     ["web", host, "__PE_WEB_RECEIPT_BUILD__"],
     ["web", web, "__PE_WEB_RECEIPT_BUILD__"],
   ] as const) {
     const stamp = baked(defines, key);
-    expect(stamp).toEqual(receiptBuildStamp("release"));
+    expect(stamp).toMatchObject({ version, build: stamp.commit.slice(0, 12) });
+    expect(isCommit(stamp.commit)).toBe(true);
     expect(admitBuild(component, stamp, id, id)).toMatchObject(stamp);
   }
   expect(Object.keys(web)).not.toContain("__PE_HOST_RECEIPT_BUILD__");

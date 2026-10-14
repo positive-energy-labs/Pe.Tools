@@ -9,8 +9,9 @@
  * or throws.
  */
 import { execFileSync } from "node:child_process";
-import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { realpathSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join, relative, resolve, isAbsolute } from "node:path";
 import { productIdentity, productPathNames } from "./contracts/product.ts";
 
 const userShellFolders =
@@ -18,11 +19,32 @@ const userShellFolders =
 
 let cached: string | undefined;
 
+/** Set only by the test global setup (`ts/tests/isolated-home`): the per-run temp root. */
+export const testHomeRootVariable = "PE_TEST_HOME_ROOT";
+
+/**
+ * Fixture isolation tripwire. Under a test run (the marker is set) no product path may resolve
+ * outside the OS temp directory: a test that reached the owner's real home fails where it resolved,
+ * not after it wrote there. Outside tests this is the identity function.
+ */
+export function insideTestRoot(path: string): string {
+  if (!process.env[testHomeRootVariable]) return path;
+  const inside = [tmpdir(), realpathSync(tmpdir())].some((root) => {
+    const away = relative(resolve(root), resolve(path));
+    return !away.startsWith("..") && !isAbsolute(away);
+  });
+  if (!inside)
+    throw new Error(
+      `Test isolation: '${path}' is outside the temp directory. Set ${productPathNames.productHomeVariable} (and LOCALAPPDATA) to a temp dir.`,
+    );
+  return path;
+}
+
 /** The product home. The Documents lookup is cached once per process; the override is always live. */
 export function productHomePath(): string {
   const override = process.env[productPathNames.productHomeVariable]?.trim();
-  if (override) return resolve(override);
-  return join((cached ??= resolveDocumentsPath()), productIdentity.productName);
+  if (override) return insideTestRoot(resolve(override));
+  return insideTestRoot(join((cached ??= resolveDocumentsPath()), productIdentity.productName));
 }
 
 function resolveDocumentsPath(): string {

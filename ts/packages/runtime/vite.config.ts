@@ -14,4 +14,8 @@ export default defineConfig({
     },
   },
   fmt: {},
+  test: {
+    globalSetup: ["../../tests/isolated-home/global-setup.ts"],
+    setupFiles: ["../../tests/isolated-home/setup.ts"],
+  },
 });

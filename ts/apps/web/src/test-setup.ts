@@ -26,3 +26,7 @@ class DeadSource {
   removeEventListener() {}
 }
 (globalThis as { EventSource?: unknown }).EventSource ??= DeadSource;
+
+/* findBy and waitFor wait 1 s by default, which a busy box outlasts on the first lazy render. */
+if (typeof document !== "undefined")
+  (await import("@testing-library/react")).configure({ asyncUtilTimeout: 5_000 });

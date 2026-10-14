@@ -39,7 +39,7 @@
 }
 .dl-hotkey-command [data-command-key] {
   font-size: var(--type-prose-size);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
 }
 .dl-hotkey-command:where([data-command-face="full"], [data-command-face="responsive"])
   > .dl-button

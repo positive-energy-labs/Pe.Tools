@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { ActionBoard } from "./situation-verbs";
-import type { RouteHandle, ActionHandle } from "./use-route";
+import type { RouteHandle, ActionHandle } from "./handle";
 
 vi.mock("#/navigation/route-controls", () => ({ useSituationPresentation: () => true }));
 afterEach(cleanup);

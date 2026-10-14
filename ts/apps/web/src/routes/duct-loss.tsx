@@ -28,8 +28,7 @@ export const Route = createFileRoute("/duct-loss")({
 
 const fmt = (n: number, d = 2) => n.toLocaleString(undefined, { maximumFractionDigits: d });
 
-const selectClass =
-  "h-(--control-h) w-full rounded-md border border-line bg-line/20 px-2 t-prose outline-none focus-visible:border-line-2";
+const selectClass = "hairline h-(--control-h) w-full rounded-md px-2 t-prose";
 
 function Field({ label, unit, children }: { label: string; unit?: string; children: ReactNode }) {
   return (
@@ -64,7 +63,7 @@ function Num({
 
 function Out({ label, value, unit }: { label: string; value: string; unit?: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 border-b border-line py-1.5 t-prose">
+    <div className="flex items-baseline justify-between gap-4 hairline-b py-1.5 t-prose">
       <span className="text-ink-2">{label}</span>
       <span className="face-mono">
         {value} {unit && <span className="text-ink-2">{unit}</span>}
@@ -209,7 +208,7 @@ function DuctLossRoute() {
               <Out label="friction factor f" value={fmt(r.friction, 4)} />
 
               <h2 className="t-prose pt-(--gutter) font-medium">Formula</h2>
-              <pre className="face-mono t-prose rounded-md border border-line bg-line/20 p-3 whitespace-pre-wrap text-ink">
+              <pre className="hairline face-mono t-prose rounded-md p-3 whitespace-pre-wrap text-ink">
                 {formula}
               </pre>
               <p className="t-prose text-ink-2">

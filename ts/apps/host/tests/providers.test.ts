@@ -12,6 +12,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "pe-provider-state-"));
   previous = process.env.LOCALAPPDATA;
   process.env.LOCALAPPDATA = root;
+  process.env.PE_TOOLS_PRODUCT_HOME = join(root, "product");
   process.env.PE_HARNESS_ADAPTER_CLAUDE = join(import.meta.dirname, "fake-acp-agent.mjs");
   process.env.FAKE_ACP_LOG = join(root, "acp-children.jsonl");
 });

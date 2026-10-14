@@ -7,6 +7,7 @@
  */
 import { useRef, useState, type PointerEvent } from "react";
 
+import { dash } from "@pe/kit/lib/token";
 import { C, EXP, diameterFor, read, ticks, type Face, type Range } from "./ductulator";
 import { BASE, CURSOR, DISK } from "./wheel";
 
@@ -18,7 +19,7 @@ type Series = {
   key: string;
   label: string;
   color: string;
-  dash?: string;
+  dash?: "seam" | "reference" | "void";
   pts: Pt[];
   labelAt?: "end" | "mid";
 };
@@ -174,7 +175,12 @@ function LogLog({
         </g>
         <g clipPath={`url(#${id})`} fill="none" strokeWidth={1.25} strokeLinejoin="round">
           {series.map((s) => (
-            <path key={s.key} d={path(s.pts)} stroke={s.color} strokeDasharray={s.dash} />
+            <path
+              key={s.key}
+              d={path(s.pts)}
+              stroke={s.color}
+              strokeDasharray={s.dash ? dash(s.dash) : undefined}
+            />
           ))}
         </g>
         <g fontSize={7.5} fill={INK2}>
@@ -198,7 +204,7 @@ function LogLog({
               y2={H - M.b}
               stroke={INK2}
               strokeWidth={0.5}
-              strokeDasharray="2 2"
+              strokeDasharray={dash("seam")}
             />
             <line
               y1={sy(hover[1])}
@@ -207,7 +213,7 @@ function LogLog({
               x2={W - M.r}
               stroke={INK2}
               strokeWidth={0.5}
-              strokeDasharray="2 2"
+              strokeDasharray={dash("seam")}
             />
             <text x={W - M.r} y={M.t + 8} textAnchor="end" fontSize={8} fill="var(--color-ink)">
               {readout(hover)}
@@ -266,7 +272,7 @@ export function DuctCharts({
     key: `V${V}`,
     label: `${V} fpm`,
     color: DISK,
-    dash: "3 3",
+    dash: "void",
     labelAt: "mid",
     pts: logspace(r.cfmFriction).map((Q) => {
       const D = Math.sqrt((576 * Q) / (Math.PI * V));

@@ -1,5 +1,5 @@
 import type { Chord, ScopeKey } from "@pe/kit/keys";
-import type { RouteHandle } from "./use-route";
+import type { RouteHandle } from "./handle";
 
 type AnyHandle = RouteHandle<any, any, any, any>;
 

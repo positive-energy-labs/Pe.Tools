@@ -23,7 +23,8 @@ import { KeysNode } from "@pe/kit/keys";
 import { manifestChords } from "./keys";
 import type { RouteManifest } from "./manifest";
 import { SituationAction } from "./situation-verbs";
-import { useRoute, type RouteHandle } from "./use-route";
+import { useRoute } from "./use-route";
+import type { RouteHandle } from "./handle";
 
 /* ── The verb row ─────────────────────────────────────────────────────────── */
 

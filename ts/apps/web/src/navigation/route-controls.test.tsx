@@ -7,14 +7,14 @@ import { Button } from "@pe/kit/lang/button";
 import {
   PrimaryRouteControls,
   RouteControlsProvider,
-  RouteControlsSlot,
+  RouteControlsOutlet,
   useSituationSignal,
   usePagePaletteOpen,
   usePalette,
   usePublishPagePalette,
 } from "./route-controls";
 import { ChainLamp } from "#/route/situation-lamp";
-import type { RouteHandle } from "#/route/use-route";
+import type { RouteHandle } from "#/route/handle";
 
 vi.mock("@tanstack/react-router", () => ({
   useRouterState: ({
@@ -29,7 +29,7 @@ test("only the visible primary route supplies the global control slot", () => {
   const tree = (mode: "visible" | "hidden") => (
     <RouteControlsProvider>
       <div data-testid="global">
-        <RouteControlsSlot />
+        <RouteControlsOutlet />
       </div>
       <Activity mode={mode}>
         <div data-testid="primary">

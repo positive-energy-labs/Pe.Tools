@@ -13,7 +13,7 @@ import type { Reading } from "@pe/agent-contracts";
 
 import { MARK } from "./inspector";
 import type { RouteAction } from "./manifest";
-import type { RouteHandle } from "./use-route";
+import type { RouteHandle } from "./handle";
 
 export function FlowMatrix({ handle }: { handle: RouteHandle<any, any, any, any> }) {
   const { manifest, readings, resolution, work } = handle;
