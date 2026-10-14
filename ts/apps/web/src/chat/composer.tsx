@@ -21,6 +21,7 @@ import { useSend, type ChatHandle } from "#/chat/composer-head";
 import { SituationAction } from "#/route/situation-verbs";
 import { Composer, ComposerFrame, type ComposerHandle } from "#/components/lang/conversation";
 import { Button } from "@pe/kit/lang/button";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { MentionChip } from "@pe/kit/lang/chip";
 import { previousOf } from "#/readings";
 import { AttachmentChip } from "./attachment-chip";
@@ -44,12 +45,14 @@ export function ThreadComposer({
   pickers,
   state,
   work,
+  refusal,
   initialDraft = EMPTY_CHAT_DRAFT,
 }: {
   handle: ChatHandle;
   pickers: (open: boolean) => ReactNode;
   state?: ReactNode;
   work?: ReactNode;
+  refusal?: string | null;
   initialDraft?: ChatDraft;
 }) {
   const [draft, setDraft] = useState(initialDraft);
@@ -70,6 +73,7 @@ export function ThreadComposer({
     box.current?.rest();
   });
   const files = useAttachments(draft, setDraft);
+  const refusedSend = handle.outcome?.key === "send" ? handle.outcome.refusal?.message : null;
   const commands = useMemo<SlashCommand[]>(() => selectSkillCommands(chat), [chat]);
   const slash = useSlashMenu(draft.text, commands);
   const [area, setArea] = useState<HTMLTextAreaElement | null>(null);
@@ -221,10 +225,10 @@ export function ThreadComposer({
                   ))}
                 </div>
               ) : null}
-              {files.refusal ? <div data-tone="caution">{files.refusal}</div> : null}
             </>
           }
           pickers={pickers}
+          refusal={files.refusal ?? refusedSend ?? refusal}
           tools={
             <>
               {state}
@@ -254,7 +258,17 @@ export function ThreadComposer({
                 tone="alarm"
               />
             ) : (
-              <SituationAction handle={handle} name="send" action={send} commit icon={ArrowUp} />
+              <TooltipHint content={refusedSend ?? send.refusal ?? send.says}>
+                <Button
+                  kind="commit"
+                  label={send.label}
+                  icon={ArrowUp}
+                  busy={handle.busy?.key === "send"}
+                  data-tone={refusedSend ? "caution" : undefined}
+                  aria-disabled={Boolean(send.refusal) || undefined}
+                  onClick={sendCurrent}
+                />
+              </TooltipHint>
             )
           }
           onSend={sendCurrent}

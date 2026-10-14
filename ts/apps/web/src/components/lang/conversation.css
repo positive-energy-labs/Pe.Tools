@@ -117,12 +117,16 @@
   grid-template-areas:
     "work work work"
     "text text text"
+    "refusal refusal refusal"
     "pick tools send";
   column-gap: var(--composer-pad);
   padding: var(--composer-pad);
 }
 .dl-composer-box[data-variant="full"] {
   --composer-lines: 7;
+}
+.dl-composer-box > [data-composer-refusal] {
+  grid-area: refusal;
 }
 /* Asks and attachments line up with the marks and Send: the box's padding is their inset. */
 .dl-composer-box > [data-composer-work] {
@@ -197,8 +201,9 @@
 .dl-composer-box:not([data-open]) > [data-composer-pickers] {
   /* Placed in its own (zero-tall) cell, which is its containing block: the rest row's corner. */
   position: absolute;
+  grid-area: text;
   inset-inline-start: 0;
-  inset-block-end: 0;
+  inset-block-start: 0;
   /* Drawn the rest row's height, held at zero underneath so an open grows them from nothing. */
   block-size: 0;
   min-block-size: var(--composer-rest);
@@ -228,7 +233,9 @@
   grid-area: send;
 }
 .dl-composer-box:not([data-open]) > [data-composer-send] {
-  translate: 0 calc((var(--composer-rest) - var(--control-h)) / 2 - var(--composer-rest));
+  grid-area: text;
+  justify-self: end;
+  translate: 0 calc((var(--composer-rest) - var(--control-h)) / 2);
 }
 /* Two names, one fade: changing the name restarts the animation on every flip. */
 @keyframes composer-marks-rest {

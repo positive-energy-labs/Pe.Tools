@@ -10,6 +10,7 @@ export const machineNoticeSchema = z.strictObject({
   title: z.string(),
   body: z.string(),
   href: text.optional(),
+  attended: z.boolean().optional(),
   act: z
     .discriminatedUnion("kind", [
       z.strictObject({

@@ -7,6 +7,7 @@ import {
   type Reading,
 } from "@pe/agent-contracts";
 import { useMachine } from "#/machine/use-machine";
+import { pidOf } from "#/machine/session";
 import { previousOf } from "#/readings";
 import { Ladder } from "./ladder";
 import { useChooseTarget } from "./shell";
@@ -112,6 +113,12 @@ export function useDocumentLadder(
     else choose(JSON.stringify({ kind: "open", ref }));
   };
   const sessionWord = session ? name(session) : null;
+  const unloaded = (observed?.revit.sessions ?? []).filter(
+    (item) =>
+      (item.row.case === "observed-active" || item.row.case === "controlled-active") &&
+      (item.attachment ? item.attachment.documents === null : item.documents?.length !== 0),
+  );
+  const notLoaded = "Pe.Tools is not loaded in this Revit. Finish the install, then restart Revit.";
   return {
     sessionWord,
     docWord: doc?.title ?? lost?.title ?? null,
@@ -138,6 +145,18 @@ export function useDocumentLadder(
               sub: item.documents === null ? "documents unknown" : `${item.documents.length} open`,
             })),
             note: note ?? "no Revit answers the host",
+            extra: unloaded.length ? (
+              <div className="grid gap-1 px-2 py-1">
+                {unloaded.map((item) => (
+                  <div key={pidOf(item.row)}>
+                    <div className="face-mono">Revit · pid {pidOf(item.row)}</div>
+                    <div aria-disabled="true" data-tone="caution">
+                      {notLoaded}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : undefined,
             picked: (id: string) => id === sessionId,
             pick: chooseSession,
           },
@@ -165,7 +184,7 @@ export function useDocumentLadder(
               : null,
             note: session
               ? session.documents === null
-                ? "documents unknown"
+                ? notLoaded
                 : "nothing open here"
               : "choose a session first",
             picked: (id: string) => id === bound?.openId,

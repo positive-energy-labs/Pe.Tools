@@ -12,6 +12,35 @@ import type { MachineNotice } from "@pe/agent-contracts";
 import { SwitchRow } from "#/components/lang/switch-row";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { resolveWorkbenchConfig } from "#/workbench/config";
+import { peClient } from "#/host/pe-client";
+
+/** Each mount has its own caller id, so tabs and the flyout cannot erase one another. */
+export function useThreadPresence(thread: string | null) {
+  useEffect(() => {
+    if (!thread) return;
+    const caller = crypto.randomUUID();
+    const send = (visible: boolean, focused: boolean) =>
+      void peClient
+        .call("notices.presence", {
+          params: { caller },
+          body: { thread, visible, focused },
+        })
+        .catch(() => {}); // A lost beat expires on the host.
+    const beat = () => send(document.visibilityState === "visible", document.hasFocus());
+    beat();
+    const timer = setInterval(beat, 5_000);
+    document.addEventListener("visibilitychange", beat);
+    window.addEventListener("focus", beat);
+    window.addEventListener("blur", beat);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", beat);
+      window.removeEventListener("focus", beat);
+      window.removeEventListener("blur", beat);
+      send(false, false);
+    };
+  }, [thread]);
+}
 
 import { followNotices } from "./notice-follow";
 import {

@@ -117,6 +117,53 @@ test("the card tells the tray it can take notices only once it listens", () => {
   expect(postMessage).toHaveBeenCalledWith(JSON.stringify({ type: "notice-ready" }));
 });
 
+test("reply growth re-reports the card height to the native tray and releases the observer", () => {
+  let resized: (() => void) | undefined;
+  const observe = vi.fn();
+  const disconnect = vi.fn();
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(callback: () => void) {
+        resized = callback;
+      }
+      observe = observe;
+      disconnect = disconnect;
+    },
+  );
+  const view = render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture />);
+  show(finished);
+  const root = screen.getByRole("status", { name: "notice" });
+  expect(observe).toHaveBeenCalledWith(root, { box: "border-box" });
+  const bounds = vi.spyOn(root, "getBoundingClientRect");
+  bounds.mockReturnValue({ height: 102 } as DOMRect);
+  act(() => {
+    resized!();
+  });
+  expect(postMessage).toHaveBeenLastCalledWith(
+    JSON.stringify({ type: "notice-card", height: 102 }),
+  );
+  fireEvent.change(screen.getByRole("textbox", { name: "reply to Pea" }), {
+    target: { value: "First line\nSecond line\nThird line\nFourth line\nFifth line" },
+  });
+  bounds.mockReturnValue({ height: 193.5 } as DOMRect);
+  act(() => {
+    resized!();
+  });
+  expect(postMessage).toHaveBeenLastCalledWith(
+    JSON.stringify({ type: "notice-card", height: 194 }),
+  );
+  bounds.mockReturnValue({ height: 102 } as DOMRect);
+  act(() => {
+    resized!();
+  });
+  expect(postMessage).toHaveBeenLastCalledWith(
+    JSON.stringify({ type: "notice-card", height: 102 }),
+  );
+  view.unmount();
+  expect(disconnect).toHaveBeenCalled();
+});
+
 test("malformed native notices never enter the card", () => {
   render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture />);
   act(() =>

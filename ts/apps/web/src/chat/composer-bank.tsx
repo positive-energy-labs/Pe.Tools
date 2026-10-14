@@ -12,6 +12,7 @@ export function ComposerBank({
   pickers,
   state,
   work,
+  refusal,
 }: {
   currentThreadId: string;
   deletedThreadIds: ReadonlySet<string>;
@@ -23,6 +24,7 @@ export function ComposerBank({
   state: ReactNode;
   /** The box's top section: live asks and staged Work (`ComposerWork`). */
   work: ReactNode;
+  refusal?: string | null;
 }) {
   const [visited, setVisited] = useState(() => new Set([currentThreadId]));
   useEffect(() => {
@@ -53,6 +55,7 @@ export function ComposerBank({
               pickers={pickers}
               state={state}
               work={work}
+              refusal={refusal}
               initialDraft={initialDraft}
             />
           </Activity>

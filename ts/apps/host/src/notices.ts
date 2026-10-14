@@ -9,6 +9,7 @@ import {
 } from "@pe/agent-contracts";
 
 import type { HostLog } from "./host-log.ts";
+import type { ThreadPresence } from "@pe/host-contracts/pe-api";
 
 /**
  * The card feed is a projection of receipts, never a source of completion. A card exists because a
@@ -206,6 +207,22 @@ export function createNotices(deps: {
   let trays = 0;
   const presence = new Set<() => void>();
   const presenceChanged = () => presence.forEach((listener) => listener());
+  const beats = new Map<string, ThreadPresence & { at: number }>();
+  const expire = () => {
+    for (const [caller, beat] of beats) if (Date.now() - beat.at >= 10_000) beats.delete(caller);
+  };
+  const beat = (caller: string, value: ThreadPresence) => {
+    expire();
+    if (value.visible && value.focused) beats.set(caller, { ...value, at: Date.now() });
+    else beats.delete(caller);
+  };
+  const forTray = (notice: MachineNotice): MachineNotice => {
+    expire();
+    const thread = notice.act && "threadId" in notice.act ? notice.act.threadId : undefined;
+    return thread && [...beats.values()].some((value) => value.thread === thread)
+      ? { ...notice, attended: true }
+      : notice;
+  };
 
   const isNotice = ({ event }: HostLogEntry) => event.kind === "notice";
   const isResolution = ({ event }: HostLogEntry) =>
@@ -253,19 +270,30 @@ export function createNotices(deps: {
       );
       for (const { id, event } of replay.entries)
         if (event.kind === "notice" && !(event.request && resolved.has(event.request)))
-          publish({ kind: "event", key, value: event.notice, id });
+          publish({
+            kind: "event",
+            key,
+            value: notices.as === "tray" ? forTray(event.notice) : event.notice,
+            id,
+          });
     }
     // Read and subscribe run in one synchronous step, so no entry falls between them.
     release.push(
       deps.log.subscribe((entry) => {
         if (entry.event.kind === "notice")
-          publish({ kind: "event", key, value: entry.event.notice, id: entry.id });
+          publish({
+            kind: "event",
+            key,
+            value: notices.as === "tray" ? forTray(entry.event.notice) : entry.event.notice,
+            id: entry.id,
+          });
       }),
     );
     return () => release.forEach((fn) => fn());
   }
 
   return {
+    beat,
     observe,
     close: () => {
       unsubscribe();

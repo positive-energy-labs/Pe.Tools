@@ -52,6 +52,12 @@ export const peErrorSchema = z.object({
   }),
 });
 const none = z.undefined();
+export const threadPresenceSchema = z.strictObject({
+  thread: z.string().min(1),
+  visible: z.boolean(),
+  focused: z.boolean(),
+});
+export type ThreadPresence = z.infer<typeof threadPresenceSchema>;
 export const bootstrapAlignmentSchema = z.strictObject({
   id: z.string().min(1).max(200),
   year: z.string().regex(/^20\d{2}$/),
@@ -229,6 +235,15 @@ export function definePeApi<
   });
   /** Public HTTP transport authority. Domain schemas stay with their domain owners. */
   const peRoutes = {
+    "notices.presence": route(
+      "POST",
+      "/pe/notices/presence/:caller",
+      threadPresenceSchema,
+      ok,
+      "caller",
+      "pe",
+      "caller",
+    ),
     "features.get": route("GET", "/pe/features", none, hostDescriptorSchema, "read", "pe", "read"),
     "machine.bootstrap": route(
       "POST",

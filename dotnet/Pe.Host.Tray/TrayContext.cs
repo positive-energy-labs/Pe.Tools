@@ -167,13 +167,11 @@ internal sealed class TrayContext : ApplicationContext {
     private void ShowNotices(IReadOnlyList<string> notices) {
         if (notices.Count == 0) return;
         try {
-            _window.BeginInvoke(async () => {
+            _window.BeginInvoke(() => {
                 try {
-                    var view = await _web.ExecuteScriptAsync("({visible:document.visibilityState==='visible',focused:document.hasFocus(),pathname:location.pathname,thread:new URLSearchParams(location.search).get('thread')})");
-                    using var panel = JsonDocument.Parse(view);
                     foreach (var notice in notices) {
                         using var value = JsonDocument.Parse(notice);
-                        PostNoticeMessage(new { type = "notice", notice = value.RootElement, view = panel.RootElement });
+                        PostNoticeMessage(new { type = "notice", notice = value.RootElement });
                     }
                 } catch (Exception error) when (error is InvalidOperationException or COMException or JsonException) { }
             });
