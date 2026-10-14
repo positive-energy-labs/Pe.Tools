@@ -148,7 +148,7 @@
 }
 /* The box's ring says where keys go; the pane's outline would be a second frame for the same fact. */
 [data-slot="pane"]:has(.dl-composer-frame) {
-  outline-color: transparent;
+  --pane-halo: transparent;
 }
 /* Message controls occupy the turn gap even while hidden; keyboard and touch keep access. */
 .dl-message-controls {
