@@ -139,7 +139,46 @@ describe("groups", () => {
     expect(header("Update").getAttribute("aria-expanded")).toBe("false");
   });
 
-  test("nothing waiting opens nothing", () => {
+  test("with nothing waiting, the first group whose header disagrees opens by itself", () => {
+    const machine = machineOf(MACHINE_SEEDS["no-revit"])!;
+    body({
+      state: "ready",
+      observation: {
+        ...machine,
+        share: { ...machine.share!, state: "refused", desired: "off", refused: [] },
+      },
+    });
+    expect(header("Share").getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(header("Share"));
+    expect(header("Share").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  test("on the route, a closed group stays closed though the address has no section", () => {
+    const machine = machineOf(MACHINE_SEEDS["no-revit"])!;
+    const reading = {
+      state: "ready" as const,
+      observation: {
+        ...machine,
+        share: {
+          ...machine.share!,
+          state: "refused" as const,
+          desired: "off" as const,
+          refused: [],
+        },
+      },
+    };
+    const choose = vi.fn();
+    const view = render(
+      <SettingsBody reading={reading} fixture={false} shell="tray" onGroup={choose} />,
+    );
+    expect(header("Share").getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(header("Share"));
+    expect(choose).toHaveBeenLastCalledWith(undefined);
+    view.rerender(<SettingsBody reading={reading} fixture={false} shell="tray" onGroup={choose} />);
+    expect(header("Share").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  test("nothing waiting and nothing disagreeing opens nothing", () => {
     body(MACHINE_SEEDS["no-revit"]);
     for (const label of ["Revit", "Update", "Share", "Pea providers"])
       expect(header(label).getAttribute("aria-expanded")).toBe("false");

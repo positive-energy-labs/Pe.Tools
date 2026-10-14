@@ -550,7 +550,7 @@ internal sealed class TrayContext : ApplicationContext {
             if (PwaLauncher.EdgeExecutable is not { } edge) { _icon.Text = "Pe.Tools: Edge unavailable"; return; }
             var installed = await FindPwaAsync();
             if (!IsOriginalService() || service != _service) return;
-            _openWindow.Text = installed is null ? "Install in Edge" : "Open window";
+            _openWindow.Text = "Open window";
             var start = PwaLauncher.Launch(edge, service.ViewOrigin, destination, installed, PwaLauncher.StandardProfileRoot);
             Process.Start(start)?.Dispose();
         } catch (Exception error) when (error is System.ComponentModel.Win32Exception or IOException or HttpRequestException
