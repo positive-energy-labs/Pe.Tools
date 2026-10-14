@@ -137,3 +137,38 @@ it("an empty Page text update crosses the contract", async () => {
   );
   expect(answer.status).toBe(204);
 });
+
+it("route consumers cannot recreate Pe paths beside the contract", () => {
+  const root = join(import.meta.dirname, "../../../apps/host");
+  for (const file of [
+    "src/resource-adapters.ts",
+    "src/demo-owner.ts",
+    "src/pages-route.ts",
+    "tests/schedule-test-fixture.ts",
+  ]) {
+    expect(readFileSync(join(root, file), "utf8"), file).not.toMatch(/\/pe\//);
+  }
+});
+
+it("admission metadata distinguishes administration, local transport, and product grants", () => {
+  for (const route of Object.values(peRoutes)) {
+    expect(["read", "product", "administration"]).toContain(route.permission);
+    expect(typeof route.localOnly).toBe("boolean");
+  }
+  expect(peRoutes["providers.add"]).toMatchObject({
+    principal: "human",
+    permission: "administration",
+    localOnly: false,
+  });
+  expect(peRoutes["share.set"]).toMatchObject({
+    principal: "human",
+    permission: "administration",
+    localOnly: true,
+  });
+  expect(peRoutes["page.bind"]).toMatchObject({
+    principal: "human-or-pea",
+    permission: "product",
+    localOnly: false,
+  });
+  expect(peRoutes["scope.revoke"]).toMatchObject({ principal: "human", permission: "product" });
+});

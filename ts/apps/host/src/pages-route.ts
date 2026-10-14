@@ -1,4 +1,10 @@
-import { peRoutes, servePeRoute, peClientScript, matchPeRoute } from "@pe/agent-contracts/pe-api";
+import {
+  peRoutes,
+  servePeRoute,
+  peClientScript,
+  matchPeRoute,
+  peRouteUrl,
+} from "@pe/agent-contracts/pe-api";
 /**
  * PAGES — disposable HTML as a working surface between an agent and a person (pages ledger,
  * 2026-10-04). A page is a folder `Documents/Pe.Tools/Pages/<slug>/` holding an `index.html`,
@@ -33,7 +39,7 @@ import { peRoutes, servePeRoute, peClientScript, matchPeRoute } from "@pe/agent-
  *   GET  /pages/<slug>/target          the default slot: binding, resolution, document, what a write would do
  *   POST /pages/<slug>/call            { key, request? }: a read on the bound document (host `/call`)
  *   POST /pages/<slug>/act             { key, input? }: a write as the page under its binding (host `/actions`)
- *   PUT  /pe/pages/<slug>/binding      a slot (PageChoice): the human picker, or Pea pinning its own document
+ *   page.bind      a slot (PageChoice): the human picker, or Pea pinning its own document
  */
 import { readFileSync, watch } from "node:fs";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
@@ -729,11 +735,11 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
   }
 
   /**
-   * `PUT /pe/pages/<slug>/binding`: a person binds anything; Pea (or an MCP client) only pins a
+   * `page.bind`: a person binds anything; Pea (or an MCP client) only pins a
    * document open in one of Pea's own Revits.
    */
   async function bind(slug: string, dir: string, page: string, request: Request, caller: Caller) {
-    const at = `/pe/pages/${slug}/binding`;
+    const at = peRouteUrl("page.bind", { params: { slug } });
     const parsed = pageChoiceSchema.safeParse(await request.json().catch(() => undefined));
     if (!parsed.success)
       return problem(
@@ -794,7 +800,10 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
       const [, , slug = "", verb, ...more] = parts;
       const where = await dirOf(slug);
       if (!where || verb !== "binding" || more.length || request.method !== "PUT")
-        return problem(404, "the binding door is PUT /pe/pages/<slug>/binding");
+        return problem(
+          404,
+          `the binding door is ${peRoutes["page.bind"].method} ${peRoutes["page.bind"].path}`,
+        );
       return bind(slug, where.dir, where.key, request, caller);
     }
     const wantsHtml = (request.headers.get("accept") ?? "").includes("text/html");

@@ -1,3 +1,4 @@
+import { createPeClient, matchPeRoute } from "@pe/agent-contracts/pe-api";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { afterEach, expect, vi } from "vite-plus/test";
 import { Context, Effect, Layer } from "effect";
@@ -248,7 +249,7 @@ export async function setup() {
       init,
     );
     const url = new URL(request.url);
-    if (url.pathname.startsWith("/pe/")) {
+    if (matchPeRoute(request.method, url.pathname)?.route.owner === "pe") {
       const row = {
         path: url.pathname + url.search,
         body: await request.clone().text(),
@@ -281,8 +282,12 @@ export async function setup() {
     target: null,
     work: reading.workspaceId,
   };
-  const view = async () =>
-    (await fetch(`/pe/route-state/schedules?work=${scope.work}`)).json() as Promise<{
+  const client = createPeClient();
+  const view = () =>
+    client.call("work.get", {
+      params: { route: "schedules" },
+      query: { work: scope.work },
+    }) as Promise<{
       revision: number;
       doc: { basis?: { captureId: string }; cells: Record<string, any> };
     }>;
@@ -291,10 +296,10 @@ export async function setup() {
     as = actor === "agent" ? pea() : human;
     try {
       return (
-        await fetch(`/pe/route-state/schedules/apply?work=${scope.work}`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ patches, expectedRevision: previous?.revision ?? 0 }),
+        await client.response("work.apply", {
+          params: { route: "schedules" },
+          query: { work: scope.work },
+          body: { patches, expectedRevision: previous?.revision ?? 0 },
         })
       ).json();
     } finally {
