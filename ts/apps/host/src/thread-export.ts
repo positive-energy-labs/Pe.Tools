@@ -1,12 +1,10 @@
-import { createHash } from "node:crypto";
 import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { harnessEventSchema, threadExportSchema } from "@pe/agent-contracts";
 
 import type { HostLog } from "./host-log.ts";
-import { artifactRelative, writeArtifact } from "./page-artifacts.ts";
+import { artifactRelative, sha256Hex as sha, writeArtifact } from "./page-artifacts.ts";
 
-const sha = (bytes: string | Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 const inside = (root: string, path: string) => {
   artifactRelative(root, realpathSync(path));
   return path;

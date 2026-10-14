@@ -8,7 +8,7 @@
  * The store is product-wide (`<product>/state/captures`), not per host service, so a dev host and
  * the installed host draw the same `<img src="/captures/<sha>.png">`.
  */
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { appendFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -23,7 +23,7 @@ import { productPathNames } from "@pe/host-contracts/contracts";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
 import { productRoot } from "./host-ownership.ts";
 import { isNavigation, type SpaFallback } from "./ops-catalog.ts";
-import { writeArtifact } from "./page-artifacts.ts";
+import { sha256Hex, writeArtifact } from "./page-artifacts.ts";
 
 const isMissing = (error: unknown) => (error as { code?: string } | null)?.code === "ENOENT";
 
@@ -44,7 +44,7 @@ export class CaptureStore {
     bytes: Buffer,
     facts: Pick<CaptureReceipt, "origin" | "document" | "view" | "focus" | "registration">,
   ): Promise<CaptureReceipt> {
-    const sha = createHash("sha256").update(bytes).digest("hex");
+    const sha = sha256Hex(bytes);
     if (facts.registration && facts.registration.imageSha256 !== sha)
       throw Error(
         `the exported PNG hashes to ${sha}, not the registration's ${facts.registration.imageSha256}; the file changed after Revit registered it`,
@@ -69,7 +69,7 @@ export class CaptureStore {
    * a taking on this host. Returns the sha.
    */
   async adopt(bytes: Buffer): Promise<string> {
-    const sha = createHash("sha256").update(bytes).digest("hex");
+    const sha = sha256Hex(bytes);
     const path = this.blobPath(sha);
     // Content-addressed and never renamed over: Windows refuses that while a reader holds the blob.
     await writeArtifact(this.blobs, path, bytes);

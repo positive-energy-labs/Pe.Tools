@@ -66,7 +66,8 @@ import {
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
 import { exportPage } from "./page-export.ts";
 import { CaptureStore, hostCaptures } from "./captures-route.ts";
-import { publishPage, withPageKey } from "./page-publication.ts";
+import { escapeHtml, publishPage, withPageKey } from "./page-publication.ts";
+import { PAGE_MEDIA, readJson } from "./page-artifacts.ts";
 
 /**
  * Each library file beside its source on the dev lane, so an edit is live on the next request;
@@ -146,23 +147,6 @@ const pageLibrary = (path: string): string | null => {
 
 /** One file segment: a leading dot is refused, so `.state/` and editor droppings stay private. */
 const SEGMENT = /^[a-z0-9_-][a-z0-9_.-]*$/i;
-const MIME: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".mjs": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".md": "text/markdown; charset=utf-8",
-  ".txt": "text/plain; charset=utf-8",
-  ".csv": "text/csv; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".woff2": "font/woff2",
-};
 const HEARTBEAT_MS = 15_000;
 const isMissing = (error: unknown) => (error as { code?: string } | null)?.code === "ENOENT";
 
@@ -287,11 +271,8 @@ class PageState {
     this.queue = job.catch(() => undefined);
     return job;
   }
-  async snapshot(): Promise<unknown> {
-    return readFile(join(this.dir, "snapshot.json"), "utf8").then(JSON.parse, (error) => {
-      if (isMissing(error)) return null;
-      throw error;
-    });
+  snapshot(): Promise<unknown> {
+    return readJson(join(this.dir, "snapshot.json"), z.unknown(), null);
   }
   async writeSnapshot(value: unknown) {
     await mkdir(this.dir, { recursive: true });
@@ -377,9 +358,6 @@ const unresolved = (door: string, resolution: Exclude<TargetResolution, { kind: 
 
 /** A catalog row's `op:<key>` (what `pe.find` answers) names the operation `<key>`. */
 const bareOp = (key: string) => key.replace(/^op:/, "");
-
-const escapeHtml = (text: string) =>
-  text.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 /**
  * The pages handler over the Pages root and the Pods root: a plain web handler, so tests need no
@@ -484,7 +462,7 @@ export function createPagesHandler(
           : raw;
       return new Response(bytes, {
         headers: {
-          "content-type": MIME[extname(path).toLowerCase()] ?? "application/octet-stream",
+          "content-type": PAGE_MEDIA[extname(path).toLowerCase()] ?? "application/octet-stream",
           "cache-control": "no-cache",
         },
       });
@@ -560,14 +538,8 @@ export function createPagesHandler(
   }
 
   const bindingFile = (dir: string) => join(dir, ".state", "binding.json");
-  const bindingOf = async (dir: string): Promise<PageBinding> =>
-    readFile(bindingFile(dir), "utf8").then(
-      (text) => pageBindingSchema.parse(JSON.parse(text)),
-      (error) => {
-        if (isMissing(error)) return unboundPage;
-        throw error;
-      },
-    );
+  const bindingOf = (dir: string): Promise<PageBinding> =>
+    readJson(bindingFile(dir), pageBindingSchema, unboundPage);
 
   async function target(page: string, dir: string): Promise<PageTargetReading> {
     const actDoor = pageActDoor(page);
@@ -732,7 +704,7 @@ export function createPagesHandler(
     if (!ref) return { key: bareOp(key), input: sent };
     if (ref.kind !== "script")
       return { problem: `${key} is a ${ref.kind}: it reads and mentions, it never runs.` };
-    await requirePackageEnabled(ref.packageId, undefined, pods);
+    await requirePackageEnabled(ref.packageId, pods);
     const pod = pods
       ? (await listPackages(pods)).packages.find((one) => one.id === ref.packageId)
       : undefined;
@@ -832,7 +804,10 @@ export function createPagesHandler(
     const library = request.method === "GET" ? pageLibrary(url.pathname) : null;
     if (library !== null)
       return new Response(library, {
-        headers: { "content-type": MIME[extname(url.pathname)]!, "cache-control": "no-cache" },
+        headers: {
+          "content-type": PAGE_MEDIA[extname(url.pathname)]!,
+          "cache-control": "no-cache",
+        },
       });
     if (!pageKeyOf(slug))
       return problem(
@@ -868,7 +843,7 @@ export function createPagesHandler(
         });
         return new Response(result.html, {
           headers: {
-            "content-type": MIME[".html"]!,
+            "content-type": PAGE_MEDIA[".html"]!,
             "content-disposition": `attachment; filename="${slug}.html"`,
             "x-pe-export-sha256": result.sha256,
             "cache-control": "no-store",

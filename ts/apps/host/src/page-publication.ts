@@ -7,16 +7,18 @@ import type { CaptureStore } from "./captures-route.ts";
 import { pagePublicationSchema, type PagePublication } from "@pe/host-contracts/pe-api";
 import { validatePageHtml, writeArtifact } from "./page-artifacts.ts";
 
+export const escapeHtml = (text: string) =>
+  text.replace(
+    /[&<>"']/g,
+    (value) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[value]!,
+  );
+
 /** Serving and preview use the same host-minted identity without changing authored bytes. */
 export function withPageKey(html: string, page: string) {
   const icon = /<link\b[^>]*\brel=["'][^"']*\bicon\b/i.test(html)
     ? ""
     : '<link rel="icon" href="data:,">';
-  const escaped = page.replace(
-    /[&<>"']/g,
-    (value) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[value]!,
-  );
-  const meta = `<meta name="pe-page" content="${escaped}">${icon}`;
+  const meta = `<meta name="pe-page" content="${escapeHtml(page)}">${icon}`;
   const head = /<head[^>]*>/i.exec(html) ?? /^\s*<!doctype[^>]*>/i.exec(html);
   if (!head) return `${meta}${html}`;
   const end = head.index + head[0].length;

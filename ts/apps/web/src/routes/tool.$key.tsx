@@ -20,6 +20,7 @@ function PodTool() {
   const row = inventory?.rows.find((entry) => entry.key === key);
   const registration = row?.trusted ? publicRoutes.get(row.workRoute) : null;
   const View = registration?.hosted;
+  const alarm = error || inventory?.errors[key] || inventory?.errors.inventory;
   if (row && View)
     return (
       <PaneErrorBoundary what="Pod route" key={`${row.key}:${row.sha256}`}>
@@ -78,9 +79,9 @@ function PodTool() {
           </Button>
         </>
       )}
-      {(error || inventory?.errors[key] || inventory?.errors.inventory) && (
+      {alarm && (
         <p role="alert" data-tone="alarm">
-          {error || inventory?.errors[key] || inventory?.errors.inventory}
+          {alarm}
         </p>
       )}
     </main>

@@ -31,9 +31,6 @@ export interface Plugin<T = unknown> {
     context: PluginContext<T>,
   ) => void | (() => void | Promise<void>) | Promise<void | (() => void | Promise<void>)>;
 }
-export function definePlugin<T>(plugin: Plugin<T>): Plugin<T> {
-  return plugin;
-}
 export type PluginStatus = { id: string; status: "active" | "disabled" | "error"; error?: string };
 import { z } from "zod";
 export const pluginStatusSchema = z.strictObject({

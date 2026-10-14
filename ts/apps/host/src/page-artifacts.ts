@@ -1,8 +1,46 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { link, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { Script } from "node:vm";
+import type { z } from "zod";
 import { parse, parseFragment, type DefaultTreeAdapterMap } from "parse5";
+
+/** A JSON file through its schema; a missing file reads as `missing`. */
+export async function readJson<T>(path: string, schema: z.ZodType<T>, missing: T): Promise<T> {
+  try {
+    return schema.parse(JSON.parse(await readFile(path, "utf8")));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return missing;
+    throw error;
+  }
+}
+
+export const sha256Hex = (bytes: string | Uint8Array) =>
+  createHash("sha256").update(bytes).digest("hex");
+
+/** Served Page files and exported data URLs name media the same way. */
+export const PAGE_MEDIA: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".md": "text/markdown; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+  ".csv": "text/csv; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+  ".mp4": "video/mp4",
+  ".mp3": "audio/mpeg",
+};
 
 /** Validate without executing or reserializing authored bytes. Modules remain browser-checked. */
 export function validatePageHtml(html: string, fragment = false) {

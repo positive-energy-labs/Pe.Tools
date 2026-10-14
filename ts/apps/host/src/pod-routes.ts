@@ -1,11 +1,10 @@
-import { readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { z } from "zod";
 import { podRouteWorkSpec, type PodRouteDescriptor } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
 import type { createPackageLifecycle } from "./package-lifecycle.ts";
 import { productRouteTrustPath } from "./product-paths.ts";
-import { writeArtifact } from "./page-artifacts.ts";
+import { readJson, writeArtifact } from "./page-artifacts.ts";
 
 const trustSchema = z.record(z.string(), z.string().regex(/^[a-f0-9]{64}$/));
 
@@ -17,14 +16,7 @@ export function createPodRoutes(
   const path = options.trustPath ?? productRouteTrustPath();
   const registrations = new Map<string, { hash: string; dispose: () => void }>();
   let tail = Promise.resolve();
-  async function decisions() {
-    try {
-      return trustSchema.parse(JSON.parse(await readFile(path, "utf8")));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
-      throw error;
-    }
-  }
+  const decisions = () => readJson(path, trustSchema, {});
   async function list(): Promise<PodRouteDescriptor[]> {
     await lifecycle.refresh();
     const trust = await decisions();

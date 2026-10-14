@@ -1,5 +1,5 @@
 /** Transport consumes packages.ts's captured members; source bytes and local custody stay distinct. */
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { lstat, readFile, rename, rm, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
@@ -17,7 +17,7 @@ import {
 } from "./packages.ts";
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
 import { activateImportedPackage } from "./package-lifecycle.ts";
-import { validatePageHtml, writeArtifact } from "./page-artifacts.ts";
+import { sha256Hex as sha256, validatePageHtml, writeArtifact } from "./page-artifacts.ts";
 
 const VENDOR_DIRECTORY = "_vendor";
 const IMPORTED_FILE = "imported.json";
@@ -599,5 +599,3 @@ function localFolder(folder: string): string {
     throw new TransferRefused(`Invalid local Pod folder '${folder}'.`, 400);
   return folder;
 }
-
-const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");

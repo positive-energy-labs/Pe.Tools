@@ -1,10 +1,10 @@
 /** The Page projection, with no HTTP: one descriptor per Page the host serves. */
-import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { contributionKey, parseContributionKey } from "@pe/agent-contracts";
 import type { AdmittedPackage } from "./packages.ts";
 import { productPagesRootPath } from "./product-paths.ts";
+import { sha256Hex as sha } from "./page-artifacts.ts";
 
 /** One Page the host serves, as anything that lists, ranks or opens Pages reads it. */
 export type PageDescriptor = {
@@ -28,7 +28,6 @@ export type PageDescriptor = {
 
 const titleOf = (html: string, slug: string) =>
   /<title>([^<]*)<\/title>/i.exec(html)?.[1]?.trim() || slug;
-const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
 /** Scratch folder names that differ only by case, each group sorted: none of them is a Page. */
 export function pageFolderCollisions(names: readonly string[]): string[][] {
