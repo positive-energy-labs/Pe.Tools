@@ -9,4 +9,7 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <EmbeddedResource Include="ReadJet.ps1" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Pe.Shared.Product\Pe.Shared.Product.csproj" />
+  </ItemGroup>
 </Project>

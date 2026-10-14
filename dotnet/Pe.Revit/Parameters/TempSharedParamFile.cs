@@ -1,3 +1,4 @@
+using Pe.Shared.Product;
 using Autodesk.Revit.ApplicationServices;
 
 namespace Pe.Revit.Parameters;
@@ -11,7 +12,8 @@ public class TempSharedParamFile : IDisposable {
         this.App = doc.Application;
         this.OriginalFileName = this.App.SharedParametersFilename;
 
-        var tempSharedParamFile = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".txt");
+        var tempSharedParamFile = Path.Combine(ProductRuntimeLayout.ForCurrentUser().ScratchPath, Guid.NewGuid().ToString("N") + ".txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(tempSharedParamFile)!);
         using (File.Create(tempSharedParamFile)) { } // Create empty file
 
         try {

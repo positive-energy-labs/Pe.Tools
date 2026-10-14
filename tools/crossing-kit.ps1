@@ -1,11 +1,13 @@
 param(
     [Parameter(Mandatory)][string]$Installer,
     [string]$NextInstaller,
-    [string]$Out = (Join-Path ([IO.Path]::GetTempPath()) ('pe-crossing-' + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmss'))),
+    [string]$Out,
     # Without this the kit only validates the installer and prints the plan: nothing is installed or started.
     [switch]$Execute
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'product-paths.ps1')
+if (-not $Out) { $Out = Join-Path (Resolve-ProductRuntimeRoot) ('scratch/pe-crossing-' + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmss')) }
 # The installed-lane crossing (host ledger, wave F1 "native crossing"): the checks no source run can prove.
 # Run -Execute only on a clean machine or a Windows Sandbox guest. It refuses a machine that already has
 # the product, so it can never touch an owner's installed Pe.Tools.
@@ -24,7 +26,7 @@ function Test-ProductInstalled {
 }
 
 function Get-ServiceRecord {
-    $directory = Join-Path $env:LOCALAPPDATA 'Positive Energy/Pe.Tools/state/service'
+    $directory = Join-Path (Resolve-ProductRuntimeRoot) 'state/service'
     if (-not (Test-Path -LiteralPath $directory)) { return $null }
     foreach ($file in Get-ChildItem -LiteralPath $directory -Filter '*.json') {
         $record = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json

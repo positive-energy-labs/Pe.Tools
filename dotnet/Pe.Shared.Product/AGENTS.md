@@ -51,5 +51,6 @@ The local folder is a filesystem address, not pod identity. Authored JSON, scrip
 ## Consumer Guidance
 
 - Ask for intentful paths and perform IO at the caller boundary; resolution creates no directories.
+- Every Pe.Tools-owned path, including scratch, must derive from `ProductRuntimeLayout` / `ProductUserContentLayout`, TS `productRoot` / `product-paths`, or PowerShell `tools/product-paths.ps1`. `PE_TOOLS_PRODUCT_HOME` selects the whole environment. The production-only `product-environment.guard.test.ts` rejects direct OS-root reads outside these resolvers; each third-party or SDK exception names its reason.
 - Build and installer code reads installed-layout facts directly from `product.payloads.json`.
 - Repo artifact topology belongs to `build/ProductLayoutAuthority.cs` and `build/BuildArtifactLayout.cs`.

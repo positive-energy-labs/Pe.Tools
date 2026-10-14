@@ -1,3 +1,4 @@
+using Pe.Shared.Product;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.LookupTables;
 
@@ -58,7 +59,7 @@ public sealed class SetLookupTables(SetLookupTablesSettings settings)
             if (manager == null || !manager.IsValidObject)
                 throw new InvalidOperationException("Failed to create or retrieve the family size-table manager.");
 
-            var workingDirectory = Path.Combine(Path.GetTempPath(), "pelt", Guid.NewGuid().ToString("N"));
+            var workingDirectory = Path.Combine(ProductRuntimeLayout.ForCurrentUser().ScratchPath, "pelt", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(workingDirectory);
 
             var logs = new List<LogEntry>();
