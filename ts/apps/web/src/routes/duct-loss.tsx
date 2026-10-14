@@ -28,8 +28,7 @@ export const Route = createFileRoute("/duct-loss")({
 
 const fmt = (n: number, d = 2) => n.toLocaleString(undefined, { maximumFractionDigits: d });
 
-const selectClass =
-  "hairline h-(--control-h) w-full rounded-md px-2 t-prose";
+const selectClass = "hairline h-(--control-h) w-full rounded-md px-2 t-prose";
 
 function Field({ label, unit, children }: { label: string; unit?: string; children: ReactNode }) {
   return (
