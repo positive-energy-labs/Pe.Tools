@@ -1,3 +1,4 @@
+import { matchPeRoute } from "@pe/agent-contracts/pe-api";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -756,6 +757,9 @@ export function createProviders(options: ProvidersOptions) {
   async function handle(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const method = request.method;
+    const declared = matchPeRoute(method, url.pathname);
+    if (!declared || declared.route.owner !== "providers")
+      return json({ error: "Unknown provider route" }, 404);
     const body = async <T>(schema: z.ZodType<T>) => {
       if (!request.headers.get("content-type")?.startsWith("application/json"))
         return json(
@@ -765,7 +769,7 @@ export function createProviders(options: ProvidersOptions) {
       const parsed = schema.safeParse(await request.json().catch(() => null));
       return parsed.success ? parsed.data : json({ error: parsed.error.message }, 400);
     };
-    if (url.pathname === "/pe/access") {
+    if (declared.id === "access.get" || declared.id === "access.set") {
       if (method === "GET") return json(readAccess());
       if (method !== "PUT") return json({ error: `No route ${method} ${url.pathname}` }, 404);
       const input = await body(accessSchema);
@@ -777,7 +781,7 @@ export function createProviders(options: ProvidersOptions) {
       log.info(`access set: guarded ${input.guarded}`);
       return json(input);
     }
-    const [, , , rawId, verb] = url.pathname.split("/"); // "", "pe", "providers", id, verb
+    const rawId = declared.params.id;
     if (!rawId) {
       if (method === "GET") {
         const list = records().map(view);
@@ -789,12 +793,12 @@ export function createProviders(options: ProvidersOptions) {
       const input = await body(addProviderRequestSchema);
       return input instanceof Response ? input : add(input);
     }
-    const record = get(decodeURIComponent(rawId));
+    const record = get(rawId);
     if (!record) return json({ error: `No provider ${rawId}` }, 404);
-    switch (`${method} ${verb ?? ""}`) {
-      case "GET ":
+    switch (declared.id) {
+      case "provider.get":
         return json(view(record));
-      case "DELETE ": {
+      case "provider.remove": {
         if (providerReadError) return json({ error: providerReadError }, 409);
         if (record.auth.kind === "subscription")
           return json(
@@ -807,9 +811,9 @@ export function createProviders(options: ProvidersOptions) {
         log.info(`provider ${record.id} removed`);
         return new Response(null, { status: 204 });
       }
-      case "POST probe":
+      case "provider.probe":
         return json(await probe(record));
-      case "POST open-login": {
+      case "provider.login": {
         if (record.auth.kind === "endpoint")
           return json(
             { error: "An endpoint provider has no login; edit its URL or key instead." },

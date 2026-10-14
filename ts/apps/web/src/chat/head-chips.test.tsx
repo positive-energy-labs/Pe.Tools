@@ -164,7 +164,12 @@ test("a refused head write shows the door, the reason and the remedy, not an unk
   };
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => Response.json({ error: refusal.reason, refusal }, { status: 403 })),
+    vi.fn(async () =>
+      Response.json(
+        { error: { code: refusal.code, message: refusal.reason, details: { refusal } } },
+        { status: 403 },
+      ),
+    ),
   );
   function Setter() {
     const scope = useThreadScope("t2", true, headReading(null));

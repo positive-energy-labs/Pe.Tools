@@ -10,12 +10,12 @@ import {
 import { useCacheView } from "../world";
 import { useWorkbench } from "../provider";
 import { useCurrentThreadView } from "../thread-view";
-import { selectBreakdown, selectMessages } from "../chat-state";
+import { selectBreakdown, selectMessages } from "@pe/agent-contracts/chat-state";
 import { intentAt, scrollTopForIntent } from "../model";
 import type { Geom } from "./scale";
 import { FOCAL, railLayout, type RailLayout } from "./scale";
 import { toMoments } from "./moments";
-import type { ChatState } from "../chat-state";
+import type { ChatState } from "@pe/agent-contracts/chat-state";
 
 /** Within this many px of the bottom, the view counts as at the bottom and follows. */
 const FOLLOW_SLACK = 24;

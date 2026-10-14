@@ -1,3 +1,4 @@
+import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -326,30 +327,8 @@ export function projectReceipt(
   };
 }
 
-export const feedbackSchema = z.strictObject({
-  comment: z.string().trim().min(1).max(8000),
-  url: z.string().max(2048),
-  selector: z.string().max(2048).nullable(),
-  component: z.string().max(200).nullable(),
-  components: z.array(z.string().max(200)).max(64),
-  html: z.string().max(4000),
-  rect: z.strictObject({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }),
-  viewport: z.strictObject({ width: z.number(), height: z.number(), dpr: z.number() }),
-  picture: z.string().startsWith("data:image/").max(ANALYTICS_PAYLOAD_BUDGET).nullable(),
-  picture_error: z.string().max(500).nullable(),
-});
-export const diagnosticsSchema = z.strictObject({
-  browserSessionId: z.uuid(),
-  dropped: z.number().int().nonnegative(),
-  facts: z
-    .array(
-      z.strictObject({
-        at: z.iso.datetime(),
-        body: receiptBodySchema.options.find((s) => s.shape.kind.value === "diagnostic")!,
-      }),
-    )
-    .max(64),
-});
+const feedbackSchema = peRoutes["feedback.submit"].body;
+const diagnosticsSchema = peRoutes["diagnostics.submit"].body;
 type ProducerStamps = { host: ReceiptStamp | null; web: ReceiptStamp | null };
 
 const DEADLINE_MS = 2000;

@@ -1,7 +1,7 @@
 // One attached file in the composer: thumbnail for images, size for the rest, a PDF opens.
 import { FileChip } from "#/components/lang/chip";
 import { Thumbnail } from "#/workbench/thumbnail";
-import { formatBytes } from "#/workbench/chat-state";
+import { formatBytes } from "@pe/agent-contracts/chat-state";
 import { isPdf, openPdf } from "#/workbench/open-pdf";
 import type { PromptAttachment } from "@pe/agent-contracts";
 

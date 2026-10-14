@@ -1,0 +1,786 @@
+import { z } from "zod";
+
+export const peErrorSchema = z.object({
+  error: z.object({
+    code: z.string(),
+    message: z.string(),
+    details: z.unknown().optional(),
+  }),
+});
+const none = z.undefined();
+const object = z.record(z.string(), z.unknown());
+const ok = z.object({ ok: z.boolean() }).passthrough();
+type Principal = "read" | "caller" | "human" | "human-or-pea" | "page";
+type Owner = "pe" | "threads" | "providers" | "share" | "pages" | "gateway";
+
+function route<const P extends string, B extends z.ZodType, O extends z.ZodType>(
+  method: "GET" | "POST" | "PUT" | "DELETE",
+  path: P,
+  body: B,
+  output: O,
+  principal: Principal,
+  owner: Owner,
+  format: "json" | "stream" | "asset" = "json",
+  encoding: "json" | "text" = "json",
+) {
+  const params = z.object(
+    Object.fromEntries(
+      path
+        .split("/")
+        .filter((p) => p.startsWith(":"))
+        .map((p) => [p.slice(1), z.string().min(1)]),
+    ),
+  );
+  return {
+    method,
+    path,
+    input: z.object({ params, query: z.record(z.string(), z.string()), body }),
+    body,
+    output,
+    error: peErrorSchema,
+    principal,
+    owner,
+    format,
+    encoding,
+  };
+}
+
+export function definePeApi<
+  S extends Record<
+    | "accessSchema"
+    | "addProviderRequestSchema"
+    | "providerSchema"
+    | "createThreadRequestSchema"
+    | "updateThreadRequestSchema"
+    | "harnessThreadSummarySchema"
+    | "harnessThreadBodySchema"
+    | "harnessEventSchema"
+    | "promptRequestSchema"
+    | "permissionResponseSchema"
+    | "questionResponseSchema"
+    | "forkThreadRequestSchema"
+    | "traitRequestSchema"
+    | "threadHeadReadingSchema"
+    | "putTargetSchema"
+    | "putTargetResultSchema"
+    | "capabilityCatalogSchema"
+    | "navigationSnapshotSchema"
+    | "routeStatePatchSchema"
+    | "familiesViewSchema"
+    | "familiesViewCommandSchema"
+    | "familiesViewAckSchema"
+    | "pageChoiceSchema"
+    | "diagnosticBodySchema"
+    | "actionAdmissionSchema"
+    | "actionReceiptSchema"
+    | "actionControlInputSchema",
+    z.ZodType
+  >,
+>(schemas: S) {
+  const accessSchema = schemas.accessSchema as S["accessSchema"];
+  const addProviderRequestSchema =
+    schemas.addProviderRequestSchema as S["addProviderRequestSchema"];
+  const providerSchema = schemas.providerSchema as S["providerSchema"];
+  const createThreadRequestSchema =
+    schemas.createThreadRequestSchema as S["createThreadRequestSchema"];
+  const updateThreadRequestSchema =
+    schemas.updateThreadRequestSchema as S["updateThreadRequestSchema"];
+  const harnessThreadSummarySchema =
+    schemas.harnessThreadSummarySchema as S["harnessThreadSummarySchema"];
+  const harnessThreadBodySchema = schemas.harnessThreadBodySchema as S["harnessThreadBodySchema"];
+  const promptRequestSchema = schemas.promptRequestSchema as S["promptRequestSchema"];
+  const permissionResponseSchema =
+    schemas.permissionResponseSchema as S["permissionResponseSchema"];
+  const questionResponseSchema = schemas.questionResponseSchema as S["questionResponseSchema"];
+  const forkThreadRequestSchema = schemas.forkThreadRequestSchema as S["forkThreadRequestSchema"];
+  const traitRequestSchema = schemas.traitRequestSchema as S["traitRequestSchema"];
+  const threadHeadReadingSchema = schemas.threadHeadReadingSchema as S["threadHeadReadingSchema"];
+  const putTargetSchema = schemas.putTargetSchema as S["putTargetSchema"];
+  const putTargetResultSchema = schemas.putTargetResultSchema as S["putTargetResultSchema"];
+  const capabilityCatalogSchema = schemas.capabilityCatalogSchema as S["capabilityCatalogSchema"];
+  const navigationSnapshotSchema =
+    schemas.navigationSnapshotSchema as S["navigationSnapshotSchema"];
+  const routeStatePatchSchema = schemas.routeStatePatchSchema as S["routeStatePatchSchema"];
+  const familiesViewSchema = schemas.familiesViewSchema as S["familiesViewSchema"];
+  const familiesViewCommandSchema =
+    schemas.familiesViewCommandSchema as S["familiesViewCommandSchema"];
+  const familiesViewAckSchema = schemas.familiesViewAckSchema as S["familiesViewAckSchema"];
+  const pageChoiceSchema = schemas.pageChoiceSchema as S["pageChoiceSchema"];
+  const feedbackSchema = z.strictObject({
+    comment: z.string().trim().min(1).max(8000),
+    url: z.string().max(2048),
+    selector: z.string().max(2048).nullable(),
+    component: z.string().max(200).nullable(),
+    components: z.array(z.string().max(200)).max(64),
+    html: z.string().max(4000),
+    rect: z.strictObject({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }),
+    viewport: z.strictObject({ width: z.number(), height: z.number(), dpr: z.number() }),
+    picture: z
+      .string()
+      .startsWith("data:image/")
+      .max(256 * 1024)
+      .nullable(),
+    picture_error: z.string().max(500).nullable(),
+  });
+  const feedbackReceiptSchema = z.discriminatedUnion("delivery", [
+    z.strictObject({ feedbackId: z.uuid(), delivery: z.literal("accepted") }),
+    z.strictObject({
+      feedbackId: z.uuid(),
+      delivery: z.enum(["failed", "uncertain"]),
+      error: z.string(),
+    }),
+  ]);
+  const diagnosticsSchema = z.strictObject({
+    browserSessionId: z.uuid(),
+    dropped: z.number().int().nonnegative(),
+    facts: z
+      .array(
+        z.strictObject({
+          at: z.iso.datetime(),
+          body: schemas.diagnosticBodySchema as S["diagnosticBodySchema"],
+        }),
+      )
+      .max(64),
+  });
+  /** Public HTTP transport authority. Domain schemas stay with their domain owners. */
+  const peRoutes = {
+    "operation.call": route(
+      "POST",
+      "/call",
+      z.object({ key: z.string().min(1), request: z.unknown().optional() }),
+      z.unknown(),
+      "read",
+      "gateway",
+    ),
+    "actions.admit": route(
+      "POST",
+      "/actions",
+      schemas.actionAdmissionSchema as S["actionAdmissionSchema"],
+      schemas.actionReceiptSchema as S["actionReceiptSchema"],
+      "caller",
+      "gateway",
+    ),
+    "actions.read": route("GET", "/actions", none, z.unknown(), "read", "gateway"),
+    "action.cancel": route(
+      "POST",
+      "/actions/cancel",
+      schemas.actionControlInputSchema as S["actionControlInputSchema"],
+      schemas.actionReceiptSchema as S["actionReceiptSchema"],
+      "caller",
+      "gateway",
+    ),
+    "action.recover": route(
+      "POST",
+      "/actions/recover",
+      schemas.actionControlInputSchema as S["actionControlInputSchema"],
+      schemas.actionReceiptSchema as S["actionReceiptSchema"],
+      "caller",
+      "gateway",
+    ),
+    "action.resume": route(
+      "POST",
+      "/actions/resume",
+      schemas.actionControlInputSchema as S["actionControlInputSchema"],
+      schemas.actionReceiptSchema as S["actionReceiptSchema"],
+      "caller",
+      "gateway",
+    ),
+    "providers.list": route(
+      "GET",
+      "/pe/providers",
+      none,
+      z.array(providerSchema),
+      "read",
+      "providers",
+    ),
+    "providers.add": route(
+      "POST",
+      "/pe/providers",
+      addProviderRequestSchema,
+      providerSchema,
+      "human",
+      "providers",
+    ),
+    "provider.get": route("GET", "/pe/providers/:id", none, providerSchema, "read", "providers"),
+    "provider.remove": route("DELETE", "/pe/providers/:id", none, none, "human", "providers"),
+    "provider.probe": route(
+      "POST",
+      "/pe/providers/:id/probe",
+      none,
+      providerSchema,
+      "human",
+      "providers",
+    ),
+    "provider.login": route(
+      "POST",
+      "/pe/providers/:id/open-login",
+      none,
+      z.object({ opened: z.literal(true) }),
+      "human",
+      "providers",
+    ),
+    "access.get": route("GET", "/pe/access", none, accessSchema, "read", "providers"),
+    "access.set": route("PUT", "/pe/access", accessSchema, accessSchema, "human", "providers"),
+    "threads.list": route(
+      "GET",
+      "/pe/threads",
+      none,
+      z.array(harnessThreadSummarySchema),
+      "read",
+      "threads",
+    ),
+    "threads.create": route(
+      "POST",
+      "/pe/threads",
+      createThreadRequestSchema,
+      harnessThreadSummarySchema,
+      "caller",
+      "threads",
+    ),
+    "threads.stream": route(
+      "GET",
+      "/pe/threads/stream",
+      none,
+      z.array(harnessThreadSummarySchema),
+      "read",
+      "threads",
+      "stream",
+    ),
+    "thread.get": route("GET", "/pe/threads/:id", none, harnessThreadBodySchema, "read", "threads"),
+    "thread.update": route(
+      "PUT",
+      "/pe/threads/:id",
+      updateThreadRequestSchema,
+      harnessThreadSummarySchema,
+      "caller",
+      "threads",
+    ),
+    "thread.remove": route("DELETE", "/pe/threads/:id", none, none, "caller", "threads"),
+    "thread.prompt": route(
+      "POST",
+      "/pe/threads/:id/prompt",
+      promptRequestSchema,
+      z.object({ turnId: z.string() }),
+      "human",
+      "threads",
+    ),
+    "thread.cancel": route(
+      "POST",
+      "/pe/threads/:id/cancel",
+      none,
+      z.object({ cancelled: z.boolean() }),
+      "caller",
+      "threads",
+    ),
+    "thread.permission": route(
+      "POST",
+      "/pe/threads/:id/permission",
+      permissionResponseSchema,
+      ok,
+      "human",
+      "threads",
+    ),
+    "thread.question": route(
+      "POST",
+      "/pe/threads/:id/question",
+      questionResponseSchema,
+      ok,
+      "human",
+      "threads",
+    ),
+    "thread.fork": route(
+      "POST",
+      "/pe/threads/:id/fork",
+      forkThreadRequestSchema,
+      harnessThreadSummarySchema,
+      "caller",
+      "threads",
+    ),
+    "thread.model": route(
+      "POST",
+      "/pe/threads/:id/model",
+      z.object({ modelId: z.string() }),
+      harnessThreadSummarySchema,
+      "caller",
+      "threads",
+    ),
+    "thread.trait": route(
+      "POST",
+      "/pe/threads/:id/trait",
+      traitRequestSchema,
+      harnessThreadBodySchema,
+      "caller",
+      "threads",
+    ),
+    "thread.stream": route(
+      "GET",
+      "/pe/threads/:id/stream",
+      none,
+      schemas.harnessEventSchema as S["harnessEventSchema"],
+      "read",
+      "threads",
+      "stream",
+    ),
+    "scope.get": route(
+      "GET",
+      "/pe/scope/:id",
+      none,
+      threadHeadReadingSchema.and(z.object({ thread: z.string().optional() })),
+      "read",
+      "threads",
+    ),
+    "scope.set": route(
+      "PUT",
+      "/pe/scope/:id",
+      putTargetSchema,
+      putTargetResultSchema,
+      "human-or-pea",
+      "threads",
+    ),
+    "scope.revoke": route(
+      "POST",
+      "/pe/scope/:id/revoke",
+      none,
+      threadHeadReadingSchema,
+      "human",
+      "threads",
+    ),
+    "navigation.get": route("GET", "/pe/navigation", none, navigationSnapshotSchema, "read", "pe"),
+    "capabilities.find": route(
+      "GET",
+      "/pe/capabilities",
+      none,
+      capabilityCatalogSchema,
+      "read",
+      "pe",
+    ),
+    "contributions.read": route("GET", "/pe/contributions", none, object, "read", "pe"),
+    "pages.libraries": route("GET", "/pe/page-libraries", none, z.unknown(), "read", "pe"),
+    "family.spec": route("GET", "/pe/family-spec", none, z.unknown(), "read", "pe", "asset"),
+    "feedback.submit": route(
+      "POST",
+      "/pe/feedback",
+      feedbackSchema,
+      feedbackReceiptSchema,
+      "human",
+      "pe",
+    ),
+    "feedback.deliver": route(
+      "POST",
+      "/pe/feedback/:id/deliver",
+      none,
+      feedbackReceiptSchema,
+      "human",
+      "pe",
+    ),
+    "diagnostics.submit": route(
+      "POST",
+      "/pe/diagnostics",
+      diagnosticsSchema,
+      z.object({ accepted: z.boolean() }),
+      "human",
+      "pe",
+    ),
+    "receipts.read": route("GET", "/pe/receipt-facts", none, z.array(object), "read", "pe"),
+    "resources.stream": route("GET", "/pe/resources", none, object, "read", "pe", "stream"),
+    "work.list": route("GET", "/pe/route-state", none, z.array(object), "read", "pe"),
+    "work.get": route("GET", "/pe/route-state/:route", none, object, "read", "pe"),
+    "work.salvage": route("GET", "/pe/route-state/:route/salvage", none, object, "human", "pe"),
+    "work.apply": route(
+      "POST",
+      "/pe/route-state/:route/apply",
+      z.object({
+        patches: z.array(routeStatePatchSchema),
+        expectedRevision: z.number().int().nonnegative(),
+      }),
+      object,
+      "caller",
+      "pe",
+    ),
+    "work.command": route(
+      "POST",
+      "/pe/route-state/:route/command",
+      z.object({
+        command: z.string(),
+        input: z.unknown().optional(),
+        expectedRevision: z.number().int().nonnegative(),
+      }),
+      object,
+      "caller",
+      "pe",
+    ),
+    "work.fresh": route(
+      "POST",
+      "/pe/route-state/:route/start-fresh",
+      z.object({}),
+      object,
+      "human",
+      "pe",
+    ),
+    "view.get": route("GET", "/pe/route-view/families", none, object, "read", "pe"),
+    "view.publish": route(
+      "PUT",
+      "/pe/route-view/families",
+      familiesViewSchema,
+      object,
+      "caller",
+      "pe",
+    ),
+    "view.query": route(
+      "POST",
+      "/pe/route-view/families/set-query",
+      familiesViewCommandSchema,
+      object,
+      "caller",
+      "pe",
+    ),
+    "view.ack": route(
+      "POST",
+      "/pe/route-view/families/ack",
+      familiesViewAckSchema,
+      object,
+      "caller",
+      "pe",
+    ),
+    "view.remove": route("DELETE", "/pe/route-view/families/:instance", none, ok, "caller", "pe"),
+    "share.set": route(
+      "PUT",
+      "/pe/share",
+      z.union([
+        z.strictObject({ on: z.boolean() }),
+        z.strictObject({ allowRemoteAdministration: z.boolean() }),
+      ]),
+      object,
+      "human",
+      "share",
+    ),
+    "page.target": route("GET", "/pages/:slug/target", none, object, "read", "pages"),
+    "page.call": route(
+      "POST",
+      "/pages/:slug/call",
+      z.strictObject({ key: z.string().min(1), request: z.unknown().optional() }),
+      z.unknown(),
+      "page",
+      "pages",
+    ),
+    "page.act": route(
+      "POST",
+      "/pages/:slug/act",
+      z.strictObject({ key: z.string().min(1), input: z.unknown().optional() }),
+      object,
+      "page",
+      "pages",
+    ),
+    "page.state": route("GET", "/pages/:slug/state", none, object, "read", "pages"),
+    "page.append": route("POST", "/pages/:slug/events", object, object, "caller", "pages"),
+    "page.events": route("GET", "/pages/:slug/events", none, object, "read", "pages", "stream"),
+    "page.snapshot": route("PUT", "/pages/:slug/snapshot", z.json(), none, "caller", "pages"),
+    "page.text": route(
+      "PUT",
+      "/pages/:slug/text",
+      z.string(),
+      none,
+      "caller",
+      "pages",
+      "json",
+      "text",
+    ),
+    "page.bind": route(
+      "PUT",
+      "/pe/pages/:slug/binding",
+      pageChoiceSchema,
+      object,
+      "human-or-pea",
+      "pages",
+    ),
+  } as const;
+
+  type PeRouteId = keyof typeof peRoutes;
+  type ParamNames<P extends string> = P extends `${string}:${infer N}/${infer Tail}`
+    ? N | ParamNames<Tail>
+    : P extends `${string}:${infer N}`
+      ? N
+      : never;
+  type PeInput<K extends PeRouteId> = ([ParamNames<(typeof peRoutes)[K]["path"]>] extends [never]
+    ? { params?: never }
+    : { params: Record<ParamNames<(typeof peRoutes)[K]["path"]>, string> }) &
+    (undefined extends z.input<(typeof peRoutes)[K]["body"]>
+      ? { body?: z.input<(typeof peRoutes)[K]["body"]> }
+      : { body: z.input<(typeof peRoutes)[K]["body"]> }) & {
+      query?: Record<string, string | number | boolean | undefined>;
+    };
+  type PeOutput<K extends PeRouteId> = z.output<(typeof peRoutes)[K]["output"]>;
+  const isPeRouteId = (id: string): id is PeRouteId => Object.hasOwn(peRoutes, id);
+
+  function peRouteUrl<K extends PeRouteId>(id: K, input: PeInput<K>, base = ""): string {
+    return createPeWire(peRoutes, base, globalThis.fetch).url(id, input);
+  }
+
+  function matchPeRoute(method: string, path: string) {
+    for (const [id, route] of Object.entries(peRoutes)) {
+      if (route.method !== method) continue;
+      const names: string[] = [];
+      const pattern = route.path.replace(/:([\w]+)/g, (_, name: string) => {
+        names.push(name);
+        return "([^/]+)";
+      });
+      const match = new RegExp(`^${pattern}$`).exec(path);
+      if (match)
+        return {
+          id: id as PeRouteId,
+          route,
+          params: Object.fromEntries(names.map((n, i) => [n, decodeURIComponent(match[i + 1]!)])),
+        };
+    }
+    return undefined;
+  }
+
+  function peProblem(status: number, code: string, message: string, details?: unknown) {
+    return Response.json(
+      { error: { code, message, ...(details === undefined ? {} : { details }) } },
+      { status },
+    );
+  }
+
+  /** The transport boundary preserves domain refusal evidence in the one error envelope. */
+  async function servePeRoute(
+    request: Request,
+    handle: (request: Request) => Promise<Response>,
+  ): Promise<Response> {
+    const url = new URL(request.url);
+    let match;
+    try {
+      match = matchPeRoute(request.method, url.pathname);
+    } catch {
+      return peProblem(400, "route.input", "Invalid route parameter encoding");
+    }
+    if (!match)
+      return peProblem(404, "route.not-found", `No route ${request.method} ${url.pathname}`);
+    const { route, params } = match;
+    let body: unknown;
+    if (request.method !== "GET" && request.method !== "DELETE") {
+      const text = await request.clone().text();
+      if (text || route.encoding === "text") {
+        try {
+          body = route.encoding === "text" ? text : JSON.parse(text);
+        } catch {
+          return peProblem(400, "route.input", "Expected a JSON body");
+        }
+      }
+    }
+    const parsed = route.input.safeParse({
+      params,
+      query: Object.fromEntries(url.searchParams),
+      body,
+    });
+    if (!parsed.success)
+      return peProblem(
+        400,
+        "route.input",
+        parsed.error.issues[0]?.message ?? "Invalid route input",
+        parsed.error.issues,
+      );
+    try {
+      const response = await handle(request);
+      if (!response.ok) return normalizePeError(response);
+      if (
+        response.status !== 204 &&
+        route.format === "json" &&
+        response.headers.get("content-type")?.includes("application/json")
+      ) {
+        const result = route.output.safeParse(await response.clone().json());
+        if (!result.success)
+          return peProblem(
+            500,
+            "route.output",
+            `Invalid response for ${match.id}`,
+            result.error.issues,
+          );
+      }
+      return response;
+    } catch (error) {
+      return peProblem(500, "route.failed", error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  function createPeClient(
+    base = "",
+    transport: (url: string, init?: RequestInit) => Promise<Response> = globalThis.fetch,
+  ) {
+    const wire = createPeWire(peRoutes, base, transport);
+    async function response<K extends PeRouteId>(
+      id: K,
+      input: PeInput<K>,
+      init?: RequestInit,
+    ): Promise<Response> {
+      peRoutes[id].body.parse(input.body);
+      return wire.response(id, input, init);
+    }
+    async function call<K extends PeRouteId>(
+      id: K,
+      input: PeInput<K>,
+      init?: RequestInit,
+    ): Promise<PeOutput<K>> {
+      peRoutes[id].body.parse(input.body);
+      const parsed = peRoutes[id].output.safeParse(await wire.call(id, input, init));
+      if (!parsed.success) throw Error(`Invalid response for ${id}`, { cause: parsed.error });
+      return parsed.data as PeOutput<K>;
+    }
+
+    return {
+      call,
+      invoke: async (id: string, raw: unknown) => {
+        if (!isPeRouteId(id)) throw Error(`Unknown declared route ${id}`);
+        const input = peRoutes[id].input.parse({
+          params: {},
+          query: {},
+          ...(raw && typeof raw === "object" ? raw : {}),
+        });
+        const result = await wire.response(id, input);
+        if (
+          result.ok &&
+          !result.headers.get("content-type")?.includes("application/json") &&
+          result.status !== 204
+        )
+          return result;
+        return peRoutes[id].output.parse(await wire.read(id, result));
+      },
+      response,
+      url: <K extends PeRouteId>(id: K, input: PeInput<K>) => peRouteUrl(id, input, base),
+    };
+  }
+
+  const peClientScript = () =>
+    `(${createPeWire.toString()})(${JSON.stringify(Object.fromEntries(Object.entries(peRoutes).map(([id, r]) => [id, { method: r.method, path: r.path, encoding: r.encoding }])))}, "", pe.fetch)`;
+  return {
+    peRoutes,
+    isPeRouteId,
+    peRouteUrl,
+    matchPeRoute,
+    servePeRoute,
+    createPeClient,
+    peClientScript,
+  };
+}
+
+/** Serialized into Pages and used by the typed client. Keep this function closure-free. */
+function createPeWire(
+  routes: Record<string, { method: string; path: string; encoding: string }>,
+  base: string,
+  transport: (url: string, init?: RequestInit) => Promise<Response>,
+) {
+  type Input = {
+    params?: Record<string, string>;
+    query?: Record<string, string | number | boolean | undefined>;
+    body?: unknown;
+  };
+  function declared(id: string) {
+    if (!Object.hasOwn(routes, id)) throw Error(`Unknown declared route ${id}`);
+    return routes[id]!;
+  }
+  function url(id: string, input: Input) {
+    const path = declared(id).path.replace(/:([\w]+)/g, (_, name: string) => {
+      const value = input.params?.[name];
+      if (!value) throw Error(`Missing route parameter ${name}`);
+      return encodeURIComponent(value);
+    });
+    const query = new URLSearchParams(
+      Object.entries(input.query ?? {}).flatMap(([k, v]) =>
+        v === undefined ? [] : [[k, String(v)]],
+      ),
+    );
+    return `${base}${path}${query.size ? `?${query.toString()}` : ""}`;
+  }
+  async function response(id: string, input: Input, init?: RequestInit) {
+    const route = declared(id);
+    const headers = new Headers(init?.headers);
+    if (route.method !== "GET")
+      headers.set("content-type", route.encoding === "text" ? "text/markdown" : "application/json");
+    return transport(url(id, input), {
+      ...init,
+      method: route.method,
+      headers,
+      ...(input.body === undefined
+        ? {}
+        : {
+            body: route.encoding === "text" ? (input.body as string) : JSON.stringify(input.body),
+          }),
+    });
+  }
+  async function call(id: string, input: Input, init?: RequestInit): Promise<unknown> {
+    const result = await response(id, input, init);
+    return read(id, result);
+  }
+  async function read(id: string, result: Response): Promise<unknown> {
+    const text = result.status === 204 ? "" : await result.text();
+    let value;
+    try {
+      value = text ? JSON.parse(text) : undefined;
+    } catch {
+      throw Object.assign(Error(`Invalid JSON response for ${id} (${result.status})`), {
+        status: result.status,
+      });
+    }
+    if (!result.ok) {
+      const problem = value?.error;
+      throw Object.assign(
+        Error(
+          typeof problem?.message === "string"
+            ? problem.message
+            : `Route ${id} failed (${result.status})`,
+        ),
+        {
+          status: result.status,
+          problem: value,
+          failure: problem?.details?.failure,
+        },
+      );
+    }
+    return value;
+  }
+  return { url, response, call, read };
+}
+
+export async function normalizePeError(response: Response): Promise<Response> {
+  if (response.ok) return response;
+  const text = await response.text();
+  let details: unknown;
+  try {
+    details = JSON.parse(text);
+  } catch {
+    details = text;
+  }
+  if (peErrorSchema.safeParse(details).success)
+    return new Response(text, { status: response.status, headers: response.headers });
+  const old = details && typeof details === "object" ? (details as Record<string, unknown>) : {};
+  const refusal =
+    old.refusal && typeof old.refusal === "object" ? (old.refusal as Record<string, unknown>) : {};
+  const code =
+    [old.code, refusal.code, old.kind].find((v) => typeof v === "string") ?? "route.refused";
+  const message =
+    [old.message, old.error, old.reason, refusal.reason, refusal.detail].find(
+      (v) => typeof v === "string",
+    ) ??
+    (text || response.statusText);
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  headers.set("content-type", "application/json");
+  return new Response(JSON.stringify({ error: { code, message, details } }), {
+    status: response.status,
+    headers,
+  });
+}
+
+/** One error decoder for clients that retain a richer domain error type. */
+export async function readPeError(response: Response) {
+  const text = await response.text();
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw Error(`Invalid host error (${response.status}): ${text}`);
+  }
+  const parsed = peErrorSchema.safeParse(value);
+  if (!parsed.success) throw Error(`Invalid host error (${response.status}): ${text}`);
+  return parsed.data.error;
+}

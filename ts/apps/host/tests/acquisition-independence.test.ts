@@ -288,9 +288,13 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
       });
       const body = (await response.json()) as {
         id?: string;
-        refusal?: { code: string; reason: string };
+        error?: { details?: { refusal?: { code: string; reason: string } } };
       };
-      return { status: response.status, refusal: body.refusal ?? null, id: body.id };
+      return {
+        status: response.status,
+        refusal: body.error?.details?.refusal ?? null,
+        id: body.id,
+      };
     };
     const refused = async (acquisition: string, fact: RegExp) => {
       const answer = await handover(acquisition);

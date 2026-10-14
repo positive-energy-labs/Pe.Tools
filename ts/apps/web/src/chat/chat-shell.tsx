@@ -13,7 +13,7 @@ import {
   selectTitle,
   selectStarting,
   selectWaitingSeconds,
-} from "#/workbench/chat-state";
+} from "@pe/agent-contracts/chat-state";
 import { EmptyState } from "#/components/lang/empty";
 import { Button } from "#/components/lang/button";
 import { Menu, X } from "lucide-react";

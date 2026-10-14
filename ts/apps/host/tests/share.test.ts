@@ -175,7 +175,7 @@ test("PUT share is local, human-only and validates the switch before invoking th
       expect((await put(body)).status).toBe(400);
     const response = await put({ on: true });
     expect(response.status).toBe(409);
-    expect(await response.json()).toHaveProperty("refusal.code", "share.installed-only");
+    expect(await response.json()).toHaveProperty("error.code", "share.installed-only");
     expect(commands).toBe(0);
     expect(
       (

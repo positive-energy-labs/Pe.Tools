@@ -1,8 +1,9 @@
+import { peRoutes, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { execFile } from "node:child_process";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Effect } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
+import { HttpRouter, HttpEffect } from "effect/unstable/http";
 import type { MachineShare } from "@pe/agent-contracts";
 import type { IdentityResult } from "./request-identity.ts";
 
@@ -302,29 +303,16 @@ export function createShare(options: ShareOptions) {
 export type ShareOwner = ReturnType<typeof createShare>;
 
 export const shareRoute = (share: ShareOwner) =>
-  HttpRouter.add("PUT", "/pe/share", (request) =>
-    Effect.gen(function* () {
-      const parsed = yield* Effect.result(request.json);
-      const body = parsed._tag === "Success" ? parsed.success : null;
-      if (
-        !body ||
-        typeof body !== "object" ||
-        Object.keys(body).length !== 1 ||
-        ((!("on" in body) || typeof body.on !== "boolean") &&
-          (!("allowRemoteAdministration" in body) ||
-            typeof body.allowRemoteAdministration !== "boolean"))
-      )
-        return HttpServerResponse.jsonUnsafe(
-          { error: "Expected { on: boolean } or { allowRemoteAdministration: boolean }" },
-          { status: 400 },
-        );
-      const value = yield* Effect.promise(() =>
-        "on" in body
-          ? share.set(body.on as boolean)
-          : share.setRemoteAdministration(body.allowRemoteAdministration as boolean),
-      );
-      return HttpServerResponse.jsonUnsafe(value, {
-        status: value.state === "refused" ? 409 : 200,
-      });
-    }),
+  HttpRouter.add(
+    peRoutes["share.set"].method,
+    peRoutes["share.set"].path,
+    HttpEffect.fromWebHandler((request) =>
+      servePeRoute(request, async (request) => {
+        const body = peRoutes["share.set"].body.parse(await request.json());
+        const value = await ("on" in body
+          ? share.set(body.on)
+          : share.setRemoteAdministration(body.allowRemoteAdministration));
+        return Response.json(value, { status: value.state === "refused" ? 409 : 200 });
+      }),
+    ),
   );

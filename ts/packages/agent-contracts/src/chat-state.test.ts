@@ -18,7 +18,7 @@ import {
   skillInvocation,
   toolDetail,
   type ChatState,
-} from "./chat-state";
+} from "@pe/agent-contracts/chat-state";
 
 const at = "2026-10-01T12:00:00.000Z";
 const update = (seq: number, turnId: string, body: Record<string, unknown>): HarnessEvent => ({

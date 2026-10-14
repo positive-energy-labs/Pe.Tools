@@ -77,8 +77,8 @@ test("explicit feedback still submits its full content, and kept vs delivered ar
   expect(again).toMatch(new RegExp(`/pe/feedback/${id}/deliver$`));
   expect(retry!.body).toBeUndefined(); // the browser never resends the content
 
-  answer(400, { error: "invalid feedback" });
+  answer(400, { error: { code: "route.input", message: "invalid feedback" } });
   await expect(sendFeedback(note)).rejects.toThrow("invalid feedback");
   answer(200, { ok: true });
-  await expect(sendFeedback(note)).rejects.toThrow("without a feedback receipt");
+  await expect(sendFeedback(note)).rejects.toThrow("Invalid response for feedback.submit");
 });

@@ -143,7 +143,16 @@ test("endpoint add shows one classified line and reveals the raw body only on de
   vi.stubGlobal(
     "fetch",
     vi.fn(async () =>
-      Response.json({ step: "endpoint", message: failure.message, failure }, { status: 400 }),
+      Response.json(
+        {
+          error: {
+            code: "route.refused",
+            message: failure.message,
+            details: { step: "endpoint", failure },
+          },
+        },
+        { status: 400 },
+      ),
     ),
   );
   render(
@@ -156,6 +165,8 @@ test("endpoint add shows one classified line and reveals the raw body only on de
       }}
     />,
   );
+  fireEvent.change(screen.getByPlaceholderText("name"), { target: { value: "test endpoint" } });
+  fireEvent.change(screen.getByPlaceholderText("API key"), { target: { value: "test-key" } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await screen.findByText(failure.message);
   expect(screen.queryByText(failure.raw)).toBeNull();

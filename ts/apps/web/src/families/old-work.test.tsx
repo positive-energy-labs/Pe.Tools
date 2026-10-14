@@ -121,7 +121,9 @@ test("old-shape saved Work reaches the Situation as the host's sentence, not a b
   fireEvent.click(screen.getByRole("button", { name: "start fresh? press again" }));
   await waitFor(() => expect(screen.queryByText("unreadable")).toBeNull(), { timeout: 5_000 });
   expect(posts).toHaveLength(1);
-  expect(new URL(posts[0]).pathname).toMatch(/\/route-state\/families\/start-fresh$/);
+  expect(new URL(posts[0], "http://host").pathname).toMatch(
+    /\/route-state\/families\/start-fresh$/,
+  );
   expect(posts[0]).not.toContain("/agent/");
   expect(screen.queryByText(UNREADABLE, { exact: false })).toBeNull();
   expect(screen.queryByRole("button", { name: "start fresh" })).toBeNull();

@@ -1,3 +1,4 @@
+import { createPeClient } from "@pe/agent-contracts/pe-api";
 /**
  * `pea --prompt` - one headless turn on a harness thread (ADR 0015: the harness drives).
  *
@@ -9,12 +10,7 @@
  */
 import { existsSync } from "node:fs";
 import path from "node:path";
-import type {
-  HarnessEvent,
-  HarnessId,
-  HarnessThreadBody,
-  HarnessThreadSummary,
-} from "@pe/agent-contracts";
+import type { HarnessEvent, HarnessId } from "@pe/agent-contracts";
 import { hostProcessIdentity, productInstallLayout } from "@pe/host-contracts/contracts";
 import {
   checkoutLayout,
@@ -92,33 +88,14 @@ export async function runPeaPromptTurn(request: PeaPromptRequest): Promise<PeaPr
   const held = invocationContext();
   if (held?.hostBaseUrl) resolveHostBaseUrl(held.hostBaseUrl);
   const host = await ensureTsHostRunning();
-  const base = `${host}/pe/threads`;
-  // An older host without providers answers 404 on this route; name it up front.
-  const providers = await fetch(`${host}/pe/providers`);
-  if (!providers.ok)
-    throw new Error(
-      `Host ${host} predates providers (GET /pe/providers -> ${providers.status}); restart it.`,
-    );
-  await providers.arrayBuffer();
-  const call = async <T>(method: string, route: string, body?: unknown): Promise<T> => {
-    const response = await fetch(`${base}${route}`, {
-      method,
-      headers: method === "GET" ? undefined : { "content-type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    const text = await response.text();
-    if (!response.ok)
-      throw new Error(`${method} /pe/threads${route} -> ${response.status} ${text}`);
-    return (text ? JSON.parse(text) : undefined) as T;
-  };
-
-  const thread: HarnessThreadSummary & Partial<Pick<HarnessThreadBody, "events">> = request.threadId
-    ? await call<HarnessThreadBody>("GET", `/${request.threadId}`)
-    : await call<HarnessThreadSummary>("POST", "", {
-        // The harness's own login: a subscription provider's id is its harness id.
-        providerId: request.harness ?? "claude",
-        title: "Pea prompt",
+  const client = createPeClient(host, fetch);
+  await client.call("providers.list", {});
+  const thread = request.threadId
+    ? await client.call("thread.get", { params: { id: request.threadId } })
+    : await client.call("threads.create", {
+        body: { providerId: request.harness ?? "claude", title: "Pea prompt" },
       });
+  const params = { id: thread.id };
   const after = thread.lastSeq;
   trace(`thread ${thread.id} harness=${thread.harness} after=${after}`);
 
@@ -140,14 +117,16 @@ export async function runPeaPromptTurn(request: PeaPromptRequest): Promise<PeaPr
   let breakBeforeNextChunk = false;
   let modelSeen = false;
   try {
-    if (request.modelId) await call("POST", `/${thread.id}/model`, { modelId: request.modelId });
-    const { turnId } = await call<{ turnId: string }>("POST", `/${thread.id}/prompt`, {
-      text: request.prompt,
+    if (request.modelId)
+      await client.call("thread.model", { params, body: { modelId: request.modelId } });
+    const { turnId } = await client.call("thread.prompt", {
+      params,
+      body: { text: request.prompt },
     });
     trace(`turn ${turnId}`);
     // The log is durable and replayable from `after`, so following it after the POST misses nothing.
     for await (const event of streamEvents(
-      `${base}/${thread.id}/stream?after=${after}`,
+      client.url("thread.stream", { params, query: { after } }),
       AbortSignal.any([signal, streamAbort.signal]),
     )) {
       trace(`event ${event.kind}`);
@@ -179,20 +158,23 @@ export async function runPeaPromptTurn(request: PeaPromptRequest): Promise<PeaPr
           event.options.find((candidate) => candidate.kind.startsWith(want));
         if (!option) throw new Error(`Permission ${event.requestId} offers no ${want} option.`);
         if (!request.allow) result.rejected.push(event.toolCall?.title ?? event.requestId);
-        await call("POST", `/${thread.id}/permission`, {
-          requestId: event.requestId,
-          optionId: option.optionId,
+        await client.call("thread.permission", {
+          params,
+          body: {
+            requestId: event.requestId,
+            optionId: option.optionId,
+          },
         });
       } else if (event.kind === "question_request") {
         // Headless has no one to fill the question card: the turn ends here with the questions as
         // the response, and the caller's next `--prompt --thread` carries the answers.
         if (chunks.length > 0) chunks.push("\n\n");
         chunks.push(renderQuestions(event.message, event.requestedSchema));
-        await call("POST", `/${thread.id}/cancel`).catch(() => undefined);
+        await client.call("thread.cancel", { params }).catch(() => undefined);
         return { ...result, stopReason: "question", response: chunks.join("").trim() };
       } else if (event.kind === "turn_end") {
         // The thread body's modelId is the settled model unless a model_changed already said so.
-        const settled = await call<HarnessThreadBody>("GET", `/${thread.id}`).catch(() => null);
+        const settled = await client.call("thread.get", { params }).catch(() => null);
         return {
           ...result,
           model: modelSeen ? result.model : (settled?.modelId ?? result.model),
@@ -210,7 +192,7 @@ export async function runPeaPromptTurn(request: PeaPromptRequest): Promise<PeaPr
       const response = error instanceof Error ? error.message : String(error);
       return { ...result, stopReason: "error", response };
     }
-    await call("POST", `/${thread.id}/cancel`).catch(() => undefined);
+    await client.call("thread.cancel", { params }).catch(() => undefined);
     const response = `Pea did not finish within ${timeoutSeconds} seconds.`;
     return { ...result, stopReason: "timeout", response };
   } finally {

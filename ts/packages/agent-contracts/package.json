@@ -11,6 +11,18 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
+    },
+    "./chat-state": {
+      "types": "./src/chat-state.ts",
+      "import": "./src/chat-state.ts"
+    },
+    "./code-format": {
+      "types": "./src/code-format.ts",
+      "import": "./src/code-format.ts"
+    },
+    "./pe-api": {
+      "types": "./src/pe-api.ts",
+      "import": "./src/pe-api.ts"
     }
   },
   "publishConfig": {
