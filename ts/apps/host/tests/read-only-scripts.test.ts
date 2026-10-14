@@ -8,7 +8,7 @@ import { HOST_CONTEXT_HEADER, HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contr
 import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { makeCallRoute } from "../src/call-route.ts";
-import { mintContext } from "../src/control.ts";
+import { bindControl, mintContext } from "../src/control.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { pagesRoute } from "../src/pages-route.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
@@ -17,8 +17,10 @@ import { serveRoutes } from "./real-server.ts";
 /**
  * Acceptance round 4c §3: the route-prefs Page, pinned by a person to a document the person opened,
  * pressed "read routing preferences" (`pe.script(READ)`, ReadOnly by default) and the host refused
- * it as a write. Rule: a script whose requested mode is ReadOnly (the contract default) is a read at
- * every door; reads never need a grant (ADR 0017 D8). NoTransaction and WriteTransaction stay writes.
+ * it as a write. Counsel's rule: a ReadOnly (or default-mode) script is a read only under a person's
+ * consent, a human caller or a Page whose binding a human set, because the ReadOnly policy does not
+ * stop a library's commit on another document, files or the network. Pea, an external MCP client
+ * and a Page bound by Pea keep it a write that needs a grant or an acquisition.
  */
 const MODEL = "C:/Jobs/HVAC.rvt";
 const doc = { session: "bridge-a", openId: "open-a" };
@@ -198,34 +200,66 @@ test("a human-pinned Page reads a human document with a ReadOnly script and writ
   }
 }, 30_000);
 
-test("Pea and an external MCP client read a human document with a ReadOnly script at /actions", async () => {
+test("Pea and an external MCP client cannot read a human document with a ReadOnly script without a grant", async () => {
   const host = await serve();
   try {
-    for (const caller of [
-      as({ kind: "pea", thread: "t-read" }),
-      as({ kind: "external-mcp", label: "ext" }),
-    ]) {
-      const admit = (mode?: string) =>
-        host.send("/actions", caller, {
+    for (const [caller, code] of [
+      [as({ kind: "pea", thread: "t-read" }), "grant.required"],
+      [as({ kind: "external-mcp", label: "ext" }), "grant.context-cannot-hold"],
+    ] as const) {
+      for (const mode of ["ReadOnly", undefined, "NoTransaction"]) {
+        const admit = await host.send("/actions", caller, {
           id: randomUUID(),
           kind: "operation",
           key: "scripting.execute",
           destination: { kind: "document", ref: doc },
           input: script(mode),
         });
-      for (const mode of ["ReadOnly", undefined]) {
-        const read = await admit(mode);
-        expect(read.status, read.text).toBeLessThan(300);
-        expect(await host.settle(read.json.id!)).toMatchObject({
-          state: "succeeded",
-          result: { status: "Succeeded", data: { types: 2 } },
-        });
+        expect([admit.status, admit.json.refusal?.code], admit.text).toEqual([403, code]);
+        // `/call` never dispatches it for them either: a script stays a mutation.
+        const call = await host.send(
+          "/call",
+          { ...caller, "x-pe-bridge-session-id": doc.session, "x-pe-open-document-id": doc.openId },
+          { key: "scripting.execute", request: script(mode) },
+        );
+        expect(call.status, call.text).toBe(409);
       }
-      const write = await admit("NoTransaction");
-      expect(write.status, write.text).toBe(403);
-      expect(["grant.required", "grant.context-cannot-hold"]).toContain(write.json.refusal?.code);
     }
+    expect(host.sent).toEqual([]);
   } finally {
+    await host.close();
+  }
+}, 30_000);
+
+test("a Page Pea bound, now on a human document, cannot read it with a ReadOnly script", async () => {
+  const host = await serve();
+  // Pea pins its own acquired document; the acquisition then ends (a handover) and the person owns it.
+  let acquired = true;
+  bindControl({ acquired: (ref) => (acquired && ref.openId === doc.openId ? "acq-1" : null) });
+  try {
+    const bound = await host.send(
+      "/pe/pages/route-prefs/binding",
+      as({ kind: "pea", thread: "t-pin" }),
+      { kind: "pinned", address: MODEL },
+      true,
+    );
+    expect(bound.status, bound.text).toBe(200);
+    acquired = false;
+    for (const mode of ["ReadOnly", undefined]) {
+      const call = await host.send("/pages/route-prefs/call", host.page, {
+        key: "scripting.execute",
+        request: script(mode),
+      });
+      expect(call.status, call.text).toBe(409);
+      const act = await host.send("/pages/route-prefs/act", host.page, {
+        key: "scripting.execute",
+        input: script(mode),
+      });
+      expect([act.status, act.json.refusal?.code], act.text).toEqual([403, "grant.required"]);
+    }
+    expect(host.sent).toEqual([]);
+  } finally {
+    bindControl({ acquired: () => null });
     await host.close();
   }
 }, 30_000);

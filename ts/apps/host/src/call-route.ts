@@ -16,7 +16,7 @@ import {
   gatewayTarget,
   requireEligibleCaller,
 } from "./gateway-actions.ts";
-import { admitCrossing, currentCaller, readsOnly, Refused } from "./control.ts";
+import { admitCrossing, consentedRead, currentCaller, readsOnly, Refused } from "./control.ts";
 import type { Caller } from "@pe/agent-contracts";
 import { actionBasesSchema, actionListFilterSchema } from "@pe/agent-contracts";
 import {
@@ -269,7 +269,7 @@ export function makeCallRoute(
           try: () => operationDefinition(key, bridge, resolvedSession),
           catch: (error) => error,
         });
-        const intent = readsOnly(key, request) ? "Read" : definition.intent;
+        const intent = consentedRead(caller, key, request) ? "Read" : definition.intent;
         if (intent === "Mutate") {
           return yield* Effect.fail(
             new BridgeError(

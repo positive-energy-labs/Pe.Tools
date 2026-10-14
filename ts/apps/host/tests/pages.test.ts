@@ -897,6 +897,8 @@ ${source}`),
         JSON.parse(await readFile(join(root, "todo", ".state", "binding.json"), "utf8")),
       ).toEqual({
         slots: { default: { kind: "pinned", address: "C:\\Pea\\Copy.rvt" } },
+        // Pea set it, so it is no person's consent to the Page's ReadOnly scripts.
+        boundBy: { default: "agent" },
       });
       expect((await put(human, { kind: "thread", thread: "t1" })).status).toBe(200);
       expect((await put(human, { kind: "thread" })).status).toBe(400);
