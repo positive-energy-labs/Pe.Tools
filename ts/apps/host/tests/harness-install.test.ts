@@ -2,13 +2,15 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vite-plus/test";
-import { codexPackagePath, installCommand } from "../src/harness/install.ts";
+import { expect, test, vi } from "vite-plus/test";
+import { codexPackagePath } from "../src/harness/adapter.ts";
+import { installCommand } from "../src/harness/install.ts";
 
 test.runIf(process.platform === "win32")(
   "Codex package installs with RedirectionGuard; a bad digest preserves the previous install",
   () => {
     const root = mkdtempSync(join(tmpdir(), "pe-install-"));
+    vi.stubEnv("PE_TOOLS_PRODUCT_HOME", join(root, "product"));
     const env = {
       ...process.env,
       USERPROFILE: join(root, "home"),
@@ -33,11 +35,11 @@ function Invoke-WebRequest { param($Uri, $OutFile, [switch]$UseBasicParsing, $Ti
 Add-Type 'using System; using System.Runtime.InteropServices; public class Guard { [DllImport("kernel32.dll",SetLastError=true)] public static extern bool SetProcessMitigationPolicy(int p, ref uint f, UIntPtr s); }'
 [uint32]$flags=1
 if (-not [Guard]::SetProcessMitigationPolicy(16,[ref]$flags,[UIntPtr]::new(4))) { throw 'Guard setup failed' }
-& { ${installCommand("codex")} }
+& { ${installCommand("codex", codexPackagePath())} }
 $fixtureDigest = 'sha256:' + ('0' * 64)
-try { & { ${installCommand("codex")} }; throw 'bad digest accepted' }
+try { & { ${installCommand("codex", codexPackagePath())} }; throw 'bad digest accepted' }
 catch { if ("$_" -notmatch 'checksum mismatch') { throw }; Write-Output 'BAD_DIGEST_REFUSED' }
-& ${quote(join(codexPackagePath(env), "bin", "codex.exe"))} --version
+& ${quote(join(codexPackagePath(), "bin", "codex.exe"))} --version
 `,
       "utf8",
     );
@@ -50,10 +52,9 @@ catch { if ("$_" -notmatch 'checksum mismatch') { throw }; Write-Output 'BAD_DIG
       expect(result.status, result.stdout + result.stderr).toBe(0);
       expect(result.stdout).toContain("BAD_DIGEST_REFUSED");
       expect(result.stdout.trim().endsWith("codex-cli fixture")).toBe(true);
-      expect(readFileSync(join(codexPackagePath(env), "bin", "codex.exe")).length).toBeGreaterThan(
-        0,
-      );
+      expect(readFileSync(join(codexPackagePath(), "bin", "codex.exe")).length).toBeGreaterThan(0);
     } finally {
+      vi.unstubAllEnvs();
       rmSync(root, { recursive: true, force: true });
     }
   },

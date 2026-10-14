@@ -12,8 +12,8 @@ import {
   hostProcessIdentity,
   productInstallLayout,
 } from "@pe/host-contracts/contracts";
-import { checkoutLayout } from "@pe/host-contracts/service-identity";
-import { codexPackagePath, codexStandaloneRelease, installCommand } from "./install.ts";
+import { checkoutLayout, productRoot } from "@pe/host-contracts/service-identity";
+import { codexStandaloneRelease, installCommand } from "./install.ts";
 
 /**
  * One row per harness: the ACP adapter package the host spawns, the CLI the user signs in with, and
@@ -28,14 +28,16 @@ export const adapters: Record<
     pkg: "@agentclientprotocol/claude-agent-acp",
     cli: "claude",
     login: "claude auth login",
-    install: installCommand("claude"),
+    install: installCommand("claude", ""),
   },
   codex: {
     title: "Codex",
     pkg: "@agentclientprotocol/codex-acp",
     cli: "codex",
     login: "codex login",
-    install: installCommand("codex"),
+    get install() {
+      return installCommand("codex", codexPackagePath());
+    },
   },
 };
 
@@ -98,8 +100,13 @@ export function openAdapter(
   return { child, conn, stderr: () => stderr };
 }
 
+/** Pea's own Codex package: a physical directory under the product root, so OpenAI's junctions never apply. */
+export function codexPackagePath(): string {
+  return join(productRoot(), "harnesses", "Codex");
+}
+
 /**
- * The user's CLI: official install, Pea's downloaded package, then shell/current registry PATH.
+ * The user's CLI: official install, Pea's downloaded package, then the PATH of `env`.
  * The bare name means not installed. Only native exes count, because
  * the Claude SDK spawns its executable without a shell.
  */
@@ -151,30 +158,15 @@ export function adapterCli(
       ? join(home, ".local", "bin", "claude.exe")
       : join(local, "Programs", "OpenAI", "Codex", "bin", "codex.exe");
   if (inspect(official)) return finish(official);
-  const packaged = join(codexPackagePath(env), "bin", "codex.exe");
+  const packaged = join(codexPackagePath(), "bin", "codex.exe");
   if (harness === "codex" && inspect(packaged)) return finish(packaged);
   const release = harness === "codex" ? codexStandaloneRelease(home) : null;
   if (release && inspect(release)) return finish(release);
-  // Read on every resolution, including the probe after a console closes. The parent PATH
-  // predates installs; `where` also searches cwd, which is not an installation authority.
-  const registry =
-    process.platform === "win32"
-      ? [
-          "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
-          "HKCU\\Environment",
-        ].map((key) => {
-          const result = spawnSync(
-            join(env.SystemRoot ?? "C:\\Windows", "System32", "reg.exe"),
-            ["query", key, "/v", "Path"],
-            { encoding: "utf8", windowsHide: true, timeout: 5000 },
-          );
-          return result.status === 0
-            ? (/^\s*Path\s+REG_(?:EXPAND_)?SZ\s+(.*)$/im.exec(result.stdout)?.[1] ?? "")
-            : "";
-        })
-      : [];
+  // `env` carries the fresh shell PATH (providers.ts recaptures it per call through `shellPath`), so
+  // an install made after host start is found with no restart. `where` also searches cwd, which is
+  // not an installation authority.
   const inherited = Object.entries(env).find(([key]) => key.toUpperCase() === "PATH")?.[1] ?? "";
-  for (const entry of [inherited, ...registry].join(";").split(";")) {
+  for (const entry of inherited.split(";")) {
     const folder = entry
       .trim()
       .replace(/^"|"$/g, "")
@@ -201,7 +193,7 @@ export function adapterCli(
       status: result.status,
       reason: result.error?.message ?? (result.stderr.trim() || "completed"),
     };
-    for (const path of result.stdout
+    for (const path of (result.stdout ?? "")
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(isAbsolute)) {

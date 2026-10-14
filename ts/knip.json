@@ -9,7 +9,7 @@
     "**/routeTree.gen.ts",
     "apps/host/src/pages/**"
   ],
-  "ignoreBinaries": ["vp", "vpx", "reg.exe", "tailscale"],
+  "ignoreBinaries": ["vp", "vpx", "reg.exe", "tailscale", "explorer.exe"],
   "ignoreDependencies": [
     "@typescript/native-preview",
     "bumpp",
