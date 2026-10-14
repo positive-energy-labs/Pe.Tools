@@ -7,6 +7,7 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 **This ledger owns every cross-route design-language and primitive gap.** Route ledgers name their own applications and evidence; they never restate a ruling or a gap that lives here. A rule lives in exactly one home: a type, a check, a swatch specimen, or `.agents/skills/lens.house/SKILL.md`. `docs/design/SURFACE-PHILOSOPHY.md` indexes those homes.
 
 ## Decided
+- 2026-10-14, owner kaitpw, item 5: Send carries idle, running and refused state without a status word; one footer under the draft holds send, target or attachment refusal in compact and full composers, and the refused Send has a caution tone and TooltipHint; [composer](../../../ts/apps/web/src/chat/composer.tsx).
 - 2026-10-14, owner kaitpw, item 4b: suppress a notice card only while a visible, focused Pe.Tools surface shows its thread; five-second presence beats expire after ten seconds, and attended items still advance the tray cursor; [notices](../../../ts/apps/host/src/notices.ts).
 - 2026-10-14, owner kaitpw, item 4a: notice cards anchor at the top-right of the primary work area so they do not cover the composer; [CardBoundsFor](../../../dotnet/Pe.Host.Tray/NoticeWindow.cs).
 - 2026-10-14, tray pop round 2 rulings (owner, live on the tray frontend): E the bare hint is the default hover preview; H the content peek stays; F the page miniature stays in principle but its render was empty for the owner (owed); G status-first not yet ruled.

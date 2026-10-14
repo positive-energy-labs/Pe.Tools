@@ -377,37 +377,13 @@ export function ComposerPickers({
   );
 }
 
-/** The run's state beside the pickers: the grant, the turn, Pea's plan, a refusal. */
-export function ComposerState({
-  handle,
-  situation: { head },
-  status,
-}: {
-  handle: ChatHandle;
-  situation: ChatSituation;
-  /** Thread-level loading or failure, said beside the pickers it qualifies. */
-  status?: ComposerStatus;
-}) {
+/** The grant and Pea's plan beside the pickers. Send owns run state. */
+export function ComposerState({ situation: { head } }: { situation: ChatSituation }) {
   const { chat } = useWorkbench();
-  const refusal =
-    head.refusal ?? (handle.outcome?.key === "send" ? handle.outcome.refusal?.message : null);
   return (
     <>
       <GrantChip grant={head.grantView} onRevoke={() => void head.revoke()} />
-      {status ? (
-        <span
-          aria-live="polite"
-          className="t-sentence"
-          data-tone={
-            status.caution ? "alarm" : status.text === "waiting for you" ? "caution" : undefined
-          }
-          data-testid="composer-status"
-        >
-          {status.text}
-        </span>
-      ) : null}
       <PlanChip tasks={selectPlan(chat)} />
-      {refusal ? <span data-tone="caution">{refusal}</span> : null}
     </>
   );
 }
@@ -416,13 +392,7 @@ export type ComposerStatus = { text: string; caution: boolean; detail?: string }
 
 /** Pea's live asks, then the Work the bound document holds: the top of the composer box, so
  *  approve and reject have one location and the draft sits under what is staged. */
-export function ComposerWork({
-  situation,
-  status,
-}: {
-  situation: ChatSituation;
-  status?: ComposerStatus;
-}) {
+export function ComposerWork({ situation }: { situation: ChatSituation }) {
   const { chat, resolveApproval, answerQuestion, store } = useWorkbench();
   const { inventory, bound, ladder } = situation;
   // Live asks only: an expired ask is a transcript record, never a head row.
@@ -435,16 +405,6 @@ export function ComposerWork({
   });
   return (
     <>
-      {status?.detail ? (
-        <div
-          role="alert"
-          className="px-(--gutter) pt-(--gutter)"
-          data-testid="composer-status-detail"
-          data-tone="caution"
-        >
-          {status.detail}
-        </div>
-      ) : null}
       <ComposerPending
         approvals={approvals}
         questions={questions}

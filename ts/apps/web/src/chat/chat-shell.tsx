@@ -320,8 +320,9 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
           pickers={(open) => (
             <ComposerPickers situation={situation} urlTarget={target} open={open} />
           )}
-          state={<ComposerState handle={handle} situation={situation} status={status} />}
-          work={<ComposerWork situation={situation} status={status} />}
+          state={<ComposerState situation={situation} />}
+          work={<ComposerWork situation={situation} />}
+          refusal={situation.head.refusal ?? status.detail}
         />
       </div>
     </div>

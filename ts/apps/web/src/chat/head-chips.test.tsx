@@ -11,6 +11,26 @@ vi.mock("#/navigation/state", () => ({ useDestination: () => vi.fn() }));
 
 const { GrantChip, HeadLadder } = await import("./head-chips");
 const { useThreadScope } = await import("./scope");
+const { ComposerState } = await import("./composer-head");
+import { emptyChatState } from "@pe/agent-contracts/chat-state";
+import type { ChatSituation } from "./composer-head";
+
+test("composer chips do not repeat status or refusal text", () => {
+  wb.current = { chat: emptyChatState() };
+  const view = render(
+    <ComposerState
+      situation={
+        {
+          head: {
+            grantView: null,
+            refusal: "Choose a provider.",
+          },
+        } as ChatSituation
+      }
+    />,
+  );
+  expect(view.container.textContent).toBe("");
+});
 
 afterEach(() => {
   cleanup();

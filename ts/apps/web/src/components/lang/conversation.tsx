@@ -115,6 +115,7 @@ export function Composer({
   drop,
   menus,
   work,
+  refusal,
   pickers,
   tools,
   send,
@@ -132,6 +133,8 @@ export function Composer({
   menus?: ReactNode;
   /** The box's top section: asks, chips, refusals. */
   work?: ReactNode;
+  /** The one refusal line, directly below the draft in every variant. */
+  refusal?: string | null;
   pickers?: (open: boolean) => ReactNode;
   tools?: ReactNode;
   /** The one Send/Stop slot. */
@@ -189,6 +192,11 @@ export function Composer({
             }
           }}
         />
+        {refusal ? (
+          <div data-composer-refusal="" data-tone="caution" role="alert">
+            {refusal}
+          </div>
+        ) : null}
         {tools ? <div data-composer-tools="">{tools}</div> : null}
         {/* One slot: Stop replaces Send while a turn runs, so the two never coexist. */}
         <div data-composer-send="">{send}</div>
