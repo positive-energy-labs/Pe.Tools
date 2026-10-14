@@ -101,6 +101,8 @@ export interface ScopeKey {
   options?: UseHotkeyDefinition["options"];
 }
 
+const UNMOUNTED: RefObject<HTMLElement | null> = { current: null };
+
 /**
  * Bind chords on the innermost scope node — the only door to a hotkey registration in this app.
  *
@@ -129,7 +131,8 @@ export function useScopeKeys(
       } satisfies KeyMeta,
     },
   }));
-  useHotkeys(definitions, { target: region ?? node.element });
+  // A `null` region is one not mounted yet: it binds nothing, never the node's element instead.
+  useHotkeys(definitions, { target: region === null ? UNMOUNTED : (region ?? node.element) });
 }
 
 /* ── The route and stage nodes ─────────────────────────────────────────────── */

@@ -108,15 +108,18 @@ export function FeedbackPicker({ hideTrigger = false }: { hideTrigger?: boolean 
     };
   }, []);
 
-  useScopeKeys([
-    {
-      hotkey: "Escape",
-      callback: close,
-      label: "cancel feedback",
-      says: "stop picking without sending a note",
-      options: { enabled: picking && !picked },
-    },
-  ]);
+  // Bound only while picking: idle, it would sit beside the route's own Escape on the document.
+  useScopeKeys(
+    [
+      {
+        hotkey: "Escape",
+        callback: close,
+        label: "cancel feedback",
+        says: "stop picking without sending a note",
+      },
+    ],
+    picking && !picked ? undefined : null,
+  );
 
   useEffect(() => {
     if (!picking || picked) return;

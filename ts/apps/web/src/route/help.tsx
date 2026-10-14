@@ -7,7 +7,7 @@
  * Panes and registrations are read once as the body mounts (it exists only while open), so the page
  * is a still picture of the route, not a subscriber that re-renders on every registration.
  */
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 
 import { Kbd } from "#/components/lang/kbd";
@@ -320,6 +320,27 @@ function HelpBody({
   );
 }
 
+/** Every mounted help button's opener, newest last. Several mount at once while navigation hands
+ *  the top bar from one route to the next, so none of them binds the chord itself. */
+const openers: (() => void)[] = [];
+
+/** The one Alt+/ binding (AppChrome): on the document, so help opens with focus anywhere, the
+ *  composer's draft included; it opens the newest help button's page. */
+export function HelpChord() {
+  useScopeKeys(
+    [
+      {
+        hotkey: HELP_CHORD.hotkey,
+        label: HELP_CHORD.label,
+        callback: () => openers.at(-1)?.(),
+        options: { ignoreInputs: false },
+      },
+    ],
+    document.documentElement,
+  );
+  return null;
+}
+
 export function RouteHelpButton({
   docs,
   name,
@@ -332,19 +353,11 @@ export function RouteHelpButton({
   const [open, setOpen] = useState(false);
   // Focus the page itself, not its first tabbable (a footer button) that would scroll it to the end.
   const popup = useRef<HTMLDivElement>(null);
-  // Bound on the document, not the pane the button renders in: the chord opens help with focus
-  // anywhere, the composer's draft included.
-  useScopeKeys(
-    [
-      {
-        hotkey: HELP_CHORD.hotkey,
-        label: HELP_CHORD.label,
-        callback: () => setOpen(true),
-        options: { ignoreInputs: false },
-      },
-    ],
-    document.documentElement,
-  );
+  useEffect(() => {
+    const opener = () => setOpen(true);
+    openers.push(opener);
+    return () => void openers.splice(openers.indexOf(opener), 1);
+  }, []);
   return (
     <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
       <DialogPrimitive.Trigger

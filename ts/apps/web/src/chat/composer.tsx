@@ -1,5 +1,6 @@
-// The composer's DOM: draft box, attachments, slash and `@` menus, send. Logic lives in the hooks and `useSend`.
-import { useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+// The thread's composer: fills the one `Composer` box with attachments, slash and `@` menus and
+// the pickers. Logic lives in the hooks and `useSend`.
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, GitFork, Paperclip, Square } from "lucide-react";
 import {
   capabilityCatalogSchema,
@@ -9,7 +10,6 @@ import {
 } from "@pe/agent-contracts";
 import { FirstOpenCard, ProviderRepair } from "#/chat/first-open";
 import { isReady } from "#/workbench/provider/providers";
-import { Textarea } from "#/components/lang/textarea";
 import { Pane } from "#/components/lang/pane";
 import { ScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import { useWorkbench } from "#/workbench/provider";
@@ -19,7 +19,7 @@ import { selectRunStatus, selectSkillCommands } from "@pe/agent-contracts/chat-s
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
 import { SituationAction } from "#/route/situation-verbs";
-import { ComposerBox, ComposerFrame } from "#/components/lang/conversation";
+import { Composer, ComposerFrame, type ComposerHandle } from "#/components/lang/conversation";
 import { Button } from "@pe/kit/lang/button";
 import { MentionChip } from "@pe/kit/lang/chip";
 import { previousOf } from "#/readings";
@@ -63,21 +63,17 @@ export function ThreadComposer({
   const unready = noneReady ? undefined : providers.list?.find((item) => item.id === headId);
   const repairing = unready && !isReady(unready) ? unready : undefined;
   const isRunning = selectRunStatus(chat) !== "idle";
-  // In the tray a sent draft rests the composer and gives focus back to the page, so the reply
-  // reads over a one-line box; the next click in the draft opens it again.
-  const compact = useSurfaceHost().shell.mount === "compact";
+  const variant = useSurfaceHost().shell.mount === "compact" ? "compact" : "full";
+  const box = useRef<ComposerHandle>(null);
   const send = useSend(handle, draft, (sent) => {
     setDraft((current) => (current === sent ? EMPTY_CHAT_DRAFT : current));
-    if (!compact) return;
-    setOpen(false);
-    const focused = document.activeElement;
-    if (focused instanceof HTMLElement && form?.contains(focused)) focused.blur();
+    box.current?.rest();
   });
   const files = useAttachments(draft, setDraft);
   const commands = useMemo<SlashCommand[]>(() => selectSkillCommands(chat), [chat]);
   const slash = useSlashMenu(draft.text, commands);
-  const [form, setForm] = useState<HTMLFormElement | null>(null);
   const [area, setArea] = useState<HTMLTextAreaElement | null>(null);
+  const form = area?.form ?? null;
   // Documents come from the live inventory, never the catalog read at mount.
   const machine = previousOf(handle.readings.machine as Reading<Machine>);
   const catalog = useMemo(() => {
@@ -129,101 +125,77 @@ export function ThreadComposer({
     },
   ];
 
-  // Open while you write: the draft grows to its content (five lines, then it scrolls) and the
-  // pickers drop to the bottom row; chat-shell.css draws the motion. Focus leaving the composer
-  // (React focus bubbles through its portalled popups) rests it at one line; a window losing
-  // focus does not.
-  const [open, setOpen] = useState(false);
-  const rest = useRef<number>(undefined);
-  const hold = () => window.clearTimeout(rest.current);
-  const release = () => {
-    hold();
-    rest.current = window.setTimeout(() => {
-      if (!document.hasFocus()) return;
-      setOpen(false);
-      if (area) area.scrollTop = 0;
-    });
-  };
-
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    sendCurrent();
-  };
-
   return (
     <Pane id="composer" scroll="visible" flush>
       <ScopeKeys keys={shortcuts} />
       <ComposerFrame>
-        <form
-          ref={setForm}
-          onSubmit={submit}
-          onFocus={hold}
-          onBlur={release}
-          className="relative w-full"
-        >
-          <ListPopup<Capability>
-            anchor="caret"
-            caret={form}
-            side="top"
-            owner={area}
-            open={mentions.open}
-            onOpenChange={(open) => (open ? undefined : mentions.dismiss())}
-            query={mentions.query}
-            onCollection={mentions.bind}
-            aria-label="Mentions"
-            items={mentions.rows}
-            keyOf={(row) => row.key}
-            labelOf={(row) => row.title}
-            groupOf={(row) => MENTION_KINDS[row.kind].group}
-            groupCap={MENTION_GROUP_CAP}
-            empty="nothing to mention"
-            maxHeight="min(20rem, 45dvh)"
-            onPick={mentions.pick}
-            detail={(row) => catalog && mentionFace(row, catalog).detail}
-            row={(row) => {
-              const Icon = MENTION_KINDS[row.kind].icon;
-              const face = catalog && mentionFace(row, catalog);
-              return {
-                lead: <Icon aria-hidden />,
-                label: face?.title ?? row.title,
-                aside: face?.mono ? <span className="face-mono">{face.fact}</span> : face?.fact,
-                title: row.key,
-              };
-            }}
-          />
-          <ListPopup<SlashCommand>
-            // Above the whole composer, never over its work or text.
-            anchor="caret"
-            caret={form}
-            side="top"
-            owner={area}
-            open={slash.open}
-            onOpenChange={(open) => (open ? undefined : slash.dismiss())}
-            query={slash.query}
-            onCollection={slash.bind}
-            aria-label="Commands"
-            items={commands}
-            keyOf={(command) => command.name}
-            labelOf={(command) => command.name}
-            filter="substring"
-            empty="no skills in this thread"
-            maxHeight="min(20rem, 45dvh)"
-            onPick={(command) => setText(slash.pick(command))}
-            // a slash command is a machine identifier — mono; what it does reads in the footer
-            row={(command) => ({
-              lead: <SkillIcon aria-hidden />,
-              label: <span className="face-mono">/{command.name}</span>,
-            })}
-            detail={(command) => command.description}
-          />
-          {/* Files dropped anywhere on the box attach; a file drag over it takes the recess ground. */}
-          <ComposerBox
-            dragging={files.dragging}
-            data-compose=""
-            data-open={open || undefined}
-            {...files.dropProps}
-          >
-            <div data-composer-work="">
+        <Composer
+          ref={box}
+          variant={variant}
+          // Files dropped anywhere on the box attach; a file drag over it takes the recess ground.
+          dragging={files.dragging}
+          drop={files.dropProps}
+          menus={
+            <>
+              <ListPopup<Capability>
+                anchor="caret"
+                caret={form}
+                side="top"
+                owner={area}
+                open={mentions.open}
+                onOpenChange={(open) => (open ? undefined : mentions.dismiss())}
+                query={mentions.query}
+                onCollection={mentions.bind}
+                aria-label="Mentions"
+                items={mentions.rows}
+                keyOf={(row) => row.key}
+                labelOf={(row) => row.title}
+                groupOf={(row) => MENTION_KINDS[row.kind].group}
+                groupCap={MENTION_GROUP_CAP}
+                empty="nothing to mention"
+                maxHeight="min(20rem, 45dvh)"
+                onPick={mentions.pick}
+                detail={(row) => catalog && mentionFace(row, catalog).detail}
+                row={(row) => {
+                  const Icon = MENTION_KINDS[row.kind].icon;
+                  const face = catalog && mentionFace(row, catalog);
+                  return {
+                    lead: <Icon aria-hidden />,
+                    label: face?.title ?? row.title,
+                    aside: face?.mono ? <span className="face-mono">{face.fact}</span> : face?.fact,
+                    title: row.key,
+                  };
+                }}
+              />
+              <ListPopup<SlashCommand>
+                // Above the whole composer, never over its work or text.
+                anchor="caret"
+                caret={form}
+                side="top"
+                owner={area}
+                open={slash.open}
+                onOpenChange={(open) => (open ? undefined : slash.dismiss())}
+                query={slash.query}
+                onCollection={slash.bind}
+                aria-label="Commands"
+                items={commands}
+                keyOf={(command) => command.name}
+                labelOf={(command) => command.name}
+                filter="substring"
+                empty="no skills in this thread"
+                maxHeight="min(20rem, 45dvh)"
+                onPick={(command) => setText(slash.pick(command))}
+                // a slash command is a machine identifier — mono; what it does reads in the footer
+                row={(command) => ({
+                  lead: <SkillIcon aria-hidden />,
+                  label: <span className="face-mono">/{command.name}</span>,
+                })}
+                detail={(command) => command.description}
+              />
+            </>
+          }
+          work={
+            <>
               {work}
               {noneReady ? <FirstOpenCard providers={providers} origin={config.origin} /> : null}
               {repairing ? <ProviderRepair provider={repairing} providers={providers} /> : null}
@@ -250,45 +222,11 @@ export function ThreadComposer({
                 </div>
               ) : null}
               {files.refusal ? <div data-tone="caution">{files.refusal}</div> : null}
-            </div>
-            <div data-composer-pickers="">{pickers(open)}</div>
-            <Textarea
-              name="input"
-              aria-label="Message"
-              ref={setArea}
-              aria-autocomplete="list"
-              aria-haspopup="listbox"
-              surface="embedded"
-              placeholder={
-                noneReady ? "no provider is ready" : "Ask Pea; / for a skill, @ to point at a thing"
-              }
-              rows={1}
-              autoFocus
-              onFocus={() => setOpen(true)}
-              value={draft.text}
-              onChange={(event) => {
-                setText(event.currentTarget.value);
-                mentions.onCaret(event.currentTarget.selectionStart);
-                slash.reset();
-                mentions.reset();
-              }}
-              onSelect={(event) => mentions.onCaret(event.currentTarget.selectionStart)}
-              onKeyDown={(event) => {
-                if (
-                  event.nativeEvent.isComposing ||
-                  slash.onKeyDown(event) ||
-                  mentions.onKeyDown(event)
-                )
-                  return;
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  sendCurrent();
-                }
-              }}
-              onPaste={files.pasteHandler}
-            />
-            <input {...files.fileInputProps} />
-            <div data-composer-tools="">
+            </>
+          }
+          pickers={pickers}
+          tools={
+            <>
               {state}
               {noneReady ? <span data-tone="caution">no provider is ready</span> : null}
               <SituationAction
@@ -303,23 +241,43 @@ export function ThreadComposer({
                 label="Attach files: images and text, 5 MB each, 10 a message"
                 onClick={files.browse}
               />
-            </div>
-            {/* One slot: Stop replaces Send while a turn runs, so the two never coexist. */}
-            <div data-composer-send="">
-              {isRunning ? (
-                <SituationAction
-                  handle={handle}
-                  name="stop"
-                  action={handle.actions.stop}
-                  icon={Square}
-                  tone="alarm"
-                />
-              ) : (
-                <SituationAction handle={handle} name="send" action={send} commit icon={ArrowUp} />
-              )}
-            </div>
-          </ComposerBox>
-        </form>
+              <input {...files.fileInputProps} />
+            </>
+          }
+          send={
+            isRunning ? (
+              <SituationAction
+                handle={handle}
+                name="stop"
+                action={handle.actions.stop}
+                icon={Square}
+                tone="alarm"
+              />
+            ) : (
+              <SituationAction handle={handle} name="send" action={send} commit icon={ArrowUp} />
+            )
+          }
+          onSend={sendCurrent}
+          onKey={(event) => slash.onKeyDown(event) || mentions.onKeyDown(event)}
+          name="input"
+          aria-label="Message"
+          areaRef={setArea}
+          aria-autocomplete="list"
+          aria-haspopup="listbox"
+          placeholder={
+            noneReady ? "no provider is ready" : "Ask Pea; / for a skill, @ to point at a thing"
+          }
+          autoFocus
+          value={draft.text}
+          onChange={(event) => {
+            setText(event.currentTarget.value);
+            mentions.onCaret(event.currentTarget.selectionStart);
+            slash.reset();
+            mentions.reset();
+          }}
+          onSelect={(event) => mentions.onCaret(event.currentTarget.selectionStart)}
+          onPaste={files.pasteHandler}
+        />
       </ComposerFrame>
     </Pane>
   );

@@ -1,11 +1,12 @@
 /**
- * Machine attention and feedback exist once around every surface's route outlet.
+ * Machine attention, feedback and the help chord exist once around every surface's route outlet.
  * Their doors are projections in the shared topbar, not separate floating controls.
  * The receipt card has its own shell. A web surface with no tray following can raise OS notifications.
  */
 import { useRouterState } from "@tanstack/react-router";
 import { InstallScrim } from "#/machine/install-scrim";
 import { FeedbackPicker } from "#/components/feedback-picker";
+import { HelpChord } from "#/route/help";
 import { MachineAttention } from "#/machine/attention";
 import { OsNotices } from "#/machine/os-notices";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
@@ -18,6 +19,7 @@ export function AppChrome() {
       <MachineAttention />
       <OsNotices />
       <FeedbackPicker hideTrigger />
+      <HelpChord />
     </>
   );
 }

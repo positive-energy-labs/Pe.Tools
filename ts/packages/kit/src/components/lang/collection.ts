@@ -447,7 +447,6 @@ export function useCollection<T>(options: CollectionOptions<T>) {
       options: {
         // The list's own input owns typing; these keys still reach the list from it.
         ignoreInputs: false,
-        enabled: options.target !== null,
       },
     }),
   );
