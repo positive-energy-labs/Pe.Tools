@@ -24,12 +24,13 @@ or when that reading is unavailable; `-Force` explicitly overrides the check. An
 tray or host restart before acting, including an idle restart: the owner may be using the window.
 Build and native launch evidence do not prove backend restart recovery or installed behavior.
 
-PWA identity belongs to the lane's origin, not the process. Installed uses
-`http://127.0.0.1:5180` with manifest `id: /`. Dev derives its port per checkout from the same hash as
-the dev host's service name (`devFrontendPort`, 5200-5999), so worktrees run side by side; each
-checkout keeps its own stable origin and therefore its own Dev PWA registration. A collision walks to
-the next free port, and `dev.ts` records the origin that actually bound, which is the only origin the
-host's `identity.origin` accepts. The backend keeps its SDK-owned dynamic port.
+PWA identity belongs to the lane's origin, not the process: two stable apps per lane.
+Installed uses `http://127.0.0.1:5180` with manifest `id: /`. Dev uses `http://127.0.0.1:5175` with
+`id: /?dev=e342bc78d3d4`, and the MAIN checkout (its `.git` is a directory) keeps that port. A linked
+worktree takes a stable slot in 5200-5999 hashed from its dev host's service name
+(`devFrontendPort`), so worktrees run beside main; a collision walks to the next free port and
+`dev.ts` records the origin that actually bound, which is the only origin the host's
+`identity.origin` accepts. The backend keeps its SDK-owned dynamic port.
 
 The full PWA entries are **Pe.Tools** and **Pe.Tools Dev**. Their separate compact launchers are
 **Pe.Tools Tray** and **Pe.Tools Dev Tray**. The next MSI authors `Pe.Tools Tray` with
