@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { Activity } from "react";
-import { render, cleanup } from "@testing-library/react";
+import { Activity, useState } from "react";
+import { act, render, cleanup } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { HostedChrome } from "#/route/hosted-chrome";
 import { Button } from "@pe/kit/lang/button";
@@ -10,6 +10,7 @@ import {
   RouteControlsSlot,
   useSituationSignal,
   usePagePaletteOpen,
+  usePalette,
   usePublishPagePalette,
 } from "./route-controls";
 import { ChainLamp } from "#/route/situation-lamp";
@@ -141,7 +142,7 @@ test("the one lamp publisher reports archive, unbound, ready, running and refusa
 
 test("only a visible primary page picker publishes a hold and releases it on close or hide", () => {
   function Picker({ open }: { open: boolean }) {
-    usePublishPagePalette("family", open);
+    usePublishPagePalette("family", open, () => {});
     return null;
   }
   function Witness() {
@@ -168,4 +169,38 @@ test("only a visible primary page picker publishes a hold and releases it on clo
   expect(view.getByTestId("palette-hold").textContent).toBe("true");
   view.rerender(tree(false));
   expect(view.getByTestId("palette-hold").textContent).toBe("false");
+});
+
+test("one palette is open at a time: global closes the page palette and a page palette closes global", () => {
+  let palette: ReturnType<typeof usePalette> | undefined;
+  let openPage: (open: boolean) => void = () => {};
+  function Page() {
+    const [open, setOpen] = useState(false);
+    openPage = setOpen;
+    usePublishPagePalette("family", open, setOpen);
+    return <output data-testid="page">{String(open)}</output>;
+  }
+  function Shell() {
+    palette = usePalette();
+    return <output data-testid="open">{String(palette.open)}</output>;
+  }
+  const view = render(
+    <RouteControlsProvider>
+      <Shell />
+      <Page />
+    </RouteControlsProvider>,
+  );
+  expect(view.getByTestId("open").textContent).toBe("null");
+  act(() => openPage(true));
+  expect(view.getByTestId("open").textContent).toBe("page");
+  act(() => palette!.show("global"));
+  expect(view.getByTestId("open").textContent).toBe("global");
+  expect(view.getByTestId("page").textContent).toBe("false");
+  act(() => openPage(true));
+  expect(view.getByTestId("open").textContent).toBe("page");
+  act(() => palette!.show("page"));
+  expect(view.getByTestId("page").textContent).toBe("true");
+  act(() => palette!.hide());
+  expect(view.getByTestId("open").textContent).toBe("null");
+  expect(view.getByTestId("page").textContent).toBe("false");
 });

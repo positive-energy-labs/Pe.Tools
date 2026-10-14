@@ -10,7 +10,7 @@ import { SituationDrawer } from "./situation-drawer";
 import { locationLabel, admittedDestination, shellButtons } from "./model";
 import { useDestination, useNavigation } from "./state";
 import { GlobalSearch } from "./global-search";
-import { RouteControlsSlot } from "./route-controls";
+import { RouteControlsSlot, usePalette } from "./route-controls";
 import { useRouteSlotPresence } from "./route-controls";
 import { RouteHelpButton } from "#/route/help";
 import { projectCaptionTheme, useSurfaceHost } from "./surface-host";
@@ -50,27 +50,32 @@ export function AppBar() {
     observer?.observe(node);
     return () => observer?.disconnect();
   }, []);
-  const [open, setOpen] = useState(false);
+  // One palette state: the global ledger and the route's page palette never stack.
+  const palette = usePalette();
+  const open = palette.open === "global";
   const [query, setQuery] = useState("");
   const [searchField, setSearchField] = useState<HTMLInputElement | null>(null);
   const changeSearchOpen = (next: boolean) => {
-    setOpen(next);
-    if (!next) setQuery("");
+    if (next) palette.show("global");
+    else {
+      palette.hide();
+      setQuery("");
+    }
   };
   const [launchRefusal, setLaunchRefusal] = useState<string | null>(null);
   const showSearch = () => {
-    if (!shell.picker) return;
+    if (shell.field !== "global") return;
     refresh();
-    setOpen(true);
+    palette.show("global");
     searchField?.focus();
   };
   useScopeKeys([
-    ...(shell.picker
+    ...(shell.field === "global"
       ? [
           {
             hotkey: "Mod+Shift+K" as const,
             callback: showSearch,
-            label: "Find tools, Works and Pea threads",
+            label: "Open work, then tools, Works and Pea threads",
             options: { ignoreInputs: false },
           },
         ]
@@ -234,7 +239,20 @@ export function AppBar() {
                 onClick={() => navigateTo(button.path)}
               />
             ))}
-            {shell.picker && (
+            {shell.field === "page" && (
+              <Button
+                kind="framed"
+                label={`${label}: open this page's palette · Ctrl+K`}
+                aria-keyshortcuts="Control+K"
+                pressed={palette.open === "page"}
+                refusal={palette.hasPage ? undefined : `${label} has no page palette`}
+                onClick={() => palette.show("page")}
+              >
+                {label}
+                <HotkeyHint hotkey="Mod+K" />
+              </Button>
+            )}
+            {shell.field === "global" && (
               <div
                 className="pe-appbar-route-search dl-control"
                 data-selected={open || undefined}
@@ -245,10 +263,10 @@ export function AppBar() {
                   ref={setSearchField}
                   surface="embedded"
                   role="combobox"
-                  aria-label="Choose product, Work or Pea thread"
+                  aria-label="Open work, tools, Works and Pea threads"
                   aria-autocomplete="list"
                   aria-keyshortcuts="Control+Shift+K"
-                  title="Search tools, Works and Pea threads · Ctrl+Shift+K"
+                  title="Open work; type to find tools, Works and Pea threads · Ctrl+Shift+K"
                   aria-expanded={open}
                   placeholder={`${label}${currentWork ? ` / ${currentWork.label}` : ""}`}
                   value={open ? query : ""}
@@ -260,7 +278,7 @@ export function AppBar() {
                   }}
                   onChange={(event) => {
                     setQuery(event.target.value);
-                    setOpen(true);
+                    palette.show("global");
                   }}
                 />
                 <span className="pe-appbar-search-hint" aria-hidden>
@@ -285,11 +303,10 @@ export function AppBar() {
           {launchRefusal || host.navigationRefusal}
         </p>
       )}
-      {shell.picker && (
+      {shell.field === "global" && (
         <GlobalSearch
           open={open}
           onOpenChange={changeSearchOpen}
-          onNavigate={navigateTo}
           anchor={searchField?.parentElement ?? null}
           query={query}
         />
