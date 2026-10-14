@@ -1,4 +1,5 @@
 import { asCaller, human } from "./callers.ts";
+import { HostLog } from "../src/host-log.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -39,6 +40,7 @@ function fixture(events: HarnessEvent[] = []) {
   );
   const options = {
     root,
+    log: new HostLog(join(root, ".log")),
     worldRoot: root,
     mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }),
     providers: {

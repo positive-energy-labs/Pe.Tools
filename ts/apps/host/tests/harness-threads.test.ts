@@ -1,9 +1,11 @@
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
+import { HostLog } from "../src/host-log.ts";
 import { createServer, type Server } from "node:http";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import type {
   Caller,
   HarnessEvent,
@@ -35,6 +37,7 @@ type Host = {
   /** Who every request crosses as: the identity middleware's stand-in. */
   as: Caller;
   heads: ReturnType<typeof createHarnessThreads>["heads"];
+  log: HostLog;
   close: () => Promise<unknown>;
   consoles: string[];
 };
@@ -48,7 +51,9 @@ const host = (updatePending?: () => boolean, prepare?: () => Promise<unknown>): 
     probeOnStart: false,
     openConsole: async (command) => void consoles.push(command),
   });
+  const log = new HostLog(join(root, ".log", randomUUID()));
   const threads = createHarnessThreads({
+    log,
     prepare,
     updatePending,
     root,
@@ -66,6 +71,7 @@ const host = (updatePending?: () => boolean, prepare?: () => Promise<unknown>): 
           : threads.fetch(request),
       ),
     heads: threads.heads,
+    log,
     close: threads.close,
     consoles,
   };
@@ -679,6 +685,24 @@ test("a thread prompts, parks a permission, cancels, interrupts, renames, and re
   expect(turnEnds(body).at(-1)).toMatchObject({ stopReason: "cancelled" });
   let done = false;
   while (!done) done = (await droppedReader.read()).done;
+});
+
+test("every committed thread event lands in the host log in order; a delete forgets them", async () => {
+  process.env.FAKE_ACP_SHAPE = "config";
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "hello" });
+  const body = await until(read, id, (b) => turnEnds(b).length === 1);
+  const logged = threads.log
+    .read(0)
+    .entries.flatMap((e) =>
+      e.event.kind === "thread" && e.event.thread === id ? [e.event.event] : [],
+    );
+  expect(logged).toEqual(body.events);
+  await call("DELETE", `/pe/threads/${id}`);
+  expect(JSON.stringify(threads.log.read(0).entries)).not.toContain(id);
 });
 
 test("the thread head lives in meta.json, falls back for unknown ids, and is observable", async () => {

@@ -67,7 +67,7 @@ import {
 } from "./machine.ts";
 import { bindControl, currentCaller, routeActorOf, writeTerminalContext } from "./control.ts";
 import { bindRevoke } from "./revoke.ts";
-import { hostActionJournal } from "./gateway-owner.ts";
+import { hostActionJournal, hostLog } from "./gateway-owner.ts";
 import { UpdateReader } from "./update-reader.ts";
 import { makeInstalledUpdateReader } from "./update-route.ts";
 import { HostLifecycle } from "./host-lifecycle.ts";
@@ -779,6 +779,7 @@ export function makeHostPeRoutes(
     providers,
     updatePending: update.automaticPending,
     root: productHarnessThreadsPath(),
+    log: hostLog(),
     worldRoot,
     // The same kernel the Pea MCP server declares, for the harness that cannot read it from there.
     developerInstructions: async () => peaAgentInstructions,

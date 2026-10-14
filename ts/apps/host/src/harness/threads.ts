@@ -65,6 +65,7 @@ import {
 } from "../control.ts";
 import { Effect } from "effect";
 import { z } from "zod";
+import type { HostLog } from "../host-log.ts";
 import { openAdapter, stopChild } from "./adapter.ts";
 import { accessModes, sessionOffer, type Providers } from "./providers.ts";
 
@@ -136,6 +137,8 @@ export type HarnessThreadsOptions = {
   updatePending?: () => boolean;
   /** Admission/import and skill publication must settle before either harness starts. */
   prepare?: () => Promise<unknown>;
+  /** The host log: every committed event is appended in commit order, after the thread's own file. */
+  log: HostLog;
   /** Called only after the transcript owner commits this fact. No prompt or tool text is exported. */
   receiptFact?: (threadId: string, title: string, event: HarnessEvent) => void;
 };
@@ -387,6 +390,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     t.events.push(full);
     projectActivity(t, full);
     appendFileSync(join(options.root, t.meta.id, "events.jsonl"), `${redacted}\n`);
+    options.log.append({ kind: "thread", thread: t.meta.id, event: full });
     options.receiptFact?.(t.meta.id, t.meta.title, full);
     if (
       ["turn_end", "error", "permission_request", "question_request"].includes(full.kind) &&
@@ -1392,6 +1396,11 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         threads.delete(t.meta.id);
         await stop(t);
         rmSync(join(options.root, t.meta.id), { recursive: true, force: true });
+        options.log.forget(
+          ({ event }) =>
+            (event.kind === "thread" && event.thread === t.meta.id) ||
+            (event.kind === "oversize" && event.ref.thread === t.meta.id),
+        );
         notifySummaries();
         return new Response(null, { status: 204 });
       case "POST prompt": {
