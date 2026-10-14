@@ -21,7 +21,14 @@ export function FailureNote({ text, onDoor }: { text: string; onDoor: (href: str
         <details className="w-full min-h-0">
           <summary className="t-small text-ink-2">Details</summary>
           <div className="max-h-40 overflow-auto">
-            <Code code={failure.detail} lang="plaintext" tone="error" wrap />
+            <Code
+              code={failure.detail}
+              lang="plaintext"
+              tone="error"
+              wrap
+              head="copy"
+              copyLabel="Copy the details"
+            />
           </div>
         </details>
       )}
