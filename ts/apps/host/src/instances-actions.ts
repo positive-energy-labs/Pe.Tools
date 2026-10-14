@@ -283,6 +283,20 @@ async function listDocuments(
   return envelope.result.documents;
 }
 
+/** The SDK row of one session id, gone and failed rows included (`--all`), or null when none. */
+async function namedSession(id: string, read: SdkReceiptReader) {
+  const args = sessionListArgv({ all: true });
+  const envelope = parsePeRevitEnvelope<SessionListResult>(
+    await read(args),
+    args,
+    peRevitLauncher(),
+  );
+  const rows = envelope.result.sessions.filter((row) => "id" in row && row.id === id);
+  if (envelope.diagnostics.length || rows.length > 1)
+    throw refuse(`The SDK does not name one session '${id}'`, envelope.result);
+  return (rows[0] as Exclude<SessionObservation, { case: "observed-active" }> | undefined) ?? null;
+}
+
 /** Run one recorded verb under its step id and settle it from the state the SDK derived (law 10). */
 async function dispatch(
   input: StepInput,
@@ -550,19 +564,33 @@ export async function admitInstancesAction(
       // The step that starts a new Revit, when the action does: `instances.start`, or the first
       // leg of an open into a new Revit. Every other action's main step carries its own key.
       const mainKey = launch && start ? `${key}.start` : key;
-      const prior = execution.recorded("native", mainKey);
+      const created = acquisition?.process.kind === "create";
+      let prior = execution.recorded("native", mainKey);
+      // A Revit this acquisition started that is gone is redone, never reused (W2 20).
+      if (resume && created && prior?.state === "succeeded") {
+        const { process } = (prior.result as { session: { process: Target["process"] } }).session;
+        if (!(await readTarget(null, process, read)))
+          prior = await execution.retire(
+            prior.id,
+            `Revit pid ${process.pid} started ${process.processStartUtc} is gone; resume starts a new one`,
+          );
+      }
       const priorAdoption = execution.recorded("native", `${key}.adopt`);
       const chosen: SessionSelection = priorAdoption
         ? { pid: target!.process.pid }
         : (target?.selection ?? {});
       // The expectation was resolved at preparation; a recorded step keeps the bytes it ran with.
+      // A redone start of Pea's own Revit expects the SDK row it replaces, read now.
       let expectSession: string | null = priorAdoption
         ? null
-        : prior
-          ? ((prior.input as StepInput).expectSession ?? null)
-          : target
-            ? target.expectSession
-            : "absent";
+        : created && prior?.state === "failed"
+          ? ((await namedSession(acquisitionSessionId(acquisition!.id), read))?.receipt
+              .receiptPath ?? "absent")
+          : prior
+            ? ((prior.input as StepInput).expectSession ?? null)
+            : target
+              ? target.expectSession
+              : "absent";
       const requestId = REQUEST_ID;
       if (priorAdoption || expectSession === null) {
         const adoptionInput: StepInput = priorAdoption
@@ -636,13 +664,12 @@ export async function admitInstancesAction(
               const project = resolveStartProject(hostOwnership.lane, hostOwnership.sourceRoot);
               // Pea's process is named by its acquisition; on a checkout it is a snapshot, the only
               // second session the SDK admits beside the person's hot-reload one on that key.
-              const created = acquisition?.process.kind === "create";
               return sessionStartArgv({
                 project,
                 year: start.year,
                 ...chosen,
                 ...(created
-                  ? { id: acquisitionSessionId(acquisition.id), snapshot: project !== undefined }
+                  ? { id: acquisitionSessionId(acquisition!.id), snapshot: project !== undefined }
                   : {}),
                 quarantine: start.addins === "off",
                 background: start.owner === "pea",
@@ -1015,6 +1042,34 @@ export const recoverInstancesAction = (
     const intent = { id: step.id, key: step.key, kind: step.kind, input: step.input };
     const answered = "response" in result && result.response != null;
     const unknownRequest = evidence.diagnostics.some((d) => d.code === "op.unknown-request");
+    // The process the SDK recorded running it is gone: it never completes (W2 20). A document op
+    // ran in that Revit, so its lifetime ended with it; a start is done only if its session lives.
+    if (
+      result.state === "abandoned" &&
+      evidence.diagnostics.some((d) => d.code === "op.process-dead")
+    ) {
+      const at = argv.indexOf("--id");
+      const named = supervisor && argv[1] === "start" && at > 0 ? argv[at + 1]! : null;
+      if (supervisor && !named) return { step, evidence };
+      const row = named ? await namedSession(named, read) : null;
+      if (row?.case === "controlled-active")
+        return {
+          step: { ...intent, state: "succeeded", result: { state: "ok", id: named, session: row } },
+          evidence,
+        };
+      if (row?.case === "controlled-pending") return { step, evidence };
+      return {
+        step: {
+          ...intent,
+          state: "failed",
+          error: supervisor
+            ? `The pe-revit running it is gone and session '${named}' is ${row?.case ?? "not registered"}`
+            : "The Revit running it is gone; what it did in that Revit ended with it",
+          status: 410,
+        },
+        evidence,
+      };
+    }
     let response = answered ? result.response : undefined;
     let notDispatched = !supervisor || unknownRequest;
     if (supervisor && !unknownRequest) {

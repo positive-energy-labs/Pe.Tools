@@ -43,7 +43,13 @@ export type ActionExecution = {
   ): Promise<A>;
   publish(result: unknown): Promise<void>;
   readonly prepared: unknown;
+  /** The latest recorded step of this kind and key: the one a resume replays or redoes. */
   recorded(kind: ActionStep["kind"], key: string): ActionStep | undefined;
+  /**
+   * A resume retires a succeeded step whose lifetime SDK truth says ended (a dead Revit): it is
+   * kept as failed with what it returned, and the resume redoes it as a new step.
+   */
+  retire(id: string, reason: string): Promise<ActionStep>;
 };
 /** The bridge answers a cancelled request 499 (BridgeOperationExceptions.CancelledStatusCode). */
 const CANCELLED_STATUS = 499;
@@ -562,10 +568,32 @@ export class ActionJournal implements ReceiptReader {
           return row.preparation.state === "ready" ? row.preparation.value : undefined;
         },
         recorded: (kind, key) =>
-          structuredClone(row.steps.find((step) => step.kind === kind && step.key === key)),
+          structuredClone(row.steps.findLast((step) => step.kind === kind && step.key === key)),
+        retire: async (id, reason) => {
+          const ended = row.steps.find((step) => step.id === id);
+          if (!resume || ended?.state !== "succeeded")
+            throw Error("Only a resumed attempt retires a succeeded step");
+          const retired: ActionStep = {
+            id,
+            key: ended.key,
+            kind: ended.kind,
+            input: ended.input,
+            state: "failed",
+            error: reason,
+            status: 410,
+            evidence: { result: ended.result },
+          };
+          await save((row) => ({
+            ...row,
+            steps: row.steps.map((step) => (step.id === id ? retired : step)),
+          }));
+          return structuredClone(retired);
+        },
         step: async (kind, key, input, effect) => {
           while (cursor < row.steps.length) {
             const priorStep = row.steps[cursor++]!;
+            // A failed step is an earlier attempt's history; the resume redoes from it.
+            if (resume && priorStep.state === "failed") continue;
             if (
               priorStep.kind !== kind ||
               priorStep.key !== key ||
@@ -573,7 +601,6 @@ export class ActionJournal implements ReceiptReader {
             )
               throw Error("Original continuation differs from its recorded effect input");
             if (priorStep.state === "succeeded") return structuredClone(priorStep.result) as never;
-            if (resume && priorStep.state === "failed") continue;
             throw Error("An uncertain effect cannot be replayed");
           }
           const step: ActionStep = {
