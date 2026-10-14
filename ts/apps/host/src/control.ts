@@ -65,7 +65,11 @@ export function mintBrowserContext(principal: RequestPrincipal): string {
     caller:
       principal.kind === "local"
         ? { kind: "human", via: "local" }
-        : { kind: "human", via: "tailnet", login: principal.login },
+        : {
+            kind: "human",
+            via: principal.kind === "tailnet" ? "tailnet" : principal.transport,
+            login: principal.login,
+          },
   });
   return `${BROWSER_CONTEXT_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/${principal.kind === "local" ? "" : "; Secure"}`;
 }
@@ -171,7 +175,24 @@ export type RoutePermission =
   | "mcp";
 
 /** Transport admission consumes the declared permission, independently of document rw admission. */
-export function admitRequest(caller: Caller, permission: RoutePermission, door: string): void {
+export function admitRequest(
+  caller: Caller,
+  permission: RoutePermission,
+  door: string,
+  remote?: { paired: boolean; allowAdministration: boolean },
+): void {
+  if (remote && !remote.paired)
+    throw refuse(
+      "device.unpaired",
+      door,
+      "Pair this device from Sharing settings on the host before using host control.",
+    );
+  if (remote && !remote.allowAdministration && (permission === "admin" || permission === "grant"))
+    throw refuse(
+      "identity.remote-administration",
+      door,
+      "Remote administration and remote rw consent are disabled on this host.",
+    );
   if (
     ![
       "read",

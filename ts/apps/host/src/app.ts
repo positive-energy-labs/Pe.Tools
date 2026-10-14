@@ -1,5 +1,7 @@
 import { sdkSession } from "./sdk-session.ts";
 import { requestIdentityLayer } from "./request-identity.ts";
+import { createDevices, type Devices } from "./remote-device.ts";
+import { deviceRoutes } from "./device-routes.ts";
 import {
   createShare,
   shareIntentFile,
@@ -138,6 +140,8 @@ export interface HttpLiveOptions {
   /** Injected listener for socket lifecycle tests. */
   readonly nodeServer?: Server;
   readonly share?: ShareOwner;
+  readonly devices?: Devices;
+  readonly remoteIngress?: readonly { origin: string; transport: "lan" | "ssh" }[];
   /** Browser origin of the separately owned dev frontend. API requests stay here. */
   readonly webUrl?: Deferred.Deferred<string>;
   /** Boot-scoped shutdown latch + service token, injected by the launch root. */
@@ -197,7 +201,10 @@ export function makeHttpLive(options: HttpLiveOptions) {
       run: tailscaleCommand(),
       ...shareIntentFile(join(productRoot(), "state", "share.json")),
     });
+  const devices = options.devices ?? createDevices(join(productRoot(), "state", "devices.json"));
   const identity = requestIdentityLayer({
+    devices,
+    remoteIngress: options.remoteIngress,
     port,
     frontendOrigin: () =>
       options.webUrl
@@ -218,6 +225,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
   const CommonAppLive = Layer.mergeAll(
     identity,
     shareRoute(share),
+    deviceRoutes(devices),
     mcpRoute(() => `http://127.0.0.1:${port()}`),
     capturesRoute(spa),
     pagesRoute(),

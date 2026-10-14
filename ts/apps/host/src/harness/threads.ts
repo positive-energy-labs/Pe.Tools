@@ -609,6 +609,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
               lifetime: target.ref,
               grantedAt: new Date(now).toISOString(),
               grantedVia: caller.via,
+              ...(caller.device ? { grantedDevice: caller.device } : {}),
               ...(caller.login ? { grantedLogin: caller.login } : {}),
               expiresAt: grantExpiry(now),
               revoked: null,
