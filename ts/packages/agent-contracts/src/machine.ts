@@ -49,6 +49,11 @@ export interface MachineHost {
   readonly startedBy: "login" | "icon" | "command" | null;
   /** Null when the Windows registry cannot be read. */
   readonly autostart: "on" | "off" | "disabled-in-windows" | null;
+  /**
+   * Windows RedirectionGuard on this host process, inherited from whatever started it (msiexec).
+   * `enforced` means this host and every harness CLI it spawns cannot traverse user junctions.
+   */
+  readonly redirectionTrust: "enforced" | "audit" | "off" | null;
   readonly sourceRoot: string | null;
   readonly uptimeSeconds: number;
   readonly canonicalUrl: string;

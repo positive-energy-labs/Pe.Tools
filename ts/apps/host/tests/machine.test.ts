@@ -117,6 +117,7 @@ function fixture() {
       port: 5180,
       startedBy: null,
       autostart: null,
+      redirectionTrust: null,
       sourceRoot: null,
       uptimeSeconds: 5,
       canonicalUrl: "http://127.0.0.1:5180",

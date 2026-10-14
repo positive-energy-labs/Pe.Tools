@@ -54,6 +54,12 @@ export function HostGroup({
       <p className="break-all text-ink-2">
         {host.sourceRoot ?? host.installedRoot ?? "Runtime root is unverified."}
       </p>
+      {host.redirectionTrust === "enforced" && (
+        <p data-tone="caution">
+          Windows RedirectionGuard is enforced on this host (inherited from its launcher): harness
+          CLIs it starts cannot traverse user junctions.
+        </p>
+      )}
       {host.runtimeRefusal && <p data-tone="caution">{host.runtimeRefusal}</p>}
       <div className="flex flex-wrap gap-2">
         <Button label="open window" kind="framed" refusal={refusal} onClick={() => run("window")}>

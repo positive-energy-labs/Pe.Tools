@@ -13,7 +13,7 @@ import {
   productInstallLayout,
 } from "@pe/host-contracts/contracts";
 import { checkoutLayout } from "@pe/host-contracts/service-identity";
-import { codexPackagePath, installCommand } from "./install.ts";
+import { codexPackagePath, codexStandaloneRelease, installCommand } from "./install.ts";
 
 /**
  * One row per harness: the ACP adapter package the host spawns, the CLI the user signs in with, and
@@ -111,6 +111,8 @@ export function adapterCli(harness: HarnessId, env: NodeJS.ProcessEnv = process.
   if (existsSync(official)) return official;
   const packaged = join(codexPackagePath(env), "bin", "codex.exe");
   if (harness === "codex" && existsSync(packaged)) return packaged;
+  const release = harness === "codex" ? codexStandaloneRelease(home) : null;
+  if (release) return release;
   // Read on every resolution, including the probe after a console closes. The parent PATH
   // predates installs; `where` also searches cwd, which is not an installation authority.
   const registry =

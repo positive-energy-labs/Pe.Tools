@@ -47,6 +47,7 @@ import {
   type Acquisition,
 } from "./acquisition.ts";
 import { grantDead } from "./control.ts";
+import { hostRedirectionTrust } from "./redirection-trust.ts";
 
 export interface MachineShareAdapter {
   read(): Promise<MachineShare>;
@@ -714,6 +715,7 @@ export function machineSources(
         port: file.port,
         startedBy: null,
         autostart: await readAutostart(hostOwnership.executablePath),
+        redirectionTrust: await hostRedirectionTrust(),
         sourceRoot: file.sourceRoot ?? null,
         installedRoot: hostOwnership.installedRoot,
         uptimeSeconds: process.uptime(),
