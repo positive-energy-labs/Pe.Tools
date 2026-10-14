@@ -60,9 +60,10 @@ const host = (
   const providers = createProviders({
     shellPath: async () => "C:\\canary-bin;C:\\also",
     probeOnStart: false,
-    openConsole: (command, _env, opened) => {
+    openConsole: async (command, _env, opened) => {
       consoles.push(command);
-      return openConsole(command, opened);
+      await openConsole(command, opened);
+      return { exitCode: 0, commandExitCode: 0, logPath: join(root, "console.log") };
     },
   });
   const log = new HostLog(join(root, ".log", randomUUID()));

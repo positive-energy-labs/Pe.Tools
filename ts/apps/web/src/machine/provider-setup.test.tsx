@@ -94,6 +94,40 @@ test("composer first-open uses the same provider setup", () => {
   render(<FirstOpenCard providers={providers()} origin="http://host" />);
   setup();
 });
+
+test("an installation refusal exposes the complete record through Copy the details", async () => {
+  const machine = seed();
+  const detail = {
+    step: "installed" as const,
+    message: "The installer command exited 17; console exit 0.",
+    candidates: [{ path: "C:\\Codex\\codex.exe", reason: "Access denied", win32Error: 5 }],
+    resolvedExecutable: null,
+    lookup: { command: "where.exe", status: 1, reason: "not found" },
+    console: {
+      exitCode: 0,
+      commandExitCode: 17,
+      logPath: "C:\\scratch\\console.log",
+      outputTail: "installer failed [redacted]",
+    },
+  };
+  state.machine = {
+    ...machine,
+    providers: machine.providers!.map((provider) =>
+      provider.id === "codex"
+        ? {
+            ...provider,
+            readiness: { state: "refused", step: "installed", message: detail.message, detail },
+          }
+        : provider,
+    ),
+  };
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  render(<ProviderSetup providers={providers()} />);
+  fireEvent.click(screen.getByRole("button", { name: "Raw error" }));
+  fireEvent.click(screen.getByRole("button", { name: "Copy the details" }));
+  await expect.poll(() => writeText.mock.calls[0]?.[0]).toBe(JSON.stringify(detail, null, 2));
+});
 test("settings still exists and projects the provider setup", async () => {
   seed();
   const search = vi.spyOn(Settings, "useSearch").mockReturnValue({ section: "pea" });

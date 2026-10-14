@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { productScratchPath } from "@pe/host-contracts/service-identity";
-import { dirname, isAbsolute, join } from "node:path";
+import { dirname, join } from "node:path";
 import { PROTOCOL_VERSION, type SessionConfigOption } from "@agentclientprotocol/sdk";
 import {
   accessSchema,
@@ -14,6 +14,7 @@ import {
   type HarnessId,
   type HarnessModel,
   type Provider,
+  type ProviderRefusal,
   type Readiness,
   type TraitOption,
 } from "@pe/agent-contracts";
@@ -365,6 +366,7 @@ async function acpProbe(
   record: ProviderRecord,
   env: Record<string, string | undefined>,
   stop: ProbeStop,
+  detail: ProviderRefusal,
 ): Promise<Omit<Probed, "probedAt">> {
   const none = { models: [], traits: [] };
   const closed: Omit<Probed, "probedAt"> = {
@@ -380,15 +382,21 @@ async function acpProbe(
   let opened: ReturnType<typeof openAdapter>;
   try {
     mkdirSync(productScratchPath(), { recursive: true });
-    opened = openAdapter(record.harness, productScratchPath(), env, () => ({
-      sessionUpdate: async () => {},
-      requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
-      // `_auth/status_update` from both adapters (seen 2026-10-08): kind `account` or `none`.
-      extNotification: async (method, params) => {
-        const status = (params as { authStatus?: AuthStatus }).authStatus;
-        if (method.endsWith("auth/status_update") && status?.kind) reportAuth(status);
-      },
-    }));
+    opened = openAdapter(
+      record.harness,
+      productScratchPath(),
+      env,
+      () => ({
+        sessionUpdate: async () => {},
+        requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
+        // `_auth/status_update` from both adapters (seen 2026-10-08): kind `account` or `none`.
+        extNotification: async (method, params) => {
+          const status = (params as { authStatus?: AuthStatus }).authStatus;
+          if (method.endsWith("auth/status_update") && status?.kind) reportAuth(status);
+        },
+      }),
+      detail,
+    );
   } catch (error) {
     return {
       readiness: {
@@ -400,18 +408,18 @@ async function acpProbe(
     };
   }
   const { child, conn, stderr } = opened;
-  const signedOut = (detail: string): Readiness =>
+  const signedOut = (message: string): Readiness =>
     record.auth.kind === "endpoint"
       ? {
           state: "refused",
           step: "endpoint",
-          message: `The harness refused the endpoint: ${detail}`,
+          message: `The harness refused the endpoint: ${message}`,
         }
-      : isAbsolute(adapterCli(record.harness, env))
+      : detail.resolvedExecutable
         ? {
             state: "refused",
             step: "signed-in",
-            message: `${adapters[record.harness].title} is not signed in (${detail}).`,
+            message: `${adapters[record.harness].title} is not signed in (${message}).`,
           }
         : {
             state: "refused",
@@ -502,6 +510,8 @@ const slug = (name: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
+type ConsoleResult = Omit<NonNullable<ProviderRefusal["console"]>, "outputTail">;
+
 export type ProvidersOptions = {
   /** The user's shell PATH, read per spawn; null keeps the host's. */
   shellPath?: () => Promise<string | null>;
@@ -515,7 +525,7 @@ export type ProvidersOptions = {
     command: string,
     env: Record<string, string | undefined>,
     opened: () => void,
-  ) => Promise<void>;
+  ) => Promise<ConsoleResult>;
 };
 
 /** How long Sign in waits to hear that a console process exists before saying it did not open. */
@@ -526,21 +536,46 @@ const CONSOLE_OPEN_MS = 5_000;
 // visible console; `/wait` keeps this promise open until it closes.
 /** Installer state stays in a child scope; failures remain visible until the user closes. */
 export function consoleScript(command: string) {
-  return [
-    "$ErrorActionPreference = 'Stop'",
-    "$global:LASTEXITCODE = 0",
-    `try { & { ${command} }; if ($LASTEXITCODE) { throw "exited $LASTEXITCODE" } } catch {`,
-    `  Write-Host $_`,
-    `  Read-Host 'Press Enter to close'`,
-    `}`,
+  const inner = [
+    "$ErrorActionPreference = 'Stop'; $global:LASTEXITCODE = 0",
+    `try { & { ${command} }; if ($LASTEXITCODE) { throw "exited $LASTEXITCODE" }; exit 0 }`,
+    "catch { Write-Output $_.Exception.Message; if ($LASTEXITCODE) { exit $LASTEXITCODE }; exit 1 }",
   ].join("\n");
+  // A child PowerShell keeps direct Console stderr, native output and Write-Host on the same
+  // capture path. Only sanitized text reaches disk; neither a transcript nor an env dump does.
+  return String.raw`
+$ErrorActionPreference = 'Continue'
+$commandPath = $PSCommandPath + '.command.ps1'
+$logPath = $PSCommandPath + '.log'
+$tail = ''
+$secrets = @(Get-ChildItem Env: | Where-Object { $_.Name -match '(?i)key|token|secret|password|credential' } | ForEach-Object { $_.Value } | Where-Object { $_ })
+[IO.File]::WriteAllText($commandPath, [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${Buffer.from(inner).toString("base64")}')))
+[IO.File]::WriteAllText($logPath, '')
+$code = 1
+try {
+  & "$PSHOME\powershell.exe" -NoLogo -NoProfile -ExecutionPolicy Bypass -File $commandPath 2>&1 | ForEach-Object {
+    $text = $_.ToString()
+    foreach ($secret in $secrets) { $text = $text.Replace($secret, '[redacted]') }
+    $text = $text -replace '(https?://[^\s?]+)\?[^\s]*', '$1?[redacted]'
+    $text = $text -replace '(?i)((?:api[-_]?key|token|password|secret|authorization)\s*[:=]\s*)\S+', '$1[redacted]'
+    $tail = $tail + $text + [Environment]::NewLine
+    if ($tail.Length -gt 8192) { $tail = $tail.Substring($tail.Length - 8192) }
+    [IO.File]::WriteAllText($logPath, $tail)
+    Write-Host $text
+  }
+  $code = $LASTEXITCODE
+} finally { Remove-Item -LiteralPath $commandPath -Force -ErrorAction SilentlyContinue }
+[IO.File]::WriteAllText($PSCommandPath + '.exit', [string]$code)
+if ($code -ne 0) { Read-Host 'Press Enter to close' | Out-Null }
+exit $code
+`;
 }
 
 function openConsole(
   command: string,
   env: Record<string, string | undefined>,
   opened: () => void,
-): Promise<void> {
+): Promise<ConsoleResult> {
   const scriptPath = join(productScratchPath(), `pe-tools-console-${randomUUID()}.ps1`);
   mkdirSync(dirname(scriptPath), { recursive: true });
   writeFileSync(scriptPath, consoleScript(command), "utf8");
@@ -573,12 +608,13 @@ function openConsole(
   const cleanup = () => rmSync(scriptPath, { force: true });
   return new Promise((resolve, reject) => {
     child.once("spawn", opened);
-    // `start /wait` returns the console script's own code, which is 0 even after a failed login (the
-    // script waits for Enter and ends); a nonzero code is cmd or PowerShell failing to start.
-    child.once("exit", (code) => {
+    child.once("close", (exitCode) => {
+      const resultPath = `${scriptPath}.exit`;
+      const result = existsSync(resultPath) ? readFileSync(resultPath, "utf8").trim() : "";
+      const commandExitCode = /^-?\d+$/.test(result) ? Number(result) : null;
+      rmSync(resultPath, { force: true });
       cleanup();
-      if (code) reject(Error(`the console process exited with code ${code}`));
-      else resolve();
+      resolve({ exitCode, commandExitCode, logPath: `${scriptPath}.log` });
     });
     child.once("error", (error) => {
       cleanup();
@@ -593,6 +629,7 @@ export function createProviders(options: ProvidersOptions) {
   const stop: ProbeStop = { closed: false, ...Promise.withResolvers<void>() };
   const probing = new Set<Promise<unknown>>();
   const cache = new Map<string, Probed>();
+  const consoles = new Map<HarnessId, ConsoleResult>();
   const knownKeys = new Set<string>();
   const inFlight = new Map<string, Promise<Provider>>();
   const listeners = new Set<() => void>();
@@ -696,16 +733,94 @@ export function createProviders(options: ProvidersOptions) {
     return { ...out, ...authEnv(record) };
   }
 
-  async function probeRecord(record: ProviderRecord): Promise<Probed> {
+  function finishProbe(record: ProviderRecord, probed: Probed, detail: ProviderRefusal): Probed {
+    if (probed.readiness.state !== "refused") return probed;
+    const console = consoles.get(record.harness);
+    let outputTail = "";
+    if (console) {
+      try {
+        outputTail = readFileSync(console.logPath, "utf8").slice(-8192);
+      } catch (error) {
+        outputTail = `Console output unavailable: ${(error as NodeJS.ErrnoException).code ?? "read failed"}`;
+      }
+    }
+    const secrets = [
+      ...knownKeys,
+      ...(record.auth.kind === "endpoint" ? [record.auth.apiKey] : []),
+      ...Object.entries(process.env)
+        .filter(([key]) => /key|token|secret|password|credential/i.test(key))
+        .map(([, value]) => value)
+        .filter((value): value is string => !!value),
+    ];
+    const clean = (text: string) => {
+      for (const secret of secrets) text = text.split(secret).join("[redacted]");
+      return text.replace(/(https?:\/\/[^\s?]+)\?[^\s]*/g, "$1?[redacted]");
+    };
+    const readiness = JSON.parse(
+      JSON.stringify(
+        {
+          ...probed.readiness,
+          detail: {
+            ...detail,
+            step: probed.readiness.step,
+            message: probed.readiness.message,
+            failure: probed.readiness.failure,
+            console: console ? { ...console, outputTail } : null,
+          },
+        },
+        (key, value) =>
+          typeof value === "string"
+            ? key === "outputTail"
+              ? clean(value).slice(-8192)
+              : clean(value)
+            : value,
+      ),
+    ) as Extract<Readiness, { state: "refused" }>;
+    log.warn(`provider ${record.id} refused: ${JSON.stringify(readiness.detail)}`);
+    return { ...probed, readiness };
+  }
+
+  async function probeRecord(
+    record: ProviderRecord,
+    installation?: ConsoleResult,
+  ): Promise<Probed> {
     const probedAt = () => new Date().toISOString();
+    const detail: ProviderRefusal = {
+      step: "installed",
+      message: "",
+      candidates: [],
+      resolvedExecutable: null,
+      lookup: null,
+      console: null,
+    };
+    const finish = (probed: Probed) => finishProbe(record, probed, detail);
     const running = acpProbe(
       record,
       { ...cleanHarnessEnv(process.env), ...(await userPath()), ...authEnv(record) },
       stop,
+      detail,
     );
     probing.add(running);
     const probed = await running.finally(() => probing.delete(running));
-    if (probed.readiness.state !== "ready") return { ...probed, probedAt: probedAt() };
+    if (installation && (installation.exitCode !== 0 || installation.commandExitCode !== 0))
+      return finish({
+        ...probed,
+        readiness: {
+          state: "refused",
+          step: "installed",
+          message: `The installer command exited ${installation.commandExitCode ?? "without an exit receipt"}; console exit ${installation.exitCode ?? "unknown"}. See its output log.`,
+        },
+        probedAt: probedAt(),
+      });
+    if (probed.readiness.state !== "ready") {
+      if (
+        installation &&
+        probed.readiness.state === "refused" &&
+        probed.readiness.step === "installed"
+      )
+        probed.readiness.message = `The installer exited 0 but the installation check failed. ${probed.readiness.message}`;
+      return finish({ ...probed, probedAt: probedAt() });
+    }
     let endpointModels: HarnessModel[] | null = null;
     try {
       if (record.auth.kind === "endpoint")
@@ -718,7 +833,7 @@ export function createProviders(options: ProvidersOptions) {
         );
     } catch (error) {
       if (!(error instanceof Refusal)) throw error;
-      return {
+      return finish({
         readiness: {
           state: "refused",
           step: error.step,
@@ -728,7 +843,7 @@ export function createProviders(options: ProvidersOptions) {
         models: [],
         traits: [],
         probedAt: probedAt(),
-      };
+      });
     }
     return {
       ...probed,
@@ -737,10 +852,10 @@ export function createProviders(options: ProvidersOptions) {
     };
   }
 
-  function probe(record: ProviderRecord): Promise<Provider> {
+  function probe(record: ProviderRecord, installation?: ConsoleResult): Promise<Provider> {
     const running = inFlight.get(record.id);
     if (running) return running;
-    const next = probeRecord(record)
+    const next = probeRecord(record, installation)
       .catch(
         (error): Probed => ({
           readiness: {
@@ -915,7 +1030,12 @@ export function createProviders(options: ProvidersOptions) {
         });
         const closed = (options.openConsole ?? openConsole)(command, childEnv, opened);
         closed
-          .then(() => probe(record))
+          .then(async (result) => {
+            consoles.set(record.harness, result);
+            // A probe started while the console was open cannot certify the completed install.
+            await inFlight.get(record.id);
+            return probe(record, install ? result : undefined);
+          })
           .catch((error) =>
             log.warn(`provider ${record.id} console or re-probe failed: ${String(error)}`),
           );

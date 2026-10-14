@@ -74,14 +74,41 @@ export const endpointFailureSchema = z.object({
 });
 export type EndpointFailure = z.infer<typeof endpointFailureSchema>;
 
+const readinessStepSchema = z.enum(["installed", "signed-in", "endpoint"]);
+/** One sanitized refusal record, shared by the host log and the provider's copyable details. */
+const providerRefusalSchema = z.object({
+  step: readinessStepSchema,
+  message: z.string(),
+  failure: endpointFailureSchema.optional(),
+  candidates: z.array(
+    z.object({ path: z.string(), reason: z.string(), win32Error: z.number().nullable() }),
+  ),
+  resolvedExecutable: z
+    .object({ path: z.string(), realPath: z.string(), size: z.number(), modifiedAt: z.string() })
+    .nullable(),
+  lookup: z
+    .object({ command: z.string(), status: z.number().nullable(), reason: z.string() })
+    .nullable(),
+  console: z
+    .object({
+      exitCode: z.number().nullable(),
+      commandExitCode: z.number().nullable(),
+      logPath: z.string(),
+      outputTail: z.string().max(8192),
+    })
+    .nullable(),
+});
+export type ProviderRefusal = z.infer<typeof providerRefusalSchema>;
+
 /** The first step that stands between the provider and a turn; `unknown` when the probe could not tell. */
 export const readinessSchema = z.discriminatedUnion("state", [
   z.object({ state: z.literal("ready") }),
   z.object({
     state: z.literal("refused"),
-    step: z.enum(["installed", "signed-in", "endpoint"]),
+    step: readinessStepSchema,
     message: z.string(),
     failure: endpointFailureSchema.optional(),
+    detail: providerRefusalSchema.optional(),
   }),
   z.object({ state: z.literal("unknown"), message: z.string() }),
 ]);
