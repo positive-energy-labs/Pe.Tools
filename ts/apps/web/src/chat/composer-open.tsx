@@ -14,21 +14,30 @@ import { PatchBay, useBayReadings } from "#/open/bay";
 
 type Mode = "target" | "open";
 
-export function ComposerOpenMode({ children }: { children: React.ReactNode }) {
+/** `switcher` false hides the mode words (the one-line composer); the ladder keeps its place. */
+export function ComposerOpenMode({
+  switcher,
+  children,
+}: {
+  switcher: boolean;
+  children: React.ReactNode;
+}) {
   const [mode, setMode] = useState<Mode>("target");
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   return (
     <>
       <span ref={setAnchor} className="contents">
-        <Switcher
-          ariaLabel="document mode"
-          value={mode}
-          onChange={setMode}
-          options={[
-            { value: "target", label: "target", title: "the open document this chat runs on" },
-            { value: "open", label: "open", title: "open a document into a Revit first" },
-          ]}
-        />
+        {switcher ? (
+          <Switcher
+            ariaLabel="document mode"
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: "target", label: "target", title: "the open document this chat runs on" },
+              { value: "open", label: "open", title: "open a document into a Revit first" },
+            ]}
+          />
+        ) : null}
       </span>
       {mode === "target" ? children : null}
       <Popover.Root
