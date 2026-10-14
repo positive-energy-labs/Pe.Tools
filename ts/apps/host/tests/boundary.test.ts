@@ -39,8 +39,10 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
   writeFileSync(join(webDir, "a.txt"), "alpha");
 
   const prevLocalAppData = process.env.LOCALAPPDATA;
+  const prevProductHome = process.env.PE_TOOLS_PRODUCT_HOME;
   const prevWebDist = process.env.PE_TOOLS_WEB_DIST;
   process.env.LOCALAPPDATA = localAppData;
+  process.env.PE_TOOLS_PRODUCT_HOME = join(localAppData, "content");
   process.env.PE_TOOLS_WEB_DIST = webDir;
   // appBase is resolved the same way the running host resolves it (LOCALAPPDATA now = temp).
   const appBase = productRoot();
@@ -145,6 +147,17 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     });
     expect(shutdown.status).toBe(200);
 
+    // Host bootstrap config belongs to the fixture's content home, never the user's Documents.
+    expect(
+      await waitFor(async () => {
+        try {
+          return readFileSync(join(localAppData, "content", ".codex", "config.toml"), "utf8");
+        } catch {
+          return null;
+        }
+      }),
+    ).toContain("Written by Pea");
+
     await done; // scope teardown: graceful server close + service-file delete.
 
     expect(await readServiceFile(appBase, hostOwnership.serviceName)).toBeNull();
@@ -154,6 +167,8 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     await done.catch(() => {});
     if (prevLocalAppData === undefined) delete process.env.LOCALAPPDATA;
     else process.env.LOCALAPPDATA = prevLocalAppData;
+    if (prevProductHome === undefined) delete process.env.PE_TOOLS_PRODUCT_HOME;
+    else process.env.PE_TOOLS_PRODUCT_HOME = prevProductHome;
     if (prevWebDist === undefined) delete process.env.PE_TOOLS_WEB_DIST;
     else process.env.PE_TOOLS_WEB_DIST = prevWebDist;
     rmSync(localAppData, { recursive: true, force: true });

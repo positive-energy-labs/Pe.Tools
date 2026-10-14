@@ -8,6 +8,7 @@ import {
 import { hostOwnership } from "./host-ownership.ts";
 import { withInvocationContext, type RequestPrincipal } from "@pe/mcps/context";
 import type { Caller, MachineShare } from "@pe/agent-contracts";
+import { matchPeRoute } from "@pe/agent-contracts/pe-api";
 import {
   admitRequest,
   callerOf,
@@ -31,8 +32,6 @@ export type IdentityResult =
 export interface IdentityOptions {
   readonly port: () => number;
   readonly frontendOrigin: () => string | undefined;
-  /** Wave A seam: resolve its one typed route table to a permission here. */
-  readonly permission?: (path: string, method: string) => RoutePermission;
   readonly share: {
     read(): Promise<MachineShare>;
     observe(result: IdentityResult, path: string, from: string): void;
@@ -88,9 +87,7 @@ export async function readRequestIdentity(
     return { refusal: { code: "identity.path", detail: "Request path cannot be normalized." } };
   }
   const host = headers.host ?? "";
-  const permission = options.permission
-    ? options.permission(pathname, method)
-    : legacyPermission(pathname, method);
+  const permission = requestPermission(pathname, method);
   const origin = headers.origin;
   const refuse = (code: string, detail: string): IdentityResult => ({ refusal: { code, detail } });
   const browser = origin !== undefined || headers["sec-fetch-site"] !== undefined;
@@ -161,7 +158,7 @@ export async function readRequestIdentity(
     if (
       "principal" in result &&
       share.allowRemoteAdministration === false &&
-      (permission === "admin" || (method === "PUT" && pathname.startsWith("/pe/scope/")))
+      (permission === "admin" || permission === "grant")
     )
       result = refuse(
         "identity.remote-administration",
@@ -191,7 +188,6 @@ export async function readRequestIdentity(
         ? refuse(minted.refusal.code, minted.refusal.detail)
         : { ...result, caller: minted.caller };
     if ("principal" in result) {
-      // Replace this resolver with Wave A's table; admitRequest has no route registry of its own.
       try {
         admitRequest(result.caller, permission, `${method} ${pathname}`);
       } catch (error) {
@@ -206,29 +202,16 @@ export async function readRequestIdentity(
   return result;
 }
 
-/** Existing routes until A lands. Method-wide refusal also closes undeclared future write routes. */
-function legacyPermission(path: string, method: string): RoutePermission {
+/** The declared API owns product permissions; protocol and machine lifecycle are separate transports. */
+function requestPermission(path: string, method: string): RoutePermission {
+  const declared = matchPeRoute(method === "HEAD" ? "GET" : method, path);
+  if (declared) return declared.route.permission;
   if (method === "GET" || method === "HEAD" || method === "OPTIONS") return "read";
   if (path === "/mcp") return "mcp";
-  if (path === "/call") return "operation";
   if (path === "/admin/shutdown" || path === "/admin/window") return "service";
-  if (administration(path, method)) return "admin";
-  if (/^\/pe\/threads\/[^/]+\/(?:question|permission)$/.test(path)) return "human";
+  if (method === "POST" && (path === "/host/update" || path === "/host/update/automatic"))
+    return "admin";
   return "caller";
-}
-
-/**
- * One boundary for machine control: human-only, and off for tailnet when remote administration is.
- * HTTP/MCP product operations keep their own normal access.
- */
-function administration(path: string, method: string): boolean {
-  return (
-    (method !== "GET" &&
-      method !== "HEAD" &&
-      (path === "/pe/providers" || path.startsWith("/pe/providers/"))) ||
-    (method === "PUT" && (path === "/pe/access" || path === "/pe/share")) ||
-    (method === "POST" && (path === "/host/update" || path === "/host/update/automatic"))
-  );
 }
 
 /** A global router middleware also covers unmatched/static requests and WebSocket upgrades. */

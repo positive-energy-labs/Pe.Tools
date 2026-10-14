@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { PageTargetReading } from "@pe/agent-contracts";
 import { Button } from "#/components/lang/button";
-import { hostFetch, runtimeStreamUrl } from "#/host/runtime";
+import { runtimeStreamUrl } from "#/host/runtime";
+import { peClient } from "#/host/pe-client";
 import { readPageTarget } from "./client";
 
 /** SPA chrome owns consent. Page code never draws or answers this control. */
@@ -34,7 +35,10 @@ export function PageBindingChip({ slug }: { slug: string }) {
     };
     const events = new EventSource(
       runtimeStreamUrl(
-        `/pages/${encodeURIComponent(slug)}/events?after=${Number.MAX_SAFE_INTEGER}`,
+        peClient.url("page.events", {
+          params: { slug },
+          query: { after: Number.MAX_SAFE_INTEGER },
+        }),
       ),
     );
     events.onopen = () => void fresh();
@@ -58,12 +62,10 @@ export function PageBindingChip({ slug }: { slug: string }) {
     const thread = reading.write.thread;
     setReading(null);
     try {
-      const response = await hostFetch(`/pe/scope/${encodeURIComponent(thread)}/revoke`, {
-        method: "POST",
-      });
+      const response = await peClient.response("scope.revoke", { params: { id: thread } });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
-        setRefusal(body?.refusal?.detail ?? body?.refusal?.reason ?? "rw revoke was refused");
+        setRefusal(body?.error?.message ?? "rw revoke was refused");
         return;
       }
       setVersion((prior) => prior + 1);

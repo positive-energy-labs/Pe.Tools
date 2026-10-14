@@ -54,7 +54,10 @@ test("access-007/008: chrome paints host time, revokes once, and refreshes the b
   });
   fireEvent.click(screen.getByRole("button", { name: "Revoke Page rw" }));
   await waitFor(() =>
-    expect(mocks.fetch).toHaveBeenCalledExactlyOnceWith("/pe/scope/t/revoke", { method: "POST" }),
+    expect(mocks.fetch).toHaveBeenCalledExactlyOnceWith(
+      "/pe/scope/t/revoke",
+      expect.objectContaining({ method: "POST" }),
+    ),
   );
   expect(await screen.findByText("read")).toBeTruthy();
 });

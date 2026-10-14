@@ -15,7 +15,7 @@
  *
  * `find`, `read` and `do` are the same words and keys as Pea's `pe_find`, `pe_read` and `pe_do`. The host knows which
  * page is calling from the page's own path (`pe.page` is the key it minted) and which document from the page's
- * binding, set with the chip in the corner (Bind… opens the picker in the app). A page never names its own origin or
+ * binding, set with the chip in SPA chrome (Bind… opens the picker in the app). A page never names its own origin or
  * target. Reads run on the bound document; a write runs as this page under the binding: a thread binding writes
  * with that thread's rw grant, a pinned document only when it is Pea's own. Anything the host refuses is thrown with
  * the host's words and shown across the top of the page.
@@ -412,7 +412,9 @@
   if (pe.slug && typeof EventSource === "function") {
     const followFiles = () => {
       const events = new EventSource(
-        streamUrl(client.url("page.events", { ...pageInput(), query: { after: Number.MAX_SAFE_INTEGER } })),
+        streamUrl(
+          client.url("page.events", { ...pageInput(), query: { after: Number.MAX_SAFE_INTEGER } }),
+        ),
       );
       events.addEventListener("file", (message) => {
         if (/\.(html|m?js|css)$/i.test(JSON.parse(message.data).path)) location.reload();

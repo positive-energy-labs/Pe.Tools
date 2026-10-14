@@ -103,8 +103,9 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
       return false;
     }
     try {
-      const response = await hostFetch(`${scopeUrl(threadId)}/revoke`, { method: "POST" });
-      const body = await response.json().catch(() => null);
+      const response = await peClient.response("scope.revoke", { params: { id: threadId } });
+      const wire = await response.json().catch(() => null);
+      const body = response.ok ? wire : wire?.error?.details;
       if (attempt !== generation.current) return false;
       peReadings.dirty(request);
       const refused = refusalSchema.safeParse(body?.refusal).data;

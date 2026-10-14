@@ -10,7 +10,7 @@ export const peErrorSchema = z.object({
 const none = z.undefined();
 const object = z.record(z.string(), z.unknown());
 const ok = z.object({ ok: z.boolean() }).passthrough();
-type Principal = "read" | "caller" | "human" | "human-or-pea" | "page";
+type Principal = "read" | "caller" | "human" | "human-or-pea" | "human-or-page";
 export type PeRoutePermission = Principal | "admin" | "grant" | "operation";
 type Owner = "pe" | "threads" | "providers" | "share" | "pages" | "gateway";
 
@@ -563,18 +563,18 @@ export function definePeApi<
       "/pages/:slug/call",
       z.strictObject({ key: z.string().min(1), request: z.unknown().optional() }),
       z.unknown(),
-      "page",
+      "human-or-page",
       "pages",
-      "page",
+      "human-or-page",
     ),
     "page.act": route(
       "POST",
       "/pages/:slug/act",
       z.strictObject({ key: z.string().min(1), input: z.unknown().optional() }),
       object,
-      "page",
+      "human-or-page",
       "pages",
-      "page",
+      "human-or-page",
     ),
     "page.state": route("GET", "/pages/:slug/state", none, object, "read", "pages", "read"),
     "page.append": route(

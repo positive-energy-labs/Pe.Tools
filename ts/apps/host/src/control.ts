@@ -166,17 +166,26 @@ export function callerOf(
 }
 
 export type RoutePermission =
-  | "read"
-  | "caller"
-  | "operation"
-  | "human"
-  | "admin"
+  | import("@pe/host-contracts/pe-api").PeRoutePermission
   | "service"
   | "mcp";
 
-/** Transport admission is independent of document rw admission. Wave A supplies route permission. */
+/** Transport admission consumes the declared permission, independently of document rw admission. */
 export function admitRequest(caller: Caller, permission: RoutePermission, door: string): void {
-  if (!["read", "caller", "operation", "human", "admin", "service", "mcp"].includes(permission))
+  if (
+    ![
+      "read",
+      "caller",
+      "operation",
+      "human",
+      "admin",
+      "grant",
+      "human-or-pea",
+      "human-or-page",
+      "service",
+      "mcp",
+    ].includes(permission)
+  )
     throw refuse(
       "permission.undeclared",
       door,
@@ -201,6 +210,22 @@ export function admitRequest(caller: Caller, permission: RoutePermission, door: 
       "grant.context-cannot-hold",
       door,
       `Refused at ${door}: external MCP is read-only until human pairing exists.`,
+    );
+  if (
+    (permission === "grant" || permission === "human-or-pea") &&
+    caller.kind !== "human" &&
+    caller.kind !== "pea"
+  )
+    throw refuse(
+      "human.only",
+      door,
+      `Refused at ${door}: only a human or Pea may select a binding.`,
+    );
+  if (permission === "human-or-page" && caller.kind !== "page" && caller.kind !== "human")
+    throw refuse(
+      "page.binding-not-yours",
+      door,
+      `Refused at ${door}: only a Page or human may use this binding.`,
     );
 }
 

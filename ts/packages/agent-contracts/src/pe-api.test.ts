@@ -46,6 +46,7 @@ describe("the declared host door", () => {
   it("access-084: administration and grant policy are declared on the route", () => {
     expect(peRoutes["provider.login"].permission).toBe("admin");
     expect(peRoutes["scope.set"].permission).toBe("grant");
+    expect(peRoutes["page.act"].principal).toBe("human-or-page");
   });
 });
 

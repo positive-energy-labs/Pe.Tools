@@ -1,6 +1,7 @@
 import { expect, test } from "vite-plus/test";
 import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
+import { peRoutes } from "@pe/agent-contracts/pe-api";
 import {
   admitRequest,
   mintBrowserContext,
@@ -26,6 +27,49 @@ const options: IdentityOptions = {
   },
 };
 const local = { host: "127.0.0.1:5180", "x-pe-runtime-service": hostOwnership.serviceName };
+
+test.each(Object.entries(peRoutes).filter(([, route]) => route.method !== "GET"))(
+  "access-041/085: anonymous declared write %s is refused before routing",
+  async (_id, route) => {
+    const path = route.path.replace(/:[\w]+/g, "fixture");
+    expect(await readRequestIdentity(local, path, options, route.method)).toMatchObject({
+      refusal: { code: "context.missing" },
+    });
+  },
+);
+
+test("the table's human read and consent requirements are enforced at admission", async () => {
+  expect(
+    await readRequestIdentity(local, "/pe/route-state/families/salvage", options),
+  ).toMatchObject({
+    refusal: { code: "context.missing" },
+  });
+  const token = mintContext({ kind: "pea", thread: "t" });
+  try {
+    expect(
+      await readRequestIdentity(
+        { ...local, "x-pe-context": token },
+        "/pe/scope/t/revoke",
+        options,
+        "POST",
+      ),
+    ).toMatchObject({
+      refusal: { code: "human.only" },
+    });
+    expect(
+      await readRequestIdentity(
+        { ...local, origin: "http://127.0.0.1:5180", referer: "http://127.0.0.1:5180/pages/p/" },
+        "/pe/pages/p/binding",
+        options,
+        "PUT",
+      ),
+    ).toMatchObject({
+      refusal: { code: "human.only" },
+    });
+  } finally {
+    retireContext(token);
+  }
+});
 
 test("access-085: an omitted route permission fails closed even for a human", () => {
   expect(() =>
