@@ -37,10 +37,11 @@ internal sealed class TrayContext : ApplicationContext {
     private readonly ToolStripMenuItem _openWindow = new("Installation unavailable") { Enabled = false };
     /** The window shows as a notice card, not the panel: no focus, card height, the page hides it. */
     private bool _card;
-    private readonly NoticeInbox _inbox = new();
+    private readonly NoticeInbox _inbox;
 
     public TrayContext(TrayLaunch launch, ServiceRecord service, Process parent) {
         _launch = launch;
+        _inbox = new NoticeInbox(NoticeCursor.Load(NoticeCursorPath(launch)), id => NoticeCursor.Save(NoticeCursorPath(launch), id));
         _service = service;
         _parent = parent;
         // No route asked for: a predecessor tray that went away with its host left where the person was.
@@ -138,13 +139,15 @@ internal sealed class TrayContext : ApplicationContext {
         PostNativeMessage(new { type = "notice", notice = (object?)null });
     }
 
-    /** The host's notice feed (`/host/notices`, SSE): each `data:` line is one card item. */
+    private static string NoticeCursorPath(TrayLaunch launch) => Path.Combine(ProductRuntimeLayout.ForCurrentUser().RootPath, $"tray-notices-{launch.ProfileKey}.cursor");
+
+    /** The host's `notices` Reading (SSE) from the saved cursor: each `data:` line is one frame of the log. */
     private async Task ReadNoticesAsync() {
         using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         while (!_stop.IsCancellationRequested && !_retired) {
             try {
                 var service = _service;
-                using var request = new HttpRequestMessage(HttpMethod.Get, service.Origin + "/host/notices");
+                using var request = new HttpRequestMessage(HttpMethod.Get, service.Origin + "/pe/resources?" + NoticeInbox.StreamQuery(_inbox.Received));
                 request.Headers.Add(TokenHeader, service.Token);
                 using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, _stop.Token);
                 if (response.IsSuccessStatusCode)

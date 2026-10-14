@@ -3,36 +3,21 @@
  * view owns no URL (the pane and its focus live in the Chat URL) and draws no document picker (the
  * target is the thread head's). Opening, switching or closing the pane is not a turn event.
  */
-import { useEffect, useState, type ContextType, type ReactNode } from "react";
+import {
+  Suspense,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ContextType,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 
-import { LiveScheduleGridWorkspace } from "#/route/schedules/live";
-import { FamilyRouteView } from "#/family/live";
 import { ChatFocus, ChatHosted, ChatPlanIntent } from "#/route/situation-ladder";
 import { HostedChrome } from "#/route/hosted-chrome";
 import { SurfaceInset } from "#/components/lang/surface";
-import { PodsRouteContent } from "#/routes/pods";
-import { FamiliesRouteContent } from "#/routes/families";
-import { ParameterLinksRouteContent } from "#/routes/parameter-links";
-import { TakeoffsPane } from "#/takeoff/pane";
-import { OpenPage } from "#/open/route";
-import { RoomsRoute } from "#/rooms/route";
+import { publicRoutes } from "#/route/builtin-routes";
 import type { ChatPluginRoute } from "./chat-plugins";
-
-type View = (props: { thread: string; visible: boolean }) => ReactNode;
-
-const views: Record<ChatPluginRoute, View> = {
-  instances: () => <OpenPage />,
-  takeoffs: ({ thread }) => <TakeoffsPane thread={thread} />,
-  family: ({ thread }) => <FamilyRouteView thread={thread} url={false} />,
-  families: ({ thread, visible }) => (
-    <FamiliesRouteContent thread={thread} visible={visible} surface="chat" />
-  ),
-  pods: ({ thread }) => <HostedPods thread={thread} />,
-  "parameter-links": ({ thread }) => <ParameterLinksRouteContent thread={thread} />,
-  schedules: ({ thread }) => <LiveScheduleGridWorkspace framed url={false} thread={thread} />,
-  rooms: () => <HostedRooms />,
-};
 
 /**
  * Every route opened on this page stays mounted; the pane only moves the open one into view.
@@ -49,6 +34,7 @@ export function useChatPluginHost(
   /** Close and focus controls; the open route draws them in its own head. */
   chrome: ReactNode = null,
 ) {
+  useSyncExternalStore(publicRoutes.subscribe, publicRoutes.revision, publicRoutes.revision);
   const [homes, setHomes] = useState<ReadonlyMap<ChatPluginRoute, HTMLElement>>(new Map());
   // Created after mount: the server renders no portals, and a portal's home must outlive the pane.
   useEffect(() => {
@@ -58,19 +44,22 @@ export function useChatPluginHost(
       setHomes(new Map(homes).set(plugin, home));
     }
   }, [plugin, homes]);
-  const home = plugin ? homes.get(plugin) : undefined;
+  const home = plugin && publicRoutes.get(plugin) ? homes.get(plugin) : undefined;
   const slot = (element: HTMLElement | null) => {
     if (element && home && element.firstChild !== home) element.replaceChildren(home);
   };
   const kept = [...homes].map(([route, element]) => {
-    const View = views[route];
+    const View = publicRoutes.get(route)?.hosted;
+    if (!View) return null;
     return createPortal(
       <ChatHosted.Provider value>
         <ChatPlanIntent.Provider value={intent?.route === route ? intent : null}>
           <ChatFocus.Provider value={route === plugin ? focus : null}>
             <HostedChrome.Provider value={route === plugin ? chrome : null}>
               <SurfaceInset.Provider value={false}>
-                <View thread={thread} visible={route === plugin && open} />
+                <Suspense fallback={<span>Loading route?</span>}>
+                  <View thread={thread} visible={route === plugin && open} />
+                </Suspense>
               </SurfaceInset.Provider>
             </HostedChrome.Provider>
           </ChatFocus.Provider>
@@ -81,14 +70,4 @@ export function useChatPluginHost(
     );
   });
   return { slot, kept };
-}
-
-function HostedRooms() {
-  const [layers, setLayers] = useState("");
-  return <RoomsRoute focus="" layers={layers} setLayers={setLayers} url={false} />;
-}
-
-function HostedPods({ thread }: { thread: string }) {
-  const [ref, select] = useState<{ pod?: string; path?: string }>({});
-  return <PodsRouteContent {...ref} thread={thread} select={select} />;
 }

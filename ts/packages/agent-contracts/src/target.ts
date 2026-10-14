@@ -175,7 +175,8 @@ export const headGrantSchema = z.strictObject({
   lifetime: documentRefSchema,
   /** Host clock at the human PUT that stamped it. */
   grantedAt: z.iso.datetime(),
-  grantedVia: z.enum(["local", "tailnet", "cli"]),
+  grantedVia: z.enum(["local", "tailnet", "cli", "lan", "ssh"]),
+  grantedDevice: z.string().optional(),
   /** Authenticated tailnet login that performed this grant; never supplied by the PUT body. */
   grantedLogin: z.string().optional(),
   /** Host-written: max(grantedAt, lastHumanMessageAt) + 60 min. */

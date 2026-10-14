@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { hostDescriptorSchema } from "./host-descriptor.ts";
+import { deviceListingSchema, deviceSessionSchema, pairingSchema } from "./remote-device.ts";
+export * from "./remote-device.ts";
 
 export const peErrorSchema = z.object({
   error: z.object({
@@ -12,8 +14,8 @@ const none = z.undefined();
 const object = z.record(z.string(), z.unknown());
 const ok = z.object({ ok: z.boolean() }).passthrough();
 type Principal = "read" | "caller" | "human" | "human-or-pea" | "human-or-page";
-export type PeRoutePermission = Principal | "admin" | "grant" | "operation";
-type Owner = "pe" | "threads" | "providers" | "share" | "pages" | "gateway";
+export type PeRoutePermission = Principal | "admin" | "grant" | "operation" | "pair";
+type Owner = "pe" | "threads" | "providers" | "share" | "pages" | "gateway" | "plugins";
 
 function route<const P extends string, B extends z.ZodType, O extends z.ZodType>(
   method: "GET" | "POST" | "PUT" | "DELETE",
@@ -61,6 +63,8 @@ export function definePeApi<
     | "harnessThreadSummarySchema"
     | "harnessThreadBodySchema"
     | "harnessEventSchema"
+    | "threadExportSchema"
+    | "pluginStatusSchema"
     | "promptRequestSchema"
     | "turnStateSchema"
     | "queueRequestSchema"
@@ -87,6 +91,7 @@ export function definePeApi<
   >,
 >(schemas: S) {
   const accessSchema = schemas.accessSchema as S["accessSchema"];
+  const pluginStatusSchema = schemas.pluginStatusSchema as S["pluginStatusSchema"];
   const addProviderRequestSchema =
     schemas.addProviderRequestSchema as S["addProviderRequestSchema"];
   const providerSchema = schemas.providerSchema as S["providerSchema"];
@@ -267,6 +272,33 @@ export function definePeApi<
       "providers",
       "admin",
     ),
+    "plugins.list": route(
+      "GET",
+      "/pe/plugins",
+      none,
+      z.array(pluginStatusSchema),
+      "read",
+      "plugins",
+      "read",
+    ),
+    "plugin.update": route(
+      "PUT",
+      "/pe/plugins/:id",
+      z.strictObject({ enabled: z.boolean() }),
+      z.array(pluginStatusSchema),
+      "human",
+      "plugins",
+      "admin",
+    ),
+    "plugin.remove": route(
+      "DELETE",
+      "/pe/plugins/:id",
+      none,
+      z.array(pluginStatusSchema),
+      "human",
+      "plugins",
+      "admin",
+    ),
     "threads.list": route(
       "GET",
       "/pe/threads",
@@ -293,6 +325,16 @@ export function definePeApi<
       "read",
       "threads",
       "read",
+    ),
+    "thread.export": route(
+      "GET",
+      "/pe/threads/:id/export",
+      none,
+      schemas.threadExportSchema,
+      "read",
+      "threads",
+      "read",
+      "asset",
     ),
     "thread.update": route(
       "PUT",
@@ -567,6 +609,56 @@ export function definePeApi<
       "human",
       "share",
       "admin",
+    ),
+    "device.list": route(
+      "GET",
+      "/pe/share/devices",
+      none,
+      deviceListingSchema,
+      "human",
+      "share",
+      "admin",
+    ),
+    "device.pair": route(
+      "POST",
+      "/pe/share/pair",
+      z.strictObject({ audience: z.enum(["browser", "mcp"]) }),
+      pairingSchema,
+      "human",
+      "share",
+      "admin",
+    ),
+    "device.revoke": route("DELETE", "/pe/share/devices/:id", none, ok, "human", "share", "admin"),
+    "device.bind": route(
+      "PUT",
+      "/pe/share/devices/:id",
+      z.strictObject({ thread: z.string().min(1).nullable() }),
+      ok,
+      "human",
+      "share",
+      "admin",
+    ),
+    "device.claim": route(
+      "POST",
+      "/pe/pair",
+      z.strictObject({ code: z.string().min(1).max(80), label: z.string().trim().min(1).max(80) }),
+      z.strictObject({
+        environmentId: z.uuid(),
+        session: deviceSessionSchema,
+        token: z.string().optional(),
+      }),
+      "read",
+      "gateway",
+      "pair",
+    ),
+    "device.environment": route(
+      "GET",
+      "/pe/environment",
+      none,
+      z.strictObject({ environmentId: z.uuid(), paired: z.boolean(), local: z.boolean() }),
+      "read",
+      "gateway",
+      "read",
     ),
     "page.target": route("GET", "/pages/:slug/target", none, object, "read", "pages", "read"),
     "page.call": route(

@@ -1,23 +1,19 @@
-import { RouteShell, emptyManifest } from "#/route";
+import { RouteShell, defineRoute } from "#/route";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { VariantE } from "#/param-tables/variants/variant-e";
 
-/** Round-one winner. The search parser remains so existing URLs keep their shape. */
-/** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
-const manifest = emptyManifest("param-tables", "Param Tables");
+export const manifest = defineRoute({
+  key: "param-tables",
+  name: "Param Tables",
+  docs: "The selected parameter-table workspace. Edit linked engineering data in the table and inspect its synthetic product states.",
+  views: [{ key: "workspace", label: "Parameter workspace", draws: () => <VariantE /> }],
+});
 
 function RouteShelledVariantE() {
-  return (
-    <RouteShell manifest={manifest}>
-      <VariantE />
-    </RouteShell>
-  );
+  return <RouteShell manifest={manifest}>{manifest.views![0]!.draws({ readings: {} })}</RouteShell>;
 }
 
 export const Route = createFileRoute("/param-tables")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    variant: typeof search.variant === "string" ? search.variant : "e",
-  }),
   component: RouteShelledVariantE,
 });

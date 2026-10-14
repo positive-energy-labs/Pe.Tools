@@ -5,7 +5,7 @@
  * spans. Math in `duct/math.ts` and `duct/ductulator.ts`, each pinned by its test.
  */
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 
 import { FactChip } from "@pe/kit/lang/chip";
 import { Input } from "@pe/kit/lang/input";
@@ -15,21 +15,21 @@ import { DuctCharts } from "#/duct/charts";
 import { FACES, type FaceKey } from "#/duct/ductulator";
 import { Ductulator } from "#/duct/wheel";
 import { type DuctInput, materials, solve } from "#/duct/math";
-import { RouteShell, emptyManifest } from "#/route";
+import { RouteShell, useRoute, urlPage } from "#/route";
 
-const manifest = emptyManifest("duct-loss", "Duct Loss");
+import { ductLossManifest as manifest } from "#/route/surface-manifests";
+const url = urlPage(manifest)!;
 
 export const Route = createFileRoute("/duct-loss")({
-  component: () => (
-    <RouteShell manifest={manifest}>
-      <DuctLossRoute />
-    </RouteShell>
-  ),
+  validateSearch: url.read,
+  search: { middlewares: [...url.middlewares] },
+  component: DuctLossRoute,
 });
 
 const fmt = (n: number, d = 2) => n.toLocaleString(undefined, { maximumFractionDigits: d });
 
-const selectClass = "hairline h-(--control-h) w-full rounded-md px-2 t-prose";
+const selectClass =
+  "hairline h-(--control-h) w-full rounded-md px-2 t-prose";
 
 function Field({ label, unit, children }: { label: string; unit?: string; children: ReactNode }) {
   return (
@@ -84,20 +84,14 @@ f   = f'                  if f' ≥ 0.018
 Dₑ  = 1.30 (ab)^0.625 / (a + b)^0.25           Huebscher`;
 
 function DuctLossRoute() {
-  const [d, setD] = useState<DuctInput>({
-    shape: "round",
-    a: 12,
-    b: 8,
-    cfm: 1000,
-    length: 100,
-    roughness: materials["galvanized steel"],
-    density: 0.075,
-  });
-  const set = (p: Partial<DuctInput>) => setD((x) => ({ ...x, ...p }));
+  const handle = useRoute(manifest, { target: null });
+  const [d, setPage] = handle.page;
+  const set = (patch: Partial<DuctInput>) => setPage(patch);
   const r = solve(d);
   const knownMaterial = Object.values<number>(materials).includes(d.roughness);
   const wheelDiameter = d.shape === "round" ? d.a : r.equivalentDiameter;
-  const [faceKey, setFaceKey] = useState<FaceKey>("commercial");
+  const faceKey = d.face;
+  const setFaceKey = (face: FaceKey) => setPage({ face });
   const face = FACES[faceKey];
   const pick = (next: { cfm?: number; diameter?: number }) =>
     set({
@@ -109,118 +103,128 @@ function DuctLossRoute() {
     });
 
   return (
-    <Surface>
-      <div className="flex flex-wrap justify-center gap-(--gutter)">
-        <div className="aspect-square h-[min(85vh,52rem)] max-w-full">
-          <Ductulator
-            face={face}
-            diameter={wheelDiameter}
-            cfm={d.cfm}
-            onDiameter={(a) => set({ shape: "round", a })}
-            onCfm={(cfm) => set({ cfm: Math.round(cfm) })}
-          />
-        </div>
-        <div className="flex w-80 flex-col gap-(--gutter)">
-          <Switcher
-            ariaLabel="wheel face"
-            value={faceKey}
-            onChange={setFaceKey}
-            options={[
-              {
-                value: "commercial",
-                label: "commercial",
-                title: "3 to 60 in, 30 to 100k cfm, up to 10 in. wg",
-              },
-              {
-                value: "residential",
-                label: "residential",
-                title: "4 to 20 in, 20 to 2000 cfm, up to 1 in. wg; wider pitch, finer read",
-              },
-            ]}
-          />
-          <section className="flex flex-col gap-2">
-            <h2 className="t-prose font-medium">Duct</h2>
-            <Field label="shape">
-              <select
-                className={selectClass}
-                value={d.shape}
-                onChange={(e) => set({ shape: e.target.value as DuctInput["shape"] })}
-              >
-                <option value="round">round</option>
-                <option value="rect">rectangular</option>
-              </select>
-            </Field>
-            <Field label={d.shape === "round" ? "diameter" : "width"} unit="in">
-              <Num value={d.a} onChange={(a) => set({ a })} />
-            </Field>
-            {d.shape === "rect" && (
-              <Field label="height" unit="in">
-                <Num value={d.b} onChange={(b) => set({ b })} />
+    <RouteShell manifest={manifest} handle={handle}>
+      <Surface>
+        <div className="flex flex-wrap justify-center gap-(--gutter)">
+          <div className="aspect-square h-[min(85vh,52rem)] max-w-full">
+            <Ductulator
+              face={face}
+              diameter={wheelDiameter}
+              cfm={d.cfm}
+              onDiameter={(a) => set({ shape: "round", a })}
+              onCfm={(cfm) => set({ cfm: Math.round(cfm) })}
+            />
+          </div>
+          <div className="flex w-80 flex-col gap-(--gutter)">
+            <Switcher
+              ariaLabel="wheel face"
+              value={faceKey}
+              onChange={setFaceKey}
+              options={[
+                {
+                  value: "commercial",
+                  label: "commercial",
+                  title: "3 to 60 in, 30 to 100k cfm, up to 10 in. wg",
+                },
+                {
+                  value: "residential",
+                  label: "residential",
+                  title: "4 to 20 in, 20 to 2000 cfm, up to 1 in. wg; wider pitch, finer read",
+                },
+              ]}
+            />
+            <section className="flex flex-col gap-2">
+              <h2 className="t-prose font-medium">Duct</h2>
+              <Field label="shape">
+                <select
+                  className={selectClass}
+                  value={d.shape}
+                  onChange={(e) => set({ shape: e.target.value as DuctInput["shape"] })}
+                >
+                  <option value="round">round</option>
+                  <option value="rect">rectangular</option>
+                </select>
               </Field>
-            )}
-            <Field label="airflow" unit="cfm">
-              <Num value={d.cfm} onChange={(cfm) => set({ cfm })} step={10} />
-            </Field>
-            <Field label="length" unit="ft">
-              <Num value={d.length} onChange={(length) => set({ length })} />
-            </Field>
-            <Field label="material">
-              <select
-                className={selectClass}
-                value={String(d.roughness)}
-                onChange={(e) => set({ roughness: Number(e.target.value) })}
-              >
-                {Object.entries(materials).map(([k, v]) => (
-                  <option key={k} value={v}>
-                    {k}
-                  </option>
-                ))}
-                {!knownMaterial && <option value={d.roughness}>custom</option>}
-              </select>
-            </Field>
-            <Field label="roughness ε" unit="ft">
-              <Num value={d.roughness} onChange={(roughness) => set({ roughness })} step={0.0001} />
-            </Field>
-            <Field label="density ρ" unit="lb/ft³">
-              <Num value={d.density} onChange={(density) => set({ density })} step={0.001} />
-            </Field>
-          </section>
+              <Field label={d.shape === "round" ? "diameter" : "width"} unit="in">
+                <Num value={d.a} onChange={(a) => set({ a })} />
+              </Field>
+              {d.shape === "rect" && (
+                <Field label="height" unit="in">
+                  <Num value={d.b} onChange={(b) => set({ b })} />
+                </Field>
+              )}
+              <Field label="airflow" unit="cfm">
+                <Num value={d.cfm} onChange={(cfm) => set({ cfm })} step={10} />
+              </Field>
+              <Field label="length" unit="ft">
+                <Num value={d.length} onChange={(length) => set({ length })} />
+              </Field>
+              <Field label="material">
+                <select
+                  className={selectClass}
+                  value={String(d.roughness)}
+                  onChange={(e) => set({ roughness: Number(e.target.value) })}
+                >
+                  {Object.entries(materials).map(([k, v]) => (
+                    <option key={k} value={v}>
+                      {k}
+                    </option>
+                  ))}
+                  {!knownMaterial && <option value={d.roughness}>custom</option>}
+                </select>
+              </Field>
+              <Field label="roughness ε" unit="ft">
+                <Num
+                  value={d.roughness}
+                  onChange={(roughness) => set({ roughness })}
+                  step={0.0001}
+                />
+              </Field>
+              <Field label="density ρ" unit="lb/ft³">
+                <Num value={d.density} onChange={(density) => set({ density })} step={0.001} />
+              </Field>
+            </section>
 
-          <section className="flex flex-col gap-2">
-            <h2 className="t-prose font-medium">Loss</h2>
-            <div className="flex flex-wrap gap-1.5 pb-1">
-              <FactChip title="Friction loss over the entered length">
-                Δp {fmt(r.loss, 3)} in. wg
-              </FactChip>
-              <FactChip title="Friction loss per 100 ft, the friction-chart number">
-                {fmt(r.lossPer100, 3)} in. wg / 100 ft
-              </FactChip>
-            </div>
-            <Out label="velocity V" value={fmt(r.velocity, 0)} unit="fpm" />
-            <Out label="area A" value={fmt(r.area, 3)} unit="ft²" />
-            <Out label="hydraulic diameter Dₕ" value={fmt(r.hydraulicDiameter, 2)} unit="in" />
-            {d.shape === "rect" && (
-              <Out label="equivalent diameter Dₑ" value={fmt(r.equivalentDiameter, 2)} unit="in" />
-            )}
-            <Out label="Reynolds Re" value={fmt(r.reynolds, 0)} />
-            <Out label="friction factor f" value={fmt(r.friction, 4)} />
+            <section className="flex flex-col gap-2">
+              <h2 className="t-prose font-medium">Loss</h2>
+              <div className="flex flex-wrap gap-1.5 pb-1">
+                <FactChip title="Friction loss over the entered length">
+                  Δp {fmt(r.loss, 3)} in. wg
+                </FactChip>
+                <FactChip title="Friction loss per 100 ft, the friction-chart number">
+                  {fmt(r.lossPer100, 3)} in. wg / 100 ft
+                </FactChip>
+              </div>
+              <Out label="velocity V" value={fmt(r.velocity, 0)} unit="fpm" />
+              <Out label="area A" value={fmt(r.area, 3)} unit="ft²" />
+              <Out label="hydraulic diameter Dₕ" value={fmt(r.hydraulicDiameter, 2)} unit="in" />
+              {d.shape === "rect" && (
+                <Out
+                  label="equivalent diameter Dₑ"
+                  value={fmt(r.equivalentDiameter, 2)}
+                  unit="in"
+                />
+              )}
+              <Out label="Reynolds Re" value={fmt(r.reynolds, 0)} />
+              <Out label="friction factor f" value={fmt(r.friction, 4)} />
 
-            <h2 className="t-prose pt-(--gutter) font-medium">Formula</h2>
-            <pre className="hairline face-mono t-prose rounded-md p-3 whitespace-pre-wrap text-ink">
-              {formula}
-            </pre>
-            <p className="t-prose text-ink-2">
-              ASHRAE Fundamentals, Duct Design: Darcy friction with the Altshul-Tsal factor. L in
-              ft, D in inches, ε in ft, ρ in lb/ft³. The wheel reads the friction-chart power law
-              0.109136·Q^1.9/D^5.02 for galvanized duct and standard air, as the SMACNA Ductulator
-              does; it runs up to a tenth above the Altshul-Tsal figure.
-            </p>
-          </section>
+              <h2 className="t-prose pt-(--gutter) font-medium">Formula</h2>
+              <pre className="hairline face-mono t-prose rounded-md p-3 whitespace-pre-wrap text-ink">
+                {formula}
+              </pre>
+              <p className="t-prose text-ink-2">
+                ASHRAE Fundamentals, Duct Design: Darcy friction with the Altshul-Tsal factor. L in
+                ft, D in inches, ε in ft, ρ in lb/ft³. The wheel reads the friction-chart power law
+                0.109136·Q^1.9/D^5.02 for galvanized duct and standard air, as the SMACNA Ductulator
+                does; it runs up to a tenth above the Altshul-Tsal figure.
+              </p>
+            </section>
+          </div>
         </div>
-      </div>
-      <div className="pt-(--gutter)">
-        <DuctCharts face={face} cfm={d.cfm} diameter={wheelDiameter} onPick={pick} />
-      </div>
-    </Surface>
+        <div className="pt-(--gutter)">
+          <DuctCharts face={face} cfm={d.cfm} diameter={wheelDiameter} onPick={pick} />
+        </div>
+      </Surface>
+    </RouteShell>
   );
 }

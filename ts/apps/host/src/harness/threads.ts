@@ -62,6 +62,7 @@ import {
 import { HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
 import {
   currentCaller,
+  callerThread,
   emitRevoke,
   grantExpiry,
   grantDead,
@@ -77,6 +78,8 @@ import { z } from "zod";
 import type { HostLog } from "../host-log.ts";
 import { openAdapter, stopChild } from "./adapter.ts";
 import { accessModes, isAuthRefusal, sessionOffer, type Providers } from "./providers.ts";
+import type { PluginHookName, PluginHooks } from "@pe/agent-contracts";
+import { exportThread } from "../thread-export.ts";
 
 /** The thread wire of ADR 0015; contract and route list in `@pe/agent-contracts` `harness-thread.ts`. */
 
@@ -163,6 +166,7 @@ export type HarnessThreadsOptions = {
   log: HostLog;
   /** Called only after the transcript owner commits this fact. No prompt or tool text is exported. */
   receiptFact?: (threadId: string, title: string, event: HarnessEvent) => void;
+  pluginHook?: <N extends PluginHookName>(name: N, event: PluginHooks[N]) => Promise<void>;
 };
 
 /** A turn with no session update for this long gets a `waiting` marker, and again each period. */
@@ -609,6 +613,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
               lifetime: target.ref,
               grantedAt: new Date(now).toISOString(),
               grantedVia: caller.via,
+              ...(caller.device ? { grantedDevice: caller.device } : {}),
               ...(caller.login ? { grantedLogin: caller.login } : {}),
               expiresAt: grantExpiry(now),
               revoked: null,
@@ -879,6 +884,10 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     writeMeta(t);
     t.session = state;
     append(t, { kind: "session", state, acpSessionId: session.sessionId });
+    await options.pluginHook?.("harness.session.started", {
+      threadId: t.meta.id,
+      sessionId: session.sessionId,
+    });
     live = { conn, sessionId: session.sessionId, configOptions };
     const notReapplied = (what: string) => (error: unknown) =>
       void append(t, {
@@ -966,6 +975,13 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     t.live = null;
     t.session = "closed";
     t.retiring = stopChild(child)
+      .then(async () => {
+        if (child && t.meta.acpSessionId)
+          await options.pluginHook?.("harness.session.stopped", {
+            threadId: t.meta.id,
+            sessionId: t.meta.acpSessionId,
+          });
+      })
       .catch((error) => warn(`harness ${t.meta.id} did not stop: ${String(error)}`))
       .finally(() => {
         t.retiring = null;
@@ -981,6 +997,11 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     clearIdle(t);
     await t.retiring;
     await stopChild(t.child);
+    if (t.child && t.meta.acpSessionId)
+      await options.pluginHook?.("harness.session.stopped", {
+        threadId: t.meta.id,
+        sessionId: t.meta.acpSessionId,
+      });
   }
 
   function scheduleIdle(t: Thread) {
@@ -1108,7 +1129,10 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       ...(mentions ? { mentions } : {}),
     });
     arm(t);
+    let outcome = "failed";
     try {
+      await options.prepare?.();
+      await options.pluginHook?.("turn.before", { threadId: t.meta.id, turnId });
       if (!t.live) append(t, { kind: "starting", turnId });
       const live = await ensure(t);
       const refeed = t.refeed;
@@ -1125,6 +1149,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         ),
       });
       append(t, { kind: "turn_end", turnId, stopReason: result.stopReason });
+      outcome = result.stopReason;
     } catch (error) {
       // A stopped thread's open turn is ended by restart recovery, not by "connection closed".
       if (!t.stopped) {
@@ -1145,6 +1170,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       }
     }
     disarm(t);
+    await options.pluginHook?.("turn.after", { threadId: t.meta.id, turnId, outcome });
     t.running = null;
     scheduleIdle(t);
     drain(t);
@@ -1298,7 +1324,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       const named = declared.params.id;
       // `self` is the caller's own thread: a pea context's, bound at spawn. No thread string travels.
       const self = named === "self";
-      const threadId = self ? (caller.kind === "pea" ? caller.thread : null) : (named ?? "");
+      const threadId = self ? callerThread(caller) : (named ?? "");
       const door = url.pathname;
       if (!threadId)
         return json(
@@ -1377,6 +1403,15 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     switch (key) {
       case "thread.get":
         return json(body(t));
+      case "thread.export":
+        try {
+          return exportThread(options.root, t.meta.id, options.log);
+        } catch (error) {
+          return json(
+            { error: error instanceof Error ? error.message : "Thread export failed" },
+            422,
+          );
+        }
       case "thread.update": {
         const change = await input(updateThreadRequestSchema);
         const state = activity(t);

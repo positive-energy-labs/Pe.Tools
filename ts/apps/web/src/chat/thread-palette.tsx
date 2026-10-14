@@ -7,6 +7,7 @@ import {
   ChevronRight,
   CircleCheck,
   Copy,
+  Download,
   GitFork,
   ListFilter,
   Mail,
@@ -41,6 +42,8 @@ import { Kbd } from "#/components/lang/kbd";
 import { Button } from "@pe/kit/lang/button";
 import { ProviderMark } from "#/components/lang/provider-mark";
 import { useSurfaceHost } from "#/navigation/surface-host";
+import { peClient } from "#/host/pe-client";
+import { readPeError } from "@pe/host-contracts/pe-api";
 import "./thread-navigation.css";
 import type { StoredThreadSummary } from "#/workbench/provider";
 import { isReady } from "#/workbench/provider/providers";
@@ -276,6 +279,29 @@ function ThreadActions({
           },
         ]
       : []),
+    {
+      id: "export",
+      label: "Download transcript",
+      icon: Download,
+      group: "  ",
+      refusal: oneThreadRefusal("Export", count),
+      run: () => {
+        void (async () => {
+          const response = await peClient.response("thread.export", { params: { id: thread.id } });
+          if (!response.ok) throw Error((await readPeError(response)).message);
+          const url = URL.createObjectURL(await response.blob());
+          const link = document.createElement("a");
+          link.href = url;
+          link.download =
+            /filename="([^"]+)"/.exec(response.headers.get("content-disposition") ?? "")?.[1] ??
+            `${thread.id}.json`;
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        })().catch((error: unknown) =>
+          setFailure(error instanceof Error ? error.message : "Could not export this thread"),
+        );
+      },
+    },
     {
       id: "copy",
       label: "Copy",

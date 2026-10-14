@@ -14,6 +14,7 @@ import {
 } from "./packages.ts";
 import { productUserContentRootPath } from "./product-paths.ts";
 import { BridgeError } from "./bridge.ts";
+import { requirePackageEnabled } from "./package-lifecycle.ts";
 
 export function requireScriptSuccess(value: unknown): void {
   const status = value && typeof value === "object" && "status" in value ? value.status : undefined;
@@ -40,6 +41,20 @@ export async function freezeScript(
     const sourceBundle = structuredClone(
       input.sourceBundle,
     ) as ScriptingExecute.Req.ScriptPodSourceBundle;
+    const manifest = sourceBundle.files?.find((file) => file.path === "pod.json");
+    if (manifest) {
+      let id: unknown;
+      try {
+        id = JSON.parse(
+          Buffer.from(manifest.bytesBase64, "base64")
+            .toString("utf8")
+            .replace(/^\uFEFF/, ""),
+        ).id;
+      } catch {
+        /* Native preparation owns malformed manifest refusal. */
+      }
+      if (typeof id === "string") await requirePackageEnabled(id);
+    }
     const bounds = scriptPodMemberBounds;
     let sourceTotal = 0;
     let sourceCount = 0;

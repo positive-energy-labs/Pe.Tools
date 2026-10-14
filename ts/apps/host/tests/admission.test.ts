@@ -28,15 +28,16 @@ const options: IdentityOptions = {
 };
 const local = { host: "127.0.0.1:5180", "x-pe-runtime-service": hostOwnership.serviceName };
 
-test.each(Object.entries(peRoutes).filter(([, route]) => route.method !== "GET"))(
-  "access-041/085: anonymous declared write %s is refused before routing",
-  async (_id, route) => {
-    const path = route.path.replace(/:[\w]+/g, "fixture");
-    expect(await readRequestIdentity(local, path, options, route.method)).toMatchObject({
-      refusal: { code: "context.missing" },
-    });
-  },
-);
+test.each(
+  Object.entries(peRoutes).filter(
+    ([, route]) => route.method !== "GET" && route.permission !== "pair",
+  ),
+)("access-041/085: anonymous declared write %s is refused before routing", async (_id, route) => {
+  const path = route.path.replace(/:[\w]+/g, "fixture");
+  expect(await readRequestIdentity(local, path, options, route.method)).toMatchObject({
+    refusal: { code: "context.missing" },
+  });
+});
 
 test("the table's human read and consent requirements are enforced at admission", async () => {
   expect(
@@ -176,4 +177,12 @@ test.each(["question", "permission"])("access-048/049: Pea cannot answer %s", as
   } finally {
     retireContext(token);
   }
+});
+
+test("pairing is the sole declared unauthenticated handshake mutation", () => {
+  expect(
+    Object.entries(peRoutes)
+      .filter(([, route]) => route.permission === "pair")
+      .map(([id]) => id),
+  ).toEqual(["device.claim"]);
 });

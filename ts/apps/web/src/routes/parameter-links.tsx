@@ -31,7 +31,7 @@ import {
 } from "#/parameter-links/model";
 import { ReviewRow, type CellWire } from "#/components/work/band";
 import { previousOf } from "#/readings";
-import { RouteShell, useRoute } from "#/route";
+import { RouteShell, useRoute, urlPage } from "#/route";
 import { Situation } from "#/route/situation";
 import { LadderPicker, useDocumentLadder } from "#/route/situation-ladder";
 import type { Reading } from "@pe/agent-contracts";
@@ -49,7 +49,8 @@ import { manifest } from "#/parameter-links/manifest";
  */
 export const parameterLinksSearch = (
   search: Record<string, unknown>,
-): { thread?: string; demo?: string } => ({
+): { thread?: string; demo?: string; view?: "links" | "plan" } => ({
+  ...urlPage(manifest)!.read(search),
   thread:
     typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
   demo: typeof search.demo === "string" && search.demo.trim() ? search.demo.trim() : undefined,
@@ -57,6 +58,7 @@ export const parameterLinksSearch = (
 
 export const Route = createFileRoute("/parameter-links")({
   validateSearch: parameterLinksSearch,
+  search: { middlewares: [...urlPage(manifest)!.middlewares] },
   component: ParameterLinksRoute,
 });
 
@@ -78,7 +80,7 @@ function ParameterLinksRoute() {
 
 /** No seeds: `parameter-links` has no demo lane (spec §7). `?demo=` is inert here. */
 export function ParameterLinksRouteContent({ thread }: { thread?: string } = {}) {
-  const route = useRoute(manifest, { thread });
+  const route = useRoute(manifest, { thread, url: thread === undefined });
   const ladder = useDocumentLadder(route);
   const peaActive = useContext(WorkbenchContext)?.isRunning ?? false;
   const resolved = route.resolution.kind === "resolved" ? route.resolution.target : null;

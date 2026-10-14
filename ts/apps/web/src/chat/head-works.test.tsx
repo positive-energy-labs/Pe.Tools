@@ -5,10 +5,65 @@ import { address, readingKey } from "@pe/agent-contracts";
 
 import { peReadings } from "#/readings";
 import { useHeadWorks } from "./head-works";
+import { publicRoutes } from "#/route/builtin-routes";
+import { defineRoutePlugin } from "#/route/registry";
+import { manifest as roomsManifest } from "#/rooms/manifest";
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+});
+
+test("a Work-bearing route registered after mount joins the head and disposal removes it", () => {
+  const next = new Map<string, Parameters<typeof peReadings.subscribe>[1]>();
+  vi.spyOn(peReadings, "subscribe").mockImplementation((request, emit) => {
+    if (request.kind === "work" && request.route === "runtime-rooms")
+      next.set(readingKey(request), emit);
+    return () => {};
+  });
+  const { result } = renderHook(() =>
+    useHeadWorks(address("C:/Models/Dynamic.rvt"), "Dynamic model", {
+      open: vi.fn(),
+      planIn: vi.fn(),
+    }),
+  );
+  let remove: (() => void | Promise<void>) | undefined;
+  try {
+    act(() => {
+      remove = publicRoutes.register(
+        defineRoutePlugin({
+          manifest: {
+            ...roomsManifest,
+            key: "runtime-rooms",
+            name: "Runtime rooms",
+            work: { ...roomsManifest.work!, route: "runtime-rooms", title: "Runtime rooms" },
+          },
+          hosted: () => null,
+        }),
+      );
+    });
+    expect(next.size).toBe(1);
+    act(() => {
+      for (const [key, emit] of next)
+        emit({
+          kind: "snapshot",
+          key,
+          value: {
+            revision: 1,
+            doc: { edits: { '["room1","name"]': { proposal: { value: "Office" } } } },
+          },
+        } as never);
+    });
+    expect(result.current.some((work) => work.route === "Runtime rooms")).toBe(true);
+    act(() => {
+      void remove?.();
+    });
+    expect(result.current.some((work) => work.route === "Runtime rooms")).toBe(false);
+  } finally {
+    act(() => {
+      void remove?.();
+    });
+  }
 });
 
 test("F-H6-5: a families scope proposal shows in the head as its own Families group", () => {

@@ -10,6 +10,8 @@ import { ThreadDialog, ThreadsSidebar } from "./thread-palette";
 afterEach(cleanup);
 
 const surface = vi.hoisted(() => ({ value: "web" }));
+const exportResponse = vi.hoisted(() => vi.fn());
+vi.mock("#/host/pe-client", () => ({ peClient: { response: exportResponse } }));
 vi.mock("#/navigation/surface-host", () => ({
   useSurfaceHost: () => ({ surface: surface.value }),
 }));
@@ -18,6 +20,34 @@ afterEach(() => {
 });
 
 const threads = () => demoThreads({ ...emptyChatState(), id: "open", title: "Open" });
+
+test("the thread action menu offers its durable transcript download", async () => {
+  const bytes = '{"kind":"pea-thread","sources":[]}\n';
+  const blob = new Blob([bytes], { type: "application/json" });
+  exportResponse.mockResolvedValue({
+    ok: true,
+    headers: new Headers({ "content-disposition": 'attachment; filename="thread-pinned.json"' }),
+    blob: async () => blob,
+  });
+  const create = vi.fn(() => "blob:thread-export");
+  const previousCreate = URL.createObjectURL;
+  URL.createObjectURL = create;
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "Actions for Draft the BIM handoff notes" }));
+  try {
+    fireEvent.click(await screen.findByText("Download transcript"));
+    await waitFor(() => expect(click).toHaveBeenCalledOnce());
+    expect(exportResponse).toHaveBeenCalledWith("thread.export", {
+      params: { id: threads().find((t) => t.title === "Draft the BIM handoff notes")!.id },
+    });
+    expect(create).toHaveBeenCalledWith(blob);
+    expect((click.mock.instances[0] as HTMLAnchorElement).download).toBe("thread-pinned.json");
+  } finally {
+    click.mockRestore();
+    URL.createObjectURL = previousCreate;
+  }
+});
 
 function mount(
   onUpdate = vi.fn(async (_id: string, _change: UpdateThreadRequest) => true),

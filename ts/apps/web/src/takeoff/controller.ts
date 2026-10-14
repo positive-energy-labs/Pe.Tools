@@ -256,6 +256,7 @@ export function useTakeoffsController(options: {
   };
 }) {
   const handle = useRoute(manifest, {
+    url: false,
     target: options.target ? (options.target as never) : null,
     ...(options.work !== undefined ? { work: options.work } : {}),
     ...(options.thread ? { thread: options.thread } : {}),

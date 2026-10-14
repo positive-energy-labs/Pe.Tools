@@ -45,10 +45,18 @@ export function skillSnapshot(packageId: string, name: string, files: SkillFile[
   };
 }
 
+export function builtinPeaSkillSnapshots(): SkillSnapshot[] {
+  return bundledPeaSkills.map((s) => {
+    const bytes = Buffer.from(`${s.content.trimEnd()}\n`);
+    return skillSnapshot("product", s.name, [{ path: "SKILL.md", bytes, sha256: hash(bytes) }]);
+  });
+}
+
 /** Personal roots are adapters of Skills/, not competing writable skill registries. */
 export async function publishPeaSkills(
   options: SkillPublicationOptions,
   packaged: readonly SkillSnapshot[] = [],
+  builtins: readonly SkillSnapshot[] = builtinPeaSkillSnapshots(),
 ): Promise<SkillPublication> {
   const capture = async (directory: string) => {
     const admitted = await options.captureDirectory(directory);
@@ -58,10 +66,7 @@ export async function publishPeaSkills(
   };
   const home = resolvePeaProductHomePath(options);
   const roots = resolvePeaSkillPaths(options);
-  const bundled = bundledPeaSkills.map((s) => {
-    const bytes = Buffer.from(`${s.content.trimEnd()}\n`);
-    return skillSnapshot("product", s.name, [{ path: "SKILL.md", bytes, sha256: hash(bytes) }]);
-  });
+  const bundled = builtins;
   const canonicalRoot = join(home, "Skills");
   const personal = new Map<string, SkillFile[]>();
   const notices: string[] = [];

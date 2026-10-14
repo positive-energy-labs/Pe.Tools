@@ -67,6 +67,7 @@ export const manifest = defineRoute<
     receipts: { kind: "receipts", target: { session: "", openId: "" } },
   } as never,
   page: takeoffPageSchema,
+  url: ["work", "level", "zone", "room", "demo"],
   stages: [
     { key: "adopt", word: "Adopting zones" },
     { key: "audit", word: "Auditing rooms" },
