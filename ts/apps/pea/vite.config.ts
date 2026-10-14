@@ -1,4 +1,5 @@
 import { defineConfig } from "vite-plus";
+import { receiptBuildDefines } from "../host/src/build-stamp.ts";
 
 export default defineConfig({
   pack: {
@@ -6,6 +7,9 @@ export default defineConfig({
     outDir: "dist-installed/bundle",
     clean: ["dist-installed"],
     shims: true,
+    define: {
+      __PE_SOURCE_COMMIT__: receiptBuildDefines("release").__PE_SOURCE_COMMIT__,
+    },
     deps: {
       alwaysBundle: [/./],
       onlyBundle: false,

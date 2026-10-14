@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { address, emptyThreadHead, type ThreadHead } from "@pe/agent-contracts";
+import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { createPeaMcpServer } from "../src/server.ts";
 import { bundledPeaSkills } from "../src/pea/skills.ts";
 import { peaAgentInstructions } from "../src/pea/instructions.ts";
@@ -71,7 +72,15 @@ test("one MCP connection discovers session and target changes without startup co
       const content = result.content as Array<{ text: string }>;
       return JSON.parse(content[0]!.text);
     };
-    expect(await discover()).toMatchObject({ target: null, revision: 0, machine });
+    const first = await discover();
+    expect(first).toMatchObject({
+      target: null,
+      revision: 0,
+      machine,
+      source: { dirty: expect.any(Boolean) },
+    });
+    expect(first.source.root).toBe(checkoutRootFrom(import.meta.dirname));
+    expect(first.source.sha).toMatch(/^[0-9a-f]{40}$/);
     machine = machineFixture([{ session: "s1", documents: null }]);
     expect(await discover()).toMatchObject({ target: null, machine });
     for (const [index, openId] of ["a", "b"].entries()) {

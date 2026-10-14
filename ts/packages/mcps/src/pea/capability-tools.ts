@@ -71,6 +71,7 @@ import { HostRpcCaller, type ResolvedTarget } from "../shared/host-rpc-caller.ts
 import type { RevitCatalogLoadedFamilies } from "@pe/host-contracts/generated";
 import { coerceJsonObject } from "../shared/coerce.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
+import { peSourceTree } from "./source-tree.ts";
 
 function base(): string {
   // Hosted tools inherit the authority already admitted by the host middleware.
@@ -189,6 +190,7 @@ export const peFind = createTool({
         machine: catalog.machine,
         defaultDocument: targetDocument(target),
         sources: catalog.sources,
+        source: peSourceTree(),
         diagnostics: catalog.diagnostics,
         map: capabilityMap(offered),
         hint: "Query pe_find for rows. pe_read runs a row that does not mutate; pe_do runs authorized actions through the host grant check. Reads need no grant. Writes target Pea's own lifetimes or the granted head; external MCP clients cannot hold rw in this release. defaultDocument is read live per call. Op target overrides affect one call only. Session work accepts SDK id-or-pid selection; host work needs no document. target_set selects only Pea's own documents for later calls.",
