@@ -167,11 +167,6 @@ export async function exportPage(input: PageExportInput) {
 const exported = JSON.parse(document.getElementById("pe-export").textContent);
 const pe = { exported, page: exported.page, doc: exported.document, kitReady: null };
 pe.describe = () => {};
-pe.target = async (...selector) => {
-  if (selector.length) throw Error("An exported snapshot cannot select another document");
-  if (!pe.doc) throw Error("This snapshot has no document reading");
-  return pe.doc;
-};
 ${kernelSource}
 pe.state = async (k) => { k.replay(exported.snapshot === null ? exported.events.map(row => row.event) : [], exported.snapshot ?? k.base); return k; };
 window.pe = pe;
