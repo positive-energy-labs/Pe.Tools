@@ -46,7 +46,9 @@ describe("the declared host door", () => {
   it("access-084: administration and grant policy are declared on the route", () => {
     expect(peRoutes["provider.login"].permission).toBe("admin");
     expect(peRoutes["plugin.update"].permission).toBe("admin");
-    expect(peRoutes["plugin.remove"].permission).toBe("admin");
+    // One capability, one path: turning a Pod off is plugin.update; there is no DELETE door.
+    expect("plugin.remove" in peRoutes).toBe(false);
+    expect(matchPeRoute("DELETE", "/pe/plugins/pod:sample")).toBeUndefined();
     expect(peRoutes["plugins.list"].permission).toBe("read");
     expect(peRoutes["thread.export"].permission).toBe("read");
     expect(peRoutes["scope.set"].permission).toBe("grant");

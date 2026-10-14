@@ -392,7 +392,6 @@ test("remote administration Off denies only machine-control mutations, including
     ["POST", "/pe/providers/x/open-login"],
     ["PUT", "/pe/access"],
     ["PUT", peRouteUrl("plugin.update", { params: { id: "pod:sample" } })],
-    ["DELETE", peRouteUrl("plugin.remove", { params: { id: "pod:sample" } })],
     ["POST", "/host/update"],
     ["POST", "/pe/%70roviders"],
     ["POST", "/pe//providers"],

@@ -34,10 +34,8 @@ export function createPluginsHandler(
     const id = declared.params.id;
     if (!content.lifecycle.inventory().some((p) => p.id === id))
       return json({ error: "Unknown plugin" }, 404);
-    // DELETE is disable: a Pod's folder is the user's, and only its activation is host state.
-    const enabled =
-      request.method === "PUT" &&
-      peRoutes["plugin.update"].body.parse(await request.json()).enabled;
+    // A Pod's folder is the user's; only its activation is host state, and PUT is its one door.
+    const { enabled } = peRoutes["plugin.update"].body.parse(await request.json());
     await content.lifecycle.setEnabled(id, enabled);
     await content.read();
     await routes.list();

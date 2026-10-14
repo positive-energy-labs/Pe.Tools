@@ -48,15 +48,11 @@ function host() {
       sent.push(`update ${id} ${enabled}`);
       return set(id, enabled);
     },
-    remove: (id) => {
-      sent.push(`remove ${id}`);
-      return set(id, false);
-    },
   };
   return { client, sent };
 }
 
-test("each Pod switches through plugin.update and removes through plugin.remove only after it asks", async () => {
+test("the switch is the one way to turn a Pod off: plugin.update, no Remove, and it names the route that goes", async () => {
   const { client, sent } = host();
   render(<PodPlugins pods={pods} client={client} />);
   const snowdon = await screen.findByRole("switch", { name: "Snowdon Circuits" });
@@ -64,17 +60,12 @@ test("each Pod switches through plugin.update and removes through plugin.remove 
   expect(screen.getByRole("switch", { name: "Duct tools" }).getAttribute("aria-checked")).toBe(
     "false",
   );
+  expect(screen.queryByRole("button", { name: /remove/i })).toBeNull();
+  expect(
+    screen.getByTitle(/serves its route Voltage Drop\. Off: the folder stays in Pods/),
+  ).toBeTruthy();
 
   fireEvent.click(snowdon);
   await waitFor(() => expect(sent).toEqual(["update pod:snowdon-circuits false"]));
-
-  fireEvent.click(screen.getByRole("button", { name: "Remove Snowdon Circuits" }));
-  // Remove asks first: nothing is sent until the armed strip commits, and it names the route.
-  expect(sent).toHaveLength(1);
-  expect(screen.getByText(/route Voltage Drop goes away/)).toBeTruthy();
-  expect(screen.getByText(/folder stays in Pods/)).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: /^remove$/i }));
-  await waitFor(() =>
-    expect(sent).toEqual(["update pod:snowdon-circuits false", "remove pod:snowdon-circuits"]),
-  );
+  await waitFor(() => expect(snowdon.getAttribute("aria-checked")).toBe("false"));
 });

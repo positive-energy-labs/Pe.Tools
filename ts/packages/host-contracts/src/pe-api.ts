@@ -395,15 +395,6 @@ export function definePeApi<
       "plugins",
       "admin",
     ),
-    "plugin.remove": route(
-      "DELETE",
-      "/pe/plugins/:id",
-      none,
-      z.array(pluginStatusSchema),
-      "human",
-      "plugins",
-      "admin",
-    ),
     "threads.list": route(
       "GET",
       "/pe/threads",
