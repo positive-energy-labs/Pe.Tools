@@ -132,9 +132,15 @@ export async function resumeThread(id: string) {
   const body = await peClient.call("thread.get", { params: { id } });
   const turn = [...body.events].reverse().find((event) => event.kind === "prompt");
   if (turn?.kind !== "prompt") throw new Error("This thread has no turn to resume.");
+  // A resumed turn is a new prompt: it gets its own id, like every composer send.
   await peClient.call("thread.prompt", {
     params: { id },
-    body: { text: turn.text, attachments: turn.attachments, mentions: turn.mentions },
+    body: {
+      id: crypto.randomUUID(),
+      text: turn.text,
+      attachments: turn.attachments,
+      mentions: turn.mentions,
+    },
   });
 }
 

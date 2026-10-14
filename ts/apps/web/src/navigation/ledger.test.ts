@@ -27,6 +27,6 @@ test("Resume re-sends the turn the host restart cut off, attachments and mention
   await resumeThread("cut");
   expect(call).toHaveBeenLastCalledWith("thread.prompt", {
     params: { id: "cut" },
-    body: { text: "size the duct", attachments, mentions: undefined },
+    body: { id: expect.any(String), text: "size the duct", attachments, mentions: undefined },
   });
 });
