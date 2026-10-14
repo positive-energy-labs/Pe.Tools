@@ -74,7 +74,7 @@ import {
   machineSources,
   useHostMachine,
 } from "./machine.ts";
-import { bindControl, currentCaller, routeActorOf } from "./control.ts";
+import { bindControl, callerThread, currentCaller, routeActorOf } from "./control.ts";
 import { bindRevoke } from "./revoke.ts";
 import { hostActionJournal, hostLog } from "./gateway-owner.ts";
 import type { HostLog } from "./host-log.ts";
@@ -109,6 +109,7 @@ import { receiptQuerySchema } from "@pe/agent-contracts";
 import {
   hostReceiptExport,
   createThreadReceiptAdapter,
+  type AgentReportContext,
   type ReceiptExport,
 } from "./receipt-export.ts";
 import { createNotices } from "./notices.ts";
@@ -126,12 +127,15 @@ export interface PeRoutesOptions {
   /** Wraps every served Reading, Work included, e.g. with the host's document change mark. */
   markReadings?: (observe: ResourceObserver) => ResourceObserver;
   telemetry?: ReceiptExport;
+  /** The running turn and harness behind a thread, for an agent report's stamps. */
+  reportContext?: (thread: string) => AgentReportContext | null;
   /** The host log `log.read` pages; the host's own when absent. */
   log?: HostLog;
 }
 
 const feedbackSchema = peRoutes["feedback.submit"].body;
 const diagnosticsSchema = peRoutes["diagnostics.submit"].body;
+const agentFeedbackSchema = peRoutes["agent-feedback.submit"].body;
 const applyBody = peRoutes["work.apply"].body;
 const commandBody = peRoutes["work.command"].body;
 
@@ -281,6 +285,24 @@ export function createPeRoutes(options: PeRoutesOptions) {
     }
     if (method === "GET" && declared.id === "resources.stream")
       return resourceResponse(request, observe);
+    // Agent feedback (owner ruling 2026-10-14): any admitted caller may file; the host stamps it.
+    if (method === "POST" && declared.id === "agent-feedback.submit") {
+      const parsed = agentFeedbackSchema.safeParse(await body());
+      if (!parsed.success) return json({ error: "invalid agent feedback" }, 400);
+      const thread = callerThread(caller);
+      try {
+        return json(
+          await (options.telemetry ?? hostReceiptExport()).submitAgentFeedback(
+            parsed.data,
+            caller.kind,
+            thread,
+            thread ? (options.reportContext?.(thread) ?? null) : null,
+          ),
+        );
+      } catch {
+        return json({ error: "Agent feedback could not be kept locally" }, 503);
+      }
+    }
     if (
       method === "POST" &&
       (declared.id === "feedback.submit" ||
@@ -893,6 +915,7 @@ export function makeHostPeRoutes(
       hostObserve(request, publish, after),
     markReadings: markReadings(documentMarks(bridge)),
     telemetry,
+    reportContext: threads.reportContext,
   });
   bindActionWorkspace(routes.workspace);
   sweepClosedDocuments(bridge, routes.workspace);
