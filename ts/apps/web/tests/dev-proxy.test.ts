@@ -3,7 +3,60 @@ import { EventEmitter } from "node:events";
 import type { IncomingMessage } from "node:http";
 import { hostProcessIdentity, sourceHostServiceName } from "@pe/host-contracts/service-identity";
 import { checkoutRoot } from "../checkout-paths.ts";
-import { devHostProxy, isCheckoutRequest } from "../dev-proxy.ts";
+import { checkoutIngress, devHostProxy, isCheckoutRequest } from "../dev-proxy.ts";
+
+test("access-053/036: dev SPA navigation forwards the host's minted cookie; Page iframes never mint", async () => {
+  const fetch = vi.fn(
+    async () =>
+      new Response(null, {
+        status: 302,
+        headers: { "set-cookie": "pe-browser-owner=host-minted; HttpOnly" },
+      }),
+  );
+  vi.stubGlobal("fetch", fetch);
+  vi.stubEnv(hostProcessIdentity.hostBaseUrlVariable, "http://127.0.0.1:5180");
+  const use = vi.fn();
+  const plugin = checkoutIngress();
+  if (typeof plugin.configureServer !== "function") throw Error("missing ingress");
+  await plugin.configureServer.call({} as never, { middlewares: { use } } as never);
+  const middleware = use.mock.calls[0]![0];
+  const response = { setHeader: vi.fn(), end: vi.fn() };
+  const next = vi.fn();
+  const request = {
+    method: "GET",
+    url: "/pea",
+    socket: { localPort: 8123 },
+    headers: {
+      host: "127.0.0.1:8123",
+      accept: "text/html",
+      "sec-fetch-mode": "navigate",
+      "sec-fetch-dest": "document",
+    },
+  };
+  try {
+    await middleware(request, response, next);
+    expect(response.setHeader).toHaveBeenCalledWith(
+      "set-cookie",
+      "pe-browser-owner=host-minted; HttpOnly",
+    );
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(next).toHaveBeenCalledTimes(1);
+    fetch.mockClear();
+    await middleware(
+      {
+        ...request,
+        url: "/pages/probe/",
+        headers: { ...request.headers, "sec-fetch-dest": "iframe" },
+      },
+      response,
+      next,
+    );
+    expect(fetch).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  }
+});
 
 test("same-checkout no-Revit host is distinct; foreign configured owner refuses", () => {
   try {
