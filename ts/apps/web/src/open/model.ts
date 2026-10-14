@@ -282,6 +282,9 @@ export function launchPlan(
   else if (target && executionRefusal(target.row)) refusal = executionRefusal(target.row);
   else if (target && phaseOf(target.row) !== "ready")
     refusal = `Revit ${year} pid ${pidOf(target.row)} is ${phaseOf(target.row)}; it opens nothing until it answers.`;
+  else if (doc?.cloud && pea)
+    refusal =
+      "A cloud copy requires an explicit immutable APS version. Version selection is not available here yet.";
   else if (
     doc?.openIn &&
     !pea &&
@@ -312,7 +315,7 @@ export function launchPlan(
     cautions.push({
       tone: "pea",
       text: doc.cloud
-        ? "Pea gets a detached copy. Nothing reaches central."
+        ? "An immutable APS version is required before Pea can acquire a cloud copy."
         : "Pea works on a copy in its own folder; your file is untouched.",
     });
   if (doc && detach && !pea)

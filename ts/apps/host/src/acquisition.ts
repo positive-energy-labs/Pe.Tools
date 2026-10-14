@@ -276,7 +276,8 @@ export const processWhose = (acquisitions: readonly Acquisition[], process: Acqu
     ? ("pea" as const)
     : ("you" as const);
 
-type NativeFacts = Pick<SessionDocument, "isWorkshared" | "isDetached">;
+type NativeFacts = Pick<SessionDocument, "isWorkshared" | "isDetached"> &
+  Partial<Pick<SessionDocument, "isCloud">>;
 
 /**
  * Why one SDK document is not natively certified independent, or null when it is: not workshared,
@@ -303,7 +304,10 @@ export function acquiredOpenIds(
     const document = each.document;
     if (each.state !== "held" || !document || !sameProcess(document.process, process)) continue;
     const sdk = sdkDocuments?.filter((doc) => doc.openId === document.sdkOpenId) ?? [];
-    const independent = sdk.length === 1 && unindependent(sdk[0]!) === null;
+    const independent =
+      sdk.length === 1 &&
+      unindependent(sdk[0]!) === null &&
+      (each.intent.document?.origin.kind !== "version-copy" || sdk[0]!.isCloud === false);
     const product = productOpenIds.filter((openId) => openId === document.sdkOpenId);
     if (independent && product.length === 1) owned.set(product[0]!, each.id);
   }

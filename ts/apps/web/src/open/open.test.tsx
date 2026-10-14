@@ -192,11 +192,10 @@ describe("launch plan", () => {
       rows,
     );
     expect(pea.verb).toBe("Give Pea a copy in a new background Revit 2025");
-    expect(pea.launch).toMatchObject({
-      input: { into: { start: { year: "2025", owner: "pea" } }, detach: true },
-    });
+    expect(pea.launch).toBeNull();
+    expect(pea.refusal).toContain("immutable APS version");
     expect(pea.cautions.map((caution) => caution.text)).toContain(
-      "Pea gets a detached copy. Nothing reaches central.",
+      "An immutable APS version is required before Pea can acquire a cloud copy.",
     );
   });
 
@@ -300,6 +299,21 @@ describe("launch plan", () => {
       },
     ])
       expect(modelRows([held], [different])[0]!.openIn).toBeNull();
+  });
+
+  test("a cloud copy refuses in Open until an immutable version can be selected", () => {
+    const cloud: DocRow = {
+      ...rows[0]!,
+      key: "cloud-version",
+      selector: "cld://US/{p}/{m}Tower.rvt",
+      title: "Tower",
+      cloud: true,
+      savedYear: 2025,
+      openIn: null,
+    };
+    const plan = launchPlan({ ...EMPTY_DRAFT, doc: cloud.key, target: PEA_25 }, world, [cloud]);
+    expect(plan.refusal).toContain("immutable APS version");
+    expect(plan.launch).toBeNull();
   });
 });
 

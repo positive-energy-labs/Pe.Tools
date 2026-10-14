@@ -1,10 +1,10 @@
-import { afterEach, expect, test, vi } from "vite-plus/test";
+import { afterEach, expect, test } from "vite-plus/test";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { instancesLaunchSchema } from "@pe/agent-contracts";
-import { planAcquisition } from "../src/acquisition.ts";
+import { acquiredOpenIds, foldAcquisitions, planAcquisition } from "../src/acquisition.ts";
 import { downloadCloudVersion } from "../src/cloud-version.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { admitInstancesAction } from "../src/instances-actions.ts";
@@ -80,13 +80,19 @@ const resource = {
   },
 };
 function apsResponses(body = resource) {
-  return vi
-    .fn<typeof fetch>()
-    .mockResolvedValueOnce(Response.json(body))
-    .mockResolvedValueOnce(
-      Response.json({ status: "complete", url: "https://storage.example/model" }),
-    )
-    .mockResolvedValueOnce(new Response("immutable-version-seven"));
+  const responses = [
+    Response.json(body),
+    Response.json({ status: "complete", url: "https://storage.example/model" }),
+    new Response("immutable-version-seven"),
+  ];
+  const calls: Array<Parameters<typeof fetch>> = [];
+  const request: typeof fetch = async (...args) => {
+    calls.push(args);
+    const response = responses.shift();
+    if (!response) throw Error("Unexpected APS request");
+    return response;
+  };
+  return Object.assign(request, { calls });
 }
 
 test("APS download validates immutable lineage, hashes exact bytes and never sends the bearer to storage", async () => {
@@ -102,9 +108,9 @@ test("APS download validates immutable lineage, hashes exact bytes and never sen
     bytes: 23,
     sha256: createHash("sha256").update("immutable-version-seven").digest("hex"),
   });
-  expect(request.mock.calls[0]![0]).toContain(encodeURIComponent(version.versionId));
-  expect(request.mock.calls[0]![1]!.headers).toEqual({ authorization: "Bearer test-bearer" });
-  expect(request.mock.calls[2]![1]!.headers).toBeUndefined();
+  expect(request.calls[0]![0]).toContain(encodeURIComponent(version.versionId));
+  expect(request.calls[0]![1]!.headers).toEqual({ authorization: "Bearer test-bearer" });
+  expect(request.calls[2]![1]!.headers).toBeUndefined();
   await expect(
     downloadCloudVersion(source, version, to, {
       token: async () => "test-bearer",
@@ -123,7 +129,7 @@ test("a changed version or model identity refuses before download and allocation
   await expect(
     downloadCloudVersion(source, version, to, { token: async () => "test-bearer", fetch: request }),
   ).rejects.toThrow("lineage");
-  expect(request).toHaveBeenCalledTimes(1);
+  expect(request.calls).toHaveLength(1);
   await expect(readFile(to)).rejects.toMatchObject({ code: "ENOENT" });
 });
 
@@ -214,6 +220,16 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
     result: { version, storageId: resource.data.relationships.storage.data.id },
   });
   expect(calls.filter((args) => args[0] === "doc")).toHaveLength(1);
+  const acquisitions = foldAcquisitions(await owner.list());
+  const native = { openId: "e".repeat(32), isWorkshared: false, isDetached: true };
+  for (const isCloud of [null, true, undefined])
+    expect(
+      acquiredOpenIds(acquisitions, row.process, [{ ...native, isCloud }], [native.openId]).size,
+    ).toBe(0);
+  expect(
+    acquiredOpenIds(acquisitions, row.process, [{ ...native, isCloud: false }], [native.openId])
+      .size,
+  ).toBe(1);
 });
 
 test("version acquisition never substitutes a reload, a template, a local source, or unverified links", () => {
