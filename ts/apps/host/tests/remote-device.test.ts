@@ -1,3 +1,4 @@
+import "./device-test-home.ts";
 import { expect, test } from "vite-plus/test";
 import {
   readRequestIdentity,
@@ -35,6 +36,28 @@ const options: IdentityOptions = {
   },
 };
 const remote = { host: "box.tailabc.ts.net", "tailscale-user-login": "person@example.com" };
+
+test("pairing uses eight unambiguous characters and expires at two minutes", () => {
+  let now = Date.now();
+  const devices = createDevices(undefined, () => now);
+  const pairing = devices.pair("browser");
+  expect(Date.parse(pairing.expiresAt) - now).toBe(120_000);
+  expect(pairing.code).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
+  now += 120_000;
+  expect(() => devices.claim(pairing.code, "Laptop", "lan")).toThrow("device.pairing");
+});
+
+test("five wrong attempts exhaust a code across transports, including the correct sixth attempt", () => {
+  const devices = createDevices();
+  const pairing = devices.pair("browser");
+  for (let index = 0; index < 5; index++)
+    expect(() => devices.claim("WRONG", "Laptop", index % 2 ? "ssh" : "lan")).toThrow(
+      "device.pairing",
+    );
+  expect(() => devices.claim(pairing.code, "Laptop", "tailnet")).toThrow("attempt");
+  const renewed = devices.pair("browser");
+  expect(devices.claim(renewed.code.toLowerCase(), "Laptop", "lan").session.label).toBe("Laptop");
+});
 
 test("a dedicated SSH ingress cannot claim local human authority by changing Host", async () => {
   expect(

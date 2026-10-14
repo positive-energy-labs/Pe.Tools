@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
@@ -16,6 +16,7 @@ const persistedSchema = z.strictObject({
   sessions: z.array(deviceSessionSchema.extend({ digest: z.string() })),
 });
 const digest = (token: string) => createHash("sha256").update(token).digest("hex");
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 export const DEVICE_COOKIE = `pe-device-${hostOwnership.serviceName}`;
 const denied = (code: "device.unpaired" | "device.revoked" | "device.pairing", reason: string) =>
   new Refused({
@@ -31,7 +32,7 @@ export function createDevices(path?: string, now = () => Date.now()) {
     path && existsSync(path)
       ? persistedSchema.parse(JSON.parse(readFileSync(path, "utf8")))
       : { environmentId: randomUUID(), sessions: [] as Array<DeviceSession & { digest: string }> };
-  let pending: (Pairing & { digest: string }) | undefined;
+  let pending: (Pairing & { digest: string; attempts: number }) | undefined;
   const save = (next: typeof state) => {
     if (path) {
       mkdirSync(dirname(path), { recursive: true });
@@ -58,23 +59,34 @@ export function createDevices(path?: string, now = () => Date.now()) {
       sessions: state.sessions.map(publicSession),
     }),
     pair(audience: "browser" | "mcp"): Pairing {
-      const code = randomBytes(16).toString("hex").match(/.{4}/g)!.join("-");
+      const code = Array.from(
+        { length: 8 },
+        () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)],
+      ).join("");
       const pairing = {
         environmentId: state.environmentId,
         code,
         audience,
-        expiresAt: new Date(now() + 5 * 60_000).toISOString(),
+        expiresAt: new Date(now() + 2 * 60_000).toISOString(),
       };
-      pending = { ...pairing, code: "", digest: digest(code) };
+      pending = { ...pairing, code: "", digest: digest(code), attempts: 0 };
       return pairing;
     },
     claim(code: string, label: string, transport: DeviceTransport, login?: string) {
-      if (
-        !pending ||
-        pending.digest !== digest(code.trim()) ||
-        Date.parse(pending.expiresAt) <= now()
-      )
+      if (!pending || Date.parse(pending.expiresAt) <= now())
         throw denied("device.pairing", "Pairing code is invalid, used, replaced, or expired.");
+      // One budget across all addresses and transports. Only a host human can replace it.
+      if (pending.attempts >= 5)
+        throw denied("device.pairing", "Too many attempts. Ask the host for a new pairing code.");
+      if (pending.digest !== digest(code.trim().toUpperCase().replace(/[\s-]/g, ""))) {
+        pending.attempts++;
+        throw denied(
+          "device.pairing",
+          pending.attempts >= 5
+            ? "Too many attempts. Ask the host for a new pairing code."
+            : "Pairing code is incorrect.",
+        );
+      }
       const token = randomBytes(32).toString("base64url");
       const session = deviceSessionSchema.parse({
         id: randomUUID(),

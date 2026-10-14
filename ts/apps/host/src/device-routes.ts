@@ -3,7 +3,7 @@ import { HttpEffect, HttpRouter } from "effect/unstable/http";
 import { peRoutes, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { invocationContext } from "@pe/runtime/context";
 import { DEVICE_COOKIE, type Devices } from "./remote-device.ts";
-import { threadHead, Refused } from "./control.ts";
+import { threadHead, live, Refused } from "./control.ts";
 
 export const deviceRoutes = (devices: Devices) =>
   HttpRouter.use((router) =>
@@ -30,7 +30,31 @@ export const deviceRoutes = (devices: Devices) =>
                     paired: !!context?.device,
                     local: context?.principal?.kind === "local" && !context.device,
                   });
-                if (id === "device.list") return Response.json(devices.list());
+                if (id === "device.list") {
+                  const listing = devices.list();
+                  return Response.json({
+                    ...listing,
+                    sessions: listing.sessions.map((session) => {
+                      const head = session.thread ? threadHead(session.thread) : null;
+                      const grant = head?.grant;
+                      const rw = !!(
+                        session.thread &&
+                        head &&
+                        grant &&
+                        !session.revokedAt &&
+                        Date.parse(session.expiresAt) > Date.now() &&
+                        !live({
+                          kind: "grant",
+                          device: session.id,
+                          thread: session.thread,
+                          headRevision: head.revision,
+                          lifetime: grant.lifetime,
+                        })
+                      );
+                      return { ...session, rw };
+                    }),
+                  });
+                }
                 if (id === "device.pair")
                   return Response.json(
                     devices.pair(peRoutes[id].body.parse(await request.json()).audience),
