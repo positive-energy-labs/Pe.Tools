@@ -1,0 +1,29 @@
+{
+  "result": {
+    "releaseVersion": "0.7.24",
+    "versionPrefix": "0.7.24",
+    "versionSuffix": null,
+    "sourceRevision": "f95ca63aba497c4fcf18bf33204da2074ec919bc",
+    "versionFile": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\product.payloads.json",
+    "repoRoot": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1"
+  },
+  "resolved": null,
+  "diagnostics": [],
+  "binary": {
+    "origin": "dev-installed",
+    "assembly": "C:\\Users\\person\\.nuget\\packages\\pe.revit.cli\\0.1.0-beta.209\\tools\\net8.0\\any\\Pe.Revit.Cli.dll",
+    "sha256": "88E83A5CD36C513D25CEF2B78B44C12C1E3BE8F417326AF50A9EE951FADCD023",
+    "informationalVersion": "0.1.0-beta.209+1194901143a8b59931a187439d01cbb7ee32a0c7",
+    "hostExecutable": "C:\\Program Files\\dotnet\\dotnet.exe"
+  },
+  "command": {
+    "cwd": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRoot": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRule": "checkout-manifest",
+    "commandManifest": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\product.payloads.json"
+  },
+  "nextSteps": [],
+  "guide": "release",
+  "related": ["pe-revit release --plan", "pe-revit doctor"],
+  "exitCode": 0
+}

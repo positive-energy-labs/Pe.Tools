@@ -1,0 +1,72 @@
+{
+  "result": {
+    "id": "acc-r1",
+    "phase": "listed",
+    "pid": 71464,
+    "processStartUtc": "2026-10-14T04:06:31.8033171Z",
+    "windows": [
+      {
+        "handle": "3937772",
+        "title": "d236e7d8-5995-4a37-9adf-1f3217bbc34cMonitor",
+        "windowClass": "WindowsForms10.Window.8.app.0.3b95145_r3_ad1",
+        "modal": false,
+        "childTexts": [],
+        "identity": {
+          "observationId": "f3f58a48-fa94-4df4-bc9a-14c9e0c0bc6b",
+          "pid": 71464,
+          "processStartUtc": "2026-10-14T04:06:31.8033171Z",
+          "handle": "3937772",
+          "lifetime": "1fd5aaa63498b11d",
+          "title": "d236e7d8-5995-4a37-9adf-1f3217bbc34cMonitor",
+          "windowClass": "WindowsForms10.Window.8.app.0.3b95145_r3_ad1",
+          "modal": false,
+          "childTexts": [],
+          "ownerTitle": "",
+          "observedAtUtc": "2026-10-14T04:08:19.6628106Z",
+          "childTextDigest": "E3-B0-C4-42-98-FC-1C-14-9A-FB-F4-C8-99-6F-B9-24-27-AE-41-E4-64-9B-93-4C-A4-95-99-1B-78-52-B8-55"
+        }
+      }
+    ],
+    "sessionJournal": "C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\71464.events.jsonl",
+    "recentSessionEvent": null,
+    "detail": null,
+    "target": null,
+    "expectSession": "C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r1\\generations\\20261014040555790\\payload\\Pe.App\\Pe.App.session.json",
+    "nativeRequestId": null,
+    "requestId": null,
+    "state": "ok"
+  },
+  "resolved": {
+    "id": "acc-r1",
+    "how": "pinned",
+    "origin": "cli",
+    "pid": 71464,
+    "processStartUtc": "2026-10-14T04:06:31.8033171Z",
+    "buildStamp": "08a107fd8365",
+    "observedAtUtc": "2026-10-14T04:08:19.7090652Z",
+    "payload": "checkout",
+    "sourceRoot": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "installedRoot": null
+  },
+  "diagnostics": [],
+  "binary": {
+    "origin": "dev-installed",
+    "assembly": "C:\\Users\\person\\.nuget\\packages\\pe.revit.cli\\0.1.0-beta.207\\tools\\net8.0\\any\\Pe.Revit.Cli.dll",
+    "sha256": "093D7ADCEDA6A6D85673BB5BAC9D56713FC5BFE88B7870E9C3E3BF425EAB12C4",
+    "informationalVersion": "0.1.0-beta.207+d458282266a924c74a811d1bea54ae91516e8fb6",
+    "hostExecutable": "C:\\Program Files\\dotnet\\dotnet.exe"
+  },
+  "command": {
+    "cwd": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRoot": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRule": "checkout-manifest",
+    "commandManifest": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\product.payloads.json"
+  },
+  "nextSteps": [
+    "pe-revit session dialogs --id acc-r1 --json",
+    "pe-revit session reset --id acc-r1"
+  ],
+  "guide": "session",
+  "related": ["pe-revit session list", "pe-revit doc list", "pe-revit guide session"],
+  "exitCode": 0
+}

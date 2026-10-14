@@ -74,7 +74,7 @@ import {
   machineSources,
   useHostMachine,
 } from "./machine.ts";
-import { bindControl, currentCaller, routeActorOf, writeTerminalContext } from "./control.ts";
+import { bindControl, currentCaller, routeActorOf } from "./control.ts";
 import { bindRevoke } from "./revoke.ts";
 import { hostActionJournal, hostLog } from "./gateway-owner.ts";
 import type { HostLog } from "./host-log.ts";
@@ -946,11 +946,9 @@ export const peRoutesLayer = (
         acquiredSession: machineSessionAcquisition,
       });
       const unbindRevoke = bridge ? bindRevoke(hostActionJournal(), bridge) : undefined;
-      const terminal = writeTerminalContext(hostOwnership.serviceName);
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
           unbindRevoke?.();
-          terminal.retire();
           bindControl({
             heads: null,
             subscribeHeads: undefined,

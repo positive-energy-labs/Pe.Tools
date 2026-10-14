@@ -9,6 +9,7 @@ import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { createUpdateReader, UpdateReader, type UpdateRunner } from "../src/update-reader.ts";
 import { HostLifecycle } from "../src/host-lifecycle.ts";
 import { updateRoutes } from "../src/update-route.ts";
+import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
 
 vi.mock("../src/host-ownership.ts", async (original) => {
   const real = await original<typeof import("../src/host-ownership.ts")>();
@@ -35,8 +36,8 @@ const envelope = (result: unknown, exitCode = 0): Envelope<unknown> => ({
   exitCode,
   diagnostics: [],
   resolved: null,
-  binary: {} as Envelope<unknown>["binary"],
-  command: {} as Envelope<unknown>["command"],
+  binary: sdkBinary,
+  command: sdkCommand,
   nextSteps: [],
   guide: "update",
   related: [],

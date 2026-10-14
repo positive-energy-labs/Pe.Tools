@@ -1,6 +1,6 @@
 """Native acceptance harness: one isolated copied home, one controlled Revit on model copies.
 
-    python tools/acceptance.py setup <run> [--web PORT] [--foreground] [--model PATH[=NAME]]...
+    python tools/acceptance.py setup <run> [--web] [--foreground] [--model PATH[=NAME]]...
     python tools/acceptance.py sdk <run> <name> <pe-revit args...>      envelope -> ev/<name>.json
     python tools/acceptance.py call <run> <who> <METHOD> <path> [body.json] [--out NAME]
     python tools/acceptance.py census <run> [label]
@@ -12,7 +12,7 @@ The owner's product home and machine-local root are only read, before and after,
 session ids and host this run recorded; anything else it finds is printed as residue.
 """
 
-import json, os, shutil, subprocess, sys, time, urllib.error, urllib.request
+import json, os, re, shutil, subprocess, sys, time, urllib.error, urllib.request
 from pathlib import Path
 
 CHECKOUT = Path(__file__).resolve().parents[1]
@@ -73,10 +73,7 @@ def owner_diff(state: dict) -> dict:
 
 
 def env(state: dict) -> dict:
-    extra = {"PE_TOOLS_PRODUCT_HOME": state["home"]}
-    if state.get("web"):
-        extra["PE_TOOLS_WEB_PORT"] = str(state["web"]["port"])
-    return dict(os.environ, **extra)
+    return dict(os.environ, PE_TOOLS_PRODUCT_HOME=state["home"])
 
 
 def sdk(run: str, name: str, args: list[str]) -> dict:
@@ -155,11 +152,10 @@ def setup(run: str, args: list[str]) -> None:
     roots = [str(owner), str(LOCAL)]
     before = root / "owner-before.json"
     before.write_text(json.dumps(owner_files(roots)), encoding="utf8")
-    web = value_list(args, "--web")
     state = {
         "run": run, "checkout": str(CHECKOUT), "home": str(home), "docs": docs,
         "ownerRoots": roots, "ownerBefore": str(before), "sessions": [], "host": None,
-        "web": {"port": int(web[0])} if web else None,
+        "web": "--web" in args,
         "commit": git("rev-parse", "HEAD"), "revitBefore": revit_pids(),
     }
     save(run, state)
@@ -178,8 +174,14 @@ def setup(run: str, args: list[str]) -> None:
     if not svc:
         sys.exit(f"host did not publish a service file (exit {process.poll()}); see {root / 'host.log'}")
     state["host"] = {"launcher": process.pid, "pid": svc["pid"], "port": svc["port"], "service": svc["file"]}
+    if state["web"]:
+        # The registered frontend binds its checkout's own port; the attach launcher prints it.
+        found = None
+        while time.time() < deadline and not (found := re.search(r"Browser: (http\S+)", read_log(root))):
+            time.sleep(1)
+        state["web"] = found.group(1) if found else None
     save(run, state)
-    log(run, f"host pid {svc['pid']} port {svc['port']} ({script})")
+    log(run, f"host pid {svc['pid']} port {svc['port']} ({script}), frontend {state['web']}")
 
     session = f"acc-{run}"
     window = [] if "--foreground" in args else ["--background"]
@@ -242,6 +244,10 @@ def pid_alive(pid: int) -> bool:
 
 def git(*args: str) -> str:
     return subprocess.run(["git", *args], cwd=CHECKOUT, capture_output=True, text=True).stdout.strip()
+
+
+def read_log(root: Path) -> str:
+    return (root / "host.log").read_text(encoding="utf8", errors="replace")
 
 
 def value_list(args: list[str], flag: str) -> list[str]:

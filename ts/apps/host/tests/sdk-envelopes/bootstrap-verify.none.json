@@ -1,0 +1,35 @@
+{
+  "result": {
+    "verb": "verify",
+    "addinsBase": "C:\\Users\\person\\AppData\\Roaming\\Autodesk\\Revit\\Addins",
+    "years": ["2025"],
+    "actions": [
+      {
+        "year": "2025",
+        "op": "check",
+        "dest": "C:\\Users\\person\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2025\\Pe.Revit.Sdk.Bootstrap",
+        "status": "ok"
+      }
+    ],
+    "ok": true
+  },
+  "resolved": null,
+  "diagnostics": [],
+  "binary": {
+    "origin": "dev-installed",
+    "assembly": "C:\\Users\\person\\.nuget\\packages\\pe.revit.cli\\0.1.0-beta.209\\tools\\net8.0\\any\\Pe.Revit.Cli.dll",
+    "sha256": "88E83A5CD36C513D25CEF2B78B44C12C1E3BE8F417326AF50A9EE951FADCD023",
+    "informationalVersion": "0.1.0-beta.209+1194901143a8b59931a187439d01cbb7ee32a0c7",
+    "hostExecutable": "C:\\Program Files\\dotnet\\dotnet.exe"
+  },
+  "command": {
+    "cwd": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRoot": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRule": "checkout-manifest",
+    "commandManifest": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\product.payloads.json"
+  },
+  "nextSteps": [],
+  "guide": "install",
+  "related": ["pe-revit bootstrap verify", "pe-revit session list"],
+  "exitCode": 0
+}

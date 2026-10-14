@@ -1,0 +1,28 @@
+{
+  "result": {},
+  "resolved": null,
+  "diagnostics": [
+    {
+      "code": "doc.output-exists",
+      "detail": "--out 'C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\.artifacts\\accept\\r1\\docs\\B-copy.rvt' already exists; an existing file is never overwritten.",
+      "fix": "choose a different --out path"
+    }
+  ],
+  "binary": {
+    "origin": "dev-installed",
+    "assembly": "C:\\Users\\person\\.nuget\\packages\\pe.revit.cli\\0.1.0-beta.207\\tools\\net8.0\\any\\Pe.Revit.Cli.dll",
+    "sha256": "093D7ADCEDA6A6D85673BB5BAC9D56713FC5BFE88B7870E9C3E3BF425EAB12C4",
+    "informationalVersion": "0.1.0-beta.207+d458282266a924c74a811d1bea54ae91516e8fb6",
+    "hostExecutable": "C:\\Program Files\\dotnet\\dotnet.exe"
+  },
+  "command": {
+    "cwd": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRoot": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRule": "checkout-manifest",
+    "commandManifest": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\product.payloads.json"
+  },
+  "nextSteps": ["pe-revit doc list --id <name>", "pe-revit session list"],
+  "guide": "session",
+  "related": ["pe-revit doc list", "pe-revit doc list --recent", "pe-revit session list"],
+  "exitCode": 3
+}

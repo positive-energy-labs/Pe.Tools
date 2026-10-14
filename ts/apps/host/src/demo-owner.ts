@@ -45,6 +45,9 @@ import { readFamily } from "./family-actions.ts";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import type { ScheduleCellsApply } from "@pe/host-contracts/generated";
 
+/** The command rule a simulated demo SDK envelope carries instead of a real resolution. */
+const SIMULATED_SDK = "simulated-demo";
+
 const unsupported = (key: string) =>
   new BridgeError(`Unsupported demo scenario: ${key}. No native execution.`, 409, {
     notDispatched: true,
@@ -897,7 +900,13 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 sourceRoot: hostOwnership.sourceRoot,
               },
               binary: {},
-              command: {},
+              // Names itself simulated: host tests hold real fakes to recordings, never this lane.
+              command: {
+                cwd: root,
+                commandRoot: root,
+                commandRule: SIMULATED_SDK,
+                commandManifest: null,
+              },
               nextSteps: [],
               guide: "session",
               related: [],

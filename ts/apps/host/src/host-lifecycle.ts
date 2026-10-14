@@ -23,7 +23,7 @@ import {
 } from "@pe/host-contracts/pe-service-host";
 import { hostOwnership, productRoot, type HostOwnership } from "./host-ownership.ts";
 import { runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
-import { currentCaller } from "./control.ts";
+import { currentCaller, writeTerminalContext } from "./control.ts";
 
 // The dev script authorizes same-checkout dev takeover only; the SDK owns cooperative retirement.
 const DEV_TAKEOVER_ARGUMENT = "--take-over-host";
@@ -364,6 +364,12 @@ export const ServiceFileLive = Layer.effectDiscard(
         ),
       ),
       (handle) => Effect.promise(() => handle.release()),
+    );
+    // The owner's terminal context belongs to the claim holder alone: written after the claim,
+    // removed with it. A host that loses the claim never touches the holder's file.
+    yield* Effect.acquireRelease(
+      Effect.sync(() => writeTerminalContext(hostOwnership.serviceName)),
+      (terminal) => Effect.sync(() => terminal.retire()),
     );
     yield* Effect.result(
       Effect.promise(() => rememberServicePort(appBase, hostOwnership.serviceName, port)),

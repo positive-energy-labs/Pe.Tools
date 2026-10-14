@@ -215,6 +215,8 @@ export function admitRequest(
       `Refused at ${door}: this route declares no permission.`,
     );
   if (permission === "read" || permission === "mcp" || permission === "pair") return;
+  // The add-in's context-free callbacks reach /call; its door admits them by key (`admitAnonymousCall`).
+  if (permission === "operation" && caller.kind === "anonymous") return;
   if (caller.kind === "anonymous")
     throw refuse("context.missing", door, `Refused at ${door}: anonymous callers are read-only.`);
   if (permission === "human" || permission === "admin") {
@@ -249,6 +251,19 @@ export function admitRequest(
       "page.binding-not-yours",
       door,
       `Refused at ${door}: only a Page or human may use this binding.`,
+    );
+}
+
+/** What Pe.App's `TsHostCallClient` asks with no context: host-local Pod reads for native scripts. */
+const ANONYMOUS_CALL_KEYS = new Set(["pod.list", "pod.capture"]);
+
+/** At /call an anonymous caller runs only the add-in's two Pod reads; every other key refuses. */
+export function admitAnonymousCall(caller: Caller, key: string): void {
+  if (caller.kind === "anonymous" && !ANONYMOUS_CALL_KEYS.has(key))
+    throw refuse(
+      "context.missing",
+      "/call",
+      `Refused at /call: an anonymous caller may only read Pods, not '${key}'.`,
     );
 }
 
@@ -590,7 +605,7 @@ export function live(basis: Basis | null, door = "step begin"): Refused | null {
 
 type RevokeListener = (thread: string, grant: HeadGrant) => void;
 const revokeListeners = new Set<RevokeListener>();
-/** E2's queue sweep registers here; the head store fires it when a human revokes. */
+/** E2's queue sweep registers here; the head store fires it when a grant ends: revoked, or retired by a head move. */
 export function onRevoke(listener: RevokeListener): () => void {
   revokeListeners.add(listener);
   return () => void revokeListeners.delete(listener);

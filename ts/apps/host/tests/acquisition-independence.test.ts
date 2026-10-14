@@ -1,3 +1,4 @@
+import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -38,7 +39,7 @@ const out = noun === "doc" && verb === "save" && args.includes("--out") ? args[a
 // The SDK's own rule (DocCommand.NewOutput): --out names a new file in an existing folder.
 if (out && !existsSync(dirname(out))) {
   process.stdout.write(JSON.stringify({ result: {}, resolved: null, diagnostics: [{ code: "doc.bad-invocation",
-    detail: "--out parent directory does not exist: '" + dirname(out) + "'.", fix: null }], binary: {}, command: {},
+    detail: "--out parent directory does not exist: '" + dirname(out) + "'.", fix: null }], binary: ${JSON.stringify(sdkBinary)}, command: ${JSON.stringify(sdkCommand)},
     nextSteps: [], guide: "doc", related: [], exitCode: 2 }));
   process.exit(2);
 }
@@ -52,7 +53,7 @@ const result =
         ? { revitYears: ["2025"] }
         : { state: "ok" };
 process.stdout.write(JSON.stringify({ result, resolved: noun === "doc" ? world.resolved : null,
-  diagnostics: [], binary: {}, command: {}, nextSteps: [], guide: "op", related: [], exitCode: 0 }));
+  diagnostics: [], binary: ${JSON.stringify(sdkBinary)}, command: ${JSON.stringify(sdkCommand)}, nextSteps: [], guide: "op", related: [], exitCode: 0 }));
 `,
 );
 vi.mock("../src/pe-revit-launch.ts", async (original) => ({

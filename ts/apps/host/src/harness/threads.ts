@@ -622,6 +622,8 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       lastHumanMessageAt: current.lastHumanMessageAt,
     };
     writeHead(threadId, head);
+    // The move retires a live grant: work it queued but Revit has not begun stops like a revoke.
+    if (current.grant && !current.grant.revoked) emitRevoke(threadId, current.grant);
     return { ok: true, why: "set", head: reading(head) };
   }
 

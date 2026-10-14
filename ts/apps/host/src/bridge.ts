@@ -594,7 +594,12 @@ export const RevitBridgeLive = Layer.effect(
       }).pipe(Effect.ensuring(forgetBridgeRequest(session.requests, requestId)));
     });
 
+    // Ids a revoke named before their request reached this registry: a begun step may still be
+    // validating when the revoke lands. Such a request is refused the moment it queues.
+    const revokedBeforeQueue = new Set<string>();
+
     const cancelQueuedRequest = Effect.fnUntraced(function* (requestId: string) {
+      let known = false;
       for (const session of (yield* Ref.get(sessions)).values()) {
         const cancelled = yield* Ref.modify(session.requests, (requests) => {
           const request = requests.get(requestId);
@@ -604,7 +609,9 @@ export const RevitBridgeLive = Layer.effect(
           return [true, next] as const;
         });
         if (cancelled) return true;
+        known ||= (yield* Ref.get(session.requests)).has(requestId);
       }
+      if (!known) revokedBeforeQueue.add(requestId);
       return false;
     });
 
@@ -705,7 +712,7 @@ export const RevitBridgeLive = Layer.effect(
         operationKey,
         requestId: wireId,
         reply,
-        phase: "queued",
+        phase: revokedBeforeQueue.delete(wireId) ? "cancelled" : "queued",
       });
 
       const myGate = yield* Deferred.make<void>();

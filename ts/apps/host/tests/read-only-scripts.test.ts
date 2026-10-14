@@ -246,6 +246,28 @@ test("Pea and an external MCP client cannot read a human document with a ReadOnl
   }
 }, 30_000);
 
+test("an anonymous local process cannot read a human document with a ReadOnly script", async () => {
+  const host = await serve();
+  try {
+    for (const mode of ["ReadOnly", undefined]) {
+      const call = await host.send(
+        "/call",
+        {
+          [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName,
+          "x-pe-bridge-session-id": doc.session,
+          "x-pe-open-document-id": doc.openId,
+        },
+        { key: "scripting.execute", request: script(mode) },
+      );
+      expect(call.status, call.text).toBe(403);
+      expect(call.text).toContain("context.missing");
+    }
+    expect(host.sent).toEqual([]);
+  } finally {
+    await host.close();
+  }
+}, 30_000);
+
 test("a human pin consents only to its document: an ungranted sibling refuses ReadOnly at call and act", async () => {
   const host = await serve();
   host.openDocuments.push(other);

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -104,6 +104,9 @@ export async function bootHost() {
     await new Promise((resolve) => setTimeout(resolve, 50));
     file = await readServiceFile(appBase, hostOwnership.serviceName);
   }
+  // The claim holder writes its terminal context right after the service file appears.
+  for (let i = 0; !existsSync(hostContextTokenPath(hostOwnership.serviceName)) && i < 200; i++)
+    await new Promise((resolve) => setTimeout(resolve, 10));
   return {
     base: `http://127.0.0.1:${file!.port}`,
     terminal: readFileSync(hostContextTokenPath(hostOwnership.serviceName), "utf8"),

@@ -10,6 +10,7 @@ import { admitInstancesAction, recoverInstancesAction } from "../src/instances-a
 import { makeCallRoute } from "../src/call-route.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
+import { replayAnswer } from "./sdk-replay.ts";
 import {
   createMachine,
   machineAcquisition,
@@ -97,20 +98,16 @@ async function setup(
   const sdk = async (args: readonly string[]) => {
     calls.push([...args]);
     if (args[0] === "session" && args[1] === "list")
-      return sdkEnvelope({
-        sessions: sessionRows,
-      });
+      return replayAnswer(args, { result: { state: "ok", sessions: sessionRows } });
     if (args[0] === "doc" && args[1] === "list") {
-      const process =
+      const { pid, processStartUtc } =
         census.process ?? (args.includes("--pid") ? observed.process : originalProcess);
-      return JSON.stringify({
-        ...JSON.parse(
-          sdkEnvelope({
-            state: "ok",
-            documents: census.documents.map((id) => ({ openId: id, isModified: census.modified })),
-          }),
-        ),
-        resolved: { ...process, id: "dev" },
+      return replayAnswer(args, {
+        result: {
+          state: "ok",
+          documents: census.documents.map((id) => ({ openId: id, isModified: census.modified })),
+        },
+        resolved: { pid, processStartUtc, id: "dev" },
       });
     }
     // The SDK's own rule (DocRoutes.ValidateOpen): unsynced belongs to a cloud source open only.
@@ -129,8 +126,8 @@ async function setup(
         }
       : await answer(args);
     if (reply instanceof Error) throw reply;
-    return JSON.stringify({
-      ...JSON.parse(sdkEnvelope(reply.result)),
+    return replayAnswer(args, {
+      result: reply.result,
       diagnostics: reply.diagnostics ?? [],
       exitCode: reply.exitCode ?? 0,
       resolved: reply.resolved ?? null,
@@ -398,7 +395,12 @@ test.each(["start", "open"])(
       (args) =>
         args[1] === "start"
           ? startedAnswer
-          : { result: { state: "ok", document: { openId, path: args[2] } } },
+          : {
+              result:
+                args[0] === "doc"
+                  ? { state: "ok", document: { openId, path: args[2] } }
+                  : { state: "ok" },
+            },
       [controlledRow({ shape: shape("background") })],
     );
     const launch = await f.admit(
@@ -531,7 +533,7 @@ test("each Pea acquisition starts its own named Revit, never the person's dev se
 });
 
 test("every option reaches doc open for a running session, and the receipt names the opened path", async () => {
-  const f = await setup(() => ({ result: { state: "ok", openId } }));
+  const f = await setup(() => ({ result: { state: "ok", document: { openId } } }));
   const receipt = await f.admit("instances.open", {
     source: "C:/Tower.rvt",
     into: into(),
@@ -558,12 +560,13 @@ test("every option reaches doc open for a running session, and the receipt names
     opened: "C:/Tower.rvt",
     copiedFrom: null,
     detached: true,
-    document: { openId },
+    // The receipt keeps the SDK's DocOpResult: the opened lifetime is its `document`.
+    document: { state: "ok", document: { openId } },
   });
 });
 
 test("an open that names no option sends none of them", async () => {
-  const f = await setup(() => ({ result: { state: "ok", openId } }));
+  const f = await setup(() => ({ result: { state: "ok", document: { openId } } }));
   expect((await f.admit("instances.open", { source: "C:/Tower.rvt", into: into() })).state).toBe(
     "succeeded",
   );
@@ -574,7 +577,7 @@ test("an open that names no option sends none of them", async () => {
 });
 
 test("reload names the open document and a template creates a new one", async () => {
-  const f = await setup(() => ({ result: { state: "ok", openId } }));
+  const f = await setup(() => ({ result: { state: "ok", document: { openId } } }));
   await f.admit("instances.open", { source: openId, into: into(), reload: true });
   const reload = f.calls.at(-1)!;
   expect(reload.slice(0, 3)).toEqual(["doc", "open", openId]);
@@ -591,7 +594,8 @@ test("reload names the open document and a template creates a new one", async ()
 
 test("a launch into a new Revit starts it, then opens the source as its own op in that session", async () => {
   const f = await setup(
-    (args) => (args[0] === "session" ? startedAnswer : { result: { state: "ok", openId } }),
+    (args) =>
+      args[0] === "session" ? startedAnswer : { result: { state: "ok", document: { openId } } },
     [],
   );
   const receipt = await f.admit("instances.open", {
@@ -621,7 +625,7 @@ test("a launch into a new Revit starts it, then opens the source as its own op i
 
 test("a Pea launch copies a local, non-workshared file into Pea's work folder and opens the copy", async () => {
   const f = await setup(
-    () => ({ result: { state: "ok", openId } }),
+    () => ({ result: { state: "ok", document: { openId } } }),
     [controlledRow({ id: "pea-bg", shape: shape("background") })],
   );
   await recordPeaLaunch(f.owner);
@@ -648,7 +652,8 @@ test("a Pea launch copies a local, non-workshared file into Pea's work folder an
 
 test("a Pea launch into a new Revit copies the file before the Revit starts", async () => {
   const f = await setup(
-    (args) => (args[0] === "session" ? startedAnswer : { result: { state: "ok", openId } }),
+    (args) =>
+      args[0] === "session" ? startedAnswer : { result: { state: "ok", document: { openId } } },
     [],
   );
   const source = await f.file("Plant.rvt", "Worksharing: Not enabled");
@@ -661,7 +666,7 @@ test("a Pea launch into a new Revit copies the file before the Revit starts", as
 
 test("a Pea launch of a workshared model copies first, then opens the copy detached", async () => {
   const f = await setup(
-    () => ({ result: { state: "ok", openId } }),
+    () => ({ result: { state: "ok", document: { openId } } }),
     [controlledRow({ id: "pea-bg", shape: shape("background") })],
   );
   await recordPeaLaunch(f.owner);
@@ -682,7 +687,7 @@ test("a Pea launch of a workshared model copies first, then opens the copy detac
 
 test("a Pea launch of a cloud model without a version refuses before connected open", async () => {
   const f = await setup(
-    () => ({ result: { state: "ok", openId } }),
+    () => ({ result: { state: "ok", document: { openId } } }),
     [controlledRow({ id: "pea-bg", shape: shape("background") })],
   );
   await recordPeaLaunch(f.owner);
@@ -697,7 +702,7 @@ test("a Pea launch of a cloud model without a version refuses before connected o
 
 test("Pea refuses, undispatched, a file whose worksharing it cannot read or a source it cannot resolve", async () => {
   const f = await setup(
-    () => ({ result: { state: "ok", openId } }),
+    () => ({ result: { state: "ok", document: { openId } } }),
     [controlledRow({ id: "pea-bg", shape: shape("background") })],
   );
   await recordPeaLaunch(f.owner);
@@ -711,7 +716,7 @@ test("Pea refuses, undispatched, a file whose worksharing it cannot read or a so
 });
 
 test("a person's foreground session opens the file as given, with no copy", async () => {
-  const f = await setup(() => ({ result: { state: "ok", openId } }));
+  const f = await setup(() => ({ result: { state: "ok", document: { openId } } }));
   const source = await f.file("Mine.rvt", "Worksharing: Not enabled");
   expect(
     (await f.admit("instances.open", { source, into: into() }, undefined, "human")).state,
@@ -722,20 +727,23 @@ test("a person's foreground session opens the file as given, with no copy", asyn
 });
 
 test("allowing missing links reaches doc open and its omission result stays in the receipt", async () => {
+  // The SDK reports the omission in the bridge's own result, beside the policy it applied.
   const nativeResult = {
     state: "ok",
-    openId,
-    missingLinkPolicy: "allow",
-    missingLinkCount: 1,
-    missingLinks: [
-      {
-        elementId: "1234",
-        name: "Site",
-        type: "RevitLinkType",
-        status: "NotFound",
-        path: "C:/Links/site.rvt",
-      },
-    ],
+    document: { openId },
+    result: {
+      links: "allow",
+      missingLinkCount: 1,
+      missingLinks: [
+        {
+          elementId: "1234",
+          name: "Site",
+          type: "RevitLinkType",
+          status: "NotFound",
+          path: "C:/Links/site.rvt",
+        },
+      ],
+    },
   };
   const f = await setup(() => ({ result: nativeResult }));
   const receipt = await f.admit("instances.open", {
@@ -848,7 +856,10 @@ test.each(["open", "stop", "restart", "close"])(
   "observed 4242 is adopted by the SDK before %s dispatches by pid with its receipt",
   async (verb) => {
     const f = await setup(
-      (args) => (args[1] === "start" ? adoptionAnswer : { result: { state: "ok", openId } }),
+      (args) =>
+        args[1] === "start"
+          ? adoptionAnswer
+          : { result: args[0] === "doc" ? { state: "ok", document: { openId } } : { state: "ok" } },
       [observedRow],
     );
     const input =
@@ -939,12 +950,7 @@ test.each(["resolved-pid", "resolved-start", "session-start", "receipt"])(
 );
 
 test("a supervisor refusal after an effect leg never claims nothing was dispatched", async () => {
-  const response = JSON.parse(
-    sdkEnvelope({ state: "refused", legs: [{ name: "stop", status: "ok" }] }),
-  );
-  response.diagnostics = [
-    { code: "op.stale-expectation", detail: "replacement refused after stop", fix: null },
-  ];
+  // A refused op response names one code (recorded shape, beta.208); its result keeps the legs.
   const f = await setup((args) =>
     args[0] === "op"
       ? {
@@ -952,7 +958,14 @@ test("a supervisor refusal after an effect leg never claims nothing was dispatch
             state: "refused",
             requestId: args[2],
             receipt: { requestId: args[2], key: "session.hr", verdict: "refused" },
-            response,
+            response: {
+              requestId: args[2],
+              key: "session.hr",
+              verdict: "refused",
+              code: "op.stale-expectation",
+              detail: "replacement refused after stop",
+              result: { state: "refused", legs: [{ name: "stop", status: "ok" }] },
+            },
           },
         }
       : Error("lost"),
@@ -982,9 +995,15 @@ test.each(["adoption", "mutation"])(
                 key: adoption ? "session.start" : "doc.open",
                 verdict: "ok",
               },
+              // Recorded op responses (beta.208): the verb's result and resolution, never an envelope.
               response: adoption
-                ? { ...JSON.parse(sdkEnvelope(adopted)), resolved: adoptionAnswer.resolved }
-                : { state: "ok", openId },
+                ? { requestId: args[2], key: "session.start", verdict: "ok", ...adoptionAnswer }
+                : {
+                    requestId: args[2],
+                    key: "doc.open",
+                    verdict: "ok",
+                    result: { openId, path: null },
+                  },
             },
           };
         }
@@ -992,7 +1011,9 @@ test.each(["adoption", "mutation"])(
           lostOnce = true;
           return Error("lost original response");
         }
-        return args[1] === "start" ? adoptionAnswer : { result: { state: "ok", openId } };
+        return args[1] === "start"
+          ? adoptionAnswer
+          : { result: { state: "ok", document: { openId } } };
       },
       [observedRow],
     );
@@ -1024,7 +1045,7 @@ test("a Pea copy is made once: resuming a lost open reuses the frozen copy", asy
         lostOnce = false;
         return Error("lost original response");
       }
-      return { result: { state: "ok", openId } };
+      return { result: { state: "ok", document: { openId } } };
     },
     [controlledRow({ id: "pea-bg", shape: shape("background") })],
   );
@@ -1116,11 +1137,19 @@ test("F7: an acquisition records its paths before writing; a crash at any bounda
   await recoverInstancesAction(done.id, journal, {
     sdk: async (args) => {
       reads.push([...args]);
-      return sdkEnvelope({
-        state: "ok",
-        requestId: openStep.id,
-        receipt: { requestId: openStep.id, key: "doc.open", verdict: "ok" },
-        response: { requestId: openStep.id, key: "doc.open", verdict: "ok", result: response },
+      return replayAnswer(args, {
+        result: {
+          state: "ok",
+          requestId: openStep.id,
+          receipt: {
+            requestId: openStep.id,
+            key: "doc.open",
+            verdict: "ok",
+            pid: originalProcess.pid,
+            processStartUtc: originalProcess.processStartUtc,
+          },
+          response: { requestId: openStep.id, key: "doc.open", verdict: "ok", result: response },
+        },
       });
     },
   });
@@ -1792,7 +1821,7 @@ test("a pre-admission SDK refusal is failed and undispatched; recovery settles a
         ],
       };
     if (mode === "hang") return Error("pe-revit produced no output");
-    return { result: { state: "ok", openId } };
+    return { result: { state: "ok", document: { openId } } };
   });
   const input = { source: "C:/Tower.rvt", into: into() };
   const refused = await f.admit("instances.open", input);
@@ -1829,7 +1858,14 @@ test.each(["start", "stop", "hr"])(
               state: "ok",
               requestId: args[2],
               receipt: { requestId: args[2], key: `session.${verb}`, verdict: "ok" },
-              response: JSON.parse(sdkEnvelope(response)),
+              // A supervisor's recorded response (op result, beta.208): the verb's result, not its envelope.
+              response: {
+                requestId: args[2],
+                key: `session.${verb}`,
+                verdict: "ok",
+                resolved: null,
+                result: response,
+              },
             },
           }
         : Error("pe-revit produced no output"),
@@ -1885,7 +1921,7 @@ test("restart, stop and close run for a human; stop and close require an unsaved
   const f = await setup((args) =>
     args[0] === "session"
       ? { result: { id: "dev", state: "ok", phase: "ready" } }
-      : { result: { state: "ok", openId } },
+      : { result: { state: "ok", document: { openId } } },
   );
   const document = { source: "sdk", session: { id: "dev" }, openId };
   for (const key of ["instances.stop", "instances.close"])
@@ -2039,7 +2075,7 @@ test.each([
     ["--central", "--comment", "rooms renumbered", "--release", "all"],
   ],
 ] as const)("save %o reaches doc save for the exact lifetime", async (to, release, expected) => {
-  const f = await setup(() => ({ result: { state: "ok", openId } }));
+  const f = await setup(() => ({ result: { state: "ok", document: { openId } } }));
   const row = await f.admit("instances.save", {
     session,
     document: sdkDocument,
@@ -2068,7 +2104,7 @@ test("save refuses states the SDK would refuse: comment without central, workset
 });
 
 test("an agent save is one document crossing: the granted lifetime admits, another refuses", async () => {
-  const f = await setup(() => ({ result: { state: "ok", openId } }));
+  const f = await setup(() => ({ result: { state: "ok", document: { openId } } }));
   bindControl({ heads: grantHead });
   f.census.documents = [openId, "b".repeat(32)];
   const input = { session, document: sdkDocument, to: { kind: "self" } };
@@ -2169,7 +2205,12 @@ test("a lost dialog dismiss recovers from its SDK receipt without replay", async
           requestId: args[2],
           state: "ok",
           receipt: { requestId: args[2], key: "session.dialogs", verdict: "ok" },
-          response: JSON.parse(sdkEnvelope({ state: "ok" })),
+          response: {
+            requestId: args[2],
+            key: "session.dialogs",
+            verdict: "ok",
+            result: { state: "ok" },
+          },
         },
       };
     return args.includes("--dismiss") ? Error("lost response") : { result: dialogList };

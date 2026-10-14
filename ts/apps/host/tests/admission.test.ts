@@ -28,9 +28,11 @@ const options: IdentityOptions = {
 };
 const local = { host: "127.0.0.1:5180", "x-pe-runtime-service": hostOwnership.serviceName };
 
+// `/call` admits an anonymous caller only for the add-in's Pod reads (anonymous-call.test.ts).
 test.each(
   Object.entries(peRoutes).filter(
-    ([, route]) => route.method !== "GET" && route.permission !== "pair",
+    ([, route]) =>
+      route.method !== "GET" && route.permission !== "operation" && route.permission !== "pair",
   ),
 )("access-041/085: anonymous declared write %s is refused before routing", async (_id, route) => {
   const path = route.path.replace(/:[\w]+/g, "fixture");
@@ -84,7 +86,6 @@ test("access-085: an omitted route permission fails closed even for a human", ()
 
 // Paths cover each write family, including unknown future routes. Admission precedes routing.
 test.each([
-  "/call",
   "/actions",
   "/pe/threads",
   "/pe/threads/t/prompt",
