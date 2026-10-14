@@ -32,7 +32,7 @@ describe("the declared host door", () => {
     ).rejects.toMatchObject({ status: 409, message: "No pending question" });
     expect(matchPeRoute("POST", "/pe/threads/t/question")?.id).toBe("thread.question");
   });
-  it("every route has schemas, a principal, and a unique method/path", () => {
+  it("access-085: every route has schemas, principal, permission and a unique method/path", () => {
     const signatures = Object.values(peRoutes).map((r) => `${r.method} ${r.path}`);
     expect(new Set(signatures).size).toBe(signatures.length);
     for (const route of Object.values(peRoutes)) {
@@ -40,7 +40,12 @@ describe("the declared host door", () => {
       expect(route.output).toBeDefined();
       expect(route.error).toBeDefined();
       expect(route.principal).toBeDefined();
+      expect(route.permission).toBeDefined();
     }
+  });
+  it("access-084: administration and grant policy are declared on the route", () => {
+    expect(peRoutes["provider.login"].permission).toBe("admin");
+    expect(peRoutes["scope.set"].permission).toBe("grant");
   });
 });
 

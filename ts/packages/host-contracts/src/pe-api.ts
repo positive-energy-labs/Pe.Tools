@@ -11,6 +11,7 @@ const none = z.undefined();
 const object = z.record(z.string(), z.unknown());
 const ok = z.object({ ok: z.boolean() }).passthrough();
 type Principal = "read" | "caller" | "human" | "human-or-pea" | "page";
+export type PeRoutePermission = Principal | "admin" | "grant" | "operation";
 type Owner = "pe" | "threads" | "providers" | "share" | "pages" | "gateway";
 
 function route<const P extends string, B extends z.ZodType, O extends z.ZodType>(
@@ -20,6 +21,7 @@ function route<const P extends string, B extends z.ZodType, O extends z.ZodType>
   output: O,
   principal: Principal,
   owner: Owner,
+  permission: PeRoutePermission,
   format: "json" | "stream" | "asset" = "json",
   encoding: "json" | "text" = "json",
 ) {
@@ -39,6 +41,7 @@ function route<const P extends string, B extends z.ZodType, O extends z.ZodType>
     output,
     error: peErrorSchema,
     principal,
+    permission,
     owner,
     format,
     encoding,
@@ -151,6 +154,7 @@ export function definePeApi<
       z.unknown(),
       "read",
       "gateway",
+      "operation",
     ),
     "actions.admit": route(
       "POST",
@@ -159,8 +163,9 @@ export function definePeApi<
       schemas.actionReceiptSchema as S["actionReceiptSchema"],
       "caller",
       "gateway",
+      "caller",
     ),
-    "actions.read": route("GET", "/actions", none, z.unknown(), "read", "gateway"),
+    "actions.read": route("GET", "/actions", none, z.unknown(), "read", "gateway", "read"),
     "action.cancel": route(
       "POST",
       "/actions/cancel",
@@ -168,6 +173,7 @@ export function definePeApi<
       schemas.actionReceiptSchema as S["actionReceiptSchema"],
       "caller",
       "gateway",
+      "caller",
     ),
     "action.recover": route(
       "POST",
@@ -176,6 +182,7 @@ export function definePeApi<
       schemas.actionReceiptSchema as S["actionReceiptSchema"],
       "caller",
       "gateway",
+      "caller",
     ),
     "action.resume": route(
       "POST",
@@ -184,6 +191,7 @@ export function definePeApi<
       schemas.actionReceiptSchema as S["actionReceiptSchema"],
       "caller",
       "gateway",
+      "caller",
     ),
     "providers.list": route(
       "GET",
@@ -192,6 +200,7 @@ export function definePeApi<
       z.array(providerSchema),
       "read",
       "providers",
+      "read",
     ),
     "providers.add": route(
       "POST",
@@ -200,9 +209,26 @@ export function definePeApi<
       providerSchema,
       "human",
       "providers",
+      "admin",
     ),
-    "provider.get": route("GET", "/pe/providers/:id", none, providerSchema, "read", "providers"),
-    "provider.remove": route("DELETE", "/pe/providers/:id", none, none, "human", "providers"),
+    "provider.get": route(
+      "GET",
+      "/pe/providers/:id",
+      none,
+      providerSchema,
+      "read",
+      "providers",
+      "read",
+    ),
+    "provider.remove": route(
+      "DELETE",
+      "/pe/providers/:id",
+      none,
+      none,
+      "human",
+      "providers",
+      "admin",
+    ),
     "provider.probe": route(
       "POST",
       "/pe/providers/:id/probe",
@@ -210,6 +236,7 @@ export function definePeApi<
       providerSchema,
       "human",
       "providers",
+      "admin",
     ),
     "provider.login": route(
       "POST",
@@ -218,9 +245,18 @@ export function definePeApi<
       z.object({ opened: z.literal(true) }),
       "human",
       "providers",
+      "admin",
     ),
-    "access.get": route("GET", "/pe/access", none, accessSchema, "read", "providers"),
-    "access.set": route("PUT", "/pe/access", accessSchema, accessSchema, "human", "providers"),
+    "access.get": route("GET", "/pe/access", none, accessSchema, "read", "providers", "read"),
+    "access.set": route(
+      "PUT",
+      "/pe/access",
+      accessSchema,
+      accessSchema,
+      "human",
+      "providers",
+      "admin",
+    ),
     "threads.list": route(
       "GET",
       "/pe/threads",
@@ -228,6 +264,7 @@ export function definePeApi<
       z.array(harnessThreadSummarySchema),
       "read",
       "threads",
+      "read",
     ),
     "threads.create": route(
       "POST",
@@ -236,6 +273,7 @@ export function definePeApi<
       harnessThreadSummarySchema,
       "caller",
       "threads",
+      "caller",
     ),
     "threads.stream": route(
       "GET",
@@ -244,9 +282,18 @@ export function definePeApi<
       z.array(harnessThreadSummarySchema),
       "read",
       "threads",
+      "read",
       "stream",
     ),
-    "thread.get": route("GET", "/pe/threads/:id", none, harnessThreadBodySchema, "read", "threads"),
+    "thread.get": route(
+      "GET",
+      "/pe/threads/:id",
+      none,
+      harnessThreadBodySchema,
+      "read",
+      "threads",
+      "read",
+    ),
     "thread.update": route(
       "PUT",
       "/pe/threads/:id",
@@ -254,8 +301,9 @@ export function definePeApi<
       harnessThreadSummarySchema,
       "caller",
       "threads",
+      "caller",
     ),
-    "thread.remove": route("DELETE", "/pe/threads/:id", none, none, "caller", "threads"),
+    "thread.remove": route("DELETE", "/pe/threads/:id", none, none, "caller", "threads", "caller"),
     "thread.prompt": route(
       "POST",
       "/pe/threads/:id/prompt",
@@ -263,6 +311,7 @@ export function definePeApi<
       z.object({ turnId: z.string() }),
       "human",
       "threads",
+      "human",
     ),
     "thread.cancel": route(
       "POST",
@@ -271,6 +320,7 @@ export function definePeApi<
       z.object({ cancelled: z.boolean() }),
       "caller",
       "threads",
+      "caller",
     ),
     "thread.permission": route(
       "POST",
@@ -279,6 +329,7 @@ export function definePeApi<
       ok,
       "human",
       "threads",
+      "human",
     ),
     "thread.question": route(
       "POST",
@@ -287,6 +338,7 @@ export function definePeApi<
       ok,
       "human",
       "threads",
+      "human",
     ),
     "thread.fork": route(
       "POST",
@@ -295,6 +347,7 @@ export function definePeApi<
       harnessThreadSummarySchema,
       "caller",
       "threads",
+      "caller",
     ),
     "thread.model": route(
       "POST",
@@ -303,6 +356,7 @@ export function definePeApi<
       harnessThreadSummarySchema,
       "caller",
       "threads",
+      "caller",
     ),
     "thread.trait": route(
       "POST",
@@ -311,6 +365,7 @@ export function definePeApi<
       harnessThreadBodySchema,
       "caller",
       "threads",
+      "caller",
     ),
     "thread.stream": route(
       "GET",
@@ -319,6 +374,7 @@ export function definePeApi<
       schemas.harnessEventSchema as S["harnessEventSchema"],
       "read",
       "threads",
+      "read",
       "stream",
     ),
     "scope.get": route(
@@ -328,6 +384,7 @@ export function definePeApi<
       threadHeadReadingSchema.and(z.object({ thread: z.string().optional() })),
       "read",
       "threads",
+      "read",
     ),
     "scope.set": route(
       "PUT",
@@ -336,6 +393,7 @@ export function definePeApi<
       putTargetResultSchema,
       "human-or-pea",
       "threads",
+      "grant",
     ),
     "scope.revoke": route(
       "POST",
@@ -344,8 +402,17 @@ export function definePeApi<
       threadHeadReadingSchema,
       "human",
       "threads",
+      "human",
     ),
-    "navigation.get": route("GET", "/pe/navigation", none, navigationSnapshotSchema, "read", "pe"),
+    "navigation.get": route(
+      "GET",
+      "/pe/navigation",
+      none,
+      navigationSnapshotSchema,
+      "read",
+      "pe",
+      "read",
+    ),
     "capabilities.find": route(
       "GET",
       "/pe/capabilities",
@@ -353,10 +420,20 @@ export function definePeApi<
       capabilityCatalogSchema,
       "read",
       "pe",
+      "read",
     ),
-    "contributions.read": route("GET", "/pe/contributions", none, object, "read", "pe"),
-    "pages.libraries": route("GET", "/pe/page-libraries", none, z.unknown(), "read", "pe"),
-    "family.spec": route("GET", "/pe/family-spec", none, z.unknown(), "read", "pe", "asset"),
+    "contributions.read": route("GET", "/pe/contributions", none, object, "read", "pe", "read"),
+    "pages.libraries": route("GET", "/pe/page-libraries", none, z.unknown(), "read", "pe", "read"),
+    "family.spec": route(
+      "GET",
+      "/pe/family-spec",
+      none,
+      z.unknown(),
+      "read",
+      "pe",
+      "read",
+      "asset",
+    ),
     "feedback.submit": route(
       "POST",
       "/pe/feedback",
@@ -364,6 +441,7 @@ export function definePeApi<
       feedbackReceiptSchema,
       "human",
       "pe",
+      "human",
     ),
     "feedback.deliver": route(
       "POST",
@@ -372,6 +450,7 @@ export function definePeApi<
       feedbackReceiptSchema,
       "human",
       "pe",
+      "human",
     ),
     "diagnostics.submit": route(
       "POST",
@@ -380,12 +459,21 @@ export function definePeApi<
       z.object({ accepted: z.boolean() }),
       "human",
       "pe",
+      "human",
     ),
-    "receipts.read": route("GET", "/pe/receipt-facts", none, z.array(object), "read", "pe"),
-    "resources.stream": route("GET", "/pe/resources", none, object, "read", "pe", "stream"),
-    "work.list": route("GET", "/pe/route-state", none, z.array(object), "read", "pe"),
-    "work.get": route("GET", "/pe/route-state/:route", none, object, "read", "pe"),
-    "work.salvage": route("GET", "/pe/route-state/:route/salvage", none, object, "human", "pe"),
+    "receipts.read": route("GET", "/pe/receipt-facts", none, z.array(object), "read", "pe", "read"),
+    "resources.stream": route("GET", "/pe/resources", none, object, "read", "pe", "read", "stream"),
+    "work.list": route("GET", "/pe/route-state", none, z.array(object), "read", "pe", "read"),
+    "work.get": route("GET", "/pe/route-state/:route", none, object, "read", "pe", "read"),
+    "work.salvage": route(
+      "GET",
+      "/pe/route-state/:route/salvage",
+      none,
+      object,
+      "human",
+      "pe",
+      "human",
+    ),
     "work.apply": route(
       "POST",
       "/pe/route-state/:route/apply",
@@ -396,6 +484,7 @@ export function definePeApi<
       object,
       "caller",
       "pe",
+      "caller",
     ),
     "work.command": route(
       "POST",
@@ -408,6 +497,7 @@ export function definePeApi<
       object,
       "caller",
       "pe",
+      "caller",
     ),
     "work.fresh": route(
       "POST",
@@ -416,8 +506,9 @@ export function definePeApi<
       object,
       "human",
       "pe",
+      "human",
     ),
-    "view.get": route("GET", "/pe/route-view/families", none, object, "read", "pe"),
+    "view.get": route("GET", "/pe/route-view/families", none, object, "read", "pe", "read"),
     "view.publish": route(
       "PUT",
       "/pe/route-view/families",
@@ -425,6 +516,7 @@ export function definePeApi<
       object,
       "caller",
       "pe",
+      "caller",
     ),
     "view.query": route(
       "POST",
@@ -433,6 +525,7 @@ export function definePeApi<
       object,
       "caller",
       "pe",
+      "caller",
     ),
     "view.ack": route(
       "POST",
@@ -441,8 +534,17 @@ export function definePeApi<
       object,
       "caller",
       "pe",
+      "caller",
     ),
-    "view.remove": route("DELETE", "/pe/route-view/families/:instance", none, ok, "caller", "pe"),
+    "view.remove": route(
+      "DELETE",
+      "/pe/route-view/families/:instance",
+      none,
+      ok,
+      "caller",
+      "pe",
+      "caller",
+    ),
     "share.set": route(
       "PUT",
       "/pe/share",
@@ -453,8 +555,9 @@ export function definePeApi<
       object,
       "human",
       "share",
+      "admin",
     ),
-    "page.target": route("GET", "/pages/:slug/target", none, object, "read", "pages"),
+    "page.target": route("GET", "/pages/:slug/target", none, object, "read", "pages", "read"),
     "page.call": route(
       "POST",
       "/pages/:slug/call",
@@ -462,6 +565,7 @@ export function definePeApi<
       z.unknown(),
       "page",
       "pages",
+      "page",
     ),
     "page.act": route(
       "POST",
@@ -470,11 +574,37 @@ export function definePeApi<
       object,
       "page",
       "pages",
+      "page",
     ),
-    "page.state": route("GET", "/pages/:slug/state", none, object, "read", "pages"),
-    "page.append": route("POST", "/pages/:slug/events", object, object, "caller", "pages"),
-    "page.events": route("GET", "/pages/:slug/events", none, object, "read", "pages", "stream"),
-    "page.snapshot": route("PUT", "/pages/:slug/snapshot", z.json(), none, "caller", "pages"),
+    "page.state": route("GET", "/pages/:slug/state", none, object, "read", "pages", "read"),
+    "page.append": route(
+      "POST",
+      "/pages/:slug/events",
+      object,
+      object,
+      "caller",
+      "pages",
+      "caller",
+    ),
+    "page.events": route(
+      "GET",
+      "/pages/:slug/events",
+      none,
+      object,
+      "read",
+      "pages",
+      "read",
+      "stream",
+    ),
+    "page.snapshot": route(
+      "PUT",
+      "/pages/:slug/snapshot",
+      z.json(),
+      none,
+      "caller",
+      "pages",
+      "caller",
+    ),
     "page.text": route(
       "PUT",
       "/pages/:slug/text",
@@ -482,6 +612,7 @@ export function definePeApi<
       none,
       "caller",
       "pages",
+      "caller",
       "json",
       "text",
     ),
@@ -492,6 +623,7 @@ export function definePeApi<
       object,
       "human-or-pea",
       "pages",
+      "human-or-pea",
     ),
   } as const;
 
