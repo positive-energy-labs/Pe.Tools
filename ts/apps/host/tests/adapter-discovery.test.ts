@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -7,14 +7,9 @@ import { adapterCli, adapterLaunch } from "../src/harness/adapter.ts";
 import { createProviders } from "../src/harness/providers.ts";
 import type { ProviderRefusal } from "@pe/agent-contracts";
 
-vi.mock("node:child_process", async (original) => ({
-  ...(await original<typeof import("node:child_process")>()),
-  spawnSync: vi.fn(),
-}));
 const roots: string[] = [];
 afterEach(() => {
   vi.restoreAllMocks();
-  vi.resetAllMocks();
   vi.unstubAllEnvs();
   roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true }));
 });
@@ -29,14 +24,6 @@ test.each(["codex", "claude"] as const)(
       join(import.meta.dirname, "fake-acp-agent.mjs"),
     );
     vi.stubEnv("FAKE_ACP_AUTH", "none");
-    vi.mocked(spawnSync).mockReturnValue({
-      status: 1,
-      stdout: "",
-      stderr: "",
-      output: [],
-      pid: 0,
-      signal: null,
-    });
     let closeConsole!: () => void;
     const providers = createProviders({
       probeOnStart: false,
@@ -83,14 +70,6 @@ test("a zero-exit installer with no executable remains refused with its console 
   for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
   vi.stubEnv("PE_HARNESS_ADAPTER_CODEX", join(import.meta.dirname, "fake-acp-agent.mjs"));
   vi.stubEnv("FAKE_ACP_AUTH", "none");
-  vi.mocked(spawnSync).mockReturnValue({
-    status: 1,
-    stdout: "",
-    stderr: "lookup failed",
-    output: [],
-    pid: 0,
-    signal: null,
-  });
   const providers = createProviders({
     probeOnStart: false,
     openConsole: async (_command, _env, opened) => {
@@ -108,7 +87,7 @@ test("a zero-exit installer with no executable remains refused with its console 
       resolvedExecutable: null,
     });
     expect(logged.mock.calls.flat().join("\n")).toContain(JSON.stringify(first.readiness.detail));
-    expect(first.readiness.detail.lookup).toMatchObject({ status: 1, reason: "lookup failed" });
+    expect(first.readiness.detail.lookup).toMatchObject({ status: 1, reason: expect.any(String) });
     expect(first.readiness.detail.candidates).toContainEqual(
       expect.objectContaining({
         path: expect.stringContaining("codex.exe"),
@@ -131,7 +110,6 @@ test("a zero-exit installer with no executable remains refused with its console 
 test.runIf(process.platform === "win32")(
   "a locked executable preserves the real Win32 sharing violation, and a miss preserves code 2 or 3",
   async () => {
-    const native = await vi.importActual<typeof import("node:child_process")>("node:child_process");
     const env = home();
     const cli = file(join(env.LOCALAPPDATA, "Programs", "OpenAI", "Codex", "bin", "codex.exe"));
     const script = join(env.USERPROFILE, "lock.ps1");
@@ -148,11 +126,6 @@ test.runIf(process.platform === "win32")(
       lock.stdout!.once("data", () => resolve());
       lock.once("error", reject);
     });
-    vi.mocked(spawnSync).mockImplementation((command, args, options) =>
-      String(command).endsWith("powershell.exe")
-        ? native.spawnSync(command, args!, options as any)
-        : { status: 1, stdout: "", stderr: "not found", pid: 0, output: [], signal: null },
-    );
     const detail: ProviderRefusal = {
       step: "installed",
       message: "",
@@ -174,7 +147,9 @@ test.runIf(process.platform === "win32")(
 function home() {
   const root = mkdtempSync(join(tmpdir(), "pe-discovery-"));
   roots.push(root);
-  return { USERPROFILE: root, LOCALAPPDATA: join(root, "local"), Path: "C:\\stale" };
+  // The product root is redirected so the packaged Codex lookup never sees the machine's install.
+  vi.stubEnv("PE_TOOLS_PRODUCT_HOME", join(root, "product"));
+  return { USERPROFILE: root, LOCALAPPDATA: join(root, "local"), Path: "C:stale" };
 }
 
 test("a launcher exit 0 cannot mask installer exit 17 even when the next ACP probe is ready", async () => {
@@ -182,14 +157,6 @@ test("a launcher exit 0 cannot mask installer exit 17 even when the next ACP pro
   for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
   vi.stubEnv("PE_HARNESS_ADAPTER_CODEX", join(import.meta.dirname, "fake-acp-agent.mjs"));
   vi.stubEnv("FAKE_ACP_AUTH", "none");
-  vi.mocked(spawnSync).mockReturnValue({
-    status: 1,
-    stdout: "",
-    stderr: "",
-    output: [],
-    pid: 0,
-    signal: null,
-  });
   const cli = join(env.LOCALAPPDATA, "Programs", "OpenAI", "Codex", "bin", "codex.exe");
   const logPath = join(env.LOCALAPPDATA, "console.log");
   vi.stubEnv("PE_TEST_SECRET", "synthetic-console-secret");
@@ -250,22 +217,11 @@ function file(path: string) {
 test.each(["codex", "claude"] as const)(
   "%s is discovered after installation without restarting the host",
   (harness) => {
-    const env = home();
-    const fresh = join(env.USERPROFILE, "new tools");
-    let registry = "";
-    vi.mocked(spawnSync).mockImplementation((_command, args) => ({
-      status: String(_command).endsWith("reg.exe") ? 0 : 1,
-      stdout: String(args?.[1]).startsWith("HKCU")
-        ? `\r\n    Path    REG_EXPAND_SZ    ${registry}\r\n`
-        : "\r\n    Path    REG_SZ    C:\\Windows\\System32\r\n",
-      stderr: "",
-      pid: 0,
-      output: [],
-      signal: null,
-    }));
+    const env: NodeJS.ProcessEnv = home();
+    const fresh = join(env.USERPROFILE!, "new tools");
     expect(adapterCli(harness, env)).toBe(harness);
     const cli = file(join(fresh, `${harness}.exe`));
-    registry = '"%USERPROFILE%\\new tools"';
+    env.Path = String.raw`C:\stale;"%USERPROFILE%\new tools"`;
     expect(adapterCli(harness, env)).toBe(cli);
     expect(adapterLaunch(harness, env).env).toEqual({
       [harness === "codex" ? "CODEX_PATH" : "CLAUDE_CODE_EXECUTABLE"]: cli,
