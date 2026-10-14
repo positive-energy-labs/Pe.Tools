@@ -1,7 +1,7 @@
 /**
- * The tray's notice card, mounted once at the root on the tray surface. The host projects receipt
+ * The tray's notice card, mounted only in the card shell. The host projects receipt
  * revisions onto the `notices` Reading (the host log) and holds each burst ~30 s; the tray shim hands every item to
- * a native `notice` event once this card says `notice-ready`, and lends its window card-sized without
+ * a native `notice` event once this card says `notice-ready`, and shows its separate window without
  * taking focus. One card pages every pending item: a new notice appends to the open card, a
  * draining timer walks passive items and ends after the last; pending asks hold the queue, hover
  * pauses it and typing stops it for good. Card messages ride the tray's string-JSON `type` protocol
@@ -27,8 +27,7 @@ import { Row } from "@pe/kit/lang/row";
 import { Textarea } from "#/components/lang/textarea";
 import { harnessClient } from "#/workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "#/workbench/config";
-import { useSurfaceHost } from "#/navigation/surface-host";
-import { useDestination } from "#/navigation/state";
+import { openFullWindow } from "#/navigation/surface-host";
 import { FailureNote } from "#/components/failure-note";
 import { useAction } from "#/readings";
 
@@ -41,6 +40,7 @@ import {
   snooze,
   wake,
   type NoticeLedger,
+  type NoticeView,
 } from "./notice-policy";
 import { AutomaticUpdates } from "./update";
 import { NoticePreview } from "./notice-preview";
@@ -71,8 +71,6 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
   const [previewHeight, setPreviewHeight] = useState(0);
   const card = useRef<HTMLDivElement>(null);
   const shell = useRef<HTMLDivElement>(null);
-  const host = useSurfaceHost();
-  const go = useDestination();
   const ledger = useRef<NoticeLedger | null>(null);
   /** This surface's own record of what the person has seen and snoozed, kept across reloads. */
   const record = (change: (ledger: NoticeLedger) => NoticeLedger) => {
@@ -95,9 +93,9 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
   };
   useEffect(() => {
     const webview = window.chrome?.webview;
-    const take = (next: MachineNotice) => {
+    const take = (next: MachineNotice, view: NoticeView = currentView()) => {
       record((l) => l);
-      const verdict = admit(ledger.current!, next, currentView(), Date.now());
+      const verdict = admit(ledger.current!, next, view, Date.now());
       // Looking at that thread is seeing it: no card, and it will not come back.
       if (verdict === "looking") record((l) => acknowledge(l, next));
       if (verdict !== "show") {
@@ -117,7 +115,7 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
       if (!parsed.success || parsed.data.type !== "notice") return;
       const next = parsed.data.notice;
       if (!next) return end();
-      take(next);
+      take(next, parsed.data.view);
     };
     webview?.addEventListener("message", receive);
     tray({ type: "notice-ready" });
@@ -127,7 +125,7 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
       const woken = wake(ledger.current!, Date.now());
       if (!woken.due.length) return;
       record(() => woken.ledger);
-      woken.due.forEach(take);
+      woken.due.forEach((notice) => take(notice));
     }, WAKE_MS);
     return () => {
       webview?.removeEventListener("message", receive);
@@ -205,15 +203,12 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
   const harness = () => harnessClient(resolveWorkbenchConfig().origin);
   const open = () =>
     close(
-      item.href && host.openFullWindow(item.href)
-        ? { type: "notice-hide" }
-        : { type: "notice-panel" },
+      item.href && openFullWindow(item.href) ? { type: "notice-hide" } : { type: "notice-panel" },
     );
   const act = item.act;
   /** A failure's door opens in the tray panel at that route; the card steps aside. */
   const door = (href: string) => {
-    go(href);
-    close({ type: "notice-panel" });
+    close({ type: "notice-panel", url: href });
   };
   return (
     <div

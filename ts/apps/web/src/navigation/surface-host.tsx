@@ -113,7 +113,7 @@ export function fullWindowDestination(destination: string, origin: string): stri
   return url.href;
 }
 
-function openFullWindow(destination: string): boolean {
+export function openFullWindow(destination: string): boolean {
   const url = fullWindowDestination(destination, window.location.origin);
   if (!url) return false;
   const native = (window as NativeWindow).chrome?.webview;

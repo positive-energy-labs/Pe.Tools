@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { hostProgram } from "./host-program.ts";
 import { resolveHostVersion } from "./host-lifecycle.ts";
 import { hostOwnership, productRoot } from "./host-ownership.ts";
+import { hostRedirectionTrust } from "./redirection-trust.ts";
 import { hostReceiptExport, fatalReceipt } from "./receipt-export.ts";
 
 // The installer stub and the login Run key start the installed host with no stdio anyone reads, so
@@ -37,6 +38,12 @@ if (hostOwnership.lane === "installed") {
 // and distinguishes "never started" from "started but died before bind". Plain console.log by design.
 console.log(
   `pe-host boot v${resolveHostVersion()} pid=${process.pid} lane=${process.env.PE_LANE ?? "?"}`,
+);
+
+// Windows RedirectionGuard is inherited from msiexec and blocks user junctions for every child the
+// host spawns. Log it once so a field report never needs a script.
+void hostRedirectionTrust().then((trust) =>
+  console.log(`pe-host redirection-guard=${trust ?? "unread"}`),
 );
 
 let fatal = false;

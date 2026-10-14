@@ -30,7 +30,7 @@ import type { ActionIdentity } from "./facts";
 import { isSpecOf, workflow } from "./workflow";
 import type { Refusal } from "./refusal";
 import type { Cells } from "./cells";
-import type { GlobalOption, PageOption, SettingsPanel } from "#/settings/option-state";
+import type { GlobalOption, PageOption } from "#/settings/option-state";
 import { registerGlobalOptions } from "#/settings/option-catalogue";
 
 export const semanticActionInput = (
@@ -144,15 +144,13 @@ export interface RouteManifest<W, R extends string, P, A extends string> {
   options?: readonly PageOption<P>[];
   /** External owner bindings remain available in Settings after this Page unmounts. */
   globalOptions?: readonly GlobalOption[];
-  /** Custom forms project existing owner controllers through quick links and full Settings. */
-  settingsPanels?: readonly SettingsPanel[];
 }
 
 /** Identity, for inference only. Exactly one `manifest` per route module (fable §8). */
 export const defineRoute = <W, const R extends string, P, const A extends string>(
   m: RouteManifest<W, R, P, A>,
 ): RouteManifest<W, R, P, A> => {
-  registerGlobalOptions(m.key, m.name, m.globalOptions ?? [], m.settingsPanels ?? []);
+  registerGlobalOptions(m.key, m.name, m.globalOptions ?? []);
   return m;
 };
 

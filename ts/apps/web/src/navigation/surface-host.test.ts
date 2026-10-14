@@ -11,9 +11,9 @@ import {
 describe("surface host admission", () => {
   it("keeps exactly the three declared tray routes local and hands all other registered tools to a full window", () => {
     const origin = "https://tools.example";
-    for (const path of ["/open", "/machine", "/pea"])
+    for (const path of ["/open", "/settings", "/pea"])
       expect(surfaceDestination("tray", `${path}?shell=tray#detail`, origin)).toBe("local");
-    for (const path of ["/families", "/settings", "/"]) {
+    for (const path of ["/families", "/"]) {
       expect(surfaceDestination("tray", path, origin)).toBe("window");
       expect(surfaceDestination("web", path, origin)).toBe("local");
       expect(surfaceDestination("pwa", path, origin)).toBe("local");

@@ -303,6 +303,7 @@ const base = (over: Partial<Machine> = {}): Machine => ({
     port: 5180,
     startedBy: "login",
     autostart: "on",
+    redirectionTrust: "off",
     sourceRoot: null,
     uptimeSeconds: 11_100,
     canonicalUrl: "http://127.0.0.1:5180",
@@ -367,6 +368,7 @@ const withUpdate = (update: Partial<Machine["update"]>, over: Partial<Machine> =
 
 const BLOCKED = plan(SESSIONS, true);
 const RECEIPT: UpdateReceipt = {
+  stub: null,
   legs: [
     {
       name: "download",

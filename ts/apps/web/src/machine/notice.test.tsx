@@ -322,3 +322,31 @@ test("snooze takes the item off the card for an hour and it returns once", () =>
   fireEvent.click(screen.getByRole("button", { name: "next" }));
   expect(screen.getByText("Revit start succeeded")).toBeTruthy();
 });
+
+test("the separate card honors the panel view supplied by the native window", () => {
+  render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture />);
+  act(() =>
+    listeners.forEach((receive) =>
+      receive({
+        data: {
+          type: "notice",
+          notice: finished,
+          view: { visible: true, focused: true, pathname: "/pea", thread: "t1" },
+        },
+      }),
+    ),
+  );
+  expect(card()).toBeNull();
+  act(() =>
+    listeners.forEach((receive) =>
+      receive({
+        data: {
+          type: "notice",
+          notice: { ...finished, revision: 2 },
+          view: { visible: true, focused: false, pathname: "/pea", thread: "t1" },
+        },
+      }),
+    ),
+  );
+  expect(card()).not.toBeNull();
+});

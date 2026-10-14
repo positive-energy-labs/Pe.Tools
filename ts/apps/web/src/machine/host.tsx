@@ -5,11 +5,9 @@ import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { PidChip } from "#/components/lang/process";
 import { hostAdmin } from "#/host/machine";
-import { useDestination } from "#/navigation/state";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { uptimeWords } from "./model";
 import { SEED_REFUSAL } from "./use-machine";
-import { settingsDestination } from "./navigation";
 
 export function HostGroup({
   machine,
@@ -22,7 +20,6 @@ export function HostGroup({
   fixture: boolean;
   stale: boolean;
 }) {
-  const go = useDestination();
   const capability = useSurfaceHost();
   const [said, setSaid] = useState<string | null>(null);
   const host = machine.host;
@@ -57,11 +54,14 @@ export function HostGroup({
       <p className="break-all text-ink-2">
         {host.sourceRoot ?? host.installedRoot ?? "Runtime root is unverified."}
       </p>
+      {host.redirectionTrust === "enforced" && (
+        <p data-tone="caution">
+          Windows RedirectionGuard is enforced on this host (inherited from its launcher): harness
+          CLIs it starts cannot traverse user junctions.
+        </p>
+      )}
       {host.runtimeRefusal && <p data-tone="caution">{host.runtimeRefusal}</p>}
       <div className="flex flex-wrap gap-2">
-        <Button label="Startup settings" onClick={() => go(settingsDestination("startup"))}>
-          Startup settings
-        </Button>
         <Button label="open window" kind="framed" refusal={refusal} onClick={() => run("window")}>
           open window
         </Button>

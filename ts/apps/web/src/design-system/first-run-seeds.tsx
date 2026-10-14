@@ -7,7 +7,7 @@ import type { Provider } from "@pe/agent-contracts";
 
 import { FirstOpenCard, ProviderRepair } from "#/chat/first-open";
 import { Switcher } from "#/components/lang/switcher";
-import { MachineBody } from "#/machine/body";
+import { SettingsBody } from "#/machine/body";
 import { UpdateGroup } from "#/machine/update";
 import { MACHINE_SEEDS } from "#/open/seeds";
 import type { Login, ProvidersState } from "#/workbench/provider/providers";
@@ -169,7 +169,7 @@ export function UpdateStatesDemo() {
         {checking ? (
           <UpdateGroup reading={reading} fixture checking />
         ) : (
-          <MachineBody key={name} reading={reading} fixture shell="tray" group="update" />
+          <SettingsBody key={name} reading={reading} fixture shell="tray" group="update" />
         )}
       </div>
     </Demo>

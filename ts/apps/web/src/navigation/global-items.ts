@@ -33,7 +33,7 @@ export function globalItems(
         }))
       : []),
     ...(kind === "All" || kind === "Tools"
-      ? APP_ROUTES.filter((tool) => tool.directory || tool.key === "machine").map((tool) => ({
+      ? APP_ROUTES.filter((tool) => tool.directory).map((tool) => ({
           key: `tool:${tool.path}`,
           kind: "Tools" as const,
           label: tool.title,

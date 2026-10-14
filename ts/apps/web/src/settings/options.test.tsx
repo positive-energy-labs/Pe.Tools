@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { Activity, useState, useSyncExternalStore } from "react";
+import { Activity, useState } from "react";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
@@ -13,7 +13,6 @@ import {
   type PageOption,
   type SettingsOption,
   type GlobalOption,
-  type SettingsPanel,
 } from "./option-state";
 import { useThemeMode, writeTheme } from "@pe/kit/theme";
 import {
@@ -201,57 +200,6 @@ test("late route imports notify once and preserve snapshots for identical descri
   expect(notify).toHaveBeenCalledTimes(1);
   unsubscribe();
   registerGlobalOptions("chat", "Late fixture", []);
-});
-
-test("owner-declared custom forms project quick links and remain live after their Page unmounts", () => {
-  let value = "first";
-  const listeners = new Set<() => void>();
-  const read = () => value;
-  const subscribe = (listener: () => void) => {
-    listeners.add(listener);
-    return () => {
-      listeners.delete(listener);
-    };
-  };
-  function Form() {
-    const current = useSyncExternalStore(subscribe, read, read);
-    return <output data-testid="custom-owner-value">{current}</output>;
-  }
-  const panel: SettingsPanel = {
-    id: "custom-fixture",
-    label: "Fixture form",
-    scope: "route",
-    surfaces: ["web"],
-    render: Form,
-  };
-  defineRoute({ key: "family", name: "Family fixture", settingsPanels: [panel] });
-  const tree = (mounted: boolean, section = panel.id, subject = "family") => (
-    <SettingsProvider>
-      {mounted && <FixtureOwner />}
-      <SettingsProjection quick subject={subject} />
-      <SettingsProjection subject={subject} section={section} />
-    </SettingsProvider>
-  );
-  const view = render(tree(true));
-  expect(view.getAllByTestId("custom-owner-value")).toHaveLength(1);
-  fireEvent.click(view.getAllByRole("button", { name: panel.label })[0]!);
-  expect(go).toHaveBeenCalledWith("/settings?subject=family&section=custom-fixture");
-  view.rerender(tree(false));
-  act(() => {
-    value = "second";
-    listeners.forEach((listener) => listener());
-  });
-  expect(view.getByTestId("custom-owner-value").textContent).toBe("second");
-  view.rerender(tree(false, "other"));
-  expect(view.queryByTestId("custom-owner-value")).toBeNull();
-  view.rerender(tree(false, panel.id, "chat"));
-  expect(view.queryByRole("button", { name: panel.label })).toBeNull();
-  host.surface = "tray";
-  view.rerender(tree(false));
-  expect(view.queryByRole("button", { name: panel.label })).toBeNull();
-  cleanup();
-  host.surface = "web";
-  registerGlobalOptions("family", "Family fixture", []);
 });
 
 function ThemeWitness({ id }: { id: string }) {

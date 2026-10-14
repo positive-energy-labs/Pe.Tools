@@ -17,12 +17,12 @@ export interface FailureSummary {
 }
 
 type Line = (message: string) => string;
-const REVIT_DOOR = { label: "Revit on Machine", href: "/machine?section=revit" };
+const REVIT_DOOR = { label: "Revit in Settings", href: "/settings?section=revit" };
 const ALIGN_DOOR = {
   label: "Align Revit add-ins with this build",
-  href: "/machine?section=revit#align-addins",
+  href: "/settings?section=revit#align-addins",
 };
-const UPDATE_DOOR = { label: "Update on Machine", href: "/machine?section=update" };
+const UPDATE_DOOR = { label: "Update in Settings", href: "/settings?section=update" };
 
 const beta = (version: string) => /beta\.(\d+)/.exec(version)?.[1];
 /** "(version skew: 0.1.0-beta.208 installed, 0.1.0-beta.207 here)" says which side is ahead. */

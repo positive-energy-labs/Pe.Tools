@@ -223,7 +223,7 @@ function ResourceLineup() {
                               : "No observation yet."
                           }
                         />
-                        <Link to="/machine">Open Machine</Link>
+                        <Link to="/settings">Open Settings</Link>
                       </div>
                     )}
                   </HoverCardContent>

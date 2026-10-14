@@ -11,6 +11,6 @@ test("a declared client reads feature revisions beside the serving host version"
   const client = createPeClient("http://host", (url, init) => app.fetch(new Request(url, init)));
   expect(await client.call("features.get", {})).toEqual({
     version: "dev",
-    features: { peApi: 1, nativeAdapter: 1 },
+    features: { peApi: 1, nativeAdapter: 2 },
   });
 });

@@ -1,15 +1,13 @@
 /**
  * Machine attention and feedback exist once around every surface's route outlet.
  * Their doors are projections in the shared topbar, not separate floating controls.
- * On the tray surface the receipt notice card mounts here too, whatever route the panel shows; on a
- * web surface with no tray following, the same items can raise OS notifications (opt-in).
+ * The receipt card has its own shell. A web surface with no tray following can raise OS notifications.
  */
+import { useRouterState } from "@tanstack/react-router";
+import { InstallScrim } from "#/machine/install-scrim";
 import { FeedbackPicker } from "#/components/feedback-picker";
 import { MachineAttention } from "#/machine/attention";
-import { NoticeCard } from "#/machine/notice";
 import { OsNotices } from "#/machine/os-notices";
-import { useMachine } from "#/machine/use-machine";
-import { useSurfaceHost } from "#/navigation/surface-host";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import { OwnerInspector } from "#/state/owner-inspector";
@@ -19,17 +17,9 @@ export function AppChrome() {
     <>
       <MachineAttention />
       <OsNotices />
-      <TrayNotice />
       <FeedbackPicker hideTrigger />
     </>
   );
-}
-
-function TrayNotice() {
-  const { reading, fixture } = useMachine();
-  return useSurfaceHost().surface === "tray" ? (
-    <NoticeCard reading={reading} fixture={fixture} />
-  ) : null;
 }
 
 export function AppDevtools({ pathname, shell }: { pathname: string; shell?: string }) {
@@ -44,5 +34,16 @@ export function AppDevtools({ pathname, shell }: { pathname: string; shell?: str
         { name: "Route owners", render: <OwnerInspector /> },
       ]}
     />
+  );
+}
+
+export function AppUtilities() {
+  const location = useRouterState({ select: (state) => state.location });
+  return (
+    <>
+      <AppChrome />
+      <InstallScrim />
+      <AppDevtools pathname={location.pathname} shell={String(location.search.shell ?? "")} />
+    </>
   );
 }

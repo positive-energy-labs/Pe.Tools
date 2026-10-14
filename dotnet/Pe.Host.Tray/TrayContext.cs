@@ -35,8 +35,10 @@ internal sealed class TrayContext : ApplicationContext {
     private string? _pendingPath;
     private bool _recordDev;
     private readonly ToolStripMenuItem _openWindow = new("Installation unavailable") { Enabled = false };
-    /** The window shows as a notice card, not the panel: no focus, card height, the page hides it. */
-    private bool _card;
+    private readonly NoticeWindow _noticeWindow = new();
+    private readonly WebView2 _noticeWeb = new() { Dock = DockStyle.Fill };
+    private bool _noticeHasPage;
+    private bool _noticeNavigating;
     private readonly NoticeInbox _inbox;
 
     public TrayContext(TrayLaunch launch, ServiceRecord service, Process parent) {
@@ -48,6 +50,8 @@ internal sealed class TrayContext : ApplicationContext {
         var resumed = launch.Route is null ? TrayResume.Take(ResumePath, DateTimeOffset.UtcNow) : null;
         _pendingPath = (launch.Route ?? resumed) is { } route ? TrayPath(route) : null;
         _window.Controls.Add(_web);
+        _noticeWindow.Controls.Add(_noticeWeb);
+        _ = _noticeWindow.Handle;
         _ = _window.Handle;
         var favicon = launch.IsDev ? Path.Combine(launch.SourceRoot!, "ts", "apps", "web", "public", "favicon-dev.ico")
             : Path.Combine(AppContext.BaseDirectory, "..", "web", "client", "favicon.ico");
@@ -56,10 +60,9 @@ internal sealed class TrayContext : ApplicationContext {
             Text = $"Pe.Tools {service.Version}", ContextMenuStrip = _menu, Visible = true
         };
         if (launch.IsDev) { _window.Text = "Pe.Tools Dev · " + Path.GetFileName(launch.SourceRoot); _window.Icon = _icon.Icon; }
-        _openWindow.Click += (_, _) => OpenWindow();
+        _openWindow.Click += (_, _) => OpenWindow(install: true);
         _menu.Items.Add(_openWindow);
         _menu.Items.Add("Rehome", null, (_, _) => {
-            if (_card) HideCard();
             _window.Rehome();
             _window.WindowState = FormWindowState.Normal;
             _window.Show();
@@ -70,14 +73,13 @@ internal sealed class TrayContext : ApplicationContext {
         _icon.MouseClick += (_, e) => {
             if (e.Button != MouseButtons.Left) return;
             if (!_ready) { _menu.Show(Cursor.Position); return; }
-            if (_window.Visible && !_card && _window.WindowState != FormWindowState.Minimized) { _window.Hide(); return; }
+            if (_window.Visible && _window.WindowState != FormWindowState.Minimized) { _window.Hide(); return; }
             RequestShow(null);
         };
         _window.FormClosing += (_, e) => {
             if (_closing || e.CloseReason != CloseReason.UserClosing) return;
             e.Cancel = true;
-            if (_card) HideCard();
-            else _window.Hide();
+            _window.Hide();
         };
         _window.TaskbarRestarted += (_, _) => { _icon.Visible = false; _icon.Visible = true; };
         _window.TitlebarGeometryChanged += (_, _) => PostTitlebarGeometry();
@@ -106,7 +108,7 @@ internal sealed class TrayContext : ApplicationContext {
     private string ResumePath => Path.Combine(ProductRuntimeLayout.ForCurrentUser().RootPath, $"tray-resume-{_launch.ProfileKey}.json");
 
     private void RememberWhereTheWindowWas() {
-        if (_quitRequested || !_ready || !_window.Visible || _card || _window.WindowState == FormWindowState.Minimized
+        if (_quitRequested || !_ready || !_window.Visible || _window.WindowState == FormWindowState.Minimized
             || _web.Source is not { } source || !IsViewUrl(source.AbsoluteUri)) return;
         TrayResume.Save(ResumePath, TrayResume.RouteOf(source), DateTimeOffset.UtcNow);
     }
@@ -126,11 +128,6 @@ internal sealed class TrayContext : ApplicationContext {
                 _hasPage = false;
                 if (_ready && _connected) _web.CoreWebView2.Navigate(_service.ViewOrigin + _pendingPath);
             }
-            if (_card) {
-                _card = false;
-                PostNativeMessage(new { type = "notice", notice = (object?)null });
-                _window.LeaveCard();
-            }
             _window.PositionAboveTaskbar();
             _window.WindowState = FormWindowState.Normal;
             _window.Show();
@@ -139,10 +136,9 @@ internal sealed class TrayContext : ApplicationContext {
     }
 
     private void HideCard() {
-        _window.Hide();
-        _card = false;
-        PostNativeMessage(new { type = "notice", notice = (object?)null });
-        _window.LeaveCard();
+        _noticeWindow.Hide();
+        if (_noticeWeb.CoreWebView2 is not null)
+            PostNoticeMessage(new { type = "notice", notice = (object?)null });
     }
 
     private static string NoticeCursorPath(TrayLaunch launch) => Path.Combine(ProductRuntimeLayout.ForCurrentUser().RootPath, $"tray-notices-{launch.ProfileKey}.cursor");
@@ -168,18 +164,15 @@ internal sealed class TrayContext : ApplicationContext {
     private void ShowNotices(IReadOnlyList<string> notices) {
         if (notices.Count == 0) return;
         try {
-            _window.BeginInvoke(() => {
-                // Lend the window even when the panel is open or dragged away from the taskbar.
-                // The page must be visible to measure the card, then its height report refines it.
-                if (!_card) {
-                    _card = true;
-                    _window.PositionCard(96);
-                    _window.Show();
-                }
-                foreach (var notice in notices) {
-                    using var value = JsonDocument.Parse(notice);
-                    PostNativeMessage(new { type = "notice", notice = value.RootElement });
-                }
+            _window.BeginInvoke(async () => {
+                try {
+                    var view = await _web.ExecuteScriptAsync("({visible:document.visibilityState==='visible',focused:document.hasFocus(),pathname:location.pathname,thread:new URLSearchParams(location.search).get('thread')})");
+                    using var panel = JsonDocument.Parse(view);
+                    foreach (var notice in notices) {
+                        using var value = JsonDocument.Parse(notice);
+                        PostNoticeMessage(new { type = "notice", notice = value.RootElement, view = panel.RootElement });
+                    }
+                } catch (Exception error) when (error is InvalidOperationException or COMException or JsonException) { }
             });
         } catch (InvalidOperationException) { }
     }
@@ -187,6 +180,12 @@ internal sealed class TrayContext : ApplicationContext {
     private void PostNativeMessage<T>(T message) {
         if (_closing || !_ready) return;
         try { _web.CoreWebView2.PostWebMessageAsJson(NativeAdapterContract.SerializeNative(message)); }
+        catch (Exception error) when (error is InvalidOperationException or COMException) { }
+    }
+
+    private void PostNoticeMessage<T>(T message) {
+        if (_closing || _noticeWeb.CoreWebView2 is null) return;
+        try { _noticeWeb.CoreWebView2.PostWebMessageAsJson(NativeAdapterContract.SerializeNative(message)); }
         catch (Exception error) when (error is InvalidOperationException or COMException) { }
     }
 
@@ -200,15 +199,16 @@ internal sealed class TrayContext : ApplicationContext {
                 return true;
             case "notice-card":
                 var css = (int)payload.GetProperty("height").GetDouble();
-                _card = true;
-                _window.PositionCard(css);
-                _window.Show();
+                _noticeWindow.PositionCard(css);
+                _noticeWindow.Show();
                 return true;
             case "notice-hide":
-                if (_card) HideCard();
+                HideCard();
                 return true;
             case "notice-panel":
-                RequestShow(null);
+                HideCard();
+                var route = payload.TryGetProperty("url", out var destination) ? destination.GetString() : null;
+                if (route is null || TrayLaunch.IsCanonicalRoute(route)) RequestShow(route);
                 return true;
             default:
                 return false;
@@ -240,6 +240,7 @@ internal sealed class TrayContext : ApplicationContext {
                         if (_ready && _web.Source is { } source && IsViewUrl(source.AbsoluteUri))
                             _pendingPath = source.PathAndQuery;
                         _service = current; _hasPage = false; _rendererReady = false;
+                        _noticeHasPage = false; _inbox.PageGone(); HideCard();
                     }
                     return true;
                 }
@@ -287,7 +288,7 @@ internal sealed class TrayContext : ApplicationContext {
                 if (!IsOriginalService()) { e.Cancel = true; return; }
                 if (!IsViewUrl(e.Uri)) { e.Cancel = true; OpenExternalUrl(e.Uri, e.IsUserInitiated); }
                 else if (ShouldRelayNavigation(_rendererReady, e.Uri, _web.Source?.AbsoluteUri)) { e.Cancel = true; RelayNavigation(e.Uri); }
-                else { _rendererReady = false; _navigating = true; _inbox.PageGone(); }
+                else { _rendererReady = false; _navigating = true; }
             };
             core.NewWindowRequested += (_, e) => {
                 e.Handled = true;
@@ -314,13 +315,11 @@ internal sealed class TrayContext : ApplicationContext {
                         if (back) _web.CoreWebView2.GoBack(); else _web.CoreWebView2.GoForward();
                         return;
                     }
-                    if (TryNoticeMessage(payload)) return;
                     if (payload.ValueKind == JsonValueKind.Object
                         && payload.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.String
                         && type.GetString() == "open-window"
                         && payload.TryGetProperty("url", out var url) && url.ValueKind == JsonValueKind.String
                         && TryGetWindowUrl(url.GetString()!, _service.ViewOrigin, out var destination)) {
-                        if (_card) HideCard();
                         OpenWindow(destination);
                     }
                     else if (TrayWindow.TryReadChromeTheme(payload, out var background, out var foreground, out var dark)) {
@@ -343,6 +342,7 @@ internal sealed class TrayContext : ApplicationContext {
             };
             core.HistoryChanged += (_, _) => PostNavigationHistory();
             _ready = true;
+            await InitializeNoticeWebAsync(environment);
             await CheckHealthAsync();
         } catch (Exception error) when (error is WebView2RuntimeNotFoundException or COMException
                                        or InvalidOperationException or IOException or UnauthorizedAccessException) {
@@ -352,6 +352,50 @@ internal sealed class TrayContext : ApplicationContext {
             _icon.Text = "Pe.Tools: WebView2 unavailable";
         }
     }
+
+    private async Task InitializeNoticeWebAsync(CoreWebView2Environment environment) {
+        await _noticeWeb.EnsureCoreWebView2Async(environment);
+        if (_closing) return;
+        var core = _noticeWeb.CoreWebView2;
+        core.Settings.AreDefaultContextMenusEnabled = false;
+        core.Settings.AreDevToolsEnabled = false;
+        core.Settings.IsBuiltInErrorPageEnabled = false;
+        _noticeWindow.ConfigureFrame(_noticeWeb);
+        core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All,
+            CoreWebView2WebResourceRequestSourceKinds.All);
+        core.WebResourceRequested += (_, e) => {
+            var current = IsOriginalService();
+            if (!IsHostUrl(e.Request.Uri)) { e.Request.Headers.RemoveHeader(TokenHeader); return; }
+            if (current) e.Request.Headers.SetHeader(TokenHeader, _service.Token);
+            else e.Response = environment.CreateWebResourceResponse(null, 503, "Parent service retired", "");
+        };
+        core.NavigationStarting += (_, e) => {
+            if (!IsOriginalService() || e.Uri != NoticeUrl) { e.Cancel = true; return; }
+            _noticeNavigating = true;
+            _inbox.PageGone();
+        };
+        core.NewWindowRequested += (_, e) => {
+            e.Handled = true;
+            if (IsOriginalService() && e.IsUserInitiated) OpenExternalUrl(e.Uri, true);
+        };
+        core.WebMessageReceived += (_, e) => {
+            if (!IsOriginalService() || e.Source != NoticeUrl) return;
+            try {
+                using var message = JsonDocument.Parse(e.TryGetWebMessageAsString());
+                var payload = message.RootElement;
+                if (!NativeAdapterContract.Accepts("renderer", payload)) return;
+                if (TryNoticeMessage(payload)) return;
+                if (payload.GetProperty("type").GetString() == "open-window"
+                    && TryGetWindowUrl(payload.GetProperty("url").GetString()!, _service.ViewOrigin, out var destination)) {
+                    HideCard();
+                    OpenWindow(destination);
+                }
+            } catch (Exception error) when (error is JsonException or InvalidOperationException or COMException) { }
+        };
+        core.NavigationCompleted += (_, e) => { _noticeNavigating = false; _noticeHasPage = e.IsSuccess; };
+    }
+
+    private string NoticeUrl => _service.ViewOrigin + "/open?shell=card";
 
     private void DevStage(string stage) {
         if (!_launch.IsDev) return;
@@ -450,6 +494,9 @@ internal sealed class TrayContext : ApplicationContext {
                 DevStage("navigate " + _service.ViewOrigin + path);
                 _web.CoreWebView2.Navigate(_service.ViewOrigin + path);
             }
+            if (_ready && _connected && !_noticeHasPage && !_noticeNavigating)
+                _noticeWeb.CoreWebView2.Navigate(NoticeUrl);
+            _noticeWeb.Enabled = _connected;
             await ShowConnectionAsync();
             if (_launch.IsDev && _ready && _recordDev) { _recordDev = false; await RecordDevStateAsync(); }
         }
@@ -547,7 +594,7 @@ internal sealed class TrayContext : ApplicationContext {
         }
     }
 
-    private async void OpenWindow(string? destination = null) {
+    private async void OpenWindow(string? destination = null, bool install = false) {
         if (!IsOriginalService()) return;
         var service = _service;
         destination ??= _service.ViewOrigin + "/";
@@ -555,8 +602,10 @@ internal sealed class TrayContext : ApplicationContext {
             if (PwaLauncher.EdgeExecutable is not { } edge) { _icon.Text = "Pe.Tools: Edge unavailable"; return; }
             var installed = await FindPwaAsync();
             if (!IsOriginalService() || service != _service) return;
-            _openWindow.Text = installed is null ? "Install in Edge" : "Open window";
-            var start = PwaLauncher.Launch(edge, service.ViewOrigin, destination, installed, PwaLauncher.StandardProfileRoot);
+            _openWindow.Text = "Open window";
+            var start = install && installed is null
+                ? PwaLauncher.Install(edge, service.ViewOrigin, PwaLauncher.StandardProfileRoot)
+                : PwaLauncher.Launch(edge, service.ViewOrigin, destination, installed, PwaLauncher.StandardProfileRoot);
             Process.Start(start)?.Dispose();
         } catch (Exception error) when (error is System.ComponentModel.Win32Exception or IOException or HttpRequestException
                                        or JsonException or UnauthorizedAccessException or ArgumentException or OperationCanceledException
@@ -595,6 +644,7 @@ internal sealed class TrayContext : ApplicationContext {
             _icon.Dispose();
             icon?.Dispose();
             _menu.Dispose();
+            _noticeWindow.Dispose();
             _window.Dispose();
             _http.Dispose();
             _stop.Dispose();
@@ -611,13 +661,6 @@ internal sealed class TrayContext : ApplicationContext {
 internal sealed class TrayWindow : Form {
     private readonly uint _taskbarCreated = RegisterWindowMessage("TaskbarCreated");
     private bool _positioned;
-    /** The panel's bounds while the window is lent to a notice card. */
-    private Rectangle? _panelBounds;
-    private bool _panelVisible;
-    private FormWindowState _panelState;
-    private int _cardCssHeight;
-    /** Lent to the card: the page covers the whole window, caption buttons included. */
-    private bool _card;
     public event EventHandler? TaskbarRestarted;
     internal CaptionThemeResult? ChromeThemeResult { get; private set; }
     private WebView2? _frameView;
@@ -630,13 +673,14 @@ internal sealed class TrayWindow : Form {
         _frameView = view; _customFrame = true; BackColor = Color.Black;
         var policy = 2;
         DwmSetWindowAttribute(Handle, 2, ref policy, sizeof(int));
-        var round = 2; // DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND, panel and card alike
+        var round = 2; // DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND, rounded panel
         if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000)) DwmSetWindowAttribute(Handle, 33, ref round, sizeof(int));
         SetWindowPos(Handle, IntPtr.Zero, 0, 0, 0, 0, 0x37); // NOMOVE|NOSIZE|NOZORDER|NOACTIVATE|FRAMECHANGED
         ExtendNativeFrame();
         SizeChanged += (_, _) => RefreshTitlebar();
         VisibleChanged += (_, _) => RefreshTitlebar();
         DpiChanged += (_, _) => RefreshTitlebar();
+        view.ZoomFactorChanged += (_, _) => RefreshTitlebar();
         RefreshTitlebar();
     }
 
@@ -645,14 +689,14 @@ internal sealed class TrayWindow : Form {
             || DwmGetWindowAttribute(Handle, 5, out NativeRect bounds, Marshal.SizeOf<NativeRect>()) != 0)
             return NativeTitlebarGeometry.Hidden;
         return ProjectTitlebar(new Rectangle(bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top),
-            ClientSize, DeviceDpi, Visible);
+            ClientSize, DeviceDpi, Visible, _frameView?.ZoomFactor ?? 1);
     }
 
-    internal static NativeTitlebarGeometry ProjectTitlebar(Rectangle buttons, Size client, int dpi, bool visible) {
-        if (!visible || dpi <= 0 || client.Width <= 0 || client.Height <= 0 || buttons.Left <= 0 || buttons.Top < 0
+    internal static NativeTitlebarGeometry ProjectTitlebar(Rectangle buttons, Size client, int dpi, bool visible, double zoomFactor = 1) {
+        if (!visible || dpi <= 0 || !double.IsFinite(zoomFactor) || zoomFactor <= 0 || client.Width <= 0 || client.Height <= 0 || buttons.Left <= 0 || buttons.Top < 0
             || buttons.Width <= 0 || buttons.Height <= 0 || buttons.Right > client.Width || buttons.Bottom > client.Height)
             return NativeTitlebarGeometry.Hidden;
-        var scale = dpi / 96d;
+        var scale = dpi / 96d * zoomFactor;
         return new("titlebar-geometry", true, new(0, 0, buttons.Left / scale, buttons.Bottom / scale));
     }
 
@@ -669,11 +713,11 @@ internal sealed class TrayWindow : Form {
         _refreshingFrame = true;
         try {
             var geometry = ReadTitlebarGeometry();
-            // Clip only the child so DWM owns the top-level frame and shadow in both modes.
+            // Clip only the child so DWM owns the top-level frame and shadow for the panel.
             ExtendNativeFrame();
             var next = new Region(ContentClipBounds(ClientSize, VisibleFrameBorder));
-            if (geometry.visible && !_card) {
-                var scale = DeviceDpi / 96d;
+            if (geometry.visible) {
+                var scale = DeviceDpi / 96d * _frameView.ZoomFactor;
                 next.Exclude(new Rectangle((int)Math.Round(geometry.rect.width * scale), 0,
                     ClientSize.Width - (int)Math.Round(geometry.rect.width * scale), (int)Math.Ceiling(geometry.rect.height * scale)));
             }
@@ -684,7 +728,7 @@ internal sealed class TrayWindow : Form {
 
     private void ExtendNativeFrame() {
         var margins = new NativeMargins { Left = 1, Right = 1, Bottom = 1,
-            Top = _card ? 1 : Math.Max(ResizeBorder, (int)Math.Round(40 * DeviceDpi / 96d)) };
+            Top = Math.Max(ResizeBorder, (int)Math.Round(40 * DeviceDpi / 96d)) };
         DwmExtendFrameIntoClientArea(Handle, ref margins);
     }
 
@@ -696,50 +740,12 @@ internal sealed class TrayWindow : Form {
         AutoScaleMode = AutoScaleMode.None;
         Text = "Pe.Tools";
         DpiChanged += (_, e) => {
-            // A DPI hop during borrowing/restoration must not rehome the dragged panel.
-            if (_card) { e.Cancel = true; PositionCard(_cardCssHeight); }
-            else if (_panelBounds is not null) e.Cancel = true;
-            else PositionAboveTaskbar(Screen.FromRectangle(e.SuggestedRectangle).WorkingArea, e.DeviceDpiNew);
+            PositionAboveTaskbar(Screen.FromRectangle(e.SuggestedRectangle).WorkingArea, e.DeviceDpiNew);
         };
     }
 
     /** The panel shows with Activate; a notice card never takes focus from Revit. */
     protected override bool ShowWithoutActivation => true;
-
-    /** Card-wide and as tall as the card says, in CSS pixels, at the taskbar's corner. */
-    public void PositionCard(int cssHeight) {
-        if (!_card) {
-            _panelBounds = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
-            _panelState = WindowState;
-            _panelVisible = Visible;
-            Hide();
-            _card = true;
-            WindowState = FormWindowState.Normal;
-        }
-        _cardCssHeight = cssHeight;
-        Bounds = CardBoundsFor((Screen.PrimaryScreen ?? Screen.FromPoint(Cursor.Position)).WorkingArea, DeviceDpi, cssHeight);
-        RefreshTitlebar();
-    }
-
-    /** The card's 420 CSS px, inset farther than the panel's 12 CSS px gutter. */
-    internal static Rectangle CardBoundsFor(Rectangle work, int dpi, int cssHeight) {
-        var gutter = Math.Max(0, (int)Math.Round(20 * dpi / 96d));
-        var width = Math.Min((int)Math.Round(420 * dpi / 96d), Math.Max(0, work.Width - 2 * gutter));
-        var height = Math.Min((int)Math.Ceiling(cssHeight * dpi / 96d), Math.Max(0, work.Height - 2 * gutter));
-        return new Rectangle(work.Right - gutter - width, work.Bottom - gutter - height, width, height);
-    }
-
-    /** The panel returns to the bounds it had before the card borrowed the window. */
-    public void LeaveCard() {
-        if (!_card) return;
-        Hide();
-        _card = false;
-        if (_panelBounds is { } panel) Bounds = panel;
-        WindowState = _panelState;
-        _panelBounds = null;
-        RefreshTitlebar();
-        if (_panelVisible) Show();
-    }
 
     public void PositionAboveTaskbar() {
         if (_positioned && Screen.FromRectangle(Bounds).WorkingArea.Contains(Bounds)) return;

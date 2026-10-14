@@ -90,7 +90,7 @@ export function InstallGate({
           )}
           <span className="text-ink-2">
             {expired
-              ? "Reload to look again, or dismiss this and check Machine."
+              ? "Reload to look again, or dismiss this and check Settings."
               : "Nothing on this page can be used until the update finishes. It reloads by itself."}
           </span>
           {expired ? (

@@ -100,8 +100,8 @@ export function noticeOf(r: Receipt, context: NoticeContext): MachineNotice | nu
       return outcome === "succeeded"
         ? {
             ...base,
-            title: "Pe.Tools updated",
-            body: "Installed while no Revit was open.",
+            title: candidateVersion ? `Pe.Tools ${candidateVersion} installed` : "Pe.Tools updated",
+            body: "The update finished. The tray panel has the receipt.",
             act: { kind: "automatic-updates" },
           }
         : {
@@ -116,8 +116,8 @@ export function noticeOf(r: Receipt, context: NoticeContext): MachineNotice | nu
 }
 
 /**
- * Finished turns, Revit verb ends and updates wait this long after the first of a burst, so a burst
- * arrives as one paged card. An approval or question blocks Pea, so it and its thread's response never wait.
+ * Finished turns and Revit verb ends wait after the first of a burst, so a burst arrives as one
+ * paged card. Updates, approvals and questions speak at once; an open ask also releases its thread's response.
  */
 const BUFFER_MS = 30_000;
 const SEEN = 256;
@@ -192,6 +192,7 @@ export function createNotices(deps: {
     }
     if (
       bufferMs <= 0 ||
+      body.kind === "usage" ||
       (body.kind === "turn" && thread && [...openRequests.values()].includes(thread))
     )
       return announce(entry);
@@ -269,6 +270,7 @@ export function createNotices(deps: {
     close: () => {
       unsubscribe();
       clearTimeout(timer);
+      flush();
     },
   };
 }

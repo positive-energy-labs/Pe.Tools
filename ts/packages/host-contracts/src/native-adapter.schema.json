@@ -108,6 +108,9 @@
             "type": {
               "type": "string",
               "const": "notice-panel"
+            },
+            "url": {
+              "$ref": "#/$defs/__schema1"
             }
           },
           "required": ["type"],
@@ -201,6 +204,32 @@
                   "type": "null"
                 }
               ]
+            },
+            "view": {
+              "type": "object",
+              "properties": {
+                "visible": {
+                  "type": "boolean"
+                },
+                "focused": {
+                  "type": "boolean"
+                },
+                "pathname": {
+                  "type": "string"
+                },
+                "thread": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": ["visible", "focused", "pathname", "thread"],
+              "additionalProperties": false
             }
           },
           "required": ["type", "notice"],
