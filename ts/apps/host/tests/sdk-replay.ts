@@ -27,7 +27,7 @@ const frame = recorded.get("session-list.ok")!;
 export const sdkBinary = frame.binary as unknown as Binary;
 export const sdkCommand = frame.command as unknown as CommandContext;
 
-const families = new Set(["session", "doc", "op", "sdk", "update"]);
+const families = new Set(["session", "doc", "op", "sdk", "update", "bootstrap"]);
 const shortForms: Record<string, string> = {
   open: "doc-open",
   start: "session-start",
@@ -100,8 +100,11 @@ export function recordedProblems(args: readonly string[], stdout: string): strin
   if ((fake.command as Record<string, unknown> | null)?.commandRule === "simulated-demo") return []; // demo-owner.ts SIMULATED_SDK
   const exact = recorded.get(`${verb}.${stateOf(fake)}`);
   // A state with no recording of its own is held to the envelope, not to another state's result.
-  const real = exact ?? [...recorded].find(([name]) => name.startsWith(`${verb}.`))?.[1];
-  if (!real) return [`no recorded envelope for '${verb}'; record one with tools/acceptance.py sdk`];
+  // A verb never recorded (bootstrap install mutates the machine) keeps the recorded frame, and its
+  // result is held to the vendored contract alone.
+  const real = exact ?? [...recorded].find(([name]) => name.startsWith(`${verb}.`))?.[1] ?? frame;
+  if (real === frame && !contractShape(fake.result))
+    return [`no recorded envelope for '${verb}' and its result matches no contract shape`];
   const problems: string[] = [];
   // A union result (op result: receipt, response, late, state-only) the recording did not take is
   // held to the vendored contract: its keys must be exactly one generated interface's.
