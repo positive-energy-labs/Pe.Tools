@@ -37,7 +37,7 @@ const asking: MachineNotice = {
 const finished: MachineNotice = {
   id: "10000000-0000-4000-8000-000000000002",
   revision: 1,
-  title: "Pea finished · ducts",
+  title: "ducts",
   body: "Resized **41 of 43** ducts.",
   href: "/pea?thread=t1",
   act: { kind: "reply", threadId: "t1" },
@@ -168,7 +168,7 @@ test("typing a reply stops the drain for good; Send takes the prompt door and St
   cancel.mockResolvedValue();
   render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture={false} />);
   show(finished);
-  expect(screen.getByText("41 of 43").tagName).toBe("STRONG");
+  expect(screen.queryByText("41 of 43")).toBeNull();
   fireEvent.change(screen.getByRole("textbox", { name: "reply to Pea" }), {
     target: { value: "number the rest" },
   });
@@ -191,6 +191,23 @@ test("the title opens the item's href in the app window, then hides the card", (
     JSON.stringify({ type: "open-window", url: `${window.location.origin}/pea?thread=t1` }),
   );
   expect(postMessage).toHaveBeenLastCalledWith(JSON.stringify({ type: "notice-hide" }));
+});
+
+test("a reply's title previews Markdown on hover without focusing or changing its reply", async () => {
+  vi.useFakeTimers();
+  render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture />);
+  show(finished, revit);
+  const title = screen.getByRole("button", { name: "ducts" });
+  const focus = document.activeElement;
+  expect(screen.queryByText("41 of 43")).toBeNull();
+  fireEvent.mouseEnter(title);
+  fireEvent.mouseMove(title);
+  await act(async () => vi.advanceTimersByTime(500));
+  expect(screen.getByText("41 of 43").tagName).toBe("STRONG");
+  expect(document.activeElement).toBe(focus);
+  expect(screen.getByRole("textbox", { name: "reply to Pea" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "next" }));
+  expect(screen.queryByText("41 of 43")).toBeNull();
 });
 
 test("a permission answer goes to the thread's door; its item leaves only when the door accepts", async () => {

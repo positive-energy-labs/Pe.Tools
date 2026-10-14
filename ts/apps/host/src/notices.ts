@@ -62,7 +62,7 @@ export function noticeOf(r: Receipt, context: NoticeContext): MachineNotice | nu
       const finished = body.phase === "finished";
       return {
         ...base,
-        title: finished ? `Pea finished · ${title}` : `Pea stopped · ${title}`,
+        title: finished ? title : `Pea stopped · ${title}`,
         body: context.said(r) || (finished ? "The turn ended." : "The turn ended with an error."),
         href: chatHref(thread?.id),
         ...(thread ? { act: { kind: "reply" as const, threadId: thread.id } } : {}),
