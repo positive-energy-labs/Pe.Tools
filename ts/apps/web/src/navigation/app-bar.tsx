@@ -10,8 +10,8 @@ import { SituationDrawer } from "./situation-drawer";
 import { locationLabel, admittedDestination, shellButtons } from "./model";
 import { useDestination, useNavigation } from "./state";
 import { GlobalSearch } from "./global-search";
-import { RouteControlsSlot } from "./route-controls";
-import { useRouteSlotPresence } from "./route-controls";
+import { RouteControlsOutlet } from "./route-controls";
+import { useRouteControlPresence } from "./route-controls";
 import { RouteHelpButton } from "#/route/help";
 import { projectCaptionTheme, useSurfaceHost } from "./surface-host";
 import { startFeedback } from "#/components/feedback-picker";
@@ -87,7 +87,7 @@ export function AppBar() {
       options: { ignoreInputs: false },
     },
   ]);
-  const hasRouteHelp = useRouteSlotPresence("controls");
+  const hasRouteHelp = useRouteControlPresence("controls");
   useEffect(() => {
     const node = bar.current;
     if (!node) return;
@@ -155,8 +155,8 @@ export function AppBar() {
   const label = locationLabel(location.pathname);
   const actions = (
     <>
-      <RouteControlsSlot slot="palette" />
-      <RouteControlsSlot />
+      <RouteControlsOutlet slot="palette" />
+      <RouteControlsOutlet />
       {!hasRouteHelp && (
         <RouteHelpButton
           name={label}

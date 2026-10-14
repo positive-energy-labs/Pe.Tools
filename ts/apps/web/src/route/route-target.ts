@@ -75,7 +75,7 @@ export function parseTarget(
 export type TargetProvenance =
   | { source: "url-pin"; raw: string }
   | { source: "thread-head"; thread: string; revision: number; current: boolean }
-  | { source: "fixture" | "none" };
+  | { source: "seed" | "none" };
 
 /**
  * The route's Target: the thread head or a `?target` pin, resolved against the live inventory,
@@ -244,7 +244,7 @@ export function useRouteTarget(
   }, [resolution, inventoryResult]);
   const head = headRequest && headResult ? { thread: headRequest.thread, ...scope } : null;
   const targetProvenance: TargetProvenance = seed
-    ? { source: "fixture" }
+    ? { source: "seed" }
     : target
       ? { source: "url-pin", raw: target }
       : thread

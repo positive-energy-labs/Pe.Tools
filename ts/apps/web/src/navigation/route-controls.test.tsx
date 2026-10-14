@@ -7,7 +7,7 @@ import { Button } from "@pe/kit/lang/button";
 import {
   PrimaryRouteControls,
   RouteControlsProvider,
-  RouteControlsSlot,
+  RouteControlsOutlet,
   useSituationSignal,
   usePagePaletteOpen,
   usePublishPagePalette,
@@ -28,7 +28,7 @@ test("only the visible primary route supplies the global control slot", () => {
   const tree = (mode: "visible" | "hidden") => (
     <RouteControlsProvider>
       <div data-testid="global">
-        <RouteControlsSlot />
+        <RouteControlsOutlet />
       </div>
       <Activity mode={mode}>
         <div data-testid="primary">

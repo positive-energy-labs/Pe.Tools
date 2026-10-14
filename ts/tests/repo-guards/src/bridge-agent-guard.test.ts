@@ -26,9 +26,12 @@ describe("BridgeAgent Revit task dispatch", () => {
     expect(bridgeAgent).not.toContain("_inFlightOperationKey");
     expect(bridgeAgent).not.toContain("_requestExecutionSync");
 
-    expect(bridgeAgent).toContain('RevitTaskOutcome.TimedOut => ("timed-out", 504)');
+    // The verdict strings are the vendored BridgeWire.Verdicts constants ("timed-out", "abandoned").
     expect(bridgeAgent).toContain(
-      'RevitTaskOutcome.AbandonedStillRunning => ("abandoned-still-running", 423)',
+      "RevitTaskOutcome.TimedOut => (BridgeWire.Verdicts.TimedOut, 504)",
+    );
+    expect(bridgeAgent).toContain(
+      "RevitTaskOutcome.AbandonedStillRunning => (BridgeWire.Verdicts.Abandoned, 423)",
     );
     expect(bridgeAgent).toContain(
       "RevitTaskOutcome.CancelledBeforeDispatch or RevitTaskOutcome.CancelledCooperatively",

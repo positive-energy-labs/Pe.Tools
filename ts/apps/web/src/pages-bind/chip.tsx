@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { PageTargetReading } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
-import { runtimeStreamUrl } from "#/host/runtime";
+import { openEventSource } from "#/readings";
 import { peClient } from "#/host/pe-client";
 import { readPageTarget } from "./client";
 
@@ -33,13 +33,11 @@ export function PageBindingChip({ slug }: { slug: string }) {
           setRefusal(error instanceof Error ? error.message : String(error));
       }
     };
-    const events = new EventSource(
-      runtimeStreamUrl(
-        peClient.url("page.events", {
-          params: { slug },
-          query: { after: Number.MAX_SAFE_INTEGER },
-        }),
-      ),
+    const events = openEventSource(
+      peClient.url("page.events", {
+        params: { slug },
+        query: { after: Number.MAX_SAFE_INTEGER },
+      }),
     );
     events.onopen = () => void fresh();
     events.addEventListener("head", () => void fresh());

@@ -140,7 +140,7 @@ const planCorners = (plan: TakeoffPlanImage): Point2[] => {
 };
 
 // ponytail: the world is drawn at 4 px per foot; zoom 0.02 to 24 spans 0.08 to 96 screen px per foot.
-export const WORLD_PX_PER_FT = 4;
+export const PLAN_PX_PER_FT = 4;
 const ZOOM = [0.02, 24] as const;
 const CLICK_PX = 5;
 const ZOOM_PAD_PX = 48;
@@ -231,13 +231,13 @@ export function RoomsPlan({
   const world = useMemo(() => {
     if (!bounds) return null;
     const { viewport, padding } = contentViewport(bounds, 0.03);
-    const width = viewport.width * WORLD_PX_PER_FT;
-    const height = viewport.height * WORLD_PX_PER_FT;
+    const width = viewport.width * PLAN_PX_PER_FT;
+    const height = viewport.height * PLAN_PX_PER_FT;
     const frame = fitFrame(
       bounds,
       { width, height },
       {
-        padding: padding * WORLD_PX_PER_FT,
+        padding: padding * PLAN_PX_PER_FT,
         yAxis: "up",
       },
     );

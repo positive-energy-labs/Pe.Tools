@@ -12,7 +12,7 @@ import { useRouterState } from "@tanstack/react-router";
 import { HostedChrome } from "#/route/hosted-chrome";
 import { routePath } from "./model";
 
-export type RouteSlotName = "controls" | "lamp" | "situation" | "palette" | "inspector";
+export type RouteControlName = "controls" | "lamp" | "situation" | "palette" | "inspector";
 export type SituationSignal = {
   kind: "archived" | "failure" | "busy" | "health" | "ready" | "unbound";
   tone: "nav" | "alarm" | "commit" | "caution" | "done";
@@ -20,11 +20,11 @@ export type SituationSignal = {
   stamp: string;
 };
 type Slot = {
-  elements: Partial<Record<RouteSlotName, HTMLElement | null>>;
-  owners: Partial<Record<RouteSlotName, symbol | null>>;
-  claim: (slot: RouteSlotName, owner: symbol) => void;
-  release: (slot: RouteSlotName, owner: symbol) => void;
-  setElement: (slot: RouteSlotName, element: HTMLElement | null) => void;
+  elements: Partial<Record<RouteControlName, HTMLElement | null>>;
+  owners: Partial<Record<RouteControlName, symbol | null>>;
+  claim: (slot: RouteControlName, owner: symbol) => void;
+  release: (slot: RouteControlName, owner: symbol) => void;
+  setElement: (slot: RouteControlName, element: HTMLElement | null) => void;
   pagePaletteOwner: symbol | null;
   setPagePaletteOwner: (owner: symbol) => void;
   clearPagePaletteOwner: (owner: symbol) => void;
@@ -59,17 +59,17 @@ export function RouteControlsProvider({ children }: { children: ReactNode }) {
     [],
   );
   const setElement = useCallback(
-    (slot: RouteSlotName, element: HTMLElement | null) =>
+    (slot: RouteControlName, element: HTMLElement | null) =>
       setElements((prior) => (prior[slot] === element ? prior : { ...prior, [slot]: element })),
     [],
   );
   const claim = useCallback(
-    (slot: RouteSlotName, owner: symbol) =>
+    (slot: RouteControlName, owner: symbol) =>
       setOwners((prior) => (prior[slot] === owner ? prior : { ...prior, [slot]: owner })),
     [],
   );
   const release = useCallback(
-    (slot: RouteSlotName, token: symbol) =>
+    (slot: RouteControlName, token: symbol) =>
       setOwners((prior) => (prior[slot] === token ? { ...prior, [slot]: null } : prior)),
     [],
   );
@@ -99,7 +99,7 @@ export function RouteControlsProvider({ children }: { children: ReactNode }) {
     </Context>
   );
 }
-export function SituationPinnedSlot() {
+export function SituationPinnedControl() {
   const context = useContext(Context);
   return <div ref={context?.setDockHost} className="pe-situation-dock" />;
 }
@@ -151,7 +151,7 @@ export function usePublishSituationPresentation(open: boolean) {
     return () => setOpen?.(false);
   }, [open, setOpen]);
 }
-export function useRouteSlotPresence(slot: RouteSlotName) {
+export function useRouteControlPresence(slot: RouteControlName) {
   return Boolean(useContext(Context)?.owners[slot]);
 }
 export function useIsPrimaryRoute(route: string) {
@@ -160,12 +160,12 @@ export function useIsPrimaryRoute(route: string) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   return slot != null && hosted == null && pathname === routePath(route);
 }
-export function RouteControlsSlot({
+export function RouteControlsOutlet({
   slot: name = "controls",
   as = "span",
   className = "pe-appbar-controls",
 }: {
-  slot?: RouteSlotName;
+  slot?: RouteControlName;
   as?: "span" | "div";
   className?: string;
 }) {
@@ -188,7 +188,7 @@ export function PrimaryRouteControls({
   children,
 }: {
   route: string;
-  slot?: RouteSlotName;
+  slot?: RouteControlName;
   children: ReactNode;
 }) {
   const slot = useContext(Context);

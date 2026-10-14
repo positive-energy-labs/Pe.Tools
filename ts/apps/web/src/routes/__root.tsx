@@ -14,7 +14,7 @@ import { AppChrome, AppDevtools } from "../route/app-chrome";
 import { InstallScrim } from "../machine/install-scrim";
 import { AppBar } from "#/navigation/app-bar";
 import { NavigationProvider } from "#/navigation/state";
-import { RouteControlsProvider, SituationPinnedSlot } from "#/navigation/route-controls";
+import { RouteControlsProvider, SituationPinnedControl } from "#/navigation/route-controls";
 import { SurfaceHostProvider } from "#/navigation/surface-host";
 import { SettingsProvider } from "#/settings/options";
 import { useSurfaceHost } from "#/navigation/surface-host";
@@ -76,7 +76,7 @@ export function RootComponent() {
                 className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto overscroll-none"
                 data-app-content
               >
-                <SituationPinnedSlot />
+                <SituationPinnedControl />
                 <div className="min-h-0 min-w-0 flex-1">
                   <SurfaceOutlet />
                 </div>
