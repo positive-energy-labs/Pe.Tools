@@ -1,5 +1,5 @@
 import { Switcher } from "#/components/lang/switcher";
-import { ListPopup } from "#/components/lang/list-popup";
+import { ListPopup } from "@pe/kit/lang/list-popup";
 import type { GeomMeta } from "#/family/world";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 

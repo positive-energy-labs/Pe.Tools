@@ -1,7 +1,7 @@
 import { Plus } from "lucide-react";
 import type { DocumentRef, ParameterLinkProfile } from "@pe/agent-contracts";
-import { EmptyState } from "#/components/lang/empty";
-import { Button } from "#/components/lang/button";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { Button } from "@pe/kit/lang/button";
 import { addDefinition } from "#/parameter-links/model";
 import { DefinitionCard } from "./definition-card";
 

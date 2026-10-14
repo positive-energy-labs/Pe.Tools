@@ -2,9 +2,9 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
-import { FactChip } from "#/components/lang/chip";
+import { FactChip } from "@pe/kit/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { ThemeToggle } from "#/components/lang/theme-toggle";
+import { ThemeToggle } from "@pe/kit/lang/theme-toggle";
 import {
   FieldOptionsPanel,
   FreeTextPanel,

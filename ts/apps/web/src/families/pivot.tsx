@@ -1,9 +1,9 @@
 import { familyCellAddress } from "@pe/agent-contracts";
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { ReadCell } from "#/components/master-table/cells";
-import { Button } from "#/components/lang/button";
-import type { Column, QueryVocabulary } from "#/components/master-table/model";
+import { ReadCell } from "@pe/kit/table/cells";
+import { Button } from "@pe/kit/lang/button";
+import type { Column, QueryVocabulary } from "@pe/kit/table/model";
 import { TableFrame } from "#/components/master-table/table-frame";
 import {
   conditionValues,
@@ -13,7 +13,7 @@ import {
   visibleRows,
   wordMatches,
   type QueryRead,
-} from "#/components/master-table/view";
+} from "@pe/kit/table/view";
 import type { ParamColumn, TypeRow } from "#/families/matrix-columns";
 import { TypeGrid, GRID, identityWidth, type TypeGridEdit } from "#/families/pivot-grid";
 import { PivotMinimap } from "#/families/pivot-minimap";

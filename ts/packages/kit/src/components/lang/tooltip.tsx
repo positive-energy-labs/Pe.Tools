@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Tooltip as Primitive } from "@base-ui/react/tooltip";
 
-import { tv, type VariantProps } from "#/lib/tv";
+import { tv, type VariantProps } from "../../lib/tv";
 
 export const tooltipRecipe = tv({
   slots: {

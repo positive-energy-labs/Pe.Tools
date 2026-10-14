@@ -1,4 +1,4 @@
-import { tv } from "#/lib/tv";
+import { tv } from "@pe/kit/lib/tv";
 
 export const valueDiffRecipe = tv({ base: "face-mono t-small" });
 

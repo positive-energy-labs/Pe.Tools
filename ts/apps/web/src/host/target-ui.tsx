@@ -1,4 +1,4 @@
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 import type { Lane } from "#/readings";
 
 /**

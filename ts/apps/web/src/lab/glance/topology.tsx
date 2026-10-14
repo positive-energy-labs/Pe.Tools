@@ -1,7 +1,7 @@
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 import { useEffect, useState } from "react";
-import { FactChip } from "#/components/lang/chip";
-import { EmptyState } from "#/components/lang/empty";
+import { FactChip } from "@pe/kit/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { Provenance } from "#/components/lang/section";
 import { callHostRpc } from "#/host/client";
 import type { Lane } from "#/readings";

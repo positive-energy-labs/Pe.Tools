@@ -1,8 +1,8 @@
 import { useId, useState } from "react";
 import type { PartitionReviewData } from "@pe/agent-contracts";
-import { List } from "#/components/lang/list-popup";
-import { Button } from "#/components/lang/button";
-import { token } from "#/lib/token";
+import { List } from "@pe/kit/lang/list-popup";
+import { Button } from "@pe/kit/lang/button";
+import { token } from "@pe/kit/lib/token";
 import law from "./visual-law.json";
 
 type ZoneViewport = {

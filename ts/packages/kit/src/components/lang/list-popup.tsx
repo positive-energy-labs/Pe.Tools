@@ -7,9 +7,9 @@ import { useContext, useEffect, useState, type ComponentProps, type ReactNode } 
 import { Popover } from "@base-ui/react/popover";
 import { ChevronDown, Ellipsis } from "lucide-react";
 
-import { CellHost } from "#/components/lang/cell";
-import { Input } from "#/components/lang/input";
-import { useCellNavigation } from "#/components/master-table/cell-navigation";
+import { CellHost } from "./cell";
+import { Input } from "./input";
+import { useCellNavigation } from "../master-table/cell-navigation";
 
 import {
   useCollection,

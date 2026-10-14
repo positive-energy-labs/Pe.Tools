@@ -1,9 +1,9 @@
 import { CircleHelp } from "lucide-react";
-import { FactChip, Tag } from "#/components/lang/chip";
-import { Code, stringify } from "#/components/lang/code";
+import { FactChip, Tag } from "@pe/kit/lang/chip";
+import { Code, stringify } from "@pe/kit/lang/code";
 import { Label } from "#/components/lang/label";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Tooltip, UiTooltipProvider } from "#/components/lang/tooltip";
+import { Tooltip, UiTooltipProvider } from "@pe/kit/lang/tooltip";
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { type FieldOptionState, useFieldChangeSummary } from "./shared";
 

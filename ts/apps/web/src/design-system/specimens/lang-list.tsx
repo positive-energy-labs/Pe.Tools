@@ -13,13 +13,13 @@ import {
   ListPopup,
   ListSegmentInput,
   PopupFrame,
-} from "#/components/lang/list-popup";
+} from "@pe/kit/lang/list-popup";
 import { Popover } from "@base-ui/react/popover";
 import { MoreHorizontal } from "lucide-react";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { CommandPalette } from "#/components/lang/command-palette";
-import { Row, RowGroupHead, rowRecipe } from "#/components/lang/row";
-import { Table } from "#/components/master-table/table";
+import { Row, RowGroupHead, rowRecipe } from "@pe/kit/lang/row";
+import { Table } from "@pe/kit/table/table";
 
 import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
@@ -37,7 +37,7 @@ export function LangListSpecimens() {
     <>
       <RecipeGrid
         name="Row"
-        importPath="#/components/lang/row"
+        importPath="@pe/kit/lang/row"
         recipe={rowRecipe}
         render={(props) => (
           <div className="flex w-64 flex-col">
@@ -57,10 +57,7 @@ export function LangListSpecimens() {
           </div>
         )}
       />
-      <SpecimenFrame
-        name="List · ListPopup · CellListSelect"
-        importPath="#/components/lang/list-popup"
-      >
+      <SpecimenFrame name="List · ListPopup · CellListSelect" importPath="@pe/kit/lang/list-popup">
         <div className="grid w-full grid-cols-3 gap-4">
           <ListPopup
             {...common}

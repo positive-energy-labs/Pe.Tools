@@ -1,6 +1,6 @@
-import { token } from "#/lib/token";
-import { VERDICT_INK } from "#/components/master-table/cells";
-import type { Verdict as RowVerdict, VerdictTone } from "#/components/master-table/model";
+import { token } from "@pe/kit/lib/token";
+import { VERDICT_INK } from "@pe/kit/table/cells";
+import type { Verdict as RowVerdict, VerdictTone } from "@pe/kit/table/model";
 import { ATLAS_ROOM_STATE_LABEL, type AtlasRoomState as RoomState } from "#/takeoff/controller";
 import type { Phase } from "#/takeoff/world";
 

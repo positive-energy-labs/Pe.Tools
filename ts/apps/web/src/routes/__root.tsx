@@ -19,7 +19,7 @@ import { SurfaceHostProvider } from "#/navigation/surface-host";
 import { SettingsProvider } from "#/settings/options";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { appRouteMount, appRouteByPath } from "@pe/agent-contracts";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 
 import appCss from "../styles.css?url";
 

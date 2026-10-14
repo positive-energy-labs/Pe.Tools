@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react";
 import { ArrowDown } from "lucide-react";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { useWorkbench } from "#/workbench/provider";
 import { annotation } from "#/components/anatomy";
 import { Moments } from "../moments";
-import { EmptyState, emptyMark } from "#/components/lang/empty";
+import { EmptyState, emptyMark } from "@pe/kit/lang/empty";
 import { formatTime } from "./moments";
 import { useLensModel } from "./model";
 import type { ChatState } from "../chat-state";

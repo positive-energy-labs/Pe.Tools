@@ -13,12 +13,12 @@ import {
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
 import type { CellWire } from "#/components/work/band";
-import { EmptyState } from "#/components/lang/empty";
-import { List } from "#/components/lang/list-popup";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { List } from "@pe/kit/lang/list-popup";
 import { Pane } from "#/components/lang/pane";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "#/components/lang/switcher";
-import { tokenRef } from "#/lib/token";
+import { tokenRef } from "@pe/kit/lib/token";
 import { CARD_META, CARD_STATES, type Card, type CardState } from "./cards";
 
 type Region = RoomsSnapshot.Res.RoomsRegion;

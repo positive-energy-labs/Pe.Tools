@@ -1,12 +1,12 @@
 import { Fragment, type ComponentProps } from "react";
 import { showAdopt, TakeoffProposalRows } from "#/takeoff/proposals";
-import { FactChip } from "#/components/lang/chip";
-import { EmptyState } from "#/components/lang/empty";
+import { FactChip } from "@pe/kit/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Button } from "#/components/lang/button";
-import { Input } from "#/components/lang/input";
+import { Button } from "@pe/kit/lang/button";
+import { Input } from "@pe/kit/lang/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/lang/dialog";
-import { fmtNum } from "#/components/master-table/model";
+import { fmtNum } from "@pe/kit/table/model";
 import { type CandidateRegion } from "#/takeoff/model";
 import { type TakeoffsController } from "#/takeoff/controller";
 

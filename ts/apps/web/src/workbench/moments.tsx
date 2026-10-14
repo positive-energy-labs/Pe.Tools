@@ -30,17 +30,17 @@ import {
   formatBytes,
 } from "./chat-state";
 import { Markdown } from "./prose";
-import { Code, stringify } from "#/components/lang/code";
+import { Code, stringify } from "@pe/kit/lang/code";
 import { actionCall, proposedRecord } from "./chat-plugins";
 import { ActionLine, ProposedLine } from "./record-lines";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { annotation } from "#/components/anatomy";
-import { PressContent } from "#/components/anatomy/press-content";
-import { FactChip, FileChip, MentionChip } from "#/components/lang/chip";
+import { PressContent } from "@pe/kit/anatomy/press-content";
+import { FactChip, FileChip, MentionChip } from "@pe/kit/lang/chip";
 import { mentionWord } from "#/chat/use-mentions";
 import { isPdf, openPdf } from "./open-pdf";
 import { Thumbnail } from "./thumbnail";
-import { useCopy } from "#/lib/use-copy";
+import { useCopy } from "@pe/kit/lib/use-copy";
 import { startFeedback } from "#/components/feedback-picker";
 import { reportFault } from "#/host/diagnostics";
 import {

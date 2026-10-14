@@ -1,10 +1,10 @@
 import { takeoffEditKey } from "@pe/agent-contracts";
 import { useMemo } from "react";
-import { FactChip } from "#/components/lang/chip";
-import { ReadCell, TextCell } from "#/components/master-table/cells";
-import { CellListSelect } from "#/components/lang/list-popup";
-import { cellStateLabel, type StateCellProps } from "#/components/lang/cell";
-import { fmtNum, type Column } from "#/components/master-table/model";
+import { FactChip } from "@pe/kit/lang/chip";
+import { ReadCell, TextCell } from "@pe/kit/table/cells";
+import { CellListSelect } from "@pe/kit/lang/list-popup";
+import { cellStateLabel, type StateCellProps } from "@pe/kit/lang/cell";
+import { fmtNum, type Column } from "@pe/kit/table/model";
 import type { AtlasActions } from "#/takeoff/atlas";
 import { TakeoffEditCell } from "#/takeoff/proposals";
 import { MANUAL_J } from "#/takeoff/room-actions";

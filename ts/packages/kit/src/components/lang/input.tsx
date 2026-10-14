@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Input as InputPrimitive } from "@base-ui/react/input";
 
-import { tv } from "#/lib/tv";
+import { tv } from "../../lib/tv";
 
 export const inputRecipe = tv({
   base: "w-full min-w-0 px-(--control-pad-x) py-0.5 t-small outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:font-semibold file:text-ink placeholder:text-ink-2 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
@@ -24,7 +24,7 @@ function Input({
   face,
   ...props
 }: Omit<React.ComponentProps<"input">, "className"> &
-  import("#/lib/tv").VariantProps<typeof inputRecipe> & { face?: "mono" }) {
+  import("../../lib/tv").VariantProps<typeof inputRecipe> & { face?: "mono" }) {
   return (
     <InputPrimitive
       type={type}

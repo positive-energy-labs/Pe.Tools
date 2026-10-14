@@ -11,11 +11,11 @@ import {
 } from "@pe/agent-contracts";
 import { Check, Copy, File, X } from "lucide-react";
 import { Popover } from "@base-ui/react/popover";
-import { PopupFrame } from "#/components/lang/list-popup";
+import { PopupFrame } from "@pe/kit/lang/list-popup";
 import { useAtomValue } from "@effect/atom-react";
 
-import { Button } from "#/components/lang/button";
-import { useCopy } from "#/lib/use-copy";
+import { Button } from "@pe/kit/lang/button";
+import { useCopy } from "@pe/kit/lib/use-copy";
 import { previousOf } from "#/readings";
 import { Ladder } from "#/route/ladder";
 import { Ledger, PageLog } from "#/route/situation-grids";

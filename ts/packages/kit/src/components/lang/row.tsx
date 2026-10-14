@@ -6,7 +6,7 @@
  */
 import type { ReactNode } from "react";
 
-import { tv } from "#/lib/tv";
+import { tv } from "../../lib/tv";
 
 import "./lang.css";
 

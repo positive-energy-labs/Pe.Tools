@@ -12,21 +12,21 @@ import {
 } from "react";
 import type { ReactTable, RowData } from "@tanstack/react-table";
 
-import { CellHost } from "#/components/lang/cell";
-import { Row } from "#/components/lang/row";
-import { CellNavigationProvider, type CellMove } from "#/components/master-table/cell-navigation";
-import type { ResolvedColumn } from "#/components/master-table/master-table-columns";
+import { CellHost } from "../lang/cell";
+import { Row } from "../lang/row";
+import { CellNavigationProvider, type CellMove } from "./cell-navigation";
+import type { ResolvedColumn } from "./master-table-columns";
 import {
   CELL_EDITOR,
   editCell,
   isInteractive,
   isTypingKey,
   keyDirection,
-} from "#/components/master-table/master-table-state";
-import type { MasterTableFeatures } from "#/components/master-table/tanstack-adapter";
-import { useScopeKeys } from "#/route/keys";
-import { token } from "#/lib/token";
-import { cn } from "#/lib/utils";
+} from "./master-table-state";
+import type { MasterTableFeatures } from "./tanstack-adapter";
+import { useScopeKeys } from "../../keys";
+import { token } from "../../lib/token";
+import { cn } from "../../lib/utils";
 
 type Table<Row extends RowData> = ReactTable<MasterTableFeatures, Row, unknown>;
 type VisibleRow<Row extends RowData> = ReturnType<Table<Row>["getRowModel"]>["rows"][number];

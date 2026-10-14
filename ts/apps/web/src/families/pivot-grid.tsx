@@ -9,8 +9,8 @@ import {
   type RefObject,
 } from "react";
 
-import { ReadCell } from "#/components/master-table/cells";
-import { CellNavigationProvider, type CellMove } from "#/components/master-table/cell-navigation";
+import { ReadCell } from "@pe/kit/table/cells";
+import { CellNavigationProvider, type CellMove } from "@pe/kit/table/cell-navigation";
 import {
   ParamCell,
   type LiveCells,
@@ -21,7 +21,7 @@ import type { PivotFamily, PivotRow } from "#/families/pivot";
 import type { FamiliesStore } from "#/families/store";
 import type { MeasuredAnswer } from "#/host/measured-parse";
 import { familyCellKey, type MeasuredDisplayUnit } from "@pe/agent-contracts";
-import { cellFromTrichotomy, StateCell } from "#/components/lang/cell";
+import { cellFromTrichotomy, StateCell } from "@pe/kit/lang/cell";
 
 export const GRID = { identity: 336, type: 112, row: 24, header: 52 } as const;
 export const identityWidth = GRID.identity;

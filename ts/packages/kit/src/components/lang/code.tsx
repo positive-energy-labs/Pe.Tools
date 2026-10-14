@@ -5,7 +5,7 @@
  */
 import { useMemo, useState, type ComponentProps } from "react";
 import { Check, Copy } from "lucide-react";
-import { useCopy } from "#/lib/use-copy";
+import { useCopy } from "../../lib/use-copy";
 import { createHighlighter, type HighlightDecoration } from "@tanstack/highlight/core";
 import { css } from "@tanstack/highlight/languages/css";
 import { diff } from "@tanstack/highlight/languages/diff";
@@ -23,10 +23,10 @@ import { ts } from "@tanstack/highlight/languages/ts";
 import { tsx } from "@tanstack/highlight/languages/tsx";
 import { yaml } from "@tanstack/highlight/languages/yaml";
 
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { csharp } from "#/components/lang/csharp-language";
-import { Button } from "#/components/lang/button";
-import { diagramKind, useDiagram } from "#/components/lang/diagram";
+import { ArtifactFrame } from "./artifact-frame";
+import { csharp } from "./csharp-language";
+import { Button } from "./button";
+import { diagramKind, useDiagram } from "./diagram";
 
 import "./code.css";
 

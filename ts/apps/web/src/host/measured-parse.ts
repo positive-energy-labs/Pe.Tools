@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 
 import type { MeasuredDisplayUnit, MeasuredValue } from "@pe/agent-contracts";
 
-import { unitWord } from "#/components/lang/cell";
+import { unitWord } from "@pe/kit/lang/cell";
 import { callHostRpc, type HostCallOptions } from "#/host/client";
 
 export type MeasuredAnswer = MeasuredValue | { refusal: string } | null;

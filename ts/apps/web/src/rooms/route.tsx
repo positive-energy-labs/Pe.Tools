@@ -15,8 +15,8 @@ import {
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
 import type { CellWire } from "#/components/work/band";
-import { EmptyState } from "#/components/lang/empty";
-import { List } from "#/components/lang/list-popup";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { List } from "@pe/kit/lang/list-popup";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";

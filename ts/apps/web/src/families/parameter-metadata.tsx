@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
-import { PopupFrame } from "#/components/lang/list-popup";
-import { Button } from "#/components/lang/button";
+import { PopupFrame } from "@pe/kit/lang/list-popup";
+import { Button } from "@pe/kit/lang/button";
 import type { FamilyParameterSnapshot } from "#/host/loaded-families-view";
 import type { PivotRow } from "./pivot";
 import type { OverlayParameter } from "./patch-overlay";

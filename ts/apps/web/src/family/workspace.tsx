@@ -106,8 +106,8 @@
  */
 import { useEffect } from "react";
 
-import { Button } from "#/components/lang/button";
-import { Code, stringify } from "#/components/lang/code";
+import { Button } from "@pe/kit/lang/button";
+import { Code, stringify } from "@pe/kit/lang/code";
 import { PaneSplit } from "#/components/lang/pane";
 import { buildReceiptSummary } from "#/family/build";
 import type { FamilyStore } from "#/family/store";

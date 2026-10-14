@@ -20,13 +20,13 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
-import { ThemeToggle } from "#/components/lang/theme-toggle";
-import { FactChip } from "#/components/lang/chip";
-import { ListPopup } from "#/components/lang/list-popup";
+import { ThemeToggle } from "@pe/kit/lang/theme-toggle";
+import { FactChip } from "@pe/kit/lang/chip";
+import { ListPopup } from "@pe/kit/lang/list-popup";
 import { Switcher } from "#/components/lang/switcher";
 import { FieldOptionPicker, FieldOptionSelect, type FieldOption } from "#/host/field-options";
 import { CATEGORY_OPTIONS } from "#/design-system/specimens-data";
-import { cn } from "#/lib/utils";
+import { cn } from "@pe/kit/lib/utils";
 
 export const Route = createFileRoute("/design-system_/popovers")({ component: PopoverHarness });
 

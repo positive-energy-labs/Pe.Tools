@@ -5,18 +5,18 @@
  */
 import { Check, X } from "lucide-react";
 
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import {
   reviewTransitions,
   runFanOut,
   type CellWire,
   type FanOutOutcome,
 } from "#/components/work/band";
-import { cellFromTrichotomy, StateCell, type StateCellProps } from "#/components/lang/cell";
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { cellFromTrichotomy, StateCell, type StateCellProps } from "@pe/kit/lang/cell";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { Section } from "#/components/lang/section";
-import { ReadCell } from "#/components/master-table/cells";
-import type { Column } from "#/components/master-table/model";
+import { ReadCell } from "@pe/kit/table/cells";
+import type { Column } from "@pe/kit/table/model";
 import { Gap } from "#/design-system/exhibit";
 
 import { ProposalHead, type HeadWork } from "#/chat/proposal-head";

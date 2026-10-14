@@ -8,7 +8,7 @@
   type RowData,
 } from "@tanstack/react-table";
 
-import type { ValueColumn } from "#/components/master-table/model";
+import type { ValueColumn } from "./model";
 
 /**
  * The TanStack surface the grid uses: the column tree, pinning, the focused cell and the sort

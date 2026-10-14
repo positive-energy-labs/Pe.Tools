@@ -10,7 +10,7 @@ import type { Machine, Reading } from "@pe/agent-contracts";
 
 import { acknowledgeUpdate } from "#/host/install";
 import { switchRemoteAdministration, switchShare } from "#/host/machine";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { MACHINE_SEEDS } from "#/open/seeds";
 import { AppChrome, AppDevtools } from "#/route/app-chrome";
 

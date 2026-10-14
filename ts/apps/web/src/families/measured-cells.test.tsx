@@ -7,7 +7,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { familyCellKey, type FamilyCellState } from "@pe/agent-contracts";
 
-import { Table } from "#/components/master-table/table";
+import { Table } from "@pe/kit/table/table";
 
 import { ParamCell, useLiveCells, type ParamColumn, type TypeRow } from "./matrix-columns";
 

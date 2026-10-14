@@ -1,7 +1,7 @@
 /** Sharing observations belong to Machine; host-owned switches belong to Settings. */
 import { useState } from "react";
 import type { Machine } from "@pe/agent-contracts";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { SwitchRow } from "#/components/lang/switch-row";
 import { switchRemoteAdministration, switchShare } from "#/host/machine";

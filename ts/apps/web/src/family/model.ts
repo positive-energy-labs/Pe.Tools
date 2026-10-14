@@ -17,7 +17,7 @@
  * closed over a module constant would silently keep answering about the fixture.
  */
 import { showCellValue, type MeasuredValue } from "@pe/agent-contracts";
-import type { TableState, VerdictTone } from "#/components/master-table/model";
+import type { TableState, VerdictTone } from "@pe/kit/table/model";
 import {
   boundParam,
   type GeomConstituent,

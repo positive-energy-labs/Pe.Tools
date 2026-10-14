@@ -7,7 +7,7 @@ import {
   type PromptAttachment,
   emptyThreadHead,
 } from "@pe/agent-contracts";
-import { stringify } from "../components/lang/code-format.ts";
+import { stringify } from "@pe/kit/lang/code-format";
 
 /** The thread body with every event the stream has appended since it was fetched. */
 export type ChatState = HarnessThreadBody;

@@ -3,8 +3,8 @@
 import * as React from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 
-import { tv } from "#/lib/tv";
-import { Button } from "#/components/lang/button";
+import { tv } from "@pe/kit/lib/tv";
+import { Button } from "@pe/kit/lang/button";
 import { X as RiCloseLine } from "lucide-react";
 
 export const dialogRecipe = tv({

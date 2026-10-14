@@ -1,7 +1,7 @@
 import { Pane, PaneSplit, paneRecipe } from "#/components/lang/pane";
 import { PaneResizeHandle, paneSplitRecipe } from "#/components/lang/pane-resize";
 import { Switch, switchRecipe } from "#/components/lang/switch";
-import { Tooltip, UiTooltipProvider, tooltipRecipe } from "#/components/lang/tooltip";
+import { Tooltip, UiTooltipProvider, tooltipRecipe } from "@pe/kit/lang/tooltip";
 import { Surface } from "#/components/lang/surface";
 import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
@@ -61,7 +61,7 @@ export function UiLayoutSpecimens() {
       />
       <RecipeGrid
         name="Tooltip"
-        importPath="#/components/lang/tooltip"
+        importPath="@pe/kit/lang/tooltip"
         recipe={tooltipRecipe}
         render={(props) => (
           <UiTooltipProvider>

@@ -1,5 +1,5 @@
 import { Pane } from "#/components/lang/pane";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { AnatomyDrawing } from "#/family/anatomy";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 

@@ -2,14 +2,14 @@ import { useContext, type ReactNode } from "react";
 import { ListFilter } from "lucide-react";
 import type { ReactTable, RowData } from "@tanstack/react-table";
 
-import { Button } from "#/components/lang/button";
-import type { ResolvedColumn } from "#/components/master-table/master-table-columns";
-import type { Column } from "#/components/master-table/model";
-import type { MasterTableFeatures } from "#/components/master-table/tanstack-adapter";
-import { cn } from "#/lib/utils";
-import { PressContent } from "#/components/anatomy/press-content";
-import { ConditionTarget } from "#/components/master-table/query";
-import { opSaid, readQuery } from "#/components/master-table/view";
+import { Button } from "../lang/button";
+import type { ResolvedColumn } from "./master-table-columns";
+import type { Column } from "./model";
+import type { MasterTableFeatures } from "./tanstack-adapter";
+import { cn } from "../../lib/utils";
+import { PressContent } from "../anatomy/press-content";
+import { ConditionTarget } from "./query";
+import { opSaid, readQuery } from "./view";
 
 type Table<Row extends RowData> = ReactTable<MasterTableFeatures, Row, unknown>;
 

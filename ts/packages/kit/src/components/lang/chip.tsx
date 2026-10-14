@@ -7,10 +7,10 @@ import { Fragment, type ReactNode } from "react";
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 import { X } from "lucide-react";
 
-import { Button } from "#/components/lang/button";
-import { Tooltip } from "#/components/lang/tooltip";
+import { Button } from "./button";
+import { Tooltip } from "./tooltip";
 
-import { tv } from "#/lib/tv";
+import { tv } from "../../lib/tv";
 
 import "./lang.css";
 

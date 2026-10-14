@@ -10,7 +10,7 @@ import { TakeoffsControllerOwner } from "#/takeoff/route";
 import { useTakeoffsController } from "#/takeoff/controller";
 import { TakeoffsPage } from "#/takeoff/route-workspace";
 import { SavedTakeoffsView } from "#/takeoff/saved-review";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 
 export function TakeoffsPane({ thread }: { thread?: string }) {
   const store = useTakeoffsController(thread ? { thread } : {});

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 
 import { filledValue, type PivotRow } from "#/families/pivot";
 import type { TypeRow } from "#/families/matrix-columns";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { familyCellKey } from "@pe/agent-contracts";
 import type { PatchOverlay } from "#/families/patch-overlay";
 

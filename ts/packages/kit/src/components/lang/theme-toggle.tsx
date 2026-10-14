@@ -1,6 +1,6 @@
 import { Moon, Sun, SunMoon } from "lucide-react";
-import { Button } from "#/components/lang/button";
-import { useThemeMode, writeTheme, type ThemeMode } from "#/settings/option-theme";
+import { Button } from "./button";
+import { useThemeMode, writeTheme, type ThemeMode } from "../../theme";
 
 const NEXT: Record<ThemeMode, ThemeMode> = { light: "dark", dark: "auto", auto: "light" };
 const ICON = { light: Sun, dark: Moon, auto: SunMoon } as const;

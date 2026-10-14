@@ -6,7 +6,7 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { MACHINE_SEEDS } from "#/open/seeds";
 
 import { InstallGate, SUCCESSOR_POLL_MS, SUCCESSOR_WAIT_MS } from "./install-scrim";

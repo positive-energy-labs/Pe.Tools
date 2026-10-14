@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { createRequire } from "node:module";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import { StateCell, type CellTransition } from "#/components/lang/cell";
-import { Table } from "#/components/master-table/table";
+import { StateCell, type CellTransition } from "@pe/kit/lang/cell";
+import { Table } from "@pe/kit/table/table";
 
 afterEach(cleanup);
 
@@ -35,7 +35,7 @@ test("row scale adds no height: its verbs are an absolute overlay inside the one
   const cell = container.querySelector(".dl-cell")!;
   // the value is the only in-flow content; everything else is the overlay
   expect([...cell.children].map((el) => el.className)).toEqual(["dl-acts"]);
-  const css = readFileSync(join(import.meta.dirname, "cell.css"), "utf8");
+  const css = readFileSync(createRequire(import.meta.url).resolve("@pe/kit/lang/cell.css"), "utf8");
   const rule = css.slice(css.indexOf(".dl-acts {"), css.indexOf("}", css.indexOf(".dl-acts {")));
   expect(rule).toContain("position: absolute");
   expect(rule).toContain("display: none");

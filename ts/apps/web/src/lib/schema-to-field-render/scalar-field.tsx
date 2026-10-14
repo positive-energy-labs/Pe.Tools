@@ -1,5 +1,5 @@
-import { Input } from "#/components/lang/input";
-import { ListInput, ListPopup } from "#/components/lang/list-popup";
+import { Input } from "@pe/kit/lang/input";
+import { ListInput, ListPopup } from "@pe/kit/lang/list-popup";
 import { Switch } from "#/components/lang/switch";
 import { FieldLabelRow, FieldMessages, FieldOptions } from "./field-metadata";
 import {

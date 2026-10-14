@@ -4,7 +4,7 @@
  * ponytail: renders on the main thread (~45 ms warm); a Worker is the upgrade if a large graph janks.
  */
 import { useEffect, useState } from "react";
-import { tokenRef } from "#/lib/token";
+import { tokenRef } from "../../lib/token";
 
 type DiagramResult = { svg: string } | { error: string };
 
@@ -61,14 +61,14 @@ const diagramColors = () => ({
 });
 
 const cache = new Map<string, DiagramResult>();
-let renderer: Promise<typeof import("beautiful-mermaid")> | undefined;
+let renderer: Promise<typeof import("./render-mermaid")> | undefined;
 
 async function renderDiagram(source: string): Promise<DiagramResult> {
   const hit = cache.get(source);
   if (hit) return hit;
   let result: DiagramResult;
   try {
-    const { renderMermaidSVG } = await (renderer ??= import("beautiful-mermaid"));
+    const { renderMermaidSVG } = await (renderer ??= import("./render-mermaid"));
     result = { svg: sanitizeSvg(renderMermaidSVG(stripStyles(source), diagramColors())) };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

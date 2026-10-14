@@ -4,13 +4,13 @@ import type {
   ParameterLinksRuntimeStatus,
 } from "@pe/agent-contracts";
 
-import { FactChip } from "#/components/lang/chip";
-import { EmptyState } from "#/components/lang/empty";
+import { FactChip } from "@pe/kit/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import type { Column } from "#/components/master-table/model";
-import { Table } from "#/components/master-table/table";
+import type { Column } from "@pe/kit/table/model";
+import { Table } from "@pe/kit/table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
-import { useTableState } from "#/components/master-table/view";
+import { useTableState } from "@pe/kit/table/view";
 
 type Write = ParameterLinkEvaluation["writes"][number];
 const CELL = "block truncate px-(--item-pad-x)";

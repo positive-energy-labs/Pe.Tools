@@ -1,12 +1,7 @@
-import {
-  CELL_STATE_ORDER,
-  StateCell,
-  cellStateLabel,
-  type StateCellProps,
-} from "#/components/lang/cell";
-import { VerdictCell } from "#/components/master-table/cells";
-import type { Column, ValueColumn } from "#/components/master-table/model";
-import type { QueryRead } from "#/components/master-table/view";
+import { CELL_STATE_ORDER, StateCell, cellStateLabel, type StateCellProps } from "../lang/cell";
+import { VerdictCell } from "./cells";
+import type { Column, ValueColumn } from "./model";
+import type { QueryRead } from "./view";
 
 export type ResolvedColumn<Row> = ValueColumn<Row> & {
   condition?: QueryRead<Row>;

@@ -1,10 +1,10 @@
 import { takeoffDecisionKey } from "@pe/agent-contracts";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 
-import type { TableState } from "#/components/master-table/model";
-import { visibleRows as viewRows } from "#/components/master-table/view";
+import type { TableState } from "@pe/kit/table/model";
+import { visibleRows as viewRows } from "@pe/kit/table/view";
 import { useTableChips } from "#/components/anatomy";
-import type { ScopeKey } from "#/route/keys";
+import type { ScopeKey } from "@pe/kit/keys";
 import {
   atlasRoomState,
   type AtlasRow as Row,

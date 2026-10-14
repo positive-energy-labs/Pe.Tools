@@ -1,10 +1,10 @@
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { CELL_STATE_ORDER, StateCell, cellStateLabel } from "#/components/lang/cell";
-import type { StateCellProps } from "#/components/lang/cell";
-import { FactChip, Tag } from "#/components/lang/chip";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { CELL_STATE_ORDER, StateCell, cellStateLabel } from "@pe/kit/lang/cell";
+import type { StateCellProps } from "@pe/kit/lang/cell";
+import { FactChip, Tag } from "@pe/kit/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { CounterExample, Gap, Law } from "#/design-system/exhibit";
 import { PARAM_ROWS, cellProps } from "#/design-system/specimens-data";
 

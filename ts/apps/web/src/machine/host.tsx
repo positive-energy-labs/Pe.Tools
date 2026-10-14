@@ -1,7 +1,7 @@
 /** Host identity and the existing service-token repair controls. */
 import { useState } from "react";
 import type { AppSurface, Machine } from "@pe/agent-contracts";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { PidChip } from "#/components/lang/process";
 import { hostAdmin } from "#/host/machine";

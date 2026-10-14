@@ -1,4 +1,4 @@
-import { EmptyState } from "#/components/lang/empty";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
 import { type TreeNode, TreeView } from "#/ops/primitives";
 import {

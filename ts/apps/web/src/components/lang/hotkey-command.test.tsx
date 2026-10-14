@@ -3,10 +3,10 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Popover } from "@base-ui/react/popover";
 import { Save } from "lucide-react";
-import { Button } from "./button";
+import { Button } from "@pe/kit/lang/button";
 import { HotkeyCommand, HotkeyHint } from "./hotkey-command";
-import { Input } from "./input";
-import { KeyScope, useScopeKeys } from "#/route/keys";
+import { Input } from "@pe/kit/lang/input";
+import { KeyScope, useScopeKeys } from "@pe/kit/keys";
 
 afterEach(cleanup);
 test("a hotkey hint shares the chord marks without introducing a focusable or acting control", () => {

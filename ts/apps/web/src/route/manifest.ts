@@ -10,7 +10,7 @@ import { previousOf } from "#/readings";
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type { ReactNode } from "react";
 import { z } from "zod";
-import type { Chord } from "./keys";
+import type { Chord } from "@pe/kit/keys";
 import {
   hostActions,
   sameValue,

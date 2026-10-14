@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
-import { Button, type ButtonProps } from "./button";
+import { Button, type ButtonProps } from "@pe/kit/lang/button";
 import { Kbd } from "./kbd";
-import { chordLabel, useScopeKeys, type Chord } from "#/route/keys";
+import { chordLabel, useScopeKeys, type Chord } from "@pe/kit/keys";
 import "./hotkey-command.css";
 
 type Props = Omit<ButtonProps, "children" | "onClick" | "icon" | "kind" | "direction"> & {

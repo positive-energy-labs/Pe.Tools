@@ -1,7 +1,6 @@
 @import "tailwindcss";
-@import "../../../apps/web/src/base.css";
-@import "../../../apps/web/src/design-lang.css";
-@source "../../../apps/web/src/components";
+@import "./base.css";
+@import "./design-lang.css";
 @source "./";
 
 /* A standalone Page follows the device until its author chooses an explicit theme. */

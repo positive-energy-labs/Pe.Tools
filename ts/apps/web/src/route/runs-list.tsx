@@ -2,7 +2,7 @@
  * A pod's run receipts on the one List. Scoped to the open member, or to the whole pod: a run made
  * from a draft (origin `SuppliedDraft`) belongs to no member, so only the pod scope can show it.
  */
-import { List } from "#/components/lang/list-popup";
+import { List } from "@pe/kit/lang/list-popup";
 import type { Run } from "#/route/pods";
 
 /** Where a run's source came from, said as the person reads it. */

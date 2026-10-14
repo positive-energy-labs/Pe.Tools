@@ -1,12 +1,12 @@
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 import type {
   RevitDetailParameterLinks,
   RevitMatrixLoadedFamilies,
 } from "@pe/host-contracts/generated";
-import { EmptyState } from "#/components/lang/empty";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { Provenance } from "#/components/lang/section";
-import { type Column } from "#/components/master-table/model";
-import { Table } from "#/components/master-table/table";
+import { type Column } from "@pe/kit/table/model";
+import { Table } from "@pe/kit/table/table";
 import { KVGrid } from "#/ops/primitives";
 import { type OpViewProps, UnrecognizedShape, asRecord } from "#/ops/registry";
 import { issueLine } from "./schedules";

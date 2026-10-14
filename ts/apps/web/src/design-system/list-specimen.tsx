@@ -6,10 +6,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 
-import { FactChip } from "#/components/lang/chip";
-import { CellListSelect, List, ListInput, ListPopup } from "#/components/lang/list-popup";
-import { Button } from "#/components/lang/button";
-import { Table } from "#/components/master-table/table";
+import { FactChip } from "@pe/kit/lang/chip";
+import { CellListSelect, List, ListInput, ListPopup } from "@pe/kit/lang/list-popup";
+import { Button } from "@pe/kit/lang/button";
+import { Table } from "@pe/kit/table/table";
 import { CHAT_SEEDS, CHAT_SEED_STATE, CHAT_SEED_THREADS } from "#/chat/seeds";
 import { DEMO_FAMILIES } from "#/families/seeds";
 import { DEMO_PODS } from "#/route/seeds";

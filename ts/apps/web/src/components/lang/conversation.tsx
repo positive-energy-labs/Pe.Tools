@@ -2,7 +2,7 @@
  *  Presentation only; the logic lives in workbench/ and chat/. Painted in conversation.css. */
 import type { ComponentProps, ReactNode } from "react";
 import { ProviderMark } from "./provider-mark";
-import "./lang.css";
+import "@pe/kit/lang/lang.css";
 import "./conversation.css";
 
 /** Who spoke, then when, then which turn: the speaker in the reading face (Pea in its identity

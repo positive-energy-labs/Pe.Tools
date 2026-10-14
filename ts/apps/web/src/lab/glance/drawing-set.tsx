@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import type { RevitDetailSheets } from "@pe/host-contracts/generated";
-import { EmptyState } from "#/components/lang/empty";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Provenance, Section } from "#/components/lang/section";
 import { VizChip } from "#/ops/primitives";
 import { asNumber, asRecord, asRecords, asString } from "#/ops/registry";
 import type { SyntheticOp, SyntheticViewProps } from "#/lab/synthetic";
 import { SheetCanvas } from "#/ops/views/detail/schedules";
-import { Button } from "#/components/lang/button";
-import { PressContent } from "#/components/anatomy/press-content";
+import { Button } from "@pe/kit/lang/button";
+import { PressContent } from "@pe/kit/anatomy/press-content";
 
 const DETAIL_BUDGET = 10;
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Button } from "#/components/lang/button";
-import { Input } from "#/components/lang/input";
+import { Button } from "@pe/kit/lang/button";
+import { Input } from "@pe/kit/lang/input";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { FieldLegendRow, FieldMessages } from "./field-metadata";
 import { FieldRenderer, recordValueNode } from "./field-renderer";

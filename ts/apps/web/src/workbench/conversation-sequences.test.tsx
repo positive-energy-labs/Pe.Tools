@@ -21,7 +21,7 @@ vi.mock("./thread-view", () => ({
   }),
 }));
 vi.mock("#/components/feedback-picker", () => ({ startFeedback: wire.feedback }));
-vi.mock("#/lib/use-copy", () => ({ useCopy: () => ({ copied: false, copy: wire.copy }) }));
+vi.mock("@pe/kit/lib/use-copy", () => ({ useCopy: () => ({ copied: false, copy: wire.copy }) }));
 // The record classifier and route are separate owners; this checks that folding retains their outputs.
 vi.mock("./chat-plugins", () => ({
   proposedRecord: (title: string) =>
@@ -36,7 +36,7 @@ vi.mock("./record-lines", () => ({
 vi.mock("./thumbnail", () => ({
   Thumbnail: ({ src }: { src: string }) => <img src={src} alt="capture" />,
 }));
-vi.mock("#/components/lang/code", () => ({
+vi.mock("@pe/kit/lang/code", () => ({
   Code: ({ code, title }: { code: string; title?: string }) => <pre aria-label={title}>{code}</pre>,
   stringify: (value: unknown) => JSON.stringify(value),
 }));

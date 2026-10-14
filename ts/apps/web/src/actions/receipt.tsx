@@ -2,9 +2,9 @@ import { actionReceiptSchema, type ActionReceipt } from "@pe/agent-contracts";
 import { peReadings, dirty, previousOf, useAction, useReading, type Readings } from "#/readings";
 import { actionControls, type ActionControlKey } from "@pe/agent-contracts";
 import { controlAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import { Button } from "#/components/lang/button";
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { Code, stringify } from "#/components/lang/code";
+import { Button } from "@pe/kit/lang/button";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { Code, stringify } from "@pe/kit/lang/code";
 import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
 import { outputRenderers } from "#/ops/renderers";
 

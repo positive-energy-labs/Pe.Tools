@@ -4,8 +4,8 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import type { MeasuredValue } from "@pe/agent-contracts";
 
-import { readMeasuredText, StateCell } from "#/components/lang/cell";
-import { Table } from "#/components/master-table/table";
+import { readMeasuredText, StateCell } from "@pe/kit/lang/cell";
+import { Table } from "@pe/kit/table/table";
 import { useMeasuredParse } from "#/host/measured-parse";
 
 const { callHostRpc } = vi.hoisted(() => ({ callHostRpc: vi.fn() }));

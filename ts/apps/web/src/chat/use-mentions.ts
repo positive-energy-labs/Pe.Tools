@@ -35,7 +35,7 @@ import {
   type CapabilityCatalog,
   type CapabilityKind,
 } from "@pe/agent-contracts";
-import type { Collection } from "#/components/lang/collection";
+import type { Collection } from "@pe/kit/lang/collection";
 import type { ChatDraft } from "#/workbench/prompt";
 
 /** Menu order, group heads, the kind word (chips) and the row's glyph: the one kind map. */

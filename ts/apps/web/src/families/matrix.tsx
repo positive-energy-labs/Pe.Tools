@@ -1,4 +1,4 @@
-import { EmptyState } from "#/components/lang/empty";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { FamiliesPivot } from "#/families/pivot";
 import { filterWords, standingFilterProposal } from "#/families/scope-band";

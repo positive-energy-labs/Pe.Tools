@@ -11,9 +11,9 @@
  */
 import { createContext, useEffect, useState, type ReactNode } from "react";
 
-import { NarrowChip } from "#/components/lang/chip";
-import { ListPopup } from "#/components/lang/list-popup";
-import type { QueryCommand, QueryVocabulary, TableState } from "#/components/master-table/model";
+import { NarrowChip } from "../lang/chip";
+import { ListPopup } from "../lang/list-popup";
+import type { QueryCommand, QueryVocabulary, TableState } from "./model";
 import {
   QUERY_OPS,
   opSaid,
@@ -22,7 +22,7 @@ import {
   quoted,
   readClause,
   type QueryClause,
-} from "#/components/master-table/view";
+} from "./view";
 
 /** The header's way into the box: opens a draft on one field. Absent outside a TableFrame. */
 export const ConditionTarget = createContext<((label: string) => void) | null>(null);

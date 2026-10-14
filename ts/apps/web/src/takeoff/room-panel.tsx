@@ -6,12 +6,12 @@ import {
 } from "@pe/agent-contracts";
 import { Fragment } from "react";
 import { StatLine } from "#/components/anatomy";
-import { FactChip } from "#/components/lang/chip";
-import { StateDot } from "#/components/master-table/cells";
-import { fmtNum } from "#/components/master-table/model";
-import { Button } from "#/components/lang/button";
+import { FactChip } from "@pe/kit/lang/chip";
+import { StateDot } from "@pe/kit/table/cells";
+import { fmtNum } from "@pe/kit/table/model";
+import { Button } from "@pe/kit/lang/button";
 import { Pane } from "#/components/lang/pane";
-import { ScopeKeys, type ScopeKey } from "#/route/keys";
+import { ScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import { TakeoffEditCell, TakeoffProposalRows } from "#/takeoff/proposals";
 import type { Verdict } from "#/takeoff/atlas";
 import { FLAG_MEANING } from "#/takeoff/model";

@@ -6,12 +6,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { CaptureReceipt } from "@pe/agent-contracts";
 
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { FactChip } from "#/components/lang/chip";
-import { Code, stringify } from "#/components/lang/code";
-import { EmptyState } from "#/components/lang/empty";
-import { Button } from "#/components/lang/button";
-import { useCopy } from "#/lib/use-copy";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { FactChip } from "@pe/kit/lang/chip";
+import { Code, stringify } from "@pe/kit/lang/code";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { Button } from "@pe/kit/lang/button";
+import { useCopy } from "@pe/kit/lib/use-copy";
 
 /** What the request cropped to, in words; `whole view` when it named no focus. */
 const focusWords = (focus: CaptureReceipt["focus"]): string =>

@@ -6,7 +6,7 @@
  */
 import type { Machine, Reading } from "@pe/agent-contracts";
 
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { LegStrip } from "#/components/lang/leg-strip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { PidChip } from "#/components/lang/process";

@@ -10,8 +10,8 @@
  */
 import { useState } from "react";
 
-import { resolveStateColumn } from "#/components/master-table/master-table-columns";
-import type { Column, TableState } from "#/components/master-table/model";
+import { resolveStateColumn } from "./master-table-columns";
+import type { Column, TableState } from "./model";
 
 export const emptyTableState = (): TableState => ({ sorts: [], query: "" });
 

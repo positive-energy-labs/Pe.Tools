@@ -5,7 +5,7 @@
  */
 import { useEffect, useId, useMemo, useState } from "react";
 
-import { useScopeKeys, type ScopeKey } from "#/route/keys";
+import { useScopeKeys, type ScopeKey } from "../../keys";
 
 type FilterMode = "none" | "substring" | "fuzzy";
 type SelectMode = "none" | "single" | "multi";

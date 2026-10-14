@@ -1,13 +1,13 @@
 import { Plus, Trash2 } from "lucide-react";
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { Tag } from "#/components/lang/chip";
-import { Button } from "#/components/lang/button";
-import { Input } from "#/components/lang/input";
-import { EmptyState } from "#/components/lang/empty";
-import { ListPopup } from "#/components/lang/list-popup";
-import { TextCell } from "#/components/master-table/cells";
-import type { Column } from "#/components/master-table/model";
-import { Table } from "#/components/master-table/table";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { Tag } from "@pe/kit/lang/chip";
+import { Button } from "@pe/kit/lang/button";
+import { Input } from "@pe/kit/lang/input";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { ListPopup } from "@pe/kit/lang/list-popup";
+import { TextCell } from "@pe/kit/table/cells";
+import type { Column } from "@pe/kit/table/model";
+import { Table } from "@pe/kit/table/table";
 import type { ColumnKind, Draft } from "#/routes/data-tables";
 import { rowKey } from "#/routes/data-tables";
 

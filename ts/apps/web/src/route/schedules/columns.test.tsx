@@ -11,12 +11,7 @@ import {
 import { ScheduleGridWorkspace } from "./workspace";
 import { useScheduleGridColumns } from "./columns";
 import { ScheduleReview } from "./review";
-import {
-  conditionValues,
-  emptyTableState,
-  visibleRows,
-  wordMatches,
-} from "#/components/master-table/view";
+import { conditionValues, emptyTableState, visibleRows, wordMatches } from "@pe/kit/table/view";
 
 /** The field spec `revit.detail.schedules` sends for an Integer column. */
 const INTEGER = { definition: { dataTypeId: "autodesk.spec:spec.int64-2.0.0" } };

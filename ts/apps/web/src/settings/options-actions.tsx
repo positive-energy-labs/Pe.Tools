@@ -1,5 +1,5 @@
 import { Gauge, MessageCircle, Server } from "lucide-react";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { startFeedback } from "#/components/feedback-picker";
 import { RouteControlsSlot, useRouteSlotPresence } from "#/navigation/route-controls";

@@ -1,8 +1,8 @@
 import type { KeyboardEvent } from "react";
 import type { SortingState } from "@tanstack/react-table";
 
-import type { CellMove } from "#/components/master-table/cell-navigation";
-import type { TableState } from "#/components/master-table/model";
+import type { CellMove } from "./cell-navigation";
+import type { TableState } from "./model";
 
 export function toSortingState(sorts: TableState["sorts"]): SortingState {
   return sorts.map((sort) => ({ id: sort.key, desc: sort.dir === "desc" }));

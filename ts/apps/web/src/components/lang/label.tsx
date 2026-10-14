@@ -1,6 +1,6 @@
 import type * as React from "react";
 
-import { tv } from "#/lib/tv";
+import { tv } from "@pe/kit/lib/tv";
 
 export const labelRecipe = tv({
   base: "flex items-center gap-2 t-small font-semibold select-none peer-disabled:cursor-not-allowed peer-disabled:opacity-50",

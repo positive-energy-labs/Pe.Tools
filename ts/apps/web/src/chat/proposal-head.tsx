@@ -4,7 +4,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { fanOut, type CellGroup, type TrichotomyCellLike } from "@pe/agent-contracts";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import {
   fanOutWord,
   runFanOut,
@@ -14,7 +14,7 @@ import {
   type CellWire,
   type FanOutOutcome,
 } from "#/components/work/band";
-import { Verdict } from "#/components/lang/verdict";
+import { Verdict } from "@pe/kit/lang/verdict";
 export interface HeadWork {
   id: string;
   /** The route title, e.g. "Families". */

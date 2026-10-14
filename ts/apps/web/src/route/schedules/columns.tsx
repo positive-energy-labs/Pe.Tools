@@ -8,10 +8,10 @@ import {
 } from "@pe/agent-contracts";
 import type { ScheduleGridDocument } from "@pe/agent-contracts";
 import { reviewTransitions, type CellWire } from "#/components/work/band";
-import type { CellTransition, StateCellProps } from "#/components/lang/cell";
-import { cellFromTrichotomy, StateCell } from "#/components/lang/cell";
-import type { Column } from "#/components/master-table/model";
-import { parseConditionNumber } from "#/components/master-table/view";
+import type { CellTransition, StateCellProps } from "@pe/kit/lang/cell";
+import { cellFromTrichotomy, StateCell } from "@pe/kit/lang/cell";
+import type { Column } from "@pe/kit/table/model";
+import { parseConditionNumber } from "@pe/kit/table/view";
 import type { ScheduleGridSnapshot as Snapshot } from "@pe/agent-contracts";
 
 type ScheduleRow = Snapshot["rows"][number];

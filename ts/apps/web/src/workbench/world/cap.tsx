@@ -1,4 +1,4 @@
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 import { useEffect } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import type { ContextBreakdown, ContextItem } from "../chat-state";

@@ -2,9 +2,9 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import type { LucideIcon } from "lucide-react";
-import { FactChip } from "#/components/lang/chip";
+import { FactChip } from "@pe/kit/lang/chip";
 import { Kbd } from "#/components/lang/kbd";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { changedInRevit } from "#/readings";
 import type { RouteAction } from "./manifest";
 import type { ActionHandle, RouteHandle } from "./use-route";

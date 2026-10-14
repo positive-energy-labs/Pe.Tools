@@ -2,7 +2,7 @@
  * Vendored from tailwind-variants 0.3.1's MIT-licensed `tv` runtime after pnpm refused this
  * worktree's foreign virtual store. This is the subset used here: slots, variants and defaults.
  */
-import { cn } from "#/lib/utils";
+import { cn } from "./utils";
 
 type ClassValue = string | null | false | undefined;
 type Slots = Record<string, ClassValue>;

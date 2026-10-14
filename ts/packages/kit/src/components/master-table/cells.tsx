@@ -9,11 +9,11 @@
  * focus law). A select-shaped cell is the list grammar's `CellListSelect` (lang/list-popup).
  */
 
-import { useCellNavigation } from "#/components/master-table/cell-navigation";
-import { StateCell, fmtNum } from "#/components/lang/cell";
-import type { Verdict, VerdictTone } from "#/components/master-table/model";
-import { token } from "#/lib/token";
-import { cn } from "#/lib/utils";
+import { useCellNavigation } from "./cell-navigation";
+import { StateCell, fmtNum } from "../lang/cell";
+import type { Verdict, VerdictTone } from "./model";
+import { token } from "../../lib/token";
+import { cn } from "../../lib/utils";
 
 export function TextCell({
   value,

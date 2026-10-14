@@ -24,10 +24,10 @@ import {
 } from "lucide-react";
 import { type DocumentRequest, type Provider, type UpdateThreadRequest } from "@pe/agent-contracts";
 import { Dialog, DialogContent, DialogTitle } from "#/components/lang/dialog";
-import { ListPopup } from "#/components/lang/list-popup";
+import { ListPopup } from "@pe/kit/lang/list-popup";
 import { CommandPalette } from "#/components/lang/command-palette";
-import { Input } from "#/components/lang/input";
-import { EmptyState } from "#/components/lang/empty";
+import { Input } from "@pe/kit/lang/input";
+import { EmptyState } from "@pe/kit/lang/empty";
 import {
   NavigationFilter,
   NavigationFilters,
@@ -38,7 +38,7 @@ import {
   NavigationToggle,
 } from "#/components/lang/navigation";
 import { Kbd } from "#/components/lang/kbd";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { ProviderMark } from "#/components/lang/provider-mark";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import "./thread-navigation.css";

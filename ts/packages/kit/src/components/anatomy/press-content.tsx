@@ -1,4 +1,4 @@
-import { tv, type VariantProps } from "#/lib/tv";
+import { tv, type VariantProps } from "../../lib/tv";
 
 const pressContentRecipe = tv({
   variants: {

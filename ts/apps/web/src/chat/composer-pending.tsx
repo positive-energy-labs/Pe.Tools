@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 import { ChevronRight, Hand } from "lucide-react";
 import { toolTitle } from "@pe/agent-contracts";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { toolDetail, type Approval, type Question, type ToolCall } from "#/workbench/chat-state";
 import { QuestionForm } from "./question-form";
 

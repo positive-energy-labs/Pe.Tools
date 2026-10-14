@@ -1,4 +1,4 @@
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { useDestination } from "#/navigation/state";
 import { chipText, runtimeIdentity, type GroupKey } from "./model";
 import { useMachine } from "./use-machine";

@@ -26,16 +26,16 @@ import {
 } from "@pe/agent-contracts";
 
 import { ArmingStrip } from "#/components/lang/arming-strip";
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { Button } from "#/components/lang/button";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { Button } from "@pe/kit/lang/button";
 import { Connectors, type Connection } from "#/components/lang/connector";
-import { EmptyState } from "#/components/lang/empty";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Row } from "#/components/lang/row";
+import { Row } from "@pe/kit/lang/row";
 import { docKey, HeldRow, SessionCard, type SessionDocument } from "#/components/lang/session";
 import { Switcher } from "#/components/lang/switcher";
-import type { QueryCommand } from "#/components/master-table/model";
-import { queryWords, readClause, useTableState, visibleRows } from "#/components/master-table/view";
+import type { QueryCommand } from "@pe/kit/table/model";
+import { queryWords, readClause, useTableState, visibleRows } from "@pe/kit/table/view";
 import { ActionOutcome } from "#/actions/receipt";
 import { frozenDemo } from "#/host/demo-client";
 import { keyOf, pidOf, processOf, selectionOf } from "#/machine/session";

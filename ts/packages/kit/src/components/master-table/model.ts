@@ -1,7 +1,7 @@
 /** Table's public product model. TanStack's types stay behind the component boundary. */
 import type { ReactNode } from "react";
 
-import type { StateCellProps } from "#/components/lang/cell";
+import type { StateCellProps } from "../lang/cell";
 
 /** A column. Capabilities are opt-in by the presence of a field, never by a flag. */
 interface ColumnBase<Row> {
@@ -164,4 +164,4 @@ export interface TableState {
 /** The numeric-cell semantics moved into the language with the editor (fit reviews 2026-08-16,
  * #2 — `StateCell.numeric` is the one commit path now). Re-exported so table consumers keep
  * their import site. */
-export { fmtNum } from "#/components/lang/cell";
+export { fmtNum } from "../lang/cell";

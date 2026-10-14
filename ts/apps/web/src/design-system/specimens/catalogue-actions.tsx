@@ -1,6 +1,6 @@
 import { RefreshCw, Save, Square, Upload } from "lucide-react";
 
-import { ActionGroup, Button } from "#/components/lang/button";
+import { ActionGroup, Button } from "@pe/kit/lang/button";
 import { CounterExample, Demo, Gap } from "#/design-system/exhibit";
 
 import { ActionDemoCatalogue } from "../action-demo-catalogue";

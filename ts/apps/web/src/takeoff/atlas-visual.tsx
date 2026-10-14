@@ -1,12 +1,12 @@
 import { Suspense } from "react";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "#/components/lang/switcher";
 import { Pane } from "#/components/lang/pane";
 import { LevelPlan } from "#/takeoff/level-plan";
 import { LevelStats } from "#/takeoff/level-stats";
 import { ZoneCard } from "#/takeoff/zone-card";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
-import { ScopeKeys } from "#/route/keys";
+import { ScopeKeys } from "@pe/kit/keys";
 import { levelsOf } from "#/takeoff/plan-image";
 
 export function AtlasVisual() {

@@ -55,7 +55,7 @@
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join, posix, resolve } from "node:path";
+import { dirname, join, posix, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "../../../apps/web/node_modules/typescript/lib/typescript.js";
 import { describe, expect, it } from "vite-plus/test";
@@ -64,6 +64,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../../../apps/web/src");
+const KIT_ROOT = resolve(HERE, "../../../packages/kit/src");
 const SKIP_DIRS = new Set(["node_modules", "src"]); // src/src is a stray vite artifact
 /* revit/revit.css is the Revit facsimile (explainers compose fake Revit UI without images). It is
    off-system on purpose and draws every value from the --rv-* block in base.css, so the house value
@@ -71,7 +72,7 @@ const SKIP_DIRS = new Set(["node_modules", "src"]); // src/src is a stray vite a
    Ruling: docs/features/design-system/LEDGER.md, "Revit facsimile" (2026-10-05). */
 const SKIP_FILES = new Set(["routeTree.gen.ts", "revit.css"]);
 
-type Entry = { rel: string; text: string };
+type Entry = { rel: string; text: string; abs?: string };
 
 const collect = (dir: string, relBase: string, out: Entry[], match: RegExp): Entry[] => {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
@@ -82,16 +83,25 @@ const collect = (dir: string, relBase: string, out: Entry[], match: RegExp): Ent
     }
     if (SKIP_FILES.has(e.name)) continue;
     if (!match.test(e.name)) continue;
-    out.push({ rel, text: readFileSync(join(dir, e.name), "utf8") });
+    out.push({ rel, abs: join(dir, e.name), text: readFileSync(join(dir, e.name), "utf8") });
   }
   return out;
 };
 
-const FILES: Entry[] = collect(ROOT, "", [], /\.(?:tsx?|css)$/);
+const FILES: Entry[] = [
+  ...collect(ROOT, "", [], /\.(?:tsx?|css)$/),
+  ...collect(KIT_ROOT, "", [], /\.(?:tsx?|css)$/),
+];
 /** Data files are scanned only for the dash-authority rule — see the JSON gate below. */
 const JSON_FILES: Entry[] = collect(ROOT, "", [], /\.json$/);
 
 describe("design guard â€” current token authority", () => {
+  it("has one source owner for every shared instrument path", () => {
+    const paths = FILES.filter((file) =>
+      /^(components\/|lib\/|base\.css$|design-lang\.css$)/.test(file.rel),
+    ).map((file) => file.rel);
+    expect(paths.filter((path, index) => paths.indexOf(path) !== index)).toEqual([]);
+  });
   it("declares each authored class in one CSS owner", () => {
     const owners = ["base.css", "design-lang.css", "components/lang/lang.css"];
     const declarations = new Map<string, string[]>();
@@ -826,6 +836,8 @@ const cssRel = (specifier: string, importer: string): string | undefined => {
   const clean = specifier.replace(/\?.*$/, "");
   if (!clean.endsWith(".css")) return undefined;
   if (clean.startsWith("#/")) return clean.slice(2);
+  if (clean.startsWith("@pe/kit/lang/")) return clean.replace("@pe/kit/lang/", "components/lang/");
+  if (clean.startsWith("@pe/kit/")) return clean.slice("@pe/kit/".length);
   return clean.startsWith(".")
     ? posix.normalize(posix.join(posix.dirname(importer), clean))
     : undefined;
@@ -876,7 +888,10 @@ const cssClasses = (css: string): Set<string> => {
 
 const APP_CSS = [...CSS_ENTRIES]
   .sort()
-  .map((rel) => `@import "./${rel}";`)
+  .map(
+    (rel) =>
+      `@import "./${relative(ROOT, FILES.find((file) => file.rel === rel)!.abs!).replace(/\\/g, "/")}";`,
+  )
   .join("\n");
 const CSS_ENTRY = join(ROOT, "styles.css");
 const compiler = await tailwindNode.compile(APP_CSS, {
@@ -1092,26 +1107,26 @@ const REQUIRED_SPECIMEN_PATHS = [
   "#/components/lang/navigation",
   "#/components/lang/conversation",
   "#/components/lang/arming-strip",
-  "#/components/lang/artifact-frame",
-  "#/components/lang/cell",
+  "@pe/kit/lang/artifact-frame",
+  "@pe/kit/lang/cell",
   "#/components/lang/cell-key",
-  "#/components/lang/chip",
+  "@pe/kit/lang/chip",
   "#/components/lang/coverage-bar",
-  "#/components/lang/empty",
+  "@pe/kit/lang/empty",
   "#/components/lang/help",
   "#/components/lang/outcome",
-  "#/components/lang/button",
+  "@pe/kit/lang/button",
   "#/components/lang/section",
   "#/components/lang/switcher",
   "#/components/lang/dialog",
-  "#/components/lang/input",
+  "@pe/kit/lang/input",
   "#/components/lang/label",
   "#/components/lang/pane",
   "#/components/lang/kbd",
   "#/components/lang/switch",
   "#/components/lang/textarea",
   "#/components/lang/value-diff",
-  "#/components/lang/verdict",
+  "@pe/kit/lang/verdict",
 ] as const;
 const BAD_SPECIMEN_PATHS = REQUIRED_SPECIMEN_PATHS.filter(
   (importPath) => SPECIMEN_PATH_USES.get(importPath) !== 1,

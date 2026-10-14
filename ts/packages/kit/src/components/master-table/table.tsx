@@ -13,22 +13,18 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTable, type RowData } from "@tanstack/react-table";
 
-import { cellFactsText, cellStateLabel } from "#/components/lang/cell";
-import { Tag } from "#/components/lang/chip";
-import { useCollection } from "#/components/lang/collection";
-import { EmptyState } from "#/components/lang/empty";
-import { MasterTableBody } from "#/components/master-table/master-table-body";
-import { resolveStateColumn } from "#/components/master-table/master-table-columns";
-import { MasterTableHeader } from "#/components/master-table/master-table-header";
-import {
-  fromSortingState,
-  resolveUpdater,
-  toSortingState,
-} from "#/components/master-table/master-table-state";
-import type { Column, TableState } from "#/components/master-table/model";
-import { masterTableFeatures, toColumnDefs } from "#/components/master-table/tanstack-adapter";
-import { emptyTableState, visibleRows } from "#/components/master-table/view";
-import { useScopeKeys } from "#/route/keys";
+import { cellFactsText, cellStateLabel } from "../lang/cell";
+import { Tag } from "../lang/chip";
+import { useCollection } from "../lang/collection";
+import { EmptyState } from "../lang/empty";
+import { MasterTableBody } from "./master-table-body";
+import { resolveStateColumn } from "./master-table-columns";
+import { MasterTableHeader } from "./master-table-header";
+import { fromSortingState, resolveUpdater, toSortingState } from "./master-table-state";
+import type { Column, TableState } from "./model";
+import { masterTableFeatures, toColumnDefs } from "./tanstack-adapter";
+import { emptyTableState, visibleRows } from "./view";
+import { useScopeKeys } from "../../keys";
 
 const GUTTER_PX = 18;
 

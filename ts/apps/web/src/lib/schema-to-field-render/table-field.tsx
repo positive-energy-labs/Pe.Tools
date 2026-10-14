@@ -1,10 +1,10 @@
-import { Button } from "#/components/lang/button";
-import { StateCell } from "#/components/lang/cell";
-import { EmptyState } from "#/components/lang/empty";
-import { Input } from "#/components/lang/input";
-import { CellListSelect } from "#/components/lang/list-popup";
-import type { Column } from "#/components/master-table/model";
-import { Table } from "#/components/master-table/table";
+import { Button } from "@pe/kit/lang/button";
+import { StateCell } from "@pe/kit/lang/cell";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { Input } from "@pe/kit/lang/input";
+import { CellListSelect } from "@pe/kit/lang/list-popup";
+import type { Column } from "@pe/kit/table/model";
+import { Table } from "@pe/kit/table/table";
 import type { SchemaNodeRef } from "@pe/schema-core";
 import { FieldLabelRow, FieldMessages, FieldOptions } from "./field-metadata";
 import {

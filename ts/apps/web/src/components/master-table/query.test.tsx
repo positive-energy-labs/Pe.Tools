@@ -3,9 +3,9 @@ import { useState } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import type { QueryCommand, QueryVocabulary } from "#/components/master-table/model";
-import { QueryBox } from "#/components/master-table/query";
-import { useTableState } from "#/components/master-table/view";
+import type { QueryCommand, QueryVocabulary } from "@pe/kit/table/model";
+import { QueryBox } from "@pe/kit/table/query";
+import { useTableState } from "@pe/kit/table/view";
 
 afterEach(cleanup);
 

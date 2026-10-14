@@ -13,8 +13,8 @@ import {
   type RefObject,
 } from "react";
 
-import { tv } from "#/lib/tv";
-import { useScopeKeys } from "#/route/keys";
+import { tv } from "../../lib/tv";
+import { useScopeKeys } from "../../keys";
 
 import { Verdict } from "./verdict";
 import "./lang.css";

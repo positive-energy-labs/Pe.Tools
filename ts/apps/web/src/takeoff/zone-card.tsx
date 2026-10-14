@@ -1,7 +1,7 @@
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { FactChip } from "#/components/lang/chip";
-import { ActionGroup, Button } from "#/components/lang/button";
-import { fmtNum } from "#/components/master-table/model";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { FactChip } from "@pe/kit/lang/chip";
+import { ActionGroup, Button } from "@pe/kit/lang/button";
+import { fmtNum } from "@pe/kit/table/model";
 import { SENSIBLE_CAP_BTUH } from "#/takeoff/world";
 import type { TakeoffsController } from "#/takeoff/controller";
 import { ZonePeek } from "#/takeoff/zone-peek";

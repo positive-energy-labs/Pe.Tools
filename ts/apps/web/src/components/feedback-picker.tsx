@@ -3,14 +3,14 @@ import { createPortal } from "react-dom";
 import { Popover } from "@base-ui/react/popover";
 import { MessageSquarePlus, Send } from "lucide-react";
 
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { HotkeyCommand } from "#/components/lang/hotkey-command";
-import { PopupFrame } from "#/components/lang/list-popup";
+import { PopupFrame } from "@pe/kit/lang/list-popup";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Textarea } from "#/components/lang/textarea";
 import { deliverFeedback, sendFeedback, type FeedbackReceipt } from "#/host/feedback";
 import { useAction } from "#/readings";
-import { useScopeKeys } from "#/route/keys";
+import { useScopeKeys } from "@pe/kit/keys";
 
 // Pick one element, write a note, send it with a cropped picture through the host, which keeps it
 // first and hands it to PostHog second. A kept note that did not deliver says so and can retry.

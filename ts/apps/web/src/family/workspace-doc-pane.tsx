@@ -1,16 +1,16 @@
 import { useRef, useState } from "react";
 import { settingsFieldPointer, type MeasuredValue } from "@pe/agent-contracts";
 import { parameterText, paramSpec } from "#/family/family-model";
-import { EmptyState } from "#/components/lang/empty";
-import { FactChip, Tag } from "#/components/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { FactChip, Tag } from "@pe/kit/lang/chip";
 import { HelpTip } from "#/components/lang/help";
-import { List } from "#/components/lang/list-popup";
+import { List } from "@pe/kit/lang/list-popup";
 import { Switcher } from "#/components/lang/switcher";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { Pane } from "#/components/lang/pane";
 import { SpecSheet, SpecText, ProposalCard } from "#/family/doc-pane";
 import { NavStateCell } from "#/family/marks";
-import { cellFromTrichotomy } from "#/components/lang/cell";
+import { cellFromTrichotomy } from "@pe/kit/lang/cell";
 import {
   authoredText,
   bindingOf,
@@ -21,7 +21,7 @@ import {
 import { boundParam, type GeomConstituent } from "#/family/world";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 import { FamilyMetaControl } from "#/family/workspace-meta-control";
-import { Code, stringify } from "#/components/lang/code";
+import { Code, stringify } from "@pe/kit/lang/code";
 
 export function FamilyWorkspaceDocPane() {
   const {

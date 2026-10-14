@@ -3,9 +3,9 @@
  *  `control` is a framed trigger beside buttons that reads the whole path. */
 import { useRef, useState, type ReactNode } from "react";
 
-import type { Collection, Level } from "#/components/lang/collection";
-import { ListPopup } from "#/components/lang/list-popup";
-import { Button } from "#/components/lang/button";
+import type { Collection, Level } from "@pe/kit/lang/collection";
+import { ListPopup } from "@pe/kit/lang/list-popup";
+import { Button } from "@pe/kit/lang/button";
 
 interface RungOption {
   id: string;

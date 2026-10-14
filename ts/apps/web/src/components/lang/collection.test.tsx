@@ -2,7 +2,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { expect, test } from "vite-plus/test";
 
-import { useCollection } from "./collection";
+import { useCollection } from "@pe/kit/lang/collection";
 
 const items = ["alpha", "beta"];
 const options = {

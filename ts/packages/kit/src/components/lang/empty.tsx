@@ -2,7 +2,7 @@
  * The labelled empty. `story` (nothing in scope vs filtered to nothing) and `exit` are required,
  * and the exit renders on the surface, not in a title.
  */
-import { tv } from "#/lib/tv";
+import { tv } from "../../lib/tv";
 
 import "./lang.css";
 
