@@ -6,6 +6,7 @@ import {
   appRouteMount,
   routeKey,
   routePath,
+  SURFACE_SHELLS,
 } from "../src/app-routes.ts";
 
 describe("application route identities and surfaces", () => {
@@ -60,5 +61,26 @@ describe("application route identities and surfaces", () => {
       }
     }
     expect(appRouteMount("/pe/navigation", "web")).toBeUndefined();
+  });
+  it("declares each surface's shell as data, the tray reproducing its rulings exactly", () => {
+    expect(SURFACE_SHELLS.tray).toEqual({
+      mount: "compact",
+      routes: ["instances", "chat", "machine"],
+      home: { path: "/open", label: "Home / open work" },
+      icons: [
+        { route: "chat", label: "Pea Inbox", iconKey: "Inbox" },
+        { route: "machine", label: "Machine", iconKey: "Server" },
+      ],
+      picker: false,
+      settings: "route",
+      history: "window",
+    });
+    expect([SURFACE_SHELLS.web.picker, SURFACE_SHELLS.web.settings]).toEqual([true, "quick"]);
+    expect([SURFACE_SHELLS.web.history, SURFACE_SHELLS.pwa.history]).toEqual(["browser", "window"]);
+    for (const [surface, shell] of Object.entries(SURFACE_SHELLS)) {
+      const doors = [shell.home.path, ...shell.icons.map((icon) => routePath(icon.route))];
+      for (const door of doors)
+        expect(appRouteMount(door, surface as keyof typeof SURFACE_SHELLS)).toBe(shell.mount);
+    }
   });
 });

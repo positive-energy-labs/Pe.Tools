@@ -24,7 +24,7 @@ export function ChromeSettings({ word = false }: { word?: boolean }) {
       `/settings${subject && subject !== "settings" ? `?subject=${encodeURIComponent(subject)}` : ""}`,
     );
   };
-  if (host.settingsDoor === "route")
+  if (host.shell.settings === "route")
     return (
       <Button
         label="Settings"

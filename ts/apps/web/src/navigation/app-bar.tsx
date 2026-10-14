@@ -7,7 +7,7 @@ import { HotkeyHint } from "#/components/lang/hotkey-command";
 import { useScopeKeys } from "#/route/keys";
 import { ChromeSettings } from "./chrome-settings";
 import { SituationDrawer } from "./situation-drawer";
-import { locationLabel, admittedDestination } from "./model";
+import { locationLabel, admittedDestination, shellButtons } from "./model";
 import { useDestination, useNavigation } from "./state";
 import { GlobalSearch } from "./global-search";
 import { RouteControlsSlot } from "./route-controls";
@@ -20,9 +20,10 @@ import "./app-bar.css";
 type LaunchWindow = Window & {
   launchQueue?: { setConsumer: (consumer: (params: { targetURL?: string }) => void) => void };
 };
+const ICONS = { Inbox, MessageSquare, Server };
 export function AppBar() {
   const host = useSurfaceHost();
-  const tray = host.surface === "tray";
+  const { shell } = host;
   const router = useRouter();
   const location = useRouterState({ select: (state) => state.location });
   const canGoBack = useCanGoBack();
@@ -58,13 +59,13 @@ export function AppBar() {
   };
   const [launchRefusal, setLaunchRefusal] = useState<string | null>(null);
   const showSearch = () => {
-    if (tray) return;
+    if (!shell.picker) return;
     refresh();
     setOpen(true);
     searchField?.focus();
   };
   useScopeKeys([
-    ...(!tray
+    ...(shell.picker
       ? [
           {
             hotkey: "Mod+Shift+K" as const,
@@ -186,7 +187,7 @@ export function AppBar() {
           }
         >
           <div className="pe-appbar-row">
-            {host.history === "window" && (
+            {shell.history === "window" && (
               <>
                 <Button
                   label="Back"
@@ -218,27 +219,22 @@ export function AppBar() {
                 />
               </>
             )}
-            <Button
-              label={host.surface === "tray" ? "Home / open work" : "Home / tool directory"}
-              icon={<img src="/favicon.ico" alt="" aria-hidden width={16} height={16} />}
-              onClick={() => navigateTo(host.homePath)}
-              pressed={tray && location.pathname === "/open"}
-            />
-            <Button
-              label={tray ? "Pea Inbox" : "Open Pea"}
-              icon={tray ? Inbox : MessageSquare}
-              pressed={tray && location.pathname === "/pea"}
-              onClick={() => navigateTo("/pea")}
-            />
-            {tray && (
+            {shellButtons(shell, location.pathname).map((button) => (
               <Button
-                label="Machine"
-                icon={Server}
-                pressed={location.pathname === "/machine"}
-                onClick={() => navigateTo("/machine")}
+                key={button.path}
+                label={button.label}
+                icon={
+                  button.iconKey ? (
+                    ICONS[button.iconKey]
+                  ) : (
+                    <img src="/favicon.ico" alt="" aria-hidden width={16} height={16} />
+                  )
+                }
+                pressed={button.pressed}
+                onClick={() => navigateTo(button.path)}
               />
-            )}
-            {!tray && (
+            ))}
+            {shell.picker && (
               <div
                 className="pe-appbar-route-search dl-control"
                 data-selected={open || undefined}
@@ -289,7 +285,7 @@ export function AppBar() {
           {launchRefusal || host.navigationRefusal}
         </p>
       )}
-      {!tray && (
+      {shell.picker && (
         <GlobalSearch
           open={open}
           onOpenChange={changeSearchOpen}
