@@ -161,7 +161,8 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
       }),
     ),
   );
-  const map = (await peFind.execute!({ limit: 8 }, {} as never)) as { machine: Machine };
+  const map = (await peFind.execute({ limit: 8 }, undefined)) as { machine: Machine };
+  expect(map, JSON.stringify(map)).not.toHaveProperty("isError");
   expect(map.machine).toEqual(machine);
   for (const [index, session] of map.machine.revit.sessions!.entries()) {
     const phase = phaseOf(session.row);

@@ -21,6 +21,7 @@ export * from "./principal.ts";
 export * from "./instances.ts";
 export * from "./capability.ts";
 export * from "./contribution.ts";
+export * from "./pod-route.ts";
 export * from "./mention.ts";
 
 export * from "./semantic-actions.ts";

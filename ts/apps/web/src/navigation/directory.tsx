@@ -13,6 +13,9 @@ import { RouteHelpButton } from "#/route/help";
 import { usePublishRouteOptions } from "#/settings/options";
 import type { PageOption } from "#/settings/option-state";
 import type { DirectorySearch } from "./directory-search";
+import { usePodRoutes } from "#/route/pod-routes";
+import { podRoutePath } from "#/route/pod-address";
+import { matches } from "./model";
 
 type DirectoryPage = DirectorySearch;
 const directoryOptions: readonly PageOption<DirectoryPage>[] = [
@@ -117,6 +120,7 @@ function NavigationStatus() {
   );
 }
 export function Directory() {
+  const pods = usePodRoutes();
   const page = useSearch({ from: "/" });
   const navigate = useNavigate({ from: "/" });
   const { query, exposure, sort } = page;
@@ -250,6 +254,27 @@ export function Directory() {
         availability is certified.
       </p>
       <NavigationStatus />
+      {pods?.rows.length ? (
+        <NavigationGroup label="Pod routes" count={pods.rows.length} forceOpen={query.length > 0}>
+          <div className="hairline-rows">
+            {pods.rows
+              .filter((row) => matches(`${row.name} ${row.description} ${row.packageId}`, query))
+              .map((row) => (
+                <div key={row.key} className="pe-navigation-row py-2">
+                  <div className="min-w-0 flex-1">
+                    <Button label={`Open ${row.name}`} onClick={() => go(podRoutePath(row.key))}>
+                      {row.name}
+                    </Button>
+                    <p className="truncate text-ink-2">{row.description}</p>
+                  </div>
+                  <span className="t-small text-ink-2">
+                    {row.trusted ? "Trusted" : "Trust required"}
+                  </span>
+                </div>
+              ))}
+          </div>
+        </NavigationGroup>
+      ) : null}
       <div className="mt-5 grid min-w-0 gap-x-8 gap-y-5 md:grid-cols-2">
         {sort === "name"
           ? tools.map(renderTool)

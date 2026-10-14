@@ -48,6 +48,7 @@ describe("fixture census", () => {
       "/parameter-links",
       "/rooms",
       "/settings",
+      "/tool/$key",
     ]);
     expect(census.classifiedPrototypeRoutes).toContainEqual({
       route: "/lab",
@@ -55,7 +56,12 @@ describe("fixture census", () => {
       fixtureKind: "prototype-fixture",
     });
     expect(census.missingReviewUrls).toEqual([]);
-    expect(census.missingCanonicalFixtures).toBe(7);
+    expect(census.classifiedMaintainedRoutes).toContainEqual({
+      route: "/tool/$key",
+      canonicalReviewUrl: `/tool/${encodeURIComponent("route:@snowdon-circuits/routes/voltage-drop/index.js")}`,
+      fixtureKind: "live-route",
+    });
+    expect(census.missingCanonicalFixtures).toBe(8);
   });
 
   it("uses real manifest seed names for every demo review URL", () => {

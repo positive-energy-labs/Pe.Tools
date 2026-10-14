@@ -616,6 +616,7 @@ async function dispatch(
       );
       return { ...answer, target: scopeTarget };
     }
+    case "route":
     case "skill":
     case "member": {
       const answer = await contributionRead(row);

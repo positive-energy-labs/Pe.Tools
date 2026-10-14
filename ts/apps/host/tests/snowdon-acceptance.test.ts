@@ -20,12 +20,11 @@ async function authored(root: string, directory = root): Promise<[string, string
   return files.sort(([a], [b]) => a.localeCompare(b));
 }
 
-// f45fdc44 authored bytes, except the owner-approved explicit export flag in circuits (2026-10-14);
-// the circuits pin follows the `offline = Boolean(pe.exported)` edit that 659d9410 landed.
+// Ducts retains the reviewed f45fdc44 bytes; circuits pins the explicit Round 4 route promotion.
 // Runtime state and exported artifacts are created only in temp copies.
 test.each([
   ["snowdon-ducts", "0860ce4e13340f99810f71229a38450bf9d7bb8828216fd434f25f531fa9a70e"],
-  ["snowdon-circuits", "418450be7ca270a4e3b4e44386648202e6b9fc30a5623028bc42976f1e281f37"],
+  ["snowdon-circuits", "4f8d9a2ed9034a7085e25e61b226c839d352af375e05031ef21519326e0a7cc6"],
 ])(
   "%s survives production transfer, hosted serving and standalone export unchanged",
   async (id, hash) => {

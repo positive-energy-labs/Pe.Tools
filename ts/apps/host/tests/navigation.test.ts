@@ -3,7 +3,7 @@ import { HostLog } from "../src/host-log.ts";
 import { mkdir, mkdtemp, open, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test, vi } from "vite-plus/test";
+import { afterEach, expect, test } from "vite-plus/test";
 import { z } from "zod";
 import {
   address,
@@ -259,11 +259,23 @@ test("Pea navigation reads real persisted harness summaries and preserves thread
 });
 
 test("failed owners remain explicit and do not turn registrations into instances", async () => {
-  const getState = vi.fn(async () => null);
-  const setState = vi.fn(async () => {});
+  const directory = await temporary();
+  const store = fileRouteDocumentStore(directory);
+  const before = await bytes(directory);
+  const accesses: string[] = [];
   const workspace = new RouteWorkspace({
     registrations: [registration()],
-    store: { getState, setState },
+    store: {
+      ...store,
+      getState: async (...args) => {
+        accesses.push("getState");
+        return store.getState(...args);
+      },
+      setState: async (...args) => {
+        accesses.push("setState");
+        return store.setState(...args);
+      },
+    },
   });
   const snapshot = await readNavigation(workspace, {
     threads: async () => {
@@ -275,7 +287,10 @@ test("failed owners remain explicit and do not turn registrations into instances
   });
   expect(snapshot.works).toEqual([]);
   expect(snapshot.threads).toEqual([]);
-  expect(snapshot.observations).toHaveLength(3);
-  expect(getState).not.toHaveBeenCalled();
-  expect(setState).not.toHaveBeenCalled();
+  expect(snapshot.observations).toEqual([
+    "Pea thread summaries are unavailable.",
+    "Current document bindings are unavailable; document resume links are refused.",
+  ]);
+  expect(accesses).toEqual([]);
+  expect(await bytes(directory)).toEqual(before);
 });

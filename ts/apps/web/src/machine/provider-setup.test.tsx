@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
-import { type Machine } from "@pe/agent-contracts";
+import { type Machine, type Provider } from "@pe/agent-contracts";
 import { MACHINE_SEEDS } from "#/open/seeds";
 import { machineOf } from "./model";
 import { PeaGroup, ProviderSetup } from "./pea";
@@ -210,14 +210,38 @@ test("a blank name saves under the endpoint's own name, and the key is the only 
 });
 test("Sign in says what it is doing under its row, then goes quiet once a probe answers", () => {
   seed();
-  state.logins = { codex: { state: "open", probedAt: null } };
+  state.logins = { codex: { state: "opening" } };
   const view = render(<ProviderSetup providers={providers()} />);
+  const refresh = (patch: Partial<Provider> = {}) => {
+    state.machine = {
+      ...state.machine!,
+      providers: state.machine!.providers!.map((p) => (p.id === "codex" ? { ...p, ...patch } : p)),
+    };
+    view.rerender(<ProviderSetup providers={providers()} />);
+  };
+  expect(screen.getByText("Opening the Codex installer console")).toBeTruthy();
+  state.logins = { codex: { state: "open", probedAt: null } };
+  refresh();
   expect(screen.getByText(/Finish installer in the console that opened/)).toBeTruthy();
   state.logins = {
     codex: { state: "failed", message: "Could not open the Codex installer console: nope" },
   };
-  view.rerender(<ProviderSetup providers={providers()} />);
+  refresh();
   expect(screen.getByText(/Could not open the Codex installer console: nope/)).toBeTruthy();
+  state.logins = { codex: { state: "opening" } };
+  refresh({
+    readiness: { state: "refused", step: "signed-in", message: "not signed in" },
+    probedAt: "t0",
+  });
+  expect(screen.getByText("Opening the Codex sign-in console")).toBeTruthy();
+  state.logins = { codex: { state: "open", probedAt: "t0" } };
+  refresh();
+  expect(screen.getByText(/Finish sign-in in the console that opened/)).toBeTruthy();
+  refresh({ probedAt: "t1" });
+  expect(screen.queryByText(/console that opened/)).toBeNull();
+  state.logins = { codex: { state: "open", probedAt: "t1" } };
+  refresh({ readiness: { state: "ready" } });
+  expect(screen.queryByText(/console that opened/)).toBeNull();
 });
 test("the model picker offers each unavailable harness's own Install or Sign in", () => {
   seed();
