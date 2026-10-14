@@ -59,21 +59,22 @@ test("numeric readings use native units, the binding chooses the document, and c
   ])
     expect(probe).toContain(member);
   const page = await text("pages/tour/page.js");
+  const instruments = await text("pages/tour/instruments.mjs");
   expect(page).toContain("pe.target()");
-  expect(page).toContain("const offline = Boolean(pe.exported);");
+  expect(page).toContain("pe.exported");
   const html = await text("pages/tour/index.html");
   const embedded = JSON.parse(
     html.match(/<script id="page-source" type="application\/json">(.*?)<\/script>/s)![1]!,
   );
   expect(embedded.app).toBe(page.replaceAll("\r\n", "\n"));
-  expect(html).toContain("const offline = Boolean(pe.exported);");
+  expect(html).toContain("Boolean(api.exported)");
   expect(page).not.toMatch(/pe\.target\([^)]*["']|x-pe-origin|x-pe-session|x-pe-document/);
-  expect(page).toContain("script:@snowdon-circuits/src/Census.cs");
-  expect(page).toContain("script:@snowdon-circuits/src/InspectRun.cs");
-  expect(page).toContain("Approve and apply wire change");
-  const start = page.indexOf("const approve");
-  expect(page.slice(start, page.indexOf("const inspect", start))).toMatch(
-    /await assertCopy\(\)[\s\S]*pe\.do\(proposal\.key/,
+  expect(instruments).toContain("script:@snowdon-circuits/src/Census.cs");
+  expect(instruments).toContain("script:@snowdon-circuits/src/InspectRun.cs");
+  expect(instruments).toContain("Approve and apply wire change");
+  const start = instruments.indexOf("const approve");
+  expect(instruments.slice(start, instruments.indexOf("const inspect", start))).toMatch(
+    /await assertCopy\(\)[\s\S]*api\.do\(proposal\.key/,
   );
 });
 

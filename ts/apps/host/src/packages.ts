@@ -3,6 +3,8 @@ import {
   packageIdSchema,
   packageMemberPathSchema,
   type ContributionKind,
+  podRouteDeclarationSchema,
+  type PodRouteDeclaration,
 } from "@pe/agent-contracts";
 import { createHash } from "node:crypto";
 import { lstat, open, readdir } from "node:fs/promises";
@@ -43,6 +45,7 @@ export type AdmittedPackage = {
   members: PackageMember[];
   diagnostics: MemberIssue[];
   contributions: PackageContribution[];
+  routes?: PodRouteDeclaration[];
 };
 export type PackageListing = {
   packages: AdmittedPackage[];
@@ -301,6 +304,29 @@ async function readFolder(directory: string, folder: string): Promise<AdmittedPa
       diagnostics.push(problem("InvalidEntrypoint", "pod.json", message(error)));
     }
   }
+  const routes: PodRouteDeclaration[] = [];
+  for (const raw of Array.isArray(value.routes) ? value.routes : []) {
+    try {
+      const declaration = podRouteDeclarationSchema.parse(raw);
+      const slug = declaration.sourcePath.split("/")[1];
+      if (`pod.${value.id}.${slug}`.length > 100)
+        throw Error("Route Work identity exceeds 100 characters");
+      if (routes.some((route) => route.sourcePath === declaration.sourcePath))
+        throw Error("Duplicate route sourcePath");
+      if (!members.some((member) => member.path === declaration.sourcePath))
+        throw Error("Route has no admitted module");
+      if (
+        declaration.page &&
+        !members.some((member) => member.path === `${declaration.page}/index.html`)
+      )
+        throw Error("Route has no admitted portable Page");
+      routes.push(declaration);
+    } catch (error) {
+      diagnostics.push(problem("InvalidRoute", "pod.json", message(error)));
+    }
+  }
+  if (value.routes !== undefined && !Array.isArray(value.routes))
+    diagnostics.push(problem("InvalidRoute", "pod.json", "routes must be an array"));
   const contributions = members.flatMap((member) => {
     const kind = kindOfMember(member.path, entrypoints);
     if (!kind) return [];
@@ -334,7 +360,18 @@ async function readFolder(directory: string, folder: string): Promise<AdmittedPa
     members,
     entrypoints,
     diagnostics,
-    contributions,
+    contributions: [
+      ...contributions,
+      ...routes.map((route) => ({
+        kind: "route" as const,
+        path: route.sourcePath,
+        memberPath: route.sourcePath,
+        key: contributionKey({ kind: "route", packageId: value.id, path: route.sourcePath }),
+        name: route.name,
+        description: route.description,
+      })),
+    ],
+    routes,
   };
 }
 

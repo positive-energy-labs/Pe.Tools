@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { podRouteDescriptorSchema } from "./pod-route.ts";
+export * from "./pod-route.ts";
 import { hostDescriptorSchema } from "./host-descriptor.ts";
 import { deviceListingSchema, deviceSessionSchema, pairingSchema } from "./remote-device.ts";
 export * from "./remote-device.ts";
@@ -271,6 +273,34 @@ export function definePeApi<
       "human",
       "providers",
       "admin",
+    ),
+    "plugins.routes": route(
+      "GET",
+      "/pe/plugin-routes",
+      none,
+      z.array(podRouteDescriptorSchema),
+      "read",
+      "plugins",
+      "read",
+    ),
+    "plugins.routeTrust": route(
+      "PUT",
+      "/pe/plugin-routes/:key/trust",
+      z.strictObject({ sha256: z.string().regex(/^[a-f0-9]{64}$/), trusted: z.boolean() }),
+      z.array(podRouteDescriptorSchema),
+      "human",
+      "plugins",
+      "admin",
+    ),
+    "plugins.routeBundle": route(
+      "GET",
+      "/pe/plugin-routes/:key/bundle/:hash",
+      none,
+      z.unknown(),
+      "read",
+      "plugins",
+      "read",
+      "asset",
     ),
     "plugins.list": route(
       "GET",
@@ -659,6 +689,16 @@ export function definePeApi<
       "read",
       "gateway",
       "read",
+    ),
+    "page.export": route(
+      "POST",
+      "/pages/:slug/export",
+      z.strictObject({ snapshot: z.unknown().optional() }),
+      z.unknown(),
+      "human-or-page",
+      "pages",
+      "human-or-page",
+      "asset",
     ),
     "page.target": route("GET", "/pages/:slug/target", none, object, "read", "pages", "read"),
     "page.call": route(

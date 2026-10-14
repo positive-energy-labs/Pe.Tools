@@ -1,5 +1,5 @@
 import { lazy, useState } from "react";
-import { createRouteRegistry, defineRoutePlugin } from "./registry";
+import { createRouteRegistry, defineRoutePlugin } from "@pe/kit/route-registry";
 import { manifest as families } from "#/families/manifest";
 import { familyManifest } from "#/family/manifest";
 import { openManifest } from "#/open/manifest";

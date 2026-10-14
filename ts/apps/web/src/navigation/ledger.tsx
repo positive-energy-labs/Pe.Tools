@@ -14,6 +14,7 @@ import { attention, machineOf } from "#/machine/model";
 import { harnessClient } from "#/workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "#/workbench/config";
 import { relativeThreadAge } from "#/chat/thread-navigation";
+import { usePodRoutes } from "#/route/pod-routes";
 import {
   destinationDetail,
   destinationLabel,
@@ -148,6 +149,7 @@ export function useLedgerList(
   query = "",
   kind: ResultKind = "All",
 ) {
+  const pods = usePodRoutes();
   const { rows, status, fault } = useLedgerRows();
   const { snapshot, loading, error } = useNavigation();
   const go = useDestination();
@@ -160,7 +162,7 @@ export function useLedgerList(
       ? presentLedger(rows, presentation, searching ? new Set(LEDGER_GROUPS) : open)
       : []),
     ...(presentation.destinations && (searching || kind !== "All")
-      ? globalItems(snapshot, kind).map((destination) => ({
+      ? globalItems(snapshot, kind, pods?.rows).map((destination) => ({
           kind: "go" as const,
           key: `go:${destination.key}`,
           destination,

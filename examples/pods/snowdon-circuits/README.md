@@ -11,6 +11,10 @@ Read electrical circuits in your own licensed Revit Snowdon Towers electrical sa
 
 The typed `revit.catalog.electrical-circuits` operation owns discovery and circuit/member identities. `src/Census.cs` supplies explicit-unit voltage, apparent current and one-way path length because the typed catalog has formatted voltage/current and omits length and material. `src/InspectRun.cs` reads circuits containing Revit's current selection. Values Revit cannot compute remain null.
 
-The house instruments come from `pe.kit`, loaded by `/pages/pe.js`. Edit `pages/tour/page.js`, `circuits.mjs`, `calc.mjs` and `index.source.html`. From `ts`, run `pnpm --filter @pe/kit build` to regenerate `index.html`, then run kit tests. The source tab retains the authored calculator and page code.
+The Pod also declares **Voltage Drop** in the Home tool directory and global palette. Open it, review the source, and trust its exact SHA-256 as a human administrator. Route code runs with the shell's browser authority; this is trusted extension code, not a sandbox. Importing a Pod does not approve its routes. An edited route requires renewed trust. Disable the Pod to remove its routes. Trust stays on this machine and is never exported.
+
+The route owns a saved Work for the manual calculator and a separate Work for each chosen document. Its Ctrl+K palette chooses the document, resets calculation state, reloads Work or exports the portable Page. Revit reads and proposals use that exact target. The Page keeps its own chip binding and portable snapshot form.
+
+The house instruments come from the shell's React and `@pe/kit`, or from `pe.kit` through `/pages/pe.js`. Edit `pages/tour/instruments.mjs`, `circuits.mjs`, `calc.mjs` and `styles.mjs` once for both forms. `page.js` adapts the Page kernel; `routes/voltage-drop/index.source.mjs` explicitly promotes the instruments to the route contract. From `ts`, run `pnpm --filter @pe/kit build` to regenerate both entry files, then run kit tests. The source tab retains the authored code.
 
 Use the `circuit-drop` skill to derive a Pod with a new manifest id. Keep readings separate from shipped sources. Check ampacity, derating, reactance, load balance and the full circuit design independently; this worksheet is a design comparison.

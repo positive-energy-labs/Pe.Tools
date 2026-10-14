@@ -81,13 +81,21 @@ export class RouteWorkspace {
 
   constructor(private readonly options: RouteWorkspaceOptions) {
     for (const registration of options.registrations) {
-      const route = registration.spec.route;
-      if (route.includes(":")) throw new Error(`route name '${route}' cannot contain ':'`);
-      if (this.#registry.has(route)) throw new Error(`duplicate route '${route}'`);
-      toJsonSchema(registration.spec.schema);
-      for (const command of Object.values(registration.spec.commands)) toJsonSchema(command.input);
-      this.#registry.set(route, registration);
+      this.register(registration);
     }
+  }
+
+  /** A trusted plugin's lifetime owns registration, never its saved Work bytes. */
+  register(registration: RouteWorkspaceRegistration): () => void {
+    const route = registration.spec.route;
+    if (route.includes(":")) throw new Error(`route name '${route}' cannot contain ':'`);
+    if (this.#registry.has(route)) throw new Error(`duplicate route '${route}'`);
+    toJsonSchema(registration.spec.schema);
+    for (const command of Object.values(registration.spec.commands)) toJsonSchema(command.input);
+    this.#registry.set(route, registration);
+    return () => {
+      if (this.#registry.get(route) === registration) this.#registry.delete(route);
+    };
   }
 
   list() {

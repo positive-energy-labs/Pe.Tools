@@ -103,6 +103,7 @@ import {
 import { join } from "node:path";
 import { createPackageLifecycle, bindPackageLifecycle } from "./package-lifecycle.ts";
 import { createPluginsHandler } from "./plugins-handler.ts";
+import { createPodRoutes } from "./pod-routes.ts";
 import { observePluginOperations } from "./plugin-receipts.ts";
 import { importShippedPods } from "./installed-pods.ts";
 import { receiptQuerySchema } from "@pe/agent-contracts";
@@ -203,7 +204,10 @@ export function createPeRoutes(options: PeRoutesOptions) {
       const key = url.searchParams.get("key") ?? "";
       if (!parseContributionKey(key))
         return json({ error: "Expected a canonical contribution key" }, 400);
-      const value = options.contributionRead?.(key, url.searchParams.get("sha256") ?? undefined);
+      const value = await options.contributionRead?.(
+        key,
+        url.searchParams.get("sha256") ?? undefined,
+      );
       return value
         ? json(value)
         : json(
@@ -868,6 +872,12 @@ export function makeHostPeRoutes(
     store: fileRouteDocumentStore(productRouteWorkPath()),
     heads: threads.heads,
     navigation: {
+      routes: async () =>
+        Object.fromEntries(
+          (await podRoutes.list())
+            .filter((route) => route.trusted)
+            .map((route) => [route.workRoute, `/tool/${encodeURIComponent(route.key)}`]),
+        ),
       threads: async () => {
         const response = await threads.fetch(
           new Request(peRouteUrl("threads.list", {}, hostBaseUrl)),
@@ -890,7 +900,10 @@ export function makeHostPeRoutes(
       },
     },
     capabilityCatalog: catalog,
-    contributionRead: content.member,
+    contributionRead: async (key, hash) => {
+      await content.read();
+      return content.member(key, hash);
+    },
     // Thread Readings (the list, and one thread's log) are the thread store's; the rest the host's.
     observeHostResource: (request, publish, after) =>
       threads.observe(request, publish, after) ?? hostObserve(request, publish, after),
@@ -899,13 +912,21 @@ export function makeHostPeRoutes(
   });
   bindActionWorkspace(routes.workspace);
   sweepClosedDocuments(bridge, routes.workspace);
+  const podRoutes = createPodRoutes(content.lifecycle, { workspace: routes.workspace });
+  const fetchRoute = routes.fetch;
+  routes.fetch = async (request) => {
+    const declared = matchPeRoute(request.method, new URL(request.url).pathname);
+    if (declared?.params.route?.startsWith("pod.")) await podRoutes.list();
+    return fetchRoute(request);
+  };
   const plugins = {
     close: async () => {
+      podRoutes.close();
       stopOperationHooks();
       await content.lifecycle.close();
       bindPackageLifecycle(undefined);
     },
-    fetch: createPluginsHandler(content),
+    fetch: createPluginsHandler(content, podRoutes),
   };
   return { providers, threads, routes, catalog, machine, notices, plugins };
 }

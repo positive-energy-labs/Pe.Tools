@@ -2,10 +2,10 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { useEffect } from "react";
-import { defineRoutePlugin } from "#/route/registry";
+import { defineRoutePlugin } from "@pe/kit/route-registry";
 
 vi.mock("#/route/builtin-routes", async () => {
-  const { createRouteRegistry } = await import("#/route/registry");
+  const { createRouteRegistry } = await import("@pe/kit/route-registry");
   return { publicRoutes: createRouteRegistry() };
 });
 import { publicRoutes } from "#/route/builtin-routes";

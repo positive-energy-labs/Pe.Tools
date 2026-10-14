@@ -152,7 +152,7 @@ const podEntrypointSchema = Schema.Struct({
 
 /** One admitted contribution (`packages.ts`): kind follows the path; `key` is the canonical host key. */
 export const podContributionSchema = Schema.Struct({
-  kind: Schema.Literals(["script", "page", "skill", "member"]),
+  kind: Schema.Literals(["script", "page", "skill", "member", "route"]),
   path: Schema.String,
   memberPath: Schema.String,
   key: Schema.String,

@@ -21,6 +21,7 @@ import { useSurfaceHost } from "#/navigation/surface-host";
 import { appRouteMount, appRouteByPath } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { RemoteDeviceGate } from "#/machine/devices";
+import { PodRoutesProvider } from "#/route/pod-routes";
 
 import appCss from "../styles.css?url";
 
@@ -67,26 +68,28 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 
 export function RootComponent() {
   return (
-    <NavigationProvider>
-      <RouteControlsProvider>
-        <SettingsProvider>
-          <div className="flex h-dvh min-h-0 min-w-0 flex-col">
-            <AppBar />
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-              <div
-                className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto overscroll-none"
-                data-app-content
-              >
-                <SituationPinnedSlot />
-                <div className="min-h-0 min-w-0 flex-1">
-                  <SurfaceOutlet />
+    <PodRoutesProvider>
+      <NavigationProvider>
+        <RouteControlsProvider>
+          <SettingsProvider>
+            <div className="flex h-dvh min-h-0 min-w-0 flex-col">
+              <AppBar />
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                <div
+                  className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto overscroll-none"
+                  data-app-content
+                >
+                  <SituationPinnedSlot />
+                  <div className="min-h-0 min-w-0 flex-1">
+                    <SurfaceOutlet />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </SettingsProvider>
-      </RouteControlsProvider>
-    </NavigationProvider>
+          </SettingsProvider>
+        </RouteControlsProvider>
+      </NavigationProvider>
+    </PodRoutesProvider>
   );
 }
 
