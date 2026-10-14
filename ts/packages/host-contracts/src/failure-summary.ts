@@ -18,6 +18,10 @@ export interface FailureSummary {
 
 type Line = (message: string) => string;
 const REVIT_DOOR = { label: "Revit on Machine", href: "/machine?section=revit" };
+const ALIGN_DOOR = {
+  label: "Align Revit add-ins with this build",
+  href: "/machine?section=revit#align-addins",
+};
 const UPDATE_DOOR = { label: "Update on Machine", href: "/machine?section=update" };
 
 const beta = (version: string) => /beta\.(\d+)/.exec(version)?.[1];
@@ -34,10 +38,10 @@ const bootstrapLine: Line = (message) => {
 const LINES: Partial<
   Record<CoreDiagnosticCode, { line: Line | string; door?: FailureSummary["door"] }>
 > = {
-  "session.bootstrap-mismatch": { line: bootstrapLine, door: REVIT_DOOR },
+  "session.bootstrap-mismatch": { line: bootstrapLine, door: ALIGN_DOOR },
   "session.bootstrap-missing": {
     line: "Revit has no Pe.Revit add-ins for this year",
-    door: REVIT_DOOR,
+    door: ALIGN_DOOR,
   },
   "session.no-revit": { line: "No Revit is installed for this year", door: REVIT_DOOR },
   "session.year-mismatch": {

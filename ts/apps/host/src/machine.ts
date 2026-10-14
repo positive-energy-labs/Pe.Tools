@@ -421,7 +421,12 @@ export function createMachine(
           const attachment = matched.length === 1 ? matched[0]! : null;
           if (attachment) classified.add(attachment);
           const held = process ? documents.get(processKey(process)) : undefined;
-          const allowed = row.execution?.allowed === true;
+          const allowed =
+            row.execution?.allowed === true &&
+            censusRead &&
+            attachmentsRead &&
+            held?.leg.observedAtUtc != null &&
+            held.leg.error === null;
           return {
             row,
             whose: receiptProcessOf(row)
@@ -472,7 +477,7 @@ export function createMachine(
           // Nobody proved these Pea's, so they are yours: only a live grant writes.
           unclassifiedAttachments: attachments
             .filter((attachment) => !classified.has(attachment))
-            .map((attachment) => withAccess(attachment, new Map(), heldGrants, at)),
+            .map((attachment) => withAccess(attachment, new Map(), [], at)),
         },
         update: sources.update.current(),
         share,

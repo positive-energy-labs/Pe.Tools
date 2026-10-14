@@ -112,6 +112,7 @@ import {
   type ReceiptExport,
 } from "./receipt-export.ts";
 import { createNotices } from "./notices.ts";
+import { alignBootstrap } from "./bootstrap.ts";
 export { fileRouteDocumentStore } from "./route-document-store.ts";
 
 export interface PeRoutesOptions {
@@ -195,6 +196,10 @@ export function createPeRoutes(options: PeRoutesOptions) {
     const declared = matchPeRoute(method, url.pathname);
     if (!declared || declared.route.owner !== "pe") return json({ error: "Unknown Pe route" }, 404);
     if (declared.id === "features.get") return json(hostDescriptor(resolveHostVersion()));
+    if (declared.id === "machine.bootstrap") {
+      const receipt = await alignBootstrap(await request.json(), caller, hostActionJournal());
+      return json(receipt);
+    }
     if (method === "GET" && declared.id === "family.spec") return familySpecAsset(url);
     const parts = url.pathname.split("/").slice(2).map(decodeURIComponent); // drop "", "pe"
     const body = () => request.json().catch(() => null);

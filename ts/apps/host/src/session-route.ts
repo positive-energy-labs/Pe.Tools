@@ -13,6 +13,8 @@ import {
   doctorArgv,
   sessionDialogsArgv,
   sessionListArgv,
+  sessionLogsArgv,
+  opListArgv,
 } from "@pe/host-contracts/pe-revit-contract";
 import { checkoutLayout } from "@pe/host-contracts/service-identity";
 import { type HostLane } from "./host-ownership.ts";
@@ -143,6 +145,10 @@ export function sdkReadingArgs(request: SdkReading): string[] {
       return docListArgs(request.session);
     case "dialogs":
       return sessionDialogsArgv({ ...request.session, all: request.all });
+    case "logs":
+      return sessionLogsArgv({ ...request.session, tail: request.tail ?? 100 });
+    case "ops":
+      return opListArgv({ ...request.session, tail: request.tail ?? 100 });
   }
 }
 
@@ -182,11 +188,12 @@ export const instancesReadingsRoute = HttpRouter.add("GET", "/instances/readings
   Effect.tryPromise(async () => {
     const { sdkReadingSchema } = await import("@pe/agent-contracts");
     const query = new URL(req.url, "http://host").searchParams;
-    if ([...query.keys()].some((key) => !["read", "session", "year", "all"].includes(key)))
+    if ([...query.keys()].some((key) => !["read", "session", "year", "all", "tail"].includes(key)))
       throw Error("Unknown SDK reading field; session accepts an id-or-pid object");
     const request = sdkReadingSchema.parse({
       kind: "sdk",
       read: query.get("read"),
+      ...(query.has("tail") ? { tail: Number(query.get("tail")) } : {}),
       ...(query.has("session") ? { session: JSON.parse(query.get("session")!) } : {}),
       ...(query.has("year") ? { year: query.get("year") } : {}),
       ...(query.has("all") ? { all: query.get("all") === "true" } : {}),

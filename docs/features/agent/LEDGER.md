@@ -182,6 +182,8 @@ restated here.
 - 2026-08-25 — One object-valued `page/lens-intent` atom for `inspectKey` and `following`: the `Lens` controller wrote fresh identities during its subscribed effect and caused an unbounded React notification loop. Replaced by primitive atoms.
 
 ## Owed
+
+- 2026-10-14, cloud acquisition first slice requires explicit APS project/item/version identity and downloads before local detached open (`downloadCloudVersion`). Native certification, version selection in Open, linked-package completeness and stripped output remain owed; connected-open acquisition stays refused. E2 muse: `.artifacts/reorient-20261013/e2/MUSE.md`.
 - 2026-10-13, wave K round 2 to wave I: new device tests import `device-test-home.ts` first, setting temporary `PE_TOOLS_PRODUCT_HOME` and `LOCALAPPDATA` before product modules. The broader isolated web run passes 424 tests but fails existing `open/machine-world.test.tsx` F8; its `fakeRuntimeHost` fixture still writes discovery under LOCALAPPDATA while the product-home override changes discovery roots. Global fixture repair stays with wave I. Evidence: `C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/reorient-20261013/k/r2/web-all.log`.
 
 - 2026-10-13, wave D: ADR 0017 admission, principal catalog, fork/revision fencing, K9 and host-clock chrome revoke have deterministic proof. Native queued-step revoke acceptance remains with the execution owner (access-093); browser layout acceptance remains with the shell owner (access-067/068). Wave K added pairing; unpaired external MCP remains read-only. Preserve the PageBindingChip mount in app-bar when the shell moves.
