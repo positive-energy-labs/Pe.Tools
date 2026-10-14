@@ -26,8 +26,9 @@
   align-items: baseline;
   gap: 10px;
   font-family: var(--font-mono);
+  font-size-adjust: var(--mono-adjust);
+  font-weight: var(--weight-mono);
   font-size: var(--type-small-size);
-  font-weight: var(--weight-regular);
   font-variant-numeric: tabular-nums;
   letter-spacing: var(--track-mono);
   color: var(--pe-ink-2);
@@ -58,6 +59,8 @@
   flex: none;
   font-size: var(--type-small-size);
   font-family: var(--font-mono);
+  font-size-adjust: var(--mono-adjust);
+  font-weight: var(--weight-mono);
 }
 .dl-tool-status[data-state="done"] {
   color: var(--pe-ink-mute);
@@ -166,6 +169,8 @@
 }
 .dl-message-controls time {
   font-family: var(--font-mono);
+  font-size-adjust: var(--mono-adjust);
+  font-weight: var(--weight-mono);
   font-size: var(--type-small-size);
   margin-right: var(--space-unit);
 }

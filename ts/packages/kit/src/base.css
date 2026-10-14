@@ -59,8 +59,11 @@
   --weight-medium: 500;
   --weight-strong: 600;
   --weight-bold: 700;
+  /* Mono sits under the sans: equal x-height still read a size large (Cascadia is ~23% wider
+     per word) and heavier, so every mono site pins 0.5 and the lighter weight. */
   --weight-mono: 350;
-  --type-mono-inline: 0.9em;
+  --sans-adjust: 0.54;
+  --mono-adjust: 0.5;
   /* Type: small is the one chrome rung, prose is reading text, then title, head, display. */
   --type-small-size: 12px;
   --type-small-line-height: 20px;
@@ -145,7 +148,7 @@
     font-size: var(--type-small-size);
     line-height: var(--type-small-line-height);
     /* One apparent size across faces: pin every face to Open Sans's 0.54 x-height. */
-    font-size-adjust: 0.54;
+    font-size-adjust: var(--sans-adjust);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -155,6 +158,11 @@
   }
   [data-pe] :where(code, pre, kbd, samp) {
     font-family: var(--font-mono);
+  }
+  /* Layered, so a weight utility or .t-upper still wins. */
+  [data-pe] :where(code, pre, kbd, samp, .face-mono) {
+    font-size-adjust: var(--mono-adjust);
+    font-weight: var(--weight-mono);
   }
 
   :where([data-pe] .face-mono, [data-pe] .t-upper) {
@@ -269,15 +277,6 @@
   text-decoration: underline solid var(--pe-line-2);
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
-}
-
-[data-pe] .tag {
-  color: var(--pe-ink-2);
-  font-family: var(--font-mono);
-  font-size: var(--type-small-size);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: var(--track-upper);
-  text-transform: uppercase;
 }
 
 [data-pe] .spin {
@@ -423,7 +422,10 @@
 [data-pe] .face-display {
   font-family: var(--font-display);
 }
+/* Caps are a sans section head; never mono, so .t-upper beside .face-mono drops the mono. */
 [data-pe] .t-upper {
+  font-family: var(--font-body);
+  font-size-adjust: var(--sans-adjust);
   font-weight: var(--weight-strong);
   letter-spacing: var(--track-upper);
   text-transform: uppercase;

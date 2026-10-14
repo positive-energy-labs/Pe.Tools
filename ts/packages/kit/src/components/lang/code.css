@@ -8,6 +8,8 @@
   overflow: auto;
   tab-size: 2;
   font-family: var(--font-mono);
+  font-size-adjust: var(--mono-adjust);
+  font-weight: var(--weight-mono);
   font-size: var(--type-small-size);
   line-height: var(--type-small-line-height);
 }
