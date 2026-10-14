@@ -209,7 +209,7 @@ function harness(initial: Receipt[] = [], bufferMs = 0) {
     disableLogger: true,
   });
   /** Connects, collects cards until `count` arrived (or the stream ends), then hangs up. */
-  async function connect(count: number, afterOpen?: () => void, onCard?: () => void) {
+  async function connect(count: number, afterOpen?: () => void, onCard?: (card: MachineNotice) => void) {
     const response = await web.handler(
       new Request("http://host/host/notices"),
       Context.empty() as never,
@@ -233,7 +233,7 @@ function harness(initial: Receipt[] = [], bufferMs = 0) {
           }
         } else if (part.startsWith("data: ")) {
           cards.push(JSON.parse(part.slice(6)));
-          onCard?.();
+          onCard?.(cards[cards.length - 1]!);
         }
       }
     }
@@ -323,27 +323,31 @@ test("closing the feed releases the receipt subscription", async () => {
   expect(h.consumers.size).toBe(0);
 });
 
-test("a burst waits out one buffer window and arrives together", async () => {
+test("a burst waits out one buffer window, but an ask never waits", async () => {
   const h = harness([], 200);
   try {
     let start = 0;
-    const arrived: number[] = [];
+    const arrived = new Map<string, number>();
     const cards = await h.connect(
-      2,
+      4,
       () => {
         start = performance.now();
         h.deliver(lifecycle("succeeded"));
         h.deliver(permission("asked"));
         setTimeout(() => h.deliver(turn("finished")), 100);
-        // Answered inside the window: the ask never reaches the tray.
-        setTimeout(() => h.deliver(permission("resolved", uid(3), 2)), 50);
+        setTimeout(() => h.deliver(question("asked")), 120);
       },
-      () => arrived.push(performance.now() - start),
+      (card) => arrived.set(card.id, performance.now() - start),
     );
-    expect(cards.map((c) => c.id)).toEqual([uid(1), uid(2)]);
-    // Nothing shows before the window closes; the late card joins it instead of opening its own.
-    expect(Math.min(...arrived)).toBeGreaterThanOrEqual(180);
-    expect(Math.max(...arrived)).toBeLessThan(270);
+    // Approvals and questions are released at once, even inside an open window.
+    expect(arrived.get(uid(3))!).toBeLessThan(100);
+    expect(arrived.get(uid(8))!).toBeGreaterThanOrEqual(110);
+    expect(arrived.get(uid(8))!).toBeLessThan(180);
+    // Finished work waits for the window, and the late card joins it instead of opening its own.
+    expect(arrived.get(uid(1))!).toBeGreaterThanOrEqual(180);
+    expect(arrived.get(uid(2))!).toBeGreaterThanOrEqual(180);
+    expect(arrived.get(uid(2))!).toBeLessThan(270);
+    expect(cards.map((c) => c.id)).toEqual([uid(3), uid(8), uid(1), uid(2)]);
   } finally {
     await h.close();
   }

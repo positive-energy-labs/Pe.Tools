@@ -107,7 +107,10 @@ export function noticeOf(r: Receipt, context: NoticeContext): MachineNotice | nu
 }
 
 const REPLAY_MS = 60_000;
-/** Cards wait this long after the first of a burst, so a burst arrives as one paged card. */
+/**
+ * Finished turns, Revit verb ends and updates wait this long after the first of a burst, so a burst
+ * arrives as one paged card. An approval or question blocks Pea, so it never waits.
+ */
 const BUFFER_MS = 30_000;
 const RING = 16;
 const SEEN = 256;
@@ -136,17 +139,19 @@ export function createNotices(deps: {
   let pending: Entry[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
 
+  function publish(entry: Entry) {
+    const same = ring.findIndex((e) => e.notice.id === entry.notice.id);
+    if (same >= 0) ring.splice(same, 1);
+    ring.push(entry);
+    if (ring.length > RING) ring.shift();
+    Effect.runSync(PubSub.publish(hub, entry.notice));
+  }
+
   function flush() {
     timer = undefined;
     const burst = pending;
     pending = [];
-    for (const entry of burst) {
-      const same = ring.findIndex((e) => e.notice.id === entry.notice.id);
-      if (same >= 0) ring.splice(same, 1);
-      ring.push(entry);
-      if (ring.length > RING) ring.shift();
-      Effect.runSync(PubSub.publish(hub, entry.notice));
-    }
+    burst.forEach(publish);
   }
 
   function ingest(r: Receipt) {
@@ -168,14 +173,15 @@ export function createNotices(deps: {
     seen.set(r.id, r.revision);
     if (seen.size > SEEN) seen.delete(seen.keys().next().value!);
     const at = Date.parse(r.at);
-    pending = pending.filter((e) => e.notice.id !== notice.id);
-    pending.push({
+    const entry = {
       notice,
       atMs: Number.isFinite(at) ? at : now(),
       request: asks(r) ? r.join.requestId : "",
-    });
-    if (bufferMs <= 0) flush();
-    else timer ??= setTimeout(flush, bufferMs);
+    };
+    pending = pending.filter((e) => e.notice.id !== notice.id);
+    if (asks(r) || bufferMs <= 0) return publish(entry);
+    pending.push(entry);
+    timer ??= setTimeout(flush, bufferMs);
   }
 
   const unsubscribe = deps.source.subscribe({ kinds: [...KINDS] }, ingest);
