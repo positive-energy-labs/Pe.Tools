@@ -209,7 +209,11 @@ function harness(initial: Receipt[] = [], bufferMs = 0) {
     disableLogger: true,
   });
   /** Connects, collects cards until `count` arrived (or the stream ends), then hangs up. */
-  async function connect(count: number, afterOpen?: () => void, onCard?: (card: MachineNotice) => void) {
+  async function connect(
+    count: number,
+    afterOpen?: () => void,
+    onCard?: (card: MachineNotice) => void,
+  ) {
     const response = await web.handler(
       new Request("http://host/host/notices"),
       Context.empty() as never,
