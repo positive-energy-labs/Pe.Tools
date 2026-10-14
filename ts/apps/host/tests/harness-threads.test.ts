@@ -41,12 +41,20 @@ type Host = {
 const hosts: Host[] = [];
 const mcpServer = () => ({ name: "pea", command: "unused", args: [], env: [] });
 /** Threads and providers behind one fetch, as the host's router mounts them. No probe at start. */
-const host = (updatePending?: () => boolean, prepare?: () => Promise<unknown>): Host => {
+const host = (
+  updatePending?: () => boolean,
+  prepare?: () => Promise<unknown>,
+  openConsole: (command: string, opened: () => void) => Promise<void> = async (_, opened) =>
+    opened(),
+): Host => {
   const consoles: string[] = [];
   const providers = createProviders({
     shellPath: async () => "C:\\canary-bin;C:\\also",
     probeOnStart: false,
-    openConsole: async (command) => void consoles.push(command),
+    openConsole: (command, _env, opened) => {
+      consoles.push(command);
+      return openConsole(command, opened);
+    },
   });
   const threads = createHarnessThreads({
     prepare,
@@ -1095,6 +1103,41 @@ test("providers list from the probe: readiness follows the adapter's own auth re
 
   expect((await call("DELETE", "/pe/providers/claude")).status).toBe(409);
   expect((await call("POST", "/pe/providers/nope/probe")).status).toBe(404);
+});
+
+test("Sign in answers only once a console opened, and says why when none could", async () => {
+  const failing = caller(
+    host(undefined, undefined, async () => {
+      throw Error("spawn cmd.exe ENOENT");
+    }),
+  );
+  const refused = await failing("POST", "/pe/providers/codex/open-login");
+  expect(refused.status).toBe(502);
+  expect(refused.json.error).toMatch(/^Could not open the Codex .* console: spawn cmd\.exe ENOENT$/);
+  expect(((await failing("GET", "/pe/providers/codex")).json as Provider).readiness).toEqual({
+    state: "unknown",
+    message: "Not probed yet.",
+  });
+
+  // A console that stays open keeps the answer honest: opened, and the re-probe waits for close.
+  let close!: () => void;
+  const open = caller(
+    host(
+      undefined,
+      undefined,
+      (_command, opened) =>
+        new Promise<void>((resolve) => {
+          opened();
+          close = resolve;
+        }),
+    ),
+  );
+  expect((await open("POST", "/pe/providers/claude/open-login")).json).toEqual({ opened: true });
+  expect(((await open("GET", "/pe/providers/claude")).json as Provider).probedAt).toBeNull();
+  close();
+  await expect
+    .poll(async () => ((await open("GET", "/pe/providers/claude")).json as Provider).probedAt)
+    .not.toBeNull();
 });
 
 test("a login that expires between turns reads expired, not ready, and says how to repair it", async () => {

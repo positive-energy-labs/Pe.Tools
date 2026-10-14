@@ -475,14 +475,28 @@ export type ProvidersOptions = {
   shellPath?: () => Promise<string | null>;
   /** Probe every provider in the background now. */
   probeOnStart?: boolean;
-  /** Opens a console the user can see running `command`; resolves when it closes. Tests replace it. */
-  openConsole?: (command: string, env: Record<string, string | undefined>) => Promise<void>;
+  /**
+   * Opens a console the user can see running `command`. Calls `opened` once the console process
+   * exists, resolves when it closes, rejects when it could not start. Tests replace it.
+   */
+  openConsole?: (
+    command: string,
+    env: Record<string, string | undefined>,
+    opened: () => void,
+  ) => Promise<void>;
 };
+
+/** How long Sign in waits to hear that a console process exists before saying it did not open. */
+const CONSOLE_OPEN_MS = 5_000;
 
 // 2026-10-12: `detached: true` on win32 is DETACHED_PROCESS, a child with no console, so interactive
 // installers and logins had nowhere to draw and exited at once. `start` gives PowerShell a fresh
 // visible console; `/wait` keeps this promise open until it closes.
-function openConsole(command: string, env: Record<string, string | undefined>): Promise<void> {
+function openConsole(
+  command: string,
+  env: Record<string, string | undefined>,
+  opened: () => void,
+): Promise<void> {
   const scriptPath = join(tmpdir(), `pe-tools-console-${randomUUID()}.ps1`);
   writeFileSync(
     scriptPath,
@@ -509,15 +523,18 @@ function openConsole(command: string, env: Record<string, string | undefined>): 
   );
   child.unref();
   const cleanup = () => rmSync(scriptPath, { force: true });
-  return new Promise((resolve) => {
-    child.once("exit", () => {
+  return new Promise((resolve, reject) => {
+    child.once("spawn", opened);
+    // `start /wait` returns the console script's own code, which is 0 even after a failed login (the
+    // script waits for Enter and ends); a nonzero code is cmd or PowerShell failing to start.
+    child.once("exit", (code) => {
       cleanup();
-      resolve();
+      if (code) reject(Error(`the console process exited with code ${code}`));
+      else resolve();
     });
     child.once("error", (error) => {
-      log.warn(`login console did not open: ${String(error)}`);
       cleanup();
-      resolve();
+      reject(error);
     });
   });
 }
@@ -835,9 +852,32 @@ export function createProviders(options: ProvidersOptions) {
           ? adapters[record.harness].install
           : adapterLogin(record.harness, adapterCli(record.harness, childEnv));
         log.info(`provider ${record.id}: opening a console for \`${command}\``);
-        void (options.openConsole ?? openConsole)(command, childEnv)
+        let opened!: () => void;
+        const gotConsole = new Promise<void>((resolve) => {
+          opened = resolve;
+        });
+        const closed = (options.openConsole ?? openConsole)(command, childEnv, opened);
+        closed
           .then(() => probe(record))
-          .catch((error) => log.warn(`provider ${record.id} re-probe failed: ${String(error)}`));
+          .catch((error) => log.warn(`provider ${record.id} console or re-probe failed: ${String(error)}`));
+        // Answer once a console exists; a console that cannot start is the user's dead click.
+        const failure = await Promise.race([
+          gotConsole.then(() => null),
+          closed.then(
+            () => null,
+            (error: unknown) => String((error as Error)?.message ?? error),
+          ),
+          new Promise<string>((resolve) =>
+            setTimeout(resolve, CONSOLE_OPEN_MS, "it did not start within 5 s").unref(),
+          ),
+        ]);
+        if (failure)
+          return json(
+            {
+              error: `Could not open the ${adapters[record.harness].title} ${install ? "installer" : "sign-in"} console: ${failure}`,
+            },
+            502,
+          );
         return json({ opened: true });
       }
     }
