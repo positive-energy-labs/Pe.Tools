@@ -1,3 +1,4 @@
+import { normalizePeError } from "@pe/host-contracts/pe-api";
 import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
 import { cli } from "gunshi";
 import { expect, test, vi } from "vite-plus/test";
@@ -28,9 +29,11 @@ test("CLI has no actor flag; no-context host and script writes get context.missi
       admitCrossing(identity.caller, body.destination, "/actions");
     } catch (error) {
       if (!(error instanceof Refused)) throw error;
-      return Response.json(
-        { error: error.message, refusal: error.refusal, notDispatched: true },
-        { status: 403 },
+      return normalizePeError(
+        Response.json(
+          { error: error.message, refusal: error.refusal, notDispatched: true },
+          { status: 403 },
+        ),
       );
     }
     throw Error("Anonymous write was admitted");
@@ -41,12 +44,10 @@ test("CLI has no actor flag; no-context host and script writes get context.missi
   const disclosure = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
     const invoke = (args: string[]) => cli(args, host, { subCommands: host.subCommands });
-    const operation = host.subCommands.operations;
-    const call = operation.subCommands.call;
+    const call = host.subCommands.call;
     expect(call.args).not.toHaveProperty("actor");
     await expect(
       invoke([
-        "operations",
         "call",
         "--key",
         "scripting.execute",
@@ -323,6 +324,31 @@ test("pea find prints key, kind and title per row of the host's catalog; --menti
   } finally {
     output.mockRestore();
     disclosed.mockRestore();
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  }
+});
+
+test("pea host call reaches a declared HTTP route through the principal-carrying client", async () => {
+  const base = fakeRuntimeHost("http://127.0.0.1:9");
+  vi.stubEnv("PE_CONTEXT", "cli-context");
+  const fetch = vi.fn(async (_url: string, init?: RequestInit) => {
+    expect(new Headers(init?.headers).get("x-pe-context")).toBe("cli-context");
+    return Response.json([]);
+  });
+  vi.stubGlobal("fetch", fetch);
+  const output = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    const host = new PeaCliCommands({ hostBaseUrl: base }).hostCommand();
+    await cli(["call", "--key", "http:threads.list"], host, { subCommands: host.subCommands });
+    expect(fetch.mock.calls[0]?.[0]).toBe(`${base}/pe/threads`);
+    expect(output).toHaveBeenCalledWith("[]");
+    await expect(
+      cli(["call", "--key", "http:missing"], host, { subCommands: host.subCommands }),
+    ).rejects.toThrow("Unknown declared route");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  } finally {
+    output.mockRestore();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   }

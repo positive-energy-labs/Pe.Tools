@@ -14,7 +14,6 @@ import {
 } from "@pe/agent-contracts";
 import { Equal, Hash, Option } from "effect";
 import { dirty, mapReading, readingAtom, peReadings, previousOf, type Readings } from "#/readings";
-import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
 import { causeRefusal, refuse, writeRefusal, type Refusal } from "./refusal";
 import { getRouteSalvage, postRouteWrite } from "./host";
 import { type Slice, appAtomRegistry, isRecord, useOwned } from "./route-owner";
@@ -38,19 +37,15 @@ class RouteAtomKey implements Equal.Equal {
   }
 }
 
-function routeUrl(
-  route: string,
-  operation: "apply" | "command" | typeof START_FRESH | "salvage",
-  key: WorkKey,
-) {
-  const url = new URL(peUrl(resolveWorkbenchConfig(), `/route-state/${route}/${operation}`));
-  if (key.work !== undefined) url.searchParams.set("work", key.work);
+function routeInput(route: string, key: WorkKey) {
+  const query: Record<string, string> = {};
+  if (key.work !== undefined) query.work = key.work;
   else {
-    if (key.target !== null) url.searchParams.set("target", key.target);
+    if (key.target !== null) query.target = key.target;
     const open = key.binding === "address" ? key.from : key.open;
-    if (open) url.searchParams.set("open", `${open.session}/${open.openId}`);
+    if (open) query.open = `${open.session}/${open.openId}`;
   }
-  return url.toString();
+  return { params: { route }, query };
 }
 
 const routeAtom = Atom.family((key: RouteAtomKey) => {
@@ -104,7 +99,7 @@ export function docWriter<S extends RouteStateSpec<any>>(
     onAccepted?: (base: number, revision: number) => void,
   ): Promise<Refusal | null> => {
     try {
-      const { status, result } = await postRouteWrite(routeUrl(spec.route, operation, key), body);
+      const { status, result } = await postRouteWrite(operation, routeInput(spec.route, key), body);
       if (!result) return refuse("failed", `${operation} failed (${status})`);
       if (!result.ok && result.code === "stale_revision" && conflict) registry.set(conflict, true);
       if (result.ok && body.expectedRevision !== undefined)
@@ -151,7 +146,7 @@ export function docWriter<S extends RouteStateSpec<any>>(
     /** The human door only; the host refuses Pea's door and readable Work. */
     startFresh: () => send(START_FRESH, {}),
     /** The human door only: what the route carries over from Work it can no longer read. */
-    salvage: () => getRouteSalvage(routeUrl(spec.route, "salvage", key)),
+    salvage: () => getRouteSalvage(routeInput(spec.route, key)),
   };
 }
 

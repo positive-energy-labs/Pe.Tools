@@ -32,7 +32,7 @@ import {
 } from "./host-lifecycle.ts";
 import { hostOwnership, productRoot } from "./host-ownership.ts";
 import { staticSpaLayer } from "./static-spa.ts";
-import { peRoutesLayer } from "./pe-routes.ts";
+import { peRoutesLayer, peApiErrorsLayer } from "./pe-routes.ts";
 import { capturesRoute } from "./captures-route.ts";
 import { pagesRoute } from "./pages-route.ts";
 import type { Notices } from "./notices.ts";
@@ -228,7 +228,8 @@ export function makeHttpLive(options: HttpLiveOptions) {
           )
         : undefined,
     share,
-  });
+  }).pipe(Layer.provide(peApiErrorsLayer));
+
   const webUrl = options.webUrl;
   const webRoot = options.webRoot;
   const spa: SpaFallback = webUrl

@@ -36,7 +36,9 @@ const send = async (
   const text = await response.text();
   let code: string | undefined;
   try {
-    code = (JSON.parse(text) as { refusal?: { code?: string } }).refusal?.code;
+    code =
+      (JSON.parse(text) as { error?: { code?: string }; refusal?: { code?: string } }).error
+        ?.code ?? (JSON.parse(text) as { refusal?: { code?: string } }).refusal?.code;
   } catch {}
   return { status: response.status, code, text };
 };
@@ -224,9 +226,10 @@ test("the harness, Page and route-state doors carry their caller through the rea
     ]);
     // POST /pe/route-state/:route/:verb: the author is the carried caller.
     const write = "/pe/route-state/families/apply";
-    expect((await at("POST", write, {}, {})).code).toBe("context.missing");
-    expect((await at("POST", write, page, {})).code).toBe("page.use-page-door");
-    humanReached(await at("POST", write, human, {}));
+    const patch = { patches: [], expectedRevision: 0 };
+    expect((await at("POST", write, {}, patch)).code).toBe("context.missing");
+    expect((await at("POST", write, page, patch)).code).toBe("page.use-page-door");
+    humanReached(await at("POST", write, human, patch));
   } finally {
     await host.close();
   }
@@ -385,3 +388,29 @@ test("action controls and the Families reading judge their real caller", async (
     rmSync(dir, { recursive: true, force: true });
   }
 }, 30_000);
+
+test("operation and action failures use the declared transport envelope without losing refusal evidence", async () => {
+  const host = await bootHost();
+  try {
+    for (const [path, body] of [
+      ["/call", { key: "not.an.operation", request: {} }],
+      ["/actions", {}],
+    ] as const) {
+      const response = await fetch(`${host.base}${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      expect(response.ok).toBe(false);
+      expect(await response.json()).toMatchObject({
+        error: {
+          code: expect.any(String),
+          message: expect.any(String),
+          details: expect.anything(),
+        },
+      });
+    }
+  } finally {
+    await host.close();
+  }
+});

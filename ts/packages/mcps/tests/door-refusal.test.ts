@@ -1,3 +1,4 @@
+import { normalizePeError } from "@pe/host-contracts/pe-api";
 /**
  * A door's refusal reaches the person whole. The host answers 403 with the typed `refusal`; the
  * client keeps it on the thrown error so a surface can name the door, the reason and the remedy,
@@ -19,9 +20,11 @@ const refusal = {
 
 test("an admission refused at a door throws the typed refusal, not the body's JSON", async () => {
   vi.stubGlobal("fetch", async () =>
-    Response.json(
-      { error: `${refusal.code}: ${refusal.reason}`, message: "m", refusal, notDispatched: true },
-      { status: 403 },
+    normalizePeError(
+      Response.json(
+        { error: `${refusal.code}: ${refusal.reason}`, message: "m", refusal, notDispatched: true },
+        { status: 403 },
+      ),
     ),
   );
   const error = await runSemanticAction(

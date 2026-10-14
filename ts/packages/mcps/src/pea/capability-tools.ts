@@ -1,3 +1,4 @@
+import { createPeClient, peRoutes } from "@pe/agent-contracts/pe-api";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import {
   carriesCallerContext,
@@ -107,7 +108,9 @@ export type Scope = ThreadHead & { thread: string };
 export async function scopeOf(): Promise<Scope | null> {
   if (invocationContext()?.caller?.kind === "external-mcp") return null;
   if (!carriesCallerContext()) return null;
-  const response = await fetch(`${base()}/pe/scope/self`);
+  const response = await createPeClient(base(), fetch).response("scope.get", {
+    params: { id: "self" },
+  });
   if (response.status === 404) return null;
   const body = (await response.json()) as { thread?: unknown };
   if (typeof body.thread !== "string") return null;
@@ -350,9 +353,9 @@ async function executeTool(
   if ("isError" in catalog) return catalog;
   const row = catalog.capabilities.find((candidate) => candidate.key === input.key);
   if (!row && contribution?.kind === "member" && !replayOperations && !input.target) {
-    const response = await fetch(
-      `${base()}/pe/contributions?${new URLSearchParams({ key: input.key })}`,
-    );
+    const response = await createPeClient(base(), fetch).response("contributions.read", {
+      query: { key: input.key },
+    });
     const result = await response.json();
     return {
       ok: response.ok,
@@ -569,15 +572,17 @@ async function dispatch(
       const open = new URL(row.projection.openUrl, base());
       if (open.origin !== new URL(base()).origin)
         throw Error("Page descriptor has a foreign origin.");
-      const read = async (path: string | URL, init?: RequestInit) => {
-        const response = await fetch(String(path), init);
-        return { ok: response.ok, result: await response.json() };
-      };
+      const client = createPeClient(base(), fetch);
+      const params = { slug: decodeURIComponent(open.pathname.split("/")[2]!) };
+      const read = async (response: Response) => ({
+        ok: response.ok,
+        result: await response.json(),
+      });
       // pe_do is the Page shelf's event/binding door; these cross their original host checks.
       if (!input.input) {
         const [state, target] = await Promise.all([
-          read(new URL("state", open)),
-          read(new URL("target", open)),
+          client.response("page.state", { params }).then(read),
+          client.response("page.target", { params }).then(read),
         ]);
         return {
           ok: state.ok && target.ok,
@@ -591,15 +596,11 @@ async function dispatch(
           z.strictObject({ event: z.record(z.string(), z.unknown()) }),
         ])
         .parse(coerceJsonObject(input.input));
-      const binding = "binding" in action;
-      const path = binding
-        ? new URL(`/pe${open.pathname}binding`, base())
-        : new URL("events", open);
-      const answer = await read(path, {
-        method: binding ? "PUT" : "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(binding ? action.binding : action.event),
-      });
+      const answer = await read(
+        "binding" in action
+          ? await client.response("page.bind", { params, body: action.binding })
+          : await client.response("page.append", { params, body: action.event }),
+      );
       return { ...answer, target: scopeTarget };
     }
     case "skill":
@@ -655,16 +656,12 @@ async function dispatch(
         const query = new URLSearchParams({ thread: viewThread });
         if (row.key === "route:families.view" && typeof payload.instance === "string")
           query.set("instance", payload.instance);
-        const response = await fetch(
-          `${base()}/pe/route-view/families${row.key.endsWith(".view") ? `?${query.toString()}` : "/set-query"}`,
-          row.key.endsWith(".view")
-            ? undefined
-            : {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ ...payload, thread: viewThread }),
-              },
-        );
+        const client = createPeClient(base(), fetch);
+        const response = row.key.endsWith(".view")
+          ? await client.response("view.get", { query: Object.fromEntries(query) })
+          : await client.response("view.query", {
+              body: peRoutes["view.query"].body.parse({ ...payload, thread: viewThread }),
+            });
         const result = (await response.json()) as Record<string, unknown>;
         if (
           row.key === "route:families.view" &&
@@ -728,9 +725,7 @@ async function dispatch(
               target: { session: null, document: null },
             }
           : await routeWorkScope(defaultTarget);
-        const result = await routeFetch(
-          `/pe/route-state/${encodeURIComponent(parsed.route)}?${scope.query}`,
-        );
+        const result = await routeFetch(parsed.route, scope.query);
         if (parsed.route === familiesRouteState.route && !("isError" in result))
           result.hint =
             "This is authored Work. Read route:families.view for the currently visible matrix or archived reading; no matrix read is started.";
@@ -809,7 +804,9 @@ async function dispatch(
 async function contributionRead(row: Capability) {
   if (!row.package) throw Error("Contribution has no admitted source");
   const query = new URLSearchParams({ key: row.key, sha256: row.package.sha256 });
-  const response = await fetch(`${base()}/pe/contributions?${query}`);
+  const response = await createPeClient(base(), fetch).response("contributions.read", {
+    query: Object.fromEntries(query),
+  });
   const answer = (await response.json()) as {
     content: string;
     bytesBase64: string;
@@ -903,13 +900,12 @@ async function routeWrite(
       }
     : await routeWorkScope(defaultTarget);
   const { query } = scope;
-  const encoded = encodeURIComponent(route);
   const revision =
     expectedRevision ??
-    (await routeFetch(`/pe/route-state/${encoded}?${query}`).then((view) =>
+    (await routeFetch(route, query).then((view) =>
       typeof view.revision === "number" ? view.revision : 0,
     ));
-  const result = await routeFetch(`/pe/route-state/${encoded}/${suffix}?${query}`, {
+  const result = await routeFetch(route, query, suffix, {
     ...body,
     expectedRevision: revision,
   });
@@ -932,18 +928,33 @@ function parseTarget(value: unknown): ResolvedTarget | null {
   };
 }
 
-async function routeFetch(path: string, body?: unknown): Promise<Record<string, unknown>> {
-  const response = await fetch(
-    `${base()}${path}`,
-    body === undefined
-      ? undefined
-      : {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        },
-  );
-  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+async function routeFetch(
+  route: string,
+  queryString: string,
+  verb?: "apply" | "command",
+  body?: unknown,
+): Promise<Record<string, unknown>> {
+  const client = createPeClient(base(), fetch);
+  const params = { route };
+  const query = Object.fromEntries(new URLSearchParams(queryString));
+  const response =
+    verb === "apply"
+      ? await client.response("work.apply", {
+          params,
+          query,
+          body: peRoutes["work.apply"].body.parse(body),
+        })
+      : verb === "command"
+        ? await client.response("work.command", {
+            params,
+            query,
+            body: peRoutes["work.command"].body.parse(body),
+          })
+        : await client.response("work.get", { params, query });
+  const wire = (await response.json()) as Record<string, unknown>;
+  const payload = response.ok
+    ? wire
+    : ((wire.error as { details?: Record<string, unknown> })?.details ?? wire);
   if (!response.ok || payload.ok === false) {
     const hint = payload.hint ?? payload.agentHint ?? payload.error;
     return {
@@ -967,7 +978,9 @@ export async function readCatalog(
     const query = new URLSearchParams(targetQuery(target));
     if (scope.bridgeSessionId) query.set("session", scope.bridgeSessionId);
     if (scope.session) query.set("sdk", JSON.stringify(scope.session));
-    const response = await fetch(`${url}/pe/capabilities?${query.toString()}`);
+    const response = await createPeClient(url, fetch).response("capabilities.find", {
+      query: Object.fromEntries(query),
+    });
     const parsed = capabilityCatalogSchema.safeParse(await response.json());
     if (!response.ok || !parsed.success)
       return { isError: true, content: `GET ${url}/pe/capabilities failed (${response.status}).` };
@@ -1014,12 +1027,12 @@ export const targetSet = createTool({
       defaultTarget: input.defaultTarget,
       expectedRevision: turn.revision,
     });
-    const response = await fetch(`${base()}/pe/scope/self`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
+    const response = await createPeClient(base(), fetch).response("scope.set", {
+      params: { id: "self" },
+      body,
     });
-    const answer: unknown = await response.json().catch(() => null);
+    const wire = await response.json().catch(() => null);
+    const answer: unknown = response.ok ? wire : wire?.error?.details;
     const result = putTargetResultSchema.safeParse(answer).data;
     // A host refusal (`grant.required`, `context.foreign-thread`) is returned in its own words.
     if (!result)

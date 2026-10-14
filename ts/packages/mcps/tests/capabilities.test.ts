@@ -1,3 +1,4 @@
+import { normalizePeError } from "@pe/host-contracts/pe-api";
 import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
 import type { PodList } from "@pe/host-contracts/operation-types";
 import { readFileSync } from "node:fs";
@@ -409,6 +410,7 @@ test.each(["http", "stdio"])(
         }
         throw Error(`Unexpected fake host request ${url}`);
       })()
+        .then(normalizePeError)
         .then(async (response) => {
           res.writeHead(response.status, Object.fromEntries(response.headers));
           res.end(Buffer.from(await response.arrayBuffer()));

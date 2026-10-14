@@ -190,7 +190,6 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
     await writeFile(request, JSON.stringify({ scriptContent: source, workspaceKey: "default" }));
     await runPeaMain([
       "host",
-      "operations",
       "call",
       "--key",
       "scripting.execute",
@@ -223,7 +222,6 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
     // No target selectors and no catalogue/session: this is receipt replay by the original ID.
     await runPeaMain([
       "host",
-      "operations",
       "call",
       "--key",
       "scripting.execute",

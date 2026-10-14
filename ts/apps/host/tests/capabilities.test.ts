@@ -125,9 +125,9 @@ test("the host-owned /pe surface answers without Revit", async () => {
       });
     const anonymous = await putAs({});
     expect(anonymous.status).toBe(403);
-    expect(await anonymous.json()).toMatchObject({ refusal: { code: "context.missing" } });
+    expect(await anonymous.json()).toMatchObject({ error: { code: "context.missing" } });
     expect(await (await putAs({ "x-pe-context": "forged" })).json()).toMatchObject({
-      refusal: { code: "context.unknown" },
+      error: { code: "context.unknown" },
     });
     const terminal = readFileSync(hostContextTokenPath(hostOwnership.serviceName), "utf8");
     const put = await putAs({ "x-pe-context": terminal });

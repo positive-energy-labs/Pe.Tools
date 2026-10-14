@@ -1,7 +1,8 @@
+import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import type { ParsedDocView, PodMember } from "@pe/agent-contracts";
 
 export const assetUrl = (pod: string, path: string) =>
-  `/pe/family-spec?${new URLSearchParams({ pod, path })}`;
+  peRouteUrl("family.spec", { query: { pod, path } });
 
 /** Resolve portable paths only at the presentation boundary; persisted JSON never holds host URLs. */
 export function displaySpec(doc: ParsedDocView, member: PodMember): ParsedDocView {

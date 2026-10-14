@@ -12,17 +12,3 @@ export function resolveWorkbenchConfig(): WorkbenchEndpointConfig {
   if (typeof window === "undefined") return { origin: "" };
   return { origin: window.location.origin };
 }
-
-function workbenchUrl(
-  config: WorkbenchEndpointConfig,
-  path: string,
-  query: Record<string, string> = {},
-): string {
-  const url = new URL(path, config.origin || "http://localhost");
-  for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value);
-  return url.toString();
-}
-
-export function peUrl(config: WorkbenchEndpointConfig, path: string): string {
-  return workbenchUrl(config, `/pe${path}`);
-}

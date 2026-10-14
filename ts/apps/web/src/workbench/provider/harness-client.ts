@@ -1,4 +1,4 @@
-import { endpointFailureSchema } from "@pe/agent-contracts";
+import { createPeClient, peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { hostFetch } from "#/host/runtime";
 /**
  * The harness-thread wire, typed (`@pe/agent-contracts` harness-thread.ts lists every route). The
@@ -8,9 +8,7 @@ import type {
   Access,
   AddProviderRequest,
   HarnessEvent,
-  HarnessThreadBody,
   HarnessThreadSummary,
-  Provider,
   promptRequestSchema,
   UpdateThreadRequest,
 } from "@pe/agent-contracts";
@@ -21,56 +19,28 @@ import { openEventSource } from "#/readings";
 export type PromptRequest = z.input<typeof promptRequestSchema>;
 
 export function harnessClient(origin: string) {
-  const call = async <T>(path: string, method = "GET", body?: object, signal?: AbortSignal) => {
-    const response = await hostFetch(`${origin}/pe${path}`, {
-      method,
-      signal,
-      // The host refuses a bodiless non-GET without the json content type (415).
-      ...(method === "GET" ? {} : { headers: { "content-type": "application/json" } }),
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      let failure;
-      try {
-        failure = endpointFailureSchema.safeParse(JSON.parse(text).failure).data;
-      } catch {
-        /* Non-JSON failures still carry the host's words. */
-      }
-      throw Object.assign(
-        new Error(said(text) || `${method} /pe${path} failed (${response.status}).`),
-        {
-          status: response.status,
-          failure,
-        },
-      );
-    }
-    return (
-      response.status === 204 ? undefined : await response.json().catch(() => undefined)
-    ) as T;
-  };
-  const thread = (id: string) => `/threads/${encodeURIComponent(id)}`;
-  const provider = (id: string) => `/providers/${encodeURIComponent(id)}`;
+  const client = createPeClient(origin, hostFetch);
   return {
-    providers: () => call<Provider[]>("/providers"),
-    addProvider: (input: AddProviderRequest) => call<Provider>("/providers", "POST", input),
-    removeProvider: (id: string) => call<void>(provider(id), "DELETE"),
-    probe: (id: string) => call<Provider>(`${provider(id)}/probe`, "POST"),
-    openLogin: (id: string) => call<{ opened: true }>(`${provider(id)}/open-login`, "POST"),
-    access: () => call<Access>("/access"),
-    setAccess: (access: Access) => call<Access>("/access", "PUT", access),
-    threads: () => call<HarnessThreadSummary[]>("/threads"),
-    create: (providerId: string) => call<HarnessThreadSummary>("/threads", "POST", { providerId }),
+    providers: () => client.call("providers.list", {}),
+    addProvider: (body: AddProviderRequest) => client.call("providers.add", { body }),
+    removeProvider: (id: string) => client.call("provider.remove", { params: { id } }),
+    probe: (id: string) => client.call("provider.probe", { params: { id } }),
+    openLogin: (id: string) => client.call("provider.login", { params: { id } }),
+    access: () => client.call("access.get", {}),
+    setAccess: (body: Access) => client.call("access.set", { body }),
+    threads: () => client.call("threads.list", {}),
+    create: (providerId: string) => client.call("threads.create", { body: { providerId } }),
     body: (id: string, signal?: AbortSignal) =>
-      call<HarnessThreadBody>(thread(id), "GET", undefined, signal),
-    rename: (id: string, title: string) => call<HarnessThreadSummary>(thread(id), "PUT", { title }),
-    update: (id: string, change: UpdateThreadRequest) =>
-      call<HarnessThreadSummary>(thread(id), "PUT", change),
+      client.call("thread.get", { params: { id } }, { signal }),
+    rename: (id: string, title: string) =>
+      client.call("thread.update", { params: { id }, body: { title } }),
+    update: (id: string, body: UpdateThreadRequest) =>
+      client.call("thread.update", { params: { id }, body }),
     summaries: (
       onChange: (threads: HarnessThreadSummary[]) => void,
       onFault: (error: Error) => void,
     ) => {
-      const events = openEventSource(`${origin}/pe/threads/stream`);
+      const events = openEventSource(client.url("threads.stream", {}));
       events.onmessage = (message) => onChange(JSON.parse(message.data) as HarnessThreadSummary[]);
       events.onerror = () => onFault(new Error("Thread list disconnected; reconnecting."));
       return () => events.close();
@@ -79,44 +49,33 @@ export function harnessClient(origin: string) {
       id: string,
       head: Pick<HarnessThreadSummary["head"], "defaultTarget" | "revision" | "displayLabel">,
     ) =>
-      call<{ ok: boolean; head: HarnessThreadSummary["head"] }>(
-        `/scope/${encodeURIComponent(id)}`,
-        "PUT",
-        {
+      client.call("scope.set", {
+        params: { id },
+        body: {
           defaultTarget: head.defaultTarget,
           expectedRevision: head.revision,
           displayLabel: head.displayLabel,
         },
-      ),
-    remove: (id: string) => call<void>(thread(id), "DELETE"),
-    prompt: (id: string, input: PromptRequest) =>
-      call<{ turnId: string }>(`${thread(id)}/prompt`, "POST", input),
-    cancel: (id: string) => call<void>(`${thread(id)}/cancel`, "POST"),
+      }),
+    remove: (id: string) => client.call("thread.remove", { params: { id } }),
+    prompt: (id: string, body: PromptRequest) =>
+      client.call("thread.prompt", { params: { id }, body }),
+    cancel: (id: string) => client.call("thread.cancel", { params: { id } }),
     permission: (id: string, requestId: string, optionId: string) =>
-      call<void>(`${thread(id)}/permission`, "POST", { requestId, optionId }),
+      client.call("thread.permission", { params: { id }, body: { requestId, optionId } }),
     question: (
       id: string,
       requestId: string,
       action: "accept" | "decline",
       content?: Record<string, unknown>,
-    ) => call<void>(`${thread(id)}/question`, "POST", { requestId, action, content }),
-    /** Same provider forks the ACP session; another provider re-feeds the transcript. */
+    ) => client.call("thread.question", { params: { id }, body: { requestId, action, content } }),
     fork: (id: string, providerId?: string) =>
-      call<HarnessThreadSummary>(`${thread(id)}/fork`, "POST", providerId ? { providerId } : {}),
-    model: (id: string, modelId: string) => call<void>(`${thread(id)}/model`, "POST", { modelId }),
+      client.call("thread.fork", { params: { id }, body: { providerId } }),
+    model: (id: string, modelId: string) =>
+      client.call("thread.model", { params: { id }, body: { modelId } }),
     trait: (id: string, traitId: string, value: string | boolean) =>
-      call<void>(`${thread(id)}/trait`, "POST", { id: traitId, value }),
+      client.call("thread.trait", { params: { id }, body: { id: traitId, value } }),
   };
-}
-
-/** A refusal body as words: `{step, message}` (a provider add) or `{error}`; otherwise the text. */
-function said(text: string): string {
-  try {
-    const body = JSON.parse(text) as { step?: string; message?: string; error?: string };
-    return body.message ?? body.error ?? text;
-  } catch {
-    return text;
-  }
 }
 
 /** The host answered 404: the thread (or route) does not exist there. */
@@ -146,7 +105,7 @@ export function streamThread(options: {
   let source: ReturnType<OpenEvents> | undefined;
   const connect = () => {
     const events = open(
-      `${origin}/pe/threads/${encodeURIComponent(threadId)}/stream?after=${last}`,
+      peRouteUrl("thread.stream", { params: { id: threadId }, query: { after: last } }, origin),
     );
     source = events;
     events.onmessage = (message: MessageEvent<string>) => {

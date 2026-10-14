@@ -1,3 +1,4 @@
+import { peClient } from "./pe-client";
 import { hostFetch } from "#/host/runtime";
 /**
  * The machine's mutations other than update (`install.ts`): the share switch, and the tray's two
@@ -19,14 +20,12 @@ export async function switchRemoteAdministration(
 async function setShare(
   body: { on: boolean } | { allowRemoteAdministration: boolean },
 ): Promise<void> {
-  const response = await hostFetch("/pe/share", {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const response = await peClient.response("share.set", { body });
   if (!response.ok && response.status !== 409) {
-    const body = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw Error(body?.error ?? `share switch refused (${response.status})`);
+    const body = (await response.json().catch(() => null)) as {
+      error?: { message: string };
+    } | null;
+    throw Error(body?.error?.message ?? `share switch refused (${response.status})`);
   }
   dirty({ kind: "machine" });
 }

@@ -1,3 +1,5 @@
+import { contextFetch } from "../shared/invocation-context.ts";
+import { createPeClient, isPeRouteId } from "@pe/agent-contracts/pe-api";
 import { actionBasesSchema } from "@pe/agent-contracts";
 import { readCapabilityIntent, runCapability, type AdmissionContext } from "../shared/admission.ts";
 import { define } from "gunshi";
@@ -46,12 +48,12 @@ export class PeaCliCommands {
       examples: [
         "pea host status",
         "pea host logs --target revit --tail 50",
-        "pea host operations call --key revit.context.summary --request {}",
+        "pea host call --key revit.context.summary --request {}",
       ].join("\n"),
       subCommands: {
         status: this.hostStatusCommand(),
         logs: this.hostLogsCommand(),
-        operations: this.hostOperationsCommand(),
+        call: this.hostOperationCallCommand(),
       },
       run: () => {
         console.log("Run `pea host --help` to list host commands.");
@@ -129,19 +131,6 @@ export class PeaCliCommands {
           tailLineCount: ctx.values.tail,
         });
         writeLogs(logs);
-      },
-    });
-  }
-
-  private hostOperationsCommand() {
-    return define({
-      name: "operations",
-      description: "Call a generated public host operation; `pea find` finds its key.",
-      subCommands: {
-        call: this.hostOperationCallCommand(),
-      },
-      run: () => {
-        console.log("Run `pea host operations --help` to list operation commands.");
       },
     });
   }
@@ -230,11 +219,11 @@ export class PeaCliCommands {
         actionId: commonArgs.actionId,
         key: {
           type: "string",
-          description: "Operation key, with or without the `op:` prefix `search` prints.",
+          description: "Operation key, or http:<route-id> from the declared HTTP contract.",
         },
         request: {
           type: "string",
-          description: "JSON request object. Omit for NoRequest operations.",
+          description: "Operation input, or {params, query, body} for a declared HTTP route.",
         },
         requestFile: {
           type: "string",
@@ -257,6 +246,17 @@ export class PeaCliCommands {
           openDocumentId: asOptionalString(ctx.values.openDocumentId),
           actionId: asOptionalString(ctx.values.actionId),
         };
+        const routeId = key.replace(/^http:/, "");
+        if (isPeRouteId(routeId) || key.startsWith("http:")) {
+          const result = await createPeClient(context.hostBaseUrl, contextFetch).invoke(
+            routeId,
+            request,
+          );
+          if (result instanceof Response) {
+            if (result.body) for await (const chunk of result.body) process.stdout.write(chunk);
+          } else console.log(JSON.stringify(result, null, 2));
+          return;
+        }
         const intent = await readCapabilityIntent(key, context);
         if (intent.kind === "operation" && !intent.mutates) {
           // Operation reads keep `/call`'s enriched result, so --verbosity still means something.

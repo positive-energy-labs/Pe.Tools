@@ -1,3 +1,4 @@
+import { normalizePeError } from "@pe/host-contracts/pe-api";
 import { expect, test } from "vite-plus/test";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import { HOST_RPC_SDK_SESSION_HEADER } from "@pe/host-contracts/operation-types";
@@ -114,13 +115,15 @@ test("unknown dynamic operation keys fail at transport with catalog enrichment a
 test("a refused call preserves the host's resolved target", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () =>
-    new Response(
-      JSON.stringify({
-        kind: "CatalogLookup",
-        message: "Unsupported bridge operation 'revit.context.summary'. Use pe_find.",
-        resolvedTarget: { session: "session-a", document: "C:/Models/A.rvt" },
-      }),
-      { status: 404, headers: { "content-type": "application/problem+json" } },
+    normalizePeError(
+      new Response(
+        JSON.stringify({
+          kind: "CatalogLookup",
+          message: "Unsupported bridge operation 'revit.context.summary'. Use pe_find.",
+          resolvedTarget: { session: "session-a", document: "C:/Models/A.rvt" },
+        }),
+        { status: 404, headers: { "content-type": "application/problem+json" } },
+      ),
     );
   try {
     const result = await new HostRpcCaller({
