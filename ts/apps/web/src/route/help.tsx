@@ -15,7 +15,7 @@ import { Button } from "@pe/kit/lang/button";
 import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { startFeedback } from "#/components/feedback-picker";
 import { MachineHelpTrigger } from "#/machine/navigation";
-import { readKeyMeta, readRegistrations, type KeyMeta } from "@pe/kit/keys";
+import { readKeyMeta, readRegistrations, useScopeKeys, type KeyMeta } from "@pe/kit/keys";
 
 interface Region {
   id: string;
@@ -332,11 +332,25 @@ export function RouteHelpButton({
   const [open, setOpen] = useState(false);
   // Focus the page itself, not its first tabbable (a footer button) that would scroll it to the end.
   const popup = useRef<HTMLDivElement>(null);
+  // Bound on the document, not the pane the button renders in: the chord opens help with focus
+  // anywhere, the composer's draft included.
+  useScopeKeys(
+    [
+      {
+        hotkey: HELP_CHORD.hotkey,
+        label: HELP_CHORD.label,
+        callback: () => setOpen(true),
+        options: { ignoreInputs: false },
+      },
+    ],
+    document.documentElement,
+  );
   return (
     <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
       <DialogPrimitive.Trigger
         render={
           <HotkeyCommand
+            bind={false}
             label={HELP_CHORD.label}
             word="Tutorial"
             hotkey={HELP_CHORD.hotkey}

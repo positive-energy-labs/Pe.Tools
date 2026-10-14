@@ -289,18 +289,17 @@ export function ChatCluster({
   );
 }
 
-/** The pickers: provider › model › traits, then the document target. `face` is how much each
- *  says: `icon` marks alone (the one-line composer), `marks` marks with the target/open switch,
- *  `brief` mark and one word, `control` every word. */
+/** The pickers as marks: provider › model › traits, then the document target. `open` adds the
+ *  target/open switch (the open composer's bottom row). */
 export function ComposerPickers({
   situation,
   urlTarget,
-  face,
+  open,
 }: {
   /** The URL's `?target` pin: a thread with no document takes it once (e2e finding 7). */
   urlTarget?: string;
   situation: ChatSituation;
-  face: PickerFace;
+  open: boolean;
 }) {
   const { currentThreadId, chat } = useWorkbench();
   const isRunning = selectRunStatus(chat) !== "idle";
@@ -323,7 +322,6 @@ export function ComposerPickers({
     currentThreadId,
   ]);
   const targetDisabled = isRunning || head.stale;
-  const ladderFace = face === "marks" ? "icon" : face;
   // A closed target names itself in the first empty slot, in the caution tone, and the picker
   // lists only the live inventory.
   const unbound = ladder.levels.findIndex((level) => level.label === null);
@@ -359,10 +357,10 @@ export function ComposerPickers({
   );
   return (
     <section aria-label="Situation" className="contents" data-testid="composer-head">
-      <HeadLadder face={ladderFace} />
-      <ComposerOpenMode switcher={face !== "icon"}>
+      <HeadLadder face="icon" />
+      <ComposerOpenMode switcher={open}>
         <Ladder
-          face={ladderFace}
+          face="icon"
           mark={<File className="size-3.5" data-tone={situation.bound ? "done" : undefined} />}
           levels={levels}
           caution={Boolean(health)}
@@ -377,8 +375,6 @@ export function ComposerPickers({
     </section>
   );
 }
-
-export type PickerFace = "control" | "brief" | "marks" | "icon";
 
 /** The run's state beside the pickers: the grant, the turn, Pea's plan, a refusal. */
 export function ComposerState({

@@ -1,13 +1,5 @@
 // The composer's DOM: draft box, attachments, slash and `@` menus, send. Logic lives in the hooks and `useSend`.
-import {
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type FormEvent,
-  type ReactNode,
-} from "react";
-import { flushSync } from "react-dom";
+import { useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { ArrowUp, GitFork, Paperclip, Square } from "lucide-react";
 import {
   capabilityCatalogSchema,
@@ -21,10 +13,11 @@ import { Textarea } from "#/components/lang/textarea";
 import { Pane } from "#/components/lang/pane";
 import { ScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import { useWorkbench } from "#/workbench/provider";
+import { useSurfaceHost } from "#/navigation/surface-host";
 import { EMPTY_CHAT_DRAFT, type ChatDraft } from "#/workbench/prompt";
 import { selectRunStatus, selectSkillCommands } from "@pe/agent-contracts/chat-state";
 import { ListPopup } from "@pe/kit/lang/list-popup";
-import { useSend, type ChatHandle, type PickerFace } from "#/chat/composer-head";
+import { useSend, type ChatHandle } from "#/chat/composer-head";
 import { SituationAction } from "#/route/situation-verbs";
 import { ComposerBox, ComposerFrame } from "#/components/lang/conversation";
 import { Button } from "@pe/kit/lang/button";
@@ -44,30 +37,19 @@ import {
   withText,
 } from "./use-mentions";
 
-/** Prototype round (tray UX 2026-10-14): how the open composer draws its pickers. A: every word,
- *  in the bottom row. B: marks only, in the bottom row. C: mark and one word, kept in the left
- *  rail. At rest every variant is one line with the marks stacked on its left. */
-export type ComposerVariant = "A" | "B" | "C";
-const OPEN_FACE: Record<ComposerVariant, PickerFace> = { A: "control", B: "marks", C: "brief" };
-
 /** The route handle's Enter runs Send scoped to this draft; `work` is the box's top section (live
- * asks, staged Work), `pickers` the provider and document pickers in a face, `state` the run's. */
+ * asks, staged Work), `pickers` the provider and document pickers, `state` the run's. */
 export function ThreadComposer({
   handle,
   pickers,
   state,
   work,
-  variant,
-  lines,
   initialDraft = EMPTY_CHAT_DRAFT,
 }: {
   handle: ChatHandle;
-  pickers: (face: PickerFace) => ReactNode;
+  pickers: (open: boolean) => ReactNode;
   state?: ReactNode;
   work?: ReactNode;
-  variant: ComposerVariant;
-  /** How tall the draft grows while open, in lines, before it scrolls. */
-  lines: number;
   initialDraft?: ChatDraft;
 }) {
   const [draft, setDraft] = useState(initialDraft);
@@ -81,9 +63,16 @@ export function ThreadComposer({
   const unready = noneReady ? undefined : providers.list?.find((item) => item.id === headId);
   const repairing = unready && !isReady(unready) ? unready : undefined;
   const isRunning = selectRunStatus(chat) !== "idle";
-  const send = useSend(handle, draft, (sent) =>
-    setDraft((current) => (current === sent ? EMPTY_CHAT_DRAFT : current)),
-  );
+  // In the tray a sent draft rests the composer and gives focus back to the page, so the reply
+  // reads over a one-line box; the next click in the draft opens it again.
+  const compact = useSurfaceHost().shell.mount === "compact";
+  const send = useSend(handle, draft, (sent) => {
+    setDraft((current) => (current === sent ? EMPTY_CHAT_DRAFT : current));
+    if (!compact) return;
+    setOpen(false);
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && form?.contains(focused)) focused.blur();
+  });
   const files = useAttachments(draft, setDraft);
   const commands = useMemo<SlashCommand[]>(() => selectSkillCommands(chat), [chat]);
   const slash = useSlashMenu(draft.text, commands);
@@ -140,26 +129,18 @@ export function ThreadComposer({
     },
   ];
 
-  // Open while you write: the draft grows to `lines` and the pickers say their words. Focus leaving
-  // the composer (React focus bubbles through its portalled popups) rests it at one line; a window
-  // losing focus does not. The reflow is a view transition, skipped under reduced motion.
+  // Open while you write: the draft grows to its content (five lines, then it scrolls) and the
+  // pickers drop to the bottom row; chat-shell.css draws the motion. Focus leaving the composer
+  // (React focus bubbles through its portalled popups) rests it at one line; a window losing
+  // focus does not.
   const [open, setOpen] = useState(false);
   const rest = useRef<number>(undefined);
-  // The state asked for, not the state drawn: a transition commits a frame late.
-  const wanted = useRef(false);
-  const flip = (next: boolean) => {
-    if (next === wanted.current) return;
-    wanted.current = next;
-    if (!document.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches)
-      return setOpen(next);
-    document.startViewTransition(() => flushSync(() => setOpen(next)));
-  };
   const hold = () => window.clearTimeout(rest.current);
   const release = () => {
     hold();
     rest.current = window.setTimeout(() => {
       if (!document.hasFocus()) return;
-      flip(false);
+      setOpen(false);
       if (area) area.scrollTop = 0;
     });
   };
@@ -238,9 +219,8 @@ export function ThreadComposer({
           {/* Files dropped anywhere on the box attach; a file drag over it takes the recess ground. */}
           <ComposerBox
             dragging={files.dragging}
-            data-compose={variant}
+            data-compose=""
             data-open={open || undefined}
-            style={{ "--composer-lines": lines } as CSSProperties}
             {...files.dropProps}
           >
             <div data-composer-work="">
@@ -248,7 +228,7 @@ export function ThreadComposer({
               {noneReady ? <FirstOpenCard providers={providers} origin={config.origin} /> : null}
               {repairing ? <ProviderRepair provider={repairing} providers={providers} /> : null}
               {files.attachments.length > 0 || draft.mentions.length > 0 ? (
-                <div className="flex flex-wrap items-end gap-1.5 px-(--gutter) pt-(--gutter)">
+                <div className="flex flex-wrap items-end gap-1.5">
                   {draft.mentions.map((mention) => (
                     <MentionChip
                       key={mention.key}
@@ -269,13 +249,9 @@ export function ThreadComposer({
                   ))}
                 </div>
               ) : null}
-              {files.refusal ? (
-                <div className="px-(--gutter) pt-2" data-tone="caution">
-                  {files.refusal}
-                </div>
-              ) : null}
+              {files.refusal ? <div data-tone="caution">{files.refusal}</div> : null}
             </div>
-            <div data-composer-pickers="">{pickers(open ? OPEN_FACE[variant] : "icon")}</div>
+            <div data-composer-pickers="">{pickers(open)}</div>
             <Textarea
               name="input"
               aria-label="Message"
@@ -288,7 +264,7 @@ export function ThreadComposer({
               }
               rows={1}
               autoFocus
-              onFocus={() => flip(true)}
+              onFocus={() => setOpen(true)}
               value={draft.text}
               onChange={(event) => {
                 setText(event.currentTarget.value);
