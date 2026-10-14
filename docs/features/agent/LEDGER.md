@@ -10,6 +10,9 @@ Design-language and primitive gaps this cluster hit are owned by the design-syst
 restated here.
 
 ## Decided
+- 2026-10-13, kaitpw: the local CLI bearer is human; machine admin remains outside the document grant; external MCP stays read-only until human pairing and renewal exist.
+- 2026-10-13, kaitpw: K9 refuses scripts beside ungranted documents. Share defaults remote admin off, and a remote browser cannot grant rw while it is off.
+- 2026-10-13, kaitpw: the Page bind chip lives in SPA chrome, and one click on the rw mark revokes. This supersedes the earlier undecided revoke affordance. ADR 0017 records the completed policy.
 - 2026-10-12, kaitpw (thread "Pea-Revit Document Control UX Rework"): Pea and the human read one Revit world. The `Machine` reading is that world: `pe_find` returns it and the web renders it, custody included. The `inventory` reading and `capabilitySessionSchema` sessions retire into it. Why: three projections disagree today, and `local-ops.ts` serves `custody: null` to Pea.
 - 2026-10-12, kaitpw: Pea's Revit lifecycle verbs go through the host catalog as SDK verbs, so every verb leaves a receipt the UI shows. Development agents keep the `pe-revit` CLI.
 - 2026-10-12, kaitpw: a proposal is a review artifact only, never a write gate. Pea writes freely to its own sessions, copies and files. The one gate is the crossing into the user's live session: Pea writes there only while the thread head names that document, and only the human moves the head onto a user-owned document (`target_set` names Pea-owned documents only). With the head there, Pea writes live, one receipt per write, with no per-call harness prompt for Pea's Revit tools.

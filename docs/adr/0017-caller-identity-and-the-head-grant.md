@@ -1,34 +1,29 @@
 # 0017: Caller identity and the head grant
 
-Date: 2026-10-12. Status: Accepted 2026-10-12. Source: kaitpw, "i take all your recommendations", after [round 2 section 2](C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/review-20261012/round2/VERDICTS.md:60). D1-D14 below use the owner's capture numbering, not that sheet's D9-D16 numbering.
+Date: 2026-10-12. Status: accepted; completed policy rulings 2026-10-13.
+Source: kaitpw, ADR 0016 review and the 2026-10-13 reorient campaign. The [agent ledger](../features/agent/LEDGER.md) records the rulings.
 
 ## Context
 
-[ADR 0016](0016-proposals-review-the-grant-gates.md) is the owner's grant policy. This ADR records how the code carries it. The reviews found five gaps, with source evidence rather than runtime proof:
-
-- The caller self-asserts `actor`, and an absent header means human ([control review:14](C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/review-20261012/round2/control-boundary-muse-opus.md:14); `ts/apps/host/src/call-route.ts:228-229`).
-- The head has no grant, expiry, or revoke fields ([round-1 check:52](C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/review-20261012/round1/L1-grant-targeting-check.md:52); `ts/packages/agent-contracts/src/target.ts:150-160`).
-- The host never receives the thread on Pea's `/call` requests ([round-1 check:55](C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/review-20261012/round1/L1-grant-targeting-check.md:55)).
-- Pages bypass the gate as `actor:"human"` ([Pages check:83](C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/review-20261012/round1/L3-contribution-pages-examples-check.md:83); `ts/apps/host/src/pages/pe.js:129-135`).
-- The patch bay computes a grant in the browser without a host clock ([control review:18](C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/review-20261012/round2/control-boundary-muse-opus.md:18); `ts/apps/web/src/open/grants.ts` on `feat/revit-patchbay@9afc38e8`).
+[ADR 0015](0015-the-harness-drives-pea-is-tools-and-ui.md) gives inference and tool approvals to the harness.
+[ADR 0016](0016-proposals-review-the-grant-gates.md) makes the document grant the one Revit write gate.
+Neither transport headers nor a proposal prove human consent. The host must carry caller identity and grant lineage through admission, dispatch, and projection.
 
 ## Decision
 
-1. **D1.** The grant is typed fields on the one head aggregate: document lifetime, expiry, and revoke evidence. The host is its only writer.
-2. **D2.** A host-minted caller context replaces self-asserted `actor` at every door. It carries principal (`human`, `pea`, `page`, `external-mcp`, or `cli`), thread, head revision, exact destination, and request id. Anonymous loopback is read-only.
-3. **D3.** Agent stop, restart, and reset refuse when any other ungranted user document is in the session. They are free on an empty user Revit.
-4. **D4.** Revoke means no new step begins. Begun steps finish and report. There is no rollback. Queued-but-unbegun work is refused.
-5. **D5.** Wave 1 needs no SDK hook. The grant is Pe.Tools work.
-6. **D6.** "Whose session" is derived per session from the launch receipt plus SDK posture. Per-document derivation comes later when background copies exist. SDK custody alone is not ownership.
-7. **D7.** `feat/revit-patchbay` may merge with agent lifecycle human-only on user sessions. Direct launch and the staging deletion stay.
-8. **D8.** Per-call write overrides name only Pea's own lifetimes or the granted head. Reads never need a grant.
-9. **D9.** A Page acts as itself (`page` principal) under its bound thread's grant. This supersedes the [Pages ledger](../features/pages/LEDGER.md) decision that a page button acts as the human.
-10. **D10.** Page target binding is host-owned: `{thread}`, pinned Address, or none. The human sets it through a bind chip. Pea sets it only to its own documents. Delete the fallback chain.
-11. **D11.** Pages use path doors `/pages/<slug>/…` with a `page` principal. A separate origin comes only when shared remotely.
-12. **Consensus.** Add no contribution registry. Keep the standalone Pages root. Build no SDK job platform or remote design work now. Firm/project overrides are outside this cut.
+1. The host mints five principals: `human`, `pea`, `page`, `external-mcp`, and `service`. Anonymous transport is read-only. A browser API request needs a host-minted session cookie. Browser headers alone never create a human. The local CLI bearer is a human consent marker. A harness bearer binds one Pea thread. MCP may inherit that Pea bearer, never a terminal human bearer.
+2. One request admission function takes the caller and the route permission. The typed route contract owns permissions and admin classification. A missing permission refuses. SDK claim tokens mint a service caller only for shutdown and window. MCP protocol admission mints or checks its own session before any product action.
+3. Machine administration requires a human and sits outside the document grant. Share leaves remote administration off by default. Remote administration off also forbids a remote browser from granting rw. External MCP remains read-only until a human pairing and renewal step exists.
+4. The host is the sole writer of the head grant. It names an exact `{session, openId}`, grant time, expiry, human transport, authenticated tailnet login when present, and revoke evidence. Head selection and revoke advance the revision. A fork retains its target but copies no grant or human-message evidence.
+5. A human selects any document. Pea selects only acquired lifetimes. Writes name an acquired document or the exact granted head; reads need no grant. A human thread message renews an unrevoked grant for 60 minutes. Closing the lifetime ends its authority. An old admission cannot survive revoke and re-grant, even on the same lifetime.
+6. Revoke prevents a new step from beginning. Begun steps finish and report; there is no rollback. Process stop, restart, and reset refuse when another ungranted user document remains. Acquisitions and SDK posture derive whose documents they are; SDK custody alone does not.
+7. K9: arbitrary scripts can reach every document in the process. A Pea or Page script refuses if any open sibling lacks authority. Check the census again before dispatch. The grant is admission policy, not containment of arbitrary code or hostile same-user processes.
+8. A Page acts as `page` through its own path doors. Its host-owned binding is a thread, a pinned Address, or none. A thread follows its head grant. A pin resolves against inventory and writes only an acquired lifetime. No active-document or title fallback exists. The human binds in SPA chrome; Page content draws no consent control.
+9. The host projects grant state with `hostNow`. Surfaces hide rw on stale readings or unavailable lifetimes, and use host clock differences for expiry refresh. The rw mark revokes with one click. JSON target pins fail closed and retain their source; malformed JSON never becomes a session name.
+10. Harness approval and Revit grant are distinct terms and policies. Unguarded harness tools do not grant Revit rw; a document grant does not approve unrelated harness tools. Proposals remain review artifacts. Catalog eligibility names principals rather than a binary actor.
 
 ## Consequences
 
-The composer, machine drawer, and `/open` show the same grant chip from a host clock. Pages show their binding and grant. Every refusal names its door and reason. Delete `actor` header trust, browser-computed grants, and the Page fallback chain. These decisions do not certify enforcement.
+The implementation has deterministic tests for anonymous admission, human-only question and approval answers, fork grant removal, revision fencing, script sibling refusal, host-clock projection, and the chrome revoke control. These tests do not certify native queue behavior or a browser's layout.
 
-Wave 1 builds caller identity, the head grant, and Page binding. Wave 3 owes D12 key grammar before the catalog grows, D13 the membership reader, and D14 kind-by-path. The 14 telemetry questions remain unanswered. The [host ledger](../features/host/LEDGER.md) and [Pages ledger](../features/pages/LEDGER.md) own implementation and proof follow-ons.
+Wave A must connect its one typed route table to `IdentityOptions.permission` and prove contract-exhaustive admin coverage. Wave C must preserve the Page chrome mount when changing the shell. Native queue-begin enforcement and visual acceptance remain owed. Remote pairing, proxy authentication evidence, per-device revocation, and isolation of shared Page origins remain separate work; same-origin Pages and same-user local code are not a hostile-code security boundary.

@@ -54,6 +54,7 @@ export const refusalCodes = [
   "context.missing",
   "context.unknown",
   "context.foreign-thread",
+  "permission.undeclared",
   "human.only",
   "grant.required",
   "grant.expired",

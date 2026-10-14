@@ -10,7 +10,7 @@ import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { CaptureStore } from "../src/captures-route.ts";
-import { mintContext } from "../src/control.ts";
+import { mintBrowserContext, mintContext } from "../src/control.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { crossingOf } from "./callers.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
@@ -42,6 +42,7 @@ const send = async (
 };
 const token = (value: string) => ({ [HOST_CONTEXT_HEADER]: value });
 const browser = (base: string, path: string) => ({
+  cookie: mintBrowserContext({ kind: "local" }).split(";")[0]!,
   [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName,
   origin: base,
   "sec-fetch-site": "same-origin",
@@ -377,7 +378,7 @@ test("action controls and the Families reading judge their real caller", async (
           filter: { categoryNames: ["Ducts"], familyNames: [], placementScope: "AllLoaded" },
         },
       );
-    expect((await families({})).text).toMatch(/anonymous calls are refused/);
+    expect((await families({})).text).toMatch(/anonymous callers are read-only/);
     expect((await families(pea)).text).toMatch(/pea calls are refused/);
     expect((await families(human)).text).toMatch(/Families Work belongs to another document/);
   } finally {

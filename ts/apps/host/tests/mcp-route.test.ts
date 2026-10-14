@@ -25,6 +25,16 @@ const base = "http://127.0.0.1:5180";
 const version = "2025-11-25";
 const remote = (login: string) => ({ host: "box.tailabc.ts.net", "tailscale-user-login": login });
 const local = { host: "127.0.0.1:5180" };
+const asPea = (headers: Record<string, string>) => {
+  const token = mintContext({
+    kind: "pea",
+    thread: `test-${headers["tailscale-user-login"] ?? "local"}`,
+  });
+  dispose.push(async () => {
+    retireContext(token);
+  });
+  return { ...headers, "x-pe-context": token };
+};
 const options: IdentityOptions = {
   port: () => 5180,
   frontendOrigin: () => undefined,
@@ -297,7 +307,7 @@ test("SDK HTTP initialization, tool discovery, notifications, versions, Origin, 
 
 test("MCP tool operations do not consult the harness agent approval preference", async () => {
   const f = await fixture();
-  for (const caller of [local, remote("one")]) {
+  for (const caller of [asPea(local), asPea(remote("one"))]) {
     const session = await f.init(caller);
     const result = await (await f.call("pe_do", { key: "op:pod.member.write" }, session)).json();
     expect(result.result.isError, JSON.stringify(result)).not.toBe(true);
@@ -314,7 +324,10 @@ test("MCP tool operations do not consult the harness agent approval preference",
 
 test("concurrent principals retain separate headers and admission identities", async () => {
   const f = await fixture();
-  const [one, two] = await Promise.all([f.init(remote("one")), f.init(remote("two"))]);
+  const [one, two] = await Promise.all([
+    f.init(asPea(remote("one"))),
+    f.init(asPea(remote("two"))),
+  ]);
   const replies = await Promise.all(
     [one, two].map(async (session) =>
       (await f.call("pe_do", { key: "op:pod.member.write" }, session)).json(),
@@ -326,8 +339,11 @@ test("concurrent principals retain separate headers and admission identities", a
   expect(new Set(f.posts.map((row) => row.id)).size).toBe(2);
   const byLogin = (a: { login: string | null }, b: { login: string | null }) =>
     String(a.login).localeCompare(String(b.login));
-  // A client with no caller context has no thread to read: no scope request is made.
-  expect(f.seen.filter((row) => row.path.startsWith("/pe/scope/"))).toEqual([]);
+  expect(
+    f.seen
+      .filter((row) => row.path.startsWith("/pe/scope/"))
+      .every((row) => row.login === "one" || row.login === "two"),
+  ).toBe(true);
   expect(
     [...f.rows.values()].map((row) => row.result as { login: string | null }).sort(byLogin),
   ).toEqual([{ login: "one" }, { login: "two" }]);
@@ -335,7 +351,7 @@ test("concurrent principals retain separate headers and admission identities", a
 
 test("transport disconnect does not cancel an admitted action; replay reads the retained receipt", async () => {
   const f = await fixture();
-  const session = await f.init(remote("one"));
+  const session = await f.init(asPea(remote("one")));
   let release!: () => void;
   f.holdPost(
     () =>
@@ -432,10 +448,12 @@ test("initialize ignores x-pe-thread and retains only a verified caller context"
   );
   dispose.push(() => door.close());
   const token = mintContext({ kind: "pea", thread: "own-thread" });
+  const terminal = mintContext({ kind: "human", via: "cli" });
   try {
     const initializeHeaders: Record<string, string>[] = [
       { "x-pe-thread": "foreign-thread" },
       { "x-pe-context": token, "x-pe-thread": "foreign-thread" },
+      { "x-pe-context": terminal },
     ];
     for (const headers of initializeHeaders) {
       const identity = callerOf({ kind: "local" }, headers);
@@ -469,6 +487,7 @@ test("initialize ignores x-pe-thread and retains only a verified caller context"
     expect(contexts[0]!.caller).toMatchObject({ kind: "external-mcp" });
     expect(contexts[1]!.caller).toMatchObject({ kind: "pea", thread: "own-thread" });
     expect(contexts[1]!.headers!["x-pe-context"]).toBe(token);
+    expect(contexts[2]!.caller).toMatchObject({ kind: "external-mcp" });
     expect(contexts.every((context) => !("x-pe-thread" in context.headers!))).toBe(true);
     await door.close();
     expect(callerOf({ kind: "local" }, { "x-pe-context": token })).toMatchObject({
@@ -476,6 +495,7 @@ test("initialize ignores x-pe-thread and retains only a verified caller context"
     });
   } finally {
     retireContext(token);
+    retireContext(terminal);
   }
 });
 

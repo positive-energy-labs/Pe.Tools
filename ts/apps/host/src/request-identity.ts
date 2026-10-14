@@ -88,6 +88,9 @@ export async function readRequestIdentity(
     return { refusal: { code: "identity.path", detail: "Request path cannot be normalized." } };
   }
   const host = headers.host ?? "";
+  const permission = options.permission
+    ? options.permission(pathname, method)
+    : legacyPermission(pathname, method);
   const origin = headers.origin;
   const refuse = (code: string, detail: string): IdentityResult => ({ refusal: { code, detail } });
   const browser = origin !== undefined || headers["sec-fetch-site"] !== undefined;
@@ -158,7 +161,7 @@ export async function readRequestIdentity(
     if (
       "principal" in result &&
       share.allowRemoteAdministration === false &&
-      (administration(pathname, method) || (method === "PUT" && pathname.startsWith("/pe/scope/")))
+      (permission === "admin" || (method === "PUT" && pathname.startsWith("/pe/scope/")))
     )
       result = refuse(
         "identity.remote-administration",
@@ -189,8 +192,6 @@ export async function readRequestIdentity(
         : { ...result, caller: minted.caller };
     if ("principal" in result) {
       // Replace this resolver with Wave A's table; admitRequest has no route registry of its own.
-      const permission =
-        options.permission?.(pathname, method) ?? legacyPermission(pathname, method);
       try {
         admitRequest(result.caller, permission, `${method} ${pathname}`);
       } catch (error) {
@@ -239,13 +240,16 @@ export const requestIdentityLayer = (options: IdentityOptions) =>
         let serviceAuthorized = false;
         if (
           request.method === "POST" &&
-          ["/admin/shutdown", "/admin/window"].includes(request.url)
+          ["/admin/shutdown", "/admin/window"].includes(request.url.split("?")[0]!)
         ) {
           const lifecycle = yield* Effect.serviceOption(HostLifecycle);
           if (lifecycle._tag === "Some") {
-            const handle = yield* Deferred.await(lifecycle.value.handle);
-            const body = yield* Effect.orElseSucceed(request.json, () => null);
-            serviceAuthorized = authorizeShutdownFor(handle)(request.headers, body);
+            const ready = yield* Deferred.poll(lifecycle.value.handle);
+            if (ready._tag === "Some") {
+              const handle = yield* ready.value;
+              const body = yield* Effect.orElseSucceed(request.json, () => null);
+              serviceAuthorized = authorizeShutdownFor(handle)(request.headers, body);
+            }
           }
         }
         const identity = yield* Effect.promise(() =>

@@ -159,7 +159,10 @@ export function useChatSituation(handle: ChatHandle) {
       threads.find((item) => item.id === currentThreadId)?.title ||
       currentThreadId;
   return {
-    head,
+    head: {
+      ...head,
+      grantView: bound && handle.readings.machine.state === "ready" ? head.grantView : null,
+    },
     inventory,
     bound,
     ladder,
@@ -373,7 +376,7 @@ export function ComposerControls({
           }
         />
       </ComposerOpenMode>
-      <GrantChip grant={head.grantView} />
+      <GrantChip grant={head.grantView} onRevoke={() => void head.revoke()} />
       {status ? (
         <span
           aria-live="polite"

@@ -70,7 +70,7 @@ import { accessModes, sessionOffer, type Providers } from "./providers.ts";
 
 /** The thread wire of ADR 0015; contract and route list in `@pe/agent-contracts` `harness-thread.ts`. */
 
-type Meta = Omit<HarnessThreadSummary, "lastSeq" | "activity"> & {
+type Meta = Omit<HarnessThreadSummary, "lastSeq" | "activity" | "head"> & {
   acpSessionId: string | null;
   models: HarnessThreadBody["models"];
   traits: HarnessThreadBody["traits"];
@@ -457,7 +457,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     updatedAt: t.events.at(-1)?.at ?? t.meta.updatedAt,
     modelId: t.meta.modelId,
     lastSeq: t.events.length,
-    head: t.meta.head,
+    head: reading(t.meta.head),
     lifecycle: t.meta.lifecycle,
     activity: activity(t),
   });
@@ -1199,7 +1199,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
             };
             const heartbeat = setInterval(() => {
               try {
-                controller.enqueue(encoder.encode(": heartbeat\n\n"));
+                send(); // Republish grant expiry from hostNow even without thread activity.
               } catch {
                 cleanup();
               }

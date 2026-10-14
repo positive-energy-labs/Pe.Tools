@@ -46,7 +46,10 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
   }, [threadId, enabled]);
 
   const current: ThreadHead = head ?? emptyThreadHead;
-  const grantView = threadHeadReadingSchema.safeParse(raw).data?.grantView ?? null;
+  const grantView =
+    reading.state === "ready"
+      ? (threadHeadReadingSchema.safeParse(raw).data?.grantView ?? null)
+      : null;
   /** True when the head moved; otherwise `refusal` says why, in the head's own words. */
   const set = async (
     defaultTarget: DocumentRequest | null,
@@ -80,6 +83,8 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
       peReadings.dirty(request);
       if (refused) {
         setRefusal(refusalSentence(refused));
+      } else if (!response.ok && body?.refusal?.detail) {
+        setRefusal(String(body.refusal.detail));
       } else if (!result) {
         setRefusal(`target outcome unknown (${response.status}); reading the current target again`);
       } else if (!result.ok) {
@@ -95,12 +100,38 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
       return false;
     }
   };
+  const revoke = async (): Promise<boolean> => {
+    const attempt = ++generation.current;
+    setRefusal(null);
+    if (!enabled || reading.state !== "ready" || !parsed.success) {
+      setRefusal("rw is not current; wait for the head to reload");
+      return false;
+    }
+    try {
+      const response = await hostFetch(`${scopeUrl(threadId)}/revoke`, { method: "POST" });
+      const body = await response.json().catch(() => null);
+      if (attempt !== generation.current) return false;
+      peReadings.dirty(request);
+      const refused = refusalSchema.safeParse(body?.refusal).data;
+      if (refused) setRefusal(refusalSentence(refused));
+      else if (!response.ok && body?.refusal?.detail) setRefusal(String(body.refusal.detail));
+      else if (!response.ok || !threadHeadReadingSchema.safeParse(body).success)
+        setRefusal("revoke outcome unknown; reading the current head again");
+      return response.ok && threadHeadReadingSchema.safeParse(body).success;
+    } catch {
+      if (attempt !== generation.current) return false;
+      peReadings.dirty(request);
+      setRefusal("revoke outcome unknown; reading the current head again");
+      return false;
+    }
+  };
   return {
     ...current,
     hydrated: head !== undefined,
     stale: reading.state !== "ready" || !parsed.success,
     grantView,
     set,
+    revoke,
     refusal,
   };
 }

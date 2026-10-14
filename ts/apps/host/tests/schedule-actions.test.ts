@@ -396,7 +396,7 @@ test("retired Family Types has no route or capabilities; current Schedule admiss
   });
   expect(rows.some((r) => r.key.includes("family-types"))).toBe(false);
   expect(rows.find((r) => r.key === "workflow:schedule.grid.push")).toMatchObject({
-    actor: "human",
+    principal: ["human"],
   });
   const f = await setup();
   const admission = await f.admission();

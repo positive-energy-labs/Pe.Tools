@@ -1,4 +1,6 @@
-﻿import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Deferred, Effect, Layer } from "effect";
@@ -43,9 +45,9 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
   // appBase is resolved the same way the running host resolves it (LOCALAPPDATA now = temp).
   const appBase = productRoot();
 
+  const latch = Effect.runSync(Deferred.make<void>());
   const program = Effect.scoped(
     Effect.gen(function* () {
-      const latch = yield* Deferred.make<void>();
       const handle = yield* Deferred.make<ServiceHostHandle>();
       const HttpLive = makeHttpLive({
         capabilities: { revit: true },
@@ -68,6 +70,7 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     expect(file.lane).toBe("dev");
 
     const base = `http://127.0.0.1:${file.port}`;
+    const terminal = readFileSync(hostContextTokenPath(hostOwnership.serviceName), "utf8");
 
     // (2) GET /host/status â†’ 200 (confirms the recorded port is the real bound one).
     const status = await fetch(`${base}/host/status`);
@@ -93,7 +96,7 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     // once silently mis-routed to the user's live Revit â€” it must 400 and point at the header.
     const misTargeted = await fetch(`${base}/call`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "x-pe-context": terminal },
       body: JSON.stringify({ key: "host.status", bridgeSessionId: "session-abc" }),
     });
     expect(misTargeted.status).toBe(400);
@@ -104,7 +107,7 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     // A clean TS-only envelope still passes the key gate (no Revit session â†’ Disconnected, not 400).
     const cleanCall = await fetch(`${base}/call`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "x-pe-context": terminal },
       body: JSON.stringify({ key: "host.status" }),
     });
     expect(cleanCall.status).toBe(200);
@@ -147,6 +150,7 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     expect(await readServiceFile(appBase, hostOwnership.serviceName)).toBeNull();
     await expect(fetch(`${base}/host/status`)).rejects.toBeDefined();
   } finally {
+    Effect.runSync(Deferred.succeed(latch, undefined));
     await done.catch(() => {});
     if (prevLocalAppData === undefined) delete process.env.LOCALAPPDATA;
     else process.env.LOCALAPPDATA = prevLocalAppData;

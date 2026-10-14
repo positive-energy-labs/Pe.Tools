@@ -8,6 +8,7 @@ import {
   HOST_RUNTIME_SERVICE_HEADER,
 } from "@pe/host-contracts/contracts";
 import { invocationContext, type RequestPrincipal } from "@pe/mcps/context";
+import { hostOwnership } from "./host-ownership.ts";
 import { parseContributionKey } from "@pe/agent-contracts";
 import type {
   Basis,
@@ -49,7 +50,7 @@ type MintSpec =
   | { kind: "external-mcp"; label: string }
   | { kind: "human"; via: "cli" };
 const contexts = new Map<string, Caller>();
-const BROWSER_CONTEXT_COOKIE = "pe-browser-context";
+const BROWSER_CONTEXT_COOKIE = `pe-browser-${hostOwnership.serviceName}`;
 const browserContexts = new Map<
   string,
   { caller: Extract<Caller, { kind: "human" }>; transport: string }
@@ -175,6 +176,12 @@ export type RoutePermission =
 
 /** Transport admission is independent of document rw admission. Wave A supplies route permission. */
 export function admitRequest(caller: Caller, permission: RoutePermission, door: string): void {
+  if (!["read", "caller", "operation", "human", "admin", "service", "mcp"].includes(permission))
+    throw refuse(
+      "permission.undeclared",
+      door,
+      `Refused at ${door}: this route declares no permission.`,
+    );
   if (permission === "read" || permission === "mcp") return;
   if (caller.kind === "anonymous")
     throw refuse("context.missing", door, `Refused at ${door}: anonymous callers are read-only.`);

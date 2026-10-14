@@ -1,7 +1,13 @@
 import { expect, test } from "vite-plus/test";
 import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
-import { mintBrowserContext, mintContext, retireContext } from "../src/control.ts";
+import {
+  admitRequest,
+  mintBrowserContext,
+  mintContext,
+  retireContext,
+  type RoutePermission,
+} from "../src/control.ts";
 
 const options: IdentityOptions = {
   port: () => 5180,
@@ -20,6 +26,16 @@ const options: IdentityOptions = {
   },
 };
 const local = { host: "127.0.0.1:5180", "x-pe-runtime-service": hostOwnership.serviceName };
+
+test("access-085: an omitted route permission fails closed even for a human", () => {
+  expect(() =>
+    admitRequest(
+      { kind: "human", via: "cli" },
+      undefined as unknown as RoutePermission,
+      "POST /pe/new-admin",
+    ),
+  ).toThrow("permission.undeclared");
+});
 
 // Paths cover each write family, including unknown future routes. Admission precedes routing.
 test.each([
@@ -66,6 +82,10 @@ test("access-053: browser headers alone never mint a human", async () => {
       "POST",
     ),
   ).toMatchObject({ refusal: { code: "context.missing" } });
+});
+
+test("browser sessions belong to one runtime, so sibling hosts do not replace each other's cookie", () => {
+  expect(mintBrowserContext({ kind: "local" })).toContain(hostOwnership.serviceName);
 });
 
 test("access-053: a host-minted browser cookie carries a human and cannot cross transport", async () => {

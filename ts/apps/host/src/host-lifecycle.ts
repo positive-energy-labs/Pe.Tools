@@ -15,7 +15,6 @@ import {
   type ServiceFile,
 } from "@pe/host-contracts/pe-service";
 import {
-  authorizeShutdownFor,
   claimServiceHost,
   chooseServicePort,
   rememberServicePort,
@@ -24,6 +23,7 @@ import {
 } from "@pe/host-contracts/pe-service-host";
 import { hostOwnership, productRoot, type HostOwnership } from "./host-ownership.ts";
 import { runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
+import { currentCaller } from "./control.ts";
 
 // The dev script authorizes same-checkout dev takeover only; the SDK owns cooperative retirement.
 const DEV_TAKEOVER_ARGUMENT = "--take-over-host";
@@ -395,23 +395,17 @@ export const ServiceFileLive = Layer.effectDiscard(
  * No dev-lane header guard: the installed-lane C# supervisor no longer evicts a healthy dev host (D4),
  * so the token alone is the authority.
  */
-export const adminShutdownRoute = HttpRouter.add(
-  "POST",
-  hostProcessIdentity.shutdownPath,
-  (request) =>
-    Effect.gen(function* () {
-      const { latch, handle: handleDeferred } = yield* HostLifecycle;
-      const handle = yield* Deferred.await(handleDeferred);
+export const adminShutdownRoute = HttpRouter.add("POST", hostProcessIdentity.shutdownPath, () => {
+  const caller = currentCaller();
+  return Effect.gen(function* () {
+    if (caller.kind !== "service" || caller.service !== hostOwnership.serviceName)
+      return yield* Response.json({ error: "Forbidden" }, { status: 403 });
+    const { latch } = yield* HostLifecycle;
 
-      // Token auth via the SDK-owned validator: X-Pe-Service-Token header or JSON body { token }.
-      const body = yield* Effect.orElseSucceed(request.json, () => null);
-      if (!authorizeShutdownFor(handle)(request.headers, body))
-        return yield* Response.json({ error: "Forbidden" }, { status: 403 });
-
-      yield* Effect.forkDetach(Deferred.succeed(latch, undefined));
-      return yield* Response.json({ shuttingDown: true, lane: hostOwnership.lane });
-    }),
-);
+    yield* Effect.forkDetach(Deferred.succeed(latch, undefined));
+    return yield* Response.json({ shuttingDown: true, lane: hostOwnership.lane });
+  });
+});
 
 /** The native launcher owns PWA identity, registration and the browser's install flow. */
 export async function openWindow(port: number): Promise<void> {
@@ -452,11 +446,12 @@ export async function openWindow(port: number): Promise<void> {
 }
 
 /** Same installed-PWA/install flow as the tray and --open, authorized by the claim token. */
-export const adminWindowRoute = HttpRouter.add("POST", "/admin/window", (request) =>
-  Effect.gen(function* () {
-    const handle = yield* Deferred.await((yield* HostLifecycle).handle);
-    if (!authorizeShutdownFor(handle)(request.headers, null))
+export const adminWindowRoute = HttpRouter.add("POST", "/admin/window", () => {
+  const caller = currentCaller();
+  return Effect.gen(function* () {
+    if (caller.kind !== "service" || caller.service !== hostOwnership.serviceName)
       return yield* Response.json({ error: "Forbidden" }, { status: 403 });
+    const handle = yield* Deferred.await((yield* HostLifecycle).handle);
     const opened = yield* Effect.tryPromise(() => openWindow(handle.serviceFile.port)).pipe(
       Effect.map(() => true),
       Effect.catch(() => Effect.succeed(false)),
@@ -467,5 +462,5 @@ export const adminWindowRoute = HttpRouter.add("POST", "/admin/window", (request
         { status: 502 },
       );
     return yield* Response.json({ opened: true });
-  }),
-);
+  });
+});
