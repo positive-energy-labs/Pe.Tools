@@ -200,6 +200,8 @@ export function makeHttpLive(options: HttpLiveOptions) {
   const ServerLive = NodeHttpServer.layer(() => nodeServer, {
     host: "127.0.0.1",
     port: options.port,
+    // Reading streams never finish naturally; interrupt them before awaiting server.close.
+    disablePreemptiveShutdown: true,
   }).pipe(Layer.provide(RetireSocketsLive));
 
   const port = () => {
