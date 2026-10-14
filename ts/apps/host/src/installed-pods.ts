@@ -54,7 +54,7 @@ export const importShippedPods = (
  * an inline probe then fails before it runs ("No unique admitted pod owns output folder", Cody,
  * 2026-10-14). Written once; an existing manifest is never touched.
  */
-export async function ensureDefaultPod(podsRoot = productPodsRootPath()): Promise<void> {
+async function ensureDefaultPod(podsRoot = productPodsRootPath()): Promise<void> {
   const key = scriptingWorkspaceIdentity.defaultWorkspaceKey;
   const manifest = join(podsRoot, key, "pod.json");
   await mkdir(dirname(manifest), { recursive: true });
