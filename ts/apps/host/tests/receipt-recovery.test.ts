@@ -1,8 +1,8 @@
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
 import { type Receipt } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
@@ -47,13 +47,15 @@ async function fixture() {
   return { path, owner, intent, action, dispatches: () => dispatches };
 }
 
-test("an old v3 journal is refused naming the file to archive; its bytes stay", async () => {
+test("an old v3 journal is archived beside itself, bytes intact, and the host starts fresh", async () => {
   const { path, action } = await fixture();
   const source = JSON.stringify({ version: 3, actions: [action] });
   await writeFile(path, source);
-  await expect(new ActionJournal(path).list()).rejects.toThrow(`${path} is journal version 3`);
-  expect(await readFile(path, "utf8")).toBe(source);
-  expect(existsSync(`${path}.v3.json`)).toBe(false);
+  expect(await new ActionJournal(path).list()).toEqual([]);
+  expect(existsSync(path)).toBe(false);
+  const archived = (await readdir(dirname(path))).find((n) => /\.v3\.\d+\.archived$/.test(n));
+  expect(archived).toBeDefined();
+  expect(await readFile(join(dirname(path), archived!), "utf8")).toBe(source);
 });
 
 test("missing recovery preserves unknown; exact cancellation joins the original native UUID without dispatch", async () => {
@@ -130,7 +132,7 @@ test("missing recovery preserves unknown; exact cancellation joins the original 
   );
 });
 
-test("restart converts running to unknown once; a malformed/unknown journal is never overwritten", async () => {
+test("restart converts running to unknown once; a malformed journal is never overwritten", async () => {
   const { path, action } = await fixture();
   const {
     error: _error,
@@ -150,8 +152,7 @@ test("restart converts running to unknown once; a malformed/unknown journal is n
   const receipts = await restarted.read({});
   expect(await new ActionJournal(path).read({})).toEqual(receipts);
   for (const malformed of [
-    { version: 99, actions: [] },
-    { version: 3, actions: [], extra: true },
+    { version: 4, actions: [], extra: true },
     { version: 4, receipts: [...receipts, ...receipts], mappings: {} },
   ]) {
     const bytes = JSON.stringify(malformed);

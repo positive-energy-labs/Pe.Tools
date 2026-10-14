@@ -67,7 +67,8 @@ Add-Type 'using System; using System.Runtime.InteropServices; public class G { [
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
       expect(readFileSync(child, "utf8")).toBe("0");
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      // Windows can hold the explorer-started fixture's handle past teardown.
+      rmSync(root, { recursive: true, force: true, maxRetries: 50, retryDelay: 100 });
     }
   },
   90_000,
