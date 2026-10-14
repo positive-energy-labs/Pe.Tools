@@ -8,7 +8,23 @@ import type { UpdateBlocker, UpdatePlan, UpdateRevit } from "@pe/host-contracts/
 
 import { phaseOf, unsavedOf } from "./session";
 
-export type GroupKey = "revit" | "update" | "share" | "pea" | "host";
+export type GroupKey = "revit" | "update" | "share" | "pea" | "host" | "notices" | "appearance";
+/** The one address of every Settings group; `session` focuses a Revit row. */
+export function settingsDestination(section?: GroupKey, session?: string) {
+  const query = new URLSearchParams();
+  if (section) query.set("section", section);
+  if (section === "revit" && session) query.set("session", session);
+  return `/settings${query.size ? `?${query}` : ""}`;
+}
+export const GROUP_KEYS: readonly GroupKey[] = [
+  "revit",
+  "update",
+  "share",
+  "pea",
+  "host",
+  "notices",
+  "appearance",
+];
 
 export const machineOf = (reading: Reading<Machine>): Machine | null =>
   reading.state === "ready"

@@ -1,14 +1,12 @@
-import { Gauge, MessageCircle, Server } from "lucide-react";
+import { Gauge, MessageCircle } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
 import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { startFeedback } from "#/components/feedback-picker";
 import { RouteControlsOutlet, useRouteControlPresence } from "#/navigation/route-controls";
-import { useDestination } from "#/navigation/state";
 
 /** Commands retain their real callbacks and never become persisted options. */
 export function SettingsActions({ close }: { close?: () => void }) {
   const inspector = useRouteControlPresence("inspector");
-  const go = useDestination();
   const feedback = () => {
     close?.();
     startFeedback();
@@ -33,18 +31,6 @@ export function SettingsActions({ close }: { close?: () => void }) {
           icon={MessageCircle}
           invoke={feedback}
         />
-      </span>
-      <span className="pe-settings-row">
-        <Button
-          label="Machine"
-          icon={Server}
-          onClick={() => {
-            close?.();
-            go("/machine");
-          }}
-        >
-          Machine
-        </Button>
       </span>
     </div>
   );

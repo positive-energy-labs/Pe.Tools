@@ -14,7 +14,7 @@ describe("one failure presentation", () => {
     );
     expect(failure.door).toEqual({
       label: "Align Revit add-ins with this build",
-      href: "/machine?section=revit#align-addins",
+      href: "/settings?section=revit#align-addins",
     });
     expect(failure.detail).toBe(BOOTSTRAP);
   });

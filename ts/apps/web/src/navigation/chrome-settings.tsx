@@ -8,6 +8,7 @@ import { SettingsProjection } from "#/settings/options";
 import { SettingsActions } from "#/settings/options-actions";
 import { useSurfaceHost } from "./surface-host";
 import { useDestination } from "./state";
+import { settingsDestination } from "#/machine/model";
 import { ownsOpenPopup } from "./situation-drawer";
 
 export function ChromeSettings({ word = false }: { word?: boolean }) {
@@ -20,10 +21,10 @@ export function ChromeSettings({ word = false }: { word?: boolean }) {
   const close = () => setOpen(false);
   const openSettings = () => {
     close();
-    go(
-      `/settings${subject && subject !== "settings" ? `?subject=${encodeURIComponent(subject)}` : ""}`,
-    );
+    go(settingsDestination());
   };
+  // A shell that draws Settings as a bar icon has its one door already.
+  if (host.shell.icons.some((icon) => icon.route === "settings")) return null;
   if (host.shell.settings === "route")
     return (
       <Button
@@ -72,7 +73,7 @@ export function ChromeSettings({ word = false }: { word?: boolean }) {
                 label="Providers and agent approvals"
                 onClick={() => {
                   close();
-                  go("/settings");
+                  go(settingsDestination("pea"));
                 }}
               >
                 Providers and agent approvals

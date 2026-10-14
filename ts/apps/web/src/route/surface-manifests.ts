@@ -52,9 +52,7 @@ export const grillesManifest = defineRoute({
 export const settingsManifest = defineRoute({
   key: "settings",
   name: "Settings",
-  docs: "UI settings and forms declared by their resource owners. Subject selects the owner and section selects its registered form.",
-  page: z.object({ subject: z.string().optional(), section: z.string().optional() }),
-  url: ["subject", "section"],
+  docs: "This machine and this app: Revit, Update, Share, Pea providers, Host, notifications, and appearance. Each group states its critical state while folded; repair and configuration live in the group.",
 });
 
 export const savedTakeoffsManifest = defineRoute({

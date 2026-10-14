@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useCanGoBack, useRouter, useRouterState } from "@tanstack/react-router";
-import { ArrowLeft, ArrowRight, Search, MessageSquare, Inbox, Server } from "lucide-react";
+import { ArrowLeft, ArrowRight, Search, MessageSquare, Inbox, Settings2 } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
 import { HotkeyHint } from "#/components/lang/hotkey-command";
@@ -21,7 +21,7 @@ import { PageBindingChip } from "#/pages-bind/chip";
 type LaunchWindow = Window & {
   launchQueue?: { setConsumer: (consumer: (params: { targetURL?: string }) => void) => void };
 };
-const ICONS = { Inbox, MessageSquare, Server };
+const ICONS = { Inbox, MessageSquare, Settings2 };
 export function AppBar() {
   const host = useSurfaceHost();
   const { shell } = host;

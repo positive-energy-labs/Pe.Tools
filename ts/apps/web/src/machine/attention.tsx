@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { planWaits } from "./model";
 import { useMachine } from "./use-machine";
 
-/** Runtime attention stays observable even while the Machine page is not mounted. */
+/** Runtime attention stays observable even while Settings is not mounted. */
 export function MachineAttention() {
   const { reading } = useMachine();
   const waiting = reading.state === "ready" ? !!planWaits(reading.observation) : false;
