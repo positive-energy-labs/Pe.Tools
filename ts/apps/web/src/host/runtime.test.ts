@@ -55,3 +55,53 @@ test("the browser contextFetch carries the runtime owner to its own origin and t
     vi.unstubAllGlobals();
   }
 });
+
+test("a context.missing POST reloads at most once per 30 seconds and preserves the body", async () => {
+  const reload = vi.fn();
+  const body = { error: { code: "context.missing", message: "anonymous callers are read-only" } };
+  vi.stubGlobal("window", { location: { reload } });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json(body, { status: 403 })),
+  );
+  const clock = vi.spyOn(Date, "now").mockReturnValue(100_000);
+  sessionStorage.clear();
+  try {
+    const response = await hostFetch("/pe/threads", { method: "POST" });
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(await response.json()).toEqual(body);
+    clock.mockReturnValue(129_999);
+    await hostFetch("/pe/threads", { method: "POST" });
+    expect(reload).toHaveBeenCalledTimes(1);
+    clock.mockReturnValue(130_000);
+    await hostFetch("/pe/threads", { method: "POST" });
+    expect(reload).toHaveBeenCalledTimes(2);
+  } finally {
+    sessionStorage.clear();
+    clock.mockRestore();
+    vi.unstubAllGlobals();
+  }
+});
+
+test("GET and other refusal codes never reload", async () => {
+  const reload = vi.fn();
+  const fetcher = vi.fn(async () =>
+    Response.json({ error: { code: "context.missing" } }, { status: 403 }),
+  );
+  vi.stubGlobal("window", { location: { reload } });
+  vi.stubGlobal("fetch", fetcher);
+  sessionStorage.clear();
+  try {
+    await hostFetch("/pe/threads");
+    await hostFetch("/pe/threads", { method: "GET" });
+    fetcher.mockImplementation(async () =>
+      Response.json({ error: { code: "grant.missing" } }, { status: 403 }),
+    );
+    await hostFetch("/pe/threads", { method: "POST" });
+    expect(reload).not.toHaveBeenCalled();
+    expect(sessionStorage.length).toBe(0);
+  } finally {
+    sessionStorage.clear();
+    vi.unstubAllGlobals();
+  }
+});

@@ -2,17 +2,41 @@ import {
   HOST_RUNTIME_SERVICE_HEADER,
   HOST_RUNTIME_SERVICE_QUERY,
 } from "@pe/host-contracts/contracts";
+import { z } from "zod";
 import { webBuildStamp } from "./build-stamp";
 
 // Frozen into the served page's module graph: a reused port must never change its owner.
 const serviceName: string = import.meta.env.PE_RUNTIME_SERVICE;
 
-export function hostFetch(url: string, init?: RequestInit): Promise<Response> {
+const contextRefusal = z.object({ error: z.object({ code: z.literal("context.missing") }) });
+const contextReloadKey = "pe.context-reload-at";
+
+export async function hostFetch(url: string, init?: RequestInit): Promise<Response> {
   if (!serviceName) throw new Error("This page has no runtime owner.");
   const headers = new Headers(init?.headers);
   headers.set(HOST_RUNTIME_SERVICE_HEADER, serviceName);
   headers.set("x-pe-web-build", webBuildStamp.build);
-  return fetch(url, { ...init, headers });
+  const response = await fetch(url, { ...init, headers });
+  if ((init?.method ?? "GET").toUpperCase() !== "GET" && response.status === 403) {
+    const body: unknown = await response
+      .clone()
+      .json()
+      .catch(() => null);
+    if (contextRefusal.safeParse(body).success) {
+      try {
+        const previous = sessionStorage.getItem(contextReloadKey);
+        const now = Date.now();
+        if (previous === null || now - Number(previous) >= 30_000) {
+          // Only navigation can mint a new human browser context after a host restart.
+          sessionStorage.setItem(contextReloadKey, String(now));
+          window.location.reload();
+        }
+      } catch {
+        // Without persistent throttling, leave the refusal for the caller rather than loop.
+      }
+    }
+  }
+  return response;
 }
 
 export function runtimeStreamUrl(url: string): string {
