@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { definePlugin, type Plugin, type PluginContext, type WorkKey } from "@pe/agent-contracts";
+import type { WorkKey } from "@pe/agent-contracts";
 
 /** The discoverable projection of a route's full, typed manifest. */
 interface RegisteredManifest {
@@ -17,17 +17,6 @@ export interface RouteRegistration {
   readonly hosted: HostedRouteView;
 }
 
-export const defineRoutePlugin = <M extends RegisteredManifest>(registration: {
-  manifest: M;
-  hosted: HostedRouteView;
-}) =>
-  definePlugin<RouteRegistration>({
-    id: registration.manifest.key,
-    setup: (context) => {
-      context.contribute(registration.manifest.key, registration);
-    },
-  });
-
 /** One registration owns discovery, action attribution and the actual hosted surface. */
 export function createRouteRegistry() {
   const routes = new Map<string, RouteRegistration>();
@@ -39,46 +28,17 @@ export function createRouteRegistry() {
   };
 
   return {
-    register(plugin: Plugin<RouteRegistration>) {
-      const cleanup: (() => void)[] = [];
-      let active = true;
-      const context: PluginContext<RouteRegistration> = {
-        id: plugin.id,
-        contribute(key, registration) {
-          if (!active) throw Error(`route plugin ${plugin.id} is inactive`);
-          if (!key.trim() || key !== registration.manifest.key)
-            throw Error("a route contribution key must name its manifest");
-          if (routes.has(key)) throw Error(`route ${key} is already registered`);
-          routes.set(key, registration);
-          changed();
-          const dispose = () => {
-            if (routes.get(key) === registration) {
-              routes.delete(key);
-              changed();
-            }
-          };
-          cleanup.push(dispose);
-          return { dispose };
-        },
-        hook() {
-          throw Error("host lifecycle hooks belong to the host plugin runtime");
-        },
-      };
-      let finalizer: ReturnType<Plugin<RouteRegistration>["setup"]>;
-      try {
-        finalizer = plugin.setup(context);
-        if (finalizer instanceof Promise)
-          throw Error("web route setup must register synchronously before mount");
-      } catch (error) {
-        active = false;
-        for (const dispose of cleanup.reverse()) dispose();
-        throw error;
-      }
+    /** Built-in and Pod routes take this one path; the answer removes exactly this registration. */
+    register(registration: RouteRegistration) {
+      const key = registration.manifest.key;
+      if (!key.trim()) throw Error("a route registration needs its manifest key");
+      if (routes.has(key)) throw Error(`route ${key} is already registered`);
+      routes.set(key, registration);
+      changed();
       return () => {
-        if (!active) return;
-        active = false;
-        for (const dispose of cleanup.reverse()) dispose();
-        if (typeof finalizer === "function") return finalizer();
+        if (routes.get(key) !== registration) return;
+        routes.delete(key);
+        changed();
       };
     },
     subscribe: (listener: () => void) => {
@@ -91,11 +51,6 @@ export function createRouteRegistry() {
     keys: () => [...routes.keys()],
     entries: () => [...routes.values()],
     get: (key: string) => routes.get(key),
-    require(key: string) {
-      const registration = routes.get(key);
-      if (!registration) throw Error(`route ${key} is not registered`);
-      return registration;
-    },
     actionRoute(key: string): string | null {
       const owners = [...routes.values()].filter(
         ({ manifest }) =>

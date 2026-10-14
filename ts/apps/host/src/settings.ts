@@ -214,7 +214,7 @@ function parseReceipt(content: string): PodReceipt | string {
 
 export const readMember = Effect.fnUntraced(function* (member: PodMember, ctx: PodContext = {}) {
   yield* Effect.tryPromise({
-    try: () => requirePackageEnabled(member.pod, undefined, ctx.podsRoot),
+    try: () => requirePackageEnabled(member.pod, ctx.podsRoot),
     catch: (error) => new LocalOpError("pod.member.read", errorMessage(error), 403),
   });
   const admitted = yield* Effect.tryPromise({
@@ -503,7 +503,7 @@ export const composedSpec = Effect.fnUntraced(function* (
 export const podFolder = Effect.fnUntraced(function* (podId: string, ctx: PodContext = {}) {
   const root = ctx.podsRoot ?? productPodsRootPath();
   yield* Effect.tryPromise({
-    try: () => requirePackageEnabled(podId, undefined, root),
+    try: () => requirePackageEnabled(podId, root),
     catch: (error) => new LocalOpError("pod.resolve", errorMessage(error), 403),
   });
   const pod = yield* Effect.tryPromise({

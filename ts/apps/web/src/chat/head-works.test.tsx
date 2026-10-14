@@ -6,7 +6,6 @@ import { address, readingKey } from "@pe/agent-contracts";
 import { peReadings } from "#/readings";
 import { useHeadWorks } from "./head-works";
 import { publicRoutes } from "#/route/builtin-routes";
-import { defineRoutePlugin } from "@pe/kit/route-registry";
 import { manifest as roomsManifest } from "#/rooms/manifest";
 
 afterEach(() => {
@@ -29,18 +28,14 @@ test("a Work-bearing route registered after mount joins the head and disposal re
   );
   let remove: (() => void | Promise<void>) | undefined;
   try {
+    const manifest = {
+      ...roomsManifest,
+      key: "runtime-rooms",
+      name: "Runtime rooms",
+      work: { ...roomsManifest.work!, route: "runtime-rooms", title: "Runtime rooms" },
+    };
     act(() => {
-      remove = publicRoutes.register(
-        defineRoutePlugin({
-          manifest: {
-            ...roomsManifest,
-            key: "runtime-rooms",
-            name: "Runtime rooms",
-            work: { ...roomsManifest.work!, route: "runtime-rooms", title: "Runtime rooms" },
-          },
-          hosted: () => null,
-        }),
-      );
+      remove = publicRoutes.register({ manifest, hosted: () => null });
     });
     expect(next.size).toBe(1);
     act(() => {

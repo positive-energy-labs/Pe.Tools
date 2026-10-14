@@ -154,7 +154,6 @@ export function KeysNode({
   );
 }
 
-/** Inside the node it declares, so `useScopeKeys` reads that node and not the one above it. */
 /** Bind chords on the enclosing scope node from inside its tree (a pane body). */
 export function ScopeKeys({ keys }: { keys: readonly ScopeKey[] }) {
   useScopeKeys(keys);

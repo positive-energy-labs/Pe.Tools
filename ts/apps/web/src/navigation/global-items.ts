@@ -1,7 +1,7 @@
 import { APP_ROUTES } from "@pe/agent-contracts";
 import type { NavigationSnapshot } from "./navigation-client";
 import { podRoutePath } from "#/route/pod-address";
-import type { PodRouteDescriptor } from "#/route/pod-loader";
+import type { PodRouteDescriptor } from "@pe/agent-contracts";
 
 export type ResultKind = "All" | "Tools" | "Works" | "Pea threads";
 export type Destination = {

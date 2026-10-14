@@ -1,21 +1,18 @@
-import { createHash } from "node:crypto";
-import { lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { isAbsolute, join, relative } from "node:path";
+import { lstatSync, readFileSync, realpathSync } from "node:fs";
+import { join } from "node:path";
 import { harnessEventSchema, threadExportSchema } from "@pe/agent-contracts";
 
 import type { HostLog } from "./host-log.ts";
+import { artifactRelative, sha256Hex as sha, writeArtifact } from "./page-artifacts.ts";
 
-const sha = (bytes: string | Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 const inside = (root: string, path: string) => {
-  const from = relative(root, realpathSync(path));
-  if (from === ".." || from.startsWith("..\\") || from.startsWith("../") || isAbsolute(from))
-    throw Error("Thread export refuses a path outside its durable store");
+  artifactRelative(root, realpathSync(path));
   return path;
 };
 
 /** The durable thread writer is synchronous. These reads occupy the same JS turn, so a live
  * append or metadata write cannot interleave. The captured tail may still be a running turn. */
-export function exportThread(root: string, threadId: string, hostLog: HostLog) {
+export async function exportThread(root: string, threadId: string, hostLog: HostLog) {
   if (!/^[a-z0-9][a-z0-9_-]*$/i.test(threadId)) throw Error("Invalid thread export id");
   const store = realpathSync(root);
   const directory = inside(store, join(store, threadId));
@@ -65,18 +62,7 @@ export function exportThread(root: string, threadId: string, hostLog: HostLog) {
   });
   const content = JSON.stringify(archive, null, 2) + "\n";
   const sha256 = sha(content);
-  const exports = join(store, ".exports");
-  mkdirSync(exports, { recursive: true });
-  inside(store, exports);
-  const path = join(exports, `${sha256}.json`);
-  try {
-    writeFileSync(path, content, { flag: "wx" });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    inside(store, path);
-    if (readFileSync(path, "utf8") !== content)
-      throw Error("Thread export artifact hash collision");
-  }
+  await writeArtifact(store, join(store, ".exports", `${sha256}.json`), content);
   return new Response(content, {
     headers: {
       "content-type": "application/json; charset=utf-8",

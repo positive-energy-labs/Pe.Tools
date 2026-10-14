@@ -1,4 +1,5 @@
 import {
+  message,
   contributionKey,
   packageIdSchema,
   packageMemberPathSchema,
@@ -148,19 +149,24 @@ export async function listPackages(podsRoot = productPodsRootPath()): Promise<Pa
 }
 
 /** Resolve manifest identity, never a folder alias. Diagnostics stay inspectable in listings. */
-export async function readPackage(
+/** The one admitted package with this id; a twice-claimed or missing id refuses with its reason. */
+export function onePackage(
+  listing: PackageListing,
   id: string,
-  podsRoot = productPodsRootPath(),
-): Promise<AdmittedPackage> {
-  const found = (await listPackages(podsRoot)).packages.filter((pod) => pod.id === id);
-  if (found.length !== 1)
-    throw Error(
-      found.length
-        ? `Pod id '${id}' is claimed by folders ${found.map((pod) => pod.folder).join(", ")}.`
-        : `No installed pod has id '${id}'.`,
-    );
-  return found[0]!;
+  refuse = (reason: string, _status: 404 | 409): Error => Error(reason),
+): AdmittedPackage {
+  const found = listing.packages.filter((pod) => pod.id === id);
+  if (found.length === 1) return found[0]!;
+  throw found.length
+    ? refuse(
+        `Pod id '${id}' is claimed by folders ${found.map((pod) => pod.folder).join(", ")}.`,
+        409,
+      )
+    : refuse(`No installed pod has id '${id}'.`, 404);
 }
+
+export const readPackage = async (id: string, podsRoot = productPodsRootPath()) =>
+  onePackage(await listPackages(podsRoot), id);
 
 /** Freeze admitted bytes without rereading disk. Admission errors refuse; member semantics stay native. */
 export async function capturePackage(
@@ -381,5 +387,3 @@ const problem = (code: string, path: string, message: string): MemberIssue => ({
   message,
   severity: "error",
 });
-const message = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
