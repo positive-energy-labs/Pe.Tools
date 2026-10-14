@@ -1,8 +1,3 @@
-/** Whether the host enables its Revit bridge; current connections are discovered through pe_find. */
-export interface PeaRuntimeCapabilities {
-  readonly revit: boolean;
-}
-
 // The static kernel: identity, authority, evidence, loop, voice, and the one exact wire protocol.
 // Tool descriptions own routing, skills own workflows, and the harness owns approval. Connections
 // and the selected document are volatile facts read through pe_find, never startup instructions.

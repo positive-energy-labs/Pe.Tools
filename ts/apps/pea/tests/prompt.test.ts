@@ -18,7 +18,7 @@ import {
 } from "@pe/host-contracts/service-identity";
 import { serviceFilePath } from "@pe/host-contracts/pe-service";
 import { runPeaPromptTurn } from "../src/prompt.ts";
-import { withInvocationContext } from "@pe/mcps/context";
+import { withInvocationContext } from "@pe/runtime/context";
 
 const { ensureRunning, sea } = vi.hoisted(() => ({
   ensureRunning: vi.fn(),

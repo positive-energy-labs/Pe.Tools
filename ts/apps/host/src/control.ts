@@ -7,7 +7,7 @@ import {
   HOST_CONTEXT_VARIABLE,
   HOST_RUNTIME_SERVICE_HEADER,
 } from "@pe/host-contracts/contracts";
-import { invocationContext, type RequestPrincipal } from "@pe/mcps/context";
+import { invocationContext, type RequestPrincipal } from "@pe/runtime/context";
 import { parseContributionKey } from "@pe/agent-contracts";
 import type {
   Basis,

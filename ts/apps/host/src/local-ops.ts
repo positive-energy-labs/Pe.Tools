@@ -20,7 +20,8 @@ import {
 } from "@pe/host-contracts/operation-types";
 import type { BridgeSessionView } from "./bridge.ts";
 import { readFileStringOrEmpty, statOrNull } from "./files/index.ts";
-import { resolvePeaProductHomePath, type PeaRuntimeCapabilities } from "@pe/mcps";
+import { resolvePeaProductHomePath } from "@pe/mcps";
+import type { PeaRuntimeCapabilities } from "@pe/runtime";
 import { resolveHostVersion } from "./host-lifecycle.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
 import { processCustody } from "./machine.ts";

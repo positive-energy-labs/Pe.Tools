@@ -13,7 +13,7 @@ import type { Caller } from "@pe/agent-contracts";
 import { productPathNames } from "@pe/host-contracts/contracts";
 
 const homeVariable = productPathNames.productHomeVariable;
-import { withInvocationContext } from "@pe/mcps/context";
+import { withInvocationContext } from "@pe/runtime/context";
 import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { makeCallRoute } from "../src/call-route.ts";

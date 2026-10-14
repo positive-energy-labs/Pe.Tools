@@ -6,7 +6,7 @@ import {
   HOST_RUNTIME_SERVICE_QUERY,
 } from "@pe/host-contracts/contracts";
 import { hostOwnership } from "./host-ownership.ts";
-import { withInvocationContext, type RequestPrincipal } from "@pe/mcps/context";
+import { withInvocationContext, type RequestPrincipal } from "@pe/runtime/context";
 import type { Caller, MachineShare } from "@pe/agent-contracts";
 import { callerOf } from "./control.ts";
 

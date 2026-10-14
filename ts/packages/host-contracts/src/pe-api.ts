@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { hostDescriptorSchema } from "./host-descriptor.ts";
 
 export const peErrorSchema = z.object({
   error: z.object({
@@ -39,6 +40,14 @@ function route<const P extends string, B extends z.ZodType, O extends z.ZodType>
     output,
     error: peErrorSchema,
     principal,
+    // Admission consumes these facts; document grants remain the operation owner's decision.
+    permission:
+      owner === "share" || (owner === "providers" && method !== "GET")
+        ? ("administration" as const)
+        : principal === "read"
+          ? ("read" as const)
+          : ("product" as const),
+    localOnly: owner === "share",
     owner,
     format,
     encoding,
@@ -144,6 +153,7 @@ export function definePeApi<
   });
   /** Public HTTP transport authority. Domain schemas stay with their domain owners. */
   const peRoutes = {
+    "features.get": route("GET", "/pe/features", none, hostDescriptorSchema, "read", "pe"),
     "operation.call": route(
       "POST",
       "/call",
@@ -512,7 +522,11 @@ export function definePeApi<
   type PeOutput<K extends PeRouteId> = z.output<(typeof peRoutes)[K]["output"]>;
   const isPeRouteId = (id: string): id is PeRouteId => Object.hasOwn(peRoutes, id);
 
-  function peRouteUrl<K extends PeRouteId>(id: K, input: PeInput<K>, base = ""): string {
+  function peRouteUrl<K extends PeRouteId>(
+    id: K,
+    input: Omit<PeInput<K>, "body">,
+    base = "",
+  ): string {
     return createPeWire(peRoutes, base, globalThis.fetch).url(id, input);
   }
 

@@ -1,5 +1,5 @@
 import type { Caller } from "@pe/agent-contracts";
-import { withInvocationContext } from "@pe/mcps/context";
+import { withInvocationContext } from "@pe/runtime/context";
 import { human, pea } from "./callers.ts";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";

@@ -7,7 +7,7 @@ import {
   HOST_CONTEXT_VARIABLE,
   HOST_RUNTIME_SERVICE_HEADER,
 } from "@pe/host-contracts/contracts";
-import { resolveLaneAndRoot } from "./host-config.ts";
+import { resolveLaneAndRoot } from "./runtime-owner.ts";
 import type { InvocationContext } from "./invocation-context.browser.ts";
 export type { InvocationContext, RequestPrincipal } from "./invocation-context.browser.ts";
 

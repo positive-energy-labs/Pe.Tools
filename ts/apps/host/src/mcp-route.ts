@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import { HttpEffect, HttpRouter } from "effect/unstable/http";
 import { createPeaMcpServer, WebStandardStreamableHTTPServerTransport } from "@pe/mcps/server";
-import { invocationContext, type InvocationContext } from "@pe/mcps/context";
+import { invocationContext, type InvocationContext } from "@pe/runtime/context";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
 import { callerOf, mintContext, retireContext } from "./control.ts";
 import { hostReceiptExport, type ReceiptExport } from "./receipt-export.ts";

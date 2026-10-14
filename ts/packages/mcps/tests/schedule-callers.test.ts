@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { setup } from "../../../apps/host/tests/schedule-test-fixture.ts";
 import { PeaCliCommands } from "../src/pea/PeaCliCommands.ts";
 import { peRead, peDo } from "../src/pea/capability-tools.ts";
-import { withInvocationContext } from "../src/shared/invocation-context.ts";
+import { withInvocationContext } from "@pe/runtime/context";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 
 afterEach(() => vi.unstubAllEnvs());

@@ -1,5 +1,5 @@
 import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
-import { withInvocationContext } from "../src/shared/invocation-context.ts";
+import { withInvocationContext } from "@pe/runtime/context";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { peDo, peRead } from "../src/pea/capability-tools.ts";
 import { buildCapabilities } from "../src/pea/capabilities.ts";

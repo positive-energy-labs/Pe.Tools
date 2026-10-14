@@ -22,32 +22,11 @@ export const hostUrl = (path: string, baseURL = "") => `${baseURL}${path}`;
  * checked-in typegen output + TS-only ops. Errors arrive as problem-JSON with
  * a real HTTP status.
  */
-export function callHostRpc<K extends OpKey>(
+export async function callHostRpc<K extends OpKey>(
   key: K,
   ...args: OpCallArgs<K, HostCallOptions>
 ): Promise<OpResponseOf<K>> {
   const [request, options] = args;
-  return postCall(key, request, options) as Promise<OpResponseOf<K>>;
-}
-
-/**
- * Escape hatch for runtime-registered ops the checked-in types haven't caught
- * up with (fresh C# op before `host-typegen` is re-run). Untyped by design —
- * regenerate and switch to `callHostRpc` once the op is stable.
- */
-export function callHostDynamic(
-  key: string,
-  request?: unknown,
-  options?: HostCallOptions,
-): Promise<unknown> {
-  return postCall(key, request, options);
-}
-
-async function postCall(
-  key: string,
-  request: unknown,
-  options?: HostCallOptions,
-): Promise<unknown> {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (options?.session) headers[HOST_RPC_SDK_SESSION_HEADER] = JSON.stringify(options.session);
   if (options?.bridgeSessionId) headers[HOST_RPC_BRIDGE_SESSION_HEADER] = options.bridgeSessionId;

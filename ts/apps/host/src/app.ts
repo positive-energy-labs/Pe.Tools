@@ -15,7 +15,7 @@ import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
-import type { PeaRuntimeCapabilities } from "@pe/mcps";
+import type { PeaRuntimeCapabilities } from "@pe/runtime";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
 import { getHostStatus } from "./local-ops.ts";
 import { isSettingsSchemaUrl } from "./settings.ts";

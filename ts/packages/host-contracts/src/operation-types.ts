@@ -1322,9 +1322,8 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
 
 /**
  * Strict key space for the typed client surface: only keys the checked-in
- * typegen output (or the hand-authored TS-only map) knows about. Runtime-
- * registered ops the types haven't caught up with go through the explicit
- * dynamic escape hatch (`callHostDynamic`) instead of weakening every call.
+ * typegen output (or the hand-authored TS-only map) knows about. Regenerate
+ * before calling a newly registered operation; there is no untyped bypass.
  */
 export type OpKey = AnyOperationKey;
 

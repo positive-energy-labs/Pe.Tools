@@ -32,7 +32,7 @@ import { createHash } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { contextFetch, withInvocationContext } from "../src/shared/invocation-context.ts";
+import { contextFetch, withInvocationContext } from "@pe/runtime/context";
 import { createMcpDoor } from "../../../apps/host/src/mcp-route.ts";
 import {
   admitCrossing,

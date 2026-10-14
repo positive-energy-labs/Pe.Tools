@@ -17,7 +17,7 @@ import {
   type HeadGrant,
   type ThreadHead,
 } from "@pe/agent-contracts";
-import { withInvocationContext } from "@pe/mcps/context";
+import { withInvocationContext } from "@pe/runtime/context";
 import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { makeCallRoute } from "../src/call-route.ts";

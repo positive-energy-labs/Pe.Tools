@@ -29,7 +29,8 @@ import { situationCells } from "./cells";
 import { DEFAULT_WAIT_S, type RouteManifest } from "./manifest";
 import { urlPage, useInitialUrlPage, useUrlPage } from "./url";
 import { actionFacts, staticNeed, type ActionFacts } from "./facts";
-import { callHostDynamic } from "#/host/client";
+import { callHostRpc, type HostCallOptions } from "#/host/client";
+import type { OpKey, OpCallArgs } from "@pe/host-contracts/operation-types";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
 import { useThreadScope } from "#/chat/scope";
 import {
@@ -423,8 +424,11 @@ export function useRoute<W, R extends string, P, A extends string>(
       readings,
       page,
       note: owner.verbNote,
-      call: (operation: string, input?: unknown) =>
-        callHostDynamic(operation, input, targetHeaders(ctx.target)),
+      call: <K extends OpKey>(operation: K, ...[input]: OpCallArgs<K, never>) =>
+        callHostRpc(
+          operation,
+          ...([input, targetHeaders(ctx.target)] as OpCallArgs<K, HostCallOptions>),
+        ),
       // Bound to the action's snapshot, through the queue: it follows this owner's own landed
       // writes past that snapshot, and a foreign write still refuses it.
       write: async (patches: RouteStatePatch[]) => {
