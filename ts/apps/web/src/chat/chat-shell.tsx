@@ -45,8 +45,6 @@ import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Surface as PageSurface } from "#/components/lang/surface";
 import { ThreadBody } from "#/workbench/lens/thread-body";
 import { ComposerBank } from "#/chat/composer-bank";
-import type { ComposerVariant } from "#/chat/composer";
-import { Switcher } from "#/components/lang/switcher";
 import { Dialog, DialogContent, DialogTitle } from "#/components/lang/dialog";
 
 type Plugin = { plugin?: ChatPluginRoute; focus?: string; target?: string };
@@ -114,7 +112,6 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
     updateThread,
   } = useWorkbench();
   const [mode, setMode] = useMode();
-  const [proto, setProto] = useComposerProto();
   const [viewportNarrow, setViewportNarrow] = useState(false);
   const narrow = compact || viewportNarrow;
   useEffect(() => {
@@ -302,16 +299,13 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
           deletedThreadIds={deletedThreadIds}
           prompt={prompt}
           handle={handle}
-          pickers={(face) => (
-            <ComposerPickers situation={situation} urlTarget={target} face={face} />
+          pickers={(open) => (
+            <ComposerPickers situation={situation} urlTarget={target} open={open} />
           )}
           state={<ComposerState handle={handle} situation={situation} status={status} />}
           work={<ComposerWork situation={situation} status={status} />}
-          variant={proto.variant}
-          lines={proto.lines}
         />
       </div>
-      {import.meta.env.DEV ? <ComposerProtoSwitch proto={proto} setProto={setProto} /> : null}
     </div>
   );
 
@@ -485,55 +479,6 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
         onNewTarget={(target) => void newThread(target)}
       />
     </main>
-  );
-}
-
-// ponytail: prototype round (tray UX 2026-10-14). The owner picks a variant and a line count;
-// then the switch, the stored choice and the losing variants go.
-type ComposerProto = { variant: ComposerVariant; lines: 3 | 5 };
-const PROTO_KEY = "pe.proto.composer";
-
-function useComposerProto() {
-  const [proto, set] = useState<ComposerProto>(() => {
-    const saved = localStorage.getItem(PROTO_KEY);
-    return saved ? (JSON.parse(saved) as ComposerProto) : { variant: "A", lines: 5 };
-  });
-  const setProto = (next: ComposerProto) => {
-    localStorage.setItem(PROTO_KEY, JSON.stringify(next));
-    set(next);
-  };
-  return [proto, setProto] as const;
-}
-
-function ComposerProtoSwitch({
-  proto,
-  setProto,
-}: {
-  proto: ComposerProto;
-  setProto: (next: ComposerProto) => void;
-}) {
-  return (
-    <div data-composer-proto="" className="flex gap-1">
-      <Switcher
-        ariaLabel="composer variant"
-        value={proto.variant}
-        onChange={(variant) => setProto({ ...proto, variant })}
-        options={[
-          { value: "A", label: "A", title: "pickers move to the bottom row and say every word" },
-          { value: "B", label: "B", title: "pickers move to the bottom row as marks" },
-          { value: "C", label: "C", title: "pickers stay in the left rail with one word each" },
-        ]}
-      />
-      <Switcher
-        ariaLabel="composer lines"
-        value={String(proto.lines) as "3" | "5"}
-        onChange={(lines) => setProto({ ...proto, lines: Number(lines) as 3 | 5 })}
-        options={[
-          { value: "3", label: "3", title: "the open draft grows to 3 lines" },
-          { value: "5", label: "5", title: "the open draft grows to 5 lines" },
-        ]}
-      />
-    </div>
   );
 }
 

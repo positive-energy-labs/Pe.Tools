@@ -1,6 +1,6 @@
 import { Activity, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ThreadComposer, type ComposerVariant } from "./composer";
-import type { ChatHandle, PickerFace } from "./composer-head";
+import { ThreadComposer } from "./composer";
+import type { ChatHandle } from "./composer-head";
 import { EMPTY_CHAT_DRAFT, type ChatDraft } from "#/workbench/prompt";
 
 /** Visited composers retain React-local drafts until their thread is explicitly deleted. */
@@ -12,21 +12,17 @@ export function ComposerBank({
   pickers,
   state,
   work,
-  variant,
-  lines,
 }: {
   currentThreadId: string;
   deletedThreadIds: ReadonlySet<string>;
   prompt?: string;
   handle: ChatHandle;
-  /** The provider and document pickers in a face (`ComposerPickers`). */
-  pickers: (face: PickerFace) => ReactNode;
+  /** The provider and document pickers, open or at rest (`ComposerPickers`). */
+  pickers: (open: boolean) => ReactNode;
   /** The run's state beside them (`ComposerState`). */
   state: ReactNode;
   /** The box's top section: live asks and staged Work (`ComposerWork`). */
   work: ReactNode;
-  variant: ComposerVariant;
-  lines: number;
 }) {
   const [visited, setVisited] = useState(() => new Set([currentThreadId]));
   useEffect(() => {
@@ -57,8 +53,6 @@ export function ComposerBank({
               pickers={pickers}
               state={state}
               work={work}
-              variant={variant}
-              lines={lines}
               initialDraft={initialDraft}
             />
           </Activity>

@@ -21,122 +21,150 @@
 .chat-column > [data-chat-composer] [data-slot="pane"][data-pane-id="composer"]:focus-within {
   outline-color: transparent;
 }
-.chat-column > [data-composer-proto] {
-  position: absolute;
-  top: calc(var(--control-h) + var(--gutter) * 2);
-  right: calc(var(--map, 23px) + var(--gutter));
-  z-index: var(--z-popup);
-}
-
-/* The chat composer: one line at rest with the pickers' marks stacked on its left and Send on its
-   right; open while you write, the draft grows to --composer-lines and the pickers say words. */
+/* The chat composer: one line at rest, the pickers' marks stacked on its left and Send on its
+   right; open while you write, the draft grows to its content (five lines, then it scrolls) over a
+   bottom row of pickers, tools and Send. Both states are one grid template: at rest the bottom
+   row is zero tall, Send rides up into the text row by `translate` and the marks sit over its
+   left edge, so the motion is plain transitions (block sizes, translate, opacity) on one easing,
+   and the box's height moves monotonically with no second paint. The template itself never animates: Chrome
+   hands interpolated `fr` slack to the auto rows, and the box wobbled. */
 .dl-composer-box[data-compose] {
   --composer-mark: 20px;
   --composer-rest: calc(var(--composer-mark) * 2);
+  --composer-pad: calc(var(--gutter) / 2);
+  --composer-ease: var(--motion-control) ease-out;
+  /* Lets the draft's `block-size` move between one line and `auto`. */
+  interpolate-size: allow-keywords;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   grid-template-areas:
     "work work work"
-    "pick text send";
-  align-items: end;
-  column-gap: calc(var(--gutter) / 2);
-  padding: calc(var(--gutter) / 2);
-  view-transition-name: composer-box;
-}
-.dl-composer-box[data-compose][data-open] {
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  grid-template-areas:
-    "work work work"
     "text text text"
     "pick tools send";
-  row-gap: calc(var(--gutter) / 2);
+  column-gap: var(--composer-pad);
+  padding: var(--composer-pad);
 }
-.dl-composer-box[data-compose="C"][data-open] {
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-areas:
-    "work work work"
-    "pick text text"
-    "pick tools send";
-}
+/* Asks and attachments line up with the marks and Send: the box's padding is their inset. */
 [data-compose] > [data-composer-work] {
   grid-area: work;
   display: flex;
   min-width: 0;
   flex-direction: column;
+  gap: var(--composer-pad);
+  padding-bottom: var(--composer-pad);
+}
+[data-compose] > [data-composer-work] > * {
+  padding-inline: 0;
+  padding-top: 0;
 }
 [data-compose] > [data-composer-work]:empty {
   display: none;
 }
-[data-compose] > [data-composer-pickers] {
-  grid-area: pick;
+.dl-composer-box[data-compose] > textarea {
+  grid-area: text;
+  inline-size: 100%;
+  field-sizing: content;
+  min-block-size: 0;
+  block-size: var(--type-prose-line-height);
+  max-block-size: calc(var(--type-prose-line-height) * 5 + var(--composer-pad) * 2);
+  /* Centred in the rest row; room on the sides for the marks and Send riding over it. */
+  margin-block: calc((var(--composer-rest) - var(--type-prose-line-height)) / 2);
+  padding: 0 calc(var(--control-h) + var(--composer-pad)) 0
+    calc(var(--composer-mark) + var(--composer-pad));
+  overflow: hidden;
+  transition:
+    block-size var(--composer-ease),
+    margin-block var(--composer-ease),
+    padding var(--composer-ease);
+}
+.dl-composer-box[data-compose][data-open] > textarea {
+  block-size: auto;
+  margin-block: 0;
+  padding: var(--composer-pad);
+  overflow-y: auto;
+}
+/* The bottom row: each item grows from zero to its own height, so the row moves on one curve. */
+[data-compose] > [data-composer-pickers],
+[data-compose] > [data-composer-tools],
+[data-compose] > [data-composer-send] {
+  block-size: auto;
   display: flex;
   min-width: 0;
-  flex-direction: column;
+  align-items: center;
+  gap: var(--composer-pad);
+  transition:
+    block-size var(--composer-ease),
+    translate var(--composer-ease),
+    opacity var(--composer-ease),
+    visibility var(--composer-ease);
+}
+[data-compose] > [data-composer-pickers] {
+  grid-area: pick;
+  flex-wrap: wrap;
+  /* The marks restack between states; each flip fades them in where they now sit. */
+  animation: composer-marks-rest var(--composer-ease);
+}
+/* At rest the row's items are zero tall; Send overflows it, ridden up a row. */
+[data-compose]:not([data-open]) > [data-composer-tools],
+[data-compose]:not([data-open]) > [data-composer-send] {
+  block-size: 0;
   align-items: flex-start;
-  view-transition-name: composer-pickers;
+}
+/* Out of the row at rest: a closing row then measures tools and Send alone, whose heights hold,
+   instead of the restacked marks (the first frame of a close swelled by their column). */
+[data-compose]:not([data-open]) > [data-composer-pickers] {
+  /* Placed in its own (zero-tall) cell, which is its containing block: the rest row's corner. */
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-end: 0;
+  /* Drawn the rest row's height, held at zero underneath so an open grows them from nothing. */
+  block-size: 0;
+  min-block-size: var(--composer-rest);
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 0;
 }
 [data-compose]:not([data-open]) > [data-composer-pickers] [data-list-trigger] {
   width: var(--composer-mark);
   height: var(--composer-mark);
 }
-[data-compose][data-open]:not([data-compose="C"]) > [data-composer-pickers] {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: calc(var(--gutter) / 2);
-}
-[data-compose="C"][data-open] > [data-composer-pickers] {
-  align-self: stretch;
-  justify-content: flex-end;
-  gap: calc(var(--gutter) / 2);
-  padding-right: calc(var(--gutter) / 2);
-  border-right: 1px solid var(--pe-line);
-}
-[data-compose="C"][data-open] > [data-composer-pickers] [data-list-trigger] {
-  max-width: 10rem;
-}
-.dl-composer-box[data-compose] > textarea {
-  grid-area: text;
-  min-height: var(--composer-rest);
-  max-height: calc(var(--type-prose-line-height) * var(--composer-lines) + var(--gutter) / 2);
-  padding: calc(var(--gutter) / 2) calc(var(--gutter) / 2) 0;
-  overflow-y: auto;
-}
-/* At rest the draft is exactly one line, its first: no padding for a scrolled line to show in. */
-.dl-composer-box[data-compose]:not([data-open]) > textarea {
-  min-height: var(--type-prose-line-height);
-  max-height: var(--type-prose-line-height);
-  margin-block: calc((var(--composer-rest) - var(--type-prose-line-height)) / 2);
-  padding-block: 0;
-  overflow: hidden;
+[data-compose][data-open] > [data-composer-pickers] {
+  animation-name: composer-marks-open;
 }
 [data-compose] > [data-composer-tools] {
   grid-area: tools;
-  display: flex;
-  min-width: 0;
   flex-wrap: wrap;
-  align-items: center;
   justify-content: flex-end;
-  gap: calc(var(--gutter) / 2);
   color: var(--pe-ink-2);
 }
 [data-compose]:not([data-open]) > [data-composer-tools] {
-  display: none;
+  visibility: hidden;
+  opacity: 0;
 }
 [data-compose] > [data-composer-send] {
   grid-area: send;
-  display: flex;
-  align-items: center;
-  height: var(--composer-rest);
-  view-transition-name: composer-send;
 }
-[data-compose][data-open] > [data-composer-send] {
-  height: auto;
+[data-compose]:not([data-open]) > [data-composer-send] {
+  translate: 0 calc((var(--composer-rest) - var(--control-h)) / 2 - var(--composer-rest));
 }
-::view-transition-group(composer-box),
-::view-transition-group(composer-pickers),
-::view-transition-group(composer-send) {
-  animation-duration: var(--motion-control, 120ms);
+/* Two names, one fade: changing the name restarts the animation on every flip. */
+@keyframes composer-marks-rest {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes composer-marks-open {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dl-composer-box[data-compose],
+  .dl-composer-box[data-compose] > * {
+    transition: none;
+    animation: none;
+  }
 }
 .chat-column [data-annotation="chat"] {
   padding-bottom: calc(var(--chat-composer-height, 0px) + var(--gutter));

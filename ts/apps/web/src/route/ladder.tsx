@@ -1,7 +1,7 @@
 /** One popup per Situation ladder: rungs as plain data, a pick binds its rung and advances.
  *  `word` is the terminal word in a sentence (dotted held, dashed derived, caution incomplete);
- *  `control` is a framed trigger beside buttons that reads the whole path; `brief` is that frame
- *  reading the mark and the second rung only; `icon` is the mark alone (the path is its title). */
+ *  `control` is a framed trigger beside buttons that reads the whole path; `icon` is the mark alone
+ *  (the path is its title). */
 import { useRef, useState, type ReactNode } from "react";
 
 import type { Collection, Level } from "@pe/kit/lang/collection";
@@ -57,7 +57,7 @@ export function Ladder({
   closeOn,
 }: {
   levels: readonly Rung[];
-  face?: "word" | "control" | "brief" | "icon";
+  face?: "word" | "control" | "icon";
   /** A glyph that stands for the first rung (the composer's provider mark): the complete ladder
    *  reads `mark second · third` instead of `first › second › third`. */
   mark?: ReactNode;
@@ -88,11 +88,6 @@ export function Ladder({
   const word =
     face === "icon" ? (
       mark
-    ) : face === "brief" ? (
-      <>
-        {mark}
-        {complete ? shown[1]?.label : null}
-      </>
     ) : !complete ? (
       levels[unbound]!.placeholder
     ) : mark ? (
@@ -134,7 +129,7 @@ export function Ladder({
   return (
     <ListPopup<Hit>
       anchor="trigger"
-      face={face === "brief" ? "control" : face}
+      face={face}
       trigger={word}
       title={title}
       disabled={disabled}
