@@ -1721,6 +1721,25 @@ test("door 6: a human PUT on your open lifetime stamps rw; a move retires it; a 
   expect(cleared.json.head.grant).toBeNull();
 });
 
+test("door 6: moving a live grant retires it the way a revoke does, so queued work stops", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(T0);
+  bindControl(peaAcquiredCopy);
+  const call = caller(host());
+  const id = "grant-door-6-move";
+  const retired: string[] = [];
+  const release = onRevoke((thread, grant) => retired.push(`${thread}:${grant.lifetime.openId}`));
+  await call("PUT", `/pe/scope/${id}`, { defaultTarget: yours, expectedRevision: 0 });
+  expect(retired).toEqual([]);
+  const named = { kind: "named", session: "S1", address: "C:/Models/A.rvt" };
+  await call("PUT", `/pe/scope/${id}`, { defaultTarget: named, expectedRevision: 1 });
+  expect(retired).toEqual([`${id}:${yours.ref.openId}`]);
+  // No live grant remains to retire.
+  await call("PUT", `/pe/scope/${id}`, { defaultTarget: null, expectedRevision: 2 });
+  expect(retired).toHaveLength(1);
+  release();
+});
+
 test("door 6 for Pea: only its own thread, only Pea's documents; anonymous cannot write a head", async () => {
   bindControl(peaAcquiredCopy);
   const threads = host();

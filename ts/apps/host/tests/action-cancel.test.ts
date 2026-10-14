@@ -627,3 +627,48 @@ test.each([false, true])(
       }),
     ),
 );
+
+test("F-c revoke stops a begun step that has not reached the bridge queue yet", () =>
+  lane(({ owner, outgoing, fixture }) =>
+    Effect.gen(function* () {
+      const bridge = yield* RevitBridge;
+      const intent = fixture.intent("revoke-before-queue");
+      const target = intent.destination.ref;
+      const head = revokeHead(target);
+      bindControl({ heads: () => head });
+      const unbind = bindRevoke(owner, bridge);
+      try {
+        const caller = pea();
+        // The step has begun in the journal, and awaits (as a script step does while it validates
+        // its session) before it reaches the bridge; the revoke lands in that gap.
+        const inGap = Promise.withResolvers<void>();
+        const leaveGap = Promise.withResolvers<void>();
+        const row = yield* Effect.promise(() =>
+          owner.admit(
+            { ...intent, caller, basis: admitCrossing(caller, intent.destination, "/actions") },
+            async () => null,
+            (execution) =>
+              execution.step("native", "gapped", {}, async (id) => {
+                inGap.resolve();
+                await leaveGap.promise;
+                return nativeValue(bridge, target, "gapped", id);
+              }),
+          ),
+        );
+        yield* Effect.promise(() => inGap.promise);
+        head.grant!.revoked = { at: new Date().toISOString() };
+        emitRevoke("thread-1", head.grant!);
+        yield* Effect.sleep("50 millis");
+        leaveGap.resolve();
+        yield* Effect.sleep("50 millis");
+        expect(yield* Queue.size(outgoing)).toBe(0);
+        const result = yield* Effect.promise(() => owner.wait(row.id));
+        expect(result.steps).toMatchObject([
+          { key: "gapped", state: "failed", notDispatched: true },
+        ]);
+      } finally {
+        unbind();
+        bindControl({ heads: null });
+      }
+    }),
+  ));

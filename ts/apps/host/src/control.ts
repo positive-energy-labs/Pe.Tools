@@ -538,7 +538,7 @@ export function live(basis: Basis | null, door = "step begin"): Refused | null {
 
 type RevokeListener = (thread: string, grant: HeadGrant) => void;
 const revokeListeners = new Set<RevokeListener>();
-/** E2's queue sweep registers here; the head store fires it when a human revokes. */
+/** E2's queue sweep registers here; the head store fires it when a grant ends: revoked, or retired by a head move. */
 export function onRevoke(listener: RevokeListener): () => void {
   revokeListeners.add(listener);
   return () => void revokeListeners.delete(listener);
