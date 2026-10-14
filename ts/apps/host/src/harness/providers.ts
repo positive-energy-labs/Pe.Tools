@@ -503,6 +503,33 @@ const CONSOLE_OPEN_MS = 5_000;
 // 2026-10-12: `detached: true` on win32 is DETACHED_PROCESS, a child with no console, so interactive
 // installers and logins had nowhere to draw and exited at once. `start` gives PowerShell a fresh
 // visible console; `/wait` keeps this promise open until it closes.
+/**
+ * The console's script. 2026-10-14 (field, 0.7.24): Codex's install.ps1 resolves a junction it
+ * created, and Windows RedirectionGuard refuses junctions a non-admin made ("untrusted mount
+ * point"); an admin console's junctions are trusted, so that one failure offers an elevated re-run
+ * and always leaves the command on screen.
+ */
+export function consoleScript(command: string) {
+  const quoted = command.replaceAll("'", "''");
+  return [
+    `try { ${command}; if ($LASTEXITCODE) { throw "exited $LASTEXITCODE" } } catch {`,
+    `  Write-Host $_`,
+    `  if ("$_" -match 'untrusted mount point') {`,
+    `    Write-Host ''`,
+    `    Write-Host 'Windows refused a folder link this installer made as a non-admin (RedirectionGuard).'`,
+    `    Write-Host 'Run it from an admin PowerShell:'`,
+    `    Write-Host ''`,
+    `    Write-Host '  ${quoted}'`,
+    `    Write-Host ''`,
+    `    if ((Read-Host '[A] open an admin PowerShell and run it now, [Enter] close') -eq 'A') {`,
+    `      try { Start-Process powershell.exe -Verb RunAs -Wait -ArgumentList '-NoExit','-Command','${quoted}' }`,
+    `      catch { Write-Host "Could not open an admin PowerShell: $_"; Read-Host 'Press Enter to close' }`,
+    `    }`,
+    `  } else { Read-Host 'Press Enter to close' }`,
+    `}`,
+  ].join("\n");
+}
+
 function openConsole(
   command: string,
   env: Record<string, string | undefined>,
@@ -510,11 +537,7 @@ function openConsole(
 ): Promise<void> {
   const scriptPath = join(productScratchPath(), `pe-tools-console-${randomUUID()}.ps1`);
   mkdirSync(dirname(scriptPath), { recursive: true });
-  writeFileSync(
-    scriptPath,
-    `try { ${command}; if ($LASTEXITCODE) { throw "exited $LASTEXITCODE" } } catch { Write-Host $_; Read-Host 'Press Enter to close' }`,
-    "utf8",
-  );
+  writeFileSync(scriptPath, consoleScript(command), "utf8");
   const child = spawn(
     "cmd.exe",
     [
