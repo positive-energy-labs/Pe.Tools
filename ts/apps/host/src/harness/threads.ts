@@ -67,7 +67,7 @@ import {
 import { Effect } from "effect";
 import { z } from "zod";
 import { openAdapter, stopChild } from "./adapter.ts";
-import { accessModes, sessionOffer, type Providers } from "./providers.ts";
+import { accessModes, isAuthRefusal, sessionOffer, type Providers } from "./providers.ts";
 
 /** The thread wire of ADR 0015; contract and route list in `@pe/agent-contracts` `harness-thread.ts`. */
 
@@ -868,14 +868,18 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           if (t.live !== connecting || t.stopped) return;
           t.live = null;
           t.session = "closed";
-          options.providers.invalidate(
-            t.meta.providerId,
-            "The harness failed to start; probe again.",
-          );
+          const expired = isAuthRefusal(error) ? options.providers.expire(t.meta.providerId) : null;
+          if (!expired)
+            options.providers.invalidate(
+              t.meta.providerId,
+              "The harness failed to start; probe again.",
+            );
           append(t, {
             kind: "error",
             turnId: t.running,
-            message: `${t.meta.harness} harness failed to start: ${String(error?.message ?? error)}`,
+            message:
+              expired ??
+              `${t.meta.harness} harness failed to start: ${String(error?.message ?? error)}`,
           });
         },
       );
@@ -1068,7 +1072,9 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     } catch (error) {
       // A stopped thread's open turn is ended by restart recovery, not by "connection closed".
       if (!t.stopped) {
-        options.providers.invalidate(t.meta.providerId, "The harness turn failed; probe again.");
+        const expired = isAuthRefusal(error) ? options.providers.expire(t.meta.providerId) : null;
+        if (!expired)
+          options.providers.invalidate(t.meta.providerId, "The harness turn failed; probe again.");
         const raw = String((error as Error)?.message ?? error);
         const failure =
           options.providers.get(t.meta.providerId)?.auth.kind === "endpoint"
@@ -1077,7 +1083,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         append(t, {
           kind: "error",
           turnId,
-          message: failure?.message ?? raw,
+          message: expired ?? failure?.message ?? raw,
           ...(failure ? { failure } : {}),
         });
       }

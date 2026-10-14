@@ -9,7 +9,7 @@ import type { TraitOption } from "@pe/agent-contracts";
 import { Ladder, type Rung } from "#/route/ladder";
 import { ProviderMark } from "#/components/lang/provider-mark";
 import { useWorkbench } from "#/workbench/provider";
-import { isReady, readinessSub } from "#/workbench/provider/providers";
+import { isReady, readinessSub, repairWord } from "#/workbench/provider/providers";
 import type { GrantView } from "./scope";
 
 /** A two-way on/off select is a toggle, as a boolean is. */
@@ -98,16 +98,32 @@ export function HeadLadder() {
   const go = useDestination();
   const head = useHead();
   const [open, setOpen] = useState(false);
+  const { providers } = useWorkbench();
+  // The picker is where a missing harness is noticed, so it carries the one press that repairs it.
   const manage = (
-    <Button
-      label="Manage providers"
-      onClick={() => {
-        setOpen(false);
-        go(settingsDestination("providers"));
-      }}
-    >
-      Manage providers
-    </Button>
+    <>
+      {head.list.map((provider) => {
+        const word = !isReady(provider) && repairWord(provider);
+        return word ? (
+          <Button
+            key={provider.id}
+            label={`${word} ${provider.name}`}
+            onClick={() => void providers.openLogin(provider.id)}
+          >
+            {`${word} ${provider.name}`}
+          </Button>
+        ) : null;
+      })}
+      <Button
+        label="Manage providers"
+        onClick={() => {
+          setOpen(false);
+          go(settingsDestination("providers"));
+        }}
+      >
+        Manage providers
+      </Button>
+    </>
   );
   const fixed = head.bound ? "fork to change" : undefined;
   const modelName = head.modelId

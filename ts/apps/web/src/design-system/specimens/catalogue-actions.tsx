@@ -4,6 +4,7 @@ import { ActionGroup, Button } from "@pe/kit/lang/button";
 import { CounterExample, Demo, Gap } from "#/design-system/exhibit";
 
 import { ActionDemoCatalogue } from "../action-demo-catalogue";
+import { FirstRunSeedsDemo, UpdateStatesDemo } from "../first-run-seeds";
 import { MachineSeedsDemo } from "../machine-seeds";
 
 const noop = () => {};
@@ -13,6 +14,8 @@ export function CatalogueActions() {
     <>
       <ActionDemoCatalogue />
       <MachineSeedsDemo />
+      <UpdateStatesDemo />
+      <FirstRunSeedsDemo />
       <Demo
         label="Button · ActionGroup"
         consumers="every control that acts: theme toggle, popover triggers, tabs, arming strips, document actions, navigation"

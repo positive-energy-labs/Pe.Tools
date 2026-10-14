@@ -155,6 +155,7 @@ new AgentSideConnection(
     cancel: () => cancelled(),
     async prompt({ sessionId, prompt }) {
       const text = prompt.map((block) => block.text ?? "").join("");
+      if (text === "auth-expired") throw RequestError.authRequired();
       if (text === "credit-refusal")
         throw new Error(
           JSON.stringify({
