@@ -16,7 +16,7 @@ import { sdkSessions } from "./native-receipt-fixture.ts";
 import { fakeRuntimeHost } from "../../../packages/mcps/tests/runtime-host-fixture.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { callerOf, writeTerminalContext } from "../src/control.ts";
-import { withInvocationContext } from "@pe/mcps/context";
+import { withInvocationContext } from "@pe/runtime/context";
 import { resolveLaneAndRoot } from "@pe/mcps";
 
 test("untargeted /ops without bridge attachments returns local operations without SDK discovery", async () => {

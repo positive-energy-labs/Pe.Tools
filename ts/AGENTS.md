@@ -51,7 +51,9 @@ Names may change, but the authority boundaries should not blur.
 
 There is no separate dev agent surface anymore (`peco` was deleted): the SDK `pe-revit` CLI/MCP owns execution-loop and test mechanics, the `pea` MCP server owns product tools, and `pea --prompt` is the headless black-box Pea probe.
 
-`@pe/runtime` is the thin shared runtime helper package below Pea and tooling. Keep it limited to route-workspace state, resource streams, and analytics that need Pe-owned policy. Do not rebuild harness loop, model, mode, thread, or ACP surfaces here; those live in `apps/host/src/harness/`.
+`@pe/runtime` is the thin shared runtime helper package below Pea and tooling. Keep it limited to route-workspace state, resource streams, invocation scope, runtime-owner resolution, and analytics that need Pe-owned policy. Do not rebuild harness loop, model, mode, thread, or ACP surfaces here; those live in `apps/host/src/harness/`.
+
+Package direction is `contracts <- runtime <- mcps/host/web`. Contracts and runtime must not import MCP or app adapters through package names or relative paths. Contracts must not depend on runtime. `@pe/runtime/context` owns invocation scope, caller-context transport, and its browser projection. `@pe/runtime/runtime-owner` resolves the executable runtime owner. `PeaRuntimeCapabilities` belongs to runtime. Host code must obtain these from runtime rather than MCP. The `package-direction.guard.test.ts` repo guard enforces these edges. The host may import MCP server creation and transport from `@pe/mcps/server`, and `peaProductTools` for MCP instrumentation. Its existing catalog, route registration, and skill publication imports remain adapter composition; they do not grant MCP ownership of invocation context or runtime capabilities.
 
 The harness child's cwd (the world root) is the product home (`productHomePath` in `@pe/host-contracts/product-paths`: `PE_TOOLS_PRODUCT_HOME`, else `Documents\Pe.Tools`; the Revit side reads the same variable). Pea operates inside that product workspace, while scripting tools can continue to default to the Host/Revit scripting workspace key such as `workspaces/default`.
 

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { withInvocationContext, type InvocationContext } from "./shared/invocation-context.ts";
+import { withInvocationContext, type InvocationContext } from "@pe/runtime/context";
 /** Pea's tool registration shared by stdio and HTTP transports. */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { peaProductTools } from "./pea/index.ts";

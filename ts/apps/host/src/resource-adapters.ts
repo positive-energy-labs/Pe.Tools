@@ -1,4 +1,4 @@
-import { invocationContext, hostFetch as fetch } from "@pe/mcps/context";
+import { invocationContext, hostFetch as fetch } from "@pe/runtime/context";
 import { Effect } from "effect";
 import { readingKey, actionStatusSchema, type ReadingFrame } from "@pe/agent-contracts";
 import { OwnerReads, resourceSnapshot, type ResourceObserver, type OwnerValue } from "@pe/runtime";

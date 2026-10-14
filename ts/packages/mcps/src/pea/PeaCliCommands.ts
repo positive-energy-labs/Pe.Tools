@@ -1,4 +1,4 @@
-import { contextFetch } from "../shared/invocation-context.ts";
+import { contextFetch } from "@pe/runtime/context";
 import { createPeClient, isPeRouteId } from "@pe/agent-contracts/pe-api";
 import { actionBasesSchema } from "@pe/agent-contracts";
 import { readCapabilityIntent, runCapability, type AdmissionContext } from "../shared/admission.ts";

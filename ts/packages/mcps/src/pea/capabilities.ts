@@ -1,5 +1,5 @@
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
-import { contextFetch as fetch } from "#invocation-context";
+import { contextFetch as fetch } from "@pe/runtime/context";
 import {
   instancesReading,
   scheduleReads,

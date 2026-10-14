@@ -27,7 +27,7 @@ import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
 import { sdkSessions, sdkEnvelope, originalProcess } from "./native-receipt-fixture.ts";
 import { detailResponse } from "./schedule-fixture.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
-import { withInvocationContext } from "@pe/mcps/context";
+import { withInvocationContext } from "@pe/runtime/context";
 import type { Caller } from "@pe/agent-contracts";
 import { human, pea } from "./callers.ts";
 

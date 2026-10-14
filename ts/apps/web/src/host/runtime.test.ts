@@ -29,7 +29,7 @@ test("HTTP and SSE retain the page's build owner across a changed destination", 
 
 test("the browser contextFetch carries the runtime owner to its own origin and to no other", async () => {
   const { contextFetch } =
-    await import("../../../../packages/mcps/src/shared/invocation-context.browser");
+    await import("../../../../packages/runtime/src/invocation-context.browser");
   const fetcher = vi.fn().mockResolvedValue(new Response());
   vi.stubGlobal("fetch", fetcher);
   try {

@@ -12,11 +12,11 @@ import { createReceiptExport, type ReceiptExport } from "../src/receipt-export.t
 import { HttpRouter } from "effect/unstable/http";
 import { buildCapabilities } from "@pe/mcps";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
-import type { InvocationContext } from "@pe/mcps/context";
+import type { InvocationContext } from "@pe/runtime/context";
 import { createPeaMcpServer } from "@pe/mcps/server";
 import { createMcpDoor, mcpRoute } from "../src/mcp-route.ts";
 import { requestIdentityLayer, type IdentityOptions } from "../src/request-identity.ts";
-import { withInvocationContext } from "@pe/mcps/context";
+import { withInvocationContext } from "@pe/runtime/context";
 import { createServer, request as httpRequest } from "node:http";
 import { once } from "node:events";
 import { callerOf, mintContext, retireContext } from "../src/control.ts";

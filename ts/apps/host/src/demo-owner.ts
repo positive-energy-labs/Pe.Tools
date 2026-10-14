@@ -28,7 +28,7 @@ import {
 } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
 import { ActionJournal } from "./action-journal.ts";
-import { withInvocationContext } from "@pe/mcps/context";
+import { withInvocationContext } from "@pe/runtime/context";
 import { TakeoffCaptures } from "./takeoff-captures.ts";
 import { RevitBridge, BridgeError, type HostBridgeEvent } from "./bridge.ts";
 import { makeCallRoute, type CallRouteDispatch } from "./call-route.ts";

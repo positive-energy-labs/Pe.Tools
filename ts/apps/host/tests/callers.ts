@@ -1,5 +1,5 @@
 import type { Caller } from "@pe/agent-contracts";
-import { withInvocationContext } from "@pe/mcps/context";
+import { withInvocationContext } from "@pe/runtime/context";
 import type { Crossing } from "../src/action-journal.ts";
 
 /** Host-minted callers for fixtures that mount routes without the identity middleware. */

@@ -13,7 +13,7 @@ import type {
   ThreadHead,
 } from "@pe/agent-contracts";
 import { emptyThreadHead } from "@pe/agent-contracts";
-import { withInvocationContext } from "@pe/mcps/context";
+import { withInvocationContext } from "@pe/runtime/context";
 import { human } from "./callers.ts";
 import { admitCrossing, bindControl, onRevoke, Refused } from "../src/control.ts";
 import { createProviders } from "../src/harness/providers.ts";
