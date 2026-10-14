@@ -1,21 +1,12 @@
 import type { HarnessId } from "@pe/agent-contracts";
 import { existsSync, readdirSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 
-/** A physical package directory: OpenAI's installer owns its own junctions and is left intact. */
-export function codexPackagePath(env: NodeJS.ProcessEnv): string {
-  return join(
-    env.LOCALAPPDATA ?? join(env.USERPROFILE ?? homedir(), "AppData", "Local"),
-    "Programs",
-    "Pe.Tools",
-    "Harnesses",
-    "Codex",
-  );
-}
-
-/** Full official package, including sandbox/code-mode helpers. No npm, admin, or junctions. */
-export function installCommand(harness: HarnessId): string {
+/**
+ * Full official package, including sandbox/code-mode helpers. No npm, admin, or junctions.
+ * `codexPackage` is a physical directory, never an installer junction.
+ */
+export function installCommand(harness: HarnessId, codexPackage: string): string {
   if (harness === "claude")
     return String.raw`
 $installer = Join-Path $env:TEMP ('pea-claude-' + [guid]::NewGuid() + '.ps1')
@@ -34,7 +25,7 @@ $ProgressPreference = 'SilentlyContinue'
 if (-not [Environment]::Is64BitOperatingSystem) { throw 'Codex requires 64-bit Windows.' }
 $arch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
 $target = switch ($arch) { 'ARM64' { 'aarch64' } 'AMD64' { 'x86_64' } default { throw "Unsupported Windows architecture: $arch" } }
-$destination = Join-Path $env:LOCALAPPDATA 'Programs\Pe.Tools\Harnesses\Codex'
+$destination = '${codexPackage.replaceAll("'", "''")}'
 $parent = Split-Path -Parent $destination
 New-Item -ItemType Directory -Force -Path $parent | Out-Null
 $work = Join-Path $parent ('.install-' + [guid]::NewGuid())

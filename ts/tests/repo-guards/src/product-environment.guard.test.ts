@@ -40,12 +40,20 @@ const resolvers = new Set([
 const allowed: Record<string, { line: string; reason: string }[]> = {
   "ts/apps/host/src/harness/adapter.ts": [
     {
-      line: 'const local = env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local");',
-      reason: "Locates the third-party Codex executable.",
+      line: "const home = env.USERPROFILE ?? homedir();",
+      reason: "Locates the third-party Claude and Codex installs, which own their own folders.",
     },
     {
-      line: '? join(homedir(), ".local", "bin", "claude.exe")',
-      reason: "Locates the third-party Claude executable.",
+      line: 'const local = env.LOCALAPPDATA ?? join(home, "AppData", "Local");',
+      reason:
+        "Locates OpenAI's official Codex install; the Pea-owned package resolves through productRoot.",
+    },
+  ],
+  "ts/apps/host/src/harness/install.ts": [
+    {
+      line: "$installer = Join-Path $env:TEMP ('pea-claude-' + [guid]::NewGuid() + '.ps1')",
+      reason:
+        "Downloads Anthropic's installer script to a throwaway OS temp file; not product data.",
     },
   ],
   "ts/apps/host/src/harness/user-shell.ts": [
