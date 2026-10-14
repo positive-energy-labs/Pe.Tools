@@ -332,6 +332,7 @@ test("thread and update adapters keep opaque joins and honest endings, with noti
       kind: "settled",
       requestId,
       state: "failed",
+      version: null,
       detail: "private stderr",
     });
     await expect.poll(async () => (await f.journal.read({ kinds: ["usage"] })).length).toBe(1);
@@ -339,6 +340,7 @@ test("thread and update adapters keep opaque joins and honest endings, with noti
       kind: "settled",
       requestId,
       state: "failed",
+      version: null,
       detail: "private stderr",
     });
     await f.exporter.close();

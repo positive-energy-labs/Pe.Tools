@@ -68,13 +68,21 @@ export function StartupSettings({
         Windows Settings › Apps › Startup owns this switch. The installed host reports its current
         value here.
       </p>
+      {host.surface === "tray" && (
+        <p className="text-ink-2">
+          Pages the tray does not hold open in an Edge app window. To install Pe.Tools as an app,
+          open Settings › Host in that window.
+        </p>
+      )}
       {!fixture && !host.native && host.surface !== "tray" && (
         <>
           <p className="text-ink-2">
             {!edge
               ? "Open this address in Microsoft Edge and install there. Other Chromium browsers create separate Windows app entries. "
               : host.surface === "pwa"
-                ? "This is an app window. "
+                ? host.overlay
+                  ? "This is an app window. "
+                  : "This is an app window under Edge's title bar. If the bar has a chevron beside Minimize, click it once to hide the bar; with no chevron, Edge installed it without the app manifest: uninstall it in Edge and use Install to taskbar again. "
                 : "Install Pe.Tools in this Edge profile. "}
             {!edge
               ? ""

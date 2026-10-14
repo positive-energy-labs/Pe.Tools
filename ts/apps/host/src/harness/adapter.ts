@@ -1,23 +1,23 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { closeSync, openSync, realpathSync, statSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { isSea } from "node:sea";
 import { Readable, Writable } from "node:stream";
 import { ClientSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
-import hostPackage from "../../package.json" with { type: "json" };
-import type { HarnessId } from "@pe/agent-contracts";
+import type { HarnessId, ProviderRefusal } from "@pe/agent-contracts";
 import {
   HOST_CONTEXT_VARIABLE,
   hostProcessIdentity,
   productInstallLayout,
 } from "@pe/host-contracts/contracts";
 import { checkoutLayout } from "@pe/host-contracts/service-identity";
+import { codexPackagePath, codexStandaloneRelease, installCommand } from "./install.ts";
 
 /**
  * One row per harness: the ACP adapter package the host spawns, the CLI the user signs in with, and
- * the official installer for that CLI. Login and install run in a console the user can see.
+ * its official installation source. Login and install run in a console the user can see.
  */
 export const adapters: Record<
   HarnessId,
@@ -28,14 +28,14 @@ export const adapters: Record<
     pkg: "@agentclientprotocol/claude-agent-acp",
     cli: "claude",
     login: "claude auth login",
-    install: "irm https://claude.ai/install.ps1 | iex",
+    install: installCommand("claude"),
   },
   codex: {
     title: "Codex",
     pkg: "@agentclientprotocol/codex-acp",
     cli: "codex",
     login: "codex login",
-    install: "irm https://chatgpt.com/codex/install.ps1 | iex",
+    install: installCommand("codex"),
   },
 };
 
@@ -47,12 +47,13 @@ export const adapters: Record<
 export function adapterLaunch(
   harness: HarnessId,
   env: NodeJS.ProcessEnv = process.env,
+  detail?: ProviderRefusal,
 ): {
   command: string;
   args: string[];
   env: Record<string, string>;
 } {
-  const cli = adapterCli(harness, env);
+  const cli = adapterCli(harness, env, detail);
   // A SEA has no fallback CLI: without this path the codex adapter would re-run Pe.Host.exe itself.
   if (isSea() && !isAbsolute(cli))
     throw new Error(`${adapters[harness].title} is not installed (no ${cli}.exe found).`);
@@ -76,8 +77,9 @@ export function openAdapter(
   cwd: string,
   env: Record<string, string | undefined>,
   client: ConstructorParameters<typeof ClientSideConnection>[0],
+  detail?: ProviderRefusal,
 ) {
-  const launch = adapterLaunch(harness, env);
+  const launch = adapterLaunch(harness, env, detail);
   const child = spawn(launch.command, launch.args, {
     cwd,
     stdio: ["pipe", "pipe", "pipe"],
@@ -97,28 +99,180 @@ export function openAdapter(
 }
 
 /**
- * The user's own CLI (host ledger 2026-10-08, H1): where the official installer puts it, else the
- * first `<cli>.exe` on PATH, else the bare name (not installed). Only native exes count, because
+ * The user's CLI: official install, Pea's downloaded package, then shell/current registry PATH.
+ * The bare name means not installed. Only native exes count, because
  * the Claude SDK spawns its executable without a shell.
  */
-export function adapterCli(harness: HarnessId, env: NodeJS.ProcessEnv = process.env): string {
-  const local = env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local");
+export function adapterCli(
+  harness: HarnessId,
+  env: NodeJS.ProcessEnv = process.env,
+  detail?: ProviderRefusal,
+): string {
+  const tried = new Set<string>();
+  const inspect = (path: string): boolean => {
+    if (tried.has(path.toLowerCase())) return false;
+    tried.add(path.toLowerCase());
+    try {
+      const realPath = realpathSync(path);
+      const stat = statSync(realPath);
+      if (!stat.isFile()) throw new Error("not a file");
+      closeSync(openSync(path, "r"));
+      if (detail) {
+        detail.candidates.push({ path, reason: "readable executable", win32Error: null });
+        detail.resolvedExecutable = {
+          path,
+          realPath,
+          size: stat.size,
+          modifiedAt: stat.mtime.toISOString(),
+        };
+      }
+      return true;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      detail?.candidates.push({
+        path,
+        reason:
+          code === "ENOENT"
+            ? "missing or inaccessible reparse target (ENOENT)"
+            : `inaccessible or reparse traversal failed: ${code ?? String(error)}`,
+        win32Error: null,
+      });
+      return false;
+    }
+  };
+  const finish = (cli: string) => {
+    if (detail && process.platform === "win32") explainWindowsFailures(detail, env);
+    return cli;
+  };
+  const home = env.USERPROFILE ?? homedir();
+  const local = env.LOCALAPPDATA ?? join(home, "AppData", "Local");
   const official =
     harness === "claude"
-      ? join(homedir(), ".local", "bin", "claude.exe")
+      ? join(home, ".local", "bin", "claude.exe")
       : join(local, "Programs", "OpenAI", "Codex", "bin", "codex.exe");
-  if (existsSync(official)) return official;
-  const found = spawnSync(
-    hostPackage.config.windowsBinaries.where,
-    [`${adapters[harness].cli}.exe`],
-    {
+  if (inspect(official)) return finish(official);
+  const packaged = join(codexPackagePath(env), "bin", "codex.exe");
+  if (harness === "codex" && inspect(packaged)) return finish(packaged);
+  const release = harness === "codex" ? codexStandaloneRelease(home) : null;
+  if (release && inspect(release)) return finish(release);
+  // Read on every resolution, including the probe after a console closes. The parent PATH
+  // predates installs; `where` also searches cwd, which is not an installation authority.
+  const registry =
+    process.platform === "win32"
+      ? [
+          "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+          "HKCU\\Environment",
+        ].map((key) => {
+          const result = spawnSync(
+            join(env.SystemRoot ?? "C:\\Windows", "System32", "reg.exe"),
+            ["query", key, "/v", "Path"],
+            { encoding: "utf8", windowsHide: true, timeout: 5000 },
+          );
+          return result.status === 0
+            ? (/^\s*Path\s+REG_(?:EXPAND_)?SZ\s+(.*)$/im.exec(result.stdout)?.[1] ?? "")
+            : "";
+        })
+      : [];
+  const inherited = Object.entries(env).find(([key]) => key.toUpperCase() === "PATH")?.[1] ?? "";
+  for (const entry of [inherited, ...registry].join(";").split(";")) {
+    const folder = entry
+      .trim()
+      .replace(/^"|"$/g, "")
+      .replace(
+        /%([^%]+)%/g,
+        (raw, name: string) =>
+          Object.entries(env).find(([key]) => key.toLowerCase() === name.toLowerCase())?.[1] ?? raw,
+      );
+    if (!isAbsolute(folder)) continue;
+    const candidate = join(folder, `${adapters[harness].cli}.exe`);
+    if (inspect(candidate)) return finish(candidate);
+  }
+  if (detail && process.platform === "win32") {
+    // Diagnostic only: cwd matches from `where` are not an installation authority.
+    const command = join(env.SystemRoot ?? "C:\\Windows", "System32", "where.exe");
+    const result = spawnSync(command, [`${adapters[harness].cli}.exe`], {
+      env,
       encoding: "utf8",
       windowsHide: true,
       timeout: 5000,
+    });
+    detail.lookup = {
+      command,
+      status: result.status,
+      reason: result.error?.message ?? (result.stderr.trim() || "completed"),
+    };
+    for (const path of result.stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(isAbsolute)) {
+      if (!tried.has(path.toLowerCase()))
+        detail.candidates.push({
+          path,
+          reason: "where.exe match outside the explicit install/PATH candidates; not selected",
+          win32Error: null,
+        });
+    }
+  }
+  return finish(adapters[harness].cli);
+}
+
+/** Node's errno loses the Win32 code, including reparse failures. Read it from File.Open's HRESULT. */
+function explainWindowsFailures(detail: ProviderRefusal, env: NodeJS.ProcessEnv) {
+  const failed = detail.candidates.filter(
+    (candidate) => candidate.path !== detail.resolvedExecutable?.path,
+  );
+  if (!failed.length) return;
+  const result = spawnSync(
+    join(
+      env.SystemRoot ?? "C:\\Windows",
+      "System32",
+      "WindowsPowerShell",
+      "v1.0",
+      "powershell.exe",
+    ),
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      String.raw`
+$paths = ConvertFrom-Json ([Console]::In.ReadToEnd())
+@($paths | ForEach-Object {
+  try {
+    $file = [IO.File]::Open($_, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]7)
+    $file.Dispose()
+    @{ path = $_; code = $null; reason = 'File.Open succeeded on diagnostic recheck' }
+  } catch {
+    $exception = $_.Exception
+    while ($exception.InnerException) { $exception = $exception.InnerException }
+    $code = if (($exception.HResult -band 0x7fff0000) -eq 0x00070000) { $exception.HResult -band 0xffff } else { $null }
+    @{ path = $PSItem.TargetObject; code = $code; reason = $exception.Message }
+  }
+}) | ConvertTo-Json -Compress
+`,
+    ],
+    {
       env,
+      input: JSON.stringify(failed.map((candidate) => candidate.path)),
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 5000,
     },
   );
-  return found.status === 0 ? found.stdout.split(/\r?\n/)[0]!.trim() : adapters[harness].cli;
+  try {
+    if (result.status !== 0)
+      throw new Error(
+        result.error?.message ?? `PowerShell exited ${result.status}: ${result.stderr.trim()}`,
+      );
+    const rows = JSON.parse(result.stdout);
+    for (const [index, candidate] of failed.entries()) {
+      const row = (Array.isArray(rows) ? rows : [rows])[index];
+      candidate.win32Error = typeof row?.code === "number" ? row.code : null;
+      candidate.reason += `; ${row?.reason ?? "native check returned no result"}`;
+    }
+  } catch (error) {
+    for (const candidate of failed)
+      candidate.reason += `; Win32 check unavailable: ${String(error)}`;
+  }
 }
 
 export function adapterLogin(harness: HarnessId, cli = adapterCli(harness)): string {

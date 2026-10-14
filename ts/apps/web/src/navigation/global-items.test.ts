@@ -4,9 +4,9 @@ import { destinationDetail, destinationLabel, globalItems } from "./global-items
 import { matches } from "./model";
 import { navigationSnapshotSchema } from "@pe/agent-contracts";
 
-test("global navigation includes Machine without adding it to the engineering directory", () => {
+test("global navigation finds this machine under Settings, with no Machine route", () => {
   const items = globalItems(null, "Tools");
-  expect(items.find((item) => item.url === "/machine")?.label).toBe("Machine");
+  expect(items.find((item) => item.url === "/machine")).toBeUndefined();
   expect(items.find((item) => item.url === "/settings")?.label).toBe("Settings");
   expect(globalItems(null, "Pea threads")).toEqual([]);
 });

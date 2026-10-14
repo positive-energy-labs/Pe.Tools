@@ -18,17 +18,16 @@ const canonicalFixtures: Record<
   "/families": { canonicalReviewUrl: "/families?demo=apply", fixtureKind: "demo-fixture" },
   "/family": { canonicalReviewUrl: "/family?demo=apply", fixtureKind: "demo-fixture" },
   "/grilles": { canonicalReviewUrl: "/grilles", fixtureKind: "inherent-static" },
-  "/machine": {
-    canonicalReviewUrl: "/machine?shell=tray&demo=blocked-plan",
-    fixtureKind: "demo-fixture",
-  },
   "/open": { canonicalReviewUrl: "/open?demo=refresh", fixtureKind: "demo-fixture" },
   "/ops": { canonicalReviewUrl: "/ops", fixtureKind: "live-route" },
   "/parameter-links": { canonicalReviewUrl: "/parameter-links", fixtureKind: "live-route" },
   "/rooms": { canonicalReviewUrl: "/rooms", fixtureKind: "live-route" },
   "/pods": { canonicalReviewUrl: "/pods?demo=browse", fixtureKind: "demo-fixture" },
   "/schedules": { canonicalReviewUrl: "/schedules?demo=apply", fixtureKind: "demo-fixture" },
-  "/settings": { canonicalReviewUrl: "/settings", fixtureKind: "live-route" },
+  "/settings": {
+    canonicalReviewUrl: "/settings?shell=tray&demo=blocked-plan",
+    fixtureKind: "demo-fixture",
+  },
   "/takeoffs": { canonicalReviewUrl: "/takeoffs?demo=sync", fixtureKind: "demo-fixture" },
   "/tool/$key": {
     canonicalReviewUrl: `/tool/${encodeURIComponent("route:@snowdon-circuits/routes/voltage-drop/index.js")}`,

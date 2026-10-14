@@ -14,7 +14,7 @@ import { Kbd } from "#/components/lang/kbd";
 import { Button } from "@pe/kit/lang/button";
 import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { startFeedback } from "#/components/feedback-picker";
-import { MachineHelpTrigger } from "#/machine/navigation";
+import { SettingsHelpTrigger } from "#/machine/navigation";
 import { readKeyMeta, readRegistrations, useScopeKeys, type KeyMeta } from "@pe/kit/keys";
 
 interface Region {
@@ -313,7 +313,7 @@ function HelpBody({
           >
             Send feedback
           </Button>
-          <MachineHelpTrigger onOpen={close} />
+          <SettingsHelpTrigger onOpen={close} />
         </div>
       ) : null}
     </div>

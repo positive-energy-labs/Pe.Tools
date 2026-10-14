@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { Button } from "@pe/kit/lang/button";
 import { useDestination } from "#/navigation/state";
-import { settingsDestination } from "#/machine/navigation";
+import { settingsDestination } from "#/machine/model";
 import type { TraitOption } from "@pe/agent-contracts";
 import { Ladder, type Rung } from "#/route/ladder";
 import type { ComponentProps } from "react";
@@ -119,7 +119,7 @@ export function HeadLadder({ face = "control" }: { face?: ComponentProps<typeof 
         label="Manage providers"
         onClick={() => {
           setOpen(false);
-          go(settingsDestination("providers"));
+          go(settingsDestination("pea"));
         }}
       >
         Manage providers

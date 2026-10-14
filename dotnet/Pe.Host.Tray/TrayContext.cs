@@ -56,7 +56,7 @@ internal sealed class TrayContext : ApplicationContext {
             Text = $"Pe.Tools {service.Version}", ContextMenuStrip = _menu, Visible = true
         };
         if (launch.IsDev) { _window.Text = "Pe.Tools Dev · " + Path.GetFileName(launch.SourceRoot); _window.Icon = _icon.Icon; }
-        _openWindow.Click += (_, _) => OpenWindow();
+        _openWindow.Click += (_, _) => OpenWindow(install: true);
         _menu.Items.Add(_openWindow);
         _menu.Items.Add("Rehome", null, (_, _) => {
             if (_card) HideCard();
@@ -547,7 +547,7 @@ internal sealed class TrayContext : ApplicationContext {
         }
     }
 
-    private async void OpenWindow(string? destination = null) {
+    private async void OpenWindow(string? destination = null, bool install = false) {
         if (!IsOriginalService()) return;
         var service = _service;
         destination ??= _service.ViewOrigin + "/";
@@ -555,8 +555,10 @@ internal sealed class TrayContext : ApplicationContext {
             if (PwaLauncher.EdgeExecutable is not { } edge) { _icon.Text = "Pe.Tools: Edge unavailable"; return; }
             var installed = await FindPwaAsync();
             if (!IsOriginalService() || service != _service) return;
-            _openWindow.Text = installed is null ? "Install in Edge" : "Open window";
-            var start = PwaLauncher.Launch(edge, service.ViewOrigin, destination, installed, PwaLauncher.StandardProfileRoot);
+            _openWindow.Text = "Open window";
+            var start = install && installed is null
+                ? PwaLauncher.Install(edge, service.ViewOrigin, PwaLauncher.StandardProfileRoot)
+                : PwaLauncher.Launch(edge, service.ViewOrigin, destination, installed, PwaLauncher.StandardProfileRoot);
             Process.Start(start)?.Dispose();
         } catch (Exception error) when (error is System.ComponentModel.Win32Exception or IOException or HttpRequestException
                                        or JsonException or UnauthorizedAccessException or ArgumentException or OperationCanceledException
@@ -637,6 +639,7 @@ internal sealed class TrayWindow : Form {
         SizeChanged += (_, _) => RefreshTitlebar();
         VisibleChanged += (_, _) => RefreshTitlebar();
         DpiChanged += (_, _) => RefreshTitlebar();
+        view.ZoomFactorChanged += (_, _) => RefreshTitlebar();
         RefreshTitlebar();
     }
 
@@ -645,14 +648,14 @@ internal sealed class TrayWindow : Form {
             || DwmGetWindowAttribute(Handle, 5, out NativeRect bounds, Marshal.SizeOf<NativeRect>()) != 0)
             return NativeTitlebarGeometry.Hidden;
         return ProjectTitlebar(new Rectangle(bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top),
-            ClientSize, DeviceDpi, Visible);
+            ClientSize, DeviceDpi, Visible, _frameView?.ZoomFactor ?? 1);
     }
 
-    internal static NativeTitlebarGeometry ProjectTitlebar(Rectangle buttons, Size client, int dpi, bool visible) {
-        if (!visible || dpi <= 0 || client.Width <= 0 || client.Height <= 0 || buttons.Left <= 0 || buttons.Top < 0
+    internal static NativeTitlebarGeometry ProjectTitlebar(Rectangle buttons, Size client, int dpi, bool visible, double zoomFactor = 1) {
+        if (!visible || dpi <= 0 || !double.IsFinite(zoomFactor) || zoomFactor <= 0 || client.Width <= 0 || client.Height <= 0 || buttons.Left <= 0 || buttons.Top < 0
             || buttons.Width <= 0 || buttons.Height <= 0 || buttons.Right > client.Width || buttons.Bottom > client.Height)
             return NativeTitlebarGeometry.Hidden;
-        var scale = dpi / 96d;
+        var scale = dpi / 96d * zoomFactor;
         return new("titlebar-geometry", true, new(0, 0, buttons.Left / scale, buttons.Bottom / scale));
     }
 
@@ -673,7 +676,7 @@ internal sealed class TrayWindow : Form {
             ExtendNativeFrame();
             var next = new Region(ContentClipBounds(ClientSize, VisibleFrameBorder));
             if (geometry.visible && !_card) {
-                var scale = DeviceDpi / 96d;
+                var scale = DeviceDpi / 96d * _frameView.ZoomFactor;
                 next.Exclude(new Rectangle((int)Math.Round(geometry.rect.width * scale), 0,
                     ClientSize.Width - (int)Math.Round(geometry.rect.width * scale), (int)Math.Ceiling(geometry.rect.height * scale)));
             }

@@ -48,9 +48,9 @@ describe("global navigation admission and catalogue", () => {
       shellButtons(SURFACE_SHELLS[surface], path).map(
         (button) => `${button.label}${button.pressed ? "*" : ""}`,
       );
-    expect(pressed("tray", "/pea")).toEqual(["Home / open work", "Pea Inbox*", "Machine"]);
-    expect(pressed("tray", "/open")).toEqual(["Home / open work*", "Pea Inbox", "Machine"]);
-    expect(pressed("tray", "/machine")).toEqual(["Home / open work", "Pea Inbox", "Machine*"]);
+    expect(pressed("tray", "/pea")).toEqual(["Home / open work", "Pea Inbox*", "Settings"]);
+    expect(pressed("tray", "/open")).toEqual(["Home / open work*", "Pea Inbox", "Settings"]);
+    expect(pressed("tray", "/settings")).toEqual(["Home / open work", "Pea Inbox", "Settings*"]);
     expect(pressed("web", "/pea")).toEqual(["Home / tool directory", "Open Pea"]);
     expect(pressed("pwa", "/")).toEqual(["Home / tool directory", "Open Pea"]);
     expect(shellButtons(SURFACE_SHELLS.tray, "/pea")[1]?.path).toBe("/pea");

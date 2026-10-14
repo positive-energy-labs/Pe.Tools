@@ -115,6 +115,13 @@ const allowed: Record<string, { line: string; reason: string }[]> = {
       reason: "Repairs the OS environment.",
     },
   ],
+  "tools/release-sandbox/Collect.ps1": [
+    {
+      line: "[string]$LocalAppDataRoot = $env:LOCALAPPDATA,",
+      reason:
+        "Sandbox guest evidence collector; copies the installed product's files out, writes none.",
+    },
+  ],
   "tools/release-sandbox/Automatic.ps1": [
     {
       line: "$planDirectory=Join-Path $env:LOCALAPPDATA 'Pe.Revit.Sdk\\sessions\\updates'",

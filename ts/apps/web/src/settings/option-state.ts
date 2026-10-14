@@ -1,5 +1,5 @@
 import type { AppSurface } from "@pe/agent-contracts";
-import type { ComponentType } from "react";
+
 type OptionScope = "user" | "machine" | "route" | "page" | "window";
 interface OptionBinding<T> {
   read: () => T;
@@ -26,13 +26,6 @@ export type SettingsOption = OptionBase &
 /** Durable options bind an external owner, never a mounted Page or window instance. */
 export type GlobalOption = SettingsOption & { scope: "user" | "machine" | "route" };
 /** A custom form keeps its existing controller; the catalogue stores this component reference. */
-export interface SettingsPanel {
-  id: string;
-  label: string;
-  scope: "user" | "machine" | "route";
-  surfaces: readonly AppSurface[];
-  render: ComponentType;
-}
 export type PageOption<P> = OptionBase & { scope: "page" | "window" } & (
     | { kind: "boolean"; read: (page: P) => boolean; patch: (value: boolean) => Partial<P> }
     | {

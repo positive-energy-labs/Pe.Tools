@@ -140,6 +140,15 @@ internal static class PwaLauncher {
         return null;
     }
 
+    /** No installed app: a tab on Settings > Host, whose Install in Edge button opens Edge's own install dialog. */
+    internal static ProcessStartInfo Install(string edge, string origin, string installProfileRoot) {
+        var start = new ProcessStartInfo(edge) { UseShellExecute = false };
+        start.ArgumentList.Add("--user-data-dir=" + installProfileRoot);
+        start.ArgumentList.Add("--profile-directory=Default");
+        start.ArgumentList.Add(origin + "/settings?section=host");
+        return start;
+    }
+
     internal static ProcessStartInfo Launch(string edge, string origin, string destination, InstalledPwa? installed,
         string installProfileRoot) {
         if (!TrayContext.TryGetWindowUrl(destination, origin, out var canonical)) throw new ArgumentException("Invalid PWA destination");
@@ -149,7 +158,7 @@ internal static class PwaLauncher {
         if (installed is not null) {
             start.ArgumentList.Add("--app-id=" + installed.AppId);
             start.ArgumentList.Add("--app-launch-url-for-shortcuts-menu-item=" + canonical);
-        } else start.ArgumentList.Add(origin + "/settings?subject=machine&section=startup");
+        } else start.ArgumentList.Add("--app=" + canonical);
         return start;
     }
 }

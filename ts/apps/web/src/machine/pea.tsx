@@ -1,10 +1,7 @@
-/**
- * Machine projects harness readiness and repair actions from the shared reading. ProviderSetup
- * configures the same host-owned providers in Settings and the composer's first-open form.
- */
+/** ProviderSetup configures the host-owned providers in Settings and the composer's first-open form. */
 import { useState, type ReactNode } from "react";
 import { Plug } from "lucide-react";
-import type { EndpointFailure, HarnessId, Machine, Provider } from "@pe/agent-contracts";
+import type { EndpointFailure, HarnessId, Provider } from "@pe/agent-contracts";
 
 import { Input } from "@pe/kit/lang/input";
 import { ListSegmentInput } from "@pe/kit/lang/list-popup";
@@ -14,71 +11,10 @@ import {
   loginLine,
   readinessSub,
   repairWord,
-  useProviders,
   type ProvidersState,
 } from "#/workbench/provider/providers";
 import { EndpointError } from "#/workbench/endpoint-error";
 import { errorMessage } from "#/workbench/provider/use-workbench";
-import { useDestination } from "#/navigation/state";
-import { SEED_REFUSAL } from "./use-machine";
-import { settingsDestination } from "./navigation";
-
-export function PeaGroup({
-  fixture,
-  machine,
-  stale = false,
-}: {
-  fixture: boolean;
-  machine: Machine;
-  stale?: boolean;
-}) {
-  const providers = useProviders("", !fixture, machine);
-  const go = useDestination();
-  const refusal = fixture ? SEED_REFUSAL : stale ? "The machine reading is not current." : null;
-  return (
-    <div className="flex flex-col gap-2" aria-label="provider health">
-      <Button label="Configure providers" onClick={() => go(settingsDestination("providers"))}>
-        Configure providers
-      </Button>
-      {providers.list?.map((provider) => (
-        <div key={provider.id} className="flex flex-wrap items-center gap-2 hairline-b py-1">
-          <span className="font-semibold">{provider.name}</span>
-          <span data-tone={provider.readiness.state === "ready" ? undefined : "caution"}>
-            {readinessSub(provider)}
-          </span>
-          <span className="ml-auto flex gap-1">
-            <Button
-              label="Probe"
-              refusal={refusal}
-              onClick={() => void providers.probe(provider.id)}
-            >
-              Probe
-            </Button>
-            {repairWord(provider) && (
-              <Button
-                label={repairWord(provider)!}
-                refusal={refusal}
-                onClick={() => void providers.openLogin(provider.id)}
-              >
-                {repairWord(provider)}
-              </Button>
-            )}
-          </span>
-          <span className="basis-full">
-            <LoginLine provider={provider} providers={providers} />
-          </span>
-        </div>
-      ))}
-      {!providers.list && (
-        <OutcomeLine
-          kind={providers.error ? "error" : "busy"}
-          label={providers.error ?? "reading providers"}
-        />
-      )}
-      {providers.list && providers.error && <OutcomeLine kind="refused" label={providers.error} />}
-    </div>
-  );
-}
 
 /** What Sign in or Install is doing right now, under the row it was pressed on. */
 export function LoginLine({
@@ -110,7 +46,8 @@ export function ProviderSetup({ providers }: { providers: ProvidersState }) {
               data-tone={provider.readiness.state === "ready" ? undefined : "caution"}
               title={readinessSub(provider)}
             >
-              {provider.readiness.state === "refused" && provider.readiness.failure
+              {provider.readiness.state === "refused" &&
+              (provider.readiness.failure || provider.readiness.detail)
                 ? "refused"
                 : readinessSub(provider)}
             </span>
@@ -134,10 +71,16 @@ export function ProviderSetup({ providers }: { providers: ProvidersState }) {
             </span>
           </span>
           <LoginLine provider={provider} providers={providers} />
-          {provider.readiness.state === "refused" && provider.readiness.failure ? (
+          {provider.readiness.state === "refused" &&
+          (provider.readiness.failure || provider.readiness.detail) ? (
             <EndpointError
               message={provider.readiness.message}
               failure={provider.readiness.failure}
+              detail={
+                provider.readiness.detail
+                  ? JSON.stringify(provider.readiness.detail, null, 2)
+                  : undefined
+              }
             />
           ) : null}
           <span className="break-all face-mono text-ink-2">

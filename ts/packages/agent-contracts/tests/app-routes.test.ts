@@ -22,7 +22,7 @@ describe("application route identities and surfaces", () => {
       APP_ROUTES.filter((route) => !route.directory)
         .map((route) => route.path)
         .sort(),
-    ).toEqual(["/", "/bind", "/machine"]);
+    ).toEqual(["/", "/bind"]);
     expect(appRouteByPath("/design-system/revit")?.path).toBe("/design-system");
     expect(
       APP_ROUTES.filter((route) => route.resume === "document")
@@ -56,7 +56,7 @@ describe("application route identities and surfaces", () => {
         expect(appRouteMount(path, "web")).toBe("full");
         expect(appRouteMount(path, "pwa")).toBe("full");
         expect(appRouteMount(path, "tray")).toBe(
-          ["/open", "/machine", "/pea"].includes(path) ? "compact" : undefined,
+          ["/open", "/settings", "/pea"].includes(path) ? "compact" : undefined,
         );
       }
     }
@@ -65,11 +65,11 @@ describe("application route identities and surfaces", () => {
   it("declares each surface's shell as data, the tray reproducing its rulings exactly", () => {
     expect(SURFACE_SHELLS.tray).toEqual({
       mount: "compact",
-      routes: ["instances", "chat", "machine"],
+      routes: ["instances", "chat", "settings"],
       home: { path: "/open", label: "Home / open work" },
       icons: [
         { route: "chat", label: "Pea Inbox", iconKey: "Inbox" },
-        { route: "machine", label: "Machine", iconKey: "Server" },
+        { route: "settings", label: "Settings", iconKey: "Settings2" },
       ],
       field: "page",
       settings: "route",
@@ -77,8 +77,14 @@ describe("application route identities and surfaces", () => {
     });
     expect([SURFACE_SHELLS.web.field, SURFACE_SHELLS.web.settings]).toEqual(["global", "quick"]);
     expect([SURFACE_SHELLS.web.history, SURFACE_SHELLS.pwa.history]).toEqual(["browser", "window"]);
+    // Every door the chrome draws mounts in place: a door that hands off leaves the app window
+    // (the tray's full-window handoff falls back to a browser tab when no PWA is installed).
     for (const [surface, shell] of Object.entries(SURFACE_SHELLS)) {
-      const doors = [shell.home.path, ...shell.icons.map((icon) => routePath(icon.route))];
+      const doors = [
+        shell.home.path,
+        "/settings",
+        ...shell.icons.map((icon) => routePath(icon.route)),
+      ];
       for (const door of doors)
         expect(appRouteMount(door, surface as keyof typeof SURFACE_SHELLS)).toBe(shell.mount);
     }

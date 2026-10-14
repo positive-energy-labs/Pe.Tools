@@ -245,7 +245,7 @@ No Revit or Autodesk login is permitted in this Sandbox lane.
 
 `CreateBundleModule` owns the Pe.App year staging used by both transports.
 `CreateInstallerModule` owns the host/Pea SEA payload builds plus the product release-signing
-boundary. The MSI also lays Desktop and Start Menu shortcuts to `Pe.Host.exe --open` from the host
+boundary. The MSI also lays Desktop and Start Menu shortcuts to `Pe.Host.exe --show-tray` (named "Pe.Tools Tray") from the host
 payload's `shortcut` block in `product.payloads.json` (SDK beta.178 `pe-revit msi`); a bare launch of
 the SEA with no `PE_LANE` is the installed lane and claims the ordinary `host` service, so a Revit
 started afterwards joins it. SDK `pe-revit install package`

@@ -36,14 +36,22 @@ public class PwaLauncherTests {
         Assert.That(PwaLauncher.Match(identity,edge,[root],[registration with {Command=registration.Command.Replace("msedge.exe","chrome.exe")}],_=>true),Is.Null);
     }
     [Test]
-    public void LaunchKeepsDeepLinkOnlyForInstalledAppAndNeverUsesAppWindowFallback() {
+    public void LaunchKeepsTheRequestedPathWithOrWithoutAnInstalledApp() {
         const string origin="http://127.0.0.1:5175";var destination=origin+"/pea?thread=one%2Ftwo&shell=tray#turn3";
         var app=new InstalledPwa("fneiaplokelkkploflemnpjlkdffgjkn",@"C:\profile","Default");
         var installed=PwaLauncher.Launch("msedge.exe",origin,destination,app,@"C:\profile");
         Assert.That(installed.ArgumentList,Does.Contain("--app-launch-url-for-shortcuts-menu-item="+origin+"/pea?thread=one%2Ftwo#turn3"));
         var absent=PwaLauncher.Launch("msedge.exe",origin,destination,null,@"C:\profile");
-        Assert.That(absent.ArgumentList,Does.Contain(origin+"/settings?subject=machine&section=startup"));
-        Assert.That(absent.ArgumentList.Any(arg=>arg.StartsWith("--app")),Is.False);
+        // No installed app: an app-style window (no browser bar) at the exact page asked for, never a tab.
+        Assert.That(absent.ArgumentList,Does.Contain("--app="+origin+"/pea?thread=one%2Ftwo#turn3"));
+        Assert.That(absent.ArgumentList.Any(arg=>arg.Contains("/settings")),Is.False);
+        Assert.That(absent.ArgumentList.Count(arg=>!arg.StartsWith("--")),Is.EqualTo(0));
         Assert.Throws<ArgumentException>(()=>PwaLauncher.Launch("msedge.exe",origin,origin+"/?token=secret",app,@"C:\profile"));
+    }
+    [Test]
+    public void InstallOpensAnEdgeTabOnTheInstallButtonNeverAnAppWindow() {
+        // A tab is where Edge fires beforeinstallprompt, so the page's Install in Edge button opens Edge's install dialog.
+        var start=PwaLauncher.Install("msedge.exe","http://127.0.0.1:5175",@"C:\profile");
+        Assert.That(start.ArgumentList,Is.EqualTo(new[]{@"--user-data-dir=C:\profile","--profile-directory=Default","http://127.0.0.1:5175/settings?section=host"}));
     }
 }

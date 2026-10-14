@@ -108,7 +108,9 @@ export async function readRequestIdentity(
   const staticResource =
     (method === "GET" || method === "HEAD") &&
     ["script", "style", "image", "font", "manifest"].includes(headers["sec-fetch-dest"] ?? "") &&
-    /\.(?:m?js|css|png|jpe?g|gif|svg|ico|woff2?|ttf|webmanifest|map)$/i.test(pathname);
+    (/\.(?:m?js|css|png|jpe?g|gif|svg|ico|woff2?|ttf|webmanifest|map)$/i.test(pathname) ||
+      // The app's own manifest; never a general .json allowance.
+      pathname === "/manifest.json");
   if (
     browser &&
     !navigation &&

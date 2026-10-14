@@ -1,30 +1,15 @@
-/** Sharing observations belong to Machine; host-owned switches belong to Settings. */
+/** Sharing: the host-owned switches, then what the host observed. */
 import { useState } from "react";
 import type { Machine } from "@pe/agent-contracts";
-import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { SwitchRow } from "#/components/lang/switch-row";
 import { switchRemoteAdministration, switchShare } from "#/host/machine";
-import { useDestination } from "#/navigation/state";
 import { hhmm } from "./model";
 import { SEED_REFUSAL } from "./use-machine";
-import { settingsDestination } from "./navigation";
 import { DeviceSettings, useLocalDevice } from "./devices";
 
 const NEEDS_TAILSCALE =
   "Sharing needs Tailscale. Install it from tailscale.com/download, then sign in.";
-
-export function ShareGroup({ machine }: { machine: Machine }) {
-  const go = useDestination();
-  return (
-    <div className="flex flex-col gap-2">
-      <Button label="Sharing settings" onClick={() => go(settingsDestination("sharing"))}>
-        Sharing settings
-      </Button>
-      <ShareStatus machine={machine} />
-    </div>
-  );
-}
 
 function ShareStatus({ machine }: { machine: Machine }) {
   const share = machine.share;
@@ -96,7 +81,7 @@ export function ShareSettings({
     : stale
       ? "The host is not answering; the switch waits for it."
       : !local
-        ? "Open Sharing settings on the host to change this control."
+        ? "Open Settings on the host to change this control."
         : null;
   const refusal =
     unavailable ??

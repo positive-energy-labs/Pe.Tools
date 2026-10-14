@@ -55,6 +55,7 @@ const receipt = (requestId: string, state: string, detail = "confirmed leg"): Up
     receiptPath: "exact.receipt.json",
     reopen: [],
     restartYears: [],
+    stub: null,
     legs: [
       {
         name: state === "running" ? "handoff" : "done",
@@ -138,12 +139,15 @@ test("a settled update announces on its transition into terminal, and a re-read 
         kind: "settled",
         requestId: reader.current().requestId,
         state: "ok",
+        version: "0.8.0",
         detail: "done",
       },
     ]);
-    // A third host loading the already-terminal admission announces nothing.
+    // A third host loading the already-terminal admission re-announces the same request: the
+    // journal dedupes by request id, and this closes the crash window between persist and intake.
     await f.make().refresh();
-    expect(f.facts).toHaveLength(1);
+    expect(f.facts).toHaveLength(2);
+    expect(f.facts[1]).toEqual(f.facts[0]);
   } finally {
     await f.close();
   }

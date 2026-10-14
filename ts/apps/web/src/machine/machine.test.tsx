@@ -16,12 +16,10 @@ import { BootstrapAlignment } from "./bootstrap";
 import { MACHINE_SEEDS, BAY_YOURS_25 } from "#/open/seeds";
 import { AppChrome, AppDevtools } from "#/route/app-chrome";
 
-import { MachineBody } from "./body";
+import { SettingsBody } from "./body";
 import { chipText, machineOf, shareState } from "./model";
-import { MachinePage } from "./page";
 import { ShareSettings } from "./share";
 import { UpdateGroup } from "./update";
-import { machineSearch } from "#/routes/machine";
 import { settingsSearch } from "#/routes/settings";
 
 const surface = vi.hoisted(() => ({ surface: "web", native: false }));
@@ -54,19 +52,19 @@ afterEach(() => {
 });
 
 const body = (reading: Reading<Machine>, shell: "web" | "tray" = "web") =>
-  render(<MachineBody reading={reading} fixture={false} shell={shell} />);
+  render(<SettingsBody reading={reading} fixture={false} shell={shell} />);
 
 const header = (label: string) =>
   within(screen.getByRole("region", { name: label })).getAllByRole("button")[0]!;
 
-test("a frozen Machine page does not open a host transport for lifecycle controls", async () => {
+test("frozen Settings does not open a host transport for lifecycle controls", async () => {
   const source = vi.fn();
   const fetch = vi.fn();
   vi.stubGlobal("EventSource", source);
   vi.stubGlobal("fetch", fetch);
-  render(<MachinePage reading={MACHINE_SEEDS["blocked-plan"]} fixture shell="tray" />);
+  render(<SettingsBody reading={MACHINE_SEEDS["blocked-plan"]} fixture shell="tray" />);
   await Promise.resolve();
-  expect(screen.getByRole("main", { name: "machine" })).toBeTruthy();
+  expect(screen.getByRole("group", { name: "settings groups" })).toBeTruthy();
   expect(source).not.toHaveBeenCalled();
   expect(fetch).not.toHaveBeenCalled();
 });
@@ -103,8 +101,8 @@ describe("groups", () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
     const rendered = body({ state: "ready", observation: machine });
-    fireEvent.click(header("Pea"));
-    expect(header("Pea").textContent).toContain("1 of 2 ready");
+    fireEvent.click(header("Pea providers"));
+    expect(header("Pea providers").textContent).toContain("1 of 2 ready");
     expect(screen.getByText("Codex")).toBeTruthy();
     const next: Machine = {
       ...machine,
@@ -116,9 +114,9 @@ describe("groups", () => {
         })),
     };
     rendered.rerender(
-      <MachineBody reading={{ state: "ready", observation: next }} fixture={false} shell="web" />,
+      <SettingsBody reading={{ state: "ready", observation: next }} fixture={false} shell="web" />,
     );
-    expect(header("Pea").textContent).toContain("no provider ready");
+    expect(header("Pea providers").textContent).toContain("no provider ready");
     expect(screen.queryByText("Codex")).toBeNull();
     expect(screen.getByText("○ The last probe expired.")).toBeTruthy();
     expect(fetch).not.toHaveBeenCalled();
@@ -126,7 +124,7 @@ describe("groups", () => {
   test("a blocked plan opens Update by itself and leaves the rest folded", () => {
     body(MACHINE_SEEDS["blocked-plan"]);
     expect(header("Update").getAttribute("aria-expanded")).toBe("true");
-    for (const label of ["Revit", "Share", "Pea"])
+    for (const label of ["Revit", "Share", "Pea providers"])
       expect(header(label).getAttribute("aria-expanded")).toBe("false");
     expect(header("Update").textContent).toContain("0.7.1 · blocked");
     expect(screen.getByRole("status").textContent).toBe(
@@ -141,9 +139,48 @@ describe("groups", () => {
     expect(header("Update").getAttribute("aria-expanded")).toBe("false");
   });
 
-  test("nothing waiting opens nothing", () => {
+  test("with nothing waiting, the first group whose header disagrees opens by itself", () => {
+    const machine = machineOf(MACHINE_SEEDS["no-revit"])!;
+    body({
+      state: "ready",
+      observation: {
+        ...machine,
+        share: { ...machine.share!, state: "refused", desired: "off", refused: [] },
+      },
+    });
+    expect(header("Share").getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(header("Share"));
+    expect(header("Share").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  test("on the route, a closed group stays closed though the address has no section", () => {
+    const machine = machineOf(MACHINE_SEEDS["no-revit"])!;
+    const reading = {
+      state: "ready" as const,
+      observation: {
+        ...machine,
+        share: {
+          ...machine.share!,
+          state: "refused" as const,
+          desired: "off" as const,
+          refused: [],
+        },
+      },
+    };
+    const choose = vi.fn();
+    const view = render(
+      <SettingsBody reading={reading} fixture={false} shell="tray" onGroup={choose} />,
+    );
+    expect(header("Share").getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(header("Share"));
+    expect(choose).toHaveBeenLastCalledWith(undefined);
+    view.rerender(<SettingsBody reading={reading} fixture={false} shell="tray" onGroup={choose} />);
+    expect(header("Share").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  test("nothing waiting and nothing disagreeing opens nothing", () => {
     body(MACHINE_SEEDS["no-revit"]);
-    for (const label of ["Revit", "Update", "Share", "Pea"])
+    for (const label of ["Revit", "Update", "Share", "Pea providers"])
       expect(header(label).getAttribute("aria-expanded")).toBe("false");
     expect(screen.getByRole("status").textContent).toBe("Nothing waits on you.");
   });
@@ -330,29 +367,18 @@ describe("shells", () => {
   beforeEach(() => history.replaceState(null, "", "/?demo=blocked-plan"));
   afterEach(() => history.replaceState(null, "", "/"));
 
-  test("the tray page fills its route pane and shares the feedback controller", () => {
+  test("tray Settings shares the feedback controller", () => {
     render(
       <>
-        <MachinePage reading={MACHINE_SEEDS["no-revit"]} fixture shell="tray" />
+        <SettingsBody reading={MACHINE_SEEDS["no-revit"]} fixture shell="tray" />
         <AppChrome />
       </>,
     );
-    const main = screen.getByRole("main", { name: "machine" });
-    expect(main.className).toContain("w-full");
-    expect(main.className).toContain("overflow-y-auto");
-    expect(main.className).not.toContain("w-[380px]");
     expect(screen.getByRole("button", { name: "feedback" })).toBeTruthy();
   });
 
-  test("Machine draws a canonical page instead of a special drawer", () => {
-    render(<MachinePage reading={MACHINE_SEEDS["no-revit"]} fixture shell="web" />);
-    expect(screen.getByRole("main", { name: "machine" })).toBeTruthy();
-    expect(screen.queryByRole("complementary", { name: "this machine" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "close" })).toBeNull();
-  });
-
   test("the floating launcher is absent in the tray and clear of Open", () => {
-    const { rerender } = render(<AppDevtools pathname="/machine" shell="tray" />);
+    const { rerender } = render(<AppDevtools pathname="/settings" shell="tray" />);
     expect(screen.queryByTestId("devtools-launcher")).toBeNull();
     rerender(<AppDevtools pathname="/open" />);
     expect(screen.queryByTestId("devtools-launcher")).toBeNull();
@@ -380,49 +406,42 @@ describe("shells", () => {
 });
 
 test("canonical sections reject unknown query values and keep exact session identity", () => {
-  expect(machineSearch({ section: "revit", session: "pid:18244", variant: "1" })).toEqual({
+  expect(settingsSearch({ section: "revit", session: "pid:18244", variant: "1" })).toEqual({
     section: "revit",
     session: "pid:18244",
   });
-  expect(machineSearch({ section: "invented", session: "" })).toEqual({
+  expect(settingsSearch({ section: "invented", session: "" })).toEqual({
     section: undefined,
     session: undefined,
   });
-  expect(settingsSearch({ subject: "machine", section: "sharing" })).toEqual({
-    subject: "machine",
-    section: "sharing",
-  });
-  expect(settingsSearch({ subject: "invented", section: "invented" })).toEqual({
-    subject: undefined,
-    section: undefined,
+  expect(settingsSearch({ subject: "machine", section: "pea" })).toEqual({
+    section: "pea",
+    session: undefined,
   });
 });
 
-test("Machine links documents and configuration to their canonical owners", () => {
+test("Settings configures in place: documents go to Open, share and providers stay here", () => {
   body(MACHINE_SEEDS["patch-bay"]);
   fireEvent.click(header("Revit"));
   expect(screen.queryByLabelText("patch bay")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Open documents and binding" }));
   expect(go).toHaveBeenCalledWith("/open");
   fireEvent.click(header("Share"));
-  expect(screen.queryByRole("switch")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Sharing settings" }));
-  expect(go).toHaveBeenCalledWith("/settings?subject=machine&section=sharing");
-  fireEvent.click(header("Pea"));
-  expect(screen.queryByPlaceholderText("API key")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Configure providers" }));
-  expect(go).toHaveBeenCalledWith("/settings?subject=machine&section=providers");
+  expect(screen.getByLabelText("sharing settings")).toBeTruthy();
+  fireEvent.click(header("Pea providers"));
+  expect(screen.getByPlaceholderText("API key")).toBeTruthy();
+  expect(go).toHaveBeenCalledTimes(1);
 });
 
-test("canonical Machine section selection follows the address without hidden accordion state", () => {
+test("canonical Settings section selection follows the address without hidden accordion state", () => {
   const choose = vi.fn();
   const tree = (section?: "update" | "host") => (
-    <MachinePage
+    <SettingsBody
       reading={MACHINE_SEEDS["blocked-plan"]}
       fixture
       shell="web"
-      section={section}
-      onSection={choose}
+      group={section}
+      onGroup={choose}
     />
   );
   const view = render(tree("update"));

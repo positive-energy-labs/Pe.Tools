@@ -100,8 +100,8 @@ export function noticeOf(r: Receipt, context: NoticeContext): MachineNotice | nu
       return outcome === "succeeded"
         ? {
             ...base,
-            title: "Pe.Tools updated",
-            body: "Installed while no Revit was open.",
+            title: candidateVersion ? `Pe.Tools ${candidateVersion} installed` : "Pe.Tools updated",
+            body: "The update finished. The tray panel has the receipt.",
             act: { kind: "automatic-updates" },
           }
         : {
@@ -191,7 +191,7 @@ export function createNotices(deps: {
       return;
     }
     if (
-      bufferMs <= 0 ||
+      bufferMs <= 0 || body.kind === "usage" ||
       (body.kind === "turn" && thread && [...openRequests.values()].includes(thread))
     )
       return announce(entry);
@@ -269,6 +269,7 @@ export function createNotices(deps: {
     close: () => {
       unsubscribe();
       clearTimeout(timer);
+      flush();
     },
   };
 }
