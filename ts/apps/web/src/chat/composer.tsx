@@ -14,7 +14,7 @@ import { Pane } from "#/components/lang/pane";
 import { ScopeKeys, type ScopeKey } from "#/route/keys";
 import { useWorkbench } from "#/workbench/provider";
 import { EMPTY_CHAT_DRAFT, type ChatDraft } from "#/workbench/prompt";
-import { selectRunStatus, selectSkillCommands } from "#/workbench/chat-state";
+import { selectRunStatus, selectSkillCommands } from "@pe/agent-contracts/chat-state";
 import { ListPopup } from "#/components/lang/list-popup";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
 import { SituationAction } from "#/route/situation-verbs";

@@ -6,7 +6,7 @@ import type {
   UpdateThreadRequest,
 } from "@pe/agent-contracts";
 import { type WorkbenchEndpointConfig } from "../config";
-import { type ChatState, type ThreadBody } from "../chat-state";
+import { type ChatState, type ThreadBody } from "@pe/agent-contracts/chat-state";
 import { type ChatPageStore } from "../store";
 import type * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AsyncResult from "effect/unstable/reactivity/AsyncResult";

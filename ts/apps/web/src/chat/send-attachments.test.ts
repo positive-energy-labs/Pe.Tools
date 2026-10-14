@@ -8,7 +8,7 @@ import {
 
 import { chatManifest } from "#/chat/manifest";
 import { emptyPrompt } from "#/workbench/prompt";
-import { emptyChatState, selectMessages } from "#/workbench/chat-state";
+import { emptyChatState, selectMessages } from "@pe/agent-contracts/chat-state";
 import { harnessClient, type PromptRequest } from "#/workbench/provider/harness-client";
 
 const png: PromptAttachment = { name: "riser.png", mimeType: "image/png", size: 4, data: "iVBO" };
@@ -74,7 +74,7 @@ it("the client posts the attachments in the prompt body the host parses", async 
   const bodies: unknown[] = [];
   vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
     bodies.push(JSON.parse(String(init.body)));
-    return Response.json({ turnId: "t1" });
+    return Response.json({ turnId: "t1", state: "running" });
   });
   await harnessClient("http://host").prompt("t", { text: "look", attachments: [png, csv] });
   expect(promptRequestSchema.parse(bodies[0])).toEqual({

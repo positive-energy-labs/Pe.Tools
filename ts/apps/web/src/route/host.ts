@@ -1,45 +1,37 @@
-import { hostFetch } from "#/host/runtime";
-/**
- * The route layer's one reach to the host. §7 ("nothing below the route reaches the host") puts
- * every route-state write behind this file, so `use-route.ts` owns sequencing and refusal and
- * never the transport.
- */
-import { type RouteStateWriteResult } from "@pe/agent-contracts";
-
+import { peRoutes } from "@pe/agent-contracts/pe-api";
+import { peClient } from "#/host/pe-client";
+import type { RouteStateWriteResult } from "@pe/agent-contracts";
 export type RouteWriteResponse = { status: number; result: RouteStateWriteResult | null };
+type WorkInput = { params: { route: string }; query: Record<string, string> };
 
-/** POST one route-state write. A body that is not a write result comes back as `null`. */
 export async function postRouteWrite(
-  url: string,
-  body: Record<string, unknown>,
+  operation: "apply" | "command" | "start-fresh",
+  input: WorkInput,
+  body: unknown,
 ): Promise<RouteWriteResponse> {
-  const response = await hostFetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const result = (await response.json().catch(() => null)) as RouteStateWriteResult | null;
-  return { status: response.status, result };
+  const response =
+    operation === "apply"
+      ? await peClient.response("work.apply", {
+          ...input,
+          body: peRoutes["work.apply"].body.parse(body),
+        })
+      : operation === "command"
+        ? await peClient.response("work.command", {
+            ...input,
+            body: peRoutes["work.command"].body.parse(body),
+          })
+        : await peClient.response("work.fresh", { ...input, body: {} });
+  const wire = await response.json().catch(() => null);
+  return { status: response.status, result: response.ok ? wire : (wire?.error?.details ?? null) };
 }
 
-/**
- * The route's salvage of Work it can no longer read (human door only): `{ from, value }`, or null
- * when there is nothing to salvage. A refusal throws in the host's words.
- */
 export async function getRouteSalvage(
-  url: string,
+  input: WorkInput,
 ): Promise<{ from: string; value: unknown } | null> {
-  const response = await hostFetch(url);
+  const response = await peClient.response("work.salvage", input);
   if (response.status === 404) return null;
-  const body = (await response.json().catch(() => null)) as
-    | { from: string; value: unknown }
-    | { error?: string; message?: string }
-    | null;
-  if (!response.ok || !body || !("from" in body))
-    throw Error(
-      (body && "message" in body && body.message) ||
-        (body && "error" in body && body.error) ||
-        `salvage failed (${response.status})`,
-    );
+  const body = await response.json();
+  if (!response.ok || !body || typeof body.from !== "string")
+    throw Error(body?.error?.message ?? `salvage failed (${response.status})`);
   return body;
 }

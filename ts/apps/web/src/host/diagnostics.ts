@@ -11,8 +11,7 @@
 import { useSyncExternalStore } from "react";
 import { receiptBodySchema, type ReceiptBody, type ReceiptFaultCode } from "@pe/agent-contracts";
 
-import { hostFetch } from "#/host/runtime";
-import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
+import { peClient } from "./pe-client";
 
 export type DiagnosticFact = {
   code: ReceiptFaultCode;
@@ -47,12 +46,8 @@ export type Post = (batch: {
   facts: readonly { at: string; body: Body }[];
 }) => Promise<Response>;
 
-const postToHost: Post = (batch) =>
-  hostFetch(peUrl(resolveWorkbenchConfig(), "/diagnostics"), {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(batch),
-  });
+const postToHost: Post = (body) =>
+  peClient.response("diagnostics.submit", { body: { ...body, facts: [...body.facts] } });
 
 export class Diagnostics {
   private pending: Pending[] = [];
@@ -143,9 +138,16 @@ export class Diagnostics {
         this.detail = "this host has no diagnostic intake; faults stay in this tab";
         retry = true;
       } else if (response.status < 500) {
-        const said = (await response.json().catch(() => null)) as { error?: string } | null;
+        const said = (await response.json().catch(() => null)) as {
+          error?: { message?: string };
+        } | null;
         this.refused += batch.length;
-        this.settle(batch, dropped, "refused", said?.error ?? `host refused (${response.status})`);
+        this.settle(
+          batch,
+          dropped,
+          "refused",
+          said?.error?.message ?? `host refused (${response.status})`,
+        );
       } else {
         this.delivery = "unreachable";
         this.detail = `host answered ${response.status}`;

@@ -1,5 +1,5 @@
 import { toolTitle } from "@pe/agent-contracts";
-import type { ChatMessage } from "../chat-state";
+import type { ChatMessage } from "@pe/agent-contracts/chat-state";
 import type { Moment } from "./scale";
 
 export function toMoments(messages: ChatMessage[]): Moment[] {

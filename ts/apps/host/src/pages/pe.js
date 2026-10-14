@@ -39,7 +39,10 @@
     /** The bound document `{ session, openId, title }`, after `pe.target()`. */
     doc: null,
   };
-  const door = (verb) => `/pages/${pe.slug}/${verb}`;
+  const pageInput = (body) => ({
+    params: { slug: pe.slug },
+    ...(body === undefined ? {} : { body }),
+  });
   /** The bind chip, drawn once the page has a body (below). */
   let chip = null;
   /** `fetch` that names this page's runtime on same-origin requests; the host refuses a browser request without it. */
@@ -53,13 +56,13 @@
     h.set(RUNTIME.header, RUNTIME.service);
     return fetch(input, { ...init, headers: h });
   };
+  const client = /*pe:client*/ null;
   // EventSource cannot send headers: the runtime rides the query, as the web app's `runtimeStreamUrl` does.
   const streamUrl = (path) => {
     const url = new URL(path, location.href);
     url.searchParams.set(RUNTIME.query, RUNTIME.service);
     return url.href;
   };
-  const headers = () => ({ "content-type": "application/json" });
   /** The host's refusal across the top of the page, word for word; one banner, the latest refusal. */
   const banner = (message) => {
     if (typeof document === "undefined" || !document.body) return;
@@ -85,6 +88,8 @@
     let j = null;
     try {
       j = typeof b === "string" ? JSON.parse(b) : b;
+      if (j.error && typeof j.error === "object")
+        j = { ...j.error.details, message: j.error.message };
       m = j.message || j.error || j.title || m;
     } catch {}
     const error = new Error(`${r.status} ${r.statusText}${m ? `: ${m}` : ""}`);
@@ -108,12 +113,10 @@
       Object.assign(body, { captureUrl: capture, captureId: r.headers.get("x-pe-capture-id") });
     return body;
   };
-  const post = (path, body) =>
-    pe.fetch(path, { method: "POST", headers: headers(), body: JSON.stringify(body) });
 
   /** The host's reading of this page's default slot: binding, resolution, document, and what a write would do. */
   const readTarget = async () => {
-    const reading = await json(await pe.fetch(door("target")));
+    const reading = await json(await client.response("page.target", pageInput()));
     pe.doc = reading.document;
     chip?.show(reading);
     return reading;
@@ -152,7 +155,7 @@
     if (kind) q.set("kind", kind);
     if (pe.doc) q.set("session", pe.doc.session);
     const { capabilities } = await json(
-      await pe.fetch(`/pe/capabilities?${q}`, { headers: { accept: "application/json" } }),
+      await client.response("capabilities.find", { query: Object.fromEntries(q) }),
     );
     return capabilities.map(({ key, kind, title, description }) => ({
       key,
@@ -163,7 +166,8 @@
   };
 
   /** Run a read on the bound document (`/pages/<slug>/call`). A mutation is refused here by the host; use `pe.do`. */
-  pe.read = async (key, request = {}) => json(await post(door("call"), { key, request }));
+  pe.read = async (key, request = {}) =>
+    json(await client.response("page.call", pageInput({ key, request })));
 
   /**
    * Run any op. A read answers at once on the bound document; a mutation runs as this page through
@@ -174,18 +178,19 @@
    */
   pe.do = async (key, input = {}) => {
     if (!key.startsWith("script:")) {
-      const r = await post(door("call"), { key, request: input });
+      const r = await client.response("page.call", pageInput({ key, request: input }));
       if (r.ok) return json(r);
-      const answer = await r.json().catch(() => null);
+      const wire = await r.json().catch(() => null);
+      const answer = wire?.error?.details ?? wire;
       // Only "this is a mutation" moves on to act; a binding that names no one document stops here.
       if (!(r.status === 409 && answer && answer.notDispatched && !answer.resolution))
         return fail(r, answer ?? "");
     }
-    let row = await json(await post(door("act"), { key, input }));
+    let row = await json(await client.response("page.act", pageInput({ key, input })));
     const id = row.id;
     while (row.state === "running") {
       await new Promise((ok) => setTimeout(ok, 250));
-      [row = row] = await json(await pe.fetch(`/actions?id=${encodeURIComponent(id)}`));
+      [row = row] = await json(await client.response("actions.read", { query: { id } }));
     }
     if (row.state !== "succeeded")
       throw new Error(`${key} ${row.state}: ${row.message || row.error || ""}`.trim());
@@ -339,27 +344,18 @@
    */
   pe.state = async (k, { local = [] } = {}) => {
     const isLocal = (ev) => ev.type === "nav" || local.includes(ev.type);
-    const base = `/pages/${pe.slug}`;
     const mine = new Set();
     let seq = 0;
     let timer;
     const snapshot = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
-        pe.fetch(`${base}/snapshot`, {
-          method: "PUT",
-          headers: headers(),
-          body: JSON.stringify(k.state),
-        }).catch(() => {});
+        client.response("page.snapshot", pageInput(k.state)).catch(() => {});
         if (describe)
-          pe.fetch(`${base}/text`, {
-            method: "PUT",
-            headers: { ...headers(), "content-type": "text/markdown" },
-            body: String(describe(k.state)),
-          }).catch(() => {});
+          client.response("page.text", pageInput(String(describe(k.state)))).catch(() => {});
       }, 150);
     };
-    const saved = await json(await pe.fetch(`${base}/state`));
+    const saved = await json(await client.response("page.state", pageInput()));
     seq = saved.seq;
     k.replay(
       saved.events.map((row) => row.event),
@@ -372,7 +368,8 @@
       if (!fire(ev)) return false;
       mine.add(ev.eventId);
       snapshot();
-      post(`${base}/events`, ev)
+      client
+        .response("page.append", pageInput(ev))
         .then(json)
         .then((row) => (seq = Math.max(seq, row.seq)))
         .catch((e) => console.error("pe.state: the host did not keep an event", e));
@@ -384,7 +381,9 @@
     let retryMs = 1000;
     let heard = Date.now();
     const follow = () => {
-      const es = new EventSource(streamUrl(`${base}/events?after=${seq}`));
+      const es = new EventSource(
+        streamUrl(client.url("page.events", { ...pageInput(), query: { after: seq } })),
+      );
       heard = Date.now();
       es.onopen = () => ((retryMs = 1000), (heard = Date.now()));
       es.addEventListener("ping", () => (heard = Date.now()));
@@ -467,7 +466,11 @@
     const fresh = () => readTarget().catch(() => {});
     const follow = () => {
       // Live only: the log's rows belong to `pe.state`.
-      const es = new EventSource(streamUrl(`${door("events")}?after=${Number.MAX_SAFE_INTEGER}`));
+      const es = new EventSource(
+        streamUrl(
+          client.url("page.events", { ...pageInput(), query: { after: Number.MAX_SAFE_INTEGER } }),
+        ),
+      );
       es.onopen = fresh;
       es.addEventListener("head", fresh);
       es.addEventListener("binding", fresh);

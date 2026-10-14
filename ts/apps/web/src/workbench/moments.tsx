@@ -28,7 +28,7 @@ import {
   type ChatPart,
   type ToolCall,
   formatBytes,
-} from "./chat-state";
+} from "@pe/agent-contracts/chat-state";
 import { Markdown } from "./prose";
 import { Code, stringify } from "#/components/lang/code";
 import { actionCall, proposedRecord } from "./chat-plugins";

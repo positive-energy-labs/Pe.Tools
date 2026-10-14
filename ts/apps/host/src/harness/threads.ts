@@ -1,3 +1,4 @@
+import { matchPeRoute } from "@pe/agent-contracts/pe-api";
 import { classifyEndpointFailure } from "./endpoint-failure.ts";
 import type { ChildProcess } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -1298,9 +1299,12 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   async function handle(request: Request): Promise<Response> {
     const caller = currentCaller();
     const url = new URL(request.url);
-    const [, , , id, verb] = url.pathname.split("/"); // "", "pe", "threads", id, verb
+    const declared = matchPeRoute(request.method, url.pathname);
+    if (!declared || declared.route.owner !== "threads")
+      return json({ error: "Unknown thread route" }, 404);
+    const id = declared.params.id;
     const method = request.method;
-    if (url.pathname === "/pe/threads/stream" && method === "GET") {
+    if (declared.id === "threads.stream") {
       const encoder = new TextEncoder();
       let cleanup = () => {};
       return new Response(
@@ -1363,17 +1367,13 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       if (!request.headers.get("content-type")?.startsWith("application/json")) throw new NotJson();
       return schema.parse(await request.json());
     };
-    if (url.pathname.startsWith("/pe/scope/")) {
-      const [named, scopeVerb, ...rest] = url.pathname.slice("/pe/scope/".length).split("/");
+    if (declared.id.startsWith("scope.")) {
+      const named = declared.params.id;
       // `self` is the caller's own thread: a pea context's, bound at spawn. No thread string travels.
       const self = named === "self";
-      const threadId = self
-        ? caller.kind === "pea"
-          ? caller.thread
-          : null
-        : decodeURIComponent(named ?? "");
-      const door = `/pe/scope/${named}${scopeVerb ? `/${scopeVerb}` : ""}`;
-      if (rest.length || !threadId)
+      const threadId = self ? (caller.kind === "pea" ? caller.thread : null) : (named ?? "");
+      const door = url.pathname;
+      if (!threadId)
         return json(
           {
             error:
@@ -1383,9 +1383,9 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           },
           404,
         );
-      if (method === "GET" && !scopeVerb)
+      if (declared.id === "scope.get")
         return json({ ...(self ? { thread: threadId } : {}), ...reading(readHead(threadId)) });
-      if (method === "POST" && scopeVerb === "revoke") {
+      if (declared.id === "scope.revoke") {
         requireHuman(caller, door, "revoking rw");
         return json({
           ...revokeHead(threadId),
@@ -1393,7 +1393,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
             "rw revoked. Steps already running finish; nothing new starts. Re-point the head to grant again.",
         });
       }
-      if (method !== "PUT" || scopeVerb)
+      if (declared.id !== "scope.set")
         return json({ error: `No route ${method} ${url.pathname}` }, 404);
       if (caller.kind === "pea" && caller.thread !== threadId)
         throw new Refused({
@@ -1410,11 +1410,11 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       );
       return json(result, result.ok ? 200 : 409);
     }
-    if (url.pathname === "/pe/threads" && method === "GET")
+    if (declared.id === "threads.list")
       return json(
         [...threads.values()].map(summary).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
       );
-    if (url.pathname === "/pe/threads" && method === "POST") {
+    if (declared.id === "threads.create") {
       const { providerId, title } = await input(createThreadRequestSchema);
       if (options.updatePending?.())
         return json(
@@ -1444,13 +1444,13 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       });
       return json(summary(t));
     }
-    const t = id ? threads.get(decodeURIComponent(id)) : undefined;
+    const t = id ? threads.get(id) : undefined;
     if (!t) return json({ error: `No thread ${id}` }, 404);
-    const key = `${method} ${verb ?? ""}`;
+    const key = declared.id;
     switch (key) {
-      case "GET ":
+      case "thread.get":
         return json(body(t));
-      case "PUT ": {
+      case "thread.update": {
         const change = await input(updateThreadRequestSchema);
         const state = activity(t);
         const lifecycleChange = Object.keys(change).some(
@@ -1519,7 +1519,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         notifySummaries();
         return json(summary(t));
       }
-      case "DELETE ":
+      case "thread.remove":
         threads.delete(t.meta.id);
         await stop(t);
         rmSync(join(options.root, t.meta.id), { recursive: true, force: true });
@@ -1530,9 +1530,9 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         );
         notifySummaries();
         return new Response(null, { status: 204 });
-      case "POST prompt": {
+      case "thread.prompt": {
         // Only a human message moves a thread, and only it renews the grant: Pea cannot renew itself.
-        requireHuman(caller, `/pe/threads/${t.meta.id}/prompt`, "a thread message");
+        requireHuman(caller, url.pathname, "a thread message");
         const {
           id: turnId,
           delivery,
@@ -1586,7 +1586,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           t.admitting.delete(turnId);
         }
       }
-      case "POST queue": {
+      case "thread.queue": {
         requireHuman(caller, url.pathname, "a queued message");
         const { turnId, action } = await input(queueRequestSchema);
         const index = t.queue.findIndex((q) => q.turnId === turnId);
@@ -1602,7 +1602,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         }
         return steer(t, caller, url.pathname, prompt!, () => t.queue.splice(index, 0, prompt!));
       }
-      case "GET wait": {
+      case "thread.wait": {
         const turnId = url.searchParams.get("turn") ?? "";
         const timeoutMs = Number(url.searchParams.get("timeoutMs") ?? 30_000);
         const signal = AbortSignal.any([
@@ -1616,15 +1616,15 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           ? json(state)
           : json({ error: `No turn ${turnId} in thread ${t.meta.id}` }, 404);
       }
-      case "POST cancel":
+      case "thread.cancel":
         return json({ cancelled: await cancel(t, caller, url.pathname) });
-      case "POST permission": {
+      case "thread.permission": {
         const { requestId, optionId } = await input(permissionResponseSchema);
         return resolvePermission(t, requestId, optionId, "user")
           ? json({ ok: true })
           : json({ error: `No pending permission ${requestId}` }, 409);
       }
-      case "POST question": {
+      case "thread.question": {
         const { requestId, ...answer } = await input(questionResponseSchema);
         return resolveQuestion(t, requestId, answer, "user")
           ? json({ ok: true })
@@ -1632,7 +1632,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       }
       // The log is copied whole. Same provider: ACP `session/fork` carries the model context.
       // Another: a new session, and the first prompt carries the transcript (`detached`).
-      case "POST fork": {
+      case "thread.fork": {
         if (t.running) return json({ error: "Fork after the running turn ends" }, 409);
         const { providerId = t.meta.providerId, title } = await input(forkThreadRequestSchema);
         const record = options.providers.get(providerId);
@@ -1661,7 +1661,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         );
         return json(summary(forked));
       }
-      case "POST model": {
+      case "thread.model": {
         const { modelId } = await input(z.object({ modelId: z.string() }));
         const record = options.providers.get(t.meta.providerId);
         if (record?.auth.kind === "endpoint") {
@@ -1700,12 +1700,12 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         await useLive(t, (live) => setModel(t, live, modelId));
         return json(summary(t));
       }
-      case "POST trait": {
+      case "thread.trait": {
         const { id: traitId, value } = await input(traitRequestSchema);
         await useLive(t, (live) => setTrait(t, live, traitId, value));
         return json(body(t));
       }
-      case "GET stream": {
+      case "thread.stream": {
         const after = Number(
           url.searchParams.get("after") ?? request.headers.get("last-event-id") ?? 0,
         );

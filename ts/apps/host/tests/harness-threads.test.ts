@@ -1,3 +1,4 @@
+import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
 import { HostLog } from "../src/host-log.ts";
 import { createServer, type Server } from "node:http";
@@ -1901,4 +1902,25 @@ test("a restarted host drops the prompts it had queued, saying so", async () => 
     turnId: queued,
     state: "dropped",
   });
+});
+
+test("declared client and actual harness handler share input, output and refusal contracts", async () => {
+  const owner = host();
+  const client = createPeClient("http://host", (url, init) =>
+    servePeRoute(new Request(url, init), owner.fetch),
+  );
+  const thread = await client.call("threads.create", {
+    body: { providerId: "claude", title: "contract" },
+  });
+  const params = { id: thread.id };
+  expect((await client.call("thread.get", { params })).title).toBe("contract");
+  expect((await client.call("thread.update", { params, body: { title: "renamed" } })).title).toBe(
+    "renamed",
+  );
+  expect((await client.call("scope.get", { params })).revision).toBe(0);
+  await expect(
+    client.call("thread.question", { params, body: { requestId: "gone", action: "decline" } }),
+  ).rejects.toMatchObject({ status: 409, message: "No pending question gone" });
+  await client.call("thread.remove", { params });
+  await expect(client.call("thread.get", { params })).rejects.toMatchObject({ status: 404 });
 });

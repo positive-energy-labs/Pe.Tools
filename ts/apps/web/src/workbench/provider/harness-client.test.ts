@@ -1,3 +1,4 @@
+import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { harnessEventSchema } from "@pe/agent-contracts";
 
@@ -46,7 +47,10 @@ describe("harnessClient", () => {
         type: new Headers(init.headers).get("content-type"),
         body: init.body,
       });
-      return new Response(null, { status: 204 });
+      if (init.method === "DELETE") return new Response(null, { status: 204 });
+      if (_url.endsWith("/cancel")) return Response.json({ cancelled: false });
+      if (_url.endsWith("/prompt")) return Response.json({ turnId: "turn", state: "running" });
+      return Response.json(emptyChatState());
     });
     const client = harnessClient("http://host");
     await client.cancel("t");

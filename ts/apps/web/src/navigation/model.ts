@@ -1,4 +1,10 @@
-import { appRouteByPath, APP_TASKS, type AppExposure } from "@pe/agent-contracts";
+import {
+  appRouteByPath,
+  APP_TASKS,
+  routePath,
+  type AppExposure,
+  type SurfaceShell,
+} from "@pe/agent-contracts";
 import { TOOLS } from "./catalogue";
 
 export { routeKey, routePath } from "@pe/agent-contracts";
@@ -19,6 +25,13 @@ export function matchingTools(query: string) {
       query,
     ),
   );
+}
+/** Home and the shell's route icons. Without a picker, the pressed icon is the location. */
+export function shellButtons(shell: SurfaceShell, pathname: string) {
+  return [
+    { path: shell.home.path, label: shell.home.label, iconKey: null },
+    ...shell.icons.map((icon) => ({ ...icon, path: routePath(icon.route) })),
+  ].map((button) => ({ ...button, pressed: !shell.picker && button.path === pathname }));
 }
 export function locationLabel(path: string) {
   if (path === "/") return "Tools";

@@ -34,3 +34,17 @@ export const hostLogEntrySchema = z.strictObject({
   event: hostEventSchema,
 });
 export type HostLogEntry = z.infer<typeof hostLogEntrySchema>;
+
+/**
+ * `GET /pe/log?after=<id>&kind=&thread=&limit=`: one bounded page of the log in id order. Resume
+ * from `next`; `more` says the page stopped at `limit`; `gap` says retention dropped entries after
+ * `after`, so re-read the owner's snapshot first.
+ */
+export const HOST_LOG_PAGE_MAX = 1000;
+export const hostLogPageSchema = z.strictObject({
+  entries: z.array(hostLogEntrySchema),
+  gap: z.boolean(),
+  next: z.number().int().nonnegative(),
+  more: z.boolean(),
+});
+export type HostLogPage = z.infer<typeof hostLogPageSchema>;

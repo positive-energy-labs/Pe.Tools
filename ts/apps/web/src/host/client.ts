@@ -1,3 +1,5 @@
+import { createPeClient } from "@pe/agent-contracts/pe-api";
+import { readPeError } from "@pe/host-contracts/pe-api";
 import { hostFetch } from "#/host/runtime";
 import {
   HOST_RPC_SDK_SESSION_HEADER,
@@ -53,20 +55,23 @@ async function postCall(
   // queue-provenance §1: `web:<route>` — the current path is the route id at call time.
   headers[HOST_RPC_ORIGIN_HEADER] = `web:${window.location.pathname}`;
 
-  const response = await hostFetch(hostUrl("/call", options?.baseURL), {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ key, request }),
-    signal: options?.signal,
-  });
+  const response = await createPeClient(options?.baseURL, hostFetch).response(
+    "operation.call",
+    { body: { key, request } },
+    {
+      headers,
+      signal: options?.signal,
+    },
+  );
   if (!response.ok) {
-    const problem = (await response.json().catch(() => undefined)) as
+    const failure = await readPeError(response);
+    const problem = failure.details as
       | { kind?: string; message?: string; status?: number }
       | undefined;
-    throw new HostCallError(`${key}: ${problem?.message ?? response.statusText}`, response.status, {
+    throw new HostCallError(`${key}: ${failure.message}`, response.status, {
       kind: problem?.kind,
       operationKey: key,
-      title: problem?.message ?? response.statusText,
+      title: failure.message,
       status: response.status,
     });
   }

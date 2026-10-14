@@ -20,7 +20,7 @@ import {
 import { CHECKOUT_HOT, MACHINE_SEEDS } from "#/open/seeds";
 
 import type { ChatReading } from "#/chat/manifest";
-import { emptyChatState, type ChatState } from "#/workbench/chat-state";
+import { emptyChatState, type ChatState } from "@pe/agent-contracts/chat-state";
 
 const at = (minute: number) => new Date(Date.UTC(2026, 7, 30, 19, minute));
 

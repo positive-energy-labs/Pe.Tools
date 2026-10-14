@@ -1,3 +1,4 @@
+import { peClientScript } from "@pe/agent-contracts/pe-api";
 /// <reference lib="es2023.array" />
 // @vitest-environment jsdom
 import { cleanup, render, screen, within } from "@testing-library/react";
@@ -219,10 +220,12 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
 
 test("the standalone Page chip renders the host write verdict without expiring it locally", async () => {
   vi.useFakeTimers();
-  const source = pageSource.replace(
-    "/*pe:runtime*/ null",
-    JSON.stringify({ header: "x-pe-runtime", query: "runtime", service: "fixture" }),
-  );
+  const source = pageSource
+    .replace("/*pe:client*/ null", peClientScript())
+    .replace(
+      "/*pe:runtime*/ null",
+      JSON.stringify({ header: "x-pe-runtime", query: "runtime", service: "fixture" }),
+    );
   let write: object = { kind: "rw", thread: "t1", expiresAt: "2000-01-01T00:00:00.000Z" };
   const fakeWindow = { addEventListener() {}, open() {}, pe: undefined as any };
   runInNewContext(source, {
@@ -230,6 +233,7 @@ test("the standalone Page chip renders the host write verdict without expiring i
     document,
     location: new URL("http://127.0.0.1:9/pages/ducts/"),
     URL,
+    URLSearchParams,
     Headers,
     Request,
     performance,

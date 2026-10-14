@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { HarnessEvent } from "@pe/agent-contracts";
-import { emptyChatState } from "../chat-state";
+import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { useThreadStream } from "./thread-stream";
 
 const wire = vi.hoisted(() => ({ body: vi.fn(), stream: vi.fn() }));

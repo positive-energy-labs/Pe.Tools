@@ -5,7 +5,7 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import { Cause, Effect } from "effect";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { emptyChatState, type ChatState, type ThreadBody } from "../chat-state";
+import { emptyChatState, type ChatState, type ThreadBody } from "@pe/agent-contracts/chat-state";
 import { harnessClient, streamThread } from "./harness-client";
 
 const EMPTY = emptyChatState();

@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { Key } from "#/components/anatomy";
-import type { ContextBreakdown, ContextItem } from "../chat-state";
+import type { ContextBreakdown, ContextItem } from "@pe/agent-contracts/chat-state";
 import { EmptyState } from "#/components/lang/empty";
 import { Switcher } from "#/components/lang/switcher";
 import { cn } from "#/lib/utils";

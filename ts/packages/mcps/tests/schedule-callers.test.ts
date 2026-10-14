@@ -15,7 +15,7 @@ test("Gunshi Schedule read and human apply use exact HTTP action and frozen Work
   const output = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
     const host = new PeaCliCommands({ hostBaseUrl: fakeRuntimeHost() }).hostCommand();
-    const command = host.subCommands!.operations;
+    const command = host;
     const request = join(f.dir, "request.json");
     await writeFile(request, JSON.stringify({ scheduleId: 42 }), "utf8");
     await cli(

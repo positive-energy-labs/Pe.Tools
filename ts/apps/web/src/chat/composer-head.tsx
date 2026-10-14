@@ -34,7 +34,7 @@ import {
   selectTitle,
   selectToolCalls,
   type ChatState,
-} from "#/workbench/chat-state";
+} from "@pe/agent-contracts/chat-state";
 import { useWorkbench } from "#/workbench/provider";
 
 import { useHeadWorks } from "./head-works";

@@ -6,6 +6,8 @@ import type { HarnessEvent, HostEvent } from "@pe/agent-contracts";
 import { HostLog } from "../src/host-log.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { logReceipts } from "../src/gateway-owner.ts";
+import { createPeRoutes } from "../src/pe-routes.ts";
+import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -111,4 +113,34 @@ test("each committed receipt revision is appended in commit order", async () => 
     { kind: "receipt", receipt: first },
     { kind: "receipt", receipt: second },
   ]);
+});
+
+test("GET /pe/log pages the log after a cursor, by kind and thread", async () => {
+  const log = new HostLog(dir());
+  for (let seq = 1; seq <= 3; seq++) log.append(said("a", seq));
+  log.append(said("b", 1));
+  const routes = createPeRoutes({
+    registrations: [],
+    store: { getState: async () => null, setState: async () => {} },
+    heads: { observe: () => () => {} },
+    log,
+  });
+  const client = createPeClient("http://host", (url, init) =>
+    servePeRoute(new Request(url, init), routes.fetch),
+  );
+  const first = await client.call("log.read", {
+    query: { after: "1", thread: "a", limit: "1" },
+  });
+  expect([first.entries.map((e) => e.id), first.next, first.more, first.gap]).toEqual([
+    [2],
+    2,
+    true,
+    false,
+  ]);
+  const rest = await client.call("log.read", { query: { after: String(first.next), thread: "a" } });
+  expect([rest.entries.map((e) => e.id), rest.next, rest.more]).toEqual([[3], 3, false]);
+  expect((await client.call("log.read", { query: { kind: "receipt" } })).entries).toEqual([]);
+  await expect(client.call("log.read", { query: { after: "x" } })).rejects.toMatchObject({
+    status: 400,
+  });
 });
