@@ -40,6 +40,10 @@ test("an anonymous local call reads Pods and nothing else", async () => {
 
 test("the service caller stays limited to shutdown and window at /call", () => {
   expect(() =>
-    admitRequest({ kind: "service", service: hostOwnership.serviceName }, "operation", "POST /call"),
+    admitRequest(
+      { kind: "service", service: hostOwnership.serviceName },
+      "operation",
+      "POST /call",
+    ),
   ).toThrow(/shutdown and window/);
 });
