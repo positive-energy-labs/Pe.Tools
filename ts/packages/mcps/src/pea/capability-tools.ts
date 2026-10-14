@@ -279,7 +279,7 @@ export const peRead = createTool({
 export const peDo = createTool({
   id: "pe_do",
   description:
-    "Publish an authored HTML Page directly with {kind: 'page', slug, title, html, width?}; no target or discovery call is needed. Returns its canonical Page key, absolute openUrl and a real PNG image. HTML must be a valid document with a doctype; inline JavaScript is validated and preview errors preserve the prior Page. pe.js and pe.kit are optional. Or do one authorized capability by key from pe_find. The host admits writes only to Pea's own lifetimes or the granted head; external MCP clients can read any document and write Pea's own, but cannot hold rw in this release. Use pe_read for rows that do not mutate. Human-only rows refuse. Op calls accept an exact per-call target override; omission follows the live thread head. The result separately names Scope revision and actual target. For Takeoffs actions, retain input.actionId from the first result to recover the same attempt; never mint another ID after an uncertain outcome.",
+    "Publish an authored HTML Page directly with {kind: 'page', slug, title, html, width?}; no target or discovery call is needed. Returns its canonical Page key, absolute openUrl and a real PNG image. HTML must be a valid document with a doctype; inline JavaScript is validated and preview errors preserve the prior Page. pe.js and pe.kit are optional. For corrections or updates, resubmit complete HTML through this same Page arm with the same slug; do not edit Page files through terminal tools. Or do one authorized capability by key from pe_find. The host admits writes only to Pea's own lifetimes or the granted head; external MCP clients can read any document and write Pea's own, but cannot hold rw in this release. Use pe_read for rows that do not mutate. Human-only rows refuse. Op calls accept an exact per-call target override; omission follows the live thread head. The result separately names Scope revision and actual target. For Takeoffs actions, retain input.actionId from the first result to recover the same attempt; never mint another ID after an uncertain outcome.",
   inputSchema: peDoInputSchema,
   toModelOutput: (output) => {
     const parsed = pagePublicationResultSchema.safeParse(output);
@@ -292,7 +292,13 @@ export const peDo = createTool({
           type: "text",
           text: JSON.stringify({
             ...result,
-            capture: { mimeType: capture.mimeType, width: capture.width, height: capture.height },
+            capture: {
+              mimeType: capture.mimeType,
+              url: capture.url,
+              sha256: capture.sha256,
+              width: capture.width,
+              height: capture.height,
+            },
           }),
         },
         { type: "media", mediaType: capture.mimeType, data: capture.data },

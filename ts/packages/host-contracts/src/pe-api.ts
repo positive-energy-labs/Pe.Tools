@@ -33,6 +33,8 @@ export const pagePublicationResultSchema = z.strictObject({
   openUrl: z.url(),
   capture: z.strictObject({
     mimeType: z.literal("image/png"),
+    url: z.url(),
+    sha256: z.string().regex(/^[0-9a-f]{64}$/),
     data: z.string().min(1),
     width: z.number().int().positive(),
     height: z.number().int().positive(),

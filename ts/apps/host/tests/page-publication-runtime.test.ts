@@ -14,7 +14,7 @@ it("loads the Page publisher through the real Node/Jiti source loader", async ()
         "jiti/register",
         "--input-type=module",
         "--eval",
-        "await import('./src/ensure-source-lane.ts'); const page = await import('./src/page-publication.ts'); const publish = page.default?.publishPage ?? page.publishPage; const result = await publish(process.env.PE_TOOLS_PRODUCT_HOME, {kind:'page',slug:'native',title:'Native',html:'<!doctype html><title>Native</title><p>Native loader</p>'}, 'http://fixture', async()=>new Response(null,{status:404})); if (!result.capture.data.startsWith('iVBOR')) throw Error('PNG missing'); console.log('Page publisher imported and captured');",
+        "await import('./src/ensure-source-lane.ts'); const page = await import('./src/page-publication.ts'); const publish = page.default?.publishPage ?? page.publishPage; const storeModule = await import('./src/captures-route.ts'); const CaptureStore = storeModule.default?.CaptureStore ?? storeModule.CaptureStore; const captures = new CaptureStore(process.env.PE_TOOLS_PRODUCT_HOME + '/captures'); const result = await publish(process.env.PE_TOOLS_PRODUCT_HOME, {kind:'page',slug:'native',title:'Native',html:'<!doctype html><title>Native</title><p>Native loader</p>'}, 'http://fixture', async()=>new Response(null,{status:404}), captures); if (!(await captures.blob(result.capture.sha256))) throw Error('Retained PNG missing'); if (!result.capture.data.startsWith('iVBOR')) throw Error('PNG missing'); console.log('Page publisher imported and captured');",
       ],
       {
         cwd: join(import.meta.dirname, ".."),

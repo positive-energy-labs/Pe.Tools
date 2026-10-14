@@ -6,6 +6,7 @@ import { Script } from "node:vm";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
 import { createRequire } from "node:module";
 import { isSea } from "node:sea";
+import type { CaptureStore } from "./captures-route.ts";
 import { pagePublicationSchema, type PagePublication } from "@pe/host-contracts/pe-api";
 
 /** Serving and preview use the same host-minted identity without changing authored bytes. */
@@ -206,6 +207,7 @@ export async function publishPage(
   raw: unknown,
   origin: string,
   library: (request: Request) => Promise<Response>,
+  captures: Pick<CaptureStore, "adopt">,
 ) {
   const input = pagePublicationSchema.parse(raw);
   validatePageHtml(input.html);
@@ -218,7 +220,9 @@ export async function publishPage(
   });
   if (names.some((name) => name !== input.slug && name.toLowerCase() === input.slug.toLowerCase()))
     throw Error("Page folder differs only by case from an existing Page");
-  const capture = await capturePage(input, origin, library);
+  const captured = await capturePage(input, origin, library);
+  const sha256 = await captures.adopt(Buffer.from(captured.data, "base64"));
+  const capture = { ...captured, sha256, url: `${origin}/captures/${sha256}.png` };
   // Recheck after the browser yields: another writer must not redirect the publication.
   await ordinaryPath(index);
   await mkdir(directory, { recursive: true });

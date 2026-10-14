@@ -21,7 +21,14 @@ it("admits the publication arm without changing the key-shaped read/do arms", ()
 });
 
 it("serializes publication as a real MCP PNG block without scope/catalog scans", async () => {
-  const capture = { mimeType: "image/png", data: "cG5n", width: 1000, height: 600 };
+  const capture = {
+    mimeType: "image/png",
+    data: "cG5n",
+    width: 1000,
+    height: 600,
+    sha256: "a".repeat(64),
+    url: `http://host/captures/${"a".repeat(64)}.png`,
+  };
   const calls: string[] = [];
   vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
     calls.push(String(url));
@@ -69,7 +76,13 @@ it("serializes publication as a real MCP PNG block without scope/catalog scans",
       title: "Flow",
       key: "page:@pages/flow",
       openUrl: "http://host/pages/flow/",
-      capture: { mimeType: "image/png", width: 1000, height: 600 },
+      capture: {
+        mimeType: "image/png",
+        width: 1000,
+        height: 600,
+        sha256: capture.sha256,
+        url: capture.url,
+      },
     });
     expect(content[1]).toEqual({ type: "image", mimeType: "image/png", data: capture.data });
     expect(content).toHaveLength(2);

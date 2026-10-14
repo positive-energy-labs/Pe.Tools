@@ -4,6 +4,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, it } from "vite-plus/test";
 import { servePeRoute, peRoutes } from "@pe/agent-contracts/pe-api";
+import { createHash } from "node:crypto";
+import { Context, Effect } from "effect";
+import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
+import { CaptureStore, capturesRoute } from "../src/captures-route.ts";
 import { createPagesHandler } from "../src/pages-route.ts";
 import { asCaller, human, pea } from "./callers.ts";
 import type { Caller } from "@pe/agent-contracts";
@@ -19,7 +23,11 @@ async function fixture(caller: Caller = pea()) {
   await mkdir(join(root, "flow", ".state"), { recursive: true });
   await writeFile(join(root, "flow", "index.html"), "old");
   await writeFile(join(root, "flow", ".state", "binding.json"), "binding retained");
-  const handle = asCaller(caller, createPagesHandler(root, join(home, "Pods")));
+  const captures = new CaptureStore(join(home, "captures"));
+  const handle = asCaller(
+    caller,
+    createPagesHandler(root, join(home, "Pods"), undefined, captures),
+  );
   const publish = (body: unknown) =>
     servePeRoute(
       new Request("http://fixture/pe/pages/publish", {
@@ -29,7 +37,7 @@ async function fixture(caller: Caller = pea()) {
       }),
       handle,
     );
-  return { home, root, publish };
+  return { home, root, publish, captures };
 }
 const page = {
   kind: "page",
@@ -83,10 +91,29 @@ it("refuses a symlink folder and foreign publication principals", async () => {
   }
 });
 it("captures through real Edge, publishes only on success, and preserves authored state", async () => {
-  const { root, publish } = await fixture(human);
+  const { root, publish, captures } = await fixture(human);
   const response = await publish(page);
   expect(response.status, await response.clone().text()).toBe(201);
   const result = await response.json();
+  const expected = Buffer.from(result.capture.data, "base64");
+  expect(result.capture.sha256).toBe(createHash("sha256").update(expected).digest("hex"));
+  expect(result.capture.url).toBe(`http://fixture/captures/${result.capture.sha256}.png`);
+  expect(await captures.blob(result.capture.sha256)).toEqual(expected);
+  const assets = HttpRouter.toWebHandler(
+    capturesRoute(
+      () => Effect.succeed(HttpServerResponse.text("spa")),
+      () => captures,
+    ),
+    { disableLogger: true },
+  );
+  try {
+    const image = await assets.handler(new Request(result.capture.url), Context.empty() as never);
+    expect(image.status).toBe(200);
+    expect(image.headers.get("content-type")).toContain("image/png");
+    expect(Buffer.from(await image.arrayBuffer())).toEqual(expected);
+  } finally {
+    await assets.dispose();
+  }
   expect(result).toMatchObject({
     ok: true,
     key: "page:@pages/flow",

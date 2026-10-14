@@ -102,6 +102,7 @@ import {
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
 import { pageKitAsset } from "./page-kit.ts";
 import { exportPage } from "./page-export.ts";
+import { CaptureStore, hostCaptures } from "./captures-route.ts";
 import { publishPage, withPageKey } from "./page-publication.ts";
 
 /**
@@ -396,7 +397,12 @@ const escapeHtml = (text: string) =>
  * The pages handler over the Pages root and the Pods root: a plain web handler, so tests need no
  * server and SSE is a ReadableStream. No pods root means no pod pages.
  */
-export function createPagesHandler(root: string, pods?: string, live: PageLive = noLive) {
+export function createPagesHandler(
+  root: string,
+  pods?: string,
+  live: PageLive = noLive,
+  captures = new CaptureStore(join(root, ".captures")),
+) {
   /**
    * Where a slug's folder is: `<root>/<slug>`, or for `<id>--<page>` the folder of the one admitted
    * package with that id that contributes `pages/<page>` (a duplicated id contributes nothing).
@@ -812,7 +818,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
       try {
         // No caller headers enter preview; public libraries pass through the ordinary serving path.
         servedPe();
-        const result = await publishPage(root, input.data, url.origin, handle);
+        const result = await publishPage(root, input.data, url.origin, handle, captures);
         return json(result, 201);
       } catch (error) {
         return problem(422, error instanceof Error ? error.message : String(error));
@@ -991,7 +997,7 @@ export const pagesRoute = (root = productPagesRootPath, pods = productPodsRootPa
             body: JSON.stringify(body),
           }),
       };
-      const pages = createPagesHandler(root(), pods(), live);
+      const pages = createPagesHandler(root(), pods(), live, hostCaptures());
       const handler = HttpEffect.fromWebHandler((request) =>
         matchPeRoute(request.method, new URL(request.url).pathname)
           ? servePeRoute(request, pages)

@@ -159,6 +159,7 @@ function toolValue(result: unknown): unknown {
       return record?.type === "text" ? readString(record.text) : undefined;
     });
     if (texts.every((item) => item !== undefined)) result = texts.join("\n");
+    else return blocks;
   }
   if (typeof result !== "string" || !/^\s*[[{]/.test(result)) return result;
   try {
@@ -508,16 +509,21 @@ export function skillInvocation(prompt: string): { name: string; args: string } 
 function toolImage(part: unknown): { url: string; mime: string; field?: string } | undefined {
   if (typeof part === "string") {
     const mime = DATA_IMAGE.exec(part)?.[1];
-    return mime ? { url: part, mime } : undefined;
+    return mime && looksBase64(part.slice(part.indexOf(",") + 1)) ? { url: part, mime } : undefined;
   }
   const record = readRecord(part);
-  const mime = readString(record?.mediaType) ?? readString(record?.mimeType);
+  const source = readRecord(record?.source);
+  const mime =
+    readString(record?.mediaType) ?? readString(record?.mimeType) ?? readString(source?.media_type);
   if (!record || !mime?.startsWith("image/")) return undefined;
-  const data = readString(record.data);
+  const data = readString(record.data) ?? readString(source?.data);
   if (data !== undefined) {
-    if (DATA_IMAGE.test(data)) return { url: data, mime, field: "data" };
+    if (DATA_IMAGE.test(data))
+      return looksBase64(data.slice(data.indexOf(",") + 1))
+        ? { url: data, mime, field: source ? "source" : "data" }
+        : undefined;
     return looksBase64(data)
-      ? { url: `data:${mime};base64,${data}`, mime, field: "data" }
+      ? { url: `data:${mime};base64,${data}`, mime, field: source ? "source" : "data" }
       : undefined;
   }
   for (const field of ["image", "url"]) {
@@ -529,15 +535,33 @@ function toolImage(part: unknown): { url: string; mime: string; field?: string }
 
 const DATA_IMAGE = /^data:(image\/[\w.+-]+);base64,/;
 
-// ponytail: checks the first 64 chars and the length, not every byte.
+// A durable-event truncation marker must never become a broken image URL.
 const looksBase64 = (value: string) =>
-  value.length > 0 && value.length % 4 === 0 && /^[A-Za-z0-9+/]+={0,2}$/.test(value.slice(0, 64));
+  value.length > 0 && value.length % 4 === 0 && /^[A-Za-z0-9+/]+={0,2}$/.test(value);
 
 const outputEntries = (output: unknown): unknown[] => (Array.isArray(output) ? output : [output]);
 
 /** Which images a tool call produced. The transcript strip reads this. */
 function toolImages(output: unknown): string[] {
-  return outputEntries(output).flatMap((part) => toolImage(part)?.url ?? []);
+  const entries = outputEntries(output);
+  const published = entries.flatMap((part) => {
+    const block = readRecord(part);
+    const metadata = readRecord(
+      typeof part === "string"
+        ? toolValue(part)
+        : block?.type === "text"
+          ? toolValue(block.text)
+          : part,
+    );
+    if (metadata?.kind !== "page" || metadata.ok !== true) return [];
+    return toolImage(metadata.capture)?.url ?? [];
+  });
+  // The retained PNG survives bounded ACP data and reload; it is the Page's image identity.
+  return [
+    ...new Set(
+      published.length ? published : entries.flatMap((part) => toolImage(part)?.url ?? []),
+    ),
+  ];
 }
 
 /**
