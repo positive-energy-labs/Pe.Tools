@@ -338,6 +338,18 @@ export const harnessEventSchema = z.discriminatedUnion("kind", [
     kind: z.literal("turn_end"),
     turnId: z.string(),
     stopReason: z.string(),
+    /** The harness's `PromptResponse.usage`, verbatim; absent when it sent none, and an unsent
+     * optional count stays absent, never zero. The context window is the separate `usage_update`. */
+    usage: z
+      .object({
+        totalTokens: z.number(),
+        inputTokens: z.number(),
+        outputTokens: z.number(),
+        thoughtTokens: z.number().optional(),
+        cachedReadTokens: z.number().optional(),
+        cachedWriteTokens: z.number().optional(),
+      })
+      .optional(),
   }),
   z.object({
     seq: z.number(),

@@ -1150,7 +1150,24 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           t.meta.promptCapabilities?.embeddedContext,
         ),
       });
-      append(t, { kind: "turn_end", turnId, stopReason: result.stopReason });
+      const u = result.usage;
+      append(t, {
+        kind: "turn_end",
+        turnId,
+        stopReason: result.stopReason,
+        ...(u
+          ? {
+              usage: {
+                totalTokens: u.totalTokens,
+                inputTokens: u.inputTokens,
+                outputTokens: u.outputTokens,
+                ...(u.thoughtTokens != null ? { thoughtTokens: u.thoughtTokens } : {}),
+                ...(u.cachedReadTokens != null ? { cachedReadTokens: u.cachedReadTokens } : {}),
+                ...(u.cachedWriteTokens != null ? { cachedWriteTokens: u.cachedWriteTokens } : {}),
+              },
+            }
+          : {}),
+      });
       outcome = result.stopReason;
     } catch (error) {
       // A stopped thread's open turn is ended by restart recovery, not by "connection closed".

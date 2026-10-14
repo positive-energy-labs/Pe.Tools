@@ -693,6 +693,29 @@ test("a thread prompts, parks a permission, cancels, interrupts, renames, and re
   expect((await bare(threads, "POST", `/pe/threads/${id}/prompt`)).status).toBe(415);
 }, 30_000);
 
+test("a turn_end carries the harness's prompt usage; absent counts stay absent, no usage stays none", async () => {
+  process.env.FAKE_ACP_SHAPE = "config";
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "usage" });
+  await until(read, id, (b) => turnEnds(b).length === 1);
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "hello" });
+  const body = await until(read, id, (b) => turnEnds(b).length === 2);
+  const [withUsage, without] = turnEnds(body);
+  expect(withUsage).toMatchObject({
+    usage: { totalTokens: 15, inputTokens: 10, outputTokens: 5, cachedReadTokens: 4 },
+  });
+  expect(Object.keys((withUsage as { usage: object }).usage).sort()).toEqual([
+    "cachedReadTokens",
+    "inputTokens",
+    "outputTokens",
+    "totalTokens",
+  ]);
+  expect(without).not.toHaveProperty("usage");
+}, 30_000);
+
 test("every committed thread event lands in the host log in order; a delete forgets them", async () => {
   process.env.FAKE_ACP_SHAPE = "config";
   const threads = host();
