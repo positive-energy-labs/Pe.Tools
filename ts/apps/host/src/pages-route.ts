@@ -138,7 +138,7 @@ const RUNTIME_SLOT = "/*pe:runtime*/ null";
 const servedPe = () => {
   const source = asset("pe.js");
   if (!source.includes(RUNTIME_SLOT)) throw Error(`pe.js must hold one \`${RUNTIME_SLOT}\` slot`);
-  return source.replace("/*pe:client*/ null", peClientScript()).replace(
+  const rendered = source.replace("/*pe:client*/ null", peClientScript()).replace(
     RUNTIME_SLOT,
     JSON.stringify({
       header: HOST_RUNTIME_SERVICE_HEADER,
@@ -146,6 +146,9 @@ const servedPe = () => {
       service: hostOwnership.serviceName,
     }),
   );
+  const unfilled = rendered.match(/\/\*pe:[^*]+\*\/\s*null\b/);
+  if (unfilled) throw Error(`Unfilled pe.js slot: ${unfilled[0]}`);
+  return rendered;
 };
 
 /** One file segment: a leading dot is refused, so `.state/` and editor droppings stay private. */
