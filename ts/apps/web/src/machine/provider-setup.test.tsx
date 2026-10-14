@@ -104,7 +104,8 @@ test("settings still exists and projects the provider setup", async () => {
   await act(async () => {
     render(<Component />);
   });
-  await screen.findByLabelText("providers");
+  // The route loads lazily; under a whole-workspace run the default 1 s wait is marginal.
+  await screen.findByLabelText("providers", undefined, { timeout: 10_000 });
   setup();
   search.mockRestore();
 });
