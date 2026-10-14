@@ -48,4 +48,10 @@ public class PwaLauncherTests {
         Assert.That(absent.ArgumentList.Count(arg=>!arg.StartsWith("--")),Is.EqualTo(0));
         Assert.Throws<ArgumentException>(()=>PwaLauncher.Launch("msedge.exe",origin,origin+"/?token=secret",app,@"C:\profile"));
     }
+    [Test]
+    public void InstallOpensAnEdgeTabOnTheInstallButtonNeverAnAppWindow() {
+        // A tab is where Edge fires beforeinstallprompt, so the page's Install in Edge button opens Edge's install dialog.
+        var start=PwaLauncher.Install("msedge.exe","http://127.0.0.1:5175",@"C:\profile");
+        Assert.That(start.ArgumentList,Is.EqualTo(new[]{@"--user-data-dir=C:\profile","--profile-directory=Default","http://127.0.0.1:5175/settings?section=host"}));
+    }
 }
