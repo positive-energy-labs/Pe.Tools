@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import type { MachineNotice } from "@pe/agent-contracts";
+import { readingFrameSchema, type MachineNotice } from "@pe/agent-contracts";
 
 import { followNotices } from "./notice-follow";
 
@@ -10,8 +10,10 @@ type Fake = {
   close: () => void;
 };
 const item = (id: string): MachineNotice => ({ id, revision: 1, title: id, body: "" });
-const event = (id: number, value: unknown) =>
-  ({ data: JSON.stringify({ kind: "event", key: "k", value, id }) }) as MessageEvent<string>;
+/** Every frame is a real Reading frame: the contract says so before the follower sees it. */
+const frame = (value: unknown) =>
+  ({ data: JSON.stringify(readingFrameSchema.parse(value)) }) as MessageEvent<string>;
+const event = (id: number, value: unknown) => frame({ kind: "event", key: "k", value, id });
 
 function harness(cursor: number | null) {
   const streams: Fake[] = [];
@@ -28,7 +30,9 @@ function harness(cursor: number | null) {
     open: (url) => {
       const fake: Fake = { url, onmessage: null, onerror: null, close: () => {} };
       streams.push(fake);
-      return fake as never;
+      return fake as unknown as ReturnType<
+        NonNullable<Parameters<typeof followNotices>[0]["open"]>
+      >;
     },
   });
   return { streams, items, cursors, trays, stop };
@@ -53,9 +57,7 @@ test("a surface that was away resumes after its cursor and handles each item onc
 test("a first follow has no cursor and a gap sets it without raising an item", () => {
   const h = harness(null);
   expect(new URL(h.streams[0]!.url).searchParams.has("after")).toBe(false);
-  h.streams[0]!.onmessage!({
-    data: JSON.stringify({ kind: "gap", key: "k", dropped: null, id: 12 }),
-  } as MessageEvent<string>);
+  h.streams[0]!.onmessage!(frame({ kind: "gap", key: "k", dropped: null, id: 12 }));
   expect(h.items).toEqual([]);
   expect(h.cursors).toEqual([12]);
   h.streams[0]!.onmessage!(event(13, item("a")));
@@ -65,9 +67,7 @@ test("a first follow has no cursor and a gap sets it without raising an item", (
 
 test("tray presence arrives as a snapshot and a malformed item moves the cursor but not the card", () => {
   const h = harness(0);
-  h.streams[0]!.onmessage!({
-    data: JSON.stringify({ kind: "snapshot", key: "k", value: { tray: true } }),
-  } as MessageEvent<string>);
+  h.streams[0]!.onmessage!(frame({ kind: "snapshot", key: "k", value: { tray: true } }));
   h.streams[0]!.onmessage!(event(1, { nope: true }));
   expect(h.trays).toEqual([true]);
   expect(h.items).toEqual([]);

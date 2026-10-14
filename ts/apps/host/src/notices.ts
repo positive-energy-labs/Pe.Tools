@@ -251,4 +251,3 @@ export function createNotices(deps: {
     },
   };
 }
-export type Notices = ReturnType<typeof createNotices>;

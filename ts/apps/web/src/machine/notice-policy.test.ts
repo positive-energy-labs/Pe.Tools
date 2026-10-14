@@ -1,5 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import type { MachineNotice } from "@pe/agent-contracts";
+import { machineNoticeSchema } from "@pe/host-contracts/native-adapter";
 
 import {
   SNOOZE_MS,
@@ -14,14 +15,16 @@ import {
   type NoticeView,
 } from "./notice-policy";
 
-const turn = (id: string, revision = 1, thread = "t1"): MachineNotice => ({
-  id,
-  revision,
-  title: "Pea finished · Wiring",
-  body: "Done.",
-  href: `/pea?thread=${thread}`,
-  act: { kind: "reply", threadId: thread },
-});
+/** Every fixture is a real notice: the contract, not a cast, says it is one. */
+const turn = (id: string, revision = 1, thread = "t1"): MachineNotice =>
+  machineNoticeSchema.parse({
+    id,
+    revision,
+    title: "Pea finished · Wiring",
+    body: "Done.",
+    href: `/pea?thread=${thread}`,
+    act: { kind: "reply", threadId: thread },
+  });
 const elsewhere: NoticeView = { visible: true, focused: true, pathname: "/machine", thread: null };
 const onThread = (thread: string): NoticeView => ({
   visible: true,

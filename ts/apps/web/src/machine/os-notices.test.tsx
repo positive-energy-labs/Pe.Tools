@@ -1,39 +1,40 @@
 // @vitest-environment jsdom
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import type { MachineNotice } from "@pe/agent-contracts";
+import { readingFrameSchema } from "@pe/agent-contracts";
+import { machineNoticeSchema } from "@pe/host-contracts/native-adapter";
 
 import { OsNotices, setOsNotices } from "./os-notices";
 
-type Follow = Parameters<typeof import("./notice-follow").followNotices>[0];
-let follow: Follow | undefined;
-const stop = vi.fn();
-vi.mock("./notice-follow", () => ({
-  followNotices: (options: Follow) => {
-    follow = options;
-    return stop;
-  },
-}));
-vi.mock("#/navigation/surface-host", () => ({
-  useSurfaceHost: () => ({ surface: "web", native: false }),
-}));
+/** The host's `notices` stream as the browser sees it: real Reading frames over a stand-in EventSource. */
+const streams: { url: string; onmessage: ((m: MessageEvent<string>) => void) | null }[] = [];
+const send = (frame: unknown) =>
+  act(() =>
+    streams.at(-1)!.onmessage?.({
+      data: JSON.stringify(readingFrameSchema.parse(frame)),
+    } as MessageEvent<string>),
+  );
+const notice = (id: string, revision = 1) =>
+  machineNoticeSchema.parse({
+    id,
+    revision,
+    title: "Pea finished · ducts",
+    body: "Resized 41 of 43.",
+    href: "/pea?thread=t1",
+    act: { kind: "reply", threadId: "t1" },
+  });
+let logId = 0;
+const item = (id: string) => send({ kind: "event", key: "k", value: notice(id), id: ++logId });
+const tray = (present: boolean) => send({ kind: "snapshot", key: "k", value: { tray: present } });
 
-const finished: MachineNotice = {
-  id: "n1",
-  revision: 1,
-  title: "Pea finished · ducts",
-  body: "Resized 41 of 43.",
-  href: "/pea?thread=t1",
-  act: { kind: "reply", threadId: "t1" },
-};
 const raised: { title: string; options: NotificationOptions }[] = [];
 let permission: NotificationPermission;
 
 beforeEach(() => {
-  follow = undefined;
+  streams.length = 0;
   raised.length = 0;
+  logId = 0;
   permission = "granted";
-  stop.mockReset();
   const store = new Map<string, string>();
   Object.defineProperty(window, "localStorage", {
     configurable: true,
@@ -43,12 +44,23 @@ beforeEach(() => {
     },
   });
   vi.stubGlobal(
+    "EventSource",
+    class {
+      onmessage: ((m: MessageEvent<string>) => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor(public url: string) {
+        streams.push(this);
+      }
+      close() {}
+    },
+  );
+  vi.stubGlobal(
     "Notification",
     class {
       static get permission() {
         return permission;
       }
-      static requestPermission = vi.fn(async () => permission);
+      static requestPermission = async () => permission;
       onclick: (() => void) | null = null;
       constructor(title: string, options: NotificationOptions) {
         raised.push({ title, options });
@@ -60,47 +72,47 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
-  vi.restoreAllMocks();
+  Object.defineProperty(document, "hasFocus", { configurable: true, value: () => false });
+  history.replaceState(null, "", "/");
 });
 
 test("nothing follows until the person opts in, and denial leaves it off", async () => {
   render(<OsNotices />);
-  expect(follow).toBeUndefined();
+  expect(streams).toHaveLength(0);
   permission = "denied";
   expect(await setOsNotices(true)).toBe("denied");
-  expect(follow).toBeUndefined();
+  expect(streams).toHaveLength(0);
   permission = "granted";
   await act(async () => void (await setOsNotices(true)));
-  expect(follow).toBeDefined();
+  expect(streams).toHaveLength(1);
+  expect(new URL(streams[0]!.url, "http://host").searchParams.get("keys")).toBe(
+    JSON.stringify([{ kind: "notices" }]),
+  );
 });
 
 test("a card item becomes an OS notification only while no tray follows, once", async () => {
   render(<OsNotices />);
   await act(async () => void (await setOsNotices(true)));
-  act(() => follow!.onTray(true));
-  act(() => follow!.onNotice(finished));
+  tray(true);
+  item("n1");
   expect(raised).toEqual([]);
-  act(() => follow!.onTray(false));
-  act(() => follow!.onNotice({ ...finished, id: "n2" }));
+  tray(false);
+  item("n2");
   expect(raised).toHaveLength(1);
   expect(raised[0]).toMatchObject({
     title: "Pea finished · ducts",
     options: { body: "Resized 41 of 43.", tag: "n2" },
   });
-  // The same revision again (a replay) is already acknowledged.
-  act(() => follow!.onNotice({ ...finished, id: "n2" }));
+  // The same revision again (a replay past the cursor) is already acknowledged.
+  send({ kind: "event", key: "k", value: notice("n2"), id: ++logId });
   expect(raised).toHaveLength(1);
 });
 
 test("the thread the window is showing and focused on raises nothing", async () => {
-  vi.spyOn(document, "hasFocus").mockReturnValue(true);
+  Object.defineProperty(document, "hasFocus", { configurable: true, value: () => true });
   history.replaceState(null, "", "/pea?thread=t1");
-  try {
-    render(<OsNotices />);
-    await act(async () => void (await setOsNotices(true)));
-    act(() => follow!.onNotice(finished));
-    expect(raised).toEqual([]);
-  } finally {
-    history.replaceState(null, "", "/");
-  }
+  render(<OsNotices />);
+  await act(async () => void (await setOsNotices(true)));
+  item("n1");
+  expect(raised).toEqual([]);
 });
