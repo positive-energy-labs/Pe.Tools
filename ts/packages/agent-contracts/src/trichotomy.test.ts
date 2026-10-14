@@ -4,6 +4,7 @@ import { applyPatches, type RouteEnvelope } from "./route-doc.ts";
 import { settingsFieldStateSchema } from "./settings.ts";
 import type { RouteStateSpec } from "./route-state.ts";
 import {
+  pendingProposals,
   availableTransitions,
   cellTransitions,
   fanOut,
@@ -324,5 +325,22 @@ describe("sameValue", () => {
     expect(sameValue({ delete: true }, { value: undefined })).toBe(false);
     expect(sameValue({ value: "x" }, null)).toBe(false);
     expect(sameValue(undefined, undefined)).toBe(false);
+  });
+});
+
+describe("pending proposals in a Work document", () => {
+  it("counts every cell Pea proposed on, at any depth, and nothing else", () => {
+    const doc = {
+      reviewFlags: {
+        '["level","101"]': { proposal: { value: true, note: "undersized" } },
+        '["level","102"]': { proposal: null, staged: { value: true } },
+      },
+      edits: { a: { staged: { value: 3 } }, b: { proposal: { value: 4 }, staged: { value: 3 } } },
+      nested: [{ cells: { c: { proposal: { delete: true } } } }],
+      note: "proposal",
+    };
+    expect(pendingProposals(doc)).toBe(3);
+    expect(pendingProposals({})).toBe(0);
+    expect(pendingProposals(null)).toBe(0);
   });
 });
