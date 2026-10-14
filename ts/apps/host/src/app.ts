@@ -39,7 +39,6 @@ import { staticSpaLayer } from "./static-spa.ts";
 import { peRoutesLayer, peApiErrorsLayer } from "./pe-routes.ts";
 import { capturesRoute } from "./captures-route.ts";
 import { pagesRoute } from "./pages-route.ts";
-import type { Notices } from "./notices.ts";
 import { makeInstalledUpdateReader, updateRoutes } from "./update-route.ts";
 import { UpdateReader, type UpdateFact } from "./update-reader.ts";
 
@@ -151,8 +150,6 @@ export interface HttpLiveOptions {
   readonly updateReader?: UpdateReader["Service"];
   /** The spine's intake for update facts, handed to the reader this app builds. */
   readonly updateFact?: (fact: UpdateFact) => void;
-  /** The receipt-projected tray card feed; absent serves no `/host/notices`. */
-  readonly notices?: Notices;
   /** Built SPA directory, or null to skip static serving (dev/vite). */
   readonly webRoot: string | null;
   /** Route registrations for the host-owned route surface; tests inject their own. */
@@ -253,7 +250,6 @@ export function makeHttpLive(options: HttpLiveOptions) {
     adminShutdownRoute,
     adminWindowRoute,
     updateRoutes,
-    options.notices?.route ?? Layer.empty,
     peRoutesLayer(options.routeRegistrations, share),
     demoRoutes(),
     webUrl

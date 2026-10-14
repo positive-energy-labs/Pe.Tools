@@ -126,9 +126,8 @@ export interface MachineUpdate {
 }
 
 /**
- * One tray card item: a projection of one receipt revision on `/host/notices`, never a source of
- * truth. `id` + `revision` are the receipt's own, so a replay, a reconnect or a successor host's
- * re-read of the same revision is one item. `href` opens in the app window; absent opens the panel.
+ * One tray card item: a projection of one receipt revision on the `notices` Reading, never a source of
+ * truth. `id` + `revision` are the receipt's own, so a later revision replaces its earlier item. `href` opens in the app window; absent opens the panel.
  */
 export type MachineNotice = NativeNotice;
 

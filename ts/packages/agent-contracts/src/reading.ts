@@ -88,6 +88,14 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
    * frame is a `gap` carrying the cursor: read the thread body, then apply events by `seq`.
    */
   z.strictObject({ kind: z.literal("thread"), thread: z.string().min(1).max(200) }),
+  /**
+   * The host's card items (`MachineNotice`) from the host log: each `event` frame is one item and
+   * carries its log `id`, so a follower that persists the last id replays exactly what it missed.
+   * With no cursor, or one the log does not hold, the first frame is a `gap` carrying the log's
+   * current id: nothing earlier is owed, follow from there. A `snapshot` frame says whether a tray
+   * follows (`{ tray }`); `as: "tray"` marks the one follower that is the tray itself.
+   */
+  z.strictObject({ kind: z.literal("notices"), as: z.literal("tray").optional() }),
   z.strictObject({ kind: z.literal("takeoff-reading"), target: documentRefSchema }),
   /**
    * The families matrix of one document over one filter, by ENVELOPE only

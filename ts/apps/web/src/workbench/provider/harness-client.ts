@@ -91,7 +91,7 @@ export const notFound = (error: unknown) => (error as { status?: unknown } | nul
 export type OpenEvents = (url: string) => Pick<EventSource, "onmessage" | "onerror" | "close">;
 
 /** One Readings connection (`resources.stream`) for one key, resumed after a host log cursor. */
-const readingsUrl = (origin: string, key: ReadingRequest, after?: number) =>
+export const readingsUrl = (origin: string, key: ReadingRequest, after?: number) =>
   peRouteUrl(
     "resources.stream",
     {
