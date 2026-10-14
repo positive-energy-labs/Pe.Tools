@@ -5,52 +5,44 @@ import { readingFrameSchema } from "@pe/agent-contracts";
 import { machineNoticeSchema } from "@pe/host-contracts/native-adapter";
 
 import { OsNotices, setOsNotices, useThreadPresence } from "./os-notices";
-const presenceCall = vi.hoisted(() =>
-  vi.fn<(name: string, input: unknown) => Promise<{ ok: boolean }>>(async () => ({ ok: true })),
-);
-vi.mock("#/host/pe-client", () => ({ peClient: { call: presenceCall } }));
+/** Presence beats as the host sees them: the PUT bodies, through the real client and hostFetch. */
+const beats: { thread: string | null; visible: boolean; focused: boolean }[] = [];
+const recordBeats = () =>
+  vi.stubGlobal("fetch", async (url: string | URL | Request, init?: RequestInit) => {
+    if (String(url).includes("/pe/notices/presence/"))
+      beats.push(JSON.parse(String(init?.body)) as (typeof beats)[number]);
+    return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+  });
 
 test("thread presence beats on focus and every 5 seconds, and stops on route departure", () => {
   vi.useFakeTimers();
-  presenceCall.mockClear();
+  beats.length = 0;
+  recordBeats();
   Object.defineProperty(document, "hasFocus", { configurable: true, value: () => true });
   function Surface({ thread }: { thread: string | null }) {
     useThreadPresence(thread);
     return null;
   }
   const view = render(<Surface thread="t1" />);
-  expect(presenceCall).toHaveBeenLastCalledWith("notices.presence", {
-    params: { caller: expect.any(String) },
-    body: { thread: "t1", visible: true, focused: true },
-  });
+  expect(beats.at(-1)).toEqual({ thread: "t1", visible: true, focused: true });
   act(() => {
     vi.advanceTimersByTime(5_000);
   });
-  expect(presenceCall).toHaveBeenCalledTimes(2);
+  expect(beats.length).toBe(2);
   Object.defineProperty(document, "hasFocus", { configurable: true, value: () => false });
   act(() => {
     window.dispatchEvent(new Event("blur"));
   });
-  expect(presenceCall.mock.calls.at(-1)).toEqual([
-    "notices.presence",
-    {
-      params: { caller: expect.any(String) },
-      body: { thread: "t1", visible: true, focused: false },
-    },
-  ]);
+  expect(beats.at(-1)).toEqual({ thread: "t1", visible: true, focused: false });
   view.rerender(<Surface thread="t2" />);
-  expect(presenceCall.mock.calls.at(-2)?.[1]).toMatchObject({
-    body: { thread: "t1", visible: false, focused: false },
-  });
+  expect(beats.at(-2)).toMatchObject({ thread: "t1", visible: false, focused: false });
   view.unmount();
-  const count = presenceCall.mock.calls.length;
+  const count = beats.length;
   act(() => {
     vi.advanceTimersByTime(15_000);
   });
-  expect(presenceCall).toHaveBeenCalledTimes(count);
-  expect(presenceCall.mock.calls.at(-1)?.[1]).toMatchObject({
-    body: { thread: "t2", visible: false, focused: false },
-  });
+  expect(beats.length).toBe(count);
+  expect(beats.at(-1)).toMatchObject({ thread: "t2", visible: false, focused: false });
   vi.useRealTimers();
 });
 
