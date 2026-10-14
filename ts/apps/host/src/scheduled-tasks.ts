@@ -34,7 +34,7 @@ const isSameSchedule = (a: Schedule, b: Schedule) => JSON.stringify(a) === JSON.
 export const missedRun = (schedule: Schedule, due: string, now: Date) =>
   schedule.type === "fixed_time" && +now - Date.parse(due) > 10 * 60_000;
 
-export const FEEDBACK_MINER_MIN_RECEIPTS = 25;
+const FEEDBACK_MINER_MIN_RECEIPTS = 25;
 const taskSchema = z.strictObject({
   id: z.string().min(1),
   title: z.string().min(1),
