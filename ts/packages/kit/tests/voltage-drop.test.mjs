@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { Script } from "node:vm";
-import { calculate, sizes } from "../../../../examples/pages/voltage-drop/calc.mjs";
+import { calculate, sizes } from "../../../../examples/pods/snowdon-circuits/pages/tour/calc.mjs";
 
 test("single phase uses the outgoing and return conductor", () => {
   const result = calculate({ size: "10", length: 200, amps: 10, voltage: 120, phase: "1" });
@@ -30,15 +30,15 @@ test("invalid input never produces a plausible number", () => {
     assert.throws(() => calculate({ ...input, ...delta }));
   assert.equal(sizes.length, 10);
 });
-test("the shipped Page contains its kit, source and styles without remote runtime dependencies", async () => {
+test("the hosted Pod Page retains authored source and loads only its same-host kit door", async () => {
   const html = await readFile(
-    new URL("../../../../examples/pages/voltage-drop/index.html", import.meta.url),
+    new URL("../../../../examples/pods/snowdon-circuits/pages/tour/index.html", import.meta.url),
     "utf8",
   );
   assert.match(html, /pe\.kit/);
   assert.match(html, /id="page-source"/);
   assert.doesNotMatch(html, /<(?:script|link)[^>]+(?:src|href)=["']https?:/);
-  assert.doesNotMatch(html, /<script[^>]+src=/);
-  assert.match(html, /--pe-page/);
+  assert.match(html, /<script src="\/pages\/pe\.js"><\/script>/);
+  assert.doesNotMatch(html, /<script[^>]+src=["'](?!\/pages\/pe\.js)/);
   for (const [, code] of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) new Script(code);
 });
