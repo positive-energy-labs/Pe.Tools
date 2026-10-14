@@ -11,6 +11,8 @@ restated here.
 
 ## Decided
 
+- 2026-10-14, wave Y round 2 / FIELD-0725: one sanitized provider refusal record feeds the host log and the UI's Copy the details action. It retains the readiness step/message, executable candidates and per-candidate Win32 errors, resolved executable identity, and console/installer exit codes with an 8192-character output tail. A launcher's zero exit cannot erase an installer failure; missing command-exit evidence also refuses success. Discovery and console errors must remain distinguishable because the 0.7.25 field harvest could not establish the failed layer.
+
 - 2026-10-14, wave Y: Pea installs the complete checksum-verified OpenAI Windows release package in a physical per-user directory (`harness/install.ts` `codexPackagePath`). The upstream installer's junctions reproduce both coworker failures under RedirectionGuard. The unproved elevated `[A]` retry is removed. Claude keeps its official installer, downloaded and run with `-NoProfile -ExecutionPolicy Bypass -File`. `adapterCli` re-reads registry PATH and the official install locations after the console closes; no host restart or manual PATH edit is required.
 
 - 2026-10-14, wave X / FIELD-0725: Codex endpoint providers use a stable Pea-owned `CODEX_HOME` under machine state `codex-endpoints/<sha256(providerId)>`. `authEnv` publishes the same key-free custom provider in startup `config.toml` and session `CODEX_CONFIG`; the key remains `PEA_ENDPOINT_API_KEY` in child env. Subscription homes are unchanged. Existing endpoint sessions in the former home take `threads.ts`'s saved-transcript replay path; new sessions resume in their endpoint home. [First-run proof](../../../ts/apps/host/tests/endpoint-first-run.test.ts): Codex 0.162.1 / codex-acp 2.1.0 accepted an OpenAI key, completed an ACP turn, and resumed in a second process without onboarding, subscription login, or `auth.json` on 2026-10-14. Claude 2.1.299 / claude-agent-acp 0.84.0 passed empty-home endpoint readiness and sent authenticated API requests to a local stub.
@@ -188,6 +190,8 @@ restated here.
 - 2026-08-25 — One object-valued `page/lens-intent` atom for `inspectKey` and `following`: the `Lens` controller wrote fresh identities during its subscribed effect and caused an unbounded React notification loop. Replaced by primitive atoms.
 
 ## Owed
+
+- Wave Y round 2: prove the refusal details and clipboard on the installed host in the field, including the actual failed installer console. Windows filesystem/PowerShell fixtures and DOM clipboard tests cover the local contract; they do not reproduce the coworker's host security context or certify browser presentation.
 
 - 2026-10-14, wave Y: clean-machine PWA Install -> browser account sign-in -> authenticated Pea turn still needs field acceptance. Isolated real Codex 0.162.1 and Claude 2.1.299 installs reached the real adapters' signed-out state. The coworker-only `OSArchitecture` failure did not reproduce in the local PowerShell launch matrix; its failing elevated path is removed. Pea's direct Codex package does not enroll in the upstream junction-based updater; a harness-update surface remains unbuilt.
 

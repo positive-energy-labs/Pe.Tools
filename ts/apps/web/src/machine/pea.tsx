@@ -46,7 +46,8 @@ export function ProviderSetup({ providers }: { providers: ProvidersState }) {
               data-tone={provider.readiness.state === "ready" ? undefined : "caution"}
               title={readinessSub(provider)}
             >
-              {provider.readiness.state === "refused" && provider.readiness.failure
+              {provider.readiness.state === "refused" &&
+              (provider.readiness.failure || provider.readiness.detail)
                 ? "refused"
                 : readinessSub(provider)}
             </span>
@@ -70,10 +71,16 @@ export function ProviderSetup({ providers }: { providers: ProvidersState }) {
             </span>
           </span>
           <LoginLine provider={provider} providers={providers} />
-          {provider.readiness.state === "refused" && provider.readiness.failure ? (
+          {provider.readiness.state === "refused" &&
+          (provider.readiness.failure || provider.readiness.detail) ? (
             <EndpointError
               message={provider.readiness.message}
               failure={provider.readiness.failure}
+              detail={
+                provider.readiness.detail
+                  ? JSON.stringify(provider.readiness.detail, null, 2)
+                  : undefined
+              }
             />
           ) : null}
           <span className="break-all face-mono text-ink-2">

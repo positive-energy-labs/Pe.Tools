@@ -103,6 +103,49 @@ test("each child gets fresh PATH and a capture failure is visible in provider re
   });
 });
 
+test("the refusal logged and copied contains neither endpoint key nor URL query nor inherited credentials", async () => {
+  const server = createServer((req, res) => {
+    if (req.url === "/v1/models")
+      res.writeHead(200).end(JSON.stringify({ data: [{ id: "claude-a" }] }));
+    else
+      res.writeHead(403).end(
+        JSON.stringify({
+          error: {
+            message: "synthetic-key https://endpoint.invalid/v1?private-query inherited-secret",
+          },
+        }),
+      );
+  });
+  const baseUrl = await listen(server);
+  const providers = createProviders({ probeOnStart: false });
+  vi.stubEnv("TEST_SECRET", "inherited-secret");
+  const logged = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    await mkdir(dirname(productProvidersPath()), { recursive: true });
+    await writeFile(
+      productProvidersPath(),
+      JSON.stringify({
+        providers: [{ ...add, id: "claude-synthetic", auth: { ...add.auth, baseUrl } }],
+      }),
+    );
+    const provider = await (
+      await providers.fetch(request("providers/claude-synthetic/probe", "POST"))
+    ).json();
+    const detail = provider.readiness.detail;
+    expect(detail.step).toBe("endpoint");
+    expect(detail.failure.raw).toContain("[redacted]");
+    const logs = logged.mock.calls.flat().join("\n");
+    expect(logs).toContain(JSON.stringify(detail));
+    for (const secret of ["synthetic-key", "private-query", "inherited-secret", "TEST_SECRET"])
+      expect(logs + JSON.stringify(provider.readiness)).not.toContain(secret);
+  } finally {
+    logged.mockRestore();
+    vi.unstubAllEnvs();
+    await providers.close();
+    await close(server);
+  }
+});
+
 test("known auth overrides are removed case-insensitively while login homes and tool paths remain", () => {
   const inherited = {
     openai_api_key: "synthetic",

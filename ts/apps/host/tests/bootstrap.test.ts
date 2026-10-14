@@ -25,7 +25,11 @@ async function fixture() {
   const owner = new ActionJournal(join(dir, "actions.json"));
   const base = async (args: readonly string[]) => {
     if (args[0] === "version")
-      return replay("bootstrap-verify", { result: null, exitCode: 0 }, "missing");
+      return replay(
+        "bootstrap-verify",
+        { binary: { informationalVersion: GENERATED_FROM }, result: null, exitCode: 0 },
+        "missing",
+      );
     if (args[0] === "session")
       return replay("session-list", {
         result: { sessions: [], unreadableReceipts: [], processReadErrors: [] },
@@ -79,11 +83,7 @@ test("alignment requires a human and confirmation of this host's exact SDK versi
 
 test("alignment refuses an open foreign/observed Revit and names its year and pid", async () => {
   const { owner, sdk } = await fixture();
-  sdk.respond(async (args) =>
-    args[0] === "version"
-      ? replay("bootstrap-verify", { result: null, exitCode: 0 }, "missing")
-      : replay("session-list"),
-  );
+  sdk.respond(async (args) => (args[0] === "version" ? sdk.base(args) : replay("session-list")));
   const receipt = actionReceiptSchema.parse(await alignBootstrap(input, human, owner, sdk));
   expect(receipt).toMatchObject({
     state: "failed",
