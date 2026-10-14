@@ -33,14 +33,15 @@ events) uses, so one PostHog project carries product usage AND install-failure d
 | `palette_action` | the Do palette's tab actions (`CmdPltCommands`) | tab=commands\|tasks\|scripts, item id, ok; the funnel ribbon buttons migrate into |
 | `$exception` | Serilog Error/Fatal sink (Revit) | PostHog error tracking; ruled export is a code-only fingerprint, no message or raw stack |
 | `ui_feedback` | web feedback picker → host `POST /pe/feedback` | user note on one picked element: comment, url, selector, component + stack names, html, rect, cropped WebP `picture` data URL (≤256KB, else `picture_error`). Awaited: the popover keeps the note until PostHog accepts |
+| `agent_feedback` | Pea's `pe_feedback` tool, host `POST /pe/agent-feedback` | Pea's report on its own tooling: surface, expected, observed, workaround, refs, with host-stamped caller, opaque thread/turn ids, harness and model. Kept locally first in `agent-feedback.jsonl`; export is best-effort (ADR 0019) |
 
 ## Export boundary (ADR 0018, ruled 2026-10-13)
 
 Leaves the machine automatically: opaque install/process/browser/request ids, immutable
 component/build/version/lane stamps, timestamps, durations, closed phase/outcome/fault codes and
 counts. Never automatically: `doc_title`, operation inputs/results, usernames/hostnames, paths,
-raw URLs/messages/stacks, credentials, replay, IP/GeoIP. The one exception is `ui_feedback`, an
-explicit human submit, which keeps its content. MCP usage stats (`$mcp_tool_call`,
+raw URLs/messages/stacks, credentials, replay, IP/GeoIP. The exceptions are `ui_feedback`, an
+explicit human submit, and `agent_feedback` while users are coworkers (ADR 0019); both keep their content. MCP usage stats (`$mcp_tool_call`,
 `$mcp_initialize`) export tool name, duration, error flag, declared argument names and client
 identity, never parameters, results or intent. Ruled event names not yet emitted: `pea_turn`,
 `reading_timeout`, `reading_failure`, `stream_fault`, `host_fault`, `telemetry_dropped`,

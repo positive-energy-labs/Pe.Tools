@@ -11,7 +11,8 @@ restated here.
 
 ## Decided
 
-- 2026-10-14, owner: scheduler P1 follows T3 Code's persisted clock tasks: interval and local fixed time only, a fresh thread per run, no bound threads or agent scheduler controls. The shipped Feedback miner aggregates settled local threads; it does not react to individual events. Volume admission happens inside the run before a thread or model turn exists. Skipped attempts retain the prior dispatched mining window so low-volume coworkers can accumulate evidence. The initial policy is 03:00 local and 25 native receipts excluding missing/running/rejected verdicts; source and deterministic vectors live in [scheduled-tasks.ts](../../../ts/apps/host/src/scheduled-tasks.ts) and [scheduled-tasks.test.ts](../../../ts/apps/host/tests/scheduled-tasks.test.ts).
+- 2026-10-14, kaitpw: the agent feedback loop is [ADR 0019](../../adr/0019-agents-report-on-their-own-tooling.md): top-level `pe_feedback` with no kind field, automatic coworker egress, a gated miner over settled local threads, a clock-only host scheduler with a fresh thread per run, and the whole tracked source shipped once at the build sha. Initial miner policy: 03:00 local, 25 Revit-touching receipts ([scheduled-tasks.ts](../../../ts/apps/host/src/scheduled-tasks.ts)). PROVEN[isolated dev host from `feedback/main`, f78d2e67, 2026-10-14]: the miner seeded on start, run-now skipped at 0/25 with no thread, and a real Claude-backed Pea turn filed `pe_feedback` with its thread, turn, harness and model stamped.
+- 2026-10-14, kaitpw: per-turn token usage is what ACP `PromptResponse.usage` delivers, stored on `turn_end`; both the Claude and Codex adapters send it, so no shim. The context window was already persisted from `usage_update` and read by `chat-state.ts` `selectBreakdown`, so a context bar is UI-only work.
 
 - 2026-10-14, wave Y round 2 / FIELD-0725: one sanitized provider refusal record feeds the host log and the UI's Copy the details action. It retains the readiness step/message, executable candidates and per-candidate Win32 errors, resolved executable identity, and console/installer exit codes with an 8192-character output tail. A launcher's zero exit cannot erase an installer failure; missing command-exit evidence also refuses success. Discovery and console errors must remain distinguishable because the 0.7.25 field harvest could not establish the failed layer.
 
@@ -193,9 +194,11 @@ restated here.
 
 ## Owed
 
-- 2026-10-14, scheduler P1 cleanup: Git unregistered the implementation worktree, but dependency residue remains at `C:/Users/kaitp/source/repos/Pe.Tools-feedback-scheduler/ts`. Automatic approval review rejected recursive cleanup with "blocked by policy"; remove that residue when permitted.
-
-- 2026-10-14, scheduler P1: real miner acceptance waits for the parallel `pe_feedback` tool and an explicitly authorized model run on coworker-machine evidence. Deterministic scheduler and fake-ACP tests do not prove finding quality or feedback delivery.
+- 2026-10-14, ADR 0019: miner acceptance. One real gated run on a coworker machine with enough Revit receipts; finding quality and the `threads.history` read path under a real turn are unproven.
+- 2026-10-14, ADR 0019: installed lane. An MSI carrying `app/bin/host/src`, `pe_find`'s installed source sha, and one `agent_feedback` read back in PostHog are unproven.
+- 2026-10-14, ADR 0019: 03:00 with a ten-minute grace never fires on a machine asleep at that hour; the schedule wants an owner ruling once miner runs are observed.
+- 2026-10-14: Claude's `PromptResponse.usage` may be session-cumulative (`claude-agent-acp` `sessionUsage` reads `accumulatedUsage`); prove it per turn before showing a per-turn number.
+- 2026-10-14, ADR 0019: the second aggregation tier across machines, over PostHog `agent_feedback`, is unbuilt.
 
 - Wave Y round 2: prove the refusal details and clipboard on the installed host in the field, including the actual failed installer console. Windows filesystem/PowerShell fixtures and DOM clipboard tests cover the local contract; they do not reproduce the coworker's host security context or certify browser presentation.
 
