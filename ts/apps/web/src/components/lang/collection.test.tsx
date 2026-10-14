@@ -2,7 +2,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { expect, test } from "vite-plus/test";
 
-import { useCollection } from "@pe/kit/lang/collection";
+import { filterItems, useCollection } from "@pe/kit/lang/collection";
 
 const items = ["alpha", "beta"];
 const options = {
@@ -41,4 +41,41 @@ test("a capped group shows its first rows and one 'more' row that opens the rest
   act(() => list.result.current.pick("more:a"));
   expect(keys()).toEqual(["head:a", "a1", "a2", "a3", "head:b", "b1"]);
   expect(list.result.current.cursor).toBe("a3");
+});
+
+test("leading groups stay first while a query ranks the rest", () => {
+  const rows = ["tool:duct loss", "waits:check duct sizing"];
+  const ranked = (leadingGroups?: readonly string[]) =>
+    renderHook(() =>
+      useCollection({
+        ...options,
+        items: rows,
+        labelOf: (item: string) => item.split(":")[1]!,
+        groupOf: (item: string) => item.split(":")[0],
+        filter: "fuzzy",
+        query: "duct",
+        leadingGroups,
+      }),
+    )
+      .result.current.visible.filter((row) => row.kind === "head")
+      .map((row) => row.key);
+  expect(ranked()).toEqual(["head:tool", "head:waits"]);
+  expect(ranked(["waits"])).toEqual(["head:waits", "head:tool"]);
+});
+
+test("words mode: a query word starts a name word, sits in the name, or starts a detail word", () => {
+  const tools = [
+    { name: "Doc Lab", detail: "grounded-document engine" },
+    { name: "Identity and instruction first sentence", detail: "Codex" },
+    { name: "Pods", detail: "edit a duct spec" },
+    { name: "Duct Loss", detail: "friction" },
+  ];
+  const hits = filterItems(
+    tools,
+    (tool) => tool.name,
+    "words",
+    "duct",
+    (tool) => tool.detail,
+  ).map((tool) => tool.name);
+  expect(hits).toEqual(["Duct Loss", "Pods"]);
 });
