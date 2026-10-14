@@ -82,7 +82,8 @@ internal sealed class TrayContext : ApplicationContext {
             _window.Hide();
         };
         _window.TaskbarRestarted += (_, _) => { _icon.Visible = false; _icon.Visible = true; };
-        _window.TitlebarGeometryChanged += (_, _) => PostTitlebarGeometry();
+        _window.SetPinned(TrayPin.Load(PinPath));
+        _window.PinChanged += (_, _) => { TrayPin.Save(PinPath, _window.TopMost); PostPanelState(); };
         _health.Tick += async (_, _) => await CheckHealthAsync();
         _health.Start();
         if (_launch.ShowOnStart || resumed is not null) RequestShow(null);
@@ -104,6 +105,8 @@ internal sealed class TrayContext : ApplicationContext {
             } catch (InvalidOperationException) { }
         } catch (OperationCanceledException) { }
     }
+
+    private string PinPath => Path.Combine(ProductRuntimeLayout.ForCurrentUser().RootPath, $"tray-pin-{_launch.ProfileKey}.json");
 
     private string ResumePath => Path.Combine(ProductRuntimeLayout.ForCurrentUser().RootPath, $"tray-resume-{_launch.ProfileKey}.json");
 
@@ -272,7 +275,7 @@ internal sealed class TrayContext : ApplicationContext {
             core.Settings.AreDevToolsEnabled = false;
             core.Settings.IsBuiltInErrorPageEnabled = false;
             core.Settings.IsNonClientRegionSupportEnabled = true;
-            _window.ConfigureTitlebar(_web);
+            _window.ConfigureFrame(_web);
             core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All,
                 CoreWebView2WebResourceRequestSourceKinds.All);
             core.WebResourceRequested += (_, e) => {
@@ -309,7 +312,7 @@ internal sealed class TrayContext : ApplicationContext {
                         && payload.TryGetProperty("type", out var readyType) && readyType.ValueKind == JsonValueKind.String
                         && readyType.GetString() == "chrome-ready") {
                         _rendererReady = true;
-                        PostTitlebarGeometry(); PostNavigationHistory(); return;
+                        PostPanelState(); PostNavigationHistory(); return;
                     }
                     if (TryReadHistoryCommand(payload, _web.CoreWebView2.CanGoBack, _web.CoreWebView2.CanGoForward, out var back)) {
                         if (back) _web.CoreWebView2.GoBack(); else _web.CoreWebView2.GoForward();
@@ -322,10 +325,8 @@ internal sealed class TrayContext : ApplicationContext {
                         && TryGetWindowUrl(url.GetString()!, _service.ViewOrigin, out var destination)) {
                         OpenWindow(destination);
                     }
-                    else if (TrayWindow.TryReadChromeTheme(payload, out var background, out var foreground, out var dark)) {
-                        _window.ApplyChromeTheme(background, foreground, dark);
-                        _recordDev = true;
-                    }
+                    else if (payload.GetProperty("type").GetString() == "panel-pin") _window.SetPinned(payload.GetProperty("pinned").GetBoolean());
+                    else if (payload.GetProperty("type").GetString() == "panel-hide" && (!payload.GetProperty("unpinnedOnly").GetBoolean() || !_window.TopMost)) _window.Hide();
                 } catch (Exception error) when (error is JsonException or InvalidOperationException or COMException) { }
             };
             core.NavigationCompleted += async (_, e) => {
@@ -336,7 +337,7 @@ internal sealed class TrayContext : ApplicationContext {
                 _recordDev |= e.IsSuccess;
                 if (e.IsSuccess) _pendingPath = null;
                 if (!e.IsSuccess) _connected = false;
-                if (e.IsSuccess) { PostTitlebarGeometry(); PostNavigationHistory(); }
+                if (e.IsSuccess) { PostPanelState(); PostNavigationHistory(); }
                 await ShowConnectionAsync();
                 if (_launch.IsDev && e.IsSuccess) await RecordDevStateAsync();
             };
@@ -404,10 +405,7 @@ internal sealed class TrayContext : ApplicationContext {
         catch (IOException) { }
     }
 
-    private void PostTitlebarGeometry() {
-        if (!_ready || _closing || !IsOriginalService() || _web.Source is not { } source || !IsViewUrl(source.AbsoluteUri)) return;
-        PostNativeMessage(_window.ReadTitlebarGeometry());
-    }
+    private void PostPanelState() => PostNativeMessage(new { type = "panel-state", pinned = _window.TopMost });
 
     private void PostNavigationHistory() {
         if (!_ready || _closing || !IsOriginalService() || _web.Source is not { } source || !IsViewUrl(source.AbsoluteUri)) return;
@@ -537,8 +535,7 @@ internal sealed class TrayContext : ApplicationContext {
                 runtime = _web.CoreWebView2.Environment.BrowserVersionString, frontend = _service.ViewOrigin,
                 backend = _service.Origin, instanceId = _service.InstanceId, connected = _connected,
                 windowVisible = _window.Visible, profile = _launch.ProfileKey, geometry = JsonSerializer.Deserialize<JsonElement>(geometry!),
-                captionTheme = _window.ChromeThemeResult,
-                nativeTitlebar = _window.ReadTitlebarGeometry(),
+                pinned = _window.TopMost,
                 when = DateTime.UtcNow
             }));
             if (_window.Visible) {
@@ -660,151 +657,101 @@ internal sealed class TrayContext : ApplicationContext {
 
 internal sealed class TrayWindow : Form {
     private readonly uint _taskbarCreated = RegisterWindowMessage("TaskbarCreated");
+    private readonly System.Windows.Forms.Timer _dismiss = new() { Interval = 100 };
     private bool _positioned;
+    private WebView2? _view;
     public event EventHandler? TaskbarRestarted;
-    internal CaptionThemeResult? ChromeThemeResult { get; private set; }
-    private WebView2? _frameView;
-    private bool _customFrame;
-    private bool _refreshingFrame;
-    public event EventHandler? TitlebarGeometryChanged;
-
-    internal void ConfigureTitlebar(WebView2 view) {
-        if (!OperatingSystem.IsWindowsVersionAtLeast(10) || DwmIsCompositionEnabled(out var enabled) != 0 || !enabled) return;
-        _frameView = view; _customFrame = true; BackColor = Color.Black;
-        var policy = 2;
-        DwmSetWindowAttribute(Handle, 2, ref policy, sizeof(int));
-        var round = 2; // DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND, rounded panel
-        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000)) DwmSetWindowAttribute(Handle, 33, ref round, sizeof(int));
-        SetWindowPos(Handle, IntPtr.Zero, 0, 0, 0, 0, 0x37); // NOMOVE|NOSIZE|NOZORDER|NOACTIVATE|FRAMECHANGED
-        ExtendNativeFrame();
-        SizeChanged += (_, _) => RefreshTitlebar();
-        VisibleChanged += (_, _) => RefreshTitlebar();
-        DpiChanged += (_, _) => RefreshTitlebar();
-        view.ZoomFactorChanged += (_, _) => RefreshTitlebar();
-        RefreshTitlebar();
-    }
-
-    internal NativeTitlebarGeometry ReadTitlebarGeometry() {
-        if (!_customFrame || !Visible || WindowState == FormWindowState.Minimized
-            || DwmGetWindowAttribute(Handle, 5, out NativeRect bounds, Marshal.SizeOf<NativeRect>()) != 0)
-            return NativeTitlebarGeometry.Hidden;
-        return ProjectTitlebar(new Rectangle(bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top),
-            ClientSize, DeviceDpi, Visible, _frameView?.ZoomFactor ?? 1);
-    }
-
-    internal static NativeTitlebarGeometry ProjectTitlebar(Rectangle buttons, Size client, int dpi, bool visible, double zoomFactor = 1) {
-        if (!visible || dpi <= 0 || !double.IsFinite(zoomFactor) || zoomFactor <= 0 || client.Width <= 0 || client.Height <= 0 || buttons.Left <= 0 || buttons.Top < 0
-            || buttons.Width <= 0 || buttons.Height <= 0 || buttons.Right > client.Width || buttons.Bottom > client.Height)
-            return NativeTitlebarGeometry.Hidden;
-        var scale = dpi / 96d * zoomFactor;
-        return new("titlebar-geometry", true, new(0, 0, buttons.Left / scale, buttons.Bottom / scale));
-    }
-
-    private int ResizeBorder => GetSystemMetricsForDpi(32, (uint)DeviceDpi) + GetSystemMetricsForDpi(92, (uint)DeviceDpi);
-    // The resize hit-test margin is wider than the painted border. Clipping to it would cut off HTML controls.
-    private int VisibleFrameBorder => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000)
-        && DwmGetWindowAttribute(Handle, 37, out uint border, sizeof(uint)) == 0 && border is > 0 and <= 16
-        ? (int)border : Math.Max(1, (int)Math.Round(DeviceDpi / 96d));
-    internal static Rectangle ContentClipBounds(Size client, int border) =>
-        new(border, border, Math.Max(0, client.Width - border * 2), Math.Max(0, client.Height - border * 2));
-
-    private void RefreshTitlebar() {
-        if (_frameView is null || _refreshingFrame) return;
-        _refreshingFrame = true;
-        try {
-            var geometry = ReadTitlebarGeometry();
-            // Clip only the child so DWM owns the top-level frame and shadow for the panel.
-            ExtendNativeFrame();
-            var next = new Region(ContentClipBounds(ClientSize, VisibleFrameBorder));
-            if (geometry.visible) {
-                var scale = DeviceDpi / 96d * _frameView.ZoomFactor;
-                next.Exclude(new Rectangle((int)Math.Round(geometry.rect.width * scale), 0,
-                    ClientSize.Width - (int)Math.Round(geometry.rect.width * scale), (int)Math.Ceiling(geometry.rect.height * scale)));
-            }
-            var old = _frameView.Region; _frameView.Region = next; old?.Dispose();
-            TitlebarGeometryChanged?.Invoke(this, EventArgs.Empty);
-        } finally { _refreshingFrame = false; }
-    }
-
-    private void ExtendNativeFrame() {
-        var margins = new NativeMargins { Left = 1, Right = 1, Bottom = 1,
-            Top = Math.Max(ResizeBorder, (int)Math.Round(40 * DeviceDpi / 96d)) };
-        DwmExtendFrameIntoClientArea(Handle, ref margins);
-    }
+    public event EventHandler? PinChanged;
 
     public TrayWindow() {
         FormBorderStyle = FormBorderStyle.Sizable;
+        ControlBox = MinimizeBox = MaximizeBox = false;
         ShowInTaskbar = false;
-        TopMost = true;
         StartPosition = FormStartPosition.Manual;
         AutoScaleMode = AutoScaleMode.None;
         Text = "Pe.Tools";
-        DpiChanged += (_, e) => {
-            PositionAboveTaskbar(Screen.FromRectangle(e.SuggestedRectangle).WorkingArea, e.DeviceDpiNew);
+        Deactivate += (_, _) => _dismiss.Start();
+        Activated += (_, _) => _dismiss.Stop();
+        VisibleChanged += (_, _) => { if (!Visible) _dismiss.Stop(); };
+        _dismiss.Tick += (_, _) => {
+            // A held drag can leave Revit before entering WebView2; wait for its drop/activation.
+            if (Control.MouseButtons != MouseButtons.None) return;
+            _dismiss.Stop();
+            if (ShouldDismiss(TopMost, ContainsFocus, OwnsForeground())) Hide();
         };
+        DpiChanged += (_, e) => { e.Cancel = true; BeginInvoke(() => Rehome(Screen.FromRectangle(e.SuggestedRectangle).WorkingArea, DeviceDpi)); };
+        Resize += (_, _) => UpdateLimits();
+        LocationChanged += (_, _) => UpdateLimits();
     }
 
-    /** The panel shows with Activate; a notice card never takes focus from Revit. */
-    protected override bool ShowWithoutActivation => true;
+    internal void SetPinned(bool pinned) { TopMost = pinned; PinChanged?.Invoke(this, EventArgs.Empty); }
+    internal static bool ShouldDismiss(bool pinned, bool focused, bool ownedDialog) => !pinned && !focused && !ownedDialog;
+
+    private bool OwnsForeground() {
+        for (var window = GetForegroundWindow(); window != IntPtr.Zero; window = GetWindow(window, 4))
+            if (window == Handle || IsChild(Handle, window)) return true;
+        return false;
+    }
+
+    internal void ConfigureFrame(WebView2 view) {
+        _view = view;
+        var policy = 2;
+        DwmSetWindowAttribute(Handle, 2, ref policy, sizeof(int));
+        var round = 2;
+        DwmSetWindowAttribute(Handle, 33, ref round, sizeof(int));
+        SetWindowPos(Handle, IntPtr.Zero, 0, 0, 0, 0, 0x37);
+        SizeChanged += (_, _) => ClipView();
+        ClipView();
+    }
+
+    private void ClipView() {
+        if (_view is null) return;
+        var margins = new NativeMargins { Left = 1, Right = 1, Top = 1, Bottom = 1 };
+        DwmExtendFrameIntoClientArea(Handle, ref margins);
+        var old = _view.Region;
+        _view.Region = new Region(ContentClipBounds(ClientSize, 1));
+        old?.Dispose();
+    }
 
     public void PositionAboveTaskbar() {
         if (_positioned && Screen.FromRectangle(Bounds).WorkingArea.Contains(Bounds)) return;
         var work = Screen.FromPoint(Cursor.Position).WorkingArea;
         Location = work.Location;
-        PositionAboveTaskbar(work, DeviceDpi);
+        Rehome(work, DeviceDpi);
     }
-
-    public void Rehome() => PositionAboveTaskbar(Screen.FromRectangle(Bounds).WorkingArea, DeviceDpi);
-
-    private void PositionAboveTaskbar(Rectangle work, int dpi) {
-        Bounds = HomeBoundsFor(work, dpi);
-        _positioned = true;
+    public void Rehome() => Rehome(Screen.FromRectangle(Bounds).WorkingArea, DeviceDpi);
+    private void Rehome(Rectangle work, int dpi) { UpdateLimits(work, dpi); Bounds = HomeBoundsFor(work, dpi); _positioned = true; }
+    private void UpdateLimits() => UpdateLimits(Screen.FromRectangle(Bounds).WorkingArea, DeviceDpi);
+    private void UpdateLimits(Rectangle work, int dpi) {
+        MinimumSize = Size.Empty;
+        MaximumSize = MaximumFor(work.Size, dpi);
+        MinimumSize = new Size(Math.Min((int)Math.Round(360 * dpi / 96d), MaximumSize.Width),
+            Math.Min((int)Math.Round(360 * dpi / 96d), MaximumSize.Height));
     }
-
+    // Keep the 560 default on short screens; larger panels stop at half the work area.
+    internal static Size MaximumFor(Size work, int dpi) => new(
+        Math.Min(work.Width, Math.Max((int)Math.Round(560 * dpi / 96d), work.Width / 2)),
+        Math.Min(work.Height, Math.Max((int)Math.Round(560 * dpi / 96d), work.Height / 2)));
     internal static Rectangle HomeBoundsFor(Rectangle work, int dpi) {
-        var gutter = Math.Max(0, (int)Math.Round(12 * dpi / 96d));
-        var insetX = Math.Min(gutter, Math.Max(0, (work.Width - 1) / 2));
-        var insetY = Math.Min(gutter, Math.Max(0, (work.Height - 1) / 2));
-        var available = new Size(Math.Max(0, work.Width - 2 * insetX), Math.Max(0, work.Height - 2 * insetY));
-        var size = SizeFor(available, dpi);
-        return new Rectangle(work.Right - insetX - size.Width, work.Bottom - insetY - size.Height, size.Width, size.Height);
+        var gutter = Math.Max(0, (int)Math.Round(20 * dpi / 96d));
+        var x = Math.Min(gutter, Math.Max(0, (work.Width - 1) / 2));
+        var y = Math.Min(gutter, Math.Max(0, (work.Height - 1) / 2));
+        var size = SizeFor(new Size(Math.Max(0, work.Width - 2 * x), Math.Max(0, work.Height - 2 * y)), dpi);
+        return new Rectangle(work.Right - x - size.Width, work.Bottom - y - size.Height, size.Width, size.Height);
     }
-
-    internal static Size SizeFor(Size work, int dpi) =>
-        new(Math.Min((int)Math.Round(560 * dpi / 96f), work.Width),
-            Math.Min((int)Math.Round(560 * dpi / 96f), work.Height));
-
-    internal static bool TryReadChromeTheme(JsonElement payload, out int background, out int foreground, out bool dark) {
-        background = foreground = 0; dark = false;
-        if (!NativeAdapterContract.Accepts("renderer", payload) || payload.GetProperty("type").GetString() != "chrome-theme") return false;
-        background = (int)payload.GetProperty("background").GetDouble();
-        foreground = (int)payload.GetProperty("foreground").GetDouble();
-        dark = payload.GetProperty("dark").GetBoolean();
-        return true;
-    }
-
-    public void ApplyChromeTheme(int background, int foreground, bool dark) {
-        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000)) return;
-        // DWM owns the caption and its system controls; colors are COLORREF (0x00bbggrr).
-        try {
-            var darkMode = dark ? 1 : 0;
-            ChromeThemeResult = new CaptionThemeResult(
-                DwmSetWindowAttribute(Handle, 20, ref darkMode, sizeof(int)),
-                DwmSetWindowAttribute(Handle, 35, ref background, sizeof(int)),
-                DwmSetWindowAttribute(Handle, 36, ref foreground, sizeof(int)));
-        } catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException or ExternalException) { }
-    }
+    internal static Size SizeFor(Size work, int dpi) => new(Math.Min((int)Math.Round(560 * dpi / 96d), work.Width), Math.Min((int)Math.Round(560 * dpi / 96d), work.Height));
+    internal static Rectangle ContentClipBounds(Size client, int border) => new(border, border, Math.Max(0, client.Width - 2 * border), Math.Max(0, client.Height - 2 * border));
 
     protected override void WndProc(ref Message message) {
         if (message.Msg == _taskbarCreated) TaskbarRestarted?.Invoke(this, EventArgs.Empty);
-        if (_customFrame) {
-            if (DwmDefWindowProc(message.HWnd, (uint)message.Msg, message.WParam, message.LParam, out var result)) { message.Result = result; return; }
+        if (message.Msg == 0x112 && ((int)message.WParam & 0xfff0) is 0xf030 or 0xf020) return;
+        if (_view is not null) {
             if (message.Msg == 0x83 && message.WParam != IntPtr.Zero) { message.Result = IntPtr.Zero; return; }
-            if (message.Msg == 6) ExtendNativeFrame();
-            if (message.Msg == 0x84 && WindowState != FormWindowState.Maximized) {
+            if (message.Msg == 0x84) {
                 var packed = message.LParam.ToInt64();
                 var p = PointToClient(new Point((short)(packed & 65535), (short)((packed >> 16) & 65535)));
-                var edge = ResizeBorder; var left = p.X < edge; var right = p.X >= ClientSize.Width - edge;
+                var edge = GetSystemMetricsForDpi(32, (uint)DeviceDpi) + GetSystemMetricsForDpi(92, (uint)DeviceDpi);
+                var left = p.X < edge; var right = p.X >= ClientSize.Width - edge;
                 var top = p.Y < edge; var bottom = p.Y >= ClientSize.Height - edge;
                 var hit = top ? (left ? 13 : right ? 14 : 12) : bottom ? (left ? 16 : right ? 17 : 15) : left ? 10 : right ? 11 : 1;
                 if (hit != 1) { message.Result = (IntPtr)hit; return; }
@@ -812,24 +759,25 @@ internal sealed class TrayWindow : Form {
         }
         base.WndProc(ref message);
     }
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern uint RegisterWindowMessage(string message);
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(IntPtr window, uint attribute, ref int value, int size);
-    [StructLayout(LayoutKind.Sequential)] private struct NativeRect { public int Left, Top, Right, Bottom; }
+    protected override void Dispose(bool disposing) { if (disposing) _dismiss.Dispose(); base.Dispose(disposing); }
     [StructLayout(LayoutKind.Sequential)] private struct NativeMargins { public int Left, Right, Top, Bottom; }
-    [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr window, int attribute, out NativeRect value, int size);
-    [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr window, int attribute, out uint value, int size);
-    [DllImport("dwmapi.dll")] private static extern int DwmExtendFrameIntoClientArea(IntPtr window, ref NativeMargins margins);
-    [DllImport("dwmapi.dll")] private static extern bool DwmDefWindowProc(IntPtr window, uint message, IntPtr wParam, IntPtr lParam, out IntPtr result);
-    [DllImport("dwmapi.dll")] private static extern int DwmIsCompositionEnabled(out bool enabled);
-    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern uint RegisterWindowMessage(string message);
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr window, uint command);
+    [DllImport("user32.dll")] private static extern bool IsChild(IntPtr parent, IntPtr window);
     [DllImport("user32.dll")] private static extern int GetSystemMetricsForDpi(int index, uint dpi);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
+    [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr window, uint attribute, ref int value, int size);
+    [DllImport("dwmapi.dll")] private static extern int DwmExtendFrameIntoClientArea(IntPtr window, ref NativeMargins margins);
 }
 
-internal sealed record CaptionThemeResult(int ImmersiveDarkMode, int CaptionColor, int TextColor);
-internal sealed record NativeTitlebarRect(double x, double y, double width, double height);
-internal sealed record NativeTitlebarGeometry(string type, bool visible, NativeTitlebarRect rect) {
-    internal static readonly NativeTitlebarGeometry Hidden = new("titlebar-geometry", false, new(0, 0, 0, 0));
+internal static class TrayPin {
+    internal static bool Load(string path) {
+        try { return JsonSerializer.Deserialize<bool>(File.ReadAllText(path)); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException) { return false; }
+    }
+    internal static void Save(string path, bool pinned) {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, JsonSerializer.Serialize(pinned));
+    }
 }

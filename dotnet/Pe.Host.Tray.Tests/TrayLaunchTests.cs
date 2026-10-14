@@ -35,11 +35,11 @@ public class TrayLaunchTests {
         var work = new System.Drawing.Rectangle(-1920, -100, 1920, 1080);
         var at96 = TrayWindow.HomeBoundsFor(work, 96);
         Assert.That(at96.Size, Is.EqualTo(new System.Drawing.Size(560, 560)));
-        Assert.That(at96.Right, Is.EqualTo(work.Right - 12));
-        Assert.That(at96.Bottom, Is.EqualTo(work.Bottom - 12));
+        Assert.That(at96.Right, Is.EqualTo(work.Right - 20));
+        Assert.That(at96.Bottom, Is.EqualTo(work.Bottom - 20));
         var at192 = TrayWindow.HomeBoundsFor(work, 192);
-        Assert.That(at192.Right, Is.EqualTo(work.Right - 24));
-        Assert.That(at192.Bottom, Is.EqualTo(work.Bottom - 24));
+        Assert.That(at192.Right, Is.EqualTo(work.Right - 40));
+        Assert.That(at192.Bottom, Is.EqualTo(work.Bottom - 40));
         Assert.That(work.Contains(at192), Is.True);
         foreach (var small in new[] { new System.Drawing.Rectangle(50, 60, 600, 500), new System.Drawing.Rectangle(-2, -2, 5, 3) })
             Assert.That(small.Contains(TrayWindow.HomeBoundsFor(small, 192)), Is.True);
@@ -94,48 +94,6 @@ public class TrayLaunchTests {
         owner.Dispose();
         listening.GetAwaiter().GetResult();
     }
-    [Test]
-    public void ChromeThemeAcceptsOnlyExplicitColorrefsAndBooleanMode() {
-        using var valid = JsonDocument.Parse("{\"type\":\"chrome-theme\",\"background\":197121,\"foreground\":16777215,\"dark\":true}");
-        Assert.That(TrayWindow.TryReadChromeTheme(valid.RootElement, out var background, out var foreground, out var dark), Is.True);
-        Assert.That(background, Is.EqualTo(0x030201));
-        Assert.That(foreground, Is.EqualTo(0xFFFFFF));
-        Assert.That(dark, Is.True);
-        foreach (var invalid in new[] {
-            "null", "[]", "{\"type\":\"other\",\"background\":0,\"foreground\":0,\"dark\":true}",
-            "{\"type\":\"chrome-theme\",\"background\":-1,\"foreground\":0,\"dark\":true}",
-            "{\"type\":\"chrome-theme\",\"background\":16777216,\"foreground\":0,\"dark\":true}",
-            "{\"type\":\"chrome-theme\",\"background\":0.5,\"foreground\":0,\"dark\":true}",
-            "{\"type\":\"chrome-theme\",\"background\":\"0\",\"foreground\":0,\"dark\":true}",
-            "{\"type\":\"chrome-theme\",\"background\":0,\"foreground\":-1,\"dark\":true}",
-            "{\"type\":\"chrome-theme\",\"background\":0,\"foreground\":16777216,\"dark\":true}",
-            "{\"type\":\"chrome-theme\",\"background\":0,\"foreground\":0,\"dark\":1}",
-            "{\"type\":\"chrome-theme\",\"background\":0,\"foreground\":0}" }) {
-            using var json = JsonDocument.Parse(invalid);
-            Assert.That(TrayWindow.TryReadChromeTheme(json.RootElement, out _, out _, out _), Is.False, invalid);
-        }
-    }
-
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmGetWindowAttribute(IntPtr window, int attribute, out int value, int size);
-
-    /** The message the page sends reaches the DWM caption: the dark flag is read back; the colors have no DWM getter. */
-    [Test, Apartment(ApartmentState.STA)]
-    public void AThemeMessageTheRendererSendsReachesTheWindowsCaption() {
-        Assume.That(OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000), "caption colors need Windows 11");
-        const string sent = "{\"type\":\"chrome-theme\",\"background\":1710618,\"foreground\":16777215,\"dark\":true}";
-        using var message = JsonDocument.Parse(sent);
-        Assert.That(NativeAdapterContract.Accepts("renderer", message.RootElement), Is.True);
-        Assert.That(TrayWindow.TryReadChromeTheme(message.RootElement, out var background, out var foreground, out var dark), Is.True);
-        using var window = new TrayWindow();
-        _ = window.Handle;
-        window.ApplyChromeTheme(background, foreground, dark);
-        Assert.That(window.ChromeThemeResult, Is.EqualTo(new CaptionThemeResult(0, 0, 0)));
-        Assert.That(DwmGetWindowAttribute(window.Handle, 20, out var immersive, sizeof(int)), Is.Zero);
-        // DWM answers E_INVALIDARG to a read of the caption and text colors: their accepted set is the proof.
-        Assert.That(immersive, Is.EqualTo(1));
-    }
-
     [DllImport("shell32.dll")]
     private static extern int GetCurrentProcessExplicitAppUserModelID([MarshalAs(UnmanagedType.LPWStr)] out string appId);
 
@@ -235,88 +193,6 @@ public class TrayLaunchTests {
         foreach (var refused in new[] { "file:///C:/secret.txt", "javascript:alert(1)", "data:text/html,test",
                      "https://user:password@example.com/", "https://example.com/\n", "/relative" })
             Assert.That(TrayContext.TryGetExternalUrl(refused, true, out _), Is.False, refused);
-    }
-
-    [Test]
-    public void NativeTitlebarUsesMeasuredBoundsAndFailsClosedForUnavailableGeometry() {
-        var client = new System.Drawing.Size(1100, 700);
-        var buttons = new System.Drawing.Rectangle(796, 0, 292, 57);
-        var geometry = TrayWindow.ProjectTitlebar(buttons, client, 192, true);
-        Assert.That(geometry.visible, Is.True);
-        Assert.That(geometry.rect, Is.EqualTo(new NativeTitlebarRect(0, 0, 398, 28.5)));
-        Assert.That(TrayWindow.ProjectTitlebar(buttons, client, 192, false), Is.EqualTo(NativeTitlebarGeometry.Hidden));
-        Assert.That(TrayWindow.ProjectTitlebar(buttons, client, 0, true), Is.EqualTo(NativeTitlebarGeometry.Hidden));
-        foreach (var invalid in new[] { System.Drawing.Rectangle.Empty, new System.Drawing.Rectangle(-1, 0, 292, 57),
-                     new System.Drawing.Rectangle(796, -1, 292, 57), new System.Drawing.Rectangle(796, 0, 400, 57),
-                     new System.Drawing.Rectangle(796, 0, 292, 701) })
-            Assert.That(TrayWindow.ProjectTitlebar(invalid, client, 192, true), Is.EqualTo(NativeTitlebarGeometry.Hidden));
-    }
-
-    [Test, Apartment(ApartmentState.STA)]
-    public void CustomFrameKeepsNativeEdgesAndCaptionGeometryAcrossWindowStates() {
-        using var window = new TrayWindow();
-        using var view = new Microsoft.Web.WebView2.WinForms.WebView2 { Dock = System.Windows.Forms.DockStyle.Fill };
-        window.Controls.Add(view);
-        window.ConfigureTitlebar(view);
-        window.Rehome();
-        try {
-            window.Show();
-            System.Windows.Forms.Application.DoEvents();
-            var geometry = window.ReadTitlebarGeometry();
-            TestContext.WriteLine(JsonSerializer.Serialize(geometry));
-            Assert.That(geometry.visible, Is.True);
-            Assert.DoesNotThrow(() => NativeAdapterContract.SerializeNative(geometry));
-            Assert.That(DwmGetWindowAttribute(window.Handle, 1, out var rendering, sizeof(int)), Is.Zero);
-            Assert.That(rendering, Is.EqualTo(1), "DWM non-client rendering is enabled");
-            Assert.That(window.Region, Is.Null, "top-level HWND is never region-clipped");
-            Assert.That(view.Region, Is.Not.Null);
-            window.WindowState = System.Windows.Forms.FormWindowState.Maximized;
-            System.Windows.Forms.Application.DoEvents();
-            var maximized = window.ReadTitlebarGeometry();
-            TestContext.WriteLine("maximized " + JsonSerializer.Serialize(maximized));
-            Assert.That(maximized.visible, Is.True, "maximized caption");
-            window.WindowState = System.Windows.Forms.FormWindowState.Minimized;
-            Assert.That(window.ReadTitlebarGeometry().visible, Is.False);
-            window.WindowState = System.Windows.Forms.FormWindowState.Normal;
-            System.Windows.Forms.Application.DoEvents();
-            Assert.That(window.ReadTitlebarGeometry().visible, Is.True, "restored caption");
-        } finally { window.Hide(); }
-    }
-
-    [TestCase(96, 760, 560, 608, 146, 29, 29)]
-    [TestCase(120, 950, 700, 760, 183, 36, 28.8)]
-    [TestCase(144, 1140, 840, 912, 219, 43, 28.6666666666667)]
-    [TestCase(192, 1520, 1120, 1216, 292, 57, 28.5)]
-    public void CaptionProjectionPreservesMeasuredDpiRounding(int dpi, int width, int height,
-        int left, int buttonsWidth, int buttonsHeight, double cssHeight) {
-        var geometry = TrayWindow.ProjectTitlebar(new System.Drawing.Rectangle(left, 0, buttonsWidth, buttonsHeight),
-            new System.Drawing.Size(width, height), dpi, true);
-        Assert.That(geometry.rect.width, Is.EqualTo(608));
-        Assert.That(geometry.rect.height, Is.EqualTo(cssHeight).Within(0.00001));
-    }
-
-    [TestCase(0.5, 1216, 57)]
-    [TestCase(0.625, 972.8, 45.6)]
-    [TestCase(0.75, 810.6666666666666, 38)]
-    [TestCase(1, 608, 28.5)]
-    [TestCase(2, 304, 14.25)]
-    public void CaptionGeometryUsesTheWebViewsZoomedCssPixels(double zoom, double width, double height) {
-        var geometry = TrayWindow.ProjectTitlebar(new System.Drawing.Rectangle(1216, 0, 292, 57),
-            new System.Drawing.Size(1520, 1120), 192, true, zoom);
-        Assert.That(geometry.rect.width, Is.EqualTo(width).Within(0.00001));
-        Assert.That(geometry.rect.height, Is.EqualTo(height).Within(0.00001));
-        foreach (var invalid in new[] { 0, -1, double.NaN, double.PositiveInfinity })
-            Assert.That(TrayWindow.ProjectTitlebar(new System.Drawing.Rectangle(1216, 0, 292, 57),
-                new System.Drawing.Size(1520, 1120), 192, true, invalid), Is.EqualTo(NativeTitlebarGeometry.Hidden));
-    }
-
-    [Test]
-    public void NativeFrameClipPreservesAppBarControlsInsideTheVisibleBorder() {
-        var clip = TrayWindow.ContentClipBounds(new System.Drawing.Size(1100, 700), 2);
-        // AppBar controls begin at 4 CSS pixels left and 2.25 CSS pixels top; this vector is at DPR2.
-        Assert.That(clip.Contains(8, 4), Is.True);
-        Assert.That(clip.Contains(1, 4), Is.False);
-        Assert.That(clip, Is.EqualTo(new System.Drawing.Rectangle(2, 2, 1096, 696)));
     }
 
     [Test]

@@ -3,7 +3,6 @@ import { z } from "zod";
 /** Protocol support does not establish that a native shell is present. */
 export const NATIVE_ADAPTER_VERSION = 2;
 const text = z.string().min(1);
-const color = z.int().min(0).max(0xffffff);
 
 export const machineNoticeSchema = z.strictObject({
   id: text,
@@ -35,12 +34,8 @@ export type NativeNotice = z.infer<typeof machineNoticeSchema>;
 
 export const rendererMessageSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("chrome-ready") }),
-  z.strictObject({
-    type: z.literal("chrome-theme"),
-    background: color,
-    foreground: color,
-    dark: z.boolean(),
-  }),
+  z.strictObject({ type: z.literal("panel-pin"), pinned: z.boolean() }),
+  z.strictObject({ type: z.literal("panel-hide"), unpinnedOnly: z.boolean() }),
   z.strictObject({ type: z.literal("navigate-history"), direction: z.enum(["back", "forward"]) }),
   z.strictObject({ type: z.literal("open-window"), url: text }),
   z.strictObject({ type: z.literal("notice-ready") }),
@@ -49,16 +44,7 @@ export const rendererMessageSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("notice-panel"), url: text.optional() }),
 ]);
 export const nativeMessageSchema = z.discriminatedUnion("type", [
-  z.strictObject({
-    type: z.literal("titlebar-geometry"),
-    visible: z.boolean(),
-    rect: z.strictObject({
-      x: z.number().min(0),
-      y: z.number().min(0),
-      width: z.number().min(0),
-      height: z.number().min(0),
-    }),
-  }),
+  z.strictObject({ type: z.literal("panel-state"), pinned: z.boolean() }),
   z.strictObject({
     type: z.literal("navigation-history"),
     canGoBack: z.boolean(),
