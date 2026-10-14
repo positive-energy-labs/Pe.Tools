@@ -10,7 +10,11 @@ import { instrumentHostMcp } from "./mcp-analytics.ts";
 
 const version = "2025-11-25";
 const principalKey = (context: InvocationContext) =>
-  JSON.stringify([context.principal, context.caller ?? { kind: "anonymous" }]);
+  JSON.stringify(
+    context.device
+      ? ["device", context.device]
+      : [context.principal, context.caller ?? { kind: "anonymous" }],
+  );
 const error = (status: number, message: string) =>
   Response.json({ jsonrpc: "2.0", id: null, error: { code: -32000, message } }, { status });
 
@@ -79,6 +83,7 @@ export function createMcpDoor(
           : mintContext({
               kind: "external-mcp",
               label: typeof info?.name === "string" ? info.name : "MCP client",
+              ...(caller.device ? { device: caller.device } : {}),
             });
         const headers: Record<string, string> = {
           ...caller.headers,
@@ -137,6 +142,14 @@ export function createMcpDoor(
       }
       // HTTP disconnect does not cancel admitted work. The SDK owns protocol cancellation;
       // the session retains its admission context until explicit DELETE or host retirement.
+      // The session keeps its caller token; address and transport evidence follow this request.
+      if (caller.device && session.context.headers) {
+        const carried = session.context.headers as Record<string, string>;
+        for (const key of Object.keys(carried))
+          if (key !== HOST_CONTEXT_HEADER) delete carried[key];
+        Object.assign(carried, caller.headers);
+        delete carried.origin;
+      }
       const response = await session.analytics.run(() =>
         session!.transport.handleRequest(request, { parsedBody: body }),
       );
