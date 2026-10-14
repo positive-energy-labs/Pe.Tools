@@ -239,7 +239,7 @@ const unsettled = (row: ActionReceipt) => {
 };
 
 /** Settled receipts kept by compaction; open actions are never dropped. */
-export const RETAIN_RECEIPTS = 10_000;
+const RETAIN_RECEIPTS = 10_000;
 /** A row that blocks overlapping admissions and must stay visible until recovered. */
 const isOpen = (row: ActionReceipt) =>
   row.state === "running" || row.state === "unknown" || row.state === "incomplete";
