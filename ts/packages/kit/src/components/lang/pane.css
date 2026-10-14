@@ -1,12 +1,14 @@
-/* Pane: the focused pane (innermost, the one whose keys bind) wears the line-2 outline. */
+/* Pane: the focused pane (innermost, the one whose keys bind) wears a half-strength hairline drawn
+   inside its own edge, so it never spills into a neighbour's gutter. A pane whose body draws its
+   own focus ring sets `--pane-halo: transparent`; a custom property never loses to specificity. */
 [data-slot="pane"] {
   outline: 1px solid transparent;
-  outline-offset: 2px;
+  outline-offset: -1px;
   transition: outline-color var(--motion-control);
 }
 [data-slot="pane"]:focus-within:not(:has([data-slot="pane"]:focus-within)) {
   z-index: var(--z-sticky);
-  outline-color: var(--pe-line-2);
+  outline-color: var(--pane-halo, color-mix(in srgb, var(--pe-line-2) 55%, transparent));
 }
 @media (prefers-reduced-motion: reduce) {
   [data-slot="pane"] {

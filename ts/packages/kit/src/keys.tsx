@@ -15,13 +15,19 @@
 import { createContext, use, useMemo, type ReactNode, type RefObject } from "react";
 import {
   formatForDisplay,
+  getHotkeyManager,
+  toHotkeyRegistrationView,
   useHotkeys,
-  useHotkeyRegistrations,
   type UseHotkeyDefinition,
 } from "@tanstack/react-hotkeys";
 
-/** The help page reads every binding back through this; nothing keeps a second list of keys. */
-export { useHotkeyRegistrations };
+/**
+ * The help page reads every binding back through this; nothing keeps a second list of keys. It is a
+ * snapshot, not a subscription: the library's hook re-renders its reader on every registration, and
+ * a registration made while another component renders then sets state mid-render.
+ */
+export const readRegistrations = () =>
+  Array.from(getHotkeyManager().registrations.state.values()).map(toHotkeyRegistrationView);
 /** A chord as this platform spells it (Ctrl+K on Windows, ⌘ K on macOS); `Kbd` prints it. */
 export { formatForDisplay as chordLabel };
 
