@@ -4,7 +4,7 @@
  * Each step's effect answers with a chosen outcome; the executor keeps going after a step error so a
  * row can hold any mix of step states.
  */
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -15,7 +15,7 @@ import { BridgeError } from "../src/bridge.ts";
 import { readNativeReceipt } from "../src/native-receipts.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { crossingOf } from "./callers.ts";
-import { writeJournal } from "./journal-fixture.ts";
+import { readJournal, writeJournal } from "./journal-fixture.ts";
 
 type Outcome = "succeeded" | "failed" | "dispatchedFailure" | "cancelled" | "unknown";
 type End = "return" | "rethrow" | "incomplete" | "hostError";
@@ -231,9 +231,8 @@ async function restart(steps: ActionStep["state"][], prepared: boolean) {
   await writeJournal(path, [row]);
   const journal = new ActionJournal(path);
   const reloaded = (await journal.list(undefined, id))[0]!;
-  expect(JSON.parse(await readFile(path, "utf8")).receipts[0].body.value.state).toBe(
-    reloaded.state,
-  );
+  const [stored] = (await readJournal(path)).receipts;
+  expect(stored!.body.kind === "action" && stored!.body.value.state).toBe(reloaded.state);
   return reloaded;
 }
 const restarts: [ActionStep["state"][], boolean, Terminal][] = [

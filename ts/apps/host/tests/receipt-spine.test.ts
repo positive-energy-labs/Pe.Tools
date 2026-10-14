@@ -1,5 +1,6 @@
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
-import { mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { chmod, mkdtemp, readdir, rm } from "node:fs/promises";
+import { readJournal } from "./journal-fixture.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
@@ -70,8 +71,7 @@ test("subscribers read one durable action authority, retain opaque ids across re
   expect(receipt!.join.actionId).not.toBe(admission().id);
   expect(received.at(-1)).toEqual(receipt);
   expect(new Set(received.map((r) => `${r.id}/${r.revision}`)).size).toBe(received.length);
-  const disk = JSON.parse(await readFile(path, "utf8"));
-  expect(disk.actions).toBeUndefined();
+  const disk = await readJournal(path);
   expect(disk.receipts.filter((r: Receipt) => r.body.kind === "action")).toEqual([receipt]);
   const restarted = new ActionJournal(path, () => ({ ...stamp, build: "successor" }));
   expect(await restarted.read({})).toEqual(await owner.read({}));
@@ -96,14 +96,15 @@ test("facts publish after commit, isolate listeners, and detach caller data", as
   });
   const body = { kind: "usage" as const, event: "app_boot" as const, counters: {} };
   const r = await owner.recordFact(body);
-  expect(JSON.parse(await readFile(path, "utf8")).receipts).toContainEqual(r);
+  expect((await readJournal(path)).receipts).toContainEqual(r);
   expect(seen).toEqual([r]);
   expect(r.stamp).toEqual(stamp);
-  await mkdir(path + ".tmp");
+  // A journal the host cannot append to: the commit fails and publishes nothing.
+  await chmod(path, 0o444);
   await expect(owner.recordFact(body)).rejects.toThrow();
   expect(seen).toEqual([r]);
   expect((await owner.read({}))[0]).toEqual(r);
-  await rm(path + ".tmp", { recursive: true });
+  await chmod(path, 0o644);
   await owner.recordFact(body);
   expect(seen).toHaveLength(2);
 });
