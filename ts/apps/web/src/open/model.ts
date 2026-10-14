@@ -200,13 +200,12 @@ const cli = (argv: string[]) =>
     .map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg))
     .join(" ")}`;
 
-/** A free socket's default year: the file's own when installed, else the lowest installed year
- * that can open it, else the newest. A year the file cannot open is never a default. */
+/** A known file year requires an exact installed match. An upgrade is an explicit choice. */
 export function defaultYear(doc: DocRow | null, years: readonly number[]): number | null {
   if (!years.length) return null;
   const sorted = [...years].sort((a, b) => a - b);
   const saved = doc?.savedYear ?? null;
-  if (saved !== null) return sorted.find((year) => year >= saved) ?? sorted.at(-1)!;
+  if (saved !== null) return years.includes(saved) ? saved : null;
   if (doc?.lastYear && years.includes(doc.lastYear)) return doc.lastYear;
   return sorted.at(-1)!;
 }
@@ -269,12 +268,15 @@ export function launchPlan(
 
   let refusal: string | null = null;
   let waiting: string | null = null;
-  if (year === null)
-    refusal = "No installed Revit year is known yet; the machine reading has none.";
-  else if (doc && saved !== null && newest !== null && saved > newest)
+  if (doc && saved !== null && newest !== null && saved > newest)
     refusal = `${doc.title} was saved in Revit ${saved}; the newest Revit here is ${newest}.`;
   else if (draft.target && draft.target !== "new" && !target)
     refusal = `Revit '${draft.target}' is no longer running; patch another socket.`;
+  else if (year === null)
+    refusal =
+      saved !== null && years.length
+        ? `Revit ${saved} is not installed. Choose an installed year explicitly to upgrade a copy.`
+        : "No installed Revit year is known yet; the machine reading has none.";
   else if (doc && saved !== null && saved > year)
     refusal = `${doc.title} was saved in Revit ${saved}; Revit ${year} cannot open a newer file.`;
   else if (target && executionRefusal(target.row)) refusal = executionRefusal(target.row);

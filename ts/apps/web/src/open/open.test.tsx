@@ -20,7 +20,7 @@ import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-
 import { PatchBay } from "./bay";
 import { jobsOf } from "./model";
 import { runLifecycle } from "./lifecycle";
-import { EMPTY_DRAFT, launchPlan, modelRows, type DocRow } from "./model";
+import { EMPTY_DRAFT, defaultYear, launchPlan, modelRows, type DocRow } from "./model";
 import { OpenPage } from "./route";
 import {
   BACKGROUND_BOOTING,
@@ -32,6 +32,13 @@ import {
   OBSERVED_ICON,
   RECENTS,
 } from "./seeds";
+
+test("a known file year defaults only to that installed year; upgrade requires a choice", () => {
+  const doc = { savedYear: 2024, lastYear: 2026 } as DocRow;
+  expect(defaultYear(doc, [2025, 2026])).toBeNull();
+  expect(defaultYear(doc, [2026, 2024, 2025])).toBe(2024);
+  expect(defaultYear(doc, [2023])).toBeNull();
+});
 
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
   readScopedActionStatuses: vi.fn(),
@@ -97,12 +104,12 @@ test("the frozen Open route renders the bay and patches without opening a host t
 });
 
 describe("launch plan", () => {
-  test("nothing patched is a wait, not a refusal; the free socket defaults to the lowest year that opens it", () => {
+  test("an absent saved year requires an explicit upgrade choice", () => {
     const plan = launchPlan({ ...EMPTY_DRAFT, doc: row("Clinic-Fitout.rvt") }, world, rows);
-    expect(plan.refusal).toBeNull();
-    expect(plan.waiting).toContain("Patch it into a Revit");
+    expect(plan.refusal).toContain("Revit 2023 is not installed");
+    expect(plan.waiting).toBeNull();
     expect(plan.launch).toBeNull();
-    expect(plan.year).toBe(2024);
+    expect(plan.year).toBeNull();
   });
 
   test("an older file patched into your running Revit names the upgrade", () => {
@@ -430,7 +437,7 @@ test("the command line pasted whole equals the click path, and a click reads bac
 test("the click path alone: a jack, then the free card's year, is the same plan", () => {
   render(<Bay />);
   fireEvent.click(jack("Clinic-Fitout.rvt"));
-  fireEvent.click(newYear("2024", true));
+  fireEvent.click(newYear("2024", false));
   expect(
     screen.getByRole("button", { name: "Open in a new Revit 2024 and upgrade from 2023" }),
   ).toBeTruthy();
