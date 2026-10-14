@@ -149,7 +149,7 @@ internal static class PwaLauncher {
         if (installed is not null) {
             start.ArgumentList.Add("--app-id=" + installed.AppId);
             start.ArgumentList.Add("--app-launch-url-for-shortcuts-menu-item=" + canonical);
-        } else start.ArgumentList.Add(origin + "/settings?section=host");
+        } else start.ArgumentList.Add("--app=" + canonical);
         return start;
     }
 }

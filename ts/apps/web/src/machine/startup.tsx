@@ -68,6 +68,12 @@ export function StartupSettings({
         Windows Settings › Apps › Startup owns this switch. The installed host reports its current
         value here.
       </p>
+      {host.surface === "tray" && (
+        <p className="text-ink-2">
+          Pages the tray does not hold open in an Edge app window. To install Pe.Tools as an app,
+          open Settings › Host in that window.
+        </p>
+      )}
       {!fixture && !host.native && host.surface !== "tray" && (
         <>
           <p className="text-ink-2">
