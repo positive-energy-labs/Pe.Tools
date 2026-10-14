@@ -1,10 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { TakeoffsRoute } from "#/takeoff/route";
+import { urlPage } from "#/route";
+import { manifest } from "#/takeoff/manifest";
 import { routeSearch } from "#/route/route-owner";
 
 export { TakeoffsRoute, LiveTakeoffsRoute } from "#/takeoff/route";
 
-const str = (value: unknown) => (typeof value === "string" ? value : "");
+const url = urlPage(manifest)!;
 
 export const Route = createFileRoute("/takeoffs")({
   /**
@@ -14,11 +16,9 @@ export const Route = createFileRoute("/takeoffs")({
    */
   validateSearch: (search: Record<string, unknown>) => ({
     ...routeSearch(search),
-    demo: str(search.demo) || undefined,
-    level: str(search.level) || undefined,
-    zone: str(search.zone) || undefined,
-    room: str(search.room) || undefined,
+    ...url.read(search),
   }),
+  search: { middlewares: [...url.middlewares] },
   component: TakeoffsFileRoute,
 });
 

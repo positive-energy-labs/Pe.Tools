@@ -9,42 +9,13 @@ import {
   semanticActions,
 } from "@pe/agent-contracts";
 
-import { manifest as families } from "#/families/manifest";
-import { familyManifest } from "#/family/manifest";
-import { openManifest } from "#/open/manifest";
-import { manifest as parameterLinks } from "#/parameter-links/manifest";
-import { manifest as rooms } from "#/rooms/manifest";
-import { schedulesManifest } from "#/route/schedules/manifest";
-import { manifest as pods } from "#/routes/pods";
-import { manifest as takeoffs } from "#/takeoff/manifest";
+import { publicRoutes } from "#/route/builtin-routes";
 
-/** Every plugin route's manifest, by its key; the order is the pane's. */
-export const CHAT_PLUGINS = {
-  instances: openManifest,
-  takeoffs,
-  family: familyManifest(),
-  families,
-  pods,
-  "parameter-links": parameterLinks,
-  schedules: schedulesManifest(),
-  rooms,
-} as const;
-
-export type ChatPluginRoute = keyof typeof CHAT_PLUGINS;
-
-export const CHAT_PLUGIN_ROUTES = Object.keys(CHAT_PLUGINS) as [
-  ChatPluginRoute,
-  ...ChatPluginRoute[],
-];
-
-for (const route of CHAT_PLUGIN_ROUTES)
-  if (CHAT_PLUGINS[route].key !== route)
-    throw new Error(`chat plugin ${route} holds the ${CHAT_PLUGINS[route].key} manifest`);
-
-/** The Work's title where the route owns one ("Schedule Grid"), else the route's name. */
+export type ChatPluginRoute = string;
+export const chatPluginRoutes = () => publicRoutes.keys();
 export const chatPluginTitle = (route: ChatPluginRoute) => {
-  const manifest: { name: string; work?: { title: string } } = CHAT_PLUGINS[route];
-  return manifest.work?.title ?? manifest.name;
+  const manifest = publicRoutes.get(route)?.manifest;
+  return manifest ? (manifest.work?.title ?? manifest.name) : `Unavailable route: ${route}`;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -79,7 +50,7 @@ export function proposedRecord(
   result: unknown,
 ): ProposedRecord | null {
   const call = routeCallOf(toolName, args);
-  const route = CHAT_PLUGIN_ROUTES.find((name) => name === call?.route);
+  const route = chatPluginRoutes().find((name) => name === call?.route);
   if (!route || call?.member !== "propose") return null;
   const outer =
     isRecord(result) && isRecord(result.structuredContent) ? result.structuredContent : result;
@@ -151,19 +122,7 @@ export function actionCall(toolName: string, args: unknown, result: unknown): Ac
  * it, or `runs` it from its views. A key no manifest declares (or two declare) has no pane; its
  * record keeps the receipt link.
  */
-const ACTION_ROUTES: ReadonlyMap<string, ChatPluginRoute | null> = CHAT_PLUGIN_ROUTES.reduce(
-  (routes, route) => {
-    const manifest: { actions?: Record<string, { does?: unknown }>; runs?: readonly string[] } =
-      CHAT_PLUGINS[route];
-    const does = Object.values(manifest.actions ?? {}).map((action) => action.does);
-    for (const key of [...does, ...(manifest.runs ?? [])])
-      if (typeof key === "string")
-        routes.set(key, routes.has(key) && routes.get(key) !== route ? null : route);
-    return routes;
-  },
-  new Map<string, ChatPluginRoute | null>(),
-);
-export const actionRoute = (key: string): ChatPluginRoute | null => ACTION_ROUTES.get(key) ?? null;
+export const actionRoute = (key: string): ChatPluginRoute | null => publicRoutes.actionRoute(key);
 
 /** `takeoffs.sync` → `sync`, `schedule.grid.push` → `grid push`. */
 export const actionWord = (key: string) => key.split(".").slice(1).join(" ") || key;

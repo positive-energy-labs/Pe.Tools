@@ -1,12 +1,6 @@
 param([switch]$CreateShortcut, [switch]$Window, [switch]$Stop, [switch]$Restart, [switch]$Force)
 $ErrorActionPreference = 'Stop'
-# The host's own root: PE_TOOLS_PRODUCT_HOME moves machine-local state under <override>\.local-state.
-function Resolve-ServiceDirectory {
-    param([string]$ProductHomeOverride, [string]$LocalAppData)
-    $override = if ($ProductHomeOverride) { $ProductHomeOverride.Trim() } else { '' }
-    $root = if ($override) { Join-Path ([IO.Path]::GetFullPath($override)) '.local-state' } else { Join-Path $LocalAppData 'Positive Energy/Pe.Tools' }
-    return Join-Path $root 'state/service'
-}
+. (Join-Path $PSScriptRoot 'product-paths.ps1')
 function Assert-DevTrayIdle {
     param([string]$CheckoutRoot, [string]$StateDirectory, [switch]$Force)
     if ($Force) {
@@ -98,7 +92,9 @@ if (Test-Path -LiteralPath $supervisorFile) {
 }
 if ($Stop) { return }
 
-$services = Resolve-ServiceDirectory -ProductHomeOverride $env:PE_TOOLS_PRODUCT_HOME -LocalAppData $env:LOCALAPPDATA
+$services = Join-Path (Resolve-ProductRuntimeRoot) 'state/service'
+# An override home that no host has run in has no service folder yet.
+New-Item -ItemType Directory -Force -Path $services | Out-Null
 $matches = @(Get-ChildItem -LiteralPath $services -Filter '*.json' | ForEach-Object {
     try {
         $record = Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json

@@ -6,49 +6,8 @@
 <title>Voltage drop · Pe Pages</title>
 <link rel="icon" href="data:,">
 <!-- KIT -->
-<style>
-body { margin: 0; }
-main { max-width: 1280px; margin: auto; padding: 32px; }
-.mast, .heading, .summary, .section-head, .foot { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
-.mast { border-bottom: 1px solid var(--pe-line-2); padding-bottom: 12px; }
-.eyebrow { font-size: var(--type-small-size); letter-spacing: var(--track-upper); text-transform: uppercase; color: var(--pe-ink-2); }
-.heading { margin: 32px 0 24px; }
-h1 { font: var(--weight-medium) var(--type-display-size)/var(--type-display-line-height) var(--font-display); margin: 0 0 8px; }
-h2 { font-size: var(--type-title-size); font-weight: var(--weight-strong); margin: 0; }
-p { margin: 0; }
-.muted { color: var(--pe-ink-2); }
-.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-.workspace { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr); gap: 24px; margin-top: 28px; }
-.workspace > *, .fields > * { min-width: 0; }
-.section-head { margin-bottom: 12px; }
-.summary { padding: 20px 0; border-top: 1px solid var(--pe-line-2); border-bottom: 1px solid var(--pe-line-2); margin-bottom: 20px; }
-.metric { font: var(--weight-regular) var(--type-display-size)/var(--type-display-line-height) var(--font-mono); margin-top: 6px; }
-.unit { font-size: var(--type-title-size); color: var(--pe-ink-2); margin-left: 4px; }
-.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 20px; }
-.field { display: grid; gap: 6px; }
-.field:first-child { grid-column: 1 / -1; }
-.artifact-body { min-height: 280px; }
-.artifact-body > .dl-code-frame { border: 0; }
-.notes { padding: 16px 20px; border-top: 1px solid var(--pe-line); }
-.diagram { margin-top: 24px; }
-.foot { margin-top: 28px; padding-top: 12px; border-top: 1px solid var(--pe-line-2); }
-.comparison { min-height: 300px; }
-.comparison [data-slot="table"] { min-height: 0; }
-.result-note { margin-top: 8px; }
-table[aria-label="Electrical circuits"] { min-width: 1200px; }
-table[aria-label="Electrical circuits"] td { padding-inline: 8px; }
-.error { padding: 20px 0; color: var(--pe-alarm); }
-.actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
-.target { display: flex; gap: 12px; align-items: center; margin: 20px 0; }
-.target input { width: 100px; }
-.proposal { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 24px; }
-.proposal > * { min-width: 0; }
-.capture { margin: 24px 0; }
-.capture img { display: block; max-height: 560px; width: 100%; object-fit: contain; background: white; }
-.capture figcaption { margin-top: 8px; }
-@media (max-width: 1000px) { main { padding: 24px; } .workspace { grid-template-columns: minmax(0, 1.2fr) minmax(300px, 1fr); gap: 16px; } .metric { font-size: var(--type-head-size); } }
-@media (max-width: 720px) { main { padding: 16px; } .workspace { grid-template-columns: 1fr; } .heading, .foot { align-items: flex-start; flex-direction: column; } .mast { flex-wrap: wrap; } }
-</style>
+<style>body { margin: 0; }</style>
+
 </head>
 <body>
 <div id="app"></div>

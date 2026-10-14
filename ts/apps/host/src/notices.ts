@@ -1,12 +1,21 @@
-import { Effect, PubSub, Stream } from "effect";
-import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
+import {
+  readingKey,
+  type HostLogEntry,
+  type MachineNotice,
+  type Receipt,
+  type ReceiptQuery,
+  type ReadingFrame,
+  type ReadingRequest,
+} from "@pe/agent-contracts";
 
-import type { MachineNotice, Receipt, ReceiptReader } from "@pe/agent-contracts";
+import type { HostLog } from "./host-log.ts";
 
 /**
- * The tray's card feed is a projection of receipts, never a source of completion. A card exists
- * because a receipt revision says something a person who looked away wants to know; it settles
- * nothing, and a card that never shows leaves every action exactly as the receipt says.
+ * The card feed is a projection of receipts, never a source of completion. A card exists because a
+ * receipt revision says something a person who looked away wants to know; it settles nothing, and a
+ * card that never shows leaves every action exactly as the receipt says. Each announced item is
+ * appended to the host log, and the `notices` Reading serves the log from a follower's cursor, so
+ * a tray that was away is handed exactly what it missed, once.
  */
 
 type Act = NonNullable<MachineNotice["act"]>;
@@ -106,64 +115,54 @@ export function noticeOf(r: Receipt, context: NoticeContext): MachineNotice | nu
   }
 }
 
-const REPLAY_MS = 60_000;
 /**
  * Finished turns, Revit verb ends and updates wait this long after the first of a burst, so a burst
  * arrives as one paged card. An approval or question blocks Pea, so it never waits.
  */
 const BUFFER_MS = 30_000;
-const RING = 16;
 const SEEN = 256;
 
-type Entry = { notice: MachineNotice; atMs: number; request: string };
+type Entry = { notice: MachineNotice; request: string };
 const asks = (r: Receipt) => r.body.kind === "permission" || r.body.kind === "question";
+const noticesRequest = (request: ReadingRequest) =>
+  request.kind === "notices" ? request : undefined;
 
 export function createNotices(deps: {
-  readonly source: ReceiptReader;
+  readonly source: {
+    subscribe(query: ReceiptQuery, consume: (r: Receipt) => void): () => void;
+  };
   readonly context: NoticeContext;
-  readonly replayMs?: number;
+  readonly log: HostLog;
   readonly bufferMs?: number;
-  readonly now?: () => number;
-  readonly onFault?: (error: unknown) => void;
 }) {
-  const now = deps.now ?? Date.now;
-  const replayMs = deps.replayMs ?? REPLAY_MS;
   const bufferMs = deps.bufferMs ?? BUFFER_MS;
-  const hub = Effect.runSync(PubSub.unbounded<MachineNotice>());
   /** Highest revision accepted per receipt id: a duplicate or stale delivery is not a card. */
   const seen = new Map<string, number>();
   /** Answered requests, so a late delivery of the question cannot resurrect its card. */
   const answered = new Set<string>();
-  const ring: Entry[] = [];
-  /** Accepted, not yet published: the open buffer window. */
+  /** Accepted, not yet announced: the open buffer window. */
   let pending: Entry[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
 
-  function publish(entry: Entry) {
-    const same = ring.findIndex((e) => e.notice.id === entry.notice.id);
-    if (same >= 0) ring.splice(same, 1);
-    ring.push(entry);
-    if (ring.length > RING) ring.shift();
-    Effect.runSync(PubSub.publish(hub, entry.notice));
+  function announce({ notice, request }: Entry) {
+    deps.log.append({ kind: "notice", notice, ...(request ? { request } : {}) });
   }
 
   function flush() {
     timer = undefined;
     const burst = pending;
     pending = [];
-    burst.forEach(publish);
+    burst.forEach(announce);
   }
 
   function ingest(r: Receipt) {
     const body = r.body;
     if ((body.kind === "permission" || body.kind === "question") && body.phase === "resolved") {
-      // The question was answered elsewhere: it must not show, nor replay as a live request.
+      // The question was answered elsewhere: it must not show as a new card.
       const request = r.join.requestId;
       answered.add(request);
       if (answered.size > SEEN) answered.delete(answered.values().next().value!);
       pending = pending.filter((e) => e.request !== request);
-      for (let i = ring.length - 1; i >= 0; i--)
-        if (ring[i]!.request === request) ring.splice(i, 1);
       return;
     }
     if (asks(r) && answered.has(r.join.requestId)) return;
@@ -172,66 +171,83 @@ export function createNotices(deps: {
     seen.delete(r.id);
     seen.set(r.id, r.revision);
     if (seen.size > SEEN) seen.delete(seen.keys().next().value!);
-    const at = Date.parse(r.at);
-    const entry = {
-      notice,
-      atMs: Number.isFinite(at) ? at : now(),
-      request: asks(r) ? r.join.requestId : "",
-    };
+    const entry = { notice, request: asks(r) ? r.join.requestId : "" };
     pending = pending.filter((e) => e.notice.id !== notice.id);
-    if (asks(r) || bufferMs <= 0) return publish(entry);
+    if (asks(r) || bufferMs <= 0) return announce(entry);
     pending.push(entry);
     timer ??= setTimeout(flush, bufferMs);
   }
 
   const unsubscribe = deps.source.subscribe({ kinds: [...KINDS] }, ingest);
-  // The durable read is what lets a successor host announce what its predecessor left open.
-  const ready = deps.source
-    .read({ kinds: [...KINDS], after: new Date(now() - replayMs).toISOString() })
-    .then((receipts) =>
-      [...receipts].sort((a, b) => Date.parse(a.at) - Date.parse(b.at)).forEach(ingest),
-    )
-    .catch((error: unknown) => deps.onFault?.(error));
 
-  const key = (n: MachineNotice) => `${n.id}:${n.revision}`;
-  const encoder = new TextEncoder();
-  const frame = (n: MachineNotice) => encoder.encode(`data: ${JSON.stringify(n)}\n\n`);
+  /** Who follows as the tray: a web surface offers an OS notification only when none does. */
+  let trays = 0;
+  const presence = new Set<() => void>();
+  const presenceChanged = () => presence.forEach((listener) => listener());
 
-  /** The tray's card feed: SSE, one `data:` line per item; replay is the bounded last minute. */
-  const route = HttpRouter.add("GET", "/host/notices", () =>
-    Effect.succeed(
-      Response.stream(
-        Stream.unwrap(
-          Effect.gen(function* () {
-            // Subscribe before the replay snapshot so no card falls between the two.
-            const live = yield* PubSub.subscribe(hub);
-            yield* Effect.promise(() => ready);
-            const replay = ring.filter((e) => now() - e.atMs < replayMs).map((e) => e.notice);
-            const sent = new Set(replay.map(key));
-            return Stream.make(encoder.encode(": open\n\n"), ...replay.map(frame)).pipe(
-              Stream.concat(
-                Stream.fromSubscription(live).pipe(
-                  Stream.filter((n) => !sent.has(key(n))),
-                  Stream.map(frame),
-                ),
-              ),
-            );
-          }),
+  const isNotice = ({ event }: HostLogEntry) => event.kind === "notice";
+  const isResolution = ({ event }: HostLogEntry) =>
+    event.kind === "receipt" &&
+    (event.receipt.body.kind === "permission" || event.receipt.body.kind === "question") &&
+    event.receipt.body.phase === "resolved";
+
+  /**
+   * The `notices` Reading: every item announced after the follower's cursor, then each one live.
+   * An ask answered after it was announced is not replayed.
+   */
+  function observe(
+    request: ReadingRequest,
+    publish: (frame: ReadingFrame) => void,
+    after?: number | null,
+  ): (() => void) | undefined {
+    const notices = noticesRequest(request);
+    if (!notices) return undefined;
+    const key = readingKey(request);
+    const release: Array<() => void> = [];
+    if (notices.as === "tray") {
+      trays++;
+      presenceChanged();
+      release.push(() => {
+        trays--;
+        presenceChanged();
+      });
+    } else {
+      const say = () => publish({ kind: "snapshot", key, value: { tray: trays > 0 } });
+      say();
+      presence.add(say);
+      release.push(() => presence.delete(say));
+    }
+    // A cursor the log never reached is a lost log, not a follower that is current.
+    const replay =
+      after == null || after > deps.log.last
+        ? null
+        : deps.log.read(after, (entry) => isNotice(entry) || isResolution(entry));
+    if (!replay || replay.gap) publish({ kind: "gap", key, dropped: null, id: deps.log.last });
+    else {
+      const resolved = new Set(
+        replay.entries.flatMap(({ event }) =>
+          event.kind === "receipt" ? [event.receipt.join.requestId] : [],
         ),
-        {
-          contentType: "text/event-stream",
-          headers: { "cache-control": "no-cache", connection: "keep-alive" },
-        },
-      ),
-    ),
-  );
+      );
+      for (const { id, event } of replay.entries)
+        if (event.kind === "notice" && !(event.request && resolved.has(event.request)))
+          publish({ kind: "event", key, value: event.notice, id });
+    }
+    // Read and subscribe run in one synchronous step, so no entry falls between them.
+    release.push(
+      deps.log.subscribe((entry) => {
+        if (entry.event.kind === "notice")
+          publish({ kind: "event", key, value: entry.event.notice, id: entry.id });
+      }),
+    );
+    return () => release.forEach((fn) => fn());
+  }
 
   return {
-    route,
+    observe,
     close: () => {
       unsubscribe();
       clearTimeout(timer);
     },
   };
 }
-export type Notices = ReturnType<typeof createNotices>;

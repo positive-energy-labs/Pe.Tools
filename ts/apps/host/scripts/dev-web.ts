@@ -1,9 +1,12 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { once } from "node:events";
 import { createServer } from "vite-plus";
-import { checkoutRootFrom, hostProcessIdentity } from "@pe/host-contracts/service-identity";
+import {
+  checkoutRootFrom,
+  hostProcessIdentity,
+  productScratchPath,
+} from "@pe/host-contracts/service-identity";
 
 if (!process.send) throw new Error("Run vp run dev from the host or workspace package.");
 const disconnected = once(process, "disconnect");
@@ -21,7 +24,8 @@ const baseUrl = `http://127.0.0.1:${file.port}`;
 process.env.PE_TOOLS_HOST_BASE_URL = baseUrl;
 process.env[hostProcessIdentity.serviceNameVariable] = file.name;
 // Each launch owns its optimizer files, including after an abrupt backend/watch exit.
-const cacheDir = await mkdtemp(join(tmpdir(), "pe-vite-"));
+await mkdir(productScratchPath(), { recursive: true });
+const cacheDir = await mkdtemp(join(productScratchPath(), "pe-vite-"));
 let vite: Awaited<ReturnType<typeof createServer>> | undefined;
 try {
   vite = await createServer({

@@ -12,6 +12,8 @@ public sealed record ProductRuntimeLayout(
     ProductRuntimeLogLayout Logs,
     ProductRuntimeCacheLayout Cache
 ) {
+    public string ScratchPath => Path.Combine(this.RootPath, "scratch");
+
     public static ProductRuntimeLayout ForCurrentUser(string? localAppData = null) {
         var rootPath = ProductPathing.ResolveRuntimeRoot(localAppData);
         return new ProductRuntimeLayout(

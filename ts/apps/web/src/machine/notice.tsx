@@ -1,6 +1,6 @@
 /**
  * The tray's notice card, mounted once at the root on the tray surface. The host projects receipt
- * revisions onto `/host/notices` and holds each burst ~30 s; the tray shim hands every item to
+ * revisions onto the `notices` Reading (the host log) and holds each burst ~30 s; the tray shim hands every item to
  * a native `notice` event once this card says `notice-ready`, and lends its window card-sized without
  * taking focus. One card pages every pending item: a new notice appends to the open card, a
  * draining timer walks item to item and the card ends after the last, hover pauses it and typing
@@ -10,7 +10,7 @@
  * the authority, and an item leaves only when that door accepts.
  */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowUp, Square, X } from "lucide-react";
+import { AlarmClockOff, ArrowUp, Square, X } from "lucide-react";
 import type { Machine, MachineNotice, Reading } from "@pe/agent-contracts";
 import {
   nativeMessageSchema,
@@ -30,8 +30,20 @@ import { harnessClient } from "#/workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "#/workbench/config";
 import { Markdown } from "#/workbench/prose";
 import { useSurfaceHost } from "#/navigation/surface-host";
+import { useDestination } from "#/navigation/state";
+import { FailureNote } from "#/components/failure-note";
 import { useAction } from "#/readings";
 
+import {
+  acknowledge,
+  admit,
+  currentView,
+  loadLedger,
+  saveLedger,
+  snooze,
+  wake,
+  type NoticeLedger,
+} from "./notice-policy";
 import { AutomaticUpdates } from "./update";
 
 declare global {
@@ -47,6 +59,8 @@ const tray = (message: TrayMessage) => postRendererMessage(window.chrome?.webvie
 export const NOTICE_DRAIN_MS = 8_000;
 const TICK_MS = 100;
 const FIXTURE = "Fixture: nothing here reaches a host.";
+/** How often snoozed items are checked for their hour being up. */
+const WAKE_MS = 30_000;
 
 export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fixture: boolean }) {
   const [items, setItems] = useState<MachineNotice[]>([]);
@@ -57,8 +71,19 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
   const [error, setError] = useState<string | null>(null);
   const card = useRef<HTMLDivElement>(null);
   const host = useSurfaceHost();
+  const go = useDestination();
+  const ledger = useRef<NoticeLedger | null>(null);
+  /** This surface's own record of what the person has seen and snoozed, kept across reloads. */
+  const record = (change: (ledger: NoticeLedger) => NoticeLedger) => {
+    ledger.current = change(ledger.current ?? loadLedger(window.localStorage));
+    saveLedger(window.localStorage, ledger.current);
+  };
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
 
   const end = () => {
+    // A card that ends has shown what it held: those revisions are acknowledged.
+    for (const item of itemsRef.current) record((l) => acknowledge(l, item));
     setItems([]);
     setAt(0);
     setElapsed(0);
@@ -67,19 +92,38 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
   };
   useEffect(() => {
     const webview = window.chrome?.webview;
-    const receive = ({ data }: NativeMessageEvent) => {
-      const parsed = nativeMessageSchema.safeParse(data);
-      if (!parsed.success || parsed.data.type !== "notice") return;
-      const next = parsed.data.notice;
-      if (!next) return end();
+    const take = (next: MachineNotice) => {
+      record((l) => l);
+      const verdict = admit(ledger.current!, next, currentView(), Date.now());
+      // Looking at that thread is seeing it: no card, and it will not come back.
+      if (verdict === "looking") return record((l) => acknowledge(l, next));
+      if (verdict !== "show") return;
       setItems((list) => {
         const same = list.findIndex((item) => item.id === next.id);
         return same < 0 ? [...list, next] : list.map((item, i) => (i === same ? next : item));
       });
     };
+    const receive = ({ data }: NativeMessageEvent) => {
+      const parsed = nativeMessageSchema.safeParse(data);
+      if (!parsed.success || parsed.data.type !== "notice") return;
+      const next = parsed.data.notice;
+      if (!next) return end();
+      take(next);
+    };
     webview?.addEventListener("message", receive);
     tray({ type: "notice-ready" });
-    return () => webview?.removeEventListener("message", receive);
+    // A snoozed item whose hour is up comes back through the same door as a new one.
+    const timer = setInterval(() => {
+      record((l) => l);
+      const woken = wake(ledger.current!, Date.now());
+      if (!woken.due.length) return;
+      record(() => woken.ledger);
+      woken.due.forEach(take);
+    }, WAKE_MS);
+    return () => {
+      webview?.removeEventListener("message", receive);
+      clearInterval(timer);
+    };
   }, []);
 
   const live = items.length > 0;
@@ -121,8 +165,23 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
   };
   /** The thread's door accepted: this item is settled; the card pages on, or ends. */
   const settle = (id: string) => {
+    const settled = items.find((n) => n.id === id);
+    if (settled) record((l) => acknowledge(l, settled));
     const rest = items.filter((n) => n.id !== id);
     if (rest.length === 0) return close({ type: "notice-hide" });
+    setItems(rest);
+    setAt((i) => Math.min(i, rest.length - 1));
+    setElapsed(0);
+    setError(null);
+  };
+  /** Take this item off the card for an hour; it returns once, and the others stay. */
+  const snoozeItem = () => {
+    record((l) => snooze(l, item, Date.now()));
+    const rest = items.filter((n) => n.id !== item.id);
+    if (rest.length === 0) {
+      setItems([]);
+      return tray({ type: "notice-hide" });
+    }
     setItems(rest);
     setAt((i) => Math.min(i, rest.length - 1));
     setElapsed(0);
@@ -137,13 +196,18 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
         : { type: "notice-panel" },
     );
   const act = item.act;
+  /** A failure's door opens in the tray panel at that route; the card steps aside. */
+  const door = (href: string) => {
+    go(href);
+    close({ type: "notice-panel" });
+  };
   return (
     <div
       ref={card}
       role="status"
       aria-label="notice"
       data-surface="artifact"
-      className="hairline fixed right-0 bottom-0 z-notice flex max-h-dvh w-[min(420px,100vw)] flex-col gap-1.5 px-3 pt-2"
+      className="hairline fixed right-0 bottom-0 z-notice flex max-h-[min(24rem,100dvh)] w-[min(420px,100vw)] flex-col gap-1.5 px-3 pt-2"
       onMouseEnter={() => setHeld(true)}
       onMouseLeave={() => setHeld(false)}
       onFocusCapture={() => setHeld(true)}
@@ -163,6 +227,7 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
         <span className="t-small face-mono text-ink-2">{`${at + 1}/${items.length}`}</span>
         <Button kind="nav" direction="back" label="previous" onClick={() => step(-1)} />
         <Button kind="nav" direction="forward" label="next" onClick={() => step(1)} />
+        <Button icon={AlarmClockOff} label="snooze for an hour" onClick={snoozeItem} />
         <Button icon={X} label="dismiss" onClick={() => close({ type: "notice-hide" })} />
       </div>
       {act?.kind === "reply" ? (
@@ -191,7 +256,9 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
           }
         />
       ) : (
-        <p className="text-ink-2">{item.body}</p>
+        <div className="min-h-0 overflow-auto">
+          <FailureNote text={item.body} onDoor={door} />
+        </div>
       )}
       {act?.kind === "permission" ? (
         <span className="flex flex-wrap gap-1.5">

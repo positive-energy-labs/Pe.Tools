@@ -2,6 +2,7 @@ import { expect, test } from "vite-plus/test";
 import { filterItems } from "@pe/kit/lang/collection";
 import { destinationDetail, destinationLabel, globalItems } from "./global-items";
 import { matches } from "./model";
+import { navigationSnapshotSchema } from "@pe/agent-contracts";
 
 test("global navigation includes Machine without adding it to the engineering directory", () => {
   const items = globalItems(null, "Tools");
@@ -13,7 +14,7 @@ test("global navigation includes Machine without adding it to the engineering di
 test("global thread search matches full and partial ID while retaining human title and aliases", () => {
   const id = "019c6e27-e55b-73d1-87d8-4e01f1f75043";
   const [item] = globalItems(
-    {
+    navigationSnapshotSchema.parse({
       observedAt: "2026-10-13T00:00:00Z",
       works: [],
       threads: [
@@ -30,7 +31,7 @@ test("global thread search matches full and partial ID while retaining human tit
       ],
       observations: [],
       truncated: false,
-    },
+    }),
     "Pea threads",
   );
   const searchText = `${item!.label} ${item!.context} ${item!.aliases} ${item!.state}`;

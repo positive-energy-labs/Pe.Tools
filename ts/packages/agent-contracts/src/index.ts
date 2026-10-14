@@ -21,6 +21,7 @@ export * from "./principal.ts";
 export * from "./instances.ts";
 export * from "./capability.ts";
 export * from "./contribution.ts";
+export * from "./pod-route.ts";
 export * from "./mention.ts";
 
 export * from "./semantic-actions.ts";
@@ -42,3 +43,7 @@ export * from "./capture.ts";
 export * from "./sdk-session.ts";
 export * from "./navigation.ts";
 export * from "./app-routes.ts";
+export * from "./plugin.ts";
+export * from "./plugin-runtime.ts";
+
+export * from "./thread-export.ts";

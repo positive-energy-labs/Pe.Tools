@@ -1,4 +1,4 @@
-import { RouteShell, emptyManifest } from "#/route";
+import { RouteShell, defineRoute } from "#/route";
 import { createFileRoute } from "@tanstack/react-router";
 import { FlaskConical, X } from "lucide-react";
 
@@ -16,14 +16,15 @@ import { SAMPLE_DOC } from "#/grounded-doc/sample";
  * to highlight (and scroll) the other. The engine + view are standalone —
  * this route is just a harness around them.
  */
-/** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
-const manifest = {
-  ...emptyManifest("doc-lab", "Doc Lab"),
+export const manifest = defineRoute({
+  key: "doc-lab",
+  name: "Doc Lab",
+  views: [{ key: "document", label: "Grounded document", draws: () => <DocLabRoute /> }],
   docs: "The grounded-document engine in isolation. Parse a PDF: markdown blocks land on the left, the original pages on the right. Hovering either side highlights (and scrolls) the other; clicking pins the link.",
-};
+});
 
 export const Route = createFileRoute("/doc-lab")({
-  component: DocLabRoute,
+  component: () => manifest.views![0]!.draws({ readings: {} }),
 });
 
 function DocLabRoute() {

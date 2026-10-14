@@ -30,6 +30,10 @@ const canonicalFixtures: Record<
   "/schedules": { canonicalReviewUrl: "/schedules?demo=apply", fixtureKind: "demo-fixture" },
   "/settings": { canonicalReviewUrl: "/settings", fixtureKind: "live-route" },
   "/takeoffs": { canonicalReviewUrl: "/takeoffs?demo=sync", fixtureKind: "demo-fixture" },
+  "/tool/$key": {
+    canonicalReviewUrl: `/tool/${encodeURIComponent("route:@snowdon-circuits/routes/voltage-drop/index.js")}`,
+    fixtureKind: "live-route",
+  },
 } as const;
 
 const explicitPrototypeRoutes = new Set(["/lab", "/param-tables"]);

@@ -106,7 +106,8 @@ export type Scope = ThreadHead & { thread: string };
 
 /** The live head of this caller's own thread (`/pe/scope/self`); none outside a harness context. */
 export async function scopeOf(): Promise<Scope | null> {
-  if (invocationContext()?.caller?.kind === "external-mcp") return null;
+  const caller = invocationContext()?.caller;
+  if (caller?.kind === "external-mcp" && !caller.device) return null;
   if (!carriesCallerContext()) return null;
   const response = await createPeClient(base(), fetch).response("scope.get", {
     params: { id: "self" },
@@ -378,7 +379,13 @@ async function executeTool(
       `Unknown capability '${input.key}'. Find keys with pe_find.`,
     );
   const principal = invocationContext()?.caller?.kind ?? "pea";
-  if (principal === "anonymous" || !row.principal.includes(principal))
+  const caller = invocationContext()?.caller;
+  const pairedOperation =
+    caller?.kind === "external-mcp" &&
+    caller.device &&
+    (row.kind === "op" || row.kind === "script") &&
+    row.principal.includes("pea");
+  if (principal === "anonymous" || (!row.principal.includes(principal) && !pairedOperation))
     return refuse(
       row.key,
       defaultTarget,
@@ -609,6 +616,7 @@ async function dispatch(
       );
       return { ...answer, target: scopeTarget };
     }
+    case "route":
     case "skill":
     case "member": {
       const answer = await contributionRead(row);

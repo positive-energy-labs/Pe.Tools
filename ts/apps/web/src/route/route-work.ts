@@ -150,34 +150,39 @@ export function docWriter<S extends RouteStateSpec<any>>(
   };
 }
 
-/**
- * One route's Work read and written by key, with no route owner: the Chat head's summary of Work
- * the thread's document holds. It reads the same Work atom a mounted route (the plugin pane) reads,
- * so both re-render from one Work; its writes are foreign to that route's own-write chain, so a
- * bound write either side refuses truthfully when the other landed first.
- */
-export function useRouteWork<S extends RouteStateSpec<any>>(spec: S, key: WorkKey | null) {
-  const id = key ? JSON.stringify(key) : null;
-  const slice = useMemo(
-    () => (key ? docAtom(spec, key, peReadings) : null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the key is identified by its JSON
-    [spec, id],
+/** A changing collection of Work subscriptions uses one React hook and the same per-Work atoms. */
+export function useRouteWorks<S extends RouteStateSpec<any>>(
+  entries: readonly { spec: S; key: WorkKey | null }[],
+) {
+  const sources = useMemo(
+    () =>
+      entries.map(({ spec, key }) => {
+        const slice = key ? docAtom(spec, key, peReadings) : null;
+        return {
+          key,
+          slice,
+          writer: key && slice ? docWriter(spec, key, appAtomRegistry, slice, undefined) : null,
+        };
+      }),
+    [entries],
   );
-  const reading = useOwned(appAtomRegistry, slice);
-  const writer = useMemo(
-    () => (key && slice ? docWriter(spec, key, appAtomRegistry, slice, undefined) : null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the key is identified by its JSON
-    [spec, slice],
+  const collection = useMemo(
+    () => Atom.make((get) => sources.map(({ slice }) => (slice ? get(slice) : null))),
+    [sources],
   );
-  const current = reading ? previousOf(reading) : undefined;
-  return {
-    doc: (current?.doc ?? null) as RouteDocOf<S> | null,
-    revision: current?.revision ?? null,
-    stale: reading?.state === "stale",
-    write: (patches: RouteStatePatch[], expectedRevision?: number) =>
-      writer ? writer.apply(patches, expectedRevision) : Promise.resolve(notHydrated),
-    reload: () => {
-      if (key) dirty({ ...key, kind: "work" });
-    },
-  };
+  const readings = useOwned(appAtomRegistry, collection);
+  return sources.map(({ key, writer }, index) => {
+    const reading = readings?.[index];
+    const current = reading ? previousOf(reading) : undefined;
+    return {
+      doc: (current?.doc ?? null) as RouteDocOf<S> | null,
+      revision: current?.revision ?? null,
+      stale: reading?.state === "stale",
+      write: (patches: RouteStatePatch[], expectedRevision?: number) =>
+        writer ? writer.apply(patches, expectedRevision) : Promise.resolve(notHydrated),
+      reload: () => {
+        if (key) dirty({ ...key, kind: "work" });
+      },
+    };
+  });
 }

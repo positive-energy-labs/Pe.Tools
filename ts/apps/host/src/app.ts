@@ -1,5 +1,9 @@
 import { sdkSession } from "./sdk-session.ts";
 import { requestIdentityLayer } from "./request-identity.ts";
+import { createDevices, type Devices } from "./remote-device.ts";
+import { deviceRoutes } from "./device-routes.ts";
+import { bindControl } from "./control.ts";
+import { readRemoteIngress, remoteListener } from "./remote-ingress.ts";
 import {
   createShare,
   shareIntentFile,
@@ -35,7 +39,6 @@ import { staticSpaLayer } from "./static-spa.ts";
 import { peRoutesLayer, peApiErrorsLayer } from "./pe-routes.ts";
 import { capturesRoute } from "./captures-route.ts";
 import { pagesRoute } from "./pages-route.ts";
-import type { Notices } from "./notices.ts";
 import { makeInstalledUpdateReader, updateRoutes } from "./update-route.ts";
 import { UpdateReader, type UpdateFact } from "./update-reader.ts";
 
@@ -138,6 +141,8 @@ export interface HttpLiveOptions {
   /** Injected listener for socket lifecycle tests. */
   readonly nodeServer?: Server;
   readonly share?: ShareOwner;
+  readonly devices?: Devices;
+  readonly remoteIngress?: readonly { origin: string; transport: "lan" | "ssh" }[];
   /** Browser origin of the separately owned dev frontend. API requests stay here. */
   readonly webUrl?: Deferred.Deferred<string>;
   /** Boot-scoped shutdown latch + service token, injected by the launch root. */
@@ -145,8 +150,6 @@ export interface HttpLiveOptions {
   readonly updateReader?: UpdateReader["Service"];
   /** The spine's intake for update facts, handed to the reader this app builds. */
   readonly updateFact?: (fact: UpdateFact) => void;
-  /** The receipt-projected tray card feed; absent serves no `/host/notices`. */
-  readonly notices?: Notices;
   /** Built SPA directory, or null to skip static serving (dev/vite). */
   readonly webRoot: string | null;
   /** Route registrations for the host-owned route surface; tests inject their own. */
@@ -166,6 +169,20 @@ export function makeHttpLive(options: HttpLiveOptions) {
     options.updateReader ?? makeInstalledUpdateReader(options.updateFact),
   );
   const nodeServer = options.nodeServer ?? createServer();
+  const remoteConfig = readRemoteIngress(
+    join(productRoot(), "state", hostOwnership.serviceName, "remote-ingress.json"),
+  );
+  const remoteRequests = new WeakSet<object>();
+  const remote = remoteConfig ? remoteListener(nodeServer, remoteRequests) : null;
+  const RemoteLive =
+    remote && remoteConfig
+      ? Layer.effectDiscard(
+          Effect.acquireRelease(
+            Effect.promise(() => remote.start(remoteConfig.listenHost, remoteConfig.port)),
+            () => Effect.promise(() => remote.close()),
+          ),
+        )
+      : Layer.empty;
   // Socket retirement. The platform layer detaches its request handler and calls `server.close`
   // on release, but a keep-alive socket a browser still holds survives that close with nothing
   // listening behind it; a reload against a successor on the same port then reuses the dead
@@ -197,7 +214,14 @@ export function makeHttpLive(options: HttpLiveOptions) {
       run: tailscaleCommand(),
       ...shareIntentFile(join(productRoot(), "state", "share.json")),
     });
+  const devices =
+    options.devices ??
+    createDevices(join(productRoot(), "state", hostOwnership.serviceName, "devices.json"));
+  bindControl({ deviceThread: (device) => devices.active(device).thread });
   const identity = requestIdentityLayer({
+    devices,
+    remoteRequests,
+    remoteIngress: options.remoteIngress ?? remoteConfig?.origins,
     port,
     frontendOrigin: () =>
       options.webUrl
@@ -216,15 +240,16 @@ export function makeHttpLive(options: HttpLiveOptions) {
       ? () => Effect.sync(() => Response.html(readFileSync(join(webRoot, "index.html"), "utf8")))
       : () => emptyNotFound;
   const CommonAppLive = Layer.mergeAll(
+    RemoteLive,
     identity,
     shareRoute(share),
+    deviceRoutes(devices),
     mcpRoute(() => `http://127.0.0.1:${port()}`),
     capturesRoute(spa),
     pagesRoute(),
     adminShutdownRoute,
     adminWindowRoute,
     updateRoutes,
-    options.notices?.route ?? Layer.empty,
     peRoutesLayer(options.routeRegistrations, share),
     demoRoutes(),
     webUrl

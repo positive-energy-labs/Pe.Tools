@@ -1,3 +1,4 @@
+using Pe.Shared.Product;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.FamilyFoundry.LookupTables;
 
@@ -26,7 +27,7 @@ public sealed class LookupTableSnapshotCollector : IFamilySnapshotCollector {
         }
 
         var keyCountsByTable = LookupFormulaInspector.CollectLookupKeyCounts(parameterSnapshots);
-        var workingDirectory = Path.Combine(Path.GetTempPath(), "pelt", "lookup-capture", Guid.NewGuid().ToString("N"));
+        var workingDirectory = Path.Combine(ProductRuntimeLayout.ForCurrentUser().ScratchPath, "pelt", "lookup-capture", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(workingDirectory);
 
         try {

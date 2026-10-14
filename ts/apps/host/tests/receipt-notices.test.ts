@@ -1,14 +1,16 @@
-import { Context, Layer } from "effect";
-import { HttpRouter } from "effect/unstable/http";
-import { expect, test } from "vite-plus/test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, expect, test } from "vite-plus/test";
 import type {
   ActionReceipt,
   MachineNotice,
   Receipt,
-  ReceiptQuery,
-  ReceiptReader,
+  ReadingFrame,
+  ReadingRequest,
 } from "@pe/agent-contracts";
-import { receiptSchema } from "@pe/agent-contracts";
+import { readingKey, receiptSchema } from "@pe/agent-contracts";
+import { HostLog } from "../src/host-log.ts";
 import { createNotices, noticeOf, type NoticeContext } from "../src/notices.ts";
 
 const T0 = Date.parse("2026-10-13T12:00:00Z");
@@ -190,169 +192,163 @@ test("a finished turn carries Pea's final response and the thread's reply door",
   ).toBeUndefined();
 });
 
-function harness(initial: Receipt[] = [], bufferMs = 0) {
+const dirs: string[] = [];
+afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+
+function harness(bufferMs = 0) {
+  const dir = mkdtempSync(join(tmpdir(), "notices-"));
+  dirs.push(dir);
+  const log = new HostLog(dir);
   const consumers = new Set<(r: Receipt) => void>();
-  let reads = 0;
-  const source: ReceiptReader = {
-    read: async (query: ReceiptQuery) => {
-      reads++;
-      return initial.filter((r) => !query.after || r.at > query.after);
-    },
-    subscribe: (_query, consume) => {
+  const source = {
+    subscribe: (_query: unknown, consume: (r: Receipt) => void) => {
       consumers.add(consume);
       return () => consumers.delete(consume);
     },
   };
-  let clock = T0;
-  const notices = createNotices({ source, context, now: () => clock, bufferMs });
-  const web = HttpRouter.toWebHandler(notices.route.pipe(Layer.provideMerge(Layer.empty)), {
-    disableLogger: true,
-  });
-  /** Connects, collects cards until `count` arrived (or the stream ends), then hangs up. */
-  async function connect(
-    count: number,
-    afterOpen?: () => void,
-    onCard?: (card: MachineNotice) => void,
-  ) {
-    const response = await web.handler(
-      new Request("http://host/host/notices"),
-      Context.empty() as never,
-    );
-    const reader = response.body!.getReader();
-    const decoder = new TextDecoder();
-    const cards: MachineNotice[] = [];
-    let buffer = "";
-    let opened = false;
-    while (cards.length < count) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value);
-      const parts = buffer.split("\n\n");
-      buffer = parts.pop() ?? "";
-      for (const part of parts) {
-        if (part.startsWith(": open")) {
-          if (!opened) {
-            opened = true;
-            afterOpen?.();
-          }
-        } else if (part.startsWith("data: ")) {
-          cards.push(JSON.parse(part.slice(6)));
-          onCard?.(cards[cards.length - 1]!);
-        }
-      }
-    }
-    await reader.cancel();
-    return cards;
+  const notices = createNotices({ source, context, log, bufferMs });
+  /** A follower: the frames it is handed, as the stream would carry them. */
+  function follow(after: number | null = null, request: ReadingRequest = { kind: "notices" }) {
+    const frames: ReadingFrame[] = [];
+    const release = notices.observe(request, (frame) => frames.push(frame), after);
+    const items = () =>
+      frames.flatMap((f) => (f.kind === "event" ? [f.value as MachineNotice] : []));
+    return {
+      frames,
+      items,
+      ids: () => items().map((n) => `${n.id}:${n.revision}`),
+      cursor: () =>
+        frames.flatMap((f) => ("id" in f && f.id !== undefined ? [f.id] : [])).at(-1) ?? null,
+      release: release ?? (() => {}),
+    };
   }
   return {
-    connect,
-    deliver: (r: Receipt) => consumers.forEach((consume) => consume(r)),
-    advance: (ms: number) => (clock += ms),
-    consumers,
-    reads: () => reads,
-    close: async () => {
-      notices.close();
-      await web.dispose();
+    follow,
+    log,
+    // The journal commits a receipt into the log and to its subscribers alike.
+    deliver: (r: Receipt) => {
+      log.append({ kind: "receipt", receipt: r });
+      consumers.forEach((consume) => consume(r));
     },
+    consumers,
+    close: () => notices.close(),
   };
 }
 
-test("a duplicate delivery is one card and a higher revision is its successor", async () => {
+test("a duplicate delivery is one card and a higher revision is its successor", () => {
   const h = harness();
-  try {
-    const cards = await h.connect(2, () => {
-      h.deliver(lifecycle("succeeded"));
-      h.deliver(lifecycle("succeeded"));
-      h.deliver(lifecycle("failed", uid(1), 2));
-      h.deliver(lifecycle("succeeded", uid(1), 1));
-    });
-    expect(cards.map((c) => `${c.id}:${c.revision}`)).toEqual([`${uid(1)}:1`, `${uid(1)}:2`]);
-  } finally {
-    await h.close();
-  }
+  const reader = h.follow();
+  h.deliver(lifecycle("succeeded"));
+  h.deliver(lifecycle("succeeded"));
+  h.deliver(lifecycle("failed", uid(1), 2));
+  h.deliver(lifecycle("succeeded", uid(1), 1));
+  expect(reader.ids()).toEqual([`${uid(1)}:1`, `${uid(1)}:2`]);
+  h.close();
 });
 
-test("a connection replays the bounded last minute from the durable read, once", async () => {
-  const old = make(
-    uid(6),
-    1,
-    { requestId: uid(15), threadId: THREAD },
-    { kind: "turn", phase: "finished" },
-    -61_000,
-  );
-  const h = harness([lifecycle("succeeded"), old, turn("finished")]);
-  try {
-    const first = await h.connect(2);
-    expect(first.map((c) => c.id).sort()).toEqual([uid(1), uid(2)]);
-    // A reconnect replays the same ring: the tray dedupes by id:revision, the host never re-reads.
-    const again = await h.connect(2);
-    expect(again.map((c) => `${c.id}:${c.revision}`).sort()).toEqual([
-      `${uid(1)}:1`,
-      `${uid(2)}:1`,
-    ]);
-    expect(h.reads()).toBe(1);
-  } finally {
-    await h.close();
-  }
+test("a follower that was away for three notices is handed each once, in order, from its cursor", () => {
+  const h = harness();
+  const first = h.follow();
+  h.deliver(lifecycle("succeeded", uid(1)));
+  const cursor = first.cursor();
+  expect(first.ids()).toEqual([`${uid(1)}:1`]);
+  first.release();
+  // The follower is offline for these three.
+  h.deliver(turn("finished", uid(2)));
+  h.deliver(lifecycle("failed", uid(4)));
+  h.deliver(permission("asked", uid(3)));
+  const back = h.follow(cursor);
+  expect(back.ids()).toEqual([`${uid(2)}:1`, `${uid(4)}:1`, `${uid(3)}:1`]);
+  // Following on from where it got to replays nothing; the next notice arrives live, once.
+  const again = h.follow(back.cursor());
+  expect(again.items()).toEqual([]);
+  h.deliver(lifecycle("succeeded", uid(5)));
+  expect(again.ids()).toEqual([`${uid(5)}:1`]);
+  expect(back.ids()).toHaveLength(4);
+  h.close();
 });
 
-test("an answered permission does not replay as a live question", async () => {
-  const h = harness([permission("asked"), turn("finished")]);
-  try {
-    h.deliver(permission("resolved", uid(3), 2));
-    // The durable read is what holds the asked receipt; resolution must beat it to the ring.
-    const cards = await h.connect(1);
-    expect(cards.map((c) => c.id)).toEqual([uid(2)]);
-  } finally {
-    await h.close();
-  }
+test("no cursor, or one this log never reached, is a gap that carries the log's current id", () => {
+  const h = harness();
+  h.deliver(lifecycle("succeeded", uid(1)));
+  const fresh = h.follow();
+  expect(fresh.frames.filter((f) => f.kind === "gap")).toMatchObject([{ id: h.log.last }]);
+  // A cursor from a lost log (ids restarted) would hide every new notice; it reads as a gap.
+  const foreign = h.follow(h.log.last + 50);
+  expect(foreign.frames.filter((f) => f.kind === "gap")).toMatchObject([{ id: h.log.last }]);
+  h.deliver(turn("finished"));
+  expect(fresh.ids()).toEqual([`${uid(2)}:1`]);
+  h.close();
 });
 
-test("a card older than the replay window is gone after the clock moves", async () => {
-  const h = harness([lifecycle("succeeded")]);
-  try {
-    expect((await h.connect(1)).map((c) => c.id)).toEqual([uid(1)]);
-    h.advance(61_000);
-    const cards = await h.connect(1, () => h.deliver(turn("finished")));
-    expect(cards.map((c) => c.id)).toEqual([uid(2)]);
-  } finally {
-    await h.close();
-  }
+test("an ask answered while the follower was away is not replayed", () => {
+  const h = harness();
+  const cursor = h.follow().cursor() ?? h.log.last;
+  h.deliver(permission("asked"));
+  h.deliver(turn("finished"));
+  h.deliver(permission("resolved", uid(3), 2));
+  expect(h.follow(cursor).ids()).toEqual([`${uid(2)}:1`]);
+  h.close();
 });
 
-test("closing the feed releases the receipt subscription", async () => {
+test("an ask the follower sees live stays; a resolved ask only stops a held one", () => {
+  const h = harness(200);
+  const reader = h.follow();
+  h.deliver(turn("finished"));
+  h.deliver(permission("asked"));
+  expect(reader.ids()).toEqual([`${uid(3)}:1`]);
+  h.close();
+});
+
+test("a tray follower is visible to the others as a snapshot", () => {
+  const h = harness();
+  const web = h.follow();
+  expect(web.frames).toContainEqual({
+    kind: "snapshot",
+    key: readingKey({ kind: "notices" }),
+    value: { tray: false },
+  });
+  const tray = h.follow(null, { kind: "notices", as: "tray" });
+  expect(web.frames.findLast((f) => f.kind === "snapshot")).toMatchObject({
+    value: { tray: true },
+  });
+  expect(tray.frames.some((f) => f.kind === "snapshot")).toBe(false);
+  tray.release();
+  expect(web.frames.findLast((f) => f.kind === "snapshot")).toMatchObject({
+    value: { tray: false },
+  });
+  h.close();
+});
+
+test("closing the feed releases the receipt subscription", () => {
   const h = harness();
   expect(h.consumers.size).toBe(1);
-  await h.close();
+  h.close();
   expect(h.consumers.size).toBe(0);
 });
 
 test("a burst waits out one buffer window, but an ask never waits", async () => {
-  const h = harness([], 200);
-  try {
-    let start = 0;
-    const arrived = new Map<string, number>();
-    const cards = await h.connect(
-      4,
-      () => {
-        start = performance.now();
-        h.deliver(lifecycle("succeeded"));
-        h.deliver(permission("asked"));
-        setTimeout(() => h.deliver(turn("finished")), 100);
-        setTimeout(() => h.deliver(question("asked")), 120);
-      },
-      (card) => arrived.set(card.id, performance.now() - start),
-    );
-    // Approvals and questions are released at once, even inside an open window.
-    expect(arrived.get(uid(3))!).toBeLessThan(100);
-    expect(arrived.get(uid(8))!).toBeGreaterThanOrEqual(110);
-    expect(arrived.get(uid(8))!).toBeLessThan(180);
-    // Finished work waits for the window, and the late card joins it instead of opening its own.
-    expect(arrived.get(uid(1))!).toBeGreaterThanOrEqual(180);
-    expect(arrived.get(uid(2))!).toBeGreaterThanOrEqual(180);
-    expect(arrived.get(uid(2))!).toBeLessThan(270);
-    expect(cards.map((c) => c.id)).toEqual([uid(3), uid(8), uid(1), uid(2)]);
-  } finally {
-    await h.close();
-  }
+  const h = harness(200);
+  const reader = h.follow();
+  const start = performance.now();
+  const arrived = new Map<string, number>();
+  const note = () =>
+    reader
+      .items()
+      .forEach((n) => arrived.has(n.id) || arrived.set(n.id, performance.now() - start));
+  h.deliver(lifecycle("succeeded"));
+  h.deliver(permission("asked"));
+  note();
+  setTimeout(() => h.deliver(turn("finished")), 100);
+  setTimeout(() => h.deliver(question("asked")), 120);
+  await new Promise((r) => setTimeout(r, 120));
+  note();
+  await new Promise((r) => setTimeout(r, 200));
+  note();
+  expect(arrived.get(uid(3))!).toBeLessThan(100);
+  expect(arrived.get(uid(8))!).toBeGreaterThanOrEqual(110);
+  expect(arrived.get(uid(8))!).toBeLessThan(180);
+  // Finished work waits for the window, and the late card joins it instead of opening its own.
+  expect(reader.items().map((c) => c.id)).toEqual([uid(3), uid(8), uid(1), uid(2)]);
+  h.close();
 });

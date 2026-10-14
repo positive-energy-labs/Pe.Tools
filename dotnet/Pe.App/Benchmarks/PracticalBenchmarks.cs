@@ -1,3 +1,4 @@
+using Pe.Shared.Product;
 using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI;
 using Pe.App.Commands.FamilyFoundry;
@@ -410,7 +411,7 @@ internal static class PracticalBenchmarks {
             shortSegment = shortSegment.Substring(0, 24);
 
         var path = Path.Combine(
-            Path.GetTempPath(),
+            ProductRuntimeLayout.ForCurrentUser().ScratchPath,
             "pe-benchmarks",
             shortSegment,
             Guid.NewGuid().ToString("N").Substring(0, 8));

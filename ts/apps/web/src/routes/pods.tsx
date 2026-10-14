@@ -3,6 +3,7 @@
  * runs filed against the open member. It performs no Revit action; a spec links to the product
  * route its `$schema` names.
  */
+import { z } from "zod";
 import { frozenDemo } from "#/host/demo-client";
 import { useEffect, useState } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -21,6 +22,7 @@ import {
   isSpecOf,
   useRoute,
   useRouteThread,
+  urlPage,
   type MemberRef,
   type PodRow,
 } from "#/route";
@@ -51,6 +53,12 @@ export const manifest = defineRoute({
   name: "Pods",
   needs: "document",
   runs: ["settings.write"],
+  page: z.object({
+    pod: z.string().optional(),
+    path: z.string().optional(),
+    demo: z.string().optional(),
+  }),
+  url: ["pod", "path", "demo"],
   seeds: PODS_SEEDS,
 });
 
@@ -91,13 +99,8 @@ export const DEMO_MEMBER_SPECS = new Map<string, DemoSpec>([
 ]);
 
 export const Route = createFileRoute("/pods")({
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { pod?: string; path?: string; demo?: string } => ({
-    pod: typeof search.pod === "string" ? search.pod : undefined,
-    path: typeof search.path === "string" ? search.path : undefined,
-    demo: typeof search.demo === "string" ? search.demo : undefined,
-  }),
+  validateSearch: urlPage(manifest)!.read,
+  search: { middlewares: [...urlPage(manifest)!.middlewares] },
   component: PodsRoute,
 });
 
@@ -135,7 +138,12 @@ export function PodsRouteContent({
   demo?: string;
   select: (ref: MemberRef) => void;
 }) {
-  const handle = useRoute(manifest, { target: target ?? null, thread });
+  const handle = useRoute(manifest, {
+    target: target ?? null,
+    thread,
+    url: false,
+    page: { pod, path, demo },
+  });
   const ladder = useDocumentLadder(handle);
   // Field options read the thread's document; choosing one here moves the thread (ledger 2026-09-17).
   const optionsFrom =

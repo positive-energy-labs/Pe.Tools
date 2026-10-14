@@ -1,3 +1,4 @@
+using Pe.Shared.Product;
 using Pe.Revit.DocumentData.Schedules;
 using Autodesk.Revit.DB.Electrical;
 using Pe.Revit.DocumentData.AgentContext;
@@ -859,7 +860,7 @@ internal sealed class RevitDataRequestService {
 
         // EditFamily documents have no PathName and cannot be activated (gotcha: reopening by
         // OpenAndActivateDocument often throws). Save to a scratch .rfa and reopen by path.
-        var scratchDir = Path.Combine(Path.GetTempPath(), "pe-family-editor");
+        var scratchDir = Path.Combine(ProductRuntimeLayout.ForCurrentUser().ScratchPath, "pe-family-editor");
         _ = Directory.CreateDirectory(scratchDir);
         var scratchPath = Path.Combine(scratchDir, family.Name + ".rfa");
 

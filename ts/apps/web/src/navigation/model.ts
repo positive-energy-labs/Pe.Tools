@@ -1,13 +1,16 @@
 import {
   appRouteByPath,
   APP_TASKS,
-  routePath,
+  routePath as builtinRoutePath,
+  routeKey as builtinRouteKey,
   type AppExposure,
   type SurfaceShell,
 } from "@pe/agent-contracts";
 import { TOOLS } from "./catalogue";
+import { podPathWork, podWorkPath, podPathName } from "#/route/pod-address";
 
-export { routeKey, routePath } from "@pe/agent-contracts";
+export const routePath = (key: string) => podWorkPath(key) ?? builtinRoutePath(key);
+export const routeKey = (path: string) => podPathWork(path) ?? builtinRouteKey(path);
 export const TASKS = APP_TASKS;
 export type Exposure = AppExposure;
 export const CATALOGUE = TOOLS;
@@ -35,6 +38,8 @@ export function shellButtons(shell: SurfaceShell, pathname: string) {
 }
 export function locationLabel(path: string) {
   if (path === "/") return "Tools";
+  const pod = podPathName(path);
+  if (pod) return pod;
   const tool = CATALOGUE.find((entry) => path === entry.to || path.startsWith(`${entry.to}/`));
   return tool
     ? `${tool.title}${path === tool.to ? "" : ` / ${path.slice(tool.to.length + 1)}`}`
@@ -63,7 +68,7 @@ export function admittedDestination(destination: string, origin: string): string
     const url = new URL(destination, origin);
     return url.origin === new URL(origin).origin &&
       ["http:", "https:"].includes(url.protocol) &&
-      appRouteByPath(url.pathname)
+      (appRouteByPath(url.pathname) || podPathWork(url.pathname))
       ? `${url.pathname}${url.search}${url.hash}`
       : null;
   } catch {

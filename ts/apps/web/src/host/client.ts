@@ -54,5 +54,9 @@ export async function callHostRpc<K extends OpKey>(
       status: response.status,
     });
   }
-  return response.json();
+  const result = await response.json();
+  const captureUrl = response.headers.get("x-pe-capture-url");
+  if (captureUrl && result && typeof result === "object")
+    Object.assign(result, { captureUrl, captureId: response.headers.get("x-pe-capture-id") });
+  return result;
 }
