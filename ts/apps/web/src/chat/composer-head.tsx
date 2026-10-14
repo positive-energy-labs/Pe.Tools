@@ -335,22 +335,27 @@ export function ComposerPickers({
             : index === unbound && closedWord
               ? closedWord
               : level.placeholder,
-          extra: head.defaultTarget ? (
-            <div className="hairline-t mt-1 px-2 pt-1">
-              <Button
-                kind="framed"
-                icon={X}
-                label="Clear target"
-                reason="Run this chat without a Revit target"
-                refusal={targetDisabled ? "Run this chat without a Revit target" : null}
-                onClick={() => {
-                  void head.set(null);
-                }}
-              >
-                Clear target
-              </Button>
-            </div>
-          ) : undefined,
+          extra: (
+            <>
+              {level.extra}
+              {head.defaultTarget ? (
+                <div className="hairline-t mt-1 px-2 pt-1">
+                  <Button
+                    kind="framed"
+                    icon={X}
+                    label="Clear target"
+                    reason="Run this chat without a Revit target"
+                    refusal={targetDisabled ? "Run this chat without a Revit target" : null}
+                    onClick={() => {
+                      void head.set(null);
+                    }}
+                  >
+                    Clear target
+                  </Button>
+                </div>
+              ) : null}
+            </>
+          ),
         }
       : index === unbound && closedWord
         ? { ...level, placeholder: closedWord }

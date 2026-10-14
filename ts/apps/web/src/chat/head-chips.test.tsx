@@ -14,6 +14,45 @@ const { useThreadScope } = await import("./scope");
 const { ComposerState } = await import("./composer-head");
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import type { ChatSituation } from "./composer-head";
+import type { ChatHandle } from "./composer-head";
+import { useDocumentLadder } from "#/route/situation-ladder";
+import { Ladder } from "#/route/ladder";
+import { MACHINE_SEEDS, OBSERVED_ICON } from "#/open/seeds";
+vi.mock("#/machine/use-machine", () => ({ useMachine: () => ({ reading: { state: "absent" } }) }));
+vi.mock("#/route/shell", () => ({ useChooseTarget: () => [null, vi.fn()] }));
+
+test("the document picker explains unknown documents without labeling a known empty Revit unloaded", () => {
+  const seed = MACHINE_SEEDS["no-revit"];
+  if (seed.state !== "ready") throw new Error("fixture must be ready");
+  const machine = seed.observation;
+  function Picker({ unknown }: { unknown: boolean }) {
+    const reading = {
+      ...seed,
+      observation: {
+        ...machine,
+        revit: {
+          ...machine.revit,
+          sessions: [{ ...OBSERVED_ICON, documents: unknown ? null : [] }],
+        },
+      },
+    };
+    const ladder = useDocumentLadder(
+      { readings: { machine: reading } } as unknown as ChatHandle,
+      undefined,
+      { bound: null, bind: vi.fn() },
+    );
+    return <Ladder levels={ladder.levels} open />;
+  }
+  const view = render(<Picker unknown />);
+  const row = screen.getByText(
+    "Pe.Tools is not loaded in this Revit. Finish the install, then restart Revit.",
+  );
+  expect(row.getAttribute("aria-disabled")).toBe("true");
+  expect(row.parentElement?.textContent).toContain("Revit · pid 2402");
+  expect(row.closest("[role=option]")).toBeNull();
+  view.rerender(<Picker unknown={false} />);
+  expect(screen.queryByText(/Pe.Tools is not loaded/)).toBeNull();
+});
 
 test("composer chips do not repeat status or refusal text", () => {
   wb.current = { chat: emptyChatState() };
