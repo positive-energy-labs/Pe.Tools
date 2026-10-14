@@ -1,3 +1,6 @@
+import { createScheduledTasks } from "./scheduled-tasks.ts";
+import { threadHistory } from "./thread-history.ts";
+import { productRoot } from "@pe/host-contracts/service-identity";
 import { normalizePeError } from "@pe/host-contracts/pe-api";
 import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
 import { peRoutes, peRouteUrl, servePeRoute, matchPeRoute } from "@pe/agent-contracts/pe-api";
@@ -74,7 +77,7 @@ import {
   machineSources,
   useHostMachine,
 } from "./machine.ts";
-import { bindControl, currentCaller, routeActorOf } from "./control.ts";
+import { bindControl, callerThread, currentCaller, routeActorOf } from "./control.ts";
 import { bindRevoke } from "./revoke.ts";
 import { hostActionJournal, hostLog } from "./gateway-owner.ts";
 import type { HostLog } from "./host-log.ts";
@@ -109,6 +112,7 @@ import { receiptQuerySchema } from "@pe/agent-contracts";
 import {
   hostReceiptExport,
   createThreadReceiptAdapter,
+  type AgentReportContext,
   type ReceiptExport,
 } from "./receipt-export.ts";
 import { createNotices } from "./notices.ts";
@@ -126,12 +130,15 @@ export interface PeRoutesOptions {
   /** Wraps every served Reading, Work included, e.g. with the host's document change mark. */
   markReadings?: (observe: ResourceObserver) => ResourceObserver;
   telemetry?: ReceiptExport;
+  /** The running turn and harness behind a thread, for an agent report's stamps. */
+  reportContext?: (thread: string) => AgentReportContext | null;
   /** The host log `log.read` pages; the host's own when absent. */
   log?: HostLog;
 }
 
 const feedbackSchema = peRoutes["feedback.submit"].body;
 const diagnosticsSchema = peRoutes["diagnostics.submit"].body;
+const agentFeedbackSchema = peRoutes["agent-feedback.submit"].body;
 const applyBody = peRoutes["work.apply"].body;
 const commandBody = peRoutes["work.command"].body;
 
@@ -281,6 +288,24 @@ export function createPeRoutes(options: PeRoutesOptions) {
     }
     if (method === "GET" && declared.id === "resources.stream")
       return resourceResponse(request, observe);
+    // Agent feedback (owner ruling 2026-10-14): any admitted caller may file; the host stamps it.
+    if (method === "POST" && declared.id === "agent-feedback.submit") {
+      const parsed = agentFeedbackSchema.safeParse(await body());
+      if (!parsed.success) return json({ error: "invalid agent feedback" }, 400);
+      const thread = callerThread(caller);
+      try {
+        return json(
+          await (options.telemetry ?? hostReceiptExport()).submitAgentFeedback(
+            parsed.data,
+            caller.kind,
+            thread,
+            thread ? (options.reportContext?.(thread) ?? null) : null,
+          ),
+        );
+      } catch {
+        return json({ error: "Agent feedback could not be kept locally" }, 503);
+      }
+    }
     if (
       method === "POST" &&
       (declared.id === "feedback.submit" ||
@@ -806,6 +831,24 @@ export function makeHostPeRoutes(
     receiptFact: receiptThreads.accept,
     pluginHook: content.lifecycle.emit,
   });
+  const scheduler = createScheduledTasks({
+    path: join(productRoot(), "state", hostOwnership.serviceName, "scheduled-tasks.json"),
+    receipts: telemetry.journal,
+    launch: threads.launchScheduled,
+  });
+  const readHistory = threadHistory({
+    snapshot: threads.historySnapshot,
+    receipts: telemetry.journal,
+    threadJoin: (id) => telemetry.journal.opaqueId("thread", id),
+  });
+  const tasks = {
+    fetch: (request: Request) =>
+      new URL(request.url).pathname === "/pe/thread-history"
+        ? readHistory(request)
+        : scheduler.fetch(request),
+    close: scheduler.close,
+    start: scheduler.start,
+  };
   receiptThreads
     .hydrate()
     .catch((error: unknown) => console.warn("Receipt thread context failed to hydrate", error));
@@ -893,6 +936,7 @@ export function makeHostPeRoutes(
       hostObserve(request, publish, after),
     markReadings: markReadings(documentMarks(bridge)),
     telemetry,
+    reportContext: threads.reportContext,
   });
   bindActionWorkspace(routes.workspace);
   sweepClosedDocuments(bridge, routes.workspace);
@@ -916,7 +960,7 @@ export function makeHostPeRoutes(
     },
     fetch: createPluginsHandler(content, podRoutes),
   };
-  return { providers, threads, routes, catalog, machine, notices, plugins };
+  return { providers, threads, routes, catalog, machine, notices, plugins, tasks };
 }
 
 /** {@link makeHostPeRoutes} on the host's router. Harness children die when the launch scope closes. */
@@ -930,13 +974,8 @@ export const peRoutesLayer = (
       const hostBaseUrl = `http://127.0.0.1:${address._tag === "TcpAddress" ? address.port : 0}`;
       const bridge = Option.getOrUndefined(yield* Effect.serviceOption(RevitBridge));
       const update = yield* UpdateReader;
-      const { providers, threads, routes, catalog, machine, notices, plugins } = makeHostPeRoutes(
-        hostBaseUrl,
-        bridge,
-        registrationsFactory,
-        update,
-        share,
-      );
+      const { providers, threads, routes, catalog, machine, notices, plugins, tasks } =
+        makeHostPeRoutes(hostBaseUrl, bridge, registrationsFactory, update, share);
       useHostMachine(machine);
       bindControl({
         heads: threads.heads.read,
@@ -959,7 +998,6 @@ export const peRoutesLayer = (
           notices.close();
         }),
       );
-      yield* Effect.addFinalizer(() => Effect.promise(() => threads.close()));
       yield* Effect.addFinalizer(() => Effect.promise(() => plugins.close()));
       yield* Effect.addFinalizer(() => Effect.promise(() => providers.close()));
       // Installed policy keeps observing even when every browser and tray drawer is closed.
@@ -973,7 +1011,16 @@ export const peRoutesLayer = (
             Stream.runForEach(() => Effect.sync(() => catalog.invalidate())),
           ),
         );
+      tasks.start();
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(async () => {
+          const closing = tasks.close();
+          await threads.close();
+          await closing;
+        }),
+      );
       const handlers = {
+        tasks: tasks.fetch,
         threads: threads.fetch,
         pe: routes.fetch,
         providers: providers.fetch,

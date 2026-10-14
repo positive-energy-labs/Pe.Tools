@@ -3,7 +3,15 @@ import { readImage } from "../shared/read-image.ts";
 import { createCaptureViewTool } from "../shared/capture-view.ts";
 import { diagram } from "../shared/diagram.ts";
 import { revitApiFetch, revitApiSearch } from "../shared/rvt-api.ts";
-import { peDo, peFind, peRead, peaHostBaseUrl, scopeOf, targetSet } from "./capability-tools.ts";
+import {
+  peDo,
+  peFeedback,
+  peFind,
+  peRead,
+  peaHostBaseUrl,
+  scopeOf,
+  targetSet,
+} from "./capability-tools.ts";
 import { documentRequestSchema, type DocumentRequest } from "@pe/agent-contracts";
 import { createTool } from "../shared/tool.ts";
 import z from "zod";
@@ -73,6 +81,7 @@ export const peaProductTools = {
   [peRead.id]: peRead,
   [peDo.id]: peDo,
   [targetSet.id]: targetSet,
+  [peFeedback.id]: peFeedback,
   [captureView.id]: captureView,
   [readImage.id]: readImage,
   [diagram.id]: diagram,

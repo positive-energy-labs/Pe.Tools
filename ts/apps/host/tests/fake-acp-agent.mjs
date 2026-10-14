@@ -279,6 +279,17 @@ new AgentSideConnection(
       }
       if (text === "silent")
         return new Promise((resolve) => (cancelled = () => resolve({ stopReason: "cancelled" })));
+      if (text === "usage")
+        return {
+          stopReason: "end_turn",
+          usage: {
+            totalTokens: 15,
+            inputTokens: 10,
+            outputTokens: 5,
+            cachedReadTokens: 4,
+            cachedWriteTokens: null,
+          },
+        };
       if (text === "title") {
         await conn.sessionUpdate({
           sessionId,

@@ -89,7 +89,7 @@ const object = z.record(z.string(), z.unknown());
 const ok = z.object({ ok: z.boolean() }).passthrough();
 type Principal = "read" | "caller" | "human" | "human-or-pea" | "human-or-page";
 export type PeRoutePermission = Principal | "admin" | "grant" | "operation" | "pair";
-type Owner = "pe" | "threads" | "providers" | "share" | "pages" | "gateway" | "plugins";
+type Owner = "tasks" | "pe" | "threads" | "providers" | "share" | "pages" | "gateway" | "plugins";
 
 function route<const P extends string, B extends z.ZodType, O extends z.ZodType>(
   method: "GET" | "POST" | "PUT" | "DELETE",
@@ -212,6 +212,14 @@ export function definePeApi<
       .max(256 * 1024)
       .nullable(),
     picture_error: z.string().max(500).nullable(),
+  });
+  /** Pea's report on its own tooling. No kind field: a later miner owns taxonomy (owner ruling 2026-10-14). */
+  const agentFeedbackSchema = z.strictObject({
+    surface: z.string().trim().min(1).max(300),
+    expected: z.string().trim().min(1).max(2000),
+    observed: z.string().trim().min(1).max(4000),
+    workaround: z.string().trim().min(1).max(2000).optional(),
+    refs: z.array(z.string().trim().min(1).max(300)).max(20).optional(),
   });
   const feedbackReceiptSchema = z.discriminatedUnion("delivery", [
     z.strictObject({ feedbackId: z.uuid(), delivery: z.literal("accepted") }),
@@ -409,6 +417,34 @@ export function definePeApi<
       "human",
       "plugins",
       "admin",
+    ),
+    "tasks.list": route("GET", "/pe/tasks", none, z.array(object), "human", "tasks", "admin"),
+    "tasks.enabled": route(
+      "PUT",
+      "/pe/tasks/:id/enabled",
+      z.strictObject({ enabled: z.boolean() }),
+      object,
+      "human",
+      "tasks",
+      "admin",
+    ),
+    "tasks.run": route(
+      "POST",
+      "/pe/tasks/:id/run",
+      z.strictObject({ force: z.boolean().default(false) }),
+      object,
+      "human",
+      "tasks",
+      "admin",
+    ),
+    "threads.history": route(
+      "GET",
+      "/pe/thread-history",
+      none,
+      object,
+      "human-or-pea",
+      "tasks",
+      "read",
     ),
     "threads.list": route(
       "GET",
@@ -612,6 +648,15 @@ export function definePeApi<
       "human",
       "pe",
       "human",
+    ),
+    "agent-feedback.submit": route(
+      "POST",
+      "/pe/agent-feedback",
+      agentFeedbackSchema,
+      z.strictObject({ feedbackId: z.uuid() }),
+      "caller",
+      "pe",
+      "caller",
     ),
     "diagnostics.submit": route(
       "POST",

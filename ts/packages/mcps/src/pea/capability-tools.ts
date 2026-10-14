@@ -71,6 +71,7 @@ import { HostRpcCaller, type ResolvedTarget } from "../shared/host-rpc-caller.ts
 import type { RevitCatalogLoadedFamilies } from "@pe/host-contracts/generated";
 import { coerceJsonObject } from "../shared/coerce.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
+import { peSourceTree } from "./source-tree.ts";
 
 function base(): string {
   // Hosted tools inherit the authority already admitted by the host middleware.
@@ -189,6 +190,7 @@ export const peFind = createTool({
         machine: catalog.machine,
         defaultDocument: targetDocument(target),
         sources: catalog.sources,
+        source: peSourceTree(),
         diagnostics: catalog.diagnostics,
         map: capabilityMap(offered),
         hint: "Query pe_find for rows. pe_read runs a row that does not mutate; pe_do runs authorized actions through the host grant check. Reads need no grant: pe_read may name any open document by exact target, and a ReadOnly scripting.execute needs a target but no grant. Writes target Pea's own lifetimes or the granted head; to grant rw the user does one thing: select the open document in the composer; that selection is the rw grant and renews with each message. Any script refuses while another open document in its Revit lacks Pea's acquisition or the grant. External MCP clients cannot hold rw in this release. defaultDocument is read live per call. Op target overrides affect one call only. Session work accepts SDK id-or-pid selection; host work needs no document. target_set selects only Pea's own documents for later calls.",
@@ -717,6 +719,16 @@ async function dispatch(
     }
     case "route-doc":
     case "route-command": {
+      if (row.key === "route:threads.history") {
+        const response = await createPeClient(base(), fetch).response("threads.history", {
+          query: { query: JSON.stringify(payload) },
+        });
+        return {
+          ok: response.ok,
+          target: { session: null, document: null },
+          result: await response.json(),
+        };
+      }
       if (row.key === "route:families.view" || row.key === "route:families.set-query") {
         if (!viewThread) throw Error("This MCP server has no thread (no harness context).");
         const query = new URLSearchParams({ thread: viewThread });
@@ -1116,6 +1128,34 @@ export const targetSet = createTool({
       head: result.head,
       note: `The new Target (revision ${result.head.revision}) applies to the next call.`,
     };
+  },
+});
+
+/**
+ * A direct tool, not a catalog row: it mutates nothing in Revit, so it crosses no document grant
+ * and no principal filter. The host stamps commit, install, thread and turn (owner ruling
+ * 2026-10-14: agent feedback leaves the machine automatically while users are coworkers).
+ */
+export const peFeedback = createTool({
+  id: "pe_feedback",
+  description:
+    "Report a defect or gap in Pea's own tooling to the Pe.Tools maintainers: a tool that returned something false, a failure whose error did not explain itself, a description or doc that misled you, a capability you needed and could not find, a slow or flaky path, or a workaround you had to invent. File it the moment you notice, then keep working; it never blocks the turn and never reaches the user as a question. Name the surface exactly (tool name, op key, route, skill, or repo path:line from the shipped source tree), say what you expected and what happened, and attach any receipt or request ids you hold. The host stamps commit, install, thread and turn; never fill those. Not for the user's model, drawing or design problems, and not for asking the user anything: the reply owns those. Not a substitute for reading a failure before retrying. Returns a feedbackId. One report per distinct defect per thread.",
+  inputSchema: peRoutes["agent-feedback.submit"].body,
+  execute: async (input) => {
+    try {
+      const response = await createPeClient(base(), fetch).response("agent-feedback.submit", {
+        body: input,
+      });
+      const answer = (await response.json()) as { feedbackId?: unknown };
+      if (response.ok && typeof answer.feedbackId === "string")
+        return { feedbackId: answer.feedbackId };
+      return {
+        isError: true,
+        content: `Feedback was not kept (${response.status}); keep working.`,
+      };
+    } catch (error) {
+      return { isError: true, content: `Feedback was not kept (${message(error)}); keep working.` };
+    }
   },
 });
 

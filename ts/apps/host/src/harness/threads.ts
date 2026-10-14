@@ -429,6 +429,39 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     return t;
   }
 
+  function newThread(
+    selection: { providerId: string; modelId: string | null },
+    title?: string,
+    origin?: HarnessThreadSummary["origin"],
+  ) {
+    const providerId = selection.providerId;
+    if (options.updatePending?.())
+      throw Error("Pe.Tools is updating; create this thread after the update finishes.");
+    const record = options.providers.get(providerId);
+    if (!record) throw Error(`No provider ${providerId}`);
+    const now = new Date().toISOString();
+    const t = create({
+      id: randomUUID(),
+      harness: record.harness,
+      providerId: record.id,
+      providerName: record.name,
+      title: title ?? "New thread",
+      createdAt: now,
+      updatedAt: now,
+      modelId: selection.modelId,
+      ...(origin ? { origin } : {}),
+      acpSessionId: null,
+      models: [],
+      traits: [],
+      traitValues: {},
+      head: emptyThreadHead,
+      forkOf: null,
+      promptCapabilities: null,
+      lifecycle: emptyThreadLifecycle(),
+    });
+    return t;
+  }
+
   const writeMeta = (t: Thread) => writeJson(join(options.root, t.meta.id, "meta.json"), t.meta);
 
   function append(t: Thread, event: Append): HarnessEvent {
@@ -515,6 +548,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     createdAt: t.meta.createdAt,
     updatedAt: t.events.at(-1)?.at ?? t.meta.updatedAt,
     modelId: t.meta.modelId,
+    ...(t.meta.origin ? { origin: t.meta.origin } : {}),
     lastSeq: t.events.length,
     cursor: options.log.last,
     head: reading(t.meta.head),
@@ -1150,7 +1184,24 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           t.meta.promptCapabilities?.embeddedContext,
         ),
       });
-      append(t, { kind: "turn_end", turnId, stopReason: result.stopReason });
+      const u = result.usage;
+      append(t, {
+        kind: "turn_end",
+        turnId,
+        stopReason: result.stopReason,
+        ...(u
+          ? {
+              usage: {
+                totalTokens: u.totalTokens,
+                inputTokens: u.inputTokens,
+                outputTokens: u.outputTokens,
+                ...(u.thoughtTokens != null ? { thoughtTokens: u.thoughtTokens } : {}),
+                ...(u.cachedReadTokens != null ? { cachedReadTokens: u.cachedReadTokens } : {}),
+                ...(u.cachedWriteTokens != null ? { cachedWriteTokens: u.cachedWriteTokens } : {}),
+              },
+            }
+          : {}),
+      });
       outcome = result.stopReason;
     } catch (error) {
       // A stopped thread's open turn is ended by restart recovery, not by "connection closed".
@@ -1376,27 +1427,9 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           { error: "Pe.Tools is updating; create this thread after the update finishes." },
           409,
         );
-      const record = options.providers.get(providerId);
-      if (!record) return json({ error: `No provider ${providerId}` }, 400);
-      const now = new Date().toISOString();
-      const t = create({
-        id: randomUUID(),
-        harness: record.harness,
-        providerId: record.id,
-        providerName: record.name,
-        title: title ?? "New thread",
-        createdAt: now,
-        updatedAt: now,
-        modelId: null,
-        acpSessionId: null,
-        models: [],
-        traits: [],
-        traitValues: {},
-        head: emptyThreadHead,
-        forkOf: null,
-        promptCapabilities: null,
-        lifecycle: emptyThreadLifecycle(),
-      });
+      if (!options.providers.get(providerId))
+        return json({ error: `No provider ${providerId}` }, 400);
+      const t = newThread({ providerId, modelId: null }, title);
       return json(summary(t));
     }
     const t = id ? threads.get(id) : undefined;
@@ -1805,8 +1838,44 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   sweep.unref();
 
   return {
+    launchScheduled: (input: import("../scheduled-tasks.ts").ScheduledLaunch) => {
+      const providerId =
+        input.selection?.providerId ??
+        options.providers.readiness().find((p) => p.readiness.state === "ready")?.id;
+      if (!providerId) throw Error("No ready provider for scheduled task");
+      const t = newThread({ providerId, modelId: input.selection?.modelId ?? null }, input.title, {
+        kind: "scheduled",
+        taskId: input.taskId,
+        runId: input.runId,
+      });
+      const completion = (async () => {
+        await ensure(t);
+        if (input.selection?.modelId && t.meta.modelId !== input.selection.modelId)
+          throw Error("Scheduled model selection was not applied");
+        t.turn = run(t, input.runId, input.prompt);
+        await t.turn;
+        const end = t.events.findLast(
+          (e) => (e.kind === "error" || e.kind === "turn_end") && e.turnId === input.runId,
+        );
+        if (
+          !end ||
+          end.kind === "error" ||
+          (end.kind === "turn_end" && end.stopReason !== "end_turn")
+        )
+          throw Error(end?.kind === "error" ? end.message : "Scheduled turn did not complete");
+      })();
+      return { threadId: t.meta.id, completion };
+    },
+    historySnapshot: () => [...threads.values()].map((t) => ({ ...summary(t), events: t.events })),
     receiptSnapshot: () =>
       [...threads.values()].map((t) => ({ id: t.meta.id, title: t.meta.title, events: t.events })),
+    /** What an agent's report stamps for this thread: the running turn and the harness behind it. */
+    reportContext: (id: string) => {
+      const t = threads.get(id);
+      return t
+        ? { turnId: t.running, provider: t.meta.providerId, model: t.meta.modelId ?? null }
+        : null;
+    },
     /** Automatic updates wait for every turn and harness action to finish. */
     active: () => [...threads.values()].some((t) => t.running !== null || t.busy > 0),
     /** The thread head store; the `thread-head` Reading observes it. */

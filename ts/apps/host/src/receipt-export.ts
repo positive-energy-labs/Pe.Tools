@@ -1,7 +1,7 @@
 import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { PostHog } from "posthog-node";
 import { z } from "zod";
@@ -74,6 +74,21 @@ const eventFields = {
     "viewport",
     "picture",
     "picture_error",
+  ],
+  // Owner ruling 2026-10-14: Pea's own report on its tooling leaves the machine automatically while
+  // users are coworkers. It rides beside the ui_feedback exception in ADR 0018; counsel amends the ADR.
+  agent_feedback: [
+    "feedback_id",
+    "surface",
+    "expected",
+    "observed",
+    "workaround",
+    "refs",
+    "caller_kind",
+    "thread_id",
+    "turn_id",
+    "harness_provider",
+    "harness_model",
   ],
 } as const;
 type ExportEvent = {
@@ -302,6 +317,17 @@ export function projectReceipt(
     default:
       return null;
   }
+  return stamped(event, properties, new Date(r.at), stamp, r.join);
+}
+
+/** The one remote event shape: allowlisted fields, then the host's stamps. */
+function stamped(
+  event: keyof typeof eventFields,
+  properties: Record<string, unknown>,
+  timestamp: Date,
+  stamp: ReceiptStamp,
+  join?: ReceiptJoin,
+): ExportEvent {
   const picked = Object.fromEntries(
     eventFields[event]
       .filter((key) => properties[key] !== undefined)
@@ -310,12 +336,12 @@ export function projectReceipt(
   return {
     event,
     distinctId: stamp.installId,
-    timestamp: new Date(r.at),
+    timestamp,
     properties: {
       ...picked,
       install_id: stamp.installId,
       process_session_id: stamp.processSessionId,
-      ...Object.fromEntries(Object.entries(r.join).map(([k, v]) => [snake(k), v])),
+      ...Object.fromEntries(Object.entries(join ?? {}).map(([k, v]) => [snake(k), v])),
       component: stamp.component,
       version: stamp.version,
       build: stamp.build,
@@ -327,8 +353,12 @@ export function projectReceipt(
   };
 }
 
+/** The running turn and harness behind a thread, as the host knows them when a report arrives. */
+export type AgentReportContext = { turnId: string | null; provider: string; model: string | null };
+
 const feedbackSchema = peRoutes["feedback.submit"].body;
 const diagnosticsSchema = peRoutes["diagnostics.submit"].body;
+const agentFeedbackSchema = peRoutes["agent-feedback.submit"].body;
 type ProducerStamps = { host: ReceiptStamp | null; web: ReceiptStamp | null };
 
 const DEADLINE_MS = 2000;
@@ -517,6 +547,65 @@ export function createReceiptExport(options: {
         webStamp(browserBuild),
       );
       return (await this.deliverFeedback(id))!;
+    },
+    /**
+     * Pea's report on its own tooling: kept locally first, then exported best-effort on the
+     * existing queue. The host supplies every stamp; the report never blocks on the export.
+     */
+    async submitAgentFeedback(
+      report: z.infer<typeof agentFeedbackSchema>,
+      callerKind: string,
+      thread: string | null,
+      context: AgentReportContext | null,
+    ) {
+      const feedbackId = randomUUID();
+      const at = new Date();
+      const host = stamps.host;
+      mkdirSync(options.root, { recursive: true });
+      appendFileSync(
+        join(options.root, "agent-feedback.jsonl"),
+        `${JSON.stringify({
+          ...report,
+          feedbackId,
+          at: at.toISOString(),
+          commit: host?.commit ?? null,
+          version: host?.version ?? null,
+          installId: host?.installId ?? null,
+          callerKind,
+          threadId: thread,
+          turnId: context?.turnId ?? null,
+          harnessProvider: context?.provider ?? null,
+          harnessModel: context?.model ?? null,
+        })}\n`,
+      );
+      if (host && send)
+        track(
+          (async () => {
+            // Local ids stay local; the export joins the receipt spine by the same opaque ids.
+            const threadId = thread ? await journal.opaqueId("thread", thread) : undefined;
+            const turnId =
+              thread && context?.turnId
+                ? await journal.opaqueId("turn", `${thread}:${context.turnId}`)
+                : undefined;
+            await send(
+              stamped(
+                "agent_feedback",
+                {
+                  ...report,
+                  feedback_id: feedbackId,
+                  caller_kind: callerKind,
+                  thread_id: threadId,
+                  turn_id: turnId,
+                  harness_provider: context?.provider,
+                  harness_model: context?.model ?? undefined,
+                },
+                at,
+                host,
+              ),
+            );
+          })(),
+        );
+      return { feedbackId };
     },
     async deliverFeedback(id: string): Promise<FeedbackDelivery | null> {
       let flight = flights.get(id);

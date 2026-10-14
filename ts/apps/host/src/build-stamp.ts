@@ -30,6 +30,11 @@ export function receiptBuildStamp(kind: "release" | "dev"): ReceiptBuildStamp {
 
 /** Compile-time defines read by receipt-export.ts and the web bundle. */
 export function receiptBuildDefines(kind: "release" | "dev") {
-  const stamp = JSON.stringify(receiptBuildStamp(kind));
-  return { __PE_HOST_RECEIPT_BUILD__: stamp, __PE_WEB_RECEIPT_BUILD__: stamp };
+  const receipt = receiptBuildStamp(kind);
+  const stamp = JSON.stringify(receipt);
+  return {
+    __PE_HOST_RECEIPT_BUILD__: stamp,
+    __PE_WEB_RECEIPT_BUILD__: stamp,
+    __PE_SOURCE_COMMIT__: JSON.stringify(receipt.commit),
+  };
 }
