@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { hostDescriptorSchema } from "./host-descriptor.ts";
 
 export const peErrorSchema = z.object({
   error: z.object({
@@ -152,6 +153,7 @@ export function definePeApi<
   });
   /** Public HTTP transport authority. Domain schemas stay with their domain owners. */
   const peRoutes = {
+    "features.get": route("GET", "/pe/features", none, hostDescriptorSchema, "read", "pe"),
     "operation.call": route(
       "POST",
       "/call",

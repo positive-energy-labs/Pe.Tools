@@ -16,6 +16,12 @@ import {
   type SurfaceShell,
 } from "@pe/agent-contracts";
 import { admittedDestination } from "./model";
+import {
+  nativeMessageSchema,
+  postRendererMessage,
+  type NativeWebView,
+  type NativeMessageEvent,
+} from "@pe/host-contracts/native-adapter";
 
 type Overlay = {
   visible: boolean;
@@ -25,11 +31,7 @@ type Overlay = {
 };
 type NativeWindow = Window & {
   chrome?: {
-    webview?: {
-      postMessage(message: string): void;
-      addEventListener(event: "message", listener: (event: MessageEvent<unknown>) => void): void;
-      removeEventListener(event: "message", listener: (event: MessageEvent<unknown>) => void): void;
-    };
+    webview?: NativeWebView;
   };
 };
 
@@ -59,11 +61,9 @@ export function surfaceDestination(
 }
 
 export function nativeNavigationHistory(message: unknown): SurfaceHost["nativeHistory"] {
-  if (typeof message !== "object" || message === null) return null;
-  const value = message as Record<string, unknown>;
-  return value.type === "navigation-history" &&
-    typeof value.canGoBack === "boolean" &&
-    typeof value.canGoForward === "boolean"
+  const parsed = nativeMessageSchema.safeParse(message);
+  const value = parsed.success ? parsed.data : null;
+  return value?.type === "navigation-history"
     ? { canGoBack: value.canGoBack, canGoForward: value.canGoForward }
     : null;
 }
@@ -71,8 +71,7 @@ export function nativeNavigationHistory(message: unknown): SurfaceHost["nativeHi
 function navigateNativeHistory(direction: "back" | "forward"): boolean {
   const native = (window as NativeWindow).chrome?.webview;
   if (!native) return false;
-  native.postMessage(JSON.stringify({ type: "navigate-history", direction }));
-  return true;
+  return postRendererMessage(native, { type: "navigate-history", direction });
 }
 
 export function usableOverlay(
@@ -94,14 +93,10 @@ export function nativeTitlebarArea(
   message: unknown,
   viewport: { width: number; height: number },
 ): SurfaceHost["titlebarArea"] {
-  if (typeof message !== "object" || message === null) return null;
-  const value = message as Record<string, unknown>;
-  if (value.type !== "titlebar-geometry" || value.visible !== true) return null;
-  if (typeof value.rect !== "object" || value.rect === null) return null;
-  const rect = value.rect as Record<string, unknown>;
-  if (![rect.x, rect.y, rect.width, rect.height].every((entry) => typeof entry === "number"))
+  const parsed = nativeMessageSchema.safeParse(message);
+  if (!parsed.success || parsed.data.type !== "titlebar-geometry" || !parsed.data.visible)
     return null;
-  const area = rect as NonNullable<SurfaceHost["titlebarArea"]>;
+  const area = parsed.data.rect;
   return usableOverlay(true, area) &&
     area.x + area.width <= viewport.width &&
     area.y + area.height <= viewport.height
@@ -123,8 +118,7 @@ function openFullWindow(destination: string): boolean {
   if (!url) return false;
   const native = (window as NativeWindow).chrome?.webview;
   if (native) {
-    native.postMessage(JSON.stringify({ type: "open-window", url }));
-    return true;
+    return postRendererMessage(native, { type: "open-window", url });
   }
   const opened = window.open(url, "_blank");
   if (!opened) return false;
@@ -159,7 +153,7 @@ export function projectCaptionTheme(backgroundColor: string, foreground: string,
   const background = captionColor(backgroundColor);
   const ink = captionColor(foreground);
   if (native && background !== null && ink !== null)
-    native.postMessage(JSON.stringify({ type: "chrome-theme", background, foreground: ink, dark }));
+    postRendererMessage(native, { type: "chrome-theme", background, foreground: ink, dark });
 }
 
 export function SurfaceHostProvider({ children }: { children: ReactNode }) {
@@ -177,16 +171,11 @@ export function SurfaceHostProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const webview = (window as NativeWindow).chrome?.webview;
     setNative(!!webview);
-    const syncNative = ({ data }: MessageEvent<unknown>) => {
-      if (
-        typeof data === "object" &&
-        data !== null &&
-        "type" in data &&
-        data.type === "navigation-request" &&
-        "url" in data &&
-        typeof data.url === "string"
-      ) {
-        navigationRequest.current(data.url);
+    const syncNative = ({ data }: NativeMessageEvent) => {
+      const parsed = nativeMessageSchema.safeParse(data);
+      if (!parsed.success) return;
+      if (parsed.data.type === "navigation-request") {
+        navigationRequest.current(parsed.data.url);
         return;
       }
       const history = nativeNavigationHistory(data);
@@ -194,19 +183,13 @@ export function SurfaceHostProvider({ children }: { children: ReactNode }) {
         setNativeHistory(history);
         return;
       }
-      if (
-        typeof data !== "object" ||
-        data === null ||
-        !("type" in data) ||
-        data.type !== "titlebar-geometry"
-      )
-        return;
+      if (parsed.data.type !== "titlebar-geometry") return;
       setNativeArea(
         nativeTitlebarArea(data, { width: window.innerWidth, height: window.innerHeight }),
       );
     };
     webview?.addEventListener("message", syncNative);
-    webview?.postMessage(JSON.stringify({ type: "chrome-ready" }));
+    postRendererMessage(webview, { type: "chrome-ready" });
     const media = matchMedia("(display-mode: standalone)");
     const syncMode = () => setStandalone(media.matches);
     syncMode();

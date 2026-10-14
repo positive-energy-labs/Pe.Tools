@@ -120,7 +120,7 @@ internal sealed class TrayContext : ApplicationContext {
         _window.Hide();
         _card = false;
         _window.LeaveCard();
-        _ = RunScriptAsync("window.peNotice?.(null)");
+        PostNativeMessage(new { type = "notice", notice = (object?)null });
     }
 
     /** The host's notice feed (`/host/notices`, SSE): each `data:` line is one card item. */
@@ -144,7 +144,7 @@ internal sealed class TrayContext : ApplicationContext {
     private void ShowNotices(IReadOnlyList<string> notices) {
         if (notices.Count == 0) return;
         try {
-            _window.BeginInvoke(async () => {
+            _window.BeginInvoke(() => {
                 // A hidden page never lays out, so its card cannot measure itself: show first, then
                 // the page's first height report resizes the window. An open panel just shows the card.
                 if (!_window.Visible) {
@@ -152,28 +152,31 @@ internal sealed class TrayContext : ApplicationContext {
                     _window.PositionCard(96);
                     _window.Show();
                 }
-                foreach (var notice in notices) await RunScriptAsync($"window.peNotice?.({notice})");
+                foreach (var notice in notices) {
+                    using var value = JsonDocument.Parse(notice);
+                    PostNativeMessage(new { type = "notice", notice = value.RootElement });
+                }
             });
         } catch (InvalidOperationException) { }
     }
 
-    private async Task RunScriptAsync(string script) {
+    private void PostNativeMessage<T>(T message) {
         if (_closing || !_ready) return;
-        try { await _web.ExecuteScriptAsync(script); }
+        try { _web.CoreWebView2.PostWebMessageAsJson(NativeAdapterContract.SerializeNative(message)); }
         catch (Exception error) when (error is InvalidOperationException or COMException) { }
     }
 
     /** The card's side of the page protocol: its height, done, and expand to the panel. */
     private bool TryNoticeMessage(JsonElement payload) {
-        if (payload.ValueKind != JsonValueKind.Object || !payload.TryGetProperty("type", out var type)
-            || type.ValueKind != JsonValueKind.String) return false;
+        if (!NativeAdapterContract.Accepts("renderer", payload)) return false;
+        var type = payload.GetProperty("type");
         switch (type.GetString()) {
             case "notice-ready":
                 ShowNotices(_inbox.PageReady());
                 return true;
             case "notice-card":
-                if ((_window.Visible && !_card) || !payload.TryGetProperty("height", out var height)
-                    || height.ValueKind != JsonValueKind.Number || !height.TryGetInt32(out var css)) return true;
+                if (_window.Visible && !_card) return true;
+                var css = (int)payload.GetProperty("height").GetDouble();
                 _card = true;
                 _window.PositionCard(css);
                 _window.Show();
@@ -277,6 +280,7 @@ internal sealed class TrayContext : ApplicationContext {
                 try {
                     using var message = JsonDocument.Parse(e.TryGetWebMessageAsString());
                     var payload = message.RootElement;
+                    if (!NativeAdapterContract.Accepts("renderer", payload)) return;
                     if (payload.ValueKind == JsonValueKind.Object
                         && payload.TryGetProperty("type", out var readyType) && readyType.ValueKind == JsonValueKind.String
                         && readyType.GetString() == "chrome-ready") {
@@ -335,15 +339,14 @@ internal sealed class TrayContext : ApplicationContext {
 
     private void PostTitlebarGeometry() {
         if (!_ready || _closing || !IsOriginalService() || _web.Source is not { } source || !IsViewUrl(source.AbsoluteUri)) return;
-        try { _web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(_window.ReadTitlebarGeometry())); }
-        catch (Exception error) when (error is InvalidOperationException or COMException) { }
+        PostNativeMessage(_window.ReadTitlebarGeometry());
     }
 
     private void PostNavigationHistory() {
         if (!_ready || _closing || !IsOriginalService() || _web.Source is not { } source || !IsViewUrl(source.AbsoluteUri)) return;
-        try { _web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new {
+        PostNativeMessage(new {
             type = "navigation-history", canGoBack = _web.CoreWebView2.CanGoBack, canGoForward = _web.CoreWebView2.CanGoForward
-        })); } catch (Exception error) when (error is InvalidOperationException or COMException) { }
+        });
     }
 
     private void RelayNavigation(string value) {
@@ -351,9 +354,9 @@ internal sealed class TrayContext : ApplicationContext {
         _pendingPath = null; _navigating = false; _hasPage = true;
         if (_closing || !IsOriginalService()
             || !TryGetNavigationRequest(_rendererReady, value, _service.ViewOrigin, out var destination)) return;
-        try { _web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new {
+        PostNativeMessage(new {
             type = "navigation-request", url = destination
-        })); } catch (Exception error) when (error is InvalidOperationException or COMException) { }
+        });
     }
 
     internal static bool TryGetNavigationRequest(bool rendererReady, string value, string origin, out string destination) {
@@ -366,11 +369,9 @@ internal sealed class TrayContext : ApplicationContext {
 
     internal static bool TryReadHistoryCommand(JsonElement payload, bool canGoBack, bool canGoForward, out bool back) {
         back = false;
-        if (payload.ValueKind != JsonValueKind.Object
-            || !payload.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String || type.GetString() != "navigate-history"
-            || !payload.TryGetProperty("direction", out var direction) || direction.ValueKind != JsonValueKind.String) return false;
-        back = direction.GetString() == "back";
-        return back ? canGoBack : direction.GetString() == "forward" && canGoForward;
+        if (!NativeAdapterContract.Accepts("renderer", payload) || payload.GetProperty("type").GetString() != "navigate-history") return false;
+        back = payload.GetProperty("direction").GetString() == "back";
+        return back ? canGoBack : canGoForward;
     }
 
     private bool IsHostUrl(string value) => Uri.TryCreate(value, UriKind.Absolute, out var uri)
@@ -712,16 +713,10 @@ internal sealed class TrayWindow : Form {
 
     internal static bool TryReadChromeTheme(JsonElement payload, out int background, out int foreground, out bool dark) {
         background = foreground = 0; dark = false;
-        if (payload.ValueKind != JsonValueKind.Object
-            || !payload.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String
-            || type.GetString() != "chrome-theme"
-            || !payload.TryGetProperty("background", out var bg) || bg.ValueKind != JsonValueKind.Number
-            || !bg.TryGetInt32(out background) || background is < 0 or > 0xFFFFFF
-            || !payload.TryGetProperty("foreground", out var fg) || fg.ValueKind != JsonValueKind.Number
-            || !fg.TryGetInt32(out foreground) || foreground is < 0 or > 0xFFFFFF
-            || !payload.TryGetProperty("dark", out var mode) || mode.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
-            return false;
-        dark = mode.GetBoolean();
+        if (!NativeAdapterContract.Accepts("renderer", payload) || payload.GetProperty("type").GetString() != "chrome-theme") return false;
+        background = (int)payload.GetProperty("background").GetDouble();
+        foreground = (int)payload.GetProperty("foreground").GetDouble();
+        dark = payload.GetProperty("dark").GetBoolean();
         return true;
     }
 

@@ -1,7 +1,7 @@
 /**
  * The tray's notice card, mounted once at the root on the tray surface. The host projects receipt
  * revisions onto `/host/notices` and holds each burst ~30 s; the tray shim hands every item to
- * `window.peNotice` once this card says `notice-ready`, and lends its window card-sized without
+ * a native `notice` event once this card says `notice-ready`, and lends its window card-sized without
  * taking focus. One card pages every pending item: a new notice appends to the open card, a
  * draining timer walks item to item and the card ends after the last, hover pauses it and typing
  * stops it for good. Card messages ride the tray's string-JSON `type` protocol
@@ -12,6 +12,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowUp, Square, X } from "lucide-react";
 import type { Machine, MachineNotice, Reading } from "@pe/agent-contracts";
+import {
+  nativeMessageSchema,
+  postRendererMessage,
+  type NativeWebView,
+  type RendererMessage,
+  type NativeMessageEvent,
+} from "@pe/host-contracts/native-adapter";
 
 import { QuestionForm } from "#/chat/question-form";
 import { Button } from "#/components/lang/button";
@@ -29,17 +36,12 @@ import { AutomaticUpdates } from "./update";
 
 declare global {
   interface Window {
-    peNotice?: (notice: MachineNotice | null) => void;
-    chrome?: { webview?: { postMessage(message: string): void } };
+    chrome?: { webview?: NativeWebView };
   }
 }
 
-type TrayMessage =
-  | { type: "notice-ready" }
-  | { type: "notice-card"; height: number }
-  | { type: "notice-hide" }
-  | { type: "notice-panel" };
-const tray = (message: TrayMessage) => window.chrome?.webview?.postMessage(JSON.stringify(message));
+type TrayMessage = Extract<RendererMessage, { type: `notice-${string}` }>;
+const tray = (message: TrayMessage) => postRendererMessage(window.chrome?.webview, message);
 
 /** How long each item holds before the card walks on. */
 export const NOTICE_DRAIN_MS = 8_000;
@@ -64,15 +66,20 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
     setError(null);
   };
   useEffect(() => {
-    window.peNotice = (next) => {
+    const webview = window.chrome?.webview;
+    const receive = ({ data }: NativeMessageEvent) => {
+      const parsed = nativeMessageSchema.safeParse(data);
+      if (!parsed.success || parsed.data.type !== "notice") return;
+      const next = parsed.data.notice;
       if (!next) return end();
       setItems((list) => {
         const same = list.findIndex((item) => item.id === next.id);
         return same < 0 ? [...list, next] : list.map((item, i) => (i === same ? next : item));
       });
     };
+    webview?.addEventListener("message", receive);
     tray({ type: "notice-ready" });
-    return () => void delete window.peNotice;
+    return () => webview?.removeEventListener("message", receive);
   }, []);
 
   const live = items.length > 0;

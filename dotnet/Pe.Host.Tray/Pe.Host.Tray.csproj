@@ -9,6 +9,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="../../ts/packages/host-contracts/src/native-adapter.schema.json" LogicalName="Pe.Host.Tray.NativeAdapter.schema.json" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" PrivateAssets="build;buildTransitive" />
     <InternalsVisibleTo Include="Pe.Host.Tray.Tests" />
     <ProjectReference Include="../Pe.Shared.Product/Pe.Shared.Product.csproj" />
