@@ -289,25 +289,22 @@ export function ChatCluster({
   );
 }
 
-/** The bottom row's lead: provider › model › traits, document target, then the run's state. */
-export function ComposerControls({
-  handle,
+/** The pickers: provider › model › traits, then the document target. `face` is how much each
+ *  says: `icon` marks alone (the one-line composer), `marks` marks with the target/open switch,
+ *  `brief` mark and one word, `control` every word. */
+export function ComposerPickers({
   situation,
-  status,
   urlTarget,
+  face,
 }: {
   /** The URL's `?target` pin: a thread with no document takes it once (e2e finding 7). */
   urlTarget?: string;
-  handle: ChatHandle;
   situation: ChatSituation;
-  /** Thread-level loading or failure, said beside the pickers it qualifies. */
-  status?: ComposerStatus;
+  face: PickerFace;
 }) {
   const { currentThreadId, chat } = useWorkbench();
   const isRunning = selectRunStatus(chat) !== "idle";
   const { head, inventory, ladder, health, closedWord } = situation;
-  const refusal =
-    head.refusal ?? (handle.outcome?.key === "send" ? handle.outcome.refusal?.message : null);
   // A new thread under a `?target` address pin binds to the one open document at that address,
   // once per thread: "new" keeps the URL's document. A later clear in the picker stands.
   const pinned = useRef<string | null>(null);
@@ -326,6 +323,7 @@ export function ComposerControls({
     currentThreadId,
   ]);
   const targetDisabled = isRunning || head.stale;
+  const ladderFace = face === "marks" ? "icon" : face;
   // A closed target names itself in the first empty slot, in the caution tone, and the picker
   // lists only the live inventory.
   const unbound = ladder.levels.findIndex((level) => level.label === null);
@@ -361,10 +359,10 @@ export function ComposerControls({
   );
   return (
     <section aria-label="Situation" className="contents" data-testid="composer-head">
-      <HeadLadder />
-      <ComposerOpenMode>
+      <HeadLadder face={ladderFace} />
+      <ComposerOpenMode switcher={face !== "icon"}>
         <Ladder
-          face="control"
+          face={ladderFace}
           mark={<File className="size-3.5" data-tone={situation.bound ? "done" : undefined} />}
           levels={levels}
           caution={Boolean(health)}
@@ -376,6 +374,28 @@ export function ComposerControls({
           }
         />
       </ComposerOpenMode>
+    </section>
+  );
+}
+
+export type PickerFace = "control" | "brief" | "marks" | "icon";
+
+/** The run's state beside the pickers: the grant, the turn, Pea's plan, a refusal. */
+export function ComposerState({
+  handle,
+  situation: { head },
+  status,
+}: {
+  handle: ChatHandle;
+  situation: ChatSituation;
+  /** Thread-level loading or failure, said beside the pickers it qualifies. */
+  status?: ComposerStatus;
+}) {
+  const { chat } = useWorkbench();
+  const refusal =
+    head.refusal ?? (handle.outcome?.key === "send" ? handle.outcome.refusal?.message : null);
+  return (
+    <>
       <GrantChip grant={head.grantView} onRevoke={() => void head.revoke()} />
       {status ? (
         <span
@@ -391,7 +411,7 @@ export function ComposerControls({
       ) : null}
       <PlanChip tasks={selectPlan(chat)} />
       {refusal ? <span data-tone="caution">{refusal}</span> : null}
-    </section>
+    </>
   );
 }
 

@@ -7,6 +7,7 @@ import { useDestination } from "#/navigation/state";
 import { settingsDestination } from "#/machine/navigation";
 import type { TraitOption } from "@pe/agent-contracts";
 import { Ladder, type Rung } from "#/route/ladder";
+import type { ComponentProps } from "react";
 import { ProviderMark } from "#/components/lang/provider-mark";
 import { useWorkbench } from "#/workbench/provider";
 import { isReady, readinessSub, repairWord } from "#/workbench/provider/providers";
@@ -94,7 +95,7 @@ const DEFAULT = "pea-default";
 
 /** provider › model › traits. Rung 1 refuses a provider that is not ready, and, once a thread is
  * bound, every other provider: a thread never changes provider. */
-export function HeadLadder() {
+export function HeadLadder({ face = "control" }: { face?: ComponentProps<typeof Ladder>["face"] }) {
   const go = useDestination();
   const head = useHead();
   const [open, setOpen] = useState(false);
@@ -131,7 +132,7 @@ export function HeadLadder() {
     : "default model";
   return (
     <Ladder
-      face="control"
+      face={face}
       open={open}
       onOpenChange={setOpen}
       // Open on the model; the first trait (effort) ends the walk, or the model when there is none.

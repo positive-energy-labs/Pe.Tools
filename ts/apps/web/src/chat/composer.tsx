@@ -1,5 +1,13 @@
 // The composer's DOM: draft box, attachments, slash and `@` menus, send. Logic lives in the hooks and `useSend`.
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import { flushSync } from "react-dom";
 import { ArrowUp, GitFork, Paperclip, Square } from "lucide-react";
 import {
   capabilityCatalogSchema,
@@ -16,9 +24,9 @@ import { useWorkbench } from "#/workbench/provider";
 import { EMPTY_CHAT_DRAFT, type ChatDraft } from "#/workbench/prompt";
 import { selectRunStatus, selectSkillCommands } from "@pe/agent-contracts/chat-state";
 import { ListPopup } from "@pe/kit/lang/list-popup";
-import { useSend, type ChatHandle } from "#/chat/composer-head";
+import { useSend, type ChatHandle, type PickerFace } from "#/chat/composer-head";
 import { SituationAction } from "#/route/situation-verbs";
-import { ComposerBox, ComposerFrame, ComposerRow } from "#/components/lang/conversation";
+import { ComposerBox, ComposerFrame } from "#/components/lang/conversation";
 import { Button } from "@pe/kit/lang/button";
 import { MentionChip } from "@pe/kit/lang/chip";
 import { previousOf } from "#/readings";
@@ -36,17 +44,30 @@ import {
   withText,
 } from "./use-mentions";
 
+/** Prototype round (tray UX 2026-10-14): how the open composer draws its pickers. A: every word,
+ *  in the bottom row. B: marks only, in the bottom row. C: mark and one word, kept in the left
+ *  rail. At rest every variant is one line with the marks stacked on its left. */
+export type ComposerVariant = "A" | "B" | "C";
+const OPEN_FACE: Record<ComposerVariant, PickerFace> = { A: "control", B: "marks", C: "brief" };
+
 /** The route handle's Enter runs Send scoped to this draft; `work` is the box's top section (live
- * asks, staged Work), `controls` the bottom row's lead (pickers and state). */
+ * asks, staged Work), `pickers` the provider and document pickers in a face, `state` the run's. */
 export function ThreadComposer({
   handle,
-  controls,
+  pickers,
+  state,
   work,
+  variant,
+  lines,
   initialDraft = EMPTY_CHAT_DRAFT,
 }: {
   handle: ChatHandle;
-  controls?: ReactNode;
+  pickers: (face: PickerFace) => ReactNode;
+  state?: ReactNode;
   work?: ReactNode;
+  variant: ComposerVariant;
+  /** How tall the draft grows while open, in lines, before it scrolls. */
+  lines: number;
   initialDraft?: ChatDraft;
 }) {
   const [draft, setDraft] = useState(initialDraft);
@@ -119,6 +140,30 @@ export function ThreadComposer({
     },
   ];
 
+  // Open while you write: the draft grows to `lines` and the pickers say their words. Focus leaving
+  // the composer (React focus bubbles through its portalled popups) rests it at one line; a window
+  // losing focus does not. The reflow is a view transition, skipped under reduced motion.
+  const [open, setOpen] = useState(false);
+  const rest = useRef<number>(undefined);
+  // The state asked for, not the state drawn: a transition commits a frame late.
+  const wanted = useRef(false);
+  const flip = (next: boolean) => {
+    if (next === wanted.current) return;
+    wanted.current = next;
+    if (!document.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches)
+      return setOpen(next);
+    document.startViewTransition(() => flushSync(() => setOpen(next)));
+  };
+  const hold = () => window.clearTimeout(rest.current);
+  const release = () => {
+    hold();
+    rest.current = window.setTimeout(() => {
+      if (!document.hasFocus()) return;
+      flip(false);
+      if (area) area.scrollTop = 0;
+    });
+  };
+
   const submit = (event: FormEvent) => {
     event.preventDefault();
     sendCurrent();
@@ -128,7 +173,13 @@ export function ThreadComposer({
     <Pane id="composer" scroll="visible" flush>
       <ScopeKeys keys={shortcuts} />
       <ComposerFrame>
-        <form ref={setForm} onSubmit={submit} className="relative w-full">
+        <form
+          ref={setForm}
+          onSubmit={submit}
+          onFocus={hold}
+          onBlur={release}
+          className="relative w-full"
+        >
           <ListPopup<Capability>
             anchor="caret"
             caret={form}
@@ -185,37 +236,46 @@ export function ThreadComposer({
             detail={(command) => command.description}
           />
           {/* Files dropped anywhere on the box attach; a file drag over it takes the recess ground. */}
-          <ComposerBox dragging={files.dragging} {...files.dropProps}>
-            {work}
-            {noneReady ? <FirstOpenCard providers={providers} origin={config.origin} /> : null}
-            {repairing ? <ProviderRepair provider={repairing} providers={providers} /> : null}
-            {files.attachments.length > 0 || draft.mentions.length > 0 ? (
-              <div className="flex flex-wrap items-end gap-1.5 px-(--gutter) pt-(--gutter)">
-                {draft.mentions.map((mention) => (
-                  <MentionChip
-                    key={mention.key}
-                    label={mention.title}
-                    kind={mentionWord(mention.kind)}
-                    pointer={mention.key}
-                    facts={mention.facts}
-                    takenAt={mention.takenAt}
-                    onRemove={() => setDraft((previous) => dropMention(previous, mention.key))}
-                  />
-                ))}
-                {files.attachments.map((attachment, index) => (
-                  <AttachmentChip
-                    key={index}
-                    attachment={attachment}
-                    onRemove={() => files.remove(index)}
-                  />
-                ))}
-              </div>
-            ) : null}
-            {files.refusal ? (
-              <div className="px-(--gutter) pt-2" data-tone="caution">
-                {files.refusal}
-              </div>
-            ) : null}
+          <ComposerBox
+            dragging={files.dragging}
+            data-compose={variant}
+            data-open={open || undefined}
+            style={{ "--composer-lines": lines } as CSSProperties}
+            {...files.dropProps}
+          >
+            <div data-composer-work="">
+              {work}
+              {noneReady ? <FirstOpenCard providers={providers} origin={config.origin} /> : null}
+              {repairing ? <ProviderRepair provider={repairing} providers={providers} /> : null}
+              {files.attachments.length > 0 || draft.mentions.length > 0 ? (
+                <div className="flex flex-wrap items-end gap-1.5 px-(--gutter) pt-(--gutter)">
+                  {draft.mentions.map((mention) => (
+                    <MentionChip
+                      key={mention.key}
+                      label={mention.title}
+                      kind={mentionWord(mention.kind)}
+                      pointer={mention.key}
+                      facts={mention.facts}
+                      takenAt={mention.takenAt}
+                      onRemove={() => setDraft((previous) => dropMention(previous, mention.key))}
+                    />
+                  ))}
+                  {files.attachments.map((attachment, index) => (
+                    <AttachmentChip
+                      key={index}
+                      attachment={attachment}
+                      onRemove={() => files.remove(index)}
+                    />
+                  ))}
+                </div>
+              ) : null}
+              {files.refusal ? (
+                <div className="px-(--gutter) pt-2" data-tone="caution">
+                  {files.refusal}
+                </div>
+              ) : null}
+            </div>
+            <div data-composer-pickers="">{pickers(open ? OPEN_FACE[variant] : "icon")}</div>
             <Textarea
               name="input"
               aria-label="Message"
@@ -228,6 +288,7 @@ export function ThreadComposer({
               }
               rows={1}
               autoFocus
+              onFocus={() => flip(true)}
               value={draft.text}
               onChange={(event) => {
                 setText(event.currentTarget.value);
@@ -251,44 +312,36 @@ export function ThreadComposer({
               onPaste={files.pasteHandler}
             />
             <input {...files.fileInputProps} />
-            <ComposerRow
-              lead={controls}
-              trail={
-                <>
-                  {noneReady ? <span data-tone="caution">no provider is ready</span> : null}
-                  <SituationAction
-                    handle={handle}
-                    name="fork"
-                    action={handle.actions.fork}
-                    icon={GitFork}
-                  />
-                  <Button
-                    kind="framed"
-                    icon={Paperclip}
-                    label="Attach files: images and text, 5 MB each, 10 a message"
-                    onClick={files.browse}
-                  />
-                  {/* One slot: Stop replaces Send while a turn runs, so the two never coexist. */}
-                  {isRunning ? (
-                    <SituationAction
-                      handle={handle}
-                      name="stop"
-                      action={handle.actions.stop}
-                      icon={Square}
-                      tone="alarm"
-                    />
-                  ) : (
-                    <SituationAction
-                      handle={handle}
-                      name="send"
-                      action={send}
-                      commit
-                      icon={ArrowUp}
-                    />
-                  )}
-                </>
-              }
-            />
+            <div data-composer-tools="">
+              {state}
+              {noneReady ? <span data-tone="caution">no provider is ready</span> : null}
+              <SituationAction
+                handle={handle}
+                name="fork"
+                action={handle.actions.fork}
+                icon={GitFork}
+              />
+              <Button
+                kind="framed"
+                icon={Paperclip}
+                label="Attach files: images and text, 5 MB each, 10 a message"
+                onClick={files.browse}
+              />
+            </div>
+            {/* One slot: Stop replaces Send while a turn runs, so the two never coexist. */}
+            <div data-composer-send="">
+              {isRunning ? (
+                <SituationAction
+                  handle={handle}
+                  name="stop"
+                  action={handle.actions.stop}
+                  icon={Square}
+                  tone="alarm"
+                />
+              ) : (
+                <SituationAction handle={handle} name="send" action={send} commit icon={ArrowUp} />
+              )}
+            </div>
           </ComposerBox>
         </form>
       </ComposerFrame>

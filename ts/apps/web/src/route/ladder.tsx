@@ -1,6 +1,7 @@
 /** One popup per Situation ladder: rungs as plain data, a pick binds its rung and advances.
  *  `word` is the terminal word in a sentence (dotted held, dashed derived, caution incomplete);
- *  `control` is a framed trigger beside buttons that reads the whole path. */
+ *  `control` is a framed trigger beside buttons that reads the whole path; `brief` is that frame
+ *  reading the mark and the second rung only; `icon` is the mark alone (the path is its title). */
 import { useRef, useState, type ReactNode } from "react";
 
 import type { Collection, Level } from "@pe/kit/lang/collection";
@@ -56,7 +57,7 @@ export function Ladder({
   closeOn,
 }: {
   levels: readonly Rung[];
-  face?: "word" | "control";
+  face?: "word" | "control" | "brief" | "icon";
   /** A glyph that stands for the first rung (the composer's provider mark): the complete ladder
    *  reads `mark second · third` instead of `first › second › third`. */
   mark?: ReactNode;
@@ -84,21 +85,29 @@ export function Ladder({
   const unbound = levels.findIndex((rung) => rung.label === null);
   const complete = unbound < 0;
   const shown = levels.filter((rung) => !rung.silent);
-  const word = !complete ? (
-    levels[unbound]!.placeholder
-  ) : mark ? (
-    <>
-      {mark}
-      {shown
-        .filter((rung) => rung !== levels[0])
-        .map((rung) => rung.label)
-        .join(" · ")}
-    </>
-  ) : face === "control" ? (
-    shown.map((rung) => rung.label).join(" › ")
-  ) : (
-    (levels.at(-1)?.label ?? "")
-  );
+  const word =
+    face === "icon" ? (
+      mark
+    ) : face === "brief" ? (
+      <>
+        {mark}
+        {complete ? shown[1]?.label : null}
+      </>
+    ) : !complete ? (
+      levels[unbound]!.placeholder
+    ) : mark ? (
+      <>
+        {mark}
+        {shown
+          .filter((rung) => rung !== levels[0])
+          .map((rung) => rung.label)
+          .join(" · ")}
+      </>
+    ) : face === "control" ? (
+      shown.map((rung) => rung.label).join(" › ")
+    ) : (
+      (levels.at(-1)?.label ?? "")
+    );
   const rungOf = (hit: Hit) => levels.find((rung) => rung.key === hit.rung)!;
   const rungs: Level<Hit>[] = levels.map((rung) => ({
     label: rung.key,
@@ -125,7 +134,7 @@ export function Ladder({
   return (
     <ListPopup<Hit>
       anchor="trigger"
-      face={face}
+      face={face === "brief" ? "control" : face}
       trigger={word}
       title={title}
       disabled={disabled}
