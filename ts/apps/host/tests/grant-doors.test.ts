@@ -107,7 +107,8 @@ const admission = (ref: DocumentRef = docA, id = "door-2") => ({
   // A human-only key would answer human.only first for a Pea caller; this one is open to both.
   key: "scripting.execute",
   destination: { kind: "document", ref },
-  input: {},
+  // A ReadOnly script is a read for Pea (items 9, 10); the grant doors judge a write.
+  input: { permissionMode: "WriteTransaction" },
   bases: {},
 });
 
