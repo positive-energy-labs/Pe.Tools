@@ -68,6 +68,11 @@ vi.mock("@pe/host-contracts/pe-service-host", async (original) => ({
   claimServiceHost: mocks.claim,
   rememberServicePort: async () => {},
 }));
+// The claim holder writes the owner's terminal context; a mocked product root must not reach the real one.
+vi.mock("../src/control.ts", async (original) => ({
+  ...(await original<object>()),
+  writeTerminalContext: () => ({ retire() {} }),
+}));
 vi.mock("../src/receipt-export.ts", () => ({
   hostReceiptExport: () => ({ record: async () => {}, close: async () => {} }),
   bindNativeProducers: () => () => {},
