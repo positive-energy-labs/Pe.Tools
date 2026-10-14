@@ -132,7 +132,7 @@ async function capturePage(
       }
       if (request.url() === url)
         return route.fulfill({
-          contentType: "text/html",
+          contentType: "text/html; charset=utf-8",
           body: withPageKey(input.html, `page:@pages/${input.slug}`),
         });
       if (!libraryPaths.has(destination.pathname)) {
