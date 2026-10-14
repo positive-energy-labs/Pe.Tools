@@ -253,12 +253,12 @@ test("kernel confines diagrams to Pages unless the user asks for one-shot output
 });
 
 test("kernel and bundled skills route visual explanations through a hosted Page", () => {
-  expect(peaAgentInstructions).toContain("Use a Page first when a chart, table, diagram");
+  expect(peaAgentInstructions).toContain("go in a hosted Pe.Tools Page first");
   expect(peaAgentInstructions).toContain("Use diagram only inside that Page");
   const page = bundledPeaSkills.find((skill) => skill.name === "make-page")?.content ?? "";
   const script =
     bundledPeaSkills.find((skill) => skill.name === "write-revit-csharp-script")?.content ?? "";
-  expect(page).toContain("Return the Page openUrl");
+  expect(page).toContain("return its openUrl with a short takeaway");
   expect(page).toContain("page:@snowdon-ducts/pages/tour");
   expect(script).toContain("Do not create or register a script without a connected document");
 });
