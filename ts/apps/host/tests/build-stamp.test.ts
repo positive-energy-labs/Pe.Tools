@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { expect, test } from "vite-plus/test";
 import hostConfig from "../vite.config.ts";
+import peaConfig from "../../pea/vite.config.ts";
 import webConfig from "../../web/vite.config.ts";
 import { receiptBuildDefines, receiptBuildStamp } from "../src/build-stamp.ts";
 import { admitBuild } from "../src/receipt-export.ts";
@@ -46,6 +47,7 @@ test("the built host and web carry the same stamp and the admission accepts it",
     command: "build",
   }).define;
   const host = (hostConfig as { pack: { define: Record<string, string> } }).pack.define;
+  const pea = (peaConfig as { pack: { define: Record<string, string> } }).pack.define;
   const id = "00000000-0000-4000-8000-000000000001";
   // One source, read once per bundle: the host bundle's two defines are the same string.
   expect(host.__PE_HOST_RECEIPT_BUILD__).toBe(host.__PE_WEB_RECEIPT_BUILD__);
@@ -60,6 +62,10 @@ test("the built host and web carry the same stamp and the admission accepts it",
     expect(admitBuild(component, stamp, id, id)).toMatchObject(stamp);
   }
   expect(Object.keys(web)).not.toContain("__PE_HOST_RECEIPT_BUILD__");
+  expect(JSON.parse(host.__PE_SOURCE_COMMIT__!)).toBe(
+    baked(host, "__PE_HOST_RECEIPT_BUILD__").commit,
+  );
+  expect(pea.__PE_SOURCE_COMMIT__).toBe(host.__PE_SOURCE_COMMIT__);
 });
 
 test("admission refuses a missing or malformed stamp", () => {
