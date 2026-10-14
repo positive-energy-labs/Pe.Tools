@@ -352,12 +352,9 @@ export const requestIdentityLayer = (options: IdentityOptions) =>
         ) {
           const lifecycle = yield* Effect.serviceOption(HostLifecycle);
           if (lifecycle._tag === "Some") {
-            const ready = yield* Deferred.poll(lifecycle.value.handle);
-            if (ready._tag === "Some") {
-              const handle = yield* ready.value;
-              const body = yield* Effect.orElseSucceed(request.json, () => null);
-              serviceAuthorized = authorizeShutdownFor(handle)(request.headers, body);
-            }
+            const handle = yield* Deferred.await(lifecycle.value.handle);
+            const body = yield* Effect.orElseSucceed(request.json, () => null);
+            serviceAuthorized = authorizeShutdownFor(handle)(request.headers, body);
           }
         }
         const identity = yield* Effect.promise(() =>
