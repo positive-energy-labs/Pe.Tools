@@ -7,6 +7,7 @@ import { token } from "@pe/kit/lib/token";
 import { tv } from "@pe/kit/lib/tv";
 
 import "@pe/kit/lang/lang.css";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export const coverageBarRecipe = tv({
   slots: {
@@ -55,23 +56,24 @@ export function CoverageBar({
     <div className={base()}>
       <div className={bar()}>
         {segments.map((s) => (
-          <div
-            key={s.label}
-            title={`${s.label}: ${s.count}`}
-            className={segment()}
-            style={{
-              width: `${(s.count / denom) * 100}%`,
-              backgroundColor: `color-mix(in srgb, ${token(`viz-${s.viz}`)} 55%, transparent)`,
-            }}
-          />
+          <TooltipHint content={`${s.label}: ${s.count}`} key={s.label}>
+            <div
+              className={segment()}
+              style={{
+                width: `${(s.count / denom) * 100}%`,
+                backgroundColor: `color-mix(in srgb, ${token(`viz-${s.viz}`)} 55%, transparent)`,
+              }}
+            />
+          </TooltipHint>
         ))}
         {sum < denom && (
-          <div
-            title={`unaccounted: ${denom - sum}`}
-            data-surface="recess"
-            className={rest()}
-            style={{ width: `${((denom - sum) / denom) * 100}%` }}
-          />
+          <TooltipHint content={`unaccounted: ${denom - sum}`}>
+            <div
+              data-surface="recess"
+              className={rest()}
+              style={{ width: `${((denom - sum) / denom) * 100}%` }}
+            />
+          </TooltipHint>
         )}
       </div>
       <div className={legend()}>

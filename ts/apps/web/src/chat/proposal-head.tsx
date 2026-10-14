@@ -15,6 +15,7 @@ import {
   type FanOutOutcome,
 } from "#/components/work/band";
 import { Verdict } from "@pe/kit/lang/verdict";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 export interface HeadWork {
   id: string;
   /** The route title, e.g. "Families". */
@@ -166,13 +167,11 @@ function WorkLine({ parts }: { parts: HeadWork[] }) {
         ) : null}
         <span className="ml-auto flex min-w-0 items-center gap-2">
           {work.refusal ? (
-            <span
-              className="min-w-0 truncate"
-              data-tone="caution"
-              title={`${work.commit.word} refused: ${work.refusal}`}
-            >
-              {work.refusal}
-            </span>
+            <TooltipHint content={`${work.commit.word} refused: ${work.refusal}`}>
+              <span className="min-w-0 truncate" data-tone="caution">
+                {work.refusal}
+              </span>
+            </TooltipHint>
           ) : null}
           <Button
             kind="framed"
@@ -311,35 +310,33 @@ function GroupRow({
     <div className="flex flex-col" data-group={label}>
       <div className="grid h-(--item-h) grid-cols-[minmax(6rem,12rem)_minmax(0,1fr)_auto] items-center gap-2">
         <span className="truncate">{label}</span>
-        <span className="truncate face-mono" title={[body, ...facts].filter(Boolean).join(" · ")}>
-          {body}
-          {facts.length ? (
-            <span className="text-ink-2">
-              {body ? " · " : ""}
-              {facts.join(" · ")}
-            </span>
-          ) : null}
-        </span>
+        <TooltipHint content={[body, ...facts].filter(Boolean).join(" · ")}>
+          <span className="truncate face-mono">
+            {body}
+            {facts.length ? (
+              <span className="text-ink-2">
+                {body ? " · " : ""}
+                {facts.join(" · ")}
+              </span>
+            ) : null}
+          </span>
+        </TooltipHint>
         <span className="flex items-center gap-1">
           {verbs && acceptK ? (
-            <Verdict
-              kind="accept"
-              aria-label={`accept ${acceptK}`}
-              title={`Stage Pea's proposal on ${acceptK} cells in one write; contested and locked cells are skipped`}
-              onClick={() => act("accept")}
+            <TooltipHint
+              content={`Stage Pea's proposal on ${acceptK} cells in one write; contested and locked cells are skipped`}
             >
-              {acceptK}
-            </Verdict>
+              <Verdict kind="accept" aria-label={`accept ${acceptK}`} onClick={() => act("accept")}>
+                {acceptK}
+              </Verdict>
+            </TooltipHint>
           ) : null}
           {verbs && denyK ? (
-            <Verdict
-              kind="deny"
-              aria-label={`deny ${denyK}`}
-              title={`Clear Pea's proposal on ${denyK} cells in one write`}
-              onClick={() => act("deny")}
-            >
-              {denyK}
-            </Verdict>
+            <TooltipHint content={`Clear Pea's proposal on ${denyK} cells in one write`}>
+              <Verdict kind="deny" aria-label={`deny ${denyK}`} onClick={() => act("deny")}>
+                {denyK}
+              </Verdict>
+            </TooltipHint>
           ) : null}
           <UnstageAll wire={work.wire} cells={work.cells} keys={keys} done={done} compact />
           <Button
@@ -354,13 +351,11 @@ function GroupRow({
         </span>
       </div>
       {outcome ? (
-        <span
-          className="truncate pl-2"
-          data-tone={outcome.refusal ? "caution" : "done"}
-          title={outcome.refusal ? "nothing was written" : undefined}
-        >
-          {fanOutWord(outcome)}
-        </span>
+        <TooltipHint content={outcome.refusal ? "nothing was written" : undefined}>
+          <span className="truncate pl-2" data-tone={outcome.refusal ? "caution" : "done"}>
+            {fanOutWord(outcome)}
+          </span>
+        </TooltipHint>
       ) : null}
     </div>
   );

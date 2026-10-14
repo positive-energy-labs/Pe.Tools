@@ -12,6 +12,7 @@ import { Table } from "@pe/kit/table/table";
 import { cn } from "@pe/kit/lib/utils";
 
 import { STALE_PLAN, type PlanEntry, type PlanSheet } from "./manifest";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const CELL = "face-mono block truncate px-(--item-pad-x)";
 
@@ -33,9 +34,9 @@ const PLAN_COLUMNS: Column<PlanEntry>[] = [
     key: "source",
     label: "source",
     cell: (entry) => (
-      <span className={cn(CELL, "text-ink-2")} title={entry.detail}>
-        {entry.detail}
-      </span>
+      <TooltipHint content={entry.detail}>
+        <span className={cn(CELL, "text-ink-2")}>{entry.detail}</span>
+      </TooltipHint>
     ),
   },
   {
@@ -43,9 +44,9 @@ const PLAN_COLUMNS: Column<PlanEntry>[] = [
     label: "exception",
     width: "w-64",
     cell: (entry) => (
-      <span className={cn(CELL, "text-ink-mute")} title={entry.flag ?? ""}>
-        {entry.flag ?? ""}
-      </span>
+      <TooltipHint content={entry.flag ?? ""}>
+        <span className={cn(CELL, "text-ink-mute")}>{entry.flag ?? ""}</span>
+      </TooltipHint>
     ),
   },
 ];

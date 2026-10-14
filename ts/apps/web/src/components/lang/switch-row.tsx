@@ -1,4 +1,5 @@
 import { Switch } from "./switch";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /**
  * A switch with its refusal beside it: a refused switch is disabled and says why on the surface,
@@ -24,15 +25,17 @@ export function SwitchRow({
 }) {
   return (
     <span className="flex min-w-0 flex-col gap-0.5">
-      <label className="flex items-center gap-2" title={says}>
-        <span className="min-w-0 flex-1">{label}</span>
-        <Switch
-          size="sm"
-          checked={checked}
-          disabled={disabled || Boolean(refusal)}
-          onCheckedChange={onCheckedChange}
-        />
-      </label>
+      <TooltipHint content={says}>
+        <label className="flex items-center gap-2">
+          <span className="min-w-0 flex-1">{label}</span>
+          <Switch
+            size="sm"
+            checked={checked}
+            disabled={disabled || Boolean(refusal)}
+            onCheckedChange={onCheckedChange}
+          />
+        </label>
+      </TooltipHint>
       {refusal ? <span data-tone="caution">{refusal}</span> : null}
     </span>
   );

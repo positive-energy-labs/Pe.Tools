@@ -1,12 +1,13 @@
 /**
  * The one list item and table row (`as="tr"`): one height, one type rung, mono only from a column
  * or the meta slot. States are data attributes (cursor, selected, active, pending, failed), never
- * hues; a refusal is `aria-disabled` and greyed, its reason only the `title` (never drawn).
+ * hues; a refusal is `aria-disabled` and greyed, its reason in a Tooltip (never drawn).
  * Painted in lang.css.
  */
 import type { ReactNode } from "react";
 
 import { tv } from "../../lib/tv";
+import { TooltipHint } from "./tooltip";
 
 import "./lang.css";
 
@@ -119,7 +120,6 @@ export function Row(props: RowProps) {
     onMouseEnter: props.onMouseEnter,
     onMouseLeave: props.onMouseLeave,
     "data-key": props["data-key"],
-    title: refusal ?? props.title,
     tabIndex: props.tabIndex,
     onKeyDown: props.onKeyDown,
     onDoubleClick: props.onDoubleClick,
@@ -133,50 +133,54 @@ export function Row(props: RowProps) {
   if (props.as === "tr") {
     const slots = rowRecipe();
     return (
-      <tr
-        {...shared}
-        ref={props.ref}
-        className={slots.base({ className: props.className })}
-        data-row="tr"
-      >
-        {props.children}
-      </tr>
+      <TooltipHint content={refusal ?? props.title}>
+        <tr
+          {...shared}
+          ref={props.ref}
+          className={slots.base({ className: props.className })}
+          data-row="tr"
+        >
+          {props.children}
+        </tr>
+      </TooltipHint>
     );
   }
   const slots = rowRecipe({ lines: props.lines ?? 1 });
   const fact = props.meta != null ? <span className="dl-row-fact">{props.meta}</span> : null;
   return (
-    <div
-      {...shared}
-      className={slots.base()}
-      data-lines={props.lines !== 1 ? props.lines : undefined}
-    >
-      {props.lead != null ? <span className={slots.lead()}>{props.lead}</span> : null}
-      <span className={slots.label()}>
-        {props.lines === 3 ? <span className="dl-row-eyebrow">{props.eyebrow}</span> : null}
-        {/* The first line: the title, then one trailing slot where the state and the verbs
+    <TooltipHint content={refusal ?? props.title}>
+      <div
+        {...shared}
+        className={slots.base()}
+        data-lines={props.lines !== 1 ? props.lines : undefined}
+      >
+        {props.lead != null ? <span className={slots.lead()}>{props.lead}</span> : null}
+        <span className={slots.label()}>
+          {props.lines === 3 ? <span className="dl-row-eyebrow">{props.eyebrow}</span> : null}
+          {/* The first line: the title, then one trailing slot where the state and the verbs
             share a cell (lang.css), so a sub line runs the full width under it. */}
-        <span className="dl-row-line">
-          <span className="dl-row-title">
-            {props.label}
-            {props.aside != null ? <span className="dl-row-aside">{props.aside}</span> : null}
-          </span>
-          {fact || props.actions != null ? (
-            <span className={slots.meta()}>
-              {fact}
-              {props.actions != null ? (
-                <span className={slots.actions()} onClick={(event) => event.stopPropagation()}>
-                  {props.actions}
-                </span>
-              ) : null}
+          <span className="dl-row-line">
+            <span className="dl-row-title">
+              {props.label}
+              {props.aside != null ? <span className="dl-row-aside">{props.aside}</span> : null}
             </span>
+            {fact || props.actions != null ? (
+              <span className={slots.meta()}>
+                {fact}
+                {props.actions != null ? (
+                  <span className={slots.actions()} onClick={(event) => event.stopPropagation()}>
+                    {props.actions}
+                  </span>
+                ) : null}
+              </span>
+            ) : null}
+          </span>
+          {props.lines !== 1 && props.sub != null ? (
+            <span className={slots.sub()}>{props.sub}</span>
           ) : null}
         </span>
-        {props.lines !== 1 && props.sub != null ? (
-          <span className={slots.sub()}>{props.sub}</span>
-        ) : null}
-      </span>
-    </div>
+      </div>
+    </TooltipHint>
   );
 }
 

@@ -117,6 +117,7 @@ import { FamilyWorkspaceTable } from "#/family/workspace-table";
 import { FamilyWorkspaceProvider, useFamilyWorkspace } from "#/family/workspace-context";
 import { useFamilyWorkspaceCore } from "#/family/workspace-core";
 import { useFamilyColumns } from "#/family/workspace-columns";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 function useFamilyWorkspaceModel(store: FamilyStore) {
   const core = useFamilyWorkspaceCore(store);
@@ -294,16 +295,17 @@ export function familyFacts(store: FamilyStore) {
       (dependency) =>
         [
           "depends",
-          <a
+          <TooltipHint
+            content="Edit the shared source JSON in its pod. Changes affect every member that includes it."
             key={`${dependency.id}:${dependency.path}`}
-            href={`/pods?${new URLSearchParams({ pod: dependency.id, path: dependency.path })}`}
-            title="Edit the shared source JSON in its pod. Changes affect every member that includes it."
           >
-            {sharedEdit?.directives.some((directive) => directive.endsWith(dependency.path))
-              ? "open referenced source "
-              : "edit shared "}
-            @{dependency.id}/{dependency.path}
-          </a>,
+            <a href={`/pods?${new URLSearchParams({ pod: dependency.id, path: dependency.path })}`}>
+              {sharedEdit?.directives.some((directive) => directive.endsWith(dependency.path))
+                ? "open referenced source "
+                : "edit shared "}
+              @{dependency.id}/{dependency.path}
+            </a>
+          </TooltipHint>,
         ] as const,
     ),
   ] as const;

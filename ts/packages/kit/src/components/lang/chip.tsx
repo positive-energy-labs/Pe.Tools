@@ -12,6 +12,7 @@ import { HoverCard, HoverCardTrigger, HoverCardContent } from "./hover-card";
 import { tv } from "../../lib/tv";
 
 import "./lang.css";
+import { TooltipHint } from "./tooltip";
 
 export const chipRecipe = tv({
   slots: {
@@ -55,15 +56,16 @@ interface FactChipProps {
 export function FactChip({ children, tone = "meta", dashed, title }: FactChipProps) {
   const { base, label } = chipRecipe({ tone, state: dashed ? "seam" : "solid" });
   return (
-    <span
-      className={base()}
-      data-tone={tone === "meta" ? undefined : tone}
-      data-surface="artifact"
-      data-seam={dashed === true ? "" : undefined}
-      title={title}
-    >
-      <span className={label()}>{children}</span>
-    </span>
+    <TooltipHint content={title}>
+      <span
+        className={base()}
+        data-tone={tone === "meta" ? undefined : tone}
+        data-surface="artifact"
+        data-seam={dashed === true ? "" : undefined}
+      >
+        <span className={label()}>{children}</span>
+      </span>
+    </TooltipHint>
   );
 }
 
@@ -98,39 +100,43 @@ export function NarrowChip({
   const slot = chipRecipe({ tone: caution ? "caution" : "meta" });
   const said = detail ? `${label} ${detail}` : label;
   return (
-    <span
-      className={slot.base()}
-      data-tone={caution ? "caution" : undefined}
-      data-surface="artifact"
-      title={title}
-    >
-      {/* One width for every narrowing (the base's cap); the full text rides the title. */}
-      {onEdit ? (
-        <button
-          type="button"
-          className="flex min-w-0 cursor-pointer items-center gap-[5px]"
-          aria-label={said}
-          title={`${said} — click to edit`}
-          onClick={onEdit}
-        >
-          <span className={slot.label()}>{label}</span>
-          {detail && <span className={slot.label({ class: "text-ink" })}>{detail}</span>}
-        </button>
-      ) : (
-        <span className={slot.label()} title={`${said} — ${title}`}>
-          {said}
-        </span>
-      )}
-      {count !== undefined && <span className={slot.count()}>{count}</span>}
-      <button
-        type="button"
-        className={slot.remove()}
-        onClick={onRemove}
-        title={`Remove the "${said}" narrowing — widens the view back out`}
+    <TooltipHint content={title}>
+      <span
+        className={slot.base()}
+        data-tone={caution ? "caution" : undefined}
+        data-surface="artifact"
       >
-        <X />
-      </button>
-    </span>
+        {/* One width for every narrowing (the base's cap); the full text rides the title. */}
+        {onEdit ? (
+          <TooltipHint content={`${said} — click to edit`}>
+            <button
+              type="button"
+              className="flex min-w-0 cursor-pointer items-center gap-[5px]"
+              aria-label={said}
+              onClick={onEdit}
+            >
+              <span className={slot.label()}>{label}</span>
+              {detail && <span className={slot.label({ class: "text-ink" })}>{detail}</span>}
+            </button>
+          </TooltipHint>
+        ) : (
+          <TooltipHint content={`${said} — ${title}`}>
+            <span className={slot.label()}>{said}</span>
+          </TooltipHint>
+        )}
+        {count !== undefined && <span className={slot.count()}>{count}</span>}
+        <TooltipHint content={`Remove the "${said}" narrowing — widens the view back out`}>
+          <button
+            type="button"
+            className={slot.remove()}
+            onClick={onRemove}
+            aria-label={`Remove the "${said}" narrowing`}
+          >
+            <X />
+          </button>
+        </TooltipHint>
+      </span>
+    </TooltipHint>
   );
 }
 
@@ -212,21 +218,22 @@ export function MentionChip({ label, kind, pointer, facts, takenAt, onRemove }: 
 export function FileChip({ name, meta, title, lead, open, onRemove }: FileChipProps) {
   const { base, label, count } = chipRecipe();
   return (
-    <span
-      className={base({ class: lead ? "h-auto py-[3px]" : undefined })}
-      data-surface="artifact"
-      title={title}
-    >
-      {lead}
-      {open ? (
-        <Button kind="nav" direction="out" label={`Open ${name}`} onClick={open}>
+    <TooltipHint content={title}>
+      <span
+        className={base({ class: lead ? "h-auto py-[3px]" : undefined })}
+        data-surface="artifact"
+      >
+        {lead}
+        {open ? (
+          <Button kind="nav" direction="out" label={`Open ${name}`} onClick={open}>
+            <span className={label()}>{name}</span>
+          </Button>
+        ) : (
           <span className={label()}>{name}</span>
-        </Button>
-      ) : (
-        <span className={label()}>{name}</span>
-      )}
-      {meta ? <span className={count()}>{meta}</span> : null}
-      {onRemove ? <Button icon={X} label={`Remove ${name}`} onClick={onRemove} /> : null}
-    </span>
+        )}
+        {meta ? <span className={count()}>{meta}</span> : null}
+        {onRemove ? <Button icon={X} label={`Remove ${name}`} onClick={onRemove} /> : null}
+      </span>
+    </TooltipHint>
   );
 }

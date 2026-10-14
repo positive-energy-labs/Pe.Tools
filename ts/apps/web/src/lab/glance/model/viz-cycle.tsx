@@ -2,6 +2,7 @@ import { token } from "@pe/kit/lib/token";
 import type { ReactNode } from "react";
 import { type CoverageSegment } from "#/components/lang/coverage-bar";
 import { type VizIndex } from "#/ops/primitives";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const VIZ_CYCLE: VizIndex[] = [1, 2, 3, 4, 5, 6];
 
@@ -56,12 +57,14 @@ export function Stat({
   warnTitle?: string;
 }) {
   return (
-    <div className="min-w-[64px] px-3 py-1.5" title={warn ? warnTitle : undefined}>
-      <div className="" style={warn ? { color: token("caution") } : undefined}>
-        {value ?? "∅"}
+    <TooltipHint content={warn ? warnTitle : undefined}>
+      <div className="min-w-[64px] px-3 py-1.5">
+        <div className="" style={warn ? { color: token("caution") } : undefined}>
+          {value ?? "∅"}
+        </div>
+        <div className="">{label}</div>
       </div>
-      <div className="">{label}</div>
-    </div>
+    </TooltipHint>
   );
 }
 

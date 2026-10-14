@@ -15,6 +15,7 @@ import {
   type TakeoffsController,
 } from "#/takeoff/controller";
 import { STAGE_ORDER, type RoomType } from "#/takeoff/world";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const ROOM_TYPES: RoomType[] = [
   "great room",
@@ -48,28 +49,29 @@ function RoomNameCell({
     entity.conflict ? "authority changed" : null,
   ].filter(Boolean);
   return (
-    <div
-      data-dirty={entity.dirty || undefined}
-      data-conflict={entity.conflict || undefined}
-      title={state.join(" · ") || undefined}
-      className="flex min-w-0 items-center"
-    >
-      <div className="min-w-0 flex-1">
-        <TextCell value={row.room.name} onCommit={onCommit} />
+    <TooltipHint content={state.join(" · ") || undefined}>
+      <div
+        data-dirty={entity.dirty || undefined}
+        data-conflict={entity.conflict || undefined}
+        className="flex min-w-0 items-center"
+      >
+        <div className="min-w-0 flex-1">
+          <TextCell value={row.room.name} onCommit={onCommit} />
+        </div>
+        {entity.dirty && (
+          <FactChip
+            tone={entity.conflict ? "caution" : undefined}
+            title={
+              entity.conflict
+                ? "Authority changed after this edit was staged."
+                : "This room has a staged edit."
+            }
+          >
+            {entity.conflict ? "conflict" : "staged"}
+          </FactChip>
+        )}
       </div>
-      {entity.dirty && (
-        <FactChip
-          tone={entity.conflict ? "caution" : undefined}
-          title={
-            entity.conflict
-              ? "Authority changed after this edit was staged."
-              : "This room has a staged edit."
-          }
-        >
-          {entity.conflict ? "conflict" : "staged"}
-        </FactChip>
-      )}
-    </div>
+    </TooltipHint>
   );
 }
 
@@ -263,9 +265,9 @@ export function useAtlasColumns({
         // the filterable words themselves: the open flag names, plain ink, no double mark.
         cell: (row) =>
           row.open.length > 0 ? (
-            <span className="px-(--item-pad-x)" title={row.open.join(", ")}>
-              {row.open.join(", ")}
-            </span>
+            <TooltipHint content={row.open.join(", ")}>
+              <span className="px-(--item-pad-x)">{row.open.join(", ")}</span>
+            </TooltipHint>
           ) : row.room.flags.length > 0 ? (
             <span className="px-(--item-pad-x)">{row.room.flags.length} decided</span>
           ) : null,

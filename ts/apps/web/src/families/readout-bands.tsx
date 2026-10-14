@@ -18,6 +18,7 @@ import { ParamCell } from "#/families/matrix-columns";
 import { ARTIFACT } from "#/families/manifest";
 import { Inspect } from "#/route/inspect";
 import { cn } from "@pe/kit/lib/utils";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** THE RECEIPTS: one bare `Table` row per family, as the op reported it. */
 type Receipt = NonNullable<
@@ -65,16 +66,17 @@ const receiptColumns: Column<Receipt>[] = [
     key: "errors",
     label: "errors",
     cell: (entry) => (
-      <span
-        className={cn(CELL, "text-ink-2")}
-        title={
+      <TooltipHint
+        content={
           entry.errors.length > 0
             ? `Errors reported by this family: ${entry.errors.join(", ")}.`
             : (entry.error ?? "No errors reported.")
         }
       >
-        {entry.errors.join(" · ") || (entry.error ?? "")}
-      </span>
+        <span className={cn(CELL, "text-ink-2")}>
+          {entry.errors.join(" · ") || (entry.error ?? "")}
+        </span>
+      </TooltipHint>
     ),
   },
   {

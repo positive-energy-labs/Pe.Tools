@@ -151,7 +151,8 @@ test("compact sidebar keeps its target and places provider after the time", () =
   expectTimeBeforeProvider(item);
   const target = item.querySelector(".pe-thread-target")!;
   expect(target.textContent).toBe("Air Handling Unit.rfa");
-  expect(target.getAttribute("title")).toBe("C:/Families/Air Handling Unit.rfa");
+  expect(target.hasAttribute("title")).toBe(false);
+  expect(target.hasAttribute("data-base-ui-tooltip-trigger")).toBe(true);
   expect(item.querySelectorAll("[data-provider]")).toHaveLength(1);
 });
 
@@ -183,7 +184,8 @@ test("the menu on a selected row acts on every selected thread and greys what ne
   const rename = within(menu)
     .getAllByRole("option")
     .find((option) => /^Rename/.test(option.textContent ?? ""))!;
-  expect(rename.title).toBe("Rename works on one thread; 2 are selected");
+  expect(rename.hasAttribute("title")).toBe(false);
+  expect(rename.hasAttribute("data-base-ui-tooltip-trigger")).toBe(true);
   expect(menu.textContent).not.toContain("works on one thread");
 
   fireEvent.click(

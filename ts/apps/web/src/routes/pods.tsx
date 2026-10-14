@@ -47,6 +47,7 @@ import {
   PODS_SEEDS,
 } from "#/route/seeds";
 import { SpecEditor, type DemoSpec } from "#/route/spec-editor";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** `/pods` writes no document; its target is the thread's document, which field options read. */
 export const manifest = defineRoute({
@@ -201,22 +202,25 @@ export function PodsRouteContent({
                     <>
                       {" "}
                       (
-                      <Link
-                        to={product.to}
-                        // The spec opens selected in the product route's apply stage; the demo
-                        // lane keeps its seed so the link lands on a rendered route.
-                        search={
-                          {
-                            stage: "apply",
-                            pod: row!.id,
-                            path: member!.path,
-                            ...(demo ? { demo: "apply" } : {}),
-                          } as never
-                        }
-                        title={`Open this spec in ${product.def.name}; apply happens there.`}
+                      <TooltipHint
+                        content={`Open this spec in ${product.def.name}; apply happens there.`}
                       >
-                        open in {product.def.name}
-                      </Link>
+                        <Link
+                          to={product.to}
+                          // The spec opens selected in the product route's apply stage; the demo
+                          // lane keeps its seed so the link lands on a rendered route.
+                          search={
+                            {
+                              stage: "apply",
+                              pod: row!.id,
+                              path: member!.path,
+                              ...(demo ? { demo: "apply" } : {}),
+                            } as never
+                          }
+                        >
+                          open in {product.def.name}
+                        </Link>
+                      </TooltipHint>
                       )
                     </>
                   ) : null}

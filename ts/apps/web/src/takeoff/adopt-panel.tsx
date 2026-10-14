@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/l
 import { fmtNum } from "@pe/kit/table/model";
 import { type CandidateRegion } from "#/takeoff/model";
 import { type TakeoffsController } from "#/takeoff/controller";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export interface AdoptRow {
   region: CandidateRegion;
@@ -64,13 +65,13 @@ export function AdoptRegions({ store }: { store: TakeoffsController }) {
                   patchRow(r.view, r.region.elementId, { checked: e.target.checked })
                 }
               />
-              <span className="w-28" title={r.view}>
-                {r.view}
-              </span>
+              <TooltipHint content={r.view}>
+                <span className="w-28">{r.view}</span>
+              </TooltipHint>
               <span className="size-2.5" style={{ backgroundColor: `rgb(${r.region.color})` }} />
-              <span className="w-24" title={r.region.typeName}>
-                {r.region.typeName}
-              </span>
+              <TooltipHint content={r.region.typeName}>
+                <span className="w-24">{r.region.typeName}</span>
+              </TooltipHint>
               <span className="w-16">{fmtNum(r.region.sqft, 0)} sf</span>
               <div className="min-w-0 flex-1">
                 <CommitInput

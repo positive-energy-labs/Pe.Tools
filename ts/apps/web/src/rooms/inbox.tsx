@@ -20,6 +20,7 @@ import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "#/components/lang/switcher";
 import { tokenRef } from "@pe/kit/lib/token";
 import { CARD_META, CARD_STATES, type Card, type CardState } from "./cards";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 type Region = RoomsSnapshot.Res.RoomsRegion;
 type Wire = Pick<CellWire, "write" | "revision">;
@@ -29,17 +30,19 @@ type Refusal = { code: string; message: string } | null;
 function Glyph({ state }: { state: CardState }) {
   const meta = CARD_META[state];
   return (
-    <span data-tone={meta.tone ?? undefined} data-glyph={state} title={meta.says}>
-      {meta.glyph}
-    </span>
+    <TooltipHint content={meta.says}>
+      <span data-tone={meta.tone ?? undefined} data-glyph={state}>
+        {meta.glyph}
+      </span>
+    </TooltipHint>
   );
 }
 
 /** The card id, square-bracketed from Pea, round from a person. */
 const Tag = ({ card }: { card: Card }) => (
-  <span className="face-mono" title={card.by === "pea" ? "from Pea" : "from a person"}>
-    {card.by === "pea" ? `[${card.id}]` : `(${card.id})`}
-  </span>
+  <TooltipHint content={card.by === "pea" ? "from Pea" : "from a person"}>
+    <span className="face-mono">{card.by === "pea" ? `[${card.id}]` : `(${card.id})`}</span>
+  </TooltipHint>
 );
 
 /** The card's one line: kind, the regions it concerns by their table labels, area, text. */

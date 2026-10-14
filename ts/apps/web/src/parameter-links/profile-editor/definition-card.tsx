@@ -26,6 +26,7 @@ import {
   updateDefinition,
 } from "#/parameter-links/model";
 import { Enum, Field, findParameterOption, parameterLabel, parameterOptionValue } from "./field";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function DefinitionCard({
   profile,
@@ -114,13 +115,14 @@ export function DefinitionCard({
     <ArtifactFrame
       head={
         <>
-          <Input
-            value={definition.id}
-            disabled={disabled}
-            onChange={(event) => patch({ id: event.target.value })}
-            aria-label="definition id"
-            title="The definition's id — how assignments and receipts refer to it"
-          />
+          <TooltipHint content="The definition's id — how assignments and receipts refer to it">
+            <Input
+              value={definition.id}
+              disabled={disabled}
+              onChange={(event) => patch({ id: event.target.value })}
+              aria-label="definition id"
+            />
+          </TooltipHint>
           <Button
             label="remove"
             kind="framed"

@@ -11,6 +11,7 @@ import { ZoneThumb } from "#/takeoff/zone-plan";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
 import { ScopeKeys } from "@pe/kit/keys";
 import { levelsOf } from "#/takeoff/plan-image";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function AtlasNavigation() {
   const { world, zoneKey, zoneStates, filteredZones, selectZone, scopeShortcuts } =
@@ -24,14 +25,12 @@ export function AtlasNavigation() {
           <div className="t-small t-upper mb-1">room states — one per room</div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             {ROOM_STATES.map((s) => (
-              <span
-                key={s}
-                title={STATE_META[s].note}
-                className="t-small face-mono inline-flex items-center gap-1 text-ink-2"
-              >
-                <StateDot tone={STATE_META[s].tone} dim={s === "unreviewed"} />
-                {STATE_META[s].label}
-              </span>
+              <TooltipHint content={STATE_META[s].note} key={s}>
+                <span className="t-small face-mono inline-flex items-center gap-1 text-ink-2">
+                  <StateDot tone={STATE_META[s].tone} dim={s === "unreviewed"} />
+                  {STATE_META[s].label}
+                </span>
+              </TooltipHint>
             ))}
           </div>
         </div>

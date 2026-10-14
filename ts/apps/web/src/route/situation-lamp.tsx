@@ -17,6 +17,7 @@ import { FlowMatrix } from "./flow";
 import { HostedChrome } from "./hosted-chrome";
 import { RouteInspector } from "./inspector";
 import type { RouteHandle } from "./handle";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /**
  * session › document, one instrument that says ONE thing at rest: the document (which is the
@@ -102,19 +103,18 @@ export function ChainLamp({
       <span className="inline-block size-2 shrink-0 rounded-[1px] border border-ink-mute align-middle" />
     );
   return (
-    <span
-      className="flex min-w-0 items-center gap-1.5 t-small face-mono text-ink-mute"
-      title={title}
-    >
-      {dot(session !== null, health ? "caution" : "done")}
-      <span
-        className={`min-w-0 truncate ${health ? "" : "text-ink-2"}`}
-        data-tone={health ? "caution" : undefined}
-      >
-        {document ?? "no document selected"}
-        {health ? ` · ${health}` : ""}
+    <TooltipHint content={title}>
+      <span className="flex min-w-0 items-center gap-1.5 t-small face-mono text-ink-mute">
+        {dot(session !== null, health ? "caution" : "done")}
+        <span
+          className={`min-w-0 truncate ${health ? "" : "text-ink-2"}`}
+          data-tone={health ? "caution" : undefined}
+        >
+          {document ?? "no document selected"}
+          {health ? ` · ${health}` : ""}
+        </span>
       </span>
-    </span>
+    </TooltipHint>
   );
 }
 

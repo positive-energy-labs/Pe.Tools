@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
 import { pluginStatusSchema, podRouteDescriptorSchema } from "@pe/agent-contracts";
 import { PodPlugins, type PluginsClient } from "./pod-plugins";
@@ -61,9 +61,11 @@ test("the switch is the one way to turn a Pod off: plugin.update, no Remove, and
     "false",
   );
   expect(screen.queryByRole("button", { name: /remove/i })).toBeNull();
-  expect(
-    screen.getByTitle(/serves its route Voltage Drop\. Off: the folder stays in Pods/),
-  ).toBeTruthy();
+  fireEvent.keyDown(document.body, { key: "Tab" });
+  await act(async () => snowdon.focus());
+  expect((await screen.findByRole("tooltip")).textContent).toMatch(
+    /serves its route Voltage Drop\. Off: the folder stays in Pods/,
+  );
 
   fireEvent.click(snowdon);
   await waitFor(() => expect(sent).toEqual(["update pod:snowdon-circuits false"]));

@@ -8,6 +8,7 @@ import { EmptyState, emptyMark } from "@pe/kit/lang/empty";
 import { formatTime } from "./moments";
 import { useLensModel } from "./model";
 import type { ChatState } from "@pe/agent-contracts/chat-state";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function Lens({ state }: { state: ChatState }) {
   const {
@@ -119,9 +120,9 @@ export function Lens({ state }: { state: ChatState }) {
                     else bandRefs.current.delete(moment.id);
                   }}
                 >
-                  <span {...annotation("dial-number")} title={formatTime(moment.createdAt)}>
-                    #{moment.turn}
-                  </span>
+                  <TooltipHint content={formatTime(moment.createdAt)}>
+                    <span {...annotation("dial-number")}>#{moment.turn}</span>
+                  </TooltipHint>
                 </div>
               ))}
             </div>

@@ -1,6 +1,7 @@
 import { token } from "@pe/kit/lib/token";
 import { type ReactNode, useState } from "react";
 import { cn } from "@pe/kit/lib/utils";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export type VizIndex = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -19,17 +20,18 @@ export function VizChip({
 }) {
   const c = vizVar(viz);
   return (
-    <span
-      title={title}
-      className="inline-flex items-center gap-1 px-1.5 py-px"
-      style={{
-        color: c,
-        backgroundColor: `color-mix(in srgb, ${c} 12%, transparent)`,
-        borderColor: `color-mix(in srgb, ${c} 25%, transparent)`,
-      }}
-    >
-      {children}
-    </span>
+    <TooltipHint content={title}>
+      <span
+        className="inline-flex items-center gap-1 px-1.5 py-px"
+        style={{
+          color: c,
+          backgroundColor: `color-mix(in srgb, ${c} 12%, transparent)`,
+          borderColor: `color-mix(in srgb, ${c} 25%, transparent)`,
+        }}
+      >
+        {children}
+      </span>
+    </TooltipHint>
   );
 }
 
@@ -54,13 +56,11 @@ export function KVGrid({
       {items.map((item, i) => (
         <div key={i} className="min-w-0">
           <dt className="">{item.label}</dt>
-          <dd
-            className="truncate"
-            style={item.tone ? { color: KV_TONE[item.tone] } : undefined}
-            title={typeof item.value === "string" ? item.value : undefined}
-          >
-            {item.value ?? "∅"}
-          </dd>
+          <TooltipHint content={typeof item.value === "string" ? item.value : undefined}>
+            <dd className="truncate" style={item.tone ? { color: KV_TONE[item.tone] } : undefined}>
+              {item.value ?? "∅"}
+            </dd>
+          </TooltipHint>
         </div>
       ))}
     </dl>
@@ -110,12 +110,9 @@ function TreeRow({ node, depth, dense }: { node: TreeNode; depth: number; dense:
         >
           {hasChildren ? "▸" : ""}
         </span>
-        <span
-          className={cn("min-w-0 truncate", hasChildren && "")}
-          title={typeof node.label === "string" ? node.label : undefined}
-        >
-          {node.label}
-        </span>
+        <TooltipHint content={typeof node.label === "string" ? node.label : undefined}>
+          <span className={cn("min-w-0 truncate", hasChildren && "")}>{node.label}</span>
+        </TooltipHint>
         {node.meta && <span className="ml-auto shrink-0">{node.meta}</span>}
       </div>
       {hasChildren && open && (

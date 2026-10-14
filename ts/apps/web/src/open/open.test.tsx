@@ -400,7 +400,8 @@ test("HCB-48 (2026) is refused by every 2025 socket before any press", () => {
   fireEvent.click(jack("HCB-48.rfa"));
   const hole = within(yoursCard()).getByText("refuses HCB-48.rfa").closest(".dl-row")!;
   expect(hole.getAttribute("aria-disabled")).toBe("true");
-  expect(hole.getAttribute("title")).toBe("Revit 2025 cannot open a 2026 file");
+  expect(hole.hasAttribute("title")).toBe(false);
+  expect(hole.hasAttribute("data-base-ui-tooltip-trigger")).toBe(true);
   fireEvent.click(hole);
   expect(screen.queryByRole("button", { name: /^Open in your Revit 2025/ })).toBeNull();
 });

@@ -11,6 +11,7 @@ import type { ModelRoom, ModelSystem, ModelZone } from "#/takeoff/world";
 import type { AtlasActions } from "#/takeoff/atlas";
 import { hostReason } from "#/takeoff/room-actions";
 import { STAGE_BLURB, type RoomState } from "#/takeoff/room-state";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function ZoneCard({
   store,
@@ -105,9 +106,11 @@ export function ZoneCard({
           </div>
           <div className="face-mono flex items-center gap-1.5 text-ink-2">
             <ZoneStateBar zone={zone} states={states} className="w-16" />
-            <span title={STAGE_BLURB[zone.stage]}>
-              {zone.rooms.length} rooms · {fmtNum(zone.zone.declaredSqft, 0)} sf · {zone.stage}
-            </span>
+            <TooltipHint content={STAGE_BLURB[zone.stage]}>
+              <span>
+                {zone.rooms.length} rooms · {fmtNum(zone.zone.declaredSqft, 0)} sf · {zone.stage}
+              </span>
+            </TooltipHint>
           </div>
           {run && (
             <FactChip

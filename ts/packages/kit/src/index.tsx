@@ -26,6 +26,7 @@ export type { Column, TableState } from "./components/master-table/model";
 
 export {
   Tooltip,
+  TooltipHint,
   TooltipTrigger,
   TooltipContent,
   TooltipProvider,

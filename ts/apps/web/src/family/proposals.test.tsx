@@ -130,15 +130,19 @@ const verbs = (scope: HTMLElement) =>
     .map((button) => button.getAttribute("aria-label") ?? button.textContent)
     .filter((name) => name === "accept" || name === "deny");
 
-test("a cell draws Pea's value and keeps the original for the tooltip", () => {
+test("a cell draws Pea's value and keeps the original for the tooltip", async () => {
   render(<Harness wire={{ segment: "cells", revision: 3, write: async () => null }} />);
   const width = screen.getByRole("region", { name: "width" });
   // the type holds 30in; Pea proposes 36in: the cell prints 36in, hover says 30in
   const cell = within(width).getByDisplayValue("36in").closest<HTMLElement>(".dl-cell")!;
   expect(within(width).queryByDisplayValue("30in")).toBeNull();
   expect(cell.dataset.body).toBe("proposed");
-  expect(cell.title).toContain("currently 30in");
-  expect(cell.title).toContain("proposed by pea");
+  expect(cell.hasAttribute("title")).toBe(false);
+  fireEvent.keyDown(document.body, { key: "Tab" });
+  await act(async () => within(width).getByDisplayValue("36in").focus());
+  const hint = await screen.findByRole("tooltip");
+  expect(hint.textContent).toContain("currently 30in");
+  expect(hint.textContent).toContain("proposed by pea");
 });
 
 test("a proposal on a parameter the reading lacks draws in its row, and accept writes it", async () => {

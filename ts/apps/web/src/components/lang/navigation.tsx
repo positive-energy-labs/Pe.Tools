@@ -20,6 +20,7 @@ import { ListPopup } from "@pe/kit/lang/list-popup";
 import { KeyScope, useScopeKeys } from "@pe/kit/keys";
 import "@pe/kit/lang/lang.css";
 import "./navigation.css";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function NavigationSearch({
   value,
@@ -397,25 +398,29 @@ export function NavigationItem({
               : null;
   const stateWord =
     state == null ? null : (
-      <span
-        data-slot="nav-state"
-        className="shrink-0"
-        data-tone={stateTone}
-        role={StateIcon ? "img" : undefined}
-        aria-label={StateIcon ? (typeof state === "string" ? state : activity) : undefined}
-        title={typeof state === "string" ? state : undefined}
-      >
-        {StateIcon ? (
-          <StateIcon aria-hidden className={activity === "running" ? "animate-spin" : undefined} />
-        ) : (
-          state
-        )}
-        {StateIcon ? (
-          <span>
-            {activity === "waiting" ? "Waiting" : activity === "snoozed" ? "Snoozed" : state}
-          </span>
-        ) : null}
-      </span>
+      <TooltipHint content={typeof state === "string" ? state : undefined}>
+        <span
+          data-slot="nav-state"
+          className="shrink-0"
+          data-tone={stateTone}
+          role={StateIcon ? "img" : undefined}
+          aria-label={StateIcon ? (typeof state === "string" ? state : activity) : undefined}
+        >
+          {StateIcon ? (
+            <StateIcon
+              aria-hidden
+              className={activity === "running" ? "animate-spin" : undefined}
+            />
+          ) : (
+            state
+          )}
+          {StateIcon ? (
+            <span>
+              {activity === "waiting" ? "Waiting" : activity === "snoozed" ? "Snoozed" : state}
+            </span>
+          ) : null}
+        </span>
+      </TooltipHint>
     );
   return (
     <div
@@ -442,9 +447,9 @@ export function NavigationItem({
         sub={
           <span data-slot="nav-line">
             <span className="min-w-0 flex-1 truncate">{target}</span>
-            <span data-slot="nav-provider" title={typeof meta === "string" ? meta : undefined}>
-              {mark}
-            </span>
+            <TooltipHint content={typeof meta === "string" ? meta : undefined}>
+              <span data-slot="nav-provider">{mark}</span>
+            </TooltipHint>
           </span>
         }
         actions={actions}

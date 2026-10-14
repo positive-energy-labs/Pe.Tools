@@ -27,6 +27,7 @@ import type { MasterTableFeatures } from "./tanstack-adapter";
 import { useScopeKeys } from "../../keys";
 import { token } from "../../lib/token";
 import { cn } from "../../lib/utils";
+import { TooltipHint } from "../lang/tooltip";
 
 type Table<Row extends RowData> = ReactTable<MasterTableFeatures, Row, unknown>;
 type VisibleRow<Row extends RowData> = ReturnType<Table<Row>["getRowModel"]>["rows"][number];
@@ -424,17 +425,18 @@ function FillDraft({
 function GutterCell<Row>({ row, gutter, width }: { row: Row; gutter: Gutter<Row>; width: number }) {
   const owed = gutter(row);
   return (
-    <td
-      data-master-gutter=""
-      title={owed?.title}
-      style={{ width, minWidth: width }}
-      className="hairline-b-inset sticky left-0 z-[5] bg-on p-0 text-center align-middle"
-    >
-      {owed && (
-        <span className="t-small face-mono" style={{ color: token(owed.tone ?? "caution") }}>
-          {owed.count}
-        </span>
-      )}
-    </td>
+    <TooltipHint content={owed?.title}>
+      <td
+        data-master-gutter=""
+        style={{ width, minWidth: width }}
+        className="hairline-b-inset sticky left-0 z-[5] bg-on p-0 text-center align-middle"
+      >
+        {owed && (
+          <span className="t-small face-mono" style={{ color: token(owed.tone ?? "caution") }}>
+            {owed.count}
+          </span>
+        )}
+      </td>
+    </TooltipHint>
   );
 }

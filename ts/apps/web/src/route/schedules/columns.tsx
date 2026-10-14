@@ -13,6 +13,7 @@ import { cellFromTrichotomy, StateCell } from "@pe/kit/lang/cell";
 import type { Column } from "@pe/kit/table/model";
 import { parseConditionNumber } from "@pe/kit/table/view";
 import type { ScheduleGridSnapshot as Snapshot } from "@pe/agent-contracts";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 type ScheduleRow = Snapshot["rows"][number];
 type Binding = ScheduleRow["bindings"][number];
@@ -215,14 +216,16 @@ export function useScheduleGridColumns(
         lock: true,
         sort: (row) => row.rowNumber,
         cell: (row) => (
-          <span
-            title={`row ${row.rowNumber} · ${row.kind}${row.subjectIds.length > 0 ? ` · elements [${row.subjectIds.join(",")}]` : ""}`}
+          <TooltipHint
+            content={`row ${row.rowNumber} · ${row.kind}${row.subjectIds.length > 0 ? ` · elements [${row.subjectIds.join(",")}]` : ""}`}
           >
-            <StateCell
-              scale="row"
-              value={`${row.rowNumber}${row.subjectIds.length > 1 ? ` ×${row.subjectIds.length}` : ""}`}
-            />
-          </span>
+            <span>
+              <StateCell
+                scale="row"
+                value={`${row.rowNumber}${row.subjectIds.length > 1 ? ` ×${row.subjectIds.length}` : ""}`}
+              />
+            </span>
+          </TooltipHint>
         ),
       },
       ...snapshot.columns.map((column): Column<ScheduleRow> => {

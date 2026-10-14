@@ -29,6 +29,7 @@ const OVERSCAN = 3;
 
 import { ParameterMetadata, type ParameterMetadataRecord } from "./parameter-metadata";
 import type { OverlayCell, PatchOverlay } from "./patch-overlay";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const HOW = {
   type: "an explicit type cell",
@@ -255,53 +256,53 @@ export const TypeGrid = memo(function TypeGrid({
             {groups
               .filter((group) => group.start < colEnd && group.start + group.count > colStart)
               .map((group) => (
+                <TooltipHint content={group.name} key={group.name}>
+                  <div
+                    role="presentation"
+                    className="t-small t-upper truncate border-b border-l px-1"
+                    data-surface="recess"
+                    style={{
+                      position: "absolute",
+                      left: Math.max(
+                        identityWidth + group.start * GRID.type,
+                        viewport.left + identityWidth,
+                      ),
+                      top: 0,
+                      width: Math.max(
+                        0,
+                        identityWidth +
+                          Math.min(group.start + group.count, colEnd) * GRID.type -
+                          Math.max(
+                            identityWidth + group.start * GRID.type,
+                            viewport.left + identityWidth,
+                          ),
+                      ),
+                      height: 26,
+                    }}
+                  >
+                    {group.name}
+                  </div>
+                </TooltipHint>
+              ))}
+            {visibleTypes.map((type, offset) => (
+              <TooltipHint content={`${type.familyName} · ${type.typeName}`} key={type.key}>
                 <div
-                  key={group.name}
-                  role="presentation"
-                  className="t-small t-upper truncate border-b border-l px-1"
+                  role="columnheader"
+                  aria-colindex={colStart + offset + 2}
+                  aria-label={`${type.familyName} · ${type.typeName}`}
+                  className="t-small truncate border-b border-l px-1"
                   data-surface="recess"
                   style={{
                     position: "absolute",
-                    left: Math.max(
-                      identityWidth + group.start * GRID.type,
-                      viewport.left + identityWidth,
-                    ),
-                    top: 0,
-                    width: Math.max(
-                      0,
-                      identityWidth +
-                        Math.min(group.start + group.count, colEnd) * GRID.type -
-                        Math.max(
-                          identityWidth + group.start * GRID.type,
-                          viewport.left + identityWidth,
-                        ),
-                    ),
+                    left: identityWidth + (colStart + offset) * GRID.type,
+                    top: 26,
+                    width: GRID.type,
                     height: 26,
                   }}
-                  title={group.name}
                 >
-                  {group.name}
+                  {type.typeName}
                 </div>
-              ))}
-            {visibleTypes.map((type, offset) => (
-              <div
-                key={type.key}
-                role="columnheader"
-                aria-colindex={colStart + offset + 2}
-                aria-label={`${type.familyName} · ${type.typeName}`}
-                className="t-small truncate border-b border-l px-1"
-                data-surface="recess"
-                style={{
-                  position: "absolute",
-                  left: identityWidth + (colStart + offset) * GRID.type,
-                  top: 26,
-                  width: GRID.type,
-                  height: 26,
-                }}
-                title={`${type.familyName} · ${type.typeName}`}
-              >
-                {type.typeName}
-              </div>
+              </TooltipHint>
             ))}
           </div>
           {visibleRows.map((row, rowOffset) => {
@@ -330,13 +331,11 @@ export const TypeGrid = memo(function TypeGrid({
                     <ReadCell value={row.name} reason={row.key} />
                   </div>
                   {row.kind === "new" && (
-                    <span
-                      className="t-small shrink-0 px-1"
-                      data-tone="pea"
-                      title="The native patch creates this parameter; the reading has none by this name."
-                    >
-                      new
-                    </span>
+                    <TooltipHint content="The native patch creates this parameter; the reading has none by this name.">
+                      <span className="t-small shrink-0 px-1" data-tone="pea">
+                        new
+                      </span>
+                    </TooltipHint>
                   )}
                   <div className="shrink-0 pr-1">
                     <ParameterMetadata

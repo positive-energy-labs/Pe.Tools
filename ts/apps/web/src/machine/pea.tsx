@@ -22,6 +22,7 @@ import { errorMessage } from "#/workbench/provider/use-workbench";
 import { useDestination } from "#/navigation/state";
 import { SEED_REFUSAL } from "./use-machine";
 import { settingsDestination } from "./navigation";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function PeaGroup({
   fixture,
@@ -105,15 +106,16 @@ export function ProviderSetup({ providers }: { providers: ProvidersState }) {
         <div key={provider.id} className="hairline-b flex flex-col py-1">
           <span className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{provider.name}</span>
-            <span
-              className="min-w-0 break-words face-mono"
-              data-tone={provider.readiness.state === "ready" ? undefined : "caution"}
-              title={readinessSub(provider)}
-            >
-              {provider.readiness.state === "refused" && provider.readiness.failure
-                ? "refused"
-                : readinessSub(provider)}
-            </span>
+            <TooltipHint content={readinessSub(provider)}>
+              <span
+                className="min-w-0 break-words face-mono"
+                data-tone={provider.readiness.state === "ready" ? undefined : "caution"}
+              >
+                {provider.readiness.state === "refused" && provider.readiness.failure
+                  ? "refused"
+                  : readinessSub(provider)}
+              </span>
+            </TooltipHint>
             <span className="ml-auto flex gap-1">
               <Button label="Probe" onClick={() => void providers.probe(provider.id)}>
                 Probe

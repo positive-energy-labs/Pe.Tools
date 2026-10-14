@@ -167,9 +167,9 @@ test("a contested row cell says pea's counter-proposal inline, not only in a hov
     );
     const cell = container.querySelector<HTMLElement>("[data-scale='row']")!;
     expect(cell.hasAttribute("data-contest")).toBe(true);
-    // Rendered text a keyboard, touch or no-hover person reads; the title stays a duplicate.
+    // Rendered text a keyboard, touch or no-hover person reads; the hint stays a duplicate.
     expect(cell.textContent).toContain("pea proposes 180 VA");
-    expect(cell.title).toContain("pea proposes 180 VA");
+    expect(cell.hasAttribute("title")).toBe(false);
     unmount();
   }
 });

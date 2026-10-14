@@ -14,6 +14,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@pe/kit/lang/button";
 import { tv } from "@pe/kit/lib/tv";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** Collapse shrinks the target to `collapsedSize`. With `title` the split draws a rail there (the
  * title rotated under an expand press); without it the pane's own header stays as the affordance. */
@@ -229,26 +230,27 @@ export function PaneResizeHandle({
   };
 
   return (
-    <div
-      role="separator"
-      tabIndex={0}
-      aria-orientation={axis === "horizontal" ? "vertical" : "horizontal"}
-      aria-valuemin={min}
-      aria-valuemax={max}
-      aria-valuenow={Math.round(value)}
-      data-surface="page"
-      aria-label="Resize pane"
-      title="Drag or use arrow keys to resize · Home or double-click resets"
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={finishPointer}
-      onPointerCancel={finishPointer}
-      onKeyDown={onKeyDown}
-      onDoubleClick={onReset}
-      className={root()}
-    >
-      <span className={bar()} />
-    </div>
+    <TooltipHint content="Drag or use arrow keys to resize · Home or double-click resets">
+      <div
+        role="separator"
+        tabIndex={0}
+        aria-orientation={axis === "horizontal" ? "vertical" : "horizontal"}
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={Math.round(value)}
+        data-surface="page"
+        aria-label="Resize pane"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={finishPointer}
+        onPointerCancel={finishPointer}
+        onKeyDown={onKeyDown}
+        onDoubleClick={onReset}
+        className={root()}
+      >
+        <span className={bar()} />
+      </div>
+    </TooltipHint>
   );
 }
 

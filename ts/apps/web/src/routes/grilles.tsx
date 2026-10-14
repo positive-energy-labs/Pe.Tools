@@ -32,6 +32,7 @@ import { type SheetRow, Sheet, seedRows } from "#/grilles/sheet";
 import { SpecDrawing } from "#/grilles/spec-drawing";
 
 import { grillesManifest as manifest } from "#/route/surface-manifests";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export const Route = createFileRoute("/grilles")({ component: GrillesRoute });
 
@@ -148,22 +149,23 @@ function GrillesRoute() {
       meta={`free % vs qty, per opening width · ${field.length} buildable profiles for this stock`}
     >
       {active && (
-        <div
-          tabIndex={0}
-          title="Focus, then arrow keys: left/right walk qty, up/down walk opening width"
-          onKeyDown={(e) => {
-            if (!e.key.startsWith("Arrow")) return;
-            e.preventDefault();
-            e.stopPropagation();
-            const next = stepField(field, active, e.key);
-            if (next) set(active.id, next);
-          }}
-        >
-          <FieldChart field={field} active={active} onPick={(p) => set(active.id, p)} />
-          <p className="px-2">
-            click a point, or focus and use arrow keys: ←→ qty · ↑↓ opening width
-          </p>
-        </div>
+        <TooltipHint content="Focus, then arrow keys: left/right walk qty, up/down walk opening width">
+          <div
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (!e.key.startsWith("Arrow")) return;
+              e.preventDefault();
+              e.stopPropagation();
+              const next = stepField(field, active, e.key);
+              if (next) set(active.id, next);
+            }}
+          >
+            <FieldChart field={field} active={active} onPick={(p) => set(active.id, p)} />
+            <p className="px-2">
+              click a point, or focus and use arrow keys: ←→ qty · ↑↓ opening width
+            </p>
+          </div>
+        </TooltipHint>
       )}
     </Pane>
   );

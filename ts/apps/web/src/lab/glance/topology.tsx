@@ -8,6 +8,7 @@ import type { Lane } from "#/readings";
 import { DeployBadge, LiveDot } from "#/host/target-ui";
 import { UnrecognizedShape, asNumber, asRecord, asRecords, asString, text } from "#/ops/registry";
 import type { SyntheticOp, SyntheticViewProps } from "#/lab/synthetic";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const DOC_FETCH_BOUND = 12;
 
@@ -86,9 +87,11 @@ function HostNode({ host }: { host: Record<string, unknown> }) {
         <span className="">host</span>
         {lane ? <DeployBadge lane={lane} /> : null}
       </div>
-      <div className="" title={exePath}>
-        {text(host.runtimeIdentity) || "∅"} · pid {text(host.processId) || "∅"}
-      </div>
+      <TooltipHint content={exePath}>
+        <div className="">
+          {text(host.runtimeIdentity) || "∅"} · pid {text(host.processId) || "∅"}
+        </div>
+      </TooltipHint>
       <div className="">
         contracts host v{text(host.hostContractVersion) || "?"} · bridge v
         {text(host.bridgeContractVersion) || "?"} · {text(host.bridgePath) || "∅"}
@@ -115,9 +118,9 @@ function DocumentLeaf({ doc }: { doc: Record<string, unknown> }) {
   return (
     <div className="flex min-w-0 items-baseline gap-1.5 py-0.5">
       <span className="inline-block size-[5px] shrink-0 self-center" />
-      <span className="min-w-0 truncate" title={text(doc.path) || text(doc.title)}>
-        {text(doc.title) || "∅"}
-      </span>
+      <TooltipHint content={text(doc.path) || text(doc.title)}>
+        <span className="min-w-0 truncate">{text(doc.title) || "∅"}</span>
+      </TooltipHint>
       <span className="shrink-0">{doc.isFamilyDocument === true ? "rfa" : "rvt"}</span>
       {isActive && <FactChip title="this document has focus in Revit">active</FactChip>}
     </div>

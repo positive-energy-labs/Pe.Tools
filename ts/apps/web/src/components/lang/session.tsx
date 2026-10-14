@@ -18,6 +18,7 @@ import { PidChip, ShapeCells } from "./process";
 import { Row } from "@pe/kit/lang/row";
 
 import "@pe/kit/lang/lang.css";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 type Phase = "ready" | "booting" | "no add-in" | "unresponsive" | "gone" | "failed";
 
@@ -180,9 +181,9 @@ export function HeldRow({
         meta={
           access && access.kind !== "read" ? (
             <>
-              <span data-tone="done" title={rwSays(access)}>
-                rw
-              </span>
+              <TooltipHint content={rwSays(access)}>
+                <span data-tone="done">rw</span>
+              </TooltipHint>
               {persistenceOf(document)}
             </>
           ) : (
@@ -224,13 +225,13 @@ export function SessionCard({
           </span>
           <PhaseWord facts={facts} />
           {session.row.execution?.allowed !== true ? (
-            <span
-              data-tone="caution"
-              className="min-w-0 truncate"
-              title={session.row.execution?.detail ?? "Runtime ownership not verified"}
+            <TooltipHint
+              content={session.row.execution?.detail ?? "Runtime ownership not verified"}
             >
-              {session.row.execution?.detail ?? "Runtime ownership not verified"}
-            </span>
+              <span data-tone="caution" className="min-w-0 truncate">
+                {session.row.execution?.detail ?? "Runtime ownership not verified"}
+              </span>
+            </TooltipHint>
           ) : null}
         </>
       }
