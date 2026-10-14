@@ -1,5 +1,6 @@
 import { useLayoutEffect, useState, type CSSProperties, type RefObject } from "react";
-import { PreviewCard } from "@base-ui/react/preview-card";
+import { HoverCard, HoverCardTrigger, HoverCardContent } from "@pe/kit/lang/hover-card";
+import { Button } from "@pe/kit/lang/button";
 
 import { Markdown } from "#/workbench/prose";
 
@@ -54,7 +55,7 @@ export function NoticePreview({
     };
   }, [open, popup, anchor, onSize]);
   return (
-    <PreviewCard.Root
+    <HoverCard
       onOpenChange={(next) => {
         setOpen(next);
         if (!next) {
@@ -63,44 +64,42 @@ export function NoticePreview({
         }
       }}
     >
-      <PreviewCard.Trigger
-        render={<button type="button" />}
+      <HoverCardTrigger
         delay={350}
         closeDelay={200}
         className="t-small min-w-0 grow truncate text-left"
         aria-label={title}
-        onClick={onOpen}
       >
         {title}
-      </PreviewCard.Trigger>
-      <PreviewCard.Portal>
-        <PreviewCard.Positioner
-          anchor={anchor}
-          side="top"
-          align="end"
-          sideOffset={8}
-          collisionAvoidance={{ side: "none", align: "none" }}
-          className="z-notice"
-        >
-          <PreviewCard.Popup
-            ref={setPopup}
-            data-surface="artifact"
-            data-notice-preview=""
-            className="hairline t-small max-h-80 w-[min(420px,100vw)] overflow-auto rounded-lg p-3"
-            style={
-              {
-                "--type-prose-size": "var(--type-small-size)",
-                "--type-prose-line-height": "var(--type-small-line-height)",
-                // A WebView cannot paint the preview until native bounds have caught up.
-                visibility: ready ? undefined : "hidden",
-                maxHeight: heightLimit,
-              } as CSSProperties
-            }
-          >
-            <Markdown text={body} />
-          </PreviewCard.Popup>
-        </PreviewCard.Positioner>
-      </PreviewCard.Portal>
-    </PreviewCard.Root>
+      </HoverCardTrigger>
+      <HoverCardContent
+        anchor={anchor}
+        side="top"
+        align="end"
+        sideOffset={8}
+        collisionAvoidance={{ side: "none", align: "none" }}
+        collisionPadding={0}
+        positionerClassName="z-notice"
+        ref={setPopup}
+        data-surface="artifact"
+        data-notice-preview=""
+        aria-label={`Response · ${title}`}
+        className="hairline t-small max-h-80 w-[min(420px,100vw)] overflow-auto rounded-lg p-3"
+        style={
+          {
+            "--type-prose-size": "var(--type-small-size)",
+            "--type-prose-line-height": "var(--type-small-line-height)",
+            // A WebView cannot paint the preview until native bounds have caught up.
+            visibility: ready ? undefined : "hidden",
+            maxHeight: heightLimit,
+          } as CSSProperties
+        }
+      >
+        <Markdown text={body} />
+        <Button kind="framed" label="Open thread" onClick={onOpen}>
+          Open thread
+        </Button>
+      </HoverCardContent>
+    </HoverCard>
   );
 }

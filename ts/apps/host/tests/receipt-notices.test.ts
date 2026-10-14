@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test } from "vite-plus/test";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 import type {
   ActionReceipt,
   MachineNotice,
@@ -246,6 +246,30 @@ test("a duplicate delivery is one card and a higher revision is its successor", 
   h.close();
 });
 
+test("an ask flushes the waiting response and a response for its thread never waits behind it", () => {
+  vi.useFakeTimers();
+  const h = harness(30_000);
+  try {
+    const reader = h.follow();
+    h.deliver(turn("finished"));
+    expect(reader.items()).toEqual([]);
+    h.deliver(question("asked"));
+    expect(reader.ids()).toEqual([`${uid(8)}:1`, `${uid(2)}:1`]);
+    h.deliver(turn("finished", uid(9)));
+    expect(reader.ids()).toEqual([`${uid(8)}:1`, `${uid(2)}:1`, `${uid(9)}:1`]);
+    vi.advanceTimersByTime(30_000);
+    expect(reader.items()).toHaveLength(3);
+    h.deliver(question("resolved", uid(8), 2));
+    h.deliver(turn("finished", uid(10)));
+    expect(reader.items()).toHaveLength(3);
+    vi.advanceTimersByTime(30_000);
+    expect(reader.items()).toHaveLength(4);
+  } finally {
+    h.close();
+    vi.useRealTimers();
+  }
+});
+
 test("a follower that was away for three notices is handed each once, in order, from its cursor", () => {
   const h = harness();
   const first = h.follow();
@@ -291,12 +315,12 @@ test("an ask answered while the follower was away is not replayed", () => {
   h.close();
 });
 
-test("an ask the follower sees live stays; a resolved ask only stops a held one", () => {
+test("an ask the follower sees live brings its held response with it", () => {
   const h = harness(200);
   const reader = h.follow();
   h.deliver(turn("finished"));
   h.deliver(permission("asked"));
-  expect(reader.ids()).toEqual([`${uid(3)}:1`]);
+  expect(reader.ids()).toEqual([`${uid(3)}:1`, `${uid(2)}:1`]);
   h.close();
 });
 
@@ -348,7 +372,7 @@ test("a burst waits out one buffer window, but an ask never waits", async () => 
   expect(arrived.get(uid(3))!).toBeLessThan(100);
   expect(arrived.get(uid(8))!).toBeGreaterThanOrEqual(110);
   expect(arrived.get(uid(8))!).toBeLessThan(180);
-  // Finished work waits for the window, and the late card joins it instead of opening its own.
-  expect(reader.items().map((c) => c.id)).toEqual([uid(3), uid(8), uid(1), uid(2)]);
+  // The response for the asking thread joins it immediately; unrelated lifecycle work stays buffered.
+  expect(reader.items().map((c) => c.id)).toEqual([uid(3), uid(2), uid(8), uid(1)]);
   h.close();
 });

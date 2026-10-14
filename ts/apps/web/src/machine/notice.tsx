@@ -3,8 +3,8 @@
  * revisions onto the `notices` Reading (the host log) and holds each burst ~30 s; the tray shim hands every item to
  * a native `notice` event once this card says `notice-ready`, and lends its window card-sized without
  * taking focus. One card pages every pending item: a new notice appends to the open card, a
- * draining timer walks item to item and the card ends after the last, hover pauses it and typing
- * stops it for good. Card messages ride the tray's string-JSON `type` protocol
+ * draining timer walks passive items and ends after the last; pending asks hold the queue, hover
+ * pauses it and typing stops it for good. Card messages ride the tray's string-JSON `type` protocol
  * (`notice-ready`/`notice-card`/`notice-hide`/`notice-panel`); opening an href is the surface's own
  * `open-window`. The card settles nothing: every answer goes to the thread's own door, which stays
  * the authority, and an item leaves only when that door accepts.
@@ -85,6 +85,7 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
   const end = () => {
     // A card that ends has shown what it held: those revisions are acknowledged.
     for (const item of itemsRef.current) record((l) => acknowledge(l, item));
+    itemsRef.current = [];
     setItems([]);
     setAt(0);
     setElapsed(0);
@@ -98,12 +99,18 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
       record((l) => l);
       const verdict = admit(ledger.current!, next, currentView(), Date.now());
       // Looking at that thread is seeing it: no card, and it will not come back.
-      if (verdict === "looking") return record((l) => acknowledge(l, next));
-      if (verdict !== "show") return;
-      setItems((list) => {
-        const same = list.findIndex((item) => item.id === next.id);
-        return same < 0 ? [...list, next] : list.map((item, i) => (i === same ? next : item));
-      });
+      if (verdict === "looking") record((l) => acknowledge(l, next));
+      if (verdict !== "show") {
+        if (!itemsRef.current.length) tray({ type: "notice-hide" });
+        return;
+      }
+      const list = itemsRef.current;
+      const same = list.findIndex((item) => item.id === next.id);
+      if (same >= 0 && list[same]!.revision >= next.revision) return;
+      itemsRef.current =
+        same < 0 ? [...list, next] : list.map((item, i) => (i === same ? next : item));
+      setItems(itemsRef.current);
+      setElapsed(0);
     };
     const receive = ({ data }: NativeMessageEvent) => {
       const parsed = nativeMessageSchema.safeParse(data);
@@ -129,12 +136,15 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
   }, []);
 
   const live = items.length > 0;
+  const needsAnswer = items.some(
+    (item) => item.act?.kind === "question" || item.act?.kind === "permission",
+  );
   const last = at >= items.length - 1;
   useEffect(() => {
-    if (!live || held || typed || previewHeight > 0) return;
+    if (!live || needsAnswer || held || typed || previewHeight > 0) return;
     const timer = setInterval(() => setElapsed((e) => e + TICK_MS), TICK_MS);
     return () => clearInterval(timer);
-  }, [live, held, typed, previewHeight]);
+  }, [live, needsAnswer, held, typed, previewHeight]);
   useEffect(() => {
     if (elapsed < NOTICE_DRAIN_MS) return;
     setElapsed(0);
@@ -305,7 +315,9 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
         <div
           aria-hidden
           className="boundary-t -mx-2 shrink-0"
-          style={{ width: typed ? 0 : `${100 - (elapsed / NOTICE_DRAIN_MS) * 100}%` }}
+          style={{
+            width: typed || needsAnswer ? 0 : `${100 - (elapsed / NOTICE_DRAIN_MS) * 100}%`,
+          }}
         />
       </div>
     </div>
