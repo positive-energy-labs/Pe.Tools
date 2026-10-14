@@ -7,6 +7,7 @@ import type { NativeMessageEvent } from "@pe/host-contracts/native-adapter";
 import { MACHINE_SEEDS } from "#/open/seeds";
 
 import { NOTICE_DRAIN_MS, NoticeCard } from "./notice";
+import { SNOOZE_MS } from "./notice-policy";
 
 const permission = vi.fn<(id: string, requestId: string, optionId: string) => Promise<void>>();
 const question =
@@ -92,6 +93,15 @@ beforeEach(() => {
     },
   };
   for (const door of [permission, question, prompt, cancel]) door.mockReset();
+  // The ledger is per-page storage; each test starts with none.
+  const store = new Map<string, string>();
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+    },
+  });
 });
 afterEach(() => {
   cleanup();
@@ -218,4 +228,49 @@ test("a fixture card refuses to answer or reply for Pea", () => {
   });
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
   expect(prompt).not.toHaveBeenCalled();
+});
+
+test("no card for the thread the window is showing and focused on, but one for another thread", () => {
+  vi.spyOn(document, "hasFocus").mockReturnValue(true);
+  history.replaceState(null, "", "/pea?thread=t1");
+  try {
+    render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture />);
+    show(finished);
+    expect(card()).toBeNull();
+    show({
+      ...finished,
+      id: "10000000-0000-4000-8000-000000000009",
+      href: "/pea?thread=t2",
+      act: { kind: "reply", threadId: "t2" },
+    });
+    expect(screen.getByText("1/1")).toBeTruthy();
+  } finally {
+    history.replaceState(null, "", "/");
+    vi.restoreAllMocks();
+  }
+});
+
+test("a dismissed card does not come back from a replay of the same revision", () => {
+  render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture />);
+  show(revit);
+  fireEvent.click(screen.getByRole("button", { name: "dismiss" }));
+  expect(card()).toBeNull();
+  show(revit);
+  expect(card()).toBeNull();
+  show({ ...revit, revision: 2 });
+  expect(card()).not.toBeNull();
+});
+
+test("snooze takes the item off the card for an hour and it returns once", () => {
+  vi.useFakeTimers();
+  render(<NoticeCard reading={MACHINE_SEEDS["no-revit"]} fixture />);
+  show(revit, asking);
+  fireEvent.click(screen.getByRole("button", { name: "snooze for an hour" }));
+  expect(screen.getByText("1/1")).toBeTruthy();
+  expect(screen.getByText("Pea wants approval · ducts")).toBeTruthy();
+  // Delivered again while snoozed, it stays away.
+  show(revit);
+  expect(screen.getByText("1/1")).toBeTruthy();
+  act(() => void vi.advanceTimersByTime(SNOOZE_MS + 60_000));
+  expect(screen.getByText("Revit start succeeded")).toBeTruthy();
 });
