@@ -63,11 +63,13 @@ import { productPeaWorkPath } from "./product-paths.ts";
 import { resolveStartProject, runPeRevitCli } from "./session-route.ts";
 import { admitCrossing, live, Refused, requireHuman } from "./control.ts";
 import { readMachineSession } from "./machine.ts";
+import { downloadCloudVersion } from "./cloud-version.ts";
 
 export type InstancesActionDependencies = {
   sdk?: SdkReceiptReader;
   /** Where Pea's copies go; the product's pea-work folder by default. */
   peaWork?: string;
+  downloadVersion?: typeof downloadCloudVersion;
 };
 
 const refuse = (message: string, result?: unknown) =>
@@ -493,7 +495,13 @@ export async function admitInstancesAction(
         : held && !launch?.reload
           ? { kind: "existing", process: target!.process, acquisition: held.id }
           : null;
-      if (!process) return { target, acquisition: null };
+      if (!process) {
+        if (launch?.cloudVersion)
+          throw refuse(
+            "An immutable APS version opens only through a Pea acquisition; it cannot open a connected user model.",
+          );
+        return { target, acquisition: null };
+      }
       try {
         // The interim hint only picks --detach; native facts certify independence (pea-source.ts).
         const hint =
@@ -520,9 +528,24 @@ export async function admitInstancesAction(
       const { target, acquisition, artifactOf } = execution.prepared as Prepared;
       const origin = acquisition?.document?.origin ?? null;
       // Allocation is recorded before it happens: baseline, then the work copy Revit opens.
-      if (origin?.kind === "file-copy") {
+      if (origin && "work" in origin) {
+        if (origin.kind === "version-copy") {
+          await execution.step(
+            "file",
+            "acquisition.baseline",
+            { to: origin.baseline, source: origin.source, version: origin.version },
+            () =>
+              (deps.downloadVersion ?? downloadCloudVersion)(
+                origin.source,
+                origin.version,
+                origin.baseline,
+              ),
+          );
+        }
         for (const [key, from, to] of [
-          ["acquisition.baseline", origin.source, origin.baseline],
+          ...(origin.kind === "file-copy"
+            ? [["acquisition.baseline", origin.source, origin.baseline] as const]
+            : []),
           ["acquisition.work", origin.baseline, origin.work],
         ] as const)
           await execution.step("file", key, { from, to }, () => copyReserved({ from, to }));
@@ -636,22 +659,17 @@ export async function admitInstancesAction(
       }
       if (!expectSession) throw refuse("The recorded mutation has no session expectation");
       const spec = launch!;
-      const opened = origin?.kind === "file-copy" ? origin.work : launch?.source;
-      const detached =
-        origin?.kind === "file-copy"
-          ? origin.detach
-          : origin?.kind === "detached"
-            ? true
-            : launch?.detach;
+      const opened = origin && "work" in origin ? origin.work : launch?.source;
+      const detached = origin && "detach" in origin ? origin.detach : launch?.detach;
       const openArgv = (session: SessionSelection, expectedSession: string) =>
         docOpenArgv({
           ...(spec.template ? { template: spec.source } : { source: opened }),
           ...session,
           detach: detached,
           upgrade: spec.upgrade,
-          links: spec.links,
+          links: origin?.kind === "version-copy" ? "refuse" : spec.links,
           reload: spec.reload,
-          unsynced: launchUnsynced(spec),
+          unsynced: origin?.kind === "version-copy" ? undefined : launchUnsynced(spec),
           requestId,
           expectSession: expectedSession,
           expectDoc: spec.reload ? spec.source : spec.template ? "new" : "absent",
@@ -765,7 +783,7 @@ export async function admitInstancesAction(
       return {
         acquisition: acquisition?.id ?? null,
         opened,
-        copiedFrom: origin?.kind === "file-copy" ? origin.source : null,
+        copiedFrom: origin && "work" in origin ? origin.source : null,
         detached: detached ?? false,
         ...(session !== undefined ? { session } : {}),
         document,
@@ -873,7 +891,8 @@ async function admitAcquisitionRelease(
       const saved = acquired!.handover ? acquired!.handover.work : acquired!.baseline;
       const changed =
         held?.isModified ||
-        (origin?.kind === "file-copy" &&
+        (origin &&
+          "work" in origin &&
           saved &&
           existsSync(origin.work) &&
           (await hashFile(origin.work)).sha256 !== saved.sha256);
@@ -902,9 +921,7 @@ async function admitAcquisitionRelease(
       const sdkOpenId = document?.sdkOpenId ?? "";
       if (key === "instances.handover") {
         const intent = acquired!.intent.document!;
-        const detached =
-          intent.origin.kind === "detached" ||
-          (intent.origin.kind === "file-copy" && intent.origin.detach);
+        const detached = "detach" in intent.origin && intent.origin.detach;
         const folder = dirname(intent.result);
         await execution.step("file", "acquisition.result-folder", { to: folder }, () =>
           reserveFolder(acquired!.intent.root, folder),
@@ -932,14 +949,9 @@ async function admitAcquisitionRelease(
           async () => {
             const result = { path: intent.result, ...(await hashFile(intent.result)) };
             const baseline =
-              intent.origin.kind === "file-copy"
+              "baseline" in intent.origin
                 ? acquired!.baseline
-                : intent.origin.kind === "new"
-                  ? { kind: "new", template: intent.origin.template }
-                  : {
-                      kind: "unknown",
-                      reason: "A detached cloud open records no provider version.",
-                    };
+                : { kind: "new", template: intent.origin.template };
             // ponytail: no domain snapshot extractor is wired to acquisitions yet; hashes are provenance.
             const plan = {
               acquisition: id,
@@ -956,7 +968,7 @@ async function admitAcquisitionRelease(
             await writeFile(intent.diffPlan, JSON.stringify(plan, null, 2), { flag: "wx" });
             // Save may update the work copy; retain its post-save bytes as the cleanup expectation.
             const work =
-              intent.origin.kind === "file-copy"
+              "work" in intent.origin
                 ? { path: intent.origin.work, ...(await hashFile(intent.origin.work)) }
                 : null;
             return { result, diffPlan: intent.diffPlan, work };
