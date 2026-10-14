@@ -1,6 +1,7 @@
 import type { SettingsPanel } from "#/settings/option-state";
 import { AccessSwitch } from "#/chat/first-open";
 import { useProviders } from "#/workbench/provider/providers";
+import { OsNoticeSettings } from "./os-notices";
 import { ProviderSetup } from "./pea";
 import { ShareSettings } from "./share";
 import { StartupSettings } from "./startup";
@@ -26,6 +27,9 @@ function SharingPanel() {
     <p className="text-ink-mute">Sharing settings wait for the machine reading.</p>
   );
 }
+function NoticePanel() {
+  return <OsNoticeSettings />;
+}
 function StartupPanel() {
   const { reading, fixture } = useMachine();
   return <StartupSettings machine={machineOf(reading)} fixture={fixture} />;
@@ -46,6 +50,13 @@ export const MachineSettingsPanels: readonly SettingsPanel[] = [
     scope: "machine",
     surfaces: ["web", "pwa", "tray"],
     render: SharingPanel,
+  },
+  {
+    id: "notices",
+    label: "Notifications",
+    scope: "machine",
+    surfaces: ["web", "pwa"],
+    render: NoticePanel,
   },
   {
     id: "startup",

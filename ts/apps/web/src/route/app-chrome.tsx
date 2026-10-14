@@ -1,11 +1,13 @@
 /**
  * Machine attention and feedback exist once around every surface's route outlet.
  * Their doors are projections in the shared topbar, not separate floating controls.
- * On the tray surface the receipt notice card mounts here too, whatever route the panel shows.
+ * On the tray surface the receipt notice card mounts here too, whatever route the panel shows; on a
+ * web surface with no tray following, the same items can raise OS notifications (opt-in).
  */
 import { FeedbackPicker } from "#/components/feedback-picker";
 import { MachineAttention } from "#/machine/attention";
 import { NoticeCard } from "#/machine/notice";
+import { OsNotices } from "#/machine/os-notices";
 import { useMachine } from "#/machine/use-machine";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
@@ -16,6 +18,7 @@ export function AppChrome() {
   return (
     <>
       <MachineAttention />
+      <OsNotices />
       <TrayNotice />
       <FeedbackPicker hideTrigger />
     </>
