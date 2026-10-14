@@ -25,6 +25,7 @@ import { LadderPicker, useDocumentLadder } from "./situation-ladder";
 import { SituationCell } from "./situation-marks";
 import type { RouteHandle } from "./handle";
 import type { StageDecl } from "./stage";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 type Handle = RouteHandle<any, any, EntityPage, any>;
 
@@ -232,14 +233,15 @@ export function EntityRouteView({
                 <>
                   {" "}
                   (
-                  <Link
-                    to="/pods"
-                    // The root carries the thread and any `?target` pin with it.
-                    search={{ pod: page.pod, path: page.path } as never}
-                    title="Open this member in the pods browser"
-                  >
-                    open in Pods
-                  </Link>
+                  <TooltipHint content="Open this member in the pods browser">
+                    <Link
+                      to="/pods"
+                      // The root carries the thread and any `?target` pin with it.
+                      search={{ pod: page.pod, path: page.path } as never}
+                    >
+                      open in Pods
+                    </Link>
+                  </TooltipHint>
                   )
                 </>
               ) : null}

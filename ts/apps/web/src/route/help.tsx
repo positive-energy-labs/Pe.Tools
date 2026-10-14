@@ -16,6 +16,7 @@ import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { startFeedback } from "#/components/feedback-picker";
 import { MachineHelpTrigger } from "#/machine/navigation";
 import { readKeyMeta, readRegistrations, useScopeKeys, type KeyMeta } from "@pe/kit/keys";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 interface Region {
   id: string;
@@ -83,13 +84,12 @@ function Rows({ keys, flow = false }: { keys: readonly Bound[]; flow?: boolean }
           <dt>
             <Kbd mute={Boolean(k.refusal)} hotkey={k.hotkey} />
           </dt>
-          <dd
-            className={k.refusal ? "text-ink-mute" : "text-ink"}
-            title={k.refusal ?? k.description}
-          >
-            {k.name}
-            {k.refusal ? ` — refuses now: ${k.refusal}` : ""}
-          </dd>
+          <TooltipHint content={k.refusal ?? k.description}>
+            <dd className={k.refusal ? "text-ink-mute" : "text-ink"}>
+              {k.name}
+              {k.refusal ? ` — refuses now: ${k.refusal}` : ""}
+            </dd>
+          </TooltipHint>
         </div>
       ))}
     </dl>

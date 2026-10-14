@@ -158,9 +158,7 @@ test("511 type columns mount a bounded window and expose direct editable cells",
     await new Promise((resolve) => setTimeout(resolve, 40));
   });
   expect(view.getByRole("columnheader", { name: "A · type 500" })).not.toBeNull();
-  expect(view.container.querySelector<HTMLElement>('[title="A"]')?.style.left).toBe(
-    `${grid.scrollLeft + identityWidth}px`,
-  );
+  expect(view.getByText("A").style.left).toBe(`${grid.scrollLeft + identityWidth}px`);
   expect(view.container.querySelector('[aria-label="p0 · A · type 500"] input')).not.toBeNull();
   expect(view.container.querySelectorAll('[role="gridcell"]').length).toBeLessThan(500);
 

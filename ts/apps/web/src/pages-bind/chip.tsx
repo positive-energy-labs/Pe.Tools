@@ -4,6 +4,7 @@ import { Button } from "@pe/kit/lang/button";
 import { openEventSource } from "#/readings";
 import { peClient } from "#/host/pe-client";
 import { readPageTarget } from "./client";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** SPA chrome owns consent. Page code never draws or answers this control. */
 export function PageBindingChip({ slug }: { slug: string }) {
@@ -85,12 +86,11 @@ export function PageBindingChip({ slug }: { slug: string }) {
           </span>
         </Button>
       ) : (
-        <span
-          className="face-mono"
-          title={write?.kind === "read" ? write.refusal.reason : (refusal ?? undefined)}
+        <TooltipHint
+          content={write?.kind === "read" ? write.refusal.reason : (refusal ?? undefined)}
         >
-          {write?.kind ?? "unverified"}
-        </span>
+          <span className="face-mono">{write?.kind ?? "unverified"}</span>
+        </TooltipHint>
       )}
       <a href={`/bind?page=${encodeURIComponent(slug)}`}>Bind…</a>
       {refusal && (

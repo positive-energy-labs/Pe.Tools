@@ -32,6 +32,7 @@ import {
 import { whySentence } from "./bar";
 import { PressContent } from "@pe/kit/anatomy/press-content";
 import { Code } from "@pe/kit/lang/code";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function SessionStrip({
   breakdown,
@@ -126,9 +127,9 @@ export function SessionStrip({
 
       {inspect ? (
         <div className="hairline-b-faint grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-2 px-3 py-1.5 t-small face-mono">
-          <span title="This breakdown was captured at the last user send; streaming pushes within the turn do not advance it">
-            {sendNumber ? `send #${sendNumber}` : "snapshot"}
-          </span>
+          <TooltipHint content="This breakdown was captured at the last user send; streaming pushes within the turn do not advance it">
+            <span>{sendNumber ? `send #${sendNumber}` : "snapshot"}</span>
+          </TooltipHint>
           <span className="truncate text-right text-ink-mute">live agent · resolved snapshot</span>
         </div>
       ) : null}

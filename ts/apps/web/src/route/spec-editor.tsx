@@ -48,6 +48,7 @@ import { ProposalReview } from "./proposal-review";
 import { podHost, type Composed } from "./pods";
 import { useRoute } from "./use-route";
 import type { RouteHandle } from "./handle";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** The demo lane's member: no host is asked for anything. `fields` seeds its proposal lane. */
 export interface DemoSpec {
@@ -529,12 +530,11 @@ export function SpecEditor({
               {session ? "semantic" : "schema only"}
             </FactChip>
             {options.owned ? (
-              <span
-                className="t-small"
-                title="The document this form reads field options from. With none chosen the form offers the schema's own options only."
-              >
-                options from <Ladder levels={options.levels} />
-              </span>
+              <TooltipHint content="The document this form reads field options from. With none chosen the form offers the schema's own options only.">
+                <span className="t-small">
+                  options from <Ladder levels={options.levels} />
+                </span>
+              </TooltipHint>
             ) : (
               <FactChip
                 tone={options.word ? "meta" : "caution"}

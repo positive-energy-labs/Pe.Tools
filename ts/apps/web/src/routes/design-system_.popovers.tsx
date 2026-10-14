@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Button } from "@pe/kit/lang/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@pe/kit/lang/tooltip";
@@ -13,19 +13,19 @@ import {
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "@pe/kit/lang/hover-card";
 import { ThemeToggle } from "@pe/kit/lang/theme-toggle";
 import { ListPopup } from "@pe/kit/lang/list-popup";
+import { Table } from "@pe/kit/table/table";
 import { FieldOptionPicker, FieldOptionSelect, type FieldOption } from "#/host/field-options";
 import { CATEGORY_OPTIONS } from "#/design-system/specimens-data";
-import type {
-  HostActiveDocumentSummary,
-  HostResourceFileStateData,
-} from "@pe/host-contracts/operation-types";
-import type { PodRouteDescriptor, PagePublication } from "@pe/host-contracts/pe-api";
-import type { Reading } from "@pe/agent-contracts";
+import type { HostActiveDocumentSummary } from "@pe/host-contracts/operation-types";
+import type { PodRouteDescriptor } from "@pe/host-contracts/pe-api";
+import type { Machine } from "@pe/agent-contracts";
+import { previousOf, useInventory, useReading } from "#/readings";
+import { usePodRoutes } from "#/route/pod-routes";
+import { hostFetch } from "#/host/runtime";
 
 export const Route = createFileRoute("/design-system_/popovers")({ component: PopoverHarness });
 
-// Contract-shaped fixtures, never current host observations or executable resources.
-const documentSnapshot = {
+const documentFixture = {
   title: "North wing · Mechanical",
   key: "fixture-document",
   path: "Models/North wing.rvt",
@@ -34,26 +34,7 @@ const documentSnapshot = {
   isWorkshared: true,
   observedAtUnixMs: Date.parse("2026-10-14T14:30:00Z"),
 } satisfies HostActiveDocumentSummary;
-const file = {
-  exists: true,
-  label: "Shared parameters",
-  path: "Standards/Shared Parameters.txt",
-  provenance: "Saved file observation",
-  sizeBytes: 18432,
-  lastWriteTimeUnixMs: Date.parse("2026-10-13T16:00:00Z"),
-} satisfies HostResourceFileStateData;
-const reading = {
-  state: "stale",
-  previous: file,
-  reason: "disconnected",
-} satisfies Reading<HostResourceFileStateData>;
-const page = {
-  kind: "page",
-  slug: "air-balance",
-  title: "Air balance review",
-  html: "<h1>Air balance review</h1><p>Supply and return observations by room.</p>",
-} satisfies PagePublication;
-const pod = {
+const podFixture = {
   key: "route:@mechanical/routes/air-balance",
   packageId: "mechanical",
   sourcePath: "routes/air-balance/index.js",
@@ -66,78 +47,194 @@ const pod = {
 } satisfies PodRouteDescriptor;
 const MOTIFS = [
   {
-    id: "A",
-    name: "Identity strip",
-    label: documentSnapshot.title,
+    id: "E",
+    name: "Bare hint",
     kind: "Document",
-    value: documentSnapshot,
+    epitaph: "Kill if identity and freshness cannot fit one glance.",
   },
-  { id: "B", name: "Observation ledger", label: file.label, kind: "Reading", value: reading },
-  { id: "C", name: "Content excerpt", label: page.title, kind: "Page", value: page },
-  { id: "D", name: "Capability receipt", label: pod.name, kind: "Pod route", value: pod },
+  {
+    id: "F",
+    name: "Visual peek",
+    kind: "Page",
+    epitaph: "Kill if the miniature cannot identify the resource without reading its caption.",
+  },
+  {
+    id: "G",
+    name: "Status first",
+    kind: "Pod route",
+    epitaph: "Kill if the large state hides which resource it belongs to.",
+  },
+  {
+    id: "H",
+    name: "Content peek",
+    kind: "Reading",
+    epitaph: "Kill if scrolling this preview is harder than opening the resource.",
+  },
 ] as const;
-type Motif = (typeof MOTIFS)[number];
+type PagePeek = { title: string; url: string | null; slug: string };
 
-function ResourcePreview({ motif, inspect }: { motif: Motif; inspect: () => void }) {
+function ResourceLineup() {
+  const inventory = useInventory();
+  const session = previousOf(inventory)?.sessions.find((entry) => entry.activeDocumentTitle);
+  const machineReading = useReading<Machine>({ kind: "machine" });
+  const machine = previousOf(machineReading);
+  const routes = usePodRoutes();
+  const pod = routes?.rows[0] ?? podFixture;
+  const [pages, setPages] = useState<PagePeek[]>([]);
+  const [pageState, setPageState] = useState("Reading Pages from this host…");
+  useEffect(() => {
+    const abort = new AbortController();
+    void hostFetch("/pages", { signal: abort.signal })
+      .then(async (response) => {
+        if (!response.ok) throw Error(`Pages refused (${response.status})`);
+        const { pages: rows } = (await response.json()) as { pages: PagePeek[] };
+        setPages(rows);
+        setPageState(
+          rows.length
+            ? "Host Page"
+            : "This host has no Pages. Import a Pod with a Page to inspect its render.",
+        );
+      })
+      .catch((error: unknown) => {
+        if (!abort.signal.aborted) setPageState(String(error));
+      });
+    return () => abort.abort();
+  }, []);
+  const page = pages.find((row) => row.url);
+  const title = session?.activeDocumentTitle ?? documentFixture.title;
+  const freshness = session ? inventory.state : "fixture · unavailable";
+  const labels = [title, page?.title ?? "No Page", pod.name, "Machine observations"];
   return (
-    <div data-motif={motif.id} className="space-y-3">
-      <div className="flex items-baseline justify-between gap-3">
-        <PopoverTitle>{motif.label}</PopoverTitle>
-        <span className="text-ink-2">{motif.kind} · fixture</span>
+    <section aria-label="Resource preview motifs" className="space-y-3">
+      <h2>Round 2 · four different kinds of preview</h2>
+      <p className="text-ink-2">
+        Hover to inspect. Click or Enter holds interactive previews. Each resource names its source.
+      </p>
+      <div className="hairline-rows">
+        {MOTIFS.map((motif, index) => (
+          <article key={motif.id} data-lineup={motif.id} className="space-y-1 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3>
+                {motif.id} · {motif.name} · {motif.kind}
+              </h3>
+              {motif.id === "E" ? (
+                <Tooltip>
+                  <TooltipTrigger aria-label="Preview E">{title}</TooltipTrigger>
+                  <TooltipContent data-motif="E">
+                    {title} · {freshness}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <HoverCard>
+                  <HoverCardTrigger aria-label={`Preview ${motif.id}`}>
+                    {labels[index]}
+                  </HoverCardTrigger>
+                  <HoverCardContent
+                    data-motif={motif.id}
+                    aria-label={`${motif.name} preview`}
+                    className={
+                      motif.id === "H" ? "w-[42rem]" : motif.id === "F" ? "w-[28rem] p-0" : "w-80"
+                    }
+                  >
+                    {motif.id === "F" ? (
+                      <figure>
+                        {page?.url ? (
+                          <div className="h-56 overflow-hidden" aria-hidden="true">
+                            <iframe
+                              title={`Page miniature: ${page.title}`}
+                              src={page.url}
+                              sandbox=""
+                              className="h-[28rem] w-[200%] origin-top-left scale-50 pointer-events-none"
+                              tabIndex={-1}
+                            />
+                          </div>
+                        ) : (
+                          <p className="p-4">{pageState}</p>
+                        )}
+                        <figcaption className="flex items-center justify-between gap-3 p-3">
+                          <span>
+                            {page?.title ?? "Page unavailable"} · host render, scripts disabled
+                          </span>
+                          {page?.url ? (
+                            <a href={page.url} target="_blank" rel="noreferrer">
+                              Open Page
+                            </a>
+                          ) : null}
+                        </figcaption>
+                      </figure>
+                    ) : motif.id === "G" ? (
+                      <div className="space-y-3">
+                        <p className="t-display" data-tone={pod.trusted ? "done" : "caution"}>
+                          {pod.trusted ? "Trusted" : "Not trusted"}
+                        </p>
+                        <p>
+                          {pod.name} · {pod.packageId}
+                        </p>
+                        <p>
+                          {pod.trusted
+                            ? "Admitted to the route loader."
+                            : "Execution is blocked until you grant trust."}
+                        </p>
+                        <p className="text-ink-2">
+                          {routes?.rows.length
+                            ? "Host route inventory"
+                            : "Fixture · host has no Pod route"}
+                        </p>
+                        <Link to="/tool/$key" params={{ key: pod.key }}>
+                          Review route
+                        </Link>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex justify-between gap-2">
+                          <PopoverTitle>Machine observations</PopoverTitle>
+                          <span>{machineReading.state} · host Reading</span>
+                        </div>
+                        <p className="face-mono break-all">
+                          {machine?.host?.serviceName ?? "Waiting for host"}
+                        </p>
+                        <Table
+                          label="Reading rows"
+                          rows={Object.entries(machine?.legs ?? {}).map(([key, leg]) => ({
+                            key,
+                            ...leg,
+                          }))}
+                          rowKey={(row) => row.key}
+                          maxHeight="10rem"
+                          columns={[
+                            { key: "subject", label: "Subject", cell: (row) => row.key },
+                            {
+                              key: "observed",
+                              label: "Observed UTC",
+                              cell: (row) => (
+                                <span className="face-mono">{row.observedAtUtc ?? "Never"}</span>
+                              ),
+                            },
+                            {
+                              key: "result",
+                              label: "Result",
+                              cell: (row) =>
+                                row.error ?? (row.observedAtUtc ? "Observed" : "Not observed"),
+                            },
+                          ]}
+                          empty={
+                            machineReading.state === "failed"
+                              ? machineReading.message
+                              : "No observation yet."
+                          }
+                        />
+                        <Link to="/machine">Open Machine</Link>
+                      </div>
+                    )}
+                  </HoverCardContent>
+                </HoverCard>
+              )}
+            </div>
+            <p className="text-ink-2">{motif.epitaph}</p>
+          </article>
+        ))}
       </div>
-      {motif.id === "A" ? (
-        <>
-          <p>Workshared project · saved observation</p>
-          <p className="face-mono break-all">{documentSnapshot.path}</p>
-          <p className="text-ink-2">Observed 14 Oct, 14:30 UTC. Current availability unknown.</p>
-        </>
-      ) : motif.id === "B" ? (
-        <>
-          <p data-tone="caution">Stale · host disconnected</p>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-            <dt>Source</dt>
-            <dd className="face-mono break-all">{file.path}</dd>
-            <dt>Last size</dt>
-            <dd className="face-mono">18 KiB</dd>
-            <dt>Modified</dt>
-            <dd className="face-mono">13 Oct, 16:00 UTC</dd>
-          </dl>
-          <p className="text-ink-2">Last known file exists. Reconnect before relying on it.</p>
-        </>
-      ) : motif.id === "C" ? (
-        <>
-          <div data-surface="document" className="space-y-2 p-3">
-            <p>{page.title}</p>
-            <p>Supply and return observations by room.</p>
-          </div>
-          <p className="text-ink-2">
-            Authored Page · no executable route. Excerpt of fixture content.
-          </p>
-        </>
-      ) : (
-        <>
-          <p>{pod.description}</p>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-            <dt>Package</dt>
-            <dd className="face-mono">{pod.packageId}</dd>
-            <dt>Entry</dt>
-            <dd className="face-mono break-all">{pod.sourcePath}</dd>
-            <dt>Trust</dt>
-            <dd data-tone="caution">Not trusted · cannot run</dd>
-          </dl>
-          <p className="text-ink-2">A promoted executable route has a separate trust boundary.</p>
-        </>
-      )}
-      <div className="hairline-t pt-2">
-        <PopoverClose
-          render={
-            <Button label={`Inspect ${motif.id} snapshot`} onClick={inspect}>
-              Inspect snapshot
-            </Button>
-          }
-        />
-      </div>
-    </div>
+    </section>
   );
 }
 
@@ -271,7 +368,6 @@ const SPECIMENS = [
   { name: "Multi select", render: FieldMultiSpecimen },
 ];
 function PopoverHarness() {
-  const [selected, setSelected] = useState<Motif | null>(null);
   const [specimen, setSpecimen] = useState("Tooltip");
   const Specimen = SPECIMENS.find((item) => item.name === specimen)!.render;
   return (
@@ -293,46 +389,7 @@ function PopoverHarness() {
           <HoverSpecimen />
         </div>
       </section>
-      <section aria-label="Resource preview motifs" className="space-y-2">
-        <h2>Resource previews · choose a motif</h2>
-        <p className="text-ink-2">
-          Contract-shaped fixtures, not current resources. Hover to preview; click or Enter to
-          inspect.
-        </p>
-        <div className="hairline-rows">
-          {MOTIFS.map((motif) => (
-            <div key={motif.id} className="flex items-center justify-between gap-3 py-2">
-              <span>
-                {motif.id} · {motif.name}
-              </span>
-              <HoverCard>
-                <HoverCardTrigger
-                  className="max-w-[55%] truncate"
-                  aria-label={`Preview ${motif.id}: ${motif.label}`}
-                >
-                  {motif.label}
-                </HoverCardTrigger>
-                <HoverCardContent>
-                  <ResourcePreview motif={motif} inspect={() => setSelected(motif)} />
-                </HoverCardContent>
-              </HoverCard>
-            </div>
-          ))}
-        </div>
-      </section>
-      {selected ? (
-        <section aria-label="Inspected fixture" className="space-y-2">
-          <div className="flex justify-between">
-            <h2>{selected.id} · fixture snapshot</h2>
-            <Button label="Dismiss snapshot" onClick={() => setSelected(null)}>
-              Dismiss
-            </Button>
-          </div>
-          <pre className="max-h-52 overflow-auto whitespace-pre-wrap face-mono break-all">
-            {JSON.stringify(selected.value, null, 2)}
-          </pre>
-        </section>
-      ) : null}
+      <ResourceLineup />
       <section aria-label="Collision harness" className="space-y-2">
         <h2>Viewport edges</h2>
         <p className="text-ink-2">

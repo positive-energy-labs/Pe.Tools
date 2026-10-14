@@ -10,6 +10,7 @@ import { Pane } from "#/components/lang/pane";
 import { OVERLAY_LABEL, OVERLAY_TITLE, type PRow } from "#/family/model";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 import { cn } from "@pe/kit/lib/utils";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function FamilyWorkspaceTable() {
   const {
@@ -250,15 +251,17 @@ export function FamilyWorkspaceTable() {
       state={drillState}
       onStateChange={setDrillState}
       summary={
-        <span title="What this one type is asking of you. The same counts as the cross-type table, narrowed to this column of it.">
-          {openProposals.filter((entry) => (entry.typeName ?? null) === drillType).length} open ·{" "}
-          <FactChip
-            tone={driftCells.some((cell) => cell.typeName === drillType) ? "alarm" : undefined}
-            title="Cells where Revit disagrees with this type's draft."
-          >
-            {driftCells.filter((cell) => cell.typeName === drillType).length} drift
-          </FactChip>
-        </span>
+        <TooltipHint content="What this one type is asking of you. The same counts as the cross-type table, narrowed to this column of it.">
+          <span>
+            {openProposals.filter((entry) => (entry.typeName ?? null) === drillType).length} open ·{" "}
+            <FactChip
+              tone={driftCells.some((cell) => cell.typeName === drillType) ? "alarm" : undefined}
+              title="Cells where Revit disagrees with this type's draft."
+            >
+              {driftCells.filter((cell) => cell.typeName === drillType).length} drift
+            </FactChip>
+          </span>
+        </TooltipHint>
       }
       searchPlaceholder="parameter"
       actions={tableActions}

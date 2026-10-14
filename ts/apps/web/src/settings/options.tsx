@@ -25,6 +25,7 @@ import {
   subscribeGlobalOptions,
   settingsPanelDestination,
 } from "./option-catalogue";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const Context = createContext<PageOptions | null>(null);
 export function SettingsProvider({ children }: { children: ReactNode }) {
@@ -112,7 +113,9 @@ function OptionControl({ option }: { option: SettingsOption }) {
       data-option-scope={option.scope}
       className="flex flex-wrap items-center justify-between gap-2"
     >
-      <span title={option.description}>{option.label}</span>
+      <TooltipHint content={option.description}>
+        <span>{option.label}</span>
+      </TooltipHint>
       {option.kind === "boolean" ? (
         <Switch
           aria-label={option.label}

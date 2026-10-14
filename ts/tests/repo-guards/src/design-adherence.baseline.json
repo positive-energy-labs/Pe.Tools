@@ -29,15 +29,13 @@
     }
   },
   "longTitle": {
-    "total": 20,
+    "total": 9,
     "byArea": {
-      "components": 1,
-      "family": 11,
-      "grounded-doc": 1,
+      "family": 2,
       "rooms": 1,
-      "route": 1,
       "routes": 2,
-      "takeoff": 3
+      "takeoff": 3,
+      "route": 1
     }
   },
   "busyState": {

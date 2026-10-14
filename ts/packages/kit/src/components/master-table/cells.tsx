@@ -14,6 +14,7 @@ import { StateCell, fmtNum } from "../lang/cell";
 import type { Verdict, VerdictTone } from "./model";
 import { token } from "../../lib/token";
 import { cn } from "../../lib/utils";
+import { TooltipHint } from "../lang/tooltip";
 
 export function TextCell({
   value,
@@ -88,13 +89,14 @@ export function ReadCell({
   "data-tone"?: "alarm" | "caution" | "done" | "commit" | "nav" | "pea";
 }) {
   return (
-    <span
-      title={reason}
-      className={cn("face-mono block truncate px-(--item-pad-x)", className)}
-      data-tone={dataTone}
-    >
-      {value}
-    </span>
+    <TooltipHint content={reason}>
+      <span
+        className={cn("face-mono block truncate px-(--item-pad-x)", className)}
+        data-tone={dataTone}
+      >
+        {value}
+      </span>
+    </TooltipHint>
   );
 }
 
@@ -124,14 +126,16 @@ export const VERDICT_INK: Record<VerdictTone, string> = {
  * verdict keeps the word in secondary ink and lets the dot carry the tone. */
 export function VerdictCell({ verdict }: { verdict: Verdict }) {
   return (
-    <span className="face-mono block truncate px-(--item-pad-x)" title={verdict.note}>
-      <StateDot tone={verdict.tone} dim={verdict.dim} />{" "}
-      <span
-        className={verdict.tone === "alarm" ? undefined : "text-ink-2"}
-        data-tone={verdict.tone === "alarm" ? "alarm" : undefined}
-      >
-        {verdict.word}
+    <TooltipHint content={verdict.note}>
+      <span className="face-mono block truncate px-(--item-pad-x)">
+        <StateDot tone={verdict.tone} dim={verdict.dim} />{" "}
+        <span
+          className={verdict.tone === "alarm" ? undefined : "text-ink-2"}
+          data-tone={verdict.tone === "alarm" ? "alarm" : undefined}
+        >
+          {verdict.word}
+        </span>
       </span>
-    </span>
+    </TooltipHint>
   );
 }

@@ -6,6 +6,7 @@ import {
   TooltipTrigger,
   TooltipContent,
   TooltipProvider,
+  TooltipHint,
 } from "../src/components/lang/tooltip";
 import {
   Popover,
@@ -17,6 +18,48 @@ import { HoverCard, HoverCardTrigger, HoverCardContent } from "../src/components
 import { Button } from "../src/components/lang/button";
 
 afterEach(cleanup);
+
+test("a composed hint preserves the native element, id, class, ref and focus order", async () => {
+  let element: HTMLSpanElement | null = null;
+  const view = render(
+    <TooltipProvider delay={0}>
+      <TooltipHint content="Full measured path">
+        <span
+          id="measured-path"
+          className="truncate"
+          tabIndex={-1}
+          ref={(node) => {
+            element = node;
+          }}
+        >
+          Path
+        </span>
+      </TooltipHint>
+    </TooltipProvider>,
+  );
+  const trigger = screen.getByText("Path");
+  expect(trigger.tagName).toBe("SPAN");
+  expect(trigger.id).toBe("measured-path");
+  expect(trigger.className).toBe("truncate");
+  expect(trigger.tabIndex).toBe(-1);
+  expect(element).toBe(trigger);
+  expect(view.container.querySelector("button")).toBeNull();
+  expect(trigger.hasAttribute("title")).toBe(false);
+  fireEvent.keyDown(document.body, { key: "Tab" });
+  await act(async () => trigger.focus());
+  const tooltip = await screen.findByRole("tooltip");
+  expect(tooltip.textContent).toBe("Full measured path");
+  expect(trigger.getAttribute("aria-describedby")).toBe(tooltip.id);
+});
+
+test("an absent hint leaves its child unchanged", () => {
+  const view = render(
+    <TooltipHint content={undefined}>
+      <span>Path</span>
+    </TooltipHint>,
+  );
+  expect(view.container.innerHTML).toBe("<span>Path</span>");
+});
 
 test.each([
   ["tooltip", Tooltip, TooltipTrigger, TooltipContent],

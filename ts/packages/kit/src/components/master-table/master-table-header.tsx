@@ -10,6 +10,7 @@ import { cn } from "../../lib/utils";
 import { PressContent } from "../anatomy/press-content";
 import { ConditionTarget } from "./query";
 import { opSaid, readQuery } from "./view";
+import { TooltipHint } from "../lang/tooltip";
 
 type Table<Row extends RowData> = ReactTable<MasterTableFeatures, Row, unknown>;
 
@@ -40,12 +41,13 @@ export function MasterTableHeader<Row extends RowData>({
       {headerGroups.map((headerGroup, rowIndex) => (
         <tr key={headerGroup.id}>
           {gutter && rowIndex === 0 && (
-            <th
-              rowSpan={headerGroups.length}
-              style={{ top: 0, width: gutterWidth, minWidth: gutterWidth }}
-              title="Rows marked in this gutter owe a person a decision — the mark's own title says what."
-              className="sticky left-0 z-sticky border-b border-line p-0 on-recess"
-            />
+            <TooltipHint content="Rows marked in this gutter owe a person a decision — the mark's own title says what.">
+              <th
+                rowSpan={headerGroups.length}
+                style={{ top: 0, width: gutterWidth, minWidth: gutterWidth }}
+                className="sticky left-0 z-sticky border-b border-line p-0 on-recess"
+              />
+            </TooltipHint>
           )}
           {headerGroup.headers.map((header) => {
             if (header.rowSpan === 0) return null;
@@ -117,41 +119,42 @@ function LeafHeader<Row>({
   children?: ReactNode;
 }) {
   return (
-    <th
-      data-column-key={column.key}
-      title={column.title}
-      rowSpan={rowSpan}
-      style={{ top: stickyTop, left: column.lock ? lockLeft : undefined }}
-      className={cn(
-        "sticky z-sticky align-top whitespace-nowrap border-b border-l border-line px-(--item-pad-x) py-1 font-normal on-recess first:border-l-0",
-        column.right ? "text-right" : "text-left",
-        column.width,
-        column.lock && "z-sticky",
-        column.headerClassName,
-      )}
-    >
-      {column.sort ? (
-        <Button
-          type="button"
-          onClick={(event) => onSort(event.shiftKey)}
-          label={`sort ${column.label}`}
-          reason="Sort by this column. Clicking again flips the direction; shift-click appends it as a tie-breaker behind the sorts already applied, numbered in the header."
-        >
-          <PressContent geometry="block">
-            <span className="t-small t-upper">{column.header ?? column.label}</span>
-            {direction && (
-              <span className="ml-1 text-ink">
-                {direction === "asc" ? "↑" : "↓"}
-                {sortCount > 1 && <span className="opacity-60">{rank + 1}</span>}
-              </span>
-            )}
-          </PressContent>
-        </Button>
-      ) : (
-        <span className="t-small t-upper block">{column.header ?? column.label}</span>
-      )}
-      {children}
-    </th>
+    <TooltipHint content={column.title}>
+      <th
+        data-column-key={column.key}
+        rowSpan={rowSpan}
+        style={{ top: stickyTop, left: column.lock ? lockLeft : undefined }}
+        className={cn(
+          "sticky z-sticky align-top whitespace-nowrap border-b border-l border-line px-(--item-pad-x) py-1 font-normal on-recess first:border-l-0",
+          column.right ? "text-right" : "text-left",
+          column.width,
+          column.lock && "z-sticky",
+          column.headerClassName,
+        )}
+      >
+        {column.sort ? (
+          <Button
+            type="button"
+            onClick={(event) => onSort(event.shiftKey)}
+            label={`sort ${column.label}`}
+            reason="Sort by this column. Clicking again flips the direction; shift-click appends it as a tie-breaker behind the sorts already applied, numbered in the header."
+          >
+            <PressContent geometry="block">
+              <span className="t-small t-upper">{column.header ?? column.label}</span>
+              {direction && (
+                <span className="ml-1 text-ink">
+                  {direction === "asc" ? "↑" : "↓"}
+                  {sortCount > 1 && <span className="opacity-60">{rank + 1}</span>}
+                </span>
+              )}
+            </PressContent>
+          </Button>
+        ) : (
+          <span className="t-small t-upper block">{column.header ?? column.label}</span>
+        )}
+        {children}
+      </th>
+    </TooltipHint>
   );
 }
 

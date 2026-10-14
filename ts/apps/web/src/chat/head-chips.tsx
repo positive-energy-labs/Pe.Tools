@@ -12,6 +12,7 @@ import { ProviderMark } from "#/components/lang/provider-mark";
 import { useWorkbench } from "#/workbench/provider";
 import { isReady, readinessSub, repairWord } from "#/workbench/provider/providers";
 import type { GrantView } from "./scope";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** A two-way on/off select is a toggle, as a boolean is. */
 const isToggle = (trait: TraitOption) =>
@@ -226,8 +227,10 @@ export function GrantChip({ grant, onRevoke }: { grant: GrantView | null; onRevo
       </Button>
     );
   return (
-    <span className="face-mono" data-tone={tone} data-testid="grant-chip" title={title}>
-      {text}
-    </span>
+    <TooltipHint content={title}>
+      <span className="face-mono" data-tone={tone} data-testid="grant-chip">
+        {text}
+      </span>
+    </TooltipHint>
   );
 }

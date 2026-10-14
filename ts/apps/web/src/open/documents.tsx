@@ -18,6 +18,7 @@ import { TableFrame } from "#/components/master-table/table-frame";
 import { queryWords, quoted, readClause } from "@pe/kit/table/view";
 import { pidOf } from "#/machine/session";
 import { accessOf, type DocRow } from "#/open/model";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const folderOf = (path: string) => path.replace(/[\\/][^\\/]+$/, "");
 
@@ -79,9 +80,11 @@ export function documentColumns(layout: "row" | "stack"): Column<DocRow>[] {
         { value: "cloud", label: "cloud" },
       ],
       cell: (row) => (
-        <span className="block max-w-64 truncate face-mono text-ink-2" title={row.path}>
-          {row.cloud ? "cloud" : layout === "stack" ? "pc" : folderOf(row.path)}
-        </span>
+        <TooltipHint content={row.path}>
+          <span className="block max-w-64 truncate face-mono text-ink-2">
+            {row.cloud ? "cloud" : layout === "stack" ? "pc" : folderOf(row.path)}
+          </span>
+        </TooltipHint>
       ),
     },
     {
@@ -96,9 +99,11 @@ export function documentColumns(layout: "row" | "stack"): Column<DocRow>[] {
         row.savedYear ? (
           <span className="face-mono">{row.savedYear}</span>
         ) : row.savedYearFailure ? (
-          <span className="face-mono" data-tone="caution" title={row.savedYearFailure}>
-            unknown
-          </span>
+          <TooltipHint content={row.savedYearFailure}>
+            <span className="face-mono" data-tone="caution">
+              unknown
+            </span>
+          </TooltipHint>
         ) : (
           <span className="text-ink-mute">—</span>
         ),
@@ -141,9 +146,9 @@ export function documentColumns(layout: "row" | "stack"): Column<DocRow>[] {
                   {["pea", "rw"].includes(
                     accessOf(row.openIn.session, row.openIn.document)?.kind ?? "",
                   ) ? (
-                    <span data-tone="done" title="the host lets a caller write this document">
-                      rw
-                    </span>
+                    <TooltipHint content="the host lets a caller write this document">
+                      <span data-tone="done">rw</span>
+                    </TooltipHint>
                   ) : null}
                 </span>
               ) : (

@@ -23,7 +23,7 @@ function Input({
   surface,
   face,
   ...props
-}: Omit<React.ComponentProps<"input">, "className"> &
+}: Omit<React.ComponentProps<"input">, "className" | "title"> &
   import("../../lib/tv").VariantProps<typeof inputRecipe> & { face?: "mono" }) {
   return (
     <InputPrimitive

@@ -10,6 +10,7 @@ import { hhmm } from "./model";
 import { SEED_REFUSAL } from "./use-machine";
 import { settingsDestination } from "./navigation";
 import { DeviceSettings, useLocalDevice } from "./devices";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const NEEDS_TAILSCALE =
   "Sharing needs Tailscale. Install it from tailscale.com/download, then sign in.";
@@ -66,13 +67,12 @@ function ShareStatus({ machine }: { machine: Machine }) {
           <span className="text-ink-2">No one has called yet.</span>
         ))}
       {share.refused.length > 0 && (
-        <span
-          data-tone="caution"
-          title={share.refused.map((row) => `${row.from} ${row.code}`).join("\n")}
-        >
-          {share.refused.length} request{share.refused.length === 1 ? "" : "s"} refused, latest{" "}
-          {share.refused.at(-1)!.code} from {share.refused.at(-1)!.from}
-        </span>
+        <TooltipHint content={share.refused.map((row) => `${row.from} ${row.code}`).join("\n")}>
+          <span data-tone="caution">
+            {share.refused.length} request{share.refused.length === 1 ? "" : "s"} refused, latest{" "}
+            {share.refused.at(-1)!.code} from {share.refused.at(-1)!.from}
+          </span>
+        </TooltipHint>
       )}
     </div>
   );

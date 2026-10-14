@@ -55,6 +55,7 @@ import {
   MessageHead,
   ToolStatus,
 } from "#/components/lang/conversation";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 type RegisterMoment = (id: string, el: HTMLElement | null) => void;
 
@@ -373,9 +374,9 @@ function ToolRunFold({
           {calls.length} {calls.length === 1 ? "tool" : "tools"}
           {thoughts > 0 ? ` · ${thoughts} ${thoughts === 1 ? "thought" : "thoughts"}` : ""}
         </span>
-        <span className="dl-tool-run-latest" title={summary}>
-          {summary}
-        </span>
+        <TooltipHint content={summary}>
+          <span className="dl-tool-run-latest">{summary}</span>
+        </TooltipHint>
         {failed > 0 ? <span data-tone="alarm">{failed} failed</span> : null}
         {working ? <span className="sr-only">Running</span> : null}
       </summary>
@@ -508,57 +509,57 @@ function ToolCallPart({
       data-surface={!recordsOnly && open ? "artifact" : undefined}
     >
       {(recordsOnly ? approval : !approval) ? (
-        <div
-          {...annotation("tool-marker")}
-          data-kind="tool"
-          data-open={open ? "" : undefined}
-          role="button"
-          tabIndex={0}
-          // The friendly title names the act; the tool id leads the tip, as a log or a skill says it.
-          title={`${call.title} · ${open ? CLOSE_TIP : OPEN_TIP}`}
-          onClick={() => view.actions.setOpenCallKey(open ? null : key)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              view.actions.setOpenCallKey(open ? null : key);
-            }
-          }}
-          className={tone}
-        >
-          <span>⌗ {title}</span>
-          {detail?.emitted ? (
-            <code>{detail.text}</code>
-          ) : detail ? (
-            <span>{detail.text}</span>
-          ) : null}
-          {record ? <span>{record}</span> : null}
-          {revision !== undefined ? (
-            <span className="face-mono" data-testid="tool-revision">
-              r{revision}
-            </span>
-          ) : null}
-          {ranTarget && (ranTarget.session || ranTarget.document) ? (
-            <span data-testid="tool-target">
-              {[ranTarget.session, ranTarget.document].filter(Boolean).join(" · ")}
-            </span>
-          ) : null}
-
-          {record ? null : (
-            <ToolStatus
-              state={
-                failed
-                  ? "failed"
-                  : denied
-                    ? "denied"
-                    : approval
-                      ? "waiting"
-                      : running
-                        ? "working"
-                        : "done"
+        <TooltipHint content={`${call.title} · ${open ? CLOSE_TIP : OPEN_TIP}`}>
+          <div
+            {...annotation("tool-marker")}
+            data-kind="tool"
+            data-open={open ? "" : undefined}
+            role="button"
+            tabIndex={0}
+            onClick={() => view.actions.setOpenCallKey(open ? null : key)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                view.actions.setOpenCallKey(open ? null : key);
               }
-            />
-          )}
-        </div>
+            }}
+            className={tone}
+          >
+            <span>⌗ {title}</span>
+            {detail?.emitted ? (
+              <code>{detail.text}</code>
+            ) : detail ? (
+              <span>{detail.text}</span>
+            ) : null}
+            {record ? <span>{record}</span> : null}
+            {revision !== undefined ? (
+              <span className="face-mono" data-testid="tool-revision">
+                r{revision}
+              </span>
+            ) : null}
+            {ranTarget && (ranTarget.session || ranTarget.document) ? (
+              <span data-testid="tool-target">
+                {[ranTarget.session, ranTarget.document].filter(Boolean).join(" · ")}
+              </span>
+            ) : null}
+
+            {record ? null : (
+              <ToolStatus
+                state={
+                  failed
+                    ? "failed"
+                    : denied
+                      ? "denied"
+                      : approval
+                        ? "waiting"
+                        : running
+                          ? "working"
+                          : "done"
+                }
+              />
+            )}
+          </div>
+        </TooltipHint>
       ) : null}
       {/* A diagram call draws its own args once the host accepted them (agent ledger). */}
       {recordsOnly && diagram ? (

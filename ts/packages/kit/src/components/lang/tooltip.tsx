@@ -1,9 +1,38 @@
-import { createContext, useContext, useId, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useId,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { Tooltip as Primitive } from "@base-ui/react/tooltip";
 import { cn } from "../../lib/utils";
 import { floatingSurface, type FloatingPosition } from "./popover";
 
 const Description = createContext<{ id: string; open: boolean } | null>(null);
+
+/** A short hint composed onto its existing element, without adding layout or a native title. */
+export function TooltipHint({
+  content,
+  children,
+}: {
+  content: ReactNode;
+  children: ReactElement<{ id?: string; tabIndex?: number }>;
+}) {
+  if (content == null || content === "" || content === false) return children;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={children}
+        className=""
+        id={children.props.id}
+        tabIndex={children.props.tabIndex}
+      />
+      <TooltipContent>{content}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 export function Tooltip({
   open: controlled,

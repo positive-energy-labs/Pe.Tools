@@ -17,6 +17,7 @@ import { projectCaptionTheme, useSurfaceHost } from "./surface-host";
 import { startFeedback } from "#/components/feedback-picker";
 import "./app-bar.css";
 import { PageBindingChip } from "#/pages-bind/chip";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 type LaunchWindow = Window & {
   launchQueue?: { setConsumer: (consumer: (params: { targetURL?: string }) => void) => void };
@@ -264,28 +265,29 @@ export function AppBar() {
                 onClick={showSearch}
               >
                 <Search aria-hidden className="pe-appbar-route-search-icon" />
-                <Input
-                  ref={setSearchField}
-                  surface="embedded"
-                  role="combobox"
-                  aria-label="Open work, tools, Works and Pea threads"
-                  aria-autocomplete="list"
-                  aria-keyshortcuts="Control+Shift+K"
-                  title="Open work; type to find tools, Works and Pea threads · Ctrl+Shift+K"
-                  aria-expanded={open}
-                  placeholder={`${label}${currentWork ? ` / ${currentWork.label}` : ""}`}
-                  value={open ? query : ""}
-                  onKeyDown={(event) => {
-                    if (!open && (event.key === "ArrowDown" || event.key === "Enter")) {
-                      event.preventDefault();
-                      showSearch();
-                    }
-                  }}
-                  onChange={(event) => {
-                    setQuery(event.target.value);
-                    palette.show("global");
-                  }}
-                />
+                <TooltipHint content="Open work; type to find tools, Works and Pea threads · Ctrl+Shift+K">
+                  <Input
+                    ref={setSearchField}
+                    surface="embedded"
+                    role="combobox"
+                    aria-label="Open work, tools, Works and Pea threads"
+                    aria-autocomplete="list"
+                    aria-keyshortcuts="Control+Shift+K"
+                    aria-expanded={open}
+                    placeholder={`${label}${currentWork ? ` / ${currentWork.label}` : ""}`}
+                    value={open ? query : ""}
+                    onKeyDown={(event) => {
+                      if (!open && (event.key === "ArrowDown" || event.key === "Enter")) {
+                        event.preventDefault();
+                        showSearch();
+                      }
+                    }}
+                    onChange={(event) => {
+                      setQuery(event.target.value);
+                      palette.show("global");
+                    }}
+                  />
+                </TooltipHint>
                 <span className="pe-appbar-search-hint" aria-hidden>
                   <HotkeyHint hotkey="Mod+Shift+K" />
                 </span>

@@ -23,6 +23,7 @@ import {
   readClause,
   type QueryClause,
 } from "./view";
+import { TooltipHint } from "../lang/tooltip";
 
 /** The header's way into the box: opens a draft on one field. Absent outside a TableFrame. */
 export const ConditionTarget = createContext<((label: string) => void) | null>(null);
@@ -332,79 +333,83 @@ export function QueryBox({
             />
           ))
         : null}
-      <input
-        ref={(element) => {
-          setInput(element);
-          onInput(element);
-        }}
-        role="combobox"
-        aria-label="table query"
-        aria-autocomplete="list"
-        aria-invalid={
-          field?.kind === "number" &&
-          clause.kind === "field" &&
-          clause.value.trim() !== "" &&
-          parseConditionNumber(clause.value) == null
-            ? true
-            : undefined
-        }
-        autoComplete="off"
-        className="t-small face-mono h-(--item-h) min-w-40 flex-1 bg-transparent outline-none placeholder:text-ink-2"
-        value={draft}
-        placeholder={
-          armed ? command!.placeholder : (placeholder ?? "search any field, or type a field name")
-        }
-        title={
+      <TooltipHint
+        content={
           command
             ? "Words search every field; a field name starts a condition; ! negates. An arrow (→ or ->) ends the query and names what to do with the rows it keeps."
             : "Words search every field (4 finds the number 4, not 14). A field name starts a step-by-step condition or sort; ! negates."
         }
-        onChange={(event) => {
-          const value = event.target.value;
-          setOpen(true);
-          if (armed) return onDraft(value);
-          if (command && ARROW.test(value)) return arm(value);
-          const quoting = value.split('"').length % 2 === 0;
-          // "Room Na" is still naming a field across its space: it stays one draft.
-          if (quoting || !/\s/.test(value) || (!/[~=<>]/.test(value) && naming(value)))
-            return type(value);
-          const parts = queryWords(value);
-          const rest = /\s$/.test(value) ? "" : (parts.pop() ?? "");
-          setEditing(null);
-          type(rest, join(base, ...parts));
-        }}
-        onFocus={() => setOpen(true)}
-        onClick={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
-        // Enter on an empty word after the arrow runs the command. Taken in the capture phase: the
-        // open list owns this input's keys through a native listener that stops propagation, so a
-        // bubble-phase handler would never hear it while tokens are still offered.
-        onKeyDownCapture={(event) => {
-          if (event.key !== "Enter" || !runs) return;
-          event.preventDefault();
-          event.stopPropagation();
-          command!.onCommit();
-        }}
-        onKeyDown={(event) => {
-          // With the list closed, Escape still clears the word, then drops the command.
-          if (event.key === "Escape" && armed && !open)
-            return draft === "" ? command!.onArmed(false) : onDraft("");
-          if (event.key !== "Backspace" || draft !== "") return;
-          event.preventDefault();
-          // Backspace on an empty box takes the last chip back into the box, as text.
-          if (armed) {
-            const last = command!.chips.at(-1);
-            if (last) {
-              last.onRemove();
-              onDraft(last.label);
-            } else command!.onArmed(false);
-            return;
+      >
+        <input
+          ref={(element) => {
+            setInput(element);
+            onInput(element);
+          }}
+          role="combobox"
+          aria-label="table query"
+          aria-autocomplete="list"
+          aria-invalid={
+            field?.kind === "number" &&
+            clause.kind === "field" &&
+            clause.value.trim() !== "" &&
+            parseConditionNumber(clause.value) == null
+              ? true
+              : undefined
           }
-          const last = committed.at(-1);
-          if (last) type(last, committed.slice(0, -1).join(" "));
-          else if (state.sorts.length) onStateChange({ ...state, sorts: state.sorts.slice(0, -1) });
-        }}
-      />
+          autoComplete="off"
+          className="t-small face-mono h-(--item-h) min-w-40 flex-1 bg-transparent outline-none placeholder:text-ink-2"
+          value={draft}
+          placeholder={
+            armed ? command!.placeholder : (placeholder ?? "search any field, or type a field name")
+          }
+          onChange={(event) => {
+            const value = event.target.value;
+            setOpen(true);
+            if (armed) return onDraft(value);
+            if (command && ARROW.test(value)) return arm(value);
+            const quoting = value.split('"').length % 2 === 0;
+            // "Room Na" is still naming a field across its space: it stays one draft.
+            if (quoting || !/\s/.test(value) || (!/[~=<>]/.test(value) && naming(value)))
+              return type(value);
+            const parts = queryWords(value);
+            const rest = /\s$/.test(value) ? "" : (parts.pop() ?? "");
+            setEditing(null);
+            type(rest, join(base, ...parts));
+          }}
+          onFocus={() => setOpen(true)}
+          onClick={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
+          // Enter on an empty word after the arrow runs the command. Taken in the capture phase: the
+          // open list owns this input's keys through a native listener that stops propagation, so a
+          // bubble-phase handler would never hear it while tokens are still offered.
+          onKeyDownCapture={(event) => {
+            if (event.key !== "Enter" || !runs) return;
+            event.preventDefault();
+            event.stopPropagation();
+            command!.onCommit();
+          }}
+          onKeyDown={(event) => {
+            // With the list closed, Escape still clears the word, then drops the command.
+            if (event.key === "Escape" && armed && !open)
+              return draft === "" ? command!.onArmed(false) : onDraft("");
+            if (event.key !== "Backspace" || draft !== "") return;
+            event.preventDefault();
+            // Backspace on an empty box takes the last chip back into the box, as text.
+            if (armed) {
+              const last = command!.chips.at(-1);
+              if (last) {
+                last.onRemove();
+                onDraft(last.label);
+              } else command!.onArmed(false);
+              return;
+            }
+            const last = committed.at(-1);
+            if (last) type(last, committed.slice(0, -1).join(" "));
+            else if (state.sorts.length)
+              onStateChange({ ...state, sorts: state.sorts.slice(0, -1) });
+          }}
+        />
+      </TooltipHint>
       <ListPopup<Pick>
         anchor="caret"
         caret={input}

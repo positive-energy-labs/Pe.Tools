@@ -10,6 +10,7 @@ import type { Column } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
 import type { ColumnKind, Draft } from "#/routes/data-tables";
 import { rowKey } from "#/routes/data-tables";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 type Line = { row: Draft["rows"][number]; index: number };
 
@@ -67,16 +68,19 @@ export function DraftEditor({
   return (
     <div className="space-y-3">
       <div className="max-w-72">
-        <Input
-          value={draft.name}
-          onChange={(e) => patch((d) => ({ ...d, name: e.target.value }))}
-          placeholder="Table name"
-          title={
+        <TooltipHint
+          content={
             draft.isNew
               ? "The table's name — apply upserts by name"
               : "Renaming creates a NEW table on apply — upserts match by name"
           }
-        />
+        >
+          <Input
+            value={draft.name}
+            onChange={(e) => patch((d) => ({ ...d, name: e.target.value }))}
+            placeholder="Table name"
+          />
+        </TooltipHint>
       </div>
 
       <ArtifactFrame>
@@ -98,9 +102,11 @@ export function DraftEditor({
               right: true,
               width: "w-10",
               cell: ({ row, index }) => (
-                <span title={`row key: ${row.key} — the stable address apply upserts by`}>
-                  <Tag>{index + 1}</Tag>
-                </span>
+                <TooltipHint content={`row key: ${row.key} — the stable address apply upserts by`}>
+                  <span>
+                    <Tag>{index + 1}</Tag>
+                  </span>
+                </TooltipHint>
               ),
             },
             ...draft.columns.map(
@@ -110,18 +116,19 @@ export function DraftEditor({
                 width: "min-w-36",
                 header: (
                   <span className="flex items-center gap-1 normal-case">
-                    <Input
-                      value={column.heading}
-                      onChange={(e) =>
-                        patch((d) => ({
-                          ...d,
-                          columns: d.columns.map((c, i) =>
-                            i === columnIndex ? { ...c, heading: e.target.value } : c,
-                          ),
-                        }))
-                      }
-                      title="Column heading — written to the schedule on apply"
-                    />
+                    <TooltipHint content="Column heading — written to the schedule on apply">
+                      <Input
+                        value={column.heading}
+                        onChange={(e) =>
+                          patch((d) => ({
+                            ...d,
+                            columns: d.columns.map((c, i) =>
+                              i === columnIndex ? { ...c, heading: e.target.value } : c,
+                            ),
+                          }))
+                        }
+                      />
+                    </TooltipHint>
                     <ListPopup<(typeof COLUMN_KINDS)[number]>
                       anchor="trigger"
                       title="Column type: txt = Text, num = Number"

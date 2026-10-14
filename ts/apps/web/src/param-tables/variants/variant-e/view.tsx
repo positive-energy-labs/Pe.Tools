@@ -32,6 +32,7 @@ import {
 import { VariantGridLens } from "./grid-lens";
 import { VariantFomLens } from "./fom-lens";
 import { VariantBodLens } from "./bod-lens";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function VariantE() {
   const [lens, setLens] = useState<Lens>("grid");
@@ -284,27 +285,27 @@ export function VariantE() {
                     {refusals.length > 0 ? ` · ${refusals.length} will refuse` : ""}
                   </span>
                 ) : outcomes[0] ? (
-                  <span
-                    role="status"
-                    title={outcomes
+                  <TooltipHint
+                    content={outcomes
                       .slice(1)
                       .map((o) => `${o.label}${o.says ? ` — ${o.says}` : ""}`)
                       .join(" · ")}
-                    data-tone={outcomes[0].kind === "error" ? "caution" : undefined}
-                    style={outcomes[0].kind === "error" ? undefined : muted}
                   >
-                    {outcomes[0].label}
-                  </span>
+                    <span
+                      role="status"
+                      data-tone={outcomes[0].kind === "error" ? "caution" : undefined}
+                      style={outcomes[0].kind === "error" ? undefined : muted}
+                    >
+                      {outcomes[0].label}
+                    </span>
+                  </TooltipHint>
                 ) : (
                   <span style={muted}>no staged writes</span>
                 )}
                 {driftRows > 0 ? (
-                  <span
-                    data-tone="alarm"
-                    title="the model disagrees with a committed authored fact on these rows"
-                  >
-                    {driftRows} rows drift
-                  </span>
+                  <TooltipHint content="the model disagrees with a committed authored fact on these rows">
+                    <span data-tone="alarm">{driftRows} rows drift</span>
+                  </TooltipHint>
                 ) : null}
                 <span className="ml-auto" style={muted}>
                   lens: {lens}

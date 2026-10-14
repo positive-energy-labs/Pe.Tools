@@ -20,6 +20,7 @@ import {
 import type { FamilyWorkspaceCore } from "#/family/workspace-core";
 import { useFamilyIdentityColumns } from "#/family/workspace-identity-columns";
 import { useFamilyTypeColumn } from "#/family/workspace-type-column";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function useFamilyColumns(core: FamilyWorkspaceCore) {
   const {
@@ -167,11 +168,11 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
     return (
       <span className="flex h-(--item-h) items-center gap-1 px-(--item-pad-x)">
         <StateDot tone="caution" />
-        <span
-          title={`UNBOUND — ${literal} is frozen into the geometry of ${slug}. Nothing in the profile, no type, and no schedule can reach it.`}
+        <TooltipHint
+          content={`UNBOUND — ${literal} is frozen into the geometry of ${slug}. Nothing in the profile, no type, and no schedule can reach it.`}
         >
-          unbound
-        </span>
+          <span>unbound</span>
+        </TooltipHint>
         {bindPicker(slug, property, row.dataType, "ml-auto")}
       </span>
     );
@@ -224,13 +225,14 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
         cell: (row) => {
           const state = agreementOf(world, draft, row, typeName);
           return (
-            <span
-              className="px-(--item-pad-x)"
-              style={{ color: VERDICT_INK[AGREEMENT_TONE[state]] }}
-              title={MARK_TITLE[state]}
-            >
-              {MARK[state]}
-            </span>
+            <TooltipHint content={MARK_TITLE[state]}>
+              <span
+                className="px-(--item-pad-x)"
+                style={{ color: VERDICT_INK[AGREEMENT_TONE[state]] }}
+              >
+                {MARK[state]}
+              </span>
+            </TooltipHint>
           );
         },
       },

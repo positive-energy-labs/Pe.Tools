@@ -26,6 +26,7 @@ import { Section } from "#/components/lang/section";
 import { PageLog } from "./situation-grids";
 import type { RouteAction } from "./manifest";
 import type { RouteHandle } from "./handle";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /* ── Marks ─────────────────────────────────────────────────────────────────── */
 
@@ -60,12 +61,9 @@ function readingWord(reading: Reading<unknown>, now: number): string {
  */
 function Gap({ says }: { says: string }) {
   return (
-    <span
-      className="hairline-b seam-border text-ink-mute"
-      title={`the RouteHandle does not carry this — ${says}`}
-    >
-      not carried
-    </span>
+    <TooltipHint content={`the RouteHandle does not carry this — ${says}`}>
+      <span className="hairline-b seam-border text-ink-mute">not carried</span>
+    </TooltipHint>
   );
 }
 
@@ -265,13 +263,14 @@ function InspectorBody<W, R extends string, P, A extends string>({
             return (
               <Row key={key} name={key} raw={{ request, reading }}>
                 <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-                  <span
-                    className={reading.state === "failed" ? "face-mono" : "face-mono text-ink-2"}
-                    data-tone={reading.state === "failed" ? "alarm" : undefined}
-                    title={word}
-                  >
-                    {MARK[reading.state]}
-                  </span>
+                  <TooltipHint content={word}>
+                    <span
+                      className={reading.state === "failed" ? "face-mono" : "face-mono text-ink-2"}
+                      data-tone={reading.state === "failed" ? "alarm" : undefined}
+                    >
+                      {MARK[reading.state]}
+                    </span>
+                  </TooltipHint>
                   <span className={reading.state === "failed" ? undefined : "text-ink-2"}>
                     {word}
                   </span>

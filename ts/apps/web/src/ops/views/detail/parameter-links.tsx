@@ -11,6 +11,7 @@ import { KVGrid } from "#/ops/primitives";
 import { type OpViewProps, UnrecognizedShape, asRecord } from "#/ops/registry";
 import { issueLine } from "./schedules";
 import { linkValueText } from "./sheets";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function ParameterLinksView({ data }: OpViewProps) {
   const rec = asRecord(data);
@@ -29,9 +30,11 @@ export function ParameterLinksView({ data }: OpViewProps) {
       key: "target",
       label: "target",
       cell: (w) => (
-        <span title={w.targetElementUniqueId}>
-          {w.targetElementName ?? w.targetElementId} <span className="">{w.targetElementId}</span>
-        </span>
+        <TooltipHint content={w.targetElementUniqueId}>
+          <span>
+            {w.targetElementName ?? w.targetElementId} <span className="">{w.targetElementId}</span>
+          </span>
+        </TooltipHint>
       ),
     },
     { key: "parameter", label: "target parameter", cell: (w) => w.targetParameter.name },
@@ -142,12 +145,14 @@ function FamilyMatrix({ family }: { family: RevitMatrixLoadedFamilies.Res.Family
       key: "parameter",
       label: "parameter",
       cell: (p) => (
-        <span title={p.definition.identity.key}>
-          {p.definition.identity.name}{" "}
-          <span className="">
-            {p.definition.isInstance == null ? "" : p.definition.isInstance ? "inst" : "type"}
+        <TooltipHint content={p.definition.identity.key}>
+          <span>
+            {p.definition.identity.name}{" "}
+            <span className="">
+              {p.definition.isInstance == null ? "" : p.definition.isInstance ? "inst" : "type"}
+            </span>
           </span>
-        </span>
+        </TooltipHint>
       ),
     },
     ...typeNames.map((typeName) => ({
@@ -158,12 +163,9 @@ function FamilyMatrix({ family }: { family: RevitMatrixLoadedFamilies.Res.Family
         const value = p.valuesPerType[typeName];
         const hasFormula = p.formulaState === "Present";
         return (
-          <span
-            className={hasFormula ? "" : undefined}
-            title={hasFormula && p.formula ? `= ${p.formula}` : undefined}
-          >
-            {value ?? "∅"}
-          </span>
+          <TooltipHint content={hasFormula && p.formula ? `= ${p.formula}` : undefined}>
+            <span className={hasFormula ? "" : undefined}>{value ?? "∅"}</span>
+          </TooltipHint>
         );
       },
     })),

@@ -45,6 +45,7 @@ import { ComposerPending } from "./composer-pending";
 import { GrantChip, HeadLadder } from "./head-chips";
 import { emptyPrompt, type ChatDraft } from "#/workbench/prompt";
 import { usePublishSituationSignal } from "#/navigation/route-controls";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export type ChatHandle = RouteHandle<ChatState, ChatReading, ChatPage, ChatActionKey>;
 
@@ -179,9 +180,9 @@ function ThreadIdentity({ id }: { id: string }) {
   const { copy, copied } = useCopy();
   return (
     <span className="flex min-w-0 items-center gap-2" data-testid="thread-identity">
-      <span className="min-w-0 truncate face-mono" title={id}>
-        {id}
-      </span>
+      <TooltipHint content={id}>
+        <span className="min-w-0 truncate face-mono">{id}</span>
+      </TooltipHint>
       <Button
         label={copied ? "Copied thread ID" : "Copy thread ID"}
         icon={copied ? Check : Copy}

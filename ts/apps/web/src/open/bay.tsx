@@ -62,6 +62,7 @@ import {
 } from "./model";
 import { BAY_THREADS } from "./seeds";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** Thread activity labels only; thread heads do not grant browser-computed access. */
 export function useThreadSummaries(
@@ -413,9 +414,9 @@ export function PatchBay({
         tone: pea ? "pea" : undefined,
         dashed: pea,
         label: upgrade ? (
-          <span data-tone="caution" title={`opened in a newer Revit than it was saved in`}>
-            {upgrade}
-          </span>
+          <TooltipHint content={`opened in a newer Revit than it was saved in`}>
+            <span data-tone="caution">{upgrade}</span>
+          </TooltipHint>
         ) : undefined,
         title: pea
           ? `Pea's copy of ${row.title}`
@@ -654,9 +655,11 @@ function LaunchStrip({
               {caution.text}{" "}
             </span>
           ))}
-          <span className="block face-mono" data-argv title="what the host runs">
-            {plan.argv.join("  then  ")}
-          </span>
+          <TooltipHint content="what the host runs">
+            <span className="block face-mono" data-argv>
+              {plan.argv.join("  then  ")}
+            </span>
+          </TooltipHint>
         </>
       }
       state={{ phase: "arming" }}

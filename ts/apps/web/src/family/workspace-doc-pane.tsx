@@ -22,6 +22,7 @@ import { boundParam, type GeomConstituent } from "#/family/world";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 import { FamilyMetaControl } from "#/family/workspace-meta-control";
 import { Code, stringify } from "@pe/kit/lang/code";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function FamilyWorkspaceDocPane() {
   const {
@@ -61,12 +62,13 @@ export function FamilyWorkspaceDocPane() {
   const [attaching, setAttaching] = useState(false);
   const partInspector = (part: GeomConstituent): React.ReactNode => (
     <>
-      <p
-        className="t-small face-mono mb-1.5 text-ink-2"
-        title={`${part.slug} is a ${part.kind}. The kind is READ-ONLY here: a prism does not become a cylinder because a word changed, and the profile's job is to say what the geometry is, not to pretend it can be retyped.`}
+      <TooltipHint
+        content={`${part.slug} is a ${part.kind}. The kind is READ-ONLY here: a prism does not become a cylinder because a word changed, and the profile's job is to say what the geometry is, not to pretend it can be retyped.`}
       >
-        {part.kind} · {part.dims.length} bindable · {part.meta.length} non-bindable
-      </p>
+        <p className="t-small face-mono mb-1.5 text-ink-2">
+          {part.kind} · {part.dims.length} bindable · {part.meta.length} non-bindable
+        </p>
+      </TooltipHint>
 
       <div className="hairline-t mb-2 pt-1.5">
         <p className="t-small t-upper mb-0.5 flex items-center gap-1 text-ink-2">
@@ -82,9 +84,9 @@ export function FamilyWorkspaceDocPane() {
           const bound = boundParam(bindingOf(world, draft, part.slug, dim.property));
           return (
             <div key={dim.property} className="flex items-center gap-2 py-0.5">
-              <span className="t-small face-mono w-24 shrink-0 text-ink-2" title={dim.note}>
-                {dim.property}
-              </span>
+              <TooltipHint content={dim.note}>
+                <span className="t-small face-mono w-24 shrink-0 text-ink-2">{dim.property}</span>
+              </TooltipHint>
               {bound != null ? (
                 <Button
                   label={bound}
@@ -118,17 +120,16 @@ export function FamilyWorkspaceDocPane() {
       </div>
 
       <div className="hairline-t pt-1.5">
-        <p
-          className="t-small t-upper mb-0.5 text-ink-2"
-          title="The half of the constituent no parameter can drive. It has no column in the table because it does not vary by type and it is not a number — and this is the ONLY place it appears, which is exactly the claim: it lives somewhere else."
-        >
-          non-bindable metadata — lives only here
-        </p>
+        <TooltipHint content="The half of the constituent no parameter can drive. It has no column in the table because it does not vary by type and it is not a number — and this is the ONLY place it appears, which is exactly the claim: it lives somewhere else.">
+          <p className="t-small t-upper mb-0.5 text-ink-2">
+            non-bindable metadata — lives only here
+          </p>
+        </TooltipHint>
         {part.meta.map((meta) => (
           <div key={meta.key} className="flex items-baseline gap-2 py-0.5">
-            <span className="t-small face-mono w-24 shrink-0 text-ink-2" title={meta.note}>
-              {meta.label}
-            </span>
+            <TooltipHint content={meta.note}>
+              <span className="t-small face-mono w-24 shrink-0 text-ink-2">{meta.label}</span>
+            </TooltipHint>
             <span className="min-w-0 flex-1">
               <FamilyMetaControl slug={part.slug} meta={meta} />
             </span>
@@ -218,12 +219,11 @@ export function FamilyWorkspaceDocPane() {
         </div>
 
         <div className="hairline-t mb-2 pt-1.5">
-          <p
-            className="t-small t-upper mb-0.5 text-ink-2"
-            title="Every geometry property this parameter drives. These have no rows of their own — this parameter IS their row — so editing the value above moves all of them together. That fan-out is the thing worth knowing before you type."
-          >
-            drives {drives.length} geometry propert{drives.length === 1 ? "y" : "ies"}
-          </p>
+          <TooltipHint content="Every geometry property this parameter drives. These have no rows of their own — this parameter IS their row — so editing the value above moves all of them together. That fan-out is the thing worth knowing before you type.">
+            <p className="t-small t-upper mb-0.5 text-ink-2">
+              drives {drives.length} geometry propert{drives.length === 1 ? "y" : "ies"}
+            </p>
+          </TooltipHint>
           <List
             aria-label="drives"
             items={drives}
@@ -248,12 +248,9 @@ export function FamilyWorkspaceDocPane() {
         </div>
 
         <div className="hairline-t pt-1.5">
-          <p
-            className="t-small t-upper mb-0.5 text-ink-2"
-            title="Where this number came from. Grounding is its own fact, independent of any proposal — accepting or denying pea's reading never erases the citation."
-          >
-            grounding
-          </p>
+          <TooltipHint content="Where this number came from. Grounding is its own fact, independent of any proposal — accepting or denying pea's reading never erases the citation.">
+            <p className="t-small t-upper mb-0.5 text-ink-2">grounding</p>
+          </TooltipHint>
           {blocks.length === 0 ? (
             <EmptyState
               story="scope"
@@ -263,14 +260,15 @@ export function FamilyWorkspaceDocPane() {
             </EmptyState>
           ) : (
             blocks.map((id) => (
-              <p
+              <TooltipHint
+                content={`Block ${id} of ${world.spec?.fileName ?? "the spec"}, verbatim. If it does not say what the value says, the value is wrong.`}
                 key={id}
-                className="hairline-l t-small face-mono py-0.5 pl-1.5 text-ink-2"
-                title={`Block ${id} of ${world.spec?.fileName ?? "the spec"}, verbatim. If it does not say what the value says, the value is wrong.`}
               >
-                <span>{id} · </span>
-                {world.spec?.blocks.find((block) => block.id === id)?.md ?? "(block not found)"}
-              </p>
+                <p className="hairline-l t-small face-mono py-0.5 pl-1.5 text-ink-2">
+                  <span>{id} · </span>
+                  {world.spec?.blocks.find((block) => block.id === id)?.md ?? "(block not found)"}
+                </p>
+              </TooltipHint>
             ))
           )}
         </div>
@@ -391,15 +389,16 @@ export function FamilyWorkspaceDocPane() {
           className="hairline-b shrink-0 max-h-1/3 overflow-y-auto px-2 py-1.5"
           data-surface="artifact"
         >
-          <div
-            className="mb-1 flex items-baseline gap-2"
-            title="Pea's reading of the spec, aimed at named cells. Accepting moves the value into the table where you can see it land; the citation stays lit either way, because the grounding is a separate fact from the proposal."
-          >
-            <span className="t-small t-upper" data-tone="pea">
-              pea
-            </span>
-            <span className="t-small t-upper text-ink-2">proposals · ephemeral · page-scoped</span>
-          </div>
+          <TooltipHint content="Pea's reading of the spec, aimed at named cells. Accepting moves the value into the table where you can see it land; the citation stays lit either way, because the grounding is a separate fact from the proposal.">
+            <div className="mb-1 flex items-baseline gap-2">
+              <span className="t-small t-upper" data-tone="pea">
+                pea
+              </span>
+              <span className="t-small t-upper text-ink-2">
+                proposals · ephemeral · page-scoped
+              </span>
+            </div>
+          </TooltipHint>
           {world.proposals.length === 0 ? (
             <EmptyState story="scope" exit="ask pea to read the attached spec against the family">
               no proposals — pea has not read this spec against the profile

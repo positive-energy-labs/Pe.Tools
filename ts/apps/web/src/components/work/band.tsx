@@ -24,6 +24,7 @@ import {
 import { Button } from "@pe/kit/lang/button";
 import { Verdict } from "@pe/kit/lang/verdict";
 import { useScopeKeys } from "@pe/kit/keys";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 interface WorkStandingProps {
   conflict?: boolean;
@@ -383,9 +384,11 @@ export function UnstageAll({
       <span className="face-mono">{armed ? `${staged}? again` : staged}</span>
     </Button>
   ) : (
-    <Verdict kind="unstage" title={title} onClick={press}>
-      {armed ? `unstage ${staged} staged? press again` : `unstage all (${staged})`}
-    </Verdict>
+    <TooltipHint content={title}>
+      <Verdict kind="unstage" onClick={press}>
+        {armed ? `unstage ${staged} staged? press again` : `unstage all (${staged})`}
+      </Verdict>
+    </TooltipHint>
   );
 }
 
@@ -479,20 +482,16 @@ export function WorkSentence({
       <span className="ml-auto flex items-baseline gap-1">
         {proposed ? (
           <>
-            <Verdict
-              kind="accept"
-              title="Accept every open proposal in one write; cells you staged are skipped. Nothing reaches Revit until apply."
-              onClick={() => all("accept")}
-            >
-              accept all
-            </Verdict>
-            <Verdict
-              kind="deny"
-              title="Clear every open proposal in one write. Staged values stay."
-              onClick={() => all("deny")}
-            >
-              deny all
-            </Verdict>
+            <TooltipHint content="Accept every open proposal in one write; cells you staged are skipped. Nothing reaches Revit until apply.">
+              <Verdict kind="accept" onClick={() => all("accept")}>
+                accept all
+              </Verdict>
+            </TooltipHint>
+            <TooltipHint content="Clear every open proposal in one write. Staged values stay.">
+              <Verdict kind="deny" onClick={() => all("deny")}>
+                deny all
+              </Verdict>
+            </TooltipHint>
           </>
         ) : null}
         <UnstageAll wire={wire} cells={cells} keys={keys} done={setOutcome} />

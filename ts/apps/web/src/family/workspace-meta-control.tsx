@@ -2,17 +2,20 @@ import { Switcher } from "#/components/lang/switcher";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import type { GeomMeta } from "#/family/world";
 import { useFamilyWorkspace } from "#/family/workspace-context";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function FamilyMetaControl({ slug, meta }: { slug: string; meta: GeomMeta }) {
   const { draft, editMeta } = useFamilyWorkspace();
   const value = draft.geom[slug]?.meta[meta.key] ?? meta.value;
   if (meta.control === "read")
     return (
-      <span
-        title={`${meta.note} READ-ONLY — a box you could type in would be claiming an edit that nothing downstream would actually make.`}
+      <TooltipHint
+        content={`${meta.note} READ-ONLY — a box you could type in would be claiming an edit that nothing downstream would actually make.`}
       >
-        {value} <span>reported</span>
-      </span>
+        <span>
+          {value} <span>reported</span>
+        </span>
+      </TooltipHint>
     );
   if (meta.control === "toggle")
     return (

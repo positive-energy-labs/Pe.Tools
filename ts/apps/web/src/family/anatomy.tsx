@@ -46,6 +46,7 @@ import { List } from "@pe/kit/lang/list-popup";
 import { AnatomyViews } from "#/family/anatomy-fixture-views";
 import { ModelViews } from "#/family/anatomy-model-views";
 import { Code, stringify } from "@pe/kit/lang/code";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function AnatomyDrawing({
   world,
@@ -183,12 +184,11 @@ export function AnatomyDrawing({
                   ))}
                 </>
               ) : unbound > 0 ? (
-                <span
-                  data-tone="caution"
-                  title={`${unbound} of this constituent's dimensions are frozen literals no parameter drives. They are the ghost rows at the bottom of the table.`}
+                <TooltipHint
+                  content={`${unbound} of this constituent's dimensions are frozen literals no parameter drives. They are the ghost rows at the bottom of the table.`}
                 >
-                  {unbound}⚠
-                </span>
+                  <span data-tone="caution">{unbound}⚠</span>
+                </TooltipHint>
               ) : undefined,
               active: inspecting === part.slug,
               onMouseEnter: () => onFocus({ kind: "part", id: part.slug }),

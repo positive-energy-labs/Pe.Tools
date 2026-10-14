@@ -20,6 +20,7 @@ import { Verdict } from "@pe/kit/lang/verdict";
 import { ARMING_SPECIMEN } from "#/design-system/specimens-data";
 
 import { RecipeGrid, SpecimenFrame, type GridVariantProps } from "./recipe-grid";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const noop = () => {};
 
@@ -45,18 +46,30 @@ export function LangWorkflowSpecimens() {
       </SpecimenFrame>
       <SpecimenFrame name="Verdict" importPath="@pe/kit/lang/verdict">
         <div className="flex items-center gap-1">
-          <Verdict kind="accept" title="Stage Pea's proposal" onClick={noop} />
-          <Verdict kind="deny" title="Clear Pea's proposal" onClick={noop} />
-          <Verdict kind="unstage" title="Clear the staged value" onClick={noop} />
-          <Verdict kind="accept" title="Stage Pea's proposal on 3 cells" onClick={noop}>
-            3
-          </Verdict>
-          <Verdict kind="deny" title="Refuse this call" onClick={noop}>
-            deny
-          </Verdict>
-          <Verdict kind="accept" title="in flight" disabled onClick={noop}>
-            accept
-          </Verdict>
+          <TooltipHint content="Stage Pea's proposal">
+            <Verdict kind="accept" onClick={noop} />
+          </TooltipHint>
+          <TooltipHint content="Clear Pea's proposal">
+            <Verdict kind="deny" onClick={noop} />
+          </TooltipHint>
+          <TooltipHint content="Clear the staged value">
+            <Verdict kind="unstage" onClick={noop} />
+          </TooltipHint>
+          <TooltipHint content="Stage Pea's proposal on 3 cells">
+            <Verdict kind="accept" onClick={noop}>
+              3
+            </Verdict>
+          </TooltipHint>
+          <TooltipHint content="Refuse this call">
+            <Verdict kind="deny" onClick={noop}>
+              deny
+            </Verdict>
+          </TooltipHint>
+          <TooltipHint content="in flight">
+            <Verdict kind="accept" disabled onClick={noop}>
+              accept
+            </Verdict>
+          </TooltipHint>
         </div>
       </SpecimenFrame>
       <SpecimenFrame

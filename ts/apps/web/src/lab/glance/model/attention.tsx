@@ -8,6 +8,7 @@ import { UnrecognizedShape, asNumber, asRecord, asRecords, asString, text } from
 import type { SyntheticOp, SyntheticViewProps } from "#/lab/synthetic";
 import { MonoAside, composition, obs } from "./viz-cycle";
 import { ModelGlanceView } from "./summary";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
   const res = asRecord(results["revit.glance.attention"]);
@@ -50,9 +51,9 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
       ) : (
         <div className="min-w-0 px-3 py-2">
           <div className="flex min-w-0 flex-wrap items-baseline gap-2">
-            <span className="min-w-0 truncate" title={text(activeView.title)}>
-              {text(activeView.title)}
-            </span>
+            <TooltipHint content={text(activeView.title)}>
+              <span className="min-w-0 truncate">{text(activeView.title)}</span>
+            </TooltipHint>
             <VizChip viz={activeView.isSheet === true ? 2 : 1} title="view kind">
               {text(activeView.viewType)}
             </VizChip>
@@ -66,16 +67,19 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
             )}
             <MonoAside>1:{text(activeView.scale)}</MonoAside>
             {sheetPlacements.map((p, i) => (
-              <span
+              <TooltipHint
+                content={p.isActiveSheet === true ? "this is the active sheet" : undefined}
                 key={i}
-                className=""
-                style={{
-                  color: p.isActiveSheet === true ? token("ink") : token("ink-2"),
-                }}
-                title={p.isActiveSheet === true ? "this is the active sheet" : undefined}
               >
-                sheet {text(p.sheetNumber)} · {text(p.sheetName)}
-              </span>
+                <span
+                  className=""
+                  style={{
+                    color: p.isActiveSheet === true ? token("ink") : token("ink-2"),
+                  }}
+                >
+                  sheet {text(p.sheetNumber)} · {text(p.sheetName)}
+                </span>
+              </TooltipHint>
             ))}
           </div>
           {viewState && (

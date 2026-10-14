@@ -18,6 +18,7 @@ import { hostFetch } from "#/host/runtime";
 import { blockersOf, disconnected, hhmm, legWords, machineOf } from "./model";
 import { updateStatus } from "./update-state";
 import { SEED_REFUSAL, useUpdateConsent } from "./use-machine";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const mb = (bytes: number) => `${Math.round(bytes / 1_048_576)} MB`;
 
@@ -235,12 +236,11 @@ export function UpdateGroup({
           from <span className="face-mono">{plan.current}</span>
           {plan.msi ? ` · ${mb(plan.msi.size)}` : ""}
         </span>
-        <span
-          className="ml-auto face-mono text-ink-2"
-          title={`consent binds to ${plan.planId}; a changed Revit re-plans and asks again`}
+        <TooltipHint
+          content={`consent binds to ${plan.planId}; a changed Revit re-plans and asks again`}
         >
-          {plan.planId.slice(-9)}
-        </span>
+          <span className="ml-auto face-mono text-ink-2">{plan.planId.slice(-9)}</span>
+        </TooltipHint>
       </span>
       {blockers.map(({ blocker, revit }) => (
         <div

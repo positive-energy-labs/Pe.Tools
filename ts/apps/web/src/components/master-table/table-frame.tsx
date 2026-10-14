@@ -16,6 +16,7 @@ import type { Column, QueryCommand, QueryVocabulary, TableState } from "@pe/kit/
 import { ConditionTarget, QueryBox } from "@pe/kit/table/query";
 import { selectableKeys, type TableSelection } from "@pe/kit/table/table";
 import { conditionValues, quoted, visibleRows } from "@pe/kit/table/view";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export interface TableFrameProps<Row extends RowData> {
   /** What is in scope, said as the strip's lead. */
@@ -109,12 +110,9 @@ export function TableFrame<Row extends RowData>({
       className="flex min-h-0 flex-1 flex-col"
       head={
         <>
-          <span
-            className="t-small t-upper"
-            title="Everything currently in scope. This table is never hidden and never narrowed silently — every filter acting on it is a chip in its query box."
-          >
-            {label}
-          </span>
+          <TooltipHint content="Everything currently in scope. This table is never hidden and never narrowed silently — every filter acting on it is a chip in its query box.">
+            <span className="t-small t-upper">{label}</span>
+          </TooltipHint>
           {summary && <span className="face-mono t-small text-ink-2">{summary}</span>}
           {!query && boxed && (
             <span className="face-mono t-small text-ink-2">

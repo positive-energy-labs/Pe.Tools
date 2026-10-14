@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import { tv } from "@pe/kit/lib/tv";
 
 import "@pe/kit/lang/lang.css";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export const switcherRecipe = tv({
   slots: {
@@ -47,18 +48,18 @@ export function Switcher<T extends string>({
           state: option.disabled ? "disabled" : value === option.value ? "active" : "rest",
         });
         return (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onChange(option.value)}
-            disabled={option.disabled}
-            title={option.title}
-            aria-pressed={value === option.value}
-            className={optionSlot()}
-            data-on={value === option.value ? "" : undefined}
-          >
-            {option.label}
-          </button>
+          <TooltipHint content={option.title} key={option.value}>
+            <button
+              type="button"
+              onClick={() => onChange(option.value)}
+              disabled={option.disabled}
+              aria-pressed={value === option.value}
+              className={optionSlot()}
+              data-on={value === option.value ? "" : undefined}
+            >
+              {option.label}
+            </button>
+          </TooltipHint>
         );
       })}
     </span>

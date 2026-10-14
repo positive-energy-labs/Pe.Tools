@@ -17,7 +17,7 @@ export function Verdict({
   children,
   type,
   ...props
-}: { kind: VerdictKind } & Omit<ComponentProps<"button">, "className">) {
+}: { kind: VerdictKind } & Omit<ComponentProps<"button">, "className" | "title">) {
   const Icon = ICON[kind];
   return (
     <button

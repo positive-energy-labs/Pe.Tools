@@ -9,6 +9,7 @@ import { tv, type VariantProps } from "@pe/kit/lib/tv";
 
 import { Rail } from "@pe/kit/lang/rail";
 import "@pe/kit/lang/pane.css";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 // A pane is a header, a scrolling body and an error boundary; it is also a key scope, so a child's
 // `useScopeKeys` binds while focus is inside it. No `title` and no `tabs` draws no header.
@@ -118,12 +119,9 @@ export function Pane({
         </h2>
       )}
       {tabs == null && meta != null && (
-        <span
-          title={typeof meta === "string" ? meta : undefined}
-          className="face-mono t-small min-w-0 truncate text-ink-mute"
-        >
-          {meta}
-        </span>
+        <TooltipHint content={typeof meta === "string" ? meta : undefined}>
+          <span className="face-mono t-small min-w-0 truncate text-ink-mute">{meta}</span>
+        </TooltipHint>
       )}
       {help != null && (
         <span className="shrink-0 self-center">

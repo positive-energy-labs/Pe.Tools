@@ -15,6 +15,7 @@ import {
   type PRow,
 } from "#/family/model";
 import type { FamilyWorkspaceCore } from "#/family/workspace-core";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
   const {
@@ -59,17 +60,20 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
         )
         .join(" · ");
       return (
-        <span
-          className="flex h-(--item-h) items-center justify-center t-small face-mono"
-          data-tone="pea"
-          title={
+        <TooltipHint
+          content={
             standing.length === 1
               ? `One proposal standing on ${row.name} — ${where}. Click the cell that wears the fold to bring its card into the doc sidebar, where accept and deny sit beside the spec text.`
               : `${standing.length} proposals standing on ${row.name}, at different types — ${where}. The row is contested more than once; the folds in the cells say WHICH cells, and clicking one brings its card into view.`
           }
         >
-          {standing.length > 1 ? standing.length : "●"}
-        </span>
+          <span
+            className="flex h-(--item-h) items-center justify-center t-small face-mono"
+            data-tone="pea"
+          >
+            {standing.length > 1 ? standing.length : "●"}
+          </span>
+        </TooltipHint>
       );
     },
   });
@@ -179,54 +183,56 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
               : undefined
           }
         >
-          <span className="min-w-0 flex-1 px-(--item-pad-x)" title={reason}>
-            <span>
-              {row.kind === "live-only" ? (
-                <span>{row.name}</span>
-              ) : (
-                <Button
-                  label={row.name}
-                  kind="nav"
-                  direction="forward"
-                  onClick={() => setInspect({ kind: "param", name: row.name })}
-                  reason={`Open ${row.name} in the inspector below the spec — where its FAMILY-LEVEL value is edited, along with its formula, its consumers, and its citation. The type columns on this row only ever hold overrides; the value they inherit lives there.`}
-                >
-                  {row.name}
-                </Button>
-              )}
-              {row.isInstance && <span className="ml-1">inst</span>}
-              {properties.filter((entry) => entry.property !== "formula").map(propertyCell)}
-              {world.missingInRevit.has(row.name) && <span className="ml-1">⊘</span>}
-              {blocks.length > 0 && <span className="ml-1">{blocks.join(" ")}</span>}
-            </span>
-            {/* The family level, on ONE line: the formula, and what the parameter DRIVES. A bound
+          <TooltipHint content={reason}>
+            <span className="min-w-0 flex-1 px-(--item-pad-x)">
+              <span>
+                {row.kind === "live-only" ? (
+                  <span>{row.name}</span>
+                ) : (
+                  <Button
+                    label={row.name}
+                    kind="nav"
+                    direction="forward"
+                    onClick={() => setInspect({ kind: "param", name: row.name })}
+                    reason={`Open ${row.name} in the inspector below the spec — where its FAMILY-LEVEL value is edited, along with its formula, its consumers, and its citation. The type columns on this row only ever hold overrides; the value they inherit lives there.`}
+                  >
+                    {row.name}
+                  </Button>
+                )}
+                {row.isInstance && <span className="ml-1">inst</span>}
+                {properties.filter((entry) => entry.property !== "formula").map(propertyCell)}
+                {world.missingInRevit.has(row.name) && <span className="ml-1">⊘</span>}
+                {blocks.length > 0 && <span className="ml-1">{blocks.join(" ")}</span>}
+              </span>
+              {/* The family level, on ONE line: the formula, and what the parameter DRIVES. A bound
                 geometry dim has no row of its own — it is represented by this parameter — so this
                 mark is the only place the representation is visible. Several consumers join here,
                 and that join is the point: editing this row moves all of them at once.
 
                 DERIVED SPENDS NO COLOUR: the language has no role for "a formula
                 computed this", and the leading `=` already says it. Italic carries the rest. */}
-            {(isFormula(authored) || drives.length > 0 || formulaProposals.length > 0) && (
-              <span>
-                {isFormula(authored) && <span>{authored}</span>}
-                {formulaProposals.map(propertyCell)}
-                {isFormula(authored) && drives.length > 0 && <span> · </span>}
-                {drives.length > 0 && <span>→ </span>}
-                {drives.map((entry, index) => (
-                  <Button
-                    key={`${entry.slug}.${entry.property}`}
-                    label={`${entry.slug}.${entry.property}`}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => setInspect({ kind: "part", slug: entry.slug })}
-                    reason={`${row.name} drives ${entry.slug}.${entry.property}. Click to open ${entry.slug} in the inspector — its non-bindable metadata (direction, system type, where its frame sits) lives there, because no parameter can drive those.`}
-                  >
-                    {index > 0 && <span>, </span>}
-                    {entry.slug}.{entry.property}
-                  </Button>
-                ))}
-              </span>
-            )}
-          </span>
+              {(isFormula(authored) || drives.length > 0 || formulaProposals.length > 0) && (
+                <span>
+                  {isFormula(authored) && <span>{authored}</span>}
+                  {formulaProposals.map(propertyCell)}
+                  {isFormula(authored) && drives.length > 0 && <span> · </span>}
+                  {drives.length > 0 && <span>→ </span>}
+                  {drives.map((entry, index) => (
+                    <Button
+                      key={`${entry.slug}.${entry.property}`}
+                      label={`${entry.slug}.${entry.property}`}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => setInspect({ kind: "part", slug: entry.slug })}
+                      reason={`${row.name} drives ${entry.slug}.${entry.property}. Click to open ${entry.slug} in the inspector — its non-bindable metadata (direction, system type, where its frame sits) lives there, because no parameter can drive those.`}
+                    >
+                      {index > 0 && <span>, </span>}
+                      {entry.slug}.{entry.property}
+                    </Button>
+                  ))}
+                </span>
+              )}
+            </span>
+          </TooltipHint>
           {row.proposed && family[0] ? (
             // The reading has no such parameter: Pea's declaration of it is a cell of its own,
             // with the same accept and deny every other proposal has.

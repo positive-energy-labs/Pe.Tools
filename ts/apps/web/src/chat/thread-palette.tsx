@@ -68,6 +68,7 @@ import {
   type TargetRead,
   type ThreadAction,
 } from "./thread-navigation";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** What the roster holds: stored summaries, read against the live inventory by the shell. */
 type RosterThread = StoredThreadSummary & TargetRead;
@@ -534,17 +535,17 @@ const SETTLED_MORE = 25;
 
 function ThreadTime({ thread, now }: { thread: RosterThread; now: number }) {
   return (
-    <time dateTime={thread.updatedAt} title={new Date(thread.updatedAt).toLocaleString()}>
-      {relativeThreadAge(thread.updatedAt, now)}
-    </time>
+    <TooltipHint content={new Date(thread.updatedAt).toLocaleString()}>
+      <time dateTime={thread.updatedAt}>{relativeThreadAge(thread.updatedAt, now)}</time>
+    </TooltipHint>
   );
 }
 
 function CompactThreadTarget({ thread }: { thread: RosterThread }) {
   return thread.head.defaultTarget ? (
-    <span className="pe-thread-target" title={exactTarget(thread.head.defaultTarget)}>
-      {targetLabel(thread)}
-    </span>
+    <TooltipHint content={exactTarget(thread.head.defaultTarget)}>
+      <span className="pe-thread-target">{targetLabel(thread)}</span>
+    </TooltipHint>
   ) : null;
 }
 
@@ -552,9 +553,11 @@ function CompactThreadTrail({ thread, now }: { thread: RosterThread; now: number
   return (
     <span className="pe-thread-trail">
       <ThreadTime thread={thread} now={now} />
-      <span title={[thread.providerName, thread.modelId].filter(Boolean).join(" · ")}>
-        <ProviderMark harness={thread.harness} />
-      </span>
+      <TooltipHint content={[thread.providerName, thread.modelId].filter(Boolean).join(" · ")}>
+        <span>
+          <ProviderMark harness={thread.harness} />
+        </span>
+      </TooltipHint>
     </span>
   );
 }
@@ -813,9 +816,9 @@ export function ThreadsSidebar({
                     compactRows ? (
                       <CompactThreadTarget thread={thread} />
                     ) : thread.head.defaultTarget ? (
-                      <span title={exactTarget(thread.head.defaultTarget)}>
-                        {targetLabel(thread)}
-                      </span>
+                      <TooltipHint content={exactTarget(thread.head.defaultTarget)}>
+                        <span>{targetLabel(thread)}</span>
+                      </TooltipHint>
                     ) : undefined
                   }
                   time={

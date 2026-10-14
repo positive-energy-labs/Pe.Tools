@@ -52,6 +52,7 @@ import {
   type CellTransitionKind,
   type StateCellProps,
 } from "./cell-state";
+import { TooltipHint } from "./tooltip";
 
 export {
   CELL_STATE_ORDER,
@@ -278,109 +279,116 @@ export function StateCell(props: StateCellProps) {
       send(props.onCommit?.(out));
     };
     return (
-      <span
-        ref={rootRef}
-        tabIndex={ownHost ? 0 : undefined}
-        className={slots.base()}
-        data-scale="row"
-        data-focus={focusHost != null ? "" : undefined}
-        aria-busy={pending || undefined}
-        onClick={locate}
-        data-body={read.body ?? undefined}
-        data-seam={read.seam ? "" : undefined}
-        data-contest={read.contested ? "" : undefined}
-        data-never={read.never ? "" : undefined}
-        data-unsaved={read.unsaved === "pea" ? "pea" : read.unsaved === "you" ? "" : undefined}
-        data-locate={props.onLocate != null ? "" : undefined}
-        title={cellFactsText(props) ?? undefined}
-      >
-        {editable ? (
-          <input
-            key={value as string}
-            defaultValue={value as string}
-            placeholder={emptied ? EMPTY_MARK : props.placeholder}
-            data-empty={emptied ? "" : undefined}
-            inputMode={props.numeric != null ? "decimal" : undefined}
-            tabIndex={-1}
-            className={
-              read.unsettled != null ? slots.unsettled({ className: slots.input() }) : slots.input()
-            }
-            data-state={read.unsettled ?? undefined}
-            onChange={() => {
-              editVersion.current++;
-              submitted.current = null;
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                commit(e.currentTarget);
-                // No row that way: stay on this cell (its host), never drop focus to the page.
-                if (!props.onNavigate?.(e.shiftKey ? "up" : "down")) {
+      <TooltipHint content={cellFactsText(props) ?? undefined}>
+        <span
+          ref={rootRef}
+          tabIndex={ownHost ? 0 : undefined}
+          className={slots.base()}
+          data-scale="row"
+          data-focus={focusHost != null ? "" : undefined}
+          aria-busy={pending || undefined}
+          onClick={locate}
+          data-body={read.body ?? undefined}
+          data-seam={read.seam ? "" : undefined}
+          data-contest={read.contested ? "" : undefined}
+          data-never={read.never ? "" : undefined}
+          data-unsaved={read.unsaved === "pea" ? "pea" : read.unsaved === "you" ? "" : undefined}
+          data-locate={props.onLocate != null ? "" : undefined}
+        >
+          {editable ? (
+            <input
+              key={value as string}
+              defaultValue={value as string}
+              placeholder={emptied ? EMPTY_MARK : props.placeholder}
+              data-empty={emptied ? "" : undefined}
+              inputMode={props.numeric != null ? "decimal" : undefined}
+              tabIndex={-1}
+              className={
+                read.unsettled != null
+                  ? slots.unsettled({ className: slots.input() })
+                  : slots.input()
+              }
+              data-state={read.unsettled ?? undefined}
+              onChange={() => {
+                editVersion.current++;
+                submitted.current = null;
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commit(e.currentTarget);
+                  // No row that way: stay on this cell (its host), never drop focus to the page.
+                  if (!props.onNavigate?.(e.shiftKey ? "up" : "down")) {
+                    const host = keyHost();
+                    if (host) host.focus();
+                    else e.currentTarget.blur();
+                  }
+                } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                  e.preventDefault();
+                  commit(e.currentTarget);
+                  props.onNavigate?.(e.key === "ArrowUp" ? "up" : "down");
+                } else if (e.key === "Tab") {
+                  commit(e.currentTarget);
+                  if (props.onNavigate?.(e.shiftKey ? "left" : "right")) e.preventDefault();
+                } else if (e.key === "Escape") {
+                  editVersion.current++;
+                  submitted.current = null;
+                  e.currentTarget.value = initial.current;
+                  // spreadsheet convention: Escape hands focus back to the cell, where a/d/u live
                   const host = keyHost();
                   if (host) host.focus();
                   else e.currentTarget.blur();
                 }
-              } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-                e.preventDefault();
-                commit(e.currentTarget);
-                props.onNavigate?.(e.key === "ArrowUp" ? "up" : "down");
-              } else if (e.key === "Tab") {
-                commit(e.currentTarget);
-                if (props.onNavigate?.(e.shiftKey ? "left" : "right")) e.preventDefault();
-              } else if (e.key === "Escape") {
-                editVersion.current++;
-                submitted.current = null;
-                e.currentTarget.value = initial.current;
-                // spreadsheet convention: Escape hands focus back to the cell, where a/d/u live
-                const host = keyHost();
-                if (host) host.focus();
-                else e.currentTarget.blur();
-              }
-            }}
-            onBlur={(e) => commit(e.currentTarget)}
-          />
-        ) : read.unsettled != null ? (
-          <span className={slots.unsettled()} data-state={read.unsettled}>
-            {shown}
-          </span>
-        ) : (
-          shown
-        )}
-        {/* A contest on the row's one line: a title alone hides it from keyboard, touch and no-hover readers. */}
-        {read.contested ? (
-          <span className={slots.counter()}>pea proposes {props.counterValue}</span>
-        ) : null}
-        {hasTransitions ? (
-          <span className={slots.acts()}>
-            {transitions.map((t) => (
-              <Verdict
-                key={t.kind}
-                kind={t.kind}
-                title={`${t.reason ?? TRANSITION[t.kind].says} (${TRANSITION[t.kind].key})`}
-                disabled={pending}
-                tabIndex={-1}
-                // the verb must never take the caret from the input it overlays
+              }}
+              onBlur={(e) => commit(e.currentTarget)}
+            />
+          ) : read.unsettled != null ? (
+            <span className={slots.unsettled()} data-state={read.unsettled}>
+              {shown}
+            </span>
+          ) : (
+            shown
+          )}
+          {/* A contest on the row's one line: a title alone hides it from keyboard, touch and no-hover readers. */}
+          {read.contested ? (
+            <span className={slots.counter()}>pea proposes {props.counterValue}</span>
+          ) : null}
+          {hasTransitions ? (
+            <span className={slots.acts()}>
+              {transitions.map((t) => (
+                <TooltipHint
+                  content={`${t.reason ?? TRANSITION[t.kind].says} (${TRANSITION[t.kind].key})`}
+                  key={t.kind}
+                >
+                  <Verdict
+                    kind={t.kind}
+                    disabled={pending}
+                    tabIndex={-1}
+                    // the verb must never take the caret from the input it overlays
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => fire(t)}
+                  />
+                </TooltipHint>
+              ))}
+            </span>
+          ) : null}
+          {keys}
+          {refusalNote != null ? (
+            <TooltipHint content={`${refusalNote.message} — click to dismiss`}>
+              <button
+                type="button"
+                className={slots.refusal()}
+                // "do not steal the caret": the note must never take focus from the input under it.
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => fire(t)}
-              />
-            ))}
-          </span>
-        ) : null}
-        {keys}
-        {refusalNote != null ? (
-          <button
-            type="button"
-            className={slots.refusal()}
-            title={`${refusalNote.message} — click to dismiss`}
-            // "do not steal the caret": the note must never take focus from the input under it.
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setRefusal(null)}
-          >
-            {refusalNote.message}
-          </button>
-        ) : null}
-        {refusalNote?.detail ? <RefusalDetail detail={refusalNote.detail} /> : null}
-      </span>
+                onClick={() => setRefusal(null)}
+              >
+                {refusalNote.message}
+              </button>
+            </TooltipHint>
+          ) : null}
+          {refusalNote?.detail ? <RefusalDetail detail={refusalNote.detail} /> : null}
+        </span>
+      </TooltipHint>
     );
   }
 
@@ -406,81 +414,75 @@ export function StateCell(props: StateCellProps) {
   // scale's hover (`title` on the wrapper, `cellFactsText`, one ranking for both).
   const hoverFoot = props.foot === "hover";
   return (
-    <span
-      ref={rootRef}
-      tabIndex={ownHost ? 0 : undefined}
-      className={slots.wrapper()}
-      aria-busy={pending || undefined}
-      onClick={locate}
-      title={hoverFoot ? (cellFactsText(props) ?? undefined) : undefined}
-    >
-      <span className={slots.line()}>
-        {reviewed ? (
-          <span className="shrink-0 whitespace-nowrap text-ink-2">
-            you reviewed <span className="face-mono text-ink">{props.reviewed ?? "—"}</span> · Revit
-            now{" "}
-            <span className={slots.ghost()} title="the value the model currently holds">
-              {modelValue}
-            </span>{" "}
-            · yours{" "}
-          </span>
-        ) : null}
-        <span
-          className={slots.base()}
-          data-body={read.body ?? undefined}
-          data-seam={read.seam ? "" : undefined}
-          data-contest={read.contested ? "" : undefined}
-          data-never={read.never ? "" : undefined}
-          data-unsaved={read.unsaved === "pea" ? "pea" : read.unsaved === "you" ? "" : undefined}
-          data-locate={props.onLocate != null ? "" : undefined}
-        >
-          {read.unsettled != null ? (
-            <span className={slots.unsettled()} data-state={read.unsettled}>
-              {shown}
+    <TooltipHint content={hoverFoot ? (cellFactsText(props) ?? undefined) : undefined}>
+      <span
+        ref={rootRef}
+        tabIndex={ownHost ? 0 : undefined}
+        className={slots.wrapper()}
+        aria-busy={pending || undefined}
+        onClick={locate}
+      >
+        <span className={slots.line()}>
+          {reviewed ? (
+            <span className="shrink-0 whitespace-nowrap text-ink-2">
+              you reviewed <span className="face-mono text-ink">{props.reviewed ?? "—"}</span> ·
+              Revit now{" "}
+              <TooltipHint content="the value the model currently holds">
+                <span className={slots.ghost()}>{modelValue}</span>
+              </TooltipHint>{" "}
+              · yours{" "}
             </span>
-          ) : (
-            shown
-          )}
-        </span>
-        {!reviewed && read.unsettled === "drift" && modelValue != null ? (
-          <span className={slots.ghost()} title="the value the model currently holds">
-            {modelValue}
+          ) : null}
+          <span
+            className={slots.base()}
+            data-body={read.body ?? undefined}
+            data-seam={read.seam ? "" : undefined}
+            data-contest={read.contested ? "" : undefined}
+            data-never={read.never ? "" : undefined}
+            data-unsaved={read.unsaved === "pea" ? "pea" : read.unsaved === "you" ? "" : undefined}
+            data-locate={props.onLocate != null ? "" : undefined}
+          >
+            {read.unsettled != null ? (
+              <span className={slots.unsettled()} data-state={read.unsettled}>
+                {shown}
+              </span>
+            ) : (
+              shown
+            )}
           </span>
-        ) : null}
-        {transitions.map((t) => (
-          <Verdict
-            key={t.kind}
-            kind={t.kind}
-            title={t.reason ?? TRANSITION[t.kind].says}
-            disabled={pending}
-            onClick={() => fire(t)}
-          >
-            {t.kind}
-          </Verdict>
-        ))}
-        {refusalNote != null ? (
-          <button
-            type="button"
-            className={slots.refusal()}
-            title={`${refusalNote.message} — click to dismiss`}
-            onClick={() => setRefusal(null)}
-          >
-            {refusalNote.message}
-          </button>
-        ) : null}
-        {refusalNote?.detail ? <RefusalDetail detail={refusalNote.detail} /> : null}
-      </span>
-      {keys}
-      {facts.length > 0 && !hoverFoot ? (
-        <span className={slots.foot()}>
-          {facts.map((f, i) => (
-            <span key={i}>
-              {i > 0 ? " · " : null}
-              {f}
-            </span>
+          {!reviewed && read.unsettled === "drift" && modelValue != null ? (
+            <TooltipHint content="the value the model currently holds">
+              <span className={slots.ghost()}>{modelValue}</span>
+            </TooltipHint>
+          ) : null}
+          {transitions.map((t) => (
+            <TooltipHint content={t.reason ?? TRANSITION[t.kind].says} key={t.kind}>
+              <Verdict kind={t.kind} disabled={pending} onClick={() => fire(t)}>
+                {t.kind}
+              </Verdict>
+            </TooltipHint>
           ))}
+          {refusalNote != null ? (
+            <TooltipHint content={`${refusalNote.message} — click to dismiss`}>
+              <button type="button" className={slots.refusal()} onClick={() => setRefusal(null)}>
+                {refusalNote.message}
+              </button>
+            </TooltipHint>
+          ) : null}
+          {refusalNote?.detail ? <RefusalDetail detail={refusalNote.detail} /> : null}
         </span>
-      ) : null}
-    </span>
+        {keys}
+        {facts.length > 0 && !hoverFoot ? (
+          <span className={slots.foot()}>
+            {facts.map((f, i) => (
+              <span key={i}>
+                {i > 0 ? " · " : null}
+                {f}
+              </span>
+            ))}
+          </span>
+        ) : null}
+      </span>
+    </TooltipHint>
   );
 }

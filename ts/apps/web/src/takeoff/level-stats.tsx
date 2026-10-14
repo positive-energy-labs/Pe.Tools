@@ -4,6 +4,7 @@ import { Button } from "@pe/kit/lang/button";
 import { fmtNum } from "@pe/kit/table/model";
 import { ROOM_STATES, STATE_META, stateInk, type RoomState } from "#/takeoff/room-state";
 import type { ModelRoom, ModelZone } from "#/takeoff/world";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function LevelStats({
   level,
@@ -62,24 +63,27 @@ export function LevelStats({
           <div className="flex h-1.5 w-full items-stretch gap-px overflow-hidden">
             {ROOM_STATES.map((s) =>
               area[s] > 0 ? (
-                <span
-                  key={s}
-                  title={`${STATE_META[s].label} — ${fmtNum(area[s], 0)} sf`}
-                  style={{
-                    width: `${(area[s] / Math.max(totalArea, 1)) * 100}%`,
-                    backgroundColor: stateInk(s),
-                    opacity: s === "unreviewed" ? 0.35 : 0.9,
-                  }}
-                />
+                <TooltipHint content={`${STATE_META[s].label} — ${fmtNum(area[s], 0)} sf`} key={s}>
+                  <span
+                    style={{
+                      width: `${(area[s] / Math.max(totalArea, 1)) * 100}%`,
+                      backgroundColor: stateInk(s),
+                      opacity: s === "unreviewed" ? 0.35 : 0.9,
+                    }}
+                  />
+                </TooltipHint>
               ) : null,
             )}
 
             {unpartitionedSqft > 0 && (
-              <span
-                className="hairline-x-2 hairline-y-2"
-                title={`not partitioned — ${fmtNum(unpartitionedSqft, 0)} sf declared, no rooms yet`}
-                style={{ width: `${(unpartitionedSqft / Math.max(totalArea, 1)) * 100}%` }}
-              />
+              <TooltipHint
+                content={`not partitioned — ${fmtNum(unpartitionedSqft, 0)} sf declared, no rooms yet`}
+              >
+                <span
+                  className="hairline-x-2 hairline-y-2"
+                  style={{ width: `${(unpartitionedSqft / Math.max(totalArea, 1)) * 100}%` }}
+                />
+              </TooltipHint>
             )}
           </div>
           <p className="t-small face-mono mt-0.5">

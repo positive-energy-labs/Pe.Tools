@@ -232,7 +232,9 @@ test("an opened call opens its sequence and shows its input and output", () => {
   const screen = show([message("one", [call("one")]), message("two", [second])]);
   expect(screen.container.querySelector("details")?.open).toBe(true);
   expect(screen.getByLabelText("out").textContent).toContain("output");
-  fireEvent.click(screen.getByTitle(/read · close this call/));
+  fireEvent.click(
+    screen.container.querySelector('[data-tool-id="two"] [data-annotation="tool-marker"]')!,
+  );
   expect(wire.setPin).toHaveBeenCalledWith(null);
 });
 
@@ -285,9 +287,9 @@ test("a user turn draws its sent files, and a slash prompt draws the skill as a 
   );
   const screen = show([sent]);
   expect(screen.getByAltText("capture")).toBeTruthy();
-  expect(screen.getByTitle(/duct-sizes\.csv \(text\/csv\)/).textContent).toBe(
-    "duct-sizes.csv1.5 KB",
-  );
+  expect(
+    screen.getByText("duct-sizes.csv").closest("[data-base-ui-tooltip-trigger]")!.textContent,
+  ).toBe("duct-sizes.csv1.5 KB");
   const bubble = screen.container.querySelector(".dl-message-bubble")!;
   expect(bubble.querySelector("[data-surface=artifact]")?.textContent).toBe("/review-schedule");
   expect(bubble.textContent).toContain("Mechanical Equipment");

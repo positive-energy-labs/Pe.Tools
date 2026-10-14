@@ -29,6 +29,7 @@ import { Button } from "./button";
 import { diagramKind, useDiagram } from "./diagram";
 
 import "./code.css";
+import { TooltipHint } from "./tooltip";
 
 const highlighter = createHighlighter({
   fallbackLanguage: "plaintext",
@@ -193,9 +194,11 @@ export function Code({
           ) : null}
           {failed ? (
             <>
-              <span className="t-small face-mono" data-tone="caution" title={failed}>
-                invalid diagram
-              </span>
+              <TooltipHint content={failed}>
+                <span className="t-small face-mono" data-tone="caution">
+                  invalid diagram
+                </span>
+              </TooltipHint>
               <Button
                 label={sourceOpen ? "hide source" : "show source"}
                 onClick={() => setSourceOpen(!sourceOpen)}

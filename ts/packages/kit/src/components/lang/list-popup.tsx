@@ -18,6 +18,7 @@ import {
   type VisibleRow,
 } from "./collection";
 import { Row, RowGroupHead, type RowState } from "./row";
+import { TooltipHint } from "./tooltip";
 
 /** What a caller draws for one item: the Row's slots and its own states. */
 type RowParts = Omit<RowState, "cursor" | "selected"> & {
@@ -356,17 +357,18 @@ export function ListPopup<T>({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       {anchor === "trigger" ? (
-        <PopupTrigger
-          face={face}
-          aria-haspopup="listbox"
-          aria-label={triggerLabel}
-          title={title}
-          disabled={disabled}
-          data-derived={derived ? "" : undefined}
-          data-tone={caution ? "caution" : undefined}
-        >
-          {trigger}
-        </PopupTrigger>
+        <TooltipHint content={title}>
+          <PopupTrigger
+            face={face}
+            aria-haspopup="listbox"
+            aria-label={triggerLabel}
+            disabled={disabled}
+            data-derived={derived ? "" : undefined}
+            data-tone={caution ? "caution" : undefined}
+          >
+            {trigger}
+          </PopupTrigger>
+        </TooltipHint>
       ) : null}
       {open ? (
         <PopupFrame
@@ -530,26 +532,27 @@ export function CellListSelect<T>({
   };
   return (
     <>
-      <button
-        type="button"
-        tabIndex={-1}
-        data-cell-editor=""
-        data-cell-query=""
-        title={title}
-        data-tone={invalid ? "alarm" : undefined}
-        data-wash={invalid ? "" : undefined}
-        className="flex h-(--item-h) w-full min-w-0 items-center justify-between gap-1 px-1 face-mono"
-        onClick={(event) => {
-          setInitial(event.currentTarget.dataset.query ?? "");
-          delete event.currentTarget.dataset.query;
-          setOpen(true);
-        }}
-      >
-        {display ?? value}
-        <span aria-hidden className="text-ink-2">
-          ▾
-        </span>
-      </button>
+      <TooltipHint content={title}>
+        <button
+          type="button"
+          tabIndex={-1}
+          data-cell-editor=""
+          data-cell-query=""
+          data-tone={invalid ? "alarm" : undefined}
+          data-wash={invalid ? "" : undefined}
+          className="flex h-(--item-h) w-full min-w-0 items-center justify-between gap-1 px-1 face-mono"
+          onClick={(event) => {
+            setInitial(event.currentTarget.dataset.query ?? "");
+            delete event.currentTarget.dataset.query;
+            setOpen(true);
+          }}
+        >
+          {display ?? value}
+          <span aria-hidden className="text-ink-2">
+            ▾
+          </span>
+        </button>
+      </TooltipHint>
       {open ? (
         <Popover open onOpenChange={(next) => (next ? undefined : close())}>
           <PopupFrame anchor={host?.current} label={list["aria-label"]}>
