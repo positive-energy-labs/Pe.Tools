@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from "vite-plus/test";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { join, relative, isAbsolute } from "node:path";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -23,6 +23,9 @@ import {
   productUserContentRootPath,
 } from "../src/product-paths.ts";
 
+// Most tests here compute paths from invented roots and touch no disk, so the test-isolation
+// tripwire (which only polices real resolution) stands down for this file.
+beforeEach(() => vi.stubEnv("PE_TEST_HOME_ROOT", ""));
 afterEach(() => vi.unstubAllEnvs());
 
 test("every production resolver output follows one locally selected product environment", () => {
