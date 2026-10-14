@@ -97,7 +97,7 @@
   outline-color: color-mix(in srgb, var(--pe-line-2) 22%, transparent);
 }
 /* The box: one line at rest, the pickers' marks stacked on its left and Send on its
-   right; open while you write, the draft grows to its content (five lines, then it scrolls) over a
+   right; open while you write, the draft grows to its content (`--composer-lines`, then it scrolls) over a
    bottom row of pickers, tools and Send. Both states are one grid template: at rest the bottom
    row is zero tall, Send rides up into the text row by `translate` and the marks sit over its
    left edge, so the motion is plain transitions (block sizes, translate, opacity) on one easing,
@@ -107,6 +107,8 @@
   --composer-mark: 20px;
   --composer-rest: calc(var(--composer-mark) * 2);
   --composer-pad: calc(var(--gutter) / 2);
+  /* The draft grows to this many lines, then scrolls: the page's composer is taller than the tray's. */
+  --composer-lines: 5;
   --composer-ease: var(--motion-control) ease-out;
   /* Lets the draft's `block-size` move between one line and `auto`. */
   interpolate-size: allow-keywords;
@@ -118,6 +120,9 @@
     "pick tools send";
   column-gap: var(--composer-pad);
   padding: var(--composer-pad);
+}
+.dl-composer-box[data-variant="full"] {
+  --composer-lines: 7;
 }
 /* Asks and attachments line up with the marks and Send: the box's padding is their inset. */
 .dl-composer-box > [data-composer-work] {
@@ -141,7 +146,9 @@
   field-sizing: content;
   min-block-size: 0;
   block-size: var(--type-prose-line-height);
-  max-block-size: calc(var(--type-prose-line-height) * 5 + var(--composer-pad) * 2);
+  max-block-size: calc(
+    var(--type-prose-line-height) * var(--composer-lines) + var(--composer-pad) * 2
+  );
   /* Centred in the rest row; room on the sides for the marks and Send riding over it. */
   margin-block: calc((var(--composer-rest) - var(--type-prose-line-height)) / 2);
   padding: 0 calc(var(--control-h) + var(--composer-pad)) 0
