@@ -16,7 +16,7 @@ import { RouteHelpButton } from "./help";
 import { FlowMatrix } from "./flow";
 import { HostedChrome } from "./hosted-chrome";
 import { RouteInspector } from "./inspector";
-import type { RouteHandle } from "./use-route";
+import type { RouteHandle } from "./handle";
 
 /**
  * session › document, one instrument that says ONE thing at rest: the document (which is the

@@ -19,7 +19,7 @@ type Series = {
   key: string;
   label: string;
   color: string;
-  dash?: string;
+  dash?: "seam" | "reference" | "void";
   pts: Pt[];
   labelAt?: "end" | "mid";
 };
@@ -175,7 +175,12 @@ function LogLog({
         </g>
         <g clipPath={`url(#${id})`} fill="none" strokeWidth={1.25} strokeLinejoin="round">
           {series.map((s) => (
-            <path key={s.key} d={path(s.pts)} stroke={s.color} strokeDasharray={s.dash} />
+            <path
+              key={s.key}
+              d={path(s.pts)}
+              stroke={s.color}
+              strokeDasharray={s.dash ? dash(s.dash) : undefined}
+            />
           ))}
         </g>
         <g fontSize={7.5} fill={INK2}>
@@ -267,7 +272,7 @@ export function DuctCharts({
     key: `V${V}`,
     label: `${V} fpm`,
     color: DISK,
-    dash: dash("void"),
+    dash: "void",
     labelAt: "mid",
     pts: logspace(r.cfmFriction).map((Q) => {
       const D = Math.sqrt((576 * Q) / (Math.PI * V));

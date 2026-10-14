@@ -22,7 +22,7 @@ import { Ledger, PageLog } from "#/route/situation-grids";
 import { useDocumentLadder } from "#/route/situation-ladder";
 import { Cluster } from "#/route/situation-lamp";
 import { parseTarget } from "#/route/route-target";
-import type { ActionHandle, RouteHandle } from "#/route/use-route";
+import type { ActionHandle, RouteHandle } from "#/route/handle";
 import type { ChatReading, ChatActionKey } from "#/chat/manifest";
 import { useThreadScope } from "#/chat/scope";
 import type { ChatPage } from "#/chat/seeds";

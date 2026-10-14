@@ -6,48 +6,50 @@
     }
   },
   "hostBelowRoute": {
-    "total": 6,
+    "total": 5,
     "byArea": {
-      "chat": 1,
       "grounded-doc": 1,
       "lab": 2,
       "(root)": 1,
-      "workbench": 1
+      "route": 1
     }
   },
   "escHandler": {
-    "total": 1,
+    "total": 3,
     "byArea": {
-      "components": 1
+      "chat": 1,
+      "components": 2
     }
   },
   "opacityDim": {
-    "total": 9,
+    "total": 8,
     "byArea": {
-      "components": 7,
+      "components": 6,
       "family": 2
     }
   },
   "longTitle": {
-    "total": 26,
+    "total": 20,
     "byArea": {
-      "components": 3,
-      "family": 16,
+      "components": 1,
+      "family": 11,
       "grounded-doc": 1,
+      "rooms": 1,
       "route": 1,
       "routes": 2,
       "takeoff": 3
     }
   },
   "busyState": {
-    "total": 2,
+    "total": 4,
     "byArea": {
-      "instances": 1,
-      "lab": 1
+      "chat": 2,
+      "lab": 1,
+      "machine": 1
     }
   },
   "inlineColor": {
-    "total": 47,
+    "total": 50,
     "byArea": {
       "components": 6,
       "design-system": 1,
@@ -57,9 +59,10 @@
       "lab": 8,
       "ops": 14,
       "param-tables": 3,
+      "rooms": 4,
       "routes": 1,
       "takeoff": 3,
-      "workbench": 2
+      "workbench": 1
     }
   },
   "rawMeaningColor": {
@@ -67,13 +70,18 @@
     "byArea": {}
   },
   "dlLeak": {
-    "total": 0,
-    "byArea": {}
-  },
-  "fatRoute": {
     "total": 9,
     "byArea": {
-      "routes": 9
+      "chat": 3,
+      "components": 1,
+      "navigation": 1,
+      "workbench": 4
+    }
+  },
+  "fatRoute": {
+    "total": 10,
+    "byArea": {
+      "routes": 10
     }
   }
 }

@@ -29,7 +29,7 @@ import { Situation } from "#/route/situation";
 import { useDocumentLadder } from "#/route/situation-ladder";
 import { usePlanImage } from "#/takeoff/plan-image";
 import type { Point2 } from "#/lib/affine-frame";
-import type { ActionHandle } from "#/route/use-route";
+import type { ActionHandle } from "#/route/handle";
 import { cardsMarkdown, coverage, inboxCards, newestRun, type Card } from "./cards";
 import { cardLine, cardMoves, FeedbackCard, RoomsInbox } from "./inbox";
 import { manifest, type RoomsPage } from "./manifest";

@@ -13,7 +13,7 @@ import {
 } from "./route-controls";
 import { SituationDrawer } from "./situation-drawer";
 import { SituationAction } from "#/route/situation-verbs";
-import type { RouteHandle, ActionHandle } from "#/route/use-route";
+import type { RouteHandle, ActionHandle } from "#/route/handle";
 
 vi.mock("@tanstack/react-router", () => ({
   useRouterState: ({

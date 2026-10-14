@@ -14,7 +14,7 @@ import {
   usePublishPagePalette,
 } from "./route-controls";
 import { ChainLamp } from "#/route/situation-lamp";
-import type { RouteHandle } from "#/route/use-route";
+import type { RouteHandle } from "#/route/handle";
 
 vi.mock("@tanstack/react-router", () => ({
   useRouterState: ({
