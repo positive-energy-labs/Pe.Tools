@@ -62,6 +62,7 @@ export const manifest = defineRoute<
     inventory: { kind: "inventory" },
   } as never,
   page: parameterLinksPageSchema,
+  url: ["view"],
   actions: {
     refresh: {
       label: "refresh",

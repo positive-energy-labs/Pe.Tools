@@ -3,7 +3,7 @@ import { z } from "zod";
 import { MODES } from "#/workbench/depth";
 import { WorkbenchProvider } from "#/workbench/provider";
 import { ChatShell } from "#/chat/chat-shell";
-import { CHAT_PLUGIN_ROUTES } from "#/workbench/chat-plugins";
+import { chatPluginRoutes } from "#/workbench/chat-plugins";
 /**
  * Chat URL state — the single home for navigable/shareable state. TanStack Router owns all of it
  * (validateSearch + the middlewares below); nothing hand-rolls `new URL().searchParams`.
@@ -29,7 +29,11 @@ export const chatSearchSchema = z.object({
     .default(DEFAULTS.mode)
     .catch(DEFAULTS.mode),
   turn: z.coerce.number().int().positive().optional().catch(undefined),
-  plugin: z.enum(CHAT_PLUGIN_ROUTES).optional().catch(undefined),
+  plugin: z
+    .string()
+    .refine((key) => chatPluginRoutes().includes(key))
+    .optional()
+    .catch(undefined),
   focus: z.string().optional().catch(undefined),
   prompt: z.string().max(PROMPT_MAX).optional(),
 });

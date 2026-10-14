@@ -1,4 +1,4 @@
-import { RouteShell, emptyManifest } from "#/route";
+import { RouteShell, defineRoute } from "#/route";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { FactChip } from "@pe/kit/lang/chip";
@@ -6,8 +6,12 @@ import { DesignSystemLaws, LAW_POINTERS } from "#/design-system/laws";
 import { DesignSystemSpecimens } from "#/design-system/specimens/index";
 import { ThesisSpecimen } from "#/design-system/specimens/thesis";
 
-/** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
-const manifest = emptyManifest("design-system", "Design System");
+export const manifest = defineRoute({
+  key: "design-system",
+  name: "Design System",
+  docs: "The design language laws and production specimens. Inspect each rule beside its actual component; the swatch carries exhaustive variants.",
+  views: [{ key: "specimens", label: "Laws and specimens", draws: () => <DesignSystem /> }],
+});
 
 function RouteShelledDesignSystem() {
   return (
@@ -17,7 +21,7 @@ function RouteShelledDesignSystem() {
         <FactChip title="Rulings with one surviving authority">{LAW_POINTERS.length} laws</FactChip>
       }
     >
-      <DesignSystem />
+      {manifest.views![0]!.draws({ readings: {} })}
     </RouteShell>
   );
 }

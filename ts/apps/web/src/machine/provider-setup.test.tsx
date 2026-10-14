@@ -18,8 +18,8 @@ vi.mock("#/machine/use-machine", () => ({
   SEED_REFUSAL: "fixture",
 }));
 vi.mock("#/open/lifecycle", () => ({ useInstancesBasis: () => null, RevitControls: () => null }));
-vi.mock("#/route", () => ({
-  emptyManifest: () => ({}),
+vi.mock("#/route", async () => ({
+  urlPage: (await import("#/route/url")).urlPage,
   RouteShell: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 vi.mock("#/workbench/provider/providers", async (original) => ({

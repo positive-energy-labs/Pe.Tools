@@ -55,6 +55,11 @@ const syncReviewSchema = z.object({
  * lives in its URL, embedded navigation in its controller, and authored decisions in Work.
  */
 export interface TakeoffPage {
+  work?: string;
+  level?: string;
+  zone?: string;
+  room?: string;
+  demo?: string;
   views: readonly string[];
   zones: readonly string[];
   r10: string;
@@ -64,6 +69,11 @@ export interface TakeoffPage {
 }
 
 export const takeoffPageSchema = z.object({
+  work: z.string().optional(),
+  level: z.string().optional(),
+  zone: z.string().optional(),
+  room: z.string().optional(),
+  demo: z.string().optional(),
   views: z.array(z.string()).readonly().default([]),
   zones: z.array(z.string()).readonly().default([]),
   r10: z.string().default(""),
