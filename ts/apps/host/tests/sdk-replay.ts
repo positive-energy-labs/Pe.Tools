@@ -102,9 +102,10 @@ export function recordedProblems(args: readonly string[], stdout: string): strin
   // A state with no recording of its own is held to the envelope, not to another state's result.
   // A verb never recorded (bootstrap install mutates the machine) keeps the recorded frame, and its
   // result is held to the vendored contract alone.
-  const real = exact ?? [...recorded].find(([name]) => name.startsWith(`${verb}.`))?.[1] ?? frame;
-  if (real === frame && !contractShape(fake.result))
+  const known = exact ?? [...recorded].find(([name]) => name.startsWith(`${verb}.`))?.[1];
+  if (!known && !contractShape(fake.result))
     return [`no recorded envelope for '${verb}' and its result matches no contract shape`];
+  const real = known ?? frame;
   const problems: string[] = [];
   // A union result (op result: receipt, response, late, state-only) the recording did not take is
   // held to the vendored contract: its keys must be exactly one generated interface's.
