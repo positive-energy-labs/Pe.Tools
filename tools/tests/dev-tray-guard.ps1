@@ -7,6 +7,8 @@ $ast = [Management.Automation.Language.Parser]::ParseInput($source, [ref]$tokens
 if ($errors.Count) { throw $errors[0] }
 $guard = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Assert-DevTrayIdle' }, $true)
 Invoke-Expression $guard.Extent.Text
+$resolver = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Resolve-ServiceDirectory' }, $true)
+Invoke-Expression $resolver.Extent.Text
 $script:fixtureRoot = 'C:\guard-fixture'
 $script:start = [DateTime]::UtcNow
 $script:pair = @{ schemaVersion = 1; sourceRoot = $fixtureRoot; serviceFile = 'service.json'; hostInstanceId = 'original' }
@@ -53,3 +55,13 @@ $script:record.instanceId = 'replacement'
 $before = $script:requests
 Assert-Outcome 'replacement host fails closed before query' $true
 if ($script:requests -ne $before) { throw 'Replacement host was queried' }
+
+function Assert-Service {
+    param([string]$Name, [string]$ProductHomeOverride, [string]$Expected)
+    $actual = Resolve-ServiceDirectory -ProductHomeOverride $ProductHomeOverride -LocalAppData 'C:\Users\fixture\AppData\Local'
+    if ($actual -ne $Expected) { throw ('Unexpected service directory for ' + $Name + ': ' + $actual) }
+    Write-Output ('PASS ' + $Name)
+}
+Assert-Service 'unset override reads the owner machine-local root' $null 'C:\Users\fixture\AppData\Local\Positive Energy\Pe.Tools\state\service'
+Assert-Service 'blank override reads the owner machine-local root' '  ' 'C:\Users\fixture\AppData\Local\Positive Energy\Pe.Tools\state\service'
+Assert-Service 'override roots service files under .local-state' 'C:\Temp\pe-home' 'C:\Temp\pe-home\.local-state\state\service'
