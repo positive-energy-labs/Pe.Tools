@@ -118,11 +118,11 @@ test("app display mode alone says window mode without certifying installed state
   expect(screen.queryByRole("button", { name: "Install in Edge" })).toBeNull();
 });
 
-test("an app window under Edge's title bar names the one toggle that hides it", () => {
+test("an app window under Edge's title bar names the toggle and the manifest-less reinstall", () => {
   host.surface = "pwa";
   render(<StartupSettings machine={machineOf(MACHINE_SEEDS["no-revit"])} fixture={false} />);
   expect(screen.getByLabelText("startup settings").textContent).toContain(
-    "Edge's title bar is showing. Click the chevron beside Minimize once to hide it",
+    "with no chevron, Edge installed it without the app manifest: uninstall it in Edge and use Install to taskbar again",
   );
   host.overlay = true;
   cleanup();
