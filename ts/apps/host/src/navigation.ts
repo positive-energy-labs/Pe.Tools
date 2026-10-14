@@ -16,25 +16,34 @@ type NavigationDocument = z.infer<typeof documentSchema>;
 export interface NavigationSources {
   threads(): Promise<unknown>;
   documents(): Promise<unknown>;
+  routes?(): Promise<Record<string, string>>;
 }
 
 const documentRoutes: Readonly<Record<string, string | undefined>> = Object.fromEntries(
   APP_ROUTES.filter((route) => route.resume === "document").map((route) => [route.key, route.path]),
 );
 
-function destination(scope: WorkKey, documents: readonly NavigationDocument[], available: boolean) {
-  // No route mounts a named Work workspace: /open holds no staged Work, and /takeoffs?work names a
-  // capture, not generic Work.
+function destination(
+  scope: WorkKey,
+  documents: readonly NavigationDocument[],
+  available: boolean,
+  routes: Record<string, string> = {},
+) {
+  // Pod routes own a document-free calculator workspace as well as document-bound Works.
+  if (scope.binding === "workspace" && scope.work === "calculator" && routes[scope.route])
+    return { url: routes[scope.route]!, reason: null };
   if (scope.binding === "workspace")
     return { url: null, reason: "This tool has no URL that resumes this named Work workspace." };
-  const path = documentRoutes[scope.route];
+  const path = routes[scope.route] ?? documentRoutes[scope.route];
   if (!path)
     return { url: null, reason: "This Work has no document route that accepts its identity." };
   if (scope.binding === "host")
-    return {
-      url: null,
-      reason: "This route requires a document; its host-only Work has no document binding.",
-    };
+    if (routes[scope.route]) return { url: path, reason: null };
+    else
+      return {
+        url: null,
+        reason: "This route requires a document; its host-only Work has no document binding.",
+      };
   if (!available) return { url: null, reason: "Current document bindings are unavailable." };
   const matching = documents.filter((document) =>
     scope.binding === "open"
@@ -73,6 +82,7 @@ export async function readNavigation(
   sources?: NavigationSources,
 ): Promise<NavigationSnapshot> {
   const observations: string[] = [];
+  const routes = (await sources?.routes?.()) ?? {};
   const [workResult, threadResult, documentResult] = await Promise.allSettled([
     workspace.instances(),
     sources
@@ -108,7 +118,7 @@ export async function readNavigation(
     revision: work.revision,
     proposals: work.proposals,
     ...(work.state === "ready"
-      ? destination(work.scope, documents ?? [], documents !== null)
+      ? destination(work.scope, documents ?? [], documents !== null, routes)
       : {
           url: null,
           reason:

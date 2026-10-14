@@ -6,7 +6,7 @@ import { address, readingKey } from "@pe/agent-contracts";
 import { peReadings } from "#/readings";
 import { useHeadWorks } from "./head-works";
 import { publicRoutes } from "#/route/builtin-routes";
-import { defineRoutePlugin } from "#/route/registry";
+import { defineRoutePlugin } from "@pe/kit/route-registry";
 import { manifest as roomsManifest } from "#/rooms/manifest";
 
 afterEach(() => {

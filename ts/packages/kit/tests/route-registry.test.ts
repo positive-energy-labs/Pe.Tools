@@ -1,7 +1,7 @@
 import { expect, test } from "vite-plus/test";
-import { createRouteRegistry, defineRoutePlugin } from "./registry";
+import { createRouteRegistry, defineRoutePlugin } from "../src/route-registry";
 
-test("a public registration supplies its manifest, hosted view and action attribution together", () => {
+test("a public registration supplies its manifest, hosted view and action attribution together", async () => {
   const registry = createRouteRegistry();
   const hosted = () => "mounted";
   const manifest = { key: "new-route", name: "New route", runs: ["new.apply"] };
@@ -17,7 +17,7 @@ test("a public registration supplies its manifest, hosted view and action attrib
     defineRoutePlugin({ manifest: { key: "other", name: "Other", runs: ["new.apply"] }, hosted }),
   );
   expect(registry.actionRoute("new.apply")).toBeNull();
-  remove();
+  await remove();
   expect(registry.get("new-route")).toBeUndefined();
   expect(registry.actionRoute("new.apply")).toBe("other");
 });
