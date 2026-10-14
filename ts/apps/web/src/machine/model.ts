@@ -35,7 +35,7 @@ export interface Installing {
   readonly version: string | null;
 }
 
-const legWords = (leg: string, to: string | null) => {
+export const legWords = (leg: string, to: string | null) => {
   switch (leg.split(":")[0]) {
     case "download":
       return `Downloading ${to ?? "the update"}`;
@@ -172,6 +172,8 @@ export function attention(machine: Machine): string[] {
   const plan = planWaits(machine);
   if (plan && plan.blockers.length) out.push(`Update ${plan.latest} blocked by ${blockedBy(plan)}`);
   else if (plan) out.push(`Update ${plan.latest} waits for you`);
+  else if (machine.update.receipt?.state === "failed" || machine.update.receipt?.state === "refused")
+    out.push(`Update ${machine.update.receipt.state}`);
   for (const session of machine.revit.sessions ?? [])
     if (session.row.case === "controlled-active" && session.row.dialogs)
       out.push(`Revit ${session.row.year} shows a dialog`);
@@ -223,22 +225,6 @@ export function revitState(machine: Machine): Said {
       .join(" · "),
     tone: dialogs ? "caution" : undefined,
   };
-}
-
-export function updateState(machine: Machine): Said {
-  const { plan, receipt, planLeg } = machine.update;
-  if (receipt && receiptRunning(machine))
-    return { text: `updating · ${receipt.legs.at(-1)?.name ?? "admitted"}` };
-  if (receipt?.state === "failed" || receipt?.state === "refused")
-    return { text: `update ${receipt.state}`, tone: "alarm" };
-  if (!plan) return planLeg.error ? { text: "check failed", tone: "caution" } : { text: "unread" };
-  const waiting = planWaits(machine);
-  if (waiting)
-    return waiting.blockers.length
-      ? { text: `${waiting.latest} · blocked`, tone: "caution" }
-      : { text: `${waiting.latest} · waits for you`, tone: "caution" };
-  if (plan.available) return { text: `${plan.latest} · admitted` };
-  return { text: `up to date · ${plan.current}` };
 }
 
 export function shareState(machine: Machine): Said {
