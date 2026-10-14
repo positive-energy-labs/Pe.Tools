@@ -110,7 +110,9 @@ const config = defineConfig(({ mode, command }) => {
       },
     },
     fmt: {},
-    test: { setupFiles: ["./src/test-setup.ts"] },
+    // Vitest's 5 s default fails honest tests when this box runs several suites at once (a 1.2 s grid
+    // test took 5 s). 15 s still fails a hang within the minute.
+    test: { setupFiles: ["./src/test-setup.ts"], testTimeout: 15_000 },
   };
 });
 

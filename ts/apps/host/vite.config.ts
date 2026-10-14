@@ -43,5 +43,7 @@ export default defineConfig({
   // fail-fast (IPC-SEAM-SPEC D7) sees a valid signal instead of throwing at module load.
   // Host boundary scenarios claim the same source service identity; parallel files would make
   // one test take over another test's server instead of testing either lifecycle.
-  test: { env: { PE_LANE: "dev" }, fileParallelism: false },
+  // Real processes and files on Windows: the 5 s default fails honest tests under load. Heavy ones
+  // carry their own 30 s.
+  test: { env: { PE_LANE: "dev" }, fileParallelism: false, testTimeout: 15_000 },
 });
