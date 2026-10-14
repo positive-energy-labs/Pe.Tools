@@ -190,7 +190,7 @@ export function instancesSessionSelection(input: unknown): SdkSessionSelection |
 }
 
 export const instancesReading = {
-  says: "Read SDK sessions, installed years, recents, open documents, or one session's visible windows (dialogs).",
+  says: "Read SDK sessions, installed years, recents, documents, visible windows (dialogs), session-journal logs, or op receipts including work outside the host journal. Logs and ops accept tail (1–500, default 100); the SDK owns their lineage and envelopes.",
   dirties: [],
   needs: "nothing",
   actor: "any",

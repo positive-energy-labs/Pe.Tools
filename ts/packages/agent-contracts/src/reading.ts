@@ -63,7 +63,8 @@ export type Reading<T> =
 /** Owner addresses, not a second state model. Projection inputs participate in identity. */
 export const sdkReadingSchema = z.strictObject({
   kind: z.literal("sdk"),
-  read: z.enum(["sessions", "doctor", "recents", "documents", "dialogs"]),
+  read: z.enum(["sessions", "doctor", "recents", "documents", "dialogs", "logs", "ops"]),
+  tail: z.number().int().min(1).max(500).optional(),
   session: sdkSessionSelectionSchema.optional(),
   year: z.string().min(1).optional(),
   all: z.boolean().optional(),
