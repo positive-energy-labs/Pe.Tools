@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using Pe.Shared.Product;
+using System.IO;
 using System.Windows.Media.Imaging;
 using Pe.Shared.RevitData;
 
@@ -285,7 +286,7 @@ public static class RevitViewImageExporter {
 
     private static string ExportToTemp(Document document, View view, int pixelSize, out int clampedPixelSize) {
         clampedPixelSize = Math.Min(Math.Max(pixelSize, 100), 8000);
-        var outputDirectory = Path.Combine(Path.GetTempPath(), "pe-view-captures");
+        var outputDirectory = Path.Combine(ProductRuntimeLayout.ForCurrentUser().ScratchPath, "pe-view-captures");
         var baseName = $"view-{view.Id.Value()}-{Guid.NewGuid():N}";
         return ExportPng(document, view.Id, outputDirectory, baseName, clampedPixelSize);
     }

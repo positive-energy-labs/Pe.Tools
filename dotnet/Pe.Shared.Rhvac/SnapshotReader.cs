@@ -1,3 +1,4 @@
+using Pe.Shared.Product;
 using System.Diagnostics;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -23,7 +24,7 @@ public static class SnapshotReader {
         // Capture the original before the driver is invoked. The driver only sees an owned copy.
         bytes = (byte[])bytes.Clone();
         var source = new JObject { ["fileName"] = Path.GetFileName(fileName), ["sha256"] = Hash(bytes), ["bytesBase64"] = Convert.ToBase64String(bytes) };
-        var temp = Path.Combine(Path.GetTempPath(), "pe-rhvac-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(temp);
+        var temp = Path.Combine(ProductRuntimeLayout.ForCurrentUser().ScratchPath, "pe-rhvac-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(temp);
         try {
             var script = Path.Combine(temp, "ReadJet.ps1");
             using (var stream = typeof(SnapshotReader).GetTypeInfo().Assembly.GetManifestResourceStream("Pe.Shared.Rhvac.ReadJet.ps1") ?? throw new InvalidOperationException("Jet reader resource missing."))

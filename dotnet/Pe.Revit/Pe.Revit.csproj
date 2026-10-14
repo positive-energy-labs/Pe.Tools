@@ -24,4 +24,7 @@
         <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj"/>
     </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Pe.Shared.Product\Pe.Shared.Product.csproj" />
+  </ItemGroup>
 </Project>
