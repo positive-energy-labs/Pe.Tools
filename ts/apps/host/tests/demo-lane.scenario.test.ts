@@ -118,7 +118,9 @@ beforeAll(async () => {
     configFile: join(webRoot, "vite.config.ts"),
     server: {
       host: "127.0.0.1",
-      port: 0,
+      // This Vite reads port 0 as "unset" and starts at 5173, and the app config is strictPort, so a
+      // running dev server made the suite fail. Let it walk to the next free port instead.
+      strictPort: false,
       hmr: false,
       proxy: devHostProxy(`http://127.0.0.1:${service.port}`),
     },

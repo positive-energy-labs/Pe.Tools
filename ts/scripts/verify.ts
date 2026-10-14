@@ -26,6 +26,12 @@ const steps: [name: string, cwd: string, cmd: string[]][] = [
     [
       "vp",
       "run",
+      // One package at a time and uncached: parallel suites starve each other (a 0.1 s test took 5 s
+      // and tripped its timeout), and after the host suite `vp run` idled forever finishing its
+      // cache/file-access bookkeeping. A test verdict must never be replayed from a cache either.
+      "--concurrency-limit",
+      "1",
+      "--no-cache",
       "--filter",
       "@pe/*",
       "--filter",

@@ -36,7 +36,8 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "pe-membership-"));
   for (const [path, content] of Object.entries(authored)) await put("Original", path, content);
 });
-afterEach(() => rm(root, { recursive: true, force: true }));
+// Windows holds fresh files open for a moment (scanners, a timed-out writer still finishing): retry.
+afterEach(() => rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }));
 
 test("one snapshot lists and captures every authored byte, excluding authority and debris", async () => {
   for (const path of [
@@ -145,7 +146,8 @@ test("membership admits family assets and settings beyond executable source bund
     Buffer.from(pod.members.find((member) => member.path === "families/example.rfa")!.bytes),
   ).toEqual(family);
   expect((await capturePackage(pod)).members).toHaveLength(Object.keys(authored).length + 242);
-});
+  // 21 MB across 241 real files: genuinely long on Windows, like the budget test above.
+}, 30_000);
 
 test.skipIf(process.platform !== "win32")(
   "an Offline attribute alone does not make a regular file unsafe",

@@ -688,7 +688,7 @@ test("a thread prompts, parks a permission, cancels, interrupts, renames, and re
   expect(turnEnds(body).at(-1)).toMatchObject({ stopReason: "cancelled" });
   let done = false;
   while (!done) done = (await droppedReader.read()).done;
-});
+}, 30_000);
 
 test("the thread head lives in meta.json, falls back for unknown ids, and is observable", async () => {
   process.env.FAKE_ACP_SHAPE = "config";

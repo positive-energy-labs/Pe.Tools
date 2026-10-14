@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, expect, test, vi } from "vite-plus/test";
+import { afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
 import { type Machine } from "@pe/agent-contracts";
 import { MACHINE_SEEDS } from "#/open/seeds";
 import { machineOf } from "./model";
@@ -77,6 +77,12 @@ function setup() {
   fireEvent.click(within(region).getByRole("button", { name: "Install" }));
   expect(state.login).toHaveBeenCalledWith("codex");
 }
+// The router plugin splits the route component into a lazy chunk, so the first render awaited a
+// cold module-graph transform. Under a loaded machine that outlasted the waits below; load it once,
+// here, with a hook budget that says what is slow.
+beforeAll(async () => {
+  await (Settings.options.component as unknown as { preload?: () => Promise<void> }).preload?.();
+}, 60_000);
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -104,8 +110,7 @@ test("settings still exists and projects the provider setup", async () => {
   await act(async () => {
     render(<Component />);
   });
-  // The route loads lazily; under a whole-workspace run the default 1 s wait is marginal.
-  await screen.findByLabelText("providers", undefined, { timeout: 10_000 });
+  await screen.findByLabelText("providers");
   setup();
   search.mockRestore();
 });
