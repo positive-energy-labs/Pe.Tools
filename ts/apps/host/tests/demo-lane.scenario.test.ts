@@ -297,7 +297,7 @@ async function landed(page: Page, pattern: RegExp) {
 async function logged(page: Page, label: string, says: string) {
   // The head's log is folded to its newest row (MAP ruling 21); any tab press opens the column.
   const situation = page.locator('section[aria-label="Situation"]');
-  const allTab = situation.getByTitle("all entries");
+  const allTab = situation.locator('[aria-description="all entries"]');
   if (await allTab.count()) await allTab.first().click();
   const rows = situation.locator(`li[aria-description$=" · ${says}"]`);
   const row = rows.filter({ hasText: new RegExp(`${label}$`) });
@@ -308,7 +308,7 @@ async function logged(page: Page, label: string, says: string) {
 async function setQuery(page: Page, text: string) {
   const box = page.getByRole("combobox", { name: "table query" });
   const remove = page.locator(
-    '[data-slot="query-box"] [title^="A word of the query"] button[title^="Remove the"]',
+    '[data-slot="query-box"] [aria-description^="A word of the query"] button[aria-label^="Remove the"]',
   );
   while (await remove.count()) await remove.first().click();
   await box.fill(text ? `${text} ` : "");
@@ -587,7 +587,7 @@ test("/families Archived inspects a saved reading without a target or Revit conn
     ).toBe(0);
     await page
       .getByRole("button", {
-        name: 'Remove the "family is not Placed_Diffuser-2" narrowing — widens the view back out',
+        name: 'Remove the "family is not Placed_Diffuser-2" narrowing',
       })
       .click();
     await expect
