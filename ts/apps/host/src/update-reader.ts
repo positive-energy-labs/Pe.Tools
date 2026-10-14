@@ -103,6 +103,8 @@ const admissionSchema = z.object({
   receiptObservedAtUtc: z.string().nullable(),
   receipt: receiptSchema.nullable(),
   receiptError: z.string().nullable().default(null),
+  /** The version this request installs, read from the plan it was admitted against. */
+  candidate: z.string().nullable().default(null),
 });
 type Admission = z.infer<typeof admissionSchema>;
 export type UpdateRunner = (args: string[], detached?: boolean) => Promise<Envelope<unknown>>;
@@ -120,6 +122,7 @@ export type UpdateFact =
       readonly kind: "settled";
       readonly requestId: string;
       readonly state: "ok" | "failed" | "refused";
+      readonly version: string | null;
       readonly detail: string | null;
     };
 
@@ -135,6 +138,11 @@ export function createUpdateReader(options: {
   readonly automaticOffPath?: string;
   /** The spine's intake for update facts; absent in tests that do not observe them. */
   readonly fact?: (fact: UpdateFact) => void;
+  /**
+   * The one exit path: called once per request when its persisted receipt first shows a confirmed
+   * running handoff, wherever that receipt was learned (apply, lost-ack recovery, late recovery).
+   */
+  readonly handoff?: () => void;
   readonly now?: () => string;
 }) {
   const now = options.now ?? (() => new Date().toISOString());
@@ -146,6 +154,7 @@ export function createUpdateReader(options: {
   let applying: Promise<MachineUpdate> | undefined;
   let automaticPending = false;
   let terminalDiagnosticPending = false;
+  const handedOff = new Set<string>();
   let value: MachineUpdate = {
     plan: null,
     receipt: null,
@@ -175,6 +184,12 @@ export function createUpdateReader(options: {
             error: admission.receiptError,
           },
         };
+        // A crash between the terminal persist and the fact intake leaves no fact; the journal
+        // dedupes by request, so announcing the persisted terminal receipt again is safe.
+        const settled = admission.receipt?.state;
+        if (settled === "ok" || settled === "failed" || settled === "refused")
+          options.fact?.(settledFact(admission, settled));
+        if (hasHandoff(admission.receipt)) handedOff.add(admission.requestId);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
@@ -203,12 +218,11 @@ export function createUpdateReader(options: {
       if (record.receipt && ["ok", "failed", "refused"].includes(record.receipt.state))
         automaticPending = false;
       if (after !== before && (after === "ok" || after === "failed" || after === "refused"))
-        options.fact?.({
-          kind: "settled",
-          requestId: record.requestId,
-          state: after,
-          detail: record.receipt?.legs.at(-1)?.detail ?? null,
-        });
+        options.fact?.(settledFact(record, after));
+      if (hasHandoff(record.receipt) && !handedOff.has(record.requestId)) {
+        handedOff.add(record.requestId);
+        options.handoff?.();
+      }
       value = {
         ...value,
         requestId: record.requestId,
@@ -348,6 +362,7 @@ export function createUpdateReader(options: {
         receiptObservedAtUtc: null,
         receipt: null,
         receiptError: null,
+        candidate: value.plan?.planId === planId ? value.plan.latest : null,
       };
       // Flush and atomically install identity BEFORE the detached child can have effects.
       await persist(record);
@@ -411,6 +426,20 @@ export function createUpdateReader(options: {
     announce: (fact: UpdateFact) => options.fact?.(fact),
     current: () => value,
     automaticPending: () => automaticPending,
+  };
+}
+
+const hasHandoff = (receipt: UpdateReceipt | null) =>
+  receipt?.state === "running" &&
+  receipt.legs.some((leg) => leg.name === "handoff" && leg.status === "ok");
+
+function settledFact(record: Admission, state: "ok" | "failed" | "refused"): UpdateFact {
+  return {
+    kind: "settled",
+    requestId: record.requestId,
+    state,
+    version: record.candidate,
+    detail: record.receipt?.legs.at(-1)?.detail ?? null,
   };
 }
 

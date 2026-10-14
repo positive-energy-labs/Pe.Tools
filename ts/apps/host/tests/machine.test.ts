@@ -297,9 +297,8 @@ test("automatic update requires two continuous Revit-free minutes and waits for 
   vi.useFakeTimers();
   const f = fixture();
   let busy = false;
-  const handoff = vi.fn();
   const machine = createMachine(f.sources, {
-    automaticUpdates: { peaActive: () => busy, handoff },
+    automaticUpdates: { peaActive: () => busy },
   });
   const plan = { planId: "idle-plan", available: true, blockers: [], revits: [] };
   Object.assign(f.sources.update.current(), { plan });
@@ -333,7 +332,7 @@ test("failed absence observations reset the automatic wait and a Pea turn starti
   const f = fixture();
   let busy = false;
   const machine = createMachine(f.sources, {
-    automaticUpdates: { peaActive: () => busy, handoff: vi.fn() },
+    automaticUpdates: { peaActive: () => busy },
   });
   Object.assign(f.sources.update.current(), {
     plan: { planId: "idle-plan", available: true, blockers: [], revits: [] },
@@ -584,7 +583,7 @@ test("SDK process read errors fail the real census adapter and restart the full 
   const machine = createMachine(
     { ...f.sources, sessions: adapter.sessions },
     {
-      automaticUpdates: { peaActive: () => false, handoff: vi.fn() },
+      automaticUpdates: { peaActive: () => false },
     },
   );
   const census = (processReadErrors: unknown[] = []) =>
@@ -1063,9 +1062,8 @@ test("failed receipt rows preserve acquisition provenance and controlled custody
 test("a switched-off automatic update announces its version once and never applies", async () => {
   vi.useFakeTimers();
   const f = fixture();
-  const handoff = vi.fn();
   const machine = createMachine(f.sources, {
-    automaticUpdates: { peaActive: () => false, handoff },
+    automaticUpdates: { peaActive: () => false },
   });
   Object.assign(f.sources.update.current(), {
     automatic: false,
@@ -1121,6 +1119,89 @@ test("a leg outage publishes one typed fault at its transition, not one per tick
       kind: "deadline",
       elapsedMs: expect.any(Number),
     });
+  } finally {
+    machine.close();
+    f.machine.close();
+    vi.useRealTimers();
+  }
+});
+
+test("U-02: an automatic apply slower than the leg deadline is not a failed read and is not re-admitted", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  const machine = createMachine(f.sources, { automaticUpdates: { peaActive: () => false } });
+  Object.assign(f.sources.update.current(), {
+    plan: { planId: "idle-plan", latest: "0.9.0", available: true, blockers: [], revits: [] },
+  });
+  vi.mocked(f.sources.sessions).mockResolvedValue([]);
+  vi.mocked(f.sources.attachments).mockResolvedValue([]);
+  vi.mocked(f.sources.update.apply).mockImplementation(() => new Promise(() => {}));
+  try {
+    await machine.refresh();
+    await vi.advanceTimersByTimeAsync(120_000);
+    const frame = await machine.refresh();
+    await vi.advanceTimersByTimeAsync(60_000);
+    const later = await machine.refresh();
+    expect(frame.legs["automatic-update"]).toBeUndefined();
+    expect(later.legs["automatic-update"]).toBeUndefined();
+    expect(f.sources.update.apply).toHaveBeenCalledTimes(1);
+  } finally {
+    machine.close();
+    f.machine.close();
+    vi.useRealTimers();
+  }
+});
+
+test("U-11: a terminal failure backs off per candidate version, not per plan UUID", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  const machine = createMachine(f.sources, { automaticUpdates: { peaActive: () => false } });
+  const offer = (planId: string) =>
+    Object.assign(f.sources.update.current(), {
+      plan: { planId, latest: "0.9.0", available: true, blockers: [], revits: [] },
+    });
+  offer("plan-1");
+  vi.mocked(f.sources.sessions).mockResolvedValue([]);
+  vi.mocked(f.sources.attachments).mockResolvedValue([]);
+  try {
+    await machine.refresh();
+    await vi.advanceTimersByTimeAsync(120_000);
+    await machine.refresh();
+    expect(f.sources.update.apply).toHaveBeenCalledTimes(1);
+    offer("plan-2");
+    await vi.advanceTimersByTimeAsync(60_000);
+    await machine.refresh();
+    expect(f.sources.update.apply).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(30 * 60_000);
+    offer("plan-3");
+    await machine.refresh();
+    expect(f.sources.update.apply).toHaveBeenCalledTimes(2);
+  } finally {
+    machine.close();
+    f.machine.close();
+    vi.useRealTimers();
+  }
+});
+
+test("U-10: a failed feed read retries in minutes with backoff, not after the full interval", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  const machine = createMachine(f.sources);
+  Object.assign(f.sources.update.current(), { planLeg: { ...unreadLeg(), error: "offline" } });
+  const feedReads = () =>
+    vi.mocked(f.sources.update.refresh).mock.calls.filter(([feed]) => feed).length;
+  try {
+    await machine.refresh();
+    expect(feedReads()).toBe(1);
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    await machine.refresh();
+    expect(feedReads()).toBe(2);
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    await machine.refresh();
+    expect(feedReads()).toBe(2);
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    await machine.refresh();
+    expect(feedReads()).toBe(3);
   } finally {
     machine.close();
     f.machine.close();

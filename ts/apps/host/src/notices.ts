@@ -100,8 +100,8 @@ export function noticeOf(r: Receipt, context: NoticeContext): MachineNotice | nu
       return outcome === "succeeded"
         ? {
             ...base,
-            title: "Pe.Tools updated",
-            body: "Installed while no Revit was open.",
+            title: candidateVersion ? `Pe.Tools ${candidateVersion} installed` : "Pe.Tools updated",
+            body: "The update finished. The tray panel has the receipt.",
             act: { kind: "automatic-updates" },
           }
         : {
@@ -173,7 +173,8 @@ export function createNotices(deps: {
     if (seen.size > SEEN) seen.delete(seen.keys().next().value!);
     const entry = { notice, request: asks(r) ? r.join.requestId : "" };
     pending = pending.filter((e) => e.notice.id !== notice.id);
-    if (asks(r) || bufferMs <= 0) return announce(entry);
+    // An update ending is a single terminal fact, not a burst: it speaks at once.
+    if (asks(r) || bufferMs <= 0 || r.body.kind === "usage") return announce(entry);
     pending.push(entry);
     timer ??= setTimeout(flush, bufferMs);
   }
@@ -248,6 +249,7 @@ export function createNotices(deps: {
     close: () => {
       unsubscribe();
       clearTimeout(timer);
+      flush();
     },
   };
 }

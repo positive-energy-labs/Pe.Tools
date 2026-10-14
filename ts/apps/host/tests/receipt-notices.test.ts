@@ -151,7 +151,9 @@ test("each shared fact projects to one card and nothing else speaks", () => {
     act: { kind: "automatic-updates" },
   });
   expect(noticeOf(update("applying"), context)).toBeNull();
-  expect(noticeOf(update("finished", "succeeded"), context)?.title).toBe("Pe.Tools updated");
+  expect(noticeOf(update("finished", "succeeded"), context)?.title).toBe(
+    "Pe.Tools 0.9.0 installed",
+  );
   expect(noticeOf(update("failed", "refused"), context)?.title).toBe("Pe.Tools update refused");
   expect(
     noticeOf(

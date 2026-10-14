@@ -61,7 +61,11 @@ export const hostProgram = (
       const latch = yield* Deferred.make<void>();
       const handle = yield* Deferred.make<ServiceHostHandle>();
       const webUrl = web ? yield* Deferred.make<string>() : undefined;
-      const updateReader = makeInstalledUpdateReader((fact) => recordUpdateFact(telemetry, fact));
+      const updateReader = makeInstalledUpdateReader(
+        (fact) => recordUpdateFact(telemetry, fact),
+        // Let the POST/receipt frame flush before the launch scope tears the server down.
+        () => void setTimeout(() => Effect.runSync(Deferred.succeed(latch, undefined)), 1000),
+      );
       const HttpLive = makeHttpLive({
         port,
         webUrl,
