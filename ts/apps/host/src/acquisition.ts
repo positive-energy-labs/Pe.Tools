@@ -174,8 +174,7 @@ export function foldAcquisitions(receipts: readonly ActionReceipt[]): Acquisitio
     const document =
       opened &&
       docProcess &&
-      (origin?.kind !== "file-copy" ||
-        (opened.path !== null && samePath(opened.path, origin.work)))
+      (origin?.kind !== "file-copy" || (opened.path !== null && samePath(opened.path, origin.work)))
         ? { process: docProcess, sdkOpenId: opened.openId }
         : null;
     const files = row.steps.flatMap((step) =>

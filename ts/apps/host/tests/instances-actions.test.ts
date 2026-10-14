@@ -1488,7 +1488,7 @@ async function crashWorld() {
     }
     if (verb === "stop" && named) {
       rows[rows.indexOf(named)] = { ...named, case: "gone-receipt" };
-      return { result: { state: "ok", id: named.id, phase: "stopped" } };
+      return { result: { state: "ok", id: flag(args, "--id"), phase: "stopped" } };
     }
     return Error(`unexpected ${args.join(" ")}`);
   }, rows);
@@ -1639,7 +1639,11 @@ test("R4d: after recovery over HTTP, cleanup closes and stops the Revit that sur
     });
     const text = await response.text();
     expect(response.status, text).toBeLessThan(300);
-    return JSON.parse(text) as { id: string; state: string; steps: { key: string }[] };
+    return JSON.parse(text) as {
+      id: string;
+      state: string;
+      steps: { key: string; state: string }[];
+    };
   };
   const admitted = await post("/actions", {
     id: "r4d-open",
