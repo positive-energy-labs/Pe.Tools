@@ -1,4 +1,5 @@
 import type { HarnessId } from "@pe/agent-contracts";
+import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -69,4 +70,38 @@ try {
   Write-Host "$version installed. Return to Pea to sign in."
 } finally { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }
 `;
+}
+
+const versionParts = (name: string) => {
+  const [core = "", pre] = name.split(/-(.*)/s);
+  return { core: core.split(".").map((part) => Number.parseInt(part, 10) || 0), pre: pre ?? null };
+};
+
+/**
+ * Codex's own standalone installer keeps each release as a physical folder beside a `current`
+ * junction. The junction fails under RedirectionGuard; the highest release's exe does not.
+ */
+export function codexStandaloneRelease(home: string): string | null {
+  const releases = join(home, ".codex", "packages", "standalone", "releases");
+  let names: string[];
+  try {
+    names = readdirSync(releases);
+  } catch {
+    return null;
+  }
+  const best = names
+    .filter((name) => existsSync(join(releases, name, "bin", "codex.exe")))
+    .map((name) => ({ name, ...versionParts(name) }))
+    .sort((a, b) => {
+      for (let i = 0; i < Math.max(a.core.length, b.core.length); i++)
+        if ((a.core[i] ?? 0) !== (b.core[i] ?? 0)) return (b.core[i] ?? 0) - (a.core[i] ?? 0);
+      return a.pre === b.pre
+        ? 0
+        : a.pre === null
+          ? -1
+          : b.pre === null
+            ? 1
+            : b.pre.localeCompare(a.pre, "en", { numeric: true });
+    })[0];
+  return best ? join(releases, best.name, "bin", "codex.exe") : null;
 }
