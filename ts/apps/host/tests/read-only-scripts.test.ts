@@ -64,6 +64,7 @@ function humanRevit(sent: Sent[], openDocuments: (typeof other)[], onCatalog: ()
                   actor: "any",
                   requestSchemaJson: JSON.stringify({ type: "object" }),
                 },
+                { key: "model.census", intent: "Read", needs: "document", actor: "any" },
               ],
             },
             target: null,
@@ -210,6 +211,32 @@ test("a human-pinned Page reads a human document with a ReadOnly script and writ
       expect(call.status, call.text).toBe(409);
     }
     expect(host.sent.length).toBe(before);
+  } finally {
+    await host.close();
+  }
+}, 30_000);
+
+const peaCall = (thread: string) => ({
+  ...as({ kind: "pea", thread }),
+  "x-pe-bridge-session-id": doc.session,
+  "x-pe-open-document-id": doc.openId,
+});
+
+test("item 9: Pea reads an ungranted human document by exact target; a write there is refused", async () => {
+  const host = await serve();
+  try {
+    const read = await host.send("/call", peaCall("t-op"), { key: "model.census", request: {} });
+    expect(read.status, read.text).toBe(200);
+    expect(host.sent.map((one) => [one.key, one.openId])).toEqual([["model.census", doc.openId]]);
+    const write = await host.send("/actions", as({ kind: "pea", thread: "t-op" }), {
+      id: randomUUID(),
+      kind: "operation",
+      key: "scripting.execute",
+      destination: { kind: "document", ref: doc },
+      input: script("WriteTransaction"),
+    });
+    expect([write.status, write.json.refusal?.code], write.text).toEqual([403, "grant.required"]);
+    expect(host.sent).toHaveLength(1);
   } finally {
     await host.close();
   }
