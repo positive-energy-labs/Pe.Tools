@@ -333,7 +333,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
       const query = z
         .object({
           after: z.coerce.number().int().nonnegative().default(0),
-          kind: z.enum(["thread", "receipt"]).optional(),
+          kind: z.enum(["thread", "receipt", "notice"]).optional(),
           thread: z.string().min(1).optional(),
           limit: z.coerce.number().int().min(1).max(HOST_LOG_PAGE_MAX).default(500),
         })
@@ -785,17 +785,13 @@ export function makeHostPeRoutes(
     mcpServer: (context) => peaMcpServer(sourceRoot, hostBaseUrl, context),
     receiptFact: receiptThreads.accept,
   });
-  const receiptContextReady = receiptThreads.hydrate();
+  receiptThreads
+    .hydrate()
+    .catch((error: unknown) => console.warn("Receipt thread context failed to hydrate", error));
   const notices = createNotices({
-    source: {
-      read: async (q) => {
-        await receiptContextReady;
-        return telemetry.journal.read(q);
-      },
-      subscribe: (q, consume) => telemetry.journal.subscribe(q, consume),
-    },
+    source: { subscribe: (q, consume) => telemetry.journal.subscribe(q, consume) },
     context: receiptThreads.context,
-    onFault: (error) => console.warn("Notice receipt read failed", error),
+    log: hostLog(),
   });
   const machine = createMachine(machineSources(bridge, providers, update, share, threads.heads), {
     fault: (fault) =>
@@ -860,9 +856,12 @@ export function makeHostPeRoutes(
     },
     capabilityCatalog: catalog,
     contributionRead: content.member,
-    // Thread Readings (the list, and one thread's log) are the thread store's; the rest the host's.
+    // Thread Readings (the list, and one thread's log) are the thread store's, notices are the
+    // notice projection's; the rest the host's.
     observeHostResource: (request, publish, after) =>
-      threads.observe(request, publish, after) ?? hostObserve(request, publish, after),
+      threads.observe(request, publish, after) ??
+      notices.observe(request, publish, after) ??
+      hostObserve(request, publish, after),
     markReadings: markReadings(documentMarks(bridge)),
     telemetry,
   });
@@ -916,7 +915,6 @@ export const peRoutesLayer = (
         }),
       );
       yield* Effect.addFinalizer(() => Effect.promise(() => threads.close()));
-      yield* Layer.build(notices.route);
       // Installed policy keeps observing even when every browser and tray drawer is closed.
       if (hostOwnership.lane === "installed") machine.observe(() => {});
       // With Revit present the op and pod rows describe the connected session, so a session

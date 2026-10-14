@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { machineNoticeSchema } from "@pe/host-contracts/native-adapter";
 import { harnessEventSchema } from "./harness-thread.ts";
 import { receiptSchema } from "./receipts.ts";
 
@@ -18,6 +19,15 @@ export const HOST_LOG_MAX_ENTRY_BYTES = 256 * 1024;
 export const hostEventSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("thread"), thread: z.string(), event: harnessEventSchema }),
   z.strictObject({ kind: z.literal("receipt"), receipt: receiptSchema }),
+  /**
+   * One card item the host decided to announce (`notices.ts`). `request` is the opaque request
+   * join of a permission or question, so a replay can drop an ask that was answered after it.
+   */
+  z.strictObject({
+    kind: z.literal("notice"),
+    notice: machineNoticeSchema,
+    request: z.string().optional(),
+  }),
   z.strictObject({
     kind: z.literal("oversize"),
     of: z.enum(["thread", "receipt"]),
