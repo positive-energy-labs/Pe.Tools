@@ -43,7 +43,7 @@ internal sealed class NoticeWindow : Form {
         var gutter = Math.Max(0, (int)Math.Round(20 * dpi / 96d));
         var width = Math.Min((int)Math.Round(420 * dpi / 96d), Math.Max(0, work.Width - 2 * gutter));
         var height = Math.Min((int)Math.Ceiling(cssHeight * dpi / 96d), Math.Max(0, work.Height - 2 * gutter));
-        return new Rectangle(work.Right - gutter - width, work.Bottom - gutter - height, width, height);
+        return new Rectangle(work.Right - gutter - width, work.Top + gutter, width, height);
     }
 
     internal void ConfigureFrame(WebView2 view) {

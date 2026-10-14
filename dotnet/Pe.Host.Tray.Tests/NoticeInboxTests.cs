@@ -146,11 +146,11 @@ public class NoticeCardWindowTests {
             Assert.That(card.Visible, Is.True);
             Assert.That(card.Handle, Is.Not.EqualTo(panel.Handle));
             Assert.That(GetForegroundWindow(), Is.EqualTo(foreground), "showing a card never activates it");
-            var bottom = card.Bottom;
+            var top = card.Top;
             var corner = card.Bounds;
             panel.Location = new Point(260, 140);
             card.PositionCard(300);
-            Assert.That(card.Bottom, Is.EqualTo(bottom), "hover grows upward");
+            Assert.That(card.Top, Is.EqualTo(top), "height grows down from the top edge");
             Assert.That(card.Right, Is.EqualTo(corner.Right));
             Assert.That(panel.Bounds, Is.EqualTo(new Rectangle(260, 140, 560, 560)));
             card.Hide();
@@ -177,9 +177,9 @@ public class NoticeCardWindowTests {
 
     [Test]
     public void TheCardIsPaddedFromTheScreenEdgeAndNeverOutgrowsTheWorkArea() {
-        var work = new Rectangle(0, 0, 1920, 1032);
-        Assert.That(NoticeWindow.CardBoundsFor(work, 96, 300), Is.EqualTo(new Rectangle(1920 - 20 - 420, 1032 - 20 - 300, 420, 300)));
-        Assert.That(NoticeWindow.CardBoundsFor(work, 192, 300), Is.EqualTo(new Rectangle(1920 - 40 - 840, 1032 - 40 - 600, 840, 600)));
+        var work = new Rectangle(0, 50, 1920, 1032);
+        Assert.That(NoticeWindow.CardBoundsFor(work, 96, 300), Is.EqualTo(new Rectangle(1920 - 20 - 420, 70, 420, 300)));
+        Assert.That(NoticeWindow.CardBoundsFor(work, 192, 300), Is.EqualTo(new Rectangle(1920 - 40 - 840, 90, 840, 600)));
         Assert.That(NoticeWindow.CardBoundsFor(new Rectangle(0, 0, 400, 300), 96, 900), Is.EqualTo(new Rectangle(20, 20, 360, 260)));
     }
 }
