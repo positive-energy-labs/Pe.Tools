@@ -10,6 +10,7 @@ import type {
   NavigationWork,
 } from "@pe/agent-contracts";
 import { HOST_RESTARTED } from "@pe/agent-contracts/chat-state";
+import { summarizeFailure } from "@pe/host-contracts/failure-summary";
 
 /** In the order the eye takes them; waits and working lead and never fold. */
 export const LEDGER_GROUPS = ["waits", "working", "interrupted", "failed", "unread"] as const;
@@ -38,6 +39,8 @@ export interface LedgerRow {
   /** The resource address; null is an explicit refusal to invent one. */
   url: string | null;
   refusal?: string;
+  /** The raw failure text the one-line `says` folds; the row offers it to copy. */
+  detail?: string;
   /** A thread whose turn the host's restart cut off: Resume re-sends that turn. */
   resume?: string;
 }
@@ -100,7 +103,10 @@ function threadRow(
           ...row("interrupted", "interrupted", "The host restarted during this turn."),
           resume: thread.id,
         };
-  if (state === "failed") return row("failed", "failed", message);
+  if (state === "failed") {
+    const failure = summarizeFailure(message ?? "The turn failed.");
+    return { ...row("failed", "failed", failure.summary), detail: failure.detail ?? undefined };
+  }
   const unread = thread.lifecycle.explicitUnread || thread.lifecycle.readSeq < thread.lastSeq;
   return unread && thread.lastSeq > 0 ? row("unread", "done", null) : null;
 }
@@ -125,21 +131,26 @@ const RECEIPT_GROUP: Partial<Record<ActionReceipt["state"], LedgerGroup>> = {
 function receiptRow(receipt: ActionReceipt): LedgerRow | null {
   const group = RECEIPT_GROUP[receipt.state];
   if (!group) return null;
+  const failure =
+    "error" in receipt
+      ? summarizeFailure(receipt.error)
+      : {
+          summary: "The outcome is not known. Check Revit before running it again.",
+          door: null,
+          detail: null,
+        };
   return {
     key: `action:${receipt.id}`,
     group,
     verb: receipt.state,
     what: receipt.key,
     where: `${receipt.kind} · ${callerWord(receipt.caller)}`,
-    says:
-      "error" in receipt
-        ? receipt.error
-        : group === "waits"
-          ? "The outcome is not known. Check Revit before running it again."
-          : null,
+    says: failure.summary,
     at: receipt.startedAt,
-    url: null,
-    refusal: "No address yet: this receipt has no page",
+    // The failure's door is the row's address; a receipt itself has no page yet.
+    url: failure.door?.href ?? null,
+    refusal: failure.door ? undefined : "No address yet: this receipt has no page",
+    detail: failure.detail ?? undefined,
   };
 }
 

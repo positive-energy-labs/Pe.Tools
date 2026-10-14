@@ -61,11 +61,11 @@ describe("open-work ledger rows", () => {
     expect(rows.some((row) => row.key === "thread:old-cut")).toBe(false);
     expect(rows.find((row) => row.key === "thread:broke")).toMatchObject({
       group: "failed",
-      says: "provider refused the key",
+      says: "Provider refused the key",
     });
     expect(rows.filter((row) => row.group === "failed")).toHaveLength(1);
   });
-  it("puts an unknown outcome in waits with its own sentence and no invented address", () => {
+  it("says a receipt failure in one line, opens its door, and keeps the raw text for copy", () => {
     const receipt = {
       kind: "workflow",
       id: "r1",
@@ -81,7 +81,8 @@ describe("open-work ledger rows", () => {
       startedAt: hoursAgo(5),
       publication: { state: "unrequested" },
       state: "unknown",
-      error: "session.bootstrap-mismatch",
+      error:
+        "session.bootstrap-mismatch: Installed Revit 2025 bootstrap is another build (version skew: 0.1.0-beta.208 installed, 0.1.0-beta.207 here)",
       status: 409,
     } as never;
     const [row] = ledgerRows({ ...sources([]), receipts: [receipt] }, now);
@@ -89,10 +90,20 @@ describe("open-work ledger rows", () => {
       group: "waits",
       verb: "unknown",
       where: "workflow · human",
-      says: "session.bootstrap-mismatch",
-      url: null,
+      says: "Revit's add-ins are a newer Pe.Revit build (beta.208) than this checkout (beta.207)",
+      url: "/machine?section=revit",
     });
-    expect(row?.refusal).toBeTruthy();
+    expect(row?.refusal).toBeUndefined();
+    expect(row?.detail).toContain("version skew");
+    const [unaddressed] = ledgerRows(
+      {
+        ...sources([]),
+        receipts: [{ ...(receipt as object), error: "op.failed: the op threw." } as never],
+      },
+      now,
+    );
+    expect(unaddressed).toMatchObject({ says: "The op threw", url: null });
+    expect(unaddressed?.refusal).toBeTruthy();
   });
   it("puts a Work with pending Pea proposals in waits with its resume address, and leaves other Works to Home's directory", () => {
     const work = (id: string, proposals: number, url: string | null) => ({
