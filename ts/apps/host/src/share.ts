@@ -71,7 +71,7 @@ export function createShare(options: ShareOptions) {
   const listeners = new Set<() => void>();
   let intent: Intent = { desired: "off", mapping: null };
   let state: MachineShare = {
-    allowRemoteAdministration: true,
+    allowRemoteAdministration: false,
     desired: "off",
     state: "unknown",
     url: null,
@@ -88,7 +88,7 @@ export function createShare(options: ShareOptions) {
   const refused = (code: string, detail: string) => {
     state = {
       ...state,
-      allowRemoteAdministration: intent.allowRemoteAdministration ?? true,
+      allowRemoteAdministration: intent.allowRemoteAdministration ?? false,
       desired: intent.desired,
       state: "refused",
       url: null,
@@ -102,7 +102,7 @@ export function createShare(options: ShareOptions) {
       return refused("share.unavailable", String(error));
     state = {
       ...state,
-      allowRemoteAdministration: intent.allowRemoteAdministration ?? true,
+      allowRemoteAdministration: intent.allowRemoteAdministration ?? false,
       desired: intent.desired,
       state: "needs-tailscale",
       url: null,
@@ -124,7 +124,7 @@ export function createShare(options: ShareOptions) {
     state = {
       ...state,
       desired: intent.desired,
-      allowRemoteAdministration: intent.allowRemoteAdministration ?? true,
+      allowRemoteAdministration: intent.allowRemoteAdministration ?? false,
     };
   }
   async function status() {

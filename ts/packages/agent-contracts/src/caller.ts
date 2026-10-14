@@ -20,6 +20,8 @@ export const callerSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("pea"), context: z.string(), thread: z.string() }),
   z.strictObject({ kind: z.literal("external-mcp"), context: z.string(), label: z.string() }),
   z.strictObject({ kind: z.literal("page"), page: pageKeySchema }),
+  // SDK claim token, scoped to its own shutdown/window doors.
+  z.strictObject({ kind: z.literal("service"), service: z.string() }),
   // Reads only (D2).
   z.strictObject({ kind: z.literal("anonymous") }),
 ]);

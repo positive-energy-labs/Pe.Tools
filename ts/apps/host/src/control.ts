@@ -49,6 +49,25 @@ type MintSpec =
   | { kind: "external-mcp"; label: string }
   | { kind: "human"; via: "cli" };
 const contexts = new Map<string, Caller>();
+export const BROWSER_CONTEXT_COOKIE = "pe-browser-context";
+const browserContexts = new Map<
+  string,
+  { caller: Extract<Caller, { kind: "human" }>; transport: string }
+>();
+const transportKey = (principal: RequestPrincipal) => JSON.stringify(principal);
+
+/** Mint on a verified SPA navigation; headers on a later API request cannot create a human. */
+export function mintBrowserContext(principal: RequestPrincipal): string {
+  const token = randomBytes(24).toString("base64url");
+  browserContexts.set(token, {
+    transport: transportKey(principal),
+    caller:
+      principal.kind === "local"
+        ? { kind: "human", via: "local" }
+        : { kind: "human", via: "tailnet", login: principal.login },
+  });
+  return `${BROWSER_CONTEXT_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/${principal.kind === "local" ? "" : "; Secure"}`;
+}
 
 /** A secret bearer token for one caller. The receipt names `context` (an id), never the token. */
 export function mintContext(spec: MintSpec): string {
@@ -99,8 +118,8 @@ export const pageActDoor = (page: string) => {
 
 /**
  * Mint the caller from the transport. A token wins and must be one this host minted; a browser
- * may never present one. A browser request carrying the runtime marker is a human when its
- * Referer is present and outside `/pages/`, a Page inside it; everything else is anonymous.
+ * may never present one. A browser needs a host-minted, transport-bound HttpOnly cookie.
+ * Page Referers still act as Pages; a missing Referer is anonymous.
  */
 export function callerOf(
   principal: RequestPrincipal,
@@ -136,12 +155,46 @@ export function callerOf(
     const page = slug ? pageKeyOf(decodeURIComponent(slug)) : null;
     return page ? { caller: { kind: "page", page } } : anonymous;
   }
-  return {
-    caller:
-      principal.kind === "local"
-        ? { kind: "human", via: "local" }
-        : { kind: "human", via: "tailnet", login: principal.login },
-  };
+  const cookie = headers.cookie
+    ?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${BROWSER_CONTEXT_COOKIE}=`))
+    ?.slice(BROWSER_CONTEXT_COOKIE.length + 1);
+  const minted = cookie ? browserContexts.get(cookie) : undefined;
+  return minted?.transport === transportKey(principal) ? { caller: minted.caller } : anonymous;
+}
+
+export type RoutePermission =
+  | "read"
+  | "caller"
+  | "operation"
+  | "human"
+  | "admin"
+  | "service"
+  | "mcp";
+
+/** Transport admission is independent of document rw admission. Wave A supplies route permission. */
+export function admitRequest(caller: Caller, permission: RoutePermission, door: string): void {
+  if (permission === "read" || permission === "mcp") return;
+  if (caller.kind === "anonymous")
+    throw refuse("context.missing", door, `Refused at ${door}: anonymous callers are read-only.`);
+  if (permission === "human" || permission === "admin") {
+    requireHuman(caller, door, "this route");
+    return;
+  }
+  if (permission === "service" && caller.kind === "service") return;
+  if (caller.kind === "service" || permission === "service")
+    throw refuse(
+      "human.only",
+      door,
+      `Refused at ${door}: the service caller is limited to shutdown and window.`,
+    );
+  if (caller.kind === "external-mcp" && permission !== "operation")
+    throw refuse(
+      "grant.context-cannot-hold",
+      door,
+      `Refused at ${door}: external MCP is read-only until human pairing exists.`,
+    );
 }
 
 /** Route Work keeps its two-valued author: a human, or anything acting for one. */
@@ -253,15 +306,15 @@ export function admitCrossing(
     return admitPage(admitted.slot, destination, admitted.door);
   }
   if (caller.kind === "human") return { kind: "human" };
-  if (destination.kind === "host" || destination.kind === "sdk-session") return null;
-  const acquired = acquisitionBasis(destination);
-  if (acquired) return acquired;
-  if (caller.kind === "external-mcp")
+  if (caller.kind === "service" || caller.kind === "external-mcp")
     throw refuse(
       "grant.context-cannot-hold",
       door,
-      `Refused at ${door}: this external MCP client can read any document and write Pea's own; rw grants for external clients are not in this release.`,
+      `Refused at ${door}: ${caller.kind} has no product write authority.`,
     );
+  if (destination.kind === "host" || destination.kind === "sdk-session") return null;
+  const acquired = acquisitionBasis(destination);
+  if (acquired) return acquired;
   return admitThread(caller.thread, destination, door);
 }
 
@@ -361,9 +414,12 @@ export function live(basis: Basis | null, door = "step begin"): Refused | null {
           { lifetime: basis.scope.lifetime },
         );
   if (basis?.kind !== "grant") return null;
-  const grant = sources.heads?.(basis.thread).grant ?? null;
+  const head = sources.heads?.(basis.thread);
+  const grant = head?.grant ?? null;
   const code =
-    !grant || !sameRef(grant.lifetime, basis.lifetime) ? "grant.revoked" : grantDead(grant);
+    !grant || head?.revision !== basis.headRevision || !sameRef(grant.lifetime, basis.lifetime)
+      ? "grant.revoked"
+      : grantDead(grant);
   return code
     ? refuse(code, door, `Refused at ${door}: ${deadReason(code, grant)}`, {
         lifetime: basis.lifetime,

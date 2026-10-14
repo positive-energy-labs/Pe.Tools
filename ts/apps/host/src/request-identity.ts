@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Deferred, Effect } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import {
   BRIDGE_PATH,
@@ -8,7 +8,15 @@ import {
 import { hostOwnership } from "./host-ownership.ts";
 import { withInvocationContext, type RequestPrincipal } from "@pe/mcps/context";
 import type { Caller, MachineShare } from "@pe/agent-contracts";
-import { callerOf } from "./control.ts";
+import {
+  admitRequest,
+  callerOf,
+  mintBrowserContext,
+  Refused,
+  type RoutePermission,
+} from "./control.ts";
+import { HostLifecycle } from "./host-lifecycle.ts";
+import { authorizeShutdownFor } from "@pe/host-contracts/pe-service-host";
 
 export type IdentityResult =
   | {
@@ -16,12 +24,15 @@ export type IdentityResult =
       readonly headers: Readonly<Record<string, string>>;
       /** Minted from the transport and `x-pe-context`; never from a body or page header. */
       readonly caller: Caller;
+      readonly setCookie?: string;
     }
   | { readonly refusal: { readonly code: string; readonly detail: string } };
 
 export interface IdentityOptions {
   readonly port: () => number;
   readonly frontendOrigin: () => string | undefined;
+  /** Wave A seam: resolve its one typed route table to a permission here. */
+  readonly permission?: (path: string, method: string) => RoutePermission;
   readonly share: {
     read(): Promise<MachineShare>;
     observe(result: IdentityResult, path: string, from: string): void;
@@ -43,6 +54,7 @@ export async function readRequestIdentity(
   path: string,
   options: IdentityOptions,
   method = "GET",
+  serviceAuthorized = false,
 ): Promise<IdentityResult> {
   const expectedService = headers[HOST_RUNTIME_SERVICE_HEADER];
   let queryServices: string[];
@@ -146,7 +158,7 @@ export async function readRequestIdentity(
     if (
       "principal" in result &&
       share.allowRemoteAdministration === false &&
-      administration(pathname, method)
+      (administration(pathname, method) || (method === "PUT" && pathname.startsWith("/pe/scope/")))
     )
       result = refuse(
         "identity.remote-administration",
@@ -167,19 +179,41 @@ export async function readRequestIdentity(
       "The bridge, SDK shutdown, window and share switch are local-only.",
     );
   if ("principal" in result) {
-    const minted = callerOf(result.principal, headers);
+    const minted =
+      serviceAuthorized && result.principal.kind === "local"
+        ? { caller: { kind: "service", service: hostOwnership.serviceName } as Caller }
+        : callerOf(result.principal, headers);
     result =
       "refusal" in minted
         ? refuse(minted.refusal.code, minted.refusal.detail)
-        : minted.caller.kind !== "human" && administration(pathname, method)
-          ? refuse(
-              minted.caller.kind === "anonymous" ? "context.missing" : "human.only",
-              `Machine administration is a person's act; a ${minted.caller.kind} call is refused (ADR 0017 D2).`,
-            )
-          : { ...result, caller: minted.caller };
+        : { ...result, caller: minted.caller };
+    if ("principal" in result) {
+      // Replace this resolver with Wave A's table; admitRequest has no route registry of its own.
+      const permission =
+        options.permission?.(pathname, method) ?? legacyPermission(pathname, method);
+      try {
+        admitRequest(result.caller, permission, `${method} ${pathname}`);
+      } catch (error) {
+        if (!(error instanceof Refused)) throw error;
+        result = refuse(error.refusal.code, error.refusal.reason);
+      }
+    }
+    if ("principal" in result && navigation && !pathname.startsWith("/pages"))
+      result = { ...result, setCookie: mintBrowserContext(result.principal) };
   }
   options.share.observe(result, pathname, host);
   return result;
+}
+
+/** Existing routes until A lands. Method-wide refusal also closes undeclared future write routes. */
+function legacyPermission(path: string, method: string): RoutePermission {
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") return "read";
+  if (path === "/mcp") return "mcp";
+  if (path === "/call") return "operation";
+  if (path === "/admin/shutdown" || path === "/admin/window") return "service";
+  if (administration(path, method)) return "admin";
+  if (/^\/pe\/threads\/[^/]+\/(?:question|permission)$/.test(path)) return "human";
+  return "caller";
 }
 
 /**
@@ -202,8 +236,26 @@ export const requestIdentityLayer = (options: IdentityOptions) =>
     (handler) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
+        let serviceAuthorized = false;
+        if (
+          request.method === "POST" &&
+          ["/admin/shutdown", "/admin/window"].includes(request.url)
+        ) {
+          const lifecycle = yield* Effect.serviceOption(HostLifecycle);
+          if (lifecycle._tag === "Some") {
+            const handle = yield* Deferred.await(lifecycle.value.handle);
+            const body = yield* Effect.orElseSucceed(request.json, () => null);
+            serviceAuthorized = authorizeShutdownFor(handle)(request.headers, body);
+          }
+        }
         const identity = yield* Effect.promise(() =>
-          readRequestIdentity(request.headers, request.originalUrl, options, request.method),
+          readRequestIdentity(
+            request.headers,
+            request.originalUrl,
+            options,
+            request.method,
+            serviceAuthorized,
+          ),
         );
         if ("refusal" in identity) return HttpServerResponse.jsonUnsafe(identity, { status: 403 });
         const services = yield* Effect.context<never>();
@@ -218,7 +270,10 @@ export const requestIdentityLayer = (options: IdentityOptions) =>
             () => Effect.runPromiseExitWith(services)(handler, { signal }),
           ),
         );
-        return yield* exit;
+        const response = yield* exit;
+        return identity.setCookie
+          ? HttpServerResponse.setHeader(response, "set-cookie", identity.setCookie)
+          : response;
       }),
     { global: true },
   );

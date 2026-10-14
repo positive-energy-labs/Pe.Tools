@@ -553,6 +553,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
               lifetime: target.ref,
               grantedAt: new Date(now).toISOString(),
               grantedVia: caller.via,
+              ...(caller.login ? { grantedLogin: caller.login } : {}),
               expiresAt: grantExpiry(now),
               revoked: null,
             }
@@ -568,7 +569,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     const current = readHead(threadId);
     if (!current.grant || current.grant.revoked) return reading(current);
     const grant = { ...current.grant, revoked: { at: new Date().toISOString() } };
-    writeHead(threadId, { ...current, grant });
+    writeHead(threadId, { ...current, revision: current.revision + 1, grant });
     emitRevoke(threadId, grant);
     return reading(readHead(threadId));
   }
@@ -1438,12 +1439,14 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       case "POST cancel":
         return json({ cancelled: await cancel(t, caller, url.pathname) });
       case "POST permission": {
+        requireHuman(caller, url.pathname, "answering a harness approval");
         const { requestId, optionId } = await input(permissionResponseSchema);
         return resolvePermission(t, requestId, optionId, "user")
           ? json({ ok: true })
           : json({ error: `No pending permission ${requestId}` }, 409);
       }
       case "POST question": {
+        requireHuman(caller, url.pathname, "answering a human question");
         const { requestId, ...answer } = await input(questionResponseSchema);
         return resolveQuestion(t, requestId, answer, "user")
           ? json({ ok: true })
@@ -1461,6 +1464,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         const forked = create(
           {
             ...t.meta,
+            head: { ...t.meta.head, grant: null, lastHumanMessageAt: null, revision: 0 },
             id: randomUUID(),
             harness: record.harness,
             providerId: record.id,

@@ -72,9 +72,7 @@ export function createMcpDoor(
           return error(400, "Unsupported MCP protocol version.");
         // Only the verified bearer context can bind a thread. A thread-id header carries no authority.
         const inherited =
-          caller.caller && caller.caller.kind !== "anonymous"
-            ? request.headers.get(HOST_CONTEXT_HEADER)
-            : null;
+          caller.caller?.kind === "pea" ? request.headers.get(HOST_CONTEXT_HEADER) : null;
         const info = (body.params as { clientInfo?: { name?: unknown } }).clientInfo;
         const mintedToken = inherited
           ? undefined
@@ -82,7 +80,12 @@ export function createMcpDoor(
               kind: "external-mcp",
               label: typeof info?.name === "string" ? info.name : "MCP client",
             });
-        const headers = { ...caller.headers, [HOST_CONTEXT_HEADER]: inherited ?? mintedToken! };
+        const headers: Record<string, string> = {
+          ...caller.headers,
+          [HOST_CONTEXT_HEADER]: inherited ?? mintedToken!,
+        };
+        // This is a host-to-host context, not a browser bearer. Terminal human tokens have no MCP audience.
+        delete headers.origin;
         const identity = callerOf(caller.principal, headers);
         if ("refusal" in identity) {
           if (mintedToken) retireContext(mintedToken);

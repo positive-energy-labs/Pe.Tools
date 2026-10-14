@@ -308,7 +308,7 @@ test("Off persists cancellation even when Tailscale status is unavailable", asyn
   expect(commands).toBe(2);
 });
 
-test("remote administration defaults on, persists locally and never runs a Tailscale mutation", async () => {
+test("remote administration defaults off, persists locally and never runs a Tailscale mutation", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-share-policy-"));
   const path = join(dir, "intent.json");
   let calls = 0;
@@ -323,7 +323,7 @@ test("remote administration defaults on, persists locally and never runs a Tails
   };
   try {
     const owner = createShare(options);
-    expect((await owner.read()).allowRemoteAdministration).toBe(true);
+    expect((await owner.read()).allowRemoteAdministration).toBe(false);
     expect((await owner.setRemoteAdministration(false)).allowRemoteAdministration).toBe(false);
     expect(calls).toBe(1);
     expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({
