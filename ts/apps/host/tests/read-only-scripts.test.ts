@@ -18,9 +18,10 @@ import { serveRoutes } from "./real-server.ts";
  * Acceptance round 4c §3: the route-prefs Page, pinned by a person to a document the person opened,
  * pressed "read routing preferences" (`pe.script(READ)`, ReadOnly by default) and the host refused
  * it as a write. Counsel's rule: a ReadOnly (or default-mode) script is a read only under a person's
- * consent, a human caller or a Page whose binding a human set, because the ReadOnly policy does not
- * stop a library's commit on another document, files or the network. Pea, an external MCP client
- * and a Page bound by Pea keep it a write that needs a grant or an acquisition.
+ * consent, a human caller or a Page whose binding a human set. 2026-10-14 (items 9, 10): Pea joins
+ * them on an exact target, because the rollback guard contains the target; it does not contain a
+ * sibling's commit, so the K9 census still refuses beside an ungranted sibling. An external MCP
+ * client and a Page bound by Pea keep it a write that needs a grant or an acquisition.
  */
 const MODEL = "C:/Jobs/HVAC.rvt";
 const doc = { session: "bridge-a", openId: "open-a" };
@@ -64,6 +65,7 @@ function humanRevit(sent: Sent[], openDocuments: (typeof other)[], onCatalog: ()
                   actor: "any",
                   requestSchemaJson: JSON.stringify({ type: "object" }),
                 },
+                { key: "model.census", intent: "Read", needs: "document", actor: "any" },
               ],
             },
             target: null,
@@ -215,30 +217,124 @@ test("a human-pinned Page reads a human document with a ReadOnly script and writ
   }
 }, 30_000);
 
-test("Pea and an external MCP client cannot read a human document with a ReadOnly script without a grant", async () => {
+const peaCall = (thread: string) => ({
+  ...as({ kind: "pea", thread }),
+  "x-pe-bridge-session-id": doc.session,
+  "x-pe-open-document-id": doc.openId,
+});
+
+test("item 9: Pea reads an ungranted human document by exact target; a write there is refused", async () => {
   const host = await serve();
   try {
-    for (const [caller, code] of [
-      [as({ kind: "pea", thread: "t-read" }), "grant.required"],
-      [as({ kind: "external-mcp", label: "ext" }), "grant.context-cannot-hold"],
-    ] as const) {
-      for (const mode of ["ReadOnly", undefined, "NoTransaction"]) {
-        const admit = await host.send("/actions", caller, {
-          id: randomUUID(),
-          kind: "operation",
-          key: "scripting.execute",
-          destination: { kind: "document", ref: doc },
-          input: script(mode),
-        });
-        expect([admit.status, admit.json.refusal?.code], admit.text).toEqual([403, code]);
-        // `/call` never dispatches it for them either: a script stays a mutation.
-        const call = await host.send(
-          "/call",
-          { ...caller, "x-pe-bridge-session-id": doc.session, "x-pe-open-document-id": doc.openId },
-          { key: "scripting.execute", request: script(mode) },
-        );
-        expect(call.status, call.text).toBe(409);
-      }
+    const read = await host.send("/call", peaCall("t-op"), { key: "model.census", request: {} });
+    expect(read.status, read.text).toBe(200);
+    expect(host.sent.map((one) => [one.key, one.openId])).toEqual([["model.census", doc.openId]]);
+    const write = await host.send("/actions", as({ kind: "pea", thread: "t-op" }), {
+      id: randomUUID(),
+      kind: "operation",
+      key: "scripting.execute",
+      destination: { kind: "document", ref: doc },
+      input: script("WriteTransaction"),
+    });
+    expect([write.status, write.json.refusal?.code], write.text).toEqual([403, "grant.required"]);
+    expect(host.sent).toHaveLength(1);
+  } finally {
+    await host.close();
+  }
+}, 30_000);
+
+test("item 10: Pea runs a ReadOnly script on an ungranted human document; NoTransaction and WriteTransaction stay writes", async () => {
+  const host = await serve();
+  try {
+    for (const mode of ["ReadOnly", undefined]) {
+      const act = await host.send("/actions", as({ kind: "pea", thread: "t-read" }), {
+        id: randomUUID(),
+        kind: "operation",
+        key: "scripting.execute",
+        destination: { kind: "document", ref: doc },
+        input: script(mode),
+      });
+      expect(act.status, act.text).toBeLessThan(300);
+      expect(await host.settle(act.json.id!)).toMatchObject({ state: "succeeded" });
+      const call = await host.send("/call", peaCall("t-read"), {
+        key: "scripting.execute",
+        request: script(mode),
+      });
+      expect(call.status, call.text).toBe(200);
+    }
+    const before = host.sent.length;
+    for (const mode of ["NoTransaction", "WriteTransaction"]) {
+      const admit = await host.send("/actions", as({ kind: "pea", thread: "t-read" }), {
+        id: randomUUID(),
+        kind: "operation",
+        key: "scripting.execute",
+        destination: { kind: "document", ref: doc },
+        input: script(mode),
+      });
+      expect([admit.status, admit.json.refusal?.code], admit.text).toEqual([403, "grant.required"]);
+      const call = await host.send("/call", peaCall("t-read"), {
+        key: "scripting.execute",
+        request: script(mode),
+      });
+      expect(call.status, call.text).toBe(409);
+    }
+    expect(host.sent.length).toBe(before);
+  } finally {
+    await host.close();
+  }
+}, 30_000);
+
+test("item 10, K9: Pea's ReadOnly script refuses while an ungranted sibling is open", async () => {
+  const host = await serve();
+  host.openDocuments.push(other);
+  try {
+    const call = await host.send("/call", peaCall("t-read"), {
+      key: "scripting.execute",
+      request: script("ReadOnly"),
+    });
+    expect(call.status, call.text).toBe(403);
+    expect(call.text).toContain("script.ungranted-documents");
+    expect(call.text).toContain(other.openId);
+    const act = await host.send("/actions", as({ kind: "pea", thread: "t-read" }), {
+      id: randomUUID(),
+      kind: "operation",
+      key: "scripting.execute",
+      destination: { kind: "document", ref: doc },
+      input: script("ReadOnly"),
+    });
+    expect(act.status, act.text).toBeLessThan(300);
+    const row = await host.settle(act.json.id!);
+    expect(row, JSON.stringify(row)).toMatchObject({ state: "failed" });
+    expect(JSON.stringify(row)).toContain("script.ungranted-documents");
+    expect(host.sent).toEqual([]);
+  } finally {
+    await host.close();
+  }
+}, 30_000);
+
+test("an external MCP client cannot read a human document with a ReadOnly script", async () => {
+  const host = await serve();
+  try {
+    const caller = as({ kind: "external-mcp", label: "ext" });
+    for (const mode of ["ReadOnly", undefined, "NoTransaction"]) {
+      const admit = await host.send("/actions", caller, {
+        id: randomUUID(),
+        kind: "operation",
+        key: "scripting.execute",
+        destination: { kind: "document", ref: doc },
+        input: script(mode),
+      });
+      expect([admit.status, admit.json.refusal?.code], admit.text).toEqual([
+        403,
+        "grant.context-cannot-hold",
+      ]);
+      // `/call` never dispatches it either: for external MCP a script stays a mutation.
+      const call = await host.send(
+        "/call",
+        { ...caller, "x-pe-bridge-session-id": doc.session, "x-pe-open-document-id": doc.openId },
+        { key: "scripting.execute", request: script(mode) },
+      );
+      expect(call.status, call.text).toBe(409);
     }
     expect(host.sent).toEqual([]);
   } finally {

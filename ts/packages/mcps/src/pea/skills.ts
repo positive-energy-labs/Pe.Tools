@@ -156,6 +156,7 @@ description: Write and run a C# Revit script when code is the clearest way to in
 - Choose a script when no host operation is the smallest capable surface. Bootstrap the workspace when paths or references are unknown.
 - Inline snippets for tiny probes; workspace files for durable or multi-step work.
 - Default to ReadOnly. Use WriteTransaction only for an explicit, user-authorized mutation. Use NoTransaction only for APIs that reject an open transaction.
+- ReadOnly needs an exact target, not a grant. WriteTransaction and NoTransaction on the user's document need the grant; ask once: select the open document in the composer; that selection is the rw grant and renews with each message. Any script refuses while another open document in that Revit lacks Pea's acquisition or the grant; name those documents to the user.
 - Treat compiler and runtime diagnostics as steering; fix the first one before rerunning.
 - Keep terminal output compact; write artifacts for broad evidence. Return structured results for anything a later step reads.
 

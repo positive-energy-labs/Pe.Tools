@@ -12,9 +12,37 @@ import {
   type Refusal,
   type ThreadHead,
   emptyThreadHead,
+  machineInventory,
+  resolveCallTarget,
+  type Machine,
 } from "@pe/agent-contracts";
 
 export type { GrantView };
+
+/**
+ * A new thread's visible default target: the one user document when exactly one connected Revit has
+ * exactly one open, and it is not Pea's. The human's send with the chip showing it is the selection
+ * (ADR 0017 rule 5); any other machine leaves the draft unbound.
+ */
+export function soleUserDocument(machine: Machine | null): DocumentRequest | null {
+  const revits = machine
+    ? [
+        ...(machine.revit.sessions ?? []).flatMap((s) => (s.attachment ? [s.attachment] : [])),
+        ...machine.revit.unclassifiedAttachments,
+      ]
+    : [];
+  const only = revits.length === 1 && revits[0]!.documents?.length === 1 ? revits[0]! : null;
+  const document = only?.documents?.[0];
+  if (!document || document.access.kind === "pea") return null;
+  const request = {
+    kind: "open",
+    ref: { session: only!.session, openId: document.openId },
+  } as const;
+  return resolveCallTarget({ needs: "document" }, request, machineInventory(machine!)).kind ===
+    "resolved"
+    ? request
+    : null;
+}
 
 /** A host door's refusal in the person's words: the door, the reason, then the remedy. */
 const refusalSentence = ({ reason, remedy }: Refusal) =>

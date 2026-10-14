@@ -350,7 +350,7 @@ export function grantDead(
 }
 export const grantExpiry = (from: number) => new Date(from + GRANT_MS).toISOString();
 
-/** K9: a human pin consents to a ReadOnly target; every other lifetime still needs write authority. */
+/** K9: a ReadOnly target needs read consent; every other open lifetime still needs write authority. */
 export function admitScript(
   caller: Caller,
   documents: readonly DocumentRef[],
@@ -358,10 +358,8 @@ export function admitScript(
   readTarget?: DocumentRef,
 ): void {
   if (caller.kind === "human") return;
-  const consent = caller.kind === "page" ? pageDoors.get(caller)?.readConsent : null;
   const ungranted = documents.filter((ref) => {
-    if (consent && readTarget && sameRef(consent, readTarget) && sameRef(ref, readTarget))
-      return false;
+    if (readTarget && sameRef(ref, readTarget) && readConsent(caller, readTarget)) return false;
     try {
       admitCrossing(caller, { kind: "document", ref }, door);
       return false;
@@ -387,33 +385,36 @@ const deadReason = (code: "grant.revoked" | "grant.expired", grant: HeadGrant | 
 
 /**
  * A script whose requested mode is ReadOnly (the contract default). Revit rolls back its changes to
- * the target document, but the policy does not stop a library's commit on another document, files
- * or the network, so it is a read only under a person's consent: a human caller, or a Page pinned
- * by a human to this exact document. For every other caller it stays a write. NoTransaction and
- * WriteTransaction are always writes.
+ * the target document, so the target needs no grant; the guard does not roll back a commit on a
+ * sibling document, so `admitScript`'s K9 census still holds for every other open document. It is
+ * a read for a human, for Pea on an exact document, and for a Page pinned by a human to this exact
+ * document. External MCP keeps it a write. NoTransaction and WriteTransaction are always writes.
  */
 export const readsOnly = (key: string, input: unknown): boolean =>
   key === "scripting.execute" &&
   ((input as { permissionMode?: unknown } | null)?.permissionMode ?? "ReadOnly") === "ReadOnly";
 
-/** A person's pin is read consent for that exact resolved lifetime, never its process or a thread. */
+/** Who may run a ReadOnly script on `target` without a grant; a person's pin consents only to its own lifetime. */
+const readConsent = (caller: Caller, target?: DocumentRef): boolean => {
+  const consent = caller.kind === "page" ? pageDoors.get(caller)?.readConsent : null;
+  return (
+    caller.kind === "human" ||
+    (caller.kind === "pea" && !!target) ||
+    !!(consent && target && sameRef(consent, target))
+  );
+};
 export const consentedRead = (
   caller: Caller,
   key: string,
   input: unknown,
   target?: DocumentRef,
-): boolean => {
-  const consent = caller.kind === "page" ? pageDoors.get(caller)?.readConsent : null;
-  return (
-    readsOnly(key, input) &&
-    (caller.kind === "human" || !!(consent && target && sameRef(consent, target)))
-  );
-};
+): boolean => readsOnly(key, input) && readConsent(caller, target);
 
 /**
  * Admit one crossing at `door`, or throw `Refused`. Null means the crossing needs no basis: a
  * consented read, a host leaf, or a lifecycle selection whose census belongs to the Instances
- * action. `scriptReads` is `readsOnly`; only a human-pinned Page's exact target turns it into a read.
+ * action. `scriptReads` is `readsOnly`: a read for Pea on an exact document and for a human-pinned
+ * Page's exact target; the script's K9 sibling census follows in `admitScript`.
  */
 export function admitCrossing(
   caller: Caller,
@@ -459,7 +460,12 @@ export function admitCrossing(
       door,
       `Refused at ${door}: ${caller.kind} has no product write authority.`,
     );
-  if (destination.kind === "host" || destination.kind === "sdk-session") return null;
+  if (
+    destination.kind === "host" ||
+    destination.kind === "sdk-session" ||
+    (scriptReads && destination.kind === "document")
+  )
+    return null;
   const acquired = acquisitionBasis(destination);
   if (acquired) return acquired;
   return admitThread(caller.thread, destination, door);
