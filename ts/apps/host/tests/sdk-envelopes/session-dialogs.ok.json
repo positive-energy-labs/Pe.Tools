@@ -67,10 +67,6 @@
     "pe-revit session reset --id acc-r1"
   ],
   "guide": "session",
-  "related": [
-    "pe-revit session list",
-    "pe-revit doc list",
-    "pe-revit guide session"
-  ],
+  "related": ["pe-revit session list", "pe-revit doc list", "pe-revit guide session"],
   "exitCode": 0
 }

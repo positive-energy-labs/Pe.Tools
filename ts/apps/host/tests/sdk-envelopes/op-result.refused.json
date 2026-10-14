@@ -1,27 +1,26 @@
 {
   "result": {
     "state": "refused",
-    "requestId": "00000000-0000-4000-8000-000000000000",
-    "dialogs": null
+    "requestId": "cdc77035-87fa-43e2-97ff-ba643dca983e",
+    "receipt": {
+      "requestId": "cdc77035-87fa-43e2-97ff-ba643dca983e",
+      "key": "doc.open",
+      "pid": 71464,
+      "processStartUtc": "2026-10-14T04:06:31.8033171Z",
+      "verdict": "refused",
+      "responsePath": "cdc77035-87fa-43e2-97ff-ba643dca983e.71464-639275475918033171.response.json",
+      "startedUtc": "2026-10-14T04:07:41.4961661Z",
+      "completedUtc": "2026-10-14T04:07:53.1139318Z"
+    },
+    "response": null
   },
   "resolved": null,
-  "diagnostics": [
-    {
-      "code": "op.receipt-read-retried",
-      "detail": "No receipt appeared on the first scan; the command re-read once before classifying the request.",
-      "fix": null
-    },
-    {
-      "code": "op.unknown-request",
-      "detail": "No receipt exists for request '00000000-0000-4000-8000-000000000000'.",
-      "fix": "check the request id or inspect receipts under C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\acc-r1 or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\accept-r2-a or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\accept-r3-a or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\accept-r4b-a or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\accept-r4c-prompts or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\accept-r4c-ui or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\accept-w2-a or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\boundary-20261011 or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\boundary19-dev or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\boundary19-installed or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\boundary20-dev or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\boundary20-installed or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\chadds-relinquish or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\close-probe or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\coord-sync or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\coord-sync2 or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\desktop-cloud-proof or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\discovery-20261011 or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\holdings-spike or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\installed-update-24 or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\installed-update-25 or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\live-b or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\pdrop-proof or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\pe.app-25-pe.tools-accept2 or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\pe.app-25-pe.tools-accept3 or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\pea-742b17820b9a2ee63649212d44f9479c or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\pea-74dac010cbfde572570966aa186d7370 or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\pea-95cabaccdf905955538d867b59f29d5f or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\pea-9a9a6620111c5af5f44629d34dfd883c or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\pea-a16e945a519b6d2e31c084db30e72422 or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\pea-a67dd2d308bc81fef5acddd08edc59b9 or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\pea-afce0fc26842d6b76d8e27be59c84353 or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\pea-bbf89ec924c2611f5e3ed3cf8253490f or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\pea-d69ceb953e844a8c4eedd4e6df8f18d0 or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\pea-ea28999b34e9f8ae9b98f47eb6c5d51a or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\pea-ed6b755dbe5d0f7a452a6f0839aa03e7 or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\revit-25-52444 or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\sdk-cloud-proof or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\unsynced-195 or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\unsynced-proof or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\wave-g-r2 or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\_minted or C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\receipts\\_update"
-    }
-  ],
+  "diagnostics": [],
   "binary": {
     "origin": "dev-installed",
-    "assembly": "C:\\Users\\person\\.nuget\\packages\\pe.revit.cli\\0.1.0-beta.207\\tools\\net8.0\\any\\Pe.Revit.Cli.dll",
-    "sha256": "093D7ADCEDA6A6D85673BB5BAC9D56713FC5BFE88B7870E9C3E3BF425EAB12C4",
-    "informationalVersion": "0.1.0-beta.207+d458282266a924c74a811d1bea54ae91516e8fb6",
+    "assembly": "C:\\Users\\person\\.nuget\\packages\\pe.revit.cli\\0.1.0-beta.208\\tools\\net8.0\\any\\Pe.Revit.Cli.dll",
+    "sha256": "90EE5D4752601BE4E0F50AED84AA5E759BAA3F49FDF0C583904009B520E9CFEE",
+    "informationalVersion": "0.1.0-beta.208+44b07e06540622cf54543d1a155ce82ccc19d440",
     "hostExecutable": "C:\\Program Files\\dotnet\\dotnet.exe"
   },
   "command": {
@@ -30,15 +29,8 @@
     "commandRule": "checkout-manifest",
     "commandManifest": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\product.payloads.json"
   },
-  "nextSteps": [
-    "pe-revit op list",
-    "pe-revit session list"
-  ],
+  "nextSteps": ["pe-revit op list", "pe-revit session list"],
   "guide": "session",
-  "related": [
-    "pe-revit op list",
-    "pe-revit op result <requestId>",
-    "pe-revit guide session"
-  ],
+  "related": ["pe-revit op list", "pe-revit op result <requestId>", "pe-revit guide session"],
   "exitCode": 3
 }

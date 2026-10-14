@@ -210,12 +210,7 @@
       }
     ],
     "fixes": [],
-    "revitYears": [
-      "2023",
-      "2024",
-      "2025",
-      "2026"
-    ]
+    "revitYears": ["2023", "2024", "2025", "2026"]
   },
   "resolved": null,
   "diagnostics": [
@@ -245,9 +240,6 @@
   },
   "nextSteps": [],
   "guide": "new-addin",
-  "related": [
-    "pe-revit guide new-addin",
-    "pe-revit session list"
-  ],
+  "related": ["pe-revit guide new-addin", "pe-revit session list"],
   "exitCode": 1
 }

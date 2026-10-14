@@ -607,11 +607,8 @@ export async function admitInstancesAction(
             return dispatch(adoptionInput, id, read, true);
           },
         );
-        const envelope = parsePeRevitEnvelope<SessionStartResult, Resolved | null>(
-          JSON.stringify(adoption),
-          adoptionInput.argv,
-          peRevitLauncher(),
-        );
+        // A live adoption keeps its whole envelope; a recovered one keeps the response's two fields.
+        const envelope = adoption as { result: SessionStartResult; resolved: Resolved | null };
         const adopted = envelope.result.session;
         if (
           !target ||
@@ -1021,6 +1018,12 @@ async function admitAcquisitionRelease(
 }
 
 type OpRead = OpReceiptResponseResult | OpReceiptResult | OpStateResult;
+type SupervisorResponse = {
+  verdict?: string;
+  code?: string;
+  resolved?: unknown;
+  result?: { state?: string; legs?: readonly unknown[] } | null;
+};
 
 /**
  * Settle lost document and supervisor invocations from their durable SDK op receipts.
@@ -1070,7 +1073,7 @@ export const recoverInstancesAction = (
         evidence,
       };
     }
-    let response = answered ? result.response : undefined;
+    let response: unknown = answered ? result.response : undefined;
     let notDispatched = !supervisor || unknownRequest;
     if (supervisor && !unknownRequest) {
       const receipt =
@@ -1084,16 +1087,19 @@ export const recoverInstancesAction = (
         receipt.verdict !== result.state
       )
         return { step, evidence };
-      const terminal = parsePeRevitEnvelope<{ state: string; legs?: readonly unknown[] }>(
-        JSON.stringify(response),
-        argv,
-        peRevitLauncher(),
-      );
-      if (terminal.result?.state !== result.state) return { step, evidence };
-      const legs = terminal.result.legs;
-      notDispatched = !legs?.length && terminal.diagnostics.some((d) => NOT_DISPATCHED.has(d.code));
+      // The supervisor's op response (recorded, beta.208): the verb's result and resolution, not
+      // its CLI envelope; a refusal names its one code.
+      const answer = response as SupervisorResponse;
+      if (
+        answer.verdict !== result.state ||
+        (answer.result && answer.result.state !== result.state)
+      )
+        return { step, evidence };
+      notDispatched = !answer.result?.legs?.length && NOT_DISPATCHED.has(answer.code ?? "");
       // Adoption needs resolved process evidence on resume; other supervisors return their payload.
-      response = step.key.endsWith(".adopt") ? terminal : terminal.result;
+      response = step.key.endsWith(".adopt")
+        ? { result: answer.result, resolved: answer.resolved }
+        : answer.result;
     }
     if (result.state === "ok" && answered)
       return { step: { ...intent, state: "succeeded", result: response ?? null }, evidence };

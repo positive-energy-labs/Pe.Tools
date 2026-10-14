@@ -54,15 +54,8 @@
     "commandRule": "checkout-manifest",
     "commandManifest": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\product.payloads.json"
   },
-  "nextSteps": [
-    "pe-revit doc open <path> --id acc-r1",
-    "pe-revit doc list --recent"
-  ],
+  "nextSteps": ["pe-revit doc open <path> --id acc-r1", "pe-revit doc list --recent"],
   "guide": "session",
-  "related": [
-    "pe-revit doc list",
-    "pe-revit doc list --recent",
-    "pe-revit session list"
-  ],
+  "related": ["pe-revit doc list", "pe-revit doc list --recent", "pe-revit session list"],
   "exitCode": 0
 }

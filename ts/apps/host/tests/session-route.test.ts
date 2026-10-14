@@ -15,7 +15,9 @@ import {
   sdkReadingArgs,
   sessionStatusArgs,
 } from "../src/session-route.ts";
-import { peRevitLauncher, validatePeRevitEnvelope } from "../src/pe-revit-launch.ts";
+import { peRevitLauncher } from "../src/pe-revit-launch.ts";
+// The SDK's own validator, unwrapped: the recorded-shape check wraps the host's re-export.
+import { validatePeRevitEnvelope } from "@pe/host-contracts/pe-revit-cli";
 import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
 
 const execFileAsync = promisify(execFile);

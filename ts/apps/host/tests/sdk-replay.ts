@@ -36,7 +36,7 @@ const shortForms: Record<string, string> = {
 };
 
 /** `doc open <path> --json` → `doc-open`; the checkout's short forms name their family verb. */
-export const verbOf = (args: readonly string[]): string => {
+const verbOf = (args: readonly string[]): string => {
   const words = args.filter((arg) => !arg.startsWith("-"));
   // `doc list --holdings` answers a narrower document row than `doc list`.
   if (families.has(words[0] ?? ""))
@@ -70,7 +70,8 @@ function compare(real: Json, fake: unknown, path: string, problems: string[]) {
   if (Array.isArray(real)) {
     const shapes = exemplars(real);
     for (const [i, row] of (fake as unknown[]).entries()) {
-      const tag = kind(row) === "object" ? String((row as Shape).case ?? (row as Shape).kind ?? "") : "";
+      const tag =
+        kind(row) === "object" ? String((row as Shape).case ?? (row as Shape).kind ?? "") : "";
       const shape = shapes.get(tag) ?? (shapes.size === 1 && !tag ? shapes.get("") : undefined);
       if (shape) compare(shape, row, `${path}[${i}]`, problems);
     }
@@ -95,6 +96,8 @@ const stateOf = (envelope: Record<string, unknown>) =>
 export function recordedProblems(args: readonly string[], stdout: string): string[] {
   const verb = verbOf(args);
   const fake = JSON.parse(stdout) as Record<string, unknown>;
+  // The demo lane is a product simulation that names itself; it is not a test fake.
+  if ((fake.command as Record<string, unknown> | null)?.commandRule === "simulated-demo") return []; // demo-owner.ts SIMULATED_SDK
   const exact = recorded.get(`${verb}.${stateOf(fake)}`);
   // A state with no recording of its own is held to the envelope, not to another state's result.
   const real = exact ?? [...recorded].find(([name]) => name.startsWith(`${verb}.`))?.[1];
@@ -110,17 +113,33 @@ export function recordedProblems(args: readonly string[], stdout: string): strin
 const sameKeys = (a: unknown, b: unknown) =>
   kind(a) === "object" &&
   kind(b) === "object" &&
-  Object.keys(a as object).sort().join() === Object.keys(b as object).sort().join();
+  Object.keys(a as object)
+    .sort()
+    .join() ===
+    Object.keys(b as object)
+      .sort()
+      .join();
 
 const contract = readFileSync(
-  join(import.meta.dirname, "../../../packages/host-contracts/src/vendor/generated/pe-revit-contract.ts"),
+  join(
+    import.meta.dirname,
+    "../../../packages/host-contracts/src/vendor/generated/pe-revit-contract.ts",
+  ),
   "utf8",
 );
 const interfaces = [...contract.matchAll(/export interface \w+(?:<\w+>)? \{([^}]*)\}/g)].map((m) =>
-  [...m[1]!.matchAll(/readonly (\w+)\??:/g)].map((k) => k[1]).sort().join(),
+  [...m[1]!.matchAll(/readonly (\w+)\??:/g)]
+    .map((k) => k[1])
+    .sort()
+    .join(),
 );
 const contractShape = (value: unknown) =>
-  kind(value) === "object" && interfaces.includes(Object.keys(value as object).sort().join());
+  kind(value) === "object" &&
+  interfaces.includes(
+    Object.keys(value as object)
+      .sort()
+      .join(),
+  );
 
 const merge = (base: Json, patch: unknown, path: string): Json => {
   if (patch === undefined) return base;
@@ -149,4 +168,24 @@ export function replay(verb: string, patch: Record<string, unknown> = {}, state 
   const base = recorded.get(`${verb}.${state}`);
   if (!base) throw new Error(`no recorded envelope '${verb}.${state}'`);
   return JSON.stringify(merge(base, patch, verb));
+}
+
+/** A fake's answer to `args`: the recording of its verb and state with `fields` laid over it, or the
+ * recorded frame around `fields` when that state was never recorded (then held to the contract). */
+export function replayAnswer(args: readonly string[], fields: Record<string, unknown>): string {
+  const verb = verbOf(args);
+  const state = String((fields.result as Record<string, unknown> | null)?.state ?? "none");
+  if (recorded.has(`${verb}.${state}`)) return replay(verb, fields, state);
+  const { binary, command, nextSteps, guide, related } = frame;
+  return JSON.stringify({
+    binary,
+    command,
+    nextSteps,
+    guide,
+    related,
+    resolved: null,
+    diagnostics: [],
+    exitCode: 0,
+    ...fields,
+  });
 }

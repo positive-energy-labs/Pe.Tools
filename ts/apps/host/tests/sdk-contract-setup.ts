@@ -1,5 +1,5 @@
 // Every host test: an envelope the host parses must have a shape the SDK was recorded sending.
-import { afterEach, vi } from "vitest";
+import { afterEach, vi } from "vite-plus/test";
 
 // Host code may swallow the refusal (a reader that catches, a retry loop); the test still fails here.
 const drift = vi.hoisted(() => [] as string[]);

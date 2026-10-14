@@ -12,12 +12,7 @@
       "startedUtc": "2026-10-14T04:11:03.4641138Z",
       "completedUtc": "2026-10-14T04:11:03.8013308Z"
     },
-    "response": {
-      "requestId": "60c86706-ef25-4847-95fb-3bf16ccfcb87",
-      "key": "scripting.execute",
-      "verdict": "failed",
-      "detail": "TS host call 'pod.list' failed (403): {\"error\":{\"code\":\"context.missing\",\"message\":\"Refused at POST /call: anonymous callers are read-only.\",\"details\":{\"refusal\":{\"code\":\"context.missing\",\"detail\":\"Refused at POST /call: anonymous callers are read-only.\"}}}}"
-    }
+    "response": null
   },
   "resolved": null,
   "diagnostics": [],
@@ -34,15 +29,8 @@
     "commandRule": "checkout-manifest",
     "commandManifest": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\product.payloads.json"
   },
-  "nextSteps": [
-    "pe-revit op result 60c86706-ef25-4847-95fb-3bf16ccfcb87",
-    "pe-revit op list"
-  ],
+  "nextSteps": ["pe-revit op result 60c86706-ef25-4847-95fb-3bf16ccfcb87", "pe-revit op list"],
   "guide": "session",
-  "related": [
-    "pe-revit op list",
-    "pe-revit op result <requestId>",
-    "pe-revit guide session"
-  ],
+  "related": ["pe-revit op list", "pe-revit op result <requestId>", "pe-revit guide session"],
   "exitCode": 1
 }

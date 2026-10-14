@@ -25,7 +25,8 @@ import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts"
 import { documentMarks } from "../src/document-marks.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
-import { sdkSessions, sdkEnvelope, originalProcess } from "./native-receipt-fixture.ts";
+import { sdkSessions, originalProcess } from "./native-receipt-fixture.ts";
+import { replayAnswer } from "./sdk-replay.ts";
 import { detailResponse } from "./schedule-fixture.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { withInvocationContext } from "@pe/runtime/context";
@@ -208,17 +209,19 @@ export async function setup() {
   const sdk = async (args: readonly string[]) => {
     if (args[0] === "session" || args[0] === "doc") return sdkSessions(args);
     const id = args[2];
-    return sdkEnvelope({
-      state: "ok",
-      requestId: id,
-      receipt: {
+    return replayAnswer(args, {
+      result: {
+        state: "ok",
         requestId: id,
-        key: "schedule.cells.apply",
-        ...originalProcess,
-        pid: Number(args[args.indexOf("--pid") + 1]),
-        verdict: "ok",
+        receipt: {
+          requestId: id,
+          key: "schedule.cells.apply",
+          processStartUtc: originalProcess.processStartUtc,
+          pid: Number(args[args.indexOf("--pid") + 1]),
+          verdict: "ok",
+        },
+        response,
       },
-      response,
     });
   };
   const mount = () =>

@@ -64,7 +64,10 @@ export const sdkSessions = async (args: readonly string[] = []) =>
       })
     : replay("session-list", {
         result: {
-          sessions: [observedProcess, { ...observedProcess, process: { ...originalProcess, pid: 43 } }],
+          sessions: [
+            observedProcess,
+            { ...observedProcess, process: { ...originalProcess, pid: 43 } },
+          ],
           registryRoot: "test",
           unreadableReceipts: [],
         },

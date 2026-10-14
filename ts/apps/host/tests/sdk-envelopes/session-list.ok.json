@@ -150,14 +150,8 @@
     "commandRule": "checkout-manifest",
     "commandManifest": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\product.payloads.json"
   },
-  "nextSteps": [
-    "pe-revit start"
-  ],
+  "nextSteps": ["pe-revit start"],
   "guide": "session",
-  "related": [
-    "pe-revit session list",
-    "pe-revit doc list",
-    "pe-revit guide session"
-  ],
+  "related": ["pe-revit session list", "pe-revit doc list", "pe-revit guide session"],
   "exitCode": 0
 }

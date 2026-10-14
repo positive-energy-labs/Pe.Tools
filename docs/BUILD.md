@@ -102,7 +102,7 @@ Verified mechanics:
 
 ## SDK pin and release feed
 
-`pe-revit sdk adopt <version> --plan` shows the adoption steps; `pe-revit sdk adopt <version>` applies them. The verb repins `global.json` and `.config/dotnet-tools.json`, points `nuget.config` at the release feed, restores the tool, regenerates the vendored TypeScript contract, reports removed exports, installs the bootstrap for the manifest's years, and writes a receipt. Review removed exports and cut consumers over before claiming acceptance.
+`pe-revit sdk adopt <version> --plan` shows the adoption steps; `pe-revit sdk adopt <version>` applies them. The verb repins `global.json` and `.config/dotnet-tools.json`, points `nuget.config` at the release feed, restores the tool, regenerates the vendored TypeScript contract, reports removed exports, installs the bootstrap for the manifest's years, and writes a receipt. Review removed exports and cut consumers over before claiming acceptance. The bootstrap install is machine-wide: adopting in one worktree breaks every other checkout still pinned to the old beta (`session.bootstrap-mismatch`, the owner's tray on 2026-10-13). A wave releases to the feed and asks counsel, who lands the pin on main and the tray in one step.
 
 The default feed is `%USERPROFILE%\source\feeds\pe-revit-sdk`, with each release in `<feed>/<version>/`. `product.payloads.json` sets `sdk.feed` to override the feed and `sdk.clientDir` to name the generated client directory. Pe.Tools uses a null feed and `ts/packages/host-contracts/src/vendor/generated`. `eng/sdk-feed` is no longer a package source; its copied nupkgs are gitignored and disposable. Fresh worktrees use the same feed folder.
 
@@ -320,7 +320,7 @@ That boundary is deliberately narrower than Revit orchestration:
 - Script execution performs the requested targeted call only. It must not build, converge, or restart the dev session. Agents inspect freshness and invoke SDK lifecycle actions explicitly.
 - A clean checkout may launch its checkout-pinned source host without a staged `Pe.Host.exe`, but that launch path is not a build or Revit-convergence path.
 
-The acceptance bar is the field drive in `Pe.Revit.Sdk/RUNTIME_ACCEPTANCE.md` — one operator, released artifacts, a real Revit, cold start through stop. There is no second rig. Per-run records are disposable (the surviving pin decision is in `docs/features/host/LEDGER.md`).
+A checkout's native acceptance round runs through `tools/acceptance.py` (setup a copied home and own host, a controlled session on model copies, `sdk` envelopes, census with the owner-root diff, teardown of only what it recorded). The acceptance bar is the field drive in `Pe.Revit.Sdk/RUNTIME_ACCEPTANCE.md` — one operator, released artifacts, a real Revit, cold start through stop. There is no second rig. Per-run records are disposable (the surviving pin decision is in `docs/features/host/LEDGER.md`).
 
 Strict execution belongs to one runtime owner. Source host, Pea/MCP and Revit use the actual checkout containing their modules or SDK payload descriptor. `PE_TOOLS_SOURCE_ROOT` must agree with that checkout. Installed host and Pea require a Node SEA at the exact manifest-declared executable under the canonical product root; a copied executable cannot claim installation ownership. Bridge registration and SDK resolution must match lane, checkout or installation root, service name and process incarnation before dispatch. An explicit id, pid, URL or path cannot waive these checks. Read-only diagnostics can show every runtime without selecting one for execution.
 

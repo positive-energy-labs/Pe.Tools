@@ -38,10 +38,6 @@
     "pe-revit op cancel 6bc3ba42-04df-4e31-886a-b913cf67a964"
   ],
   "guide": "session",
-  "related": [
-    "pe-revit op list",
-    "pe-revit op result <requestId>",
-    "pe-revit guide session"
-  ],
+  "related": ["pe-revit op list", "pe-revit op result <requestId>", "pe-revit guide session"],
   "exitCode": 4
 }

@@ -39,15 +39,8 @@
     "commandRule": "checkout-manifest",
     "commandManifest": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\product.payloads.json"
   },
-  "nextSteps": [
-    "pe-revit op result 6bc3ba42-04df-4e31-886a-b913cf67a964",
-    "pe-revit op list"
-  ],
+  "nextSteps": ["pe-revit op result 6bc3ba42-04df-4e31-886a-b913cf67a964", "pe-revit op list"],
   "guide": "session",
-  "related": [
-    "pe-revit op list",
-    "pe-revit op result <requestId>",
-    "pe-revit guide session"
-  ],
+  "related": ["pe-revit op list", "pe-revit op result <requestId>", "pe-revit guide session"],
   "exitCode": 1
 }
