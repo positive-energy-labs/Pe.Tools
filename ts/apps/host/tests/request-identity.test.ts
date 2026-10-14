@@ -75,7 +75,7 @@ afterEach(async () => {
   await Promise.all(disposals.splice(0).map((dispose) => dispose()));
 });
 
-test.each(["/call", "/events", "/pe/readings", "/api/bridge", "/host/status"])(
+test.each(["/call", "/pe/readings", "/api/bridge", "/host/status"])(
   "stale browser cannot enter %s without its original runtime owner",
   async (path) => {
     const browser = {
@@ -135,7 +135,7 @@ test("browser document navigation and static assets retain normal routing", asyn
         "sec-fetch-dest": "empty",
         accept: "text/html",
       },
-      "/events",
+      "/pe/resources",
       options,
     ),
   ).toMatchObject({ refusal: { code: "runtime.owner-missing" } });
@@ -243,7 +243,6 @@ test("the global reader gates routes, static fallback, unmatched paths and upgra
     "/call",
     "/actions",
     "/actions/cancel",
-    "/events",
     "/pe/resources",
     "/pe/access",
     "/host/status",

@@ -62,6 +62,9 @@ export function definePeApi<
     | "harnessThreadBodySchema"
     | "harnessEventSchema"
     | "promptRequestSchema"
+    | "turnStateSchema"
+    | "queueRequestSchema"
+    | "hostLogPageSchema"
     | "permissionResponseSchema"
     | "questionResponseSchema"
     | "forkThreadRequestSchema"
@@ -95,6 +98,9 @@ export function definePeApi<
     schemas.harnessThreadSummarySchema as S["harnessThreadSummarySchema"];
   const harnessThreadBodySchema = schemas.harnessThreadBodySchema as S["harnessThreadBodySchema"];
   const promptRequestSchema = schemas.promptRequestSchema as S["promptRequestSchema"];
+  const turnStateSchema = schemas.turnStateSchema as S["turnStateSchema"];
+  const queueRequestSchema = schemas.queueRequestSchema as S["queueRequestSchema"];
+  const hostLogPageSchema = schemas.hostLogPageSchema as S["hostLogPageSchema"];
   const permissionResponseSchema =
     schemas.permissionResponseSchema as S["permissionResponseSchema"];
   const questionResponseSchema = schemas.questionResponseSchema as S["questionResponseSchema"];
@@ -279,16 +285,6 @@ export function definePeApi<
       "threads",
       "caller",
     ),
-    "threads.stream": route(
-      "GET",
-      "/pe/threads/stream",
-      none,
-      z.array(harnessThreadSummarySchema),
-      "read",
-      "threads",
-      "read",
-      "stream",
-    ),
     "thread.get": route(
       "GET",
       "/pe/threads/:id",
@@ -312,10 +308,29 @@ export function definePeApi<
       "POST",
       "/pe/threads/:id/prompt",
       promptRequestSchema,
-      z.object({ turnId: z.string() }),
+      turnStateSchema,
       "human",
       "threads",
       "human",
+    ),
+    "thread.queue": route(
+      "POST",
+      "/pe/threads/:id/queue",
+      queueRequestSchema,
+      turnStateSchema,
+      "human",
+      "threads",
+      "human",
+    ),
+    /** Query `turn` and `timeoutMs`: answers once the turn settles, or as it stands at the timeout. */
+    "thread.wait": route(
+      "GET",
+      "/pe/threads/:id/wait",
+      none,
+      turnStateSchema,
+      "read",
+      "threads",
+      "read",
     ),
     "thread.cancel": route(
       "POST",
@@ -370,16 +385,6 @@ export function definePeApi<
       "caller",
       "threads",
       "caller",
-    ),
-    "thread.stream": route(
-      "GET",
-      "/pe/threads/:id/stream",
-      none,
-      schemas.harnessEventSchema as S["harnessEventSchema"],
-      "read",
-      "threads",
-      "read",
-      "stream",
     ),
     "scope.get": route(
       "GET",
@@ -467,6 +472,8 @@ export function definePeApi<
     ),
     "receipts.read": route("GET", "/pe/receipt-facts", none, z.array(object), "read", "pe", "read"),
     "resources.stream": route("GET", "/pe/resources", none, object, "read", "pe", "read", "stream"),
+    /** Query `after`, `kind`, `thread`, `limit`: one page of the host log after a cursor. */
+    "log.read": route("GET", "/pe/log", none, hostLogPageSchema, "read", "pe", "read"),
     "work.list": route("GET", "/pe/route-state", none, z.array(object), "read", "pe", "read"),
     "work.get": route("GET", "/pe/route-state/:route", none, object, "read", "pe", "read"),
     "work.salvage": route(
