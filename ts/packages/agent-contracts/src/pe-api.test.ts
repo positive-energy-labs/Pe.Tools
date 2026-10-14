@@ -176,5 +176,5 @@ it("admission metadata: one explicit permission per route, and share stays local
     permission: "human-or-pea",
     localOnly: false,
   });
-  expect(peRoutes["scope.revoke"]).toMatchObject({ principal: "human", permission: "product" });
+  expect(peRoutes["scope.revoke"]).toMatchObject({ principal: "human", permission: "human" });
 });

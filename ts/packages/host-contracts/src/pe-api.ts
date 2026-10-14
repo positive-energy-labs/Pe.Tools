@@ -150,7 +150,7 @@ export function definePeApi<
   });
   /** Public HTTP transport authority. Domain schemas stay with their domain owners. */
   const peRoutes = {
-    "features.get": route("GET", "/pe/features", none, hostDescriptorSchema, "read", "pe"),
+    "features.get": route("GET", "/pe/features", none, hostDescriptorSchema, "read", "pe", "read"),
     "operation.call": route(
       "POST",
       "/call",

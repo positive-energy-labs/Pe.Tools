@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { PageTargetReading } from "@pe/agent-contracts";
-import { Button } from "#/components/lang/button";
+import { Button } from "@pe/kit/lang/button";
 import { runtimeStreamUrl } from "#/host/runtime";
 import { peClient } from "#/host/pe-client";
 import { readPageTarget } from "./client";

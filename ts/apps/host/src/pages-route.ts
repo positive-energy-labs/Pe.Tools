@@ -873,8 +873,7 @@ ${asset("pe.css")}`,
             if (path === "/pages/pe.js") return asset("pe.js");
             if (path.startsWith("/pages/kit/"))
               return pageKitAsset(path.slice("/pages/kit/".length));
-            if (path === "/pages/pe.css")
-              return `${chipTokens(asset("base.css"))}\n${asset("pe.css")}`;
+            if (path === "/pages/pe.css") return `${asset("base.css")}\n${asset("pe.css")}`;
             if (path === "/pages/revit.js") return classicRevit();
             if (path === "/pages/revit.css") return asset("revit.css");
             throw Error(`Page export has an unsupported host library: ${path}`);
