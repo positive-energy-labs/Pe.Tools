@@ -1,0 +1,27 @@
+{
+  "name": "@pe/kit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.tsx"
+  },
+  "scripts": {
+    "build": "vp build && node scripts/page.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "vp check"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.18",
+    "@types/node": "^25.6.2",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "playwright-core": "1.60.0",
+    "tailwindcss": "^4.1.18",
+    "vite-plus": "catalog:"
+  }
+}

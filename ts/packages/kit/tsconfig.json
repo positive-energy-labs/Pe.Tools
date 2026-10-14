@@ -1,0 +1,7 @@
+{
+  "extends": "../../apps/web/tsconfig.json",
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"],
+  "compilerOptions": {
+    "paths": { "#/*": ["../../apps/web/src/*"] }
+  }
+}
