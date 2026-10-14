@@ -27,7 +27,8 @@ const archive = execFileSync("git", ["archive", "--format=tar", commit], {
   cwd: repo,
   maxBuffer: 1 << 30,
 });
-execFileSync("tar", ["-xf", "-", "-C", source], { input: archive });
+// cwd, not -C: GNU tar (Git Bash) reads a drive letter in -C as a remote host; Windows tar does not.
+execFileSync("tar", ["-xf", "-"], { cwd: source, input: archive });
 if (!existsSync(join(source, "Pe.Tools.slnx")))
   throw new Error("source staging: extracted archive has no Pe.Tools.slnx");
 writeFileSync(manifest, `${JSON.stringify({ commit }, null, 2)}\n`);
