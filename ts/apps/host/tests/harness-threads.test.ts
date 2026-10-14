@@ -1097,6 +1097,23 @@ test("providers list from the probe: readiness follows the adapter's own auth re
   expect((await call("POST", "/pe/providers/nope/probe")).status).toBe(404);
 });
 
+test("a login that expires between turns reads expired, not ready, and says how to repair it", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const readiness = async () =>
+    ((await call("GET", "/pe/providers/claude")).json as Provider).readiness;
+  await call("POST", "/pe/providers/claude/probe");
+  expect(await readiness()).toEqual({ state: "ready" });
+  const created = await call("POST", "/pe/threads", { providerId: "claude" });
+  await call("POST", `/pe/threads/${created.json.id}/prompt`, { text: "auth-expired" });
+  await until(reader(threads), created.json.id, (body) => body.events.some((e) => e.kind === "error"));
+  expect(await readiness()).toEqual({
+    state: "refused",
+    step: "signed-in",
+    message: "Claude Code sign-in expired. Sign in again.",
+  });
+});
+
 test("an endpoint provider is checked before save, and every thread carries its provider's env", async () => {
   vi.stubEnv("ANTHROPIC_BASE_URL", "https://inherited.invalid");
   vi.stubEnv("MODEL_PROVIDER", "inherited-provider");

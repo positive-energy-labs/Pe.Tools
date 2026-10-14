@@ -101,6 +101,19 @@ export const accessModes = {
   unguarded: ["bypassPermissions", "agent-full-access", "full-access"],
 };
 
+/**
+ * A harness refusal that means the login itself ended: ACP's `authRequired` (-32000) or the words
+ * the two CLIs use for an expired or revoked subscription. Anything else is an ordinary failure.
+ */
+export function isAuthRefusal(error: unknown): boolean {
+  return (
+    (error as { code?: unknown } | null)?.code === -32000 ||
+    /authentication required|not logged in|(?:please|must) (?:log|sign) ?in|unauthori[sz]ed|\b401\b|(?:token|login|session|credentials?) (?:has |have )?(?:expired|been revoked)/i.test(
+      String((error as Error | null)?.message ?? error),
+    )
+  );
+}
+
 /* ── Child env per provider ── */
 
 const CODEX_PROVIDER = "pea_endpoint";
@@ -860,6 +873,23 @@ export function createProviders(options: ProvidersOptions) {
         probedAt: new Date().toISOString(),
       });
       notify();
+    },
+    /**
+     * The harness refused a turn for auth: a subscription login that was ready now reads expired,
+     * so Send stops offering it and the repair button is Sign in. An endpoint key is not a login.
+     */
+    expire: (id: string): string | null => {
+      const record = get(id);
+      if (record?.auth.kind !== "subscription") return null;
+      const message = `${adapters[record.harness].title} sign-in expired. Sign in again.`;
+      cache.set(id, {
+        readiness: { state: "refused", step: "signed-in", message },
+        models: cache.get(id)?.models ?? [],
+        traits: cache.get(id)?.traits ?? [],
+        probedAt: new Date().toISOString(),
+      });
+      notify();
+      return message;
     },
     validateModel: async (record: ProviderRecord, modelId: string) => {
       if (record.auth.kind === "endpoint")
