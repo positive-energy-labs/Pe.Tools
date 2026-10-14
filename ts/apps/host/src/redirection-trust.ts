@@ -1,4 +1,6 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { mkdirSync, statSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 
 export type RedirectionTrust = "enforced" | "audit" | "off";
 
@@ -33,3 +35,44 @@ export async function readRedirectionTrust(pid = process.pid): Promise<Redirecti
 let own: Promise<RedirectionTrust | null> | undefined;
 /** This host's own policy, read once per process; the startup log and the machine reading share it. */
 export const hostRedirectionTrust = () => (own ??= readRedirectionTrust());
+
+const RELAUNCH_WINDOW_MS = 120_000;
+
+/**
+ * An enforced host (inherited from msiexec through the old update stub) hands itself to the desktop
+ * shell, which starts it unguarded, and exits. Explorer carries no args or env, so "once" is a marker
+ * file written before the launch: a child that is still enforced and finds a fresh marker logs and
+ * continues guarded rather than looping. Returns true when this process should exit.
+ * Facts mirrored from the SDK's ShellLaunch.cs: `explorer.exe "<exe>"`, no arguments (Run-key form).
+ */
+export function relaunchOutOfGuard(o: {
+  trust: RedirectionTrust | null;
+  exe: string;
+  marker: string;
+  log?: (line: string) => void;
+  launch?: (exe: string) => void;
+}): boolean {
+  if (o.trust !== "enforced") return false;
+  const log = o.log ?? console.log;
+  try {
+    if (Date.now() - statSync(o.marker).mtimeMs < RELAUNCH_WINDOW_MS) {
+      log("pe-host redirection-guard still enforced after a shell relaunch; continuing guarded");
+      return false;
+    }
+  } catch {
+    // No marker: first time.
+  }
+  try {
+    mkdirSync(dirname(o.marker), { recursive: true });
+    writeFileSync(o.marker, new Date().toISOString());
+    (
+      o.launch ??
+      ((exe) => spawn("explorer.exe", [exe], { detached: true, stdio: "ignore" }).unref())
+    )(o.exe);
+  } catch (error) {
+    log(`pe-host redirection-guard shell relaunch failed (${String(error)}); continuing guarded`);
+    return false;
+  }
+  log("pe-host redirection-guard enforced; relaunched through the desktop shell, exiting");
+  return true;
+}

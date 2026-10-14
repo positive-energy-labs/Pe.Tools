@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { hostProgram } from "./host-program.ts";
 import { resolveHostVersion } from "./host-lifecycle.ts";
 import { hostOwnership, productRoot } from "./host-ownership.ts";
-import { hostRedirectionTrust } from "./redirection-trust.ts";
+import { hostRedirectionTrust, relaunchOutOfGuard } from "./redirection-trust.ts";
 import { hostReceiptExport, fatalReceipt } from "./receipt-export.ts";
 
 // The installer stub and the login Run key start the installed host with no stdio anyone reads, so
@@ -41,10 +41,18 @@ console.log(
 );
 
 // Windows RedirectionGuard is inherited from msiexec and blocks user junctions for every child the
-// host spawns. Log it once so a field report never needs a script.
-void hostRedirectionTrust().then((trust) =>
-  console.log(`pe-host redirection-guard=${trust ?? "unread"}`),
-);
+// host spawns. Log it once, and on the installed lane leave a guarded start before claiming anything.
+const trust = await hostRedirectionTrust();
+console.log(`pe-host redirection-guard=${trust ?? "unread"}`);
+if (
+  hostOwnership.lane === "installed" &&
+  relaunchOutOfGuard({
+    trust,
+    exe: hostOwnership.executablePath,
+    marker: join(productRoot(), "guard-relaunch.stamp"),
+  })
+)
+  process.exit(0);
 
 let fatal = false;
 for (const [event, code] of [
