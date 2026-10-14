@@ -6,7 +6,6 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { isSea } from "node:sea";
 import { Readable, Writable } from "node:stream";
 import { ClientSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
-import hostPackage from "../../package.json" with { type: "json" };
 import type { HarnessId } from "@pe/agent-contracts";
 import {
   HOST_CONTEXT_VARIABLE,
@@ -14,10 +13,11 @@ import {
   productInstallLayout,
 } from "@pe/host-contracts/contracts";
 import { checkoutLayout } from "@pe/host-contracts/service-identity";
+import { codexPackagePath, installCommand } from "./install.ts";
 
 /**
  * One row per harness: the ACP adapter package the host spawns, the CLI the user signs in with, and
- * the official installer for that CLI. Login and install run in a console the user can see.
+ * its official installation source. Login and install run in a console the user can see.
  */
 export const adapters: Record<
   HarnessId,
@@ -28,14 +28,14 @@ export const adapters: Record<
     pkg: "@agentclientprotocol/claude-agent-acp",
     cli: "claude",
     login: "claude auth login",
-    install: "irm https://claude.ai/install.ps1 | iex",
+    install: installCommand("claude"),
   },
   codex: {
     title: "Codex",
     pkg: "@agentclientprotocol/codex-acp",
     cli: "codex",
     login: "codex login",
-    install: "irm https://chatgpt.com/codex/install.ps1 | iex",
+    install: installCommand("codex"),
   },
 };
 
@@ -97,28 +97,53 @@ export function openAdapter(
 }
 
 /**
- * The user's own CLI (host ledger 2026-10-08, H1): where the official installer puts it, else the
- * first `<cli>.exe` on PATH, else the bare name (not installed). Only native exes count, because
+ * The user's CLI: official install, Pea's downloaded package, then shell/current registry PATH.
+ * The bare name means not installed. Only native exes count, because
  * the Claude SDK spawns its executable without a shell.
  */
 export function adapterCli(harness: HarnessId, env: NodeJS.ProcessEnv = process.env): string {
-  const local = env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local");
+  const home = env.USERPROFILE ?? homedir();
+  const local = env.LOCALAPPDATA ?? join(home, "AppData", "Local");
   const official =
     harness === "claude"
-      ? join(homedir(), ".local", "bin", "claude.exe")
+      ? join(home, ".local", "bin", "claude.exe")
       : join(local, "Programs", "OpenAI", "Codex", "bin", "codex.exe");
   if (existsSync(official)) return official;
-  const found = spawnSync(
-    hostPackage.config.windowsBinaries.where,
-    [`${adapters[harness].cli}.exe`],
-    {
-      encoding: "utf8",
-      windowsHide: true,
-      timeout: 5000,
-      env,
-    },
-  );
-  return found.status === 0 ? found.stdout.split(/\r?\n/)[0]!.trim() : adapters[harness].cli;
+  const packaged = join(codexPackagePath(env), "bin", "codex.exe");
+  if (harness === "codex" && existsSync(packaged)) return packaged;
+  // Read on every resolution, including the probe after a console closes. The parent PATH
+  // predates installs; `where` also searches cwd, which is not an installation authority.
+  const registry =
+    process.platform === "win32"
+      ? [
+          "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+          "HKCU\\Environment",
+        ].map((key) => {
+          const result = spawnSync(
+            join(env.SystemRoot ?? "C:\\Windows", "System32", "reg.exe"),
+            ["query", key, "/v", "Path"],
+            { encoding: "utf8", windowsHide: true, timeout: 5000 },
+          );
+          return result.status === 0
+            ? (/^\s*Path\s+REG_(?:EXPAND_)?SZ\s+(.*)$/im.exec(result.stdout)?.[1] ?? "")
+            : "";
+        })
+      : [];
+  const inherited = Object.entries(env).find(([key]) => key.toUpperCase() === "PATH")?.[1] ?? "";
+  for (const entry of [inherited, ...registry].join(";").split(";")) {
+    const folder = entry
+      .trim()
+      .replace(/^"|"$/g, "")
+      .replace(
+        /%([^%]+)%/g,
+        (raw, name: string) =>
+          Object.entries(env).find(([key]) => key.toLowerCase() === name.toLowerCase())?.[1] ?? raw,
+      );
+    if (!isAbsolute(folder)) continue;
+    const candidate = join(folder, `${adapters[harness].cli}.exe`);
+    if (existsSync(candidate)) return candidate;
+  }
+  return adapters[harness].cli;
 }
 
 export function adapterLogin(harness: HarnessId, cli = adapterCli(harness)): string {
