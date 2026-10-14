@@ -30,6 +30,8 @@ import { harnessClient } from "#/workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "#/workbench/config";
 import { Markdown } from "#/workbench/prose";
 import { useSurfaceHost } from "#/navigation/surface-host";
+import { useDestination } from "#/navigation/state";
+import { FailureNote } from "#/components/failure-note";
 import { useAction } from "#/readings";
 
 import {
@@ -69,6 +71,7 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
   const [error, setError] = useState<string | null>(null);
   const card = useRef<HTMLDivElement>(null);
   const host = useSurfaceHost();
+  const go = useDestination();
   const ledger = useRef<NoticeLedger | null>(null);
   /** This surface's own record of what the person has seen and snoozed, kept across reloads. */
   const record = (change: (ledger: NoticeLedger) => NoticeLedger) => {
@@ -193,13 +196,18 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
         : { type: "notice-panel" },
     );
   const act = item.act;
+  /** A failure's door opens in the tray panel at that route; the card steps aside. */
+  const door = (href: string) => {
+    go(href);
+    close({ type: "notice-panel" });
+  };
   return (
     <div
       ref={card}
       role="status"
       aria-label="notice"
       data-surface="artifact"
-      className="hairline fixed right-0 bottom-0 z-notice flex max-h-dvh w-[min(420px,100vw)] flex-col gap-1.5 px-3 pt-2"
+      className="hairline fixed right-0 bottom-0 z-notice flex max-h-[min(24rem,100dvh)] w-[min(420px,100vw)] flex-col gap-1.5 px-3 pt-2"
       onMouseEnter={() => setHeld(true)}
       onMouseLeave={() => setHeld(false)}
       onFocusCapture={() => setHeld(true)}
@@ -248,7 +256,9 @@ export function NoticeCard({ reading, fixture }: { reading: Reading<Machine>; fi
           }
         />
       ) : (
-        <p className="text-ink-2">{item.body}</p>
+        <div className="min-h-0 overflow-auto">
+          <FailureNote text={item.body} onDoor={door} />
+        </div>
       )}
       {act?.kind === "permission" ? (
         <span className="flex flex-wrap gap-1.5">

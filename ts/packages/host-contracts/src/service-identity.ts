@@ -41,6 +41,9 @@ export function productRoot(): string {
   );
 }
 
+/** Product-owned temporary files follow the same environment as durable state. No IO here. */
+export const productScratchPath = (): string => join(productRoot(), "scratch");
+
 /** The owner's terminal context token, written by the host at start and read by the `pea` CLI. */
 export const hostContextTokenPath = (serviceName: string): string =>
   join(productRoot(), "state", "service", `${serviceName}.context`);

@@ -1,3 +1,4 @@
+using Pe.Shared.Product;
 ﻿using Autodesk.Revit.Exceptions;
 using Autodesk.Revit.UI;
 using Pe.Revit.Extensions.ProjDocument;
@@ -219,7 +220,7 @@ public static class OpenDocumentExtensions {
     /// </summary>
     private static string SaveFamilyToStableTempFile(Document famDoc, string familyName) {
         // Use a stable directory (no GUIDs) so the same family always gets the same path
-        var tempDir = Path.Combine(Path.GetTempPath(), "Pe.App_FamilyCache");
+        var tempDir = Path.Combine(ProductRuntimeLayout.ForCurrentUser().ScratchPath, "Pe.App_FamilyCache");
         if (!Directory.Exists(tempDir))
             _ = Directory.CreateDirectory(tempDir);
 

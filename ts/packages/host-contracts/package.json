@@ -12,6 +12,11 @@
       "import": "./src/contracts/index.ts",
       "default": "./src/contracts/index.ts"
     },
+    "./failure-summary": {
+      "types": "./src/failure-summary.ts",
+      "import": "./src/failure-summary.ts",
+      "default": "./src/failure-summary.ts"
+    },
     "./product-paths": {
       "types": "./src/product-paths.ts",
       "import": "./src/product-paths.ts",

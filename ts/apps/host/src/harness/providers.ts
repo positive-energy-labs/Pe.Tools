@@ -2,7 +2,7 @@ import { matchPeRoute } from "@pe/agent-contracts/pe-api";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { productScratchPath } from "@pe/host-contracts/service-identity";
 import { dirname, isAbsolute, join } from "node:path";
 import { PROTOCOL_VERSION, type SessionConfigOption } from "@agentclientprotocol/sdk";
 import {
@@ -351,7 +351,8 @@ async function acpProbe(
   });
   let opened: ReturnType<typeof openAdapter>;
   try {
-    opened = openAdapter(record.harness, tmpdir(), env, () => ({
+    mkdirSync(productScratchPath(), { recursive: true });
+    opened = openAdapter(record.harness, productScratchPath(), env, () => ({
       sessionUpdate: async () => {},
       requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
       // `_auth/status_update` from both adapters (seen 2026-10-08): kind `account` or `none`.
@@ -394,11 +395,13 @@ async function acpProbe(
       protocolVersion: PROTOCOL_VERSION,
       clientCapabilities: { fs: { readTextFile: false, writeTextFile: false } },
     });
-    const session = await conn.newSession({ cwd: tmpdir(), mcpServers: [] }).catch((error) => {
-      const message = String(error?.message ?? error);
-      if (/auth/i.test(message)) return { refused: message };
-      throw error;
-    });
+    const session = await conn
+      .newSession({ cwd: productScratchPath(), mcpServers: [] })
+      .catch((error) => {
+        const message = String(error?.message ?? error);
+        if (/auth/i.test(message)) return { refused: message };
+        throw error;
+      });
     if ("refused" in session) return { readiness: signedOut(session.refused), ...none };
     const state = session as Parameters<typeof sessionOffer>[0];
     const offer = sessionOffer(state);
@@ -498,7 +501,8 @@ function openConsole(
   env: Record<string, string | undefined>,
   opened: () => void,
 ): Promise<void> {
-  const scriptPath = join(tmpdir(), `pe-tools-console-${randomUUID()}.ps1`);
+  const scriptPath = join(productScratchPath(), `pe-tools-console-${randomUUID()}.ps1`);
+  mkdirSync(dirname(scriptPath), { recursive: true });
   writeFileSync(
     scriptPath,
     `try { ${command}; if ($LASTEXITCODE) { throw "exited $LASTEXITCODE" } } catch { Write-Host $_; Read-Host 'Press Enter to close' }`,
