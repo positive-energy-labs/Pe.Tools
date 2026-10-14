@@ -139,6 +139,27 @@ test("browser document navigation and static assets retain normal routing", asyn
       options,
     ),
   ).toHaveProperty("principal");
+  // 0.7.25 field (Andrea): Edge's manifest fetch for /manifest.json was refused 403 eight times,
+  // so Edge never offered Install and never applied the title-bar overlay.
+  expect(
+    await readRequestIdentity(
+      {
+        host: local.host,
+        "sec-fetch-site": "same-origin",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-dest": "manifest",
+      },
+      "/manifest.json",
+      options,
+    ),
+  ).toHaveProperty("principal");
+  expect(
+    await readRequestIdentity(
+      { host: local.host, "sec-fetch-site": "same-origin", "sec-fetch-dest": "manifest" },
+      "/pe/resources.json",
+      options,
+    ),
+  ).toMatchObject({ refusal: { code: "runtime.owner-missing" } });
   expect(
     await readRequestIdentity(
       {
