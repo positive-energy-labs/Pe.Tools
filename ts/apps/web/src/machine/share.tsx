@@ -108,29 +108,34 @@ export function ShareSettings({
     void action.catch((caught: unknown) => setError(String(caught)));
   };
   return (
-    <div className="flex flex-col gap-2" aria-label="sharing settings">
-      <SwitchRow
-        label="Share over tailnet"
-        checked={share.desired === "on"}
-        refusal={refusal}
-        disabled={share.state === "needs-tailscale" && share.desired !== "on"}
-        says="serve this host over the tailnet; host control also requires device pairing"
-        onCheckedChange={(on) => change(switchShare(on))}
-      />
-      <SwitchRow
-        label="Allow remote machine administration"
-        checked={share.allowRemoteAdministration}
-        refusal={unavailable}
-        says="local switch; paired remote browsers may administer this host and grant document rw when on"
-        onCheckedChange={(allowed) => change(switchRemoteAdministration(allowed))}
-      />
-      <span className="text-ink-2">
-        Remote rw consent requires remote administration. It starts off. Shared Pages and captures
-        do not grant host control. MCP pairing starts read-only and can use a thread grant only
-        after a human binds it here.
-      </span>
+    <div className="flex flex-col gap-5" aria-label="sharing settings">
+      <div className="flex flex-col gap-3">
+        <SwitchRow
+          label="Share over tailnet"
+          checked={share.desired === "on"}
+          refusal={refusal}
+          disabled={share.state === "needs-tailscale" && share.desired !== "on"}
+          says="serve this host over the tailnet; host control also requires device pairing"
+          onCheckedChange={(on) => change(switchShare(on))}
+        />
+        <SwitchRow
+          label="Allow remote machine administration"
+          checked={share.allowRemoteAdministration}
+          refusal={unavailable}
+          says="local switch; paired remote browsers may administer this host and grant document rw when on"
+          onCheckedChange={(allowed) => change(switchRemoteAdministration(allowed))}
+        />
+        <span className="text-ink-2">
+          Remote rw consent requires remote administration. Shared Pages and captures grant no host
+          control.
+        </span>
+      </div>
       <ShareStatus machine={machine} />
-      <DeviceSettings refusal={unavailable} />
+      <DeviceSettings
+        refusal={unavailable}
+        remoteUrl={share.state === "on" ? share.url : null}
+        allowRemoteAdministration={share.allowRemoteAdministration}
+      />
       {error && <OutcomeLine kind="refused" label={error} />}
     </div>
   );
