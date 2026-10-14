@@ -30,6 +30,7 @@ import { peaCodexProjectConfig, userCodexMcpServers } from "../src/harness/user-
 import { productProvidersPath } from "../src/product-paths.ts";
 import { createUpdateReader, type UpdateRunner } from "../src/update-reader.ts";
 import type { Envelope } from "@pe/host-contracts/pe-revit-contract";
+import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
 
 let root = "";
 let previousLocalAppData: string | undefined;
@@ -199,8 +200,8 @@ test("automatic update admission refuses a new Pea prompt through download and r
     exitCode: state === "running" ? 4 : 3,
     diagnostics: [],
     resolved: null,
-    binary: {} as Envelope<unknown>["binary"],
-    command: {} as Envelope<unknown>["command"],
+    binary: sdkBinary,
+    command: sdkCommand,
     nextSteps: [],
     guide: "update",
     related: [],

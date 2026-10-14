@@ -1,0 +1,253 @@
+{
+  "result": {
+    "repoRoot": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "budgetSeconds": 60,
+    "fixApplied": false,
+    "partial": [],
+    "checks": [
+      {
+        "id": "windows-env",
+        "ok": true,
+        "detail": "core env vars present",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "git",
+        "ok": true,
+        "detail": "git version 2.49.0.windows.1",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "dotnet",
+        "ok": true,
+        "detail": ".NET SDK 10.0.203",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "version-source",
+        "ok": true,
+        "detail": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\product.payloads.json -> 0.7.24",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "revit-installs",
+        "ok": true,
+        "detail": "installed: 2023, 2024, 2025, 2026",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "addins-roots",
+        "ok": true,
+        "detail": "addins folder exists for every installed year",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "foreign-loader-shim",
+        "ok": false,
+        "detail": "installed product 'Pe.Tools' 0.7.24 owns C:\\Users\\person\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2023\\Pe.App.addin; its loader C:\\Users\\person\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2023\\Pe.App\\Pe.Revit.Loader.dll is 0.1.0-beta.199+955e33b9e96270ae707cb994107c4071e4189e7c; CLI loader is 0.1.0-beta.207+d458282266a924c74a811d1bea54ae91516e8fb6; installed product 'Pe.Tools' 0.7.24 owns C:\\Users\\person\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2024\\Pe.App.addin; its loader C:\\Users\\person\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2024\\Pe.App\\Pe.Revit.Loader.dll is 0.1.0-beta.199+955e33b9e96270ae707cb994107c4071e4189e7c; CLI loader is 0.1.0-beta.207+d458282266a924c74a811d1bea54ae91516e8fb6; installed product 'Pe.Tools' 0.7.24 owns C:\\Users\\person\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2026\\Pe.App.addin; its loader C:\\Users\\person\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2026\\Pe.App\\Pe.Revit.Loader.dll is 0.1.0-beta.199+955e33b9e96270ae707cb994107c4071e4189e7c; CLI loader is 0.1.0-beta.207+d458282266a924c74a811d1bea54ae91516e8fb6",
+        "fix": "update 'Pe.Tools' through its installer before replacing its files",
+        "advisory": true
+      },
+      {
+        "id": "addin-store-2025",
+        "ok": true,
+        "detail": "Revit 2025 add-in store: no rows disabled outside a running quarantine hold",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "addin-store-2026",
+        "ok": true,
+        "detail": "Revit 2026 add-in store: no rows disabled outside a running quarantine hold",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "sdk-task-assembly-lock",
+        "ok": false,
+        "detail": "locked by a running MSBuild node: C:\\Users\\person\\.nuget\\packages\\pe.revit.sdk\\0.1.0-beta.207\\tasks\\net8.0\\Pe.Revit.Sdk.dll",
+        "fix": "dotnet build-server shutdown; if an IDE is open its own MSBuild keeps the lock \u2014 bump the SDK version instead of evicting the cache",
+        "advisory": true
+      },
+      {
+        "id": "tool-resolver-cache",
+        "ok": true,
+        "detail": "cached entry for 0.1.0-beta.207 resolves to an existing executable",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "obj-redirect",
+        "ok": true,
+        "detail": "Directory.Build.props redirects obj/ (BaseIntermediateOutputPath)",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "lockstep-pins",
+        "ok": true,
+        "detail": "SDK pin 0.1.0-beta.207, CLI tool pin 0.1.0-beta.207, running CLI 0.1.0-beta.207",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "sdk-feed",
+        "ok": true,
+        "detail": "Pe.Revit.Sdk 0.1.0-beta.207 in the package cache",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "payload-manifest",
+        "ok": true,
+        "detail": "product.payloads.json well-formed",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "shims-on-path",
+        "ok": true,
+        "detail": "C:\\Users\\person\\AppData\\Local\\Positive Energy\\Pe.Tools\\shims is on PATH",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "legacy-shims",
+        "ok": true,
+        "detail": "no pre-kernel shim dirs on PATH",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "service-files",
+        "ok": false,
+        "detail": "host-source-9585df8aa6ae: running (pid 66112, port 54326); host-source-e342bc78d3d4: stale (pid 70156, port 64242)",
+        "fix": "stale (host-source-e342bc78d3d4): pe-revit service sweep",
+        "advisory": false
+      },
+      {
+        "id": "companion-pins",
+        "ok": true,
+        "detail": "companion package pins track the SDK",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "ts-client-drift",
+        "ok": true,
+        "detail": "vendored TypeScript clients match the canonical files",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "gh",
+        "ok": true,
+        "detail": "gh version 2.95.0 (2026-06-17)",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "stale-session-files",
+        "ok": false,
+        "detail": "3630 orphan file(s) under C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions: 5 endpoint, 64 journal, 3561 op receipt",
+        "fix": "pe-revit doctor --fix removes them (nothing reads a journal or op receipt whose process is gone)",
+        "advisory": false
+      },
+      {
+        "id": "unreadable-session-rows",
+        "ok": true,
+        "detail": "no unreadable session rows",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "quarantine-holds",
+        "ok": true,
+        "detail": "no quarantine hold outlives its session",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "receipts",
+        "ok": true,
+        "detail": "no receipts yet (pe-revit pack writes them)",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "bootstrap-2023",
+        "ok": true,
+        "detail": "C:\\Users\\person\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2023\\!!Pe.Revit.Sdk.Bootstrap.addin",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "bootstrap-2024",
+        "ok": true,
+        "detail": "C:\\Users\\person\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2024\\!!Pe.Revit.Sdk.Bootstrap.addin",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "bootstrap-2025",
+        "ok": true,
+        "detail": "C:\\Users\\person\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2025\\!!Pe.Revit.Sdk.Bootstrap.addin",
+        "fix": null,
+        "advisory": false
+      },
+      {
+        "id": "bootstrap-2026",
+        "ok": true,
+        "detail": "C:\\Users\\person\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2026\\!!Pe.Revit.Sdk.Bootstrap.addin",
+        "fix": null,
+        "advisory": false
+      }
+    ],
+    "fixes": [],
+    "revitYears": [
+      "2023",
+      "2024",
+      "2025",
+      "2026"
+    ]
+  },
+  "resolved": null,
+  "diagnostics": [
+    {
+      "code": "doctor.check-failed",
+      "detail": "service-files: host-source-9585df8aa6ae: running (pid 66112, port 54326); host-source-e342bc78d3d4: stale (pid 70156, port 64242)",
+      "fix": "stale (host-source-e342bc78d3d4): pe-revit service sweep"
+    },
+    {
+      "code": "doctor.check-failed",
+      "detail": "stale-session-files: 3630 orphan file(s) under C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions: 5 endpoint, 64 journal, 3561 op receipt",
+      "fix": "pe-revit doctor --fix removes them (nothing reads a journal or op receipt whose process is gone)"
+    }
+  ],
+  "binary": {
+    "origin": "dev-installed",
+    "assembly": "C:\\Users\\person\\.nuget\\packages\\pe.revit.cli\\0.1.0-beta.207\\tools\\net8.0\\any\\Pe.Revit.Cli.dll",
+    "sha256": "093D7ADCEDA6A6D85673BB5BAC9D56713FC5BFE88B7870E9C3E3BF425EAB12C4",
+    "informationalVersion": "0.1.0-beta.207+d458282266a924c74a811d1bea54ae91516e8fb6",
+    "hostExecutable": "C:\\Program Files\\dotnet\\dotnet.exe"
+  },
+  "command": {
+    "cwd": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRoot": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRule": "checkout-manifest",
+    "commandManifest": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\product.payloads.json"
+  },
+  "nextSteps": [],
+  "guide": "new-addin",
+  "related": [
+    "pe-revit guide new-addin",
+    "pe-revit session list"
+  ],
+  "exitCode": 1
+}

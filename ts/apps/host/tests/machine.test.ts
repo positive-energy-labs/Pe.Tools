@@ -30,6 +30,7 @@ import type { Providers } from "../src/harness/providers.ts";
 import { unreadLeg } from "../src/update-reader.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
 import { planAcquisition } from "../src/acquisition.ts";
+import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
 
 const sdkRun = vi.hoisted(() => vi.fn<(args: readonly string[]) => Promise<string>>());
 vi.mock("../src/session-route.ts", async (original) => {
@@ -527,8 +528,8 @@ test("SDK adapter uses the all-row census and pid document read, refusing a diff
       resolved,
       exitCode: 0,
       diagnostics: [],
-      binary: {},
-      command: {},
+      binary: sdkBinary,
+      command: sdkCommand,
       nextSteps: [],
       guide: "session",
       related: [],
@@ -592,8 +593,8 @@ test("SDK process read errors fail the real census adapter and restart the full 
       exitCode: 0,
       diagnostics: [],
       resolved: {},
-      binary: {},
-      command: {},
+      binary: sdkBinary,
+      command: sdkCommand,
       nextSteps: [],
       guide: "session",
       related: [],

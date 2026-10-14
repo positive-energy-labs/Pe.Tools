@@ -1,0 +1,48 @@
+{
+  "result": {
+    "state": "failed",
+    "requestId": "60c86706-ef25-4847-95fb-3bf16ccfcb87",
+    "receipt": {
+      "requestId": "60c86706-ef25-4847-95fb-3bf16ccfcb87",
+      "key": "scripting.execute",
+      "pid": 71464,
+      "processStartUtc": "2026-10-14T04:06:31.8033171Z",
+      "verdict": "failed",
+      "responsePath": "60c86706-ef25-4847-95fb-3bf16ccfcb87.71464-639275475918033171.response.json",
+      "startedUtc": "2026-10-14T04:11:03.4641138Z",
+      "completedUtc": "2026-10-14T04:11:03.8013308Z"
+    },
+    "response": {
+      "requestId": "60c86706-ef25-4847-95fb-3bf16ccfcb87",
+      "key": "scripting.execute",
+      "verdict": "failed",
+      "detail": "TS host call 'pod.list' failed (403): {\"error\":{\"code\":\"context.missing\",\"message\":\"Refused at POST /call: anonymous callers are read-only.\",\"details\":{\"refusal\":{\"code\":\"context.missing\",\"detail\":\"Refused at POST /call: anonymous callers are read-only.\"}}}}"
+    }
+  },
+  "resolved": null,
+  "diagnostics": [],
+  "binary": {
+    "origin": "dev-installed",
+    "assembly": "C:\\Users\\person\\.nuget\\packages\\pe.revit.cli\\0.1.0-beta.207\\tools\\net8.0\\any\\Pe.Revit.Cli.dll",
+    "sha256": "093D7ADCEDA6A6D85673BB5BAC9D56713FC5BFE88B7870E9C3E3BF425EAB12C4",
+    "informationalVersion": "0.1.0-beta.207+d458282266a924c74a811d1bea54ae91516e8fb6",
+    "hostExecutable": "C:\\Program Files\\dotnet\\dotnet.exe"
+  },
+  "command": {
+    "cwd": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRoot": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRule": "checkout-manifest",
+    "commandManifest": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\product.payloads.json"
+  },
+  "nextSteps": [
+    "pe-revit op result 60c86706-ef25-4847-95fb-3bf16ccfcb87",
+    "pe-revit op list"
+  ],
+  "guide": "session",
+  "related": [
+    "pe-revit op list",
+    "pe-revit op result <requestId>",
+    "pe-revit guide session"
+  ],
+  "exitCode": 1
+}

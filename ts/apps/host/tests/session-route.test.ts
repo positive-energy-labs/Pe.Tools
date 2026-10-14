@@ -16,6 +16,7 @@ import {
   sessionStatusArgs,
 } from "../src/session-route.ts";
 import { peRevitLauncher, validatePeRevitEnvelope } from "../src/pe-revit-launch.ts";
+import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -220,8 +221,8 @@ for (const verdict of existingIdVerdicts) {
       nextSteps: verdict.nextSteps,
       guide: "session",
       related: [],
-      binary: {},
-      command: {},
+      binary: sdkBinary,
+      command: sdkCommand,
       exitCode: verdict.code === "session.id-in-use" ? 3 : 0,
     });
     const outcome = await Effect.runPromise(

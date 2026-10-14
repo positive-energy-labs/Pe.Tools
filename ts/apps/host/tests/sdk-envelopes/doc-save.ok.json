@@ -1,0 +1,74 @@
+{
+  "result": {
+    "state": "ok",
+    "requestId": "e554583b-ada5-4107-a722-6c187639ddf4",
+    "key": "doc.save",
+    "document": {
+      "openId": "36720a38fc29437da66eac4e43db77f0",
+      "title": "B-copy",
+      "path": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\.artifacts\\accept\\r1\\docs\\B-copy.rvt",
+      "window": "windowed",
+      "persistence": "local",
+      "central": null,
+      "isModified": false
+    },
+    "result": {
+      "openId": "36720a38fc29437da66eac4e43db77f0",
+      "title": "B-copy",
+      "path": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\.artifacts\\accept\\r1\\docs\\B-copy.rvt",
+      "window": "windowed",
+      "isActive": true,
+      "isModified": false,
+      "isFamily": false,
+      "isWorkshared": false,
+      "isDetached": false,
+      "isCloud": false,
+      "centralPath": null,
+      "persistence": "local",
+      "central": null,
+      "reopenSource": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\.artifacts\\accept\\r1\\docs\\B.rvt",
+      "mode": "save-as",
+      "saved": true,
+      "previousPath": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\.artifacts\\accept\\r1\\docs\\B.rvt"
+    },
+    "late": null,
+    "lastClose": null,
+    "dialogs": null
+  },
+  "resolved": {
+    "id": "acc-r1",
+    "how": "pinned",
+    "origin": "cli",
+    "pid": 71464,
+    "processStartUtc": "2026-10-14T04:06:31.8033171Z",
+    "buildStamp": "08a107fd8365",
+    "observedAtUtc": "2026-10-14T04:11:23.7322324Z",
+    "payload": "checkout",
+    "sourceRoot": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "installedRoot": null
+  },
+  "diagnostics": [],
+  "binary": {
+    "origin": "dev-installed",
+    "assembly": "C:\\Users\\person\\.nuget\\packages\\pe.revit.cli\\0.1.0-beta.207\\tools\\net8.0\\any\\Pe.Revit.Cli.dll",
+    "sha256": "093D7ADCEDA6A6D85673BB5BAC9D56713FC5BFE88B7870E9C3E3BF425EAB12C4",
+    "informationalVersion": "0.1.0-beta.207+d458282266a924c74a811d1bea54ae91516e8fb6",
+    "hostExecutable": "C:\\Program Files\\dotnet\\dotnet.exe"
+  },
+  "command": {
+    "cwd": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRoot": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRule": "checkout-manifest",
+    "commandManifest": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\product.payloads.json"
+  },
+  "nextSteps": [
+    "pe-revit doc list --id acc-r1"
+  ],
+  "guide": "session",
+  "related": [
+    "pe-revit doc list",
+    "pe-revit doc list --recent",
+    "pe-revit session list"
+  ],
+  "exitCode": 0
+}
