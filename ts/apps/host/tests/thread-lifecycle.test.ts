@@ -4,6 +4,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { emptyThreadLifecycle, type HarnessEvent } from "@pe/agent-contracts";
 import { createHarnessThreads } from "../src/harness/threads.ts";
 import type { Providers } from "../src/harness/providers.ts";
@@ -185,7 +186,7 @@ test("a real prompt reopens settled work with a new anchor; active prompts retai
       new Request("http://host/pe/threads/thread/prompt", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: "Continue" }),
+        body: JSON.stringify({ id: randomUUID(), text: "Continue" }),
       }),
     );
   await send();

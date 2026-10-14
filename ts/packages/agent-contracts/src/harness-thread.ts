@@ -33,9 +33,15 @@ import { threadHeadSchema } from "./target.ts";
  *   GET    /pe/threads/:id                     -> HarnessThreadBody
  *   PUT    /pe/threads/:id    {title}          -> HarnessThreadSummary
  *   DELETE /pe/threads/:id
- *   POST   /pe/threads/:id/prompt {text, attachments?, mentions?} -> { turnId }   (interrupts a running
- *            turn: it ends cancelled, then this one starts; 409 when it does not stop; 400 on an unreadable
- *            attachment kind; a mention is never refused, see `mentionSchema`)
+ *   POST   /pe/threads/:id/prompt {id, text, attachments?, mentions?, delivery?} -> TurnState
+ *            (`id` is client-minted and becomes the turn's id: a retry with the same id and content
+ *            answers the turn's state and never sends twice; other content under it is 409.
+ *            `steer`, the default, interrupts a running turn: it ends cancelled, then this one starts;
+ *            409 when it does not stop. `queue` waits for the running turn and any steer to end, then
+ *            delivers in order. 400 on an unreadable attachment kind; a mention is never refused)
+ *   POST   /pe/threads/:id/queue {turnId, action: steer|cancel} -> TurnState   (a queued prompt only)
+ *   GET    /pe/threads/:id/wait?turn=<id>&timeoutMs=<n> -> TurnState   (answers once the turn
+ *            settles, or as it stands after `timeoutMs`, at most {@link TURN_WAIT_MAX_MS})
  *   POST   /pe/threads/:id/cancel
  *   POST   /pe/threads/:id/permission {requestId, optionId}
  *   POST   /pe/threads/:id/question {requestId, action, content?}   (answers an ACP elicitation form)
@@ -261,6 +267,24 @@ export const harnessEventSchema = z.discriminatedUnion("kind", [
       by: z.enum(["cancel", "expired"]),
     }),
   ]),
+  /** A `queue` prompt admitted while a turn runs. Its `prompt` follows, same `turnId`, on delivery. */
+  z.object({
+    seq: z.number(),
+    at: z.string(),
+    kind: z.literal("prompt_queued"),
+    turnId: z.string(),
+    text: z.string(),
+    attachments: z.array(promptAttachmentSchema).optional(),
+    mentions: z.array(mentionSchema).optional(),
+  }),
+  /** A queued prompt that will never be delivered: the user dropped it, or the host restarted. */
+  z.object({
+    seq: z.number(),
+    at: z.string(),
+    kind: z.literal("prompt_dropped"),
+    turnId: z.string(),
+    by: z.enum(["user", "expired"]),
+  }),
   /** The host spawned or resumed the harness child for this turn's prompt: nothing else is logged
    * until it answers (seconds when a reaped child is respawned). Absent when a live child took it. */
   z.object({ seq: z.number(), at: z.string(), kind: z.literal("starting"), turnId: z.string() }),
@@ -413,6 +437,8 @@ export type HarnessThreadBody = z.infer<typeof harnessThreadBodySchema>;
  * harness reads no embedded context. */
 export const promptRequestSchema = z
   .object({
+    id: z.uuid(),
+    delivery: z.enum(["steer", "queue"]).default("steer"),
     text: z.string(),
     attachments: z.array(promptAttachmentSchema).optional(),
     mentions: z.array(mentionSchema).optional(),
@@ -421,6 +447,19 @@ export const promptRequestSchema = z
     (p) => p.text.trim() || p.attachments?.length || p.mentions?.length,
     "Enter a prompt, attachment or mention",
   );
+/** Where one turn stands: `queued` and `running` are live; the rest are settled. */
+export const turnStateSchema = z.object({
+  turnId: z.string(),
+  state: z.enum(["queued", "running", "ended", "failed", "dropped"]),
+  stopReason: z.string().optional(),
+  message: z.string().optional(),
+});
+export type TurnState = z.infer<typeof turnStateSchema>;
+export const TURN_WAIT_MAX_MS = 5 * 60_000;
+export const queueRequestSchema = z.object({
+  turnId: z.string(),
+  action: z.enum(["steer", "cancel"]),
+});
 export const permissionResponseSchema = z.object({ requestId: z.string(), optionId: z.string() });
 /** `accept` carries the form's answers keyed by property; `decline` is "skip", the harness goes on. */
 export const questionResponseSchema = z.object({

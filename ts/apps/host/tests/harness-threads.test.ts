@@ -106,6 +106,9 @@ afterAll(async () => {
 });
 
 const caller = (threads: Host) => async (method: string, path: string, body?: unknown) => {
+  // A client mints one id per prompt; a test that names none sends a fresh one.
+  if (path.endsWith("/prompt") && body && typeof body === "object" && !("id" in body))
+    body = { id: randomUUID(), ...body };
   const response = await threads.fetch(
     new Request(`http://host${path}`, {
       method,
@@ -1763,4 +1766,139 @@ test("door 7: revoke is human-only, keeps evidence, fires onRevoke, and only a f
   expect(renewed.json.head.grant).toMatchObject({ revoked: null, grantedAt: at(T0 + 5 * 60_000) });
   expect(crossing(peaOf(id), yours.ref)).toMatchObject({ kind: "grant" });
   release();
+});
+
+/* ── The prompt inbox: client ids, queue and steer, and wait ─────────────────────────────── */
+
+const story = (body: HarnessThreadBody) =>
+  body.events.flatMap((e) =>
+    e.kind === "prompt"
+      ? [`prompt ${e.text}`]
+      : e.kind === "prompt_queued"
+        ? [`queued ${e.text}`]
+        : e.kind === "prompt_dropped"
+          ? [`dropped ${e.by}`]
+          : e.kind === "turn_end"
+            ? [`end ${e.stopReason}`]
+            : [],
+  );
+
+test("a prompt id is the turn id: a retry never sends twice, other content under it is refused", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  const turnId = randomUUID();
+  const first = await call("POST", `/pe/threads/${id}/prompt`, { id: turnId, text: "hello" });
+  expect(first.json).toMatchObject({ turnId, state: "running" });
+  const retry = await call("POST", `/pe/threads/${id}/prompt`, { id: turnId, text: "hello" });
+  expect([retry.status, retry.json.turnId]).toEqual([200, turnId]);
+  const other = await call("POST", `/pe/threads/${id}/prompt`, { id: turnId, text: "other" });
+  expect(other.status).toBe(409);
+  const body = await until(read, id, (b) => turnEnds(b).length === 1 && !b.running);
+  expect(story(body)).toEqual(["prompt hello", "end end_turn"]);
+  expect(body.events.find((e) => e.kind === "prompt")).toMatchObject({ turnId });
+  const unnamed = await threads.fetch(
+    new Request(`http://host/pe/threads/${id}/prompt`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "no id" }),
+    }),
+  );
+  expect(unnamed.status).toBe(400);
+});
+
+test("queue order holds under steer: the steer runs next, then the queue in order", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  const prompt = (text: string, delivery: "steer" | "queue") =>
+    call("POST", `/pe/threads/${id}/prompt`, { id: randomUUID(), text, delivery });
+  await prompt("hang", "steer");
+  await until(read, id, (b) => lastEcho(b) === "echo: hang");
+  expect((await prompt("one", "queue")).json.state).toBe("queued");
+  expect((await prompt("two", "queue")).json.state).toBe("queued");
+  const steered = await prompt("slow", "steer");
+  expect(steered.json.state).toBe("running");
+  const body = await until(read, id, (b) => turnEnds(b).length === 4 && !b.running);
+  expect(story(body)).toEqual([
+    "prompt hang",
+    "queued one",
+    "queued two",
+    "end cancelled",
+    "prompt slow",
+    "end end_turn",
+    "prompt one",
+    "end end_turn",
+    "prompt two",
+    "end end_turn",
+  ]);
+});
+
+test("a queued prompt can be dropped or promoted to a steer, and wait answers each turn", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  const [hang, one, two] = [randomUUID(), randomUUID(), randomUUID()];
+  await call("POST", `/pe/threads/${id}/prompt`, { id: hang, text: "hang" });
+  await until(read, id, (b) => lastEcho(b) === "echo: hang");
+  await call("POST", `/pe/threads/${id}/prompt`, { id: one, text: "one", delivery: "queue" });
+  await call("POST", `/pe/threads/${id}/prompt`, { id: two, text: "two", delivery: "queue" });
+  const wait = (turn: string, timeoutMs = 10_000) =>
+    call("GET", `/pe/threads/${id}/wait?turn=${turn}&timeoutMs=${timeoutMs}`);
+  expect((await wait(hang, 50)).json).toEqual({ turnId: hang, state: "running" });
+  expect((await wait(one, 50)).json).toEqual({ turnId: one, state: "queued" });
+  expect((await wait(randomUUID(), 50)).status).toBe(404);
+  const dropped = await call("POST", `/pe/threads/${id}/queue`, { turnId: one, action: "cancel" });
+  expect(dropped.json).toEqual({ turnId: one, state: "dropped" });
+  const waitingOnTwo = wait(two);
+  const promoted = await call("POST", `/pe/threads/${id}/queue`, { turnId: two, action: "steer" });
+  expect(promoted.json).toEqual({ turnId: two, state: "running" });
+  expect((await waitingOnTwo).json).toEqual({
+    turnId: two,
+    state: "ended",
+    stopReason: "end_turn",
+  });
+  expect((await wait(hang)).json).toEqual({
+    turnId: hang,
+    state: "ended",
+    stopReason: "cancelled",
+  });
+  expect(
+    (await call("POST", `/pe/threads/${id}/queue`, { turnId: one, action: "steer" })).status,
+  ).toBe(409);
+  expect(story(await read(id))).toEqual([
+    "prompt hang",
+    "queued one",
+    "queued two",
+    "dropped user",
+    "end cancelled",
+    "prompt two",
+    "end end_turn",
+  ]);
+});
+
+test("a restarted host drops the prompts it had queued, saying so", async () => {
+  const first = host();
+  const call = caller(first);
+  const read = reader(first);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await call("POST", `/pe/threads/${id}/prompt`, { id: randomUUID(), text: "hang" });
+  await until(read, id, (b) => lastEcho(b) === "echo: hang");
+  const queued = randomUUID();
+  await call("POST", `/pe/threads/${id}/prompt`, { id: queued, text: "later", delivery: "queue" });
+  await first.close();
+  const second = host();
+  const body = await reader(second)(id);
+  expect(body.events.at(-1)).toMatchObject({
+    kind: "prompt_dropped",
+    turnId: queued,
+    by: "expired",
+  });
+  expect((await caller(second)("GET", `/pe/threads/${id}/wait?turn=${queued}`)).json).toEqual({
+    turnId: queued,
+    state: "dropped",
+  });
 });

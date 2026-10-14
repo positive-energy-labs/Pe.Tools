@@ -36,6 +36,8 @@ import {
   permissionResponseSchema,
   promptRequestSchema,
   putTargetSchema,
+  queueRequestSchema,
+  TURN_WAIT_MAX_MS,
   questionResponseSchema,
   threadHeadSchema,
   traitRequestSchema,
@@ -47,6 +49,7 @@ import {
   type PutTargetResult,
   type ThreadHead,
   type ThreadHeadReading,
+  type TurnState,
   type Caller,
   emptyThreadHead,
 } from "@pe/agent-contracts";
@@ -86,6 +89,13 @@ type Meta = Omit<HarnessThreadSummary, "lastSeq" | "activity"> & {
 };
 type Live = { conn: ClientSideConnection; sessionId: string; configOptions: SessionConfigOption[] };
 type Pending<R> = { turnId: string | null; resolve: (response: R) => void };
+/** A prompt waiting its turn; `turnId` is the client's prompt id. */
+type Prompt = {
+  turnId: string;
+  text: string;
+  attachments?: PromptAttachment[];
+  mentions?: Mention[];
+};
 type Thread = {
   meta: Meta;
   child: ChildProcess | null;
@@ -99,6 +109,12 @@ type Thread = {
   running: string | null;
   /** Settles when the running turn has logged its end; an interrupting prompt waits on it. */
   turn: Promise<void>;
+  /** `queue` prompts in delivery order, and steers interrupting the running turn: while one is
+   * waiting, the queue holds so the steer runs next. */
+  queue: Prompt[];
+  steers: number;
+  /** Prompt ids admitted but not yet logged: a concurrent retry of one is refused, never doubled. */
+  admitting: Set<string>;
   pending: Map<string, Pending<RequestPermissionResponse>>;
   questions: Map<string, Pending<CreateElicitationResponse>>;
   listeners: Set<(event: HarnessEvent) => void>;
@@ -344,6 +360,9 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       stopped: false,
       running: null,
       turn: Promise.resolve(),
+      queue: [],
+      steers: 0,
+      admitting: new Set(),
       pending: new Map(),
       questions: new Map(),
       listeners: new Set(),
@@ -1088,6 +1107,110 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     disarm(t);
     t.running = null;
     scheduleIdle(t);
+    drain(t);
+  }
+
+  /** Deliver the oldest queued prompt once nothing runs and no steer is waiting. */
+  function drain(t: Thread) {
+    const next = !t.running && !t.steers && !t.stopped ? t.queue.shift() : undefined;
+    if (next) t.turn = run(t, next.turnId, next.text, next.attachments, next.mentions);
+  }
+
+  /** A human message reopens a settled, snoozed or archived-then-restored thread. */
+  function reopen(t: Thread) {
+    if (t.meta.lifecycle.status === "settled" || t.meta.lifecycle.snoozedUntil)
+      t.meta.lifecycle.reopenedAt = new Date().toISOString();
+    t.meta.lifecycle.status = "active";
+    t.meta.lifecycle.settledAt = null;
+    t.meta.lifecycle.snoozedUntil = null;
+    t.meta.lifecycle.revision++;
+    heardHuman(t);
+  }
+
+  /**
+   * Steer: interrupt the running turn, holding the queue, then run this prompt now. When the turn
+   * will not stop, `refused` puts the prompt back where it was and the queue resumes.
+   */
+  async function steer(
+    t: Thread,
+    by: Caller,
+    door: string,
+    prompt: Prompt,
+    refused = () => {},
+  ): Promise<Response> {
+    t.steers++;
+    let stopped = true;
+    try {
+      while (t.running)
+        if (!(await interrupt(t, by, door))) {
+          stopped = false;
+          break;
+        }
+    } catch (error) {
+      t.steers--;
+      refused();
+      drain(t);
+      throw error;
+    }
+    t.steers--;
+    if (!stopped) {
+      refused();
+      drain(t);
+      return json(
+        {
+          error: `${t.meta.providerName} did not stop the running turn within ${INTERRUPT_MS / 1000} s; press Stop, then send again`,
+        },
+        409,
+      );
+    }
+    if (t.stopped) return json({ error: `No thread ${t.meta.id}` }, 404);
+    reopen(t);
+    t.turn = run(t, prompt.turnId, prompt.text, prompt.attachments, prompt.mentions);
+    return json(turnState(t, prompt.turnId));
+  }
+
+  /** One prompt's content, so a retry under its id is told apart from other words. */
+  const same = (a: Prompt, b: Prompt) =>
+    JSON.stringify([a.text, a.attachments ?? null, a.mentions ?? null]) ===
+    JSON.stringify([b.text, b.attachments ?? null, b.mentions ?? null]);
+
+  /** Where one turn stands, or null for an id this thread never admitted. */
+  function turnState(t: Thread, turnId: string): TurnState | null {
+    if (t.running === turnId) return { turnId, state: "running" };
+    if (t.queue.some((q) => q.turnId === turnId)) return { turnId, state: "queued" };
+    const end = t.events.findLast(
+      (e) =>
+        "turnId" in e &&
+        e.turnId === turnId &&
+        (e.kind === "turn_end" || e.kind === "error" || e.kind === "prompt_dropped"),
+    );
+    if (end?.kind === "turn_end") return { turnId, state: "ended", stopReason: end.stopReason };
+    if (end?.kind === "error") return { turnId, state: "failed", message: end.message };
+    if (end?.kind === "prompt_dropped") return { turnId, state: "dropped" };
+    return null;
+  }
+
+  /** The turn's state once it settles, or as it stands when `signal` ends the wait. */
+  async function waitTurn(t: Thread, turnId: string, signal: AbortSignal) {
+    for (;;) {
+      const state = turnState(t, turnId);
+      if (!state || signal.aborted || (state.state !== "queued" && state.state !== "running"))
+        return state;
+      await new Promise<void>((resolve) => {
+        const done = () => {
+          t.listeners.delete(listener);
+          signal.removeEventListener("abort", done);
+          resolve();
+        };
+        const listener = (e: HarnessEvent) => {
+          if ("turnId" in e && e.turnId === turnId) done();
+        };
+        signal.addEventListener("abort", done, { once: true });
+        t.listeners.add(listener);
+        // A running turn settles when its run returns, after its last event.
+        if (state.state === "running") void t.turn.then(done);
+      });
+    }
   }
 
   /**
@@ -1406,9 +1529,31 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       case "POST prompt": {
         // Only a human message moves a thread, and only it renews the grant: Pea cannot renew itself.
         requireHuman(caller, `/pe/threads/${t.meta.id}/prompt`, "a thread message");
-        const { text, attachments: sent, mentions: named } = await input(promptRequestSchema);
+        const {
+          id: turnId,
+          delivery,
+          text,
+          attachments: sent,
+          mentions: named,
+        } = await input(promptRequestSchema);
         const attachments = sent?.length ? sent : undefined;
         const mentions = named?.length ? named : undefined;
+        const prompt: Prompt = {
+          turnId,
+          text,
+          ...(attachments ? { attachments } : {}),
+          ...(mentions ? { mentions } : {}),
+        };
+        const known = t.events.find(
+          (e): e is Extract<HarnessEvent, { kind: "prompt" | "prompt_queued" }> =>
+            (e.kind === "prompt" || e.kind === "prompt_queued") && e.turnId === turnId,
+        );
+        if (known)
+          return same(known, prompt)
+            ? json(turnState(t, turnId))
+            : json({ error: `Prompt ${turnId} was already sent with other content` }, 409);
+        if (t.admitting.has(turnId))
+          return json({ error: `Prompt ${turnId} is already being sent` }, 409);
         if (options.updatePending?.())
           return json({ error: "Pe.Tools is updating; send this after the update finishes." }, 409);
         if (t.meta.lifecycle.status === "archived")
@@ -1423,26 +1568,49 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
           );
           if (refusal) return json({ error: refusal }, 400);
         }
-        // A prompt on a running turn interrupts it: that turn ends cancelled, then this one starts.
-        while (t.running)
-          if (!(await interrupt(t, caller, url.pathname)))
-            return json(
-              {
-                error: `${t.meta.providerName} did not stop the running turn within ${INTERRUPT_MS / 1000} s; press Stop, then send again`,
-              },
-              409,
-            );
-        if (t.stopped) return json({ error: `No thread ${id}` }, 404);
-        if (t.meta.lifecycle.status === "settled" || t.meta.lifecycle.snoozedUntil)
-          t.meta.lifecycle.reopenedAt = new Date().toISOString();
-        t.meta.lifecycle.status = "active";
-        t.meta.lifecycle.settledAt = null;
-        t.meta.lifecycle.snoozedUntil = null;
-        t.meta.lifecycle.revision++;
-        heardHuman(t);
-        const turnId = randomUUID();
-        t.turn = run(t, turnId, text, attachments, mentions);
-        return json({ turnId });
+        // Queue waits behind the running turn and any steer; with nothing running it starts now.
+        if (delivery === "queue" && (t.running || t.steers)) {
+          reopen(t);
+          append(t, { kind: "prompt_queued", ...prompt });
+          t.queue.push(prompt);
+          return json(turnState(t, turnId));
+        }
+        t.admitting.add(turnId);
+        try {
+          return await steer(t, caller, url.pathname, prompt);
+        } finally {
+          t.admitting.delete(turnId);
+        }
+      }
+      case "POST queue": {
+        requireHuman(caller, url.pathname, "a queued message");
+        const { turnId, action } = await input(queueRequestSchema);
+        const index = t.queue.findIndex((q) => q.turnId === turnId);
+        if (index < 0)
+          return json(
+            { error: `No queued prompt ${turnId}`, turn: turnState(t, turnId) },
+            turnState(t, turnId) ? 409 : 404,
+          );
+        const [prompt] = t.queue.splice(index, 1);
+        if (action === "cancel") {
+          append(t, { kind: "prompt_dropped", turnId, by: "user" });
+          return json(turnState(t, turnId));
+        }
+        return steer(t, caller, url.pathname, prompt!, () => t.queue.splice(index, 0, prompt!));
+      }
+      case "GET wait": {
+        const turnId = url.searchParams.get("turn") ?? "";
+        const timeoutMs = Number(url.searchParams.get("timeoutMs") ?? 30_000);
+        const signal = AbortSignal.any([
+          request.signal,
+          AbortSignal.timeout(
+            Math.min(Number.isFinite(timeoutMs) ? timeoutMs : 0, TURN_WAIT_MAX_MS),
+          ),
+        ]);
+        const state = await waitTurn(t, turnId, signal);
+        return state
+          ? json(state)
+          : json({ error: `No turn ${turnId} in thread ${t.meta.id}` }, 404);
       }
       case "POST cancel":
         return json({ cancelled: await cancel(t, caller, url.pathname) });
@@ -1568,6 +1736,15 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     const last = t.events.findLast((e) => e.kind === "prompt");
     if (last?.kind === "prompt" && !ended.has(last.turnId))
       append(t, { kind: "error", turnId: last.turnId, message: "host restarted during this turn" });
+    // A queued prompt never reached the harness; it is dropped and says so, never sent unasked.
+    const settledPrompts = new Set(
+      t.events.flatMap((e) =>
+        e.kind === "prompt" || e.kind === "prompt_dropped" ? [e.turnId] : [],
+      ),
+    );
+    for (const e of t.events)
+      if (e.kind === "prompt_queued" && !settledPrompts.has(e.turnId))
+        append(t, { kind: "prompt_dropped", turnId: e.turnId, by: "expired" });
   }
 
   const sweep = setInterval(() => {

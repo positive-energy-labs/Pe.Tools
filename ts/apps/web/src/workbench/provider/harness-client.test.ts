@@ -56,7 +56,11 @@ describe("harnessClient", () => {
     expect(sent).toEqual([
       { method: "POST", type: "application/json", body: undefined },
       { method: "DELETE", type: "application/json", body: undefined },
-      { method: "POST", type: "application/json", body: '{"text":"hi"}' },
+      {
+        method: "POST",
+        type: "application/json",
+        body: expect.stringMatching(/^\{"id":"[0-9a-f-]{36}","text":"hi"\}$/),
+      },
       { method: "GET", type: null, body: undefined },
     ]);
   });

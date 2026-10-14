@@ -7,6 +7,7 @@
  * questions as the response; the next `--thread` prompt carries the answers. Prints `{ ok, host,
  * threadId, harness, model, stopReason, response }`.
  */
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import type {
@@ -142,6 +143,7 @@ export async function runPeaPromptTurn(request: PeaPromptRequest): Promise<PeaPr
   try {
     if (request.modelId) await call("POST", `/${thread.id}/model`, { modelId: request.modelId });
     const { turnId } = await call<{ turnId: string }>("POST", `/${thread.id}/prompt`, {
+      id: randomUUID(),
       text: request.prompt,
     });
     trace(`turn ${turnId}`);

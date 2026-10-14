@@ -17,8 +17,8 @@ import type {
 import type { z } from "zod";
 import { openEventSource } from "#/readings";
 
-/** What a send posts: text, attachments, mentions (`promptRequestSchema`). */
-export type PromptRequest = z.input<typeof promptRequestSchema>;
+/** What a send posts: text, attachments, mentions (`promptRequestSchema`); the client mints its id. */
+export type PromptRequest = Omit<z.input<typeof promptRequestSchema>, "id">;
 
 export function harnessClient(origin: string) {
   const call = async <T>(path: string, method = "GET", body?: object, signal?: AbortSignal) => {
@@ -90,7 +90,10 @@ export function harnessClient(origin: string) {
       ),
     remove: (id: string) => call<void>(thread(id), "DELETE"),
     prompt: (id: string, input: PromptRequest) =>
-      call<{ turnId: string }>(`${thread(id)}/prompt`, "POST", input),
+      call<{ turnId: string }>(`${thread(id)}/prompt`, "POST", {
+        id: crypto.randomUUID(),
+        ...input,
+      }),
     cancel: (id: string) => call<void>(`${thread(id)}/cancel`, "POST"),
     permission: (id: string, requestId: string, optionId: string) =>
       call<void>(`${thread(id)}/permission`, "POST", { requestId, optionId }),
