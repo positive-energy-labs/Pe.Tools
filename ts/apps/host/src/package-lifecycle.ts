@@ -149,15 +149,12 @@ export function createPackageLifecycle(
   return {
     ready,
     initialized: () => initialized,
+    /** The first catalog build reuses the bootstrap census; every later read re-lists. */
     refresh: async (initial = false) => {
       await ready;
-      if (initial && initialListing) {
-        const listing = initialListing;
-        initialListing = undefined;
-        return listing;
-      }
+      const listing = initial ? initialListing : undefined;
       initialListing = undefined;
-      return synchronize();
+      return listing ?? synchronize();
     },
     inventory: runtime.inventory,
     active: (id: string) => runtime.active(`pod:${id}`),

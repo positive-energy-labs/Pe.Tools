@@ -12,7 +12,7 @@ import {
   capturePackage,
   isPackageMember,
   listPackages,
-  type AdmittedPackage,
+  onePackage,
   type PackageListing,
 } from "./packages.ts";
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
@@ -557,16 +557,8 @@ const escapeXml = (value: string) =>
 const ordinal = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const byPath = ([a]: [string, unknown], [b]: [string, unknown]) => ordinal(a, b);
 
-function unique(listing: PackageListing, id: string): AdmittedPackage {
-  const found = listing.packages.filter((p) => p.id === id);
-  if (found.length === 1) return found[0]!;
-  throw found.length
-    ? new TransferRefused(
-        `Pod id '${id}' is claimed by folders ${found.map((p) => p.folder).join(", ")}.`,
-        409,
-      )
-    : new TransferRefused(`No installed pod has id '${id}'.`, 404);
-}
+const unique = (listing: PackageListing, id: string) =>
+  onePackage(listing, id, (reason, status) => new TransferRefused(reason, status));
 
 function bounded(files: { path: string; bytes: Buffer }[]) {
   const total = files.reduce((sum, f) => sum + f.bytes.length, 0);

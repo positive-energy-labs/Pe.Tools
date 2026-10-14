@@ -335,11 +335,7 @@ class PageState {
   }
 }
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json; charset=utf-8" },
-  });
+const json = (body: unknown, status = 200) => Response.json(body, { status });
 const problem = (status: number, message: string) => json({ error: message, message }, status);
 /** A door refusal, the shape `/actions` answers: 403, named, never dispatched. */
 const refused = (refusal: Refusal) =>

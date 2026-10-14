@@ -1,12 +1,4 @@
-import {
-  createContext,
-  use,
-  useEffect,
-  useMemo,
-  useState,
-  useCallback,
-  type ReactNode,
-} from "react";
+import { createContext, use, useEffect, useMemo, useState, type ReactNode } from "react";
 import { message, type PodRouteDescriptor } from "@pe/agent-contracts";
 import { useRouterState } from "@tanstack/react-router";
 import { peClient } from "#/host/pe-client";
@@ -33,41 +25,37 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const loader = useMemo(
-    () =>
-      createPodRouteLoader(async (row) => {
+  const { loader, publish } = useMemo(() => {
+    const loader = createPodRouteLoader(async (row) => {
+      try {
+        const response = await peClient.response("plugins.routeBundle", {
+          params: { key: row.key, hash: row.sha256 },
+        });
+        if (!response.ok) throw Error((await readPeError(response)).message);
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        await verifyBundle(bytes, row.sha256);
+        const url = URL.createObjectURL(new Blob([bytes], { type: "text/javascript" }));
         try {
-          const response = await peClient.response("plugins.routeBundle", {
-            params: { key: row.key, hash: row.sha256 },
-          });
-          if (!response.ok) throw Error((await readPeError(response)).message);
-          const bytes = new Uint8Array(await response.arrayBuffer());
-          await verifyBundle(bytes, row.sha256);
-          const url = URL.createObjectURL(new Blob([bytes], { type: "text/javascript" }));
-          try {
-            const bundle = (await import(/* @vite-ignore */ url)) as PodRouteBundle;
-            const route = makePodRoute(row, bundle);
-            return publicRoutes.register(route);
-          } finally {
-            URL.revokeObjectURL(url);
-          }
-        } catch (error) {
-          setErrors((prior) => ({ ...prior, [row.key]: message(error) }));
-          throw error;
+          const bundle = (await import(/* @vite-ignore */ url)) as PodRouteBundle;
+          const route = makePodRoute(row, bundle);
+          return publicRoutes.register(route);
+        } finally {
+          URL.revokeObjectURL(url);
         }
-      }),
-    [],
-  );
-  const refresh = () => setRevision((prior) => prior + 1);
-  const publish = useCallback(
-    async (next: PodRouteDescriptor[]) => {
+      } catch (error) {
+        setErrors((prior) => ({ ...prior, [row.key]: message(error) }));
+        throw error;
+      }
+    });
+    const publish = async (next: PodRouteDescriptor[]) => {
       setRows(next);
       setPodAddresses(next);
       setErrors({});
       await loader.sync(next);
-    },
-    [loader],
-  );
+    };
+    return { loader, publish };
+  }, []);
+  const refresh = () => setRevision((prior) => prior + 1);
   useEffect(() => {
     const timer = setInterval(refresh, 10_000);
     window.addEventListener("focus", refresh);
