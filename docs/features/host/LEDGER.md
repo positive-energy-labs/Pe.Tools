@@ -203,6 +203,8 @@ design-system ledger, not restated here.
 - 2026-08-16 — (/settings) Hand-rolled busy/error state per command: replaced by `useVerb`, which serializes open/re-read/validate/save.
 
 ## Owed
+
+- 2026-10-14, SDK `MsiCommand.ComposeServiceActions`: honor manifest `service.autostart: true` after successful first `/qn` and `/passive` install in the interactive user's environment. Preserve HKCU Run startup, skip uninstall/failed install, and let `update apply` suppress MSI launch while its stub owns relaunch. Do not move the existing action into the server environment without proof; that launch already failed in Sandbox. Require silent/full-UI/repair/logon and updater single-successor acceptance. Exact ask and evidence: wave U `.artifacts/reorient-20261013/u/AUDIT.md`, U-01.
 - E1: a recovered native gateway step stores the SDK op response wrapper `{requestId,key,verdict,result}` as its result, and a recovered failure is parsed as `{error,statusCode,outcome}` while the SDK writes `{verdict,code?,detail}` (`native-receipts.ts`). Record one host-dispatched mutation's `op result` (a Page read left no SDK receipt) before changing it.
 - E1: the SDK reports `doc.bridge-unreachable` for ~3 s after each `doc open`, and `doc list` answers `ok` with zero documents while a modal or that window blocks the bridge (3 of 3 native opens, beta.207/208). Belongs to the SDK; host readers must treat `ok` plus that code as unknown.
 - E1: Close Model's "Don't save" never answers Revit's own Save prompt: `HoldingsClose.Names` needs the title in quotes and Revit 2025 asks "Do you want to save changes to A.rvt?" (PROVEN[session acc-r2, 1443e647]). Owner ruling owed: safe-but-two-clicks, or match the unquoted `<title>.rvt` for the exact openId.
