@@ -65,7 +65,8 @@ const config = defineConfig(({ mode, command }) => {
     ],
     server: {
       host: "127.0.0.1",
-      port: 5175,
+      // A second checkout's registered frontend (acceptance runs, worktrees) names its own port.
+      port: Number(process.env.PE_TOOLS_WEB_PORT ?? 5175),
       strictPort: true,
       allowedHosts: ["127.0.0.1"],
       cors: false,
