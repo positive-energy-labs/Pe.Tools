@@ -6,10 +6,11 @@
  *  1. check    fmt + lint + typecheck, whole workspace, so a contract edit reddens in its consumers.
  *              Generated files are excluded from fmt by ts/vite.config.ts and linted like the rest.
  *  2. knip     dead files, exports, and dependencies against knip.json. `knip --fix` is the purge.
- *  3. test     every package's own `test` script, so web and host keep their lane setup.
- *  4. guards   ts/tests/repo-guards, serialized (fileParallelism: false in its vite config).
+ *  3. kit      build packages/kit/dist, the Page kit asset the host tests serve.
+ *  4. test     every package's own `test` script, so web and host keep their lane setup.
+ *  5. guards   ts/tests/repo-guards, serialized (fileParallelism: false in its vite config).
  *              The ops-catalog guard reads the committed drift hash and never builds dotnet.
- *  5. r24      compile Pe.App as Debug.R24 (net48) and nothing else: no Revit, no deploy. CI builds
+ *  6. r24      compile Pe.App as Debug.R24 (net48) and nothing else: no Revit, no deploy. CI builds
  *              R23 and R25, so a net8-only API (`SkipLast`, `IReadOnlySet<T>`) went red here unseen.
  */
 import { spawnSync } from "node:child_process";
@@ -20,6 +21,9 @@ const TS = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const steps: [name: string, cwd: string, cmd: string[]][] = [
   ["check", TS, ["vp", "check"]],
   ["knip", TS, ["vp", "exec", "knip", "--no-progress"]],
+  // The host serves and exports Pages from packages/kit/dist (gitignored); a fresh worktree has none
+  // and the snowdon acceptance tests answer 503 without it.
+  ["kit", TS, ["vp", "run", "--filter", "@pe/kit", "build"]],
   [
     "test",
     TS,
