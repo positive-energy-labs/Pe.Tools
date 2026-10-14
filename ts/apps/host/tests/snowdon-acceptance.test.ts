@@ -65,7 +65,7 @@ test.each([
       const servedPe = await library("/pages/pe.js");
       expect(servedPe).not.toContain("/*pe:client*/ null");
       expect(servedPe).not.toContain("/*pe:runtime*/ null");
-      const snapshot = { acceptance: id, rows: [] };
+      const snapshot = null;
       const standalone = await exportPage({
         directory: join(to, "Elsewhere/pages/tour"),
         page: `page:@${id}/pages/tour`,

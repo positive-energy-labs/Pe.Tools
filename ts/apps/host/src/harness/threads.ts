@@ -68,6 +68,7 @@ import { Effect } from "effect";
 import { z } from "zod";
 import { openAdapter, stopChild } from "./adapter.ts";
 import { accessModes, sessionOffer, type Providers } from "./providers.ts";
+import { exportThread } from "../thread-export.ts";
 
 /** The thread wire of ADR 0015; contract and route list in `@pe/agent-contracts` `harness-thread.ts`. */
 
@@ -1319,6 +1320,15 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     switch (key) {
       case "thread.get":
         return json(body(t));
+      case "thread.export":
+        try {
+          return exportThread(options.root, t.meta.id);
+        } catch (error) {
+          return json(
+            { error: error instanceof Error ? error.message : "Thread export failed" },
+            422,
+          );
+        }
       case "thread.update": {
         const change = await input(updateThreadRequestSchema);
         const state = activity(t);

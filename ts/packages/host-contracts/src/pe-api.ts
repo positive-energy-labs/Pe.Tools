@@ -55,6 +55,7 @@ export function definePeApi<
     | "harnessThreadSummarySchema"
     | "harnessThreadBodySchema"
     | "harnessEventSchema"
+    | "threadExportSchema"
     | "promptRequestSchema"
     | "permissionResponseSchema"
     | "questionResponseSchema"
@@ -247,6 +248,15 @@ export function definePeApi<
       "stream",
     ),
     "thread.get": route("GET", "/pe/threads/:id", none, harnessThreadBodySchema, "read", "threads"),
+    "thread.export": route(
+      "GET",
+      "/pe/threads/:id/export",
+      none,
+      schemas.threadExportSchema,
+      "read",
+      "threads",
+      "asset",
+    ),
     "thread.update": route(
       "PUT",
       "/pe/threads/:id",
