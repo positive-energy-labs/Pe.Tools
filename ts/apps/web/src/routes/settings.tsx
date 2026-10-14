@@ -1,19 +1,18 @@
 ﻿import { createFileRoute } from "@tanstack/react-router";
 import { appRouteByKey } from "@pe/agent-contracts";
-import { RouteShell, emptyManifest } from "#/route";
+import { RouteShell, urlPage } from "#/route";
 import { SettingsProjection } from "#/settings/options";
 import { SettingsActions } from "#/settings/options-actions";
 import { readGlobalOptions } from "#/settings/option-catalogue";
 // Registers this owner's durable forms for a direct /settings deep link, without its Page.
 import "#/machine/manifest";
 
-const manifest = {
-  ...emptyManifest("settings", "Settings"),
-  docs: "UI settings and forms declared by their resource owners.",
-};
+import { settingsManifest as manifest } from "#/route/surface-manifests";
+const url = urlPage(manifest)!;
 export const settingsSearch = (
   search: Record<string, unknown>,
 ): { subject?: string; section?: string } => {
+  search = url.read(search);
   const subject =
     typeof search.subject === "string" ? appRouteByKey(search.subject)?.key : undefined;
   const section =
@@ -28,6 +27,7 @@ export const settingsSearch = (
 };
 export const Route = createFileRoute("/settings")({
   validateSearch: settingsSearch,
+  search: { middlewares: [...url.middlewares] },
   component: SettingsRoute,
 });
 function SettingsRoute() {

@@ -643,14 +643,16 @@ const window_ = (spec, o) =>
  * @param {Spec} spec @param {RenderOptions} [o] @returns {string}
  */
 const render = (spec, o = {}) => {
-  if (o.notes) {
-    const known = index(spec);
-    for (const n of o.notes)
-      if (!known.has(n.at) && !n.at.startsWith("button:") && !n.at.startsWith("group:"))
-        // TODO: a live palette (fromElement) has no button row, so a note pinned to one throws here and pdrop-tour drops such notes (2026-10-05); skip or warn instead of throwing when the spec is a projection.
-        throw Error(`rv: note on unknown id "${n.at}"`);
-  }
-  const win = window_(spec, o);
+  const known = o.notes && index(spec);
+  const win = window_(
+    spec,
+    known
+      ? {
+          ...o,
+          notes: o.notes?.map((n) => (known.has(n.at) ? n : { ...n, at: "" })),
+        }
+      : o,
+  );
   const notes = o.notes?.length
     ? `<ol class="rv-notes">${o.notes.map((n) => `<li>${esc(n.text)}</li>`).join("")}</ol>`
     : "";
@@ -742,19 +744,23 @@ const compare = (a, b, o = {}) => {
 
 /**
  * An element's Properties palette from one `revit.detail.elements` entry: its requested parameters
- * grouped as Revit groups them, read-only ones disabled, values as Revit displays them when the read
+ * grouped by the supplied group label or readable group id, read-only ones disabled, values as Revit displays them when the read
  * gives a display string, else the raw value. `groups` keeps only those group names, in that order.
  * @param {{ categoryName?: string | null, className: string, familyName?: string | null, typeName?: string | null,
  *   requestedParameters?: { name: string, displayValue?: string | null, rawValue?: string | null, value?: string | null,
- *   isReadOnly?: boolean | null, definition?: { groupTypeLabel?: string | null } }[] | null }} e
+ *   isReadOnly?: boolean | null, definition?: { groupTypeLabel?: string | null, groupTypeId?: string | null } }[] | null }} e
  * @param {{ groups?: string[] }} [o] @returns {Palette}
  */
-// TODO: `revit.detail.elements` sends `definition.groupTypeId`, never `groupTypeLabel`, so every row lands under "Parameters" (pdrop-tour maps the id to the Revit label itself, 2026-10-05); take the id here.
 const fromElement = (e, { groups } = {}) => {
   /** @type {Map<string, PropRow[]>} */
   const byGroup = new Map();
   for (const p of e.requestedParameters ?? []) {
-    const g = p.definition?.groupTypeLabel || "Parameters";
+    const id = p.definition?.groupTypeId;
+    const token = id?.match(/^autodesk\.parameter\.group:([a-z\d]+)(?:-\d+(?:\.\d+)*)?$/i)?.[1];
+    const readable = token
+      ?.replace(/([a-z\d])([A-Z])/g, "$1 $2")
+      .replace(/^./, (c) => c.toUpperCase());
+    const g = p.definition?.groupTypeLabel || readable || id || "Parameters";
     if (groups && !groups.includes(g)) continue;
     const rows = byGroup.get(g) ?? [];
     byGroup.set(g, rows);
@@ -785,7 +791,6 @@ const fromElement = (e, { groups } = {}) => {
  * @param {{ group: string, i: number, part: string, crit: string }[]} rows
  * @param {{ typeName?: string, preferred?: string }} [o] @returns {Dialog}
  */
-// TODO: the `row` and `tools` pieces below carry no id, so `compare` refuses the spec as duplicate ids (pdrop-tour numbers them first, 2026-10-05); give them ids per group.
 const fromRouting = (rows, { typeName = "Duct Type", preferred = "Tee" } = {}) => {
   const size = (/** @type {string} */ crit) =>
     crit === "all"
@@ -796,10 +801,12 @@ const fromRouting = (rows, { typeName = "Duct Type", preferred = "Tee" } = {}) =
           .map((s) => `${s} in`);
   const table = (/** @type {string} */ g) => /** @type {Piece} */ ({
     t: "row",
+    id: `row:${g}`,
     gap: 4,
     items: [
       {
         t: "tools",
+        id: `tools:${g}`,
         items: [{ icon: "up" }, { icon: "down" }, { icon: "add" }, { icon: "remove" }],
       },
       {

@@ -15,7 +15,7 @@ const object = z.record(z.string(), z.unknown());
 const ok = z.object({ ok: z.boolean() }).passthrough();
 type Principal = "read" | "caller" | "human" | "human-or-pea" | "human-or-page";
 export type PeRoutePermission = Principal | "admin" | "grant" | "operation" | "pair";
-type Owner = "pe" | "threads" | "providers" | "share" | "pages" | "gateway";
+type Owner = "pe" | "threads" | "providers" | "share" | "pages" | "gateway" | "plugins";
 
 function route<const P extends string, B extends z.ZodType, O extends z.ZodType>(
   method: "GET" | "POST" | "PUT" | "DELETE",
@@ -63,6 +63,8 @@ export function definePeApi<
     | "harnessThreadSummarySchema"
     | "harnessThreadBodySchema"
     | "harnessEventSchema"
+    | "threadExportSchema"
+    | "pluginStatusSchema"
     | "promptRequestSchema"
     | "turnStateSchema"
     | "queueRequestSchema"
@@ -89,6 +91,7 @@ export function definePeApi<
   >,
 >(schemas: S) {
   const accessSchema = schemas.accessSchema as S["accessSchema"];
+  const pluginStatusSchema = schemas.pluginStatusSchema as S["pluginStatusSchema"];
   const addProviderRequestSchema =
     schemas.addProviderRequestSchema as S["addProviderRequestSchema"];
   const providerSchema = schemas.providerSchema as S["providerSchema"];
@@ -269,6 +272,33 @@ export function definePeApi<
       "providers",
       "admin",
     ),
+    "plugins.list": route(
+      "GET",
+      "/pe/plugins",
+      none,
+      z.array(pluginStatusSchema),
+      "read",
+      "plugins",
+      "read",
+    ),
+    "plugin.update": route(
+      "PUT",
+      "/pe/plugins/:id",
+      z.strictObject({ enabled: z.boolean() }),
+      z.array(pluginStatusSchema),
+      "human",
+      "plugins",
+      "admin",
+    ),
+    "plugin.remove": route(
+      "DELETE",
+      "/pe/plugins/:id",
+      none,
+      z.array(pluginStatusSchema),
+      "human",
+      "plugins",
+      "admin",
+    ),
     "threads.list": route(
       "GET",
       "/pe/threads",
@@ -295,6 +325,16 @@ export function definePeApi<
       "read",
       "threads",
       "read",
+    ),
+    "thread.export": route(
+      "GET",
+      "/pe/threads/:id/export",
+      none,
+      schemas.threadExportSchema,
+      "read",
+      "threads",
+      "read",
+      "asset",
     ),
     "thread.update": route(
       "PUT",

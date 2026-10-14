@@ -16,6 +16,7 @@ import {
   HOST_RUNTIME_SERVICE_HEADER,
   HOST_RUNTIME_SERVICE_QUERY,
 } from "@pe/host-contracts/contracts";
+import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { createDevices, DEVICE_COOKIE } from "../src/remote-device.ts";
 import { mintBrowserContext, mintContext } from "../src/control.ts";
@@ -390,6 +391,8 @@ test("remote administration Off denies only machine-control mutations, including
     ["POST", "/pe/providers/x/probe"],
     ["POST", "/pe/providers/x/open-login"],
     ["PUT", "/pe/access"],
+    ["PUT", peRouteUrl("plugin.update", { params: { id: "pod:sample" } })],
+    ["DELETE", peRouteUrl("plugin.remove", { params: { id: "pod:sample" } })],
     ["POST", "/host/update"],
     ["POST", "/pe/%70roviders"],
     ["POST", "/pe//providers"],
@@ -416,6 +419,8 @@ test("remote administration Off denies only machine-control mutations, including
   for (const [method, path] of [
     ["GET", "/pe/providers"],
     ["GET", "/pe/access"],
+    ["GET", peRouteUrl("plugins.list", {})],
+    ["GET", peRouteUrl("thread.export", { params: { id: "thread" } })],
     ["GET", "/host/update"],
     ["POST", "/call"],
     ["POST", "/actions"],

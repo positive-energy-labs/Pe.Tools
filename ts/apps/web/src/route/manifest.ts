@@ -157,12 +157,6 @@ export const defineRoute = <W, const R extends string, P, const A extends string
   return m;
 };
 
-/** An empty manifest is a legal manifest: the shell must render one. */
-export const emptyManifest = (
-  key: string,
-  name: string,
-): RouteManifest<never, never, never, never> => ({ key, name });
-
 /* ── The entity route kernel ─────────────────────────────────────────────────── */
 
 /** A pod member's address, everywhere (dogma law 11). */

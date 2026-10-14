@@ -25,6 +25,7 @@ import type {
 } from "@pe/host-contracts/generated";
 import type { PodDraftSource, PodMemberSource } from "@pe/agent-contracts";
 import { isPackageMember, listPackages, readPackage } from "./packages.ts";
+import { requirePackageEnabled, activePackages } from "./package-lifecycle.ts";
 import { LocalOpError } from "./local-error.ts";
 import { productPodsRootPath } from "./product-paths.ts";
 import {
@@ -56,7 +57,7 @@ export const listPods = Effect.fnUntraced(function* (ctx: PodContext = {}) {
     catch: (error) => new LocalOpError("pod.list", errorMessage(error), 400),
   });
   return {
-    pods: found.packages.map((pod) => ({
+    pods: (yield* Effect.promise(() => activePackages(found.packages, root))).map((pod) => ({
       id: pod.id,
       name: pod.name,
       version: pod.version,
@@ -212,6 +213,10 @@ function parseReceipt(content: string): PodReceipt | string {
 }
 
 export const readMember = Effect.fnUntraced(function* (member: PodMember, ctx: PodContext = {}) {
+  yield* Effect.tryPromise({
+    try: () => requirePackageEnabled(member.pod, undefined, ctx.podsRoot),
+    catch: (error) => new LocalOpError("pod.member.read", errorMessage(error), 403),
+  });
   const admitted = yield* Effect.tryPromise({
     try: () => readPackage(member.pod, ctx.podsRoot ?? productPodsRootPath()),
     catch: (error) =>
@@ -497,6 +502,10 @@ export const composedSpec = Effect.fnUntraced(function* (
 
 export const podFolder = Effect.fnUntraced(function* (podId: string, ctx: PodContext = {}) {
   const root = ctx.podsRoot ?? productPodsRootPath();
+  yield* Effect.tryPromise({
+    try: () => requirePackageEnabled(podId, undefined, root),
+    catch: (error) => new LocalOpError("pod.resolve", errorMessage(error), 403),
+  });
   const pod = yield* Effect.tryPromise({
     try: () => readPackage(podId, root),
     catch: (error) =>

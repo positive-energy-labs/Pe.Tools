@@ -15,6 +15,8 @@ public sealed class ShippedPodCompilationTests {
     // first-boot shipped entrypoint, not an inferred property of its source text.
     private static readonly IReadOnlyDictionary<(string Pod, string Entrypoint), ScriptPermissionMode> EntrypointPolicies =
         new Dictionary<(string Pod, string Entrypoint), ScriptPermissionMode> {
+            [("snowdon-circuits", "src/Census.cs")] = ScriptPermissionMode.ReadOnly,
+            [("snowdon-circuits", "src/InspectRun.cs")] = ScriptPermissionMode.ReadOnly,
             [("snowdon-ducts", "src/Census.cs")] = ScriptPermissionMode.ReadOnly,
             [("snowdon-ducts", "src/InspectRun.cs")] = ScriptPermissionMode.ReadOnly,
             [("snowdon-ducts", "src/CoefficientExperiment.cs")] = ScriptPermissionMode.NoTransaction

@@ -60,6 +60,13 @@ test("numeric readings use native units, the binding chooses the document, and c
     expect(probe).toContain(member);
   const page = await text("pages/tour/page.js");
   expect(page).toContain("pe.target()");
+  expect(page).toContain("const offline = Boolean(pe.exported);");
+  const html = await text("pages/tour/index.html");
+  const embedded = JSON.parse(
+    html.match(/<script id="page-source" type="application\/json">(.*?)<\/script>/s)![1]!,
+  );
+  expect(embedded.app).toBe(page.replaceAll("\r\n", "\n"));
+  expect(html).toContain("const offline = Boolean(pe.exported);");
   expect(page).not.toMatch(/pe\.target\([^)]*["']|x-pe-origin|x-pe-session|x-pe-document/);
   expect(page).toContain("script:@snowdon-circuits/src/Census.cs");
   expect(page).toContain("script:@snowdon-circuits/src/InspectRun.cs");

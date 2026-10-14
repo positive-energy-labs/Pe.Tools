@@ -221,7 +221,7 @@ restated here.
 - `ScopeDocument.year` means the holder's Revit year for a held document and the file's saved year for a recent (F10); a picked document in neither list makes `fileYear` null and every session eligible (F9).
 - `Pe.Tools-lean` worktree and its dev host on port 5180 (`close/lean-scope`, merged) are still up; retire them.
 - `takeoff/store.ts` `reconcileWorld` still persists `bindings.world`, the pre-lean world-as-binding idea `ops/store.ts` dropped; `FleetFeed.sessions` in `targeting/world.ts` is unused; `pea host operations` searches the whole catalog and wants the name `pea find`.
-- `CHAT_PLUGIN_ROUTES`, `routePaneSpecs`, `ChatSearch.plugin`, and `routeChatPluginList` list the chat plugin routes four times and disagree on `families`; derive one from the plugin list.
+- Pod-authored browser routes still need a production bundle/loader crossing. Builtin routes now use the same scoped plugin contract and one manifest registration supplies discovery, actions, heads and hosted views; runtime registration and disposal are tested, but importing a Pod does not yet mount its React route.
 - `InstancesPage` `target` / `setTarget` is a dead prop pair (`route-panes.tsx` passes a no-op setter); the route document's `selectedSession` is the target.
 - `Slice` in `state/route-store.ts` encodes one state machine in five parallel nullables; make it a discriminated union and delete the hand-written `hydrated`/`slice == null` guards.
 - Held-document year mismatch: a user who opens a 2024 file in Revit 2026 by hand has an upgraded document in memory, and a save writes 2026 to disk. Ruled ignorable for now (kaitpw 2026-09-05); if it bites, show file year against session year on `resolved` in the technical head and refuse the write door once.

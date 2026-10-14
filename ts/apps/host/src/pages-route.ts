@@ -90,6 +90,7 @@ import {
   subscribeHeads,
 } from "./control.ts";
 import { capturePackage, listPackages } from "./packages.ts";
+import { activePackages, requirePackageEnabled } from "./package-lifecycle.ts";
 import {
   PAGE_LIBRARIES,
   packagePageDescriptors,
@@ -140,7 +141,7 @@ const RUNTIME_SLOT = "/*pe:runtime*/ null";
 const servedPe = () => {
   const source = asset("pe.js");
   if (!source.includes(RUNTIME_SLOT)) throw Error(`pe.js must hold one \`${RUNTIME_SLOT}\` slot`);
-  return source.replace("/*pe:client*/ null", peClientScript()).replace(
+  const rendered = source.replace("/*pe:client*/ null", peClientScript()).replace(
     RUNTIME_SLOT,
     JSON.stringify({
       header: HOST_RUNTIME_SERVICE_HEADER,
@@ -148,6 +149,9 @@ const servedPe = () => {
       service: hostOwnership.serviceName,
     }),
   );
+  const unfilled = rendered.match(/\/\*pe:[^*]+\*\/\s*null\b/);
+  if (unfilled) throw Error(`Unfilled pe.js slot: ${unfilled[0]}`);
+  return rendered;
 };
 
 /** One file segment: a leading dot is refused, so `.state/` and editor droppings stay private. */
@@ -409,7 +413,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
         : null;
     }
     if (more.length || !pods) return null;
-    for (const pod of (await listPackages(pods)).packages) {
+    for (const pod of await activePackages((await listPackages(pods)).packages, pods)) {
       const row = pod.contributions.find(
         (one) => one.kind === "page" && one.path === `pages/${page}`,
       );
@@ -430,7 +434,9 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
   const list = async (): Promise<PageRow[]> =>
     [
       ...(await scratchPageDescriptors(root)),
-      ...packagePageDescriptors(pods ? (await listPackages(pods)).packages : []),
+      ...packagePageDescriptors(
+        pods ? await activePackages((await listPackages(pods)).packages, pods) : [],
+      ),
     ].map((page) => ({
       slug: page.slug,
       key: page.key,
@@ -727,6 +733,7 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
     if (!ref) return { key: bareOp(key), input: sent };
     if (ref.kind !== "script")
       return { problem: `${key} is a ${ref.kind}: it reads and mentions, it never runs.` };
+    await requirePackageEnabled(ref.packageId, undefined, pods);
     const pod = pods
       ? (await listPackages(pods)).packages.find((one) => one.id === ref.packageId)
       : undefined;
@@ -795,7 +802,11 @@ export function createPagesHandler(root: string, pods?: string, live: PageLive =
 
   /** `index.html` names its page: the host mints the key; the page never claims one. */
   const withPageKey = (html: string, page: string) => {
-    const meta = `<meta name="pe-page" content="${escapeHtml(page)}">`;
+    // Pages without an authored icon must not make a stray request to the product's /favicon.ico.
+    const icon = /<link\b[^>]*\brel=["'][^"']*\bicon\b/i.test(html)
+      ? ""
+      : '<link rel="icon" href="data:,">';
+    const meta = `<meta name="pe-page" content="${escapeHtml(page)}">${icon}`;
     const head = /<head[^>]*>/i.exec(html) ?? /^\s*<!doctype[^>]*>/i.exec(html);
     if (!head) return `${meta}${html}`;
     const end = head.index + head[0].length;

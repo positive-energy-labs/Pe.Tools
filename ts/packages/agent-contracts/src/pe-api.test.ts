@@ -45,6 +45,10 @@ describe("the declared host door", () => {
   });
   it("access-084: administration and grant policy are declared on the route", () => {
     expect(peRoutes["provider.login"].permission).toBe("admin");
+    expect(peRoutes["plugin.update"].permission).toBe("admin");
+    expect(peRoutes["plugin.remove"].permission).toBe("admin");
+    expect(peRoutes["plugins.list"].permission).toBe("read");
+    expect(peRoutes["thread.export"].permission).toBe("read");
     expect(peRoutes["scope.set"].permission).toBe("grant");
     expect(peRoutes["page.act"].principal).toBe("human-or-page");
   });
@@ -147,6 +151,8 @@ it("an empty Page text update crosses the contract", async () => {
 it("route consumers cannot recreate Pe paths beside the contract", () => {
   const root = join(import.meta.dirname, "../../../apps/host");
   for (const file of [
+    "src/plugins-handler.ts",
+    "src/thread-export.ts",
     "src/resource-adapters.ts",
     "src/demo-owner.ts",
     "src/pages-route.ts",

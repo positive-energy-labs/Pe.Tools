@@ -18,7 +18,10 @@ import { hostOwnership } from "../src/host-ownership.ts";
 import { requestIdentityLayer } from "../src/request-identity.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 
-vi.mock("../src/product-paths.ts", () => ({ productUserContentRootPath: vi.fn() }));
+vi.mock("../src/product-paths.ts", async (original) => ({
+  ...(await original<typeof import("../src/product-paths.ts")>()),
+  productUserContentRootPath: vi.fn(),
+}));
 
 it.each([
   ["Succeeded", "succeeded"],
