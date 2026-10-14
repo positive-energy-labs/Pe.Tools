@@ -69,7 +69,10 @@ test("Pea enumerates Pod members and proposes revision-checked Work without rout
       }
       throw Error(`Unexpected ${url.href}`);
     });
-    const run = (tool: typeof peDo | typeof peFind, input: Record<string, unknown>) =>
+    const run = (
+      tool: typeof peDo | typeof peRead | typeof peFind,
+      input: Record<string, unknown>,
+    ) =>
       tool.execute!({ timeoutSeconds: 30, limit: 50, ...input } as never, {} as never) as Promise<
         Record<string, unknown>
       >;

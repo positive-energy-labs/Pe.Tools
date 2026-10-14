@@ -1,4 +1,5 @@
 import { createPeClient, peRoutes } from "@pe/agent-contracts/pe-api";
+import { pagePublicationSchema, pagePublicationResultSchema } from "@pe/host-contracts/pe-api";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import {
   carriesCallerContext,
@@ -242,6 +243,28 @@ const runInputSchema = z.object({
 });
 type RunInput = z.infer<typeof runInputSchema>;
 
+// MCP tools require an object at the top level; the two strict arms still validate separately.
+const peDoInputSchema = z
+  .strictObject({
+    ...runInputSchema.shape,
+    key: runInputSchema.shape.key.optional(),
+    timeoutSeconds: z.number().min(5).max(900).optional(),
+    kind: z.literal("page").optional(),
+    slug: pagePublicationSchema.shape.slug.optional(),
+    title: pagePublicationSchema.shape.title.optional(),
+    html: pagePublicationSchema.shape.html.optional(),
+    width: pagePublicationSchema.shape.width,
+  })
+  .superRefine((input, context) => {
+    const parsed =
+      input.kind === "page"
+        ? pagePublicationSchema.safeParse(input)
+        : runInputSchema.strict().safeParse(input);
+    if (!parsed.success)
+      for (const issue of parsed.error.issues)
+        context.addIssue({ code: "custom", path: issue.path, message: issue.message });
+  });
+
 export const peRead = createTool({
   id: "pe_read",
   description:
@@ -256,11 +279,33 @@ export const peRead = createTool({
 export const peDo = createTool({
   id: "pe_do",
   description:
-    "Do one authorized capability by key from pe_find. The host admits writes only to Pea's own lifetimes or the granted head; external MCP clients can read any document and write Pea's own, but cannot hold rw in this release. Use pe_read for rows that do not mutate. Human-only rows refuse. Op calls accept an exact per-call target override; omission follows the live thread head. The result separately names Scope revision and actual target. For Takeoffs actions, retain input.actionId from the first result to recover the same attempt; never mint another ID after an uncertain outcome.",
-  inputSchema: runInputSchema,
-  execute: (input, context) =>
-    executeTool(
-      input,
+    "Publish an authored HTML Page directly with {kind: 'page', slug, title, html, width?}; no target or discovery call is needed. Returns its canonical Page key, absolute openUrl and a real PNG image. HTML must be a valid document with a doctype; inline JavaScript is validated and preview errors preserve the prior Page. pe.js and pe.kit are optional. Or do one authorized capability by key from pe_find. The host admits writes only to Pea's own lifetimes or the granted head; external MCP clients can read any document and write Pea's own, but cannot hold rw in this release. Use pe_read for rows that do not mutate. Human-only rows refuse. Op calls accept an exact per-call target override; omission follows the live thread head. The result separately names Scope revision and actual target. For Takeoffs actions, retain input.actionId from the first result to recover the same attempt; never mint another ID after an uncertain outcome.",
+  inputSchema: peDoInputSchema,
+  toModelOutput: (output) => {
+    const parsed = pagePublicationResultSchema.safeParse(output);
+    if (!parsed.success) return undefined;
+    const { capture, ...result } = parsed.data;
+    return {
+      type: "content",
+      value: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            ...result,
+            capture: { mimeType: capture.mimeType, width: capture.width, height: capture.height },
+          }),
+        },
+        { type: "media", mediaType: capture.mimeType, data: capture.data },
+      ],
+    };
+  },
+  execute: async (input, context) => {
+    if (input.kind === "page")
+      return createPeClient(base(), fetch).call("page.publish", {
+        body: pagePublicationSchema.parse(input),
+      });
+    return executeTool(
+      runInputSchema.parse(input),
       context,
       (row) =>
         row.kind === "document"
@@ -271,7 +316,8 @@ export const peDo = createTool({
               ? `'${row.key}' is a read/mention-only member and cannot execute.`
               : null,
       true,
-    ),
+    );
+  },
 });
 
 async function executeTool(
