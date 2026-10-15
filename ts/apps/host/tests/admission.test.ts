@@ -32,12 +32,24 @@ const local = { host: "127.0.0.1:5180", "x-pe-runtime-service": hostOwnership.se
 test.each(
   Object.entries(peRoutes).filter(
     ([, route]) =>
-      route.method !== "GET" && route.permission !== "operation" && route.permission !== "pair",
+      route.method !== "GET" &&
+      route.permission !== "read" &&
+      route.permission !== "operation" &&
+      route.permission !== "pair",
   ),
 )("access-041/085: anonymous declared write %s is refused before routing", async (_id, route) => {
   const path = route.path.replace(/:[\w]+/g, "fixture");
   expect(await readRequestIdentity(local, path, options, route.method)).toMatchObject({
     refusal: { code: "context.missing" },
+  });
+});
+
+test.each(
+  Object.entries(peRoutes).filter(([, route]) => route.method !== "GET" && route.permission === "read"),
+)("anonymous declared read %s retains read admission regardless of HTTP method", async (_id, route) => {
+  const path = route.path.replace(/:[\w]+/g, "fixture");
+  expect(await readRequestIdentity(local, path, options, route.method)).toMatchObject({
+    caller: { kind: "anonymous" },
   });
 });
 
