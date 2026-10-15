@@ -1796,3 +1796,11 @@ test("headless Ducts analysis is discoverable and pe_read needs no mounted threa
   });
   expect(calls).toEqual(["/pe/capabilities", "/pe/ducts/analysis"]);
 });
+
+test("Ducts discovery exposes artifact-only canonical apply-request without another tool", () => {
+  const rows = catalog().capabilities.filter((row) => row.key === "route:ducts.analysis");
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({ needs: "nothing", mutates: false });
+  expect(rows[0]!.description).toContain("does not stage Work or write Revit");
+  expect(JSON.stringify(rows[0]!.input)).toContain("apply-request");
+});

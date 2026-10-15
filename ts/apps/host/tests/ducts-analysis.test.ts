@@ -24,9 +24,13 @@ import {
   ductsAnalysisRequestSchema,
   ductsAnalysisResponseSchema,
   ductsDocumentSchema,
+  ductsApplyRequestArtifactSchema,
+  ductsApplyInputSchema,
   ductsRouteState,
   type DuctPortPin,
 } from "@pe/agent-contracts";
+import { price, applyRequest } from "@pe/ducts-domain/pricing";
+import { toGrids } from "@pe/ducts-domain/loss-grid";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import {
   createDuctsAnalysis,
@@ -131,7 +135,15 @@ function fixture() {
     mark: number | null = null;
   const sources: DuctsAnalysisSources = {
     root,
-    producer: { lane: "deterministic-purpose-fixture" },
+    producer: {
+      version: "purpose-1",
+      lane: "dev",
+      executablePath: "fixture-host",
+      processId: 99,
+      serviceName: "fixture-host",
+      sourceRoot: "fixture-source",
+      installedRoot: null,
+    },
     marks: { observedSince: 0, changedAt: () => mark, subscribe: () => () => {} },
     resolve: async (target) => {
       resolutions++;
@@ -523,10 +535,14 @@ test("MCP analysis retains admitted caller through the real route and nested nat
     share: { ...unavailableShare, observe: () => {} },
   };
   const seen: string[] = [];
+  let retainedAnalysis = "";
   const routes = createPeRoutes({
-    registrations: [],
+    registrations: [{ spec: ductsRouteState, handlers: {} }],
     heads: { observe: () => () => {} },
-    store: { getState: async () => null, setState: async () => {} },
+    store: {
+      getState: async () => ({ version: 1, revision: 7, doc: candidateWork() }),
+      setState: async () => {},
+    },
     ductsAnalysis: { ...f.sources, call: ductsNativeRead(base) },
   });
   vi.stubEnv("PE_CONTEXT", "");
@@ -548,7 +564,12 @@ test("MCP analysis retains admitted caller through the real route and nested nat
           diagnostics: [],
           capabilities: buildCapabilities({ ops: [], routes: [], packages: [], skills: [] }),
         });
-      if (url.pathname === "/pe/ducts/analysis") return routes.fetch(request);
+      if (url.pathname === "/pe/ducts/analysis") {
+        const response = await routes.fetch(request);
+        const body = await response.clone().json();
+        retainedAnalysis = body.analysisId;
+        return response;
+      }
       if (url.pathname === "/call") {
         const body = (await request.json()) as { key: string };
         try {
@@ -584,6 +605,31 @@ test("MCP analysis retains admitted caller through the real route and nested nat
       );
       expect(result).toMatchObject({ ok: true, result: { target: f.target } });
     }
+    expect(seen).toEqual(["ducts.snapshot", "ducts.tables", "ducts.snapshot", "ducts.tables"]);
+    const candidateInput = {
+      key: "route:ducts.analysis",
+      input: {
+        source: { kind: "artifact", id: retainedAnalysis },
+        selector: { kind: "document" },
+        projection: "apply-request",
+      },
+    };
+    const candidate = await withInvocationContext(
+      { hostBaseUrl: base, headers: { "x-pe-context": token } },
+      () =>
+        peRead.execute(peRead.inputSchema.parse(candidateInput), {
+          agent: { toolCallId: "fixture-plan" },
+        }),
+    );
+    expect(candidate).toMatchObject({
+      ok: true,
+      result: {
+        applyRequest: {
+          mode: "historical-candidate-requires-approval-and-revalidation",
+          counts: { terminals: 1 },
+        },
+      },
+    });
     expect(seen).toEqual(["ducts.snapshot", "ducts.tables", "ducts.snapshot", "ducts.tables"]);
   } finally {
     retireContext(token);
@@ -1202,4 +1248,287 @@ test("actual analysis handler shares bounded prescribed hydraulic closure and ex
     "hydraulic law pool is missing",
   );
   expect(f.counts()).toEqual(before);
+});
+
+function candidateWork() {
+  return ductsDocumentSchema.parse({
+    terminalDrops: {
+      "2": {
+        staged: { value: { inWg: 0.12, source: "Approved purpose point" } },
+        proposal: { value: { inWg: 9, source: "Not accepted" } },
+      },
+    },
+    componentDrops: { "3": { staged: { value: { inWg: 0.02, source: "Stated component" } } } },
+    parameters: { terminalDrop: { staged: { value: "TerminalDrop" } } },
+  });
+}
+const candidateRead = (id: string, selector: unknown = { kind: "document" }) =>
+  read({ kind: "artifact", id }, selector, { projection: "apply-request" });
+const hashJson = (value: unknown) =>
+  createHash("sha256").update(JSON.stringify(value)).digest("hex");
+function storeChanged(f: ReturnType<typeof fixture>, artifact: unknown) {
+  const bytes = Buffer.from(JSON.stringify(artifact));
+  const id = createHash("sha256").update(bytes).digest("hex");
+  writeFileSync(join(f.root, `${id}.json`), bytes);
+  return id;
+}
+test("apply-request builds a canonical immutable candidate without reacquiring", async () => {
+  const f = fixture();
+  const doc = candidateWork();
+  f.snapshot.store = {
+    version: 1,
+    rules: {},
+    instances: {},
+    terminals: {},
+    workRevision: 3,
+    customerKeep: { exact: [1, "untouched"] },
+  };
+  f.sources.readWork = vi.fn(async () => ({ doc, revision: 7 }));
+  const initial = await f.api.read(read({ kind: "fresh", target: f.target }));
+  const original = Buffer.from(await (await f.api.artifact(initial.analysisId)).arrayBuffer());
+  const artifact = JSON.parse(original.toString("utf8"));
+  const input = JSON.parse(gunzipSync(Buffer.from(artifact.input.data, "base64")).toString("utf8"));
+  const before = f.counts();
+  vi.mocked(f.sources.readWork).mockClear();
+  const candidate = ductsAnalysisResponseSchema.parse(
+    await f.api.read(candidateRead(initial.analysisId)),
+  );
+  const meta = candidate.applyRequest!;
+  expect(meta.mode).toBe("historical-candidate-requires-approval-and-revalidation");
+  expect(meta.counts).toEqual({
+    fittings: 0,
+    terminals: 1,
+    components: 1,
+    equipment: 0,
+    unpricedRuleInstances: 0,
+  });
+  expect(candidate.rows).toEqual([]);
+  expect(Buffer.byteLength(JSON.stringify(candidate))).toBeLessThanOrEqual(65536);
+  const bytes = Buffer.from(await (await f.api.artifact(meta.artifact.id)).arrayBuffer());
+  expect(createHash("sha256").update(bytes).digest("hex")).toBe(meta.artifact.sha256);
+  const plan = ductsApplyRequestArtifactSchema.parse(JSON.parse(bytes.toString("utf8")));
+  const expected = ductsApplyInputSchema.parse(
+    applyRequest(
+      input.snapshot,
+      price(input.snapshot, toGrids(input.tables), input.work),
+      plan.createdAt,
+      "",
+    ),
+  );
+  expect(plan.payload).toEqual(expected);
+  expect(plan.payloadSha256).toBe(hashJson(plan.payload));
+  expect(plan.payloadByteSize).toBe(Buffer.byteLength(JSON.stringify(plan.payload)));
+  expect(plan.source.work).toMatchObject({ revision: 7, jsonSha256: hashJson(input.work) });
+  expect(plan.source.snapshotJsonSha256).toBe(hashJson(input.snapshot));
+  expect(plan.source.tablesJsonSha256).toBe(hashJson(input.tables));
+  expect(plan.payload.store.customerKeep).toEqual({ exact: [1, "untouched"] });
+  expect(plan.payload.terminals).toEqual([{ id: 2, inWg: 0.12, source: "Approved purpose point" }]);
+  expect(plan.source.target).toEqual(f.target);
+  expect(plan.source.acquisitions.map((r) => r.sha256)).toEqual(
+    artifact.acquisition.map((r: { sha256: string }) => r.sha256),
+  );
+  expect(Buffer.from(await (await f.api.artifact(initial.analysisId)).arrayBuffer())).toEqual(
+    original,
+  );
+  expect(f.counts()).toEqual(before);
+  expect(f.sources.readWork).not.toHaveBeenCalled();
+  await expect(f.api.read(read({ kind: "artifact", id: meta.artifact.id }))).rejects.toThrow(
+    "Unsupported analysis format",
+  );
+  const group = await f.api.read(candidateRead(initial.analysisId, { kind: "group", id: "g" }));
+  expect(group.applyRequest!.counts.components).toBe(0);
+  await expect(
+    f.api.read(candidateRead(initial.analysisId, { kind: "group", id: "absent" })),
+  ).rejects.toThrow("group is unavailable");
+});
+
+test("apply-request refuses changed producer outputs, custody, Work and unsupported formats without acquisitions", async () => {
+  const f = fixture();
+  f.sources.readWork = async () => ({ doc: candidateWork(), revision: 1 });
+  const fresh = await f.api.read(read({ kind: "fresh", target: f.target }));
+  const original = JSON.parse(await (await f.api.artifact(fresh.analysisId)).text());
+  const before = f.counts();
+  const mutations = [
+    (a: typeof original) => {
+      a.outputs.next.paths["2"].rows[0].dp = 123;
+    },
+    (a: typeof original) => {
+      a.producer.version = "other";
+    },
+    (a: typeof original) => {
+      a.producer.installedRoot = "foreign";
+    },
+    (a: typeof original) => {
+      delete a.producer.version;
+    },
+    (a: typeof original) => {
+      a.freshness.state = "changed";
+    },
+    (a: typeof original) => {
+      a.work.revision = null;
+    },
+    (a: typeof original) => {
+      a.work.key = { binding: "host", route: "ducts" };
+    },
+    (a: typeof original) => {
+      a.acquisition[0].sha256 = "0".repeat(64);
+    },
+    (a: typeof original) => {
+      a.acquisition[0].byteSize++;
+    },
+    (a: typeof original) => {
+      a.acquisition.reverse();
+    },
+    (a: typeof original) => {
+      a.format = "ducts-analysis-v4";
+    },
+  ];
+  for (const change of mutations) {
+    const altered = structuredClone(original);
+    change(altered);
+    await expect(f.api.read(candidateRead(storeChanged(f, altered)))).rejects.toThrow();
+  }
+  // Host lifetime differs, exact producer applicability and reproduced outputs still agree.
+  const restart = structuredClone(original);
+  restart.producer.processId++;
+  expect((await f.api.read(candidateRead(storeChanged(f, restart)))).applyRequest).not.toBeNull();
+  expect(f.counts()).toEqual(before);
+  for (const extra of [
+    { source: { kind: "fresh", target: f.target } },
+    { selector: { kind: "terminal", id: 2 } },
+    { cursor: { offset: 0, basis: "a".repeat(64) } },
+  ])
+    expect(
+      ductsAnalysisRequestSchema.safeParse({
+        source: { kind: "artifact", id: fresh.analysisId },
+        selector: { kind: "document" },
+        projection: "apply-request",
+        ...extra,
+      }).success,
+    ).toBe(false);
+});
+
+test("apply-request cannot turn proposal-only or physical fan required head into native writes", async () => {
+  const f = fixture();
+  let doc = ductsDocumentSchema.parse({
+    terminalDrops: { "2": { proposal: { value: { inWg: 2, source: "Unaccepted" } } } },
+  });
+  f.sources.readWork = async () => ({ doc, revision: 1 });
+  let initial = await f.api.read(read({ kind: "fresh", target: f.target }));
+  await expect(f.api.read(candidateRead(initial.analysisId))).rejects.toThrow(
+    "No native write values",
+  );
+  doc = candidateWork();
+  f.snapshot.storeError = "corrupt store";
+  initial = await f.api.read(read({ kind: "fresh", target: f.target }));
+  await expect(f.api.read(candidateRead(initial.analysisId))).rejects.toThrow(
+    "store is unreadable",
+  );
+  delete f.snapshot.storeError;
+  for (const n of f.snapshot.nodes) n.uniqueId = `purpose-${n.id}`;
+  f.snapshot.nodes[0]!.connectors[0]!.direction = "out";
+  doc = ductsDocumentSchema.parse({
+    ...candidateWork(),
+    unitStatics: { "1": { staged: { value: { inWg: 0.25 } } } },
+    calculation: {
+      fan: {
+        staged: {
+          value: {
+            kind: "fan",
+            element: { id: 1, uniqueId: "purpose-1" },
+            inlet: null,
+            outlet: {
+              index: 1,
+              point: [0, 0, 0],
+              shape: "round",
+              diameterIn: 8,
+              widthIn: null,
+              heightIn: null,
+              direction: "out",
+              connectedTo: { id: 2, uniqueId: "purpose-2", connector: 1 },
+            },
+            designFlowCfm: 100,
+            referenceTotalPressureInWg: 0,
+            source: "Purpose physical fan",
+          },
+        },
+      },
+    },
+  });
+  initial = await f.api.read(read({ kind: "fresh", target: f.target }));
+  await expect(f.api.read(candidateRead(initial.analysisId))).rejects.toThrow(
+    "no admitted manufacturer scalar ESP mapping",
+  );
+});
+
+test("apply-request never publishes a clipped candidate above the complete artifact budget", async () => {
+  const f = fixture();
+  const doc = ductsDocumentSchema.parse({
+    terminalDrops: Object.fromEntries(
+      Array.from({ length: 17000 }, (_, n) => [
+        String(n + 20000),
+        { staged: { value: { inWg: 0.01, source: "x".repeat(2000) } } },
+      ]),
+    ),
+  });
+  f.sources.readWork = async () => ({ doc, revision: 1 });
+  const source = await f.api.read(read({ kind: "fresh", target: f.target }));
+  const sourceBytes = Buffer.from(await (await f.api.artifact(source.analysisId)).arrayBuffer());
+  const before = f.counts();
+  await expect(f.api.read(candidateRead(source.analysisId))).rejects.toThrow(
+    "Apply request exceeds byte budget",
+  );
+  expect(f.counts()).toEqual(before);
+  expect(Buffer.from(await (await f.api.artifact(source.analysisId)).arrayBuffer())).toEqual(
+    sourceBytes,
+  );
+}, 30000);
+
+test("apply-request uses canonical staged fitting lookup and names unpriced instances", async () => {
+  for (const missing of [false, true]) {
+    const f = fixture();
+    Object.assign(
+      f.snapshot,
+      JSON.parse(
+        readFileSync(
+          new URL("../../web/src/ducts/fixtures/synthetic-snapshot.json", import.meta.url),
+          "utf8",
+        ),
+      ),
+    );
+    const tables = {
+      tables: missing
+        ? {}
+        : {
+            "CD3-2": {
+              Co: { title: "Purpose constant coefficient", xLabel: "D", x: [], grid: [0.24] },
+            },
+          },
+      missing: [],
+      unsupported: [],
+    };
+    f.sources.call = async (key) => Response.json(key === "ducts.snapshot" ? f.snapshot : tables);
+    const doc = ductsDocumentSchema.parse({
+      rules: { "elbow-1d-gt10": { staged: { value: { table: "CD3-2" } } } },
+    });
+    f.sources.readWork = async () => ({ doc, revision: 1 });
+    const initial = await f.api.read(read({ kind: "fresh", target: f.target }));
+    const candidate = await f.api.read(candidateRead(initial.analysisId));
+    const plan = ductsApplyRequestArtifactSchema.parse(
+      await (await f.api.artifact(candidate.applyRequest!.artifact.id)).json(),
+    );
+    const expected = ductsApplyInputSchema.parse(
+      applyRequest(f.snapshot, price(f.snapshot, toGrids(tables), doc), plan.createdAt, ""),
+    );
+    expect(plan.payload).toEqual(expected);
+    expect(plan.payload.fittings).toHaveLength(missing ? 0 : 1);
+    expect(plan.unpriced).toHaveLength(missing ? 1 : 0);
+    if (!missing)
+      expect(plan.payload.fittings[0]).toMatchObject({
+        method: "pe-server",
+        coefficient: 0.24,
+        table: "CD3-2",
+        ruleKey: "elbow-1d-gt10",
+      });
+  }
 });

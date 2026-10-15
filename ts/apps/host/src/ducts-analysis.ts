@@ -9,8 +9,12 @@ import { gzipSync, gunzipSync } from "node:zlib";
 import { join } from "node:path";
 import {
   addressSchema,
+  canonicalRouteInput,
   bindWork,
   ductsDocumentSchema,
+  ductsApplyRequestArtifactSchema,
+  ductsApplyInputSchema,
+  ductsApplyRequestProducerSchema,
   stagedDucts,
   type DuctPortPin,
   type DuctComponentWitness,
@@ -22,7 +26,13 @@ import {
 } from "@pe/agent-contracts";
 import { assessDucts } from "@pe/ducts-domain/assessment";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
-import { price, proposedStatic, TABLE_IDS } from "@pe/ducts-domain/pricing";
+import {
+  price,
+  applyRequest,
+  instancesOf,
+  proposedStatic,
+  TABLE_IDS,
+} from "@pe/ducts-domain/pricing";
 import { readiness } from "@pe/ducts-domain/readiness";
 import { terminalCfm } from "@pe/ducts-domain/topology";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -358,6 +368,149 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       ...storeOutputs(outputs),
     };
   }
+  async function buildRequest(
+    artifact: Artifact,
+    input: EffectiveInputs,
+    request: DuctsAnalysisRequest,
+    id: string,
+    byteSize: number,
+  ): Promise<NonNullable<DuctsAnalysisResponse["applyRequest"]>> {
+    const builder = ductsApplyRequestProducerSchema.parse(sources.producer);
+    const producer = ductsApplyRequestProducerSchema.parse(artifact.producer);
+    const sameCode = ({ processId: _pid, ...code }: typeof producer) => code;
+    if (JSON.stringify(sameCode(producer)) !== JSON.stringify(sameCode(builder)))
+      throw Error("Apply request producer differs from this builder");
+    if (
+      artifact.work.kind !== "canonical" ||
+      artifact.work.revision === null ||
+      !input.work ||
+      artifact.freshness.state !== "fresh"
+    )
+      throw Error(
+        "Apply request needs canonical Work and an originally fresh acquisition; it remains historical",
+      );
+    const expectedKey = bindWork(
+      "ducts",
+      artifact.observation.address ? addressSchema.parse(artifact.observation.address) : null,
+      undefined,
+      artifact.observation.target,
+    );
+    if (JSON.stringify(expectedKey) !== JSON.stringify(artifact.work.key))
+      throw Error("Apply request Work key does not match its observation");
+    const work = ductsDocumentSchema.parse(input.work);
+    if (input.snapshot.storeError) throw Error("Apply request provenance store is unreadable");
+    if (artifact.acquisition.length !== 2) throw Error("Apply request acquisitions are incomplete");
+    for (const [index, key] of ["ducts.snapshot", "ducts.tables"].entries()) {
+      const row = artifact.acquisition[index]!;
+      const raw = Buffer.from(row.bodyUtf8, "utf8");
+      if (
+        row.key !== key ||
+        row.status < 200 ||
+        row.status >= 300 ||
+        raw.length !== row.byteSize ||
+        sha256Hex(raw) !== row.sha256 ||
+        JSON.stringify(JSON.parse(row.bodyUtf8)) !==
+          JSON.stringify(index === 0 ? input.snapshot : input.tables)
+      )
+        throw Error("Apply request acquisition custody failed");
+    }
+    const group = request.selector.kind === "group" ? request.selector.id : "";
+    if (group && !input.snapshot.groups.some((g) => g.id === group))
+      throw Error("Apply request group is unavailable");
+    const priced = price(input.snapshot, toGrids(input.tables), work);
+    if (
+      ![
+        priced.staged.rules,
+        priced.staged.terminalDrops,
+        priced.staged.componentDrops,
+        priced.staged.unitStatics,
+        priced.staged.parameters,
+      ].some((cells) => Object.keys(cells).length)
+    )
+      throw Error(
+        "No native write values are staged; calculation evidence is not a native payload",
+      );
+    const reproduced = storeOutputs(solve({ ...input, work }));
+    if (
+      canonicalRouteInput(reproduced) !==
+      canonicalRouteInput({
+        outputs: artifact.outputs,
+        witnessElements: artifact.witnessElements,
+        hydraulicLaws: artifact.hydraulicLaws,
+      })
+    )
+      throw Error(
+        "Apply request outputs differ from the retained producer; no historical result was replaced",
+      );
+    const createdAt = new Date().toISOString();
+    const payload = ductsApplyInputSchema.parse(
+      applyRequest(input.snapshot, priced, createdAt, group),
+    );
+    const payloadJson = JSON.stringify(payload);
+    const unpriced = Object.keys(priced.staged.rules)
+      .sort()
+      .flatMap((ruleKey) =>
+        [...instancesOf(priced.next, ruleKey).values()]
+          .filter(
+            (row) =>
+              (row.c == null || row.error) &&
+              (!group || input.snapshot.nodes.some((n) => n.id === row.id && n.groupId === group)),
+          )
+          .map((row) => ({ ruleKey, id: row.id, reason: row.error ?? null })),
+      );
+    const plan = ductsApplyRequestArtifactSchema.parse({
+      format: "ducts-apply-request-v1",
+      createdAt,
+      builder: sources.producer,
+      source: {
+        analysisId: id,
+        byteSize,
+        producer: artifact.producer,
+        target: artifact.observation.target,
+        process: artifact.observation.process,
+        work: {
+          key: artifact.work.key,
+          revision: artifact.work.revision,
+          jsonSha256: sha256Hex(JSON.stringify(input.work)),
+        },
+        freshness: artifact.freshness,
+        effectiveInput: { sha256: artifact.input.sha256, byteSize: artifact.input.byteSize },
+        snapshotJsonSha256: sha256Hex(JSON.stringify(input.snapshot)),
+        tablesJsonSha256: sha256Hex(JSON.stringify(input.tables)),
+        acquisitions: artifact.acquisition.map(({ bodyUtf8: _body, ...row }) => row),
+      },
+      group,
+      payload,
+      payloadSha256: sha256Hex(payloadJson),
+      payloadByteSize: Buffer.byteLength(payloadJson),
+      unpriced,
+    });
+    const bytes = Buffer.from(JSON.stringify(plan));
+    if (bytes.length > MAX_BYTES)
+      throw Error("Apply request exceeds byte budget; no partial artifact was published");
+    const planId = sha256Hex(bytes);
+    await writeArtifact(sources.root, join(sources.root, `${planId}.json`), bytes);
+    return {
+      artifact: {
+        id: planId,
+        url: `/pe/ducts/analyses/${planId}/artifact`,
+        sha256: planId,
+        byteSize: bytes.length,
+        format: "ducts-apply-request-v1",
+      },
+      mode: "historical-candidate-requires-approval-and-revalidation",
+      sourceAnalysisId: id,
+      payloadSha256: plan.payloadSha256,
+      payloadByteSize: plan.payloadByteSize,
+      counts: {
+        fittings: payload.fittings.length,
+        terminals: payload.terminals.length,
+        components: payload.components.length,
+        equipment: payload.equipment.length,
+        unpricedRuleInstances: unpriced.length,
+      },
+    };
+  }
   return {
     artifact: async (id: string) =>
       new Response(await artifactBytes(id), {
@@ -377,7 +530,12 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
         bytes = await artifactBytes(id);
         artifact = JSON.parse(bytes.toString("utf8")) as Artifact;
       }
-      return project(artifact, inputOf(artifact), request, id, bytes.length);
+      const input = inputOf(artifact);
+      const candidate =
+        request.projection === "apply-request"
+          ? await buildRequest(artifact, input, request, id, bytes.length)
+          : null;
+      return project(artifact, input, request, id, bytes.length, candidate);
     },
   };
 }
@@ -388,6 +546,7 @@ function project(
   request: DuctsAnalysisRequest,
   id: string,
   byteSize: number,
+  candidate: DuctsAnalysisResponse["applyRequest"] = null,
 ): DuctsAnalysisResponse {
   const { snapshot, work } = input;
   const outputs = hydrateOutputs(artifact);
@@ -424,7 +583,8 @@ function project(
     servedGroupState: null,
   });
   let rows: DuctsAnalysisResponse["rows"];
-  if (request.projection === "components")
+  if (request.projection === "apply-request") rows = [];
+  else if (request.projection === "components")
     rows = assessment.componentFlows.map((c) => ({
       ...baseRow(undefined, c.elementIds[0]!),
       kind: "component",
@@ -679,6 +839,7 @@ function project(
   const pageRows = rows.slice(offset, offset + request.limit);
   const response: DuctsAnalysisResponse = {
     analysisId: id,
+    applyRequest: candidate,
     artifact: {
       id,
       url: `/pe/ducts/analyses/${id}/artifact`,

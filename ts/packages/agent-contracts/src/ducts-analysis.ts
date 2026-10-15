@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { ductPortPinSchema } from "./ducts.ts";
+import { ductsApplyInputSchema, ductPortPinSchema } from "./ducts.ts";
+import { workKeySchema } from "./route-state.ts";
 import { documentRefSchema } from "./target.ts";
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
@@ -27,15 +28,27 @@ export const ductsAnalysisRequestSchema = z
         "ports",
         "components",
         "flows",
+        "apply-request",
       ])
       .describe(
-        "components reports whole-component stated-design flow status, which alone is not pressure certification; optional hydraulics reports prescribed-flow TOTAL-pressure closure with its own status, physical coverage, reasons and required fan head; flows pages physical joints, ordered line subruns, and flow-only station-arm/curve-continuity edges with signed CFM. Mass-only edges have null length and assert no pressure-loss law. The v5 artifact stores complete witness element records in top-level witnessElements; each stored component holds ordered witnessElements indices. Dereference those indices to assemble its exact componentWitness for canonical Work staging; no numeric recomputation. Hydraulic law evidence is losslessly interned in top-level hydraulicLaws; each stored hydraulics record holds ordered lawIndices, which dereference to its exact canonical lawEvidence array including duplicates. Effective input is input{encoding:gzip-base64,data,sha256,byteSize}; data gunzips to exact UTF-8 JSON, with sha256 and byteSize over those uncompressed bytes. Raw acquisition bodyUtf8, headers and hashes remain unchanged. Older artifact downloads retain exact bytes; unsupported projection formats refuse without recomputation. Normal responses are limited to100 rows and65536 UTF-8 bytes; oversized rows refuse with artifact id.",
+        "apply-request builds an immutable historical native-write candidate from a supported artifact only; download its exact payload, obtain approval and revalidate before preview/apply. It neither stages Work nor writes Revit. components reports whole-component stated-design flow status, which alone is not pressure certification; optional hydraulics reports prescribed-flow TOTAL-pressure closure with its own status, physical coverage, reasons and required fan head; flows pages physical joints, ordered line subruns, and flow-only station-arm/curve-continuity edges with signed CFM. Mass-only edges have null length and assert no pressure-loss law. The v5 artifact stores complete witness element records in top-level witnessElements; each stored component holds ordered witnessElements indices. Dereference those indices to assemble its exact componentWitness for canonical Work staging; no numeric recomputation. Hydraulic law evidence is losslessly interned in top-level hydraulicLaws; each stored hydraulics record holds ordered lawIndices, which dereference to its exact canonical lawEvidence array including duplicates. Effective input is input{encoding:gzip-base64,data,sha256,byteSize}; data gunzips to exact UTF-8 JSON, with sha256 and byteSize over those uncompressed bytes. Raw acquisition bodyUtf8, headers and hashes remain unchanged. Older artifact downloads retain exact bytes; unsupported projection formats refuse without recomputation. Normal responses are limited to100 rows and65536 UTF-8 bytes; oversized rows refuse with artifact id.",
       )
       .default("summary"),
     limit: z.number().int().min(1).max(100).default(20),
     cursor: z.strictObject({ offset: z.number().int().nonnegative(), basis: hash }).optional(),
   })
   .superRefine((input, ctx) => {
+    if (
+      input.projection === "apply-request" &&
+      (input.source.kind !== "artifact" ||
+        input.cursor ||
+        !["document", "group"].includes(input.selector.kind))
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["projection"],
+        message: "apply-request requires an artifact, document/group selection and no cursor.",
+      });
     if (input.cursor && input.source.kind === "fresh")
       ctx.addIssue({
         code: "custom",
@@ -217,8 +230,83 @@ const row = z.strictObject({
     })
     .nullable(),
 });
+const applyRequestReference = z.strictObject({
+  artifact: z.strictObject({
+    id: hash,
+    url: z.string(),
+    sha256: hash,
+    byteSize: z.number().int(),
+    format: z.literal("ducts-apply-request-v1"),
+  }),
+  mode: z.literal("historical-candidate-requires-approval-and-revalidation"),
+  sourceAnalysisId: hash,
+  payloadSha256: hash,
+  payloadByteSize: z.number().int(),
+  counts: z.strictObject({
+    fittings: z.number().int(),
+    terminals: z.number().int(),
+    components: z.number().int(),
+    equipment: z.number().int(),
+    unpricedRuleInstances: z.number().int(),
+  }),
+});
+export const ductsApplyRequestProducerSchema = z.looseObject({
+  version: z.string().min(1),
+  lane: z.enum(["dev", "installed"]),
+  executablePath: z.string().min(1),
+  processId: z.number().int().positive(),
+  serviceName: z.string().min(1),
+  sourceRoot: z.string().nullable(),
+  installedRoot: z.string().nullable(),
+});
+/** A read-only candidate; no approval, preview, native execution or currentness is implied. */
+export const ductsApplyRequestArtifactSchema = z.strictObject({
+  format: z.literal("ducts-apply-request-v1"),
+  createdAt: z.string().datetime(),
+  builder: ductsApplyRequestProducerSchema,
+  source: z.strictObject({
+    analysisId: hash,
+    byteSize: z.number().int(),
+    producer: ductsApplyRequestProducerSchema,
+    target: documentRefSchema,
+    process: z.strictObject({ pid: z.number().int(), startUtcUnixMs: z.number() }),
+    work: z.strictObject({
+      key: workKeySchema,
+      revision: z.number().int().nonnegative(),
+      jsonSha256: hash,
+    }),
+    freshness: z.strictObject({
+      state: z.literal("fresh"),
+      observedAt: z.string(),
+      reason: z.string().nullable(),
+    }),
+    effectiveInput: z.strictObject({ sha256: hash, byteSize: z.number().int() }),
+    snapshotJsonSha256: hash,
+    tablesJsonSha256: hash,
+    acquisitions: z
+      .array(
+        z.strictObject({
+          key: z.string(),
+          request: z.unknown(),
+          status: z.number().int(),
+          headers: z.record(z.string(), z.string()),
+          sha256: hash,
+          byteSize: z.number().int(),
+        }),
+      )
+      .length(2),
+  }),
+  group: z.string(),
+  payload: ductsApplyInputSchema,
+  payloadSha256: hash,
+  payloadByteSize: z.number().int(),
+  unpriced: z.array(
+    z.strictObject({ ruleKey: z.string(), id: z.number().int(), reason: z.string().nullable() }),
+  ),
+});
 export const ductsAnalysisResponseSchema = z.strictObject({
   analysisId: hash,
+  applyRequest: applyRequestReference.nullable(),
   artifact: z.strictObject({
     id: hash,
     url: z.string(),
