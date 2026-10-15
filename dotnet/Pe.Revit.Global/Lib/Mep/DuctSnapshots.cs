@@ -36,12 +36,18 @@ public static class DuctSnapshots {
 
         var levels = new FilteredElementCollector(doc).OfClass(typeof(Level)).Cast<Level>()
             .OrderBy(l => l.ProjectElevation)
-            .Select(l => new DuctLevel(l.Id.Value, l.Name, R(l.ProjectElevation)))
+            .Select(l => new DuctLevel(l.Id.Value(), l.Name, R(l.ProjectElevation)))
             .ToList();
 
         // FOOTGUN (pdrop-w3, 2026-10-04): under network-based calculations Revit 2025's Connector.Flow getter can raise an
         // AccessViolationException on Project A (uncatchable in .NET 8; it killed Revit mid-snapshot). Read it only on the legacy engine.
+#if REVIT2023
+        // Duct network-based calculations were introduced in Revit 2024.
+        // https://help.autodesk.com/cloudhelp/2024/ENU/Revit-WhatsNew/files/GUID-DB2E2193-D0FE-46EC-B721-2CE6910DBE96.htm
+        const bool network = false;
+#else
         var network = DuctSettings.GetDuctSettings(doc).NetworkBasedCalculations;
+#endif
         var segments = Of(BuiltInCategory.OST_DuctCurves).Concat(Of(BuiltInCategory.OST_FlexDuctCurves))
             .OfType<MEPCurve>().Select(c => Segment(doc, c, network)).ToList();
         var schemas = LossSchemas();
@@ -85,13 +91,13 @@ public static class DuctSnapshots {
                     k,
                     Try(() => (double?)R(UnitUtils.ConvertFromInternalUnits(section.Flow, UnitTypeId.CubicFeetPerMinute), 1)),
                     Try(() => (double?)R(UnitUtils.ConvertFromInternalUnits(section.TotalPressureLoss, UnitTypeId.InchesOfWater60DegreesFahrenheit), 5)),
-                    section.GetElementIds().Select(id => id.Value).ToList()));
+                    section.GetElementIds().Select(id => id.Value()).ToList()));
         return new DuctSystem(
-            m.Id.Value,
+            m.Id.Value(),
             m.Name,
             m.SystemType.ToString(),
             Try(() => (bool?)m.IsWellConnected),
-            Try(() => m.BaseEquipment?.Id.Value),
+            Try(() => m.BaseEquipment?.Id.Value()),
             Try(() => m.BaseEquipmentConnector?.Id),
             Try(() => (double?)R(UnitUtils.ConvertFromInternalUnits(m.PressureLossOfCriticalPath, UnitTypeId.InchesOfWater60DegreesFahrenheit), 5)),
             critical,
@@ -152,7 +158,7 @@ public static class DuctSnapshots {
                 ? new List<double[]> { P(line.GetEndPoint(0)), P(line.GetEndPoint(1)) }
                 : [];
         return new DuctSegment(
-            curve.Id.Value,
+            curve.Id.Value(),
             flex ? DuctSegmentKind.Flex : DuctSegmentKind.Duct,
             type?.Name,
             connectors.FirstOrDefault(c => c.Kind == "end")?.Shape ?? DuctShape.Other,
@@ -162,7 +168,7 @@ public static class DuctSnapshots {
             Inches(curve, BuiltInParameter.RBS_CURVE_HEIGHT_PARAM),
             R(curve.get_Parameter(BuiltInParameter.CURVE_ELEM_LENGTH)?.AsDouble() ?? 0),
             polyline,
-            curve.ReferenceLevel?.Id.Value,
+            curve.ReferenceLevel?.Id.Value(),
             null,
             Text(curve, BuiltInParameter.RBS_SYSTEM_NAME_PARAM),
             Text(curve, BuiltInParameter.RBS_SYSTEM_CLASSIFICATION_PARAM),
@@ -209,13 +215,13 @@ public static class DuctSnapshots {
             ? e.LevelId
             : e.get_Parameter(BuiltInParameter.FAMILY_LEVEL_PARAM)?.AsElementId();
         return new DuctNode(
-            e.Id.Value,
+            e.Id.Value(),
             kind,
             e.Category?.Name ?? "",
             fi?.Symbol?.FamilyName,
             fi?.Symbol?.Name,
             (fi?.MEPModel as MechanicalFitting)?.PartType.ToString(),
-            levelId is { } id && id != ElementId.InvalidElementId ? id.Value : null,
+            levelId is { } id && id != ElementId.InvalidElementId ? id.Value() : null,
             Where(e),
             null,
             Text(e, BuiltInParameter.RBS_SYSTEM_NAME_PARAM),
@@ -336,7 +342,7 @@ public static class DuctSnapshots {
         if (!c.IsConnected) return null;
         foreach (Connector other in c.AllRefs)
             if (other.Owner.Id != c.Owner.Id && other.ConnectorType is ConnectorType.End or ConnectorType.Curve)
-                return new DuctRef(other.Owner.Id.Value, other.Id);
+                return new DuctRef(other.Owner.Id.Value(), other.Id);
         return null;
     }
 
