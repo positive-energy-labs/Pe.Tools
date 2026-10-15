@@ -734,6 +734,20 @@ async function dispatch(
           result: await response.json(),
         };
       }
+      if (row.key === "route:ducts.analysis") {
+        const response = await createPeClient(base(), fetch).response("ducts.analysis", {
+          body: peRoutes["ducts.analysis"].body.parse(payload),
+        });
+        const result = await response.json();
+        if (response.ok) result.artifact.url = new URL(result.artifact.url, base()).toString();
+        return {
+          ok: response.ok,
+          target: response.ok
+            ? { session: result.target.session, document: result.target.openId }
+            : { session: null, document: null },
+          result,
+        };
+      }
       if (row.key === "route:families.view" || row.key === "route:families.set-query") {
         if (!viewThread) throw Error("This MCP server has no thread (no harness context).");
         const query = new URLSearchParams({ thread: viewThread });

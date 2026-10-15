@@ -1761,3 +1761,38 @@ test("settled thread history is discoverable and pe_read uses its bounded host r
   });
   expect(calls).toEqual(["/pe/capabilities", "/pe/thread-history"]);
 });
+
+test("headless Ducts analysis is discoverable and pe_read needs no mounted thread view", async () => {
+  fakeRuntimeHost("http://127.0.0.1:9");
+  expect(catalog().capabilities.find((row) => row.key === "route:ducts.analysis")).toMatchObject({
+    needs: "nothing",
+    mutates: false,
+  });
+  const input = {
+    source: { kind: "artifact", id: "a".repeat(64) },
+    selector: { kind: "document" },
+  };
+  const calls: string[] = [];
+  vi.stubGlobal("fetch", async (url: string | URL | Request, init?: RequestInit) => {
+    const path = new URL(url instanceof Request ? url.url : String(url)).pathname;
+    calls.push(path);
+    if (path === "/pe/capabilities") return Response.json(catalog());
+    if (path === "/pe/ducts/analysis") {
+      expect(typeof init?.body).toBe("string");
+      expect(JSON.parse(init?.body as string)).toMatchObject(input);
+      return Response.json({
+        target: { session: "retained-session", openId: "retained-open" },
+        artifact: { url: "/pe/ducts/analyses/retained/artifact" },
+      });
+    }
+    throw Error(`Unexpected analysis request ${path}`);
+  });
+  expect(
+    await run(peRead, { key: "route:ducts.analysis", input, timeoutSeconds: 30 }),
+  ).toMatchObject({
+    ok: true,
+    target: { session: "retained-session", document: "retained-open" },
+    result: { artifact: { url: "http://127.0.0.1:9/pe/ducts/analyses/retained/artifact" } },
+  });
+  expect(calls).toEqual(["/pe/capabilities", "/pe/ducts/analysis"]);
+});

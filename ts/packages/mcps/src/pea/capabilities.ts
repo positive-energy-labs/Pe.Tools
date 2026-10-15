@@ -2,6 +2,7 @@ import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { contextFetch as fetch } from "@pe/runtime/context";
 import {
   capabilityPrincipals,
+  ductsAnalysisRequestSchema,
   instancesReading,
   scheduleReads,
   actionControls,
@@ -136,6 +137,30 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
       }),
     ),
     ...sources.routes.flatMap(routeRows),
+    {
+      key: "route:ducts.analysis",
+      kind: "route-command",
+      title: "Analyze duct pressure drop",
+      description:
+        "Calculate pressure-drop demand over a complete retained duct graph without a mounted page. Use source fresh with an exact document and selector document for the first full inventory; reuse the returned artifact for equipment, terminal, group or exact space-text projections and pagination, with no further native reads. Totals expose incomplete inputs and native parity limits. Space text does not prove room identity. Read/calculation only; no model or Work mutation.",
+      finds: [
+        "ducts",
+        "pressure drop",
+        "fan static",
+        "equipment",
+        "terminal",
+        "grille",
+        "room",
+        "space",
+        "critical path",
+      ],
+      needs: "nothing",
+      mutates: false,
+      principal: capabilityPrincipals(false),
+      input: z.toJSONSchema(ductsAnalysisRequestSchema) as Record<string, unknown>,
+      source: "host Ducts analysis",
+      rank: 2,
+    },
     {
       key: "route:families.view",
       kind: "route-command",

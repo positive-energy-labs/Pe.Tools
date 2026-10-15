@@ -1,0 +1,333 @@
+import { createPeRoutes } from "../src/pe-routes.ts";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, expect, test } from "vite-plus/test";
+import {
+  ductsAnalysisRequestSchema,
+  ductsAnalysisResponseSchema,
+  ductsDocumentSchema,
+  ductsRouteState,
+} from "@pe/agent-contracts";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { createDuctsAnalysis, type DuctsAnalysisSources } from "../src/ducts-analysis.ts";
+
+const roots: string[] = [];
+afterEach(() => {
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
+/** Purpose fixture: one fan directly connected to a 100-CFM grille with a stated 0.08-in-wg drop.
+ * The fan has no available-static rating. This is not a clipped customer model. */
+function fixture() {
+  const connector = (other: number): DuctSnapshot["nodes"][number]["connectors"][number] => ({
+    index: 1,
+    kind: "end",
+    shape: "round",
+    diameterIn: 8,
+    size: "8",
+    direction: "bidirectional",
+    point: [0, 0, 0],
+    connectedTo: { elementId: other, connector: 1 },
+  });
+  const snapshot: DuctSnapshot = {
+    document: {
+      title: "Purpose fixture",
+      readAt: "2026-10-14T00:00:00Z",
+      elapsedMs: 1,
+      networkBasedCalculations: true,
+    },
+    groups: [
+      {
+        id: "g",
+        rootIds: [1],
+        classifications: ["SupplyAir"],
+        systemNames: ["SA"],
+        terminalCount: 1,
+        elementCount: 1,
+        loops: 0,
+        issueIds: ["fan"],
+      },
+    ],
+    nodes: [
+      {
+        id: 1,
+        kind: "equipment",
+        category: "Equipment",
+        family: "Fan",
+        type: "Fixture",
+        levelId: null,
+        point: [0, 0, 0],
+        connectors: [connector(2)],
+        facts: [],
+      },
+      {
+        id: 2,
+        kind: "terminal",
+        category: "Terminal",
+        family: "Grille",
+        type: "Fixture",
+        groupId: "g",
+        levelId: null,
+        point: [0, 0, 0],
+        connectors: [connector(1)],
+        facts: [
+          { key: "flow", value: 100, unit: "cfm", provenance: "designer-stated" },
+          { key: "space", text: "101 Office", unit: "", provenance: "revit-reported" },
+        ],
+        terminalDrop: { catalogDropInWg: 0.08, assignedPressureDropInWg: null, writable: false },
+      },
+    ],
+    segments: [],
+    levels: [],
+    flows: [],
+    layers: [],
+    systems: [],
+    slots: {
+      fanStatic: "FanStatic",
+      fanFlow: "FanFlow",
+      componentDrop: "Pressure Drop",
+      fittingCoefficient: "Pe_C",
+    },
+    issues: [
+      {
+        id: "fan",
+        kind: "no-fan-static",
+        elementId: 1,
+        groupId: "g",
+        note: "Fan rating absent",
+      },
+    ],
+  };
+  const root = mkdtempSync(join(tmpdir(), "pe-duct-analysis-"));
+  roots.push(root);
+  const target = { session: "fixture-incarnation", openId: "fixture-open" };
+  let nativeReads = 0,
+    resolutions = 0,
+    workReads = 0,
+    mark: number | null = null;
+  const sources: DuctsAnalysisSources = {
+    root,
+    producer: { lane: "deterministic-purpose-fixture" },
+    marks: { observedSince: 0, changedAt: () => mark, subscribe: () => () => {} },
+    resolve: async (target) => {
+      resolutions++;
+      return {
+        target,
+        title: "Purpose fixture",
+        address: null,
+        process: { pid: 123, startUtcUnixMs: 1 },
+        provenance: { fixture: true },
+      };
+    },
+    call: async (key) => {
+      nativeReads++;
+      return Response.json(
+        key === "ducts.snapshot" ? snapshot : { tables: {}, missing: [], unsupported: [] },
+        { headers: { "x-pe-native-request-id": `fixture-${nativeReads}` } },
+      );
+    },
+    readWork: async () => {
+      workReads++;
+      return null;
+    },
+  };
+  return {
+    root,
+    target,
+    snapshot,
+    sources,
+    api: createDuctsAnalysis(sources),
+    counts: () => ({ nativeReads, resolutions, workReads }),
+    change: () => {
+      mark = Date.now();
+    },
+  };
+}
+const read = (source: unknown, selector: unknown = { kind: "document" }, extra: object = {}) =>
+  ductsAnalysisRequestSchema.parse({ source, selector, ...extra });
+
+test("required demand does not need a known fan rating; evidence contains the exact effective inputs", async () => {
+  const f = fixture();
+  const result = ductsAnalysisResponseSchema.parse(
+    await f.api.read(read({ kind: "fresh", target: f.target })),
+  );
+  expect(result.rows[0]).toMatchObject({
+    id: 1,
+    requiredEspNowInWg: 0.08,
+    availableFanStaticInWg: null,
+  });
+  expect(result.completeness).toMatchObject({
+    verdict: "complete",
+    expectedTerminals: 1,
+    pricedTerminals: 1,
+  });
+  expect(result.work.kind).toBe("observed-only");
+  const artifact = JSON.parse(await (await f.api.artifact(result.analysisId)).text());
+  expect(JSON.parse(artifact.input.json).snapshot).toEqual(f.snapshot);
+  expect(artifact.acquisition[0].headers["x-pe-native-request-id"]).toBe("fixture-1");
+  expect(artifact.transportLabel).toContain("not original native");
+});
+
+test("historical selectors and pagination make zero acquisitions; corruption and wrong cursors refuse", async () => {
+  const f = fixture();
+  const initial = await f.api.read(read({ kind: "fresh", target: f.target }));
+  const before = f.counts();
+  const source = { kind: "artifact", id: initial.analysisId };
+  const terminal = await f.api.read(
+    read(source, { kind: "terminal", id: 2 }, { projection: "terminals", limit: 1 }),
+  );
+  expect(terminal.rows[0]?.requiredEspNowInWg).toBe(0.08);
+  const path = await f.api.read(read(source, { kind: "terminal", id: 2 }, { projection: "path" }));
+  expect(path.rows[0]?.path).toMatchObject({
+    terminalId: 2,
+    componentKind: "terminal",
+    lossInWg: 0.08,
+    error: null,
+  });
+  expect(terminal.freshness.state).toBe("historical");
+  const ambiguous = await f.api.read(read(source, { kind: "space-text", text: "101 office" }));
+  expect(ambiguous.selection.state).toBe("ambiguous");
+  expect(ambiguous.completeness.verdict).toBe("partial");
+  expect(f.counts()).toEqual(before);
+  await expect(
+    f.api.read(
+      read(source, { kind: "document" }, { cursor: { offset: 1, basis: "0".repeat(64) } }),
+    ),
+  ).rejects.toThrow("Cursor");
+  const artifactPath = join(f.root, `${initial.analysisId}.json`);
+  writeFileSync(artifactPath, readFileSync(artifactPath, "utf8") + " ");
+  await expect(f.api.read(read(source))).rejects.toThrow("integrity");
+});
+
+test("an intervening mark and unknown drops prevent a complete demand verdict", async () => {
+  const f = fixture();
+  f.snapshot.nodes[1]!.terminalDrop = null;
+  const original = f.sources.call;
+  f.sources.call = async (...args) => {
+    const response = await original(...args);
+    f.change();
+    return response;
+  };
+  const result = await f.api.read(read({ kind: "fresh", target: f.target }));
+  expect(result.freshness.state).toBe("changed");
+  expect(result.completeness.verdict).toBe("partial");
+  expect(result.completeness.pricedTerminals).toBe(0);
+});
+
+test("a stale exact target refuses before any native read", async () => {
+  const f = fixture();
+  f.sources.resolve = async () => {
+    throw Error("exact attachment unavailable");
+  };
+  await expect(f.api.read(read({ kind: "fresh", target: f.target }))).rejects.toThrow(
+    "exact attachment",
+  );
+  expect(f.counts().nativeReads).toBe(0);
+});
+
+test("a present passive equipment node stays in inventory with unknown demand", async () => {
+  const f = fixture();
+  f.snapshot.nodes.push({ ...f.snapshot.nodes[0]!, id: 3, connectors: [] });
+  const initial = await f.api.read(read({ kind: "fresh", target: f.target }));
+  expect(initial.coverage.equipment).toBe(2);
+  expect(initial.rows.map((row) => row.id)).toEqual([1, 3]);
+  const passive = await f.api.read(
+    read({ kind: "artifact", id: initial.analysisId }, { kind: "equipment", id: 3 }),
+  );
+  expect(passive.selection.state).toBe("matched");
+  expect(passive.rows[0]?.requiredEspNowInWg).toBeNull();
+  expect(passive.completeness.verdict).toBe("partial");
+});
+
+test("an implicit connector zero is unknown; explicitly stated zero remains known", async () => {
+  const f = fixture();
+  f.snapshot.nodes[1]!.terminalDrop = {
+    assignedPressureDropInWg: 0,
+    connectorLossMethod: "NotDefined",
+    writable: false,
+  };
+  const implicit = await f.api.read(read({ kind: "fresh", target: f.target }));
+  expect(implicit.completeness.verdict).toBe("partial");
+  expect(implicit.completeness.reasons.map((reason) => reason.code)).toContain(
+    "terminal-drop-authority",
+  );
+  f.snapshot.nodes[1]!.terminalDrop!.connectorLossMethod = "SpecificLoss";
+  const assigned = await f.api.read(read({ kind: "fresh", target: f.target }));
+  expect(assigned.completeness.verdict).toBe("partial");
+  f.snapshot.nodes[1]!.terminalDrop!.catalogDropInWg = 0;
+  const stated = await f.api.read(read({ kind: "fresh", target: f.target }));
+  expect(stated.completeness.verdict).toBe("complete");
+  expect(stated.rows[0]?.requiredEspStagedInWg).toBe(0);
+  // Catalog zero above is a contract fixture: today's native Converted() filters zero out.
+  // An explicit staged zero exercises the source the shipped native collector cannot return.
+  f.snapshot.nodes[1]!.terminalDrop!.catalogDropInWg = null;
+  f.sources.readWork = async () => ({
+    revision: 1,
+    doc: ductsDocumentSchema.parse({
+      terminalDrops: {
+        "2": { staged: { value: { inWg: 0, source: "Purpose fixture explicit zero" } } },
+      },
+    }),
+  });
+  const staged = await f.api.read(read({ kind: "fresh", target: f.target }));
+  expect(staged.completeness.verdict).toBe("complete");
+  expect(staged.rows[0]?.requiredEspStagedInWg).toBe(0);
+});
+
+test("an unreadable applied store and unresolved physical fan circuits stay partial", async () => {
+  const f = fixture();
+  f.snapshot.storeError = "Invalid model store";
+  f.snapshot.groups[0]!.classifications = ["SupplyAir", "ExhaustAir"];
+  const result = await f.api.read(read({ kind: "fresh", target: f.target }));
+  expect(result.rows[0]?.requiredEspNowInWg).toBeNull();
+  expect(result.rows[0]?.classificationParts).toHaveLength(1);
+  expect(result.completeness.reasons.map((reason) => reason.code)).toEqual(
+    expect.arrayContaining(["unreadable-model-store", "unresolved-fan-circuits"]),
+  );
+});
+
+test("the declared host route reads canonical Work and unreadable Work refuses before acquisition", async () => {
+  const f = fixture();
+  const resolve = f.sources.resolve;
+  f.sources.resolve = async (target) => ({ ...(await resolve(target)), address: "C:/fixture.rvt" });
+  let unreadable = false;
+  let writes = 0;
+  const routes = createPeRoutes({
+    registrations: [{ spec: ductsRouteState, handlers: {} }],
+    heads: { observe: () => () => {} },
+    store: {
+      getState: async () => {
+        if (unreadable) throw Error("Unreadable fixture Work");
+        return { version: 1, revision: 7, doc: ductsDocumentSchema.parse({}) };
+      },
+      setState: async () => {
+        writes++;
+      },
+    },
+    ductsAnalysis: f.sources,
+  });
+  const request = () =>
+    new Request("http://local/pe/ducts/analysis", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        source: { kind: "fresh", target: f.target },
+        selector: { kind: "document" },
+      }),
+    });
+  const response = await routes.fetch(request());
+  expect(response.status).toBe(200);
+  const result = ductsAnalysisResponseSchema.parse(await response.json());
+  expect(result.work).toEqual({ kind: "canonical", revision: 7 });
+  const asset = await routes.fetch(new Request(`http://local${result.artifact.url}`));
+  expect(asset.status).toBe(200);
+  expect(JSON.parse(await asset.text()).work.key.target).toBe("C:/fixture.rvt");
+  const counts = f.counts();
+  unreadable = true;
+  const refused = await routes.fetch(request());
+  expect(refused.status).toBe(409);
+  expect(await refused.text()).toContain("Unreadable fixture Work");
+  expect(f.counts().nativeReads).toBe(counts.nativeReads);
+  expect(writes).toBe(0);
+});

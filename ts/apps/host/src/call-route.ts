@@ -419,6 +419,7 @@ export function makeCallRoute(
       // what was touched rather than the selector that was typed. Headers, not a payload wrapper.
       // A TS-only op touched no Revit, so it stamps nothing rather than the latest session.
       const headers = result.target ? resolvedTargetHeaders(result.target) : {};
+      if (!op.tsOnly && key !== CANCEL_OPERATION_KEY) headers["x-pe-native-request-id"] = requestId;
       if (captureId) headers["x-pe-takeoff-capture-id"] = captureId;
       if (kept)
         Object.assign(headers, { "x-pe-capture-id": kept.id, "x-pe-capture-url": kept.url });
