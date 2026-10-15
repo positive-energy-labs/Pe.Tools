@@ -3,7 +3,6 @@ import { withInvocationContext } from "@pe/runtime/context";
 import { HttpRouter } from "effect/unstable/http";
 import { Context } from "effect";
 import { instancesReadingsRoute } from "../src/session-route.ts";
-import * as machineOwner from "../src/machine.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { holdingsReadingSchema, discoveryMachine } from "@pe/agent-contracts";
@@ -94,8 +93,10 @@ test("large canonical holdings remain inspectable without entering discovery", (
 
 test("existing Instances HTTP reading pages exact holdings and refuses a wrong document", async () => {
   const f = fixture();
-  const spy = vi.spyOn(machineOwner, "currentMachine").mockReturnValue(f.machine);
-  const web = HttpRouter.toWebHandler(instancesReadingsRoute, { disableLogger: true });
+  const web = HttpRouter.toWebHandler(
+    instancesReadingsRoute(() => f.machine),
+    { disableLogger: true },
+  );
   const request = async (changes: Record<string, string> = {}) => {
     const query = new URLSearchParams({
       read: "holdings",
@@ -149,7 +150,6 @@ test("existing Instances HTTP reading pages exact holdings and refuses a wrong d
       total: 0,
     });
   } finally {
-    spy.mockRestore();
     vi.unstubAllGlobals();
     await web.dispose();
   }

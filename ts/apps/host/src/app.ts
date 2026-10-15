@@ -1,3 +1,4 @@
+import { currentMachine } from "./machine.ts";
 import { sdkSession } from "./sdk-session.ts";
 import { requestIdentityLayer } from "./request-identity.ts";
 import { createDevices, type Devices } from "./remote-device.ts";
@@ -128,7 +129,7 @@ function makeRevitComposition(spa: SpaFallback = () => emptyNotFound) {
       settingsSchemaRoute,
       hostStatusRoute,
       hostInstallRoute,
-      instancesReadingsRoute,
+      instancesReadingsRoute(currentMachine),
       callRoute,
     ),
   };

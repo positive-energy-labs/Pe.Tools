@@ -202,8 +202,14 @@ export function hostResourceObserver(
           }
           return machine.observe((value) => accept({ value }));
         case "sdk":
-          return observeSdkReading(request, accept, (notify) =>
-            bridge ? bridge.subscribe(() => notify()) : () => {},
+          return observeSdkReading(
+            request,
+            () => {
+              if (!machine) throw Error("Machine owner is unavailable");
+              return machine.current();
+            },
+            accept,
+            (notify) => (bridge ? bridge.subscribe(() => notify()) : () => {}),
           );
         case "host-status":
         case "capabilities":
