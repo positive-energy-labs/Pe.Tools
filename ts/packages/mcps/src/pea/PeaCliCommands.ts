@@ -658,7 +658,16 @@ function scriptFailureDiagnostics(value: unknown) {
   if (Array.isArray(result.diagnostics) && result.diagnostics.length > 64) {
     result.diagnosticsTotal = result.diagnostics.length;
     result.diagnosticsTruncated = true;
-    result.diagnostics = result.diagnostics.slice(0, 64);
+    const priority = (diagnostic: unknown) => {
+      const severity =
+        diagnostic && typeof diagnostic === "object" && "severity" in diagnostic
+          ? diagnostic.severity
+          : undefined;
+      return severity === "Error" ? 0 : severity === "Warning" ? 1 : 2;
+    };
+    result.diagnostics = [...result.diagnostics]
+      .sort((a: unknown, b: unknown) => priority(a) - priority(b))
+      .slice(0, 64);
   }
   return result;
 }

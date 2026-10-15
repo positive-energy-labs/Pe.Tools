@@ -366,6 +366,8 @@ test.each([
   ].map((status) => ({ json: true, status, count: 1 })),
   { json: false, status: "PolicyRejected", count: 1 },
   { json: true, status: "PolicyRejected", count: 65 },
+  { json: true, status: "PolicyRejected", count: 66 },
+  { json: true, status: "PolicyRejected", count: 69 },
 ])(
   "script CLI retains dispatched diagnostics ($status, json=$json)",
   async ({ json, status, count }) => {
@@ -384,7 +386,32 @@ test.each([
         },
       ],
     };
-    native.diagnostics = Array.from({ length: count }, () => native.diagnostics[0]!);
+    const policyError = native.diagnostics[0]!;
+    native.diagnostics =
+      count === 66
+        ? [
+            ...Array.from({ length: 65 }, (_, i) => ({
+              stage: "resolve",
+              severity: "Info",
+              source: "references",
+              message: `reference ${i}`,
+            })),
+            policyError,
+          ]
+        : Array.from({ length: count }, () => policyError);
+    if (count === 69)
+      native.diagnostics = [
+        ...Array.from({ length: 65 }, (_, i) => ({
+          stage: "resolve",
+          severity: "Info",
+          source: "references",
+          message: `reference ${i}`,
+        })),
+        { ...policyError, severity: "Warning", message: "first warning" },
+        policyError,
+        { ...policyError, severity: "Warning", message: "second warning" },
+        { ...policyError, message: "second error" },
+      ];
     const calls: string[] = [];
     let actionId: string | undefined;
     vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
@@ -453,8 +480,25 @@ test.each([
           actionId,
           state: "failed",
           status: 422,
-          evidence: { result: { ...native, diagnostics: native.diagnostics.slice(0, 64) } },
+          evidence: {
+            result: {
+              ...native,
+              diagnostics:
+                count === 69
+                  ? [
+                      native.diagnostics[66],
+                      native.diagnostics[68],
+                      native.diagnostics[65],
+                      native.diagnostics[67],
+                      ...native.diagnostics.slice(0, 60),
+                    ]
+                  : count === 66
+                    ? [policyError, ...native.diagnostics.slice(0, 63)]
+                    : native.diagnostics.slice(0, 64),
+            },
+          },
         });
+        if (count === 66) expect(outcome.evidence.result.diagnostics[0]).toEqual(policyError);
         if (count > 64)
           expect(outcome.evidence.result).toMatchObject({
             diagnosticsTotal: count,
