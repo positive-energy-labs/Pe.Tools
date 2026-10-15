@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /** The composer ladder: provider › model › one rung per trait, read whole in its trigger. */
 import { useEffect } from "react";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { Provider, Reading } from "@pe/agent-contracts";
 
@@ -64,7 +64,8 @@ test("composer chips do not repeat status or refusal text", () => {
             grantView: null,
             refusal: "Choose a provider.",
           },
-        } as ChatSituation
+          ladder: { docWord: null },
+        } as unknown as ChatSituation
       }
     />,
   );
@@ -222,11 +223,24 @@ test("access-062: a stale reading cannot keep painting rw from its previous valu
   expect(chip()).toBeNull();
 });
 
-test("access-008: one click on rw revokes without a second confirmation", () => {
-  const revoke = vi.fn();
-  render(<GrantChip grant={{ state: "rw", minutes: 42 }} onRevoke={revoke} />);
-  fireEvent.click(screen.getByRole("button", { name: "Revoke rw" }));
-  expect(revoke).toHaveBeenCalledTimes(1);
+test("a click on rw opens the grant's facts; only the labeled verb revokes", async () => {
+  let revoked = 0;
+  render(
+    <GrantChip
+      grant={{ state: "rw", minutes: 42 }}
+      document="Hospital-MEP.rvt"
+      onRevoke={() => revoked++}
+    />,
+  );
+  const chip = screen.getByRole("button", {
+    name: "Pea can edit Hospital-MEP.rvt for 42 more minutes",
+  });
+  fireEvent.click(chip);
+  const verb = await screen.findByRole("button", { name: "Stop editing access" });
+  expect(revoked).toBe(0);
+  fireEvent.click(verb);
+  expect(revoked).toBe(1);
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Stop editing access" })).toBeNull());
 });
 
 test("a refused head write shows the door, the reason and the remedy, not an unknown outcome", async () => {
