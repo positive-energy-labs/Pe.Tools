@@ -1,3 +1,4 @@
+import type { IssueKind, Blocks } from "@pe/ducts-domain/issues";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * T2 `ledger`: the engineer's worksheet, table first. Groups with their readiness; the chosen
@@ -16,11 +17,18 @@ import type { Column } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
 import { tokenRef } from "@pe/kit/lib/token";
 import { ChatHosted } from "#/route/situation-ladder";
-import { ISSUE_KINDS, IssueLegend, issueVerdict, type Blocks, type IssueKind } from "./issues";
+import { ISSUE_KINDS, IssueLegend, issueVerdict } from "./issues";
 import type { DuctsPage } from "./manifest";
-import type { DuctSnapshot, GroupReadiness } from "./readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import type { GroupReadiness } from "@pe/ducts-domain/readiness";
 import { READY } from "./tables";
-import { groupTree, runsOf, terminalCfm, type GroupTree, type Run } from "./topology";
+import {
+  groupTree,
+  runsOf,
+  terminalCfm,
+  type GroupTree,
+  type Run,
+} from "@pe/ducts-domain/topology";
 type Issue = DuctSnapshot["issues"][number];
 const num = (value: number | null | undefined, digits = 0) =>
   value == null ? "" : value.toFixed(digits);

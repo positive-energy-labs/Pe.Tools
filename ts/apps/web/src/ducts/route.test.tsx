@@ -18,7 +18,7 @@ import {
 import { Route } from "#/routes/ducts";
 import { ChatHosted } from "#/route/situation-ladder";
 import type { DuctsSnapshot } from "@pe/host-contracts/generated";
-import type { DuctSnapshot } from "./readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
 
 let work = ductsRouteState.schema.parse({ assumptions: {} });

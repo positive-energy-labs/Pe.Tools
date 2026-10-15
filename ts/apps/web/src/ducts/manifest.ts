@@ -24,9 +24,9 @@ import {
   runSemanticAction,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type { DuctsApply } from "@pe/host-contracts/generated";
-import type { Grids } from "./loss-grid";
-import { applyRequest, price } from "./pricing";
-import type { DuctSnapshot } from "./readiness";
+import type { Grids } from "@pe/ducts-domain/loss-grid";
+import { applyRequest, price } from "@pe/ducts-domain/pricing";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 const DUCTS_STAGES = [
   { key: "survey", word: "Surveying ducts" },

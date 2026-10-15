@@ -18,11 +18,12 @@ import { IssueLegend } from "./issues";
 import { useIso } from "./iso";
 import type { DuctsPage } from "./manifest";
 import { usePlan } from "./plan";
-import type { Priced } from "./pricing";
-import type { DuctSnapshot, GroupReadiness } from "./readiness";
+import type { Priced } from "@pe/ducts-domain/pricing";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import type { GroupReadiness } from "@pe/ducts-domain/readiness";
 import { indexOf, type DuctIndex } from "./scene";
 import { READY } from "./tables";
-import { groupTree, runsOf } from "./topology";
+import { groupTree, runsOf } from "@pe/ducts-domain/topology";
 
 function EncodingBand({
   encoding,

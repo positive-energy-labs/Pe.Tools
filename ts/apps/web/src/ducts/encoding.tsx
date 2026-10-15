@@ -1,3 +1,4 @@
+import type { Blocks } from "@pe/ducts-domain/issues";
 /**
  * The one encoding substrate of the /ducts drawings: an encoding sorts each drawn segment into one
  * of its bins, and a bin is the stroke (ink, width, dash) and the legend row. The plan and the
@@ -8,8 +9,8 @@
 import type { DashRole } from "@pe/kit/lib/token";
 import { token } from "@pe/kit/lib/token";
 import { VERDICT_INK } from "@pe/kit/table/cells";
-import { ISSUE_KINDS, type Blocks } from "./issues";
-import type { DuctSnapshot } from "./readiness";
+import { ISSUE_KINDS } from "./issues";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 export type Segment = DuctSnapshot["segments"][number];
 export type DuctNode = DuctSnapshot["nodes"][number];

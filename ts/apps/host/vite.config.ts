@@ -46,6 +46,7 @@ export default defineConfig({
   // Real processes and files on Windows: the 5 s default fails honest tests under load. Heavy ones
   // carry their own 30 s.
   test: {
+    include: ["tests/**/*.test.{ts,tsx}"],
     env: { PE_LANE: "dev" },
     fileParallelism: false,
     testTimeout: 15_000,

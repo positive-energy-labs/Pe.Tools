@@ -8,7 +8,7 @@
  * - Developed length is straight duct only. Fitting equivalent lengths need the loss solver.
  * - The longest developed run stands in for the Manual D critical path until that solver exists.
  */
-import type { DuctSnapshot } from "./readiness";
+import type { DuctSnapshot } from "./types.ts";
 
 type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];

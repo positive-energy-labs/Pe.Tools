@@ -9,9 +9,9 @@ import type { DuctParameterKey } from "@pe/agent-contracts";
 
 import { useHostOp } from "#/readings";
 import { NATIVE_READ_WAIT_S } from "#/route/waits";
-import { toGrids, type Grids } from "./loss-grid";
-import { TABLE_IDS } from "./pricing";
-import type { DuctSnapshot } from "./readiness";
+import { toGrids, type Grids } from "@pe/ducts-domain/loss-grid";
+import { TABLE_IDS } from "@pe/ducts-domain/pricing";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 /** The saved snapshot's URL in dev, else undefined. */
 export const SAVED: string | undefined = import.meta.env.DEV

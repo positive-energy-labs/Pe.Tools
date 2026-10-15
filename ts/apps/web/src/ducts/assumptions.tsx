@@ -1,3 +1,4 @@
+import type { IssueKind } from "@pe/ducts-domain/issues";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * The verdict half of Work's `assumptions`: one issue id, one answer (capped, connect, ignore).
@@ -10,8 +11,8 @@ import {
   type RouteStatePatch,
 } from "@pe/agent-contracts";
 import { Switcher } from "#/components/lang/switcher";
-import { ISSUE_KINDS, type IssueKind } from "./issues";
-import type { DuctSnapshot } from "./readiness";
+import { ISSUE_KINDS } from "./issues";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 type Issue = DuctSnapshot["issues"][number];
 type Verdict = Extract<
   DuctAssumption,

@@ -9,14 +9,14 @@ import { join } from "node:path";
 import { expect, it } from "vite-plus/test";
 import { ductsRouteState, stagedDucts } from "@pe/agent-contracts";
 
-import { lookupGrid, toGrids, type Grid, type Grids } from "./loss-grid";
-import { friction, roundSection } from "./loss-physics";
-import { computeLosses, fanout, systemFor } from "./losses";
-import { price, stagedFanout } from "./pricing";
+import { lookupGrid, toGrids, type Grid, type Grids } from "@pe/ducts-domain/loss-grid";
+import { friction, roundSection } from "@pe/ducts-domain/loss-physics";
+import { computeLosses, fanout, systemFor } from "@pe/ducts-domain/losses";
+import { price, stagedFanout } from "@pe/ducts-domain/pricing";
 import { indexOf, lossesOf, sceneOf } from "./scene";
-import { groupTree } from "./topology";
+import { groupTree } from "@pe/ducts-domain/topology";
 import synthetic from "./fixtures/synthetic-snapshot.json";
-import type { DuctSnapshot } from "./readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 // ---- test-only .tbl reader (ctable.py parse) ------------------------------------------------
 function parseTbl(name: string): Record<string, Grid> {

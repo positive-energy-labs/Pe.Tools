@@ -8,11 +8,10 @@
  *   or an ignore.
  */
 import { ductOverrideKey, type DuctAssumption, type DuctsRouteDocument } from "@pe/agent-contracts";
-import type { DuctsSnapshot } from "@pe/host-contracts/generated";
 
-import { ISSUE_KINDS } from "./issues";
+import { ISSUE_BLOCKS } from "./issues.ts";
+import type { DuctSnapshot } from "./types.ts";
 
-export type DuctSnapshot = DuctsSnapshot.Res.Response;
 type DuctIssue = DuctSnapshot["issues"][number];
 type Readiness = "blocked" | "walkable" | "budgetable";
 
@@ -86,7 +85,7 @@ export function readiness(
     }
   };
   const open = (blocks: "walkable" | "budgetable") => (issue: DuctIssue) =>
-    ISSUE_KINDS[issue.kind].blocks === blocks && !resolved(issue);
+    ISSUE_BLOCKS[issue.kind] === blocks && !resolved(issue);
 
   return Object.fromEntries(
     snapshot.groups.map((group) => {

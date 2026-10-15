@@ -25,9 +25,9 @@ import { ValueDiff } from "#/components/lang/value-diff";
 import type { Column } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
 import type { DuctsEvaluation, DuctsPage } from "./manifest";
-import { LOSS_RULES, ruleByKey } from "./loss-rules";
-import type { LossResult, Row } from "./losses";
-import { systemFor } from "./losses";
+import { LOSS_RULES, ruleByKey } from "@pe/ducts-domain/loss-rules";
+import type { LossResult, Row } from "@pe/ducts-domain/losses";
+import { systemFor } from "@pe/ducts-domain/losses";
 import {
   applyRequest,
   instancesOf,
@@ -40,9 +40,10 @@ import {
   unpriced,
   type Part,
   type Priced,
-} from "./pricing";
-import type { Grids } from "./loss-grid";
-import { snapshotById, type DuctSnapshot, type GroupReadiness } from "./readiness";
+} from "@pe/ducts-domain/pricing";
+import type { Grids } from "@pe/ducts-domain/loss-grid";
+import { snapshotById, type GroupReadiness } from "@pe/ducts-domain/readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 type Node = DuctSnapshot["nodes"][number];
 type Group = DuctSnapshot["groups"][number];
 export interface LossesWork {

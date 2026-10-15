@@ -5,8 +5,8 @@
  */
 import { stagedDucts, type DuctsApplyInput, type DuctsRouteDocument } from "@pe/agent-contracts";
 
-import type { Grids } from "./loss-grid";
-import { LOSS_RULES, ruleByKey } from "./loss-rules";
+import type { Grids } from "./loss-grid.ts";
+import { LOSS_RULES, ruleByKey } from "./loss-rules.ts";
 import {
   computeLosses,
   fanout,
@@ -16,8 +16,8 @@ import {
   type LossResult,
   type Overrides,
   type Row,
-} from "./losses";
-import type { DuctSnapshot } from "./readiness";
+} from "./losses.ts";
+import type { DuctSnapshot } from "./types.ts";
 
 type Node = DuctSnapshot["nodes"][number];
 type Group = DuctSnapshot["groups"][number];

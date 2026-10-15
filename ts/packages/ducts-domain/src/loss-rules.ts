@@ -7,7 +7,7 @@
  * Pv basis (C x Pv): elbow and damper use their own (inlet) Pv; a transition the downstream
  * (outlet) Pv; a tap's branch leg Cb the branch Pv; its straight leg Cs the main's downstream Pv.
  */
-import type { Section } from "./loss-physics";
+import type { Section } from "./loss-physics.ts";
 
 /** A connector's size as the rules read it. */
 export interface Port {

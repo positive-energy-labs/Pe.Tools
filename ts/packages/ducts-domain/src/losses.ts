@@ -11,8 +11,8 @@
  * - fan = the largest path total in a group; the critical terminal is its argmax.
  * Physics in loss-physics.ts, interpolation in loss-grid.ts, rule data in loss-rules.ts.
  */
-import { GridError, lookupGrid, type Grids } from "./loss-grid";
-import { friction, sectionOf } from "./loss-physics";
+import { GridError, lookupGrid, type Grids } from "./loss-grid.ts";
+import { friction, sectionOf } from "./loss-physics.ts";
 import {
   LOSS_RULES,
   ruleByKey,
@@ -21,9 +21,9 @@ import {
   type Leg,
   type LossRule,
   type Port,
-} from "./loss-rules";
-import type { DuctSnapshot } from "./readiness";
-import { groupTree, runsOf, terminalCfm, type GroupTree } from "./topology";
+} from "./loss-rules.ts";
+import type { DuctSnapshot } from "./types.ts";
+import { groupTree, runsOf, terminalCfm, type GroupTree } from "./topology.ts";
 
 type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];

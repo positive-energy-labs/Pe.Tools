@@ -1,3 +1,4 @@
+import type { IssueKind } from "@pe/ducts-domain/issues";
 // @vitest-environment jsdom
 /**
  * /ducts spatial views, deterministic: the plan and the isometric draw the subject group over a
@@ -18,10 +19,11 @@ import {
   type Issue,
   type Segment,
 } from "./encoding";
-import { ISSUE_KINDS, type IssueKind } from "./issues";
+import { ISSUE_KINDS } from "./issues";
 import { gridAngle, isoProject } from "./iso";
 import type { DuctsPage } from "./manifest";
-import { readiness, type DuctSnapshot } from "./readiness";
+import { readiness } from "@pe/ducts-domain/readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { DuctsSpatial } from "./spatial";
 
 let resizeDrawing: (width: number, height: number) => void;

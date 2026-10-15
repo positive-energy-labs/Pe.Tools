@@ -7,9 +7,9 @@ import type { ReactNode } from "react";
 
 import type { DuctDrawing, NodeFacts, Scene } from "./drawing";
 import type { DuctNode, Issue, Segment, SegmentFacts } from "./encoding";
-import type { LossResult } from "./losses";
-import type { Priced } from "./pricing";
-import type { DuctSnapshot } from "./readiness";
+import type { LossResult } from "@pe/ducts-domain/losses";
+import type { Priced } from "@pe/ducts-domain/pricing";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 type Level = DuctSnapshot["levels"][number];
 

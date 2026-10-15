@@ -20,13 +20,13 @@ import {
 
 import type { DuctsApply } from "@pe/host-contracts/generated";
 
-import type { Grid, Grids } from "./loss-grid";
-import { computeLosses } from "./losses";
+import type { Grid, Grids } from "@pe/ducts-domain/loss-grid";
+import { computeLosses } from "@pe/ducts-domain/losses";
 import { DuctsLosses, foldRefusals, StagedLosses } from "./losses-view";
 import { manifest, type DuctsPage } from "./manifest";
-import { applyRequest, price, proposedStatic } from "./pricing";
+import { applyRequest, price, proposedStatic } from "@pe/ducts-domain/pricing";
 import synthetic from "./fixtures/synthetic-snapshot.json";
-import type { DuctSnapshot } from "./readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 afterEach(cleanup);
 

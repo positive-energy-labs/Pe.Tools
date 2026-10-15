@@ -11,7 +11,8 @@ import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 import { ISSUE_KINDS, IssueLegend, issueVerdict } from "./issues";
 import type { DuctsPage } from "./manifest";
-import type { DuctSnapshot, GroupReadiness } from "./readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import type { GroupReadiness } from "@pe/ducts-domain/readiness";
 
 type Group = DuctSnapshot["groups"][number];
 type Segment = DuctSnapshot["segments"][number];

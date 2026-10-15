@@ -8,7 +8,8 @@ import {
 } from "@pe/agent-contracts";
 
 import { ISSUE_KINDS } from "./issues";
-import { readiness, type DuctSnapshot } from "./readiness";
+import { readiness } from "@pe/ducts-domain/readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 const issue = (id: string, kind: DuctSnapshot["issues"][number]["kind"], elementId: number) => ({
   id,
