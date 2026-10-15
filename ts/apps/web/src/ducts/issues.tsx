@@ -72,6 +72,12 @@ export const ISSUE_KINDS: Record<IssueKind, IssueKindInfo> = {
     "budgetable",
     3,
   ),
+  "no-flow-leg": kind(
+    "no-flow leg",
+    "A tee or tap leg carries no flow; every table prices it 0, so the leg is not on the budget.",
+    "budgetable",
+    4,
+  ),
   stub: kind("stub", "A duct under 3 in long, a connector stub between fittings.", "none", 1),
   "implausible-size": kind("odd size", "A size or aspect ratio no real duct has.", "none", 2),
   "mixed-classification": kind(

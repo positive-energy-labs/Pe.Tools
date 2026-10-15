@@ -167,12 +167,20 @@ export namespace DocumentTemporaryStatus {
   }
 }
 
-/** Write duct losses into Revit so they travel with the model: Specific Coefficient on duct fittings, Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the FanStatic slot, the network-based calculation switch, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. previewOnly plans every write and refusal without a transaction. A real apply commits Not Defined, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after. */
+/** Write duct losses into Revit so they travel with the model. Each fitting names a method: pe-server points it at the Pe loss server, which charges the family's own coefficient parameter live (the fittingCoefficient slot, default Pe_C) when the family carries one and otherwise prices each leg live from the write's ASHRAE table and the connectors' flows (taps, transitions, unstamped elbows); specific-coefficient freezes a number (export only). Revit's own ASHRAE-table route is never written. Also Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the fanStatic slot, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. previewOnly plans every write and refusal without a transaction. A real apply commits Not Defined on every targeted fitting, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after. */
 export namespace DuctsApply {
   export namespace Req {
     /**
-     * Coefficient is Specific Coefficient (dimensionless); Table, Inputs and RuleKey are Pe's provenance for it and
-     * land only in the store. Terminals and Components carry a drop in in-wg; Equipment the fan external static.
+     * How Revit is told a fitting's loss (pressure-drop ledger, 2026-10-12): the Pe server live, or a frozen number for export.
+     */
+    export type DuctFittingMethod = "pe-server" | "specific-coefficient";
+
+    /**
+     * A fitting write names its Method: PeServer points the fitting at the Pe loss server, which reads the family's
+     * coefficient parameter live (the FittingCoefficient slot, default Pe_C); AshraeTable stores Table as Revit's
+     * ASHRAETableName and Revit looks the legs up itself; SpecificCoefficient freezes Coefficient (the export route,
+     * never the web's). Coefficient, Table, Inputs and RuleKey are Pe's provenance and land in the store.
+     * Terminals and Components carry a drop in in-wg; Equipment the fan external static.
      *
      */
     export interface Request {
@@ -186,7 +194,9 @@ export namespace DuctsApply {
     }
     /**
      * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
-     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop.
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop,
+     * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
+     * live (the configurable door, kaitpw 2026-10-08).
      *
      */
     export interface DuctParameterSlots {
@@ -194,9 +204,14 @@ export namespace DuctsApply {
       fanFlow?: string;
       componentDrop?: string;
       terminalDrop?: null | string;
+      fittingCoefficient?: string;
     }
+    /**
+     * Table is the rule's ASHRAE table the Pe server prices the legs from when the family carries no coefficient; Coefficient is the web's number for the store and the export route.
+     */
     export interface DuctFittingWrite {
       id: number;
+      method: DuctFittingMethod;
       coefficient: number;
       table?: null | string;
       inputs?: null | string;
@@ -315,6 +330,34 @@ export namespace DuctsApply {
   }
 }
 
+/** Build the Family Foundry patch that gives a duct fitting family its own loss coefficient: an embedded lookup table (PeElbowC, dense over r/D, angle and diameter from Revit's shipped ASHRAE CD3 grids) and an instance number parameter (default Pe_C) with a rounding size_lookup formula, plus the run policy that lets Revit disconnect a fitting it cannot keep joined on reload. Hand the patch to families.plan then families.apply; ducts.apply with method pe-server then charges it live. Read-only; needs no document. */
+export namespace DuctsFamilyPatch {
+  export namespace Req {
+    export type DuctFamilyKind = "round-elbow";
+
+    /**
+     * Family is the loaded family name to select; Parameter is the coefficient parameter the formula fills (the FittingCoefficient slot).
+     */
+    export interface Request {
+      family: string;
+      kind?: DuctFamilyKind;
+      parameter?: string;
+    }
+  }
+  export namespace Res {
+    /**
+     * Patch is the FamilyPatch JSON as `families.plan` reads it; Rows counts the table; Sources names the ASHRAE grids behind it.
+     */
+    export interface Response {
+      patch: unknown;
+      table: string;
+      rows: number;
+      sources: string[];
+      formula: string;
+    }
+  }
+}
+
 /** Read every duct network in the project: ducts, flex, fittings, accessories, terminals and HVAC equipment with their connectors, grouped by topology with equipment cut out, plus pass-1 terminal flow, fitting geometry ratios, fitting and accessory loss methods, terminal drops, Revit's supply/return/exhaust systems with critical path and sections, issues and the query behind each layer. Slots name the fan static, fan flow, component drop and terminal catalog drop parameters. Read-only. */
 export namespace DuctsSnapshot {
   export namespace Req {
@@ -326,7 +369,9 @@ export namespace DuctsSnapshot {
     }
     /**
      * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
-     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop.
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop,
+     * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
+     * live (the configurable door, kaitpw 2026-10-08).
      *
      */
     export interface DuctParameterSlots {
@@ -334,6 +379,7 @@ export namespace DuctsSnapshot {
       fanFlow?: string;
       componentDrop?: string;
       terminalDrop?: null | string;
+      fittingCoefficient?: string;
     }
   }
   export namespace Res {
@@ -343,7 +389,13 @@ export namespace DuctsSnapshot {
      * Where a value came from. The route prints it beside the value.
      */
     export type DuctProvenance = "geometry" | "revit-reported" | "revit-default" | "designer-stated" | "derived";
-    export type DuctLossMethod = "not-defined" | "ashrae-table" | "specific-coefficient" | "specific-loss" | "other";
+    export type DuctLossMethod =
+      | "not-defined"
+      | "ashrae-table"
+      | "specific-coefficient"
+      | "specific-loss"
+      | "pe-server"
+      | "other";
     export type DuctSegmentKind = "duct" | "flex";
     export type DuctIssueKind =
       | "open-end"
@@ -357,7 +409,8 @@ export namespace DuctsSnapshot {
       | "no-terminal-flow"
       | "no-root"
       | "multi-root"
-      | "high-velocity";
+      | "high-velocity"
+      | "no-flow-leg";
 
     /**
      * Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
@@ -591,7 +644,9 @@ export namespace DuctsSnapshot {
     }
     /**
      * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
-     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop.
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop,
+     * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
+     * live (the configurable door, kaitpw 2026-10-08).
      *
      */
     export interface DuctParameterSlots {
@@ -599,6 +654,7 @@ export namespace DuctsSnapshot {
       fanFlow: string;
       componentDrop: string;
       terminalDrop?: null | string;
+      fittingCoefficient: string;
     }
     /**
      * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
@@ -6866,6 +6922,7 @@ export interface HostOps {
   "document.temporary.release": { request: DocumentTemporaryRelease.Req.Request; response: DocumentTemporaryRelease.Res.Response };
   "document.temporary.status": { request: DocumentTemporaryStatus.Req.Request; response: DocumentTemporaryStatus.Res.Response };
   "ducts.apply": { request: DuctsApply.Req.Request; response: DuctsApply.Res.Response };
+  "ducts.family-patch": { request: DuctsFamilyPatch.Req.Request; response: DuctsFamilyPatch.Res.Response };
   "ducts.snapshot": { request: DuctsSnapshot.Req.Request; response: DuctsSnapshot.Res.Response };
   "ducts.tables": { request: DuctsTables.Req.Request; response: DuctsTables.Res.Response };
   "families.apply": { request: FamiliesApply.Req.Request; response: FamiliesApply.Res.Response };
@@ -6949,6 +7006,7 @@ export const hostOpKeys = [
   "document.temporary.release",
   "document.temporary.status",
   "ducts.apply",
+  "ducts.family-patch",
   "ducts.snapshot",
   "ducts.tables",
   "families.apply",

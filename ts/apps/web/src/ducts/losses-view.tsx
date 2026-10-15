@@ -688,6 +688,8 @@ const SLOT_WORDS = {
   componentDrop: "component drop (on accessories, in-wg)",
   terminalDrop:
     "terminal drop (on grilles, in-wg; Revit refuses the connector, so a family parameter carries it)",
+  fittingCoefficient:
+    "fitting coefficient (on fittings, a number the family computes; the Pe loss server reads it live)",
 } as const;
 
 /** The Revit parameter each value travels in; staged names ride the next snapshot read and apply. */

@@ -104,6 +104,14 @@ public sealed class AppCore : IPePayload {
 
         TaskInitializer.RegisterAllTasks();
 
+        // The live reader of a fitting family's own loss coefficient (pressure-drop ledger, 2026-10-08). Revit hands
+        // the server an element id with no document, so it resolves across the SDK tracker's open documents.
+        try {
+            Pe.Revit.Global.Lib.Mep.PeLossServer.Register();
+        } catch (Exception ex) {
+            Log.Error(ex, "Pe loss server registration failed; ducts.apply refuses pe-server writes until it registers");
+        }
+
         AutoTagService.Instance.Initialize(app.ActiveAddInId, documents);
         ParameterLinksService.Instance.Initialize(app.ActiveAddInId, documents);
     }

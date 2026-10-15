@@ -42,6 +42,7 @@ export const DUCT_PARAMETER_KEYS = [
   "fanFlow",
   "componentDrop",
   "terminalDrop",
+  "fittingCoefficient",
 ] as const;
 export type DuctParameterKey = (typeof DUCT_PARAMETER_KEYS)[number];
 
@@ -118,12 +119,22 @@ const slotsSchema = z.strictObject({
   fanFlow: z.string().min(1).optional(),
   componentDrop: z.string().min(1).optional(),
   terminalDrop: optionalText,
+  /** The fitting family's own coefficient parameter the Pe loss server reads (default Pe_C). */
+  fittingCoefficient: z.string().min(1).optional(),
 });
+/**
+ * How Revit is told a fitting's loss (pressure-drop ledger, 2026-10-12): the Pe loss server charges the
+ * family's coefficient when it has one, else prices the legs live from the rule's table; a frozen
+ * Specific Coefficient is the export route and never the web's. Revit's own table route is never written.
+ */
+export const DUCT_FITTING_METHODS = ["pe-server", "specific-coefficient"] as const;
+export type DuctFittingMethod = (typeof DUCT_FITTING_METHODS)[number];
 export const ductsApplyInputSchema = z.strictObject({
   slots: slotsSchema.nullable().optional(),
   fittings: z.array(
     z.strictObject({
       id: z.number().int(),
+      method: z.enum(DUCT_FITTING_METHODS),
       coefficient: z.number(),
       table: optionalText,
       inputs: optionalText,
@@ -177,7 +188,7 @@ export const ductsRouteState = {
   route: "ducts",
   title: "Ducts",
   description:
-    "Duct pressure-drop Work, one trichotomy cell per key. assumptions: an issue id from ducts.snapshot holds a verdict (capped, connect, ignore); flex-roughness:<flex type> (ft), fan-static:<equipment id> (in-wg) and component-drop:<family> (in-wg) hold overrides, never written to Revit. rules: a loss-rule key holds { table }, the ASHRAE table every instance of that fitting type is looked up under. terminalDrops and componentDrops: an element id holds { inWg, source }. unitStatics: an air mover's element id holds { inWg }, the external static written to it. parameters: fanStatic, fanFlow, componentDrop, terminalDrop name the Revit parameter of each slot (person only). Pea may propose rules and drops; a person stages; ducts.apply-losses writes the staged cells to Revit after ducts.preview-losses.",
+    "Duct pressure-drop Work, one trichotomy cell per key. assumptions: an issue id from ducts.snapshot holds a verdict (capped, connect, ignore); flex-roughness:<flex type> (ft), fan-static:<equipment id> (in-wg) and component-drop:<family> (in-wg) hold overrides, never written to Revit. rules: a loss-rule key holds { table }, the ASHRAE table every instance of that fitting type is looked up under. terminalDrops and componentDrops: an element id holds { inWg, source }. unitStatics: an air mover's element id holds { inWg }, the external static written to it. parameters: fanStatic, fanFlow, componentDrop, terminalDrop, fittingCoefficient name the Revit parameter of each slot (person only); fittingCoefficient is the family parameter the Pe loss server reads (default Pe_C). Pea may propose rules and drops; a person stages; ducts.apply-losses writes the staged cells to Revit after ducts.preview-losses.",
   schema: ductsDocumentSchema,
   agentWriteMask: [
     ["assumptions", "*", "proposal"],

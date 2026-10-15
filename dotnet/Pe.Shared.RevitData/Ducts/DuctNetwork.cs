@@ -35,6 +35,14 @@ public static class DuctNetwork {
     /// <summary>Takeoff: branch area over main area (ASHRAE SD5-x Ab/Ac).</summary>
     public const string AbOverAc = "abOverAc";
 
+    /// <summary>The family's own loss coefficient, read through the FittingCoefficient slot (what the Pe loss server charges).</summary>
+    public const string FamilyCoefficient = "familyCoefficient";
+
+    /// <summary>Part types with more than one downstream leg: a leg without flow is an issue there, and Revit caches a slot per leg (pressure-drop ledger, 2026-10-08).</summary>
+    public static readonly HashSet<string> JunctionPartTypes = new(StringComparer.Ordinal) {
+        "Tee", "TapAdjustable", "TapPerpendicular", "Wye", "Cross", "LateralTee", "LateralCross", "Pants", "MultiPort"
+    };
+
     public sealed record Analysis(
         IReadOnlyList<DuctNode> Nodes,
         IReadOnlyList<DuctSegment> Segments,
@@ -157,6 +165,13 @@ public static class DuctNetwork {
                 var (groupFlows, parent) = PassOne(ports[0].element, adj, nodeById, segById);
                 flows.AddRange(groupFlows);
                 foreach (var kv in parent) parentOf[kv.Key] = kv.Value == kv.Key ? ports[0].equipment : kv.Value;
+                var flowOf = groupFlows.ToDictionary(f => f.SegmentId, f => f.Cfm);
+                foreach (var x in ids) {
+                    if (!nodeById.TryGetValue(x, out var node) || node.Kind != DuctNodeKind.Fitting || !JunctionPartTypes.Contains(node.PartType ?? "")) continue;
+                    foreach (var c in node.Connectors)
+                        if (c.ConnectedTo is { } to && flowOf.TryGetValue(to.ElementId, out var cfm) && cfm <= 0)
+                            Add(DuctIssueKind.NoFlowLeg, x, c.Point, $"{node.PartType} leg {c.Index} carries no flow", c.Index);
+                }
             }
             issues.AddRange(groupIssues);
             groups.Add(new DuctGroup(gid, roots, classes.ToList(), systems.ToList(), terminals, ids.Count, loops,

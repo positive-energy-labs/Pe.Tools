@@ -71,7 +71,9 @@ public enum DuctIssueKind {
     /// <summary>A group attached to more than one equipment port.</summary>
     [EnumMember(Value = "multi-root")] MultiRoot,
     /// <summary>A segment whose Revit-reported velocity is 2000 fpm or more.</summary>
-    [EnumMember(Value = "high-velocity")] HighVelocity
+    [EnumMember(Value = "high-velocity")] HighVelocity,
+    /// <summary>A tee, tap, wye or cross with a leg carrying no pass-1 flow: Revit's table route charges that leg 0 and the branch grid has no point there.</summary>
+    [EnumMember(Value = "no-flow-leg")] NoFlowLeg
 }
 
 /// <summary>Optional: which parameters carry the designer-stated values. Absent reads the defaults.</summary>
@@ -79,13 +81,17 @@ public sealed record DuctSnapshotRequest(DuctParameterSlots? Slots = null);
 
 /// <summary>
 ///     Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
-///     equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop.
+///     equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop,
+///     FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
+///     live (the configurable door, kaitpw 2026-10-08).
 /// </summary>
 public sealed record DuctParameterSlots(
     string FanStatic = "PE_M_Fan_ExternalStaticPressure",
     string FanFlow = "PE_M_Fan_AirFlow",
     string ComponentDrop = "Pressure Drop",
-    string? TerminalDrop = null) {
+    string? TerminalDrop = null,
+    string FittingCoefficient = DuctParameterSlots.DefaultFittingCoefficient) {
+    public const string DefaultFittingCoefficient = "Pe_C";
     private static readonly DuctParameterSlots Defaults = new();
 
     /// <summary>Each name this leaves blank (a partial wire object) comes from <paramref name="under" />.</summary>
@@ -95,14 +101,16 @@ public sealed record DuctParameterSlots(
             string.IsNullOrWhiteSpace(this.FanStatic) ? under.FanStatic : this.FanStatic,
             string.IsNullOrWhiteSpace(this.FanFlow) ? under.FanFlow : this.FanFlow,
             string.IsNullOrWhiteSpace(this.ComponentDrop) ? under.ComponentDrop : this.ComponentDrop,
-            string.IsNullOrWhiteSpace(this.TerminalDrop) ? under.TerminalDrop : this.TerminalDrop);
+            string.IsNullOrWhiteSpace(this.TerminalDrop) ? under.TerminalDrop : this.TerminalDrop,
+            string.IsNullOrWhiteSpace(this.FittingCoefficient) ? under.FittingCoefficient : this.FittingCoefficient);
 
     /// <summary>A partial slots object from the wire deserializes missing names as null, not the defaults; this restores them.</summary>
     public DuctParameterSlots WithDefaults() => new(
         string.IsNullOrWhiteSpace(this.FanStatic) ? Defaults.FanStatic : this.FanStatic,
         string.IsNullOrWhiteSpace(this.FanFlow) ? Defaults.FanFlow : this.FanFlow,
         string.IsNullOrWhiteSpace(this.ComponentDrop) ? Defaults.ComponentDrop : this.ComponentDrop,
-        string.IsNullOrWhiteSpace(this.TerminalDrop) ? null : this.TerminalDrop);
+        string.IsNullOrWhiteSpace(this.TerminalDrop) ? null : this.TerminalDrop,
+        string.IsNullOrWhiteSpace(this.FittingCoefficient) ? Defaults.FittingCoefficient : this.FittingCoefficient);
 }
 
 /// <summary>
@@ -150,10 +158,12 @@ public sealed record DuctSection(int Number, double? FlowCfm, double? TotalPress
 [JsonConverter(typeof(StringEnumConverter))]
 public enum DuctLossMethod {
     [EnumMember(Value = "not-defined")] NotDefined,
-    /// <summary>"Coefficient from ASHRAE Table": computes zero on every fitting in R2025 and R2026 (pressure-drop ledger).</summary>
+    /// <summary>Revit's "Coefficient from ASHRAE Table": read only; it keeps a stale per-leg slot across method switches, so Pe never writes it (pressure-drop ledger 2026-10-08, 2026-10-12).</summary>
     [EnumMember(Value = "ashrae-table")] AshraeTable,
     [EnumMember(Value = "specific-coefficient")] SpecificCoefficient,
     [EnumMember(Value = "specific-loss")] SpecificLoss,
+    /// <summary>Pe's own loss server: the family's coefficient parameter (the FittingCoefficient slot) when it has one, else each leg priced live from the rule's ASHRAE table.</summary>
+    [EnumMember(Value = "pe-server")] PeServer,
     /// <summary>A server this census does not know, or no server parameter.</summary>
     [EnumMember(Value = "other")] Other
 }

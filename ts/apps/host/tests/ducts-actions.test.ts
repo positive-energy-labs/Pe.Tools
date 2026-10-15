@@ -28,7 +28,14 @@ const metrics = {
 const input: DuctsApplyInput = {
   slots: { fanStatic: "PE_ESP" },
   fittings: [
-    { id: 22, coefficient: 1.38, table: "SD5-10", inputs: "Qb/Qc=0.25", ruleKey: "tap-std" },
+    {
+      id: 22,
+      method: "pe-server",
+      coefficient: 1.38,
+      table: "SD5-10",
+      inputs: "Qb/Qc=0.25",
+      ruleKey: "tap-std",
+    },
   ],
   terminals: [{ id: 31, inWg: 0.08, source: "catalog" }],
   components: [],

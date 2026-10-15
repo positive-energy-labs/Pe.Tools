@@ -86,7 +86,7 @@ internal sealed class RevitDataRequestService {
     private static DuctSnapshotData GetDuctSnapshotCore(DuctSnapshotRequest request, ProjectDocument activeDocument) =>
         Lib.Mep.DuctSnapshots.Snapshot(activeDocument.Value, request.Slots);
 
-    [Op("ducts.apply", Does = "Write duct losses into Revit so they travel with the model: Specific Coefficient on duct fittings, Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the FanStatic slot, the network-based calculation switch, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. previewOnly plans every write and refusal without a transaction. A real apply commits Not Defined, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after.", Title = "Apply Duct Losses", Finds = ["ducts", "apply", "pressure", "loss", "coefficient", "terminal", "fan-static", "critical-path", "mutation"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"previewOnly\": true, \"fittings\": [{ \"id\": 12345, \"coefficient\": 0.25, \"table\": \"CD3-1\", \"ruleKey\": \"Round Elbow:Standard|r/D 1.0\" }], \"terminals\": [], \"components\": [], \"equipment\": [], \"store\": { \"version\": 1 } }")]
+    [Op("ducts.apply", Does = "Write duct losses into Revit so they travel with the model. Each fitting names a method: pe-server points it at the Pe loss server, which charges the family's own coefficient parameter live (the fittingCoefficient slot, default Pe_C) when the family carries one and otherwise prices each leg live from the write's ASHRAE table and the connectors' flows (taps, transitions, unstamped elbows); specific-coefficient freezes a number (export only). Revit's own ASHRAE-table route is never written. Also Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the fanStatic slot, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. previewOnly plans every write and refusal without a transaction. A real apply commits Not Defined on every targeted fitting, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after.", Title = "Apply Duct Losses", Finds = ["ducts", "apply", "pressure", "loss", "coefficient", "terminal", "fan-static", "critical-path", "mutation"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"previewOnly\": true, \"fittings\": [{ \"id\": 12345, \"method\": \"pe-server\", \"coefficient\": 0.25, \"table\": \"CD3-1\", \"ruleKey\": \"elbow-1d-le10\" }, { \"id\": 12346, \"method\": \"pe-server\", \"coefficient\": 0.35, \"table\": \"SD5-10\", \"ruleKey\": \"tap-std\" }], \"terminals\": [], \"components\": [], \"equipment\": [], \"store\": { \"version\": 1 } }")]
     private static DuctApplyResult ApplyDuctsCore(DuctApplyRequest request, ProjectDocument activeDocument) {
         var document = activeDocument.Value;
         if (!request.PreviewOnly && document.IsReadOnly)
@@ -106,6 +106,17 @@ internal sealed class RevitDataRequestService {
         } catch (Exception ex) {
             Serilog.Log.Error(ex, "ducts.apply failed outside a stage");
             throw BridgeOperationExceptions.Unexpected("DuctsApplyException", ex, "Run ducts.apply with previewOnly=true and read each refusal, then retry.");
+        }
+    }
+
+    [Op("ducts.family-patch", Does = "Build the Family Foundry patch that gives a duct fitting family its own loss coefficient: an embedded lookup table (PeElbowC, dense over r/D, angle and diameter from Revit's shipped ASHRAE CD3 grids) and an instance number parameter (default Pe_C) with a rounding size_lookup formula, plus the run policy that lets Revit disconnect a fitting it cannot keep joined on reload. Hand the patch to families.plan then families.apply; ducts.apply with method pe-server then charges it live. Read-only; needs no document.", Title = "Build Duct Family Patch", Finds = ["ducts", "family", "patch", "lookup-table", "coefficient", "family-foundry", "elbow"], Actor = OpActor.Any, Cost = OpCost.Cheap, Example = "{ \"family\": \"Round Elbow\", \"kind\": \"round-elbow\", \"parameter\": \"Pe_C\" }")]
+    private static DuctFamilyPatchData GetDuctFamilyPatchCore(DuctFamilyPatchRequest request) {
+        try {
+            return DuctFamilyTables.Patch(request, AshraeTables.Read(AshraeTables.DefaultFolder, DuctFamilyTables.ElbowSources));
+        } catch (Exception ex) when (ex is DirectoryNotFoundException or InvalidOperationException or ArgumentException) {
+            throw BridgeOperationExceptions.Conflict(
+                ex.Message,
+                [BridgeOperationExceptions.Issue("$", "DuctFamilyPatchUnavailable", ex.Message, "Name a loaded fitting family and make sure Revit's ASHRAE duct fitting tables are installed.")]);
         }
     }
 

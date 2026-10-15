@@ -21,7 +21,8 @@ public static class DuctSnapshots {
         [new Guid("76eff5da-2e71-45f7-b940-cc5716328ba0")] = DuctLossMethod.NotDefined,
         [new Guid("8baf7d75-8b9b-46d0-b8ce-3ad1c19e6b19")] = DuctLossMethod.AshraeTable,
         [new Guid("5a598293-1504-46cc-a9c0-de55c82848b9")] = DuctLossMethod.SpecificCoefficient,
-        [new Guid("46245996-eebb-4536-ac17-9c1cd917d8cf")] = DuctLossMethod.SpecificLoss
+        [new Guid("46245996-eebb-4536-ac17-9c1cd917d8cf")] = DuctLossMethod.SpecificLoss,
+        [PeLossServer.Id] = DuctLossMethod.PeServer
     };
 
     public static DuctSnapshotData Snapshot(Document doc, DuctParameterSlots? slots = null) {
@@ -199,6 +200,9 @@ public static class DuctSnapshots {
                 // Revit's elbow families carry "Center Radius" as an instance length; r/D is derived in DuctNetwork.
                 if (e.LookupParameter("Center Radius") is { HasValue: true, StorageType: StorageType.Double } radius && radius.AsDouble() > 0)
                     facts.Add(new DuctFact(DuctNetwork.CenterRadius, R(radius.AsDouble() * 12), null, "in", DuctProvenance.Geometry));
+                // The family's own coefficient (a lookup-table formula, -1 when its table has no row): what the Pe loss server charges.
+                if (e.LookupParameter(slots.FittingCoefficient) is { HasValue: true, StorageType: StorageType.Double } own)
+                    facts.Add(new DuctFact(DuctNetwork.FamilyCoefficient, R(own.AsDouble(), 4), null, "", DuctProvenance.RevitReported));
                 break;
         }
         var levelId = e.LevelId != ElementId.InvalidElementId
@@ -268,7 +272,7 @@ public static class DuctSnapshots {
                 "OST_DuctTerminal instances: FamilyInstance.Space (Number Name)",
                 new(terminals.Count(t => t.Facts.Any(f => f.Key == "space")), terminals.Count), DuctProvenance.Geometry),
             new("fitting-geometry", "Fitting geometry",
-                "OST_DuctFitting: LookupParameter(\"Angle\"), LookupParameter(\"Center Radius\"); connector sizes; DuctNetwork derives rOverD (round elbows), inlet and aoOverA1 (rooted transitions), takeoff, mainDiameter, mainArea and abOverAc (fittings on a duct's curve connector)",
+                $"OST_DuctFitting: LookupParameter(\"Angle\"), LookupParameter(\"Center Radius\"), LookupParameter(\"{slots.FittingCoefficient}\") (familyCoefficient); connector sizes; DuctNetwork derives rOverD (round elbows), inlet and aoOverA1 (rooted transitions), takeoff, mainDiameter, mainArea and abOverAc (fittings on a duct's curve connector)",
                 new(fittings.Count(n => n.Facts.Any(f => f.Key is DuctNetwork.ROverD or DuctNetwork.AoOverA1 or DuctNetwork.AbOverAc)), fittings.Count), DuctProvenance.Geometry),
             new("loss-method", "Fitting and accessory loss method",
                 "RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM; ExternalServiceRegistry DuctFittingAndAccessoryPressureDropService GetServer(id).GetDataSchema(), Element.GetEntity(schema) string fields (ASHRAETableName, Coefficient); RBS_DUCT_PRESSURE_DROP",

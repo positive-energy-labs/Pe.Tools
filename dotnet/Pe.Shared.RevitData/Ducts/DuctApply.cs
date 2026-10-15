@@ -8,8 +8,11 @@ namespace Pe.Shared.RevitData.Ducts;
 // into Revit, plus Pe's provenance store. PreviewOnly plans every write and opens no transaction.
 
 /// <summary>
-///     Coefficient is Specific Coefficient (dimensionless); Table, Inputs and RuleKey are Pe's provenance for it and
-///     land only in the store. Terminals and Components carry a drop in in-wg; Equipment the fan external static.
+///     A fitting write names its Method: PeServer points the fitting at the Pe loss server, which reads the family's
+///     coefficient parameter live (the FittingCoefficient slot, default Pe_C); AshraeTable stores Table as Revit's
+///     ASHRAETableName and Revit looks the legs up itself; SpecificCoefficient freezes Coefficient (the export route,
+///     never the web's). Coefficient, Table, Inputs and RuleKey are Pe's provenance and land in the store.
+///     Terminals and Components carry a drop in in-wg; Equipment the fan external static.
 /// </summary>
 public sealed record DuctApplyRequest(
     bool PreviewOnly,
@@ -20,7 +23,15 @@ public sealed record DuctApplyRequest(
     IReadOnlyList<DuctEquipmentWrite> Equipment,
     DuctLossStore Store);
 
-public sealed record DuctFittingWrite(long Id, double Coefficient, string? Table, string? Inputs, string? RuleKey);
+/// <summary>Table is the rule's ASHRAE table the Pe server prices the legs from when the family carries no coefficient; Coefficient is the web's number for the store and the export route.</summary>
+public sealed record DuctFittingWrite(long Id, DuctFittingMethod Method, double Coefficient, string? Table, string? Inputs, string? RuleKey);
+
+/// <summary>How Revit is told a fitting's loss (pressure-drop ledger, 2026-10-12): the Pe server live, or a frozen number for export.</summary>
+[JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+public enum DuctFittingMethod {
+    [System.Runtime.Serialization.EnumMember(Value = "pe-server")] PeServer,
+    [System.Runtime.Serialization.EnumMember(Value = "specific-coefficient")] SpecificCoefficient
+}
 
 public sealed record DuctDropWrite(long Id, double InWg, string? Source);
 

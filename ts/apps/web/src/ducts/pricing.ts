@@ -223,6 +223,8 @@ export function applyRequest(
         .filter((row) => row.c != null && !row.error && inScope(row.id))
         .map((row) => ({
           id: row.id,
+          // The Pe server charges the family's own coefficient when it has one, else prices the legs from this table.
+          method: "pe-server" as const,
           coefficient: row.c!,
           table: row.table!,
           inputs: inputsOf(row),

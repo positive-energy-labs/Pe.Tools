@@ -216,6 +216,7 @@ it("builds the ducts.apply request from the staged cells only, exactly", () => {
     fittings: [
       {
         id: 22,
+        method: "pe-server",
         coefficient: 1,
         table: "SD5-10",
         inputs: "Qb/Qc=0.25, Ab/Ac=0.25",
@@ -236,6 +237,7 @@ it("builds the ducts.apply request from the staged cells only, exactly", () => {
         fanStatic: "PE_M_Fan_ExternalStaticPressure",
         fanFlow: "PE_M_Fan_AirFlow",
         componentDrop: "Pressure Drop",
+        fittingCoefficient: "Pe_C",
       },
       workRevision: 0,
       appliedAt: at,
