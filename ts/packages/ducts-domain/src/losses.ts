@@ -124,6 +124,7 @@ function fittingFacts(
   prev: number | null,
   next: number | null,
   parent: Segment | null = null,
+  root: GroupTree["root"] = null,
 ): FittingFacts {
   const toward = (id: number | null) =>
     node.connectors.find((c) => id != null && c.connectedTo?.elementId === id);
@@ -132,8 +133,14 @@ function fittingFacts(
   // W1 `inlet` is the connector index facing the root; derive from the path only when absent.
   const stated = factOf(node, "inlet");
   const facing = stated == null ? undefined : node.connectors.find((c) => c.index === stated);
-  const inlet =
-    facing ?? (tap ? node.connectors.find((c) => c !== main) : (main ?? node.connectors[0]));
+  const attached = prev == null && root?.element === node.id && root.equipment != null;
+  // A root-attached fitting has no preceding path element. Its inlet is the exact equipment
+  // connector held by the tree, including the port index; an absent match stays unknown.
+  const inlet = attached
+    ? node.connectors.find(
+        (c) => c.connectedTo?.elementId === root.equipment && c.connectedTo.connector === root.port,
+      )
+    : (facing ?? (tap ? node.connectors.find((c) => c !== main) : (main ?? node.connectors[0])));
   const outlet = tap
     ? undefined
     : (toward(next) ??
@@ -368,7 +375,7 @@ function pathRows(
     leg: Leg,
   ) => {
     const parentPart = prev == null ? null : tree.parts.get(prev);
-    const facts = fittingFacts(node, prev, next, parentPart?.segment ?? null);
+    const facts = fittingFacts(node, prev, next, parentPart?.segment ?? null, tree.root);
     const stated = overrides.componentDrop?.[node.id];
     if (stated != null && !facts.takeoff) {
       rows.push({

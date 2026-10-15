@@ -10,13 +10,14 @@ import { expect, it } from "vite-plus/test";
 import { ductsRouteState, stagedDucts } from "@pe/agent-contracts";
 
 import { lookupGrid, toGrids, type Grid, type Grids } from "@pe/ducts-domain/loss-grid";
-import { friction, roundSection } from "@pe/ducts-domain/loss-physics";
+import { friction, roundSection, sectionOf } from "@pe/ducts-domain/loss-physics";
 import { computeLosses, fanout, systemFor } from "@pe/ducts-domain/losses";
 import { price, stagedFanout } from "@pe/ducts-domain/pricing";
 import { indexOf, lossesOf, sceneOf } from "./scene";
 import { groupTree } from "@pe/ducts-domain/topology";
 import synthetic from "./fixtures/synthetic-snapshot.json";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import rootAttached from "./fixtures/root-attached-fittings.json";
 
 // ---- test-only .tbl reader (ctable.py parse) ------------------------------------------------
 function parseTbl(name: string): Record<string, Grid> {
@@ -439,3 +440,98 @@ it("the scene carries Pe's loss per element, counting the rows paths share once"
   expect(sceneOf(indexOf(snap), "g10", () => true).segments.every((f) => !f.pressure)).toBe(true);
   expect(sceneOf(indexOf(snap, priced), "", () => true).context.flat()).toHaveLength(3);
 });
+
+it.each(rootAttached.cases)(
+  "resolves the exact root attachment of retained fitting $fitting.id",
+  (captured) => {
+    for (const reverse of [false, true]) {
+      const fitting = structuredClone(captured.fitting) as DuctSnapshot["nodes"][number];
+      const equipment = structuredClone(captured.equipment) as DuctSnapshot["nodes"][number];
+      const terminalId = 900000001;
+      fitting.groupId = "root-regression";
+      const outlet = fitting.connectors.find((port) => port.index === captured.outletIndex)!;
+      outlet.connectedTo = { elementId: terminalId, connector: 0 };
+      equipment.connectors = equipment.connectors.filter(
+        (port) => port.index === captured.rootEquipmentPort,
+      );
+      if (reverse) fitting.connectors.reverse();
+      const snap: DuctSnapshot = {
+        ...structuredClone(snapshot),
+        groups: [
+          {
+            id: fitting.groupId,
+            rootIds: [equipment.id],
+            classifications: ["SupplyAir"],
+            systemNames: ["regression"],
+            terminalCount: 1,
+            elementCount: 2,
+            loops: 0,
+            issueIds: [],
+          },
+        ],
+        nodes: [
+          equipment,
+          fitting,
+          node(terminalId, "terminal", {
+            groupId: fitting.groupId,
+            connectors: [
+              {
+                ...outlet,
+                index: 0,
+                connectedTo: { elementId: fitting.id, connector: outlet.index },
+              },
+            ],
+            facts: [{ key: "flow", value: 100, unit: "cfm", provenance: "designer-stated" }],
+            terminalDrop: { catalogDropInWg: 0, writable: false },
+          }),
+        ],
+        segments: [],
+        systems: [],
+        flows: [],
+        issues: [],
+      };
+      const root = groupTree(snap, fitting.groupId).root!;
+      expect(root).toEqual({
+        equipment: equipment.id,
+        port: captured.rootEquipmentPort,
+        element: fitting.id,
+      });
+      const inlet = fitting.connectors.find(
+        (port) =>
+          port.connectedTo?.elementId === root.equipment &&
+          port.connectedTo.connector === root.port,
+      )!;
+      const inletSection = sectionOf(inlet.shape, inlet.diameterIn, inlet.widthIn, inlet.heightIn)!;
+      const outletSection = sectionOf(
+        outlet.shape,
+        outlet.diameterIn,
+        outlet.widthIn,
+        outlet.heightIn,
+      )!;
+      expect(inlet.index).toBe(captured.inletIndex);
+      expect(outletSection.areaFt2 / inletSection.areaFt2).toBeCloseTo(captured.ratio, 12);
+      const result = computeLosses(snap, grids);
+      const row = result.paths[terminalId]!.rows.find((row) => row.id === fitting.id)!;
+      if (fitting.id === 12398836) {
+        expect(row.error).toBeUndefined();
+        expect(row.table).toBe("SR4-3");
+        expect(row.inputs?.y).toBeCloseTo(576 / (100 * Math.PI), 12);
+        expect(row.c).toBeCloseTo(1.32 * (576 / (100 * Math.PI) - 1), 12);
+        const missing = structuredClone(snap);
+        missing.nodes
+          .find((node) => node.id === fitting.id)!
+          .connectors.find(
+            (port) => port.index === captured.inletIndex,
+          )!.connectedTo!.connector = 999;
+        const unpriced = computeLosses(missing, grids).paths[terminalId]!.rows.find(
+          (row) => row.id === fitting.id,
+        )!;
+        expect(unpriced.error).toBeDefined();
+      } else {
+        // Attachment truth is retained, but rectangular pricing is a separate frontier.
+        expect(row.error).toContain("no rule matches Transition");
+        expect(row.dp).toBe(0);
+      }
+    }
+  },
+);

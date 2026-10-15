@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { expect, test, vi } from "vite-plus/test";
+import { expect, test } from "vite-plus/test";
 import { withInvocationContext } from "@pe/runtime/context";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
 import { ductsNativeRead } from "../src/ducts-analysis.ts";
@@ -9,11 +9,6 @@ import { hostOwnership } from "../src/host-ownership.ts";
 import type { RevitBridge } from "../src/bridge.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { serveRoutes } from "./real-server.ts";
-
-vi.mock("../src/pe-revit-launch.ts", async (original) => ({
-  ...(await original<typeof import("../src/pe-revit-launch.ts")>()),
-  peRevitLauncher: () => ({ cmd: process.execPath, args: [] }),
-}));
 
 test("the analysis read adapter preserves Pea admission and never borrows a human principal", async () => {
   let nativeReads = 0;
