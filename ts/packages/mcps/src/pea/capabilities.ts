@@ -347,7 +347,7 @@ function parseSchema(json: string | undefined): Record<string, unknown> {
   }
 }
 
-/* â”€â”€ live source â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── live source ─────────────────────────────────────────────────────────── */
 
 const CATALOG_TTL_MS = 30_000;
 // SDK resolution allows 30 s before native catalog dispatch; host-only sources keep their 2 s budget.

@@ -377,8 +377,8 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
   ): Promise<NonNullable<DuctsAnalysisResponse["applyRequest"]>> {
     const builder = ductsApplyRequestProducerSchema.parse(sources.producer);
     const producer = ductsApplyRequestProducerSchema.parse(artifact.producer);
-    const sameCode = ({ processId: _pid, ...code }: typeof producer) => code;
-    if (JSON.stringify(sameCode(producer)) !== JSON.stringify(sameCode(builder)))
+    const applicability = ({ processId: _pid, ...code }: typeof producer) => code;
+    if (JSON.stringify(applicability(producer)) !== JSON.stringify(applicability(builder)))
       throw Error("Apply request producer differs from this builder");
     if (
       artifact.work.kind !== "canonical" ||
