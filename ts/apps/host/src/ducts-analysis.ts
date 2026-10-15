@@ -708,6 +708,11 @@ function project(
                 )
                 .map((e) => e.id),
     );
+    const exterior = new Map(
+      next.design.componentFlows.flatMap((c) =>
+        c.boundaries.map((b) => [b.port, b.externalExchange] as const),
+      ),
+    );
     rows = [...elements.values()]
       .filter((e) => selected.has(e.id))
       .sort((a, b) => a.id - b.id)
@@ -723,7 +728,10 @@ function project(
             otherPorts[0]!.connectedTo?.elementId === e.id &&
             otherPorts[0]!.connectedTo?.connector === c.index;
           const pin: DuctPortPin | null =
-            e.uniqueId && other?.uniqueId && reciprocal && c.connectedTo && c.point.length === 3
+            e.uniqueId &&
+            own.length === 1 &&
+            (!c.connectedTo || (other?.uniqueId && reciprocal)) &&
+            c.point.length === 3
               ? {
                   index: c.index,
                   point: c.point as [number, number, number],
@@ -732,11 +740,13 @@ function project(
                   widthIn: c.widthIn ?? null,
                   heightIn: c.heightIn ?? null,
                   direction: c.direction,
-                  connectedTo: {
-                    id: c.connectedTo.elementId,
-                    connector: c.connectedTo.connector,
-                    uniqueId: other.uniqueId,
-                  },
+                  connectedTo: c.connectedTo
+                    ? {
+                        id: c.connectedTo.elementId,
+                        connector: c.connectedTo.connector,
+                        uniqueId: other!.uniqueId!,
+                      }
+                    : null,
                 }
               : null;
           return {
@@ -760,6 +770,7 @@ function project(
               uniqueId: e.uniqueId ?? null,
               index: c.index,
               pin,
+              externalExchange: exterior.get(`${e.id}:${c.index}`) ?? null,
               reason: pin
                 ? null
                 : !e.uniqueId || (c.connectedTo && !other?.uniqueId)

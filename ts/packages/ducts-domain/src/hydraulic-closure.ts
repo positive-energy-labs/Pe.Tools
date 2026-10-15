@@ -61,6 +61,10 @@ export function prescribedHydraulics(g: Graph, components: ComponentFlow[]): Com
         flow.set(e.from, e.signedCfm);
         flow.set(e.to, e.signedCfm === null ? null : -e.signedCfm);
       }
+  for (const c of components)
+    for (const b of c.boundaries)
+      if (b.externalExchange)
+        flow.set(b.port, c.status === "unique" ? b.externalExchange.ownerOutwardCfm : null);
   const add = (from: string, to: string, drop: number, owner: number | null, source: string) =>
     laws.push({ from, to, drop, owner, source });
   const endpoint = (p: Endpoint, witness: ComponentFlow) => {
@@ -482,7 +486,10 @@ export function prescribedHydraulics(g: Graph, components: ComponentFlow[]): Com
     const qi = f.value.inlet ? flow.get(inlet) : null,
       qo = f.value.outlet ? flow.get(outlet) : null,
       q = qo ?? (qi == null ? null : -qi);
-    const valid = q != null && (qi == null || qo == null || close(-qi, qo));
+    const openFlowMissing = [f.value.inlet, f.value.outlet].some(
+      (p) => p && p.connectedTo === null && flow.get(key(f.value.element.id, p.index)) == null,
+    );
+    const valid = !openFlowMissing && q != null && (qi == null || qo == null || close(-qi, qo));
     const determined =
       a &&
       b &&

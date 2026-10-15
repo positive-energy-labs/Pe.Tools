@@ -6,6 +6,7 @@ import {
   type DuctCalculation,
   type DuctHydraulics,
   ductHydraulicsSchema,
+  ductPortPinSchema,
   type DuctPortPin,
 } from "@pe/agent-contracts";
 import { applyRequest, price, proposedStatic } from "@pe/ducts-domain/pricing";
@@ -100,10 +101,15 @@ function fixture() {
     systems: [],
   } as unknown as DuctSnapshot;
 }
-function pin(s: DuctSnapshot, id: number, index: number): DuctPortPin {
+function pin(
+  s: DuctSnapshot,
+  id: number,
+  index: number,
+): DuctPortPin & { connectedTo: NonNullable<DuctPortPin["connectedTo"]> } {
   const elements = [...s.nodes, ...s.segments];
   const c = elements.find((e) => e.id === id)!.connectors.find((c) => c.index === index)!;
-  const to = c.connectedTo!;
+  const to = c.connectedTo;
+  if (!to) throw Error("Purpose connected-pin helper requires a real peer");
   return {
     index,
     point: c.point as [number, number, number],
@@ -1872,4 +1878,271 @@ it("direct physical interfaces require native-double encoding before automatic p
   expect(legacy.status).toBe("partial");
   expect(legacy.reasons.some((r) => r.code === "hydraulic-flow-not-unique")).toBe(true);
   expect(legacy.fanHeads[0]!.requiredExternalTotalPressureInWg).toBeNull();
+});
+
+function openPhysicalFanPurpose(flow: number | null = 300) {
+  const s = fixture();
+  const fan = s.nodes[0]!,
+    grille = s.nodes[2]!;
+  fan.connectors = [port(0, 300, 0, "out")];
+  grille.connectors = [port(0, 100, 0, "in")];
+  grille.category = "Air Terminals";
+  grille.terminalDrop = { catalogDropInWg: 0.1, writable: false };
+  s.nodes = [fan, grille];
+  s.nodes[0]!.connectors.push({
+    ...port(3, 999, 0, "in"),
+    point: [0, 0, -1],
+    shape: "rectangular",
+    diameterIn: null,
+    widthIn: 17.5,
+    heightIn: 21,
+    connectedTo: null,
+  });
+  s.nodes[1]!.connectors[0]!.direction = "in";
+  s.nodes[1]!.facts =
+    flow === null ? [] : [{ key: "flow", value: flow, unit: "cfm", provenance: "designer-stated" }];
+  s.segments = [];
+  s.groups = [group("downstream", [100], 1)];
+  const inlet = ductPortPinSchema.parse({
+    index: 3,
+    point: [0, 0, -1],
+    shape: "rectangular",
+    diameterIn: null,
+    widthIn: 17.5,
+    heightIn: 21,
+    direction: "in",
+    connectedTo: null,
+  });
+  const e: Record<string, DuctCalculation> = {
+    fan: {
+      kind: "fan",
+      element: identity(100),
+      inlet,
+      outlet: pin(s, 100, 0),
+      designFlowCfm: null,
+      referenceTotalPressureInWg: 999,
+      source: "Purpose actual open exterior inlet, NOT conceptual reservoir",
+    },
+    grille: {
+      kind: "terminal",
+      element: identity(300),
+      port: pin(s, 300, 0),
+      role: "demand",
+      flowCfm: flow,
+      boundaryTotalPressureInWg: 0,
+      loss: { flowCfm: 300, totalLossInWg: 0.1, source: "Purpose stated TOTAL drop" },
+      source: "Purpose demand",
+    },
+  };
+  const components = price(s, {}, work(e)).next.design.componentFlows;
+  for (const c of components)
+    e[`hyd:${c.id}`] = {
+      kind: "component-flow",
+      constraints: [],
+      componentWitness: c.componentWitness,
+      hydraulics: ductHydraulicsSchema.parse({
+        ...emptyHydraulics(),
+        anchors: c.boundaries.some((b) => b.port === "100:3")
+          ? [
+              {
+                at: { element: identity(100), port: inlet },
+                kind: "physical-boundary",
+                totalPressureInWg: -0.01,
+                source:
+                  "Purpose sourced face Pt: reservoir0 minus entrance0.01 at300; NOT automatic ambient0",
+              },
+            ]
+          : [],
+      }),
+      source: "Purpose open-face hydraulic scope",
+    };
+  return { s, e, inlet };
+}
+it("binds an actual open fan face and transfers only qualified same-fan flow", () => {
+  const { s, e } = openPhysicalFanPurpose();
+  const result = price(s, {}, work(e)).next.design;
+  const open = result.componentFlows.find((c) => c.boundaries.some((b) => b.port === "100:3"))!;
+  expect(open.status).toBe("unique");
+  expect(open.edges).toEqual([]);
+  expect(open.boundaries[0]).toMatchObject({
+    injectionCfm: -300,
+    externalExchange: { ownerOutwardCfm: -300, inflowCfm: 300, derivation: "fan-continuity" },
+  });
+  expect(open.maxResidualCfm).toBe(0);
+  const head = result.componentFlows
+    .flatMap((c) => c.hydraulics?.fanHeads ?? [])
+    .find((f) => f.id === "fan")!;
+  expect(head.flowCfm).toBe(300);
+  expect(head.requiredExternalTotalPressureInWg).toBeCloseTo(0.11, 12);
+  expect(
+    result.componentFlows.every((c) => c.hydraulics?.status === "complete-for-prescribed-flow"),
+  ).toBe(true);
+  expect(result.circuits.every((c) => c.status === "partial")).toBe(true);
+});
+
+it("keeps separate open ERV fan streams on one cabinet without exchanging their flows", () => {
+  const { s, e, inlet } = openPhysicalFanPurpose();
+  for (const name of Object.keys(e)) if (name.startsWith("hyd:")) delete e[name];
+  const fan = s.nodes[0]!;
+  fan.connectors.push({ ...fan.connectors[1]!, index: 5, point: [0, 0, -2] });
+  fan.connectors.push(port(2, 400, 0, "out"));
+  const grille = structuredClone(s.nodes[1]!);
+  grille.id = 400;
+  grille.uniqueId = "purpose-400";
+  grille.connectors = [port(0, 100, 2, "in")];
+  grille.facts = [{ key: "flow", value: 75, unit: "cfm", provenance: "designer-stated" }];
+  s.nodes.push(grille);
+  const inletB = ductPortPinSchema.parse({ ...inlet, index: 5, point: [0, 0, -2] });
+  e.fanB = {
+    kind: "fan",
+    element: identity(100),
+    inlet: inletB,
+    outlet: pin(s, 100, 2),
+    designFlowCfm: null,
+    referenceTotalPressureInWg: 0,
+    source: "Second actual ERV stream",
+  };
+  e.grilleB = {
+    kind: "terminal",
+    element: identity(400),
+    port: pin(s, 400, 0),
+    role: "demand",
+    flowCfm: 75,
+    boundaryTotalPressureInWg: 0,
+    loss: { totalLossInWg: 0.1, flowCfm: 75, source: "Purpose" },
+    source: "Purpose",
+  };
+  const result = price(s, {}, work(e)).next.design.componentFlows;
+  const boundaries = result.flatMap((c) => c.boundaries);
+  expect(boundaries.find((b) => b.port === "100:3")?.externalExchange?.ownerOutwardCfm).toBe(-300);
+  expect(boundaries.find((b) => b.port === "100:5")?.externalExchange?.ownerOutwardCfm).toBe(-75);
+  expect(result.every((c) => c.status === "unique")).toBe(true);
+});
+
+it("does not turn unknown exterior flow or missing face pressure into a known head", () => {
+  for (const mode of ["unknown", "pressure"] as const) {
+    const { s, e } = openPhysicalFanPurpose(mode === "unknown" ? null : 300);
+    if (mode === "pressure")
+      for (const value of Object.values(e))
+        if (value.kind === "component-flow" && value.hydraulics) value.hydraulics.anchors = [];
+    const components = price(s, {}, work(e)).next.design.componentFlows;
+    const open = components.find((c) => c.boundaries.some((b) => b.port === "100:3"))!;
+    if (mode === "unknown") {
+      expect(open.status).toBe("underdetermined");
+      expect(open.maxResidualCfm).toBeNull();
+      expect(open.boundaries[0]!.externalExchange!.ownerOutwardCfm).toBeNull();
+    }
+    expect(
+      components
+        .flatMap((c) => c.hydraulics?.fanHeads ?? [])
+        .every((f) => f.requiredExternalTotalPressureInWg === null),
+    ).toBe(true);
+  }
+});
+
+it("invalidates exact open fan pins when native identity, geometry, sense or peer changes", () => {
+  for (const mode of ["peer", "disconnect", "uid", "point", "width", "direction"] as const) {
+    const { s, e } = openPhysicalFanPurpose();
+    const node = s.nodes[0]!,
+      p = node.connectors[1]!;
+    if (mode === "peer") p.connectedTo = { elementId: 300, connector: 0 };
+    if (mode === "disconnect") node.connectors[0]!.connectedTo = null;
+    if (mode === "uid") node.uniqueId = "replaced-owner";
+    if (mode === "point") p.point = [0, 0, -2];
+    if (mode === "width") p.widthIn = 18;
+    if (mode === "direction") p.direction = "out";
+    const result = price(s, {}, work(e)).next.design;
+    expect(result.reasons.some((r) => r.code === "stale-port-evidence")).toBe(true);
+    expect(
+      result.componentFlows
+        .flatMap((c) => c.hydraulics?.fanHeads ?? [])
+        .every((f) => f.requiredExternalTotalPressureInWg === null),
+    ).toBe(true);
+  }
+});
+
+it("refuses contradictory fan design flow and leaves unclaimed open equipment unknown", () => {
+  const { s, e } = openPhysicalFanPurpose();
+  if (e.fan?.kind !== "fan") throw Error("Purpose fan");
+  e.fan.designFlowCfm = 200;
+  let components = price(s, {}, work(e)).next.design.componentFlows;
+  expect(components.some((c) => c.status === "inconsistent")).toBe(true);
+  expect(
+    components
+      .flatMap((c) => c.hydraulics?.fanHeads ?? [])
+      .every((f) => f.requiredExternalTotalPressureInWg === null),
+  ).toBe(true);
+  delete e.fan;
+  for (const name of Object.keys(e)) if (name.startsWith("hyd:")) delete e[name];
+  components = price(s, {}, work(e)).next.design.componentFlows;
+  const open = components.find((c) => c.boundaries.some((b) => b.port === "100:3"))!;
+  expect(open.status).toBe("underdetermined");
+  expect(open.boundaries[0]!.injectionCfm).toBeNull();
+  expect(open.boundaries[0]!.externalExchange).toBeUndefined();
+});
+
+it("keeps component joint constraints connected-only while admitting exact open fan pins", () => {
+  const { s, inlet } = openPhysicalFanPurpose();
+  const componentWitness = price(s, {}, work({})).next.design.componentFlows[0]!.componentWitness;
+  expect(() =>
+    ductsRouteState.schema.parse({
+      calculation: {
+        bad: {
+          staged: {
+            value: {
+              kind: "component-flow",
+              componentWitness,
+              constraints: [
+                {
+                  element: identity(100),
+                  port: inlet,
+                  signedCfm: -300,
+                  source: "Cannot be an open native joint",
+                },
+              ],
+              hydraulics: null,
+              source: "Purpose",
+            },
+          },
+        },
+      },
+    }),
+  ).toThrow();
+});
+
+it("never promotes an open passive face into an automatic exterior premise", () => {
+  const { s, e, inlet } = openPhysicalFanPurpose();
+  e.fan = {
+    kind: "passive",
+    element: identity(100),
+    ports: [inlet, pin(s, 100, 0)],
+    loss: {
+      flowCfm: 300,
+      totalLossInWg: 0,
+      source: "Purpose explicitly stated passive loss point",
+    },
+    source: "Purpose passive open equipment",
+  };
+  for (const name of Object.keys(e)) if (name.startsWith("hyd:")) delete e[name];
+  const components = price(s, {}, work(e)).next.design.componentFlows;
+  const open = components.flatMap((c) => c.boundaries).find((b) => b.port === "100:3")!;
+  expect(open.injectionCfm).toBeNull();
+  expect(open.externalExchange).toBeUndefined();
+  expect(components.every((c) => c.status === "underdetermined")).toBe(true);
+});
+
+it("uses explicit fan design flow including stated zero without reading native placeholders", () => {
+  for (const q of [0, 300]) {
+    const { s, e } = openPhysicalFanPurpose(q);
+    if (e.fan?.kind !== "fan") throw Error("Purpose fan");
+    e.fan.designFlowCfm = q;
+    const result = price(s, {}, work(e)).next.design.componentFlows;
+    const open = result.find((c) => c.boundaries.some((b) => b.port === "100:3"))!;
+    expect(open.status).toBe("unique");
+    expect(open.boundaries[0]!.externalExchange).toMatchObject({
+      ownerOutwardCfm: -q,
+      inflowCfm: q,
+      derivation: "fan-design",
+    });
+  }
 });

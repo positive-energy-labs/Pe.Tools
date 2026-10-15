@@ -178,6 +178,15 @@ const row = z.strictObject({
       uniqueId: z.string().nullable(),
       index: z.number().int(),
       pin: ductPortPinSchema.nullable(),
+      externalExchange: z
+        .strictObject({
+          ownerOutwardCfm: z.number().nullable(),
+          inflowCfm: z.number().nullable(),
+          source: z.string(),
+          derivation: z.enum(["fan-design", "fan-continuity"]).nullable(),
+          fromComponentId: z.string().nullable(),
+        })
+        .nullable(),
       reason: z.string().nullable(),
     })
     .nullable(),

@@ -106,6 +106,16 @@ export function designCircuits(
       reasons: [],
     };
     if (!pin) return { side, tree: null, terminalFlows: new Map() };
+    if (pin.connectedTo === null) {
+      side.reasons.push(
+        reason(
+          "open-physical-plane",
+          fan.element.id,
+          "Exact open physical fan face needs qualified flow and sourced physical pressure; legacy tree does not supply them",
+        ),
+      );
+      return { side, tree: null, terminalFlows: new Map() };
+    }
     const start = pin.connectedTo.id;
     if (!adjacent.has(start)) {
       side.reasons.push(

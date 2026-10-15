@@ -1536,3 +1536,97 @@ test("apply-request uses canonical staged fitting lookup and names unpriced inst
       });
   }
 });
+
+test("ports exposes exact open fan pins and derived exterior flow without historical reacquisition", async () => {
+  const f = fixture();
+  for (const n of f.snapshot.nodes) n.uniqueId = `purpose-${n.id}`;
+  f.snapshot.nodes[0]!.connectors[0]!.direction = "out";
+  f.snapshot.nodes[1]!.connectors[0]!.direction = "in";
+  f.snapshot.nodes[0]!.connectors.push({
+    index: 3,
+    kind: "end",
+    size: "17.5x21",
+    point: [0, 0, -1],
+    shape: "rectangular",
+    diameterIn: null,
+    widthIn: 17.5,
+    heightIn: 21,
+    direction: "in",
+    connectedTo: null,
+  });
+  const open: DuctPortPin = {
+    index: 3,
+    point: [0, 0, -1],
+    shape: "rectangular",
+    diameterIn: null,
+    widthIn: 17.5,
+    heightIn: 21,
+    direction: "in",
+    connectedTo: null,
+  };
+  const pin = (id: number, direction: string): DuctPortPin => ({
+    index: 1,
+    point: [0, 0, 0],
+    shape: "round",
+    diameterIn: 8,
+    widthIn: null,
+    heightIn: null,
+    direction,
+    connectedTo: { id: id === 1 ? 2 : 1, uniqueId: `purpose-${id === 1 ? 2 : 1}`, connector: 1 },
+  });
+  const doc = ductsDocumentSchema.parse({
+    calculation: {
+      fan: {
+        staged: {
+          value: {
+            kind: "fan",
+            element: { id: 1, uniqueId: "purpose-1" },
+            inlet: open,
+            outlet: pin(1, "out"),
+            designFlowCfm: null,
+            referenceTotalPressureInWg: 999,
+            source: "Purpose exact physical fan faces",
+          },
+        },
+      },
+      terminal: {
+        staged: {
+          value: {
+            kind: "terminal",
+            element: { id: 2, uniqueId: "purpose-2" },
+            port: pin(2, "in"),
+            role: "demand",
+            flowCfm: 100,
+            boundaryTotalPressureInWg: 0,
+            loss: { flowCfm: 100, totalLossInWg: 0.08, source: "Purpose TOTAL" },
+            source: "Purpose demand",
+          },
+        },
+      },
+    },
+  });
+  f.sources.readWork = async () => ({ doc, revision: 18 });
+  const fresh = await f.api.read(
+    read({ kind: "fresh", target: f.target }, { kind: "document" }, { projection: "ports" }),
+  );
+  const row = fresh.rows.find((r) => r.id === 1 && r.port?.index === 3)!;
+  expect(row.port).toMatchObject({
+    pin: open,
+    connection: null,
+    reciprocal: false,
+    reason: null,
+    externalExchange: { ownerOutwardCfm: -100, inflowCfm: 100, derivation: "fan-continuity" },
+  });
+  const before = f.counts();
+  const historical = ductsAnalysisResponseSchema.parse(
+    await f.api.read(
+      read(
+        { kind: "artifact", id: fresh.analysisId },
+        { kind: "document" },
+        { projection: "ports" },
+      ),
+    ),
+  );
+  expect(historical.rows).toEqual(fresh.rows);
+  expect(f.counts()).toEqual(before);
+});

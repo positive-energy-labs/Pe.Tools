@@ -25,7 +25,18 @@ export interface ComponentFlow {
   unknownEdges: number;
   maxResidualCfm: number | null;
   edges: FlowEdge[];
-  boundaries: { port: string; injectionCfm: number | null; source: string }[];
+  boundaries: {
+    port: string;
+    injectionCfm: number | null;
+    source: string;
+    externalExchange?: {
+      ownerOutwardCfm: number | null;
+      inflowCfm: number | null;
+      source: string;
+      derivation: "fan-design" | "fan-continuity" | null;
+      fromComponentId: string | null;
+    };
+  }[];
   reasons: CircuitReason[];
 }
 const portKey = (id: number, index: number) => `${id}:${index}`;
@@ -283,7 +294,16 @@ export function componentFlows(g: Graph): ComponentFlow[] {
   const consumedDesigns = new Set<string>();
   const seen = new Set<string>(),
     results: ComponentFlow[] = [];
-  const fanPorts = new Map<string, { injection: number | null; source: string }>();
+  const exterior: {
+    component: ComponentFlow;
+    boundary: ComponentFlow["boundaries"][number];
+    other: string | null;
+    sign: number;
+  }[] = [];
+  const fanPorts = new Map<
+    string,
+    { injection: number | null; source: string; sign: number; other: string | null }
+  >();
   for (const f of g.validFans)
     for (const [side, sign] of [
       [f.value.inlet, -1],
@@ -293,6 +313,10 @@ export function componentFlows(g: Graph): ComponentFlow[] {
         fanPorts.set(portKey(f.value.element.id, side.index), {
           injection: f.value.designFlowCfm == null ? null : sign * f.value.designFlowCfm,
           source: f.value.source,
+          sign,
+          other: (sign === -1 ? f.value.outlet : f.value.inlet)
+            ? portKey(f.value.element.id, (sign === -1 ? f.value.outlet : f.value.inlet)!.index)
+            : null,
         });
   for (const first of [...vertices.keys()].sort()) {
     if (seen.has(first)) continue;
@@ -399,6 +423,7 @@ export function componentFlows(g: Graph): ComponentFlow[] {
     const ce = [...memberEdges].sort((a, b) => a - b).map((i) => edges[i]!);
     const boundaries: ComponentFlow["boundaries"] = [];
     const injection = new Map(todo.map((k) => [k, 0 as number | null]));
+    const localExterior: Omit<(typeof exterior)[number], "component">[] = [];
     const inferable = new Set<string>();
     const terminalMagnitudes = new Map<string, number | null>();
     for (const k of todo) {
@@ -417,9 +442,29 @@ export function componentFlows(g: Graph): ComponentFlow[] {
       }
       const fan = fanPorts.get(k);
       if (fan) {
-        injection.set(k, fan.injection);
-        if (fan.injection == null) inferable.add(k);
-        boundaries.push({ port: k, injectionCfm: fan.injection, source: fan.source });
+        const open = !p.connectedTo;
+        const boundary: ComponentFlow["boundaries"][number] = {
+          port: k,
+          injectionCfm: fan.injection,
+          source: fan.source,
+        };
+        if (open) {
+          boundary.externalExchange = {
+            ownerOutwardCfm: fan.injection,
+            inflowCfm: fan.injection === null ? null : -fan.injection,
+            source: fan.source,
+            derivation: fan.injection === null ? null : "fan-design",
+            fromComponentId: null,
+          };
+          // Exterior exchange balances the admitted fan face, without adding a physical joint.
+          // A zero net residual here never certifies an unknown crossing flow.
+          injection.set(k, 0);
+          localExterior.push({ boundary, sign: fan.sign, other: fan.other });
+        } else {
+          injection.set(k, fan.injection);
+          if (fan.injection == null) inferable.add(k);
+        }
+        boundaries.push(boundary);
         continue;
       }
       if (e.kind === "equipment" && !g.passives.has(id)) {
@@ -608,8 +653,14 @@ export function componentFlows(g: Graph): ComponentFlow[] {
     const knownResiduals = [...residual]
       .filter(([k, q]) => q != null && unresolved.get(k)!.size === 0)
       .map(([, q]) => q!);
+    const unresolvedExterior = localExterior.some(
+      (x) => x.boundary.externalExchange!.ownerOutwardCfm === null,
+    );
     const maxResidualCfm =
-      reasons.length > 0 || unknownEdges || [...injection.values()].some((q) => q == null)
+      unresolvedExterior ||
+      reasons.length > 0 ||
+      unknownEdges ||
+      [...injection.values()].some((q) => q == null)
         ? null
         : knownResiduals.reduce((max, q) => Math.max(max, Math.abs(q)), 0);
     const scale = boundaries.reduce((max, b) => Math.max(max, Math.abs(b.injectionCfm ?? 0)), 1);
@@ -639,6 +690,14 @@ export function componentFlows(g: Graph): ComponentFlow[] {
           "Remaining cycle/boundary freedoms need independent sourced signed flow constraints",
         ),
       );
+    if (unresolvedExterior)
+      reasons.push(
+        issue(
+          "unknown-exterior-flow",
+          null,
+          "Admitted open fan face has no stated or qualified same-fan flow",
+        ),
+      );
     results.push({
       hydraulics: null,
       id: first,
@@ -657,6 +716,27 @@ export function componentFlows(g: Graph): ComponentFlow[] {
       boundaries,
       reasons,
     });
+    for (const x of localExterior) exterior.push({ ...x, component: results[results.length - 1]! });
+  }
+  for (const x of exterior) {
+    const exchange = x.boundary.externalExchange!;
+    if (exchange.ownerOutwardCfm !== null || x.component.status === "inconsistent" || !x.other)
+      continue;
+    const counterpart = results.find(
+      (c) =>
+        c.status === "unique" &&
+        c.boundaries.some((b) => b.port === x.other && b.injectionCfm !== null),
+    );
+    const q = counterpart?.boundaries.find((b) => b.port === x.other)?.injectionCfm;
+    if (q == null || q * x.sign > 0) continue;
+    x.boundary.injectionCfm = -q;
+    exchange.ownerOutwardCfm = -q;
+    exchange.inflowCfm = q;
+    exchange.derivation = "fan-continuity";
+    exchange.fromComponentId = counterpart!.id;
+    x.component.reasons = x.component.reasons.filter((r) => r.code !== "unknown-exterior-flow");
+    x.component.status = x.component.reasons.length ? "underdetermined" : "unique";
+    x.component.maxResidualCfm = x.component.reasons.length ? null : 0;
   }
   for (const [name] of g.flowDesigns)
     if (!consumedDesigns.has(name))

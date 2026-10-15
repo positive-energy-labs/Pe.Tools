@@ -60,14 +60,19 @@ export function physicalGraph(
     const to = c.connectedTo;
     const other = to ? elements.get(to.elementId) : undefined;
     const back = other?.connectors.filter((c) => c.index === to?.connector) ?? [];
+    const peer = pin.connectedTo;
+    const attachment =
+      peer === null
+        ? !to
+        : !!to &&
+          other?.uniqueId === peer.uniqueId &&
+          to.elementId === peer.id &&
+          to.connector === peer.connector &&
+          back.length === 1 &&
+          back[0]!.connectedTo?.elementId === id &&
+          back[0]!.connectedTo?.connector === pin.index;
     return (
-      !!to &&
-      other?.uniqueId === pin.connectedTo.uniqueId &&
-      to.elementId === pin.connectedTo.id &&
-      to.connector === pin.connectedTo.connector &&
-      back.length === 1 &&
-      back[0]!.connectedTo?.elementId === id &&
-      back[0]!.connectedTo?.connector === pin.index &&
+      attachment &&
       c.point.length === 3 &&
       c.point.every((n, i) => n === pin.point[i]) &&
       c.shape === pin.shape &&
@@ -91,7 +96,7 @@ export function physicalGraph(
         reason(
           "stale-port-evidence",
           e.element.id,
-          `${id}: element identity or exact reciprocal connector witness does not match`,
+          `${id}: element identity or exact connected/open connector witness does not match`,
         ),
       );
       continue;
