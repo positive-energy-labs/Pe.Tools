@@ -487,7 +487,7 @@ export function componentFlows(g: Graph): ComponentFlow[] {
       .filter(([k, q]) => q != null && unresolved.get(k)!.size === 0)
       .map(([, q]) => q!);
     const maxResidualCfm =
-      unknownEdges || [...injection.values()].some((q) => q == null)
+      reasons.length > 0 || unknownEdges || [...injection.values()].some((q) => q == null)
         ? null
         : knownResiduals.reduce((max, q) => Math.max(max, Math.abs(q)), 0);
     const scale = boundaries.reduce((max, b) => Math.max(max, Math.abs(b.injectionCfm ?? 0)), 1);

@@ -864,6 +864,11 @@ it("refuses distinct tap ports at one axial station instead of inventing a zero-
   expect(
     d.componentFlows.flatMap((c) => c.reasons).some((r) => r.code === "ambiguous-flow-stations"),
   ).toBe(true);
+  expect(
+    d.componentFlows
+      .filter((c) => c.elementIds.includes(10))
+      .every((c) => c.maxResidualCfm === null),
+  ).toBe(true);
   expect(d.graph.ports.filter((p) => p.elementId === 10).map((p) => p.connector.index)).toEqual([
     0, 1, 2, 3,
   ]);
