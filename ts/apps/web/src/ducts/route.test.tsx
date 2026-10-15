@@ -48,6 +48,7 @@ const connectors = (id: number) =>
       connectedTo: { elementId: pair.find((other) => other !== id)!, connector: 0 },
     }));
 const snapshot: DuctSnapshot = {
+  coordinateEncoding: "native-double",
   document: {
     title: "Duct route slice",
     readAt: "2026-09-26T00:00:00Z",
@@ -90,6 +91,7 @@ const snapshot: DuctSnapshot = {
   segments: [1, 3, 5].map((id) => ({
     id,
     kind: "duct",
+    curveKind: "line",
     shape: "round",
     size: "8 in",
     diameterIn: 8,
@@ -366,6 +368,9 @@ test("an exact document lifetime change fences a pending read, including returni
 
 test("page selection follows iso to tables and ledger, and a ledger run lights plan and iso", async () => {
   const { container, router } = await mount();
+  await waitFor(() =>
+    expect(container.querySelector('[data-segment="3"] path:last-child')).not.toBeNull(),
+  );
   fireEvent.click(container.querySelector('[data-segment="3"] path:last-child')!);
   await waitFor(() => expect(router.state.location.search.selected).toBe("3"));
   await view("tables");

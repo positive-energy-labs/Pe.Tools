@@ -383,6 +383,10 @@ export namespace DuctsSnapshot {
     }
   }
   export namespace Res {
+    /**
+     * Physical XYZ and segment LengthFt preserve native model-foot binary64 values; other facts retain their stated units/rounding.
+     */
+    export type DuctCoordinateEncoding = "native-double";
     export type DuctNodeKind = "equipment" | "terminal" | "fitting" | "accessory" | "cap";
     export type DuctShape = "round" | "rectangular" | "oval" | "other";
     /**
@@ -397,6 +401,10 @@ export namespace DuctsSnapshot {
       | "pe-server"
       | "other";
     export type DuctSegmentKind = "duct" | "flex";
+    /**
+     * The native path form; samples alone do not certify nonlinear curve arclength stations.
+     */
+    export type DuctCurveKind = "line" | "arc" | "flex-polyline" | "other";
     export type DuctIssueKind =
       | "open-end"
       | "loop"
@@ -419,6 +427,7 @@ export namespace DuctsSnapshot {
      */
     export interface Response {
       document: DuctDocument;
+      coordinateEncoding: DuctCoordinateEncoding;
       levels: DuctLevel[];
       groups: DuctGroup[];
       nodes: DuctNode[];
@@ -556,6 +565,7 @@ export namespace DuctsSnapshot {
     export interface DuctSegment {
       id: number;
       kind: DuctSegmentKind;
+      curveKind: DuctCurveKind;
       type?: null | string;
       shape: DuctShape;
       size: string;

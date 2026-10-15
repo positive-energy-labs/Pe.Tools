@@ -7,7 +7,7 @@ export interface FlowEdge {
   id: string;
   from: string;
   to: string;
-  kind: "joint" | "duct-subrun" | "fitting-arm" | "passive";
+  kind: "joint" | "duct-subrun" | "station-arm" | "curve-continuity" | "fitting-arm" | "passive";
   elementId: number;
   lengthFt: number | null;
   signedCfm: number | null;
@@ -27,10 +27,18 @@ export interface ComponentFlow {
   reasons: CircuitReason[];
 }
 const portKey = (id: number, index: number) => `${id}:${index}`;
-// DuctSnapshots.cs:394-395 rounds model-foot XYZ coordinates to 3 decimals.
-// Each point has <=sqrt(3)*0.0005 ft error; connector vs interpolated polyline doubles it.
-const projectionToleranceFt = Math.sqrt(3) * 0.001 + 1e-9;
-const stationSeparationFt = 2 * projectionToleranceFt;
+// For n rounded operations, gamma(n)=n*u/(1-n*u), u=EPSILON/2. A leg projection
+// uses <64 scalar operations (subtract/dot/norm/clamp/reconstruct); include cumulative legs.
+// Scaling by absolute world coordinates bounds cancellation. This is numerical error, not a physical merge tolerance.
+const numericalError = (points: number[][], legs: number) => {
+  const n = 64 * (legs + 1),
+    u = Number.EPSILON / 2;
+  return (
+    ((n * u) / (1 - n * u)) *
+    points.reduce((scale, p) => p.reduce((scale, v) => Math.max(scale, Math.abs(v)), scale), 0)
+  );
+};
+const validPoint = (p: number[]) => Array.isArray(p) && p.length === 3 && p.every(Number.isFinite);
 const close = (a: number, b: number) =>
   Math.abs(a - b) <= 1e-7 * Math.max(1, Math.abs(a), Math.abs(b));
 const distance = (a: number[], b: number[]) => Math.hypot(...a.map((v, i) => v - b[i]!));
@@ -92,80 +100,172 @@ export function componentFlows(g: Graph): ComponentFlow[] {
     }
     if (e.kind === "terminal" || e.kind === "cap") continue;
     if (e.kind === "duct" || e.kind === "flex") {
+      const refuse = (code: string, message: string) =>
+        geometryReasons.set(e.id, [issue(code, e.id, message)]);
+      if (!g.coordinateEncoding) {
+        refuse(
+          "flow-coordinate-encoding",
+          "Native-double coordinate encoding is not asserted; duct continuity is unknown",
+        );
+        continue;
+      }
+      if (
+        !Array.isArray(e.polyline) ||
+        !e.polyline.every(validPoint) ||
+        !ps.every((p) => validPoint(p.point))
+      ) {
+        refuse(
+          "flow-subrun-geometry",
+          "Polyline and connector coordinates must be finite model-foot XYZ triples",
+        );
+        continue;
+      }
+      if (e.curveKind === "arc" || e.curveKind === "flex-polyline") {
+        if (
+          e.uniqueId &&
+          ps.length === 2 &&
+          ps[0]!.index !== ps[1]!.index &&
+          ps.every((p) => p.kind === "end") &&
+          !g.badJoints.has(e.id) &&
+          Number.isFinite(e.lengthFt) &&
+          e.lengthFt > 0 &&
+          e.polyline.length >= 2
+        ) {
+          // Native two-end-port MEPCurve mass continuity only; no chord, subrun, or pressure-loss law.
+          add(portKey(e.id, ps[0]!.index), portKey(e.id, ps[1]!.index), "curve-continuity", e.id);
+        } else
+          refuse(
+            "flow-subrun-geometry",
+            "Nonlinear MEPCurve does not establish one stable two-end-port physical channel",
+          );
+        continue;
+      }
+      if (e.curveKind !== "line" || e.polyline.length !== 2) {
+        refuse(
+          "flow-subrun-geometry",
+          "Native line curve kind is not established; nonlinear multiport samples do not certify ordered arclength stations",
+        );
+        continue;
+      }
       const polyline = canonicalPolyline(e.polyline);
       const legs = polyline.slice(1).map((p, i) => distance(p, polyline[i]!));
       const total = legs.reduce((a, b) => a + b, 0);
-      if (!(total > 0) || !Number.isFinite(total) || !(e.lengthFt >= 0) || ps.length < 2) {
-        geometryReasons.set(e.id, [
-          issue(
-            "flow-subrun-geometry",
-            e.id,
-            "Duct polyline/length or connector census cannot establish ordered subruns",
-          ),
-        ]);
+      const errorFt = numericalError([...polyline, ...ps.map((p) => p.point)], legs.length);
+      if (
+        !(total > errorFt) ||
+        !Number.isFinite(total) ||
+        !Number.isFinite(e.lengthFt) ||
+        !(e.lengthFt > 0) ||
+        ps.length < 2 ||
+        legs.some((l) => !(l > errorFt)) ||
+        Math.abs(total - e.lengthFt) > errorFt
+      ) {
+        refuse(
+          "flow-subrun-geometry",
+          "Positive native polyline/length and supported curve geometry are not established",
+        );
         continue;
       }
       const located = ps
         .map((p) => {
-          let best = { error: Infinity, at: 0 };
-          let run = 0;
+          let best = { error: Infinity, at: 0 },
+            run = 0;
+          const projections: { error: number; at: number }[] = [];
           for (let i = 0; i < legs.length; i++) {
             const a = polyline[i]!,
               b = polyline[i + 1]!;
             const delta = b.map((v, k) => v - a[k]!);
             const square = delta.reduce((sum, v) => sum + v * v, 0);
-            const t =
-              square === 0
-                ? 0
-                : Math.max(
-                    0,
-                    Math.min(
-                      1,
-                      delta.reduce((sum, v, k) => sum + v * (p.point[k]! - a[k]!), 0) / square,
-                    ),
-                  );
+            const t = Math.max(
+              0,
+              Math.min(1, delta.reduce((sum, v, k) => sum + v * (p.point[k]! - a[k]!), 0) / square),
+            );
             const error = distance(
               p.point,
               a.map((v, k) => v + t * delta[k]!),
             );
-            if (error < best.error) best = { error, at: run + t * legs[i]! };
+            const projected = { error, at: run + t * legs[i]! };
+            projections.push(projected);
+            if (error < best.error) best = projected;
             run += legs[i]!;
           }
-          return { p, ...best };
+          const tied = projections.filter((q) => q.error <= best.error + errorFt);
+          const ambiguous = tied.some((q) => Math.abs(q.at - best.at) > 2 * errorFt);
+          return { p, ...best, ambiguous };
         })
         .sort((a, b) => a.at - b.at || a.p.index - b.p.index);
-      // This capture-error bound establishes projection applicability, not physical partner coincidence.
       if (
-        located.some((p) => p.error > projectionToleranceFt) ||
-        located[0]!.at > projectionToleranceFt ||
-        total - located.at(-1)!.at > projectionToleranceFt
+        located.some((p) => p.ambiguous || !Number.isFinite(p.at) || p.error > errorFt) ||
+        located[0]!.at > errorFt ||
+        total - located.at(-1)!.at > errorFt
       ) {
-        geometryReasons.set(e.id, [
-          issue(
-            "flow-subrun-geometry",
-            e.id,
-            "Connectors exceed the snapshot 3-decimal XYZ rounding bound (sqrt(3)*0.001 ft); subrun geometry is not established",
-          ),
-        ]);
+        refuse(
+          "flow-subrun-geometry",
+          "Connectors are not on the complete native polyline within derived binary64 arithmetic error",
+        );
         continue;
       }
-      if (located.some((p, i) => i > 0 && p.at - located[i - 1]!.at <= stationSeparationFt)) {
-        geometryReasons.set(e.id, [
-          issue(
-            "ambiguous-flow-stations",
-            e.id,
-            "Distinct duct connectors have coincident or capture-indistinguishable axial stations; no ordered subruns are asserted",
-          ),
-        ]);
+      const stations: { ports: typeof located; at: number; key: string }[] = [];
+      let ambiguous = false;
+      for (const p of located) {
+        const previous = stations.at(-1),
+          first = previous?.ports[0];
+        if (first && p.at - previous!.ports.at(-1)!.at <= 2 * errorFt) {
+          if (p.at - first.at > 2 * errorFt || distance(p.p.point, first.p.point) > 2 * errorFt) {
+            ambiguous = true;
+            break;
+          }
+          previous!.ports.push(p);
+        } else stations.push({ ports: [p], at: p.at, key: "" });
+      }
+      if (ambiguous) {
+        refuse(
+          "ambiguous-flow-stations",
+          "Overlapping numerical station envelopes do not establish one common physical station",
+        );
         continue;
       }
-      for (let i = 1; i < located.length; i++)
+      for (const station of stations) {
+        station.at = (station.ports[0]!.at + station.ports.at(-1)!.at) / 2;
+        if (station.at <= errorFt) station.at = 0;
+        if (total - station.at <= errorFt) station.at = total;
+      }
+      // A shared station needs one line point inside every port's numerical error ball,
+      // not merely a transitive chain of close pairs.
+      if (
+        stations.some((station) => {
+          const point = polyline[0]!.map(
+            (v, i) => v + (station.at / total) * (polyline[1]![i]! - v),
+          );
+          return (
+            station.ports.length > 1 &&
+            station.ports.some((p) => distance(p.p.point, point) > errorFt)
+          );
+        })
+      ) {
+        refuse(
+          "ambiguous-flow-stations",
+          "No single native line point is within every grouped port's numerical error bound",
+        );
+        continue;
+      }
+      for (const station of stations) {
+        const ids = station.ports.map((p) => p.p.index).sort((a, b) => a - b);
+        station.key =
+          ids.length === 1 ? portKey(e.id, ids[0]!) : `${e.id}:station:${ids.join(",")}`;
+        if (ids.length > 1) {
+          vertices.set(station.key, e.id);
+          // Flow-only mass continuity at a numerically common station; never a friction/equal-pressure edge.
+          for (const index of ids) add(portKey(e.id, index), station.key, "station-arm", e.id);
+        }
+      }
+      for (let i = 1; i < stations.length; i++)
         add(
-          portKey(e.id, located[i - 1]!.p.index),
-          portKey(e.id, located[i]!.p.index),
+          stations[i - 1]!.key,
+          stations[i]!.key,
           "duct-subrun",
           e.id,
-          ((located[i]!.at - located[i - 1]!.at) / total) * e.lengthFt,
+          ((stations[i]!.at - stations[i - 1]!.at) / total) * e.lengthFt,
         );
     } else if (ps.length > 1) {
       const hub = `${e.id}:continuity`;
@@ -210,6 +310,15 @@ export function componentFlows(g: Graph): ComponentFlow[] {
     const members = new Set(todo),
       elementIds = [...new Set(todo.map((k) => vertices.get(k)!))].sort((a, b) => a - b);
     const reasons = [
+      ...(g.coordinateEncoding
+        ? []
+        : [
+            issue(
+              "flow-coordinate-encoding",
+              null,
+              "Native-double coordinate encoding is not asserted",
+            ),
+          ]),
       ...elementIds.flatMap((id) => geometryReasons.get(id) ?? []),
       ...g.reasons.filter((r) => r.elementId == null || elementIds.includes(r.elementId)),
     ];
@@ -253,6 +362,8 @@ export function componentFlows(g: Graph): ComponentFlow[] {
       if (terminal) rolePartitions.push(`terminal:${terminal.port.index}:${terminal.role}`);
       return {
         element: { id, uniqueId: e.uniqueId ?? "" },
+        coordinateEncoding: g.coordinateEncoding,
+        curveKind: "curveKind" in e ? (e.curveKind ?? null) : null,
         kind: e.kind,
         family: "family" in e ? (e.family ?? null) : null,
         type: "type" in e ? (e.type ?? null) : null,
@@ -289,7 +400,7 @@ export function componentFlows(g: Graph): ComponentFlow[] {
     const inferable = new Set<string>();
     const terminalMagnitudes = new Map<string, number | null>();
     for (const k of todo) {
-      if (k.endsWith(":continuity")) continue;
+      if (k.endsWith(":continuity") || k.includes(":station:")) continue;
       const id = vertices.get(k)!,
         e = g.elements.get(id)!,
         p = e.connectors.find((p) => portKey(id, p.index) === k)!;

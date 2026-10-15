@@ -18,7 +18,7 @@ public sealed class DuctGeometryTests {
         new(id, kind, kind.ToString(), "Fam", "Type", part, null, [0, 0, 0], null, "SA 1", "Supply Air", ports, facts);
 
     private static DuctSegment Duct(long id, double d, params DuctConnector[] ports) =>
-        new(id, DuctSegmentKind.Duct, "Round", DuctShape.Round, $"{d}\"ÃƒÆ’Ã‚Â¸", d, null, null, 10,
+        new(id, DuctSegmentKind.Duct, DuctCurveKind.Line, "Round", DuctShape.Round, $"{d}\"ÃƒÆ’Ã‚Â¸", d, null, null, 10,
             [[0, 0, 0], [10, 0, 0]], null, null, "SA 1", "Supply Air",
             new DuctRoughness(0.0003, DuctProvenance.RevitDefault), new DuctRevitValues(null, null, null, null), ports);
 

@@ -66,6 +66,7 @@ public static class DuctSnapshots {
         var analysis = DuctNetwork.Analyze(nodes, segments);
         return new DuctSnapshotData(
             new DuctDocument(doc.Title, readAt, clock.ElapsedMilliseconds, network),
+            DuctCoordinateEncoding.NativeDouble,
             levels,
             analysis.Groups,
             analysis.Nodes,
@@ -152,21 +153,27 @@ public static class DuctSnapshots {
         var type = doc.GetElement(curve.GetTypeId()) as MEPCurveType;
         var roughness = type?.Roughness ?? 0;
         var connectors = HvacConnectors(curve).Select(c => Connector(c, network)).ToList();
+        var nativeCurve = (curve.Location as LocationCurve)?.Curve;
         var polyline = curve is FlexDuct fd
             ? fd.Points.Select(P).ToList()
-            : curve.Location is LocationCurve { Curve: var line }
-                ? new List<double[]> { P(line.GetEndPoint(0)), P(line.GetEndPoint(1)) }
+            : nativeCurve is not null
+                ? new List<double[]> { P(nativeCurve.GetEndPoint(0)), P(nativeCurve.GetEndPoint(1)) }
                 : [];
         return new DuctSegment(
             curve.Id.Value(),
             flex ? DuctSegmentKind.Flex : DuctSegmentKind.Duct,
+            flex ? DuctCurveKind.FlexPolyline : nativeCurve switch {
+                Line => DuctCurveKind.Line,
+                Arc => DuctCurveKind.Arc,
+                _ => DuctCurveKind.Other
+            },
             type?.Name,
             connectors.FirstOrDefault(c => c.Kind == "end")?.Shape ?? DuctShape.Other,
             Text(curve, BuiltInParameter.RBS_CALCULATED_SIZE) ?? "",
             Inches(curve, BuiltInParameter.RBS_CURVE_DIAMETER_PARAM),
             Inches(curve, BuiltInParameter.RBS_CURVE_WIDTH_PARAM),
             Inches(curve, BuiltInParameter.RBS_CURVE_HEIGHT_PARAM),
-            R(curve.get_Parameter(BuiltInParameter.CURVE_ELEM_LENGTH)?.AsDouble() ?? 0),
+            nativeCurve?.Length ?? curve.get_Parameter(BuiltInParameter.CURVE_ELEM_LENGTH)?.AsDouble() ?? 0,
             polyline,
             curve.ReferenceLevel?.Id.Value(),
             null,
@@ -391,6 +398,6 @@ public static class DuctSnapshots {
         ex is Autodesk.Revit.Exceptions.ApplicationException or InvalidOperationException
         || ex.GetType().Namespace?.StartsWith("Autodesk.Revit", StringComparison.Ordinal) == true;
 
-    private static double[] P(XYZ p) => [R(p.X), R(p.Y), R(p.Z)];
+    private static double[] P(XYZ p) => [p.X, p.Y, p.Z];
     private static double R(double v, int digits = 3) => Math.Round(v, digits);
 }

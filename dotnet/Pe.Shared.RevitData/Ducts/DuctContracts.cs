@@ -119,6 +119,7 @@ public sealed record DuctParameterSlots(
 /// </summary>
 public sealed record DuctSnapshotData(
     DuctDocument Document,
+    DuctCoordinateEncoding CoordinateEncoding,
     IReadOnlyList<DuctLevel> Levels,
     IReadOnlyList<DuctGroup> Groups,
     IReadOnlyList<DuctNode> Nodes,
@@ -130,6 +131,12 @@ public sealed record DuctSnapshotData(
     DuctParameterSlots Slots,
     DuctLossStore? Store = null,
     string? StoreError = null);
+
+/// <summary>Physical XYZ and segment LengthFt preserve native model-foot binary64 values; other facts retain their stated units/rounding.</summary>
+[JsonConverter(typeof(StringEnumConverter))]
+public enum DuctCoordinateEncoding {
+    [EnumMember(Value = "native-double")] NativeDouble
+}
 
 /// <summary>
 ///     The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
@@ -266,9 +273,19 @@ public sealed record DuctRevitValues(
     double? FrictionInWgPer100Ft,
     double? PressureDropInWg);
 
+/// <summary>The native path form; samples alone do not certify nonlinear curve arclength stations.</summary>
+[JsonConverter(typeof(StringEnumConverter))]
+public enum DuctCurveKind {
+    [EnumMember(Value = "line")] Line,
+    [EnumMember(Value = "arc")] Arc,
+    [EnumMember(Value = "flex-polyline")] FlexPolyline,
+    [EnumMember(Value = "other")] Other
+}
+
 public sealed record DuctSegment(
     long Id,
     DuctSegmentKind Kind,
+    DuctCurveKind CurveKind,
     string? Type,
     DuctShape Shape,
     string Size,

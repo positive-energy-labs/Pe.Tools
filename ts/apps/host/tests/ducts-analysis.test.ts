@@ -52,6 +52,7 @@ function fixture() {
     connectedTo: { elementId: other, connector: 1 },
   });
   const snapshot: DuctSnapshot = {
+    coordinateEncoding: "native-double",
     document: {
       title: "Purpose fixture",
       readAt: "2026-10-14T00:00:00Z",
@@ -978,4 +979,32 @@ test("v3 rejects invalid witness references and old projection versions while ra
     /witness reference is invalid/,
   );
   expect(f.counts()).toEqual(before);
+});
+
+test("historical v3 rounded-coordinate results remain stored evidence without acquiring or recomputing native-double geometry", async () => {
+  const f = fixture(),
+    fresh = await f.api.read(
+      read({ kind: "fresh", target: f.target }, { kind: "document" }, { projection: "components" }),
+    );
+  const artifact = JSON.parse(await (await f.api.artifact(fresh.analysisId)).text());
+  const input = JSON.parse(artifact.input.json);
+  delete input.snapshot.coordinateEncoding;
+  for (const segment of input.snapshot.segments) delete segment.curveKind;
+  artifact.input.json = JSON.stringify(input);
+  artifact.input.byteSize = Buffer.byteLength(artifact.input.json);
+  artifact.input.sha256 = createHash("sha256").update(artifact.input.json).digest("hex");
+  for (const w of artifact.witnessElements) {
+    delete w.coordinateEncoding;
+    delete w.curveKind;
+  }
+  const bytes = Buffer.from(JSON.stringify(artifact)),
+    id = createHash("sha256").update(bytes).digest("hex");
+  writeFileSync(join(f.root, `${id}.json`), bytes);
+  const before = f.counts(),
+    historical = await f.api.read(
+      read({ kind: "artifact", id }, { kind: "document" }, { projection: "components" }),
+    );
+  expect(historical.rows).toEqual(fresh.rows);
+  expect(f.counts()).toEqual(before);
+  expect(Buffer.from(await (await f.api.artifact(id)).arrayBuffer())).toEqual(bytes);
 });

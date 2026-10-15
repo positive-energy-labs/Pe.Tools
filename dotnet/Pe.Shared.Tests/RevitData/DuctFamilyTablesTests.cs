@@ -66,7 +66,7 @@ public sealed class DuctFamilyTablesTests {
         new(id, kind, kind.ToString(), "Fam", "Type", part, null, [0, 0, 0], null, "SA 1", "Supply Air", ports, facts);
 
     private static DuctSegment Duct(long id, double lengthFt, params DuctConnector[] ports) =>
-        new(id, DuctSegmentKind.Duct, "Round", DuctShape.Round, "8\"ø", 8, null, null, lengthFt,
+        new(id, DuctSegmentKind.Duct, DuctCurveKind.Line, "Round", DuctShape.Round, "8\"ø", 8, null, null, lengthFt,
             [[0, 0, 0], [lengthFt, 0, 0]], null, null, "SA 1", "Supply Air",
             new DuctRoughness(0.0003, DuctProvenance.RevitDefault), new DuctRevitValues(null, null, null, null), ports);
 

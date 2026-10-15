@@ -58,6 +58,7 @@ const segment = (
 ): Segment => ({
   id,
   kind: "duct",
+  curveKind: "line",
   shape: "round",
   size: '8"ø',
   diameterIn: 8,
@@ -85,6 +86,7 @@ const issues: Issue[] = KINDS.map((kind, i) => ({
 }));
 
 const slice = {
+  coordinateEncoding: "native-double",
   document: {
     title: "slice",
     readAt: "2026-09-26T00:00:00Z",

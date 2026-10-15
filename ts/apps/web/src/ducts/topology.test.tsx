@@ -85,6 +85,7 @@ const duct = (id: number, lengthFt: number, size: string): Segment =>
   ({
     id,
     kind: "duct",
+    curveKind: "line",
     type: "Rect",
     shape: "rectangular",
     size,
@@ -103,6 +104,7 @@ const flow = (cfm: number) =>
 
 const OPEN = "open-end:g1:9:1";
 const snapshot = {
+  coordinateEncoding: "native-double",
   document: {
     title: "t",
     readAt: "2026-09-26T00:00:00Z",

@@ -134,6 +134,7 @@ const duct = (
   ({
     id,
     kind: "duct",
+    curveKind: "line",
     ...size,
     lengthFt,
     polyline,
@@ -144,6 +145,7 @@ const duct = (
   }) as unknown as DuctSnapshot["segments"][number];
 
 const snapshot = {
+  coordinateEncoding: "native-double",
   document: { title: "t", readAt: "2026-10-04T00:00:00Z", elapsedMs: 1 },
   levels: [],
   groups: [

@@ -50,6 +50,7 @@ const segment = (id: number, groupId: string, connectors: ReturnType<typeof port
   id,
   uniqueId: `purpose-${id}`,
   kind: "duct",
+  curveKind: "line",
   shape: "round",
   size: "8",
   diameterIn: 8,
@@ -75,6 +76,7 @@ const group = (id: string, rootIds: number[], terminalCount: number) => ({
 });
 function fixture() {
   return {
+    coordinateEncoding: "native-double",
     document: {
       title: "Purpose fixture, NOT Chadds",
       readAt: "2026-10-15T00:00:00Z",
@@ -821,7 +823,7 @@ it("stale component-flow evidence cannot leave a previously complete tree pressu
   expect(after.circuits[0]!.requiredExternalTotalPressureInWg).toBeNull();
 });
 
-it("refuses distinct tap ports at one axial station instead of inventing a zero-length ordered subrun", () => {
+it("retains shared tap station continuity without inventing a zero-length friction subrun", () => {
   const { s, e } = parallelFlowFixture(),
     main = s.segments[0]!,
     owner = s.nodes[0]!;
@@ -859,15 +861,10 @@ it("refuses distinct tap ports at one axial station instead of inventing a zero-
   };
   const d = price(s, {}, work(e)).next.design;
   expect(
-    d.componentFlows.filter((c) => c.elementIds.includes(10)).every((c) => c.status !== "unique"),
-  ).toBe(true);
+    d.componentFlows.flatMap((c) => c.edges).filter((e) => e.kind === "station-arm"),
+  ).toHaveLength(2);
   expect(
-    d.componentFlows.flatMap((c) => c.reasons).some((r) => r.code === "ambiguous-flow-stations"),
-  ).toBe(true);
-  expect(
-    d.componentFlows
-      .filter((c) => c.elementIds.includes(10))
-      .every((c) => c.maxResidualCfm === null),
+    d.circuits.every((c) => c.status === "partial" && c.requiredExternalTotalPressureInWg === null),
   ).toBe(true);
   expect(d.graph.ports.filter((p) => p.elementId === 10).map((p) => p.connector.index)).toEqual([
     0, 1, 2, 3,
@@ -882,7 +879,7 @@ it("refuses distinct tap ports at one axial station instead of inventing a zero-
       .some((e) => e.kind === "duct-subrun" && e.elementId === 10 && e.lengthFt === 0),
   ).toBe(false);
 });
-it("refuses duct connector projection outside the collector coordinate rounding bound", () => {
+it("refuses duct connector projection outside derived native arithmetic error", () => {
   const { s, e } = parallelFlowFixture();
   s.segments[0]!.connectors[0]!.point = [0, 0.005, 0];
   const d = price(s, {}, work(e)).next.design;
@@ -892,9 +889,9 @@ it("refuses duct connector projection outside the collector coordinate rounding 
   expect(d.graph.ports.some((p) => p.elementId === 10 && p.connector.index === 0)).toBe(true);
 });
 
-it("allows projection residual within the explicit conservative coordinate rounding bound", () => {
+it("allows projection residual within derived native arithmetic error", () => {
   const { s, e } = parallelFlowFixture();
-  s.segments[0]!.connectors[0]!.point = [0, 0.001, 0];
+  s.segments[0]!.connectors[0]!.point = [0, 1e-14, 0];
   expect(
     price(s, {}, work(e))
       .next.design.componentFlows.flatMap((c) => c.reasons)
@@ -935,10 +932,11 @@ function refusedContinuityFixture() {
   ];
   return s;
 }
-it.each(["coincident-stations", "missing-polyline", "off-polyline"])(
+it.each(["unknown-encoding", "missing-polyline", "off-polyline"])(
   "keeps joint flows unknown across %s duct continuity instead of deriving false zero",
   (failure) => {
     const s = refusedContinuityFixture();
+    if (failure === "unknown-encoding") Reflect.deleteProperty(s, "coordinateEncoding");
     if (failure === "missing-polyline") s.segments[0]!.polyline = [];
     if (failure === "off-polyline") s.segments[0]!.connectors[2]!.point = [4, 1, 0];
     const cs = price(s, {}, work({})).next.design.componentFlows;
@@ -951,6 +949,7 @@ it.each(["coincident-stations", "missing-polyline", "off-polyline"])(
 );
 it("preserves independently stated boundary/constraint flows and legitimate cap zero at refused continuity", () => {
   const s = refusedContinuityFixture();
+  s.segments[0]!.polyline = [];
   s.nodes[0]!.connectors[0]!.direction = "out";
   s.nodes[1]!.kind = "cap";
   const e: Record<string, DuctCalculation> = {
@@ -991,4 +990,319 @@ it("preserves independently stated boundary/constraint flows and legitimate cap 
   expect(joint(300).source).toBe("staged-constraint");
   expect(joint(400).signedCfm).toBeNull();
   expect(cs.every((c) => c.status === "underdetermined")).toBe(true);
+});
+
+function sharedStationFixture(spacing = 0) {
+  const s = refusedContinuityFixture();
+  const main = s.segments[0]!;
+  main.polyline = [
+    [293.45470444255335, 591.7499486928011, -12.152641961698464],
+    [293.45470444255335, 591.7499486928011, -2.152641961698464],
+  ];
+  const points = [
+    main.polyline[0]!,
+    main.polyline[1]!,
+    [293.45470444255335, 591.7499486928011, -8.152641961698464],
+    [293.45470444255335, 591.7499486928011, -8.152641961698464 + spacing],
+  ];
+  for (const [i, c] of main.connectors.entries()) {
+    c.point = points[i]!;
+    s.nodes[i]!.connectors[0]!.point = points[i]!;
+  }
+  s.nodes[0]!.connectors[0]!.direction = "out";
+  for (const node of s.nodes.slice(1)) {
+    node.kind = "terminal";
+    node.connectors[0]!.direction = "in";
+  }
+  const e: Record<string, DuctCalculation> = {
+    fan: {
+      kind: "fan",
+      element: identity(100),
+      inlet: null,
+      outlet: pin(s, 100, 0),
+      designFlowCfm: 1500,
+      referenceTotalPressureInWg: 0,
+      source: "Synthetic1500CFM design",
+    },
+  };
+  for (const [id, flowCfm] of [
+    [200, 750],
+    [300, 375],
+    [400, 375],
+  ] as const)
+    e[`terminal:${id}`] = {
+      kind: "terminal",
+      element: identity(id),
+      port: pin(s, id, 0),
+      role: "demand",
+      flowCfm,
+      boundaryTotalPressureInWg: 0,
+      loss: null,
+      source: "Synthetic known withdrawal",
+    };
+  return { s, e };
+}
+it("retains opposing shared-station tap ports in a flow-only continuity hub", () => {
+  const { s, e } = sharedStationFixture(6e-14);
+  const d = price(s, {}, work(e)).next.design,
+    c = d.componentFlows.find((c) => c.elementIds.includes(100))!;
+  expect(c.status).toBe("unique");
+  expect(c.maxResidualCfm).toBe(0);
+  expect(c.edges.filter((e) => e.kind === "station-arm").map((e) => e.lengthFt)).toEqual([
+    null,
+    null,
+  ]);
+  const runs = c.edges.filter((e) => e.kind === "duct-subrun");
+  expect(runs.map((e) => Math.abs(e.signedCfm!))).toEqual([1500, 750]);
+  expect(runs.every((e) => e.lengthFt! > 0)).toBe(true);
+  expect(runs[0]!.lengthFt).toBeCloseTo(4, 10);
+  expect(runs[1]!.lengthFt).toBeCloseTo(6, 10);
+  expect(c.edges.filter((e) => e.kind === "joint")).toHaveLength(4);
+  expect(
+    c.edges
+      .filter((e) => e.kind === "joint")
+      .map((e) => Math.abs(e.signedCfm!))
+      .sort((a, b) => a - b),
+  ).toEqual([375, 375, 750, 1500]);
+  const original = c.edges;
+  s.segments[0]!.polyline.reverse();
+  s.segments[0]!.connectors.reverse();
+  s.nodes.reverse();
+  expect(
+    price(s, {}, work(e))
+      .next.design.componentFlows.find((c) => c.elementIds.includes(100))!
+      .edges.slice()
+      .sort((a, b) => a.id.localeCompare(b.id)),
+  ).toEqual(original.slice().sort((a, b) => a.id.localeCompare(b.id)));
+  expect(
+    d.circuits.every((c) => c.status === "partial" && c.requiredExternalTotalPressureInWg === null),
+  ).toBe(true);
+});
+it.each([
+  1.818198813730021e-9, 2.579633928689873e-8, 3.6704583157853854e-5, 0.0017713385100712742,
+  0.0032141193888493014,
+])("preserves genuinely ordered native station spacing %s feet", (spacing) => {
+  const { s, e } = sharedStationFixture(spacing),
+    c = price(s, {}, work(e)).next.design.componentFlows.find((c) => c.elementIds.includes(100))!;
+  expect(c.status).toBe("unique");
+  expect(c.edges.some((e) => e.kind === "station-arm")).toBe(false);
+  const runs = c.edges.filter((e) => e.kind === "duct-subrun");
+  expect(runs).toHaveLength(3);
+  expect(runs.every((e) => e.lengthFt! > 0)).toBe(true);
+});
+it.each([undefined, "rounded-3", "foreign"])(
+  "refuses unasserted coordinate encoding %s without zero-flow propagation",
+  (encoding) => {
+    const { s, e } = sharedStationFixture();
+    Reflect.set(s, "coordinateEncoding", encoding);
+    const cs = price(s, {}, work(e)).next.design.componentFlows;
+    expect(cs.every((c) => c.status !== "unique")).toBe(true);
+    expect(cs.flatMap((c) => c.reasons).some((r) => r.code === "flow-coordinate-encoding")).toBe(
+      true,
+    );
+    expect(
+      cs.flatMap((c) => c.edges).some((e) => e.kind === "duct-subrun" || e.kind === "station-arm"),
+    ).toBe(false);
+  },
+);
+it("refuses malformed/nonfinite geometry and unsupported curve length", () => {
+  for (const mutation of ["nonfinite", "malformed", "curve"]) {
+    const { s, e } = sharedStationFixture();
+    const staged = work(e);
+    if (mutation === "nonfinite") s.segments[0]!.connectors[2]!.point[0] = Infinity;
+    if (mutation === "malformed") s.segments[0]!.polyline[0] = [1, 2];
+    if (mutation === "curve") s.segments[0]!.lengthFt = 12;
+    const cs = price(s, {}, staged).next.design.componentFlows;
+    expect(cs.every((c) => c.status !== "unique")).toBe(true);
+    expect(cs.flatMap((c) => c.reasons).some((r) => r.code === "flow-subrun-geometry")).toBe(true);
+  }
+});
+
+it("preserves all six ports and two actual native shared stations from retained9173326 geometry", () => {
+  // Geometry is the frozen after-Pea11 capture; the1500/375/375/750 roles below are synthetic, not project facts.
+  const { s, e } = sharedStationFixture(),
+    main = s.segments[0]!,
+    owner = s.nodes[0]!;
+  const z = [
+    9.999999999999648, 10.953166666666538, 10.624121941532547, 10.624121941532543,
+    10.651015469267557, 10.651015469267556,
+  ];
+  const points = z.map((v) => [277.87711515041065, 624.6588642540819, v]);
+  main.lengthFt = 0.9531666666668901;
+  main.polyline = [points[0]!, points[1]!];
+  for (let i = 0; i < 4; i++) {
+    main.connectors[i]!.point = points[i]!;
+    s.nodes[i]!.connectors[0]!.point = points[i]!;
+  }
+  for (const [i, id] of [
+    [4, 500],
+    [5, 600],
+  ] as const) {
+    main.connectors.push({ ...port(i, id, 0), kind: "curve", point: points[i]! });
+    s.nodes.push({
+      ...owner,
+      id,
+      uniqueId: `purpose-${id}`,
+      kind: "cap",
+      connectors: [{ ...port(0, 10, i), point: points[i]! }],
+    });
+  }
+  if (e.fan?.kind !== "fan") throw Error("fixture fan");
+  e.fan.outlet = pin(s, 100, 0);
+  for (const id of [200, 300, 400]) {
+    const t = e[`terminal:${id}`];
+    if (t?.kind !== "terminal") throw Error("fixture terminal");
+    t.port = pin(s, id, 0);
+  }
+  const c = price(s, {}, work(e)).next.design.componentFlows.find((c) =>
+    c.elementIds.includes(100),
+  )!;
+  expect(c.status).toBe("unique");
+  expect(c.maxResidualCfm).toBe(0);
+  expect(c.edges.filter((e) => e.kind === "station-arm")).toHaveLength(4);
+  expect(c.edges.filter((e) => e.kind === "duct-subrun")).toHaveLength(3);
+  expect(c.edges.filter((e) => e.kind === "joint")).toHaveLength(6);
+  expect(
+    c.edges
+      .filter((e) => e.kind === "joint")
+      .map((e) => Math.abs(e.signedCfm!))
+      .sort((a, b) => a - b),
+  ).toEqual([0, 0, 375, 375, 750, 1500]);
+  expect(c.componentWitness.find((w) => w.element.id === 10)!.ports.map((p) => p.index)).toEqual([
+    0, 1, 2, 3, 4, 5,
+  ]);
+});
+it("binds component flow Work freshness to coordinate encoding without legacy normalization", () => {
+  const { s, e } = sharedStationFixture(),
+    w = price(s, {}, work(e)).next.design.componentFlows[0]!.componentWitness;
+  expect(w.every((e) => e.coordinateEncoding === "native-double")).toBe(true);
+  const old = structuredClone(w);
+  for (const e of old) e.coordinateEncoding = null;
+  e.flow = {
+    kind: "component-flow",
+    componentWitness: old,
+    constraints: [
+      { element: identity(100), port: pin(s, 100, 0), signedCfm: 1500, source: "Sourced1500" },
+    ],
+    source: "Historical encoding unavailable",
+  };
+  expect(
+    price(s, {}, work(e)).next.design.componentFlows.some((c) =>
+      c.reasons.some((r) => r.code === "stale-component-flow"),
+    ),
+  ).toBe(true);
+  for (const record of old) Reflect.deleteProperty(record, "coordinateEncoding");
+  expect(() => work(e)).toThrow();
+});
+
+it.each([undefined, "arc", "flex-polyline", "other"])(
+  "does not certify ordered stations from unsupported curve kind %s",
+  (kind) => {
+    const { s, e } = sharedStationFixture();
+    Reflect.set(s.segments[0]!, "curveKind", kind);
+    const before = structuredClone(s.segments[0]!.polyline),
+      cs = price(s, {}, work(e)).next.design.componentFlows;
+    expect(cs.every((c) => c.status !== "unique")).toBe(true);
+    expect(cs.flatMap((c) => c.reasons).some((r) => r.code === "flow-subrun-geometry")).toBe(true);
+    expect(s.segments[0]!.polyline).toEqual(before);
+    expect(
+      cs.flatMap((c) => c.edges).some((e) => e.kind === "duct-subrun" || e.kind === "station-arm"),
+    ).toBe(false);
+  },
+);
+it("refuses chained overlapping station envelopes rather than merging numerically distinct groups transitively", () => {
+  const { s } = sharedStationFixture(1e-11),
+    main = s.segments[0]!,
+    owner = s.nodes[0]!;
+  const point = [...main.connectors[2]!.point];
+  point[2]! += 2e-11;
+  main.connectors.push({ ...port(4, 500, 0), kind: "curve", point });
+  s.nodes.push({
+    ...owner,
+    id: 500,
+    uniqueId: "purpose-500",
+    kind: "cap",
+    connectors: [{ ...port(0, 10, 4), point }],
+  });
+  const cs = price(s, {}, null).next.design.componentFlows;
+  expect(cs.flatMap((c) => c.reasons).some((r) => r.code === "ambiguous-flow-stations")).toBe(true);
+  expect(
+    cs.flatMap((c) => c.edges).some((e) => e.kind === "duct-subrun" || e.kind === "station-arm"),
+  ).toBe(false);
+});
+
+it("keeps very short positive native line subruns positive without scalar length rounding", () => {
+  const s = refusedContinuityFixture(),
+    main = s.segments[0]!;
+  main.lengthFt = 1e-4;
+  main.polyline = [
+    [0, 0, 0],
+    [1e-4, 0, 0],
+  ];
+  const points = [
+    [0, 0, 0],
+    [1e-4, 0, 0],
+    [4e-5, 0, 0],
+    [4e-5, 0, 0],
+  ];
+  for (const [i, c] of main.connectors.entries()) {
+    c.point = points[i]!;
+    s.nodes[i]!.kind = "cap";
+    s.nodes[i]!.connectors[0]!.point = points[i]!;
+  }
+  const c = price(s, {}, null).next.design.componentFlows.find((c) => c.elementIds.includes(10))!;
+  expect(c.status).toBe("unique");
+  const runs = c.edges.filter((e) => e.kind === "duct-subrun");
+  expect(runs).toHaveLength(2);
+  expect(runs.every((e) => e.lengthFt! > 0)).toBe(true);
+  expect(runs.reduce((sum, e) => sum + e.lengthFt!, 0)).toBeCloseTo(1e-4, 14);
+});
+
+it.each(["arc", "flex-polyline"] as const)(
+  "retains two-end-port %s mass continuity without inventing a chord loss edge",
+  (curveKind) => {
+    const { s, e } = sharedStationFixture();
+    s.segments[0]!.curveKind = curveKind;
+    s.segments[0]!.lengthFt = 12;
+    s.segments[0]!.connectors = s.segments[0]!.connectors.slice(0, 2);
+    s.nodes = s.nodes.slice(0, 2);
+    delete e["terminal:300"];
+    delete e["terminal:400"];
+    const t = e["terminal:200"];
+    if (t?.kind !== "terminal") throw Error("fixture terminal");
+    t.flowCfm = 1500;
+    const c = price(s, {}, work(e)).next.design.componentFlows[0]!;
+    expect(c.status).toBe("unique");
+    expect(c.maxResidualCfm).toBe(0);
+    expect(
+      c.edges
+        .filter((e) => e.kind === "curve-continuity")
+        .map((e) => ({ q: Math.abs(e.signedCfm!), length: e.lengthFt })),
+    ).toEqual([{ q: 1500, length: null }]);
+    expect(c.edges.some((e) => e.kind === "duct-subrun")).toBe(false);
+    const unknown = price(s, {}, null).next.design.componentFlows[0]!;
+    expect(unknown.status).toBe("underdetermined");
+    expect(unknown.edges.every((e) => e.signedCfm === null)).toBe(true);
+    const duplicate = structuredClone(s);
+    duplicate.segments[0]!.connectors[1]!.kind = "curve";
+    expect(
+      price(duplicate, {}, null)
+        .next.design.componentFlows.flatMap((c) => c.edges)
+        .some((e) => e.kind === "curve-continuity"),
+    ).toBe(false);
+  },
+);
+it("retains nonlinear two-port continuity as a loop leg without claiming hydraulic head", () => {
+  const { s, e } = parallelFlowFixture();
+  s.segments[0]!.curveKind = "arc";
+  s.segments[0]!.lengthFt = 12;
+  const d = price(s, {}, work(e)).next.design;
+  expect(
+    d.componentFlows.some(
+      (c) => c.cycleRank === 1 && c.edges.some((e) => e.kind === "curve-continuity"),
+    ),
+  ).toBe(true);
+  expect(
+    d.circuits.every((c) => c.status === "partial" && c.requiredExternalTotalPressureInWg === null),
+  ).toBe(true);
 });

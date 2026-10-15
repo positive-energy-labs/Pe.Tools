@@ -37,8 +37,8 @@ public sealed class DuctSyntheticFixtureTests {
         new(id, kind, kind.ToString(), family, "Standard", part, 100, at, null, "SA 1", "Supply Air", ports, facts, loss, drop);
 
     private static DuctSegment Duct(long id, double d, double[] a, double[] b, params DuctConnector[] ports) =>
-        new(id, DuctSegmentKind.Duct, "Round Duct", DuctShape.Round, $"{d}\"ø", d, null, null,
-            Math.Round(Math.Sqrt(Math.Pow(b[0] - a[0], 2) + Math.Pow(b[1] - a[1], 2) + Math.Pow(b[2] - a[2], 2)), 3),
+        new(id, DuctSegmentKind.Duct, DuctCurveKind.Line, "Round Duct", DuctShape.Round, $"{d}\"ø", d, null, null,
+            Math.Sqrt(Math.Pow(b[0] - a[0], 2) + Math.Pow(b[1] - a[1], 2) + Math.Pow(b[2] - a[2], 2)),
             [a, b], 100, null, "SA 1", "Supply Air", new DuctRoughness(0.0003, DuctProvenance.RevitDefault),
             new DuctRevitValues(null, null, null, null), ports);
 
@@ -78,6 +78,7 @@ public sealed class DuctSyntheticFixtureTests {
         var a = DuctNetwork.Analyze(nodes, segments);
         return new DuctSnapshotData(
             new DuctDocument("Synthetic", DateTimeOffset.Parse("2026-10-04T00:00:00Z"), 1, true),
+            DuctCoordinateEncoding.NativeDouble,
             [new DuctLevel(100, "Level 1", 0)],
             a.Groups, a.Nodes, a.Segments, a.Flows, a.Issues, [],
             [new DuctSystem(500, "SA 1", "SupplyAir", true, 1, 1, 0.1, [1, 2],

@@ -217,6 +217,8 @@ export function physicalGraph(
     }
   for (const list of adjacent.values()) list.sort((a, b) => a - b);
   return {
+    coordinateEncoding:
+      snapshot.coordinateEncoding === "native-double" ? snapshot.coordinateEncoding : null,
     pinMatches,
     flowDesigns: entries.filter(([, e]) => e.kind === "component-flow"),
     elements,

@@ -96,6 +96,8 @@ const designPoint = z.strictObject({
 export const ductComponentWitnessSchema = z.array(
   z.strictObject({
     element: elementIdentity,
+    coordinateEncoding: z.literal("native-double").nullable(),
+    curveKind: z.enum(["line", "arc", "flex-polyline", "other"]).nullable(),
     kind: z.string(),
     family: z.string().nullable(),
     type: z.string().nullable(),
