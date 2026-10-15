@@ -5,7 +5,7 @@ namespace Pe.Shared.RevitData.Ducts;
 // numbers are pinned beside the web's loss-grid.ts and loss-rules.ts, which price the same fittings for the view.
 
 /// <summary>One connector as Revit hands it to the server: Index (-1 is a takeoff's own branch), flow and area in Revit internal units.</summary>
-public sealed record LossLeg(int Index, double Flow, double Area, bool Round, bool In);
+public sealed record LossLeg(int Index, double Flow, double Area, bool Round, string Direction);
 
 /// <summary>One leg Revit prices: the connector pair of a `DuctFittingAndAccessoryPressureDropItem`.</summary>
 public sealed record LossItem(int Begin, int End);
@@ -43,54 +43,72 @@ public static class AshraeLookup {
 ///     velocity pressure a coefficient multiplies is Revit's own per item; the web charges a tap's straight leg on
 ///     the main's downstream Pv and a transition on its outlet Pv, and whether Revit agrees is a session proof.
 /// </summary>
+public sealed record LossPrice(double? Coefficient, string? Error) {
+    public bool Success => Coefficient.HasValue;
+}
+
 public static class DuctFittingPricing {
     public const string Transition = "Transition";
+    private static LossPrice Unknown(string reason) => new(null, reason);
+    private static LossPrice Known(double coefficient) => Finite(coefficient) && coefficient >= 0
+        ? new(coefficient, null) : Unknown("The table returned a negative or non-finite coefficient");
+    private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
-    public static double Price(string partType, IReadOnlyDictionary<string, AshraeGrid> table, IReadOnlyList<LossLeg> legs, LossItem item) =>
-        DuctNetwork.JunctionPartTypes.Contains(partType) ? Junction(table, legs, item)
-        : partType == Transition ? TransitionCo(table, legs, item)
-        : Single(table, legs, item);
+    /// <summary>Unknown/unsupported inputs are failures, distinct from a known zero-flow coefficient.</summary>
+    public static LossPrice TryPrice(string partType, IReadOnlyDictionary<string, AshraeGrid>? table,
+        IReadOnlyList<LossLeg> legs, LossItem item, double? transitionAngleDeg = null) {
+        if (legs.Count == 0 || legs.Select(l => l.Index).Distinct().Count() != legs.Count)
+            return Unknown("Connector indices are missing or ambiguous");
+        if (item.Begin == item.End || !legs.Any(l => l.Index == item.Begin) || !legs.Any(l => l.Index == item.End))
+            return Unknown("The priced item does not identify two retained connectors");
+        if (legs.Any(l => !Finite(l.Flow) || l.Flow < 0)) return Unknown("Connector flow is unknown or invalid");
+        if (legs.All(l => l.Flow == 0)) return Known(0);
+        if (table is null) return Unknown("The fitting has no readable coefficient table");
+        try {
+            return DuctNetwork.JunctionPartTypes.Contains(partType) ? Junction(table, legs, item)
+                : partType == Transition ? TransitionCo(table, legs, transitionAngleDeg)
+                : partType == "Elbow" ? Single(table, legs, item)
+                : Unknown($"Unsupported fitting part type {partType}");
+        } catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IndexOutOfRangeException) {
+            return Unknown(ex.Message);
+        }
+    }
 
-    /// <summary>
-    ///     Junction (the web's `tap-std`): the inlet is the leg with the most flow, the largest on a tie (an end-of-run
-    ///     takeoff reports its branch and its upstream main equal). The item's other end is the priced leg: the inlet's
-    ///     size makes it the straight leg, Cs over Qs/Qc; any other size is the branch, Cb over Qb/Qc and Ab/Ac.
-    ///     PROVEN[session, srv-spike5 2026-10-05] for a Round Takeoff: legs 0 and 1 are the main's two halves, -1 the
-    ///     branch, items (-1,1) and (-1,0). ponytail: an equal-size branch tee reads as two straight legs; the connector
-    ///     angle would tell them apart, unproven.
-    /// </summary>
-    public static double Junction(IReadOnlyDictionary<string, AshraeGrid> table, IReadOnlyList<LossLeg> legs, LossItem item) {
-        var inlet = legs.OrderByDescending(l => l.Flow).ThenByDescending(l => l.Area).FirstOrDefault();
-        if (inlet is null || inlet.Flow <= 0) return 0;
+    // Existing junction policy: most-flow inlet, largest on a tie. Shape/role improvements are separate.
+    private static LossPrice Junction(IReadOnlyDictionary<string, AshraeGrid> table, IReadOnlyList<LossLeg> legs, LossItem item) {
+        var inlet = legs.OrderByDescending(l => l.Flow).ThenByDescending(l => l.Area).First();
         var legIndex = item.End == inlet.Index ? item.Begin : item.End;
         var leg = legs.FirstOrDefault(l => l.Index == legIndex);
-        // A leg with no flow prices 0 (its Pv is 0 anyway; the grid edge would read thousands). PROVEN[session, srv-1-apply 2026-10-12].
-        if (leg is null || leg.Index == inlet.Index || leg.Flow <= 0) return 0;
+        if (leg is null || leg.Index == inlet.Index) return Unknown("The priced junction leg is unresolved");
+        // Observed zero-flow legs are known zero, not an unsupported-table fallback.
+        if (leg.Flow == 0) return Known(0);
+        if (!Finite(inlet.Area) || inlet.Area <= 0 || !Finite(leg.Area) || leg.Area <= 0)
+            return Unknown("Junction cross-section is unknown or invalid");
         var q = leg.Flow / inlet.Flow;
         var straight = leg.Round == inlet.Round && Math.Abs(leg.Area - inlet.Area) <= 0.02 * inlet.Area;
-        if (straight) return table.TryGetValue("Cs", out var cs) ? AshraeLookup.Value(cs, q, cs.Y is null ? null : 1) : 0;
-        return table.TryGetValue("Cb", out var cb) ? AshraeLookup.Value(cb, q, cb.Y is null ? null : leg.Area / inlet.Area) : 0;
+        var result = straight ? "Cs" : "Cb";
+        if (!table.TryGetValue(result, out var grid)) return Unknown($"The table has no {result} junction result");
+        return Known(AshraeLookup.Value(grid, q, grid.Y is null ? null : straight ? 1 : leg.Area / inlet.Area));
     }
 
-    /// <summary>
-    ///     Transition (the web's `trx-*`): Co over the included angle and Ao/A1, outlet area over inlet area. The angle
-    ///     is the family's 45°, as the web prices it; the inlet is the leg Revit marks In. UNPROVEN[session]: what a
-    ///     transition reports as FlowDirection and Angle; a wrong inlet inverts the ratio.
-    /// </summary>
-    public static double TransitionCo(IReadOnlyDictionary<string, AshraeGrid> table, IReadOnlyList<LossLeg> legs, LossItem item) {
-        if (!table.TryGetValue("Co", out var co) || legs.Count < 2) return 0;
-        var inlet = legs.FirstOrDefault(l => l.In) ?? legs.First(l => l.Index == item.Begin);
-        var outlet = legs.First(l => l.Index != inlet.Index);
-        if (inlet.Area <= 0) return 0;
-        return AshraeLookup.Value(co, 45, co.Y is null ? null : outlet.Area / inlet.Area);
+    private static LossPrice TransitionCo(IReadOnlyDictionary<string, AshraeGrid> table,
+        IReadOnlyList<LossLeg> legs, double? angleDeg) {
+        var pair = DuctNetwork.TwoPortFlow(legs, l => l.Direction);
+        if (pair is null) return Unknown("Transition requires exactly one In and one Out connector");
+        if (angleDeg is not { } angle || !Finite(angle) || angle <= 0 || angle > 180)
+            return Unknown("Transition has no valid measured included angle in degrees");
+        var (inlet, outlet) = pair.Value;
+        if (!Finite(inlet.Area) || inlet.Area <= 0 || !Finite(outlet.Area) || outlet.Area <= 0)
+            return Unknown("Transition cross-section is unknown or invalid");
+        if (!table.TryGetValue("Co", out var co)) return Unknown("The table has no Co transition result");
+        return Known(AshraeLookup.Value(co, angle, co.Y is null ? null : outlet.Area / inlet.Area));
     }
 
-    /// <summary>One-leg fittings (elbows without their own coefficient): Co over the inlet diameter in inches, the web's `elbowInput`. An r/D table needs the family and reads 0 here.</summary>
-    public static double Single(IReadOnlyDictionary<string, AshraeGrid> table, IReadOnlyList<LossLeg> legs, LossItem item) {
-        if (!table.TryGetValue("Co", out var co) || co.Y is not null || co.XLabel.IndexOf("r/D", StringComparison.OrdinalIgnoreCase) >= 0) return 0;
-        var inlet = legs.FirstOrDefault(l => l.Index == item.Begin) ?? legs.FirstOrDefault();
-        if (inlet is null || inlet.Area <= 0) return 0;
-        // Diameter from area, in inches; a rectangular leg prices on its equivalent round diameter.
-        return AshraeLookup.Value(co, Math.Sqrt(4 * inlet.Area / Math.PI) * 12);
+    private static LossPrice Single(IReadOnlyDictionary<string, AshraeGrid> table, IReadOnlyList<LossLeg> legs, LossItem item) {
+        if (!table.TryGetValue("Co", out var co) || co.Y is not null || co.XLabel.IndexOf("r/D", StringComparison.OrdinalIgnoreCase) >= 0)
+            return Unknown("The elbow table needs geometry this pricing input does not carry");
+        var inlet = legs.First(l => l.Index == item.Begin);
+        if (!inlet.Round || !Finite(inlet.Area) || inlet.Area <= 0) return Unknown("The round elbow cross-section is unknown or invalid");
+        return Known(AshraeLookup.Value(co, Math.Sqrt(4 * inlet.Area / Math.PI) * 12));
     }
 }

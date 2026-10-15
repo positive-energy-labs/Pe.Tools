@@ -3,6 +3,7 @@ import type {
   DuctsAnalysisResponse,
   DuctsRouteDocument,
 } from "@pe/agent-contracts";
+import { transitionGeometry } from "./geometry.ts";
 import { proposedStatic, unitOf, type Priced } from "./pricing.ts";
 import { groupTree, terminalCfm } from "./topology.ts";
 import type { GroupReadiness } from "./readiness.ts";
@@ -144,6 +145,19 @@ export function assessDucts(
     "Terminal design flow is unknown",
   );
   const selectedNodes = snapshot.nodes.filter((node) => groupIds.has(node.groupId ?? ""));
+  const transitions = selectedNodes
+    .filter((node) => node.partType === "Transition")
+    .map(transitionGeometry);
+  reason(
+    "unknown-transition-angle",
+    transitions.filter((input) => input.angleDeg == null).length,
+    "Transition included angle is not measured; type labels and a fixed 45-degree value do not establish table inputs",
+  );
+  reason(
+    "unknown-transition-orientation",
+    transitions.filter((input) => !input.inlet || !input.outlet).length,
+    "Transition direction is unknown or contradictory; the root walk does not establish a physical In/Out pair",
+  );
   reason(
     "unreadable-model-store",
     snapshot.storeError ? 1 : 0,

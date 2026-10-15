@@ -18,6 +18,7 @@ import { groupTree } from "@pe/ducts-domain/topology";
 import synthetic from "./fixtures/synthetic-snapshot.json";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import rootAttached from "./fixtures/root-attached-fittings.json";
+import physicalTransitions from "./fixtures/physical-transitions.json";
 
 // ---- test-only .tbl reader (ctable.py parse) ------------------------------------------------
 function parseTbl(name: string): Record<string, Grid> {
@@ -61,6 +62,7 @@ const grids: Grids = {
   "CD3-21": parseTbl("Cd3-21"),
   "SD5-9": parseTbl("Sd5-9"),
   "SR4-3": parseTbl("Sr4-3"),
+  "SD4-2": parseTbl("Sd4-2"),
 };
 
 it("interpolates the real tables to the values ctable.md lists", () => {
@@ -170,7 +172,8 @@ const snapshot = {
     }),
     node(5, "fitting", {
       partType: "Transition",
-      connectors: [conn(0, [3, 1], round(8)), conn(1, [6, 0], rect(12, 4))],
+      connectors: [{ ...conn(0, [3, 1], round(8)), direction: "in" }, conn(1, [6, 0], rect(12, 4))],
+      facts: [{ key: "angle", value: 45, unit: "deg", provenance: "designer-stated" }],
     }),
     node(6, "terminal", {
       terminalDrop: { catalogDropInWg: 0.05, writable: false },
@@ -529,25 +532,85 @@ it.each(rootAttached.cases)(
       const result = computeLosses(snap, grids);
       const row = result.paths[terminalId]!.rows.find((row) => row.id === fitting.id)!;
       if (fitting.id === 12398836) {
-        expect(row.error).toBeUndefined();
-        expect(row.table).toBe("SR4-3");
-        expect(row.inputs?.y).toBeCloseTo(576 / (100 * Math.PI), 12);
-        expect(row.c).toBeCloseTo(1.32 * (576 / (100 * Math.PI) - 1), 12);
-        const missing = structuredClone(snap);
-        missing.nodes
-          .find((node) => node.id === fitting.id)!
-          .connectors.find(
-            (port) => port.index === captured.inletIndex,
-          )!.connectedTo!.connector = 999;
-        const unpriced = computeLosses(missing, grids).paths[terminalId]!.rows.find(
-          (row) => row.id === fitting.id,
+        expect(row.error).toContain("measured included angle");
+        // Explicit manual test angle overlays the retained geometry; it is not a native observation.
+        fitting.facts.push({ key: "angle", value: 45, unit: "deg", provenance: "designer-stated" });
+        const physical = computeLosses(snap, grids).paths[terminalId]!.rows.find(
+          (r) => r.id === fitting.id,
         )!;
-        expect(unpriced.error).toBeDefined();
+        expect(physical.error).toBeUndefined();
+        expect(physical.table).toBe("SD4-2");
+        expect(physical.inputs?.y).toBeCloseTo((Math.PI * 100) / 576, 12);
+        expect(physical.c).toBeCloseTo(0.05455015305021264, 12);
+        const contradictory = structuredClone(snap);
+        contradictory.nodes
+          .find((n) => n.id === fitting.id)!
+          .connectors.forEach((c) => {
+            c.direction = "in";
+          });
+        expect(
+          computeLosses(contradictory, grids).paths[terminalId]!.rows.find(
+            (r) => r.id === fitting.id,
+          )!.error,
+        ).toContain("exactly one In and one Out");
       } else {
         // Attachment truth is retained, but rectangular pricing is a separate frontier.
-        expect(row.error).toContain("no rule matches Transition");
+        expect(row.error).toBeDefined();
         expect(row.dp).toBe(0);
       }
+    }
+  },
+);
+
+// The manual angle below is an explicit test input, not an observation added to retained Chadds.
+it("does not substitute a root-relative transition inlet or an assumed angle", () => {
+  const missingAngle = structuredClone(snapshot);
+  const trx = missingAngle.nodes.find((n) => n.id === 5)!;
+  trx.connectors[0]!.direction = "in";
+  trx.connectors[1]!.direction = "out";
+  trx.facts = [];
+  const row = () => computeLosses(missingAngle, grids).paths[6]!.rows.find((r) => r.id === 5)!;
+  expect(row().error).toContain("measured included angle");
+  trx.facts = [{ key: "angle", value: 45, unit: "deg", provenance: "designer-stated" }];
+  trx.connectors[0]!.direction = "out";
+  expect(row().error).toContain("exactly one In and one Out");
+});
+
+it.each(physicalTransitions.nodes)(
+  "uses retained transition $id physical directions independently of its non-root walk",
+  (captured) => {
+    const fitting = structuredClone(captured) as DuctSnapshot["nodes"][number];
+    fitting.groupId = "g1";
+    fitting.facts = [{ key: "angle", value: 45, unit: "deg", provenance: "designer-stated" }];
+    fitting.connectors[0]!.connectedTo = { elementId: 1, connector: 1 };
+    fitting.connectors[1]!.connectedTo = { elementId: 6, connector: 0 };
+    const network = structuredClone(snapshot);
+    network.groups[0]!.terminalCount = 1;
+    network.nodes = [
+      network.nodes.find((n) => n.id === 100)!,
+      fitting,
+      network.nodes.find((n) => n.id === 6)!,
+    ];
+    network.nodes.find((n) => n.id === 6)!.connectors[0]!.connectedTo = {
+      elementId: fitting.id,
+      connector: fitting.connectors[1]!.index,
+    };
+    network.segments = [network.segments.find((s) => s.id === 1)!];
+    network.segments[0]!.connectors[1]!.connectedTo = {
+      elementId: fitting.id,
+      connector: fitting.connectors[0]!.index,
+    };
+    const row = () =>
+      computeLosses(network, grids).paths[6]!.rows.find((r) => r.id === fitting.id)!;
+    if (fitting.id === 12809620) {
+      expect(row().error).toBeUndefined();
+      expect(row().table).toBe("SR4-3");
+      expect(row().inputs?.y).toBeCloseTo(4 / Math.PI, 12);
+      fitting.connectors.reverse();
+      expect(row().inputs?.y).toBeCloseTo(4 / Math.PI, 12);
+    } else {
+      expect(row().error).toContain("exactly one In and one Out");
+      expect(row().dp).toBe(0);
     }
   },
 );

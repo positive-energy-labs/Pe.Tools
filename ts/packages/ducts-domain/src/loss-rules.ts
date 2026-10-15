@@ -25,8 +25,11 @@ export interface FittingFacts {
   rOverD: number | null;
   /** Outlet area over inlet area. */
   aoOverA1: number | null;
+  /** Measured included transition angle, degrees; never inferred from a type name. */
+  angleDeg?: number | null;
+  inputError?: string;
   inlet: Port;
-  /** The port toward the terminal; null for a tap (its `inlet` is the branch) and a dead end. */
+  /** Physical outlet for a transition; otherwise the port toward the terminal. Null for a tap/dead end. */
   outlet: Port | null;
   /** The main duct a tap hangs off. */
   main: Port | null;
@@ -86,7 +89,7 @@ const transition = (f: FittingFacts) => f.partType === "Transition";
 /** Elbow input: r/D for the r/D table, else the diameter. */
 const elbowInput = (f: FittingFacts, _flows: Flows, table: string) =>
   table === "CD3-12" ? { res: "Co", x: f.rOverD ?? NaN } : { res: "Co", x: dIn(f) };
-const angleInput = (f: FittingFacts) => ({ res: "Co", x: 45, y: f.aoOverA1 ?? NaN });
+const angleInput = (f: FittingFacts) => ({ res: "Co", x: f.angleDeg ?? NaN, y: f.aoOverA1 ?? NaN });
 
 export const LOSS_RULES: readonly LossRule[] = [
   {
@@ -151,7 +154,7 @@ export const LOSS_RULES: readonly LossRule[] = [
   {
     key: "trx-grille",
     family: "Rectangular to Round Transition - Angle",
-    type: "45 Degree",
+    type: "Measured angle",
     cond: "expansion into the grille boot (round to rectangular)",
     table: "SR4-3",
     options: TRANSITIONS,
@@ -163,7 +166,7 @@ export const LOSS_RULES: readonly LossRule[] = [
   {
     key: "trx-inlet",
     family: "Rectangular to Round Transition - Angle",
-    type: "45 Degree",
+    type: "Measured angle",
     cond: "contraction at the unit outlet (rectangular to round)",
     table: "SD4-2",
     options: TRANSITIONS,
@@ -175,7 +178,7 @@ export const LOSS_RULES: readonly LossRule[] = [
   {
     key: "trx-round",
     family: "Round Transition - Angle",
-    type: "45 Degree",
+    type: "Measured angle",
     cond: "",
     table: "SD4-1",
     options: TRANSITIONS,

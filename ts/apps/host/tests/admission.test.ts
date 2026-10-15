@@ -45,13 +45,18 @@ test.each(
 });
 
 test.each(
-  Object.entries(peRoutes).filter(([, route]) => route.method !== "GET" && route.permission === "read"),
-)("anonymous declared read %s retains read admission regardless of HTTP method", async (_id, route) => {
-  const path = route.path.replace(/:[\w]+/g, "fixture");
-  expect(await readRequestIdentity(local, path, options, route.method)).toMatchObject({
-    caller: { kind: "anonymous" },
-  });
-});
+  Object.entries(peRoutes).filter(
+    ([, route]) => route.method !== "GET" && route.permission === "read",
+  ),
+)(
+  "anonymous declared read %s retains read admission regardless of HTTP method",
+  async (_id, route) => {
+    const path = route.path.replace(/:[\w]+/g, "fixture");
+    expect(await readRequestIdentity(local, path, options, route.method)).toMatchObject({
+      caller: { kind: "anonymous" },
+    });
+  },
+);
 
 test("the table's human read and consent requirements are enforced at admission", async () => {
   expect(

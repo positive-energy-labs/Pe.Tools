@@ -11,6 +11,7 @@
  * - fan = the largest path total in a group; the critical terminal is its argmax.
  * Physics in loss-physics.ts, interpolation in loss-grid.ts, rule data in loss-rules.ts.
  */
+import { transitionGeometry } from "./geometry.ts";
 import { GridError, lookupGrid, type Grids } from "./loss-grid.ts";
 import { friction, sectionOf } from "./loss-physics.ts";
 import {
@@ -136,15 +137,19 @@ function fittingFacts(
   const attached = prev == null && root?.element === node.id && root.equipment != null;
   // A root-attached fitting has no preceding path element. Its inlet is the exact equipment
   // connector held by the tree, including the port index; an absent match stays unknown.
-  const inlet = attached
+  const walkedInlet = attached
     ? node.connectors.find(
         (c) => c.connectedTo?.elementId === root.equipment && c.connectedTo.connector === root.port,
       )
     : (facing ?? (tap ? node.connectors.find((c) => c !== main) : (main ?? node.connectors[0])));
-  const outlet = tap
+  const walkedOutlet = tap
     ? undefined
     : (toward(next) ??
-      node.connectors.find((c) => c !== inlet && c.connectedTo?.elementId !== prev));
+      node.connectors.find((c) => c !== walkedInlet && c.connectedTo?.elementId !== prev));
+  const transition = node.partType === "Transition";
+  const physical = transition ? transitionGeometry(node) : null;
+  const inlet = physical ? physical.inlet : walkedInlet;
+  const outlet = physical ? physical.outlet : walkedOutlet;
   const inletPort = portOf(inlet) ?? { shape: "other", section: null };
   const outletPort = portOf(outlet);
   const ratio =
@@ -167,7 +172,9 @@ function fittingFacts(
     kind: node.kind === "accessory" ? "accessory" : "fitting",
     partType: node.partType ?? null,
     rOverD: factOf(node, "rOverD"),
-    aoOverA1: factOf(node, "aoOverA1") ?? ratio,
+    aoOverA1: transition ? ratio : (factOf(node, "aoOverA1") ?? ratio),
+    angleDeg: physical?.angleDeg ?? null,
+    inputError: physical?.error,
     inlet: inletPort,
     outlet: outletPort,
     main: mainPort,
@@ -393,6 +400,18 @@ function pathRows(
         kind: "fitting",
         dp: stated,
         desc: `${node.partType ?? node.kind} ${node.id}, stated drop`,
+      });
+      return;
+    }
+    const inputError = facts.inputError;
+    if (inputError) {
+      fail({ id: node.id, message: inputError });
+      rows.push({
+        id: node.id,
+        kind: LEG_KIND[leg],
+        dp: 0,
+        desc: `${node.id}: ${inputError}`,
+        error: inputError,
       });
       return;
     }

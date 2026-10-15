@@ -201,8 +201,7 @@ public static class DuctSnapshots {
                 facts.Add(Fact("fanFlow", Converted(Named(e, slots.FanFlow), UnitTypeId.CubicFeetPerMinute), "cfm", DuctProvenance.DesignerStated));
                 break;
             case DuctNodeKind.Fitting:
-                if (e.LookupParameter("Angle") is { HasValue: true, StorageType: StorageType.Double } angle)
-                    facts.Add(new DuctFact("angle", R(angle.AsDouble() * 180 / Math.PI), null, "deg", DuctProvenance.Geometry));
+                if (DuctFittingGeometry.Angle(e) is { } angle) facts.Add(angle);
                 // Revit's elbow families carry "Center Radius" as an instance length; r/D is derived in DuctNetwork.
                 if (e.LookupParameter("Center Radius") is { HasValue: true, StorageType: StorageType.Double } radius && radius.AsDouble() > 0)
                     facts.Add(new DuctFact(DuctNetwork.CenterRadius, R(radius.AsDouble() * 12), null, "in", DuctProvenance.Geometry));
@@ -278,7 +277,7 @@ public static class DuctSnapshots {
                 "OST_DuctTerminal instances: FamilyInstance.Space (Number Name)",
                 new(terminals.Count(t => t.Facts.Any(f => f.Key == "space")), terminals.Count), DuctProvenance.Geometry),
             new("fitting-geometry", "Fitting geometry",
-                $"OST_DuctFitting: LookupParameter(\"Angle\"), LookupParameter(\"Center Radius\"), LookupParameter(\"{slots.FittingCoefficient}\") (familyCoefficient); connector sizes; DuctNetwork derives rOverD (round elbows), inlet and aoOverA1 (rooted transitions), takeoff, mainDiameter, mainArea and abOverAc (fittings on a duct's curve connector)",
+                $"OST_DuctFitting: instance-to-symbol Angle parameter (Angle spec, exact origin retained), LookupParameter(\"Center Radius\"), LookupParameter(\"{slots.FittingCoefficient}\") (familyCoefficient); connector sizes; DuctNetwork derives rOverD (round elbows), inlet and aoOverA1 (explicit physical In/Out transitions), takeoff, mainDiameter, mainArea and abOverAc (fittings on a duct's curve connector)",
                 new(fittings.Count(n => n.Facts.Any(f => f.Key is DuctNetwork.ROverD or DuctNetwork.AoOverA1 or DuctNetwork.AbOverAc)), fittings.Count), DuctProvenance.Geometry),
             new("loss-method", "Fitting and accessory loss method",
                 "RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM; ExternalServiceRegistry DuctFittingAndAccessoryPressureDropService GetServer(id).GetDataSchema(), Element.GetEntity(schema) string fields (ASHRAETableName, Coefficient); RBS_DUCT_PRESSURE_DROP",
@@ -323,7 +322,7 @@ public static class DuctSnapshots {
             c.ConnectorType == ConnectorType.Curve ? "curve" : "end",
             P(c.Origin),
             shape,
-            diameter is { } d ? $"{d:0.#}\"ø" : width is { } w && height is { } h ? $"{w:0.#}x{h:0.#}" : "",
+            diameter is { } d ? $"{d:0.#}\"ÃƒÂ¸" : width is { } w && height is { } h ? $"{w:0.#}x{h:0.#}" : "",
             diameter,
             width,
             height,

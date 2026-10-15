@@ -14,7 +14,7 @@ namespace Pe.Revit.Global.Lib.Mep;
 ///     coefficient parameter (the FittingCoefficient slot, default Pe_C) and the ASHRAE table of its rule. A positive
 ///     parameter wins and charges every leg (the family owns the number: a stamped elbow); otherwise each leg is priced
 ///     from the table and the connectors (<see cref="DuctFittingPricing" />: a tap's branch and straight legs, a
-///     transition, an unstamped elbow). Nothing to read charges 0.
+///     transition, an unstamped elbow). Unknown or unsupported pricing returns failure; a known zero-flow result may charge 0.
 ///     The GUIDs never change: a fitting stores the server id in RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM, and a
 ///     changed id orphans every fitting that points at it. A Revit without this add-in shows Revit's missing-server
 ///     dialog and charges 0 (accepted, ruling 2026-10-08; the export route freezes numbers for that case).
@@ -104,18 +104,24 @@ public sealed class PeLossServer : IDuctFittingAndAccessoryPressureDropServer {
             return true;
         }
         var grids = table is null ? null : Table(table);
-        var legs = grids is null
-            ? []
-            : fitting.GetAllConnectorData().Select(c => new LossLeg(c.Index, c.Flow, Area(c), c.Profile == ConnectorProfileType.Round, c.FlowDirection == FlowDirectionType.In)).ToList();
+        var legs = fitting.GetAllConnectorData().Select(c => new LossLeg(c.Index, c.Flow, Area(c), c.Profile == ConnectorProfileType.Round,
+            c.FlowDirection.ToString().ToLowerInvariant())).ToList();
         var partType = fitting.PartType.ToString();
-        foreach (var item in items) {
-            var c = grids is null ? 0 : Try(() => (double?)DuctFittingPricing.Price(partType, grids, legs, new LossItem(item.BeginConnectorIndex, item.EndConnectorIndex))) ?? 0;
-            item.Coefficient = c > 0 && !double.IsNaN(c) && !double.IsInfinity(c) ? c : 0;
+        // One parameter resolver feeds both native pricing and snapshot facts; no default angle.
+        var angle = partType == DuctFittingPricing.Transition && element is not null ? DuctFittingGeometry.Angle(element)?.Value : null;
+        var prices = items.Select(item => DuctFittingPricing.TryPrice(partType, grids, legs,
+            new LossItem(item.BeginConnectorIndex, item.EndConnectorIndex), angle)).ToList();
+        var unknown = prices.FirstOrDefault(price => !price.Success);
+        if (unknown is not null || prices.Count == 0) {
+            Log.Debug("Pe loss server {Id} {Part} table {Table} refused: {Reason}", id.Value(), partType, table,
+                unknown?.Error ?? "No priced items");
+            return false;
         }
+        for (var i = 0; i < items.Count; i++) items[i].Coefficient = prices[i].Coefficient!.Value;
         // The session proof reads this: what Revit reports per leg and what the server charged (Debug, off in production).
         if (Log.IsEnabled(Serilog.Events.LogEventLevel.Debug))
             Log.Debug("Pe loss server {Id} {Part} table {Table}: legs {Legs}; items {Items}", id.Value(), partType, table,
-                legs.Select(l => $"{l.Index}:q={l.Flow:0.###},a={l.Area:0.####},{(l.Round ? "round" : "rect")},{(l.In ? "in" : "out")}"),
+                legs.Select(l => $"{l.Index}:q={l.Flow:0.###},a={l.Area:0.####},{(l.Round ? "round" : "rect")},{l.Direction}"),
                 items.Select(i => $"{i.BeginConnectorIndex}->{i.EndConnectorIndex}:c={i.Coefficient:0.####},pv={i.VelocityPressure:0.###}"));
         return true;
     }
