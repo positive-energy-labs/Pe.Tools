@@ -1283,13 +1283,17 @@ test("apply-request builds a canonical immutable candidate without reacquiring",
     workRevision: 3,
     customerKeep: { exact: [1, "untouched"] },
   };
-  f.sources.readWork = vi.fn(async () => ({ doc, revision: 7 }));
+  let workReadCalls = 0;
+  f.sources.readWork = async () => {
+    workReadCalls++;
+    return { doc, revision: 7 };
+  };
   const initial = await f.api.read(read({ kind: "fresh", target: f.target }));
   const original = Buffer.from(await (await f.api.artifact(initial.analysisId)).arrayBuffer());
   const artifact = JSON.parse(original.toString("utf8"));
   const input = JSON.parse(gunzipSync(Buffer.from(artifact.input.data, "base64")).toString("utf8"));
   const before = f.counts();
-  vi.mocked(f.sources.readWork).mockClear();
+  expect(workReadCalls).toBe(2);
   const candidate = ductsAnalysisResponseSchema.parse(
     await f.api.read(candidateRead(initial.analysisId)),
   );
@@ -1331,7 +1335,7 @@ test("apply-request builds a canonical immutable candidate without reacquiring",
     original,
   );
   expect(f.counts()).toEqual(before);
-  expect(f.sources.readWork).not.toHaveBeenCalled();
+  expect(workReadCalls).toBe(2);
   await expect(f.api.read(read({ kind: "artifact", id: meta.artifact.id }))).rejects.toThrow(
     "Unsupported analysis format",
   );
