@@ -6,6 +6,7 @@ import {
   admitAnonymousCall,
   currentCaller,
   mintContext,
+  mintBrowserContext,
   retireContext,
   Refused,
 } from "../src/control.ts";
@@ -579,6 +580,79 @@ test("MCP analysis retains admitted caller through the real route and nested nat
     expect(seen).toEqual(["ducts.snapshot", "ducts.tables", "ducts.snapshot", "ducts.tables"]);
   } finally {
     retireContext(token);
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  }
+});
+
+test("browser human analysis retains its admitted identity through nested native reads", async () => {
+  const f = fixture();
+  const base = "http://127.0.0.1:5180";
+  const options = {
+    port: () => 5180,
+    frontendOrigin: () => undefined,
+    share: { ...unavailableShare, observe: () => {} },
+  };
+  const cookie = mintBrowserContext({ kind: "local" }).split(";")[0]!;
+  const routes = createPeRoutes({
+    registrations: [],
+    heads: { observe: () => () => {} },
+    store: { getState: async () => null, setState: async () => {} },
+    ductsAnalysis: { ...f.sources, call: ductsNativeRead(base) },
+  });
+  const seen: string[] = [];
+  vi.stubEnv("PE_CONTEXT", "");
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    const identity = await readRequestIdentity(
+      { ...Object.fromEntries(request.headers), host: url.host },
+      url.pathname,
+      options,
+      request.method,
+    );
+    if ("refusal" in identity) return Response.json(identity, { status: 403 });
+    return withInvocationContext({ ...identity, hostBaseUrl: base }, async () => {
+      expect(currentCaller()).toMatchObject({ kind: "human", via: "local" });
+      expect(request.headers.get("cookie")).toBe(cookie);
+      expect(request.headers.has("x-pe-context")).toBe(false);
+      const body = (await request.json()) as { key: string };
+      admitAnonymousCall(currentCaller(), body.key);
+      seen.push(body.key);
+      return Response.json(
+        body.key === "ducts.snapshot" ? f.snapshot : { tables: {}, missing: [], unsupported: [] },
+      );
+    });
+  });
+  try {
+    const initial = new Request(`${base}/pe/ducts/analysis`, {
+      method: "POST",
+      headers: {
+        origin: base,
+        referer: `${base}/ducts`,
+        cookie: `${cookie}; unrelated=do-not-forward`,
+        "x-pe-runtime-service": hostOwnership.serviceName,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        source: { kind: "fresh", target: f.target },
+        selector: { kind: "document" },
+      }),
+    });
+    const identity = await readRequestIdentity(
+      { ...Object.fromEntries(initial.headers), host: "127.0.0.1:5180" },
+      "/pe/ducts/analysis",
+      options,
+      "POST",
+    );
+    if ("refusal" in identity) throw Error(identity.refusal.code);
+    expect(identity.caller.kind).toBe("human");
+    const response = await withInvocationContext({ ...identity, hostBaseUrl: base }, () =>
+      routes.fetch(initial),
+    );
+    expect(response.status).toBe(200);
+    expect(seen).toEqual(["ducts.snapshot", "ducts.tables"]);
+  } finally {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   }

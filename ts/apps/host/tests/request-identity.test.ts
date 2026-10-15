@@ -600,3 +600,161 @@ test("only an admitted context token survives nested same-host requests", async 
     caller: { kind: "anonymous" },
   });
 });
+
+test("admitted browser context round trips through nested requests without unrelated cookies", async () => {
+  const cookie = mintBrowserContext({ kind: "local" }).split(";")[0]!;
+  const headers = {
+    ...local,
+    origin: "http://127.0.0.1:5180",
+    referer: "http://127.0.0.1:5180/ducts",
+    cookie: `${cookie}; unrelated=secret`,
+  };
+  const first = await rawReadRequestIdentity(headers, "/pe/ducts/analysis", options, "POST");
+  if (!("principal" in first)) throw Error(first.refusal.code);
+  expect(first.caller).toMatchObject({ kind: "human", via: "local" });
+  const next = await rawReadRequestIdentity(
+    { ...local, ...first.headers },
+    "/call",
+    options,
+    "POST",
+  );
+  expect(next).toMatchObject({ caller: { kind: "human", via: "local" } });
+  expect(first.headers.cookie).toBe(cookie);
+  expect(first.headers).not.toHaveProperty(HOST_CONTEXT_HEADER);
+});
+
+test("remote browser nested requests retain their admitted transport and only selected credentials", async () => {
+  for (const transport of ["tailnet", "ssh"] as const) {
+    const principal =
+      transport === "tailnet"
+        ? { kind: "tailnet" as const, login: "operator@example.com", authority: remote.host }
+        : { kind: "remote" as const, transport: "ssh" as const, authority: "ssh.test:65180" };
+    const pairedBrowser = devices.claim(
+      devices.pair("browser").code,
+      `Nested ${transport}`,
+      transport,
+      transport === "tailnet" ? "operator@example.com" : undefined,
+    );
+    const cookie = mintBrowserContext(principal).split(";")[0]!;
+    const origin = `https://${principal.authority}`;
+    const scoped = {
+      ...options,
+      remoteIngress: [{ origin: "https://ssh.test:65180", transport: "ssh" as const }],
+    };
+    const headers = {
+      ...local,
+      host: principal.authority,
+      origin,
+      referer: `${origin}/ducts`,
+      ...(transport === "tailnet" ? { "tailscale-user-login": "operator@example.com" } : {}),
+      cookie: `${cookie}; ${DEVICE_COOKIE}=${pairedBrowser.token}; unrelated=secret`,
+    };
+    const first = await rawReadRequestIdentity(headers, "/pe/ducts/analysis", scoped, "POST");
+    if (!("principal" in first)) throw Error(first.refusal.code);
+    expect(first.principal).toEqual(principal);
+    expect(first.caller).toMatchObject({
+      kind: "human",
+      via: transport,
+      device: pairedBrowser.session.id,
+    });
+    expect(first.headers.cookie).toBe(`${cookie}; ${DEVICE_COOKIE}=${pairedBrowser.token}`);
+    expect(first.headers.host).toBe(principal.authority);
+    const second = await rawReadRequestIdentity(
+      { ...local, ...first.headers },
+      "/call",
+      scoped,
+      "POST",
+    );
+    expect(second).toMatchObject({ principal, caller: first.caller });
+    expect(
+      await rawReadRequestIdentity(
+        { ...local, ...first.headers, host: "foreign.test:65180" },
+        "/call",
+        scoped,
+        "POST",
+      ),
+    ).toHaveProperty("refusal");
+    const pageHeaders = { ...headers, referer: `${origin}/pages/tour/` };
+    const page = await rawReadRequestIdentity(pageHeaders, "/call", scoped, "POST");
+    if (!("principal" in page)) throw Error(page.refusal.code);
+    expect(page.caller).toEqual({ kind: "page", page: "page:@pages/tour" });
+    expect(page.headers.cookie).toBe(`${DEVICE_COOKIE}=${pairedBrowser.token}`);
+    expect(
+      await rawReadRequestIdentity({ ...local, ...page.headers }, "/call", scoped, "POST"),
+    ).toMatchObject({ principal, caller: page.caller });
+    devices.revoke(pairedBrowser.session.id);
+    expect(
+      await rawReadRequestIdentity({ ...local, ...first.headers }, "/call", scoped, "POST"),
+    ).toMatchObject({ refusal: { code: "device.revoked" } });
+  }
+});
+
+test("browser forwarding does not accept invalid cookies, context tokens, or forwarded transport claims", async () => {
+  const cookie = mintBrowserContext({ kind: "local" }).split(";")[0]!;
+  const browser = {
+    ...local,
+    origin: "http://127.0.0.1:5180",
+    referer: "http://127.0.0.1:5180/ducts",
+    cookie,
+  };
+  const name = cookie.split("=")[0]!;
+  const bad = await rawReadRequestIdentity(
+    { ...browser, cookie: `${name}=invalid; unrelated=secret` },
+    "/call",
+    options,
+    "POST",
+  );
+  expect(bad).toMatchObject({ caller: { kind: "anonymous" } });
+  if ("principal" in bad) expect(bad.headers).not.toHaveProperty("cookie");
+  const token = mintContext({ kind: "pea", thread: "malicious-browser-token" });
+  try {
+    expect(
+      await rawReadRequestIdentity(
+        { ...browser, [HOST_CONTEXT_HEADER]: token },
+        "/call",
+        options,
+        "POST",
+      ),
+    ).toMatchObject({ refusal: { code: "context.unknown" } });
+  } finally {
+    retireContext(token);
+  }
+  const forged = await rawReadRequestIdentity(
+    {
+      ...browser,
+      "x-forwarded-host": remote.host,
+      "x-forwarded-proto": "https",
+      forwarded: `host=${remote.host}`,
+    },
+    "/call",
+    options,
+    "POST",
+  );
+  expect(forged).toMatchObject({
+    principal: { kind: "local" },
+    caller: { kind: "human", via: "local" },
+  });
+  if ("principal" in forged) {
+    expect(forged.headers).not.toHaveProperty("x-forwarded-host");
+    expect(forged.headers).not.toHaveProperty("forwarded");
+    expect(forged.headers).not.toHaveProperty("host");
+  }
+});
+
+test("a browser context from an earlier host lifetime or foreign transport grants no caller", async () => {
+  const cookie = mintBrowserContext({ kind: "local" }).split(";")[0]!;
+  const browser = {
+    ...local,
+    origin: "http://127.0.0.1:5180",
+    referer: "http://127.0.0.1:5180/ducts",
+    cookie,
+  };
+  const { callerOf } = await import("../src/control.ts");
+  expect(
+    callerOf({ kind: "remote", transport: "ssh", authority: "ssh.test:65180" }, browser),
+  ).toEqual({ caller: { kind: "anonymous" } });
+  vi.resetModules();
+  const restarted = await import("../src/control.ts");
+  expect(restarted.callerOf({ kind: "local" }, browser)).toEqual({ caller: { kind: "anonymous" } });
+  expect(restarted.browserContextHeaders({ kind: "local" }, browser)).not.toHaveProperty("cookie");
+});
