@@ -4,6 +4,7 @@ export * from "./route-view.ts";
 export * from "./route-doc.ts";
 export * from "./reading.ts";
 export * from "./machine.ts";
+export * from "./discovery-machine.ts";
 export * from "./trichotomy.ts";
 export * from "./family.ts";
 export * from "./grounded-doc.ts";

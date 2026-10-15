@@ -271,3 +271,58 @@ test("kernel and bundled skills route visual explanations through a hosted Page"
   expect(page).toContain("page:@snowdon-ducts/pages/tour");
   expect(script).toContain("Do not create or register a script without a connected document");
 });
+
+test("discovery never transports per-element holdings to an MCP client", async () => {
+  fakeRuntimeHost("http://127.0.0.1:9");
+  const machine = machineFixture([{ session: "s1", documents: null }]);
+  Object.assign(machine.revit.sessions![0]!, {
+    holdings: [
+      {
+        openId: "o1",
+        title: "Fixture",
+        holdings: {
+          elements: Array.from({ length: 53139 }, (_, id) => ({
+            id,
+            category: "fixture",
+            name: "HELD_SENTINEL",
+            changedSinceSync: null,
+            requesters: [],
+          })),
+          empty: false,
+          savedNotSynced: null,
+          unsaved: false,
+          worksets: [],
+          workshared: true,
+        },
+      },
+    ],
+  });
+  vi.stubGlobal("fetch", async () =>
+    Response.json({
+      at: machine.observedAtUtc,
+      machine,
+      sources: {},
+      diagnostics: [],
+      capabilities: [],
+    }),
+  );
+  const server = await createPeaMcpServer({ hostBaseUrl: "http://127.0.0.1:9" });
+  const client = new Client({ name: "bounded-discovery", version: "1" });
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  try {
+    await server.connect(st);
+    await client.connect(ct);
+    const result = await client.callTool({ name: "pe_find", arguments: {} });
+    const text = (result.content as Array<{ text: string }>)[0]!.text;
+    expect(text).not.toContain("HELD_SENTINEL");
+    expect(text.length).toBeLessThan(65536);
+    expect(JSON.parse(text).machine.revit.sessions[0].holdings[0].holdings.elementCount).toBe(
+      53139,
+    );
+  } finally {
+    await client.close();
+    await server.close();
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  }
+});

@@ -1,3 +1,4 @@
+import { discoveryMachine } from "@pe/agent-contracts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { contextFetch as fetch } from "@pe/runtime/context";
 import {
@@ -400,7 +401,7 @@ export function createCapabilityCatalogSource(options: {
         : scoped;
       return {
         ...catalog,
-        machine,
+        machine: discoveryMachine(machine),
         recents: recent.recents,
         sources: { ...catalog.sources, recents: recent.status },
       };

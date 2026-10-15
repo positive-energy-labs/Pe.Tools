@@ -512,7 +512,7 @@ test("MCP analysis retains admitted caller through the real route and nested nat
   const options = {
     port: () => 5180,
     frontendOrigin: () => undefined,
-    share: { read: async () => ({ state: "off", desired: "off" }), observe: () => {} },
+    share: { ...unavailableShare, observe: () => {} },
   };
   const seen: string[] = [];
   const routes = createPeRoutes({

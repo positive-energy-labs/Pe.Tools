@@ -1,3 +1,6 @@
+import type { HeldElement, ProcessIdentity } from "@pe/host-contracts/pe-revit-contract";
+import type { MachineLeg } from "./machine.ts";
+import type { SdkSessionSelection } from "./sdk-session.ts";
 import { sdkSessionSelectionSchema } from "./sdk-session.ts";
 /**
  * Reading — anything observed from Revit, the host, or disk. One subject, one observation time,
@@ -61,7 +64,7 @@ export type Reading<T> =
 /* ── Requests: what a Reading is a reading OF ─────────────────────────────────────────────── */
 
 /** Owner addresses, not a second state model. Projection inputs participate in identity. */
-export const sdkReadingSchema = z.strictObject({
+export const sdkStandardReadingSchema = z.strictObject({
   kind: z.literal("sdk"),
   read: z.enum(["sessions", "doctor", "recents", "documents", "dialogs", "logs", "ops"]),
   tail: z.number().int().min(1).max(500).optional(),
@@ -69,6 +72,46 @@ export const sdkReadingSchema = z.strictObject({
   year: z.string().min(1).optional(),
   all: z.boolean().optional(),
 });
+export const holdingsReadingSchema = z.strictObject({
+  kind: z.literal("sdk"),
+  read: z.literal("holdings"),
+  section: z.enum(["elements", "worksets"]).default("elements"),
+  session: sdkSessionSelectionSchema,
+  processStartUtc: z.iso.datetime(),
+  openId: z.string().min(1),
+  limit: z.number().int().min(1).max(100).default(50),
+  cursor: z.string().max(300).optional(),
+});
+export const sdkReadingSchema = z.discriminatedUnion("read", [
+  sdkStandardReadingSchema,
+  holdingsReadingSchema,
+]);
+export type HoldingsReading = z.infer<typeof holdingsReadingSchema>;
+export type HoldingsReadingResult =
+  | { state: "refused"; code: string; detail: string }
+  | {
+      state: "ok";
+      process: ProcessIdentity;
+      session: SdkSessionSelection;
+      openId: string;
+      title: string;
+      observedAtUtc: string;
+      leg: MachineLeg;
+      source: string;
+      digest: string;
+      empty: boolean;
+      savedNotSynced: boolean | null;
+      unsaved: boolean;
+      workshared: boolean;
+      section: "elements" | "worksets";
+      total: number;
+      elementCount: number;
+      worksetCount: number;
+      offset: number;
+      rows: readonly HeldElement[] | readonly string[];
+      nextCursor: string | null;
+    };
+
 export type SdkReading = z.infer<typeof sdkReadingSchema>;
 
 export const readingRequestSchema = z.discriminatedUnion("kind", [

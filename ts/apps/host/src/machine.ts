@@ -565,6 +565,11 @@ export type MachineOwner = ReturnType<typeof createMachine>;
  * summary and list) but run outside the Machine's own routes. Set once at boot.
  */
 let hostMachine: MachineOwner | undefined;
+export function currentMachine(): Machine {
+  if (!hostMachine) throw Error("Machine census is unavailable.");
+  return hostMachine.current();
+}
+
 export const useHostMachine = (owner: MachineOwner | undefined) => {
   hostMachine = owner;
 };
