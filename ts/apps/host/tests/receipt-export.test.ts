@@ -1,5 +1,5 @@
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { PostHog } from "posthog-node";
@@ -7,7 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { expect, test } from "vite-plus/test";
-import { type HarnessEvent, type Receipt } from "@pe/agent-contracts";
+import { z } from "zod";
+import { harnessEventSchema, type HarnessEvent, type Receipt } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import {
   projectReceipt,
@@ -21,6 +22,7 @@ import {
   abortableFetch,
 } from "../src/receipt-export.ts";
 import { mcpBeforeSend } from "../src/mcp-analytics.ts";
+import { foreignAddins } from "../src/foreign-addins.ts";
 
 const stamp = receiptGoldenEnvelope.stamp!;
 const r = (body: Receipt["body"]): Receipt => ({
@@ -116,6 +118,93 @@ test("one allowlist rejects unclosed labels, stamp spoofing, null identity and a
       },
     } as never),
   ).toBeNull();
+});
+
+test("a settled action exports its duration, status and a closed fault code, never its error or issues", () => {
+  const action = (state: "failed" | "succeeded", error: string) =>
+    r({
+      kind: "action",
+      value: {
+        kind: "operation",
+        id: "private-action",
+        key: "scripting.execute",
+        caller: { kind: "human", via: "cli" },
+        basis: null,
+        destination: { kind: "host" },
+        request: { code: "private script" },
+        bases: {},
+        steps: [],
+        preparation: { state: "unprepared" },
+        recovery: [],
+        startedAt: "2026-10-13T14:59:57.500Z",
+        publication: { state: "unrequested" },
+        ...(state === "succeeded"
+          ? { state, result: { private: true } }
+          : {
+              state,
+              error,
+              status: 500,
+              issues: [
+                { instancePath: "/x", code: "private.code", message: "private", severity: "error" },
+              ],
+            }),
+      },
+    });
+  const failed = projectReceipt(action("failed", "private stack at C:/private/x.cs"))!;
+  expect(failed.event).toBe("host_op");
+  expect(failed.properties).toMatchObject({
+    op: "scripting.execute",
+    outcome: "failed",
+    duration_ms: 2500,
+    status: 500,
+    fault_code: "action.failed",
+    origin_class: "human",
+  });
+  expect(JSON.stringify(failed)).not.toContain("private");
+  expect(
+    projectReceipt(action("failed", "Error: grant.required: Refused at /call: private"))!.properties
+      .fault_code,
+  ).toBe("grant.required");
+  const ok = projectReceipt(action("succeeded", ""))!.properties;
+  expect(ok).toMatchObject({ outcome: "succeeded", duration_ms: 2500 });
+  expect(ok).not.toHaveProperty("fault_code");
+  expect(ok).not.toHaveProperty("status");
+});
+
+test("the host boot fact counts stale Pe.Tools add-in manifests by the product's legacy rule, as counts and years", () => {
+  const dir = mkdtempSync(join(tmpdir(), "pe-addins-"));
+  try {
+    const roots = {
+      user: join(dir, "user"),
+      machine: join(dir, "machine"),
+      programFiles: [join(dir, "pf")],
+    };
+    const addin = (root: string, year: string, name: string, assembly: string) => {
+      mkdirSync(join(root, year), { recursive: true });
+      writeFileSync(
+        join(root, year, `${name}.addin`),
+        `<RevitAddIns><AddIn Type="Application"><Assembly>${assembly}</Assembly></AddIn></RevitAddIns>`,
+      );
+    };
+    addin(roots.user, "2025", "Pe.App", "Pe.App\\Pe.App.dll"); // this install
+    addin(roots.user, "2025", "00-Pe.App", "Pe.App\\Pe.Revit.Loader.dll"); // 0.6.x shim
+    addin(roots.machine, "2024", "Pe.App", "C:\\private\\old\\Pe.App.dll"); // per-machine 0.5
+    addin(roots.user, "2026", "PE_Tools", "PE_Tools\\PE_Tools.dll"); // a legacy name
+    addin(roots.user, "2026", "Unrelated", "Unrelated.dll"); // not ours
+    const manifest = JSON.parse(
+      readFileSync(join(import.meta.dirname, "../../../../product.payloads.json"), "utf8"),
+    );
+    const counters = foreignAddins(manifest, roots);
+    expect(counters).toEqual({ foreignAddinCount: 3, foreignAddinYears: ["2024", "2025", "2026"] });
+    const boot = projectReceipt(r({ kind: "usage", event: "app_boot", counters }))!;
+    expect(boot.properties).toMatchObject({
+      foreign_addin_count: 3,
+      foreign_addin_years: ["2024", "2025", "2026"],
+    });
+    expect(JSON.stringify(boot)).not.toMatch(/private|Pe\.App|PE_Tools|pe-addins/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("the actual PostHog client wire carries the original receipt timestamp and only safe diagnostic fields", async () => {
@@ -345,6 +434,50 @@ test("thread and update adapters keep opaque joins and honest endings, with noti
     });
     await f.exporter.close();
     expect(await f.journal.read({ kinds: ["usage"] })).toHaveLength(1);
+  } finally {
+    await f.close();
+  }
+});
+
+test("a turn's end exports its duration, tool count and closed failure class from the thread", async () => {
+  const f = fixture();
+  try {
+    const id = "private-thread";
+    const turnId = "private-turn";
+    const at = (s: number) => `2026-10-13T16:00:0${s}.000Z`;
+    const tool = (seq: number) => ({
+      seq,
+      at: at(seq),
+      kind: "update",
+      turnId,
+      update: { sessionUpdate: "tool_call", toolCallId: `private-${seq}`, title: "private tool" },
+    });
+    const events = z.array(harnessEventSchema).parse([
+      { seq: 1, at: at(1), kind: "prompt", turnId, text: "private prompt" },
+      tool(2),
+      tool(3),
+      {
+        seq: 5,
+        at: at(5),
+        kind: "error",
+        turnId,
+        message: "private words",
+        failure: { kind: "billing", message: "private", raw: "private raw" },
+      },
+    ]);
+    const adapter = createThreadReceiptAdapter(f.exporter, () => [
+      { id, title: "private title", events },
+    ]);
+    for (const event of events) adapter.accept(id, "private title", event);
+    await expect.poll(() => f.sent.length).toBe(2);
+    expect(JSON.stringify(f.sent)).not.toContain("private");
+    expect((f.sent.at(-1) as { properties: object }).properties).toMatchObject({
+      phase: "failed",
+      outcome: "failed",
+      fault_code: "turn.billing",
+      duration_ms: 4000,
+      tool_count: 2,
+    });
   } finally {
     await f.close();
   }

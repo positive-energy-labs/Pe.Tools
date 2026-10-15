@@ -50,6 +50,7 @@ import {
   pageKeyOf,
   readsOnly,
   Refused,
+  refusalHeaders,
   documentAcquisition,
   threadHead,
   subscribeHeads,
@@ -339,7 +340,10 @@ const json = (body: unknown, status = 200) => Response.json(body, { status });
 const problem = (status: number, message: string) => json({ error: message, message }, status);
 /** A door refusal, the shape `/actions` answers: 403, named, never dispatched. */
 const refused = (refusal: Refusal) =>
-  json({ error: refusal.reason, message: refusal.reason, refusal, notDispatched: true }, 403);
+  Response.json(
+    { error: refusal.reason, message: refusal.reason, refusal, notDispatched: true },
+    { status: 403, headers: refusalHeaders(refusal.code) },
+  );
 /** A slot that names no one document (or not yet): 409 with the resolver's own words. */
 const unresolved = (door: string, resolution: Exclude<TargetResolution, { kind: "resolved" }>) => {
   const why =

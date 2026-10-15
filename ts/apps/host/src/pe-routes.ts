@@ -1,5 +1,5 @@
 import { createScheduledTasks } from "./scheduled-tasks.ts";
-import { threadHistory } from "./thread-history.ts";
+import { eligibleThreads, threadHistory } from "./thread-history.ts";
 import { productRoot } from "@pe/host-contracts/service-identity";
 import { normalizePeError } from "@pe/host-contracts/pe-api";
 import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
@@ -87,7 +87,13 @@ import {
   machineSources,
   useHostMachine,
 } from "./machine.ts";
-import { bindControl, callerThread, currentCaller, routeActorOf } from "./control.ts";
+import {
+  bindControl,
+  callerThread,
+  currentCaller,
+  refusalHeaders,
+  routeActorOf,
+} from "./control.ts";
 import { bindRevoke } from "./revoke.ts";
 import { hostActionJournal, hostLog } from "./gateway-owner.ts";
 import type { HostLog } from "./host-log.ts";
@@ -349,9 +355,9 @@ export function createPeRoutes(options: PeRoutesOptions) {
         declared.id === "feedback.deliver")
     ) {
       if (caller.kind !== "human")
-        return json(
+        return Response.json(
           { error: "human.only: Feedback and browser diagnostics require a human caller." },
-          403,
+          { status: 403, headers: refusalHeaders("human.only") },
         );
       const telemetry = options.telemetry ?? hostReceiptExport();
       if (declared.id === "diagnostics.submit") {
@@ -492,7 +498,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
       }
       const write = method === "POST" && route && verb ? writes[verb] : undefined;
       if (write && route && (caller.kind === "anonymous" || caller.kind === "page"))
-        return json(
+        return Response.json(
           {
             ok: false,
             kind: "error",
@@ -509,7 +515,12 @@ export function createPeRoutes(options: PeRoutesOptions) {
                   : "Anonymous loopback calls are read-only.",
             },
           },
-          403,
+          {
+            status: 403,
+            headers: refusalHeaders(
+              caller.kind === "page" ? "page.use-page-door" : "context.missing",
+            ),
+          },
         );
       if (write && route) {
         const scope = workKey(url, route, "write");
@@ -870,6 +881,8 @@ export function makeHostPeRoutes(
   const scheduler = createScheduledTasks({
     path: join(productRoot(), "state", hostOwnership.serviceName, "scheduled-tasks.json"),
     receipts: telemetry.journal,
+    evidence: (since, before) =>
+      new Set(eligibleThreads(threads.historySnapshot(), since, before).map((t) => t.id)),
     launch: threads.launchScheduled,
   });
   const readHistory = threadHistory({

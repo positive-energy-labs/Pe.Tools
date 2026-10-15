@@ -203,6 +203,7 @@ restated here.
 - 2026-10-14, ADR 0019: 03:00 with a ten-minute grace never fires on a machine asleep at that hour; the schedule wants an owner ruling once miner runs are observed.
 - 2026-10-14: Claude's `PromptResponse.usage` may be session-cumulative (`claude-agent-acp` `sessionUsage` reads `accumulatedUsage`); prove it per turn before showing a per-turn number.
 - 2026-10-14, ADR 0019: the second aggregation tier across machines, over PostHog `agent_feedback`, is unbuilt.
+- 2026-10-14, ADR 0019 review fixes: the miner gate now counts only native receipts of actions a Pea thread in the eligible set admitted, but `route:threads.history` still reads receipts by thread id, and native receipts carry only the action id, so the run itself cannot read the Revit receipts the gate counted. A replayed `agent_feedback` row carries the replaying host's version stamp, not the one that kept it.
 
 - Wave Y round 2: prove the refusal details and clipboard on the installed host in the field, including the actual failed installer console. Windows filesystem/PowerShell fixtures and DOM clipboard tests cover the local contract; they do not reproduce the coworker's host security context or certify browser presentation.
 

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -177,6 +177,20 @@ test("the automatic-update switch is one marker file that survives a new reader"
     expect((await reader.setAutomatic(true)).automatic).toBe(true);
     expect(existsSync(f.automaticOffPath)).toBe(false);
     expect(f.make().current().automatic).toBe(true);
+  } finally {
+    await f.close();
+  }
+});
+
+test("a marker written by hand turns a running reader off without a host restart", async () => {
+  const f = await fixture();
+  try {
+    const reader = f.make();
+    expect(reader.current().automatic).toBe(true);
+    await writeFile(f.automaticOffPath, "");
+    expect(reader.current().automatic).toBe(false);
+    await rm(f.automaticOffPath);
+    expect(reader.current().automatic).toBe(true);
   } finally {
     await f.close();
   }

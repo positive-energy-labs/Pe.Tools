@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname } from "node:path";
 import { z } from "zod";
 import type { Receipt, ReceiptReader } from "@pe/agent-contracts";
-import { currentCaller, Refused, requireHuman } from "./control.ts";
+import { currentCaller, Refused, refusalHeaders, requireHuman } from "./control.ts";
 
 export const scheduleSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("interval"), everyMs: z.number().finite().int().min(60_000) }),
@@ -49,7 +49,7 @@ const taskSchema = z.strictObject({
   createdAt: z.iso.datetime(),
   nextRunAt: z.iso.datetime(),
   lastRunAt: z.iso.datetime().nullable(),
-  // Skips do not consume the mining window; low-volume machines can accumulate enough evidence.
+  // The mining watermark: the start of the last succeeded run. Skips and failures leave it.
   lastStartedAt: z.iso.datetime().nullable(),
   lastStatus: z.enum(["never", "running", "succeeded", "failed", "skipped"]),
   lastError: z.string().nullable(),
@@ -101,6 +101,8 @@ export function feedbackMiner(now: Date): ScheduledTask {
 export function createScheduledTasks(options: {
   path: string;
   receipts: ReceiptReader;
+  /** Local ids of the threads a run over (since, before] may read. */
+  evidence: (since: string, before: string) => ReadonlySet<string>;
   now?: () => Date;
   launch: (input: ScheduledLaunch) => { threadId: string; completion: Promise<void> };
 }) {
@@ -158,9 +160,30 @@ export function createScheduledTasks(options: {
     save(); // Claim before the first await, including the gate read and concurrent run-now calls.
     try {
       if (!force && row.gate) {
-        const receipts = await options.receipts.read({ after: since, kinds: ["native"] });
+        // Only Revit work the run can read counts: native receipts of actions a Pea thread in the
+        // eligible evidence set admitted (thread-history.ts), joined by the action's opaque id.
+        const threads = options.evidence(since, at.toISOString());
+        const receipts = await options.receipts.read({ kinds: ["action", "native"] });
+        const actions = new Set(
+          receipts.flatMap((r) =>
+            r.body.kind === "action" &&
+            r.body.value.caller.kind === "pea" &&
+            threads.has(r.body.value.caller.thread) &&
+            r.join.actionId
+              ? [r.join.actionId]
+              : [],
+          ),
+        );
         const count = new Set(
-          receipts.filter((r) => r.at <= at.toISOString() && revitTouching(r)).map((r) => r.id),
+          receipts
+            .filter(
+              (r) =>
+                r.at > since &&
+                r.at <= at.toISOString() &&
+                revitTouching(r) &&
+                actions.has(r.join.actionId ?? ""),
+            )
+            .map((r) => r.id),
         ).size;
         if (count < row.gate.minRevitReceipts) {
           row.lastStatus = "skipped";
@@ -177,10 +200,11 @@ export function createScheduledTasks(options: {
         prompt: `${row.prompt}\n\nMining window: since=${since}, before=${at.toISOString()}.`,
       });
       row.threadId = launched.threadId;
-      row.lastStartedAt = at.toISOString();
       save();
       await launched.completion;
       row.lastStatus = "succeeded";
+      // The window moves only past a run that finished: a failed one leaves its evidence for the next.
+      row.lastStartedAt = at.toISOString();
     } catch (error) {
       row.lastStatus = "failed";
       row.lastError = String(error);
@@ -246,7 +270,9 @@ export function createScheduledTasks(options: {
       } catch (error) {
         return Response.json(
           { error: String(error) },
-          { status: error instanceof Refused ? 403 : 400 },
+          error instanceof Refused
+            ? { status: 403, headers: refusalHeaders(error.refusal.code) }
+            : { status: 400 },
         );
       }
     },

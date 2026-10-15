@@ -7,15 +7,23 @@ import {
 } from "@pe/host-contracts/contracts";
 import { hostOwnership } from "./host-ownership.ts";
 import { withInvocationContext, type RequestPrincipal } from "@pe/runtime/context";
-import type { Caller, MachineShare } from "@pe/agent-contracts";
+import {
+  receiptReasonCodeSchema,
+  type AdmissionRefusalCode,
+  type Caller,
+  type MachineShare,
+  type ReceiptFact,
+} from "@pe/agent-contracts";
 import { matchPeRoute } from "@pe/agent-contracts/pe-api";
 import {
   admitRequest,
   callerOf,
   mintBrowserContext,
   Refused,
+  REFUSAL_HEADER,
   type RoutePermission,
 } from "./control.ts";
+import { recordHostFact, type ReceiptExport } from "./receipt-export.ts";
 import { HostLifecycle } from "./host-lifecycle.ts";
 import { authorizeShutdownFor } from "@pe/host-contracts/pe-service-host";
 import { deviceCredential, type Devices } from "./remote-device.ts";
@@ -30,10 +38,12 @@ export type IdentityResult =
       readonly setCookie?: string;
       readonly device?: string;
     }
-  | { readonly refusal: { readonly code: string; readonly detail: string } };
+  | { readonly refusal: { readonly code: AdmissionRefusalCode; readonly detail: string } };
 
 export interface IdentityOptions {
   readonly devices?: Devices;
+  /** Where refusals are counted; the host's own receipt export when absent. */
+  readonly telemetry?: ReceiptExport;
   readonly remoteRequests?: WeakSet<object>;
   /** Host-configured addresses. Never inferred from Forwarded or caller-supplied transport headers. */
   readonly remoteIngress?: readonly { origin: string; transport: "lan" | "ssh" }[];
@@ -98,7 +108,9 @@ export async function readRequestIdentity(
   const host = headers.host ?? "";
   const permission = requestPermission(pathname, method);
   const origin = headers.origin;
-  const refuse = (code: string, detail: string): IdentityResult => ({ refusal: { code, detail } });
+  const refuse = (code: AdmissionRefusalCode, detail: string): IdentityResult => ({
+    refusal: { code, detail },
+  });
   const browser = origin !== undefined || headers["sec-fetch-site"] !== undefined;
   const navigation =
     (method === "GET" || method === "HEAD") &&
@@ -339,6 +351,21 @@ function requestPermission(path: string, method: string): RoutePermission {
   return "caller";
 }
 
+/**
+ * The one place a refusal is counted: admission refuses here, and a door's 403 names its code in
+ * `x-pe-refusal`. Only the closed code leaves the machine; a code outside the set is `refused`.
+ */
+function countRefusal(telemetry: ReceiptExport | undefined, code: string) {
+  const parsed = receiptReasonCodeSchema.safeParse(code);
+  const fact: ReceiptFact = {
+    kind: "usage",
+    event: "refusal_count",
+    counters: { reasonCode: parsed.success ? parsed.data : "refused", count: 1 },
+  };
+  if (telemetry) telemetry.track(telemetry.record(fact));
+  else recordHostFact(fact);
+}
+
 /** A global router middleware also covers unmatched/static requests and WebSocket upgrades. */
 export const requestIdentityLayer = (options: IdentityOptions) =>
   HttpRouter.middleware(
@@ -368,7 +395,10 @@ export const requestIdentityLayer = (options: IdentityOptions) =>
             options.remoteRequests?.has(request.source),
           ),
         );
-        if ("refusal" in identity) return HttpServerResponse.jsonUnsafe(identity, { status: 403 });
+        if ("refusal" in identity) {
+          countRefusal(options.telemetry, identity.refusal.code);
+          return HttpServerResponse.jsonUnsafe(identity, { status: 403 });
+        }
         const services = yield* Effect.context<never>();
         const exit = yield* Effect.promise((signal) =>
           withInvocationContext(
@@ -383,6 +413,8 @@ export const requestIdentityLayer = (options: IdentityOptions) =>
           ),
         );
         const response = yield* exit;
+        const refused = response.headers[REFUSAL_HEADER];
+        if (response.status === 403 && refused) countRefusal(options.telemetry, refused);
         return identity.setCookie
           ? HttpServerResponse.setHeader(response, "set-cookie", identity.setCookie)
           : response;

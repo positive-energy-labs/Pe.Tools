@@ -186,6 +186,92 @@ test("real HTTP feedback retains content and caller before body; diagnostics can
   }
 }, 15_000);
 
+test("real HTTP refusals, from admission and from a door, export refusal_count with only their closed code", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pe-refusal-http-"));
+  const journal = new ActionJournal(join(dir, "journal.json"), () => receiptGoldenEnvelope.stamp);
+  const sent: { event: string; properties: Record<string, unknown> }[] = [];
+  const module = await import("../src/receipt-export.ts");
+  const telemetry = module.createReceiptExport({
+    journal,
+    root: dir,
+    stamps: { host: receiptGoldenEnvelope.stamp!, web: null },
+    send: async (e) => {
+      sent.push(e);
+    },
+  });
+  const server = createServer();
+  const port = () => {
+    const a = server.address();
+    return a && typeof a !== "string" ? a.port : 0;
+  };
+  const latch = Effect.runSync(Deferred.make<void>());
+  // A door's own 403: one with a closed code, one naming a code outside the contract.
+  const door = (code: string) =>
+    HttpEffect.fromWebHandler(async () =>
+      Response.json(
+        { error: "private reason text" },
+        { status: 403, headers: { "x-pe-refusal": code } },
+      ),
+    );
+  const done = Effect.runPromise(
+    Effect.raceFirst(
+      Layer.launch(
+        HttpRouter.serve(
+          Layer.mergeAll(
+            requestIdentityLayer({
+              port,
+              frontendOrigin: () => undefined,
+              telemetry,
+              share: {
+                read: async () => {
+                  throw Error("local only");
+                },
+                observe: () => {},
+              },
+            }),
+            HttpRouter.add("GET", "/door/grant", door("grant.required")),
+            HttpRouter.add("GET", "/door/odd", door("private.made-up")),
+            HttpRouter.add(
+              "*",
+              "/pe/*",
+              HttpEffect.fromWebHandler(async () => Response.json({})),
+            ),
+          ),
+          { disableLogger: true },
+        ).pipe(Layer.provide(NodeHttpServer.layer(() => server, { host: "127.0.0.1", port: 0 }))),
+      ),
+      Deferred.await(latch),
+    ),
+  );
+  try {
+    for (let i = 0; !port() && i < 200; i++) await new Promise((r) => setTimeout(r, 10));
+    const base = `http://127.0.0.1:${port()}`;
+    // The coworker's refusal: an anonymous write is refused at admission, before any door.
+    expect((await fetch(`${base}/pe/threads`, { method: "POST" })).status).toBe(403);
+    expect((await fetch(`${base}/pe/x`, { headers: { origin: "http://elsewhere" } })).status).toBe(
+      403,
+    );
+    expect((await fetch(`${base}/door/grant`)).status).toBe(403);
+    expect((await fetch(`${base}/door/odd`)).status).toBe(403);
+    await expect.poll(() => sent.length).toBe(4);
+    expect(sent.map((e) => e.event)).toEqual(Array(4).fill("refusal_count"));
+    expect(sent.map((e) => e.properties.reason_code)).toEqual([
+      "context.missing",
+      "runtime.owner-missing",
+      "grant.required",
+      "refused",
+    ]);
+    expect(sent.every((e) => e.properties.count === 1)).toBe(true);
+    expect(JSON.stringify(sent)).not.toMatch(/private|elsewhere|threads/);
+  } finally {
+    Effect.runSync(Deferred.succeed(latch, undefined));
+    server.closeAllConnections();
+    await done.catch(() => {});
+    await telemetry.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 15_000);
+
 test("real HTTP prompt and permission produce joined receipts; remote automatic-update writes are refused before effects", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pe-producer-http-"));
   const previous = {

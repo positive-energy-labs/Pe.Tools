@@ -85,6 +85,18 @@ export const refusalCodes = [
   "page.use-page-door",
 ] as const;
 export type RefusalCode = (typeof refusalCodes)[number];
+/** Request admission refuses before any door runs, with one of these or a `RefusalCode`. */
+export const identityRefusalCodes = [
+  "identity.path",
+  "identity.host",
+  "identity.origin",
+  "identity.forged-proxy",
+  "identity.missing-user",
+  "identity.local-only",
+  "runtime.owner-mismatch",
+  "runtime.owner-missing",
+] as const;
+export type AdmissionRefusalCode = RefusalCode | (typeof identityRefusalCodes)[number];
 
 /** Every door refuses with this shape: its own name, the reason, and what the person can do. */
 export const refusalSchema = z.strictObject({

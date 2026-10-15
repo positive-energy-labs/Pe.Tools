@@ -12,6 +12,7 @@ import {
   nextRun,
   revitTouching,
   scheduleSchema,
+  type ScheduledLaunch,
 } from "../src/scheduled-tasks.ts";
 import { threadHistory } from "../src/thread-history.ts";
 import { asCaller, human, pea } from "./callers.ts";
@@ -28,8 +29,17 @@ function fixture() {
   const path = join(dir, "tasks.json");
   let clock = new Date(at);
   const read = vi.fn(async () => [] as Receipt[]);
-  const launch = vi.fn(() => ({ threadId: randomUUID(), completion: Promise.resolve() }));
-  const options = { path, receipts: { read, subscribe: () => () => {} }, launch, now: () => clock };
+  const launch = vi.fn((_input: ScheduledLaunch) => ({
+    threadId: randomUUID(),
+    completion: Promise.resolve(),
+  }));
+  const options = {
+    path,
+    receipts: { read, subscribe: () => () => {} },
+    evidence: () => new Set(["eligible"]),
+    launch,
+    now: () => clock,
+  };
   return {
     path,
     read,
@@ -40,13 +50,47 @@ function fixture() {
     },
   };
 }
-const receipt = (verdict: "ok" | "running" | "rejected" = "ok"): Receipt => ({
+const ELIGIBLE_ACTION = "00000000-0000-4000-8000-0000000000a1";
+const OTHER_ACTION = "00000000-0000-4000-8000-0000000000a2";
+/** An action a Pea thread admitted; its native steps join it by the opaque action id. */
+const action = (thread: string, actionId: string): Receipt => ({
   schema: 1,
   id: randomUUID(),
   revision: 1,
   at: at.toISOString(),
   stamp: null,
-  join: { requestId: "00000000-0000-4000-8000-000000000001" },
+  join: { requestId: randomUUID(), actionId },
+  body: {
+    kind: "action",
+    value: {
+      kind: "operation",
+      id: actionId,
+      key: "arbitrary",
+      caller: { kind: "pea", context: "c", thread },
+      basis: null,
+      destination: { kind: "host" },
+      request: {},
+      bases: {},
+      steps: [],
+      preparation: { state: "unprepared" },
+      recovery: [],
+      startedAt: at.toISOString(),
+      publication: { state: "unrequested" },
+      state: "succeeded",
+      result: null,
+    },
+  },
+});
+const receipt = (
+  verdict: "ok" | "running" | "rejected" = "ok",
+  actionId = ELIGIBLE_ACTION,
+): Receipt => ({
+  schema: 1,
+  id: randomUUID(),
+  revision: 1,
+  at: at.toISOString(),
+  stamp: null,
+  join: { requestId: "00000000-0000-4000-8000-000000000001", actionId },
   body: {
     kind: "native",
     verdict,
@@ -108,10 +152,14 @@ test("gate skips without a thread or turn; revisions and native running/refused 
   const service = createScheduledTasks(f.options);
   const rows = Array.from({ length: 24 }, () => receipt());
   f.read.mockResolvedValue([
+    action("eligible", ELIGIBLE_ACTION),
+    action("not-in-window", OTHER_ACTION),
     ...rows,
     { ...rows[0]!, revision: 2 },
     receipt("running"),
     receipt("rejected"),
+    // Revit work outside the evidence set: a thread the run cannot read.
+    ...Array.from({ length: 5 }, () => receipt("ok", OTHER_ACTION)),
   ]);
   await service.run("feedback-miner");
   expect(f.launch).not.toHaveBeenCalled();
@@ -120,8 +168,9 @@ test("gate skips without a thread or turn; revisions and native running/refused 
     runCount: 1,
     threadId: null,
     lastStartedAt: null,
+    lastError: "Volume gate: 24/25 Revit-touching receipts",
   });
-  f.read.mockResolvedValue([...rows, receipt()]);
+  f.read.mockResolvedValue([action("eligible", ELIGIBLE_ACTION), ...rows, receipt()]);
   await service.run("feedback-miner");
   expect(f.launch).toHaveBeenCalledOnce();
   expect(service.list()[0]?.lastStatus).toBe("succeeded");
@@ -153,7 +202,7 @@ test("claim covers gate await and turn lifetime; concurrent poll and force canno
   const service = createScheduledTasks(f.options);
   const running = service.run("feedback-miner");
   await expect(service.run("feedback-miner", true)).rejects.toThrow("already running");
-  gate(Array.from({ length: 25 }, () => receipt()));
+  gate([action("eligible", ELIGIBLE_ACTION), ...Array.from({ length: 25 }, () => receipt())]);
   await vi.waitFor(() => expect(f.launch).toHaveBeenCalledOnce());
   f.advance(2 * 86_400_000);
   await service.poll();
@@ -297,6 +346,28 @@ test("human run-now honors the gate unless explicitly forced and preserves async
   await vi.waitFor(() => expect(service.list()[0]?.lastStatus).toBe("failed"));
   expect(service.list()[0]?.lastError).toContain("fake turn failed");
   expect(f.launch).toHaveBeenCalledOnce();
+  await service.close();
+});
+
+test("only a succeeded run advances the mining watermark; a failed start keeps its window", async () => {
+  const f = fixture();
+  const service = createScheduledTasks(f.options);
+  const epoch = new Date(0).toISOString();
+  const since = () => /since=(\S+),/.exec(f.launch.mock.calls.at(-1)![0].prompt)?.[1];
+  f.launch.mockImplementationOnce(() => ({
+    threadId: randomUUID(),
+    completion: Promise.reject(Error("provider failed to start")),
+  }));
+  await service.run("feedback-miner", true);
+  expect(service.list()[0]).toMatchObject({ lastStatus: "failed", lastStartedAt: null });
+  f.advance(60_000);
+  await service.run("feedback-miner", true);
+  expect(since()).toBe(epoch);
+  const mark = new Date(+at + 60_000).toISOString();
+  expect(service.list()[0]).toMatchObject({ lastStatus: "succeeded", lastStartedAt: mark });
+  f.advance(60_000);
+  await service.run("feedback-miner", true);
+  expect(since()).toBe(mark);
   await service.close();
 });
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { actionReceiptSchema, nativeProcessSchema } from "./action-receipts.ts";
+import { identityRefusalCodes, refusalCodes } from "./caller.ts";
 import { documentRefSchema } from "./target.ts";
 
 const uuid = z.uuid();
@@ -41,6 +42,12 @@ export const receiptFaultCodeSchema = z.enum([
   "parts.failed",
   "native.failed",
   "turn.failed",
+  // A harness failure's closed `EndpointFailure.kind`; `other` stays `turn.failed`.
+  "turn.billing",
+  "turn.auth",
+  "turn.unreachable",
+  "turn.model",
+  "action.failed",
   "mcp.failed",
   "update.failed",
   "telemetry.dropped",
@@ -51,6 +58,13 @@ export const receiptFaultCodeSchema = z.enum([
   "bridge.failed",
 ]);
 export type ReceiptFaultCode = z.infer<typeof receiptFaultCodeSchema>;
+/** Why a request was refused: every closed admission code; `refused` when a door names none. */
+export const receiptReasonCodeSchema = z.enum([
+  ...refusalCodes,
+  ...identityRefusalCodes,
+  "refused",
+]);
+export type ReceiptReasonCode = z.infer<typeof receiptReasonCodeSchema>;
 export const receiptEvidenceRefSchema = z.strictObject({
   path: z.string().min(1),
   target: documentRefSchema.optional(),
@@ -109,12 +123,18 @@ export const receiptCountersSchema = z.strictObject({
   readingKind: token.optional(),
   streamKind: token.optional(),
   routeCode: token.optional(),
-  reasonCode: token.optional(),
+  reasonCode: receiptReasonCodeSchema.optional(),
   phase: z
     .enum(["started", "finished", "failed", "available", "applying", "restarting"])
     .optional(),
   candidateVersion: token.optional(),
   producer: receiptComponentSchema.optional(),
+  /** Pe.Tools add-in manifests Revit can load that are not this install's own. */
+  foreignAddinCount: count.optional(),
+  foreignAddinYears: z
+    .array(z.string().regex(/^\d{4}$/))
+    .max(16)
+    .optional(),
 });
 export const safeMcpMetadataSchema = z.strictObject({
   sessionId: uuid.optional(),

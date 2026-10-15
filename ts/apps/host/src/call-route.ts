@@ -24,6 +24,7 @@ import {
   currentCaller,
   readsOnly,
   Refused,
+  refusalHeaders,
   admitAnonymousCall,
 } from "./control.ts";
 import type { Caller } from "@pe/agent-contracts";
@@ -116,7 +117,7 @@ import type { HostErrorKind } from "@pe/host-contracts/contracts";
 const refusedResponse = (error: Refused) =>
   Response.jsonUnsafe(
     { error: error.message, message: error.message, refusal: error.refusal, notDispatched: true },
-    { status: 403 },
+    { status: 403, headers: refusalHeaders(error.refusal.code) },
   );
 
 /** A refusal's own words. `BridgeError` is a plain class, so `String()` would say [object Object]. */
@@ -428,15 +429,12 @@ export function makeCallRoute(
       Effect.catch((error) => {
         const problem = toProblem(error);
         if (op) recordOperation(op, { ok: false, problem });
-        else
+        else if (problem.status >= 500)
           recordHostFact(
             {
               kind: "usage",
-              event: problem.status < 500 ? "refusal_count" : "host_fault",
-              counters:
-                problem.status < 500
-                  ? { reasonCode: "refused", count: 1 }
-                  : { routeCode: "call", faultCode: "host.failed", status: problem.status },
+              event: "host_fault",
+              counters: { routeCode: "call", faultCode: "host.failed", status: problem.status },
             },
             { requestId },
           );
@@ -945,12 +943,7 @@ function recordHostOp(
     },
     join,
   );
-  if (refused)
-    recordHostFact(
-      { kind: "usage", event: "refusal_count", counters: { reasonCode: "refused", count: 1 } },
-      join,
-    );
-  else if (!outcome.ok)
+  if (!outcome.ok && !refused)
     recordHostFact(
       {
         kind: "usage",

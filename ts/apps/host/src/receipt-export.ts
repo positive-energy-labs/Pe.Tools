@@ -1,7 +1,7 @@
 import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { PostHog } from "posthog-node";
 import { z } from "zod";
@@ -9,6 +9,7 @@ import {
   receiptSchema,
   receiptStampSchema,
   receiptBodySchema,
+  receiptReasonCodeSchema,
   readingRequestSchema,
   type Receipt,
   type ReceiptFact,
@@ -45,9 +46,9 @@ const mcpFields = [
   "$mcp_server_build",
 ] as const;
 const eventFields = {
-  app_boot: ["revit_version"],
+  app_boot: ["revit_version", "foreign_addin_count", "foreign_addin_years"],
   version_mismatch: ["host_version"],
-  host_op: ["op", "origin_class", "ts_only", "outcome", "fault_code", "duration_ms"],
+  host_op: ["op", "origin_class", "ts_only", "outcome", "fault_code", "duration_ms", "status"],
   bridge_queue: ["op", "phase", "queue_depth", "wait_ms"],
   ribbon_click: ["command_code"],
   palette_action: ["palette", "tab", "item_kind", "mode", "outcome"],
@@ -96,6 +97,8 @@ type ExportEvent = {
   distinctId: string;
   timestamp: Date;
   properties: Record<string, unknown>;
+  /** A fixed event id, so a replayed send is the same PostHog event. */
+  uuid?: string;
 };
 // Compiled Pe.App command types, never ribbon labels or authored task/Pod ids.
 export const commandCodes = new Set([
@@ -152,17 +155,17 @@ const routes = new Set([
   "update",
   "host",
 ]);
-const reasons = new Set([
-  "context.missing",
-  "grant.required",
-  "grant.revoked",
-  "grant.other-lifetime",
-  "grant.context-cannot-hold",
-  "human.only",
-  "page.use-page-door",
-  "choose",
-  "refused",
-]);
+const reasons = new Set<string>(receiptReasonCodeSchema.options);
+/** A failed action's closed code: the refusal it carries (`Refused` says `code: reason`), else generic. */
+const actionFault = (error: string) => {
+  const code = /^(?:\w*Error: )?([a-z][a-z.-]*):/.exec(error)?.[1];
+  return code && reasons.has(code) ? code : "action.failed";
+};
+/** Whole milliseconds between two ISO stamps; absent when either is unreadable. */
+const elapsed = (from: string, to: string) => {
+  const ms = Date.parse(to) - Date.parse(from);
+  return Number.isFinite(ms) ? Math.max(0, ms) : undefined;
+};
 const validVersion = (v: string) => /^(dev|\d{4}|\d+\.\d+\.\d+(?:[-+][a-zA-Z0-9.-]+)?)$/.test(v);
 const snake = (key: string) => key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 const exception = (code: string, component: string, handled: boolean) => ({
@@ -188,9 +191,15 @@ export function projectReceipt(
       if (!isAnyOperationKey(body.value.key) || body.value.state === "running") return null;
       event = "host_op";
       const caller = body.value.caller.kind;
+      const settled = body.value;
       properties = {
-        op: body.value.key,
-        outcome: body.value.state,
+        op: settled.key,
+        outcome: settled.state,
+        duration_ms: elapsed(settled.startedAt, r.at),
+        ...(settled.state === "succeeded" ? {} : { status: settled.status }),
+        ...(settled.state === "succeeded" || settled.state === "cancelled"
+          ? {}
+          : { fault_code: actionFault(settled.error) }),
         ts_only: isTsOnlyOperationKey(body.value.key),
         origin_class:
           caller === "pea" || caller === "human" || caller === "page"
@@ -359,6 +368,20 @@ export type AgentReportContext = { turnId: string | null; provider: string; mode
 const feedbackSchema = peRoutes["feedback.submit"].body;
 const diagnosticsSchema = peRoutes["diagnostics.submit"].body;
 const agentFeedbackSchema = peRoutes["agent-feedback.submit"].body;
+/** One kept agent-feedback JSONL row: the report plus the host's stamps and local joins. */
+const agentFeedbackRowSchema = agentFeedbackSchema.extend({
+  feedbackId: z.uuid(),
+  at: z.iso.datetime(),
+  commit: z.string().nullable(),
+  version: z.string().nullable(),
+  installId: z.string().nullable(),
+  callerKind: z.string(),
+  threadId: z.string().nullable(),
+  turnId: z.string().nullable(),
+  harnessProvider: z.string().nullable(),
+  harnessModel: z.string().nullable(),
+});
+type AgentFeedbackRow = z.infer<typeof agentFeedbackRowSchema>;
 type ProducerStamps = { host: ReceiptStamp | null; web: ReceiptStamp | null };
 
 const DEADLINE_MS = 2000;
@@ -461,29 +484,39 @@ export function createReceiptExport(options: {
     seen.set(r.id, r.revision);
     if (seen.size > 1024) seen.delete(seen.keys().next().value!);
     const event = projectReceipt(r);
-    if (!event || !send) return;
+    if (event) enqueue(event);
+  });
+  /** The one bounded export queue: at 64 pending, an event is dropped and counted, never awaited. */
+  function enqueue(event: ExportEvent, delivered?: () => void) {
+    if (!send) return;
     if (remotePending === 64) {
       dropped++;
       return;
     }
     remotePending++;
     track(
-      send(event).finally(() => {
-        remotePending--;
-        if (dropped) {
-          const count = dropped;
-          dropped = 0;
-          track(
-            journal.recordFact(
-              { kind: "usage", event: "telemetry_dropped", counters: { producer: "host", count } },
-              undefined,
-              stamps.host,
-            ),
-          );
-        }
-      }),
+      send(event)
+        .then(delivered)
+        .finally(() => {
+          remotePending--;
+          if (dropped) {
+            const count = dropped;
+            dropped = 0;
+            track(
+              journal.recordFact(
+                {
+                  kind: "usage",
+                  event: "telemetry_dropped",
+                  counters: { producer: "host", count },
+                },
+                undefined,
+                stamps.host,
+              ),
+            );
+          }
+        }),
     );
-  });
+  }
   const deliver = async (id: string): Promise<FeedbackDelivery | null> => {
     const r = (await journal.read({ kinds: ["feedback"] })).find(
       (r) => r.body.kind === "feedback" && r.body.localRef.feedbackId === id,
@@ -530,6 +563,59 @@ export function createReceiptExport(options: {
     stamp: ReceiptStamp | null = stamps.host,
     source?: { id: string; at: string },
   ) => journal.recordFact(body, join, stamp, source);
+  // Agent feedback is kept in its JSONL first; a delivered id is appended beside it only after
+  // PostHog took the event. Every undelivered row is replayed at the next start under its
+  // feedbackId as the event uuid, so a resend is the same event.
+  const agentFeedbackLog = join(options.root, "agent-feedback.jsonl");
+  const deliveredLog = join(options.root, "agent-feedback.delivered");
+  const exportAgentFeedback = (row: AgentFeedbackRow) => {
+    const host = stamps.host;
+    if (!host || !send) return;
+    track(
+      (async () => {
+        // Local ids stay local; the export joins the receipt spine by the same opaque ids.
+        const thread = row.threadId;
+        const threadId = thread ? await journal.opaqueId("thread", thread) : undefined;
+        const turnId =
+          thread && row.turnId
+            ? await journal.opaqueId("turn", `${thread}:${row.turnId}`)
+            : undefined;
+        const event = stamped(
+          "agent_feedback",
+          {
+            ...row,
+            feedback_id: row.feedbackId,
+            caller_kind: row.callerKind,
+            thread_id: threadId,
+            turn_id: turnId,
+            harness_provider: row.harnessProvider ?? undefined,
+            harness_model: row.harnessModel ?? undefined,
+          },
+          new Date(row.at),
+          host,
+        );
+        enqueue({ ...event, uuid: row.feedbackId }, () =>
+          appendFileSync(deliveredLog, `${row.feedbackId}\n`),
+        );
+      })(),
+    );
+  };
+  if (stamps.host && send && existsSync(agentFeedbackLog)) {
+    const delivered = new Set(
+      existsSync(deliveredLog) ? readFileSync(deliveredLog, "utf8").split("\n") : [],
+    );
+    for (const line of readFileSync(agentFeedbackLog, "utf8").split("\n")) {
+      // A torn or foreign line stays in the file for inspection and is not replayed.
+      let value: unknown;
+      try {
+        value = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      const row = agentFeedbackRowSchema.safeParse(value);
+      if (row.success && !delivered.has(row.data.feedbackId)) exportAgentFeedback(row.data);
+    }
+  }
   return {
     journal,
     stamps,
@@ -561,50 +647,22 @@ export function createReceiptExport(options: {
       const feedbackId = randomUUID();
       const at = new Date();
       const host = stamps.host;
+      const row: AgentFeedbackRow = {
+        ...report,
+        feedbackId,
+        at: at.toISOString(),
+        commit: host?.commit ?? null,
+        version: host?.version ?? null,
+        installId: host?.installId ?? null,
+        callerKind,
+        threadId: thread,
+        turnId: context?.turnId ?? null,
+        harnessProvider: context?.provider ?? null,
+        harnessModel: context?.model ?? null,
+      };
       mkdirSync(options.root, { recursive: true });
-      appendFileSync(
-        join(options.root, "agent-feedback.jsonl"),
-        `${JSON.stringify({
-          ...report,
-          feedbackId,
-          at: at.toISOString(),
-          commit: host?.commit ?? null,
-          version: host?.version ?? null,
-          installId: host?.installId ?? null,
-          callerKind,
-          threadId: thread,
-          turnId: context?.turnId ?? null,
-          harnessProvider: context?.provider ?? null,
-          harnessModel: context?.model ?? null,
-        })}\n`,
-      );
-      if (host && send)
-        track(
-          (async () => {
-            // Local ids stay local; the export joins the receipt spine by the same opaque ids.
-            const threadId = thread ? await journal.opaqueId("thread", thread) : undefined;
-            const turnId =
-              thread && context?.turnId
-                ? await journal.opaqueId("turn", `${thread}:${context.turnId}`)
-                : undefined;
-            await send(
-              stamped(
-                "agent_feedback",
-                {
-                  ...report,
-                  feedback_id: feedbackId,
-                  caller_kind: callerKind,
-                  thread_id: threadId,
-                  turn_id: turnId,
-                  harness_provider: context?.provider,
-                  harness_model: context?.model ?? undefined,
-                },
-                at,
-                host,
-              ),
-            );
-          })(),
-        );
+      appendFileSync(agentFeedbackLog, `${JSON.stringify(row)}\n`);
+      exportAgentFeedback(row);
       return { feedbackId };
     },
     async deliverFeedback(id: string): Promise<FeedbackDelivery | null> {
@@ -854,6 +912,23 @@ export function createThreadReceiptAdapter(
       ].includes(event.kind)
     )
       return;
+    // A turn's end carries its span and tool count, read from the thread now, never its words.
+    const ended = event.kind === "turn_end" || event.kind === "error" ? event : undefined;
+    const events = ended?.turnId ? (snapshot().find((t) => t.id === id)?.events ?? []) : [];
+    const prompt = events.find((e) => e.kind === "prompt" && e.turnId === ended?.turnId);
+    const span =
+      ended && prompt
+        ? {
+            durationMs: elapsed(prompt.at, ended.at),
+            toolCount: events.filter(
+              (e) =>
+                e.kind === "update" &&
+                e.turnId === ended.turnId &&
+                e.update.sessionUpdate === "tool_call",
+            ).length,
+          }
+        : {};
+    const failure = event.kind === "error" ? event.failure?.kind : undefined;
     tail = tail
       .then(async () => {
         const threadId = await threadJoin(id);
@@ -880,7 +955,13 @@ export function createThreadReceiptAdapter(
                   : event.kind === "turn_end"
                     ? "finished"
                     : "failed",
-              ...(event.kind === "error" ? { code: "turn.failed" as const } : {}),
+              ...(event.kind === "error"
+                ? {
+                    code:
+                      failure && failure !== "other" ? (`turn.${failure}` as const) : "turn.failed",
+                  }
+                : {}),
+              ...span,
             };
         const sourceId = await exporter.journal.opaqueId("request", `${id}:event:${event.seq}`);
         await exporter.record(
