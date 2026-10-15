@@ -13,6 +13,8 @@ import { useWorkbench } from "#/workbench/provider";
 import { isReady, readinessSub, repairWord } from "#/workbench/provider/providers";
 import type { GrantView } from "./scope";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { Popover } from "@base-ui/react/popover";
+import { PopupFrame } from "@pe/kit/lang/list-popup";
 
 /** A two-way on/off select is a toggle, as a boolean is. */
 const isToggle = (trait: TraitOption) =>
@@ -190,18 +192,29 @@ export function HeadLadder({ face = "control" }: { face?: ComponentProps<typeof 
 }
 
 /**
- * Whether Pea may write the document this thread points at, counted on the host's clock. Words
- * with one-click revoke. Nothing when the thread holds no grant.
+ * Whether Pea may write the document this thread points at, counted on the host's clock. The chip
+ * names itself; a click opens the grant's facts, and only the labeled verb inside revokes, so one
+ * curious click never ends a running agent's access. Nothing when the thread holds no grant.
  * The copy is lowercase by ruling (`rw · 42m`), so the chip takes no sentence casing.
  */
-export function GrantChip({ grant, onRevoke }: { grant: GrantView | null; onRevoke?: () => void }) {
+export function GrantChip({
+  grant,
+  document,
+  onRevoke,
+}: {
+  grant: GrantView | null;
+  /** The document's name as the target chip says it. */
+  document?: string;
+  onRevoke?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
   if (!grant) return null;
   const [tone, text, title] =
     grant.state === "rw"
       ? [
           "done",
           `rw · ${grant.minutes}m`,
-          "Pea may write this document. Each message you send renews it to 60 minutes; pointing the thread elsewhere ends it.",
+          `Pea can edit ${document ?? "this document"} for ${grant.minutes} more minutes`,
         ]
       : grant.state === "expired"
         ? [
@@ -216,15 +229,35 @@ export function GrantChip({ grant, onRevoke }: { grant: GrantView | null; onRevo
           ];
   if (grant.state === "rw" && onRevoke)
     return (
-      <Button
-        label="Revoke rw"
-        reason="Revoke rw. Running steps finish; no new step begins."
-        data-testid="grant-chip"
-        data-tone={tone}
-        onClick={onRevoke}
-      >
-        <span className="face-mono">{text}</span>
-      </Button>
+      <Popover.Root open={open} onOpenChange={setOpen}>
+        <Popover.Trigger
+          render={<Button label={title} reason={title} data-tone={tone} data-testid="grant-chip" />}
+        >
+          <span className="face-mono">{text}</span>
+        </Popover.Trigger>
+        <PopupFrame side="top" align="end" label="Editing access">
+          <div className="grid w-80 gap-1.5 p-1.5">
+            <p>{title}.</p>
+            <p className="t-small text-ink-2">
+              Each message you send renews it to 60 minutes; pointing the thread elsewhere ends it.
+              Stopping it lets running steps finish and starts no new write.
+            </p>
+            <span className="justify-self-end">
+              <Button
+                kind="framed"
+                data-tone="alarm"
+                label="Stop editing access"
+                onClick={() => {
+                  setOpen(false);
+                  onRevoke();
+                }}
+              >
+                <span className="t-sentence">Stop editing access</span>
+              </Button>
+            </span>
+          </div>
+        </PopupFrame>
+      </Popover.Root>
     );
   return (
     <TooltipHint content={title}>

@@ -383,11 +383,15 @@ export function ComposerPickers({
 }
 
 /** The grant and Pea's plan beside the pickers. Send owns run state. */
-export function ComposerState({ situation: { head } }: { situation: ChatSituation }) {
+export function ComposerState({ situation: { head, ladder } }: { situation: ChatSituation }) {
   const { chat } = useWorkbench();
   return (
     <>
-      <GrantChip grant={head.grantView} onRevoke={() => void head.revoke()} />
+      <GrantChip
+        grant={head.grantView}
+        document={ladder.docWord ?? undefined}
+        onRevoke={() => void head.revoke()}
+      />
       <PlanChip tasks={selectPlan(chat)} />
     </>
   );

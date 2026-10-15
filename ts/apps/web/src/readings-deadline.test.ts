@@ -73,12 +73,15 @@ test("a lost stream is one fault per outage, not one per reconnect attempt", asy
   await vi.advanceTimersByTimeAsync(0);
   sources[0]!.onerror!();
   expect(reportFault).not.toHaveBeenCalled(); // never opened: the deadline owns this silence
+  // Reconnects back off 1 s, 2 s, 4 s: no fresh frame arrived to reset them.
   await vi.advanceTimersByTimeAsync(1_000);
   sources[1]!.onopen!();
   sources[1]!.onerror!();
-  await vi.advanceTimersByTimeAsync(1_000);
+  await vi.advanceTimersByTimeAsync(1_999);
+  expect(sources).toHaveLength(2);
+  await vi.advanceTimersByTimeAsync(1);
   sources[2]!.onerror!();
-  await vi.advanceTimersByTimeAsync(1_000);
+  await vi.advanceTimersByTimeAsync(4_000);
   sources[3]!.onerror!();
   expect(reportFault).toHaveBeenCalledTimes(1);
   expect(reportFault).toHaveBeenCalledWith({ code: "stream.failed", streamKind: "readings" });

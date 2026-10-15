@@ -73,12 +73,15 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       setThreads(demoThreads(demo));
       return;
     }
+    let fault: string | undefined;
     return client.summaries(
       (listed) => {
         rosterEpoch.current++;
         setThreads((current) => mergeThreadRoster(current, listed));
+        // A fresh roster ends the list's own staleness, never another verb's complaint.
+        setError((current) => (current === fault ? undefined : current));
       },
-      (caught) => setError(errorMessage(caught)),
+      (caught) => setError((fault = errorMessage(caught))),
     );
   }, [client, demo]);
 
