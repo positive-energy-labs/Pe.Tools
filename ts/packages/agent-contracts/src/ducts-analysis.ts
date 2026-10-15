@@ -29,7 +29,7 @@ export const ductsAnalysisRequestSchema = z
         "flows",
       ])
       .describe(
-        "components reports whole-component stated-design flow status, not pressure certification; flows pages physical joints, ordered line subruns, and flow-only station-arm/curve-continuity edges with signed CFM. Mass-only edges have null length and assert no pressure-loss law. The v3 artifact stores complete witness element records in top-level witnessElements; each stored component holds ordered witnessElements indices. Dereference those indices to assemble its exact componentWitness for canonical Work staging; no numeric recomputation. Normal responses are limited to100 rows and65536 UTF-8 bytes; oversized rows refuse with artifact id.",
+        "components reports whole-component stated-design flow status, not pressure certification; flows pages physical joints, ordered line subruns, and flow-only station-arm/curve-continuity edges with signed CFM. Mass-only edges have null length and assert no pressure-loss law. The v4 artifact stores complete witness element records in top-level witnessElements; each stored component holds ordered witnessElements indices. Dereference those indices to assemble its exact componentWitness for canonical Work staging; no numeric recomputation. Effective input is input{encoding:gzip-base64,data,sha256,byteSize}; data gunzips to exact UTF-8 JSON, with sha256 and byteSize over those uncompressed bytes. Raw acquisition bodyUtf8, headers and hashes remain unchanged. Older artifact downloads retain exact bytes; unsupported projection formats refuse without recomputation. Normal responses are limited to100 rows and65536 UTF-8 bytes; oversized rows refuse with artifact id.",
       )
       .default("summary"),
     limit: z.number().int().min(1).max(100).default(20),
@@ -187,7 +187,7 @@ export const ductsAnalysisResponseSchema = z.strictObject({
     url: z.string(),
     sha256: hash,
     byteSize: z.number().int(),
-    format: z.literal("ducts-analysis-v3"),
+    format: z.literal("ducts-analysis-v4"),
   }),
   mode: z.enum(["fresh", "historical"]),
   target: documentRefSchema,

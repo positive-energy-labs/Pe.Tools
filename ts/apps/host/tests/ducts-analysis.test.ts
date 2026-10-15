@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { gzipSync, gunzipSync } from "node:zlib";
 import { unavailableShare } from "../src/machine.ts";
 import { peRead, peDo, buildCapabilities } from "@pe/mcps";
 import { withInvocationContext } from "@pe/runtime/context";
@@ -186,7 +187,9 @@ test("required demand does not need a known fan rating; evidence contains the ex
   });
   expect(result.work.kind).toBe("observed-only");
   const artifact = JSON.parse(await (await f.api.artifact(result.analysisId)).text());
-  expect(JSON.parse(artifact.input.json).snapshot).toEqual(f.snapshot);
+  expect(
+    JSON.parse(gunzipSync(Buffer.from(artifact.input.data, "base64")).toString("utf8")).snapshot,
+  ).toEqual(f.snapshot);
   expect(artifact.acquisition[0].headers["x-pe-native-request-id"]).toBe("fixture-1");
   expect(artifact.transportLabel).toContain("not original native");
 });
@@ -427,8 +430,10 @@ test("physical circuits and path pages retain staged evidence and never acquire 
     },
   });
   const artifact = JSON.parse(await (await f.api.artifact(fresh.analysisId)).text());
-  expect(artifact.format).toBe("ducts-analysis-v3");
-  expect(JSON.parse(artifact.input.json).work).toEqual(doc);
+  expect(artifact.format).toBe("ducts-analysis-v4");
+  expect(
+    JSON.parse(gunzipSync(Buffer.from(artifact.input.data, "base64")).toString("utf8")).work,
+  ).toEqual(doc);
   expect(artifact.outputs.next.design.graph.ports).toHaveLength(2);
   const counts = f.counts();
   const historical = ductsAnalysisResponseSchema.parse(
@@ -882,7 +887,7 @@ test("analysis pages obey byte budget and preserve complete historical row cover
   );
 });
 
-test("artifact v3 interns witness records without merging different role partitions", async () => {
+test("artifact v4 interns witness records without merging different role partitions", async () => {
   const f = fixture();
   for (const n of f.snapshot.nodes) n.uniqueId = `purpose-${n.id}`;
   const pin = (id: number): DuctPortPin => ({
@@ -932,7 +937,7 @@ test("artifact v3 interns witness records without merging different role partiti
     read({ kind: "fresh", target: f.target }, { kind: "document" }, { projection: "components" }),
   );
   const artifact = JSON.parse(await (await f.api.artifact(response.analysisId)).text());
-  expect(artifact.format).toBe("ducts-analysis-v3");
+  expect(artifact.format).toBe("ducts-analysis-v4");
   expect(artifact.witnessElements.length).toBeGreaterThan(2);
   const now = artifact.outputs.now.design.componentFlows[0],
     next = artifact.outputs.next.design.componentFlows[0];
@@ -955,7 +960,7 @@ test("artifact v3 interns witness records without merging different role partiti
   expect(f.counts()).toEqual(before);
 });
 
-test("v3 rejects invalid witness references and old projection versions while raw bytes remain exact", async () => {
+test("v4 rejects invalid witness references and old projection versions while raw bytes remain exact", async () => {
   const f = fixture();
   const fresh = await f.api.read(read({ kind: "fresh", target: f.target }));
   const artifact = JSON.parse(await (await f.api.artifact(fresh.analysisId)).text());
@@ -965,7 +970,7 @@ test("v3 rejects invalid witness references and old projection versions while ra
     writeFileSync(join(f.root, `${id}.json`), bytes);
     return { id, bytes };
   };
-  const legacy = save({ ...artifact, format: "ducts-analysis-v2" });
+  const legacy = save({ ...artifact, format: "ducts-analysis-v3" });
   const before = f.counts();
   expect(Buffer.from(await (await f.api.artifact(legacy.id)).arrayBuffer())).toEqual(legacy.bytes);
   await expect(f.api.read(read({ kind: "artifact", id: legacy.id }))).rejects.toThrow(
@@ -981,18 +986,19 @@ test("v3 rejects invalid witness references and old projection versions while ra
   expect(f.counts()).toEqual(before);
 });
 
-test("historical v3 rounded-coordinate results remain stored evidence without acquiring or recomputing native-double geometry", async () => {
+test("historical v4 rounded-coordinate results remain stored evidence without acquiring or recomputing native-double geometry", async () => {
   const f = fixture(),
     fresh = await f.api.read(
       read({ kind: "fresh", target: f.target }, { kind: "document" }, { projection: "components" }),
     );
   const artifact = JSON.parse(await (await f.api.artifact(fresh.analysisId)).text());
-  const input = JSON.parse(artifact.input.json);
+  const input = JSON.parse(gunzipSync(Buffer.from(artifact.input.data, "base64")).toString("utf8"));
   delete input.snapshot.coordinateEncoding;
   for (const segment of input.snapshot.segments) delete segment.curveKind;
-  artifact.input.json = JSON.stringify(input);
-  artifact.input.byteSize = Buffer.byteLength(artifact.input.json);
-  artifact.input.sha256 = createHash("sha256").update(artifact.input.json).digest("hex");
+  const inputJson = JSON.stringify(input);
+  artifact.input.data = gzipSync(Buffer.from(inputJson)).toString("base64");
+  artifact.input.byteSize = Buffer.byteLength(inputJson);
+  artifact.input.sha256 = createHash("sha256").update(inputJson).digest("hex");
   for (const w of artifact.witnessElements) {
     delete w.coordinateEncoding;
     delete w.curveKind;
@@ -1007,4 +1013,48 @@ test("historical v3 rounded-coordinate results remain stored evidence without ac
   expect(historical.rows).toEqual(fresh.rows);
   expect(f.counts()).toEqual(before);
   expect(Buffer.from(await (await f.api.artifact(id)).arrayBuffer())).toEqual(bytes);
+});
+
+test("v4 stores exact effective UTF8 input in bounded gzip-base64", async () => {
+  const f = fixture();
+  const response = await f.api.read(read({ kind: "fresh", target: f.target }));
+  const artifact = JSON.parse(await (await f.api.artifact(response.analysisId)).text());
+  expect(artifact.format).toBe("ducts-analysis-v4");
+  expect(artifact.input.encoding).toBe("gzip-base64");
+});
+
+test("v4 rejects malformed input bytes before JSON parsing and never reacquires historical data", async () => {
+  const f = fixture();
+  const fresh = await f.api.read(read({ kind: "fresh", target: f.target }));
+  const original = JSON.parse(await (await f.api.artifact(fresh.analysisId)).text());
+  const before = f.counts();
+  const cases = [
+    { ...original.input, encoding: "utf8" },
+    { ...original.input, data: original.input.data + "\n" },
+    { ...original.input, data: "Zh==" },
+    { ...original.input, data: Buffer.from("not gzip").toString("base64") },
+    { ...original.input, sha256: "0".repeat(64) },
+    { ...original.input, byteSize: original.input.byteSize + 1 },
+    { ...original.input, byteSize: 1 },
+    { ...original.input, byteSize: 67108865 },
+    {
+      encoding: "gzip-base64",
+      data: gzipSync(Buffer.from([0xff])).toString("base64"),
+      byteSize: 1,
+      sha256: createHash("sha256")
+        .update(Buffer.from([0xff]))
+        .digest("hex"),
+    },
+  ];
+  for (const input of cases) {
+    const bytes = Buffer.from(JSON.stringify({ ...original, input }));
+    const id = createHash("sha256").update(bytes).digest("hex");
+    writeFileSync(join(f.root, `${id}.json`), bytes);
+    await expect(f.api.read(read({ kind: "artifact", id }))).rejects.toThrow(/effective-input/);
+  }
+  expect(f.counts()).toEqual(before);
+  const raw = gunzipSync(Buffer.from(original.input.data, "base64"));
+  expect(raw.length).toBe(original.input.byteSize);
+  expect(createHash("sha256").update(raw).digest("hex")).toBe(original.input.sha256);
+  expect(JSON.parse(raw.toString("utf8")).snapshot).toEqual(f.snapshot);
 });

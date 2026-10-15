@@ -5,6 +5,7 @@ import {
   HOST_RPC_DOCUMENT_HEADER,
 } from "@pe/host-contracts/operation-types";
 import { readFile } from "node:fs/promises";
+import { gzipSync, gunzipSync } from "node:zlib";
 import { join } from "node:path";
 import {
   addressSchema,
@@ -141,13 +142,13 @@ function hydrateOutputs(artifact: Artifact): Outputs {
 }
 
 type Artifact = {
-  format: "ducts-analysis-v3";
+  format: "ducts-analysis-v4";
   createdAt: string;
   producer: unknown;
   observation: Observation;
   work: { kind: "canonical" | "observed-only"; key: WorkKey; revision: number | null };
   freshness: DuctsAnalysisResponse["freshness"];
-  input: { encoding: "utf8"; json: string; sha256: string; byteSize: number };
+  input: { encoding: "gzip-base64"; data: string; sha256: string; byteSize: number };
   transportLabel: "host-/call HTTP response JSON; not original native transport bytes";
   acquisition: {
     key: string;
@@ -167,16 +168,37 @@ const space = (node: DuctSnapshot["nodes"][number]) =>
 const label = (node: DuctSnapshot["nodes"][number]) =>
   [node.family, node.type].filter(Boolean).join(" / ") || String(node.id);
 const inputOf = (artifact: Artifact): EffectiveInputs => {
-  if (artifact.format !== "ducts-analysis-v3")
+  if (artifact.format !== "ducts-analysis-v4")
     throw Error(
       "Unsupported analysis format; historical outputs were not recomputed or reinterpreted",
     );
+  const input = artifact.input;
   if (
-    sha256Hex(artifact.input.json) !== artifact.input.sha256 ||
-    Buffer.byteLength(artifact.input.json) !== artifact.input.byteSize
+    input?.encoding !== "gzip-base64" ||
+    typeof input.data !== "string" ||
+    !Number.isSafeInteger(input.byteSize) ||
+    input.byteSize <= 0 ||
+    input.byteSize > MAX_BYTES ||
+    typeof input.sha256 !== "string" ||
+    !/^[a-f0-9]{64}$/.test(input.sha256) ||
+    input.data.length > 4 * Math.ceil(MAX_BYTES / 3)
   )
+    throw Error("Analysis effective-input encoding or size is invalid");
+  const compressed = Buffer.from(input.data, "base64");
+  if (!compressed.length || compressed.toString("base64") !== input.data)
+    throw Error("Analysis effective-input base64 is not canonical");
+  let bytes: Buffer;
+  try {
+    bytes = gunzipSync(compressed, { maxOutputLength: input.byteSize });
+  } catch {
+    throw Error("Analysis effective-input gzip failed or exceeded its declared byte budget");
+  }
+  if (bytes.length !== input.byteSize || sha256Hex(bytes) !== input.sha256)
     throw Error("Analysis effective-input integrity failed");
-  return JSON.parse(artifact.input.json) as EffectiveInputs;
+  const json = bytes.toString("utf8");
+  if (!Buffer.from(json, "utf8").equals(bytes))
+    throw Error("Analysis effective-input UTF8 is invalid");
+  return JSON.parse(json) as EffectiveInputs;
 };
 
 /** Native reads retain the invoking context and pass through the existing admission door. */
@@ -262,7 +284,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       JSON.stringify(owned?.doc) !== JSON.stringify(afterWork?.doc);
     const fresh = observedSince !== undefined && observedSince <= began;
     return {
-      format: "ducts-analysis-v3",
+      format: "ducts-analysis-v4",
       createdAt: new Date().toISOString(),
       producer: sources.producer,
       observation,
@@ -278,8 +300,8 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       },
       transportLabel: "host-/call HTTP response JSON; not original native transport bytes",
       input: {
-        encoding: "utf8",
-        json: inputJson,
+        encoding: "gzip-base64",
+        data: gzipSync(Buffer.from(inputJson, "utf8")).toString("base64"),
         sha256: sha256Hex(inputJson),
         byteSize: Buffer.byteLength(inputJson),
       },
@@ -591,7 +613,7 @@ function project(
       url: `/pe/ducts/analyses/${id}/artifact`,
       sha256: id,
       byteSize,
-      format: "ducts-analysis-v3",
+      format: "ducts-analysis-v4",
     },
     mode: request.source.kind === "fresh" ? "fresh" : "historical",
     target: artifact.observation.target,
