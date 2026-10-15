@@ -293,6 +293,15 @@ export function componentFlows(g: Graph): ComponentFlow[] {
       const id = vertices.get(k)!,
         e = g.elements.get(id)!,
         p = e.connectors.find((p) => portKey(id, p.index) === k)!;
+      if (geometryReasons.has(id)) {
+        injection.set(k, null);
+        boundaries.push({
+          port: k,
+          injectionCfm: null,
+          source: "Duct internal continuity is not established",
+        });
+        continue;
+      }
       const fan = fanPorts.get(k);
       if (fan) {
         injection.set(k, fan.injection);

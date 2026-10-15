@@ -901,3 +901,94 @@ it("allows projection residual within the explicit conservative coordinate round
       .some((r) => r.code === "flow-subrun-geometry"),
   ).toBe(false);
 });
+
+function refusedContinuityFixture() {
+  const s = fixture(),
+    owner = s.nodes[0]!,
+    main = s.segments[0]!;
+  const points = [
+    [0, 0, 0],
+    [10, 0, 0],
+    [4, 0, 0],
+    [4, 0, 0],
+  ];
+  s.nodes = [100, 200, 300, 400].map((id, index) => ({
+    ...owner,
+    id,
+    uniqueId: `purpose-${id}`,
+    connectors: [{ ...port(0, 10, index), point: points[index]! }],
+  }));
+  s.segments = [
+    {
+      ...main,
+      lengthFt: 10,
+      polyline: [
+        [0, 0, 0],
+        [10, 0, 0],
+      ],
+      connectors: s.nodes.map((n, index) => ({
+        ...port(index, n.id, 0),
+        kind: index < 2 ? "end" : "curve",
+        point: points[index]!,
+      })),
+    },
+  ];
+  return s;
+}
+it.each(["coincident-stations", "missing-polyline", "off-polyline"])(
+  "keeps joint flows unknown across %s duct continuity instead of deriving false zero",
+  (failure) => {
+    const s = refusedContinuityFixture();
+    if (failure === "missing-polyline") s.segments[0]!.polyline = [];
+    if (failure === "off-polyline") s.segments[0]!.connectors[2]!.point = [4, 1, 0];
+    const cs = price(s, {}, work({})).next.design.componentFlows;
+    const joints = cs.flatMap((c) => c.edges.filter((e) => e.kind === "joint"));
+    expect(joints).toHaveLength(4);
+    expect(joints.every((e) => e.signedCfm === null && e.source === null)).toBe(true);
+    expect(cs.every((c) => c.status === "underdetermined" && c.maxResidualCfm === null)).toBe(true);
+    expect(cs.flatMap((c) => c.boundaries).filter((b) => b.port.startsWith("10:"))).toHaveLength(4);
+  },
+);
+it("preserves independently stated boundary/constraint flows and legitimate cap zero at refused continuity", () => {
+  const s = refusedContinuityFixture();
+  s.nodes[0]!.connectors[0]!.direction = "out";
+  s.nodes[1]!.kind = "cap";
+  const e: Record<string, DuctCalculation> = {
+    fan: {
+      kind: "fan",
+      element: identity(100),
+      inlet: null,
+      outlet: pin(s, 100, 0),
+      designFlowCfm: 125,
+      referenceTotalPressureInWg: 0,
+      source: "Explicit125CFM boundary",
+    },
+  };
+  const baseline = price(s, {}, work(e)).next.design.componentFlows;
+  e.flow = {
+    kind: "component-flow",
+    componentWitness: baseline.find((c) => c.elementIds.includes(300))!.componentWitness,
+    constraints: [
+      {
+        element: identity(300),
+        port: pin(s, 300, 0),
+        signedCfm: 75,
+        source: "Explicit75CFM joint",
+      },
+    ],
+    source: "Independent joint design",
+  };
+  const cs = price(s, {}, work(e)).next.design.componentFlows;
+  const joint = (id: number) =>
+    cs
+      .flatMap((c) => c.edges)
+      .find((e) => e.kind === "joint" && (e.from === `${id}:0` || e.to === `${id}:0`))!;
+  expect(Math.abs(joint(100).signedCfm!)).toBe(125);
+  expect(joint(100).source).toBe("conservation");
+  expect(Math.abs(joint(200).signedCfm!)).toBe(0);
+  expect(joint(200).source).toBe("conservation");
+  expect(Math.abs(joint(300).signedCfm!)).toBe(75);
+  expect(joint(300).source).toBe("staged-constraint");
+  expect(joint(400).signedCfm).toBeNull();
+  expect(cs.every((c) => c.status === "underdetermined")).toBe(true);
+});
