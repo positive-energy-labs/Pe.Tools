@@ -25,6 +25,7 @@ import { ValueDiff } from "#/components/lang/value-diff";
 import type { Column } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
 import type { DuctsEvaluation, DuctsPage } from "./manifest";
+import { assessDucts } from "@pe/ducts-domain/assessment";
 import { LOSS_RULES, ruleByKey } from "@pe/ducts-domain/loss-rules";
 import type { LossResult, Row } from "@pe/ducts-domain/losses";
 import { systemFor } from "@pe/ducts-domain/losses";
@@ -33,7 +34,6 @@ import {
   instancesOf,
   partOf,
   PARTS,
-  proposedStatic,
   stagedFanout,
   tableOf,
   unitOf,
@@ -46,6 +46,7 @@ import { snapshotById, type GroupReadiness } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 type Node = DuctSnapshot["nodes"][number];
 type Group = DuctSnapshot["groups"][number];
+type Assessment = ReturnType<typeof assessDucts>;
 export interface LossesWork {
   doc: DuctsRouteDocument | null;
   revision: number | null;
@@ -79,13 +80,14 @@ function terminalStatus(
   ready: GroupReadiness | undefined,
   node: Node,
   priced: Priced,
+  dropKnown: boolean,
 ): Status[] {
   const { issues } = snapshotById(snapshot);
   const out: Status[] = [];
   if (ready?.walk.some((id) => issues.get(id)?.kind === "open-end")) out.push("open-end");
   if (node.terminalDrop && !node.terminalDrop.writable) out.push("refuses");
   const terminal = priced.next.paths[node.id]?.rows.find((row) => row.kind === "terminal");
-  if (terminal?.error) out.push("no-drop");
+  if (terminal?.error || !dropKnown) out.push("no-drop");
   return out;
 }
 /** Stage a rule's table; staging the table already staged takes it back. */
@@ -482,11 +484,13 @@ function GroupHead({
   snapshot,
   group,
   priced,
+  assessment,
   work,
 }: {
   snapshot: DuctSnapshot;
   group: Group;
   priced: Priced;
+  assessment: Assessment;
   work: LossesWork;
 }) {
   const now = priced.now.byGroup[group.id];
@@ -495,8 +499,9 @@ function GroupHead({
   const revit = critical == null ? null : systemFor(snapshot, critical);
   // The air mover Pe's number would be written to; nothing reaches it until a person stages it.
   const unit = unitOf(snapshot, priced.now, group);
-  const sum = unit == null ? null : proposedStatic(snapshot, priced.next, unit);
-  const proposed = sum?.total ?? null;
+  const demand = assessment.equipment.find((equipment) => equipment.id === unit);
+  const sum = demand?.next ?? null;
+  const proposed = demand?.requiredEspStagedInWg ?? null;
   const stagedStatic = unit == null ? undefined : priced.staged.unitStatics[String(unit)]?.inWg;
   return (
     <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 py-1" data-group-head={group.id}>
@@ -567,6 +572,7 @@ function Bars({
   group,
   ready,
   priced,
+  assessment,
   max,
   selected,
   setPage,
@@ -576,6 +582,7 @@ function Bars({
   group: Group;
   ready: GroupReadiness | undefined;
   priced: Priced;
+  assessment: Assessment;
   max: number;
   selected: string;
   setPage: (next: Partial<DuctsPage>) => void;
@@ -598,7 +605,13 @@ function Bars({
         }
         const next = priced.next.paths[id]?.total ?? path.total;
         const moved = Math.abs(next - path.total) > 1e-9;
-        const statuses = terminalStatus(snapshot, ready, node, priced);
+        const statuses = terminalStatus(
+          snapshot,
+          ready,
+          node,
+          priced,
+          assessment.terminalDrops[node.id] ?? false,
+        );
         const opened = selected === String(id);
         return (
           <Fragment key={id}>
@@ -678,6 +691,7 @@ const GroupSection = memo(function GroupSection(props: ComponentProps<typeof Bar
         snapshot={props.snapshot}
         group={props.group}
         priced={props.priced}
+        assessment={props.assessment}
         work={props.work}
       />
       <Bars {...props} />
@@ -756,13 +770,25 @@ export function DuctsLosses({
   } | null;
   work: LossesWork;
 }) {
+  const assessment = useMemo(
+    () =>
+      snapshot && priced
+        ? assessDucts(
+            snapshot,
+            work.doc,
+            { now: priced.now, next: priced.next, readiness: ready },
+            { selector: page.group ? { kind: "group", id: page.group } : { kind: "document" } },
+          )
+        : null,
+    [snapshot, priced, ready, work.doc, page.group],
+  );
   if (empty || !snapshot)
     return (
       <EmptyState story="scope" exit={empty?.exit ?? "wait for the snapshot"}>
         {empty?.says ?? "reading ducts…"}
       </EmptyState>
     );
-  if (!grids || !priced)
+  if (!grids || !priced || !assessment)
     return (
       <EmptyState
         story="scope"
@@ -809,6 +835,7 @@ export function DuctsLosses({
           group={group}
           ready={ready[group.id]}
           priced={priced}
+          assessment={assessment}
           max={max}
           // Only the group holding the open grille sees `selected`, so a pick re-renders one group.
           selected={

@@ -456,7 +456,11 @@ function pathRows(
     const taps = (tree.children.get(duct.id) ?? [])
       .map((id) => tree.parts.get(id)!.node)
       .filter((n): n is Node => isTap(n))
-      .map((n) => ({ node: n, pos: tapDistance(duct, n, prev, tree.root), qb: below.get(n.id) ?? 0 }))
+      .map((n) => ({
+        node: n,
+        pos: tapDistance(duct, n, prev, tree.root),
+        qb: below.get(n.id) ?? 0,
+      }))
       .sort((a, b) => a.pos - b.pos || a.node.id - b.node.id);
     let q = below.get(duct.id) ?? 0;
     let at = 0;

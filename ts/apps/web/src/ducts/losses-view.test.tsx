@@ -140,7 +140,7 @@ it("draws one bar per grille, opens a grille's rules, and a table chip stages th
   const status30 = [...q('[data-terminal="30"]')!.querySelectorAll("[data-status]")].map((el) =>
     el.getAttribute("data-status"),
   );
-  expect(status30).toEqual(["refuses"]);
+  expect(status30).toEqual(["refuses", "no-drop"]);
   expect(q("[data-staged-band]")).toBeNull();
   // The slot a terminal drop travels in is a cell a person can name.
   expect(q('[data-slot="terminalDrop"]')).not.toBeNull();
@@ -520,4 +520,27 @@ it("folds refusals with an identical reason into one line naming every id", () =
     { reason: "shared", kind: "equipment", ids: [1, 2] },
     { reason: "other", kind: "terminal", ids: [3] },
   ]);
+});
+
+it("does not offer a combined fan static for unresolved equipment air circuits", () => {
+  const shared: DuctSnapshot = {
+    ...snapshot,
+    groups: [{ ...snapshot.groups[0]!, classifications: ["Supply Air", "Exhaust Air"] }],
+  };
+  const doc = ductsRouteState.schema.parse({});
+  const view = render(
+    <DuctsLosses
+      snapshot={shared}
+      grids={grids}
+      priced={price(shared, grids, doc)}
+      ready={{}}
+      page={PAGE}
+      setPage={() => {}}
+      empty={null}
+      work={{ doc, revision: 0, write: async () => null }}
+    />,
+  );
+  const unit = view.container.querySelector('[data-unit="1"]')!;
+  expect(unit.textContent).toContain("Pe proposes\u2014");
+  expect(within(unit as HTMLElement).queryByText("stage")).toBeNull();
 });
