@@ -12,6 +12,7 @@ import {
   ductsDocumentSchema,
   stagedDucts,
   type DuctPortPin,
+  type DuctComponentWitness,
   type DocumentRef,
   type DuctsRouteDocument,
   type WorkKey,
@@ -66,8 +67,81 @@ const solve = ({ snapshot, tables, work }: EffectiveInputs) => {
     })),
   };
 };
+type Outputs = ReturnType<typeof solve>;
+type ComponentFlow = Outputs["next"]["design"]["componentFlows"][number];
+type StoredComponentFlow = Omit<ComponentFlow, "componentWitness"> & { witnessElements: number[] };
+type StoredSide = Omit<Outputs["now"], "design"> & {
+  design: Omit<Outputs["now"]["design"], "componentFlows"> & {
+    componentFlows: StoredComponentFlow[];
+  };
+};
+type StoredOutputs = Omit<Outputs, "now" | "next"> & { now: StoredSide; next: StoredSide };
+
+/** One immutable artifact pool; identity includes geometry AND the scenario's role partition. */
+function storeOutputs(outputs: Outputs) {
+  const witnessElements: DuctComponentWitness = [];
+  const positions = new Map<string, number>();
+  const side = (value: Outputs["now"]): StoredSide => ({
+    ...value,
+    design: {
+      ...value.design,
+      componentFlows: value.design.componentFlows.map(
+        ({ id, elementIds, componentWitness, ...rest }) => ({
+          id,
+          elementIds,
+          witnessElements: componentWitness.map((element) => {
+            const content = JSON.stringify(element);
+            let position = positions.get(content);
+            if (position === undefined) {
+              position = witnessElements.length;
+              positions.set(content, position);
+              witnessElements.push(element);
+            }
+            return position;
+          }),
+          ...rest,
+        }),
+      ),
+    },
+  });
+  return {
+    witnessElements,
+    outputs: { ...outputs, now: side(outputs.now), next: side(outputs.next) },
+  };
+}
+function hydrateOutputs(artifact: Artifact): Outputs {
+  if (!Array.isArray(artifact.witnessElements)) throw Error("Analysis witness pool is missing");
+  const side = (value: StoredSide): Outputs["now"] => ({
+    ...value,
+    design: {
+      ...value.design,
+      componentFlows: value.design.componentFlows.map(
+        ({ id, elementIds, witnessElements, ...rest }) => ({
+          id,
+          elementIds,
+          componentWitness: witnessElements.map((index) => {
+            if (
+              !Number.isSafeInteger(index) ||
+              index < 0 ||
+              index >= artifact.witnessElements.length
+            )
+              throw Error("Analysis witness reference is invalid");
+            return structuredClone(artifact.witnessElements[index]!);
+          }),
+          ...rest,
+        }),
+      ),
+    },
+  });
+  return {
+    ...artifact.outputs,
+    now: side(artifact.outputs.now),
+    next: side(artifact.outputs.next),
+  };
+}
+
 type Artifact = {
-  format: "ducts-analysis-v2";
+  format: "ducts-analysis-v3";
   createdAt: string;
   producer: unknown;
   observation: Observation;
@@ -84,7 +158,8 @@ type Artifact = {
     sha256: string;
     byteSize: number;
   }[];
-  outputs: ReturnType<typeof solve>;
+  witnessElements: DuctComponentWitness;
+  outputs: StoredOutputs;
 };
 const MAX_BYTES = 64 * 1024 * 1024;
 const space = (node: DuctSnapshot["nodes"][number]) =>
@@ -92,7 +167,7 @@ const space = (node: DuctSnapshot["nodes"][number]) =>
 const label = (node: DuctSnapshot["nodes"][number]) =>
   [node.family, node.type].filter(Boolean).join(" / ") || String(node.id);
 const inputOf = (artifact: Artifact): EffectiveInputs => {
-  if (artifact.format !== "ducts-analysis-v2")
+  if (artifact.format !== "ducts-analysis-v3")
     throw Error(
       "Unsupported analysis format; historical outputs were not recomputed or reinterpreted",
     );
@@ -187,7 +262,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       JSON.stringify(owned?.doc) !== JSON.stringify(afterWork?.doc);
     const fresh = observedSince !== undefined && observedSince <= began;
     return {
-      format: "ducts-analysis-v2",
+      format: "ducts-analysis-v3",
       createdAt: new Date().toISOString(),
       producer: sources.producer,
       observation,
@@ -209,7 +284,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
         byteSize: Buffer.byteLength(inputJson),
       },
       acquisition,
-      outputs,
+      ...storeOutputs(outputs),
     };
   }
   return {
@@ -244,12 +319,11 @@ function project(
   byteSize: number,
 ): DuctsAnalysisResponse {
   const { snapshot, work } = input;
-  const { now, next } = artifact.outputs;
-  if (!Array.isArray(next.design.componentFlows))
-    throw Error("Retained analysis predates component-flow evidence; acquire a new analysis");
+  const outputs = hydrateOutputs(artifact);
+  const { now, next } = outputs;
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
   const selector = request.selector;
-  const assessment = assessDucts(snapshot, work, artifact.outputs, {
+  const assessment = assessDucts(snapshot, work, outputs, {
     selector,
     freshness: artifact.freshness,
   });
@@ -517,7 +591,7 @@ function project(
       url: `/pe/ducts/analyses/${id}/artifact`,
       sha256: id,
       byteSize,
-      format: "ducts-analysis-v2",
+      format: "ducts-analysis-v3",
     },
     mode: request.source.kind === "fresh" ? "fresh" : "historical",
     target: artifact.observation.target,

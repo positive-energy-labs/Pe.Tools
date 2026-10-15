@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { unavailableShare } from "../src/machine.ts";
 import { peRead, peDo, buildCapabilities } from "@pe/mcps";
 import { withInvocationContext } from "@pe/runtime/context";
@@ -425,7 +426,7 @@ test("physical circuits and path pages retain staged evidence and never acquire 
     },
   });
   const artifact = JSON.parse(await (await f.api.artifact(fresh.analysisId)).text());
-  expect(artifact.format).toBe("ducts-analysis-v2");
+  expect(artifact.format).toBe("ducts-analysis-v3");
   expect(JSON.parse(artifact.input.json).work).toEqual(doc);
   expect(artifact.outputs.next.design.graph.ports).toHaveLength(2);
   const counts = f.counts();
@@ -771,7 +772,9 @@ test("canonical staged component constraints drive shared analysis without claim
   expect(baseline.rows[0]!.component?.status).toBe("underdetermined");
   const design = {
     kind: "component-flow",
-    componentWitness: raw.outputs.next.design.componentFlows[0].componentWitness,
+    componentWitness: raw.outputs.next.design.componentFlows[0].witnessElements.map(
+      (index: number) => raw.witnessElements[index],
+    ),
     constraints: [
       {
         element: { id: 2, uniqueId: "flow-2" },
@@ -876,4 +879,103 @@ test("analysis pages obey byte budget and preserve complete historical row cover
   await expect(f.api.read(read({ kind: "fresh", target: f.target }))).rejects.toThrow(
     /65536-byte budget.*artifact/,
   );
+});
+
+test("artifact v3 interns witness records without merging different role partitions", async () => {
+  const f = fixture();
+  for (const n of f.snapshot.nodes) n.uniqueId = `purpose-${n.id}`;
+  const pin = (id: number): DuctPortPin => ({
+    index: 1,
+    point: [0, 0, 0],
+    shape: "round",
+    diameterIn: 8,
+    widthIn: null,
+    heightIn: null,
+    direction: "bidirectional",
+    connectedTo: { id: id === 1 ? 2 : 1, uniqueId: `purpose-${id === 1 ? 2 : 1}`, connector: 1 },
+  });
+  const doc = ductsDocumentSchema.parse({
+    calculation: {
+      scenario: { staged: { value: { kind: "balanced-design", source: "Purpose design" } } },
+      fan: {
+        staged: {
+          value: {
+            kind: "fan",
+            element: { id: 1, uniqueId: "purpose-1" },
+            inlet: null,
+            outlet: pin(1),
+            designFlowCfm: 100,
+            referenceTotalPressureInWg: 0,
+            source: "Purpose fan",
+          },
+        },
+      },
+      t: {
+        staged: {
+          value: {
+            kind: "terminal",
+            element: { id: 2, uniqueId: "purpose-2" },
+            port: pin(2),
+            role: "demand",
+            flowCfm: 100,
+            boundaryTotalPressureInWg: 0,
+            loss: { flowCfm: 100, totalLossInWg: 0, source: "Explicit zero TOTAL" },
+            source: "Purpose terminal",
+          },
+        },
+      },
+    },
+  });
+  f.sources.readWork = async () => ({ doc, revision: 1 });
+  const response = await f.api.read(
+    read({ kind: "fresh", target: f.target }, { kind: "document" }, { projection: "components" }),
+  );
+  const artifact = JSON.parse(await (await f.api.artifact(response.analysisId)).text());
+  expect(artifact.format).toBe("ducts-analysis-v3");
+  expect(artifact.witnessElements.length).toBeGreaterThan(2);
+  const now = artifact.outputs.now.design.componentFlows[0],
+    next = artifact.outputs.next.design.componentFlows[0];
+  expect(now).not.toHaveProperty("componentWitness");
+  expect(next).not.toHaveProperty("componentWitness");
+  const nw = now.witnessElements.map((i: number) => artifact.witnessElements[i]);
+  const sw = next.witnessElements.map((i: number) => artifact.witnessElements[i]);
+  expect(nw[0].rolePartitions).toEqual([]);
+  expect(sw[0].rolePartitions).toEqual(["fan:reservoir->1"]);
+  expect(now.witnessElements[0]).not.toBe(next.witnessElements[0]);
+  const before = f.counts();
+  const historical = await f.api.read(
+    read(
+      { kind: "artifact", id: response.analysisId },
+      { kind: "document" },
+      { projection: "components" },
+    ),
+  );
+  expect(historical.rows).toEqual(response.rows);
+  expect(f.counts()).toEqual(before);
+});
+
+test("v3 rejects invalid witness references and old projection versions while raw bytes remain exact", async () => {
+  const f = fixture();
+  const fresh = await f.api.read(read({ kind: "fresh", target: f.target }));
+  const artifact = JSON.parse(await (await f.api.artifact(fresh.analysisId)).text());
+  const save = (value: unknown) => {
+    const bytes = Buffer.from(JSON.stringify(value));
+    const id = createHash("sha256").update(bytes).digest("hex");
+    writeFileSync(join(f.root, `${id}.json`), bytes);
+    return { id, bytes };
+  };
+  const legacy = save({ ...artifact, format: "ducts-analysis-v2" });
+  const before = f.counts();
+  expect(Buffer.from(await (await f.api.artifact(legacy.id)).arrayBuffer())).toEqual(legacy.bytes);
+  await expect(f.api.read(read({ kind: "artifact", id: legacy.id }))).rejects.toThrow(
+    /Unsupported analysis format/,
+  );
+  const invalid = structuredClone(artifact);
+  invalid.outputs.next.design.componentFlows[0].witnessElements[0] =
+    artifact.witnessElements.length;
+  const broken = save(invalid);
+  await expect(f.api.read(read({ kind: "artifact", id: broken.id }))).rejects.toThrow(
+    /witness reference is invalid/,
+  );
+  expect(f.counts()).toEqual(before);
 });

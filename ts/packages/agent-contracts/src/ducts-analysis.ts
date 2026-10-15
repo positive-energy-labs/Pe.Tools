@@ -29,7 +29,7 @@ export const ductsAnalysisRequestSchema = z
         "flows",
       ])
       .describe(
-        "components reports whole-component stated-design flow status, not pressure certification; flows pages every physical joint and ordered duct subrun with signed CFM. Full componentWitness is in the artifact for canonical Work staging. Normal responses are limited to100 rows and65536 UTF-8 bytes; oversized rows refuse with artifact id.",
+        "components reports whole-component stated-design flow status, not pressure certification; flows pages every physical joint and ordered duct subrun with signed CFM. The v3 artifact stores complete witness element records in top-level witnessElements; each stored component holds ordered witnessElements indices. Dereference those indices to assemble its exact componentWitness for canonical Work staging; no numeric recomputation. Normal responses are limited to100 rows and65536 UTF-8 bytes; oversized rows refuse with artifact id.",
       )
       .default("summary"),
     limit: z.number().int().min(1).max(100).default(20),
@@ -180,7 +180,7 @@ export const ductsAnalysisResponseSchema = z.strictObject({
     url: z.string(),
     sha256: hash,
     byteSize: z.number().int(),
-    format: z.literal("ducts-analysis-v2"),
+    format: z.literal("ducts-analysis-v3"),
   }),
   mode: z.enum(["fresh", "historical"]),
   target: documentRefSchema,
