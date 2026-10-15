@@ -179,7 +179,12 @@ function fittingFacts(
 const dist = (p: number[], q: number[]) => Math.hypot(...p.map((v, k) => v - q[k]!));
 
 /** Distance of a tap from the upstream end of its duct, ft, along the centerline. */
-function tapDistance(duct: Segment, tap: Node, parentId: number | null): number {
+function tapDistance(
+  duct: Segment,
+  tap: Node,
+  parentId: number | null,
+  root: GroupTree["root"],
+): number {
   const poly = duct.polyline;
   const legs = poly.slice(1).map((p, i) => dist(p, poly[i]!));
   const total = legs.reduce((a, b) => a + b, 0);
@@ -201,9 +206,14 @@ function tapDistance(duct: Segment, tap: Node, parentId: number | null): number 
     if (d < best.d) best = { d, s: run + t * legs[i]! };
     run += legs[i]!;
   });
-  // Measure from the end that faces the parent; a root duct measures from the polyline start.
+  // The curve's stored direction does not establish the equipment end of a root duct.
+  const attached = parentId == null && root?.element === duct.id && root.equipment != null;
   const up = duct.connectors.find(
-    (c) => c.kind !== "curve" && parentId != null && c.connectedTo?.elementId === parentId,
+    (c) =>
+      c.kind !== "curve" &&
+      (attached
+        ? c.connectedTo?.elementId === root.equipment && c.connectedTo.connector === root.port
+        : parentId != null && c.connectedTo?.elementId === parentId),
   );
   const fromEnd = up != null && dist(up.point, poly.at(-1)!) < dist(up.point, poly[0]!);
   const s = fromEnd ? total - best.s : best.s;
@@ -446,7 +456,7 @@ function pathRows(
     const taps = (tree.children.get(duct.id) ?? [])
       .map((id) => tree.parts.get(id)!.node)
       .filter((n): n is Node => isTap(n))
-      .map((n) => ({ node: n, pos: tapDistance(duct, n, prev), qb: below.get(n.id) ?? 0 }))
+      .map((n) => ({ node: n, pos: tapDistance(duct, n, prev, tree.root), qb: below.get(n.id) ?? 0 }))
       .sort((a, b) => a.pos - b.pos || a.node.id - b.node.id);
     let q = below.get(duct.id) ?? 0;
     let at = 0;

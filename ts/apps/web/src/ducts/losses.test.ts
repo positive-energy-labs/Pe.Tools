@@ -238,6 +238,22 @@ const snapshot = {
 const T6 = 0.09187933;
 const T8 = 0.16736657;
 
+it("measures root-duct taps from the equipment port regardless of curve storage direction", () => {
+  const rooted = structuredClone(snapshot);
+  rooted.nodes = rooted.nodes.filter((n) => n.id !== 2);
+  rooted.segments = rooted.segments.filter((s) => s.id !== 1);
+  rooted.nodes.find((n) => n.id === 100)!.connectors = [conn(7, [3, 0], round(8))];
+  const main = rooted.segments.find((s) => s.id === 3)!;
+  main.connectors.find((c) => c.index === 0)!.connectedTo = { elementId: 100, connector: 7 };
+  const forward = computeLosses(rooted, grids);
+  const common = friction(roundSection(8), 300, 5, 0.0003).dp;
+  const branch = forward.paths[8]!;
+  expect(branch.rows.find((r) => r.id === 3 && r.kind === "friction")!.dp).toBeCloseTo(common, 12);
+  main.polyline.reverse();
+  const reversed = computeLosses(rooted, grids);
+  expect(reversed).toEqual(forward);
+});
+
 it("solves a synthetic network end to end", () => {
   const r = computeLosses(snapshot, grids);
   expect(r.errors).toEqual([]);
