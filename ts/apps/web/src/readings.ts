@@ -47,6 +47,13 @@ export type { Lane };
 type Frame = (ReadingFrame & { stale?: boolean }) | { kind: "stale"; key: string };
 type Source = Pick<EventSource, "onopen" | "onmessage" | "onerror" | "close">;
 
+/** How long a subscribed key may wait for its owner acquisition; past it the connection is dead. */
+const READING_DEADLINE_MS = 30_000;
+/** Reconnect delays double from 1 s to this ceiling, and reset on the first fresh frame. */
+const RETRY_CEILING_MS = 30_000;
+/** A tab hidden at least this long resyncs when it is shown again (a frozen tab's socket lies). */
+const WAKE_AFTER_MS = 5_000;
+
 /** The one place the web opens an SSE stream: Readings, and a harness thread's tail. */
 export const openEventSource = (url: string) => new EventSource(runtimeStreamUrl(url));
 
@@ -71,6 +78,14 @@ export class PeReadings {
   private closed = false;
   /** A stream opened since the last loss: its loss is one fault, its reconnect attempts are not. */
   private opened = false;
+  /** Reconnects since the last fresh frame; the next delay is 1 s doubled this many times. */
+  private attempts = 0;
+  /** A connection whose keys are not all fresh by the deadline is faulted (it opened and went silent). */
+  private watchdog?: ReturnType<typeof setTimeout>;
+  /** A fault or wake happened; the next open tells every resync listener to re-read. */
+  private faulted = false;
+  private readonly resyncs = new Set<() => void>();
+  private unwatchWake?: () => void;
 
   constructor(
     private readonly url: () => string,
@@ -85,11 +100,73 @@ export class PeReadings {
     this.pendingFenced = false;
     clearTimeout(this.retry);
     this.retry = undefined;
+    clearTimeout(this.watchdog);
     this.source?.close();
     this.source = undefined;
     this.retiring?.close();
     this.retiring = undefined;
     this.entries.clear();
+    this.resyncs.clear();
+    this.unwatchWake?.();
+    this.unwatchWake = undefined;
+  }
+
+  /**
+   * Transports this owner cannot carry (a thread's log tail, which resumes from its own cursor)
+   * follow its liveness: the listener runs when the connection reopens after a fault or a wake,
+   * and re-reads its own state from the host. One owner decides when the world is suspect.
+   */
+  onResync(listener: () => void): () => void {
+    this.resyncs.add(listener);
+    return () => void this.resyncs.delete(listener);
+  }
+
+  /**
+   * The world may have moved without this tab hearing it (the tab woke, the network came back):
+   * fence every key, reconnect now, and have every follower re-read. Coalesced per tick, so a
+   * burst of wake signals is one reconnect.
+   */
+  resync() {
+    if (this.closed) return;
+    this.faulted = true;
+    this.attempts = 0;
+    if (this.entries.size === 0) return this.recovered();
+    this.schedule(true);
+  }
+
+  private recovered() {
+    if (!this.faulted) return;
+    this.faulted = false;
+    for (const listener of this.resyncs) listener();
+  }
+
+  /** The stream failed or went silent: one fault per outage, then reconnect with backoff. */
+  private fault() {
+    if (this.closed) return;
+    if (this.opened) reportFault({ code: "stream.failed", streamKind: "readings" });
+    this.opened = false;
+    this.faulted = true;
+    this.lose(true);
+  }
+
+  private watchWake() {
+    if (this.unwatchWake || typeof document === "undefined") return;
+    let hiddenAt: number | undefined;
+    const visibility = () => {
+      if (document.visibilityState === "hidden") hiddenAt ??= Date.now();
+      else if (hiddenAt !== undefined) {
+        const slept = Date.now() - hiddenAt;
+        hiddenAt = undefined;
+        if (slept >= WAKE_AFTER_MS) this.resync();
+      }
+    };
+    const online = () => this.resync();
+    document.addEventListener("visibilitychange", visibility);
+    window.addEventListener("online", online);
+    this.unwatchWake = () => {
+      document.removeEventListener("visibilitychange", visibility);
+      window.removeEventListener("online", online);
+    };
   }
 
   subscribe(raw: ReadingRequest, listener: (frame: Frame) => void): () => void {
@@ -126,6 +203,7 @@ export class PeReadings {
 
   private lose(retry: boolean) {
     this.generation++;
+    clearTimeout(this.watchdog);
     this.source?.close();
     this.source = undefined;
     this.retiring?.close();
@@ -135,10 +213,13 @@ export class PeReadings {
       for (const accept of entry.listeners) accept({ kind: "stale", key });
     }
     if (retry)
-      this.retry = setTimeout(() => {
-        this.retry = undefined;
-        this.open();
-      }, 1000);
+      this.retry = setTimeout(
+        () => {
+          this.retry = undefined;
+          this.open();
+        },
+        Math.min(RETRY_CEILING_MS, 1000 * 2 ** this.attempts++),
+      );
   }
 
   /**
@@ -170,6 +251,7 @@ export class PeReadings {
   private open() {
     // Prerender and SSR have no window and no EventSource; the client subscribes again on hydration.
     if (typeof window === "undefined" || this.closed || this.entries.size === 0) return;
+    this.watchWake();
     const generation = this.generation;
     const url = new URL(this.url());
     url.searchParams.set(
@@ -182,17 +264,20 @@ export class PeReadings {
     const source = this.connect(url.toString());
     this.source = source;
     const current = () => this.generation === generation && this.source === source;
+    clearTimeout(this.watchdog);
+    this.watchdog = setTimeout(() => {
+      if (current() && [...this.entries.values()].some((entry) => entry.stale)) this.fault();
+    }, READING_DEADLINE_MS);
     source.onopen = () => {
       if (!current()) return;
       this.opened = true;
       this.retiring?.close();
       this.retiring = undefined;
+      this.recovered();
     };
     const lost = () => {
-      if (this.closed || !current()) return;
-      if (this.opened) reportFault({ code: "stream.failed", streamKind: "readings" });
-      this.opened = false;
-      this.lose(true);
+      if (!current()) return;
+      this.fault();
     };
     source.onerror = lost;
     // Socket open proves no reading fresh. Each key must receive its owner acquisition.
@@ -207,6 +292,7 @@ export class PeReadings {
         if (frame.kind === "snapshot" || frame.kind === "failure") {
           entry.latest = frame;
           entry.stale = false;
+          this.attempts = 0;
         }
         for (const accept of entry.listeners) accept(frame);
       } catch {
@@ -221,6 +307,8 @@ export const peReadings = new PeReadings(() =>
 );
 
 export type Readings = Pick<PeReadings, "subscribe" | "dirty">;
+/** What a follower of the owner's liveness holds: `onResync` only. */
+export type Liveness = Pick<PeReadings, "onResync">;
 
 /* -- Frames become the one lifecycle ------------------------------------------------------ */
 
@@ -273,8 +361,11 @@ function advance<T>(reading: Reading<T>, frame: Frame): Reading<T> {
     case "gap":
       return previous === undefined ? absent : { state: "stale", previous, reason: "gap" };
     case "stale":
+      // A fence demotes fresh evidence only. A loading key keeps its first deadline (a reconnect
+      // loop cannot postpone its failure forever) and a failure stays said until a frame answers.
+      if (reading.state === "loading" || reading.state === "failed") return reading;
       return previous === undefined
-        ? { state: "loading", requestId: frame.key, deadline: Date.now() + 30_000 }
+        ? { state: "loading", requestId: frame.key, deadline: Date.now() + READING_DEADLINE_MS }
         : { state: "stale", previous, reason: "disconnected" };
     default:
       return reading;

@@ -240,7 +240,9 @@ test("a click on rw opens the grant's facts; only the labeled verb revokes", asy
   expect(revoked).toBe(0);
   fireEvent.click(verb);
   expect(revoked).toBe(1);
-  await waitFor(() => expect(screen.queryByRole("button", { name: "Stop editing access" })).toBeNull());
+  await waitFor(() =>
+    expect(screen.queryByRole("button", { name: "Stop editing access" })).toBeNull(),
+  );
 });
 
 test("a refused head write shows the door, the reason and the remedy, not an unknown outcome", async () => {

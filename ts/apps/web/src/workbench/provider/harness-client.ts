@@ -16,7 +16,7 @@ import type {
 } from "@pe/agent-contracts";
 import { followThread } from "@pe/agent-contracts/chat-state";
 import type { z } from "zod";
-import { openEventSource } from "#/readings";
+import { openEventSource, peReadings } from "#/readings";
 
 /** What a send posts: text, attachments, mentions (`promptRequestSchema`); the client mints its id. */
 export type PromptRequest = Omit<z.input<typeof promptRequestSchema>, "id">;
@@ -43,13 +43,16 @@ export function harnessClient(origin: string) {
       onChange: (threads: HarnessThreadSummary[]) => void,
       onFault: (error: Error) => void,
     ) => {
-      const events = openEventSource(readingsUrl(origin, { kind: "threads" }));
-      events.onmessage = (message) => {
-        const frame = JSON.parse(message.data) as ReadingFrame;
-        if (frame.kind === "snapshot") onChange(frame.value as HarnessThreadSummary[]);
-      };
-      events.onerror = () => onFault(new Error("Thread list disconnected; reconnecting."));
-      return () => events.close();
+      // The one Readings owner carries the list: its fault, backoff, wake and resync are this
+      // list's, so a stalled tab converges instead of painting an old roster as live.
+      let seen = false;
+      return peReadings.subscribe({ kind: "threads" }, (frame) => {
+        if (frame.kind === "snapshot") {
+          seen = true;
+          onChange(frame.value as HarnessThreadSummary[]);
+        } else if (frame.kind === "stale" && seen)
+          onFault(new Error("Thread list is not current; reconnecting."));
+      });
     },
     target: (
       id: string,
