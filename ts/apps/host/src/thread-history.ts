@@ -12,9 +12,31 @@ const querySchema = z
   })
   .refine((q) => q.since <= q.before, "since must precede before");
 
+type HistoryThread = HarnessThreadSummary & { events: HarnessEvent[] };
+
+/** The miner's evidence: threads settled in (since, before], idle, and not a miner run themselves. */
+export function eligibleThreads<T extends HistoryThread>(
+  threads: T[],
+  since: string,
+  before: string,
+) {
+  return threads
+    .filter(
+      (t) =>
+        t.lifecycle.status === "settled" &&
+        t.lifecycle.settledAt &&
+        t.lifecycle.settledAt > since &&
+        t.lifecycle.settledAt <= before &&
+        t.activity.state !== "running" &&
+        !t.activity.pending &&
+        !(t.origin?.kind === "scheduled" && t.origin.taskId === "feedback-miner"),
+    )
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
 /** Read through the transcript owner and receipt spine; never ask the model to locate private state. */
 export function threadHistory(options: {
-  snapshot: () => Array<HarnessThreadSummary & { events: HarnessEvent[] }>;
+  snapshot: () => HistoryThread[];
   receipts: ReceiptReader;
   threadJoin: (id: string) => Promise<string>;
 }) {
@@ -29,19 +51,7 @@ export function threadHistory(options: {
       const q = querySchema.parse(
         JSON.parse(new URL(request.url).searchParams.get("query") ?? "{}"),
       );
-      const rows = options
-        .snapshot()
-        .filter(
-          (t) =>
-            t.lifecycle.status === "settled" &&
-            t.lifecycle.settledAt &&
-            t.lifecycle.settledAt > q.since &&
-            t.lifecycle.settledAt <= q.before &&
-            t.activity.state !== "running" &&
-            !t.activity.pending &&
-            !(t.origin?.kind === "scheduled" && t.origin.taskId === "feedback-miner"),
-        )
-        .sort((a, b) => a.id.localeCompare(b.id));
+      const rows = eligibleThreads(options.snapshot(), q.since, q.before);
       const page = <T>(values: T[]) => ({
         items: values.slice(q.offset, q.offset + q.limit),
         hasMore: values.length > q.offset + q.limit,

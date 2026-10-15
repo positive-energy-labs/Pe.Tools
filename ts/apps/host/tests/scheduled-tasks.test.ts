@@ -33,7 +33,13 @@ function fixture() {
     threadId: randomUUID(),
     completion: Promise.resolve(),
   }));
-  const options = { path, receipts: { read, subscribe: () => () => {} }, launch, now: () => clock };
+  const options = {
+    path,
+    receipts: { read, subscribe: () => () => {} },
+    evidence: () => new Set(["eligible"]),
+    launch,
+    now: () => clock,
+  };
   return {
     path,
     read,
@@ -44,13 +50,47 @@ function fixture() {
     },
   };
 }
-const receipt = (verdict: "ok" | "running" | "rejected" = "ok"): Receipt => ({
+const ELIGIBLE_ACTION = "00000000-0000-4000-8000-0000000000a1";
+const OTHER_ACTION = "00000000-0000-4000-8000-0000000000a2";
+/** An action a Pea thread admitted; its native steps join it by the opaque action id. */
+const action = (thread: string, actionId: string): Receipt => ({
   schema: 1,
   id: randomUUID(),
   revision: 1,
   at: at.toISOString(),
   stamp: null,
-  join: { requestId: "00000000-0000-4000-8000-000000000001" },
+  join: { requestId: randomUUID(), actionId },
+  body: {
+    kind: "action",
+    value: {
+      kind: "operation",
+      id: actionId,
+      key: "arbitrary",
+      caller: { kind: "pea", context: "c", thread },
+      basis: null,
+      destination: { kind: "host" },
+      request: {},
+      bases: {},
+      steps: [],
+      preparation: { state: "unprepared" },
+      recovery: [],
+      startedAt: at.toISOString(),
+      publication: { state: "unrequested" },
+      state: "succeeded",
+      result: null,
+    },
+  },
+});
+const receipt = (
+  verdict: "ok" | "running" | "rejected" = "ok",
+  actionId = ELIGIBLE_ACTION,
+): Receipt => ({
+  schema: 1,
+  id: randomUUID(),
+  revision: 1,
+  at: at.toISOString(),
+  stamp: null,
+  join: { requestId: "00000000-0000-4000-8000-000000000001", actionId },
   body: {
     kind: "native",
     verdict,
@@ -112,10 +152,14 @@ test("gate skips without a thread or turn; revisions and native running/refused 
   const service = createScheduledTasks(f.options);
   const rows = Array.from({ length: 24 }, () => receipt());
   f.read.mockResolvedValue([
+    action("eligible", ELIGIBLE_ACTION),
+    action("not-in-window", OTHER_ACTION),
     ...rows,
     { ...rows[0]!, revision: 2 },
     receipt("running"),
     receipt("rejected"),
+    // Revit work outside the evidence set: a thread the run cannot read.
+    ...Array.from({ length: 5 }, () => receipt("ok", OTHER_ACTION)),
   ]);
   await service.run("feedback-miner");
   expect(f.launch).not.toHaveBeenCalled();
@@ -124,8 +168,9 @@ test("gate skips without a thread or turn; revisions and native running/refused 
     runCount: 1,
     threadId: null,
     lastStartedAt: null,
+    lastError: "Volume gate: 24/25 Revit-touching receipts",
   });
-  f.read.mockResolvedValue([...rows, receipt()]);
+  f.read.mockResolvedValue([action("eligible", ELIGIBLE_ACTION), ...rows, receipt()]);
   await service.run("feedback-miner");
   expect(f.launch).toHaveBeenCalledOnce();
   expect(service.list()[0]?.lastStatus).toBe("succeeded");
@@ -157,7 +202,7 @@ test("claim covers gate await and turn lifetime; concurrent poll and force canno
   const service = createScheduledTasks(f.options);
   const running = service.run("feedback-miner");
   await expect(service.run("feedback-miner", true)).rejects.toThrow("already running");
-  gate(Array.from({ length: 25 }, () => receipt()));
+  gate([action("eligible", ELIGIBLE_ACTION), ...Array.from({ length: 25 }, () => receipt())]);
   await vi.waitFor(() => expect(f.launch).toHaveBeenCalledOnce());
   f.advance(2 * 86_400_000);
   await service.poll();

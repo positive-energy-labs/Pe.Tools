@@ -1,5 +1,5 @@
 import { createScheduledTasks } from "./scheduled-tasks.ts";
-import { threadHistory } from "./thread-history.ts";
+import { eligibleThreads, threadHistory } from "./thread-history.ts";
 import { productRoot } from "@pe/host-contracts/service-identity";
 import { normalizePeError } from "@pe/host-contracts/pe-api";
 import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
@@ -845,6 +845,8 @@ export function makeHostPeRoutes(
   const scheduler = createScheduledTasks({
     path: join(productRoot(), "state", hostOwnership.serviceName, "scheduled-tasks.json"),
     receipts: telemetry.journal,
+    evidence: (since, before) =>
+      new Set(eligibleThreads(threads.historySnapshot(), since, before).map((t) => t.id)),
     launch: threads.launchScheduled,
   });
   const readHistory = threadHistory({

@@ -101,6 +101,8 @@ export function feedbackMiner(now: Date): ScheduledTask {
 export function createScheduledTasks(options: {
   path: string;
   receipts: ReceiptReader;
+  /** Local ids of the threads a run over (since, before] may read. */
+  evidence: (since: string, before: string) => ReadonlySet<string>;
   now?: () => Date;
   launch: (input: ScheduledLaunch) => { threadId: string; completion: Promise<void> };
 }) {
@@ -158,9 +160,30 @@ export function createScheduledTasks(options: {
     save(); // Claim before the first await, including the gate read and concurrent run-now calls.
     try {
       if (!force && row.gate) {
-        const receipts = await options.receipts.read({ after: since, kinds: ["native"] });
+        // Only Revit work the run can read counts: native receipts of actions a Pea thread in the
+        // eligible evidence set admitted (thread-history.ts), joined by the action's opaque id.
+        const threads = options.evidence(since, at.toISOString());
+        const receipts = await options.receipts.read({ kinds: ["action", "native"] });
+        const actions = new Set(
+          receipts.flatMap((r) =>
+            r.body.kind === "action" &&
+            r.body.value.caller.kind === "pea" &&
+            threads.has(r.body.value.caller.thread) &&
+            r.join.actionId
+              ? [r.join.actionId]
+              : [],
+          ),
+        );
         const count = new Set(
-          receipts.filter((r) => r.at <= at.toISOString() && revitTouching(r)).map((r) => r.id),
+          receipts
+            .filter(
+              (r) =>
+                r.at > since &&
+                r.at <= at.toISOString() &&
+                revitTouching(r) &&
+                actions.has(r.join.actionId ?? ""),
+            )
+            .map((r) => r.id),
         ).size;
         if (count < row.gate.minRevitReceipts) {
           row.lastStatus = "skipped";
