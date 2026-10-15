@@ -1,3 +1,4 @@
+import { prescribedHydraulics } from "./hydraulic-closure.ts";
 import { componentFlows, type ComponentFlow } from "./component-flows.ts";
 import { physicalGraph, type PhysicalGraph, type CircuitReason } from "./physical-graph.ts";
 import type { DuctCalculation, DuctPortPin } from "@pe/agent-contracts";
@@ -75,7 +76,7 @@ export function designCircuits(
   ) => { terminalId: number; rows: Row[]; total: number }[],
 ): CircuitResult {
   const physical = physicalGraph(snapshot, evidence);
-  const flowComponents = componentFlows(physical);
+  const flowComponents = prescribedHydraulics(physical, componentFlows(physical));
   const {
     elements,
     nodes,
@@ -547,6 +548,9 @@ export function designCircuits(
       }
     }
     const allReasons = [
+      ...flowComponents
+        .filter((c) => c.hydraulics && c.elementIds.includes(fan.element.id))
+        .flatMap((c) => c.hydraulics!.reasons),
       ...circuitReasons,
       ...inlet.side.reasons,
       ...outlet.side.reasons,

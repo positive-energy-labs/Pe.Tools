@@ -1,3 +1,4 @@
+import type { HydraulicClosure } from "./hydraulic-closure.ts";
 import type { DuctComponentWitness } from "@pe/agent-contracts";
 import { terminalCfm } from "./topology.ts";
 import type { physicalGraph, CircuitReason } from "./physical-graph.ts";
@@ -14,6 +15,7 @@ export interface FlowEdge {
   source: "conservation" | "staged-constraint" | null;
 }
 export interface ComponentFlow {
+  hydraulics: HydraulicClosure | null;
   id: string;
   elementIds: number[];
   componentWitness: DuctComponentWitness;
@@ -30,7 +32,7 @@ const portKey = (id: number, index: number) => `${id}:${index}`;
 // For n rounded operations, gamma(n)=n*u/(1-n*u), u=EPSILON/2. A leg projection
 // uses <64 scalar operations (subtract/dot/norm/clamp/reconstruct); include cumulative legs.
 // Scaling by absolute world coordinates bounds cancellation. This is numerical error, not a physical merge tolerance.
-const numericalError = (points: number[][], legs: number) => {
+export const ductArithmeticError = (points: number[][], legs: number) => {
   const n = 64 * (legs + 1),
     u = Number.EPSILON / 2;
   return (
@@ -150,7 +152,7 @@ export function componentFlows(g: Graph): ComponentFlow[] {
       const polyline = canonicalPolyline(e.polyline);
       const legs = polyline.slice(1).map((p, i) => distance(p, polyline[i]!));
       const total = legs.reduce((a, b) => a + b, 0);
-      const errorFt = numericalError([...polyline, ...ps.map((p) => p.point)], legs.length);
+      const errorFt = ductArithmeticError([...polyline, ...ps.map((p) => p.point)], legs.length);
       if (
         !(total > errorFt) ||
         !Number.isFinite(total) ||
@@ -638,6 +640,7 @@ export function componentFlows(g: Graph): ComponentFlow[] {
         ),
       );
     results.push({
+      hydraulics: null,
       id: first,
       elementIds,
       componentWitness: witness,

@@ -430,7 +430,7 @@ test("physical circuits and path pages retain staged evidence and never acquire 
     },
   });
   const artifact = JSON.parse(await (await f.api.artifact(fresh.analysisId)).text());
-  expect(artifact.format).toBe("ducts-analysis-v4");
+  expect(artifact.format).toBe("ducts-analysis-v5");
   expect(
     JSON.parse(gunzipSync(Buffer.from(artifact.input.data, "base64")).toString("utf8")).work,
   ).toEqual(doc);
@@ -778,6 +778,7 @@ test("canonical staged component constraints drive shared analysis without claim
   expect(baseline.rows[0]!.component?.status).toBe("underdetermined");
   const design = {
     kind: "component-flow",
+    hydraulics: null,
     componentWitness: raw.outputs.next.design.componentFlows[0].witnessElements.map(
       (index: number) => raw.witnessElements[index],
     ),
@@ -887,7 +888,7 @@ test("analysis pages obey byte budget and preserve complete historical row cover
   );
 });
 
-test("artifact v4 interns witness records without merging different role partitions", async () => {
+test("artifact v5 interns witness records without merging different role partitions", async () => {
   const f = fixture();
   for (const n of f.snapshot.nodes) n.uniqueId = `purpose-${n.id}`;
   const pin = (id: number): DuctPortPin => ({
@@ -937,7 +938,7 @@ test("artifact v4 interns witness records without merging different role partiti
     read({ kind: "fresh", target: f.target }, { kind: "document" }, { projection: "components" }),
   );
   const artifact = JSON.parse(await (await f.api.artifact(response.analysisId)).text());
-  expect(artifact.format).toBe("ducts-analysis-v4");
+  expect(artifact.format).toBe("ducts-analysis-v5");
   expect(artifact.witnessElements.length).toBeGreaterThan(2);
   const now = artifact.outputs.now.design.componentFlows[0],
     next = artifact.outputs.next.design.componentFlows[0];
@@ -960,7 +961,7 @@ test("artifact v4 interns witness records without merging different role partiti
   expect(f.counts()).toEqual(before);
 });
 
-test("v4 rejects invalid witness references and old projection versions while raw bytes remain exact", async () => {
+test("v5 rejects invalid witness references and old projection versions while raw bytes remain exact", async () => {
   const f = fixture();
   const fresh = await f.api.read(read({ kind: "fresh", target: f.target }));
   const artifact = JSON.parse(await (await f.api.artifact(fresh.analysisId)).text());
@@ -970,12 +971,16 @@ test("v4 rejects invalid witness references and old projection versions while ra
     writeFileSync(join(f.root, `${id}.json`), bytes);
     return { id, bytes };
   };
-  const legacy = save({ ...artifact, format: "ducts-analysis-v3" });
   const before = f.counts();
-  expect(Buffer.from(await (await f.api.artifact(legacy.id)).arrayBuffer())).toEqual(legacy.bytes);
-  await expect(f.api.read(read({ kind: "artifact", id: legacy.id }))).rejects.toThrow(
-    /Unsupported analysis format/,
-  );
+  for (const format of ["ducts-analysis-v3", "ducts-analysis-v4"]) {
+    const legacy = save({ ...artifact, format });
+    expect(Buffer.from(await (await f.api.artifact(legacy.id)).arrayBuffer())).toEqual(
+      legacy.bytes,
+    );
+    await expect(f.api.read(read({ kind: "artifact", id: legacy.id }))).rejects.toThrow(
+      /Unsupported analysis format/,
+    );
+  }
   const invalid = structuredClone(artifact);
   invalid.outputs.next.design.componentFlows[0].witnessElements[0] =
     artifact.witnessElements.length;
@@ -986,7 +991,7 @@ test("v4 rejects invalid witness references and old projection versions while ra
   expect(f.counts()).toEqual(before);
 });
 
-test("historical v4 rounded-coordinate results remain stored evidence without acquiring or recomputing native-double geometry", async () => {
+test("historical v5 rounded-coordinate results remain stored evidence without acquiring or recomputing native-double geometry", async () => {
   const f = fixture(),
     fresh = await f.api.read(
       read({ kind: "fresh", target: f.target }, { kind: "document" }, { projection: "components" }),
@@ -1015,15 +1020,15 @@ test("historical v4 rounded-coordinate results remain stored evidence without ac
   expect(Buffer.from(await (await f.api.artifact(id)).arrayBuffer())).toEqual(bytes);
 });
 
-test("v4 stores exact effective UTF8 input in bounded gzip-base64", async () => {
+test("v5 stores exact effective UTF8 input in bounded gzip-base64", async () => {
   const f = fixture();
   const response = await f.api.read(read({ kind: "fresh", target: f.target }));
   const artifact = JSON.parse(await (await f.api.artifact(response.analysisId)).text());
-  expect(artifact.format).toBe("ducts-analysis-v4");
+  expect(artifact.format).toBe("ducts-analysis-v5");
   expect(artifact.input.encoding).toBe("gzip-base64");
 });
 
-test("v4 rejects malformed input bytes before JSON parsing and never reacquires historical data", async () => {
+test("v5 rejects malformed input bytes before JSON parsing and never reacquires historical data", async () => {
   const f = fixture();
   const fresh = await f.api.read(read({ kind: "fresh", target: f.target }));
   const original = JSON.parse(await (await f.api.artifact(fresh.analysisId)).text());
@@ -1057,4 +1062,144 @@ test("v4 rejects malformed input bytes before JSON parsing and never reacquires 
   expect(raw.length).toBe(original.input.byteSize);
   expect(createHash("sha256").update(raw).digest("hex")).toBe(original.input.sha256);
   expect(JSON.parse(raw.toString("utf8")).snapshot).toEqual(f.snapshot);
+});
+
+test("actual analysis handler shares bounded prescribed hydraulic closure and exact historical evidence", async () => {
+  const f = fixture();
+  for (const n of f.snapshot.nodes) n.uniqueId = `purpose-${n.id}`;
+  f.snapshot.nodes[1]!.connectors[0]!.direction = "in";
+  const port = (id: number) => {
+    const n = f.snapshot.nodes.find((n) => n.id === id)!,
+      c = n.connectors[0]!;
+    return {
+      index: c.index,
+      point: c.point,
+      shape: c.shape,
+      diameterIn: c.diameterIn ?? null,
+      widthIn: null,
+      heightIn: null,
+      direction: c.direction,
+      connectedTo: { id: id === 1 ? 2 : 1, uniqueId: `purpose-${id === 1 ? 2 : 1}`, connector: 1 },
+    };
+  };
+  let doc = ductsDocumentSchema.parse({
+    calculation: {
+      scenario: { staged: { value: { kind: "balanced-design", source: "Purpose design" } } },
+      fan: {
+        staged: {
+          value: {
+            kind: "fan",
+            element: { id: 1, uniqueId: "purpose-1" },
+            inlet: null,
+            outlet: port(1),
+            designFlowCfm: 100,
+            referenceTotalPressureInWg: 0,
+            source: "Purpose fan",
+          },
+        },
+      },
+      terminal: {
+        staged: {
+          value: {
+            kind: "terminal",
+            element: { id: 2, uniqueId: "purpose-2" },
+            port: port(2),
+            role: "demand",
+            flowCfm: 100,
+            boundaryTotalPressureInWg: 0,
+            loss: { flowCfm: 100, totalLossInWg: 0.08, source: "Purpose TOTAL" },
+            source: "Purpose terminal",
+          },
+        },
+      },
+    },
+  });
+  f.sources.readWork = async () => ({ doc, revision: 1 });
+  const initial = await f.api.read(
+    read({ kind: "fresh", target: f.target }, { kind: "document" }, { projection: "components" }),
+  );
+  const first = JSON.parse(await (await f.api.artifact(initial.analysisId)).text());
+  const witness = first.outputs.next.design.componentFlows[0].witnessElements.map(
+    (i: number) => first.witnessElements[i],
+  );
+  doc = ductsDocumentSchema.parse({
+    ...doc,
+    calculation: {
+      ...doc.calculation,
+      pressure: {
+        staged: {
+          value: {
+            kind: "component-flow",
+            componentWitness: witness,
+            constraints: [],
+            hydraulics: {
+              mode: "prescribed-flow-demand",
+              anchors: [],
+              laws: [],
+              stationEquivalences: [],
+              fanAllocations: [],
+              source: "Purpose pressure closure",
+            },
+            source: "Purpose component",
+          },
+        },
+      },
+    },
+  });
+  const response = ductsAnalysisResponseSchema.parse(
+    await f.api.read(
+      read({ kind: "fresh", target: f.target }, { kind: "document" }, { projection: "components" }),
+    ),
+  );
+  expect(response.rows[0]!.component?.hydraulics).toMatchObject({
+    status: "complete-for-prescribed-flow",
+    maxPressureResidualInWg: 0,
+    fanHeadCount: 1,
+    unknownFanHeads: 0,
+    fanHeads: [expect.objectContaining({ requiredExternalTotalPressureInWg: 0.08 })],
+  });
+  expect(Buffer.byteLength(JSON.stringify(response))).toBeLessThanOrEqual(65536);
+  const before = f.counts(),
+    saved = Buffer.from(await (await f.api.artifact(response.analysisId)).arrayBuffer());
+  const historical = await f.api.read(
+    read(
+      { kind: "artifact", id: response.analysisId },
+      { kind: "document" },
+      { projection: "components" },
+    ),
+  );
+  expect(historical.rows).toEqual(response.rows);
+  expect(f.counts()).toEqual(before);
+  expect(createHash("sha256").update(saved).digest("hex")).toBe(response.analysisId);
+  const encoded = JSON.parse(saved.toString("utf8"));
+  expect(encoded.format).toBe("ducts-analysis-v5");
+  const stored = encoded.outputs.next.design.componentFlows[0].hydraulics;
+  expect(stored.lawEvidence).toBeUndefined();
+  expect(stored.lawIndices.length).toBeGreaterThan(0);
+  expect(stored.lawIndices.every((i: number) => encoded.hydraulicLaws[i])).toBe(true);
+  const save = (value: unknown) => {
+    const bytes = Buffer.from(JSON.stringify(value));
+    const id = createHash("sha256").update(bytes).digest("hex");
+    writeFileSync(join(f.root, `${id}.json`), bytes);
+    return id;
+  };
+  for (const index of [-1, 0.5, encoded.hydraulicLaws.length, Number.MAX_SAFE_INTEGER]) {
+    const bad = structuredClone(encoded);
+    bad.outputs.next.design.componentFlows[0].hydraulics.lawIndices[0] = index;
+    await expect(
+      f.api.read(
+        read(
+          { kind: "artifact", id: save(bad) },
+          { kind: "document" },
+          { projection: "components" },
+        ),
+      ),
+    ).rejects.toThrow("hydraulic law reference is invalid");
+  }
+  const missing = structuredClone(encoded);
+  delete missing.hydraulicLaws;
+  await expect(f.api.read(read({ kind: "artifact", id: save(missing) }))).rejects.toThrow(
+    "hydraulic law pool is missing",
+  );
+  expect(f.counts()).toEqual(before);
 });

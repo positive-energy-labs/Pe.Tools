@@ -70,7 +70,13 @@ const solve = ({ snapshot, tables, work }: EffectiveInputs) => {
 };
 type Outputs = ReturnType<typeof solve>;
 type ComponentFlow = Outputs["next"]["design"]["componentFlows"][number];
-type StoredComponentFlow = Omit<ComponentFlow, "componentWitness"> & { witnessElements: number[] };
+type HydraulicClosure = NonNullable<ComponentFlow["hydraulics"]>;
+type HydraulicLaw = HydraulicClosure["lawEvidence"][number];
+type StoredHydraulics = Omit<HydraulicClosure, "lawEvidence"> & { lawIndices: number[] };
+type StoredComponentFlow = Omit<ComponentFlow, "componentWitness" | "hydraulics"> & {
+  witnessElements: number[];
+  hydraulics: StoredHydraulics | null;
+};
 type StoredSide = Omit<Outputs["now"], "design"> & {
   design: Omit<Outputs["now"]["design"], "componentFlows"> & {
     componentFlows: StoredComponentFlow[];
@@ -82,6 +88,28 @@ type StoredOutputs = Omit<Outputs, "now" | "next"> & { now: StoredSide; next: St
 function storeOutputs(outputs: Outputs) {
   const witnessElements: DuctComponentWitness = [];
   const positions = new Map<string, number>();
+  const hydraulicLaws: HydraulicLaw[] = [];
+  const lawPositions = new Map<string, number>();
+  const hydraulic = (value: ComponentFlow["hydraulics"]): StoredHydraulics | null => {
+    if (value === null) return null;
+    const { status, mode, physicalComponentIds, lawEvidence, ...rest } = value;
+    return {
+      status,
+      mode,
+      physicalComponentIds,
+      lawIndices: lawEvidence.map((law) => {
+        const content = JSON.stringify(law);
+        let index = lawPositions.get(content);
+        if (index === undefined) {
+          index = hydraulicLaws.length;
+          lawPositions.set(content, index);
+          hydraulicLaws.push(law);
+        }
+        return index;
+      }),
+      ...rest,
+    };
+  };
   const side = (value: Outputs["now"]): StoredSide => ({
     ...value,
     design: {
@@ -101,17 +129,36 @@ function storeOutputs(outputs: Outputs) {
             return position;
           }),
           ...rest,
+          hydraulics: hydraulic(rest.hydraulics),
         }),
       ),
     },
   });
   return {
     witnessElements,
+    hydraulicLaws,
     outputs: { ...outputs, now: side(outputs.now), next: side(outputs.next) },
   };
 }
 function hydrateOutputs(artifact: Artifact): Outputs {
   if (!Array.isArray(artifact.witnessElements)) throw Error("Analysis witness pool is missing");
+  if (!Array.isArray(artifact.hydraulicLaws)) throw Error("Analysis hydraulic law pool is missing");
+  const hydraulic = (value: StoredHydraulics | null): ComponentFlow["hydraulics"] => {
+    if (value === null) return null;
+    const { status, mode, physicalComponentIds, lawIndices, ...rest } = value;
+    if (!Array.isArray(lawIndices)) throw Error("Analysis hydraulic law references are missing");
+    return {
+      status,
+      mode,
+      physicalComponentIds,
+      lawEvidence: lawIndices.map((index) => {
+        if (!Number.isSafeInteger(index) || index < 0 || index >= artifact.hydraulicLaws.length)
+          throw Error("Analysis hydraulic law reference is invalid");
+        return structuredClone(artifact.hydraulicLaws[index]!);
+      }),
+      ...rest,
+    };
+  };
   const side = (value: StoredSide): Outputs["now"] => ({
     ...value,
     design: {
@@ -130,6 +177,7 @@ function hydrateOutputs(artifact: Artifact): Outputs {
             return structuredClone(artifact.witnessElements[index]!);
           }),
           ...rest,
+          hydraulics: hydraulic(rest.hydraulics),
         }),
       ),
     },
@@ -142,7 +190,7 @@ function hydrateOutputs(artifact: Artifact): Outputs {
 }
 
 type Artifact = {
-  format: "ducts-analysis-v4";
+  format: "ducts-analysis-v5";
   createdAt: string;
   producer: unknown;
   observation: Observation;
@@ -160,6 +208,7 @@ type Artifact = {
     byteSize: number;
   }[];
   witnessElements: DuctComponentWitness;
+  hydraulicLaws: HydraulicLaw[];
   outputs: StoredOutputs;
 };
 const MAX_BYTES = 64 * 1024 * 1024;
@@ -168,7 +217,7 @@ const space = (node: DuctSnapshot["nodes"][number]) =>
 const label = (node: DuctSnapshot["nodes"][number]) =>
   [node.family, node.type].filter(Boolean).join(" / ") || String(node.id);
 const inputOf = (artifact: Artifact): EffectiveInputs => {
-  if (artifact.format !== "ducts-analysis-v4")
+  if (artifact.format !== "ducts-analysis-v5")
     throw Error(
       "Unsupported analysis format; historical outputs were not recomputed or reinterpreted",
     );
@@ -284,7 +333,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       JSON.stringify(owned?.doc) !== JSON.stringify(afterWork?.doc);
     const fresh = observedSince !== undefined && observedSince <= began;
     return {
-      format: "ducts-analysis-v4",
+      format: "ducts-analysis-v5",
       createdAt: new Date().toISOString(),
       producer: sources.producer,
       observation,
@@ -395,6 +444,28 @@ function project(
         reasonsTruncated: c.reasons.length > 20,
         reasons: c.reasons.slice(0, 20),
         pressureCertification: "not-established-by-flow-check",
+        hydraulics: c.hydraulics
+          ? {
+              status: c.hydraulics.status,
+              mode: c.hydraulics.mode,
+              physicalPortCount: c.hydraulics.physicalPortCount,
+              coveredPhysicalPortCount: c.hydraulics.coveredPhysicalPortCount,
+              physicalPartCount: c.hydraulics.physicalPartCount,
+              coveredPhysicalPartCount: c.hydraulics.coveredPhysicalPartCount,
+              lawCount: c.hydraulics.lawCount,
+              pressureComponentCount: c.hydraulics.pressureComponentCount,
+              maxPressureResidualInWg: c.hydraulics.maxPressureResidualInWg,
+              fanHeadCount: c.hydraulics.fanHeads.length,
+              fanHeadsTruncated: c.hydraulics.fanHeads.length > 20,
+              fanHeads: c.hydraulics.fanHeads.slice(0, 20),
+              unknownFanHeads: c.hydraulics.fanHeads.filter(
+                (f) => f.requiredExternalTotalPressureInWg === null,
+              ).length,
+              reasonCount: c.hydraulics.reasons.length,
+              reasonsTruncated: c.hydraulics.reasons.length > 20,
+              reasons: c.hydraulics.reasons.slice(0, 20),
+            }
+          : null,
       },
     }));
   else if (request.projection === "flows")
@@ -613,7 +684,7 @@ function project(
       url: `/pe/ducts/analyses/${id}/artifact`,
       sha256: id,
       byteSize,
-      format: "ducts-analysis-v4",
+      format: "ducts-analysis-v5",
     },
     mode: request.source.kind === "fresh" ? "fresh" : "historical",
     target: artifact.observation.target,

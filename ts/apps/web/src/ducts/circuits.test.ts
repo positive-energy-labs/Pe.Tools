@@ -4,6 +4,8 @@ import {
   transitionPatches,
   ductsRouteState,
   type DuctCalculation,
+  type DuctHydraulics,
+  ductHydraulicsSchema,
   type DuctPortPin,
 } from "@pe/agent-contracts";
 import { applyRequest, price, proposedStatic } from "@pe/ducts-domain/pricing";
@@ -588,6 +590,7 @@ it("admits sourced cycle allocation by conservation while pressure and KVL remai
   };
   e.flow = {
     kind: "component-flow",
+    hydraulics: null,
     componentWitness: structuredClone(before.componentWitness),
     constraints: [constraint],
     source: "Synthetic single component design",
@@ -637,6 +640,7 @@ it("duplicate constraints do not close a second independent cycle", () => {
   };
   e.flow = {
     kind: "component-flow",
+    hydraulics: null,
     componentWitness: baseline.componentWitness,
     constraints: [constraint, constraint],
     source: "Dependent constraints",
@@ -721,6 +725,7 @@ it("requires sourced signed sense for a bidirectional terminal and refuses forei
   };
   e.flow = {
     kind: "component-flow",
+    hydraulics: null,
     componentWitness: baseline.componentWitness,
     constraints: [constraint],
     source: "Known signed terminal sense",
@@ -739,6 +744,7 @@ it("never treats a KCL-compatible sourced equal split as KVL/pressure certificat
   const witness = price(s, {}, work(e)).next.design.componentFlows[0]!.componentWitness;
   e.flow = {
     kind: "component-flow",
+    hydraulics: null,
     componentWitness: witness,
     constraints: [
       {
@@ -811,6 +817,7 @@ it("stale component-flow evidence cannot leave a previously complete tree pressu
   witness[0]!.family = "stale family";
   e.flow = {
     kind: "component-flow",
+    hydraulics: null,
     componentWitness: witness,
     constraints: [
       { element: identity(100), port: pin(s, 100, 0), signedCfm: 100, source: "Design100" },
@@ -847,6 +854,7 @@ it("retains shared tap station continuity without inventing a zero-length fricti
   const before = price(s, {}, work(e)).next.design;
   e.flow = {
     kind: "component-flow",
+    hydraulics: null,
     componentWitness: before.componentFlows.find((c) => c.elementIds.includes(100))!
       .componentWitness,
     constraints: [
@@ -966,6 +974,7 @@ it("preserves independently stated boundary/constraint flows and legitimate cap 
   const baseline = price(s, {}, work(e)).next.design.componentFlows;
   e.flow = {
     kind: "component-flow",
+    hydraulics: null,
     componentWitness: baseline.find((c) => c.elementIds.includes(300))!.componentWitness,
     constraints: [
       {
@@ -1180,6 +1189,7 @@ it("binds component flow Work freshness to coordinate encoding without legacy no
   for (const e of old) e.coordinateEncoding = null;
   e.flow = {
     kind: "component-flow",
+    hydraulics: null,
     componentWitness: old,
     constraints: [
       { element: identity(100), port: pin(s, 100, 0), signedCfm: 1500, source: "Sourced1500" },
@@ -1305,4 +1315,561 @@ it("retains nonlinear two-port continuity as a loop leg without claiming hydraul
   expect(
     d.circuits.every((c) => c.status === "partial" && c.requiredExternalTotalPressureInWg === null),
   ).toBe(true);
+});
+
+it("closes prescribed-flow pressure over all physical parts without a new fan operating-point claim", () => {
+  const s = fixture();
+  const point = (x: number) => [x, 0, 0];
+  for (const n of s.nodes)
+    for (const p of n.connectors) p.point = point(n.id === 100 ? 0 : n.id === 200 ? 5 : 10);
+  for (const [i, seg] of s.segments.entries()) {
+    seg.polyline = [point(i * 5), point((i + 1) * 5)];
+    seg.connectors.forEach((p, j) => {
+      p.point = point((i + j) * 5);
+    });
+  }
+  s.nodes.find((n) => n.id === 300)!.connectors[0]!.direction = "in";
+  const e = evidence(s);
+  const c = price(s, {}, work(e)).next.design.componentFlows.find((c) =>
+    c.elementIds.includes(10),
+  )!;
+  e.closure = {
+    kind: "component-flow",
+    componentWitness: c.componentWitness,
+    constraints: [],
+    hydraulics: {
+      mode: "prescribed-flow-demand",
+      anchors: [],
+      laws: [],
+      stationEquivalences: [],
+      fanAllocations: [],
+      source: "Purpose exact prescribed design",
+    },
+    source: "Purpose closure",
+  };
+  const result = price(s, {}, work(e)).next.design.componentFlows.find((c) =>
+    c.elementIds.includes(10),
+  )!;
+  expect(result.hydraulics?.status).toBe("complete-for-prescribed-flow");
+  expect(result.hydraulics?.fanHeads[0]?.requiredExternalTotalPressureInWg).toBeCloseTo(
+    2 * friction(roundSection(8), 100, 5, 0.0003).dp + 0.13,
+    12,
+  );
+});
+
+function prescribedPurpose() {
+  const s = fixture();
+  const point = (x: number) => [x, 0, 0];
+  for (const n of s.nodes)
+    for (const p of n.connectors) p.point = point(n.id === 100 ? 0 : n.id === 200 ? 5 : 10);
+  for (const [i, d] of s.segments.entries()) {
+    d.polyline = [point(i * 5), point((i + 1) * 5)];
+    d.connectors.forEach((p, j) => {
+      p.point = point((i + j) * 5);
+    });
+  }
+  s.nodes.find((n) => n.id === 300)!.connectors[0]!.direction = "in";
+  return { s, e: evidence(s) };
+}
+const emptyHydraulics = (): DuctHydraulics => ({
+  mode: "prescribed-flow-demand",
+  anchors: [],
+  laws: [],
+  stationEquivalences: [],
+  fanAllocations: [],
+  source: "Purpose stated pressure design",
+});
+function pressureResult(
+  s: DuctSnapshot,
+  e: Record<string, DuctCalculation>,
+  h = emptyHydraulics(),
+) {
+  delete e.closure;
+  const c = price(s, {}, work(e)).next.design.componentFlows.find((c) =>
+    c.elementIds.includes(100),
+  )!;
+  e.closure = {
+    kind: "component-flow",
+    hydraulics: h,
+    componentWitness: c.componentWitness,
+    constraints: [],
+    source: "Purpose complete physical component",
+  };
+  return price(s, {}, work(e)).next.design.componentFlows.find((c) => c.elementIds.includes(100))!
+    .hydraulics!;
+}
+it("withholds unknown flow and pressure law rather than manufacturing zero", () => {
+  const { s, e } = prescribedPurpose();
+  delete e.grille;
+  expect(pressureResult(s, e).status).toBe("partial");
+  const v = prescribedPurpose();
+  delete v.e.filter;
+  v.s.nodes.find((n) => n.id === 200)!.kind = "fitting";
+  expect(
+    pressureResult(v.s, v.e).reasons.some((r) => r.code === "hydraulic-part-law-unknown"),
+  ).toBe(true);
+});
+it("rejects reciprocal gaps and unequal profile as automatic zero-pressure interfaces", () => {
+  for (const change of ["gap", "profile"]) {
+    const { s, e } = prescribedPurpose(),
+      p = s.nodes.find((n) => n.id === 100)!.connectors[0]!;
+    if (change === "gap") p.point = [0.001, 0, 0];
+    else p.diameterIn = 9;
+    if (e.fan!.kind !== "fan") throw Error("purpose fan");
+    e.fan.outlet = pin(s, 100, 0);
+    const h = pressureResult(s, e);
+    expect(h.status).toBe("partial");
+    expect(h.reasons.some((r) => r.code === "hydraulic-interface-unknown")).toBe(true);
+  }
+});
+it("checks every non-tree pressure constraint and rejects incompatible fixed pressure without balancing", () => {
+  const { s, e } = prescribedPurpose(),
+    h = emptyHydraulics();
+  h.anchors = [
+    {
+      at: { element: identity(100), port: pin(s, 100, 0) },
+      kind: "physical-boundary",
+      totalPressureInWg: 10,
+      source: "Purpose incompatible fixed boundary",
+    },
+  ];
+  const result = pressureResult(s, e, h);
+  expect(result.status).toBe("inconsistent");
+  expect(result.maxPressureResidualInWg).toBeGreaterThan(1);
+});
+it("closed recirculation required head is gauge invariant without an ambient-pressure claim", () => {
+  const { s, e } = prescribedPurpose();
+  s.nodes = s.nodes.filter((n) => n.id !== 300);
+  delete e.grille;
+  const fan = s.nodes.find((n) => n.id === 100)!;
+  fan.connectors.push({ ...port(3, 20, 1, "in"), point: [10, 0, 0] });
+  s.segments[1]!.connectors[1]!.connectedTo = { elementId: 100, connector: 3 };
+  if (e.fan!.kind !== "fan") throw Error("purpose fan");
+  e.fan.inlet = pin(s, 100, 3);
+  e.fan.designFlowCfm = 100;
+  const first = pressureResult(s, e),
+    h = emptyHydraulics();
+  h.anchors = [
+    {
+      at: { element: identity(100), port: pin(s, 100, 0) },
+      kind: "gauge",
+      totalPressureInWg: 500,
+      source: "Computational gauge only",
+    },
+  ];
+  const second = pressureResult(s, e, h);
+  expect(first.status).toBe("complete-for-prescribed-flow");
+  expect(second.status).toBe(first.status);
+  expect(second.fanHeads[0]!.requiredExternalTotalPressureInWg).toBeCloseTo(
+    first.fanHeads[0]!.requiredExternalTotalPressureInWg!,
+    12,
+  );
+  expect(second.ports.every((p) => p.totalPressureInWg === null)).toBe(true);
+});
+it("series fan heads remain unallocated until an explicit matching fan relation is supplied", () => {
+  const { s, e } = prescribedPurpose();
+  delete e.filter;
+  e.second = {
+    kind: "fan",
+    element: identity(200),
+    inlet: pin(s, 200, 1),
+    outlet: pin(s, 200, 2),
+    designFlowCfm: 100,
+    referenceTotalPressureInWg: 0,
+    source: "Purpose series fan",
+  };
+  const first = pressureResult(s, e);
+  expect(first.fanHeads.every((f) => f.requiredExternalTotalPressureInWg === null)).toBe(true);
+  const h = emptyHydraulics();
+  h.fanAllocations = [
+    {
+      element: identity(200),
+      inlet: pin(s, 200, 1),
+      outlet: pin(s, 200, 2),
+      flowCfm: 100,
+      totalRiseInWg: 0.05,
+      source: "Explicit series allocation, not equal sharing",
+    },
+  ];
+  const second = pressureResult(s, e, h);
+  expect(second.status).toBe("complete-for-prescribed-flow");
+  expect(
+    second.fanHeads.find((f) => f.elementId === 200)!.requiredExternalTotalPressureInWg,
+  ).toBeCloseTo(0.05, 12);
+  expect(
+    second.fanHeads.find((f) => f.elementId === 100)!.requiredExternalTotalPressureInWg,
+  ).not.toBeCloseTo(0.05, 8);
+});
+function sharedPressurePurpose() {
+  const s = fixture();
+  s.segments = [];
+  s.nodes = [
+    { ...s.nodes.find((n) => n.id === 100)!, connectors: [port(0, 400, 0, "out")] },
+    { ...s.nodes.find((n) => n.id === 200)!, connectors: [port(0, 400, 1, "out")] },
+    {
+      ...s.nodes.find((n) => n.id === 300)!,
+      category: "Terminal",
+      connectors: [port(0, 400, 2, "in")],
+    },
+    {
+      ...s.nodes.find((n) => n.id === 200)!,
+      id: 400,
+      uniqueId: "purpose-400",
+      kind: "fitting",
+      connectors: [port(0, 100, 0), port(1, 200, 0), port(2, 300, 0)],
+    },
+  ];
+  s.nodes.find((n) => n.id === 300)!.connectors[0]!.direction = "in";
+  const e: Record<string, DuctCalculation> = {
+    scenario: { kind: "balanced-design", source: "Purpose design" },
+    a: {
+      kind: "fan",
+      element: identity(100),
+      inlet: null,
+      outlet: pin(s, 100, 0),
+      designFlowCfm: 100,
+      referenceTotalPressureInWg: 0,
+      source: "Purpose100",
+    },
+    b: {
+      kind: "fan",
+      element: identity(200),
+      inlet: null,
+      outlet: pin(s, 200, 0),
+      designFlowCfm: 200,
+      referenceTotalPressureInWg: 0,
+      source: "Purpose200",
+    },
+    t: {
+      kind: "terminal",
+      element: identity(300),
+      port: pin(s, 300, 0),
+      flowCfm: 300,
+      role: "demand",
+      boundaryTotalPressureInWg: 0,
+      loss: { flowCfm: 300, totalLossInWg: 0.03, source: "PurposeTOTAL" },
+      source: "Purpose demand",
+    },
+  };
+  const h = emptyHydraulics(),
+    portFlows = [0, 1, 2].map((i) => ({
+      at: { element: identity(400), port: pin(s, 400, i) },
+      signedCfm: [-100, -200, 300][i]!,
+    }));
+  h.laws = [
+    {
+      from: { element: identity(400), port: pin(s, 400, 0) },
+      to: { element: identity(400), port: pin(s, 400, 2) },
+      signedCfm: 100,
+      totalPressureDifferenceInWg: 0.1,
+      portFlows,
+      source: "Purpose full300=100+200 mixing regime point",
+    },
+    {
+      from: { element: identity(400), port: pin(s, 400, 1) },
+      to: { element: identity(400), port: pin(s, 400, 2) },
+      signedCfm: 200,
+      totalPressureDifferenceInWg: 0.2,
+      portFlows,
+      source: "Purpose full300=100+200 other inlet regime point",
+    },
+  ];
+  return { s, e, h };
+}
+it("shared component100+200?300 has distinct sourced required heads and no equal allocation", () => {
+  const { s, e, h } = sharedPressurePurpose(),
+    result = pressureResult(s, e, h);
+  expect(result.status).toBe("complete-for-prescribed-flow");
+  expect(
+    result.fanHeads.find((f) => f.elementId === 100)!.requiredExternalTotalPressureInWg,
+  ).toBeCloseTo(0.13, 12);
+  expect(
+    result.fanHeads.find((f) => f.elementId === 200)!.requiredExternalTotalPressureInWg,
+  ).toBeCloseTo(0.23, 12);
+});
+it("a changed third-leg flow invalidates a multiport source point despite unchanged geometry", () => {
+  const { s, e, h } = sharedPressurePurpose();
+  if (e.a!.kind !== "fan" || e.b!.kind !== "fan") throw Error("purpose fan");
+  e.a.designFlowCfm = 120;
+  e.b.designFlowCfm = 180;
+  const result = pressureResult(s, e, h);
+  expect(result.status).toBe("partial");
+  expect(result.reasons.some((r) => r.code === "hydraulic-law-flow-vector")).toBe(true);
+});
+it("mixing may transfer pressure between incoming legs but may not generate passive energy", () => {
+  const { s, e, h } = sharedPressurePurpose();
+  h.laws[0]!.totalPressureDifferenceInWg = -0.1;
+  h.laws[1]!.totalPressureDifferenceInWg = 0.2;
+  expect(pressureResult(s, e, h).status).toBe("complete-for-prescribed-flow");
+  h.laws[1]!.totalPressureDifferenceInWg = -0.2;
+  const invalid = pressureResult(s, e, h);
+  expect(invalid.status).toBe("inconsistent");
+  expect(invalid.fanHeads.every((f) => f.requiredExternalTotalPressureInWg === null)).toBe(true);
+  expect(
+    invalid.ports.every((p) => p.relativePressureInWg === null && p.totalPressureInWg === null),
+  ).toBe(true);
+});
+it("rejects remote laws, stale pins, and static/unit fields as TOTAL-law authority", () => {
+  const { s, e, h } = sharedPressurePurpose();
+  h.laws[0]!.to = { element: identity(200), port: pin(s, 200, 0) };
+  expect(pressureResult(s, e, h).status).toBe("partial");
+  const v = sharedPressurePurpose();
+  v.h.laws[0]!.from.port.point = [1, 0, 0];
+  expect(pressureResult(v.s, v.e, v.h).status).toBe("partial");
+  const bad = { ...emptyHydraulics(), unit: "Pa" };
+  expect(ductHydraulicsSchema.safeParse(bad).success).toBe(false);
+  expect(
+    ductHydraulicsSchema.safeParse({
+      ...v.h,
+      laws: [{ ...v.h.laws[0], totalStaticPressureInWg: 0.1 }],
+    }).success,
+  ).toBe(false);
+});
+
+it("keeps pressure residuals scoped to the physical pressure network", () => {
+  const { s, e, h } = sharedPressurePurpose();
+  const other: ReturnType<typeof sharedPressurePurpose> = JSON.parse(
+    JSON.stringify(sharedPressurePurpose()),
+    (key, value) => {
+      if (
+        (key === "id" || key === "elementId") &&
+        typeof value === "number" &&
+        [100, 200, 300, 400].includes(value)
+      )
+        return value + 1000;
+      if (key === "uniqueId" && typeof value === "string" && value.startsWith("purpose-"))
+        return `purpose-${Number(value.slice(8)) + 1000}`;
+      return value;
+    },
+  );
+  s.nodes.push(...other.s.nodes);
+  for (const [k, v] of Object.entries(other.e)) if (k !== "scenario") e[`other:${k}`] = v;
+  other.h.laws.push({ ...structuredClone(other.h.laws[0]!), totalPressureDifferenceInWg: 1.1 });
+  const bad = price(s, {}, work(e)).next.design.componentFlows.find((c) =>
+    c.elementIds.includes(1100),
+  )!;
+  e.badClosure = {
+    kind: "component-flow",
+    hydraulics: other.h,
+    componentWitness: bad.componentWitness,
+    constraints: [],
+    source: "Purpose disjoint inconsistent network",
+  };
+  const valid = pressureResult(s, e, h);
+  expect(valid.status).toBe("complete-for-prescribed-flow");
+  expect(valid.maxPressureResidualInWg).toBeCloseTo(0, 12);
+  const invalid = price(s, {}, work(e)).next.design.componentFlows.find((c) =>
+    c.elementIds.includes(1100),
+  )!.hydraulics!;
+  expect(invalid.status).toBe("inconsistent");
+  expect(invalid.maxPressureResidualInWg).toBeGreaterThan(0.9);
+  expect(invalid.fanHeads.every((f) => f.requiredExternalTotalPressureInWg === null)).toBe(true);
+});
+
+it("preserves4ft at300 and6ft at200 while keeping a solitary tap pressure plane distinct", () => {
+  const { s, e } = prescribedPurpose();
+  delete e.filter;
+  s.segments = [
+    {
+      ...s.segments[0]!,
+      lengthFt: 10,
+      polyline: [
+        [0, 0, 0],
+        [10, 0, 0],
+      ],
+      connectors: [
+        { ...port(0, 100, 0), point: [0, 0, 0] },
+        { ...port(1, 300, 0), point: [10, 0, 0] },
+        { ...port(2, 200, 0), kind: "curve", point: [4, 0, 0] },
+      ],
+    },
+  ];
+  const branch = s.nodes.find((n) => n.id === 200)!;
+  branch.kind = "terminal";
+  branch.connectors = [{ ...port(0, 10, 2, "in"), point: [4, 0, 0] }];
+  s.nodes.find((n) => n.id === 300)!.connectors[0] = { ...port(0, 10, 1, "in"), point: [10, 0, 0] };
+  if (e.fan!.kind !== "fan" || e.grille!.kind !== "terminal") throw Error("purpose roles");
+  e.fan.designFlowCfm = 300;
+  e.grille.port = pin(s, 300, 0);
+  e.grille.flowCfm = 200;
+  e.grille.loss = { flowCfm: 200, totalLossInWg: 0.03, source: "Purpose TOTAL200" };
+  e.branch = {
+    kind: "terminal",
+    element: identity(200),
+    port: pin(s, 200, 0),
+    role: "demand",
+    flowCfm: 100,
+    boundaryTotalPressureInWg: 0,
+    loss: {
+      flowCfm: 100,
+      totalLossInWg: 0.03 + friction(roundSection(8), 200, 6, 0.0003).dp,
+      source: "Purpose compatible branch TOTAL point",
+    },
+    source: "Purpose100 branch",
+  };
+  const unresolved = pressureResult(s, e);
+  expect(unresolved.status).toBe("partial");
+  expect(unresolved.reasons.some((r) => r.code === "hydraulic-part-law-unknown")).toBe(true);
+  const h = emptyHydraulics();
+  h.stationEquivalences = [
+    {
+      element: identity(10),
+      ports: [pin(s, 10, 2)],
+      source:
+        "Purpose explicitly justified same8in cross-section pressure plane, no unrepresented tap loss",
+    },
+  ];
+  const solved = pressureResult(s, e, h);
+  expect(solved.status).toBe("complete-for-prescribed-flow");
+  expect(solved.fanHeads[0]!.requiredExternalTotalPressureInWg).toBeCloseTo(
+    0.03 +
+      friction(roundSection(8), 300, 4, 0.0003).dp +
+      friction(roundSection(8), 200, 6, 0.0003).dp,
+    12,
+  );
+  expect(
+    solved.lawEvidence.some(
+      (l) => l.from.includes("pressure-station") || l.to.includes("pressure-station"),
+    ),
+  ).toBe(true);
+  s.segments[0]!.connectors[2]!.diameterIn = 6;
+  branch.connectors[0]!.diameterIn = 6;
+  if (e.branch.kind !== "terminal") throw Error("purpose branch");
+  e.branch.port = pin(s, 200, 0);
+  h.stationEquivalences[0]!.ports = [pin(s, 10, 2)];
+  const unequal = pressureResult(s, e, h);
+  expect(unequal.status).toBe("partial");
+  expect(unequal.reasons.some((r) => r.code === "hydraulic-station-equivalence")).toBe(true);
+});
+
+it("retains unrequested fan-side dependency evidence once and refuses its missing joint pressure law", () => {
+  const { s, e } = prescribedPurpose(),
+    fan = s.nodes.find((n) => n.id === 100)!;
+  fan.connectors.push({ ...port(3, 30, 1, "in"), point: [-5, 0, 0] });
+  s.nodes.push({
+    ...s.nodes.find((n) => n.id === 300)!,
+    id: 400,
+    uniqueId: "purpose-400",
+    connectors: [{ ...port(0, 30, 0, "out"), point: [-8, 0, 0] }],
+  });
+  s.segments.push({
+    ...s.segments[0]!,
+    id: 30,
+    uniqueId: "purpose-30",
+    lengthFt: 3,
+    polyline: [
+      [-8, 0, 0],
+      [-5, 0, 0],
+    ],
+    connectors: [
+      { ...port(0, 400, 0), point: [-8, 0, 0] },
+      { ...port(1, 100, 3), point: [-5, 0, 0] },
+    ],
+  });
+  if (e.fan!.kind !== "fan") throw Error("purpose fan");
+  e.fan.inlet = pin(s, 100, 3);
+  e.fan.designFlowCfm = 100;
+  e.intake = {
+    kind: "terminal",
+    element: identity(400),
+    port: pin(s, 400, 0),
+    role: "reference",
+    flowCfm: 100,
+    boundaryTotalPressureInWg: 0,
+    loss: { flowCfm: 100, totalLossInWg: 0.02, source: "Purpose inlet TOTAL" },
+    source: "Purpose outdoor boundary",
+  };
+  const head = pressureResult(s, e);
+  expect(head.status).toBe("complete-for-prescribed-flow");
+  expect(head.physicalComponentIds).toHaveLength(2);
+  const components = price(s, {}, work(e)).next.design.componentFlows.filter((c) =>
+    head.physicalComponentIds.includes(c.id),
+  );
+  expect(components.every((c) => c.hydraulics !== null)).toBe(true);
+  expect(components.some((c) => c.hydraulics!.lawEvidence.some((l) => l.elementId === 30))).toBe(
+    true,
+  );
+  expect(
+    components.every((c) => c.hydraulics!.ports.length < c.hydraulics!.physicalPortCount),
+  ).toBe(true);
+  s.segments.find((s) => s.id === 30)!.connectors[1]!.diameterIn = 9;
+  const broken = pressureResult(s, e);
+  expect(broken.status).toBe("partial");
+  expect(broken.reasons.some((r) => r.code === "hydraulic-interface-unknown")).toBe(true);
+  expect(broken.fanHeads[0]!.requiredExternalTotalPressureInWg).toBeNull();
+});
+
+it("admits sourced physical-interface loss with outward flow sense and rejects interface energy creation", () => {
+  const { s, e } = prescribedPurpose(),
+    h = emptyHydraulics();
+  s.nodes.find((n) => n.id === 100)!.connectors[0]!.point = [0.001, 0, 0];
+  if (e.fan!.kind !== "fan") throw Error("purpose fan");
+  e.fan.outlet = pin(s, 100, 0);
+  const from = { element: identity(100), port: pin(s, 100, 0) },
+    to = { element: identity(10), port: pin(s, 10, 0) };
+  h.laws = [
+    {
+      from,
+      to,
+      signedCfm: 100,
+      portFlows: [
+        { at: from, signedCfm: 100 },
+        { at: to, signedCfm: -100 },
+      ],
+      totalPressureDifferenceInWg: 0.02,
+      source: "Purpose sourced interface total-pressure point",
+    },
+  ];
+  const admitted = pressureResult(s, e, h);
+  expect(admitted.status).toBe("complete-for-prescribed-flow");
+  expect(admitted.fanHeads[0]!.requiredExternalTotalPressureInWg).toBeCloseTo(
+    2 * friction(roundSection(8), 100, 5, 0.0003).dp + 0.15,
+    12,
+  );
+  h.laws[0]!.totalPressureDifferenceInWg = -0.02;
+  const forwardGain = pressureResult(s, e, h);
+  expect(forwardGain.status).toBe("inconsistent");
+  expect(
+    forwardGain.ports.every((p) => p.relativePressureInWg === null && p.totalPressureInWg === null),
+  ).toBe(true);
+  expect(forwardGain.fanHeads.every((f) => f.requiredExternalTotalPressureInWg === null)).toBe(
+    true,
+  );
+  h.laws = [
+    { ...h.laws[0]!, from: to, to: from, signedCfm: -100, totalPressureDifferenceInWg: -0.02 },
+  ];
+  const reversed = pressureResult(s, e, h);
+  expect(reversed.status).toBe("complete-for-prescribed-flow");
+  expect(reversed.fanHeads[0]!.requiredExternalTotalPressureInWg).toBeCloseTo(
+    admitted.fanHeads[0]!.requiredExternalTotalPressureInWg!,
+    12,
+  );
+  h.laws[0]!.totalPressureDifferenceInWg = 0.02;
+  const bad = pressureResult(s, e, h);
+  expect(bad.status).toBe("inconsistent");
+  expect(bad.fanHeads.every((f) => f.requiredExternalTotalPressureInWg === null)).toBe(true);
+  expect(
+    bad.ports.every((p) => p.relativePressureInWg === null && p.totalPressureInWg === null),
+  ).toBe(true);
+});
+
+it("direct physical interfaces require native-double encoding before automatic pressure equivalence", () => {
+  const { s, e } = prescribedPurpose();
+  s.nodes = s.nodes.filter((n) => n.id === 100 || n.id === 300);
+  s.segments = [];
+  s.nodes.find((n) => n.id === 100)!.connectors[0]!.connectedTo = { elementId: 300, connector: 0 };
+  s.nodes.find((n) => n.id === 300)!.connectors[0]!.connectedTo = { elementId: 100, connector: 0 };
+  s.nodes.find((n) => n.id === 300)!.connectors[0]!.point = [0, 0, 0];
+  delete e.filter;
+  if (e.fan!.kind !== "fan" || e.grille!.kind !== "terminal") throw Error("purpose roles");
+  e.fan.outlet = pin(s, 100, 0);
+  e.grille.port = pin(s, 300, 0);
+  expect(pressureResult(s, e).status).toBe("complete-for-prescribed-flow");
+  // Deliberately decoded untrusted legacy JSON violates the current producer DTO.
+  const legacySnapshot = JSON.parse(JSON.stringify(s));
+  legacySnapshot.coordinateEncoding = null;
+  const legacy = pressureResult(legacySnapshot, e);
+  expect(legacy.status).toBe("partial");
+  expect(legacy.reasons.some((r) => r.code === "hydraulic-flow-not-unique")).toBe(true);
+  expect(legacy.fanHeads[0]!.requiredExternalTotalPressureInWg).toBeNull();
 });

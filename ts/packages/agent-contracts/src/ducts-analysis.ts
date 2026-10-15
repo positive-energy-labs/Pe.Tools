@@ -29,7 +29,7 @@ export const ductsAnalysisRequestSchema = z
         "flows",
       ])
       .describe(
-        "components reports whole-component stated-design flow status, not pressure certification; flows pages physical joints, ordered line subruns, and flow-only station-arm/curve-continuity edges with signed CFM. Mass-only edges have null length and assert no pressure-loss law. The v4 artifact stores complete witness element records in top-level witnessElements; each stored component holds ordered witnessElements indices. Dereference those indices to assemble its exact componentWitness for canonical Work staging; no numeric recomputation. Effective input is input{encoding:gzip-base64,data,sha256,byteSize}; data gunzips to exact UTF-8 JSON, with sha256 and byteSize over those uncompressed bytes. Raw acquisition bodyUtf8, headers and hashes remain unchanged. Older artifact downloads retain exact bytes; unsupported projection formats refuse without recomputation. Normal responses are limited to100 rows and65536 UTF-8 bytes; oversized rows refuse with artifact id.",
+        "components reports whole-component stated-design flow status, which alone is not pressure certification; optional hydraulics reports prescribed-flow TOTAL-pressure closure with its own status, physical coverage, reasons and required fan head; flows pages physical joints, ordered line subruns, and flow-only station-arm/curve-continuity edges with signed CFM. Mass-only edges have null length and assert no pressure-loss law. The v5 artifact stores complete witness element records in top-level witnessElements; each stored component holds ordered witnessElements indices. Dereference those indices to assemble its exact componentWitness for canonical Work staging; no numeric recomputation. Hydraulic law evidence is losslessly interned in top-level hydraulicLaws; each stored hydraulics record holds ordered lawIndices, which dereference to its exact canonical lawEvidence array including duplicates. Effective input is input{encoding:gzip-base64,data,sha256,byteSize}; data gunzips to exact UTF-8 JSON, with sha256 and byteSize over those uncompressed bytes. Raw acquisition bodyUtf8, headers and hashes remain unchanged. Older artifact downloads retain exact bytes; unsupported projection formats refuse without recomputation. Normal responses are limited to100 rows and65536 UTF-8 bytes; oversized rows refuse with artifact id.",
       )
       .default("summary"),
     limit: z.number().int().min(1).max(100).default(20),
@@ -86,6 +86,43 @@ const row = z.strictObject({
         )
         .max(20),
       pressureCertification: z.literal("not-established-by-flow-check"),
+      hydraulics: z
+        .strictObject({
+          status: z.enum(["complete-for-prescribed-flow", "partial", "inconsistent"]),
+          mode: z.literal("prescribed-flow-demand"),
+          physicalPortCount: z.number().int(),
+          coveredPhysicalPortCount: z.number().int(),
+          physicalPartCount: z.number().int(),
+          coveredPhysicalPartCount: z.number().int(),
+          lawCount: z.number().int(),
+          pressureComponentCount: z.number().int(),
+          maxPressureResidualInWg: z.number().nullable(),
+          fanHeadCount: z.number().int(),
+          fanHeadsTruncated: z.boolean(),
+          fanHeads: z
+            .array(
+              z.strictObject({
+                id: z.string(),
+                elementId: z.number().int(),
+                flowCfm: z.number().nullable(),
+                requiredExternalTotalPressureInWg: z.number().nullable(),
+              }),
+            )
+            .max(20),
+          unknownFanHeads: z.number().int(),
+          reasonCount: z.number().int(),
+          reasonsTruncated: z.boolean(),
+          reasons: z
+            .array(
+              z.strictObject({
+                code: z.string(),
+                elementId: z.number().nullable(),
+                message: z.string(),
+              }),
+            )
+            .max(20),
+        })
+        .nullable(),
     })
     .nullable(),
   flow: z
@@ -187,7 +224,7 @@ export const ductsAnalysisResponseSchema = z.strictObject({
     url: z.string(),
     sha256: hash,
     byteSize: z.number().int(),
-    format: z.literal("ducts-analysis-v4"),
+    format: z.literal("ducts-analysis-v5"),
   }),
   mode: z.enum(["fresh", "historical"]),
   target: documentRefSchema,
