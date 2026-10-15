@@ -38,6 +38,12 @@ const resolvers = new Set([
   "tools/product-paths.ps1",
 ]);
 const allowed: Record<string, { line: string; reason: string }[]> = {
+  "ts/apps/host/src/foreign-addins.ts": [
+    {
+      line: 'user: join(env.APPDATA ?? "", "Autodesk", "Revit", "Addins"),',
+      reason: "Reads Autodesk's per-user Revit Addins folder to count stale add-in manifests.",
+    },
+  ],
   "ts/apps/host/src/harness/adapter.ts": [
     {
       line: "const home = env.USERPROFILE ?? homedir();",

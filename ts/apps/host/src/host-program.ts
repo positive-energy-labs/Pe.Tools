@@ -10,6 +10,7 @@ import { openWindow, prepareHostBinding, resolveHostVersion } from "./host-lifec
 import { makeHttpLive, resolveWebRoot } from "./app.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
 import { makeInstalledUpdateReader } from "./update-route.ts";
+import { installedForeignAddins } from "./foreign-addins.ts";
 
 /** The shared host lifecycle used by both installed startup and source web development. */
 export const hostProgram = (
@@ -30,7 +31,11 @@ export const hostProgram = (
         }),
       );
       yield* Effect.promise(() =>
-        telemetry.record({ kind: "usage", event: "app_boot", counters: {} }),
+        telemetry.record({
+          kind: "usage",
+          event: "app_boot",
+          counters: hostOwnership.lane === "installed" ? installedForeignAddins() : {},
+        }),
       );
       const open = process.argv.includes("--open");
       const showTray = process.argv.includes("--show-tray");

@@ -68,6 +68,7 @@ import {
   grantDead,
   mintContext,
   Refused,
+  refusalHeaders,
   requireHuman,
   retireContext,
   documentAcquisition,
@@ -1885,7 +1886,10 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     fetch: (request: Request) =>
       handle(request).catch((error) =>
         error instanceof Refused
-          ? json({ error: error.message, refusal: error.refusal }, 403)
+          ? Response.json(
+              { error: error.message, refusal: error.refusal },
+              { status: 403, headers: refusalHeaders(error.refusal.code) },
+            )
           : error instanceof NotJson
             ? json(
                 { error: "This route reads a JSON body: send content-type: application/json" },

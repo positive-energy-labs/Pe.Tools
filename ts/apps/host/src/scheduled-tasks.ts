@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname } from "node:path";
 import { z } from "zod";
 import type { Receipt, ReceiptReader } from "@pe/agent-contracts";
-import { currentCaller, Refused, requireHuman } from "./control.ts";
+import { currentCaller, Refused, refusalHeaders, requireHuman } from "./control.ts";
 
 export const scheduleSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("interval"), everyMs: z.number().finite().int().min(60_000) }),
@@ -246,7 +246,9 @@ export function createScheduledTasks(options: {
       } catch (error) {
         return Response.json(
           { error: String(error) },
-          { status: error instanceof Refused ? 403 : 400 },
+          error instanceof Refused
+            ? { status: 403, headers: refusalHeaders(error.refusal.code) }
+            : { status: 400 },
         );
       }
     },

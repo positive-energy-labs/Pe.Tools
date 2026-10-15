@@ -36,6 +36,9 @@ export class Refused extends Error {
     super(`${refusal.code}: ${refusal.reason}`);
   }
 }
+/** A door's 403 names its refusal code here; request admission counts it (request-identity.ts). */
+export const REFUSAL_HEADER = "x-pe-refusal";
+export const refusalHeaders = (code: RefusalCode) => ({ [REFUSAL_HEADER]: code });
 const refuse = (
   code: RefusalCode,
   door: string,

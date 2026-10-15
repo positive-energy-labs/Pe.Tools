@@ -100,7 +100,11 @@ else if(args.includes('--https=443')) {
       authority,
     );
     for (let i = 0; i < 40; i++)
-      share.observe({ refusal: { code: "missing-user", detail: "no user" } }, "/mcp", authority);
+      share.observe(
+        { refusal: { code: "identity.missing-user", detail: "no user" } },
+        "/mcp",
+        authority,
+      );
     expect(share.current().callers).toEqual([{ login: "one", lastAtUtc: time, door: "pe" }]);
     expect(share.current().refused).toHaveLength(32);
     expect(await share.set(false)).toMatchObject({ desired: "off", state: "off", url: null });

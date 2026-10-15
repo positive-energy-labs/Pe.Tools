@@ -9,6 +9,7 @@ import {
   receiptSchema,
   receiptStampSchema,
   receiptBodySchema,
+  receiptReasonCodeSchema,
   readingRequestSchema,
   type Receipt,
   type ReceiptFact,
@@ -45,9 +46,9 @@ const mcpFields = [
   "$mcp_server_build",
 ] as const;
 const eventFields = {
-  app_boot: ["revit_version"],
+  app_boot: ["revit_version", "foreign_addin_count", "foreign_addin_years"],
   version_mismatch: ["host_version"],
-  host_op: ["op", "origin_class", "ts_only", "outcome", "fault_code", "duration_ms"],
+  host_op: ["op", "origin_class", "ts_only", "outcome", "fault_code", "duration_ms", "status"],
   bridge_queue: ["op", "phase", "queue_depth", "wait_ms"],
   ribbon_click: ["command_code"],
   palette_action: ["palette", "tab", "item_kind", "mode", "outcome"],
@@ -152,17 +153,17 @@ const routes = new Set([
   "update",
   "host",
 ]);
-const reasons = new Set([
-  "context.missing",
-  "grant.required",
-  "grant.revoked",
-  "grant.other-lifetime",
-  "grant.context-cannot-hold",
-  "human.only",
-  "page.use-page-door",
-  "choose",
-  "refused",
-]);
+const reasons = new Set<string>(receiptReasonCodeSchema.options);
+/** A failed action's closed code: the refusal it carries (`Refused` says `code: reason`), else generic. */
+const actionFault = (error: string) => {
+  const code = /^(?:\w*Error: )?([a-z][a-z.-]*):/.exec(error)?.[1];
+  return code && reasons.has(code) ? code : "action.failed";
+};
+/** Whole milliseconds between two ISO stamps; absent when either is unreadable. */
+const elapsed = (from: string, to: string) => {
+  const ms = Date.parse(to) - Date.parse(from);
+  return Number.isFinite(ms) ? Math.max(0, ms) : undefined;
+};
 const validVersion = (v: string) => /^(dev|\d{4}|\d+\.\d+\.\d+(?:[-+][a-zA-Z0-9.-]+)?)$/.test(v);
 const snake = (key: string) => key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 const exception = (code: string, component: string, handled: boolean) => ({
@@ -188,9 +189,15 @@ export function projectReceipt(
       if (!isAnyOperationKey(body.value.key) || body.value.state === "running") return null;
       event = "host_op";
       const caller = body.value.caller.kind;
+      const settled = body.value;
       properties = {
-        op: body.value.key,
-        outcome: body.value.state,
+        op: settled.key,
+        outcome: settled.state,
+        duration_ms: elapsed(settled.startedAt, r.at),
+        ...(settled.state === "succeeded" ? {} : { status: settled.status }),
+        ...(settled.state === "succeeded" || settled.state === "cancelled"
+          ? {}
+          : { fault_code: actionFault(settled.error) }),
         ts_only: isTsOnlyOperationKey(body.value.key),
         origin_class:
           caller === "pea" || caller === "human" || caller === "page"
@@ -854,6 +861,23 @@ export function createThreadReceiptAdapter(
       ].includes(event.kind)
     )
       return;
+    // A turn's end carries its span and tool count, read from the thread now, never its words.
+    const ended = event.kind === "turn_end" || event.kind === "error" ? event : undefined;
+    const events = ended?.turnId ? (snapshot().find((t) => t.id === id)?.events ?? []) : [];
+    const prompt = events.find((e) => e.kind === "prompt" && e.turnId === ended?.turnId);
+    const span =
+      ended && prompt
+        ? {
+            durationMs: elapsed(prompt.at, ended.at),
+            toolCount: events.filter(
+              (e) =>
+                e.kind === "update" &&
+                e.turnId === ended.turnId &&
+                e.update.sessionUpdate === "tool_call",
+            ).length,
+          }
+        : {};
+    const failure = event.kind === "error" ? event.failure?.kind : undefined;
     tail = tail
       .then(async () => {
         const threadId = await threadJoin(id);
@@ -880,7 +904,13 @@ export function createThreadReceiptAdapter(
                   : event.kind === "turn_end"
                     ? "finished"
                     : "failed",
-              ...(event.kind === "error" ? { code: "turn.failed" as const } : {}),
+              ...(event.kind === "error"
+                ? {
+                    code:
+                      failure && failure !== "other" ? (`turn.${failure}` as const) : "turn.failed",
+                  }
+                : {}),
+              ...span,
             };
         const sourceId = await exporter.journal.opaqueId("request", `${id}:event:${event.seq}`);
         await exporter.record(

@@ -3,7 +3,7 @@ import { HttpEffect, HttpRouter } from "effect/unstable/http";
 import { peRoutes, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { invocationContext } from "@pe/runtime/context";
 import { DEVICE_COOKIE, type Devices } from "./remote-device.ts";
-import { threadHead, live, Refused } from "./control.ts";
+import { threadHead, live, Refused, refusalHeaders } from "./control.ts";
 
 export const deviceRoutes = (devices: Devices) =>
   HttpRouter.use((router) =>
@@ -113,7 +113,7 @@ export const deviceRoutes = (devices: Devices) =>
                       details: error.refusal,
                     },
                   },
-                  { status: 403 },
+                  { status: 403, headers: refusalHeaders(error.refusal.code) },
                 );
               }
             }),
