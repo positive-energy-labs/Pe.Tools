@@ -27,6 +27,10 @@ export interface ComponentFlow {
   reasons: CircuitReason[];
 }
 const portKey = (id: number, index: number) => `${id}:${index}`;
+// DuctSnapshots.cs:394-395 rounds model-foot XYZ coordinates to 3 decimals.
+// Each point has <=sqrt(3)*0.0005 ft error; connector vs interpolated polyline doubles it.
+const projectionToleranceFt = Math.sqrt(3) * 0.001 + 1e-9;
+const stationSeparationFt = 2 * projectionToleranceFt;
 const close = (a: number, b: number) =>
   Math.abs(a - b) <= 1e-7 * Math.max(1, Math.abs(a), Math.abs(b));
 const distance = (a: number[], b: number[]) => Math.hypot(...a.map((v, i) => v - b[i]!));
@@ -130,17 +134,27 @@ export function componentFlows(g: Graph): ComponentFlow[] {
           return { p, ...best };
         })
         .sort((a, b) => a.at - b.at || a.p.index - b.p.index);
-      // Native rounded coordinates permit 0.02 ft attachment tolerance; this is not a coincidence certificate.
+      // This capture-error bound establishes projection applicability, not physical partner coincidence.
       if (
-        located.some((p) => p.error > 0.02) ||
-        located[0]!.at > 0.02 ||
-        total - located.at(-1)!.at > 0.02
+        located.some((p) => p.error > projectionToleranceFt) ||
+        located[0]!.at > projectionToleranceFt ||
+        total - located.at(-1)!.at > projectionToleranceFt
       ) {
         geometryReasons.set(e.id, [
           issue(
             "flow-subrun-geometry",
             e.id,
-            "Connectors do not cover polyline endpoints or project within 0.02 ft; subrun flows are not certified",
+            "Connectors exceed the snapshot 3-decimal XYZ rounding bound (sqrt(3)*0.001 ft); subrun geometry is not established",
+          ),
+        ]);
+        continue;
+      }
+      if (located.some((p, i) => i > 0 && p.at - located[i - 1]!.at <= stationSeparationFt)) {
+        geometryReasons.set(e.id, [
+          issue(
+            "ambiguous-flow-stations",
+            e.id,
+            "Distinct duct connectors have coincident or capture-indistinguishable axial stations; no ordered subruns are asserted",
           ),
         ]);
         continue;

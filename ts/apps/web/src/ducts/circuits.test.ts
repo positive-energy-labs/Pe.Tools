@@ -820,3 +820,79 @@ it("stale component-flow evidence cannot leave a previously complete tree pressu
   expect(after.circuits[0]!.status).toBe("partial");
   expect(after.circuits[0]!.requiredExternalTotalPressureInWg).toBeNull();
 });
+
+it("refuses distinct tap ports at one axial station instead of inventing a zero-length ordered subrun", () => {
+  const { s, e } = parallelFlowFixture(),
+    main = s.segments[0]!,
+    owner = s.nodes[0]!;
+  main.lengthFt = 10;
+  main.polyline = [
+    [0, 0, 0],
+    [10, 0, 0],
+  ];
+  main.connectors[1]!.point = [10, 0, 0];
+  for (const [id, index] of [
+    [700, 2],
+    [800, 3],
+  ] as const) {
+    const p = port(index, id, 0);
+    p.point = [4, 0, 0];
+    main.connectors.push(p);
+    const back = port(0, 10, index);
+    back.point = [4, 0, 0];
+    s.nodes.push({ ...owner, id, uniqueId: `purpose-${id}`, kind: "cap", connectors: [back] });
+  }
+  const before = price(s, {}, work(e)).next.design;
+  e.flow = {
+    kind: "component-flow",
+    componentWitness: before.componentFlows.find((c) => c.elementIds.includes(100))!
+      .componentWitness,
+    constraints: [
+      {
+        element: identity(10),
+        port: pin(s, 10, 0),
+        signedCfm: -200,
+        source: "Sourced200, no station order evidence",
+      },
+    ],
+    source: "Synthetic coincident taps",
+  };
+  const d = price(s, {}, work(e)).next.design;
+  expect(
+    d.componentFlows.filter((c) => c.elementIds.includes(10)).every((c) => c.status !== "unique"),
+  ).toBe(true);
+  expect(
+    d.componentFlows.flatMap((c) => c.reasons).some((r) => r.code === "ambiguous-flow-stations"),
+  ).toBe(true);
+  expect(d.graph.ports.filter((p) => p.elementId === 10).map((p) => p.connector.index)).toEqual([
+    0, 1, 2, 3,
+  ]);
+  expect(d.graph.joints).toHaveLength(before.graph.joints.length);
+  expect(d.componentFlows.flatMap((c) => c.edges).filter((e) => e.kind === "joint")).toHaveLength(
+    d.graph.joints.length,
+  );
+  expect(
+    d.componentFlows
+      .flatMap((c) => c.edges)
+      .some((e) => e.kind === "duct-subrun" && e.elementId === 10 && e.lengthFt === 0),
+  ).toBe(false);
+});
+it("refuses duct connector projection outside the collector coordinate rounding bound", () => {
+  const { s, e } = parallelFlowFixture();
+  s.segments[0]!.connectors[0]!.point = [0, 0.005, 0];
+  const d = price(s, {}, work(e)).next.design;
+  expect(
+    d.componentFlows.flatMap((c) => c.reasons).some((r) => r.code === "flow-subrun-geometry"),
+  ).toBe(true);
+  expect(d.graph.ports.some((p) => p.elementId === 10 && p.connector.index === 0)).toBe(true);
+});
+
+it("allows projection residual within the explicit conservative coordinate rounding bound", () => {
+  const { s, e } = parallelFlowFixture();
+  s.segments[0]!.connectors[0]!.point = [0, 0.001, 0];
+  expect(
+    price(s, {}, work(e))
+      .next.design.componentFlows.flatMap((c) => c.reasons)
+      .some((r) => r.code === "flow-subrun-geometry"),
+  ).toBe(false);
+});
