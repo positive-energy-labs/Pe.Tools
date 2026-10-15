@@ -9,7 +9,7 @@ public sealed record BuildOptions {
     ///     Application version.
     /// </summary>
     /// <remarks>
-    ///     This will override the version determined from git. <br />
+    ///     Optional assertion of product.payloads.json's version; a different value is refused.
     /// </remarks>
     /// <example>
     ///     1.0.0-alpha.1.250101 <br />

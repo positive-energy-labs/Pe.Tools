@@ -15,7 +15,6 @@ namespace Build.Modules;
 [DependsOn<CleanProjectModule>(Optional = true)]
 public sealed class CreateAutomationBundleModule(IOptions<BuildOptions> buildOptions) : Module {
     protected override async Task ExecuteModuleAsync(IModuleContext context, CancellationToken cancellationToken) {
-        var versioning = (await context.GetModule<ResolveVersioningModule>()).ValueOrDefault!;
         var matrix = (await context.GetModule<ResolveBuildMatrixModule>()).ValueOrDefault!;
         var layout = (await context.GetModule<ResolveBuildLayoutModule>()).ValueOrDefault!;
         var configurations = matrix.ResolveConfigurations(BuildConfigurationGroup.AutomationPack, buildOptions.Value.Configuration);
@@ -40,9 +39,7 @@ public sealed class CreateAutomationBundleModule(IOptions<BuildOptions> buildOpt
                 ("DeployAddin", "false"),
                 ("LaunchRevit", "false"),
                 ("PeRevitYears", string.Join(";", years)),
-                ("PeAppBundleOutputRoot", layout.Artifacts.AutomationPackagesRoot),
-                ("VersionPrefix", versioning.VersionPrefix),
-                ("VersionSuffix", versioning.VersionSuffix!)
+                ("PeAppBundleOutputRoot", layout.Artifacts.AutomationPackagesRoot)
             ],
             cancellationToken
         ).ConfigureAwait(false);
