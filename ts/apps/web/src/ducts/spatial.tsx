@@ -6,8 +6,8 @@
  */
 import { useMemo, useState } from "react";
 
-import { EmptyState } from "#/components/lang/empty";
-import { FactChip } from "#/components/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { FactChip } from "@pe/kit/lang/chip";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 import { Switcher } from "#/components/lang/switcher";
@@ -164,7 +164,7 @@ function Spatial({
       resize={{ target: "end", defaultSize: 360, minSize: 240, persist: "pe.ducts.factsWidth" }}
       start={
         <Pane
-          kind="content"
+          id="content"
           title={view.label}
           meta={`${view.scene.segments.length} segments · ${view.scene.issues.length} issues`}
           scroll="clip"
@@ -229,7 +229,7 @@ function Spatial({
         </Pane>
       }
       end={
-        <Pane kind="content" title="facts" scroll="auto">
+        <Pane id="content" title="facts" scroll="auto">
           <div className="flex flex-col gap-3">
             {segment ? (
               <SegmentFactsView {...segment} />

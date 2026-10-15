@@ -1,3 +1,4 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * The one duct-issue taxonomy: every view, the tables, the legend and Chat read it from here.
  * C# emits only the kind (`DuctIssueKind`); what it means, what it blocks and how it is coloured
@@ -6,21 +7,20 @@
  * (owed in the design-system ledger), so a view draws `tone` and may use `shade` only as order.
  */
 import type { DuctsSnapshot } from "@pe/host-contracts/generated";
-
-import type { VerdictTone } from "#/components/master-table/model";
-
+import type { VerdictTone } from "@pe/kit/table/model";
 export type IssueKind = DuctsSnapshot.Res.DuctIssueKind;
 export type Blocks = "walkable" | "budgetable" | "none";
-
 export interface IssueKindInfo {
   /** One to three words. */
   label: string;
   /** One sentence. */
   what: string;
   blocks: Blocks;
-  color: { tone: VerdictTone; shade: number };
+  color: {
+    tone: VerdictTone;
+    shade: number;
+  };
 }
-
 const TONE: Record<Blocks, VerdictTone> = {
   walkable: "alarm",
   budgetable: "caution",
@@ -32,7 +32,6 @@ const kind = (label: string, what: string, blocks: Blocks, shade: number): Issue
   blocks,
   color: { tone: TONE[blocks], shade },
 });
-
 export const ISSUE_KINDS: Record<IssueKind, IssueKindInfo> = {
   "open-end": kind(
     "open end",
@@ -93,19 +92,16 @@ export const ISSUE_KINDS: Record<IssueKind, IssueKindInfo> = {
     4,
   ),
 };
-
 /** The table's issue column: the kind's word in its class's tone. */
 export const issueVerdict = (issueKind: IssueKind) => {
   const info = ISSUE_KINDS[issueKind];
   return { word: info.label, tone: info.color.tone, note: info.what };
 };
-
 const BLOCKS_WORD: Record<Blocks, string> = {
   walkable: "blocks walking",
   budgetable: "blocks the budget",
   none: "advisory",
 };
-
 /** The legend every view shows beside its issues: class, then kinds in shade order. */
 export function IssueLegend() {
   return (
@@ -118,9 +114,9 @@ export function IssueLegend() {
               .filter(([, info]) => info.blocks === blocks)
               .sort(([, a], [, b]) => a.color.shade - b.color.shade)
               .map(([key, info]) => (
-                <span key={key} title={info.what} data-tone={info.color.tone}>
-                  {info.label}{" "}
-                </span>
+                <TooltipHint key={key} content={info.what}>
+                  <span data-tone={info.color.tone}>{info.label} </span>
+                </TooltipHint>
               ))}
           </dd>
         </div>

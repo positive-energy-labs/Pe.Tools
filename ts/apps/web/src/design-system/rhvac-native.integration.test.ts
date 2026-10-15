@@ -11,6 +11,9 @@ import { createDemoOwner } from "../../../host/src/demo-owner";
 import { admitTakeoffAction, fileVersion } from "../../../host/src/takeoff-actions";
 import { sdkSessions, readRhvacFixture } from "../../../host/tests/native-receipt-fixture";
 import type { RevitBridge } from "../../../host/src/bridge";
+import { crossingOf } from "../../../host/tests/callers";
+
+const crossing = crossingOf("human");
 
 /** Explicit native integration only. Ordinary catalogue tests never need this file or Jet. */
 test.skipIf(process.env.PE_DEMO_JET !== "1")(
@@ -76,7 +79,6 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
       const admission = {
         id: `${owner.id}:jet`,
         key: "takeoffs.sync",
-        actor: "human",
         destination: { kind: "document", ref: owner.target },
         input: { path, zones: seed.page.zones },
         bases: {
@@ -86,7 +88,7 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
         },
       };
       const deps = { workspace: owner.work, sdk: sdkSessions };
-      await admitTakeoffAction(admission, owner.journal, owner.captures, bridge, deps);
+      await admitTakeoffAction(admission, crossing, owner.journal, owner.captures, bridge, deps);
       const receipt = await owner.journal.wait(admission.id);
       expect(receipt.state).toBe("succeeded");
       expect(await fileVersion(path)).not.toBe(beforeHash);
@@ -100,7 +102,7 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
         ),
       ).toEqual({});
       const afterHash = await fileVersion(path);
-      await admitTakeoffAction(admission, owner.journal, owner.captures, bridge, deps);
+      await admitTakeoffAction(admission, crossing, owner.journal, owner.captures, bridge, deps);
       expect(nativeLinks).toHaveLength(1);
       expect(await fileVersion(path)).toBe(afterHash);
       const staleId = `${owner.id}:stale`;
@@ -116,6 +118,7 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
             },
           },
         },
+        crossing,
         owner.journal,
         owner.captures,
         bridge,

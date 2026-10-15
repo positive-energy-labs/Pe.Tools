@@ -3,16 +3,11 @@ import { Agent, createServer as createNodeServer, get } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Deferred, Effect, Layer } from "effect";
-import { expect, test, vi } from "vite-plus/test";
+import { expect, test } from "vite-plus/test";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { makeHttpLive } from "../src/app.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
-
-vi.mock("../src/pe-revit-launch.ts", async (original) => ({
-  ...(await original<typeof import("../src/pe-revit-launch.ts")>()),
-  peRevitLauncher: () => ({ cmd: process.execPath, args: [] }),
-}));
 
 /**
  * Socket retirement at the shared runtime seam. A retired host must hold no keep-alive socket a
@@ -52,10 +47,11 @@ async function launchHost(port: number, previousToken?: string) {
 }
 
 async function stopHost(host: Awaited<ReturnType<typeof launchHost>>) {
-  await fetch(`http://127.0.0.1:${host.service.port}/admin/shutdown`, {
+  const response = await fetch(`http://127.0.0.1:${host.service.port}/admin/shutdown`, {
     method: "POST",
     headers: { "x-pe-service-token": host.service.token },
   });
+  expect(response.status).toBe(200);
   await host.done;
 }
 
@@ -119,8 +115,17 @@ test("a retired host closes its keep-alive sockets; the successor gets a fresh c
 
     const retired = host;
     host = undefined;
-    await stopHost(retired);
-    await stream.ended;
+    const stopping = stopHost(retired);
+    try {
+      await expect(
+        Promise.race([
+          stream.ended.then(() => "closed"),
+          new Promise((resolve) => setTimeout(() => resolve("still open"), 2_000)),
+        ]),
+      ).resolves.toBe("closed");
+    } finally {
+      await stopping;
+    }
     // The socket that carried the stream is closed by the retired server, not left in the
     // client's pool for the next request to reuse.
     await expect(

@@ -11,12 +11,15 @@ import {
   ListChips,
   ListInput,
   ListPopup,
+  ListSegmentInput,
   PopupFrame,
-} from "#/components/lang/list-popup";
+} from "@pe/kit/lang/list-popup";
 import { Popover } from "@base-ui/react/popover";
-import { Press } from "#/components/lang/press";
-import { Row, RowGroupHead, rowRecipe } from "#/components/lang/row";
-import { Table } from "#/components/master-table/table";
+import { MoreHorizontal } from "lucide-react";
+import { Button } from "@pe/kit/lang/button";
+import { CommandPalette } from "#/components/lang/command-palette";
+import { Row, RowGroupHead, rowRecipe } from "@pe/kit/lang/row";
+import { Table } from "@pe/kit/table/table";
 
 import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
@@ -34,7 +37,7 @@ export function LangListSpecimens() {
     <>
       <RecipeGrid
         name="Row"
-        importPath="#/components/lang/row"
+        importPath="@pe/kit/lang/row"
         recipe={rowRecipe}
         render={(props) => (
           <div className="flex w-64 flex-col">
@@ -46,13 +49,15 @@ export function LangListSpecimens() {
             <Row label="pending" pending />
             <Row label="failed" failed />
             <Row label="refused" refusal="read-only in Revit" />
+            <Row
+              label="verbs take the meta slot on hover"
+              meta="3m"
+              actions={<Button icon={MoreHorizontal} label="Row actions" />}
+            />
           </div>
         )}
       />
-      <SpecimenFrame
-        name="List · ListPopup · CellListSelect"
-        importPath="#/components/lang/list-popup"
-      >
+      <SpecimenFrame name="List · ListPopup · CellListSelect" importPath="@pe/kit/lang/list-popup">
         <div className="grid w-full grid-cols-3 gap-4">
           <ListPopup
             {...common}
@@ -64,6 +69,7 @@ export function LangListSpecimens() {
             aria-label="multi list"
           />
           <FreeText />
+          <SegmentInput />
           <List {...common} aria-label="inline list" filter="substring" />
           <ListPopup
             {...common}
@@ -72,8 +78,8 @@ export function LangListSpecimens() {
             aria-label="popup list"
           />
           <Popover.Root>
-            <Popover.Trigger render={<Press tone="quiet" size="caption" />}>
-              plan 1/3
+            <Popover.Trigger render={<Button label="plan 1/3" />}>
+              <span className="face-mono">plan 1/3</span>
             </Popover.Trigger>
             <PopupFrame side="top" align="end" label="plain popup">
               <div className="grid w-64 p-1.5 t-small text-ink-2">
@@ -97,7 +103,80 @@ export function LangListSpecimens() {
           />
         </div>
       </SpecimenFrame>
+      <SpecimenFrame name="CommandPalette" importPath="#/components/lang/command-palette">
+        <PaletteSpecimen />
+      </SpecimenFrame>
     </>
+  );
+}
+
+function PaletteSpecimen() {
+  const [open, setOpen] = useState(false);
+  const [picked, setPicked] = useState("none");
+  const items = [
+    { key: "family", label: "Family audit", group: "Tools", reason: null },
+    { key: "thread", label: "Pea coordination thread", group: "Threads", reason: null },
+    {
+      key: "closed",
+      label: "Closed document Work",
+      group: "Works",
+      reason: "Its open-document lifetime ended",
+    },
+  ];
+  return (
+    <div className="flex items-center gap-3">
+      <Button label="Open shared command palette" onClick={() => setOpen(true)}>
+        Open palette
+      </Button>
+      <span className="text-ink-2">Chosen fixture: {picked}</span>
+      <CommandPalette
+        open={open}
+        onOpenChange={setOpen}
+        aria-label="Shared destination palette specimen"
+        items={items}
+        keyOf={(item) => item.key}
+        labelOf={(item) => item.label}
+        groupOf={(item) => item.group}
+        filter="fuzzy"
+        searchAbove={0}
+        searchPlaceholder="Search fixture destinations"
+        empty="No fixture destinations"
+        onPick={(item) => setPicked(item.label)}
+        row={(item) => ({ label: item.label, refusal: item.reason })}
+        footer={
+          <p className="px-1 pb-1 text-ink-2">
+            Fixture destinations only; this specimen does not navigate.
+          </p>
+        }
+      />
+    </div>
+  );
+}
+
+/** The pick fixes or frees the input: "fixed" disables it and shows the fixed value. */
+function SegmentInput() {
+  const [pick, setPick] = useState("fixed");
+  const [value, setValue] = useState("");
+  return (
+    <ListSegmentInput
+      popup={{
+        "aria-label": "segment",
+        triggerLabel: pick,
+        trigger: <span className="face-mono">{pick}</span>,
+        items: ["fixed", "free"],
+        keyOf: (k) => k,
+        labelOf: (k) => k,
+        selected: [pick],
+        empty: "no picks",
+        onPick: setPick,
+        row: (k) => ({ label: k }),
+      }}
+      aria-label="segment input"
+      disabled={pick === "fixed"}
+      placeholder={pick === "fixed" ? "https://api.example.com" : "type a URL"}
+      value={pick === "fixed" ? "" : value}
+      onChange={(event) => setValue(event.target.value)}
+    />
   );
 }
 

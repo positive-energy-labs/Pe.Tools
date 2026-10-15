@@ -1,0 +1,287 @@
+import {
+  createContext,
+  use,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { useRouter, useRouterState } from "@tanstack/react-router";
+import {
+  appRouteMount,
+  SURFACE_SHELLS,
+  type AppSurface,
+  type SurfaceShell,
+} from "@pe/agent-contracts";
+import { admittedDestination } from "./model";
+import {
+  nativeMessageSchema,
+  postRendererMessage,
+  type NativeWebView,
+  type NativeMessageEvent,
+} from "@pe/host-contracts/native-adapter";
+
+type Overlay = {
+  visible: boolean;
+  getTitlebarAreaRect(): DOMRect;
+  addEventListener(event: "geometrychange", listener: () => void): void;
+  removeEventListener(event: "geometrychange", listener: () => void): void;
+};
+type NativeWindow = Window & {
+  chrome?: {
+    webview?: NativeWebView;
+  };
+};
+
+export interface SurfaceHost {
+  surface: AppSurface;
+  /** What this surface's shell may do; the bar and the router read it, never the surface name. */
+  shell: SurfaceShell;
+  /** Caption drawing alone is insufficient: the page must receive usable geometry. */
+  overlay: boolean;
+  titlebarArea: Pick<DOMRect, "x" | "y" | "width" | "height"> | null;
+  native: boolean;
+  pinned: boolean;
+  setPinned(pinned: boolean): void;
+  hidePanel(unpinnedOnly?: boolean): void;
+  nativeHistory: { canGoBack: boolean; canGoForward: boolean } | null;
+  navigateNativeHistory(direction: "back" | "forward"): boolean;
+  openFullWindow(destination: string): boolean;
+  navigationRefusal: string | null;
+}
+
+/** One destination policy for router changes, ordinary links and native document navigation. */
+export function surfaceDestination(
+  surface: AppSurface,
+  destination: string,
+  origin: string,
+): "local" | "window" | null {
+  const admitted = admittedDestination(destination, origin);
+  if (!admitted) return null;
+  return appRouteMount(new URL(admitted, origin).pathname, surface) ? "local" : "window";
+}
+
+export function nativeNavigationHistory(message: unknown): SurfaceHost["nativeHistory"] {
+  const parsed = nativeMessageSchema.safeParse(message);
+  const value = parsed.success ? parsed.data : null;
+  return value?.type === "navigation-history"
+    ? { canGoBack: value.canGoBack, canGoForward: value.canGoForward }
+    : null;
+}
+
+function navigateNativeHistory(direction: "back" | "forward"): boolean {
+  const native = (window as NativeWindow).chrome?.webview;
+  if (!native) return false;
+  return postRendererMessage(native, { type: "navigate-history", direction });
+}
+
+export function usableOverlay(
+  visible: boolean,
+  rect: Pick<DOMRect, "x" | "y" | "width" | "height">,
+) {
+  return (
+    visible &&
+    [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) &&
+    rect.x >= 0 &&
+    rect.y >= 0 &&
+    rect.width > 0 &&
+    rect.height > 0
+  );
+}
+
+/** Presentation state never changes the resource address handed to another surface. */
+export function fullWindowDestination(destination: string, origin: string): string | null {
+  const admitted = admittedDestination(destination, origin);
+  if (!admitted) return null;
+  const url = new URL(admitted, origin);
+  url.searchParams.delete("shell");
+  return url.href;
+}
+
+export function openFullWindow(destination: string): boolean {
+  const url = fullWindowDestination(destination, window.location.origin);
+  if (!url) return false;
+  const native = (window as NativeWindow).chrome?.webview;
+  if (native) {
+    return postRendererMessage(native, { type: "open-window", url });
+  }
+  const opened = window.open(url, "_blank");
+  if (!opened) return false;
+  opened.opener = null;
+  return true;
+}
+
+const webHost: SurfaceHost = {
+  surface: "web",
+  shell: SURFACE_SHELLS.web,
+  overlay: false,
+  titlebarArea: null,
+  native: false,
+  pinned: false,
+  setPinned,
+  hidePanel,
+  nativeHistory: null,
+  navigateNativeHistory,
+  openFullWindow,
+  navigationRefusal: null,
+};
+const Context = createContext<SurfaceHost>(webHost);
+
+function setPinned(pinned: boolean) {
+  postRendererMessage((window as NativeWindow).chrome?.webview, { type: "panel-pin", pinned });
+}
+function hidePanel(unpinnedOnly = false) {
+  postRendererMessage((window as NativeWindow).chrome?.webview, {
+    type: "panel-hide",
+    unpinnedOnly,
+  });
+}
+
+export function SurfaceHostProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const location = useRouterState({ select: (state) => state.location });
+  const shell = location.search.shell;
+  const navigationRequest = useRef<(destination: string) => void>(() => {});
+  const lastTrayLocation = useRef("/open?shell=tray");
+  const [navigationRefusal, setNavigationRefusal] = useState<string | null>(null);
+  const [standalone, setStandalone] = useState(false);
+  const [browserArea, setBrowserArea] = useState<SurfaceHost["titlebarArea"]>(null);
+  const [pinned, syncPinned] = useState(false);
+  const [native, setNative] = useState(false);
+  const [nativeHistory, setNativeHistory] = useState<SurfaceHost["nativeHistory"]>(null);
+  useEffect(() => {
+    const webview = (window as NativeWindow).chrome?.webview;
+    setNative(!!webview);
+    const syncNative = ({ data }: NativeMessageEvent) => {
+      const parsed = nativeMessageSchema.safeParse(data);
+      if (!parsed.success) return;
+      if (parsed.data.type === "navigation-request") {
+        navigationRequest.current(parsed.data.url);
+        return;
+      }
+      const history = nativeNavigationHistory(data);
+      if (history) {
+        setNativeHistory(history);
+        return;
+      }
+      if (parsed.data.type === "panel-state") syncPinned(parsed.data.pinned);
+    };
+    webview?.addEventListener("message", syncNative);
+    postRendererMessage(webview, { type: "chrome-ready" });
+    const media = matchMedia("(display-mode: standalone)");
+    const syncMode = () => setStandalone(media.matches);
+    syncMode();
+    media.addEventListener("change", syncMode);
+    const controls = (navigator as Navigator & { windowControlsOverlay?: Overlay })
+      .windowControlsOverlay;
+    const syncOverlay = () => {
+      const rect = controls?.getTitlebarAreaRect();
+      const usable = !!controls && !!rect && usableOverlay(controls.visible, rect);
+      setBrowserArea(
+        usable && rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null,
+      );
+    };
+    syncOverlay();
+    controls?.addEventListener("geometrychange", syncOverlay);
+    return () => {
+      webview?.removeEventListener("message", syncNative);
+      media.removeEventListener("change", syncMode);
+      controls?.removeEventListener("geometrychange", syncOverlay);
+    };
+  }, []);
+  const titlebarArea = native || shell === "tray" ? null : browserArea;
+  const overlay = titlebarArea !== null;
+  const open = useCallback(openFullWindow, []);
+  const surface: AppSurface = shell === "tray" ? "tray" : standalone || overlay ? "pwa" : "web";
+  const local = SURFACE_SHELLS[surface].routes !== "all";
+  useEffect(() => {
+    document.documentElement.dataset.shell = surface;
+  }, [surface]);
+  const handoff = useCallback((destination: string) => {
+    const opened = openFullWindow(destination);
+    setNavigationRefusal(
+      opened ? null : "The full window could not be opened. The tray stayed on its current route.",
+    );
+    return opened;
+  }, []);
+  navigationRequest.current = (destination) => {
+    const mode = surfaceDestination(surface, destination, window.location.origin);
+    if (mode === "window") {
+      handoff(destination);
+      return;
+    }
+    if (!mode) {
+      setNavigationRefusal("This destination is not a registered app route.");
+      return;
+    }
+    const url = new URL(destination, window.location.origin);
+    const search = Object.fromEntries(url.searchParams);
+    void router.navigate({
+      to: url.pathname,
+      search: { ...search, shell: surface === "tray" ? "tray" : undefined },
+      hash: url.hash.slice(1),
+    });
+  };
+  useEffect(() => {
+    if (!local) return;
+    const decide = (destination: string) =>
+      surfaceDestination(surface, destination, window.location.origin);
+    const unblock = router.history.block({
+      enableBeforeUnload: false,
+      blockerFn: ({ nextLocation }) => {
+        const mode = decide(nextLocation.href);
+        if (mode === "local") return false;
+        if (mode === "window") handoff(nextLocation.href);
+        else setNavigationRefusal("This destination is not a registered app route.");
+        return true;
+      },
+    });
+    const click = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.target instanceof Node === false)
+        return;
+      const anchor =
+        event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
+      if (!anchor || anchor.hasAttribute("download")) return;
+      const mode = decide(anchor.href);
+      if (!mode) return;
+      event.preventDefault();
+      navigationRequest.current(anchor.href);
+    };
+    document.addEventListener("click", click);
+    return () => {
+      unblock();
+      document.removeEventListener("click", click);
+    };
+  }, [surface, local, router, handoff]);
+  useEffect(() => {
+    if (!local) return;
+    if (surfaceDestination(surface, location.href, window.location.origin) === "local") {
+      lastTrayLocation.current = location.href;
+      return;
+    }
+    navigationRequest.current(location.href);
+    void router.navigate({ href: lastTrayLocation.current, replace: true, ignoreBlocker: true });
+  }, [surface, local, location.href, router]);
+  const value = useMemo<SurfaceHost>(
+    () => ({
+      surface,
+      shell: SURFACE_SHELLS[surface],
+      overlay,
+      titlebarArea,
+      native,
+      pinned,
+      setPinned,
+      hidePanel,
+      nativeHistory,
+      navigateNativeHistory,
+      openFullWindow: open,
+      navigationRefusal,
+    }),
+    [surface, overlay, titlebarArea, native, pinned, nativeHistory, open, navigationRefusal],
+  );
+  return <Context value={value}>{children}</Context>;
+}
+
+export const useSurfaceHost = () => use(Context);

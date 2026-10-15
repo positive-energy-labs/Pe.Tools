@@ -41,6 +41,7 @@ You are counsel: you argue and you are liable. An agent's report is testimony. T
 | the wrong reality: a claim proved on a lane that cannot falsify it | `execute` |
 | rumor: a finding without lineage | `mine` |
 | the painting: a page with no state behind it | `page` |
+| the wall of text: a topic explained in prose that a diagram would settle | `show-me` |
 <!-- routing:end -->
 
 `python .agents/skills/check.py --fix` projects this table from each skill's `prevents:`. Do not edit it by hand.
@@ -133,6 +134,9 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
   the payload/pattern to a file (harness Read/Grep tools where available) — see the `execute` skill.
 - Background + poll anything minutes-scale, and read `status` before any retry. (Client-kill orphans
   were field-disproven at beta.118 — the SDK reaps its own children.)
+- `git stash` is one stack shared by every worktree of this repo: a `stash pop` in one worktree applies
+  another agent's work (2026-10-13, wave C popped wave B's event-spine WIP). Never stash in a worktree;
+  commit WIP on your branch instead.
 
 ### Non-Doc Artifacts
 
@@ -174,7 +178,7 @@ After any large changes, ALWAYS clarify user intent and capture the durable know
 | **document-owned**    | Behavior that can be derived from a specific `Document` without needing UI session state | Prefer `Document` extensions for this                                                        |
 | **document session**  | Open/active/UI-tab state for documents in the current Revit process                      | Keep this in `UIApplication` or session-aware helpers                                        |
 | **artifact**          | A durable machine-readable output produced by a command or DA workitem                   | Prefer this over vague `report` when the file is the actual output contract                  |
-| **inference endpoint** | The one OpenAI-compatible base URL plus key Pea sends model calls to (ADR 0014). A subscription proxy, a VPS, Ollama, or a future PE gateway are all just an endpoint | Prefer "Pea talks to any OpenAI-compatible endpoint"; avoid naming Tailscale, Codex, or a cloud as a Pea feature |
+| **inference endpoint** | A user-added provider of one harness: a base URL plus key stored in `providers.json` and passed to the harness child as env (ADR 0014, superseded by ADR 0015). Claude's speaks the Messages API, Codex's the Responses API. Pea sends no model call itself | Prefer "endpoint provider" for the record and "subscription provider" for the harness's own login; avoid naming Tailscale, Codex, or a cloud as a Pea feature |
 
 ## Proof Lanes
 

@@ -17,12 +17,18 @@ export * from "./schedule-actions.ts";
 export * from "./schedule-grid-data.ts";
 export * from "./world.ts";
 export * from "./target.ts";
+export * from "./caller.ts";
+export * from "./principal.ts";
 export * from "./instances.ts";
 export * from "./capability.ts";
+export * from "./contribution.ts";
+export * from "./pod-route.ts";
+export * from "./mention.ts";
 
 export * from "./semantic-actions.ts";
 
 export * from "./action-receipts.ts";
+export * from "./receipts.ts";
 
 export * from "./family-actions.ts";
 
@@ -31,7 +37,14 @@ export * from "./seed.ts";
 export * from "./diagram.ts";
 
 export * from "./harness-thread.ts";
+export * from "./host-log.ts";
 
 export * from "./capture.ts";
 
 export * from "./sdk-session.ts";
+export * from "./navigation.ts";
+export * from "./app-routes.ts";
+export * from "./plugin.ts";
+export * from "./plugin-runtime.ts";
+
+export * from "./thread-export.ts";

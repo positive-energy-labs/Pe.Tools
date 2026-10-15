@@ -6,7 +6,7 @@
  * The Reading is the cache, shared by every pane that draws it, Chat's too; the host stamps its
  * taken-at and its change mark once for all of them (ruled 2026-09-22).
  */
-import type { Chord } from "#/route/keys";
+import type { Chord } from "@pe/kit/keys";
 
 export interface PaneDecl<R extends string, A extends string> {
   /** The Readings this pane draws. */

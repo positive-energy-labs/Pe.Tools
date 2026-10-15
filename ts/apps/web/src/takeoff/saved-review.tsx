@@ -3,6 +3,7 @@
  * capture are both the `takeoff-saved` Reading kind; nothing here calls the host directly.
  */
 import { useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 import {
   sameAddress,
   type Address,
@@ -13,14 +14,12 @@ import type { z } from "zod";
 
 import { SavedCaptureText } from "#/takeoff/saved-capture-text";
 import { TakeoffsControllerOwner } from "#/takeoff/route";
-import { RouteShell } from "#/route";
-import { ActionButton } from "#/components/lang/action-button";
-import { List } from "#/components/lang/list-popup";
-import { useReading, previousOf } from "#/readings";
-import { emptyManifest } from "#/route";
+import { RouteShell, useRoute } from "#/route";
+import { Button } from "@pe/kit/lang/button";
+import { List } from "@pe/kit/lang/list-popup";
+import { previousOf } from "#/readings";
+import { savedTakeoffsManifest as savedManifest } from "#/route/surface-manifests";
 import type { TakeoffViewSelection } from "#/takeoff/route-workspace";
-
-const savedManifest = emptyManifest("takeoffs-saved", "Takeoffs saved review");
 
 export function SavedTakeoffsRoute({ capture }: { capture?: string }) {
   const navigate = useNavigate({ from: "/takeoffs" });
@@ -48,14 +47,14 @@ export function SavedTakeoffsView({
   select: (patch: TakeoffViewSelection) => void;
   renderCapture: (capture: TakeoffCapture) => import("react").ReactNode;
 }) {
-  const one = useReading<TakeoffCapture>(
-    capture ? { kind: "takeoff-saved", id: capture } : { kind: "takeoff-saved" },
-  );
-  // ponytail: the host observer drops `document` from this Reading (resource-adapters.ts), so the
-  // list is filtered here; forward it there and this filter becomes the host's.
-  const many = useReading<readonly z.infer<typeof takeoffCaptureSummarySchema>[]>({
-    kind: "takeoff-saved",
-  });
+  const handle = useRoute(savedManifest, { target: null, url: false, page: { work: capture } });
+  useEffect(() => {
+    handle.page[1]({ work: capture });
+  }, [capture]); // eslint-disable-line react-hooks/exhaustive-deps
+  const one = handle.readings.capture as import("@pe/agent-contracts").Reading<TakeoffCapture>;
+  const many = handle.readings.captures as import("@pe/agent-contracts").Reading<
+    readonly z.infer<typeof takeoffCaptureSummarySchema>[]
+  >;
   const saved = capture ? previousOf(one) : undefined;
   if (saved)
     return (
@@ -72,12 +71,16 @@ export function SavedTakeoffsView({
     <main className="min-h-screen px-6 py-4">
       <RouteShell
         manifest={savedManifest}
+        handle={handle}
         head={
-          <ActionButton
+          <Button
+            kind="framed"
             label="live"
             reason="Explicitly return to document selection in Revit"
             onClick={() => select({ work: undefined })}
-          />
+          >
+            live
+          </Button>
         }
       />
       {capture && reading.state !== "failed" ? (

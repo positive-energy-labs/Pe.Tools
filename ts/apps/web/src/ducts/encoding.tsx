@@ -5,9 +5,9 @@
  * per-element loss) is one entry in `ENCODINGS`, never a new drawing. Issue inks come only from
  * `ISSUE_KINDS` (`issues.tsx`) by their `blocks` class; everything else is a house token.
  */
-import type { DashRole } from "#/lib/token";
-import { token } from "#/lib/token";
-import { VERDICT_INK } from "#/components/master-table/cells";
+import type { DashRole } from "@pe/kit/lib/token";
+import { token } from "@pe/kit/lib/token";
+import { VERDICT_INK } from "@pe/kit/table/cells";
 import { ISSUE_KINDS, type Blocks } from "./issues";
 import type { DuctSnapshot } from "./readiness";
 
@@ -16,7 +16,7 @@ export type DuctNode = DuctSnapshot["nodes"][number];
 export type Issue = DuctSnapshot["issues"][number];
 
 /** Pe's own loss at one element (`lossesOf`, `scene.ts`): the summed `dp` of its priced rows, in-wg. */
-export interface PressurePoint {
+interface PressurePoint {
   drop: number | null;
 }
 

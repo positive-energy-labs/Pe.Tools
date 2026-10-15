@@ -7,9 +7,9 @@
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
-import { FactChip } from "#/components/lang/chip";
-import { Press } from "#/components/lang/press";
-import { EmptyState } from "#/components/lang/empty";
+import { FactChip } from "@pe/kit/lang/chip";
+import { Button } from "@pe/kit/lang/button";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import {
   boundsOf,
@@ -19,7 +19,7 @@ import {
   type Point2,
   type Viewport2,
 } from "#/lib/affine-frame";
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 import { PlanImageLayer, type TakeoffPlanImage } from "#/takeoff/level-plan";
 import { pathD } from "#/takeoff/model";
 import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan-image";
@@ -140,7 +140,7 @@ const planCorners = (plan: TakeoffPlanImage): Point2[] => {
 };
 
 // ponytail: the world is drawn at 4 px per foot; zoom 0.02 to 24 spans 0.08 to 96 screen px per foot.
-export const WORLD_PX_PER_FT = 4;
+export const PLAN_PX_PER_FT = 4;
 const ZOOM = [0.02, 24] as const;
 const CLICK_PX = 5;
 const ZOOM_PAD_PX = 48;
@@ -231,13 +231,13 @@ export function RoomsPlan({
   const world = useMemo(() => {
     if (!bounds) return null;
     const { viewport, padding } = contentViewport(bounds, 0.03);
-    const width = viewport.width * WORLD_PX_PER_FT;
-    const height = viewport.height * WORLD_PX_PER_FT;
+    const width = viewport.width * PLAN_PX_PER_FT;
+    const height = viewport.height * PLAN_PX_PER_FT;
     const frame = fitFrame(
       bounds,
       { width, height },
       {
-        padding: padding * WORLD_PX_PER_FT,
+        padding: padding * PLAN_PX_PER_FT,
         yAxis: "up",
       },
     );
@@ -394,19 +394,17 @@ export function RoomsPlan({
       {LAYERS.map((layer) => {
         const on = layers.includes(layer);
         return (
-          <Press
+          <Button
             key={layer}
-            type="button"
-            frame="line"
-            size="caption"
-            state={on ? "selected" : "rest"}
-            aria-pressed={on}
-            disabled={!trace.data}
-            title={trace.data ? LAYER_SAYS[layer] : (trace.none ?? "reading the trace")}
+            label={layer}
+            kind="framed"
+            pressed={on}
+            refusal={trace.data ? null : (trace.none ?? "reading the trace")}
+            reason={LAYER_SAYS[layer]}
             onClick={() => setLayers(toggleLayer(layers, layer))}
           >
             {layer}
-          </Press>
+          </Button>
         );
       })}
       {!trace.data && trace.none ? (

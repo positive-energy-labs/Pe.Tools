@@ -1,4 +1,5 @@
-import { withInvocationContext } from "../src/shared/invocation-context.ts";
+import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
+import { withInvocationContext } from "@pe/runtime/context";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { peDo, peRead } from "../src/pea/capability-tools.ts";
 import { buildCapabilities } from "../src/pea/capabilities.ts";
@@ -18,6 +19,8 @@ const receipt = (admission: Record<string, unknown>) => {
   const { input, ...rest } = admission;
   return {
     ...rest,
+    caller: { kind: "pea", context: "c", thread: "t" },
+    basis: null,
     request: input,
     state: "succeeded",
     result: { done: true },
@@ -46,8 +49,9 @@ function host(prior?: Record<string, unknown>) {
       return Response.json({
         at: new Date(0).toISOString(),
         sources: {},
-        sessions: [],
-        capabilities: buildCapabilities({ ops: operations, routes: [], pods: null, skills: [] }),
+        diagnostics: [],
+        machine: machineFixture(),
+        capabilities: buildCapabilities({ ops: operations, routes: [], packages: [], skills: [] }),
       });
     if (url.pathname === "/ops") return Response.json({ operations, bridgeSessionId: "A" });
     if (url.pathname === "/call") {
@@ -82,13 +86,22 @@ const call = (tool: typeof peDo | typeof peRead, input: Record<string, unknown>,
     ),
   ) as Promise<Record<string, unknown>>;
 
-test("pe_do admits native operations and workflows with exact identity, actor, target and bases", async () => {
+test("pe_do admits native operations and workflows with exact identity, target and bases, and no actor", async () => {
   const { posts } = host();
   expect(
     await call(peDo, { key: "op:scripting.execute", target, input: { scriptContent: "x" } }),
   ).toMatchObject({ ok: true });
   for (const key of ["scripting.workspace.bootstrap", "pod.import", "pod.export"])
-    expect(await call(peDo, { key: `op:${key}`, target: { id: "A" } }, key)).toMatchObject({
+    expect(
+      await call(
+        peDo,
+        {
+          key: `op:${key}`,
+          ...(key === "scripting.workspace.bootstrap" ? { target: { id: "A" } } : {}),
+        },
+        key,
+      ),
+    ).toMatchObject({
       ok: true,
     });
   const bases = { captureId: "c".repeat(64) };
@@ -111,7 +124,6 @@ test("pe_do admits native operations and workflows with exact identity, actor, t
       id: "attempt",
       kind: "operation",
       key: "scripting.execute",
-      actor: "agent",
       destination,
       input: { scriptContent: "x" },
       bases: {},
@@ -120,19 +132,21 @@ test("pe_do admits native operations and workflows with exact identity, actor, t
       id: key,
       kind: "operation",
       key,
-      actor: "agent",
-      destination: { kind: "session", session: "A" },
+      destination:
+        key === "scripting.workspace.bootstrap"
+          ? { kind: "session", session: "A" }
+          : { kind: "host" },
     })),
     {
       id: "workflow",
       kind: "workflow",
       key: "takeoffs.partition",
-      actor: "agent",
       destination,
       bases,
     },
   ]);
   expect(posts.at(-1)?.input).not.toHaveProperty("bases");
+  for (const post of posts) expect(post).not.toHaveProperty("actor");
 });
 
 test("pe_read refuses mutations; pe_do refuses human, unknown and missing or closed targets before admission", async () => {
@@ -165,7 +179,6 @@ test("pe_do replays the original receipt without catalog or target discovery and
       id: "attempt",
       kind: "operation",
       key: "scripting.execute",
-      actor: "agent",
       destination,
       input: { scriptContent: "x" },
       bases: {},
@@ -187,4 +200,54 @@ test("pe_do replays the original receipt without catalog or target discovery and
   ).rejects.toThrow("destination");
   expect(posts).toHaveLength(1);
   expect(new Set(reads)).toEqual(new Set(["/actions"]));
+});
+
+test("pe_do admits a lifecycle action at the session its input names, with no head lifetime", async () => {
+  const { posts } = host();
+  const session = {
+    selection: { id: "dev" },
+    process: { pid: 7, processStartUtc: "2026-10-13T00:00:00.0000000Z", executable: "Revit.exe" },
+  };
+  expect(
+    await call(peDo, {
+      key: "workflow:instances.stop",
+      input: { session, unsaved: "keep", actionId: "stop" },
+    }),
+  ).toMatchObject({ ok: true });
+  expect(posts).toMatchObject([
+    {
+      id: "stop",
+      key: "instances.stop",
+      destination: { kind: "sdk-session", selection: { id: "dev" } },
+    },
+  ]);
+});
+
+test("a canonical script replays its captured manifest identity and sourcePath without a current folder lookup", async () => {
+  const sourceBundle = {
+    files: [
+      { path: "pod.json", bytesBase64: Buffer.from('{"id":"shelf-test"}').toString("base64") },
+      { path: "src/Census.cs", bytesBase64: Buffer.from("sealed script").toString("base64") },
+    ],
+  };
+  const prior = receipt({
+    id: "attempt",
+    kind: "operation",
+    key: "scripting.execute",
+    destination,
+    input: { workspaceKey: "historical-folder", sourcePath: "src/Census.cs", sourceBundle },
+    bases: {},
+  });
+  const before = JSON.stringify(prior);
+  const { posts, reads } = host(prior);
+  expect(await call(peDo, { key: "script:@shelf-test/src/Census.cs" })).toMatchObject({ ok: true });
+  expect(posts[0]).toMatchObject({
+    id: "attempt",
+    input: { workspaceKey: "historical-folder", sourcePath: "src/Census.cs", sourceBundle },
+  });
+  await expect(call(peDo, { key: "script:@other/src/Census.cs" })).rejects.toThrow("conflicts");
+  await expect(call(peDo, { key: "script:@shelf-test/src/Other.cs" })).rejects.toThrow("conflicts");
+  expect(posts).toHaveLength(1);
+  expect(new Set(reads)).toEqual(new Set(["/actions"]));
+  expect(JSON.stringify(prior)).toBe(before);
 });

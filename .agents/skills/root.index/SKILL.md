@@ -40,6 +40,7 @@ Authority runs user, then skill, then this file. A stance is a posture, not a pr
 | slot | `execute` | the proving ground and chain of custody — touch the right reality, then name exactly what answered | the wrong reality: a claim proved on a lane that cannot falsify it | - | - | - |
 | slot | `mine` | how retained Claude and Codex sessions become evidence, this repo | rumor: a finding without lineage | - | - | - |
 | slot | `page` | the orrery, not the painting — a page that holds state and turns | the painting: a page with no state behind it | - | - | - |
+| slot | `show-me` | the sketch on the back of the envelope | the wall of text: a topic explained in prose that a diagram would settle | - | - | - |
 
 Real work starts with two accounts (`AGENTS.md`, Always): the ask restated, then what the terrain shows. `protoui`, `muse`, `purge`, `diagnose`, and `goal` often form a session's main loop. A pasted failure is `diagnose`. `delegate`, `goal` and `relay` are user-only; name them then stop. Suggest "/realy" when you and the user seem to be consistently misaligned.
 
@@ -137,6 +138,7 @@ Shared words, the only home for figure aliases. Each is a rule compressed to a n
 | **line** | One agent and every prompt sent down it; a follow-up goes down the line that read the terrain, never to a fresh agent. `delegate` calls it jesses |
 | **edge** | The bound on a delegated mission: stop condition, time box, report file; no agent including yourself starts without all three. `delegate` calls it the creance |
 | **stop** | What ends a loop; every pass and loop names one in frontmatter, and a stop is reported with `prove`'s stamp or not as a stop |
+| **kit / sounding / shoal** | `house` words: kit is the primitive set or component library; sounding is a value or cell; shoal is drift, stale, or unverified |
 
 Three verdict vocabularies, no others. State: **PROVEN / BLOCKED / OPEN**. Claim: **PROVEN / FALSIFIED / UNPROVEN**. Candidate: **ADOPT / KILL / FALSIFIED**.
 

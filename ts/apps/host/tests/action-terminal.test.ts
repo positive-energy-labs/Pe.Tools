@@ -4,7 +4,7 @@
  * Each step's effect answers with a chosen outcome; the executor keeps going after a step error so a
  * row can hold any mix of step states.
  */
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -14,6 +14,8 @@ import { ActionIncomplete, ActionJournal } from "../src/action-journal.ts";
 import { BridgeError } from "../src/bridge.ts";
 import { readNativeReceipt } from "../src/native-receipts.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
+import { crossingOf } from "./callers.ts";
+import { readJournal, writeJournal } from "./journal-fixture.ts";
 
 type Outcome = "succeeded" | "failed" | "dispatchedFailure" | "cancelled" | "unknown";
 type End = "return" | "rethrow" | "incomplete" | "hostError";
@@ -32,7 +34,7 @@ const admission = (id: string) => ({
   id,
   kind: "workflow" as const,
   key: "test.terminal",
-  actor: "human" as const,
+  ...crossingOf("human"),
   destination: { kind: "host" as const },
   input: {},
   bases: {},
@@ -226,10 +228,11 @@ async function restart(steps: ActionStep["state"][], prepared: boolean) {
     state: "running",
   };
   delete (row as { input?: unknown }).input;
-  await writeFile(path, JSON.stringify({ version: 3, actions: [row] }));
+  await writeJournal(path, [row]);
   const journal = new ActionJournal(path);
   const reloaded = (await journal.list(undefined, id))[0]!;
-  expect(JSON.parse(await readFile(path, "utf8")).actions[0].state).toBe(reloaded.state);
+  const [stored] = (await readJournal(path)).receipts;
+  expect(stored!.body.kind === "action" && stored!.body.value.state).toBe(reloaded.state);
   return reloaded;
 }
 const restarts: [ActionStep["state"][], boolean, Terminal][] = [

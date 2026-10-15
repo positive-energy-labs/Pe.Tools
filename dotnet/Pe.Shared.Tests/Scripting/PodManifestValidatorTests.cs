@@ -25,8 +25,7 @@ public sealed class PodManifestValidatorTests {
               "description": "Checks connector data.",
               "entrypoints": [
                 {
-                  "id": "main",
-                  "sourcePath": "src\\Main.cs",
+                  "sourcePath": "src/Main.cs",
                   "name": "Main"
                 }
               ]
@@ -54,7 +53,6 @@ public sealed class PodManifestValidatorTests {
               "surprise": true,
               "entrypoints": [
                 {
-                  "id": "main",
                   "sourcePath": "src/Main.cs",
                   "extra": "nope"
                 }
@@ -78,7 +76,7 @@ public sealed class PodManifestValidatorTests {
     }
 
     [Test]
-    public void Entrypoints_must_have_unique_slug_ids_and_source_paths() {
+    public void Entrypoints_must_have_unique_source_paths() {
         var result = PodManifestValidator.ValidateJson(
             """
             {
@@ -87,15 +85,14 @@ public sealed class PodManifestValidatorTests {
               "name": "Connector Audit",
               "version": "1.0.0",
               "entrypoints": [
-                { "id": "main", "sourcePath": "src/Main.cs" },
-                { "id": "main", "sourcePath": "src/main.cs" }
+                { "sourcePath": "src/Main.cs" },
+                { "sourcePath": "src/main.cs" }
               ]
             }
             """
         );
 
         Assert.That(result.Success, Is.False);
-        Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("Duplicate pod entrypoint id 'main'"));
         Assert.That(result.Diagnostics.Select(diagnostic => diagnostic.Message), Has.Some.Contain("Duplicate pod entrypoint sourcePath 'src/main.cs'"));
     }
 
@@ -154,7 +151,7 @@ public sealed class PodManifestValidatorTests {
           "name": "Connector Audit",
           "version": "1.0.0",
           "entrypoints": [
-            { "id": "main", "sourcePath": "{{sourcePath}}" }
+            { "sourcePath": "{{sourcePath}}" }
           ]
         }
         """;

@@ -1,30 +1,13 @@
 /**
- * CELL-STATE KEY — a first-class entity, not a legend strip.
- *
- * CONSUMER: any route that mounts `StateCell`. It belongs INSIDE the artifact frame of the thing
- * it describes (the table's recess foot), not beside it — the key describes the table, so making
- * it a fifth framed object would spend the border budget on a caption.
- *
- * RULINGS EMBODIED:
- * - ROUND-2 RULING NOTE 2 promoted the key to a first-class entity: it was instrumental to the
- *   table reading at all, and its open design work — how cell states sort and group inside it —
- *   was handed to this step and answered here: **grouped BY AXIS, ordered inside a group by the
- *   cell's own precedence.** Capability outranks pea's proposal; the squiggle family runs
- *   drift ▸ stale ▸ unverified; the unsaved square composes last.
- * - EVERY SPECIMEN IS A REAL `StateCell` WITH REAL PROPS. That is the point: a key drawn with its
- *   own markup can teach a treatment the table does not use, and eventually will. This one
- *   cannot lie, because it renders through the same component.
- * - The axis names stay quiet (`--pe-ink-2`, 9.5px mono) — this is a key, not a legend poster.
- *
- * ponytail: the axes are a fixed list, not a subset derived from the rows on screen. A real key
- * would drop axes the table never exercises; nothing has ruled how to detect that, and the
- * five-axis block was what the round judged. Upgrade path: take the rendered rows and filter.
+ * The cell-state key: grouped by axis, ordered by the cell's precedence. Every specimen is a real
+ * `StateCell`, so the key cannot teach a treatment the table does not use. Mount it inside the
+ * artifact frame of the thing it describes.
  */
-import { tv } from "#/lib/tv";
+import { tv } from "@pe/kit/lib/tv";
 
-import { StateCell } from "./cell";
+import { StateCell } from "@pe/kit/lang/cell";
 
-import "./lang.css";
+import "@pe/kit/lang/lang.css";
 
 export const cellStateKeyRecipe = tv({
   slots: {
@@ -86,9 +69,7 @@ const AXES: readonly KeyAxis[] = [
     axis: "capability",
     asks: "can it be written at all?",
     items: [
-      // RULED 2026-08-31: one refusal RENDERING, and the reason carries which refusal it is —
-      // `readonly` and `excluded` were the same greyed-italic body under two names, so they
-      // collapsed into `locked` + `capReason`. The key shows the one specimen the cell draws.
+      // One refusal rendering: `locked`, with `capReason` saying which refusal it is.
       {
         label: "locked — the reason says which refusal",
         specimen: <StateCell value="84 in" cap="locked" />,

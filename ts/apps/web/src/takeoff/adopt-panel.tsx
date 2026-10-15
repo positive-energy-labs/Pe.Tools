@@ -1,14 +1,15 @@
 import { Fragment, type ComponentProps } from "react";
 import { showAdopt, TakeoffProposalRows } from "#/takeoff/proposals";
-import { FactChip } from "#/components/lang/chip";
-import { EmptyState } from "#/components/lang/empty";
+import { FactChip } from "@pe/kit/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { ActionButton } from "#/components/lang/action-button";
-import { Input } from "#/components/lang/input";
+import { Button } from "@pe/kit/lang/button";
+import { Input } from "@pe/kit/lang/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/lang/dialog";
-import { fmtNum } from "#/components/master-table/model";
+import { fmtNum } from "@pe/kit/table/model";
 import { type CandidateRegion } from "#/takeoff/model";
 import { type TakeoffsController } from "#/takeoff/controller";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export interface AdoptRow {
   region: CandidateRegion;
@@ -64,13 +65,13 @@ export function AdoptRegions({ store }: { store: TakeoffsController }) {
                   patchRow(r.view, r.region.elementId, { checked: e.target.checked })
                 }
               />
-              <span className="w-28" title={r.view}>
-                {r.view}
-              </span>
+              <TooltipHint content={r.view}>
+                <span className="w-28">{r.view}</span>
+              </TooltipHint>
               <span className="size-2.5" style={{ backgroundColor: `rgb(${r.region.color})` }} />
-              <span className="w-24" title={r.region.typeName}>
-                {r.region.typeName}
-              </span>
+              <TooltipHint content={r.region.typeName}>
+                <span className="w-24">{r.region.typeName}</span>
+              </TooltipHint>
               <span className="w-16">{fmtNum(r.region.sqft, 0)} sf</span>
               <div className="min-w-0 flex-1">
                 <CommitInput
@@ -150,6 +151,11 @@ export function SyncPanel({ store }: { store: TakeoffsController }) {
   const busy = store.busy?.key ?? null;
   const sync = () => void store.handle.actions["commit-sync"].run();
   const refusal = store.handle.actions["commit-sync"].refusal;
+  const syncWhy = () =>
+    refusal ??
+    (busy !== null
+      ? `${busy} is in flight`
+      : `Inserts ${inserts.length} rooms into ${r10Path} and writes the {file, room} link back onto each Room Region. Work on a COPY of the template.`);
 
   return (
     <Panel title={`sync to ${r10Path}`} onClose={() => store.actions.openPanel(null)}>
@@ -217,18 +223,15 @@ export function SyncPanel({ store }: { store: TakeoffsController }) {
       )}
 
       <div className="mt-2 flex items-center gap-2">
-        <ActionButton
-          tone="commit"
+        <Button
+          kind="commit"
           label={`sync ${inserts.length + linkedUpdates} rooms`}
-          disabled={busy !== null || refusal !== null}
-          reason={
-            refusal ??
-            (busy !== null
-              ? `${busy} is in flight`
-              : `Inserts ${inserts.length} rooms into ${r10Path} and writes the {file, room} link back onto each Room Region. Work on a COPY of the template.`)
-          }
+          refusal={busy !== null || refusal !== null ? syncWhy() : null}
+          reason={syncWhy()}
           onClick={sync}
-        />
+        >
+          {`sync ${inserts.length + linkedUpdates} rooms`}
+        </Button>
       </div>
     </Panel>
   );

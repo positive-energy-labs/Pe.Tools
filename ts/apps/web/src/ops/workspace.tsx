@@ -6,10 +6,10 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { ActionReceiptView } from "#/actions/receipt";
-import { FactChip } from "#/components/lang/chip";
-import { EmptyState } from "#/components/lang/empty";
+import { FactChip } from "@pe/kit/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { Pane } from "#/components/lang/pane";
-import { Press } from "#/components/lang/press";
+import { Button } from "@pe/kit/lang/button";
 import { Provenance } from "#/components/lang/section";
 import { Surface } from "#/components/lang/surface";
 import { previousOf, useReading } from "#/readings";
@@ -23,7 +23,7 @@ import { OpForm, requestOf, seedValues, type FormValues } from "#/ops/form";
 import { isMutation, opsManifest, type HostOperationCatalogEntry } from "#/ops/manifest";
 import { outputRenderers } from "#/ops/renderers";
 import { runOp } from "#/ops/run";
-import { Code, stringify } from "#/components/lang/code";
+import { Code, stringify } from "@pe/kit/lang/code";
 
 type Catalog = { operations?: HostOperationCatalogEntry[]; bridgeCatalogError?: string };
 type Value = { op: string; request: unknown; value: unknown; elapsedMs: number };
@@ -145,7 +145,7 @@ export function OpsRoute({
         />
       }
     >
-      <Pane kind="content" title="operation">
+      <Pane title="operation">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
           {actionId ? <ActionReceiptView id={actionId} /> : null}
           {selected ? (
@@ -171,17 +171,16 @@ export function OpsRoute({
                   <h2>Request</h2>
                   <span className="flex gap-1">
                     {(selected.requestExamples ?? []).map((example) => (
-                      <Press
+                      <Button
                         key={example.name}
-                        size="caption"
-                        tone="neutral"
-                        title={example.description}
+                        label={example.name}
+                        reason={example.description}
                         onClick={() =>
                           setValues(seedValues(selected.requestSchemaJson, example.json))
                         }
                       >
                         {example.name}
-                      </Press>
+                      </Button>
                     ))}
                   </span>
                 </div>

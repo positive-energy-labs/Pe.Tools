@@ -5,18 +5,18 @@
  */
 import { Check, X } from "lucide-react";
 
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "@pe/kit/lang/button";
 import {
   reviewTransitions,
   runFanOut,
   type CellWire,
   type FanOutOutcome,
-} from "#/components/lang/band";
-import { cellFromTrichotomy, StateCell, type StateCellProps } from "#/components/lang/cell";
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
+} from "#/components/work/band";
+import { cellFromTrichotomy, StateCell, type StateCellProps } from "@pe/kit/lang/cell";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { Section } from "#/components/lang/section";
-import { ReadCell } from "#/components/master-table/cells";
-import type { Column } from "#/components/master-table/model";
+import { ReadCell } from "@pe/kit/table/cells";
+import type { Column } from "@pe/kit/table/model";
 import { Gap } from "#/design-system/exhibit";
 
 import { ProposalHead, type HeadWork } from "#/chat/proposal-head";
@@ -135,19 +135,24 @@ function AskLine({ resolve }: { resolve: (verdict: Ask) => void }) {
     <div className="flex flex-wrap items-baseline gap-3 py-0.5">
       <span className="face-mono text-ink">⌗ family.capture</span>
       <span>on Air Handler</span>
-      <ActionButton
-        tone="commit"
+      <Button
+        kind="commit"
         icon={Check}
         label="allow"
         reason="Allow this transient tool call"
         onClick={() => resolve("allowed")}
-      />
-      <ActionButton
+      >
+        allow
+      </Button>
+      <Button
+        kind="framed"
         icon={X}
         label="refuse"
         reason="Refuse this transient tool call"
         onClick={() => resolve("refused")}
-      />
+      >
+        refuse
+      </Button>
     </div>
   );
 }
@@ -225,12 +230,15 @@ export function ChatScale({
         </div>
       </ArtifactFrame>
       <div className="flex flex-wrap items-baseline gap-3 pt-2">
-        <ActionButton
+        <Button
+          kind="framed"
           label="end turn · SIMULATED"
           reason="Ends Pea's turn; its awaiting ask expires with it"
-          disabled={ask !== "live"}
+          refusal={ask !== "live" ? "Ends Pea's turn; its awaiting ask expires with it" : null}
           onClick={() => setAsk("expired")}
-        />
+        >
+          end turn · SIMULATED
+        </Button>
         <span className="t-small text-ink-2">
           Ruled: an ask lives as long as its awaiting turn. Turn end, cancel and host restart expire
           it; navigation and reload do not.

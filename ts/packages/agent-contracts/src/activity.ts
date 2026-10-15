@@ -85,6 +85,7 @@ export const TOOL_TITLES: Record<string, string> = {
   pe_read: "Read",
   pe_do: "Do",
   target_set: "Propose the default Target",
+  pe_feedback: "Report a tooling defect",
   read_image: "Look at an image",
   capture_view: "Capture a view",
   diagram: "Draw a diagram",

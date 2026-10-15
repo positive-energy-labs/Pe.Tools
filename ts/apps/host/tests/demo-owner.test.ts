@@ -78,7 +78,6 @@ test("admitted demo launch uses only its labelled leaf and rejects escape or rea
       id,
       kind: "operation",
       key,
-      actor: "human",
       destination: { kind: "host" },
       input: { path },
       bases: {},
@@ -106,7 +105,6 @@ async function save(f: Awaited<ReturnType<typeof setup>>) {
     id: `${f.owner.id}:save`,
     kind: "workflow",
     key: "settings.write",
-    actor: "human",
     destination: { kind: "host" },
     input: { member: basis.member, write: { kind: "save", sha256: basis.sha256 } },
     bases: { work: { key: f.owner.scope, revision: work!.revision } },
@@ -129,8 +127,8 @@ test.each(["success", "token-conflict", "publication-refusal"] as const)(
     const path = await f.owner.settings.memberPath(f.owner.member!);
     const file = JSON.parse(await readFile(path, "utf8"));
     expect(file.family.name).toBe(scenario === "token-conflict" ? "Box" : "Saved Demo");
-    const stored = JSON.parse(await readFile(join(f.owner.root, "journal.json"), "utf8"));
-    expect(JSON.stringify(stored)).toContain(`${f.owner.id}:save`);
+    const stored = await readFile(join(f.owner.root, "journal.json"), "utf8");
+    expect(stored).toContain(`${f.owner.id}:save`);
     if (scenario === "publication-refusal")
       expect(
         JSON.stringify(await f.owner.work.read(f.owner.scope, settingsRouteState.route)),
@@ -147,7 +145,6 @@ test("Build freezes original saved/composed basis and labels simulated outcome; 
       id: `${f.owner.id}:${suffix}`,
       kind: "workflow",
       key: "family.build",
-      actor: "human",
       destination: { kind: "document", ref: f.owner.target },
       input: { source: { ...f.owner.member!, sha256: opened.sha256 } },
       bases: {},
@@ -201,7 +198,6 @@ test("demo Family capture files a new member and returns what the capture saw", 
     id: `${f.owner.id}:capture`,
     kind: "workflow",
     key: "family.capture",
-    actor: "agent",
     destination: { kind: "document", ref: f.owner.target },
     input: { pod: f.owner.member!.pod },
     bases: {},
@@ -267,7 +263,6 @@ test("demo Family capture with no pod reads the live spec and files nothing; wit
       id: `${f.owner.id}:${suffix}`,
       kind: "workflow",
       key: "family.capture",
-      actor: "agent",
       destination: { kind: "document", ref: f.owner.target },
       input,
       bases: {},
@@ -314,7 +309,6 @@ test("demo Family plan returns a hash, apply sends that exact hash, from the byt
           id: `${f.owner.id}:${suffix}`,
           kind: "workflow",
           key: planHash ? "family.apply" : "family.plan",
-          actor: "human",
           destination: { kind: "document", ref: f.owner.target },
           input: planHash
             ? { plan: `${f.owner.id}:planned`, expectedPlanHashes: { "1": planHash } }
@@ -511,7 +505,6 @@ test("demo schedule push files a run in the bound pod with values before and aft
       id,
       kind: "workflow",
       key: "schedule.grid.push",
-      actor: "human",
       destination: { kind: "document", ref: f.owner.target },
       input,
       bases: { work: { key, revision: (await f.owner.work.read(key, route))!.revision } },

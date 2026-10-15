@@ -1,7 +1,7 @@
 import { Activity, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ThreadComposer } from "./composer";
 import type { ChatHandle } from "./composer-head";
-import type { ChatDraft } from "#/workbench/prompt";
+import { EMPTY_CHAT_DRAFT, type ChatDraft } from "#/workbench/prompt";
 
 /** Visited composers retain React-local drafts until their thread is explicitly deleted. */
 export function ComposerBank({
@@ -9,13 +9,22 @@ export function ComposerBank({
   deletedThreadIds,
   prompt,
   handle,
-  topBar,
+  pickers,
+  state,
+  work,
+  refusal,
 }: {
   currentThreadId: string;
   deletedThreadIds: ReadonlySet<string>;
   prompt?: string;
   handle: ChatHandle;
-  topBar: ReactNode;
+  /** The provider and document pickers, open or at rest (`ComposerPickers`). */
+  pickers: (open: boolean) => ReactNode;
+  /** The run's state beside them (`ComposerState`). */
+  state: ReactNode;
+  /** The box's top section: live asks and staged Work (`ComposerWork`). */
+  work: ReactNode;
+  refusal?: string | null;
 }) {
   const [visited, setVisited] = useState(() => new Set([currentThreadId]));
   useEffect(() => {
@@ -36,10 +45,19 @@ export function ComposerBank({
     <div className="pointer-events-auto">
       {composerIds.map((threadId) => {
         const initialDraft: ChatDraft | undefined =
-          threadId === currentThreadId && prompt ? { text: prompt, attachments: [] } : undefined;
+          threadId === currentThreadId && prompt
+            ? { ...EMPTY_CHAT_DRAFT, text: prompt }
+            : undefined;
         return (
           <Activity key={threadId} mode={threadId === currentThreadId ? "visible" : "hidden"}>
-            <ThreadComposer handle={handle} topBar={topBar} initialDraft={initialDraft} />
+            <ThreadComposer
+              handle={handle}
+              pickers={pickers}
+              state={state}
+              work={work}
+              refusal={refusal}
+              initialDraft={initialDraft}
+            />
           </Activity>
         );
       })}

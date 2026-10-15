@@ -19,3 +19,10 @@ export function peRevitLauncher(
     productName: productIdentity.productName,
   });
 }
+
+/** An apphost that cannot start (no .NET runtime) explains itself on stderr only; keep the tail with the error. */
+export function withStderr(error: unknown, stderr: string): Error {
+  const failure = error instanceof Error ? error : new Error(String(error));
+  const tail = stderr.trim();
+  return tail ? new Error(`${failure.message}; stderr: ${tail}`) : failure;
+}

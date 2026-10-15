@@ -1,94 +1,40 @@
-/**
- * The Share group: one switch over the installed host's Tailscale Serve mapping, the URL it
- * serves, the callers it has seen (observations with their last time, never a presence claim),
- * and the requests it refused. The switch is local-only on the host; a remote caller is refused
- * there and the refusal is drawn here.
- */
+/** Sharing: the host-owned switches, then what the host observed. */
 import { useState } from "react";
 import type { Machine } from "@pe/agent-contracts";
-
 import { OutcomeLine } from "#/components/lang/outcome";
 import { SwitchRow } from "#/components/lang/switch-row";
 import { switchRemoteAdministration, switchShare } from "#/host/machine";
-
 import { hhmm } from "./model";
 import { SEED_REFUSAL } from "./use-machine";
+import { DeviceSettings, useLocalDevice } from "./devices";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
-export function ShareGroup({
-  machine,
-  fixture,
-  stale,
-}: {
-  machine: Machine;
-  fixture: boolean;
-  stale: boolean;
-}) {
+const NEEDS_TAILSCALE =
+  "Sharing needs Tailscale. Install it from tailscale.com/download, then sign in.";
+
+function ShareStatus({ machine }: { machine: Machine }) {
   const share = machine.share;
-  const [error, setError] = useState<string | null>(null);
   if (!share)
     return (
       <span data-tone="caution">
         Share state unread{machine.legs.share?.error ? `: ${machine.legs.share.error}` : "."}
       </span>
     );
-  const refusal = fixture
-    ? SEED_REFUSAL
-    : stale
-      ? "The host is not answering; the switch waits for it."
-      : share.state === "refused" && share.desired !== "on"
-        ? (share.refusal?.detail ?? "The host refused to share.")
-        : null;
-  const url = share.url?.replace(/^https?:\/\//, "");
   return (
-    <div className="flex flex-col gap-1" aria-label="share">
-      <SwitchRow
-        label="Share over tailnet"
-        checked={share.desired === "on"}
-        refusal={refusal}
-        says="serve this host to people on your tailnet; their tailnet identity is the credential"
-        onCheckedChange={(on) => {
-          setError(null);
-          switchShare(on).catch((caught: unknown) => setError(String(caught)));
-        }}
-      />
-      <SwitchRow
-        label="Allow remote machine administration"
-        checked={share.allowRemoteAdministration}
-        refusal={
-          fixture
-            ? SEED_REFUSAL
-            : stale
-              ? "The host is not answering; the switch waits for it."
-              : null
-        }
-        says="local switch; remote callers can manage providers, agent approvals and host updates when on"
-        onCheckedChange={(allowed) => {
-          setError(null);
-          switchRemoteAdministration(allowed).catch((caught: unknown) => setError(String(caught)));
-        }}
-      />
-      <span className="text-ink-2">
-        Turning administration off keeps shared HTTP and MCP product operations available.
-      </span>
-      {share.refusal && share.state === "refused" ? (
+    <div className="flex flex-col gap-1" aria-label="share status">
+      <p>
+        Sharing {share.state}
+        {share.desired !== share.state ? ` · requested ${share.desired}` : ""}
+      </p>
+      {share.state === "needs-tailscale" && <span className="text-ink-2">{NEEDS_TAILSCALE}</span>}
+      {share.refusal && share.state === "refused" && (
         <span className="face-mono text-ink-2">
           {share.refusal.code} · {share.refusal.detail}
         </span>
-      ) : null}
-      {url ? (
-        <span className="flex items-center gap-2">
-          <span className="face-mono">{url}</span>
-          <span className="text-ink-2">
-            {share.state === "on"
-              ? "serves this window, /pe and /mcp"
-              : share.desired !== share.state
-                ? `turning ${share.desired}`
-                : "not served"}
-          </span>
-        </span>
-      ) : null}
-      {share.state === "on" ? (
-        share.callers.length ? (
+      )}
+      {share.url && <span className="face-mono break-all">{share.url}</span>}
+      {share.state === "on" &&
+        (share.callers.length ? (
           <div className="flex flex-col" aria-label="callers">
             {share.callers
               .slice(-5)
@@ -104,18 +50,78 @@ export function ShareGroup({
           </div>
         ) : (
           <span className="text-ink-2">No one has called yet.</span>
-        )
-      ) : null}
-      {share.refused.length ? (
-        <span
-          data-tone="caution"
-          title={share.refused.map((row) => `${row.from} ${row.code}`).join("\n")}
-        >
-          {share.refused.length} request{share.refused.length === 1 ? "" : "s"} refused, latest{" "}
-          {share.refused.at(-1)!.code} from {share.refused.at(-1)!.from}
+        ))}
+      {share.refused.length > 0 && (
+        <TooltipHint content={share.refused.map((row) => `${row.from} ${row.code}`).join("\n")}>
+          <span data-tone="caution">
+            {share.refused.length} request{share.refused.length === 1 ? "" : "s"} refused, latest{" "}
+            {share.refused.at(-1)!.code} from {share.refused.at(-1)!.from}
+          </span>
+        </TooltipHint>
+      )}
+    </div>
+  );
+}
+
+export function ShareSettings({
+  machine,
+  fixture,
+  stale,
+}: {
+  machine: Machine;
+  fixture: boolean;
+  stale: boolean;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const local = useLocalDevice();
+  const share = machine.share;
+  if (!share) return <ShareStatus machine={machine} />;
+  const unavailable = fixture
+    ? SEED_REFUSAL
+    : stale
+      ? "The host is not answering; the switch waits for it."
+      : !local
+        ? "Open Settings on the host to change this control."
+        : null;
+  const refusal =
+    unavailable ??
+    (share.state === "refused" && share.desired !== "on"
+      ? (share.refusal?.detail ?? "The host refused to share.")
+      : null);
+  const change = (action: Promise<void>) => {
+    setError(null);
+    void action.catch((caught: unknown) => setError(String(caught)));
+  };
+  return (
+    <div className="flex flex-col gap-5" aria-label="sharing settings">
+      <div className="flex flex-col gap-3">
+        <SwitchRow
+          label="Share over tailnet"
+          checked={share.desired === "on"}
+          refusal={refusal}
+          disabled={share.state === "needs-tailscale" && share.desired !== "on"}
+          says="serve this host over the tailnet; host control also requires device pairing"
+          onCheckedChange={(on) => change(switchShare(on))}
+        />
+        <SwitchRow
+          label="Allow remote machine administration"
+          checked={share.allowRemoteAdministration}
+          refusal={unavailable}
+          says="local switch; paired remote browsers may administer this host and grant document rw when on"
+          onCheckedChange={(allowed) => change(switchRemoteAdministration(allowed))}
+        />
+        <span className="text-ink-2">
+          Remote rw consent requires remote administration. Shared Pages and captures grant no host
+          control.
         </span>
-      ) : null}
-      {error ? <OutcomeLine kind="refused" label={error} /> : null}
+      </div>
+      <ShareStatus machine={machine} />
+      <DeviceSettings
+        refusal={unavailable}
+        remoteUrl={share.state === "on" ? share.url : null}
+        allowRemoteAdministration={share.allowRemoteAdministration}
+      />
+      {error && <OutcomeLine kind="refused" label={error} />}
     </div>
   );
 }

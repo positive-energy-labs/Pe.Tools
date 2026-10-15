@@ -1,21 +1,17 @@
 /**
  * The Works the Chat head summarizes: every plugin route's Work, read by the key its manifest
- * declares (`useRouteWork`, the same Work atom the route's pane reads), one head Work per declared
+ * declares (`useRouteWorks`, the same Work atom the route's pane reads), one head Work per declared
  * cell head with pending cells. Every exit opens that route in the plugin pane.
  */
-import { useState } from "react";
+import { useState, useSyncExternalStore, useMemo } from "react";
 import type { Address, RouteStatePatch, TrichotomyCellLike, WorkKey } from "@pe/agent-contracts";
 
 import type { Cells } from "#/route/cells";
 import type { RouteManifest } from "#/route/manifest";
-import { useRouteWork } from "#/route/route-work";
-import {
-  CHAT_PLUGIN_ROUTES,
-  CHAT_PLUGINS,
-  chatPluginTitle,
-  type ChatPluginRoute,
-} from "#/workbench/chat-plugins";
+import { useRouteWorks } from "#/route/route-work";
+import { chatPluginTitle, type ChatPluginRoute } from "#/workbench/chat-plugins";
 
+import { publicRoutes } from "#/route/builtin-routes";
 import type { HeadWork } from "./proposal-head";
 
 export interface HeadExits {
@@ -27,16 +23,6 @@ export interface HeadExits {
 
 type Doc = Record<string, unknown>;
 type Manifest = RouteManifest<Doc, string, unknown, string>;
-
-/** The plugin routes whose Work declares cells the head can key; a module constant, so the hook
- * order below never changes. */
-const HEADED = CHAT_PLUGIN_ROUTES.flatMap((route) => {
-  const manifest = CHAT_PLUGINS[route] as unknown as Manifest;
-  const { work, cells } = manifest;
-  return work && cells?.length && manifest.workKey !== null
-    ? [{ route, manifest, spec: work, cells }]
-    : [];
-});
 
 const keyOf = (manifest: Manifest, address: Address | null): WorkKey | null =>
   manifest.workKey ??
@@ -50,6 +36,30 @@ export function useHeadWorks(
   subject: string,
   exits: HeadExits,
 ): HeadWork[] {
+  const revision = useSyncExternalStore(
+    publicRoutes.subscribe,
+    publicRoutes.revision,
+    publicRoutes.revision,
+  );
+  const headed = useMemo(
+    () =>
+      publicRoutes.entries().flatMap(({ manifest: registered }) => {
+        const manifest = registered as unknown as Manifest;
+        return manifest.work && manifest.cells?.length && manifest.workKey !== null
+          ? [
+              {
+                route: manifest.key,
+                manifest,
+                cells: manifest.cells,
+                spec: manifest.work,
+                key: keyOf(manifest, address),
+              },
+            ]
+          : [];
+      }),
+    [revision, address],
+  );
+  const summaries = useRouteWorks(headed);
   // A refused bound write is a foreign write landing first: say it, and offer reload.
   const [conflicts, setConflicts] = useState<ReadonlySet<string>>(new Set());
   const conflict = (route: string, on: boolean) =>
@@ -60,13 +70,10 @@ export function useHeadWorks(
       else next.delete(route);
       return next;
     });
-  const works = HEADED.map((one) => ({
-    ...one,
-    work: useRouteWork(one.spec, keyOf(one.manifest, address)),
-  }));
+  const works = headed.map((one, index) => ({ ...one, work: summaries[index]! }));
   return works.flatMap(({ route, manifest, work, cells: heads }) => {
     const doc = work.doc as Doc | null;
-    if (!doc) return [];
+    if (!doc || !publicRoutes.get(route)) return [];
     const key = keyOf(manifest, address);
     return heads.flatMap((head: Cells<Doc>): HeadWork[] => {
       const cells = (

@@ -13,7 +13,7 @@ namespace Pe.Revit.Tests;
 public sealed class ScriptPodSourceTests {
     private static string Encode(string content) => Convert.ToBase64String(Encoding.UTF8.GetBytes(content));
     private static ScriptPodSourceBundle Bundle() => new(
-        [new("pod.json", Encode("""{"schemaVersion":2,"id":"sample","name":"Sample","version":"1.0.0","entrypoints":[{"id":"main","sourcePath":"src/Main.cs"}]}""")),
+        [new("pod.json", Encode("""{"schemaVersion":2,"id":"sample","name":"Sample","version":"1.0.0","entrypoints":[{"sourcePath":"src/Main.cs"}]}""")),
          new("src/Main.cs", Encode("public static class Main { public static int Run() => Helper.Value; }")),
          new("src/Helper.cs", Encode("public static class Helper { public const int Value = 42; }"))]);
 
@@ -30,6 +30,20 @@ public sealed class ScriptPodSourceTests {
 
     [Test]
     public void Captured_set_compiles_without_a_workspace_or_materialization() => CompileAndRun(Bundle());
+
+    [Test]
+    public void Unrelated_asset_does_not_consume_compiler_source_bounds() => CompileAndRun(Bundle() with {
+        Files = [.. Bundle().Files, new("assets/image.bin", Convert.ToBase64String(new byte[614400]))]
+    });
+
+    [Test]
+    public void Four_MiB_of_CSharp_sources_compile_with_manifest_outside_the_source_budget() {
+        var bundle = Bundle();
+        var padding = new string(' ', 512 * 1024);
+        CompileAndRun(bundle with { Files = [bundle.Files[0],
+            .. bundle.Files.Skip(1).Select(file => file with { BytesBase64 = Encode(Encoding.UTF8.GetString(Convert.FromBase64String(file.BytesBase64)).PadRight(512 * 1024)) }),
+            .. Enumerable.Range(0, 6).Select(i => new ScriptPodSourceFile($"src/Padding{i}.cs", Encode(padding)))] });
+    }
 
     [Test]
     public void A_manifest_without_entrypoints_can_execute_a_captured_source() {
@@ -104,8 +118,9 @@ public sealed class ScriptPodSourceTests {
         Reject(bundle with { Files = [bundle.Files[0], bundle.Files[2]] });
         Reject(bundle with { Files = [bundle.Files[0], .. Enumerable.Range(0, 201).Select(i => new ScriptPodSourceFile($"src/F{i}.cs", ""))] });
         Reject(bundle with { Files = [bundle.Files[0], bundle.Files[1] with { BytesBase64 = Convert.ToBase64String(new byte[512 * 1024 + 1]) }] });
-        Reject(bundle with { Files = [bundle.Files[0], .. Enumerable.Range(0, 5).Select(i => new ScriptPodSourceFile($"src/F{i}.cs", Convert.ToBase64String(new byte[512 * 1024])))] });
-        Reject(bundle with { Files = [new("pod.json", "not base64!"), bundle.Files[1]] });
+        Reject(bundle with { Files = [bundle.Files[0], .. Enumerable.Range(0, 9).Select(i => new ScriptPodSourceFile($"src/F{i}.cs", Convert.ToBase64String(new byte[512 * 1024])))] });
+        Assert.Throws<FormatException>(() => ScriptPodSourceNormalizer.Normalize(
+            bundle with { Files = [new("pod.json", "not base64!"), bundle.Files[1]] }, "sample", "src/Main.cs"));
         Assert.That(ScriptPodSourceNormalizer.Normalize(bundle, "Other Local Copy", "src/Main.cs").Manifest.Id, Is.EqualTo("sample"));
         Assert.That(ScriptPodSourceNormalizer.Normalize(bundle, "sample", "src/Helper.cs").SourceSet.EntryPointSourceName, Is.EqualTo("Helper.cs"));
     }

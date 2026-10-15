@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { Deferred, Effect } from "effect";
 import { NodeRuntime } from "@effect/platform-node";
-import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
+import { checkoutRootFrom, productRoot } from "@pe/host-contracts/service-identity";
+import { serviceFilePath } from "@pe/host-contracts/pe-service";
+import { publishDevTraySession } from "../scripts/dev-tray-session.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { hostProgram } from "./host-program.ts";
 
@@ -32,9 +34,7 @@ const program = hostProgram(
         Effect.sync(() =>
           spawn(
             process.execPath,
-            [
-              fileURLToPath(new URL("../scripts/dev-web.ts", import.meta.url)),
-            ],
+            [fileURLToPath(new URL("../scripts/dev-web.ts", import.meta.url))],
             {
               cwd: new URL("../", import.meta.url),
               stdio: ["ignore", "inherit", "inherit", "ipc"],
@@ -74,9 +74,27 @@ const program = hostProgram(
             });
             child.once("message", (message) => {
               clearTimeout(timeout);
-              if (typeof message !== "string" || !/^http:\/\/127\.0\.0\.1:\d+$/.test(message))
+              const frontend = message as { url?: string; pid?: number; processStartUtc?: string };
+              if (
+                !frontend ||
+                typeof frontend.url !== "string" ||
+                typeof frontend.pid !== "number" ||
+                !/^http:\/\/127\.0\.0\.1:\d+$/.test(frontend.url) ||
+                frontend.pid !== child.pid ||
+                typeof frontend.processStartUtc !== "string" ||
+                !Number.isFinite(Date.parse(frontend.processStartUtc))
+              )
                 reject(new Error("Invalid dev frontend address"));
-              else resolve(message);
+              else
+                void publishDevTraySession({
+                  schemaVersion: 1,
+                  sourceRoot: hostOwnership.sourceRoot!,
+                  serviceFile: serviceFilePath(productRoot(), hostOwnership.serviceName),
+                  hostInstanceId: handle.serviceFile.instanceId,
+                  frontendOrigin: frontend.url,
+                  frontendPid: frontend.pid,
+                  frontendStartUtc: frontend.processStartUtc,
+                }).then(() => resolve(frontend.url!), reject);
             });
             child.send({
               port: handle.serviceFile.port,

@@ -7,9 +7,9 @@
  *   f = f' when f' >= 0.018, else 0.85 f' + 0.0028.
  * - Fitting dp = C Pv, the Pv basis per rule (see loss-rules.ts).
  */
-export const RHO = 0.075;
+const RHO = 0.075;
 /** Revit's default rigid duct roughness, ft. */
-export const DEFAULT_ROUGHNESS_FT = 0.0003;
+const DEFAULT_ROUGHNESS_FT = 0.0003;
 
 /** A flow cross-section: area (ft2) and hydraulic diameter (in). */
 export interface Section {
@@ -21,7 +21,7 @@ export const roundSection = (dIn: number): Section => ({
   areaFt2: (Math.PI / 4) * (dIn / 12) ** 2,
   dhIn: dIn,
 });
-export const rectSection = (wIn: number, hIn: number): Section => ({
+const rectSection = (wIn: number, hIn: number): Section => ({
   areaFt2: (wIn * hIn) / 144,
   dhIn: (2 * wIn * hIn) / (wIn + hIn),
 });
@@ -38,7 +38,7 @@ export function sectionOf(
   return null;
 }
 
-export const velocityPressure = (fpm: number) => RHO * (fpm / 1097) ** 2;
+const velocityPressure = (fpm: number) => RHO * (fpm / 1097) ** 2;
 
 export interface Friction {
   dp: number;

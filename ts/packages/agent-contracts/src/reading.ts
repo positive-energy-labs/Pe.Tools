@@ -63,7 +63,8 @@ export type Reading<T> =
 /** Owner addresses, not a second state model. Projection inputs participate in identity. */
 export const sdkReadingSchema = z.strictObject({
   kind: z.literal("sdk"),
-  read: z.enum(["sessions", "doctor", "recents", "documents"]),
+  read: z.enum(["sessions", "doctor", "recents", "documents", "dialogs", "logs", "ops"]),
+  tail: z.number().int().min(1).max(500).optional(),
   session: sdkSessionSelectionSchema.optional(),
   year: z.string().min(1).optional(),
   all: z.boolean().optional(),
@@ -80,6 +81,22 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
     workKeySchema.options[3].extend({ kind: z.literal("work") }),
   ]),
   z.strictObject({ kind: z.literal("thread-head"), thread: z.string().min(1).max(200) }),
+  /** Every harness thread's summary, one snapshot per change (coalesced). */
+  z.strictObject({ kind: z.literal("threads") }),
+  /**
+   * One harness thread's events from the host log (`host-log.ts`): each `event` frame is one
+   * HarnessEvent and carries its log `id`. With no cursor, or one older than retention, the first
+   * frame is a `gap` carrying the cursor: read the thread body, then apply events by `seq`.
+   */
+  z.strictObject({ kind: z.literal("thread"), thread: z.string().min(1).max(200) }),
+  /**
+   * The host's card items (`MachineNotice`) from the host log: each `event` frame is one item and
+   * carries its log `id`, so a follower that persists the last id replays exactly what it missed.
+   * With no cursor, or one the log does not hold, the first frame is a `gap` carrying the log's
+   * current id: nothing earlier is owed, follow from there. A `snapshot` frame says whether a tray
+   * follows (`{ tray }`); `as: "tray"` marks the one follower that is the tray itself.
+   */
+  z.strictObject({ kind: z.literal("notices"), as: z.literal("tray").optional() }),
   z.strictObject({ kind: z.literal("takeoff-reading"), target: documentRefSchema }),
   /**
    * The families matrix of one document over one filter, by ENVELOPE only
@@ -164,12 +181,23 @@ export const readingFrameSchema = z.discriminatedUnion("kind", [
     changed: z.boolean().optional(),
   }),
   z.strictObject({ kind: z.literal("failure"), key: z.string(), error: z.string() }),
-  z.strictObject({ kind: z.literal("event"), key: z.string(), value: z.unknown() }),
+  /**
+   * `id` marks a host log frame: it is the SSE id, and a reconnect resumes after the last one
+   * (`?after=<id>` or `Last-Event-ID`). Log frames of every key share one lane in id order; a
+   * reader that falls behind it loses the connection, never a frame.
+   */
+  z.strictObject({
+    kind: z.literal("event"),
+    key: z.string(),
+    value: z.unknown(),
+    id: z.number().int().nonnegative().optional(),
+  }),
   // null means the connection has no history for the disconnected interval.
   z.strictObject({
     kind: z.literal("gap"),
     key: z.string(),
     dropped: z.number().int().nonnegative().nullable(),
+    id: z.number().int().nonnegative().optional(),
   }),
 ]);
 export type ReadingFrame = z.infer<typeof readingFrameSchema>;

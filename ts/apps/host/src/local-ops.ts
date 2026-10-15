@@ -5,9 +5,9 @@ import {
   BRIDGE_CONTRACT_VERSION,
   BRIDGE_PATH,
   HOST_CONTRACT_VERSION,
-  productIdentity,
   productPathNames,
 } from "@pe/host-contracts/contracts";
+import { productRoot } from "@pe/host-contracts/service-identity";
 import {
   HostLogTarget,
   type HostProbeData,
@@ -20,8 +20,20 @@ import {
 } from "@pe/host-contracts/operation-types";
 import type { BridgeSessionView } from "./bridge.ts";
 import { readFileStringOrEmpty, statOrNull } from "./files/index.ts";
-import { resolvePeaProductHomePath, type PeaRuntimeCapabilities } from "@pe/mcps";
+import { resolvePeaProductHomePath } from "@pe/mcps";
+import type { PeaRuntimeCapabilities } from "@pe/runtime";
+import { resolveHostVersion } from "./host-lifecycle.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
+import { processCustody } from "./machine.ts";
+
+/** Status must answer even when the installed manifest is unreadable; the throw belongs to boot. */
+function hostVersion(): string {
+  try {
+    return resolveHostVersion();
+  } catch {
+    return "unknown";
+  }
+}
 import { LocalOpError } from "./local-error.ts";
 
 const RUNTIME_IDENTITY = `pe-host-ts/${process.version}`;
@@ -58,6 +70,7 @@ export function getHostStatus(
     executablePath: hostOwnership.executablePath,
     lane: hostOwnership.lane,
     processId: hostOwnership.processId,
+    version: hostVersion(),
     runtimeIdentity: RUNTIME_IDENTITY,
     serviceName: hostOwnership.serviceName,
     sourceRoot: hostOwnership.sourceRoot,
@@ -72,7 +85,7 @@ export function getBridgeSessionSummary(bridge: BridgeSessionView) {
   return Effect.succeed({
     buildStamp: bridge.buildStamp ?? null,
     lane: bridge.lane ?? null,
-    custody: null,
+    custody: processCustody(bridge.processId, bridge.processStartUtcUnixMs),
     sdkSessionId: bridge.sdkSessionId ?? null,
     activeDocument:
       s?.hasActiveDocument === true
@@ -135,7 +148,7 @@ export const listBridgeSessions = Effect.fnUntraced(function* (
         processStartUtcUnixMs: bridge.processStartUtcUnixMs ?? null,
         revitVersion: bridge.state?.revitVersion ?? null,
         runtimeFramework: bridge.state?.runtimeFramework ?? null,
-        custody: null,
+        custody: processCustody(bridge.processId, bridge.processStartUtcUnixMs),
         sdkSessionId: bridge.sdkSessionId ?? null,
         sessionId: bridge.sessionId!,
       })),
@@ -242,12 +255,7 @@ function splitLogLines(text: string): string[] {
 }
 
 function productLogPaths() {
-  const rootPath = join(
-    process.env.LOCALAPPDATA ?? "",
-    productIdentity.vendorName,
-    productIdentity.productName,
-    productPathNames.logsDirectoryName,
-  );
+  const rootPath = join(productRoot(), productPathNames.logsDirectoryName);
   return {
     hostLogPath: join(rootPath, productPathNames.hostLogFileName),
     revitAppLogPath: join(rootPath, productPathNames.revitAppLogFileName),

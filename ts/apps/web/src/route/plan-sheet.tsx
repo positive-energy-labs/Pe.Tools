@@ -3,15 +3,16 @@
  * commit that sends exactly the rows still included. It is apply's last page, never a stage.
  * Rows are the one `Table`; inclusion is its selection, and a flagged row refuses it.
  */
-import { ActionButton } from "#/components/lang/action-button";
-import { FactChip, Tag } from "#/components/lang/chip";
-import { EmptyState } from "#/components/lang/empty";
+import { Button } from "@pe/kit/lang/button";
+import { FactChip, Tag } from "@pe/kit/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import type { Column } from "#/components/master-table/model";
-import { Table } from "#/components/master-table/table";
-import { cn } from "#/lib/utils";
+import type { Column } from "@pe/kit/table/model";
+import { Table } from "@pe/kit/table/table";
+import { cn } from "@pe/kit/lib/utils";
 
 import { STALE_PLAN, type PlanEntry, type PlanSheet } from "./manifest";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const CELL = "face-mono block truncate px-(--item-pad-x)";
 
@@ -33,9 +34,9 @@ const PLAN_COLUMNS: Column<PlanEntry>[] = [
     key: "source",
     label: "source",
     cell: (entry) => (
-      <span className={cn(CELL, "text-ink-2")} title={entry.detail}>
-        {entry.detail}
-      </span>
+      <TooltipHint content={entry.detail}>
+        <span className={cn(CELL, "text-ink-2")}>{entry.detail}</span>
+      </TooltipHint>
     ),
   },
   {
@@ -43,9 +44,9 @@ const PLAN_COLUMNS: Column<PlanEntry>[] = [
     label: "exception",
     width: "w-64",
     cell: (entry) => (
-      <span className={cn(CELL, "text-ink-mute")} title={entry.flag ?? ""}>
-        {entry.flag ?? ""}
-      </span>
+      <TooltipHint content={entry.flag ?? ""}>
+        <span className={cn(CELL, "text-ink-mute")}>{entry.flag ?? ""}</span>
+      </TooltipHint>
     ),
   },
 ];
@@ -83,6 +84,8 @@ export function PlanSheetView({
   stale?: boolean;
   busy: boolean;
 }) {
+  const applyWhy =
+    refusal ?? `Write the ${plural(included.length, "included row")} to Revit, exactly as planned.`;
   const head = (
     <div className="hairline-b flex flex-wrap items-center gap-1.5 px-2 py-1">
       <Tag>plan</Tag>
@@ -97,36 +100,44 @@ export function PlanSheetView({
       <span className="ml-auto flex items-center gap-1.5">
         {/* While apply runs, the sheet's escape is the real one: stop the op inside Revit. */}
         {busy && stop ? (
-          <ActionButton
+          <Button
+            kind="framed"
             label={stop.label}
             reason="Signal the running operation. It stops at its next checkpoint; what it already wrote stands."
             onClick={stop.run}
-          />
+          >
+            {stop.label}
+          </Button>
         ) : (
-          <ActionButton
+          <Button
+            kind="framed"
             label="cancel"
-            disabled={busy}
+            refusal={busy ? "Close the sheet; nothing has been written." : null}
             reason="Close the sheet; nothing has been written."
             onClick={cancel}
-          />
+          >
+            cancel
+          </Button>
         )}
-        <ActionButton
+        <Button
+          kind="framed"
           label="re-plan"
-          disabled={busy}
+          refusal={busy ? `Read a fresh plan: ${replan.says}.` : null}
           reason={`Read a fresh plan: ${replan.says}.`}
           onClick={replan.run}
-        />
-        <ActionButton
-          tone="commit"
+        >
+          re-plan
+        </Button>
+        <Button
+          kind="commit"
           label={`apply ${plural(included.length, "row")}`}
           busy={busy}
-          disabled={busy || refusal !== null}
-          reason={
-            refusal ??
-            `Write the ${plural(included.length, "included row")} to Revit, exactly as planned.`
-          }
+          refusal={busy || refusal !== null ? applyWhy : null}
+          reason={applyWhy}
           onClick={apply}
-        />
+        >
+          {`apply ${plural(included.length, "row")}`}
+        </Button>
       </span>
     </div>
   );

@@ -1,9 +1,8 @@
 /** The Situation's marks: a sentence slot and its choice (dotted = operable, dashed = empty). */
 import type { ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
-import { Kbd } from "#/components/lang/kbd";
-import { Press } from "#/components/lang/press";
-import { useScopeKeys } from "./keys";
+import { HotkeyCommand } from "#/components/lang/hotkey-command";
+import { useScopeKeys } from "@pe/kit/keys";
 
 /** A slot in the sentence: an operable value with its io mark (`r`, `w`, `rw`) as a superscript. */
 export function SituationCell({
@@ -57,7 +56,7 @@ export function SituationChoice({
         <Popover.Positioner side="bottom" align="start" sideOffset={6} className="isolate z-popup">
           <Popover.Popup
             data-surface="artifact"
-            className="max-h-96 w-80 max-w-(--available-width) overflow-auto rounded-lg p-2 t-prose text-ink ring-1 ring-line outline-none"
+            className="max-h-96 w-80 max-w-(--available-width) overflow-auto p-2 t-prose text-ink float-surface"
           >
             {children}
           </Popover.Popup>
@@ -82,15 +81,17 @@ export function PaletteKey({ open }: { open: () => void }) {
       options: { ignoreInputs: false },
     },
   ]);
+  return <PagePaletteButton open={open} />;
+}
+export function PagePaletteButton({ open }: { open: () => void }) {
   return (
-    <Press
-      tone="quiet"
-      size="value"
-      aria-label="Open the palette"
-      title="Switch what this page shows: every rung of the sentence, type to filter (Ctrl K)"
-      onClick={open}
-    >
-      <Kbd mute>Ctrl K</Kbd>
-    </Press>
+    <HotkeyCommand
+      label="Open page palette"
+      word="Page"
+      hotkey="Mod+K"
+      invoke={open}
+      bind={false}
+      reason="Switch what this page shows"
+    />
   );
 }

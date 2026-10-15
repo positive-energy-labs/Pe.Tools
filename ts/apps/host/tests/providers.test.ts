@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { createProviders } from "../src/harness/providers.ts";
+import { cleanHarnessEnv, createProviders } from "../src/harness/providers.ts";
 import { productAccessPath, productProvidersPath } from "../src/product-paths.ts";
 
 let root: string;
@@ -12,6 +12,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "pe-provider-state-"));
   previous = process.env.LOCALAPPDATA;
   process.env.LOCALAPPDATA = root;
+  process.env.PE_TOOLS_PRODUCT_HOME = join(root, "product");
   process.env.PE_HARNESS_ADAPTER_CLAUDE = join(import.meta.dirname, "fake-acp-agent.mjs");
   process.env.FAKE_ACP_LOG = join(root, "acp-children.jsonl");
 });
@@ -36,6 +37,140 @@ const add = {
   name: "Synthetic",
   auth: { kind: "endpoint", baseUrl: "https://synthetic.invalid", apiKey: "synthetic-key" },
 };
+
+test("an Anthropic credit refusal crosses add as a classified line without model retries", async () => {
+  const raw = JSON.stringify({
+    type: "error",
+    error: {
+      type: "invalid_request_error",
+      message: "Your credit balance is too low to access the Anthropic API.",
+    },
+  });
+  let calls = 0;
+  const server = createServer((req, res) => {
+    if (req.url === "/v1/models") {
+      res.writeHead(200).end(JSON.stringify({ data: [{ id: "claude-a" }, { id: "claude-b" }] }));
+    } else {
+      calls++;
+      res.writeHead(400).end(raw);
+    }
+  });
+  const baseUrl = await listen(server);
+  try {
+    const providers = createProviders({ probeOnStart: false });
+    const response = await providers.fetch(
+      request("providers", "POST", { ...add, auth: { ...add.auth, baseUrl } }),
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      step: "endpoint",
+      message: "billing: Out of credit or billing limit reached.",
+      failure: {
+        kind: "billing",
+        message: "billing: Out of credit or billing limit reached.",
+        raw,
+      },
+    });
+    expect(calls).toBe(1);
+    expect(providers.get("claude-synthetic")).toBeNull();
+  } finally {
+    await close(server);
+  }
+});
+
+test("each child gets fresh PATH and a capture failure is visible in provider readiness", async () => {
+  let captures = 0;
+  let failed = false;
+  const providers = createProviders({
+    probeOnStart: false,
+    shellPath: async () => {
+      if (failed) throw new Error("synthetic profile failure");
+      return `C:\\capture-${++captures}`;
+    },
+  });
+  const record = providers.get("claude")!;
+  for (const capture of [1, 2]) {
+    const env = await providers.env(record);
+    const pathKey = Object.keys(env).find((key) => key.toUpperCase() === "PATH")!;
+    expect(env[pathKey]?.startsWith(`C:\\capture-${capture};`)).toBe(true);
+  }
+  failed = true;
+  await expect(providers.env(record)).rejects.toThrow("synthetic profile failure");
+  const response = await providers.fetch(request("providers/claude/probe", "POST", {}));
+  expect((await response.json()).readiness).toEqual({
+    state: "unknown",
+    message: "The probe failed: synthetic profile failure",
+  });
+});
+
+test("the refusal logged and copied contains neither endpoint key nor URL query nor inherited credentials", async () => {
+  const server = createServer((req, res) => {
+    if (req.url === "/v1/models")
+      res.writeHead(200).end(JSON.stringify({ data: [{ id: "claude-a" }] }));
+    else
+      res.writeHead(403).end(
+        JSON.stringify({
+          error: {
+            message: "synthetic-key https://endpoint.invalid/v1?private-query inherited-secret",
+          },
+        }),
+      );
+  });
+  const baseUrl = await listen(server);
+  const providers = createProviders({ probeOnStart: false });
+  vi.stubEnv("TEST_SECRET", "inherited-secret");
+  const logged = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    await mkdir(dirname(productProvidersPath()), { recursive: true });
+    await writeFile(
+      productProvidersPath(),
+      JSON.stringify({
+        providers: [{ ...add, id: "claude-synthetic", auth: { ...add.auth, baseUrl } }],
+      }),
+    );
+    const provider = await (
+      await providers.fetch(request("providers/claude-synthetic/probe", "POST"))
+    ).json();
+    const detail = provider.readiness.detail;
+    expect(detail.step).toBe("endpoint");
+    expect(detail.failure.raw).toContain("[redacted]");
+    const logs = logged.mock.calls.flat().join("\n");
+    expect(logs).toContain(JSON.stringify(detail));
+    for (const secret of ["synthetic-key", "private-query", "inherited-secret", "TEST_SECRET"])
+      expect(logs + JSON.stringify(provider.readiness)).not.toContain(secret);
+  } finally {
+    logged.mockRestore();
+    vi.unstubAllEnvs();
+    await providers.close();
+    await close(server);
+  }
+});
+
+test("known auth overrides are removed case-insensitively while login homes and tool paths remain", () => {
+  const inherited = {
+    openai_api_key: "synthetic",
+    ANTHROPIC_AUTH_TOKEN: "synthetic",
+    CLAUDE_CODE_USE_BEDROCK: "1",
+    CLAUDE_CODE_OAUTH_TOKEN: "synthetic",
+    CODEX_CONFIG: "synthetic",
+    MODEL_PROVIDER: "foreign",
+    DEFAULT_AUTH_REQUEST: "foreign-login",
+    PEA_ENDPOINT_API_KEY: "synthetic",
+    PATH: "tools",
+    CODEX_HOME: "login-home",
+    CLAUDE_CONFIG_DIR: "claude-home",
+    AWS_PROFILE: "other-tool-account",
+    CUSTOM_UNKNOWN_AUTH: "outside-boundary",
+  };
+  expect(cleanHarnessEnv(inherited)).toEqual({
+    PATH: "tools",
+    CODEX_HOME: "login-home",
+    CLAUDE_CONFIG_DIR: "claude-home",
+    AWS_PROFILE: "other-tool-account",
+    CUSTOM_UNKNOWN_AUTH: "outside-boundary",
+  });
+  expect(inherited.openai_api_key).toBe("synthetic");
+});
 
 test.each([
   "{broken synthetic-key",
@@ -73,6 +208,53 @@ const listen = async (server: Server) => {
   return `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 };
 const close = (server: Server) => new Promise<void>((resolve) => server.close(() => resolve()));
+
+test("Codex endpoints publish startup config without keys and retain separate stable homes", async () => {
+  vi.stubEnv("CODEX_HOME", join(root, "subscription-home"));
+  vi.stubEnv("PE_HARNESS_ADAPTER_CODEX", join(import.meta.dirname, "fake-acp-agent.mjs"));
+  const server = createServer((_req, res) =>
+    res.end(
+      JSON.stringify({
+        data: [{ id: "gpt-6.1-sol" }],
+        output: [{ type: "message", content: [{ type: "output_text", text: "OK" }] }],
+      }),
+    ),
+  );
+  const baseUrl = await listen(server);
+  const providers = createProviders({ probeOnStart: false });
+  try {
+    const homes: string[] = [];
+    for (const name of ["First", 'Second "quoted"']) {
+      const response = await providers.fetch(
+        request("providers", "POST", {
+          ...add,
+          harness: "codex",
+          name,
+          auth: { ...add.auth, baseUrl },
+        }),
+      );
+      expect(response.status).toBe(200);
+      const record = providers.get((await response.json()).id)!;
+      const env = await providers.env(record);
+      const config = JSON.parse(env.CODEX_CONFIG!);
+      const startup = await readFile(join(env.CODEX_HOME!, "config.toml"), "utf8");
+      expect(startup).toContain('model_provider = "pea_endpoint"');
+      for (const [key, value] of Object.entries(config.model_providers.pea_endpoint))
+        expect(startup).toContain(`${key} = ${JSON.stringify(value)}`);
+      expect(startup).not.toContain(add.auth.apiKey);
+      expect(env.PEA_ENDPOINT_API_KEY).toBe(add.auth.apiKey);
+      expect((await providers.env(record)).CODEX_HOME).toBe(env.CODEX_HOME);
+      homes.push(env.CODEX_HOME!);
+    }
+    expect(new Set(homes).size).toBe(2);
+    expect((await providers.env(providers.get("codex")!)).CODEX_HOME).toBe(process.env.CODEX_HOME);
+    expect(homes).not.toContain(process.env.CODEX_HOME);
+  } finally {
+    await providers.close();
+    await close(server);
+    vi.unstubAllEnvs();
+  }
+});
 
 test("Claude validation rejects redirects before forwarding its synthetic key", async () => {
   const received: unknown[] = [];

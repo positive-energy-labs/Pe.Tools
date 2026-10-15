@@ -1,8 +1,8 @@
 import { ActivityDisclosure } from "#/components/lang/activity";
-import { FactChip } from "#/components/lang/chip";
+import { FactChip } from "@pe/kit/lang/chip";
 import { CoverageBar, coverageBarRecipe } from "#/components/lang/coverage-bar";
-import { EmptyState, emptyStateRecipe } from "#/components/lang/empty";
-import { HelpTip, helpTipRecipe } from "#/components/lang/help";
+import { EmptyState, emptyStateRecipe } from "@pe/kit/lang/empty";
+import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine, outcomeLineRecipe, type OutcomeKind } from "#/components/lang/outcome";
 import { Provenance, Section, sectionRecipe } from "#/components/lang/section";
 import { Switcher, switcherRecipe } from "#/components/lang/switcher";
@@ -39,7 +39,7 @@ export function LangStatusSpecimens() {
       />
       <RecipeGrid
         name="EmptyState"
-        importPath="#/components/lang/empty"
+        importPath="@pe/kit/lang/empty"
         recipe={emptyStateRecipe}
         render={(props) => (
           <EmptyState
@@ -50,12 +50,9 @@ export function LangStatusSpecimens() {
           </EmptyState>
         )}
       />
-      <RecipeGrid
-        name="HelpTip"
-        importPath="#/components/lang/help"
-        recipe={helpTipRecipe}
-        render={() => <HelpTip>What this region shows and how to read it.</HelpTip>}
-      />
+      <SpecimenFrame name="HelpTip" importPath="#/components/lang/help">
+        <HelpTip>What this region shows and how to read it.</HelpTip>
+      </SpecimenFrame>
       <RecipeGrid
         name="OutcomeLine"
         importPath="#/components/lang/outcome"

@@ -10,7 +10,7 @@ import {
 import { productInstallLayout } from "@pe/host-contracts/contracts";
 import { discoverHostBaseUrl, resolveLaneAndRoot } from "../src/shared/host-config.ts";
 import { serviceFilePath } from "@pe/host-contracts/pe-service";
-import { contextFetch } from "@pe/mcps/context";
+import { contextFetch } from "@pe/runtime/context";
 
 const { sea } = vi.hoisted(() => ({ sea: { bundled: false } }));
 vi.mock("node:sea", async (original) => ({
@@ -24,6 +24,7 @@ const sourceRoot = checkoutRootFrom(import.meta.dirname)!;
 beforeEach(() => {
   appBase = mkdtempSync(join(tmpdir(), "pe-runtime-discovery-"));
   vi.stubEnv("LOCALAPPDATA", appBase);
+  vi.stubEnv("PE_TOOLS_PRODUCT_HOME", ""); // the LOCALAPPDATA-rooted lane
   vi.stubEnv("PE_LANE", "dev");
   vi.stubEnv("PE_TOOLS_SOURCE_ROOT", "");
   vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "");

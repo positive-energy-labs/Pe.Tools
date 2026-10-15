@@ -19,6 +19,7 @@ import { Route } from "#/routes/ducts";
 import { ChatHosted } from "#/route/situation-ladder";
 import type { DuctsSnapshot } from "@pe/host-contracts/generated";
 import type { DuctSnapshot } from "./readiness";
+import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
 
 let work = ductsRouteState.schema.parse({ assumptions: {} });
 let revision = 0;
@@ -162,11 +163,21 @@ beforeEach(() => {
             const request = readingRequestSchema.parse(raw);
             const emit = () => {
               const value =
-                request.kind === "inventory"
-                  ? inventory
-                  : request.kind === "work"
-                    ? { doc: work, revision }
-                    : undefined;
+                request.kind === "machine"
+                  ? machineFixture(
+                      inventory.sessions.map((session) => ({
+                        session: session.sessionId,
+                        documents: session.openDocuments.map((document) => ({
+                          ...document,
+                          isActive: document.openId === "doc",
+                        })),
+                      })),
+                    )
+                  : request.kind === "inventory"
+                    ? inventory
+                    : request.kind === "work"
+                      ? { doc: work, revision }
+                      : undefined;
               if (value !== undefined)
                 this.onmessage?.({
                   data: JSON.stringify({ kind: "snapshot", key: readingKey(request), value }),

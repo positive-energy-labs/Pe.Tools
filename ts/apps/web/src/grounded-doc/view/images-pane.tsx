@@ -1,9 +1,10 @@
 import { Pin } from "lucide-react";
 import type { GroundedDocEngine } from "#/grounded-doc/engine";
 import type { DocImage, GroundedBlock } from "#/grounded-doc/types";
-import { cn } from "#/lib/utils";
-import { List } from "#/components/lang/list-popup";
+import { cn } from "@pe/kit/lib/utils";
+import { List } from "@pe/kit/lang/list-popup";
 import { BlockMarkdown, VEIL_HOVER, anchorRef, pageKey } from "./block-markdown";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** The figures, one List grouped by page: the thumbnail is each Row's lead (R10). The one focus
  * is the cursor, from whichever pane set it; the pin is the selection, and a pick toggles it. */
@@ -95,20 +96,14 @@ export function MarkdownBlock({
       <div className="mb-0.5 flex items-center gap-1.5">
         <span className="">{block.kind}</span>
         {!groundable && (
-          <span
-            className=""
-            title="No bounding box from the parser — this block cannot be located on the page"
-          >
-            no bbox
-          </span>
+          <TooltipHint content="No bounding box from the parser — this block cannot be located on the page">
+            <span className="">no bbox</span>
+          </TooltipHint>
         )}
         {isApprox && (
-          <span
-            className=""
-            title="Approximate location — the parser gave this block and a sibling the same region, so the highlight can't be trusted precisely."
-          >
-            ≈ approx
-          </span>
+          <TooltipHint content="Approximate location — the parser gave this block and a sibling the same region, so the highlight can't be trusted precisely.">
+            <span className="">≈ approx</span>
+          </TooltipHint>
         )}
         {isPinned && <Pin className="size-3" />}
       </div>

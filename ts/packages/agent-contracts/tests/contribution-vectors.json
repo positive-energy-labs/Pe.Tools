@@ -1,0 +1,98 @@
+{
+  "keys": [
+    {
+      "key": "script:@snowdon-ducts/src/Census.cs",
+      "kind": "script",
+      "packageId": "snowdon-ducts",
+      "path": "src/Census.cs",
+      "sourcePath": "src/Census.cs"
+    },
+    {
+      "key": "page:@snowdon-ducts/pages/tour",
+      "kind": "page",
+      "packageId": "snowdon-ducts",
+      "path": "pages/tour",
+      "sourcePath": "pages/tour/index.html"
+    },
+    {
+      "key": "skill:@snowdon-ducts/skills/duct-loss",
+      "kind": "skill",
+      "packageId": "snowdon-ducts",
+      "path": "skills/duct-loss",
+      "sourcePath": "skills/duct-loss/SKILL.md"
+    },
+    {
+      "key": "member:@snowdon-ducts/settings/checks.json",
+      "kind": "member",
+      "packageId": "snowdon-ducts",
+      "path": "settings/checks.json",
+      "sourcePath": "settings/checks.json"
+    },
+    {
+      "key": "page:@pages/tour",
+      "kind": "page",
+      "packageId": "pages",
+      "path": "tour",
+      "sourcePath": "tour/index.html"
+    },
+    {
+      "key": "skill:@skills/skills/personal",
+      "kind": "skill",
+      "packageId": "skills",
+      "path": "skills/personal",
+      "sourcePath": "skills/personal/SKILL.md"
+    },
+    {
+      "key": "skill:@product/skills/make-page",
+      "kind": "skill",
+      "packageId": "product",
+      "path": "skills/make-page",
+      "sourcePath": "skills/make-page/SKILL.md"
+    }
+  ],
+  "rejectedKeys": [
+    "pod:folder.census",
+    "skill:make-page",
+    "page:@folder/tour",
+    "script:@Snowdon/src/Census.cs",
+    "script:@snowdon-ducts/src/../Census.cs",
+    "script:@snowdon-ducts/src\\Census.cs",
+    "script:@snowdon-ducts/src/%43ensus.cs",
+    "script:@snowdon-ducts/src//Census.cs",
+    "script:@snowdon-ducts/src/Census.cs/",
+    "script:@snowdon-ducts/src/Census.cs#copy",
+    "script:@product/src/Census.cs",
+    "member:@pages/settings/checks.json",
+    "page:@skills/pages/tour",
+    "page:@snowdon-ducts/pages/tour/index.html",
+    "skill:@snowdon-ducts/skills/duct-loss/SKILL.md",
+    "op:revit.catalog.warnings",
+    "route:pods",
+    "doc:session/open",
+    "recent:C:/Model.rvt"
+  ],
+  "sourcePaths": {
+    "accepted": ["src/Census.cs", "src/Nested/InspectRun.cs", "src/Helper File.cs", "src/Case.CS"],
+    "rejected": [
+      "Census.cs",
+      "src/../Census.cs",
+      "src/./Census.cs",
+      "src\\Census.cs",
+      "src//Census.cs",
+      "src/Census.cs/",
+      "src/Census.cs.",
+      "src/Census.cs ",
+      " src/Census.cs",
+      "src/ Census.cs",
+      "src/Census.txt",
+      "SRC/Census.cs",
+      "C:/src/Census.cs",
+      "/src/Census.cs",
+      "src/%43ensus.cs",
+      "src/Census.cs#copy",
+      "src/CON.cs",
+      "src/NUL/helper.cs",
+      "src/Census.cs:stream"
+    ]
+  }
+}

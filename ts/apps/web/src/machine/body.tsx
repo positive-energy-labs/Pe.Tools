@@ -1,20 +1,9 @@
-/**
- * THE MACHINE BODY — one renderer, two shells (host ledger 2026-10-09 rulings 2 and 4): the web
- * drawer behind the version chip, and the tray window (`/machine?shell=tray`). A status line says
- * what waits on the person, then four groups (Revit, Update, Share, Pea), each header carrying its
- * critical state, one open at a time, Update opening by itself while a plan waits or a receipt
- * runs. The host footer closes it. Everything drawn is the host's one `Machine` reading.
- */
-import { useEffect, useState } from "react";
-import type { Machine, MachineSession, Reading } from "@pe/agent-contracts";
-
-import { Accordion } from "#/components/lang/accordion";
-import { ActionButton } from "#/components/lang/action-button";
+/** One canonical Settings renderer on web, PWA, and tray: every machine group, then appearance. */
+import { useState } from "react";
+import type { AppSurface, Machine, Reading } from "@pe/agent-contracts";
+import { Accordion, type AccordionGroup } from "#/components/lang/accordion";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { PidChip } from "#/components/lang/process";
-import { hostAdmin } from "#/host/machine";
-import { RevitControls, useInstancesBasis } from "#/open/lifecycle";
-
+import { useDiagnostics, type DiagnosticsState } from "#/host/diagnostics";
 import {
   attention,
   autoOpen,
@@ -24,285 +13,208 @@ import {
   peaState,
   revitState,
   shareState,
-  updateState,
-  uptimeWords,
   type GroupKey,
 } from "./model";
-import { PeaGroup } from "./pea";
-import { keyOf, nameOf, phaseOf, pidOf, PHASE_TONE } from "./session";
-import { ShareGroup } from "./share";
+import { RevitGroup } from "./revit";
+import { HostGroup } from "./host";
+import { ProviderSetup } from "./pea";
+import { AccessSwitch } from "#/chat/first-open";
+import { useProviders } from "#/workbench/provider/providers";
+import { SettingsProjection } from "#/settings/options";
+import { SettingsActions } from "#/settings/options-actions";
+import { OsNoticeSettings } from "./os-notices";
+import { StartupSettings } from "./startup";
+import { ShareSettings } from "./share";
 import { UpdateGroup } from "./update";
+import { updateSaid } from "./update-state";
 import { SEED_REFUSAL } from "./use-machine";
 
-export type Shell = "drawer" | "tray";
-
-type InstallPrompt = Event & { prompt: () => Promise<void> };
-
-function RevitRow({
-  session,
-  basis,
-  refusal,
-}: {
-  session: MachineSession;
-  basis: ReturnType<typeof useInstancesBasis>;
-  refusal: string | null;
-}) {
-  const row = session.row;
-  const phase = phaseOf(row);
-  const pid = pidOf(row);
-  const documents = session.documents;
-  const active = documents?.find((document) => document.isActive) ?? documents?.[0];
-  const shape = [
-    row.shape.payload === "checkout" ? "checkout" : null,
-    row.shape.reload === "hot" ? "hot reload" : null,
-    row.shape.posture === "background" ? "background" : null,
-    row.shape.quarantine ? "add-ins off" : null,
-  ].filter(Boolean);
-  return (
-    <div className="flex flex-col py-1" aria-label={`Revit ${row.year}`}>
-      <span className="flex items-center gap-2">
-        <span className="w-9 shrink-0 face-mono">{row.year}</span>
-        <span className="min-w-0 flex-1 truncate">
-          {documents === null ? (
-            <span className="text-ink-2">documents unknown</span>
-          ) : active ? (
-            <>
-              <span className={active.isModified ? "font-semibold" : undefined}>
-                {active.title ?? active.path}
-              </span>
-              {documents.length > 1 ? (
-                <span className="text-ink-2"> +{documents.length - 1}</span>
-              ) : null}
-            </>
-          ) : (
-            <span className="text-ink-2">no document open</span>
-          )}
-        </span>
-        {pid ? <PidChip pid={pid} /> : null}
-        <span data-tone={PHASE_TONE[phase]}>{phase}</span>
-      </span>
-      <span className="flex items-start gap-2 pl-11">
-        <span className="min-w-0 flex-1 text-ink-2">
-          <span className={row.case === "observed-active" ? undefined : "face-mono"}>
-            {nameOf(row)}
-          </span>
-          {shape.length ? ` · ${shape.join(", ")}` : ""}
-          {row.case === "controlled-active" && row.dialogs ? (
-            <span data-tone="caution"> · dialog open</span>
-          ) : null}
-        </span>
-        <RevitControls session={session} basis={basis} refusal={refusal} hr={false} />
-      </span>
-    </div>
-  );
-}
-
-function HostFooter({
-  machine,
-  shell,
-  fixture,
-}: {
-  machine: Machine;
-  shell: Shell;
-  fixture: boolean;
-}) {
-  const host = machine.host;
-  const [said, setSaid] = useState<string | null>(null);
-  const [installPrompt, setInstallPrompt] = useState<InstallPrompt | null>(null);
-  useEffect(() => {
-    if (shell === "tray") return;
-    const onPrompt = (event: Event) => {
-      event.preventDefault();
-      setInstallPrompt(event as InstallPrompt);
-    };
-    const onInstalled = () => setInstallPrompt(null);
-    window.addEventListener("beforeinstallprompt", onPrompt);
-    window.addEventListener("appinstalled", onInstalled);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", onPrompt);
-      window.removeEventListener("appinstalled", onInstalled);
-    };
-  }, [shell]);
-  const run = (verb: "window" | "shutdown") =>
-    void hostAdmin(verb).then(setSaid, (caught: unknown) => setSaid(String(caught)));
-  const trayOnly =
-    shell === "tray"
-      ? null
-      : "Only the tray holds the host's service token; use the Pe.Tools icon in the notification area.";
-  const refusal = fixture ? SEED_REFUSAL : trayOnly;
-  if (!host)
+/**
+ * This window's caught faults and whether the host heard them. It reads the diagnostic owner,
+ * never `/host/status`, so a host that is down still has its silence drawn here.
+ */
+function DiagnosticsLine({ state }: { state: DiagnosticsState }) {
+  const counts = [
+    state.pending ? `${state.pending} waiting` : null,
+    state.dropped ? `${state.dropped} dropped` : null,
+    state.refused ? `${state.refused} refused` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const label = `diagnostics ${state.delivery}${counts ? ` · ${counts}` : ""}`;
+  if (state.delivery === "idle")
+    return <OutcomeLine kind="advisory" label="diagnostics · no fault caught" />;
+  if (state.delivery === "delivered" && !counts)
     return (
-      <span data-tone="caution">
-        Host identity unread{machine.legs.host?.error ? `: ${machine.legs.host.error}` : "."}
-      </span>
+      <OutcomeLine
+        kind="receipt"
+        label={label}
+        says="the host took every fault this window caught"
+      />
     );
+  if (state.delivery === "sending") return <OutcomeLine kind="busy" label={label} />;
   return (
-    <div className="hairline-t flex flex-col gap-1 pt-1.5" aria-label="host">
-      {shell === "tray" ? (
-        <span className="flex min-w-0 items-center gap-1 whitespace-nowrap">
-          <span
-            className="min-w-0 flex-1 truncate"
-            title={`since ${host.startedBy ?? "unknown"} · up ${uptimeWords(host.uptimeSeconds)}`}
-          >
-            Pe.Tools {host.version} · {host.payload} · up {uptimeWords(host.uptimeSeconds)}
-          </span>
-          <span className="shrink-0 face-mono text-ink-2">
-            pid {host.process.pid} · :{host.port}
-          </span>
-        </span>
-      ) : (
-        <span className="flex flex-wrap items-center gap-2">
-          <span className="font-semibold">Pe.Tools</span>
-          <span className="face-mono">{host.version}</span>
-          <span className="face-mono text-ink-2">{host.payload}</span>
-          <span className="text-ink-2">
-            {host.startedBy ? `since ${host.startedBy} · ` : ""}up {uptimeWords(host.uptimeSeconds)}
-          </span>
-          <span className="ml-auto flex items-center gap-1">
-            <PidChip
-              pid={host.process.pid}
-              title={`host process, started ${host.process.processStartUtc}`}
-            />
-            <span
-              className="face-mono text-ink-2"
-              title="the pinned origin the window and the tailnet URL use"
-            >
-              :{host.port}
-            </span>
-          </span>
-        </span>
-      )}
-      <span className="flex flex-wrap items-center gap-1">
-        <span
-          className="text-ink-2"
-          title="the HKCU Run value; Windows Settings › Apps › Startup can also turn it off"
-        >
-          start at login:{" "}
-          {host.autostart === "disabled-in-windows"
-            ? "off in Windows"
-            : (host.autostart ?? "unknown")}
-        </span>
-        <span className="ml-auto flex gap-1">
-          <ActionButton
-            label="open window"
-            reason={refusal ?? "open this host in its Edge app window"}
-            disabled={refusal !== null}
-            onClick={() => run("window")}
-          />
-          <ActionButton
-            label="quit host"
-            reason={
-              refusal ??
-              "stop this host; every Revit keeps running; the next login or the Pe.Tools icon starts it again"
-            }
-            disabled={refusal !== null}
-            onClick={() => run("shutdown")}
-          />
-        </span>
-      </span>
-      {shell === "drawer" && installPrompt && !matchMedia("(display-mode: standalone)").matches ? (
-        <ActionButton
-          label="Install as app"
-          reason="install Pe.Tools in this Edge profile"
-          onClick={() => {
-            void installPrompt.prompt().catch(() => {});
-            setInstallPrompt(null);
-          }}
-        />
-      ) : null}
-      {said ? <OutcomeLine kind="advisory" label={said} /> : null}
+    <OutcomeLine
+      kind={state.delivery === "refused" ? "refused" : "error"}
+      label={label}
+      says={state.detail ?? undefined}
+    />
+  );
+}
+
+function Diagnostics() {
+  return <DiagnosticsLine state={useDiagnostics()} />;
+}
+
+function PeaSettings({ machine, fixture }: { machine: Machine; fixture: boolean }) {
+  const providers = useProviders("", !fixture, machine);
+  return (
+    <div className="flex flex-col gap-3">
+      <ProviderSetup providers={providers} />
+      <AccessSwitch providers={providers} />
     </div>
   );
 }
 
-export function MachineBody({
+export function SettingsBody({
   reading,
   fixture,
   shell,
   group,
+  session,
+  onGroup,
 }: {
   reading: Reading<Machine>;
   fixture: boolean;
-  shell: Shell;
-  /** A group a caller opened the body at (Pea, from a provider that needs a sign-in). */
+  shell: AppSurface;
   group?: GroupKey;
+  session?: string;
+  onGroup?: (group: GroupKey | undefined) => void;
 }) {
   const machine = machineOf(reading);
   const [picked, setPicked] = useState<GroupKey | null | undefined>(group);
-  const basis = useInstancesBasis(!fixture);
-  if (!machine)
-    return reading.state === "failed" ? (
-      <OutcomeLine kind="error" label={`machine reading failed: ${reading.message}`} />
-    ) : (
-      <OutcomeLine kind="busy" label="reading this machine" />
-    );
-  const gap = disconnected(reading);
-  const open = picked === undefined ? autoOpen(machine) : picked;
-  const waits = attention(machine);
-  const refusal = fixture ? SEED_REFUSAL : gap ? "The host is not answering." : null;
-  const revit = revitState(machine);
-  const update = updateState(machine);
-  const share = shareState(machine);
-  const pea = peaState(machine);
+  const gap = reading.state !== "ready";
+  const waits = machine ? attention(machine) : [];
+  const refusal = fixture
+    ? SEED_REFUSAL
+    : gap
+      ? "The machine reading is not current; wait for the host."
+      : null;
+  const unread = (key: GroupKey, label: string): AccordionGroup => ({
+    key,
+    label,
+    tone: "caution",
+    state: reading.state === "failed" ? "read failed" : "reading",
+    body:
+      reading.state === "failed" ? (
+        <OutcomeLine kind="error" label={`machine reading failed: ${reading.message}`} />
+      ) : (
+        <OutcomeLine kind="busy" label="reading this machine" />
+      ),
+  });
+  const machineGroups: AccordionGroup[] = machine
+    ? [
+        {
+          key: "revit",
+          label: "Revit",
+          state: revitState(machine).text,
+          tone: revitState(machine).tone,
+          body: <RevitGroup machine={machine} refusal={refusal} session={session} />,
+        },
+        {
+          key: "update",
+          label: "Update",
+          state: updateSaid(machine).text,
+          tone: updateSaid(machine).tone,
+          body: <UpdateGroup reading={reading} fixture={fixture} />,
+        },
+        {
+          key: "share",
+          label: "Share",
+          state: shareState(machine).text,
+          tone: shareState(machine).tone,
+          body: <ShareSettings machine={machine} fixture={fixture} stale={gap} />,
+        },
+        {
+          key: "pea",
+          label: "Pea providers",
+          state: peaState(machine).text,
+          tone: peaState(machine).tone,
+          body: <PeaSettings machine={machine} fixture={fixture} />,
+        },
+        {
+          key: "host",
+          label: "Host",
+          state: machine.host ? `${machine.host.version} · ${machine.host.payload}` : "unread",
+          body: (
+            <div className="flex flex-col gap-3">
+              <HostGroup machine={machine} surface={shell} fixture={fixture} stale={gap} />
+              <StartupSettings machine={machine} fixture={fixture} />
+            </div>
+          ),
+        },
+      ]
+    : [
+        unread("revit", "Revit"),
+        unread("update", "Update"),
+        unread("share", "Share"),
+        unread("pea", "Pea providers"),
+        unread("host", "Host"),
+      ];
+  const groups: AccordionGroup[] = [
+    ...machineGroups,
+    ...(shell === "tray"
+      ? []
+      : [
+          {
+            key: "notices",
+            label: "Notifications",
+            state: "this browser",
+            body: <OsNoticeSettings />,
+          },
+        ]),
+    {
+      key: "appearance",
+      label: "Appearance",
+      state: "theme",
+      body: <SettingsProjection />,
+    },
+  ];
+  // An address names the group; without one, what waits opens, else the first header that disagrees.
+  // Closing it is remembered here, so an address with no section does not reopen it.
+  const automatic =
+    autoOpen(machine) ??
+    (machine
+      ? (machineGroups.find((entry) => entry.tone === "caution" || entry.tone === "alarm")?.key ??
+        null)
+      : null);
+  const open = group ?? (picked === undefined ? automatic : picked);
   return (
-    <div className="flex min-w-0 flex-col gap-1.5" data-shell={shell} aria-label="this machine">
+    <div className="flex min-w-0 flex-col gap-2" data-shell={shell} aria-label="settings">
       <p className="m-0" data-tone={gap || waits.length ? "caution" : undefined} role="status">
-        {gap
-          ? `The host stopped answering after ${hhmm(machine.observedAtUtc)}; this is its last reading.`
-          : waits.length
-            ? `${waits.join(". ")}.`
-            : "Nothing waits on you."}
+        {!machine
+          ? reading.state === "failed"
+            ? "This machine could not be read; its groups wait for the host."
+            : "Reading this machine."
+          : disconnected(reading)
+            ? `The host stopped answering after ${hhmm(machine.observedAtUtc)}; this is its last reading.`
+            : gap
+              ? "This machine reading is not current; repair actions wait for the host."
+              : waits.length
+                ? `${waits.join(". ")}.`
+                : "Nothing waits on you."}
       </p>
       <Accordion
-        label="machine groups"
+        label="settings groups"
         open={open}
-        onOpen={(key) => setPicked(key as GroupKey | null)}
-        groups={[
-          {
-            key: "revit",
-            label: "Revit",
-            state: revit.text,
-            tone: revit.tone,
-            body:
-              machine.revit.sessions === null ? (
-                <span data-tone="caution">The Revit census has not been read.</span>
-              ) : machine.revit.sessions.length ? (
-                machine.revit.sessions.map((session) => (
-                  <RevitRow
-                    key={keyOf(session)}
-                    session={session}
-                    basis={basis}
-                    refusal={refusal}
-                  />
-                ))
-              ) : (
-                <span className="text-ink-2">No Revit is running. Start one from Open.</span>
-              ),
-          },
-          {
-            key: "update",
-            label: "Update",
-            state: update.text,
-            tone: update.tone,
-            body: <UpdateGroup reading={reading} fixture={fixture} />,
-          },
-          {
-            key: "share",
-            label: "Share",
-            state: share.text,
-            tone: share.tone,
-            body: <ShareGroup machine={machine} fixture={fixture} stale={gap} />,
-          },
-          {
-            key: "pea",
-            label: "Pea",
-            state: pea.text,
-            tone: pea.tone,
-            body: <PeaGroup fixture={fixture} machine={machine} />,
-          },
-        ]}
+        onOpen={(key) => {
+          setPicked(key as GroupKey | null);
+          onGroup?.((key ?? undefined) as GroupKey | undefined);
+        }}
+        groups={groups}
       />
-      <HostFooter machine={machine} shell={shell} fixture={fixture} />
+      <Diagnostics />
+      <SettingsActions />
     </div>
   );
 }

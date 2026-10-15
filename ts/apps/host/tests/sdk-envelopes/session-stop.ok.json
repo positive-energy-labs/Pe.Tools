@@ -1,0 +1,49 @@
+{
+  "result": {
+    "id": "acc-r2",
+    "phase": "stopped",
+    "borrowsRequestId": "781110cd-aa27-40a0-829d-d13c473f8105",
+    "borrows": [],
+    "unsavedLost": [],
+    "legs": [
+      {
+        "name": "stop",
+        "status": "ok",
+        "detail": null,
+        "observedAtUtc": "2026-10-14T05:00:13.8450400Z"
+      }
+    ],
+    "requestId": "ef346fdc-d102-4527-9268-aaf068e6ae8e",
+    "state": "ok"
+  },
+  "resolved": {
+    "id": "acc-r2",
+    "how": "pinned",
+    "origin": "cli",
+    "pid": 3068,
+    "processStartUtc": "2026-10-14T04:58:22.4257706Z",
+    "buildStamp": "cdbd012e1820",
+    "observedAtUtc": "2026-10-14T05:00:13.8463020Z",
+    "payload": "checkout",
+    "sourceRoot": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "installedRoot": null
+  },
+  "diagnostics": [],
+  "binary": {
+    "origin": "dev-installed",
+    "assembly": "C:\\Users\\person\\.nuget\\packages\\pe.revit.cli\\0.1.0-beta.208\\tools\\net8.0\\any\\Pe.Revit.Cli.dll",
+    "sha256": "90EE5D4752601BE4E0F50AED84AA5E759BAA3F49FDF0C583904009B520E9CFEE",
+    "informationalVersion": "0.1.0-beta.208+44b07e06540622cf54543d1a155ce82ccc19d440",
+    "hostExecutable": "C:\\Program Files\\dotnet\\dotnet.exe"
+  },
+  "command": {
+    "cwd": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRoot": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRule": "checkout-manifest",
+    "commandManifest": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\product.payloads.json"
+  },
+  "nextSteps": ["pe-revit session list"],
+  "guide": "session",
+  "related": ["pe-revit session list", "pe-revit doc list", "pe-revit guide session"],
+  "exitCode": 0
+}

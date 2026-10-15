@@ -6,6 +6,41 @@ Keep detailed workflow behavior in the owning package docs, repo skills, or the 
 
 ## Core decision
 
+Desktop window launches share the native [PwaLauncher](../dotnet/Pe.Host.Tray/PwaLauncher.cs):
+`Pe.Host.Tray.exe --launch-window <local frontend URL>` resolves an actual Edge app registration
+or opens its install surface. The source host waits for its own Vite redirect before passing the
+URL; the installed host uses its packaged `tray/Pe.Host.Tray.exe`. Missing/unavailable launchers
+refuse rather than silently creating an uninstalled `--app` window. Build-time app identity and
+real OS registration are separate evidence; an app-ID hash alone never proves installation.
+
+The development tray is a checkout-owned native shell over the Vite frontend and source host,
+not an installed runtime. [tools/dev-tray.ps1](../tools/dev-tray.ps1) creates or attaches the pair;
+`-CreateShortcut` installs a distinct Pe.Tools Dev Tray Start shortcut. Repeated launch reveals the
+same checkout window. `-Stop` and `-Restart` retire only the identity-verified native child and
+its tray supervisor, preserving an already-running host/frontend. The supervisor keeps the
+frontend origin and backend service receipt separate and revalidates both incarnations.
+Both retirement switches refuse while the original host reports running or waiting Pea turns,
+or when that reading is unavailable; `-Force` explicitly overrides the check. Announce any dev
+tray or host restart before acting, including an idle restart: the owner may be using the window.
+Build and native launch evidence do not prove backend restart recovery or installed behavior.
+
+PWA identity belongs to the lane's origin, not the process: two stable apps per lane.
+Installed uses `http://127.0.0.1:5180` with manifest `id: /`. Dev uses `http://127.0.0.1:5175` with
+`id: /?dev=e342bc78d3d4`, and the MAIN checkout (its `.git` is a directory) keeps that port. A linked
+worktree takes a stable slot in 5200-5999 hashed from its dev host's service name
+(`devFrontendPort`), so worktrees run beside main; a collision walks to the next free port and
+`dev.ts` records the origin that actually bound, which is the only origin the host's
+`identity.origin` accepts. The backend keeps its SDK-owned dynamic port.
+
+The full PWA entries are **Pe.Tools** and **Pe.Tools Dev**. Their separate compact launchers are
+**Pe.Tools Tray** and **Pe.Tools Dev Tray**. The next MSI authors `Pe.Tools Tray` with
+`Pe.Host.exe --show-tray`; it starts the claim-owned tray or forwards to its existing owner.
+Native forwarding appends `--show [--route <canonical path>]` to verified parent/service arguments
+or `--dev --supervisor-file <absolute path>`. Tray menu, startup and forwarding use one show path.
+`tools/dev-tray.ps1` shows the Dev tray; `-Window` bootstraps the dev host and opens its PWA.
+The Edge-authored PWA Start entry itself depends on the background host; it cannot bootstrap a
+stopped host. Edge MSIX and registry-style PWA registrations are both read without changing them.
+
 A terminal build, a packaged artifact, a running Revit session, and an installed product are different authorities. Do not let one claim stand in for another.
 
 The practical rule is:
@@ -70,7 +105,7 @@ Verified mechanics:
 
 ## SDK pin and release feed
 
-`pe-revit sdk adopt <version> --plan` shows the adoption steps; `pe-revit sdk adopt <version>` applies them. The verb repins `global.json` and `.config/dotnet-tools.json`, points `nuget.config` at the release feed, restores the tool, regenerates the vendored TypeScript contract, reports removed exports, installs the bootstrap for the manifest's years, and writes a receipt. Review removed exports and cut consumers over before claiming acceptance.
+`pe-revit sdk adopt <version> --plan` shows the adoption steps; `pe-revit sdk adopt <version>` applies them. The verb repins `global.json` and `.config/dotnet-tools.json`, points `nuget.config` at the release feed, restores the tool, regenerates the vendored TypeScript contract, reports removed exports, installs the bootstrap for the manifest's years, and writes a receipt. Review removed exports and cut consumers over before claiming acceptance. The bootstrap install is machine-wide: adopting in one worktree breaks every other checkout still pinned to the old beta (`session.bootstrap-mismatch`, the owner's tray on 2026-10-13). A wave releases to the feed and asks counsel, who lands the pin on main and the tray in one step.
 
 The default feed is `%USERPROFILE%\source\feeds\pe-revit-sdk`, with each release in `<feed>/<version>/`. `product.payloads.json` sets `sdk.feed` to override the feed and `sdk.clientDir` to name the generated client directory. Pe.Tools uses a null feed and `ts/packages/host-contracts/src/vendor/generated`. `eng/sdk-feed` is no longer a package source; its copied nupkgs are gitignored and disposable. Fresh worktrees use the same feed folder.
 
@@ -210,7 +245,7 @@ No Revit or Autodesk login is permitted in this Sandbox lane.
 
 `CreateBundleModule` owns the Pe.App year staging used by both transports.
 `CreateInstallerModule` owns the host/Pea SEA payload builds plus the product release-signing
-boundary. The MSI also lays Desktop and Start Menu shortcuts to `Pe.Host.exe --open` from the host
+boundary. The MSI also lays Desktop and Start Menu shortcuts to `Pe.Host.exe --show-tray` (named "Pe.Tools Tray") from the host
 payload's `shortcut` block in `product.payloads.json` (SDK beta.178 `pe-revit msi`); a bare launch of
 the SEA with no `PE_LANE` is the installed lane and claims the ordinary `host` service, so a Revit
 started afterwards joins it. SDK `pe-revit install package`
@@ -288,7 +323,7 @@ That boundary is deliberately narrower than Revit orchestration:
 - Script execution performs the requested targeted call only. It must not build, converge, or restart the dev session. Agents inspect freshness and invoke SDK lifecycle actions explicitly.
 - A clean checkout may launch its checkout-pinned source host without a staged `Pe.Host.exe`, but that launch path is not a build or Revit-convergence path.
 
-The acceptance bar is the field drive in `Pe.Revit.Sdk/RUNTIME_ACCEPTANCE.md` — one operator, released artifacts, a real Revit, cold start through stop. There is no second rig. Per-run records are disposable (the surviving pin decision is in `docs/features/host/LEDGER.md`).
+A checkout's native acceptance round runs through `tools/acceptance.py` (setup a copied home and own host, a controlled session on model copies, `sdk` envelopes, census with the owner-root diff, teardown of only what it recorded). The acceptance bar is the field drive in `Pe.Revit.Sdk/RUNTIME_ACCEPTANCE.md` — one operator, released artifacts, a real Revit, cold start through stop. There is no second rig. Per-run records are disposable (the surviving pin decision is in `docs/features/host/LEDGER.md`).
 
 Strict execution belongs to one runtime owner. Source host, Pea/MCP and Revit use the actual checkout containing their modules or SDK payload descriptor. `PE_TOOLS_SOURCE_ROOT` must agree with that checkout. Installed host and Pea require a Node SEA at the exact manifest-declared executable under the canonical product root; a copied executable cannot claim installation ownership. Bridge registration and SDK resolution must match lane, checkout or installation root, service name and process incarnation before dispatch. An explicit id, pid, URL or path cannot waive these checks. Read-only diagnostics can show every runtime without selecting one for execution.
 

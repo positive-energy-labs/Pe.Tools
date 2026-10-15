@@ -7,10 +7,10 @@
  */
 import { useMemo } from "react";
 
-import { EmptyState } from "#/components/lang/empty";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { Pane } from "#/components/lang/pane";
-import type { VerdictTone } from "#/components/master-table/model";
-import { tokenRef } from "#/lib/token";
+import type { VerdictTone } from "@pe/kit/table/model";
+import { tokenRef } from "@pe/kit/lib/token";
 import { ISSUE_KINDS, IssueLegend, type IssueKind } from "./issues";
 import type { DuctsPage } from "./manifest";
 import type { DuctSnapshot } from "./readiness";
@@ -119,7 +119,7 @@ export function DuctsTree({
 
   if (empty || !snapshot || !tree || !layout)
     return (
-      <Pane kind="content" title="tree">
+      <Pane id="content" title="tree">
         <EmptyState story="scope" exit={empty?.exit ?? "choose a group in the sentence"}>
           {empty?.says ?? "no group chosen: the tree draws one group"}
         </EmptyState>
@@ -137,7 +137,7 @@ export function DuctsTree({
 
   return (
     <Pane
-      kind="content"
+      id="content"
       title="tree"
       meta={`${tree.groupId} · ${tree.terminals.length} terminals`}
       scroll="clip"

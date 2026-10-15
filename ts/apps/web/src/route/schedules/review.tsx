@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { showCellValue, splitScheduleCellKey } from "@pe/agent-contracts";
-import { ReviewRow, type CellWire } from "#/components/lang/band";
-import { Press } from "#/components/lang/press";
+import { ReviewRow, type CellWire } from "#/components/work/band";
+import { Button } from "@pe/kit/lang/button";
 import { ValueDiff } from "#/components/lang/value-diff";
 import type { ScheduleGridDocument } from "@pe/agent-contracts";
-import { StateCell } from "#/components/lang/cell";
+import { StateCell } from "@pe/kit/lang/cell";
 import {
   cellText,
   scheduleCellState,
@@ -101,17 +101,15 @@ export function ScheduleProposals({
                 address={key}
                 cell={cell}
                 label={
-                  <Press
-                    type="button"
-                    tone="quiet"
-                    size="caption"
-                    title="Highlight this cell's row in the grid and scroll it into view."
+                  <Button
+                    label={`${columnHeader(columnNumber)} · r${rowNumber}`}
+                    reason="Highlight this cell's row in the grid and scroll it into view."
                     onClick={() => locate(key)}
                   >
-                    <span className="truncate">
+                    <span className="truncate face-mono">
                       {columnHeader(columnNumber)} · r{rowNumber}
                     </span>
-                  </Press>
+                  </Button>
                 }
                 transitions={scheduleTransitions(wire, key, cell, stale)}
                 editor={editor?.(key)}

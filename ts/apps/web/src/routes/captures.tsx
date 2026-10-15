@@ -14,17 +14,25 @@ import { CapturesList } from "#/captures/list";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Pane } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
-import { RouteShell, useRoute, type RouteManifest } from "#/route";
+import { RouteShell, useRoute, urlPage, type RouteManifest } from "#/route";
 
 /**
  * The receipts are a host read, not a Reading: no Revit change mark lights them, so `refresh`
  * names `work`, which this route never has, and the verb is the only way the list re-reads.
  */
-const capturesManifest = (
-  reload: () => Promise<void>,
-): RouteManifest<never, never, Record<string, never>, "refresh"> => ({
+const capturePage = z.object({ sha: z.string().optional() });
+const captureLocation = {
   key: "captures",
   name: "Captures",
+  page: capturePage,
+  url: ["sha"] as const,
+};
+const url = urlPage(captureLocation)!;
+
+const capturesManifest = (
+  reload: () => Promise<void>,
+): RouteManifest<never, never, z.infer<typeof capturePage>, "refresh"> => ({
+  ...captureLocation,
   docs: "Every view picture the host kept, newest first: who took it, of which view, and the receipt. Open the PNG or copy its URL into a page.",
   actions: {
     refresh: {
@@ -42,8 +50,8 @@ const capturesManifest = (
 });
 
 export const Route = createFileRoute("/captures")({
-  validateSearch: (search: Record<string, unknown>): { sha?: string } =>
-    typeof search.sha === "string" && search.sha ? { sha: search.sha } : {},
+  validateSearch: url.read,
+  search: { middlewares: [...url.middlewares] },
   component: CapturesRoute,
 });
 
@@ -73,7 +81,7 @@ function CapturesRoute() {
 
   return (
     <Surface head={<RouteShell manifest={manifest} handle={handle} />}>
-      <Pane kind="content" title="captures" meta={captures ? String(captures.length) : undefined}>
+      <Pane title="captures" meta={captures ? String(captures.length) : undefined}>
         {failure ? <OutcomeLine kind="error" label="captures unread" says={failure} /> : null}
         {captures ? <CapturesList captures={captures} focus={sha} /> : null}
       </Pane>

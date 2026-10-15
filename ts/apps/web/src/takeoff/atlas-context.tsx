@@ -8,6 +8,7 @@ export function AtlasProvider({ value, children }: { value: AtlasModel; children
   return <AtlasContext.Provider value={value}>{children}</AtlasContext.Provider>;
 }
 
+/** Inside a pane, so the keys bind on that pane's scope and Help lists them under it. */
 export function useAtlasWorkspace() {
   const value = useContext(AtlasContext);
   if (value == null) throw new Error("AtlasProvider is missing");

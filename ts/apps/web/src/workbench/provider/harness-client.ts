@@ -1,3 +1,4 @@
+import { createPeClient, peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { hostFetch } from "#/host/runtime";
 /**
  * The harness-thread wire, typed (`@pe/agent-contracts` harness-thread.ts lists every route). The
@@ -7,80 +8,80 @@ import type {
   Access,
   AddProviderRequest,
   HarnessEvent,
-  HarnessThreadBody,
   HarnessThreadSummary,
-  Provider,
+  promptRequestSchema,
+  ReadingFrame,
+  ReadingRequest,
+  UpdateThreadRequest,
 } from "@pe/agent-contracts";
+import { followThread } from "@pe/agent-contracts/chat-state";
+import type { z } from "zod";
 import { openEventSource } from "#/readings";
 
+/** What a send posts: text, attachments, mentions (`promptRequestSchema`); the client mints its id. */
+export type PromptRequest = Omit<z.input<typeof promptRequestSchema>, "id">;
+
 export function harnessClient(origin: string) {
-  const call = async <T>(path: string, method = "GET", body?: object, signal?: AbortSignal) => {
-    const response = await hostFetch(`${origin}/pe${path}`, {
-      method,
-      signal,
-      // The host refuses a bodiless non-GET without the json content type (415).
-      ...(method === "GET" ? {} : { headers: { "content-type": "application/json" } }),
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
-    if (!response.ok) {
-      throw Object.assign(
-        new Error(
-          said(await response.text().catch(() => "")) ||
-            `${method} /pe${path} failed (${response.status}).`,
-        ),
-        {
-          status: response.status,
-        },
-      );
-    }
-    return (
-      response.status === 204 ? undefined : await response.json().catch(() => undefined)
-    ) as T;
-  };
-  const thread = (id: string) => `/threads/${encodeURIComponent(id)}`;
-  const provider = (id: string) => `/providers/${encodeURIComponent(id)}`;
+  const client = createPeClient(origin, hostFetch);
   return {
-    providers: () => call<Provider[]>("/providers"),
-    addProvider: (input: AddProviderRequest) => call<Provider>("/providers", "POST", input),
-    removeProvider: (id: string) => call<void>(provider(id), "DELETE"),
-    probe: (id: string) => call<Provider>(`${provider(id)}/probe`, "POST"),
-    openLogin: (id: string) => call<{ opened: true }>(`${provider(id)}/open-login`, "POST"),
-    access: () => call<Access>("/access"),
-    setAccess: (access: Access) => call<Access>("/access", "PUT", access),
-    threads: () => call<HarnessThreadSummary[]>("/threads"),
-    create: (providerId: string) => call<HarnessThreadSummary>("/threads", "POST", { providerId }),
+    providers: () => client.call("providers.list", {}),
+    addProvider: (body: AddProviderRequest) => client.call("providers.add", { body }),
+    removeProvider: (id: string) => client.call("provider.remove", { params: { id } }),
+    probe: (id: string) => client.call("provider.probe", { params: { id } }),
+    openLogin: (id: string) => client.call("provider.login", { params: { id } }),
+    access: () => client.call("access.get", {}),
+    setAccess: (body: Access) => client.call("access.set", { body }),
+    threads: () => client.call("threads.list", {}),
+    create: (providerId: string) => client.call("threads.create", { body: { providerId } }),
     body: (id: string, signal?: AbortSignal) =>
-      call<HarnessThreadBody>(thread(id), "GET", undefined, signal),
-    rename: (id: string, title: string) => call<HarnessThreadSummary>(thread(id), "PUT", { title }),
-    remove: (id: string) => call<void>(thread(id), "DELETE"),
-    prompt: (id: string, text: string) =>
-      call<{ turnId: string }>(`${thread(id)}/prompt`, "POST", { text }),
-    cancel: (id: string) => call<void>(`${thread(id)}/cancel`, "POST"),
+      client.call("thread.get", { params: { id } }, { signal }),
+    rename: (id: string, title: string) =>
+      client.call("thread.update", { params: { id }, body: { title } }),
+    update: (id: string, body: UpdateThreadRequest) =>
+      client.call("thread.update", { params: { id }, body }),
+    summaries: (
+      onChange: (threads: HarnessThreadSummary[]) => void,
+      onFault: (error: Error) => void,
+    ) => {
+      const events = openEventSource(readingsUrl(origin, { kind: "threads" }));
+      events.onmessage = (message) => {
+        const frame = JSON.parse(message.data) as ReadingFrame;
+        if (frame.kind === "snapshot") onChange(frame.value as HarnessThreadSummary[]);
+      };
+      events.onerror = () => onFault(new Error("Thread list disconnected; reconnecting."));
+      return () => events.close();
+    },
+    target: (
+      id: string,
+      head: Pick<HarnessThreadSummary["head"], "defaultTarget" | "revision" | "displayLabel">,
+    ) =>
+      client.call("scope.set", {
+        params: { id },
+        body: {
+          defaultTarget: head.defaultTarget,
+          expectedRevision: head.revision,
+          displayLabel: head.displayLabel,
+        },
+      }),
+    remove: (id: string) => client.call("thread.remove", { params: { id } }),
+    prompt: (id: string, body: PromptRequest) =>
+      client.call("thread.prompt", { params: { id }, body: { id: crypto.randomUUID(), ...body } }),
+    cancel: (id: string) => client.call("thread.cancel", { params: { id } }),
     permission: (id: string, requestId: string, optionId: string) =>
-      call<void>(`${thread(id)}/permission`, "POST", { requestId, optionId }),
+      client.call("thread.permission", { params: { id }, body: { requestId, optionId } }),
     question: (
       id: string,
       requestId: string,
       action: "accept" | "decline",
       content?: Record<string, unknown>,
-    ) => call<void>(`${thread(id)}/question`, "POST", { requestId, action, content }),
-    /** Same provider forks the ACP session; another provider re-feeds the transcript. */
+    ) => client.call("thread.question", { params: { id }, body: { requestId, action, content } }),
     fork: (id: string, providerId?: string) =>
-      call<HarnessThreadSummary>(`${thread(id)}/fork`, "POST", providerId ? { providerId } : {}),
-    model: (id: string, modelId: string) => call<void>(`${thread(id)}/model`, "POST", { modelId }),
+      client.call("thread.fork", { params: { id }, body: { providerId } }),
+    model: (id: string, modelId: string) =>
+      client.call("thread.model", { params: { id }, body: { modelId } }),
     trait: (id: string, traitId: string, value: string | boolean) =>
-      call<void>(`${thread(id)}/trait`, "POST", { id: traitId, value }),
+      client.call("thread.trait", { params: { id }, body: { id: traitId, value } }),
   };
-}
-
-/** A refusal body as words: `{step, message}` (a provider add) or `{error}`; otherwise the text. */
-function said(text: string): string {
-  try {
-    const body = JSON.parse(text) as { step?: string; message?: string; error?: string };
-    return body.step ? `${body.step}: ${body.message}` : (body.message ?? body.error ?? text);
-  } catch {
-    return text;
-  }
 }
 
 /** The host answered 404: the thread (or route) does not exist there. */
@@ -89,35 +90,61 @@ export const notFound = (error: unknown) => (error as { status?: unknown } | nul
 /** The browser's EventSource, or a test's stand-in with the same three members. */
 export type OpenEvents = (url: string) => Pick<EventSource, "onmessage" | "onerror" | "close">;
 
+/** One Readings connection (`resources.stream`) for one key, resumed after a host log cursor. */
+export const readingsUrl = (origin: string, key: ReadingRequest, after?: number) =>
+  peRouteUrl(
+    "resources.stream",
+    {
+      query: {
+        keys: JSON.stringify([key]),
+        ...(after === undefined ? {} : { after: String(after) }),
+      },
+    },
+    origin,
+  );
+
 /**
- * Tail one thread's log from `after`. On any stream error it closes and reopens from the last
- * seq it delivered, so a reconnect never replays or skips; a stale or repeated seq is dropped.
+ * Follow one thread's `thread` Reading from the body's `cursor`, applying events past `lastSeq` by
+ * the shared rule (`followThread`). A dropped stream reopens after the last host log id it saw, so
+ * a reconnect neither replays nor skips. A gap or a hole in seq ends this stream with `onReread`:
+ * read the body again and follow from its cursor.
  */
 export function streamThread(options: {
   origin: string;
   threadId: string;
-  after: number;
+  cursor: number;
+  lastSeq: number;
   onEvent: (event: HarnessEvent) => void;
+  onReread: () => void;
   onFault?: (error: Error) => void;
   open?: OpenEvents;
   retryMs?: number;
 }): () => void {
-  const { origin, threadId, onEvent, onFault, retryMs = 1_000 } = options;
+  const { origin, threadId, onEvent, onReread, onFault, retryMs = 1_000 } = options;
   const open = options.open ?? openEventSource;
-  let last = options.after;
+  let cursor = options.cursor;
+  let last = options.lastSeq;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let source: ReturnType<OpenEvents> | undefined;
+  const stop = () => {
+    stopped = true;
+    clearTimeout(timer);
+    source?.close();
+  };
   const connect = () => {
-    const events = open(
-      `${origin}/pe/threads/${encodeURIComponent(threadId)}/stream?after=${last}`,
-    );
+    const events = open(readingsUrl(origin, { kind: "thread", thread: threadId }, cursor));
     source = events;
     events.onmessage = (message: MessageEvent<string>) => {
-      const event = JSON.parse(message.data) as HarnessEvent;
-      if (event.seq <= last) return;
-      last = event.seq;
-      onEvent(event);
+      if (message.lastEventId) cursor = Number(message.lastEventId);
+      const step = followThread(last, JSON.parse(message.data) as ReadingFrame);
+      if (step.kind === "apply") {
+        last = step.event.seq;
+        onEvent(step.event);
+      } else if (step.kind === "reread") {
+        stop();
+        onReread();
+      }
     };
     events.onerror = () => {
       events.close();
@@ -127,9 +154,5 @@ export function streamThread(options: {
     };
   };
   connect();
-  return () => {
-    stopped = true;
-    clearTimeout(timer);
-    source?.close();
-  };
+  return stop;
 }

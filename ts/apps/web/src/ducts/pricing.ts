@@ -28,7 +28,7 @@ export const TABLE_IDS: readonly string[] = [
 ].sort();
 
 /** The tables Pe's provenance store says were last applied, per rule key; absent = the default. */
-export const appliedChoices = (snapshot: DuctSnapshot): Choices =>
+const appliedChoices = (snapshot: DuctSnapshot): Choices =>
   Object.fromEntries(
     Object.entries(snapshot.store?.rules ?? {}).flatMap(([key, rule]) =>
       rule.table ? [[key, rule.table.toUpperCase()]] : [],
@@ -170,7 +170,7 @@ const inputsOf = ({ inputs }: Row) => {
   return inputs.y == null ? x : `${x}, ${inputs.yLabel ?? "y"}=${at(inputs.y)}`;
 };
 
-export const round4 = (n: number) => Math.round(n * 1e4) / 1e4;
+const round4 = (n: number) => Math.round(n * 1e4) / 1e4;
 
 /** The air mover a group's fan static is written to: its one root, else its critical system's base. */
 export function unitOf(snapshot: DuctSnapshot, result: LossResult, group: Group): number | null {

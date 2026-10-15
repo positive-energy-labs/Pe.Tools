@@ -1615,52 +1615,6 @@ export namespace OpCancel {
   }
 }
 
-/** Export an installed pod as a .zip archive. Every consumed foreign fragment is vendored under settings/_vendor/<id>/ and its reference rewritten to @local/_vendor/<id>/..., so the archive composes from its own bytes. */
-export namespace PodExport {
-  export namespace Req {
-    export interface Request {
-      pod: string;
-      archivePath: string;
-    }
-  }
-  export namespace Res {
-    export interface Response {
-      archivePath: string;
-      vendored: PodDependencyData[];
-    }
-    export interface PodDependencyData {
-      id: string;
-      path: string;
-      sha256: string;
-    }
-  }
-}
-
-/** Import a pod .zip archive into a new folder under Documents/Pe.Tools/Pods (default: the manifest id). Bytes are extracted unchanged and imported.json records the archive SHA-256, locator, and date. */
-export namespace PodImport {
-  export namespace Req {
-    export interface Request {
-      archivePath: string;
-      folder?: null | string;
-    }
-  }
-  export namespace Res {
-    export type ScriptDiagnosticSeverity = "Info" | "Warning" | "Error";
-
-    export interface Response {
-      id: string;
-      folder: string;
-      diagnostics?: ScriptDiagnostic[] | null;
-    }
-    export interface ScriptDiagnostic {
-      stage: string;
-      severity: ScriptDiagnosticSeverity;
-      message: string;
-      source?: null | string;
-    }
-  }
-}
-
 /** Compose one JSON member ($include, $preset) from the saved file or the supplied draft content. @local/ resolves inside the pod; @<id>/ resolves to the installed pod with that manifest id. Returns composed JSON, this member's diagnostics only, and consumed fragments with SHA-256. */
 export namespace PodMemberCompose {
   export namespace Req {
@@ -6543,7 +6497,7 @@ export namespace ScriptingExecute {
   }
 }
 
-/** Create or update a C# Revit scripting pod workspace: pod.json, PeScripts.csproj, docs, and a sample entrypoint script. */
+/** Create or update a C# Revit scripting pod workspace for authoring: pod.json (no entrypoints until you declare one), PeScripts.csproj with this session's references for editor support, and docs. Existing files are kept. */
 export namespace ScriptingWorkspaceBootstrap {
   export namespace Req {
     export interface Request {
@@ -6561,7 +6515,6 @@ export namespace ScriptingWorkspaceBootstrap {
       workspaceReadmePath: string;
       projectFilePath: string;
       podManifestPath: string;
-      sampleScriptPath: string;
       revitVersion: string;
       targetFramework: string;
       runtimeAssemblyPath: string;
@@ -6909,6 +6862,14 @@ export const parameterValueApplyBounds = {
 } as const;
 
 /** Contract constants shared with C#; read these instead of re-typing the numbers. */
+export const scriptPodMemberBounds = {
+  "maxFileBytes": 67108864,
+  "maxTotalBytes": 268435456,
+  "maxFileCount": 4096,
+  "maxDirectoryCount": 4096
+} as const;
+
+/** Contract constants shared with C#; read these instead of re-typing the numbers. */
 export const scriptPodSourceBounds = {
   "maxFileBytes": 524288,
   "maxTotalBytes": 4194304,
@@ -6938,8 +6899,6 @@ export interface HostOps {
   "family.temporary.acquire": { request: FamilyTemporaryAcquire.Req.Request; response: FamilyTemporaryAcquire.Res.Response };
   "host.ops.catalog": { request: HostOpsCatalog.Req.Request; response: HostOpsCatalog.Res.Response };
   "op.cancel": { request: OpCancel.Req.Request; response: OpCancel.Res.Response };
-  "pod.export": { request: PodExport.Req.Request; response: PodExport.Res.Response };
-  "pod.import": { request: PodImport.Req.Request; response: PodImport.Res.Response };
   "pod.member.compose": { request: PodMemberCompose.Req.Request; response: PodMemberCompose.Res.Response };
   "revit.apply.command.execute": { request: RevitApplyCommandExecute.Req.Request; response: RevitApplyCommandExecute.Res.Response };
   "revit.apply.parameter-links": { request: RevitApplyParameterLinks.Req.Request; response: RevitApplyParameterLinks.Res.Response };
@@ -7022,8 +6981,6 @@ export const hostOpKeys = [
   "family.temporary.acquire",
   "host.ops.catalog",
   "op.cancel",
-  "pod.export",
-  "pod.import",
   "pod.member.compose",
   "revit.apply.command.execute",
   "revit.apply.parameter-links",

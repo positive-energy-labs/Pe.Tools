@@ -6,17 +6,65 @@
  */
 import type { Machine, Reading } from "@pe/agent-contracts";
 
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "@pe/kit/lang/button";
 import { LegStrip } from "#/components/lang/leg-strip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { PidChip } from "#/components/lang/process";
+import { SwitchRow } from "#/components/lang/switch-row";
 import { dirty, useAction } from "#/readings";
 import { recheckUpdate } from "#/host/install";
+import { hostFetch } from "#/host/runtime";
 
-import { blockersOf, disconnected, hhmm, machineOf, receiptRunning } from "./model";
+import { blockersOf, disconnected, hhmm, legWords, machineOf } from "./model";
+import { updateStatus } from "./update-state";
 import { SEED_REFUSAL, useUpdateConsent } from "./use-machine";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const mb = (bytes: number) => `${Math.round(bytes / 1_048_576)} MB`;
+
+async function setAutomaticUpdates(enabled: boolean): Promise<void> {
+  const response = await hostFetch("/host/update/automatic", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  if (response.ok) return;
+  const body = (await response.json().catch(() => null)) as { error?: string } | null;
+  throw Error(body?.error ?? `Switch refused (${response.status}).`);
+}
+
+/** The automatic-update off switch: one instrument, drawn in the Update group and on its card. */
+export function AutomaticUpdates({
+  reading,
+  fixture,
+}: {
+  reading: Reading<Machine>;
+  fixture: boolean;
+}) {
+  const machine = machineOf(reading);
+  const toggle = useAction<boolean, void>(async (enabled) => {
+    try {
+      await setAutomaticUpdates(enabled);
+    } finally {
+      dirty({ kind: "machine" });
+    }
+  });
+  if (!machine) return null;
+  return (
+    <>
+      <SwitchRow
+        label="Update automatically"
+        says="Installs a new version once no Revit has been open for two minutes and Pea is idle"
+        checked={machine.update.automatic}
+        onCheckedChange={(enabled) => toggle.mutate(enabled)}
+        refusal={
+          fixture ? SEED_REFUSAL : disconnected(reading) ? "The host is disconnected." : null
+        }
+      />
+      {toggle.error ? <OutcomeLine kind="refused" label={toggle.error.message} /> : null}
+    </>
+  );
+}
 
 function Receipt({ machine, gap }: { machine: Machine; gap: boolean }) {
   const receipt = machine.update.receipt;
@@ -74,7 +122,16 @@ function Receipt({ machine, gap }: { machine: Machine; gap: boolean }) {
   );
 }
 
-export function UpdateGroup({ reading, fixture }: { reading: Reading<Machine>; fixture: boolean }) {
+export function UpdateGroup({
+  reading,
+  fixture,
+  checking = false,
+}: {
+  reading: Reading<Machine>;
+  fixture: boolean;
+  /** A recheck is in flight somewhere this group cannot see (a specimen draws it). */
+  checking?: boolean;
+}) {
   const machine = machineOf(reading);
   const consent = useUpdateConsent(reading, fixture);
   const check = useAction<void, void>(async () => {
@@ -86,55 +143,87 @@ export function UpdateGroup({ reading, fixture }: { reading: Reading<Machine>; f
   });
   if (!machine) return null;
   const gap = disconnected(reading);
-  const { plan, planLeg } = machine.update;
+  const status = updateStatus(machine, check.isPending || checking);
   const recheck = (
     <>
-      <ActionButton
+      <Button
         label="recheck"
+        kind="framed"
         reason={
           fixture ? SEED_REFUSAL : "read the update feed again and re-plan against every Revit"
         }
-        disabled={fixture || gap}
+        refusal={
+          fixture || gap
+            ? fixture
+              ? SEED_REFUSAL
+              : "read the update feed again and re-plan against every Revit"
+            : null
+        }
         busy={check.isPending}
         onClick={() => check.mutate()}
-      />
+      >
+        recheck
+      </Button>
       {check.error ? <OutcomeLine kind="refused" label={check.error.message} /> : null}
     </>
   );
-  if (!plan)
+  if (status.state === "idle" || status.state === "checking" || status.state === "failed") {
+    // Nothing waits on this person: up to date, unread, a check in flight, or a failure to read.
+    const plan = machine.update.plan;
     return (
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1" aria-label={`update ${status.state}`}>
         <span className="flex items-center gap-2">
-          {planLeg.error ? (
-            <span data-tone="caution">Update check failed: {planLeg.error}</span>
-          ) : (
+          {status.state === "checking" ? (
+            <OutcomeLine kind="busy" label="Reading the update feed" />
+          ) : status.state === "failed" ? (
+            // An apply's reason is the receipt's own line below; a check has no receipt to say it.
+            <span data-tone={status.during === "check" ? "caution" : "alarm"}>
+              {status.during === "check"
+                ? `Update check failed: ${status.message}`
+                : "Update failed. Recheck to plan again."}
+            </span>
+          ) : status.state === "idle" && plan ? (
+            <>
+              <span>
+                Up to date <span className="face-mono">{plan.current}</span>
+              </span>
+              <span className="text-ink-2">checked {hhmm(plan.observedAtUtc)}</span>
+            </>
+          ) : status.state === "idle" ? (
             <span className="text-ink-2">The update feed has not been read yet.</span>
-          )}
+          ) : null}
           <span className="ml-auto">{recheck}</span>
         </span>
+        {status.state === "idle" && status.checkError ? (
+          <span data-tone="caution">Update check failed: {status.checkError}</span>
+        ) : null}
+        <AutomaticUpdates reading={reading} fixture={fixture} />
         <Receipt machine={machine} gap={gap} />
       </div>
     );
-  if (!plan.available || receiptRunning(machine))
+  }
+  if (status.state === "downloading" || status.state === "applying")
     return (
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1" aria-label={`update ${status.state}`}>
         <span className="flex items-center gap-2">
-          {plan.available ? (
-            <span>
-              Updating to <span className="face-mono">{plan.latest}</span>
-            </span>
-          ) : (
-            <span>
-              Up to date <span className="face-mono">{plan.current}</span>
-            </span>
-          )}
-          <span className="text-ink-2">checked {hhmm(plan.observedAtUtc)}</span>
+          <OutcomeLine
+            kind="busy"
+            label={
+              status.state === "downloading"
+                ? `Downloading ${status.to ?? "the update"}`
+                : legWords(status.leg, status.to)
+            }
+            says={machine.update.receipt?.legs.at(-1)?.detail ?? undefined}
+          />
           <span className="ml-auto">{recheck}</span>
         </span>
+        <AutomaticUpdates reading={reading} fixture={fixture} />
         <Receipt machine={machine} gap={gap} />
       </div>
     );
+  const plan = status.plan;
   const blockers = blockersOf(plan);
+  const blockedByRevit = blockers.some(({ revit }) => revit !== null);
   const closing = plan.effects.close.length;
   const reopening = plan.effects.reopen.length;
   const unknown = plan.revits.filter((revit) => revit.unknown);
@@ -148,12 +237,11 @@ export function UpdateGroup({ reading, fixture }: { reading: Reading<Machine>; f
           from <span className="face-mono">{plan.current}</span>
           {plan.msi ? ` · ${mb(plan.msi.size)}` : ""}
         </span>
-        <span
-          className="ml-auto face-mono text-ink-2"
-          title={`consent binds to ${plan.planId}; a changed Revit re-plans and asks again`}
+        <TooltipHint
+          content={`consent binds to ${plan.planId}; a changed Revit re-plans and asks again`}
         >
-          {plan.planId.slice(-9)}
-        </span>
+          <span className="ml-auto face-mono text-ink-2">{plan.planId.slice(-9)}</span>
+        </TooltipHint>
       </span>
       {blockers.map(({ blocker, revit }) => (
         <div
@@ -178,27 +266,42 @@ export function UpdateGroup({ reading, fixture }: { reading: Reading<Machine>; f
         </div>
       ))}
       <span className="text-ink-2">
-        Closes {closing} Revit{closing === 1 ? "" : "s"} keeping their work, installs, then reopens{" "}
-        {reopening} document{reopening === 1 ? "" : "s"}.
-        {unknown.length
-          ? ` Revit ${unknown.map((revit) => revit.year).join(", ")} is not answering yet; its documents are unknown and are kept if it answers.`
-          : ""}
+        {blockedByRevit ? (
+          "Revit is open. Update saves your work, restarts Revit and reopens your documents."
+        ) : (
+          <>
+            Closes {closing} Revit{closing === 1 ? "" : "s"} keeping their work, installs, then
+            reopens {reopening} document{reopening === 1 ? "" : "s"}.
+            {unknown.length
+              ? ` Revit ${unknown.map((revit) => revit.year).join(", ")} is not answering yet; its documents are unknown and are kept if it answers.`
+              : ""}
+          </>
+        )}
       </span>
       <span className="flex flex-wrap items-center gap-2">
-        <ActionButton
-          tone="commit"
-          label={`close ${closing} Revit${closing === 1 ? "" : "s"} and update`}
+        <Button
+          kind="commit"
+          label={
+            blockedByRevit
+              ? "Update"
+              : `close ${closing} Revit${closing === 1 ? "" : "s"} and update`
+          }
           reason={consent.refusal ?? `pe-revit update apply ${plan.planId}`}
-          disabled={consent.refusal !== null}
+          refusal={consent.refusal}
           busy={consent.pending}
           onClick={() => void consent.consent()}
-        />
+        >
+          {blockedByRevit
+            ? "Update"
+            : `close ${closing} Revit${closing === 1 ? "" : "s"} and update`}
+        </Button>
         {recheck}
       </span>
       {consent.refusal && blockers.length ? (
         <span data-tone="caution">Consent waits for the blocker above.</span>
       ) : null}
       {consent.error ? <OutcomeLine kind="refused" label={consent.error.message} /> : null}
+      <AutomaticUpdates reading={reading} fixture={fixture} />
       <Receipt machine={machine} gap={gap} />
     </div>
   );

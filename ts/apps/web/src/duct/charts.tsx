@@ -7,6 +7,7 @@
  */
 import { useRef, useState, type PointerEvent } from "react";
 
+import { dash } from "@pe/kit/lib/token";
 import { C, EXP, diameterFor, read, ticks, type Face, type Range } from "./ductulator";
 import { BASE, CURSOR, DISK } from "./wheel";
 
@@ -14,7 +15,14 @@ const INK2 = "var(--color-ink-2)";
 const fmt = (n: number, d = 2) => n.toLocaleString(undefined, { maximumFractionDigits: d });
 
 type Pt = readonly [number, number];
-type Series = { key: string; label: string; color: string; dash?: string; pts: Pt[]; labelAt?: "end" | "mid" };
+type Series = {
+  key: string;
+  label: string;
+  color: string;
+  dash?: "seam" | "reference" | "void";
+  pts: Pt[];
+  labelAt?: "end" | "mid";
+};
 
 const W = 420;
 const H = 300;
@@ -44,8 +52,10 @@ function LogLog({
   const [hover, setHover] = useState<Pt | null>(null);
   const down = useRef(false);
   const lx = (v: number) => Math.log10(v);
-  const sx = (v: number) => M.l + ((lx(v) - lx(x.range[0])) / (lx(x.range[1]) - lx(x.range[0]))) * (W - M.l - M.r);
-  const sy = (v: number) => H - M.b - ((lx(v) - lx(y.range[0])) / (lx(y.range[1]) - lx(y.range[0]))) * (H - M.t - M.b);
+  const sx = (v: number) =>
+    M.l + ((lx(v) - lx(x.range[0])) / (lx(x.range[1]) - lx(x.range[0]))) * (W - M.l - M.r);
+  const sy = (v: number) =>
+    H - M.b - ((lx(v) - lx(y.range[0])) / (lx(y.range[1]) - lx(y.range[0]))) * (H - M.t - M.b);
   const inX = (v: number) => v >= x.range[0] && v <= x.range[1];
   const inY = (v: number) => v >= y.range[0] && v <= y.range[1];
 
@@ -54,8 +64,11 @@ function LogLog({
     const px = ((e.clientX - b.left) / b.width) * W;
     const py = ((e.clientY - b.top) / b.height) * H;
     if (px < M.l || px > W - M.r || py < M.t || py > H - M.b) return null;
-    const vx = 10 ** (lx(x.range[0]) + ((px - M.l) / (W - M.l - M.r)) * (lx(x.range[1]) - lx(x.range[0])));
-    const vy = 10 ** (lx(y.range[0]) + ((H - M.b - py) / (H - M.t - M.b)) * (lx(y.range[1]) - lx(y.range[0])));
+    const vx =
+      10 ** (lx(x.range[0]) + ((px - M.l) / (W - M.l - M.r)) * (lx(x.range[1]) - lx(x.range[0])));
+    const vy =
+      10 **
+      (lx(y.range[0]) + ((H - M.b - py) / (H - M.t - M.b)) * (lx(y.range[1]) - lx(y.range[0])));
     return [vx, vy];
   };
   const move = (e: PointerEvent) => {
@@ -107,44 +120,116 @@ function LogLog({
         </defs>
         {/* grid: decades solid, 2 and 5 faint */}
         <g stroke="var(--color-line)" strokeWidth={0.5}>
-          {ticks(x.range, [1, 2, 5]).filter((t) => t.label).map((t) => (
-            <line key={`x${t.v}`} x1={sx(t.v)} x2={sx(t.v)} y1={M.t} y2={H - M.b} opacity={Math.log10(t.v) % 1 === 0 ? 1 : 0.4} />
-          ))}
-          {ticks(y.range, [1, 2, 5]).filter((t) => t.label).map((t) => (
-            <line key={`y${t.v}`} y1={sy(t.v)} y2={sy(t.v)} x1={M.l} x2={W - M.r} opacity={Math.log10(t.v) % 1 === 0 ? 1 : 0.4} />
-          ))}
+          {ticks(x.range, [1, 2, 5])
+            .filter((t) => t.label)
+            .map((t) => (
+              <line
+                key={`x${t.v}`}
+                x1={sx(t.v)}
+                x2={sx(t.v)}
+                y1={M.t}
+                y2={H - M.b}
+                opacity={Math.log10(t.v) % 1 === 0 ? 1 : 0.4}
+              />
+            ))}
+          {ticks(y.range, [1, 2, 5])
+            .filter((t) => t.label)
+            .map((t) => (
+              <line
+                key={`y${t.v}`}
+                y1={sy(t.v)}
+                y2={sy(t.v)}
+                x1={M.l}
+                x2={W - M.r}
+                opacity={Math.log10(t.v) % 1 === 0 ? 1 : 0.4}
+              />
+            ))}
         </g>
         <g fontSize={8} fill={INK2}>
-          {ticks(x.range, [1, 2, 5]).filter((t) => t.label).map((t) => (
-            <text key={t.v} x={sx(t.v)} y={H - M.b + 11} textAnchor="middle">{t.label}</text>
-          ))}
-          {ticks(y.range, [1, 2, 5]).filter((t) => t.label).map((t) => (
-            <text key={t.v} x={M.l - 4} y={sy(t.v) + 3} textAnchor="end">{t.label}</text>
-          ))}
-          <text x={W - M.r} y={H - 4} textAnchor="end" letterSpacing={0.8}>{x.label}</text>
-          <text x={M.l} y={M.t - 2} transform={`rotate(-90 ${M.l - 30} ${M.t + 8})`} letterSpacing={0.8} />
-          <text x={M.l + 2} y={M.t + 8} letterSpacing={0.8}>{y.label}</text>
+          {ticks(x.range, [1, 2, 5])
+            .filter((t) => t.label)
+            .map((t) => (
+              <text key={t.v} x={sx(t.v)} y={H - M.b + 11} textAnchor="middle">
+                {t.label}
+              </text>
+            ))}
+          {ticks(y.range, [1, 2, 5])
+            .filter((t) => t.label)
+            .map((t) => (
+              <text key={t.v} x={M.l - 4} y={sy(t.v) + 3} textAnchor="end">
+                {t.label}
+              </text>
+            ))}
+          <text x={W - M.r} y={H - 4} textAnchor="end" letterSpacing={0.8}>
+            {x.label}
+          </text>
+          <text
+            x={M.l}
+            y={M.t - 2}
+            transform={`rotate(-90 ${M.l - 30} ${M.t + 8})`}
+            letterSpacing={0.8}
+          />
+          <text x={M.l + 2} y={M.t + 8} letterSpacing={0.8}>
+            {y.label}
+          </text>
         </g>
         <g clipPath={`url(#${id})`} fill="none" strokeWidth={1.25} strokeLinejoin="round">
           {series.map((s) => (
-            <path key={s.key} d={path(s.pts)} stroke={s.color} strokeDasharray={s.dash} />
+            <path
+              key={s.key}
+              d={path(s.pts)}
+              stroke={s.color}
+              strokeDasharray={s.dash ? dash(s.dash) : undefined}
+            />
           ))}
         </g>
         <g fontSize={7.5} fill={INK2}>
           {series.map((s) => {
             const e = endLabel(s);
-            return e && <text key={s.key} x={sx(e[0]) + 3} y={sy(e[1]) - 2}>{s.label}</text>;
+            return (
+              e && (
+                <text key={s.key} x={sx(e[0]) + 3} y={sy(e[1]) - 2}>
+                  {s.label}
+                </text>
+              )
+            );
           })}
         </g>
         {hover && (
           <g pointerEvents="none">
-            <line x1={sx(hover[0])} x2={sx(hover[0])} y1={M.t} y2={H - M.b} stroke={INK2} strokeWidth={0.5} strokeDasharray="2 2" />
-            <line y1={sy(hover[1])} y2={sy(hover[1])} x1={M.l} x2={W - M.r} stroke={INK2} strokeWidth={0.5} strokeDasharray="2 2" />
-            <text x={W - M.r} y={M.t + 8} textAnchor="end" fontSize={8} fill="var(--color-ink)">{readout(hover)}</text>
+            <line
+              x1={sx(hover[0])}
+              x2={sx(hover[0])}
+              y1={M.t}
+              y2={H - M.b}
+              stroke={INK2}
+              strokeWidth={0.5}
+              strokeDasharray={dash("seam")}
+            />
+            <line
+              y1={sy(hover[1])}
+              y2={sy(hover[1])}
+              x1={M.l}
+              x2={W - M.r}
+              stroke={INK2}
+              strokeWidth={0.5}
+              strokeDasharray={dash("seam")}
+            />
+            <text x={W - M.r} y={M.t + 8} textAnchor="end" fontSize={8} fill="var(--color-ink)">
+              {readout(hover)}
+            </text>
           </g>
         )}
         {inX(point[0]) && inY(point[1]) && (
-          <circle cx={sx(point[0])} cy={sy(point[1])} r={4} fill={CURSOR} stroke="var(--color-document)" strokeWidth={2} pointerEvents="none" />
+          <circle
+            cx={sx(point[0])}
+            cy={sy(point[1])}
+            r={4}
+            fill={CURSOR}
+            stroke="var(--color-document)"
+            strokeWidth={2}
+            pointerEvents="none"
+          />
         )}
       </svg>
     </figure>
@@ -170,19 +255,24 @@ export function DuctCharts({
 }) {
   const { friction, velocity } = read(cfm, diameter);
   const r = face.range;
-  const within = ([lo, hi]: Range) => (v: number) => v >= lo && v <= hi;
+  const within =
+    ([lo, hi]: Range) =>
+    (v: number) =>
+      v >= lo && v <= hi;
 
   const constantD: Series[] = SIZES.filter(within(r.diameter)).map((D) => ({
     key: `D${D}`,
     label: `${D}″`,
     color: BASE,
-    pts: logspace(r.friction).map((dp) => [dp, ((dp * D ** EXP.diameter) / C) ** (1 / EXP.cfm)] as const),
+    pts: logspace(r.friction).map(
+      (dp) => [dp, ((dp * D ** EXP.diameter) / C) ** (1 / EXP.cfm)] as const,
+    ),
   }));
   const constantV: Series[] = SPEEDS.filter(within(r.velocity)).map((V) => ({
     key: `V${V}`,
     label: `${V} fpm`,
     color: DISK,
-    dash: "3 3",
+    dash: "void",
     labelAt: "mid",
     pts: logspace(r.cfmFriction).map((Q) => {
       const D = Math.sqrt((576 * Q) / (Math.PI * V));
@@ -210,7 +300,14 @@ export function DuctCharts({
         note={`slope −${EXP.diameter}  ·  Δp = ${fmt(C * cfm ** EXP.cfm, 0)} / D^${EXP.diameter}`}
         x={{ label: "DIAMETER · IN", range: r.diameter }}
         y={{ label: "IN. WG / 100 FT", range: r.friction }}
-        series={[{ key: "dp", label: "", color: BASE, pts: logspace(r.diameter).map((D) => [D, read(cfm, D).friction] as const) }]}
+        series={[
+          {
+            key: "dp",
+            label: "",
+            color: BASE,
+            pts: logspace(r.diameter).map((D) => [D, read(cfm, D).friction] as const),
+          },
+        ]}
         point={[diameter, friction]}
         readout={([D]) => `${fmt(D, 1)}″ → ${fmt(read(cfm, D).friction, 3)} in. wg`}
         onPick={([D]) => onPick({ diameter: D })}
@@ -220,7 +317,14 @@ export function DuctCharts({
         note={`slope ${EXP.cfm}  ·  Δp = ${(C / diameter ** EXP.diameter).toExponential(2)} · Q^${EXP.cfm}`}
         x={{ label: "CFM", range: r.cfmFriction }}
         y={{ label: "IN. WG / 100 FT", range: r.friction }}
-        series={[{ key: "dp", label: "", color: BASE, pts: logspace(r.cfmFriction).map((Q) => [Q, read(Q, diameter).friction] as const) }]}
+        series={[
+          {
+            key: "dp",
+            label: "",
+            color: BASE,
+            pts: logspace(r.cfmFriction).map((Q) => [Q, read(Q, diameter).friction] as const),
+          },
+        ]}
         point={[cfm, friction]}
         readout={([Q]) => `${fmt(Q, 0)} cfm → ${fmt(read(Q, diameter).friction, 3)} in. wg`}
         onPick={([Q]) => onPick({ cfm: Q })}
@@ -230,7 +334,14 @@ export function DuctCharts({
         note={`slope −${EXP.velocityDiameter}  ·  V = 576·${fmt(cfm, 0)} / (π·D²)`}
         x={{ label: "DIAMETER · IN", range: r.diameter }}
         y={{ label: "FPM", range: r.velocity }}
-        series={[{ key: "v", label: "", color: DISK, pts: logspace(r.diameter).map((D) => [D, read(cfm, D).velocity] as const) }]}
+        series={[
+          {
+            key: "v",
+            label: "",
+            color: DISK,
+            pts: logspace(r.diameter).map((D) => [D, read(cfm, D).velocity] as const),
+          },
+        ]}
         point={[diameter, velocity]}
         readout={([D]) => `${fmt(D, 1)}″ → ${fmt(read(cfm, D).velocity, 0)} fpm`}
         onPick={([D]) => onPick({ diameter: D })}

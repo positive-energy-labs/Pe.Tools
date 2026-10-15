@@ -21,7 +21,7 @@
  *   · both capability refusals that render differently: locked (reason carries which) · nohome.
  *   · a value long enough to prove the footline clamp and the no-icons-in-cells ruling.
  */
-import type { StateCellProps } from "#/components/lang/cell";
+import type { StateCellProps } from "@pe/kit/lang/cell";
 
 /* ── 1 · the parameter table ────────────────────────────────────────────────────────────── */
 

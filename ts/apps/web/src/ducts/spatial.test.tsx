@@ -9,7 +9,7 @@ import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeAll, expect, it } from "vite-plus/test";
 import { ductsRouteState } from "@pe/agent-contracts";
 
-import { VERDICT_INK } from "#/components/master-table/cells";
+import { VERDICT_INK } from "@pe/kit/table/cells";
 import {
   ENCODINGS,
   ENCODING_KEYS,

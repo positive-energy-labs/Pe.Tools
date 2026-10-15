@@ -3,7 +3,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { transitionPatches } from "@pe/agent-contracts";
 
-import type { CellWire } from "#/components/lang/band";
+import type { CellWire } from "#/components/work/band";
 import { AnatomyDrawing } from "#/family/anatomy";
 import type { FieldState } from "#/family/host";
 import { initialDraft, savedFrom } from "#/family/model";
@@ -11,12 +11,12 @@ import { familySource } from "#/family/source";
 import type { FamilyStore } from "#/family/store";
 import { FamilyWorkspaceProvider } from "#/family/workspace-context";
 import { useFamilyIdentityColumns } from "#/family/workspace-identity-columns";
-import type { TableState } from "#/components/master-table/model";
+import type { TableState } from "@pe/kit/table/model";
 import { useFamilyWorkspaceCore } from "#/family/workspace-core";
 import { FamilyWorkspaceDocPane } from "#/family/workspace-doc-pane";
 import { useFamilyTypeColumn } from "#/family/workspace-type-column";
 
-vi.mock("#/lib/token", () => ({ token: () => "currentColor", dash: () => "none" }));
+vi.mock("@pe/kit/lib/token", () => ({ token: () => "currentColor", dash: () => "none" }));
 afterEach(cleanup);
 
 const raw = JSON.stringify({
@@ -130,15 +130,19 @@ const verbs = (scope: HTMLElement) =>
     .map((button) => button.getAttribute("aria-label") ?? button.textContent)
     .filter((name) => name === "accept" || name === "deny");
 
-test("a cell draws Pea's value and keeps the original for the tooltip", () => {
+test("a cell draws Pea's value and keeps the original for the tooltip", async () => {
   render(<Harness wire={{ segment: "cells", revision: 3, write: async () => null }} />);
   const width = screen.getByRole("region", { name: "width" });
   // the type holds 30in; Pea proposes 36in: the cell prints 36in, hover says 30in
   const cell = within(width).getByDisplayValue("36in").closest<HTMLElement>(".dl-cell")!;
   expect(within(width).queryByDisplayValue("30in")).toBeNull();
   expect(cell.dataset.body).toBe("proposed");
-  expect(cell.title).toContain("currently 30in");
-  expect(cell.title).toContain("proposed by pea");
+  expect(cell.hasAttribute("title")).toBe(false);
+  fireEvent.keyDown(document.body, { key: "Tab" });
+  await act(async () => within(width).getByDisplayValue("36in").focus());
+  const hint = await screen.findByRole("tooltip");
+  expect(hint.textContent).toContain("currently 30in");
+  expect(hint.textContent).toContain("proposed by pea");
 });
 
 test("a proposal on a parameter the reading lacks draws in its row, and accept writes it", async () => {

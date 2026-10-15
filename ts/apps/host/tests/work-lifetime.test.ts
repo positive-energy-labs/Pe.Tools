@@ -1,3 +1,4 @@
+import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +14,13 @@ import { RouteWorkspace, type RouteWorkspaceRegistration } from "@pe/runtime";
 import { Effect, PubSub } from "effect";
 import type { RevitBridge, HostBridgeEvent, BridgeSessionView } from "../src/bridge.ts";
 import { createPeRoutes, fileRouteDocumentStore, makeHostPeRoutes } from "../src/pe-routes.ts";
+import { withInvocationContext } from "@pe/runtime/context";
+import type { Caller } from "@pe/agent-contracts";
+import { human, pea } from "./callers.ts";
+
+/** Route writes cross as the human the identity middleware would mint for the web app. */
+const asHuman = (owner: { fetch: (request: Request) => Promise<Response> }) => (request: Request) =>
+  withInvocationContext({ caller: human }, () => owner.fetch(request));
 
 const registrations = [
   {
@@ -46,7 +54,7 @@ test("HTTP Work written before workspace recreation is swept by the next workspa
       store,
       heads: { observe: () => () => {} },
     });
-    const written = await app.fetch(
+    const written = await asHuman(app)(
       new Request(`${path.replace("?", "/apply?")}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -60,7 +68,7 @@ test("HTTP Work written before workspace recreation is swept by the next workspa
     expect(await restarted.sweepOpen([{ session: "session", openId: "still-open" }])).toBe(1);
     expect(await restarted.sweepOpen([{ session: "session", openId: "still-open" }])).toBe(0);
     expect(await restarted.read(open, "test")).toBeNull();
-    const read = await app.fetch(new Request(path));
+    const read = await asHuman(app)(new Request(path));
     expect(await read.json()).toMatchObject({ revision: 0, doc: { count: 0 } });
 
     // Save As moves the bytes; closing the original lifetime cannot discard the addressed Work.
@@ -70,14 +78,14 @@ test("HTTP Work written before workspace recreation is swept by the next workspa
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ expectedRevision: 0, patches: [{ path: ["count"], value: 9 }] }),
       });
-    expect(await (await app.fetch(apply())).json()).toMatchObject({ ok: true });
+    expect(await (await asHuman(app)(apply())).json()).toMatchObject({ ok: true });
     const addressed = `${path}&target=${encodeURIComponent("C:\\Models\\Saved.rvt")}`;
-    expect(await (await app.fetch(new Request(addressed))).json()).toMatchObject({
+    expect(await (await asHuman(app)(new Request(addressed))).json()).toMatchObject({
       revision: 1,
       doc: { count: 9 },
     });
     expect(await restarted.sweepOpen([{ session: "session", openId: "still-open" }])).toBe(0);
-    expect(await (await app.fetch(new Request(addressed))).json()).toMatchObject({
+    expect(await (await asHuman(app)(new Request(addressed))).json()).toMatchObject({
       revision: 1,
       doc: { count: 9 },
     });
@@ -119,7 +127,7 @@ test("host HTTP publishes one discard when a bridge frame closes the last docume
           yield* Effect.addFinalizer(() => Effect.sync(() => threads.close()));
           yield* Effect.gen(function* () {
             yield* Effect.promise(async () => {
-              const response = await host.fetch(
+              const response = await asHuman(host)(
                 new Request(
                   `http://host/pe/resources?keys=${encodeURIComponent(JSON.stringify([{ kind: "world" }]))}`,
                 ),
@@ -135,7 +143,7 @@ test("host HTTP publishes one discard when a bridge frame closes the last docume
                 }
               })();
               try {
-                const written = await host.fetch(
+                const written = await asHuman(host)(
                   new Request(path.replace("?", "/apply?"), {
                     method: "POST",
                     headers: { "content-type": "application/json" },
@@ -161,7 +169,7 @@ test("host HTTP publishes one discard when a bridge frame closes the last docume
                   );
                 await expect.poll(() => discards().length).toBe(1);
                 emit();
-                const read = await host.fetch(new Request(path));
+                const read = await asHuman(host)(new Request(path));
                 expect(await read.json()).toMatchObject({ revision: 0, doc: { count: 0 } });
                 expect(discards()).toHaveLength(1);
               } finally {
@@ -198,8 +206,9 @@ test("HTTP authored writes enforce short local revision checks", async () => {
     catalogReads.push(session),
     {
       at: "2026-09-14T22:54:30.125Z",
-      sessions: [],
+      machine: machineFixture(),
       sources: {},
+      diagnostics: [],
       capabilities: [],
     }
   );
@@ -251,43 +260,49 @@ test("HTTP authored writes enforce short local revision checks", async () => {
   });
   const queryA = `target=${encodeURIComponent(address(String.raw`C:\Models\A.rvt`))}`;
   expect(
-    await app.fetch(new Request("http://local/pe/capabilities?session=session-exact")),
+    await asHuman(app)(new Request("http://local/pe/capabilities?session=session-exact")),
   ).toMatchObject({ status: 200 });
-  expect(catalogReads).toContain("session-exact");
-  const response = await app.fetch(
+  expect(catalogReads).toContainEqual({ bridgeSessionId: "session-exact", session: undefined });
+  const response = await asHuman(app)(
     new Request("http://local/pe/route-state/test-route?target=not-an-address"),
   );
   expect(response.status).toBe(400);
   expect(await response.json()).toMatchObject({ error: /invalid Target/ });
   // E2E-J1: a registered route with no Work reads the empty document at r0.
-  const absent = await app.fetch(new Request(`http://local/pe/route-state/test-route?${queryA}`));
+  const absent = await asHuman(app)(
+    new Request(`http://local/pe/route-state/test-route?${queryA}`),
+  );
   expect(absent.status).toBe(200);
   expect(await absent.json()).toMatchObject({ route: "test-route", revision: 0, doc: {} });
-  const unknown = await app.fetch(new Request(`http://local/pe/route-state/nope?${queryA}`));
+  const unknown = await asHuman(app)(new Request(`http://local/pe/route-state/nope?${queryA}`));
   expect(unknown.status).toBe(404);
   expect(await unknown.json()).toEqual({ error: "unknown route 'nope'" });
 
-  const post = (path: string, body: unknown) =>
-    app.fetch(
-      new Request(`http://local${path}?${queryA}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      }),
+  const post = (path: string, body: unknown, as: Caller = human) =>
+    withInvocationContext({ caller: as }, () =>
+      app.fetch(
+        new Request(`http://local${path}?${queryA}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      ),
     );
   expect(
     await (
-      await post("/pe/agent/route-state/test-route/apply", {
-        patches: [{ path: ["values", "http"], value: "landed" }],
-        expectedRevision: 0,
-      })
+      await post(
+        "/pe/route-state/test-route/apply",
+        { patches: [{ path: ["values", "http"], value: "landed" }], expectedRevision: 0 },
+        pea(),
+      )
     ).json(),
   ).toMatchObject({ ok: true, revision: 1 });
   // F-H6-4: a malformed body names the failing field and its shape.
-  const stringPath = await post("/pe/agent/route-state/test-route/apply", {
-    patches: [{ path: "scope.proposal", value: 1 }],
-    expectedRevision: 1,
-  });
+  const stringPath = await post(
+    "/pe/route-state/test-route/apply",
+    { patches: [{ path: "scope.proposal", value: 1 }], expectedRevision: 1 },
+    pea(),
+  );
   expect(stringPath.status).toBe(400);
   expect(await stringPath.json()).toMatchObject({
     ok: false,
@@ -295,7 +310,7 @@ test("HTTP authored writes enforce short local revision checks", async () => {
     error: 'invalid body at patches[0].path: must be a segment array, e.g. ["scope","proposal"]',
   });
   expect(
-    await (await post("/pe/agent/route-state/test-route/apply", { patches: [] })).json(),
+    await (await post("/pe/route-state/test-route/apply", { patches: [] }, pea())).json(),
   ).toMatchObject({ error: expect.stringMatching(/^invalid body at expectedRevision: /) });
   const command = { command: "increment", input: {}, expectedRevision: 1 };
   expect(await (await post("/pe/route-state/test-route/command", command)).json()).toMatchObject({
@@ -309,18 +324,20 @@ test("HTTP authored writes enforce short local revision checks", async () => {
   ).toMatchObject({ ok: false, code: "stale_revision" });
   // Start fresh is a human verb: Pea's door refuses it, and readable Work has nothing to set aside.
   expect(
-    await (await post("/pe/agent/route-state/test-route/start-fresh", {})).json(),
+    await (await post("/pe/route-state/test-route/start-fresh", {}, pea())).json(),
   ).toMatchObject({ ok: false, error: "start fresh is human-only" });
   expect(await (await post("/pe/route-state/test-route/start-fresh", {})).json()).toMatchObject({
     ok: false,
     error: "this route's Work is readable",
   });
   // Salvage is a human read: a route that declares none has nothing (404); Pea is refused by name.
-  const salvage = (prefix: string) =>
-    app.fetch(new Request(`http://local${prefix}/test-route/salvage?${queryA}`));
-  expect((await salvage("/pe/route-state")).status).toBe(404);
-  const pea = await salvage("/pe/agent/route-state");
-  expect(pea.status).toBe(403);
-  expect(await pea.json()).toMatchObject({ ok: false, error: "salvage is human-only" });
+  const salvage = (as: Caller) =>
+    withInvocationContext({ caller: as }, () =>
+      app.fetch(new Request(`http://local/pe/route-state/test-route/salvage?${queryA}`)),
+    );
+  expect((await salvage(human)).status).toBe(404);
+  const refused = await salvage(pea());
+  expect(refused.status).toBe(403);
+  expect(await refused.json()).toMatchObject({ ok: false, error: "salvage is human-only" });
   expect(externalCalls).toBe(0);
 });

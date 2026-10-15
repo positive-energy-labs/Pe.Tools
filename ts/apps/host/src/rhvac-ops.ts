@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { tmpdir } from "node:os";
+import { mkdirSync } from "node:fs";
+import { productScratchPath } from "@pe/host-contracts/service-identity";
 import { dirname, join, resolve } from "node:path";
 import { Effect, FileSystem, Option } from "effect";
 import type {
@@ -406,7 +407,9 @@ const parseJson = Effect.fnUntraced(function* (key: string, text: string, label:
 });
 
 function tempJsonPath(purpose: string): string {
-  return join(tmpdir(), `pe-rhvac-${purpose}-${randomUUID()}.json`);
+  const scratch = productScratchPath();
+  mkdirSync(scratch, { recursive: true });
+  return join(scratch, `pe-rhvac-${purpose}-${randomUUID()}.json`);
 }
 
 function removeQuietly(path: string) {

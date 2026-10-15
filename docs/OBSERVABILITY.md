@@ -1,7 +1,7 @@
 # Observability
 
-PostHog-only, no auth: the project API key is a public write-only ingest key. Resolution order
-(both clients, must stay identical):
+PostHog-only, no auth: the project API key is a public write-only ingest key. Current resolution order
+(both clients, must stay identical until ADR 0018 lands):
 
 1. **Installed product manifest** (authoritative — the key rides the release):
    `%LOCALAPPDATA%\Positive Energy\Pe.Tools\product.payloads.json` →
@@ -9,7 +9,11 @@ PostHog-only, no auth: the project API key is a public write-only ingest key. Re
 2. **Settings fallback** (dev/override): `Documents\Pe.Tools\settings\Global\settings.json` →
    `{ "posthog": { "apiKey": "phc_...", "host": "..." } }`
 
-No key → all capture is a no-op. Two implementations, same event shapes:
+No key → all capture is a no-op. Ruled target (ADR 0018, 2026-10-13): lane selects the
+key source first; `dev` reads only the explicit preferences key (no fallback to the installed
+manifest), `installed` reads the manifest. The host owns the one PostHog client; the browser and
+the add-in forward typed facts to it and hold no key. Current code still has two implementations,
+same event shapes:
 
 - TS: `ts/packages/runtime/src/analytics.ts` (host + pea runtime)
 - C#: `dotnet/Pe.App/Analytics/PostHogAnalytics.cs` (Revit add-in)
@@ -23,14 +27,25 @@ events) uses, so one PostHog project carries product usage AND install-failure d
 | Event | Source | Notes |
 |---|---|---|
 | `app_boot` | Revit add-in startup, host startup | version fleet + DAU denominator |
-| `pea_prompt` | `createRuntimeController` (all surfaces) | full prompt, `surface: tui\|web\|test\|acp` |
-| `tool_call` | runtime session events (`tool_end`) | full event payload |
-| `agent_turn` / `agent_error` | runtime session events (`agent_end`/`error`) | carries model usage/tokens when reported |
-| `host_op` | host `POST /call` dispatch | input, ok/error kind+message, duration — outputs deliberately not captured (op+input reproduce them) |
-| `ribbon_click` | AdWindows `ItemExecuted`, filtered to `Pe.App.Commands` | carries `doc_title`; retires as buttons migrate into Tasks |
+| `host_op` | host `POST /call` dispatch | op, ok, duration today; ruled export drops serialized input and error message (ADR 0018) |
+| `bridge_queue` | host Revit queue | `phase: queued` only when another op is ahead at enqueue; `phase: started` whenever the gate opens, with `wait_ms`. Both carry `op`, `request_id` (wire id), `session_id`, and `queue_depth` (at enqueue, including this op). Join phases by `request_id`; a blocked op retains its queued event. |
+| `ribbon_click` | AdWindows `ItemExecuted`, filtered to `Pe.App.Commands` | `doc_title` leaves export (ADR 0018); retires as buttons migrate into Tasks |
 | `palette_action` | the Do palette's tab actions (`CmdPltCommands`) | tab=commands\|tasks\|scripts, item id, ok; the funnel ribbon buttons migrate into |
-| `$exception` | Serilog Error/Fatal sink (Revit) | PostHog error tracking |
+| `$exception` | Serilog Error/Fatal sink (Revit) | PostHog error tracking; ruled export is a code-only fingerprint, no message or raw stack |
 | `ui_feedback` | web feedback picker → host `POST /pe/feedback` | user note on one picked element: comment, url, selector, component + stack names, html, rect, cropped WebP `picture` data URL (≤256KB, else `picture_error`). Awaited: the popover keeps the note until PostHog accepts |
+| `agent_feedback` | Pea's `pe_feedback` tool, host `POST /pe/agent-feedback` | Pea's report on its own tooling: surface, expected, observed, workaround, refs, with host-stamped caller, opaque thread/turn ids, harness and model. Kept locally first in `agent-feedback.jsonl`; export is best-effort (ADR 0019) |
+
+## Export boundary (ADR 0018, ruled 2026-10-13)
+
+Leaves the machine automatically: opaque install/process/browser/request ids, immutable
+component/build/version/lane stamps, timestamps, durations, closed phase/outcome/fault codes and
+counts. Never automatically: `doc_title`, operation inputs/results, usernames/hostnames, paths,
+raw URLs/messages/stacks, credentials, replay, IP/GeoIP. The exceptions are `ui_feedback`, an
+explicit human submit, and `agent_feedback` while users are coworkers (ADR 0019); both keep their content. MCP usage stats (`$mcp_tool_call`,
+`$mcp_initialize`) export tool name, duration, error flag, declared argument names and client
+identity, never parameters, results or intent. Ruled event names not yet emitted: `pea_turn`,
+`reading_timeout`, `reading_failure`, `stream_fault`, `host_fault`, `telemetry_dropped`,
+`refusal_count`, `update_outcome`. Per-event field allowlist: wave-4 plan section 4.
 
 Payloads are size-bounded at 256KB/side with `*_truncated: true` + byte size — truncation is
 itself a tuning signal, not silent loss.
@@ -38,7 +53,8 @@ itself a tuning signal, not silent loss.
 ## Deferred (re-entry triggers)
 
 - Approval/edit/reject loop events — when pea stabilizes (best cost signal once real).
-- posthog-js in the web SPA; doc-title hashing; payload privacy hardening — external users.
+- Session replay, flight-recorder rings, a durable forwarding queue, Sentry — ADR 0018 defers them
+  (Sentry until fixed grouping still fails or an issue-to-PR workflow is requested).
 - OTLP log streaming; posthog-node client — if file logs + events stop being enough.
 - GitHub auto-issues from feedback events — when weekly skimming stops scaling.
 - Opt-out surface — deliberate non-goal at internal-beta scale (the SDK CLI honors

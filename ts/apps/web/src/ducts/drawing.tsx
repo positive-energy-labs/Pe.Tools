@@ -8,7 +8,7 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import { boundsOf, type Bounds2, type Point2, type Viewport2 } from "#/lib/affine-frame";
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 import {
   DASH_CLASS,
   issueInk,

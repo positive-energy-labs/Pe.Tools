@@ -1,37 +1,77 @@
+import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
+import { HostLog } from "../src/host-log.ts";
 import { createServer, type Server } from "node:http";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { HarnessEvent, HarnessThreadBody, Provider, ThreadHead } from "@pe/agent-contracts";
+import { randomUUID } from "node:crypto";
+import type {
+  Caller,
+  HarnessEvent,
+  HarnessThreadBody,
+  Provider,
+  ThreadHead,
+  PluginHookName,
+  PluginHooks,
+} from "@pe/agent-contracts";
+import { emptyThreadHead, createPluginRuntime, HARNESS_EVENT_MAX_BYTES } from "@pe/agent-contracts";
+import { withInvocationContext } from "@pe/runtime/context";
+import { human } from "./callers.ts";
+import { admitCrossing, bindControl, onRevoke, Refused } from "../src/control.ts";
 import { createProviders } from "../src/harness/providers.ts";
-import { createHarnessThreads, IDLE_CHILD_MS, WAITING_MS } from "../src/harness/threads.ts";
+import {
+  createHarnessThreads,
+  IDLE_CHILD_MS,
+  INTERRUPT_MS,
+  WAITING_MS,
+} from "../src/harness/threads.ts";
 import * as adapter from "../src/harness/adapter.ts";
 import { peaCodexProjectConfig, userCodexMcpServers } from "../src/harness/user-shell.ts";
 import { productProvidersPath } from "../src/product-paths.ts";
 import { createUpdateReader, type UpdateRunner } from "../src/update-reader.ts";
 import type { Envelope } from "@pe/host-contracts/pe-revit-contract";
+import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
 
 let root = "";
 let previousLocalAppData: string | undefined;
 type Host = {
   fetch: (request: Request) => Promise<Response>;
+  /** Who every request crosses as: the identity middleware's stand-in. */
+  as: Caller;
+  launchScheduled: ReturnType<typeof createHarnessThreads>["launchScheduled"];
   heads: ReturnType<typeof createHarnessThreads>["heads"];
+  observe: ReturnType<typeof createHarnessThreads>["observe"];
+  log: HostLog;
   close: () => Promise<unknown>;
   consoles: string[];
 };
 const hosts: Host[] = [];
 const mcpServer = () => ({ name: "pea", command: "unused", args: [], env: [] });
 /** Threads and providers behind one fetch, as the host's router mounts them. No probe at start. */
-const host = (updatePending?: () => boolean): Host => {
+const host = (
+  updatePending?: () => boolean,
+  prepare?: () => Promise<unknown>,
+  openConsole: (command: string, opened: () => void) => Promise<void> = async (_, opened) =>
+    opened(),
+  pluginHook?: <N extends PluginHookName>(name: N, event: PluginHooks[N]) => Promise<void>,
+): Host => {
   const consoles: string[] = [];
   const providers = createProviders({
     shellPath: async () => "C:\\canary-bin;C:\\also",
     probeOnStart: false,
-    openConsole: async (command) => void consoles.push(command),
+    openConsole: async (command, _env, opened) => {
+      consoles.push(command);
+      await openConsole(command, opened);
+      return { exitCode: 0, commandExitCode: 0, logPath: join(root, "console.log") };
+    },
   });
+  const log = new HostLog(join(root, ".log", randomUUID()));
   const threads = createHarnessThreads({
+    log,
+    prepare,
+    pluginHook,
     updatePending,
     root,
     worldRoot: tmpdir(),
@@ -40,11 +80,17 @@ const host = (updatePending?: () => boolean): Host => {
     providers,
   });
   const routed: Host = {
+    as: human,
     fetch: (request) =>
-      /^\/pe\/(providers|access)/.test(new URL(request.url).pathname)
-        ? providers.fetch(request)
-        : threads.fetch(request),
+      withInvocationContext({ caller: routed.as }, () =>
+        /^\/pe\/(providers|access)/.test(new URL(request.url).pathname)
+          ? providers.fetch(request)
+          : threads.fetch(request),
+      ),
+    launchScheduled: threads.launchScheduled,
     heads: threads.heads,
+    observe: threads.observe,
+    log,
     close: threads.close,
     consoles,
   };
@@ -61,10 +107,12 @@ beforeAll(async () => {
   process.env.PE_HARNESS_ADAPTER_CODEX = process.env.PE_HARNESS_ADAPTER_CLAUDE;
 });
 afterEach(() => {
+  vi.unstubAllEnvs();
   delete process.env.FAKE_ACP_SHAPE;
   delete process.env.FAKE_ACP_AUTH;
   delete process.env.FAKE_ACP_GATE;
   delete process.env.FAKE_ACP_NATIVE_CURRENT;
+  delete process.env.FAKE_ACP_PROMPT;
   vi.useRealTimers();
 });
 afterAll(async () => {
@@ -77,6 +125,9 @@ afterAll(async () => {
 });
 
 const caller = (threads: Host) => async (method: string, path: string, body?: unknown) => {
+  // A client mints one id per prompt; a test that names none sends a fresh one.
+  if (path.endsWith("/prompt") && body && typeof body === "object" && !("id" in body))
+    body = { id: randomUUID(), ...body };
   const response = await threads.fetch(
     new Request(`http://host${path}`, {
       method,
@@ -106,6 +157,66 @@ async function until(
 const kinds = (events: HarnessEvent[]) =>
   events.map((e) => (e.kind === "update" ? `update:${e.update.sessionUpdate}` : e.kind));
 
+test("production harness boundary emits scoped turn and ACP session hooks", async () => {
+  const seen: string[] = [];
+  const plugins = createPluginRuntime<string>();
+  await plugins.install({
+    id: "observer",
+    setup(context) {
+      for (const name of [
+        "turn.before",
+        "turn.after",
+        "harness.session.started",
+        "harness.session.stopped",
+      ] as const)
+        context.hook(name, () => {
+          seen.push(name);
+        });
+    },
+  });
+  const threads = host(undefined, undefined, undefined, plugins.emit);
+  const call = caller(threads);
+  const created = await call("POST", "/pe/threads", { providerId: "claude" });
+  const id = created.json.id;
+  await until(reader(threads), id, (b) => b.models.length > 0);
+  expect(seen).toContain("harness.session.started");
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "hello" });
+  await until(reader(threads), id, (b) => b.events.some((e) => e.kind === "turn_end"));
+  expect(seen).toContain("turn.before");
+  expect(seen).toContain("turn.after");
+  await threads.close();
+  expect(seen).toContain("harness.session.stopped");
+  await plugins.close();
+});
+
+test.each(["claude", "codex"])(
+  "%s waits for admitted skill publication before starting its child",
+  async (providerId) => {
+    let release!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const prepare = vi.fn(() => ready);
+    const threads = host(undefined, prepare);
+    const created = await caller(threads)("POST", "/pe/threads", { providerId });
+    expect(created.status).toBe(200);
+    const id = created.json.id;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(prepare).toHaveBeenCalledOnce();
+    const waiting = await reader(threads)(id);
+    expect(waiting.models).toEqual([]);
+    expect(waiting.events).toEqual([]);
+    release();
+    await until(reader(threads), id, (body) => body.models.length > 0);
+  },
+);
+
+test("no route rewrites stored threads: the contribution migration door is gone", async () => {
+  const call = caller(host());
+  const migrated = await call("POST", "/pe/threads/contribution-migration", []);
+  expect(migrated.status).toBe(404);
+});
+
 test("automatic update admission refuses a new Pea prompt through download and releases on confirmed refusal", async () => {
   const planId = "64f25f46-dfa6-4ee6-b973-d7f6a8b523c4";
   let release!: () => void;
@@ -128,8 +239,8 @@ test("automatic update admission refuses a new Pea prompt through download and r
     exitCode: state === "running" ? 4 : 3,
     diagnostics: [],
     resolved: null,
-    binary: {} as Envelope<unknown>["binary"],
-    command: {} as Envelope<unknown>["command"],
+    binary: sdkBinary,
+    command: sdkCommand,
     nextSteps: [],
     guide: "update",
     related: [],
@@ -161,9 +272,7 @@ test("automatic update admission refuses a new Pea prompt through download and r
     });
     expect(refused.status).toBe(409);
     expect(refused.json.error).toContain("updating");
-    expect((await read(id)).events.some((e) => e.kind === "prompt" || e.kind === "queued")).toBe(
-      false,
-    );
+    expect((await read(id)).events.some((e) => e.kind === "prompt")).toBe(false);
     release();
     await applying;
     expect(updates.automaticPending()).toBe(true);
@@ -257,7 +366,7 @@ test("idle reaping keeps history and choices, and a prompt waits for exact-child
     });
     await realStop(child);
   });
-  const stream = await threads.fetch(new Request(`http://host/pe/threads/${id}/stream`));
+  const following = threads.observe({ kind: "thread", thread: id }, () => {}, null)!;
   try {
     await vi.advanceTimersByTimeAsync(IDLE_CHILD_MS - 1);
     expect((await read(id)).session).toBe("started");
@@ -288,12 +397,89 @@ test("idle reaping keeps history and choices, and a prompt waits for exact-child
   } finally {
     release?.();
     stop.mockRestore();
-    await stream.body?.cancel();
+    following();
     await threads.close();
   }
 });
 
-test("connect, model/trait RPCs, active turns, queued work and asks prevent idle reaping", async () => {
+test("a warm resume says it is starting, and a cancel records who asked and at which door", async () => {
+  process.env.FAKE_ACP_SHAPE = "config";
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  try {
+    await untilIo(
+      () => read(id),
+      (b) => b.models.length > 0,
+    );
+    // A live child admits the prompt with no start to announce.
+    await call("POST", `/pe/threads/${id}/prompt`, { text: "echo" });
+    const warm = await untilIo(
+      () => read(id),
+      (b) => !b.running && turnEnds(b).length === 1,
+    );
+    expect(warm.events.some((e) => e.kind === "starting")).toBe(false);
+    // Nothing is running: a cancel changes nothing and leaves no record.
+    expect((await call("POST", `/pe/threads/${id}/cancel`)).json).toEqual({ cancelled: false });
+    expect((await read(id)).events.some((e) => e.kind === "cancel_requested")).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(IDLE_CHILD_MS);
+    expect((await read(id)).session).toBe("closed");
+    await call("POST", `/pe/threads/${id}/prompt`, { text: "hang" });
+    // The reaped child is respawned after the prompt: the log says so before the session does.
+    const resumed = await untilIo(
+      () => read(id),
+      (b) => b.session === "resumed" && lastEcho(b) === "echo: hang",
+    );
+    expect(kinds(resumed.events.slice(warm.events.length)).slice(0, 3)).toEqual([
+      "prompt",
+      "starting",
+      "session",
+    ]);
+    expect(resumed.events.find((e) => e.kind === "starting")).toMatchObject({
+      turnId: resumed.events.findLast((e) => e.kind === "prompt")?.turnId,
+    });
+
+    threads.as = { kind: "human", via: "cli" };
+    await call("POST", `/pe/threads/${id}/cancel`);
+    const stopped = await untilIo(
+      () => read(id),
+      (b) => !b.running,
+    );
+    expect(kinds(stopped.events.slice(resumed.events.length))).toEqual([
+      "cancel_requested",
+      "turn_end",
+    ]);
+    expect(stopped.events.findLast((e) => e.kind === "cancel_requested")).toMatchObject({
+      turnId: stopped.events.findLast((e) => e.kind === "prompt")?.turnId,
+      by: { kind: "human", via: "cli" },
+      door: `/pe/threads/${id}/cancel`,
+    });
+
+    // A prompt sent over a running turn cancels it too, and the record names that door.
+    threads.as = human;
+    await call("POST", `/pe/threads/${id}/prompt`, { text: "hang" });
+    await untilIo(
+      () => read(id),
+      (b) => b.running,
+    );
+    await call("POST", `/pe/threads/${id}/prompt`, { text: "echo" });
+    const interrupted = await untilIo(
+      () => read(id),
+      (b) => !b.running && turnEnds(b).length === 4,
+    );
+    expect(interrupted.events.findLast((e) => e.kind === "cancel_requested")).toMatchObject({
+      by: { kind: "human", via: "local" },
+      door: `/pe/threads/${id}/prompt`,
+    });
+  } finally {
+    await threads.close();
+  }
+});
+
+test("connect, model/trait RPCs, active turns and asks prevent idle reaping", async () => {
   process.env.FAKE_ACP_SHAPE = "config";
   const gates = await mkdtemp(join(root, "gates-"));
   process.env.FAKE_ACP_GATE = gates;
@@ -336,17 +522,14 @@ test("connect, model/trait RPCs, active turns, queued work and asks prevent idle
               ? openQuestions(b).length > 0
               : lastEcho(b) === "echo: hang",
       );
-      const queued = await call("POST", `/pe/threads/${id}/prompt`, { text: "queued" });
-      expect(queued.status).toBe(202);
       await vi.advanceTimersByTimeAsync(2 * IDLE_CHILD_MS);
       const active = await read(id);
       expect(active.session).toBe("started");
       expect(active.running).toBe(true);
-      expect(active.queued).toHaveLength(1);
       await call("POST", `/pe/threads/${id}/cancel`);
       await untilIo(
         () => read(id),
-        (b) => !b.running && b.queued.length === 0,
+        (b) => !b.running,
       );
     }
   } finally {
@@ -355,7 +538,7 @@ test("connect, model/trait RPCs, active turns, queued work and asks prevent idle
   }
 });
 
-test("a thread prompts, parks a permission, cancels, queues, renames, and replays over SSE", async () => {
+test("a thread prompts, parks a permission, cancels, interrupts, renames, and replays over SSE", async () => {
   process.env.FAKE_ACP_SHAPE = "config";
   const threads = host();
   const call = caller(threads);
@@ -399,6 +582,20 @@ test("a thread prompts, parks a permission, cancels, queues, renames, and replay
   body = await until(read, id, (b) => openAsks(b).length === 1);
   expect(body.running).toBe(true);
   const ask = openAsks(body)[0]!;
+  for (const change of [
+    { status: "settled" },
+    { status: "archived" },
+    { snoozedUntil: "2099-10-11T12:00:00.000Z" },
+  ])
+    expect(
+      (
+        await call("PUT", `/pe/threads/${id}`, {
+          expectedRevision: body.lifecycle.revision,
+          ...change,
+        })
+      ).status,
+    ).toBe(409);
+  expect((await read(id)).activity).toMatchObject({ state: "waiting", pending: 1 });
   expect(ask.toolCall).toMatchObject({ toolCallId: "t-ask permission", title: "fake tool" });
   expect(
     (await call("POST", `/pe/threads/${id}/permission`, { requestId: "nope", optionId: "yes" }))
@@ -433,27 +630,28 @@ test("a thread prompts, parks a permission, cancels, queues, renames, and replay
   expect(cancelled).not.toHaveProperty("optionId");
   expect(turnEnds(body).at(-1)).toMatchObject({ stopReason: "cancelled" });
 
-  // Cancel mid-turn, and a prompt sent while running waits in the queue, logged as `queued`.
+  // A prompt sent while a turn runs interrupts it: the turn ends cancelled, then the new one starts.
   await call("POST", `/pe/threads/${id}/prompt`, { text: "hang" });
-  await until(read, id, (b) => b.running);
-  const queued = await call("POST", `/pe/threads/${id}/prompt`, { text: "slow" });
-  expect(queued.status).toBe(202);
-  body = await read(id);
-  expect(body.queued).toEqual([{ turnId: queued.json.turnId, text: "slow" }]);
-  expect(body.events.at(-1)).toMatchObject({
-    kind: "queued",
-    turnId: queued.json.turnId,
-    text: "slow",
+  await until(read, id, (b) => lastEcho(b) === "echo: hang");
+  const interrupting = await call("POST", `/pe/threads/${id}/prompt`, { text: "slow" });
+  expect(interrupting.status).toBe(200);
+  body = await until(read, id, (b) => turnEnds(b).length === 5 && !b.running);
+  expect(
+    body.events
+      .flatMap((e) =>
+        e.kind === "prompt"
+          ? [`prompt ${e.text}`]
+          : e.kind === "turn_end"
+            ? [`end ${e.stopReason}`]
+            : [],
+      )
+      .slice(-4),
+  ).toEqual(["prompt hang", "end cancelled", "prompt slow", "end end_turn"]);
+  expect(body.events.findLast((e) => e.kind === "prompt")).toMatchObject({
+    turnId: interrupting.json.turnId,
   });
   // Cancel reads no body, so it needs no content type.
   expect((await bare(threads, "POST", `/pe/threads/${id}/cancel`)).status).toBe(200);
-  body = await until(read, id, (b) => turnEnds(b).length === 5 && !b.running);
-  expect(
-    turnEnds(body)
-      .slice(-2)
-      .map((e) => e.kind === "turn_end" && e.stopReason),
-  ).toEqual(["cancelled", "end_turn"]);
-  expect(body.queued).toEqual([]);
   expect(body.events.map((e) => e.seq)).toEqual(body.events.map((_, i) => i + 1));
 
   // Model and traits (config option branch) go through ACP and land in the log.
@@ -495,52 +693,47 @@ test("a thread prompts, parks a permission, cancels, queues, renames, and replay
 
   // A route that reads a body refuses one without a JSON content type.
   expect((await bare(threads, "POST", `/pe/threads/${id}/prompt`)).status).toBe(415);
+}, 30_000);
 
-  // SSE replays after `after`, then tails live.
-  body = await read(id);
-  const after = body.events.length - 1;
-  const response = await threads.fetch(
-    new Request(`http://host/pe/threads/${id}/stream?after=${after}`),
-  );
-  expect(response.headers.get("content-type")).toBe("text/event-stream");
-  const stream = response.body!.getReader();
-  const seen: HarnessEvent[] = [];
-  let buffer = "";
-  const pump = async (count: number) => {
-    while (seen.length < count) {
-      buffer += new TextDecoder().decode((await stream.read()).value);
-      for (const match of buffer.matchAll(/^data: (.*)$/gm)) seen.push(JSON.parse(match[1]!));
-      buffer = buffer.slice(buffer.lastIndexOf("\n\n") + 2);
-    }
-  };
-  await pump(1);
-  expect(seen.map((e) => e.seq)).toEqual([after + 1]);
-  await call("POST", `/pe/threads/${id}/prompt`, { text: "live" });
-  await pump(5);
-  expect(kinds(seen)).toEqual([
-    "title_changed",
-    "prompt",
-    "update:agent_message_chunk",
-    "update:tool_call",
-    "turn_end",
+test("a turn_end carries the harness's prompt usage; absent counts stay absent, no usage stays none", async () => {
+  process.env.FAKE_ACP_SHAPE = "config";
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "usage" });
+  await until(read, id, (b) => turnEnds(b).length === 1);
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "hello" });
+  const body = await until(read, id, (b) => turnEnds(b).length === 2);
+  const [withUsage, without] = turnEnds(body);
+  expect(withUsage).toMatchObject({
+    usage: { totalTokens: 15, inputTokens: 10, outputTokens: 5, cachedReadTokens: 4 },
+  });
+  expect(Object.keys((withUsage as { usage: object }).usage).sort()).toEqual([
+    "cachedReadTokens",
+    "inputTokens",
+    "outputTokens",
+    "totalTokens",
   ]);
-  await stream.cancel();
+  expect(without).not.toHaveProperty("usage");
+}, 30_000);
 
-  // A client that drops mid-stream ends its stream only; the thread keeps logging.
-  const abort = new AbortController();
-  const dropped = await threads.fetch(
-    new Request(`http://host/pe/threads/${id}/stream`, { signal: abort.signal }),
-  );
-  const droppedReader = dropped.body!.getReader();
-  await droppedReader.read();
-  await call("POST", `/pe/threads/${id}/prompt`, { text: "hang" });
-  await until(read, id, (b) => b.running);
-  abort.abort();
-  await call("POST", `/pe/threads/${id}/cancel`);
-  body = await until(read, id, (b) => !b.running);
-  expect(turnEnds(body).at(-1)).toMatchObject({ stopReason: "cancelled" });
-  let done = false;
-  while (!done) done = (await droppedReader.read()).done;
+test("every committed thread event lands in the host log in order; a delete forgets them", async () => {
+  process.env.FAKE_ACP_SHAPE = "config";
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "hello" });
+  const body = await until(read, id, (b) => turnEnds(b).length === 1);
+  const logged = threads.log
+    .read(0)
+    .entries.flatMap((e) =>
+      e.event.kind === "thread" && e.event.thread === id ? [e.event.event] : [],
+    );
+  expect(logged).toEqual(body.events);
+  await call("DELETE", `/pe/threads/${id}`);
+  expect(JSON.stringify(threads.log.read(0).entries)).not.toContain(id);
 });
 
 test("the thread head lives in meta.json, falls back for unknown ids, and is observable", async () => {
@@ -551,16 +744,25 @@ test("the thread head lives in meta.json, falls back for unknown ids, and is obs
   const target = { kind: "named", session: "s1", address: "C:\\Models\\A.rvt" };
   const seen: ThreadHead[] = [];
   const release = threads.heads.observe(id, ({ value }) => seen.push(value));
-  expect((await call("GET", `/pe/scope/${id}`)).json).toEqual({ defaultTarget: null, revision: 0 });
+  const hostNow = expect.any(String);
+  expect((await call("GET", `/pe/scope/${id}`)).json).toEqual({
+    ...emptyThreadHead,
+    hostNow,
+    grantView: null,
+  });
   const set = await call("PUT", `/pe/scope/${id}`, { defaultTarget: target, expectedRevision: 0 });
   expect(set).toEqual({
     status: 200,
-    json: { ok: true, why: "set", head: { defaultTarget: target, revision: 1 } },
+    json: {
+      ok: true,
+      why: "set",
+      head: { ...emptyThreadHead, defaultTarget: target, revision: 1, hostNow, grantView: null },
+    },
   });
   const stale = await call("PUT", `/pe/scope/${id}`, { defaultTarget: null, expectedRevision: 0 });
   expect([stale.status, stale.json.why]).toEqual([409, "stale"]);
   const meta = JSON.parse(await readFile(join(root, id, "meta.json"), "utf8"));
-  expect(meta.head).toEqual({ defaultTarget: target, revision: 1 });
+  expect(meta.head).toEqual({ ...emptyThreadHead, defaultTarget: target, revision: 1 });
   await expect.poll(() => seen.at(-1)?.revision).toBe(1);
   release();
 
@@ -571,9 +773,41 @@ test("the thread head lives in meta.json, falls back for unknown ids, and is obs
       .ok,
   ).toBe(true);
   expect((await caller(host())("GET", `/pe/scope/${loose}`)).json).toEqual({
+    ...emptyThreadHead,
     defaultTarget: target,
     revision: 1,
+    hostNow,
+    grantView: null,
   });
+});
+
+test("a prompt whose interrupt the harness ignores is refused, never queued", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "stubborn" });
+  await until(read, id, (b) => lastEcho(b) === "echo: stubborn");
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const said = (b: HarnessThreadBody) =>
+    b.events.some(
+      (e) =>
+        e.kind === "update" &&
+        (e.update as { content?: { text?: string } }).content?.text === "ignoring cancel",
+    );
+  const refused = call("POST", `/pe/threads/${id}/prompt`, { text: "after" });
+  await untilIo(() => read(id), said);
+  await vi.advanceTimersByTimeAsync(INTERRUPT_MS);
+  expect(await refused).toEqual({
+    status: 409,
+    json: {
+      error: "Claude Code did not stop the running turn within 10 s; press Stop, then send again",
+    },
+  });
+  const body = await read(id);
+  expect(body.running).toBe(true);
+  expect(body.events.filter((e) => e.kind === "prompt").map((e) => e.text)).toEqual(["stubborn"]);
+  await threads.close();
 });
 
 test("a restarted host expires open asks, ends the open turn, resumes, and keeps the model", async () => {
@@ -587,8 +821,6 @@ test("a restarted host expires open asks, ends the open turn, resumes, and keeps
   await call("POST", `/pe/threads/${id}/prompt`, { text: "permission" });
   const parked = await until(read, id, (b) => openAsks(b).length === 1);
   const turnId = parked.events.findLast((e) => e.kind === "prompt")!.turnId;
-  const queued = await call("POST", `/pe/threads/${id}/prompt`, { text: "after restart" });
-  expect(queued.status).toBe(202);
   await first.close();
 
   // A torn thread directory is skipped, never fatal.
@@ -597,16 +829,21 @@ test("a restarted host expires open asks, ends the open turn, resumes, and keeps
 
   const second = host();
   const reread = reader(second);
+  const recall = caller(second);
+  expect((await recall("POST", `/pe/threads/${id}/prompt`, { text: "after restart" })).status).toBe(
+    200,
+  );
   const resumed = await until(
     reread,
     id,
-    (b) => b.session === "resumed" && !b.running && b.queued.length === 0,
+    (b) => b.session === "resumed" && !b.running && turnEnds(b).length === 1,
   );
-  const tail = resumed.events.slice(parked.events.length + 1);
+  const tail = resumed.events.slice(parked.events.length);
   expect(kinds(tail)).toEqual([
     "permission_resolved",
     "error",
     "prompt",
+    "starting",
     "session",
     "model_changed",
     "update:agent_message_chunk",
@@ -615,7 +852,7 @@ test("a restarted host expires open asks, ends the open turn, resumes, and keeps
   ]);
   expect(tail[0]).toMatchObject({ by: "expired", requestId: openAsks(parked)[0]!.requestId });
   expect(tail[1]).toMatchObject({ turnId, message: "host restarted during this turn" });
-  expect(tail[2]).toMatchObject({ turnId: queued.json.turnId, text: "after restart" });
+  expect(tail[2]).toMatchObject({ text: "after restart" });
   expect(resumed.modelId).toBe("m2");
   expect(
     (await caller(second)("GET", "/pe/threads")).json.map((t: { id: string }) => t.id),
@@ -795,6 +1032,62 @@ const said = (body: HarnessThreadBody, name: string) =>
     )
     .find((text) => text.startsWith(`${name}=`))
     ?.slice(name.length + 1);
+
+test("subscription children exclude inherited inference credentials without changing the host", async () => {
+  const names = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"];
+  for (const name of names) vi.stubEnv(name, "synthetic-inherited-credential");
+  const threads = host();
+  for (const provider of ["claude", "codex"]) {
+    const body = await envOf(threads, provider);
+    for (const name of names) expect(said(body, name)).toBe("");
+  }
+  for (const name of names) expect(process.env[name]).toBe("synthetic-inherited-credential");
+});
+
+test("Pea children default Python output to UTF-8 and keep an explicit encoding", async () => {
+  vi.stubEnv("PYTHONIOENCODING", undefined);
+  for (const provider of ["claude", "codex"])
+    expect(said(await envOf(host(), provider), "PYTHONIOENCODING")).toBe("utf-8");
+  vi.stubEnv("PYTHONIOENCODING", "cp1252");
+  for (const provider of ["claude", "codex"])
+    expect(said(await envOf(host(), provider), "PYTHONIOENCODING")).toBe("cp1252");
+  expect(process.env.PYTHONIOENCODING).toBe("cp1252");
+});
+
+test("unsolicited config changes persist before turn end and replace the live config ids", async () => {
+  process.env.FAKE_ACP_SHAPE = "config";
+  const threads = host();
+  const call = caller(threads);
+  const {
+    json: { id },
+  } = await call("POST", "/pe/threads", { providerId: "claude" });
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "settings" });
+  const body = await until(reader(threads), id, (b) =>
+    b.events.some((e) => e.kind === "update" && e.update.sessionUpdate === "config_option_update"),
+  );
+  expect(body.running).toBe(true);
+  expect(body.modelId).toBe("m2");
+  expect(body.traits.map((trait) => trait.current)).toEqual(["high", true]);
+  await call("POST", `/pe/threads/${id}/cancel`);
+  await until(reader(threads), id, (b) => !b.running);
+  expect((await call("POST", `/pe/threads/${id}/model`, { modelId: "m1" })).status).toBe(200);
+});
+
+test("configuration acknowledgements win over requested model and trait values", async () => {
+  process.env.FAKE_ACP_SHAPE = "config";
+  vi.stubEnv("FAKE_ACP_CLAMP", "true");
+  const threads = host();
+  const call = caller(threads);
+  const created = await call("POST", "/pe/threads", { providerId: "claude" });
+  const id = created.json.id;
+  expect((await call("POST", `/pe/threads/${id}/model`, { modelId: "m2" })).json.modelId).toBe(
+    "m1",
+  );
+  const result = await call("POST", `/pe/threads/${id}/trait`, { id: "effort", value: "high" });
+  expect(result.json.traits[0].current).toBe("low");
+  expect(result.json.events.at(-1)).toMatchObject({ kind: "trait_changed", value: "low" });
+});
+
 async function envOf(threads: Host, providerId: string) {
   const call = caller(threads);
   const created = await call("POST", "/pe/threads", { providerId });
@@ -859,7 +1152,66 @@ test("providers list from the probe: readiness follows the adapter's own auth re
   expect((await call("POST", "/pe/providers/nope/probe")).status).toBe(404);
 });
 
+test("Sign in answers only once a console opened, and says why when none could", async () => {
+  const failing = caller(
+    host(undefined, undefined, async () => {
+      throw Error("spawn cmd.exe ENOENT");
+    }),
+  );
+  const refused = await failing("POST", "/pe/providers/codex/open-login");
+  expect(refused.status).toBe(502);
+  expect(refused.json.error).toMatch(
+    /^Could not open the Codex .* console: spawn cmd\.exe ENOENT$/,
+  );
+  expect(((await failing("GET", "/pe/providers/codex")).json as Provider).readiness).toEqual({
+    state: "unknown",
+    message: "Not probed yet.",
+  });
+
+  // A console that stays open keeps the answer honest: opened, and the re-probe waits for close.
+  let close!: () => void;
+  const open = caller(
+    host(
+      undefined,
+      undefined,
+      (_command, opened) =>
+        new Promise<void>((resolve) => {
+          opened();
+          close = resolve;
+        }),
+    ),
+  );
+  expect((await open("POST", "/pe/providers/claude/open-login")).json).toEqual({ opened: true });
+  expect(((await open("GET", "/pe/providers/claude")).json as Provider).probedAt).toBeNull();
+  close();
+  await expect
+    .poll(async () => ((await open("GET", "/pe/providers/claude")).json as Provider).probedAt)
+    .not.toBeNull();
+});
+
+test("a login that expires between turns reads expired, not ready, and says how to repair it", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const readiness = async () =>
+    ((await call("GET", "/pe/providers/claude")).json as Provider).readiness;
+  await call("POST", "/pe/providers/claude/probe");
+  expect(await readiness()).toEqual({ state: "ready" });
+  const created = await call("POST", "/pe/threads", { providerId: "claude" });
+  await call("POST", `/pe/threads/${created.json.id}/prompt`, { text: "auth-expired" });
+  await until(reader(threads), created.json.id, (body) =>
+    body.events.some((e) => e.kind === "error"),
+  );
+  expect(await readiness()).toEqual({
+    state: "refused",
+    step: "signed-in",
+    message: "Claude Code sign-in expired. Sign in again.",
+  });
+});
+
 test("an endpoint provider is checked before save, and every thread carries its provider's env", async () => {
+  vi.stubEnv("ANTHROPIC_BASE_URL", "https://inherited.invalid");
+  vi.stubEnv("MODEL_PROVIDER", "inherited-provider");
+  vi.stubEnv("OPENAI_API_KEY", "synthetic-inherited-key");
   process.env.FAKE_ACP_SHAPE = "config";
   process.env.FAKE_ACP_NATIVE_CURRENT = "gpt-4.1-mini";
   const hits: string[] = [];
@@ -915,7 +1267,12 @@ test("an endpoint provider is checked before save, and every thread carries its 
     expect(refused.status).toBe(400);
     expect(refused.json).toEqual({
       step: "endpoint",
-      message: expect.stringMatching(/^models: HTTP 503 from .*auth_unavailable/),
+      message: "unreachable: Endpoint unreachable or unavailable.",
+      failure: {
+        kind: "unreachable",
+        message: "unreachable: Endpoint unreachable or unavailable.",
+        raw: JSON.stringify({ error: "auth_unavailable" }),
+      },
     });
     expect((await add("codex", "Ftp", "ftp://x", "sk-x")).json.step).toBe("endpoint");
     expect((await call("GET", "/pe/providers")).json).toHaveLength(2);
@@ -953,8 +1310,9 @@ test("an endpoint provider is checked before save, and every thread carries its 
       },
     });
     expect(explicit.status).toBe(400);
-    expect(explicit.json.message).toContain("gpt-5.2-codex");
-    expect(explicit.json.message).toContain("Set Model");
+    expect(explicit.json.failure.kind).toBe("model");
+    expect(explicit.json.failure.raw).toContain("gpt-5.2-codex");
+    expect(explicit.json.failure.raw).toContain("Set Model");
     expect(hits).toEqual(
       expect.arrayContaining([
         "GET /ok/v1/models",
@@ -994,6 +1352,7 @@ test("an endpoint provider is checked before save, and every thread carries its 
 
     // Endpoint: Codex gets the custom provider, Claude the Anthropic base URL and token.
     const codexEnd = await envOf(threads, "codex-vps");
+    expect(said(codexEnd, "OPENAI_API_KEY")).toBe("");
     expect([codexEnd.providerId, codexEnd.providerName]).toEqual(["codex-vps", "VPS"]);
     expect(said(codexEnd, "MODEL_PROVIDER")).toBe("pea_endpoint");
     const config = JSON.parse(said(codexEnd, "CODEX_CONFIG")!);
@@ -1035,11 +1394,23 @@ test("an endpoint provider is checked before save, and every thread carries its 
     expect(unsupported.json.message).toContain("Codex metadata");
     expect(inferred).not.toContain("gpt-4.1-mini");
     const claudeEnd = await envOf(threads, "claude-gate");
+    expect(said(claudeEnd, "MODEL_PROVIDER")).toBe("");
     expect(said(claudeEnd, "ANTHROPIC_BASE_URL")).toBe(`${origin}/ok`);
     expect(said(claudeEnd, "ANTHROPIC_AUTH_TOKEN")).toBe("…8765");
     expect(said(claudeEnd, "CODEX_CONFIG")).toBe("");
     expect(claudeEnd.modelId).toBe("claude-haiku-5-5");
     expect(claudeEnd.models).toEqual(gate.json.models);
+    await call("POST", `/pe/threads/${claudeEnd.id}/prompt`, { text: "credit-refusal" });
+    const failed = await until(
+      reader(threads),
+      claudeEnd.id,
+      (body) => !body.running && body.events.some((event) => event.kind === "error"),
+    );
+    const refusal = failed.events.findLast((event) => event.kind === "error");
+    expect(refusal).toMatchObject({
+      message: "billing: Out of credit or billing limit reached.",
+      failure: { kind: "billing", raw: expect.stringContaining("credit balance") },
+    });
     for (const body of [codexEnd, claudeEnd]) {
       const log = await readFile(join(root, body.id, "events.jsonl"), "utf8");
       expect(log).not.toContain(codexKey);
@@ -1107,4 +1478,633 @@ test("a turn that hears nothing for 60 s is marked waiting, once per 60 s, until
   await settle((b) => !b.running);
   await vi.advanceTimersByTimeAsync(3 * WAITING_MS);
   expect(waiting(await read(id))).toHaveLength(2);
+});
+
+// A 1x1 PNG, the same fixture the Mastra-era attachment test used.
+const PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+const png = { name: "riser.png", mimeType: "image/png", size: 68, data: PNG };
+const csv = {
+  name: "duct-sizes.csv",
+  mimeType: "text/csv",
+  size: 24,
+  text: "tag,cfm\nSA-1,400\nSA-2,250",
+};
+const pdf = { name: "spec.pdf", mimeType: "application/pdf", size: 5, data: "aGVsbG8=" };
+/** What the fake said it received besides text (`blocks: <json>` for the last prompt). */
+const blocksSeen = (body: HarnessThreadBody) => {
+  const prompt = body.events.findLastIndex((e) => e.kind === "prompt");
+  const said = body.events
+    .slice(prompt)
+    .flatMap((e) =>
+      e.kind === "update" && e.update.sessionUpdate === "agent_message_chunk"
+        ? [(e.update as { content?: { text?: string } }).content?.text ?? ""]
+        : [],
+    )
+    .find((text) => text.startsWith("blocks: "));
+  return said ? JSON.parse(said.slice("blocks: ".length)) : null;
+};
+
+test("attachments reach the harness as an image block, an embedded text resource and a linked file", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await until(read, id, (body) => body.promptCapabilities !== null);
+  expect((await read(id)).promptCapabilities).toEqual({ image: true, embeddedContext: true });
+  const sent = await call("POST", `/pe/threads/${id}/prompt`, {
+    text: "look",
+    attachments: [png, csv, pdf],
+  });
+  expect(sent.status).toBe(200);
+  const body = await until(read, id, (b) => turnEnds(b).length === 1);
+  // The log keeps what was sent, so a reload draws the user's turn with its files.
+  expect(body.events.find((e) => e.kind === "prompt")).toMatchObject({
+    text: "look",
+    attachments: [png, csv, pdf],
+  });
+  expect(lastEcho(body)).toBe("echo: look");
+  expect(blocksSeen(body)).toEqual([
+    { type: "image", mimeType: "image/png", data: PNG },
+    {
+      type: "resource",
+      uri: "file:///duct-sizes.csv",
+      mimeType: "text/csv",
+      text: "tag,cfm\nSA-1,400\nSA-2,250",
+    },
+    {
+      type: "resource_link",
+      name: "spec.pdf",
+      mimeType: "application/pdf",
+      size: 5,
+      bytes: "aGVsbG8=",
+    },
+  ]);
+  // Attachments alone are a prompt.
+  expect(
+    (await call("POST", `/pe/threads/${id}/prompt`, { text: "", attachments: [csv] })).status,
+  ).toBe(200);
+  expect((await call("POST", `/pe/threads/${id}/prompt`, { text: " " })).status).toBe(400);
+  await until(read, id, (b) => turnEnds(b).length === 2);
+  await threads.close();
+});
+
+test("a harness that does not read images or embedded text refuses those attachments before the turn", async () => {
+  process.env.FAKE_ACP_PROMPT = "none";
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await until(read, id, (body) => body.promptCapabilities !== null);
+  const refused = await call("POST", `/pe/threads/${id}/prompt`, {
+    text: "look",
+    attachments: [png, csv, pdf],
+  });
+  expect(refused.status).toBe(400);
+  expect(refused.json.error).toBe(
+    "Claude Code cannot read attached images or text files: remove riser.png, duct-sizes.csv to send",
+  );
+  expect((await read(id)).events.some((e) => e.kind === "prompt")).toBe(false);
+  // A linked file needs no capability.
+  expect(
+    (await call("POST", `/pe/threads/${id}/prompt`, { text: "look", attachments: [pdf] })).status,
+  ).toBe(200);
+  const body = await until(read, id, (b) => turnEnds(b).length === 1);
+  expect(blocksSeen(body)).toMatchObject([{ type: "resource_link", name: "spec.pdf" }]);
+  await threads.close();
+});
+
+const docMention = {
+  key: "doc:b1/o1",
+  kind: "document",
+  title: "Riser",
+  facts: { session: "b1", openId: "o1", address: "C:\\Models\\Riser.rvt", custody: "controlled" },
+  takenAt: "2026-10-12T12:00:00.000Z",
+};
+const skillMention = {
+  key: "skill:@product/skills/build-pod",
+  kind: "skill",
+  title: "build-pod",
+  facts: { description: "Build a Pod.", needs: "nothing", mutates: false },
+  takenAt: "2026-10-12T12:00:00.000Z",
+};
+/** What the fake said about the last prompt's block order (`order: <types>`). */
+const orderSeen = (body: HarnessThreadBody) => {
+  const prompt = body.events.findLastIndex((e) => e.kind === "prompt");
+  const said = body.events
+    .slice(prompt)
+    .flatMap((e) =>
+      e.kind === "update" && e.update.sessionUpdate === "agent_message_chunk"
+        ? [(e.update as { content?: { text?: string } }).content?.text ?? ""]
+        : [],
+    )
+    .find((text) => text.startsWith("order: "));
+  return said?.slice("order: ".length).split(",") ?? null;
+};
+
+test("mentions reach the harness as one pe:// JSON resource each, after the text block", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  const sent = await call("POST", `/pe/threads/${id}/prompt`, {
+    text: "size @Riser with @build-pod",
+    mentions: [docMention, skillMention],
+    attachments: [csv],
+  });
+  expect(sent.status).toBe(200);
+  const body = await until(read, id, (b) => turnEnds(b).length === 1);
+  // The log keeps the pointers, so a reload draws the chips.
+  expect(body.events.find((e) => e.kind === "prompt")).toMatchObject({
+    text: "size @Riser with @build-pod",
+    mentions: [docMention, skillMention],
+  });
+  expect(lastEcho(body)).toBe("echo: size @Riser with @build-pod");
+  expect(orderSeen(body)).toEqual(["text", "resource", "resource", "resource"]);
+  expect(blocksSeen(body)).toEqual([
+    {
+      type: "resource",
+      uri: "pe://doc:b1/o1",
+      mimeType: "application/json",
+      text: JSON.stringify(docMention),
+    },
+    {
+      type: "resource",
+      uri: "pe://skill:@product/skills/build-pod",
+      mimeType: "application/json",
+      text: JSON.stringify(skillMention),
+    },
+    { type: "resource", uri: "file:///duct-sizes.csv", mimeType: "text/csv", text: csv.text },
+  ]);
+  // A malformed mention is a 400, not a silent drop.
+  expect(
+    (
+      await call("POST", `/pe/threads/${id}/prompt`, {
+        text: "x",
+        mentions: [{ key: "doc:b1/o1" }],
+      })
+    ).status,
+  ).toBe(400);
+  await threads.close();
+});
+
+test("a harness that reads no embedded context gets each mention as a text line, never a refusal", async () => {
+  process.env.FAKE_ACP_PROMPT = "none";
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await until(read, id, (body) => body.promptCapabilities !== null);
+  const sent = await call("POST", `/pe/threads/${id}/prompt`, {
+    text: "size @Riser",
+    mentions: [docMention],
+  });
+  expect(sent.status).toBe(200);
+  const body = await until(read, id, (b) => turnEnds(b).length === 1);
+  expect(lastEcho(body)).toBe(
+    "echo: size @Riser[@Riser → doc:b1/o1, session: b1, openId: o1, address: C:\\Models\\Riser.rvt, custody: controlled, taken 2026-10-12T12:00:00.000Z]",
+  );
+  expect(blocksSeen(body)).toBeNull();
+  await threads.close();
+});
+
+/* ── The head grant: doors 6, 7 and 8 (ADR 0017) ─────────────────────────────────────── */
+
+const T0 = Date.parse("2026-10-12T12:00:00.000Z");
+const at = (ms: number) => new Date(ms).toISOString();
+const yours = { kind: "open", ref: { session: "S1", openId: "A" } } as const;
+const peas = { kind: "open", ref: { session: "P", openId: "copy" } } as const;
+/** Pea acquired the copy in Revit "P"; a user document opened there later is not acquired. */
+const peaAcquiredCopy = {
+  acquired: (ref: { session: string; openId: string }) =>
+    ref.session === "P" && ref.openId === "copy" ? "acq-copy" : null,
+  acquiredSession: (session: string) => (session === "P" ? "acq-P" : null),
+};
+const userInPeas = { kind: "open", ref: { session: "P", openId: "B" } } as const;
+const peaOf = (thread: string): Caller => ({ kind: "pea", context: `ctx-${thread}`, thread });
+const onDoc = (ref: { session: string; openId: string }) => ({ kind: "document", ref }) as const;
+
+test("access-050: fork retains the target but never inherits grant or human-message evidence", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const created = await call("POST", "/pe/threads", { providerId: "claude" });
+  const id = created.json.id;
+  await call("PUT", `/pe/scope/${id}`, { defaultTarget: yours, expectedRevision: 0 });
+  const forked = await call("POST", `/pe/threads/${id}/fork`, {});
+  expect(forked.status).toBe(200);
+  expect(threads.heads.read(forked.json.id)).toMatchObject({
+    defaultTarget: yours,
+    grant: null,
+    lastHumanMessageAt: null,
+    revision: 0,
+  });
+});
+
+test.each(["permission", "question"])(
+  "access-048/049: %s answers require a human before looking up a card",
+  async (verb) => {
+    const threads = host();
+    const call = caller(threads);
+    const created = await call("POST", "/pe/threads", { providerId: "claude" });
+    threads.as = peaOf(created.json.id);
+    const denied = await call("POST", `/pe/threads/${created.json.id}/${verb}`, {});
+    expect(denied.status).toBe(403);
+    expect(denied.json.refusal.code).toBe("human.only");
+  },
+);
+const crossing = (caller: Caller, ref: { session: string; openId: string }) => {
+  try {
+    return admitCrossing(caller, onDoc(ref), "/actions");
+  } catch (error) {
+    if (error instanceof Refused) return error.refusal.code;
+    throw error;
+  }
+};
+afterEach(() => bindControl({ heads: null, acquired: () => null, acquiredSession: () => null }));
+
+test("the head reading projects expiry and republishes it on the host clock", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(T0);
+  const threads = host();
+  const call = caller(threads);
+  const id = "projected-expiry";
+  const result = await call("PUT", `/pe/scope/${id}`, {
+    defaultTarget: yours,
+    expectedRevision: 0,
+  });
+  expect(result.json.head.grantView).toEqual({ state: "rw", minutes: 60 });
+  const seen: unknown[] = [];
+  const release = threads.heads.observe(id, ({ value }) => seen.push(value));
+  try {
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(seen.at(-1)).toMatchObject({ grantView: { state: "expired" } });
+  } finally {
+    release();
+  }
+});
+
+test("door 6: a human PUT on your open lifetime stamps rw; a move retires it; a named target never holds one", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(T0);
+  bindControl(peaAcquiredCopy);
+  const call = caller(host());
+  const id = "grant-door-6";
+  const set = await call("PUT", `/pe/scope/${id}`, { defaultTarget: yours, expectedRevision: 0 });
+  expect(set.status).toBe(200);
+  expect(set.json.head).toMatchObject({
+    revision: 1,
+    hostNow: at(T0),
+    grant: {
+      lifetime: yours.ref,
+      grantedAt: at(T0),
+      grantedVia: "local",
+      expiresAt: at(T0 + 60 * 60_000),
+      revoked: null,
+    },
+  });
+  const named = { kind: "named", session: "S1", address: "C:/Models/A.rvt" };
+  const moved = await call("PUT", `/pe/scope/${id}`, { defaultTarget: named, expectedRevision: 1 });
+  expect(moved.json.head).toMatchObject({ defaultTarget: named, grant: null });
+  const back = await call("PUT", `/pe/scope/${id}`, { defaultTarget: yours, expectedRevision: 2 });
+  expect(back.json.head.grant).not.toBeNull();
+  // Pea's own document needs no grant, so none is stamped.
+  const own = await call("PUT", `/pe/scope/${id}`, { defaultTarget: peas, expectedRevision: 3 });
+  expect(own.json.head.grant).toBeNull();
+  // A user's document inside Pea's Revit is yours: pointing at it grants rw like any other.
+  const mine = await call("PUT", `/pe/scope/${id}`, {
+    defaultTarget: userInPeas,
+    expectedRevision: 4,
+  });
+  expect(mine.json.head.grant).toMatchObject({ lifetime: userInPeas.ref });
+  const cleared = await call("PUT", `/pe/scope/${id}`, {
+    defaultTarget: null,
+    expectedRevision: 5,
+  });
+  expect(cleared.json.head.grant).toBeNull();
+});
+
+test("door 6: moving a live grant retires it the way a revoke does, so queued work stops", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(T0);
+  bindControl(peaAcquiredCopy);
+  const call = caller(host());
+  const id = "grant-door-6-move";
+  const retired: string[] = [];
+  const release = onRevoke((thread, grant) => retired.push(`${thread}:${grant.lifetime.openId}`));
+  await call("PUT", `/pe/scope/${id}`, { defaultTarget: yours, expectedRevision: 0 });
+  expect(retired).toEqual([]);
+  const named = { kind: "named", session: "S1", address: "C:/Models/A.rvt" };
+  await call("PUT", `/pe/scope/${id}`, { defaultTarget: named, expectedRevision: 1 });
+  expect(retired).toEqual([`${id}:${yours.ref.openId}`]);
+  // No live grant remains to retire.
+  await call("PUT", `/pe/scope/${id}`, { defaultTarget: null, expectedRevision: 2 });
+  expect(retired).toHaveLength(1);
+  release();
+});
+
+test("door 6 for Pea: only its own thread, only Pea's documents; anonymous cannot write a head", async () => {
+  bindControl(peaAcquiredCopy);
+  const threads = host();
+  const call = caller(threads);
+  const id = "grant-door-6-pea";
+  threads.as = peaOf(id);
+  const refused = await call("PUT", "/pe/scope/self", {
+    defaultTarget: yours,
+    expectedRevision: 0,
+  });
+  expect([refused.status, refused.json.refusal.code]).toEqual([403, "grant.required"]);
+  const inherited = await call("PUT", "/pe/scope/self", {
+    defaultTarget: userInPeas,
+    expectedRevision: 0,
+  });
+  expect([inherited.status, inherited.json.refusal.code]).toEqual([403, "grant.required"]);
+  const own = await call("PUT", "/pe/scope/self", { defaultTarget: peas, expectedRevision: 0 });
+  expect(own.json).toMatchObject({ ok: true, head: { defaultTarget: peas, grant: null } });
+  expect((await call("GET", "/pe/scope/self")).json).toMatchObject({
+    thread: id,
+    defaultTarget: peas,
+    revision: 1,
+    hostNow: expect.any(String),
+  });
+  const foreign = await call("PUT", "/pe/scope/someone-else", {
+    defaultTarget: null,
+    expectedRevision: 0,
+  });
+  expect([foreign.status, foreign.json.refusal.code]).toEqual([403, "context.foreign-thread"]);
+  threads.as = { kind: "anonymous" };
+  const anonymous = await call("PUT", `/pe/scope/${id}`, {
+    defaultTarget: null,
+    expectedRevision: 1,
+  });
+  expect([anonymous.status, anonymous.json.refusal.code]).toEqual([403, "context.missing"]);
+  expect((await call("GET", "/pe/scope/self")).status).toBe(404);
+});
+
+test("door 8: Pea cannot prompt; a human prompt renews rw from the host clock, then it expires", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(T0);
+  const threads = host();
+  bindControl({ heads: threads.heads.read });
+  const call = caller(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await call("PUT", `/pe/scope/${id}`, { defaultTarget: yours, expectedRevision: 0 });
+  threads.as = peaOf(id);
+  const self = await call("POST", `/pe/threads/${id}/prompt`, { text: "renew me" });
+  expect([self.status, self.json.refusal.code]).toEqual([403, "human.only"]);
+  expect(threads.heads.read(id).grant?.expiresAt).toBe(at(T0 + 60 * 60_000));
+  threads.as = human;
+  vi.setSystemTime(T0 + 30 * 60_000);
+  expect((await call("POST", `/pe/threads/${id}/prompt`, { text: "hello" })).status).toBe(200);
+  expect(threads.heads.read(id)).toMatchObject({
+    lastHumanMessageAt: at(T0 + 30 * 60_000),
+    grant: { grantedAt: at(T0), expiresAt: at(T0 + 90 * 60_000) },
+  });
+  vi.setSystemTime(T0 + 89 * 60_000);
+  expect(crossing(peaOf(id), yours.ref)).toMatchObject({ kind: "grant", thread: id });
+  vi.setSystemTime(T0 + 90 * 60_000);
+  expect(crossing(peaOf(id), yours.ref)).toBe("grant.expired");
+  await until(reader(threads), id, (b) => !b.running);
+  await threads.close();
+});
+
+test("door 7: revoke is human-only, keeps evidence, fires onRevoke, and only a fresh human PUT clears it", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(T0);
+  const threads = host();
+  bindControl({ heads: threads.heads.read });
+  const call = caller(threads);
+  const id = "grant-door-7";
+  await call("PUT", `/pe/scope/${id}`, { defaultTarget: yours, expectedRevision: 0 });
+  expect(crossing(peaOf(id), yours.ref)).toMatchObject({ kind: "grant" });
+  const fired: string[] = [];
+  const release = onRevoke((thread, grant) => fired.push(`${thread}@${grant.revoked?.at}`));
+  threads.as = peaOf(id);
+  const self = await call("POST", `/pe/scope/${id}/revoke`, {});
+  expect([self.status, self.json.refusal.code]).toEqual([403, "human.only"]);
+  threads.as = human;
+  vi.setSystemTime(T0 + 5 * 60_000);
+  const revoked = await call("POST", `/pe/scope/${id}/revoke`, {});
+  expect(revoked.json.grant).toMatchObject({ revoked: { at: at(T0 + 5 * 60_000) } });
+  expect(revoked.json.receipt).toBe(
+    "rw revoked. Steps already running finish; nothing new starts. Re-point the head to grant again.",
+  );
+  expect(fired).toEqual([`${id}@${at(T0 + 5 * 60_000)}`]);
+  expect(crossing(peaOf(id), yours.ref)).toBe("grant.revoked");
+  // A human message does not revive a revoked grant; re-pointing the head does.
+  const renewed = await call("PUT", `/pe/scope/${id}`, {
+    defaultTarget: yours,
+    expectedRevision: revoked.json.revision,
+  });
+  expect(renewed.json.head.grant).toMatchObject({ revoked: null, grantedAt: at(T0 + 5 * 60_000) });
+  expect(crossing(peaOf(id), yours.ref)).toMatchObject({ kind: "grant" });
+  release();
+});
+
+/* ── The prompt inbox: client ids, queue and steer, and wait ─────────────────────────────── */
+
+const story = (body: HarnessThreadBody) =>
+  body.events.flatMap((e) =>
+    e.kind === "prompt"
+      ? [`prompt ${e.text}`]
+      : e.kind === "prompt_queued"
+        ? [`queued ${e.text}`]
+        : e.kind === "prompt_dropped"
+          ? [`dropped ${e.by}`]
+          : e.kind === "turn_end"
+            ? [`end ${e.stopReason}`]
+            : [],
+  );
+
+test("a prompt id is the turn id: a retry never sends twice, other content under it is refused", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  const turnId = randomUUID();
+  const first = await call("POST", `/pe/threads/${id}/prompt`, { id: turnId, text: "hello" });
+  expect(first.json).toMatchObject({ turnId, state: "running" });
+  const retry = await call("POST", `/pe/threads/${id}/prompt`, { id: turnId, text: "hello" });
+  expect([retry.status, retry.json.turnId]).toEqual([200, turnId]);
+  const other = await call("POST", `/pe/threads/${id}/prompt`, { id: turnId, text: "other" });
+  expect(other.status).toBe(409);
+  const body = await until(read, id, (b) => turnEnds(b).length === 1 && !b.running);
+  expect(story(body)).toEqual(["prompt hello", "end end_turn"]);
+  expect(body.events.find((e) => e.kind === "prompt")).toMatchObject({ turnId });
+  const unnamed = await threads.fetch(
+    new Request(`http://host/pe/threads/${id}/prompt`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "no id" }),
+    }),
+  );
+  expect(unnamed.status).toBe(400);
+});
+
+test("queue order holds under steer: the steer runs next, then the queue in order", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  const prompt = (text: string, delivery: "steer" | "queue") =>
+    call("POST", `/pe/threads/${id}/prompt`, { id: randomUUID(), text, delivery });
+  await prompt("hang", "steer");
+  await until(read, id, (b) => lastEcho(b) === "echo: hang");
+  expect((await prompt("one", "queue")).json.state).toBe("queued");
+  expect((await prompt("two", "queue")).json.state).toBe("queued");
+  const steered = await prompt("slow", "steer");
+  expect(steered.json.state).toBe("running");
+  const body = await until(read, id, (b) => turnEnds(b).length === 4 && !b.running);
+  expect(story(body)).toEqual([
+    "prompt hang",
+    "queued one",
+    "queued two",
+    "end cancelled",
+    "prompt slow",
+    "end end_turn",
+    "prompt one",
+    "end end_turn",
+    "prompt two",
+    "end end_turn",
+  ]);
+});
+
+test("a queued prompt can be dropped or promoted to a steer, and wait answers each turn", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  const [hang, one, two] = [randomUUID(), randomUUID(), randomUUID()];
+  await call("POST", `/pe/threads/${id}/prompt`, { id: hang, text: "hang" });
+  await until(read, id, (b) => lastEcho(b) === "echo: hang");
+  await call("POST", `/pe/threads/${id}/prompt`, { id: one, text: "one", delivery: "queue" });
+  await call("POST", `/pe/threads/${id}/prompt`, { id: two, text: "two", delivery: "queue" });
+  const wait = (turn: string, timeoutMs = 10_000) =>
+    call("GET", `/pe/threads/${id}/wait?turn=${turn}&timeoutMs=${timeoutMs}`);
+  expect((await wait(hang, 50)).json).toEqual({ turnId: hang, state: "running" });
+  expect((await wait(one, 50)).json).toEqual({ turnId: one, state: "queued" });
+  expect((await wait(randomUUID(), 50)).status).toBe(404);
+  const dropped = await call("POST", `/pe/threads/${id}/queue`, { turnId: one, action: "cancel" });
+  expect(dropped.json).toEqual({ turnId: one, state: "dropped" });
+  const waitingOnTwo = wait(two);
+  const promoted = await call("POST", `/pe/threads/${id}/queue`, { turnId: two, action: "steer" });
+  expect(promoted.json).toEqual({ turnId: two, state: "running" });
+  expect((await waitingOnTwo).json).toEqual({
+    turnId: two,
+    state: "ended",
+    stopReason: "end_turn",
+  });
+  expect((await wait(hang)).json).toEqual({
+    turnId: hang,
+    state: "ended",
+    stopReason: "cancelled",
+  });
+  expect(
+    (await call("POST", `/pe/threads/${id}/queue`, { turnId: one, action: "steer" })).status,
+  ).toBe(409);
+  expect(story(await read(id))).toEqual([
+    "prompt hang",
+    "queued one",
+    "queued two",
+    "dropped user",
+    "end cancelled",
+    "prompt two",
+    "end end_turn",
+  ]);
+});
+
+test("a restarted host drops the prompts it had queued, saying so", async () => {
+  const first = host();
+  const call = caller(first);
+  const read = reader(first);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await call("POST", `/pe/threads/${id}/prompt`, { id: randomUUID(), text: "hang" });
+  await until(read, id, (b) => lastEcho(b) === "echo: hang");
+  const queued = randomUUID();
+  await call("POST", `/pe/threads/${id}/prompt`, { id: queued, text: "later", delivery: "queue" });
+  await first.close();
+  const second = host();
+  const body = await reader(second)(id);
+  expect(body.events.at(-1)).toMatchObject({
+    kind: "prompt_dropped",
+    turnId: queued,
+    by: "expired",
+  });
+  expect((await caller(second)("GET", `/pe/threads/${id}/wait?turn=${queued}`)).json).toEqual({
+    turnId: queued,
+    state: "dropped",
+  });
+});
+
+test("declared client and actual harness handler share input, output and refusal contracts", async () => {
+  const owner = host();
+  const client = createPeClient("http://host", (url, init) =>
+    servePeRoute(new Request(url, init), owner.fetch),
+  );
+  const thread = await client.call("threads.create", {
+    body: { providerId: "claude", title: "contract" },
+  });
+  const params = { id: thread.id };
+  expect((await client.call("thread.get", { params })).title).toBe("contract");
+  expect((await client.call("thread.update", { params, body: { title: "renamed" } })).title).toBe(
+    "renamed",
+  );
+  expect((await client.call("scope.get", { params })).revision).toBe(0);
+  await expect(
+    client.call("thread.question", { params, body: { requestId: "gone", action: "decline" } }),
+  ).rejects.toMatchObject({ status: 409, message: "No pending question gone" });
+  await client.call("thread.remove", { params });
+  await expect(client.call("thread.get", { params })).rejects.toMatchObject({ status: 404 });
+});
+
+test("one huge tool result is kept bounded in the record, the log and every reader", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const read = reader(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "huge" });
+  const body = await until(read, id, (b) => turnEnds(b).length === 1);
+  const updates = body.events.filter(
+    (e): e is Extract<HarnessEvent, { kind: "update" }> =>
+      e.kind === "update" && ["t-huge", "t-wide"].includes(String(e.update.toolCallId)),
+  );
+  expect(updates).toHaveLength(2);
+  for (const e of updates) {
+    expect(Buffer.byteLength(JSON.stringify(e))).toBeLessThan(HARNESS_EVENT_MAX_BYTES);
+    expect(e.update.truncated).toBeGreaterThan(HARNESS_EVENT_MAX_BYTES);
+  }
+  // A long string keeps its head; a wide structure keeps the call's identity.
+  expect(JSON.stringify(updates[0]!.update)).toContain("characters not kept");
+  expect(updates[1]!.update).toMatchObject({ toolCallId: "t-wide", status: "completed" });
+  expect((await stat(join(root, id, "events.jsonl"))).size).toBeLessThan(
+    4 * HARNESS_EVENT_MAX_BYTES,
+  );
+  expect(threads.log.read(0).entries.some((e) => e.event.kind === "oversize")).toBe(false);
+});
+
+test("scheduled launches create fresh threads with persisted origin before the fake ACP turn", async () => {
+  const service = host();
+  const first = service.launchScheduled({
+    taskId: "feedback-miner",
+    runId: randomUUID(),
+    title: "Miner",
+    prompt: "hello",
+    selection: { providerId: "claude", modelId: null },
+  });
+  await first.completion;
+  const second = service.launchScheduled({
+    taskId: "feedback-miner",
+    runId: randomUUID(),
+    title: "Miner",
+    prompt: "hello again",
+    selection: { providerId: "claude", modelId: null },
+  });
+  await second.completion;
+  expect(first.threadId).not.toBe(second.threadId);
+  for (const launched of [first, second]) {
+    const meta = JSON.parse(await readFile(join(root, launched.threadId, "meta.json"), "utf8"));
+    expect(meta.origin).toMatchObject({ kind: "scheduled", taskId: "feedback-miner" });
+    const body = await reader(service)(launched.threadId);
+    expect(body.origin).toEqual(meta.origin);
+    expect(body.events.find((e) => e.kind === "prompt")?.turnId).toBe(meta.origin.runId);
+  }
 });

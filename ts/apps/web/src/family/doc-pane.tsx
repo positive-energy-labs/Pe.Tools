@@ -1,16 +1,17 @@
 import type { TrichotomyCellLike } from "@pe/agent-contracts";
-import { token } from "#/lib/token";
-import { EmptyState } from "#/components/lang/empty";
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { FactChip, Tag } from "#/components/lang/chip";
+import { token } from "@pe/kit/lib/token";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { FactChip, Tag } from "@pe/kit/lang/chip";
 import { useEffect, useRef } from "react";
 import { useGroundedDoc } from "#/grounded-doc/engine";
 import { PagePane } from "#/grounded-doc/view/page-pane";
-import { ReviewRow, type CellWire } from "#/components/lang/band";
+import { ReviewRow, type CellWire } from "#/components/work/band";
 import { Switcher } from "#/components/lang/switcher";
 
 import type { ProtoProposal, ProtoSpec } from "#/family/world";
-import { Code } from "#/components/lang/code";
+import { Code } from "@pe/kit/lang/code";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function SpecText({
   spec,
@@ -40,32 +41,34 @@ export function SpecText({
         {spec.blocks.map((block) => {
           const lit = litBlocks.has(block.id);
           return (
-            <div
-              key={block.id}
-              title={
+            <TooltipHint
+              content={
                 lit
                   ? "This is the block the focused parameter is grounded in. That correspondence is the whole claim — if the text does not say what the cell says, the cell is wrong."
                   : `Page ${block.page} of ${spec.fileName}, as OCR read it. Hover a grounded row in the table to light the block it cites.`
               }
+              key={block.id}
             >
-              <ArtifactFrame
-                head={
-                  <>
-                    <Tag>
-                      {block.id} · p{block.page}
-                    </Tag>
-                    <Tag>{block.kind}</Tag>
-                    {lit ? (
-                      <FactChip title="The focused parameter cites this block.">
-                        focused citation
-                      </FactChip>
-                    ) : null}
-                  </>
-                }
-              >
-                <Code code={block.md} lang="markdown" />
-              </ArtifactFrame>
-            </div>
+              <div>
+                <ArtifactFrame
+                  head={
+                    <>
+                      <Tag>
+                        {block.id} · p{block.page}
+                      </Tag>
+                      <Tag>{block.kind}</Tag>
+                      {lit ? (
+                        <FactChip title="The focused parameter cites this block.">
+                          focused citation
+                        </FactChip>
+                      ) : null}
+                    </>
+                  }
+                >
+                  <Code code={block.md} lang="markdown" />
+                </ArtifactFrame>
+              </div>
+            </TooltipHint>
           );
         })}
       </div>
@@ -198,12 +201,13 @@ export function ProposalCard({
       />
       <p className="mt-0.5 text-ink">{proposal.note}</p>
       {blockMd && (
-        <p
-          className="hairline-l mt-1 max-h-[3lh] overflow-hidden pl-1.5 whitespace-pre-line t-small face-mono text-ink-2"
-          title={`Read from ${proposal.sourceBlockId} of ${specFileName ?? "the spec"} — the source text verbatim, so the claim is checkable without leaving the page.`}
+        <TooltipHint
+          content={`Read from ${proposal.sourceBlockId} of ${specFileName ?? "the spec"} — the source text verbatim, so the claim is checkable without leaving the page.`}
         >
-          {blockMd}
-        </p>
+          <p className="hairline-l mt-1 max-h-[3lh] overflow-hidden pl-1.5 whitespace-pre-line t-small face-mono text-ink-2">
+            {blockMd}
+          </p>
+        </TooltipHint>
       )}
     </div>
   );

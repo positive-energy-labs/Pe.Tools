@@ -168,7 +168,6 @@ public sealed class RevitScriptingPortTests {
 
             var result = bootstrapService.Bootstrap(
                 workspaceKey,
-                true,
                 "2025",
                 "net8.0-windows",
                 runtimeAssemblyPath
@@ -186,10 +185,8 @@ public sealed class RevitScriptingPortTests {
             Assert.That(File.Exists(result.WorkspaceReadmePath), Is.True);
             Assert.That(File.ReadAllText(result.WorkspaceReadmePath), Does.Not.Contain("lane"));
             Assert.That(File.Exists(result.PodManifestPath), Is.True);
-            Assert.That(File.ReadAllText(result.PodManifestPath), Does.Contain("src/SampleScript.cs"));
-            Assert.That(File.ReadAllText(result.SampleScriptPath), Does.Contain("pea script execute --source-path src/SampleScript.cs"));
-            Assert.That(File.ReadAllText(result.SampleScriptPath),
-                Does.Contain("Keep exactly one non-abstract PeScriptContainer per entrypoint file"));
+            Assert.That(File.ReadAllText(result.PodManifestPath), Does.Contain("\"entrypoints\": []"));
+            Assert.That(Directory.EnumerateFiles(Path.Combine(workspaceRoot, "src")), Is.Empty);
             Assert.That(Directory.Exists(Path.Combine(workspaceRoot, "settings")), Is.True);
             Assert.That(Directory.Exists(Path.Combine(workspaceRoot, "assets")), Is.True);
             Assert.That(Directory.Exists(Path.Combine(workspaceRoot, "output")), Is.True);

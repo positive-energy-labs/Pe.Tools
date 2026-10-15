@@ -6,29 +6,26 @@
  */
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
+import { usePublishPagePalette } from "#/navigation/route-controls";
 
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Switcher } from "#/components/lang/switcher";
-import { KeysNode, stageChords } from "#/route/keys";
+import { stageChords } from "#/route/keys";
+import { KeysNode } from "@pe/kit/keys";
 import { Surface } from "#/components/lang/surface";
 import { previousOf } from "#/readings";
 
-import {
-  STALE_PLAN,
-  isSpecOf,
-  sheetOf,
-  type EntityPage,
-  type EntityRouteDef,
-  type PodRow,
-} from "./manifest";
+import { STALE_PLAN, sheetOf, type EntityPage, type EntityRouteDef, type PodRow } from "./manifest";
+import { isSpecOf } from "./workflow";
 import { Ladder, type Rung } from "./ladder";
 import { PlanSheetView } from "./plan-sheet";
 import { SpecEditor, type DemoSpec } from "./spec-editor";
 import { Situation, type SituationProps } from "./situation";
 import { LadderPicker, useDocumentLadder } from "./situation-ladder";
 import { SituationCell } from "./situation-marks";
-import type { RouteHandle } from "./use-route";
+import type { RouteHandle } from "./handle";
 import type { StageDecl } from "./stage";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 type Handle = RouteHandle<any, any, EntityPage, any>;
 
@@ -107,6 +104,7 @@ export function EntityRouteView({
     setPalette(open && handle.busy === null);
     if (open) onPalette?.();
   };
+  usePublishPagePalette(handle.manifest.key, palette, openPalette);
   const pods = (previousOf(handle.readings.pods) as readonly PodRow[] | undefined) ?? [];
   const pod = pods.find((row) => row.id === page.pod) ?? null;
   const specs = pod?.members.filter((member) => isSpecOf(member.schema, def.schema)) ?? [];
@@ -235,14 +233,15 @@ export function EntityRouteView({
                 <>
                   {" "}
                   (
-                  <Link
-                    to="/pods"
-                    // The root carries the thread and any `?target` pin with it.
-                    search={{ pod: page.pod, path: page.path } as never}
-                    title="Open this member in the pods browser"
-                  >
-                    open in Pods
-                  </Link>
+                  <TooltipHint content="Open this member in the pods browser">
+                    <Link
+                      to="/pods"
+                      // The root carries the thread and any `?target` pin with it.
+                      search={{ pod: page.pod, path: page.path } as never}
+                    >
+                      open in Pods
+                    </Link>
+                  </TooltipHint>
                   )
                 </>
               ) : null}
@@ -269,10 +268,8 @@ export function EntityRouteView({
         end={
           specHidden ? null : (
             <Pane
-              kind="inspector"
               title={confirming ? "plan" : sheet ? sheet.title : showOutput ? "output" : "spec"}
               meta={def.entity}
-              side="right"
               actions={
                 !confirming && !sheet && hasOutput ? (
                   <Switcher

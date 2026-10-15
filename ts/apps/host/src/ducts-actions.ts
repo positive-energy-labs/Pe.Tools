@@ -13,7 +13,8 @@ import {
 } from "@pe/agent-contracts";
 import { z } from "zod";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
-import { type ActionJournal } from "./action-journal.ts";
+import { resolveSdkSession } from "./sdk-session.ts";
+import { type ActionJournal, type Crossing } from "./action-journal.ts";
 import {
   readNativeReceipt,
   readOriginalProcess,
@@ -25,6 +26,7 @@ const refused = (message: string) => new BridgeError(message, 409, { notDispatch
 
 export async function admitDuctsAction(
   raw: unknown,
+  crossing: Crossing,
   owner: ActionJournal,
   bridge: RevitBridge["Service"],
   deps: { sdk?: SdkReceiptReader } = {},
@@ -55,9 +57,14 @@ export async function admitDuctsAction(
     return selected!;
   };
   return owner.admit(
-    admission,
+    { ...admission, ...crossing },
     async () => {
-      const selected = await current();
+      await current();
+      const selected = await resolveSdkSession(
+        bridge,
+        { bridgeSessionId: target.session, openDocumentId: target.openId },
+        deps.sdk,
+      );
       if (!selected.processId || selected.processStartUtcUnixMs == null)
         throw refused("Original process identity is unavailable");
       return {

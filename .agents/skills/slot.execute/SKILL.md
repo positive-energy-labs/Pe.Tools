@@ -24,6 +24,8 @@ scope: repo
 - Prefer the repo's command, then the tool's guide or help. Do not preserve a copied CLI manual here.
 - Read `docs/ARCHITECTURE.md` and `docs/BUILD.md` before multi-package, build, deployment, or dev-loop changes.
 - Use PowerShell. `AGENTS.md` owns Windows quoting and exit-code footguns.
+- A native claim (Revit, tray, installed host) runs through `tools/acceptance.py` (setup, probe, census, teardown; read its docstring) and records its SDK calls as envelopes under the run's `ev/`. Round 4 to 4e (RUN.md, 2026-10-13) re-built setup and census each time and found three isolation leaks one round at a time.
+- One agent owns a native FALSIFIED from diagnosis through fix to the native re-check, in one task. In 4d to 4e the cause, the fix, and the native re-check went to three agents and a falsified cleanup took two more rounds.
 
 ## Stack
 

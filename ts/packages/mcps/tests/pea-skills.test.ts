@@ -1,21 +1,25 @@
+import { createHash } from "node:crypto";
+import { captureDirectory } from "../../../apps/host/src/packages.ts";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
+import { productPathNames } from "@pe/host-contracts/contracts";
 import {
   bundledPeaSkills,
-  materializeBundledPeaSkills,
-  peaProductHomeEnvVar,
+  publishPeaSkills,
   peaStandardSkillsRoot,
   resolvePeaProductHomePath,
   resolvePeaSkillPaths,
   retiredPeaSkillNames,
 } from "../src/pea/skills.ts";
 
-test("resolves pea product home under the configured documents root", async () => {
+const homeVariable = productPathNames.productHomeVariable;
+
+test("resolves pea product home and skills under the product home override", async () => {
   const profile = await withTempProductHomeEnv();
   try {
-    const expected = path.join(profile.documentsRoot, "Pe.Tools");
+    const expected = profile.productHome;
     expect(resolvePeaProductHomePath()).toBe(expected);
     expect(resolvePeaSkillPaths()).toEqual([
       path.join(expected, peaStandardSkillsRoot),
@@ -26,64 +30,58 @@ test("resolves pea product home under the configured documents root", async () =
   }
 });
 
-test("lets explicit pea product home override documents root", async () => {
-  const profile = await withTempProductHomeEnv();
-  try {
-    const productHome = path.join(profile.tempRoot, "custom-product-home");
-    process.env[peaProductHomeEnvVar] = productHome;
-
-    expect(resolvePeaProductHomePath()).toBe(productHome);
-  } finally {
-    await profile.dispose();
-  }
-});
-
 async function withTempProductHomeEnv() {
-  const previousProductHome = process.env[peaProductHomeEnvVar];
-  const previousDocumentsRoot = process.env.PE_TOOLS_DOCUMENTS_ROOT;
+  const previousProductHome = process.env[homeVariable];
   const tempRoot = await mkdtemp(path.join(tmpdir(), "pe-tools-home-"));
-  const documentsRoot = path.join(tempRoot, "Documents");
-
-  delete process.env[peaProductHomeEnvVar];
-  process.env.PE_TOOLS_DOCUMENTS_ROOT = documentsRoot;
+  const productHome = path.join(tempRoot, "Pe.Tools");
+  process.env[homeVariable] = productHome;
 
   return {
-    tempRoot,
-    documentsRoot,
+    productHome,
     dispose: async () => {
-      if (previousProductHome == null) delete process.env[peaProductHomeEnvVar];
-      else process.env[peaProductHomeEnvVar] = previousProductHome;
-
-      if (previousDocumentsRoot == null) delete process.env.PE_TOOLS_DOCUMENTS_ROOT;
-      else process.env.PE_TOOLS_DOCUMENTS_ROOT = previousDocumentsRoot;
+      if (previousProductHome == null) delete process.env[homeVariable];
+      else process.env[homeVariable] = previousProductHome;
 
       await rm(tempRoot, { recursive: true, force: true });
     },
   };
 }
 
-test("materialization retires only the product's former skill directories", async () => {
+test("materialization deletes a retired skill folder only when the product receipt proves its bytes", async () => {
   const profile = await withTempProductHomeEnv();
   try {
-    const skillsRoot = path.join(resolvePeaProductHomePath(), peaStandardSkillsRoot);
-    const retired = path.join(skillsRoot, retiredPeaSkillNames[0]!, "SKILL.md");
-    const userOwned = path.join(skillsRoot, "my-office-standards", "SKILL.md");
-    await mkdir(path.dirname(retired), { recursive: true });
-    await mkdir(path.dirname(userOwned), { recursive: true });
-    await writeFile(retired, "stale\n", "utf-8");
+    const [codexRoot, claudeRoot] = resolvePeaSkillPaths();
+    const retiredName = retiredPeaSkillNames[0]!;
+    const userOwned = path.join(codexRoot!, "my-office-standards", "SKILL.md");
+    const receipted = path.join(codexRoot!, retiredName, "SKILL.md");
+    const unreceipted = path.join(claudeRoot!, retiredName, "SKILL.md");
+    const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+    const receiptHash = createHash("sha256")
+      .update(`SKILL.md:${sha("old\n")}`)
+      .digest("hex");
+    for (const file of [userOwned, receipted, unreceipted])
+      await mkdir(path.dirname(file), { recursive: true });
     await writeFile(userOwned, "mine\n", "utf-8");
-
-    const materialized = await materializeBundledPeaSkills();
-
-    // Every bundled skill lands under each harness root: Codex's `.agents/skills`, Claude's `.claude/skills`.
-    expect(materialized.map((skill) => skill.name)).toEqual([
-      ...bundledPeaSkills.map((skill) => skill.name),
-      ...bundledPeaSkills.map((skill) => skill.name),
-    ]);
-    expect(new Set(materialized.map((skill) => path.dirname(path.dirname(skill.path))))).toEqual(
-      new Set(resolvePeaSkillPaths()),
+    await writeFile(receipted, "old\n", "utf-8");
+    await writeFile(
+      path.join(codexRoot!, ".pe-projection.json"),
+      JSON.stringify({ [retiredName]: receiptHash }),
     );
-    await expect(access(path.dirname(retired))).rejects.toThrow();
+    await writeFile(unreceipted, "the user's own words\n", "utf-8");
+
+    const materialized = await publishPeaSkills({ captureDirectory });
+
+    expect(materialized.skills.map((skill) => skill.name)).toContain("my-office-standards");
+    for (const root of resolvePeaSkillPaths())
+      for (const skill of bundledPeaSkills)
+        expect(await readFile(path.join(root, skill.name, "SKILL.md"), "utf8")).toBe(
+          `${skill.content.trimEnd()}\n`,
+        );
+    await expect(access(path.dirname(receipted))).rejects.toThrow();
+    expect(await readFile(unreceipted, "utf-8")).toBe("the user's own words\n");
+    expect(materialized.notices.filter((n) => n.includes(path.dirname(unreceipted)))).toHaveLength(
+      1,
+    );
     expect(await readFile(userOwned, "utf-8")).toBe("mine\n");
     expect(retiredPeaSkillNames.some((name) => bundledPeaSkills.some((s) => s.name === name))).toBe(
       false,

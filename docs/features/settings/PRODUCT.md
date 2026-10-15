@@ -131,8 +131,8 @@ fixture mode — suggestion lists stay empty/loading without one; inputs remain 
 in the console; nothing renders from it.
 
 **Environment finding (not a code defect):** the running host instance (5180) serves `/call`
-fully but its `/pe` agent surface (route-state, SSE, pea) is degraded to 503 — the documented
-Mastra-thread/livelock class. Until that host restarts, no web lane can open documents through
+fully but its `/pe` agent surface (route-state, SSE, pea) is degraded to 503 (a thread-lock
+failure of the since-deleted Mastra runtime, observed before ADR 0015). Until that host restarts, no web lane can open documents through
 route-state, whatever the code does. The dev proxy is opt-in (`PE_TOOLS_HOST_BASE_URL`) to
 preserve per-worktree lane isolation; unset = takeover-era behavior, untouched.
 

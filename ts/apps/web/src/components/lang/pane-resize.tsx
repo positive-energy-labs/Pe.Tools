@@ -10,15 +10,20 @@ import {
   type ReactNode,
 } from "react";
 
-import { tv } from "#/lib/tv";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
-/** Collapse leaves the pane's own chrome visible (`collapsedSize` ≈ toolbar height) so the
- * re-expand affordance lives IN the pane — no separate rail node to design. */
+import { Button } from "@pe/kit/lang/button";
+import { tv } from "@pe/kit/lib/tv";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
+
+/** Collapse shrinks the target to `collapsedSize`. With `title` the split draws a rail there (the
+ * title rotated under an expand press); without it the pane's own header stays as the affordance. */
 interface PaneCollapseSpec {
-  collapsed?: boolean;
+  collapsed: boolean;
   onCollapsedChange?: (collapsed: boolean) => void;
   collapsedSize?: number;
   collapseBelow?: number;
+  title?: string;
 }
 
 interface PaneSizeSpec {
@@ -27,7 +32,6 @@ interface PaneSizeSpec {
   maxSize?: number;
   minOtherSize?: number;
   persist?: string;
-  onSizeChange?: (size: number) => void;
   collapse?: PaneCollapseSpec;
 }
 
@@ -66,15 +70,11 @@ function storedSize(spec: PaneSizeSpec) {
 
 function usePaneSize(spec: PaneSizeSpec): PaneSizeState {
   const [internalSize, setInternalSize] = useState(() => storedSize(spec));
-  const [collapsedInternal, setCollapsedInternal] = useState(false);
   const size = clampSize(internalSize, spec);
-  const collapsed = spec.collapse?.collapsed ?? collapsedInternal;
+  const collapsed = spec.collapse?.collapsed ?? false;
 
   const setCollapsed = useCallback(
-    (next: boolean) => {
-      if (spec.collapse?.collapsed === undefined) setCollapsedInternal(next);
-      spec.collapse?.onCollapsedChange?.(next);
-    },
+    (next: boolean) => spec.collapse?.onCollapsedChange?.(next),
     [spec.collapse],
   );
 
@@ -93,7 +93,6 @@ function usePaneSize(spec: PaneSizeSpec): PaneSizeState {
       if (collapsed) setCollapsed(false);
       const next = clampSize(requested, spec, containerSize);
       setInternalSize(next);
-      spec.onSizeChange?.(next);
       if (commit && spec.persist && typeof window !== "undefined") {
         try {
           window.localStorage.setItem(spec.persist, String(next));
@@ -162,15 +161,18 @@ interface PaneResizeHandleProps {
   onReset: () => void;
 }
 
+// The handle IS the seam between two panes: a full-length hairline, so two panes on one ground
+// never read as one field (chat polish, 2026-10-11 — the sidebar and the conversation had only an
+// 8px gap and a 32px grip between them). Hover and focus darken the whole seam, not a grip.
 const paneResizeHandleRecipe = tv({
   slots: {
-    root: "veil group z-raised flex touch-none items-center justify-center outline-none",
-    bar: "bg-line-2 group-hover:bg-ink-2 group-focus-visible:bg-ink-2",
+    root: "group z-raised flex touch-none items-center justify-center outline-none",
+    bar: "bg-line transition-colors duration-control group-hover:bg-ink-2 group-focus-visible:bg-ink-2 motion-reduce:transition-none",
   },
   variants: {
     axis: {
-      horizontal: { root: "h-full w-(--gutter) cursor-col-resize", bar: "h-8 w-px" },
-      vertical: { root: "h-(--gutter) w-full cursor-row-resize", bar: "h-px w-8" },
+      horizontal: { root: "h-full w-(--gutter) cursor-col-resize", bar: "h-full w-px" },
+      vertical: { root: "h-(--gutter) w-full cursor-row-resize", bar: "h-px w-full" },
     },
   },
 });
@@ -228,26 +230,27 @@ export function PaneResizeHandle({
   };
 
   return (
-    <div
-      role="separator"
-      tabIndex={0}
-      aria-orientation={axis === "horizontal" ? "vertical" : "horizontal"}
-      aria-valuemin={min}
-      aria-valuemax={max}
-      aria-valuenow={Math.round(value)}
-      data-surface="page"
-      aria-label="Resize pane"
-      title="Drag or use arrow keys to resize · Home or double-click resets"
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={finishPointer}
-      onPointerCancel={finishPointer}
-      onKeyDown={onKeyDown}
-      onDoubleClick={onReset}
-      className={root()}
-    >
-      <span className={bar()} />
-    </div>
+    <TooltipHint content="Drag or use arrow keys to resize · Home or double-click resets">
+      <div
+        role="separator"
+        tabIndex={0}
+        aria-orientation={axis === "horizontal" ? "vertical" : "horizontal"}
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={Math.round(value)}
+        data-surface="page"
+        aria-label="Resize pane"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={finishPointer}
+        onPointerCancel={finishPointer}
+        onKeyDown={onKeyDown}
+        onDoubleClick={onReset}
+        className={root()}
+      >
+        <span className={bar()} />
+      </div>
+    </TooltipHint>
   );
 }
 
@@ -296,22 +299,40 @@ export function PaneSplit({ axis, start, end, resize, hide, grow }: PaneSplitPro
 
   usePaneFit(rootRef, (rect) => state.fit(horizontal ? rect.width : rect.height));
 
+  const railTitle = resize?.collapse?.title;
   const renderSide = (side: "start" | "end", child: ReactNode) => {
+    const rail = railTitle != null && state.collapsed && side === target && child != null;
+    const style = horizontal
+      ? { gridColumn: bothSides ? (side === "start" ? 1 : 3) : 1, gridRow: 1 }
+      : { gridColumn: 1, gridRow: bothSides ? (side === "start" ? 1 : 3) : 1 };
     return (
-      <div
-        className={
-          child == null || hide === side
-            ? "hidden"
-            : "flex min-h-0 min-w-0 flex-col overflow-visible"
-        }
-        style={
-          horizontal
-            ? { gridColumn: bothSides ? (side === "start" ? 1 : 3) : 1, gridRow: 1 }
-            : { gridColumn: 1, gridRow: bothSides ? (side === "start" ? 1 : 3) : 1 }
-        }
-      >
-        {child}
-      </div>
+      <>
+        {rail && (
+          <div
+            data-slot="pane-rail"
+            className="flex min-h-0 flex-col items-center gap-2 py-2"
+            style={style}
+          >
+            <Button
+              label={`Expand ${railTitle}`}
+              icon={side === "start" ? ChevronRight : ChevronLeft}
+              onClick={() => resize?.collapse?.onCollapsedChange?.(false)}
+            />
+            <span className="t-small t-upper [writing-mode:vertical-rl]">{railTitle}</span>
+          </div>
+        )}
+        {/* A collapsed side under a rail stays mounted, so its pane keeps its state. */}
+        <div
+          className={
+            child == null || hide === side || rail
+              ? "hidden"
+              : "flex min-h-0 min-w-0 flex-col overflow-visible"
+          }
+          style={style}
+        >
+          {child}
+        </div>
+      </>
     );
   };
 

@@ -1,5 +1,9 @@
 import { sdkSession } from "./sdk-session.ts";
 import { requestIdentityLayer } from "./request-identity.ts";
+import { createDevices, type Devices } from "./remote-device.ts";
+import { deviceRoutes } from "./device-routes.ts";
+import { bindControl } from "./control.ts";
+import { readRemoteIngress, remoteListener } from "./remote-ingress.ts";
 import {
   createShare,
   shareIntentFile,
@@ -8,14 +12,14 @@ import {
   type ShareOwner,
 } from "./share.ts";
 import { mcpRoute } from "./mcp-route.ts";
-import { Deferred, Effect, Layer, Stream, Option } from "effect";
+import { Deferred, Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
 import { NodeHttpClient, NodeHttpServer, NodeServices } from "@effect/platform-node";
 import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
-import type { PeaRuntimeCapabilities } from "@pe/mcps";
+import type { PeaRuntimeCapabilities } from "@pe/runtime";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
 import { getHostStatus } from "./local-ops.ts";
 import { isSettingsSchemaUrl } from "./settings.ts";
@@ -32,11 +36,11 @@ import {
 } from "./host-lifecycle.ts";
 import { hostOwnership, productRoot } from "./host-ownership.ts";
 import { staticSpaLayer } from "./static-spa.ts";
-import { peRoutesLayer } from "./pe-routes.ts";
+import { peRoutesLayer, peApiErrorsLayer } from "./pe-routes.ts";
 import { capturesRoute } from "./captures-route.ts";
 import { pagesRoute } from "./pages-route.ts";
 import { makeInstalledUpdateReader, updateRoutes } from "./update-route.ts";
-import { UpdateReader } from "./update-reader.ts";
+import { UpdateReader, type UpdateFact } from "./update-reader.ts";
 
 export { resolveWebRoot } from "./static-spa.ts";
 
@@ -95,30 +99,9 @@ const noRevitHostStatusRoute = HttpRouter.add("GET", hostProcessIdentity.healthP
 
 const emptyNotFound = Effect.succeed(Response.empty({ status: 404 }));
 
-const bridgeEventsRoute = HttpRouter.add("GET", "/events", () =>
-  Effect.gen(function* () {
-    const bridge = yield* RevitBridge;
-    const encoder = new TextEncoder();
-    const body = Stream.make(encoder.encode(": open\n\n")).pipe(
-      Stream.concat(
-        Stream.fromPubSub(bridge.events).pipe(
-          Stream.map((event) =>
-            encoder.encode(`data: ${JSON.stringify({ ...event, atMs: Date.now() })}\n\n`),
-          ),
-        ),
-      ),
-    );
-    return Response.stream(body, {
-      contentType: "text/event-stream",
-      headers: { "cache-control": "no-cache", connection: "keep-alive" },
-    });
-  }),
-);
-
 const noRevitBoundary = () =>
   Layer.mergeAll(
     HttpRouter.add("*", BRIDGE_PATH, emptyNotFound),
-    HttpRouter.add("*", "/events", emptyNotFound),
     HttpRouter.add("*", "/schemas/settings/*", emptyNotFound),
     HttpRouter.add("*", "/host/install", emptyNotFound),
   );
@@ -141,7 +124,6 @@ function makeRevitComposition(spa: SpaFallback = () => emptyNotFound) {
     provider: RevitBridgeLive,
     routes: Layer.mergeAll(
       bridgeWsRoute,
-      bridgeEventsRoute,
       opsCatalogRoute(spa),
       settingsSchemaRoute,
       hostStatusRoute,
@@ -159,11 +141,15 @@ export interface HttpLiveOptions {
   /** Injected listener for socket lifecycle tests. */
   readonly nodeServer?: Server;
   readonly share?: ShareOwner;
+  readonly devices?: Devices;
+  readonly remoteIngress?: readonly { origin: string; transport: "lan" | "ssh" }[];
   /** Browser origin of the separately owned dev frontend. API requests stay here. */
   readonly webUrl?: Deferred.Deferred<string>;
   /** Boot-scoped shutdown latch + service token, injected by the launch root. */
   readonly lifecycle: HostLifecycle["Service"];
   readonly updateReader?: UpdateReader["Service"];
+  /** The spine's intake for update facts, handed to the reader this app builds. */
+  readonly updateFact?: (fact: UpdateFact) => void;
   /** Built SPA directory, or null to skip static serving (dev/vite). */
   readonly webRoot: string | null;
   /** Route registrations for the host-owned route surface; tests inject their own. */
@@ -180,9 +166,23 @@ export interface HttpLiveOptions {
 export function makeHttpLive(options: HttpLiveOptions) {
   const UpdateLive = Layer.succeed(
     UpdateReader,
-    options.updateReader ?? makeInstalledUpdateReader(),
+    options.updateReader ?? makeInstalledUpdateReader(options.updateFact),
   );
   const nodeServer = options.nodeServer ?? createServer();
+  const remoteConfig = readRemoteIngress(
+    join(productRoot(), "state", hostOwnership.serviceName, "remote-ingress.json"),
+  );
+  const remoteRequests = new WeakSet<object>();
+  const remote = remoteConfig ? remoteListener(nodeServer, remoteRequests) : null;
+  const RemoteLive =
+    remote && remoteConfig
+      ? Layer.effectDiscard(
+          Effect.acquireRelease(
+            Effect.promise(() => remote.start(remoteConfig.listenHost, remoteConfig.port)),
+            () => Effect.promise(() => remote.close()),
+          ),
+        )
+      : Layer.empty;
   // Socket retirement. The platform layer detaches its request handler and calls `server.close`
   // on release, but a keep-alive socket a browser still holds survives that close with nothing
   // listening behind it; a reload against a successor on the same port then reuses the dead
@@ -200,6 +200,8 @@ export function makeHttpLive(options: HttpLiveOptions) {
   const ServerLive = NodeHttpServer.layer(() => nodeServer, {
     host: "127.0.0.1",
     port: options.port,
+    // Reading streams never finish naturally; interrupt them before awaiting server.close.
+    disablePreemptiveShutdown: true,
   }).pipe(Layer.provide(RetireSocketsLive));
 
   const port = () => {
@@ -214,7 +216,14 @@ export function makeHttpLive(options: HttpLiveOptions) {
       run: tailscaleCommand(),
       ...shareIntentFile(join(productRoot(), "state", "share.json")),
     });
+  const devices =
+    options.devices ??
+    createDevices(join(productRoot(), "state", hostOwnership.serviceName, "devices.json"));
+  bindControl({ deviceThread: (device) => devices.active(device).thread });
   const identity = requestIdentityLayer({
+    devices,
+    remoteRequests,
+    remoteIngress: options.remoteIngress ?? remoteConfig?.origins,
     port,
     frontendOrigin: () =>
       options.webUrl
@@ -223,7 +232,8 @@ export function makeHttpLive(options: HttpLiveOptions) {
           )
         : undefined,
     share,
-  });
+  }).pipe(Layer.provide(peApiErrorsLayer));
+
   const webUrl = options.webUrl;
   const webRoot = options.webRoot;
   const spa: SpaFallback = webUrl
@@ -232,8 +242,10 @@ export function makeHttpLive(options: HttpLiveOptions) {
       ? () => Effect.sync(() => Response.html(readFileSync(join(webRoot, "index.html"), "utf8")))
       : () => emptyNotFound;
   const CommonAppLive = Layer.mergeAll(
+    RemoteLive,
     identity,
     shareRoute(share),
+    deviceRoutes(devices),
     mcpRoute(() => `http://127.0.0.1:${port()}`),
     capturesRoute(spa),
     pagesRoute(),

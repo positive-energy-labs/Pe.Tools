@@ -15,8 +15,8 @@
  * The migration was a deletion, exactly as this file's old note predicted. The cells now build
  * their props through `cellFromTrichotomy`, so no reading of a proposal is written here twice.
  */
-import { StateCell, type StateCellProps } from "#/components/lang/cell";
-import { useCellNavigation } from "#/components/master-table/cell-navigation";
+import { StateCell, type StateCellProps } from "@pe/kit/lang/cell";
+import { useCellNavigation } from "@pe/kit/table/cell-navigation";
 
 /**
  * The editable `StateCell`, wired to whatever cell navigation surrounds it. Inside a Table

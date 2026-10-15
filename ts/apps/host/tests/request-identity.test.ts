@@ -1,9 +1,9 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
-import { invocationContext, withInvocationContext, contextFetch } from "@pe/mcps/context";
+import { invocationContext, withInvocationContext, contextFetch } from "@pe/runtime/context";
 import {
-  readRequestIdentity,
+  readRequestIdentity as rawReadRequestIdentity,
   requestIdentityLayer,
   type IdentityOptions,
 } from "../src/request-identity.ts";
@@ -12,10 +12,27 @@ import { hostResourceObserver } from "../src/resource-adapters.ts";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import {
+  HOST_CONTEXT_HEADER,
   HOST_RUNTIME_SERVICE_HEADER,
   HOST_RUNTIME_SERVICE_QUERY,
 } from "@pe/host-contracts/contracts";
+import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { hostOwnership } from "../src/host-ownership.ts";
+import { createDevices, DEVICE_COOKIE } from "../src/remote-device.ts";
+import { mintBrowserContext, mintContext } from "../src/control.ts";
+
+// Existing browser fixtures acquire a host-minted session before entering the API.
+const readRequestIdentity: typeof rawReadRequestIdentity = (headers, ...rest) => {
+  const principal = headers["tailscale-user-login"]
+    ? { kind: "tailnet" as const, login: headers["tailscale-user-login"], authority: headers.host! }
+    : { kind: "local" as const };
+  return rawReadRequestIdentity(
+    headers.origin && principal.kind === "local"
+      ? { ...headers, cookie: mintBrowserContext(principal).split(";")[0] }
+      : headers,
+    ...rest,
+  );
+};
 
 test.each(["/call", "/revit-bridge", "/host/update", "/pe/action", "/mcp"])(
   "wrong checkout header refuses %s before routing",
@@ -46,13 +63,22 @@ const share: MachineShare = {
   callers: [],
   refused: [],
 };
+const devices = createDevices();
+const paired = devices.claim(
+  devices.pair("browser").code,
+  "Test browser",
+  "tailnet",
+  "operator@example.com",
+);
 const options: IdentityOptions = {
+  devices,
   port: () => 5180,
   frontendOrigin: () => "http://127.0.0.1:8123",
   share: { read: async () => share, observe: () => {} },
 };
 const local = { host: "127.0.0.1:5180", [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName };
 const remote = {
+  cookie: `${DEVICE_COOKIE}=${paired.token}`,
   host: "box.tailabc.ts.net",
   "tailscale-user-login": "operator@example.com",
   [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName,
@@ -62,7 +88,7 @@ afterEach(async () => {
   await Promise.all(disposals.splice(0).map((dispose) => dispose()));
 });
 
-test.each(["/call", "/events", "/pe/readings", "/api/bridge", "/host/status"])(
+test.each(["/call", "/pe/readings", "/api/bridge", "/host/status"])(
   "stale browser cannot enter %s without its original runtime owner",
   async (path) => {
     const browser = {
@@ -113,6 +139,27 @@ test("browser document navigation and static assets retain normal routing", asyn
       options,
     ),
   ).toHaveProperty("principal");
+  // 0.7.25 field (Andrea): Edge's manifest fetch for /manifest.json was refused 403 eight times,
+  // so Edge never offered Install and never applied the title-bar overlay.
+  expect(
+    await readRequestIdentity(
+      {
+        host: local.host,
+        "sec-fetch-site": "same-origin",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-dest": "manifest",
+      },
+      "/manifest.json",
+      options,
+    ),
+  ).toHaveProperty("principal");
+  expect(
+    await readRequestIdentity(
+      { host: local.host, "sec-fetch-site": "same-origin", "sec-fetch-dest": "manifest" },
+      "/pe/resources.json",
+      options,
+    ),
+  ).toMatchObject({ refusal: { code: "runtime.owner-missing" } });
   expect(
     await readRequestIdentity(
       {
@@ -122,7 +169,7 @@ test("browser document navigation and static assets retain normal routing", asyn
         "sec-fetch-dest": "empty",
         accept: "text/html",
       },
-      "/events",
+      "/pe/resources",
       options,
     ),
   ).toMatchObject({ refusal: { code: "runtime.owner-missing" } });
@@ -230,7 +277,6 @@ test("the global reader gates routes, static fallback, unmatched paths and upgra
     "/call",
     "/actions",
     "/actions/cancel",
-    "/events",
     "/pe/resources",
     "/pe/access",
     "/host/status",
@@ -366,37 +412,51 @@ test("remote administration Off denies only machine-control mutations, including
     ["POST", "/pe/providers/x/probe"],
     ["POST", "/pe/providers/x/open-login"],
     ["PUT", "/pe/access"],
+    ["PUT", peRouteUrl("plugin.update", { params: { id: "pod:sample" } })],
     ["POST", "/host/update"],
     ["POST", "/pe/%70roviders"],
     ["POST", "/pe//providers"],
     ["POST", "/pe/providers/"],
     ["POST", "/x/../pe/providers?unused=true"],
   ]) {
+    // Administration is a person's act (ADR 0017 D2): the caller carries the owner's context.
+    const person = { [HOST_CONTEXT_HEADER]: mintContext({ kind: "human", via: "cli" }) };
     expect(
-      await readRequestIdentity(remote, path!, disabled, method),
+      await readRequestIdentity({ ...remote, ...person }, path!, disabled, method),
       `${method} ${path}`,
     ).toHaveProperty("refusal.code", "identity.remote-administration");
-    expect(await readRequestIdentity(local, path!, disabled, method)).toHaveProperty(
-      "principal.kind",
-      "local",
-    );
-    expect(await readRequestIdentity(remote, path!, options, method)).toHaveProperty(
-      "principal.kind",
-      "tailnet",
+    expect(
+      await readRequestIdentity({ ...local, ...person }, path!, disabled, method),
+    ).toHaveProperty("principal.kind", "local");
+    expect(
+      await readRequestIdentity({ ...remote, ...person }, path!, options, method),
+    ).toHaveProperty("principal.kind", "tailnet");
+    expect(await readRequestIdentity(local, path!, options, method)).toHaveProperty(
+      "refusal.code",
+      "context.missing",
     );
   }
   for (const [method, path] of [
     ["GET", "/pe/providers"],
     ["GET", "/pe/access"],
+    ["GET", peRouteUrl("plugins.list", {})],
+    ["GET", peRouteUrl("thread.export", { params: { id: "thread" } })],
     ["GET", "/host/update"],
     ["POST", "/call"],
     ["POST", "/actions"],
     ["POST", "/mcp"],
   ])
-    expect(await readRequestIdentity(remote, path!, disabled, method)).toHaveProperty(
-      "principal.kind",
-      "tailnet",
-    );
+    expect(
+      await readRequestIdentity(
+        {
+          ...remote,
+          [HOST_CONTEXT_HEADER]: mintContext({ kind: "pea", thread: "remote-product" }),
+        },
+        path!,
+        disabled,
+        method,
+      ),
+    ).toHaveProperty("principal.kind", "tailnet");
 });
 
 test("the actual router supplies the mutation method to the remote administration boundary", async () => {
@@ -434,8 +494,73 @@ test("the actual router supplies the mutation method to the remote administratio
     ["POST", "/call"],
   ])
     expect(
-      (await app.handler(new Request(`http://127.0.0.1:5180${path}`, { method, headers: remote })))
-        .status,
+      (
+        await app.handler(
+          new Request(`http://127.0.0.1:5180${path}`, {
+            method,
+            headers: {
+              ...remote,
+              [HOST_CONTEXT_HEADER]: mintContext({ kind: "pea", thread: "remote-product" }),
+            },
+          }),
+        )
+      ).status,
     ).toBe(200);
   expect(reached).toBe(2);
+});
+
+test("identity mints the caller: minted browser cookie is human, an actor header is nobody, a browser context is refused", async () => {
+  const browser = { ...local, origin: "http://127.0.0.1:5180", "sec-fetch-site": "same-origin" };
+  expect(
+    await readRequestIdentity(
+      { ...browser, referer: "http://127.0.0.1:5180/open" },
+      "/actions",
+      options,
+      "POST",
+    ),
+  ).toMatchObject({ caller: { kind: "human", via: "local" } });
+  expect(
+    await readRequestIdentity(
+      { ...local, "x-pe-action-actor": "human" },
+      "/actions",
+      options,
+      "POST",
+    ),
+  ).toMatchObject({ refusal: { code: "context.missing" } });
+  expect(
+    await readRequestIdentity(
+      { ...browser, referer: "http://127.0.0.1:5180/pages/todo/" },
+      "/actions",
+      options,
+      "POST",
+    ),
+  ).toMatchObject({ caller: { kind: "page", page: "page:@pages/todo" } });
+  expect(
+    await readRequestIdentity(
+      { ...browser, referer: "http://127.0.0.1:5180/open", "x-pe-context": "anything" },
+      "/actions",
+      options,
+      "POST",
+    ),
+  ).toMatchObject({ refusal: { code: "context.unknown" } });
+  expect(
+    await readRequestIdentity(
+      { ...local, "x-pe-context": "never-minted" },
+      "/actions",
+      options,
+      "POST",
+    ),
+  ).toMatchObject({ refusal: { code: "context.unknown" } });
+  expect(
+    await readRequestIdentity(
+      {
+        ...remote,
+        origin: "https://box.tailabc.ts.net",
+        referer: "https://box.tailabc.ts.net/chat",
+      },
+      "/actions",
+      options,
+      "POST",
+    ),
+  ).toMatchObject({ caller: { kind: "human", via: "tailnet", login: "operator@example.com" } });
 });

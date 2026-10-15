@@ -8,7 +8,7 @@ import { useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { actionAdmissionSchema } from "@pe/agent-contracts";
 
-import { Press } from "#/components/lang/press";
+import { Button } from "@pe/kit/lang/button";
 import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 export interface Inspectable {
@@ -89,7 +89,6 @@ async function openOnHost(path: string): Promise<void> {
       id: crypto.randomUUID(),
       kind: "operation",
       key: "host.shell.open",
-      actor: "human",
       destination: { kind: "host" },
       input: { path },
       bases: {},
@@ -129,11 +128,12 @@ export function Inspect({
     );
   const path = spec.open.path(id);
   return (
-    <Press
-      tone="nav"
-      size="value"
+    <Button
+      kind="nav"
+      direction="out"
+      label={spec.label(id)}
       data-tone={refusal ? "caution" : undefined}
-      title={refusal ?? `Open ${path} in the host's default app. Nothing is copied.`}
+      reason={refusal ?? `Open ${path} in the host's default app. Nothing is copied.`}
       onClick={() =>
         void openOnHost(path).then(
           () => setRefusal(null),
@@ -142,6 +142,6 @@ export function Inspect({
       }
     >
       {text}
-    </Press>
+    </Button>
   );
 }

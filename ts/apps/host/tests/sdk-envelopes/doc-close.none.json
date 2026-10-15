@@ -1,0 +1,28 @@
+{
+  "result": {},
+  "resolved": null,
+  "diagnostics": [
+    {
+      "code": "doc.no-match",
+      "detail": "--doc '36720a38fc29437da66eac4e43db77f0' is neither the openId nor the exact path of an open document. Open now: A openId e54ad67d7ce64e61bf552c35c914e2a9.",
+      "fix": "pe-revit doc list --id acc-r1  (copy the openId)"
+    }
+  ],
+  "binary": {
+    "origin": "dev-installed",
+    "assembly": "C:\\Users\\person\\.nuget\\packages\\pe.revit.cli\\0.1.0-beta.207\\tools\\net8.0\\any\\Pe.Revit.Cli.dll",
+    "sha256": "093D7ADCEDA6A6D85673BB5BAC9D56713FC5BFE88B7870E9C3E3BF425EAB12C4",
+    "informationalVersion": "0.1.0-beta.207+d458282266a924c74a811d1bea54ae91516e8fb6",
+    "hostExecutable": "C:\\Program Files\\dotnet\\dotnet.exe"
+  },
+  "command": {
+    "cwd": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRoot": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRule": "checkout-manifest",
+    "commandManifest": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\product.payloads.json"
+  },
+  "nextSteps": ["pe-revit doc list --id acc-r1", "pe-revit session list"],
+  "guide": "session",
+  "related": ["pe-revit doc list", "pe-revit doc list --recent", "pe-revit session list"],
+  "exitCode": 3
+}

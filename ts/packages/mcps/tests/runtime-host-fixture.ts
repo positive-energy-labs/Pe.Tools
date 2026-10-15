@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { serviceFilePath } from "@pe/host-contracts/pe-service";
+import { productRoot } from "@pe/host-contracts/service-identity";
 import { resolveLaneAndRoot } from "../src/shared/host-config.ts";
 
 const roots: string[] = [];
@@ -19,8 +20,15 @@ export function fakeRuntimeHost(base = "http://127.0.0.1:19999"): string {
   const local = mkdtempSync(join(tmpdir(), "pe-fake-runtime-host-"));
   roots.push(local);
   vi.stubEnv("LOCALAPPDATA", local);
+  const productHome = process.env.PE_TOOLS_PRODUCT_HOME?.trim();
+  if (productHome) {
+    mkdirSync(productHome, { recursive: true });
+    const isolatedHome = mkdtempSync(join(productHome, "runtime-host-"));
+    roots.push(isolatedHome);
+    vi.stubEnv("PE_TOOLS_PRODUCT_HOME", isolatedHome);
+  }
   vi.stubEnv("PE_TOOLS_HOST_BASE_URL", base);
-  const path = serviceFilePath(join(local, "Positive Energy", "Pe.Tools"), owner.serviceName);
+  const path = serviceFilePath(productRoot(), owner.serviceName);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(
     path,

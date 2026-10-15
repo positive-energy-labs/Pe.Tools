@@ -2,7 +2,10 @@ import { access, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
-import { peaProductHomeEnvVar, peaProductTools, peaStandardSkillsRoot } from "@pe/mcps";
+import { productPathNames } from "@pe/host-contracts/contracts";
+import { peaProductTools, peaStandardSkillsRoot } from "@pe/mcps";
+
+const peaProductHomeEnvVar = productPathNames.productHomeVariable;
 import { createPeaCliCommand, getPeaCliCommandNames } from "../src/index.ts";
 
 test("pea exposes three capability doors, one Scope door, and the media and docs helpers", () => {
@@ -11,6 +14,7 @@ test("pea exposes three capability doors, one Scope door, and the media and docs
     "pe_read",
     "pe_do",
     "target_set",
+    "pe_feedback",
     "capture_view",
     "read_image",
     "diagram",

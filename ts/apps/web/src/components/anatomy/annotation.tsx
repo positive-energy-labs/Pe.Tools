@@ -12,19 +12,11 @@ export type AnnotationVariant =
   | "reticle-focal"
   | "caret"
   | "chat"
-  | "trace-frame"
-  | "trace-pin"
-  | "inspect"
   | "scrim"
   | "moment"
   | "streaming-caret"
   | "tool-marker"
   | "tool-run"
-  | "tool-body"
-  | "trace-cell"
-  | "cell-head"
-  | "cell-title"
-  | "cell-meta"
-  | "tool-image";
+  | "tool-body";
 
 export const annotation = (variant: AnnotationVariant) => ({ "data-annotation": variant }) as const;

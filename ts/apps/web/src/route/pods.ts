@@ -21,7 +21,6 @@ async function admitHost(key: "pod.member.write" | "pod.member.save", input: obj
       id: crypto.randomUUID(),
       kind: "operation",
       key,
-      actor: "human",
       destination: { kind: "host" },
       input,
       bases: {},

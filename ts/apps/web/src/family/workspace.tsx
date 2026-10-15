@@ -106,8 +106,8 @@
  */
 import { useEffect } from "react";
 
-import { ActionButton } from "#/components/lang/action-button";
-import { Code, stringify } from "#/components/lang/code";
+import { Button } from "@pe/kit/lang/button";
+import { Code, stringify } from "@pe/kit/lang/code";
 import { PaneSplit } from "#/components/lang/pane";
 import { buildReceiptSummary } from "#/family/build";
 import type { FamilyStore } from "#/family/store";
@@ -117,6 +117,7 @@ import { FamilyWorkspaceTable } from "#/family/workspace-table";
 import { FamilyWorkspaceProvider, useFamilyWorkspace } from "#/family/workspace-context";
 import { useFamilyWorkspaceCore } from "#/family/workspace-core";
 import { useFamilyColumns } from "#/family/workspace-columns";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 function useFamilyWorkspaceModel(store: FamilyStore) {
   const core = useFamilyWorkspaceCore(store);
@@ -138,11 +139,14 @@ export function FamilyWorkspace({ store }: { store: FamilyStore }) {
         {store.editFailure && (
           <div role="alert">
             <span>{store.editFailure.message} Your input is retained for this member.</span>
-            <ActionButton
+            <Button
               label="retry staging"
               reason="Retry the retained input against its original Work revision"
+              kind="framed"
               onClick={() => void store.actions.flush().catch(() => undefined)}
-            />
+            >
+              retry staging
+            </Button>
           </div>
         )}
         <FamilyAuditPanes />
@@ -291,16 +295,17 @@ export function familyFacts(store: FamilyStore) {
       (dependency) =>
         [
           "depends",
-          <a
+          <TooltipHint
+            content="Edit the shared source JSON in its pod. Changes affect every member that includes it."
             key={`${dependency.id}:${dependency.path}`}
-            href={`/pods?${new URLSearchParams({ pod: dependency.id, path: dependency.path })}`}
-            title="Edit the shared source JSON in its pod. Changes affect every member that includes it."
           >
-            {sharedEdit?.directives.some((directive) => directive.endsWith(dependency.path))
-              ? "open referenced source "
-              : "edit shared "}
-            @{dependency.id}/{dependency.path}
-          </a>,
+            <a href={`/pods?${new URLSearchParams({ pod: dependency.id, path: dependency.path })}`}>
+              {sharedEdit?.directives.some((directive) => directive.endsWith(dependency.path))
+                ? "open referenced source "
+                : "edit shared "}
+              @{dependency.id}/{dependency.path}
+            </a>
+          </TooltipHint>,
         ] as const,
     ),
   ] as const;

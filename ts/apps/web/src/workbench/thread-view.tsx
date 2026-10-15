@@ -23,8 +23,8 @@ function createCurrentThreadView(deps: {
   patch: (partial: { turn?: number }, replace?: boolean) => Promise<void>;
 }) {
   const core = createRouteOwner("chat/thread", deps.registry);
-  const lensInspectKey = core.owned("page/lens-inspect-key", Atom.make<string | null>(null));
-  const lensPinKey = core.owned("page/lens-pin-key", Atom.make<string | null>(null));
+  // The one call opened in the transcript (`tool:<id>`), or none.
+  const openCallKey = core.owned("page/open-call-key", Atom.make<string | null>(null));
   const lensIntent = core.owned(
     "widget/lens-intent",
     Atom.make<LensScrollIntent>(deps.turn ? { kind: "turn", turn: deps.turn } : { kind: "tail" }),
@@ -62,14 +62,12 @@ function createCurrentThreadView(deps: {
     if (next.kind === "tail") void deps.patch({ turn: undefined }, true);
     else turnTimer = setTimeout(() => void deps.patch({ turn: next.turn }, true), 1000);
   };
-  core.expose({ page: { lensInspectKey } });
   return {
     registry: deps.registry,
-    atoms: { lensInspectKey, lensPinKey, lensIntent, world, worldCache },
+    atoms: { openCallKey, lensIntent, world, worldCache },
     actions: {
-      setLensInspectKey: (value: Setter<string | null>) =>
-        set("set-lens-inspect-key", lensInspectKey, value),
-      setLensPinKey: (value: Setter<string | null>) => set("set-lens-pin-key", lensPinKey, value),
+      setOpenCallKey: (value: Setter<string | null>) =>
+        set("set-open-call-key", openCallKey, value),
       setWorld: (value: Setter<WorldState>) => set("set-world", world, value),
       setWorldCache: (value: Setter<WorldCacheState>) => set("set-world-cache", worldCache, value),
       setLensIntent,

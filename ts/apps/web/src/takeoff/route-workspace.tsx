@@ -14,7 +14,7 @@ import { Ladder } from "#/route/ladder";
 import { manifest } from "#/takeoff/manifest";
 import { takeoffReadingHealth } from "#/takeoff/actions";
 import { AdoptRegions, SyncPanel } from "#/takeoff/adopt-panel";
-import { Input } from "#/components/lang/input";
+import { Input } from "@pe/kit/lang/input";
 
 function TakeoffHead({ store }: { store: TakeoffsController }) {
   const ladder = useDocumentLadder(store.handle, store.actions.resetTarget);

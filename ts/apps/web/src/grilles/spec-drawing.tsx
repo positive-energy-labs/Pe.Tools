@@ -1,7 +1,7 @@
 // This drawing is serialized to a standalone .svg by the export sheet, which carries no
 // stylesheet — so its two broken lines read their role through the token boundary and render as
 // attributes rather than wearing the `dash-*` classes the on-screen drawings use.
-import { dash, token } from "#/lib/token";
+import { dash, token } from "@pe/kit/lib/token";
 /**
  * SPEC DRAWING — the one pane that reflects per-slot information, drawn the way a Price
  * submittal draws a grille: line work in ink, no fills, extension lines + witness lines +

@@ -1,13 +1,18 @@
 // A fake ACP agent for harness-threads.test.ts: echoes the prompt, emits one tool_call, asks one
 // permission when the prompt says "permission", asks one form question on "question", hangs until
-// cancel on "hang" (and with no update at all on "silent"), lingers on "slow", names the session on
+// cancel on "hang" (and with no update at all on "silent"), ignores cancel on "stubborn" (saying
+// "ignoring cancel"), lingers on "slow", names the session on
 // "title", and echoes its env on "env". `FAKE_ACP_SHAPE=config` answers `configOptions` (model, an effort select, a fast boolean);
 // otherwise only the unstable `models` state, so `setModel` takes `session/set_model`. Auth as the
 // real adapters report it (2026-10-08): `_auth/status_update` before the session answers, kind from
 // `FAKE_ACP_AUTH` (`account` by default, `none`), and `required` refuses `session/new`. `session/resume` picks a stored
-// session up with no replay and refuses the id "lost"; `session/fork` answers a new id.
+// session up with no replay and refuses the id "lost"; `session/fork` answers a new id. It reads
+// images and embedded context unless `FAKE_ACP_PROMPT=none`, and says `blocks: <json>` for every
+// non-text prompt block (a linked file's bytes read back from its path), then `order: <types>` when
+// a `pe://` mention resource rode along.
 import { Readable, Writable } from "node:stream";
-import { appendFileSync, existsSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import {
   AgentSideConnection,
@@ -99,7 +104,12 @@ new AgentSideConnection(
       await gate("connect");
       return {
         protocolVersion: PROTOCOL_VERSION,
-        agentCapabilities: { loadSession: true, sessionCapabilities: { resume: {}, fork: {} } },
+        agentCapabilities: {
+          loadSession: true,
+          sessionCapabilities: { resume: {}, fork: {} },
+          promptCapabilities:
+            process.env.FAKE_ACP_PROMPT === "none" ? {} : { image: true, embeddedContext: true },
+        },
         authMethods: [],
       };
     },
@@ -131,7 +141,7 @@ new AgentSideConnection(
           ? typeof value === "boolean"
           : option?.options.some((o) => o.value === value);
       if (!valid) throw RequestError.invalidParams({ configId, value });
-      option.currentValue = value;
+      if (!process.env.FAKE_ACP_CLAMP) option.currentValue = value;
       return { configOptions };
     },
     extMethod: (method) => {
@@ -145,18 +155,84 @@ new AgentSideConnection(
     cancel: () => cancelled(),
     async prompt({ sessionId, prompt }) {
       const text = prompt.map((block) => block.text ?? "").join("");
+      if (text === "auth-expired") throw RequestError.authRequired();
+      if (text === "credit-refusal")
+        throw new Error(
+          JSON.stringify({
+            error: {
+              type: "invalid_request_error",
+              message: "Your credit balance is too low to access the Anthropic API.",
+            },
+          }),
+        );
       const say = (chunk) =>
         conn.sessionUpdate({
           sessionId,
           update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: chunk } },
         });
       await say(`echo: ${text}`);
+      const blocks = prompt.flatMap((b) =>
+        b.type === "image"
+          ? [{ type: b.type, mimeType: b.mimeType, data: b.data }]
+          : b.type === "resource"
+            ? [{ type: b.type, ...b.resource }]
+            : b.type === "resource_link"
+              ? [
+                  {
+                    type: b.type,
+                    name: b.name,
+                    mimeType: b.mimeType,
+                    size: b.size,
+                    bytes: readFileSync(fileURLToPath(b.uri)).toString("base64"),
+                  },
+                ]
+              : [],
+      );
+      if (blocks.length) await say(`blocks: ${JSON.stringify(blocks)}`);
+      // Mentions must follow the text, so a prompt carrying one says its block order.
+      if (prompt.some((b) => b.type === "resource" && b.resource.uri.startsWith("pe://")))
+        await say(`order: ${prompt.map((b) => b.type).join(",")}`);
+      if (text === "settings") {
+        configOptions[0].id = "live-model";
+        configOptions[0].currentValue = "m2";
+        configOptions[2].currentValue = "high";
+        configOptions[3].currentValue = true;
+        await conn.sessionUpdate({
+          sessionId,
+          update: { sessionUpdate: "config_option_update", configOptions },
+        });
+        return new Promise((resolve) => (cancelled = () => resolve({ stopReason: "cancelled" })));
+      }
       if (text === "pid") {
         await say(`PID=${process.pid}`);
         return { stopReason: "end_turn" };
       }
+      if (text === "huge") {
+        // One enormous tool result: a long text and a wide structure of small values.
+        await conn.sessionUpdate({
+          sessionId,
+          update: {
+            sessionUpdate: "tool_call_update",
+            toolCallId: "t-huge",
+            status: "completed",
+            content: [{ type: "content", content: { type: "text", text: "x".repeat(2_000_000) } }],
+          },
+        });
+        await conn.sessionUpdate({
+          sessionId,
+          update: {
+            sessionUpdate: "tool_call_update",
+            toolCallId: "t-wide",
+            status: "completed",
+            rawOutput: { rows: Array.from({ length: 30_000 }, (_, i) => ({ i })) },
+          },
+        });
+        return { stopReason: "end_turn" };
+      }
       if (text === "hang")
         return new Promise((resolve) => (cancelled = () => resolve({ stopReason: "cancelled" })));
+      if (text === "stubborn")
+        return new Promise(() => (cancelled = () => void say("ignoring cancel")));
       if (text === "question") {
         const answer = await conn.createElicitation({
           sessionId,
@@ -189,8 +265,12 @@ new AgentSideConnection(
           "CODEX_CONFIG",
           "MODEL_PROVIDER",
           "PEA_ENDPOINT_API_KEY",
+          "OPENAI_API_KEY",
+          "ANTHROPIC_API_KEY",
+          "CLAUDE_CODE_OAUTH_TOKEN",
           "ANTHROPIC_BASE_URL",
           "ANTHROPIC_AUTH_TOKEN",
+          "PYTHONIOENCODING",
         ])
           await say(`${name}=${process.env[name] ?? ""}`);
         await say(`PATH=${process.env.PATH ?? process.env.Path ?? ""}`);
@@ -199,6 +279,17 @@ new AgentSideConnection(
       }
       if (text === "silent")
         return new Promise((resolve) => (cancelled = () => resolve({ stopReason: "cancelled" })));
+      if (text === "usage")
+        return {
+          stopReason: "end_turn",
+          usage: {
+            totalTokens: 15,
+            inputTokens: 10,
+            outputTokens: 5,
+            cachedReadTokens: 4,
+            cachedWriteTokens: null,
+          },
+        };
       if (text === "title") {
         await conn.sessionUpdate({
           sessionId,

@@ -12,13 +12,12 @@ public static class DocumentTrackerAccessor {
 }
 
 public static class DocumentTrackerExtensions {
-    private sealed record OpenIdentity(string Value);
-    /// <summary>Stable across wrapper access and SaveAs, replaced after close/reopen.</summary>
-    public static string OpenId(this TrackedDocument document) =>
-        document.State(tracked => new OpenIdentity(tracked.OpenId)).Value;
-
+    /// <summary>
+    ///     Current member by the SDK bridge's open id (beta.202: the sole document identity authority).
+    ///     A lookup, not another identity: a closed lifetime's retained id finds nothing.
+    /// </summary>
     public static TrackedDocument? FindOpenId(this IDocumentTracker tracker, string openId) =>
-        tracker.Open.SingleOrDefault(document => document.OpenId() == openId);
+        tracker.Open.SingleOrDefault(document => document.OpenId == openId);
 
     /// <summary>
     ///     Finds the tracked document for a live wrapper. Wrapper identity, not reference

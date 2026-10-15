@@ -1,4 +1,4 @@
-import { Input, inputRecipe } from "#/components/lang/input";
+import { Input, inputRecipe } from "@pe/kit/lang/input";
 import { Label, labelRecipe } from "#/components/lang/label";
 import { Textarea, textareaRecipe } from "#/components/lang/textarea";
 import { RecipeGrid } from "./recipe-grid";
@@ -8,7 +8,7 @@ export function UiInputSpecimens() {
     <>
       <RecipeGrid
         name="Input"
-        importPath="#/components/lang/input"
+        importPath="@pe/kit/lang/input"
         recipe={inputRecipe}
         render={(props) => (
           <Input

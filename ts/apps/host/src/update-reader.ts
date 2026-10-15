@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Context } from "effect";
 import { z } from "zod";
@@ -30,6 +31,8 @@ const receiptSchema: z.ZodType<UpdateReceipt> = z.object({
   reopen: z.array(z.string()),
   restartYears: z.array(z.number().int()),
   legs: z.array(leg),
+  // beta.210: the stub's identity lets the SDK read a lost stub as abandoned; older receipts lack it.
+  stub: processIdentity.nullable().default(null),
 });
 const planSchema: z.ZodType<UpdatePlan> = z.object({
   installedRoot: z.string(),
@@ -102,11 +105,28 @@ const admissionSchema = z.object({
   receiptObservedAtUtc: z.string().nullable(),
   receipt: receiptSchema.nullable(),
   receiptError: z.string().nullable().default(null),
+  /** The version this request installs, read from the plan it was admitted against. */
+  candidate: z.string().nullable().default(null),
 });
 type Admission = z.infer<typeof admissionSchema>;
 export type UpdateRunner = (args: string[], detached?: boolean) => Promise<Envelope<unknown>>;
 export const isUpdatePlanId = (id: unknown): id is string =>
   typeof id === "string" && z.uuid().safeParse(id).success && id === id.toLowerCase();
+
+/**
+ * An update fact for the receipt spine to publish. The reader announces; it never notifies. A
+ * settled fact fires on the transition into a terminal receipt, so a re-read of the same terminal
+ * receipt (a successor host loading it, the diagnostic re-persist) announces nothing twice.
+ */
+export type UpdateFact =
+  | { readonly kind: "available"; readonly version: string }
+  | {
+      readonly kind: "settled";
+      readonly requestId: string;
+      readonly state: "ok" | "failed" | "refused";
+      readonly version: string | null;
+      readonly detail: string | null;
+    };
 
 /** One persisted recovery handle. A lost acknowledgement is never permission to dispatch again. */
 export function createUpdateReader(options: {
@@ -116,6 +136,15 @@ export function createUpdateReader(options: {
   readonly pid: number;
   /** The installed product manifest; the SDK resolves the install root from it (`update.not-installed` otherwise). */
   readonly manifest?: string;
+  /** Present means automatic updates are off; absent (the default) means on. */
+  readonly automaticOffPath?: string;
+  /** The spine's intake for update facts; absent in tests that do not observe them. */
+  readonly fact?: (fact: UpdateFact) => void;
+  /**
+   * The one exit path: called once per request when its persisted receipt first shows a confirmed
+   * running handoff, wherever that receipt was learned (apply, lost-ack recovery, late recovery).
+   */
+  readonly handoff?: () => void;
   readonly now?: () => string;
 }) {
   const now = options.now ?? (() => new Date().toISOString());
@@ -127,6 +156,7 @@ export function createUpdateReader(options: {
   let applying: Promise<MachineUpdate> | undefined;
   let automaticPending = false;
   let terminalDiagnosticPending = false;
+  const handedOff = new Set<string>();
   let value: MachineUpdate = {
     plan: null,
     receipt: null,
@@ -134,6 +164,7 @@ export function createUpdateReader(options: {
     admittedPlanId: null,
     planLeg: unreadLeg(),
     receiptLeg: unreadLeg(),
+    automatic: !(options.automaticOffPath && existsSync(options.automaticOffPath)),
   };
 
   const load = () =>
@@ -155,6 +186,12 @@ export function createUpdateReader(options: {
             error: admission.receiptError,
           },
         };
+        // A crash between the terminal persist and the fact intake leaves no fact; the journal
+        // dedupes by request, so announcing the persisted terminal receipt again is safe.
+        const settled = admission.receipt?.state;
+        if (settled === "ok" || settled === "failed" || settled === "refused")
+          options.fact?.(settledFact(admission, settled));
+        if (hasHandoff(admission.receipt)) handedOff.add(admission.requestId);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
@@ -176,10 +213,18 @@ export function createUpdateReader(options: {
         await file.close();
       }
       await rename(temporary, options.path);
+      const before = admission?.requestId === record.requestId ? admission.receipt?.state : null;
       admission = record;
+      const after = record.receipt?.state;
       terminalDiagnosticPending = false;
       if (record.receipt && ["ok", "failed", "refused"].includes(record.receipt.state))
         automaticPending = false;
+      if (after !== before && (after === "ok" || after === "failed" || after === "refused"))
+        options.fact?.(settledFact(record, after));
+      if (hasHandoff(record.receipt) && !handedOff.has(record.requestId)) {
+        handedOff.add(record.requestId);
+        options.handoff?.();
+      }
       value = {
         ...value,
         requestId: record.requestId,
@@ -319,6 +364,7 @@ export function createUpdateReader(options: {
         receiptObservedAtUtc: null,
         receipt: null,
         receiptError: null,
+        candidate: value.plan?.planId === planId ? value.plan.latest : null,
       };
       // Flush and atomically install identity BEFORE the detached child can have effects.
       await persist(record);
@@ -363,7 +409,40 @@ export function createUpdateReader(options: {
     return applying;
   }
 
-  return { refresh, apply, current: () => value, automaticPending: () => automaticPending };
+  /** The off switch is one marker file: present means off. */
+  async function setAutomatic(on: boolean) {
+    if (!options.automaticOffPath) throw Error("Automatic updates have no switch on this host.");
+    if (on) await rm(options.automaticOffPath, { force: true });
+    else {
+      await mkdir(dirname(options.automaticOffPath), { recursive: true });
+      await writeFile(options.automaticOffPath, "");
+    }
+    value = { ...value, automatic: on };
+    return value;
+  }
+
+  return {
+    refresh,
+    apply,
+    setAutomatic,
+    announce: (fact: UpdateFact) => options.fact?.(fact),
+    current: () => value,
+    automaticPending: () => automaticPending,
+  };
+}
+
+const hasHandoff = (receipt: UpdateReceipt | null) =>
+  receipt?.state === "running" &&
+  receipt.legs.some((leg) => leg.name === "handoff" && leg.status === "ok");
+
+function settledFact(record: Admission, state: "ok" | "failed" | "refused"): UpdateFact {
+  return {
+    kind: "settled",
+    requestId: record.requestId,
+    state,
+    version: record.candidate,
+    detail: record.receipt?.legs.at(-1)?.detail ?? null,
+  };
 }
 
 function said(envelope: Envelope<unknown>) {

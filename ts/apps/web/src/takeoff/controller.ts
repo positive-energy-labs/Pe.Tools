@@ -28,7 +28,7 @@ import {
   transitionPatches,
 } from "@pe/agent-contracts";
 
-import type { CellWire } from "#/components/lang/band";
+import type { CellWire } from "#/components/work/band";
 import { previousOf, useHostCall } from "#/readings";
 import { NATIVE_READ_WAIT_S } from "#/route/waits";
 import { useRoute } from "#/route/use-route";
@@ -256,6 +256,7 @@ export function useTakeoffsController(options: {
   };
 }) {
   const handle = useRoute(manifest, {
+    url: false,
     target: options.target ? (options.target as never) : null,
     ...(options.work !== undefined ? { work: options.work } : {}),
     ...(options.thread ? { thread: options.thread } : {}),

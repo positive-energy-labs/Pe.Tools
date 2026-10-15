@@ -74,7 +74,6 @@ export async function partitionFixture(dir: string, target: DocumentRef) {
       id,
       key: "takeoffs.partition",
       kind: "workflow" as const,
-      actor: "human" as const,
       destination: { kind: "document" as const, ref: target },
       input: {
         zoneRegion: candidate.elementId,

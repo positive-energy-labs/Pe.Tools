@@ -1,7 +1,7 @@
 import { Plus } from "lucide-react";
 import type { DocumentRef, ParameterLinkProfile } from "@pe/agent-contracts";
-import { EmptyState } from "#/components/lang/empty";
-import { ActionButton } from "#/components/lang/action-button";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { Button } from "@pe/kit/lang/button";
 import { addDefinition } from "#/parameter-links/model";
 import { DefinitionCard } from "./definition-card";
 
@@ -24,17 +24,16 @@ export function ProfileEditor({
         <EmptyState story="scope" exit="add a definition to start linking parameters">
           no draft profile
         </EmptyState>
-        <ActionButton
+        <Button
           label="add definition"
+          kind="framed"
           icon={Plus}
-          disabled={disabled}
+          refusal={disabled ? "the draft is busy — wait for the current command to finish" : null}
           onClick={() => onChange(addDefinition(profile))}
-          reason={
-            disabled
-              ? "the draft is busy — wait for the current command to finish"
-              : "Add a blank link definition to the draft (local until saved)"
-          }
-        />
+          reason="Add a blank link definition to the draft (local until saved)"
+        >
+          add definition
+        </Button>
       </div>
     );
   }
@@ -52,17 +51,16 @@ export function ProfileEditor({
           onChange={onChange}
         />
       ))}
-      <ActionButton
+      <Button
         label="add definition"
+        kind="framed"
         icon={Plus}
-        disabled={disabled}
+        refusal={disabled ? "the draft is busy — wait for the current command to finish" : null}
         onClick={() => onChange(addDefinition(profile))}
-        reason={
-          disabled
-            ? "the draft is busy — wait for the current command to finish"
-            : "Add a blank link definition to the draft (local until saved)"
-        }
-      />
+        reason="Add a blank link definition to the draft (local until saved)"
+      >
+        add definition
+      </Button>
     </div>
   );
 }

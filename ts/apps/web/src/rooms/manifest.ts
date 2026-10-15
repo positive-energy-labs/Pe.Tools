@@ -65,6 +65,7 @@ export const manifest = defineRoute<
 >({
   key: "rooms",
   name: "Rooms",
+  runs: ["rooms.draw"],
   docs: "Split the zones drawn on one level's plan view into room regions, stage each room's name, type and Manual J fields, then apply them to the regions in Revit.",
   needs: "project",
   work: roomsRouteState,

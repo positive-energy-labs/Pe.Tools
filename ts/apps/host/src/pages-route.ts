@@ -1,55 +1,92 @@
-/**
- * PAGES — disposable HTML as a working surface between an agent and a person (pages ledger,
- * 2026-10-04). A page is a folder `Documents/Pe.Tools/Pages/<slug>/` holding an `index.html`,
- * served at `/pages/<slug>/` with no registration: a dropped folder appears. Its doors into Revit
- * are `/pages/pe.js` (`find`, `read`, `do`, the target headers, the read-versus-write door, and
- * `state`) and `/pages/pe.css` (the house tokens, opt-in).
- *
- * Shared state is one event log per page under `<slug>/.state/`: the page appends, an agent appends
- * over HTTP, the host fans out over SSE, and the page writes its own snapshot and a text projection
- * (`pe.describe`) so an agent reads the state, and what the page says, without running the reducer.
- * The log lives beside the page, so deleting or sharing the folder deletes or shares its state.
- *
- * A Pod may carry pages (pages ledger, ruling 5): `Documents/Pe.Tools/Pods/<pod>/pages/<page>/index.html`
- * lists and serves as the slug `<pod>--<page>`, and its `.state/` sits beside the page inside the pod,
- * so publishing the pod carries it. A pod is a folder holding `pod.json`; nothing in it is read, so a
- * page never depends on its pod (ruling 6). A plain page whose folder name contains `--` is skipped.
- *
- *   GET  /pages                        every page, newest first (JSON, rows carry `pod`; a list page when a browser navigates)
- *   GET  /pages/pe.js | /pages/pe.css  the doors and the house look
- *   GET  /pages/<slug>/[file]          the folder's files (`index.html` by default; dot-files are private)
- *   GET  /pages/<slug>/state           { seq, events, snapshot, text }
- *   POST /pages/<slug>/events          append one event (the body); answers the stored row
- *   GET  /pages/<slug>/events?after=N  SSE: rows after N (or Last-Event-ID), then live
- *   PUT  /pages/<slug>/snapshot        the page's current state, as the page computed it
- *   PUT  /pages/<slug>/text            the page's current state as markdown, as the page describes it
- */
-import { readFileSync } from "node:fs";
-import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import {
+  peRoutes,
+  servePeRoute,
+  peClientScript,
+  matchPeRoute,
+  peRouteUrl,
+} from "@pe/agent-contracts/pe-api";
+/** Scratch Pages and admitted Pod Pages share serving, binding and event state. See pe.js for the author API. */
+import { readFileSync, watch } from "node:fs";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Effect } from "effect";
-import { HttpEffect, HttpRouter } from "effect/unstable/http";
-import { HOST_RPC_ORIGIN_HEADER } from "@pe/host-contracts/contracts";
+import { randomUUID } from "node:crypto";
+import { Effect, Option } from "effect";
+import { HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http";
+import {
+  HOST_CONTEXT_HEADER,
+  HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_DOCUMENT_HEADER,
+  HOST_RPC_ORIGIN_HEADER,
+  HOST_RUNTIME_SERVICE_HEADER,
+  HOST_RUNTIME_SERVICE_QUERY,
+} from "@pe/host-contracts/contracts";
+import {
+  addressSchema,
+  pageBindingSchema,
+  parseContributionKey,
+  pageChoiceSchema,
+  resolveCallTarget,
+  resolvePinned,
+  unboundPage,
+  type Caller,
+  type DocumentRef,
+  type PageBinding,
+  type PageChoice,
+  type PageTargetReading,
+  type PageWrite,
+  type Refusal,
+  type TargetInventory,
+  type TargetResolution,
+} from "@pe/agent-contracts";
+import { z } from "zod";
+import { RevitBridge } from "./bridge.ts";
 import { hostOwnership } from "./host-ownership.ts";
+import {
+  admitPage,
+  currentCaller,
+  mintPageDoor,
+  pageActDoor,
+  pageKeyOf,
+  readsOnly,
+  Refused,
+  documentAcquisition,
+  threadHead,
+  subscribeHeads,
+} from "./control.ts";
+import { capturePackage, listPackages } from "./packages.ts";
+import { activePackages, requirePackageEnabled } from "./package-lifecycle.ts";
+import {
+  packagePageDescriptors,
+  pageFolderCollisions,
+  scratchPageDescriptors,
+  scratchPageFolders,
+  scratchPageKey,
+} from "./page-libraries.ts";
 import { productPagesRootPath, productPodsRootPath } from "./product-paths.ts";
-
-/** Page assets that live in the web app: the tokens and the Revit facsimile (one source each). */
-const WEB_ASSETS: Record<string, string> = {
-  "base.css": "../../web/src/base.css",
-  "revit.js": "../../web/src/revit/revit.js",
-  "revit.css": "../../web/src/revit/revit.css",
-};
+import { exportPage } from "./page-export.ts";
+import { CaptureStore, hostCaptures } from "./captures-route.ts";
+import { escapeHtml, publishPage, withPageKey } from "./page-publication.ts";
+import { PAGE_MEDIA, readJson } from "./page-artifacts.ts";
 
 /**
- * `pe.js`, `pe.css`, the product's `base.css` (the tokens) and the Revit facsimile: read beside
- * their source on the dev lane, so an edit is live on the next request; staged to `<exeDir>/pages`
- * when installed (`scripts/stage-web.mjs`), like the web root.
+ * Each library file beside its source on the dev lane, so an edit is live on the next request;
+ * staged under `<exeDir>/pages` when installed (`scripts/stage-web.mjs`).
  */
-const assetPath = (name: string) =>
+const LIBRARY_SOURCES = {
+  "pe.js": "./pages/pe.js",
+  "pe.css": "./pages/pe.css",
+  "base.css": "../../../packages/kit/src/base.css",
+  "revit.js": "../../web/src/revit/revit.js",
+  "revit.css": "../../web/src/revit/revit.css",
+  "kit/pe-kit.js": "../../../packages/kit/dist/pe-kit.js",
+  "kit/pe-kit.css": "../../../packages/kit/dist/pe-kit.css",
+} as const;
+type PageLibraryFile = keyof typeof LIBRARY_SOURCES;
+const assetPath = (name: PageLibraryFile) =>
   hostOwnership.lane === "installed"
     ? join(dirname(process.execPath), "pages", name)
-    : fileURLToPath(new URL(WEB_ASSETS[name] ?? `./pages/${name}`, import.meta.url));
+    : fileURLToPath(new URL(LIBRARY_SOURCES[name], import.meta.url));
 
 /**
  * The facsimile is an ES module for the web app; pages load classic scripts (their inline handlers
@@ -66,50 +103,150 @@ ${source.replace(exports, "globalThis.rv = {$1};")}
 })();
 `;
 };
-const asset = (name: string) => readFileSync(assetPath(name), "utf8");
+const asset = (name: PageLibraryFile) => {
+  try {
+    return readFileSync(assetPath(name), "utf8");
+  } catch (error) {
+    if (isMissing(error)) throw Error(`Page library ${name} is missing; build @pe/kit first`);
+    throw error;
+  }
+};
 
-const ACTOR_HEADER = "x-pe-action-actor";
-/** One folder name: no dots, so no `..` and no file masquerading as a page. */
-const SLUG = /^[a-z0-9][a-z0-9_-]*$/i;
+/**
+ * The doors carry the runtime that served them: the request identity gate refuses a browser API
+ * request that does not name its runtime, so this host writes its own service name into pe.js,
+ * as the web app's build freezes it into its module graph.
+ */
+const RUNTIME_SLOT = "/*pe:runtime*/ null";
+const servedPe = () => {
+  const source = asset("pe.js");
+  if (!source.includes(RUNTIME_SLOT)) throw Error(`pe.js must hold one \`${RUNTIME_SLOT}\` slot`);
+  const rendered = source.replace("/*pe:client*/ null", peClientScript()).replace(
+    RUNTIME_SLOT,
+    JSON.stringify({
+      header: HOST_RUNTIME_SERVICE_HEADER,
+      query: HOST_RUNTIME_SERVICE_QUERY,
+      service: hostOwnership.serviceName,
+    }),
+  );
+  const unfilled = rendered.match(/\/\*pe:[^*]+\*\/\s*null\b/);
+  if (unfilled) throw Error(`Unfilled pe.js slot: ${unfilled[0]}`);
+  return rendered;
+};
+
+/** A host library by URL, or null: serving, export and publication preview read the same bytes. */
+const pageLibrary = (path: string): string | null => {
+  if (path === "/pages/pe.js") return servedPe();
+  if (path === "/pages/pe.css") return `${asset("base.css")}\n${asset("pe.css")}`;
+  if (path === "/pages/revit.js") return classicRevit();
+  const file = path.slice("/pages/".length);
+  return file === "revit.css" || file === "kit/pe-kit.js" || file === "kit/pe-kit.css"
+    ? asset(file)
+    : null;
+};
+
 /** One file segment: a leading dot is refused, so `.state/` and editor droppings stay private. */
 const SEGMENT = /^[a-z0-9_-][a-z0-9_.-]*$/i;
-const MIME: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".mjs": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".md": "text/markdown; charset=utf-8",
-  ".txt": "text/plain; charset=utf-8",
-  ".csv": "text/csv; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".woff2": "font/woff2",
-};
 const HEARTBEAT_MS = 15_000;
 const isMissing = (error: unknown) => (error as { code?: string } | null)?.code === "ENOENT";
 
 export type PageEventRow = { seq: number; at: string; origin: string; event: unknown };
-/** One `GET /pages` row; `pod` is the pod folder's name when the page lives inside a pod. */
+/** One `GET /pages` row; `pod` is the package id when an admitted package contributes the page. */
 export type PageRow = {
   slug: string;
+  /** The Page key: `page:@pages/<slug>`, or the package's `page:@<id>/pages/<page>`; null when the folder has none. */
+  key: string | null;
   title: string;
-  url: string;
-  modifiedAt: string;
+  /** Null when the folder has no key (an unsafe or case-colliding name). */
+  url: string | null;
+  /** Null for a packaged Page. */
+  modifiedAt: string | null;
   pod: string | null;
 };
 type Listener = (row: PageEventRow) => void;
+/** A named push on a page's stream that is not a log row: `binding`, `file`. */
+type Signal = (event: "binding" | "file", data: unknown) => void;
+
+/** One open document as the bridge lists it. */
+type LiveDocument = {
+  openId: string;
+  title: string;
+  address?: string | null;
+  isFamilyDocument: boolean;
+  isActive: boolean;
+};
+/** A connected Revit; `documents` is null while its state has not arrived. */
+export type LiveSession = { session: string; documents: readonly LiveDocument[] | null };
+/** What the page doors need from the running host; tests hand in their own. */
+export type PageLive = {
+  sessions(): Promise<readonly LiveSession[]>;
+  /** One POST into this host's own `/call` or `/actions`, carrying the minted page-door context. */
+  forward(
+    path: "/call" | "/actions",
+    headers: Record<string, string>,
+    body: unknown,
+  ): Promise<Response>;
+};
+const noLive: PageLive = {
+  sessions: async () => [],
+  forward: async () => problem(503, "this host has no Revit composition"),
+};
+
+const callBodySchema = z.strictObject({ key: z.string().min(1), request: z.unknown().optional() });
+const actBodySchema = z.strictObject({ key: z.string().min(1), input: z.unknown().optional() });
+
+const inventoryOf = (sessions: readonly LiveSession[]): TargetInventory => ({
+  kind: "ready",
+  sessions: Object.fromEntries(
+    sessions.map(({ session, documents }) => [
+      session,
+      documents === null
+        ? { kind: "checking" as const }
+        : {
+            kind: "ready" as const,
+            values: documents.map((doc) => ({
+              openId: doc.openId,
+              address: addressSchema.safeParse(doc.address).data ?? null,
+              kind: doc.isFamilyDocument ? ("family" as const) : ("project" as const),
+            })),
+          },
+    ]),
+  ),
+});
+
+/**
+ * A slot against the live sessions. `none` names nothing: it is `choose`, with one Revit or two,
+ * never the active document (K15, ADR 0017 D10).
+ */
+function resolveSlot(slot: PageChoice, sessions: readonly LiveSession[]): TargetResolution {
+  if (slot.kind === "thread")
+    return resolveCallTarget(
+      { needs: "document" },
+      threadHead(slot.thread)?.defaultTarget ?? null,
+      inventoryOf(sessions),
+    );
+  if (slot.kind === "pinned") return resolvePinned(slot.address, inventoryOf(sessions));
+  return { kind: "choose", reason: "missing" };
+}
+
+/** The host-stamped origin of a row: the page key, `human`, or `agent`; never a header. */
+const originOf = (caller: Caller) =>
+  caller.kind === "page" ? caller.page : caller.kind === "human" ? "human" : "agent";
+
+const unboundRefusal = (door: string): Refusal => ({
+  code: "page.unbound",
+  door,
+  reason: `Refused at ${door}: this Page has no target. Bind it to a thread or pin a document from the chip.`,
+});
 
 /** One page's log and snapshot, under `<page>/.state/`. Appends are serial per page. */
 class PageState {
   private readonly dir: string;
   private readonly listeners = new Set<Listener>();
+  private readonly signals = new Set<Signal>();
+  private unwatch: (() => void) | null = null;
   private queue: Promise<unknown> = Promise.resolve();
-  constructor(pageDir: string) {
+  constructor(private readonly pageDir: string) {
     this.dir = join(pageDir, ".state");
   }
   async rows(): Promise<PageEventRow[]> {
@@ -134,11 +271,8 @@ class PageState {
     this.queue = job.catch(() => undefined);
     return job;
   }
-  async snapshot(): Promise<unknown> {
-    return readFile(join(this.dir, "snapshot.json"), "utf8").then(JSON.parse, (error) => {
-      if (isMissing(error)) return null;
-      throw error;
-    });
+  snapshot(): Promise<unknown> {
+    return readJson(join(this.dir, "snapshot.json"), z.unknown(), null);
   }
   async writeSnapshot(value: unknown) {
     await mkdir(this.dir, { recursive: true });
@@ -159,83 +293,134 @@ class PageState {
     this.listeners.add(listen);
     return () => this.listeners.delete(listen);
   }
+  signal: Signal = (event, data) => {
+    for (const hear of this.signals) hear(event, data);
+  };
+  /**
+   * Named pushes while a stream is open. The page folder is watched only then: a change to any
+   * file outside a dot-folder is `file`, so a stale tab reloads without polling its own file.
+   */
+  hear(signal: Signal) {
+    this.signals.add(signal);
+    if (!this.unwatch) this.unwatch = this.watch();
+    return () => {
+      this.signals.delete(signal);
+      if (this.signals.size || !this.unwatch) return;
+      this.unwatch();
+      this.unwatch = null;
+    };
+  }
+  private watch() {
+    const pending = new Map<string, ReturnType<typeof setTimeout>>();
+    try {
+      const watcher = watch(this.pageDir, { recursive: true }, (_kind, name) => {
+        const path = name?.toString().replaceAll("\\", "/");
+        if (!path || path.split("/").some((segment) => segment.startsWith("."))) return;
+        // One write is several OS events; one push per path settles them.
+        clearTimeout(pending.get(path));
+        pending.set(
+          path,
+          setTimeout(() => (pending.delete(path), this.signal("file", { path })), 50),
+        );
+      });
+      watcher.on("error", () => watcher.close());
+      return () => {
+        for (const timer of pending.values()) clearTimeout(timer);
+        watcher.close();
+      };
+    } catch (error) {
+      if (isMissing(error)) return () => {};
+      throw error;
+    }
+  }
 }
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json; charset=utf-8" },
-  });
+const json = (body: unknown, status = 200) => Response.json(body, { status });
 const problem = (status: number, message: string) => json({ error: message, message }, status);
+/** A door refusal, the shape `/actions` answers: 403, named, never dispatched. */
+const refused = (refusal: Refusal) =>
+  json({ error: refusal.reason, message: refusal.reason, refusal, notDispatched: true }, 403);
+/** A slot that names no one document (or not yet): 409 with the resolver's own words. */
+const unresolved = (door: string, resolution: Exclude<TargetResolution, { kind: "resolved" }>) => {
+  const why =
+    resolution.kind === "choose"
+      ? `choose: ${resolution.reason}`
+      : resolution.kind === "failed"
+        ? `failed: ${resolution.message}`
+        : "checking";
+  const message = `Refused at ${door}: the binding names no one document (${why}). Bind it from the chip.`;
+  return json({ error: message, message, resolution, notDispatched: true }, 409);
+};
 
-const escapeHtml = (text: string) =>
-  text.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+/** A catalog row's `op:<key>` (what `pe.find` answers) names the operation `<key>`. */
+const bareOp = (key: string) => key.replace(/^op:/, "");
 
 /**
  * The pages handler over the Pages root and the Pods root: a plain web handler, so tests need no
  * server and SSE is a ReadableStream. No pods root means no pod pages.
  */
-export function createPagesHandler(root: string, pods?: string) {
-  /** Where a slug's folder is: `<root>/<slug>`, or `<pods>/<pod>/pages/<page>` for `<pod>--<page>`. */
-  const dirOf = (slug: string) => {
-    const [pod, page, ...more] = slug.split("--");
-    if (page === undefined) return { dir: join(root, slug), pod: null };
+export function createPagesHandler(
+  root: string,
+  pods?: string,
+  live: PageLive = noLive,
+  captures = new CaptureStore(join(root, ".captures")),
+) {
+  /**
+   * Where a slug's folder is: `<root>/<slug>`, or for `<id>--<page>` the folder of the one admitted
+   * package with that id that contributes `pages/<page>` (a duplicated id contributes nothing).
+   * ponytail: a pod page's request lists the packages once; cache by snapshot if pods get large.
+   */
+  const dirOf = async (slug: string) => {
+    const [id, page, ...more] = slug.split("--");
+    if (page === undefined) {
+      // A scratch Page is its folder as named: the exact name, never another spelling or a twin.
+      const folders = await scratchPageFolders(root);
+      const { key } = scratchPageKey(slug, pageFolderCollisions(folders));
+      const named = folders.find((folder) => folder.toLowerCase() === slug.toLowerCase());
+      return key && (named === undefined || named === slug)
+        ? { dir: join(root, slug), pod: null, key }
+        : null;
+    }
     if (more.length || !pods) return null;
-    return { dir: join(pods, pod!, "pages", page), pod: pod! };
+    for (const pod of await activePackages((await listPackages(pods)).packages, pods)) {
+      const row = pod.contributions.find(
+        (one) => one.kind === "page" && one.path === `pages/${page}`,
+      );
+      if (pod.id === id && row)
+        return { dir: join(pod.directory, row.path), pod: pod.id, key: row.key };
+    }
+    return null;
   };
   const states = new Map<string, PageState>();
-  const stateOf = (slug: string, dir: string) => {
-    let state = states.get(slug);
-    if (!state) states.set(slug, (state = new PageState(dir)));
+  /** By folder: a renamed pod's page keeps its slug and opens its state where it lives now. */
+  const stateOf = (dir: string) => {
+    let state = states.get(dir);
+    if (!state) states.set(dir, (state = new PageState(dir)));
     return state;
   };
 
-  const folders = async (dir: string) =>
-    (
-      await readdir(dir, { withFileTypes: true }).catch((error) => {
-        if (isMissing(error)) return [];
-        throw error;
-      })
-    )
-      .filter((entry) => entry.isDirectory() && SLUG.test(entry.name))
-      .map((entry) => entry.name);
-  const exists = (path: string) =>
-    stat(path).then(
-      () => true,
-      () => false,
-    );
-
-  async function list() {
-    const pages: PageRow[] = [];
-    const add = async (slug: string, dir: string, pod: string | null) => {
-      const index = join(dir, "index.html");
-      const facts = await stat(index).catch(() => null);
-      if (!facts) return;
-      const title = /<title>([^<]*)<\/title>/i.exec(await readFile(index, "utf8"))?.[1]?.trim();
-      pages.push({
-        slug,
-        title: title || slug,
-        url: `/pages/${slug}/`,
-        modifiedAt: facts.mtime.toISOString(),
-        pod,
-      });
-    };
-    for (const name of await folders(root))
-      if (!name.includes("--")) await add(name, join(root, name), null);
-    for (const pod of pods ? await folders(pods) : [])
-      if (!pod.includes("--") && (await exists(join(pods!, pod, "pod.json"))))
-        for (const page of await folders(join(pods!, pod, "pages")))
-          if (!page.includes("--"))
-            await add(`${pod}--${page}`, join(pods!, pod, "pages", page), pod);
-    return pages.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
-  }
+  /** `GET /pages`: the one Page projection, as rows: scratch newest first, then packaged by key. */
+  const list = async (): Promise<PageRow[]> =>
+    [
+      ...(await scratchPageDescriptors(root)),
+      ...packagePageDescriptors(
+        pods ? await activePackages((await listPackages(pods)).packages, pods) : [],
+      ),
+    ].map((page) => ({
+      slug: page.slug,
+      key: page.key,
+      title: page.title,
+      url: page.openUrl,
+      modifiedAt: page.modifiedAt,
+      pod: page.pod,
+    }));
 
   function listPage(pages: PageRow[]) {
     const rows = pages.length
       ? pages
           .map(
             (p) =>
-              `<li><a href="${p.url}">${escapeHtml(p.title)}</a> <code>${escapeHtml(p.slug)}</code>${p.pod ? ` <small>pod ${escapeHtml(p.pod)}</small>` : ""} <small>${escapeHtml(p.modifiedAt.slice(0, 16).replace("T", " "))}</small></li>`,
+              `<li>${p.url ? `<a href="${p.url}">${escapeHtml(p.title)}</a>` : `${escapeHtml(p.title)} <small>not a Page until its folder is renamed</small>`} <code>${escapeHtml(p.slug)}</code>${p.pod ? ` <small>pod ${escapeHtml(p.pod)}</small>` : ""} ${p.modifiedAt ? ` <small>${escapeHtml(p.modifiedAt.slice(0, 16).replace("T", " "))}</small>` : ""}</li>`,
           )
           .join("\n")
       : `<li><em>none yet</em></li>`;
@@ -261,15 +446,19 @@ export function createPagesHandler(root: string, pods?: string) {
     );
   }
 
-  async function file(slug: string, dir: string, segments: string[]) {
+  async function file(slug: string, dir: string, page: string, segments: string[]) {
     if (!segments.every((s) => SEGMENT.test(s)))
       return problem(400, "that is not a page file path");
     const path = join(dir, ...segments);
     try {
-      const bytes = await readFile(path);
+      const raw = await readFile(path);
+      const bytes =
+        segments.length === 1 && segments[0] === "index.html"
+          ? withPageKey(raw.toString("utf8"), page)
+          : raw;
       return new Response(bytes, {
         headers: {
-          "content-type": MIME[extname(path).toLowerCase()] ?? "application/octet-stream",
+          "content-type": PAGE_MEDIA[extname(path).toLowerCase()] ?? "application/octet-stream",
           "cache-control": "no-cache",
         },
       });
@@ -301,7 +490,12 @@ export function createPagesHandler(root: string, pods?: string) {
         };
         // Follow first, then replay: a row appended between the two is sent once, by seq.
         const unfollow = state.follow(send);
-        for (const row of await state.rows()) send(row);
+        const unhead = subscribeHeads(() =>
+          controller.enqueue(encoder.encode("event: head\ndata: {}\n\n")),
+        );
+        const unhear = state.hear((event, data) =>
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)),
+        );
         // A named heartbeat, so pe.js can tell a quiet stream from a dead one (a browser's own
         // EventSource retry was seen to never fire after a dev host restart, 2026-10-04).
         const beat = setInterval(
@@ -309,15 +503,22 @@ export function createPagesHandler(root: string, pods?: string) {
           HEARTBEAT_MS,
         );
         stop = () => {
+          last = Infinity;
+          request.signal.removeEventListener("abort", stop);
           clearInterval(beat);
           unfollow();
+          unhead();
+          unhear();
           try {
             controller.close();
           } catch {
             /* already closed by the consumer */
           }
         };
+        // Listen before the replay's await: an abort during it still closes the folder watcher.
         request.signal.addEventListener("abort", stop);
+        if (request.signal.aborted) stop();
+        for (const row of await state.rows()) send(row);
       },
       cancel() {
         stop();
@@ -332,40 +533,322 @@ export function createPagesHandler(root: string, pods?: string) {
     });
   }
 
+  const bindingFile = (dir: string) => join(dir, ".state", "binding.json");
+  const bindingOf = (dir: string): Promise<PageBinding> =>
+    readJson(bindingFile(dir), pageBindingSchema, unboundPage);
+
+  async function target(page: string, dir: string): Promise<PageTargetReading> {
+    const actDoor = pageActDoor(page);
+    const slot = (await bindingOf(dir)).slots.default;
+    const sessions = await live.sessions();
+    const resolution = resolveSlot(slot, sessions);
+    const ref =
+      resolution.kind === "resolved" && resolution.target.kind === "document"
+        ? resolution.target.ref
+        : null;
+    const title = ref
+      ? (sessions
+          .find((s) => s.session === ref.session)
+          ?.documents?.find((d) => d.openId === ref.openId)?.title ?? "")
+      : "";
+    let write: PageWrite | null =
+      slot.kind === "none" ? { kind: "read", refusal: unboundRefusal(actDoor) } : null;
+    if (resolution.kind === "resolved")
+      try {
+        const basis = admitPage(slot, resolution.target, actDoor);
+        const grant = basis?.kind === "grant" ? threadHead(basis.thread)?.grant : null;
+        write =
+          basis?.kind === "grant" && grant
+            ? { kind: "rw", thread: basis.thread, expiresAt: grant.expiresAt }
+            : { kind: "pea" };
+      } catch (error) {
+        if (!(error instanceof Refused)) throw error;
+        write = { kind: "read", refusal: error.refusal };
+      }
+    return {
+      page,
+      slot: "default",
+      binding: slot,
+      resolution,
+      document: ref ? { ...ref, title } : null,
+      write,
+      hostNow: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Only the page itself (its own browser) or a person drives its doors. Pea reaches a page
+   * through its shelf; a Pea or MCP context here would borrow a binding that is not its own.
+   */
+  function doorRefusal(door: string, caller: Caller): Refusal | null {
+    if (caller.kind === "page" || caller.kind === "human") return null;
+    return caller.kind === "anonymous"
+      ? {
+          code: "context.missing",
+          door,
+          reason: `Refused at ${door}: no caller context. A Page's doors answer its own browser.`,
+        }
+      : {
+          code: "page.binding-not-yours",
+          door,
+          reason: `Refused at ${door}: a Page's doors answer its own browser; a ${caller.kind} call would borrow a binding that is not its own.`,
+        };
+  }
+
+  /** One crossing as the page, under a context minted for this request and retired after it. */
+  async function cross(
+    page: string,
+    slot: PageChoice,
+    humanBound: boolean,
+    target: DocumentRef | null,
+    door: string,
+    path: "/call" | "/actions",
+    headers: Record<string, string>,
+    body: unknown,
+  ) {
+    const minted = mintPageDoor(page, slot, door, humanBound, target);
+    try {
+      return await live.forward(
+        path,
+        { ...headers, [HOST_CONTEXT_HEADER]: minted.token, [HOST_RPC_ORIGIN_HEADER]: page },
+        body,
+      );
+    } finally {
+      minted.retire();
+    }
+  }
+
+  async function door(
+    verb: "call" | "act",
+    slug: string,
+    dir: string,
+    page: string,
+    request: Request,
+    caller: Caller,
+  ) {
+    const at = `/pages/${slug}/${verb}`;
+    const who = doorRefusal(at, caller);
+    if (who) return refused(who);
+    const raw: unknown = await request.json().catch(() => undefined);
+    const binding = await bindingOf(dir);
+    const slot = binding.slots.default;
+    // Only a person's pin consents to ReadOnly on its resolved document; thread bindings need rw.
+    const humanBound = binding.boundBy.default === "human" && slot.kind === "pinned";
+    try {
+      if (verb === "call") {
+        const body = callBodySchema.safeParse(raw);
+        if (!body.success) return problem(400, "a page call is { key, request? }");
+        const resolution = resolveSlot(slot, await live.sessions());
+        if (resolution.kind !== "resolved") return unresolved(at, resolution);
+        const ref = resolution.target.kind === "document" ? resolution.target.ref : null;
+        return await cross(
+          page,
+          slot,
+          humanBound,
+          ref,
+          at,
+          "/call",
+          ref
+            ? {
+                [HOST_RPC_BRIDGE_SESSION_HEADER]: ref.session,
+                [HOST_RPC_DOCUMENT_HEADER]: ref.openId,
+              }
+            : {},
+          {
+            key: bareOp(body.data.key),
+            ...(body.data.request === undefined ? {} : { request: body.data.request }),
+          },
+        );
+      }
+      const body = actBodySchema.safeParse(raw);
+      if (!body.success) return problem(400, "a page act is { key, input? }");
+      if (slot.kind === "none") return refused(unboundRefusal(at));
+      const resolution = resolveSlot(slot, await live.sessions());
+      if (resolution.kind !== "resolved") return unresolved(at, resolution);
+      const action = await operationOf(body.data.key, body.data.input);
+      if ("problem" in action) return problem(400, action.problem);
+      // Decided here first, so a refusal names this door; `/actions` decides again under the same slot.
+      admitPage(slot, resolution.target, at, humanBound && readsOnly(action.key, action.input));
+      return await cross(
+        page,
+        slot,
+        humanBound,
+        resolution.target.kind === "document" ? resolution.target.ref : null,
+        at,
+        "/actions",
+        {},
+        { id: randomUUID(), kind: "operation", destination: resolution.target, ...action },
+      );
+    } catch (error) {
+      if (error instanceof Refused) return refused(error.refusal);
+      throw error;
+    }
+  }
+
+  /**
+   * The operation a page's act names. A host op runs as sent. A contribution key runs only as a
+   * declared script of an admitted package: `scripting.execute` over that package's captured bytes,
+   * the same frozen input Pea's dispatch sends. The target is the binding's, so a page-sent
+   * selector, bundle or source path is dropped; only the run's mode and timeout pass.
+   */
+  async function operationOf(
+    key: string,
+    input: unknown,
+  ): Promise<{ key: string; input: Record<string, unknown> } | { problem: string }> {
+    const ref = parseContributionKey(key);
+    const sent = (input ?? {}) as Record<string, unknown>;
+    if (!ref) return { key: bareOp(key), input: sent };
+    if (ref.kind !== "script")
+      return { problem: `${key} is a ${ref.kind}: it reads and mentions, it never runs.` };
+    await requirePackageEnabled(ref.packageId, pods);
+    const pod = pods
+      ? (await listPackages(pods)).packages.find((one) => one.id === ref.packageId)
+      : undefined;
+    if (!pod?.contributions.some((row) => row.kind === "script" && row.key === key))
+      return { problem: `${key} is no declared script of an admitted package.` };
+    const { sourceBundle } = await capturePackage(pod);
+    const run = Object.fromEntries(
+      (["permissionMode", "timeoutSeconds"] as const)
+        .filter((name) => sent[name] !== undefined)
+        .map((name) => [name, sent[name]]),
+    );
+    return { key: "scripting.execute", input: { ...run, sourcePath: ref.path, sourceBundle } };
+  }
+
+  /**
+   * `page.bind`: a person binds anything; Pea (or an MCP client) only pins a
+   * document open in one of Pea's own Revits.
+   */
+  async function bind(slug: string, dir: string, page: string, request: Request, caller: Caller) {
+    const at = peRouteUrl("page.bind", { params: { slug } });
+    const parsed = pageChoiceSchema.safeParse(await request.json().catch(() => undefined));
+    if (!parsed.success)
+      return problem(
+        400,
+        "a binding is { kind: thread, thread } | { kind: pinned, address } | { kind: none }",
+      );
+    const slot = parsed.data;
+    if (caller.kind === "anonymous")
+      return refused({
+        code: "context.missing",
+        door: at,
+        reason: `Refused at ${at}: no caller context; binding a Page is a person's act, or Pea pinning its own document.`,
+      });
+    if (caller.kind === "page")
+      return refused({
+        code: "human.only",
+        door: at,
+        reason: `Refused at ${at}: a Page cannot bind itself; Bind… opens the picker.`,
+      });
+    if (caller.kind !== "human") {
+      const resolution =
+        slot.kind === "pinned"
+          ? resolvePinned(slot.address, inventoryOf(await live.sessions()))
+          : null;
+      const lifetime =
+        resolution?.kind === "resolved" && resolution.target.kind === "document"
+          ? resolution.target.ref
+          : null;
+      if (!lifetime || documentAcquisition(lifetime) === null)
+        return refused({
+          code: "page.binding-not-yours",
+          door: at,
+          reason: "Pea may pin a Page only to a document it acquired.",
+        });
+    }
+    const current = await bindingOf(dir);
+    await mkdir(join(dir, ".state"), { recursive: true });
+    const next: PageBinding = {
+      slots: { ...current.slots, default: slot },
+      boundBy: { ...current.boundBy, default: caller.kind === "human" ? "human" : "agent" },
+    };
+    await writeFile(bindingFile(dir), JSON.stringify(next, null, 2), "utf8");
+    stateOf(dir).signal("binding", {});
+    return json(await target(page, dir));
+  }
+
   return async function handle(request: Request): Promise<Response> {
+    const caller = currentCaller();
     const url = new URL(request.url);
+    if (url.pathname === peRoutes["page.publish"].path && request.method === "POST") {
+      if (caller.kind !== "human" && caller.kind !== "pea")
+        return problem(403, "Page publication requires a human or Pea caller");
+      const input = peRoutes["page.publish"].body.safeParse(await request.json());
+      if (!input.success) return problem(400, input.error.message);
+      try {
+        const result = await publishPage(root, input.data, url.origin, pageLibrary, captures);
+        return json(result, 201);
+      } catch (error) {
+        return problem(422, error instanceof Error ? error.message : String(error));
+      }
+    }
     const parts = url.pathname.split("/").filter(Boolean); // ["pages", slug?, ...rest]
+    if (parts[0] === "pe") {
+      const [, , slug = "", verb, ...more] = parts;
+      const where = await dirOf(slug);
+      if (!where || verb !== "binding" || more.length || request.method !== "PUT")
+        return problem(
+          404,
+          `the binding door is ${peRoutes["page.bind"].method} ${peRoutes["page.bind"].path}`,
+        );
+      return bind(slug, where.dir, where.key, request, caller);
+    }
     const wantsHtml = (request.headers.get("accept") ?? "").includes("text/html");
     if (parts.length === 1)
       return wantsHtml ? listPage(await list()) : json({ root, pages: await list() });
     const [, slug = "", ...rest] = parts;
-    if (slug === "pe.js")
-      return new Response(asset("pe.js"), {
-        headers: { "content-type": MIME[".js"]!, "cache-control": "no-cache" },
-      });
-    if (slug === "revit.js")
-      return new Response(classicRevit(), {
-        headers: { "content-type": MIME[".js"]!, "cache-control": "no-cache" },
-      });
-    if (slug === "revit.css")
-      return new Response(asset("revit.css"), {
-        headers: { "content-type": MIME[".css"]!, "cache-control": "no-cache" },
-      });
-    if (slug === "pe.css")
-      return new Response(
-        `${asset("base.css")}
-${asset("pe.css")}`,
-        {
-          headers: { "content-type": MIME[".css"]!, "cache-control": "no-cache" },
+    const library = request.method === "GET" ? pageLibrary(url.pathname) : null;
+    if (library !== null)
+      return new Response(library, {
+        headers: {
+          "content-type": PAGE_MEDIA[extname(url.pathname)]!,
+          "cache-control": "no-cache",
         },
+      });
+    if (!pageKeyOf(slug))
+      return problem(
+        400,
+        "a page slug is its folder name (letters, digits, '.', '_', single '-'); a pod's page is <id>--<page>",
       );
-    const where = SLUG.test(slug) ? dirOf(slug) : null;
-    if (!where)
-      return problem(400, "a page slug is letters, digits, - and _; a pod's page is <pod>--<page>");
+    const where = await dirOf(slug);
+    if (!where) return problem(404, `no page ${slug}: no admitted package contributes it`);
     if (rest.length === 0 && !url.pathname.endsWith("/"))
       return Response.redirect(`${url.origin}/pages/${slug}/${url.search}`, 308); // relative links need the slash
-    const state = stateOf(slug, where.dir);
+    const state = stateOf(where.dir);
     const verb = rest.length === 1 ? rest[0] : undefined;
+    if (verb === "export" && (request.method === "GET" || request.method === "POST")) {
+      const sent: unknown =
+        request.method === "POST" ? await request.json().catch(() => undefined) : {};
+      const parsed = z.strictObject({ snapshot: z.unknown().optional() }).safeParse(sent);
+      if (!parsed.success)
+        return problem(400, "a Page export is { snapshot? }; destination paths are host-owned");
+      try {
+        const result = await exportPage({
+          directory: where.dir,
+          page: where.key,
+          exportedAt: new Date().toISOString(),
+          document: (await target(where.key, where.dir)).document,
+          snapshot:
+            parsed.data.snapshot === undefined ? await state.snapshot() : parsed.data.snapshot,
+          events: await state.rows(),
+          library: async (path) => {
+            const text = pageLibrary(path);
+            if (text === null) throw Error(`Page export has an unsupported host library: ${path}`);
+            return text;
+          },
+        });
+        return new Response(result.html, {
+          headers: {
+            "content-type": PAGE_MEDIA[".html"]!,
+            "content-disposition": `attachment; filename="${slug}.html"`,
+            "x-pe-export-sha256": result.sha256,
+            "cache-control": "no-store",
+          },
+        });
+      } catch (error) {
+        return problem(422, error instanceof Error ? error.message : "Page export failed");
+      }
+    }
     if (verb === "state" && request.method === "GET") {
       const rows = await state.rows();
       return json({
@@ -383,11 +866,12 @@ ${asset("pe.css")}`,
       const event: unknown = await request.json().catch(() => undefined);
       if (typeof event !== "object" || event === null || Array.isArray(event))
         return problem(400, "an event is one JSON object");
-      const actor = request.headers.get(ACTOR_HEADER);
-      const origin =
-        request.headers.get(HOST_RPC_ORIGIN_HEADER) ?? (actor === "agent" ? "agent" : "human");
-      return json(await state.append(event, origin), 201);
+      return json(await state.append(event, originOf(caller)), 201);
     }
+    if (verb === "target" && request.method === "GET")
+      return json(await target(where.key, where.dir));
+    if ((verb === "call" || verb === "act") && request.method === "POST")
+      return door(verb, slug, where.dir, where.key, request, caller);
     if (verb === "events" && request.method === "GET") {
       const after = Number(
         url.searchParams.get("after") ?? request.headers.get("last-event-id") ?? 0,
@@ -402,18 +886,51 @@ ${asset("pe.css")}`,
     }
     if (request.method !== "GET")
       return problem(405, `${request.method} has no meaning on a page file`);
-    return file(slug, where.dir, rest.length ? rest : ["index.html"]);
+    if (
+      request.method === "GET" &&
+      request.headers.get("sec-fetch-dest") === "document" &&
+      (rest.length === 0 || (rest.length === 1 && rest[0] === "index.html"))
+    )
+      return new Response(null, {
+        status: 302,
+        headers: { location: `/bind?page=${encodeURIComponent(slug)}&view=1` },
+      });
+    return file(slug, where.dir, where.key, rest.length ? rest : ["index.html"]);
   };
 }
 
 export const pagesRoute = (root = productPagesRootPath, pods = productPodsRootPath) =>
   HttpRouter.use((router) =>
     Effect.gen(function* () {
-      // One registration claims the bare `/pages` too (a second `add` is refused at boot; see captures).
-      yield* router.add(
-        "*",
-        "/pages/*",
-        HttpEffect.fromWebHandler(createPagesHandler(root(), pods())),
+      const { address } = yield* HttpServer.HttpServer;
+      const base = `http://127.0.0.1:${address._tag === "TcpAddress" ? address.port : 0}`;
+      const bridge = Option.getOrUndefined(yield* Effect.serviceOption(RevitBridge));
+      const live: PageLive = {
+        sessions: async () =>
+          bridge
+            ? (await Effect.runPromise(bridge.list)).flatMap((s) =>
+                s.connected && s.sessionId
+                  ? [{ session: s.sessionId, documents: s.state?.openDocuments ?? null }]
+                  : [],
+              )
+            : [],
+        // Back through this host's own front door, so `/call` and `/actions` decide as for anyone.
+        forward: (path, headers, body) =>
+          fetch(`${base}${path}`, {
+            method: "POST",
+            headers: { "content-type": "application/json", ...headers },
+            body: JSON.stringify(body),
+          }),
+      };
+      const pages = createPagesHandler(root(), pods(), live, hostCaptures());
+      const handler = HttpEffect.fromWebHandler((request) =>
+        matchPeRoute(request.method, new URL(request.url).pathname)
+          ? servePeRoute(request, pages)
+          : pages(request),
       );
+      // One registration claims the bare `/pages` too (a second `add` is refused at boot; see captures).
+      yield* router.add("*", "/pages/*", handler);
+      yield* router.add(peRoutes["page.bind"].method, peRoutes["page.bind"].path, handler);
+      yield* router.add(peRoutes["page.publish"].method, peRoutes["page.publish"].path, handler);
     }),
   );

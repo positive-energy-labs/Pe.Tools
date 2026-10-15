@@ -9,6 +9,7 @@ import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { createUpdateReader, UpdateReader, type UpdateRunner } from "../src/update-reader.ts";
 import { HostLifecycle } from "../src/host-lifecycle.ts";
 import { updateRoutes } from "../src/update-route.ts";
+import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
 
 vi.mock("../src/host-ownership.ts", async (original) => {
   const real = await original<typeof import("../src/host-ownership.ts")>();
@@ -35,8 +36,8 @@ const envelope = (result: unknown, exitCode = 0): Envelope<unknown> => ({
   exitCode,
   diagnostics: [],
   resolved: null,
-  binary: {} as Envelope<unknown>["binary"],
-  command: {} as Envelope<unknown>["command"],
+  binary: sdkBinary,
+  command: sdkCommand,
   nextSteps: [],
   guide: "update",
   related: [],
@@ -48,6 +49,7 @@ const receipt = (requestId: string, state = "running"): UpdateReceipt => ({
   receiptPath: "exact.receipt.json",
   reopen: ["C:/saved.rvt"],
   restartYears: [2025],
+  stub: null,
   legs: [
     {
       name: state === "ok" ? "done" : "handoff",
@@ -522,6 +524,41 @@ test("automatic admission excludes new Pea work through download and handoff, te
     f.confirm(receipt(admitted.requestId!, "refused"));
     await reader.refresh(false);
     expect(reader.automaticPending()).toBe(false);
+  } finally {
+    await f.close();
+  }
+});
+
+test("U-02/U-04: a lost acknowledgement is unknown, and late recovery of a running handoff exits once", async () => {
+  const f = await fixture();
+  const handoff = vi.fn();
+  let answering = false;
+  let saved: UpdateReceipt | null = null;
+  const run: UpdateRunner = vi.fn(async (args) => {
+    if (args[0] === "update" && args[1] === "apply") {
+      saved = receipt(JSON.parse(await readFile(f.path, "utf8")).requestId);
+      throw Error("acknowledgement lost");
+    }
+    if (!answering || !saved) throw Error("not answering");
+    return recovered(saved);
+  });
+  const reader = createUpdateReader({
+    path: f.path,
+    run,
+    installed: true,
+    pid: 123,
+    manifest: MANIFEST,
+    handoff,
+  });
+  try {
+    const first = await reader.apply(plan.planId);
+    expect(first.requestId).not.toBeNull();
+    expect(first.receipt).toBeNull();
+    expect(handoff).not.toHaveBeenCalled();
+    answering = true;
+    await reader.refresh(false);
+    await reader.refresh(false);
+    expect(handoff).toHaveBeenCalledTimes(1);
   } finally {
     await f.close();
   }

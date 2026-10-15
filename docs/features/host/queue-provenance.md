@@ -34,7 +34,7 @@ Never touches the SDK; all Pe.Tools-side.
 
 ## Follow-ons (not in the first cut)
 
-- Queue transitions on the `GET /events` SSE relay; a depth `FactChip` on web surfaces.
+- Queue transitions on the World Reading (`GET /pe/resources`); a depth `FactChip` on web surfaces.
 - Snapshot across all sessions at once (fleet view) — first cut matches the
   one-session-per-call wire posture.
 - 423-when-full body naming the queue contents.

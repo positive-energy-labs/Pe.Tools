@@ -11,13 +11,15 @@ namespace Pe.App.Commands.Palette.TaskPalette;
 ///     scripting pipeline: policy analysis, compilation, and a host-owned transaction/rollback guard.
 /// </summary>
 public sealed class PodScriptTaskItem : IPaletteListItem {
+    public required string Key { get; init; }
+    public required string PodId { get; init; }
     public required string WorkspaceKey { get; init; }
     public required string PodName { get; init; }
     public required Pe.Shared.Scripting.Pods.PodEntrypoint Entrypoint { get; init; }
 
-    public string Id => $"pod:{this.WorkspaceKey}:{this.Entrypoint.Id}";
+    public string Id => this.Key;
 
-    public string TextPrimary => this.Entrypoint.Name ?? this.Entrypoint.Id;
+    public string TextPrimary => this.Entrypoint.Name ?? this.Entrypoint.SourcePath;
     public string TextSecondary => this.Entrypoint.Description ?? this.Entrypoint.SourcePath;
     public string? TextPill => this.PodName;
     public Func<string> GetTextInfo => () =>

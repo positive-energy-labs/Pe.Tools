@@ -2,11 +2,17 @@
 // (./vendor/pe-service.ts). Naming mechanics (the worktree hash, a cross-language contract with the
 // SDK's C# client) live in the SDK; this module owns only what is Pe.Tools-specific: the product
 // root and the lane→name mapping.
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { isSea } from "node:sea";
-import { hostProcessIdentity, productIdentity, productInstallLayout } from "./contracts/product.ts";
+import {
+  hostProcessIdentity,
+  productIdentity,
+  productInstallLayout,
+  productPathNames,
+} from "./contracts/product.ts";
+import { insideTestRoot, productHomePath } from "./product-paths.ts";
 export {
   HOST_RUNTIME_SERVICE_HEADER,
   HOST_RUNTIME_SERVICE_QUERY,
@@ -19,15 +25,28 @@ export type HostLane = "dev" | "installed";
 /**
  * Product root under `%LOCALAPPDATA%\<vendor>\<product>` — the A10 service-file `appBase`
  * (`state/service/<service-name>.json` lives beneath it) and the install-receipt root. Resolved
- * lazily so tests can redirect it via `LOCALAPPDATA`.
+ * lazily so tests can redirect it via `LOCALAPPDATA`. When the product home override is set the
+ * root moves under it (`<home>\.local-state`), so an isolated run shares no state with the owner's
+ * host; the SDK's own registry stays in `%LOCALAPPDATA%\Pe.Revit.Sdk`.
  */
 export function productRoot(): string {
-  return join(
-    process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),
-    productIdentity.vendorName,
-    productIdentity.productName,
+  if (process.env[productPathNames.productHomeVariable]?.trim())
+    return join(productHomePath(), productPathNames.localStateDirectoryName);
+  return insideTestRoot(
+    join(
+      process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"),
+      productIdentity.vendorName,
+      productIdentity.productName,
+    ),
   );
 }
+
+/** Product-owned temporary files follow the same environment as durable state. No IO here. */
+export const productScratchPath = (): string => join(productRoot(), "scratch");
+
+/** The owner's terminal context token, written by the host at start and read by the `pea` CLI. */
+export const hostContextTokenPath = (serviceName: string): string =>
+  join(productRoot(), "state", "service", `${serviceName}.context`);
 
 /** Installed executables must run at the manifest's canonical installed location. */
 export function installedRuntimeRoot(
@@ -45,6 +64,24 @@ export function installedRuntimeRoot(
 /** Worktree-scoped dev-host name for a checkout root (SDK hash — byte-stable across languages). */
 export function sourceHostServiceName(sourceRoot: string): string {
   return sourceServiceName(hostProcessIdentity.serviceName, sourceRoot);
+}
+
+/**
+ * The dev frontend's preferred port for a checkout. The MAIN checkout (its `.git` is a directory) is
+ * the dev lane's identity and keeps `DEV_LANE_FRONTEND_PORT`, the origin of the owner's installed
+ * "Pe.Tools Dev" PWA. Every linked worktree (`.git` is a file) takes a stable slot in 5200-5999
+ * derived from the same hash as its dev host's service name, so worktrees run beside main and each
+ * other. Vite walks to the next free port on a collision; the host learns the origin that actually
+ * bound (dev.ts), never this number.
+ */
+export const DEV_LANE_FRONTEND_PORT = 5175;
+export const DEV_FRONTEND_PORTS = { first: 5200, count: 800 } as const;
+export function devFrontendPort(sourceRoot: string): number {
+  if (statSync(join(sourceRoot, ".git"), { throwIfNoEntry: false })?.isDirectory())
+    return DEV_LANE_FRONTEND_PORT;
+  const hash = /([0-9a-f]{8})[0-9a-f]*$/.exec(sourceHostServiceName(sourceRoot))?.[1];
+  if (!hash) throw new Error("Dev host service name carries no checkout hash.");
+  return DEV_FRONTEND_PORTS.first + (Number.parseInt(hash, 16) % DEV_FRONTEND_PORTS.count);
 }
 
 /**

@@ -59,6 +59,12 @@ internal static class TsHostLauncher {
     /// <summary>The checkout root is the dev service identity, the same string every TS deriver hashes.</summary>
     private static string ServiceName => HostEndpoint.ResolveServiceName(Context.Lane, Context.SourceRoot);
 
+    /// <summary>
+    ///     The root the supervisor leases and reads <c>state\service</c> under: the product's one
+    ///     machine-local root, which <c>PE_TOOLS_PRODUCT_HOME</c> moves with the host's.
+    /// </summary>
+    internal static string ServiceAppBase => ProductRuntimeLayout.ForCurrentUser().RootPath;
+
     private static ServiceResult EnsureInstalled() {
         var product = InstalledProduct.Open(Context.InstallRoot!)
             ?? throw new InvalidOperationException($"No product manifest at '{Context.InstallRoot}'; reinstall Pe.Tools.");
@@ -89,9 +95,8 @@ internal static class TsHostLauncher {
         start.EnvironmentVariables[HostEndpoint.ServiceNameVariable] = ServiceName;
         start.EnvironmentVariables[SourceRootEnvironmentVariable] = sourceRoot;
 
-        var appBase = InstalledProduct.AppBaseFor(ProductIdentity.ProductName, ProductIdentity.VendorName);
         return InstalledProduct.EnsureRunning(
-            appBase, ServiceName, spec, start, Context.Lane, null,
+            ServiceAppBase, ServiceName, spec, start, Context.Lane, null,
             file => file.Lane == "dev" && PathsEqual(file.SourceRoot, sourceRoot),
             DevStartupTimeout);
     }

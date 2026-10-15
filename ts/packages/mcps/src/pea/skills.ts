@@ -1,7 +1,5 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { productIdentity } from "@pe/host-contracts/contracts";
-import { userDocumentsPath } from "@pe/host-contracts/product-paths";
+import { productHomePath } from "@pe/host-contracts/product-paths";
 
 export interface BundledPeaSkill {
   name: string;
@@ -9,6 +7,31 @@ export interface BundledPeaSkill {
 }
 
 export const bundledPeaSkills: readonly BundledPeaSkill[] = [
+  {
+    name: "make-page",
+    content: String.raw`---
+name: make-page
+description: Use for a chart, table, diagram, comparison, calculation walk, or mechanism explanation with one pe_do Page call. It validates and publishes HTML and returns a visible PNG plus an open URL. No Revit model needed for illustrations.
+---
+
+# Make a Page
+
+Use pe_do({kind: "page", slug, title, html}) before the final reply when a visual would explain a mechanism, comparison, or calculation. Send a complete self-contained HTML document with inline style and script. The host checks it, captures it, and writes Pages/<slug>/index.html under its product home. Its result includes the canonical Page key, absolute openUrl, and a PNG shown in the conversation. Return its openUrl with a short takeaway; the person already sees the picture. Default to a compact single view for teaching: one diagram or comparison, short labels, and only controls that clarify an assumption. Aim for about 3 KB of HTML for the first visual. Every correction or update resubmits complete HTML through the same Page call with the same slug. Keep that HTML in the turn; never locate, read, or patch Page files through a terminal or any owner or default Documents home. If the call refuses, fix the stated problem and resubmit the HTML.
+
+Worked example, the Snowdon duct-loss shape (page:@snowdon-ducts/pages/tour): explain the pressure budget as straight duct plus fittings plus a VAV allowance. For a teaching illustration, publish it directly with assumed inputs rather than waiting for that example's model binding:
+
+    pe_do({kind: "page", slug: "duct-pressure-lesson", title: "Duct pressure budget", html: '<!doctype html><html><head><title>Duct pressure budget</title><style>body{font:18px system-ui;padding:24px}section{display:flex;gap:12px}article{padding:16px;background:#eee;flex:1}output{font-weight:bold}</style></head><body><h1>Where the pressure goes</h1><p>Illustrative inputs, not a model reading.</p><section><article>120 ft duct<br>0.12 in. wg</article><article>Two elbows<br>0.06 in. wg</article><article>VAV allowance<br>0.25 in. wg</article></section><p>Losses in series add: <output>0.43 in. wg</output>.</p></body></html>'})
+
+The one result supplies the open URL and screenshot. Replace the assumed values only after an actual model reading. A prose-only explanation or an unbound-example link is not delivery.
+
+1. For a new explanation, call pe_do with kind page directly. For adapting an existing Page, discover and read its canonical key first. Update a scratch Page by publishing its slug again; the host keeps its shared state and binding.
+2. Inline CSS, JavaScript, and SVG are sufficient. /pages/pe.js and pe.kit are available when the Page needs host state or richer controls. Keep the explanation focused; do not fetch their source for a simple illustration.
+3. For model-backed work, use pe.target(), pe.read(key), pe.do(key, input), pe.script(path), pe.describe() and shared Page state. Keep the host Bind chip. Never choose Revit session/document headers, imitate Pea, or hide a refusal. Binding is required before model reads or actions, not for an assumed-input illustration.
+4. script:@<manifest-id>/src/File.cs selects the admitted source file. member:@<manifest-id>/settings/file.json is data and cannot execute. Pea reads a Page through pe_read, and appends an event or requests its own pinned binding through pe_do; the Page's action door belongs to the Page.
+5. Read actual observations before presenting model claims. Label illustrations and stale observations. The publication call already validates and captures the Page; use its returned URL and image instead of rediscovering or reopening it. A capture proves what rendered, not engineering correctness or a Revit action. After a model edit, obtain an independent reading and its receipt.
+6. Share a scratch Page through op:pod.promote, or adapt an installed Pod under a distinct manifest id. Export with op:pod.export and import with op:pod.import. These archive doors need no Revit. Keep authored support files; binding authority and runtime output never travel.
+`,
+  },
   {
     name: "survey-revit-model",
     content: String.raw`---
@@ -122,16 +145,18 @@ The user asked to learn, not to be told. The master corrects the hand and never 
     name: "write-revit-csharp-script",
     content: String.raw`---
 name: write-revit-csharp-script
-description: Write and run a C# Revit script when code is the clearest way to inspect, mutate, or experiment against the model. Use for one-off probes, gaps in host operations, and durable multi-step work. Covers inline snippets, workspace files, and Pod rules. Not for changing values a route shows (family or type parameters, schedule cells, instances, takeoffs, parameter links); propose those with propose-changes, even under Trusted.
+description: Write and run a C# Revit script when code is the clearest way to inspect, mutate, or experiment against a connected model. Use for one-off probes, gaps in host operations, and durable multi-step work. Covers inline snippets, workspace files, and Pod rules. Not for changing values a route shows (family or type parameters, schedule cells, takeoffs, parameter links); propose those with propose-changes, even under Trusted.
 ---
 
 # Write Revit C# Script
 
 ## Method
 
+- Start with pe_find to establish the exact connected document and capability. Do not create or register a script without a connected document. This includes .cs drafts, reusable audits, ReadOnly scripts, and Pod entrypoints for future models. If discovery fails or there is no document, report the missing target and return the proposed contract in the reply only: purpose, inputs, read/write mode, expected artifact, and the readback that will prove it. Write no source file yet.
 - Choose a script when no host operation is the smallest capable surface. Bootstrap the workspace when paths or references are unknown.
 - Inline snippets for tiny probes; workspace files for durable or multi-step work.
 - Default to ReadOnly. Use WriteTransaction only for an explicit, user-authorized mutation. Use NoTransaction only for APIs that reject an open transaction.
+- ReadOnly needs an exact target, not a grant. WriteTransaction and NoTransaction on the user's document need the grant; ask once: select the open document in the composer; that selection is the rw grant and renews with each message. Any script refuses while another open document in that Revit lacks Pea's acquisition or the grant; name those documents to the user.
 - Treat compiler and runtime diagnostics as steering; fix the first one before rerunning.
 - Keep terminal output compact; write artifacts for broad evidence. Return structured results for anything a later step reads.
 
@@ -140,6 +165,8 @@ Building or fixing a family from a cut sheet follows build-revit-family.
 A Pod is a workspace with a root pod.json declaring entrypoints; the build-pod skill defines it and owns building or adapting one.
 
 For a probe, report the answer and the permission mode it ran under. For a mutation, add the script path, diagnostics, and the verification readback.
+
+Worked example: to audit missing diffuser neck sizes, first read the connected project and identify the exact neck parameter. Only then create a ReadOnly script that returns grouped rows by family and type; do not register a Pod entrypoint until that first run produces the expected artifact.
 `,
   },
   {
@@ -209,17 +236,19 @@ description: Turn a repeated workflow or an add-in idea into a shareable Pod, or
 
 The user supplies intent and ideas; you handle the code. Nothing that does not connect to the workflow, nothing longer than it must be.
 
+For a Pod with Revit script entrypoints, pe_find must first establish an exact connected document target. Without it, return the proposed workflow and script contract in the reply; create no source, manifest entrypoint, or registration yet. Preparing reusable code for future models is subject to the same preflight.
+
 ## What a Pod is
 
-A Pod is one folder under Documents/Pe.Tools/Pods/<folder>/ holding pod.json and any of src/ (scripts), settings/ (JSON members and fragments), assets/, and output/ (runs, never published). pod.json holds schemaVersion, id, name, version, description, and optional script entrypoints; nothing else. Libraries offer operations for JSON members; do not bind a JSON file to an operation in the manifest. A folder without pod.json is not a Pod.
+A Pod is one folder under Documents/Pe.Tools/Pods/<folder>/ holding pod.json and authored source, guides, settings, assets, Pages and skills. The host admits one bounded membership set; runtime/build debris and binding authority never travel. pod.json holds schemaVersion, id, name, version, description, and optional script entrypoints; nothing else. Libraries offer operations for JSON members; do not bind a JSON file to an operation in the manifest. A folder without pod.json is not a Pod.
 
 ## Identity: three facts
 
 - The folder path is an address. Renaming or moving it does not change identity. Use the discovered folder when executing; never derive it from the manifest id.
-- The pod.json id names the lineage. Different local copies and versions can share it.
+- The pod.json id names the package. Conflicting installed ids refuse; give an adapted derivative a distinct id.
 - Each member's SHA-256 identifies its exact bytes. It is derived on read, never stored. The human version is a label, not an update policy.
 
-Address a member as { pod: <id>, path: <relative path> } everywhere.
+Canonical keys are script:@<id>/src/File.cs, page:@<id>/pages/<page>, skill:@<id>/skills/<skill>, and member:@<id>/settings/file.json. sourcePath is script identity; no entrypoint id or folder alias survives. Address operation inputs as { pod: <id>, path: <relative path> }. Members are read/mention-only. Other admitted support files remain readable package members.
 
 ## Compose, share, and adapt
 
@@ -239,9 +268,9 @@ Every apply and every entrypoint run writes output/<runId>/receipt.json in the p
 
 ## Every entrypoint is a button
 
-A declared entrypoint appears in Revit's Do palette, on the Scripts tab, with two actions: run safe, where document changes are discarded, and run full, where they are kept. The palette rebuilds its list each time it is summoned, so a new entrypoint appears without restarting Revit. It runs in-process on the Revit lane, so the button still works when Pea is closed and the host is disconnected.
+A declared entrypoint appears in Revit's Do palette, on the Scripts tab, with two actions: run safe, where document changes are discarded, and run full, where they are kept. The palette rebuilds its list each time it is summoned, so a new entrypoint appears without restarting Revit. It runs in-process on the Revit lane using the host-admitted frozen input; unavailable host admission refuses with its reason.
 
-The entrypoint name and description in pod.json are the button label and its subtitle, and the Pod name is the filter pill. Write all three for the practitioner who presses the button, not for yourself. An entrypoint with no name shows its raw id. A Pod whose pod.json is invalid does not appear on the tab at all, and the user cannot see why from Revit, so validate the manifest before you hand it over.
+The entrypoint name and description in pod.json are the button label and its subtitle, and the Pod name is the filter pill. Write all three for the practitioner who presses the button, not for yourself. An entrypoint with no name shows its sourcePath. A Pod whose pod.json is invalid does not appear on the tab at all, and the user cannot see why from Revit, so validate the manifest before you hand it over.
 
 A Pod is not a compiled add-in. The ladder is: a script proves the idea, a declared entrypoint makes it a button, and a typed host operation is the promotion after that. The last rung is a repo change and an add-in rebuild, not session work; say so when the user asks for it.
 
@@ -264,7 +293,7 @@ When more than a sentence is needed, report what the Pod does in the user's word
     name: "propose-changes",
     content: String.raw`---
 name: propose-changes
-description: Propose value changes on a route. Use when the user asks to change, set, fill in, fix, rename, or adjust values on something a route shows - "set <parameter> on every type of <families>", family parameters, bulk families, schedule cells, a pod member or spec, instances, takeoff rooms, parameter links - or has such a route open. You propose; the person stages and commits.
+description: Propose value changes on a route. Use when the user asks to change, set, fill in, fix, rename, or adjust values on something a route shows - "set <parameter> on every type of <families>", family parameters, bulk families, schedule cells, a pod member or spec, takeoff rooms, parameter links - or has such a route open. You propose; the person stages and commits.
 ---
 
 # Propose Changes
@@ -278,7 +307,7 @@ Every route works the same way. You write proposals; the person stages them, and
 3. Write only proposals: pe_do key=route:<route>.propose with patches to proposal rungs and expectedRevision from your read. A patch path is an array of segments, e.g. ["cells","<key>","proposal"] or ["scope","proposal"], never pointer strings. Never write staged. If a route has no proposal rung, describe the change in chat and let the person make it.
 4. Propose even when the harness runs tools without asking. A change the person could review on a route goes through that route; do not reach the same values through a script, an op, or a file edit. A tool that runs unasked does not skip the person's review.
 5. What the person sees: each proposal sits on its own cell next to the current value, with accept and deny on that cell. The Chat head shows a compact summary and opens the route inside Chat. A staged value beside a different proposal of yours is a counter-proposal; do not overwrite it.
-6. Commit is the person's. Plan, apply, save, push, and sync are human verbs; do not press them or ask to. Say which verb to press and what it consumes: the staged values at the current revision, never open proposals. Instances is the one exception: open or start runs exactly what the person staged, so you may run it when they ask.
+6. Commit is the person's. Plan, apply, save, push, and sync are human verbs; do not press them or ask to. Say which verb to press and what it consumes: the staged values at the current revision, never open proposals. Opening and starting Revit are not proposals: run workflow:instances.open or workflow:instances.start yourself when the work needs a Revit, preferring owner pea and a copy over the person's own session.
 7. A proposal is not a permission request. When the harness asks the person to allow a tool call, that ask lives only as long as your turn and approves the call, not your proposal; a proposal waits in the route as Work and survives reload. For a decision only the person can make, ask in chat.
 
 ## Families
@@ -418,19 +447,14 @@ export const retiredPeaSkillNames: readonly string[] = [
 
 /** Codex reads repo skills from `.agents/skills` under its cwd; Claude Code from `.claude/skills`. */
 export const peaStandardSkillsRoot = path.join(".agents", "skills");
-export const peaClaudeSkillsRoot = path.join(".claude", "skills");
-export const peaProductHomeEnvVar = "PE_TOOLS_PRODUCT_HOME";
+const peaClaudeSkillsRoot = path.join(".claude", "skills");
 
 export interface PeaProductHomeOptions {
   productHomePath?: string;
 }
 
 export function resolvePeaProductHomePath(options: PeaProductHomeOptions = {}): string {
-  return path.resolve(
-    readEnvPath(options.productHomePath) ??
-      readEnvPath(process.env[peaProductHomeEnvVar]) ??
-      path.join(userDocumentsPath(), productIdentity.productName),
-  );
+  return path.resolve(readEnvPath(options.productHomePath) ?? productHomePath());
 }
 
 export function resolvePeaStandardSkillsRoot(options: PeaProductHomeOptions = {}): string {
@@ -442,44 +466,7 @@ export function resolvePeaSkillPaths(options: PeaProductHomeOptions = {}): strin
   return [path.join(home, peaStandardSkillsRoot), path.join(home, peaClaudeSkillsRoot)];
 }
 
-export interface MaterializedPeaSkill {
-  name: string;
-  path: string;
-  status: "created" | "updated" | "unchanged";
-}
-
-/** Writes every bundled skill under each harness root; retires the product's former names there. */
-export async function materializeBundledPeaSkills(
-  options: PeaProductHomeOptions = {},
-): Promise<MaterializedPeaSkill[]> {
-  const materialized: MaterializedPeaSkill[] = [];
-  for (const skillsRoot of resolvePeaSkillPaths(options)) {
-    await mkdir(skillsRoot, { recursive: true });
-    for (const name of retiredPeaSkillNames) {
-      if (bundledPeaSkills.some((skill) => skill.name === name))
-        throw new Error(`Pea skill '${name}' is both bundled and retired.`);
-      await rm(path.join(skillsRoot, name), { recursive: true, force: true });
-    }
-    for (const skill of bundledPeaSkills) {
-      const skillPath = path.join(skillsRoot, skill.name, "SKILL.md");
-      await mkdir(path.dirname(skillPath), { recursive: true });
-      const content = `${skill.content.trimEnd()}\n`;
-      const existing = await readExisting(skillPath);
-      const status = existing == null ? "created" : existing === content ? "unchanged" : "updated";
-      if (status !== "unchanged") await writeFile(skillPath, content, "utf-8");
-      materialized.push({ name: skill.name, path: skillPath, status });
-    }
-  }
-  return materialized;
-}
-
-async function readExisting(filePath: string): Promise<string | null> {
-  try {
-    return await readFile(filePath, "utf-8");
-  } catch {
-    return null;
-  }
-}
+export { publishPeaSkills } from "./skill-publication.ts";
 
 function readEnvPath(value: string | undefined): string | undefined {
   const trimmed = value?.trim();

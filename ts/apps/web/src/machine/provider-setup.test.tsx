@@ -1,0 +1,257 @@
+// @vitest-environment jsdom
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
+import { type Machine, type Provider } from "@pe/agent-contracts";
+import { MACHINE_SEEDS } from "#/open/seeds";
+import { machineOf } from "./model";
+import { ProviderSetup } from "./pea";
+import { SettingsBody } from "./body";
+import { harnessClient } from "#/workbench/provider/harness-client";
+import { FirstOpenCard } from "#/chat/first-open";
+import { HeadLadder } from "#/chat/head-chips";
+import { Route as Settings } from "#/routes/settings";
+
+const state = vi.hoisted(() => ({
+  machine: null as Machine | null,
+  login: vi.fn(),
+  logins: {} as Record<string, import("#/workbench/provider/providers").Login>,
+  go: vi.fn(),
+}));
+vi.mock("#/navigation/state", () => ({ useDestination: () => state.go }));
+vi.mock("#/machine/use-machine", () => ({
+  useMachine: () => ({ reading: { state: "ready", observation: state.machine }, fixture: false }),
+  SEED_REFUSAL: "fixture",
+}));
+vi.mock("#/open/lifecycle", () => ({ useInstancesBasis: () => null, RevitControls: () => null }));
+vi.mock("#/route", async () => ({
+  urlPage: (await import("#/route/url")).urlPage,
+  RouteShell: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+vi.mock("#/workbench/provider/providers", async (original) => ({
+  ...(await original<typeof import("#/workbench/provider/providers")>()),
+  useProviders: () => providers(),
+}));
+vi.mock("#/workbench/provider", () => ({
+  useWorkbench: () => ({
+    chat: {},
+    currentThreadId: null,
+    threads: [],
+    providers: providers(),
+    draft: { providerId: "claude", modelId: null, traits: {} },
+    setDraft: vi.fn(),
+  }),
+}));
+
+function providers() {
+  return {
+    list: [...state.machine!.providers!],
+    access: { guarded: true },
+    error: undefined,
+    probe: vi.fn(),
+    openLogin: state.login,
+    login: state.logins,
+    remove: vi.fn(),
+    add: vi.fn(),
+    setAccess: vi.fn(),
+  };
+}
+function seed() {
+  const machine = machineOf(MACHINE_SEEDS["no-revit"])!;
+  state.machine = {
+    ...machine,
+    providers: machine.providers!.map((p) => ({
+      ...p,
+      readiness:
+        p.id === "claude"
+          ? { state: "ready" }
+          : { state: "refused", step: "installed", message: "Codex is not installed" },
+    })),
+  };
+  return state.machine;
+}
+function setup() {
+  const region = screen.getByLabelText("providers");
+  expect(within(region).getByRole("button", { name: "Install" })).toBeTruthy();
+  expect(within(region).getByLabelText("base URL")).toBeTruthy();
+  expect(within(region).getByPlaceholderText("API key")).toBeTruthy();
+  fireEvent.click(within(region).getByRole("button", { name: "Install" }));
+  expect(state.login).toHaveBeenCalledWith("codex");
+}
+// The router plugin splits the route component into a lazy chunk, so the first render awaited a
+// cold module-graph transform. Under a loaded machine that outlasted the waits below; load it once,
+// here, with a hook budget that says what is slow.
+beforeAll(async () => {
+  await (Settings.options.component as unknown as { preload?: () => Promise<void> }).preload?.();
+}, 60_000);
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+  state.logins = {};
+});
+
+test("composer first-open uses the same provider setup", () => {
+  seed();
+  render(<FirstOpenCard providers={providers()} origin="http://host" />);
+  setup();
+});
+
+test("an installation refusal exposes the complete record through Copy the details", async () => {
+  const machine = seed();
+  const detail = {
+    step: "installed" as const,
+    message: "The installer command exited 17; console exit 0.",
+    candidates: [{ path: "C:\\Codex\\codex.exe", reason: "Access denied", win32Error: 5 }],
+    resolvedExecutable: null,
+    lookup: { command: "where.exe", status: 1, reason: "not found" },
+    console: {
+      exitCode: 0,
+      commandExitCode: 17,
+      logPath: "C:\\scratch\\console.log",
+      outputTail: "installer failed [redacted]",
+    },
+  };
+  state.machine = {
+    ...machine,
+    providers: machine.providers!.map((provider) =>
+      provider.id === "codex"
+        ? {
+            ...provider,
+            readiness: { state: "refused", step: "installed", message: detail.message, detail },
+          }
+        : provider,
+    ),
+  };
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  render(<ProviderSetup providers={providers()} />);
+  fireEvent.click(screen.getByRole("button", { name: "Raw error" }));
+  fireEvent.click(screen.getByRole("button", { name: "Copy the details" }));
+  await expect.poll(() => writeText.mock.calls[0]?.[0]).toBe(JSON.stringify(detail, null, 2));
+});
+test("settings still exists and projects the provider setup", async () => {
+  seed();
+  const search = vi.spyOn(Settings, "useSearch").mockReturnValue({ section: "pea" });
+  const Component = Settings.options.component!;
+  await act(async () => {
+    render(<Component />);
+  });
+  await screen.findByLabelText("providers");
+  setup();
+  search.mockRestore();
+});
+
+test("tray Settings opens provider setup in place from the same machine snapshot", () => {
+  render(
+    <SettingsBody reading={{ state: "ready", observation: seed() }} fixture={false} shell="tray" />,
+  );
+  const pea = screen.getByRole("region", { name: "Pea providers" });
+  const toggle = within(pea).getAllByRole("button")[0]!;
+  if (toggle.getAttribute("aria-expanded") !== "true") fireEvent.click(toggle);
+  setup();
+  expect(state.go).not.toHaveBeenCalled();
+});
+test("endpoint add shows one classified line and reveals the raw body only on demand", async () => {
+  seed();
+  const failure = {
+    kind: "billing",
+    message: "billing: Out of credit or billing limit reached.",
+    raw: '{"error":{"type":"insufficient_quota"}}',
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      Response.json(
+        {
+          error: {
+            code: "route.refused",
+            message: failure.message,
+            details: { step: "endpoint", failure },
+          },
+        },
+        { status: 400 },
+      ),
+    ),
+  );
+  render(
+    <ProviderSetup
+      providers={{
+        ...providers(),
+        add: async (input) => {
+          await harnessClient("").addProvider(input);
+        },
+      }}
+    />,
+  );
+  fireEvent.change(screen.getByPlaceholderText("OpenAI API"), {
+    target: { value: "test endpoint" },
+  });
+  fireEvent.change(screen.getByPlaceholderText("API key"), { target: { value: "test-key" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await screen.findByText(failure.message);
+  expect(screen.queryByText(failure.raw)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Raw error" }));
+  expect(screen.getByText(failure.raw)).toBeTruthy();
+  vi.unstubAllGlobals();
+});
+test("Manage providers from the model picker navigates to canonical Settings", () => {
+  seed();
+  render(<HeadLadder />);
+  fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
+  fireEvent.click(screen.getByRole("button", { name: "Manage providers" }));
+  expect(state.go).toHaveBeenCalledWith("/settings?section=pea");
+});
+test("a blank name saves under the endpoint's own name, and the key is the only thing to type", () => {
+  seed();
+  const add = vi.fn();
+  render(<ProviderSetup providers={{ ...providers(), add }} />);
+  fireEvent.change(screen.getByPlaceholderText("API key"), { target: { value: "sk-test" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  expect(add).toHaveBeenCalledWith({
+    harness: "codex",
+    name: "OpenAI API",
+    auth: { kind: "endpoint", baseUrl: "https://api.openai.com/v1", apiKey: "sk-test" },
+  });
+});
+test("Sign in says what it is doing under its row, then goes quiet once a probe answers", () => {
+  seed();
+  state.logins = { codex: { state: "opening" } };
+  const view = render(<ProviderSetup providers={providers()} />);
+  const refresh = (patch: Partial<Provider> = {}) => {
+    state.machine = {
+      ...state.machine!,
+      providers: state.machine!.providers!.map((p) => (p.id === "codex" ? { ...p, ...patch } : p)),
+    };
+    view.rerender(<ProviderSetup providers={providers()} />);
+  };
+  expect(screen.getByText("Opening the Codex installer console")).toBeTruthy();
+  state.logins = { codex: { state: "open", probedAt: null } };
+  refresh();
+  expect(screen.getByText(/Finish installer in the console that opened/)).toBeTruthy();
+  state.logins = {
+    codex: { state: "failed", message: "Could not open the Codex installer console: nope" },
+  };
+  refresh();
+  expect(screen.getByText(/Could not open the Codex installer console: nope/)).toBeTruthy();
+  state.logins = { codex: { state: "opening" } };
+  refresh({
+    readiness: { state: "refused", step: "signed-in", message: "not signed in" },
+    probedAt: "t0",
+  });
+  expect(screen.getByText("Opening the Codex sign-in console")).toBeTruthy();
+  state.logins = { codex: { state: "open", probedAt: "t0" } };
+  refresh();
+  expect(screen.getByText(/Finish sign-in in the console that opened/)).toBeTruthy();
+  refresh({ probedAt: "t1" });
+  expect(screen.queryByText(/console that opened/)).toBeNull();
+  state.logins = { codex: { state: "open", probedAt: "t1" } };
+  refresh({ readiness: { state: "ready" } });
+  expect(screen.queryByText(/console that opened/)).toBeNull();
+});
+test("the model picker offers each unavailable harness's own Install or Sign in", () => {
+  seed();
+  render(<HeadLadder />);
+  fireEvent.click(screen.getByRole("button", { name: "Choose model" }));
+  fireEvent.click(screen.getByRole("button", { name: "Install Codex" }));
+  expect(state.login).toHaveBeenCalledWith("codex");
+  expect(screen.queryByRole("button", { name: /^(Install|Sign in) Claude/ })).toBeNull();
+});

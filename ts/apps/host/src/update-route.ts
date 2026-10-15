@@ -1,14 +1,14 @@
 ﻿import { spawn } from "node:child_process";
 import { join } from "node:path";
-import { Deferred, Effect, Layer } from "effect";
+import { Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
-import { HostLifecycle } from "./host-lifecycle.ts";
 import { hostOwnership, productRoot } from "./host-ownership.ts";
-import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
+import { parsePeRevitEnvelope, peRevitLauncher, withStderr } from "./pe-revit-launch.ts";
 import {
   createUpdateReader,
   isUpdatePlanId,
   UpdateReader,
+  type UpdateFact,
   type UpdateRunner,
 } from "./update-reader.ts";
 
@@ -20,9 +20,10 @@ export const updateVerb: UpdateRunner = (verbArgs, detached = false) => {
       cwd: launch.cwd,
       detached,
       windowsHide: true,
-      stdio: ["ignore", "pipe", "ignore"],
+      stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
+    let stderr = "";
     let settled = false;
     const settle = (envelope: () => Parameters<typeof resolve>[0]) => {
       if (settled) return;
@@ -42,6 +43,9 @@ export const updateVerb: UpdateRunner = (verbArgs, detached = false) => {
       // envelope the CLI prints at handoff; the pipe closes whenever the stub finishes.
       if (detached) settle(() => parsePeRevitEnvelope(stdout, verbArgs, launch));
     });
+    child.stderr.on("data", (chunk) => {
+      stderr = (stderr + chunk).slice(-4096);
+    });
     child.on("error", reject);
     child.on("close", () => {
       if (settled) return;
@@ -49,15 +53,21 @@ export const updateVerb: UpdateRunner = (verbArgs, detached = false) => {
         settled = true;
         resolve(parsePeRevitEnvelope(stdout, verbArgs, launch));
       } catch (error) {
-        reject(error);
+        reject(withStderr(error, stderr));
       }
     });
   });
 };
 
-export const makeInstalledUpdateReader = () =>
+export const makeInstalledUpdateReader = (
+  fact?: (fact: UpdateFact) => void,
+  handoff?: () => void,
+) =>
   createUpdateReader({
+    handoff,
     path: join(productRoot(), "state", "host-update.json"),
+    automaticOffPath: join(productRoot(), "state", "host-update-automatic-off"),
+    fact,
     run: updateVerb,
     installed: hostOwnership.lane === "installed",
     pid: process.pid,
@@ -75,6 +85,21 @@ export const updateRoutes = Layer.mergeAll(
           current.planLeg.attemptedAtUtc
           ? current
           : yield* Effect.promise(() => reader.refresh()),
+      );
+    }),
+  ),
+  HttpRouter.add("POST", "/host/update/automatic", (request) =>
+    Effect.gen(function* () {
+      const body = yield* request.json.pipe(Effect.catch(() => Effect.succeed(null)));
+      const enabled = (body as { enabled?: unknown } | null)?.enabled;
+      if (typeof enabled !== "boolean")
+        return Response.jsonUnsafe({ error: "Say enabled: true or false." }, { status: 400 });
+      const reader = yield* UpdateReader;
+      return yield* Effect.tryPromise(() => reader.setAutomatic(enabled)).pipe(
+        Effect.map((update) => Response.jsonUnsafe(update)),
+        Effect.catch((error) =>
+          Effect.succeed(Response.jsonUnsafe({ error: String(error) }, { status: 409 })),
+        ),
       );
     }),
   ),
@@ -99,18 +124,12 @@ export const updateRoutes = Layer.mergeAll(
       if ("error" in outcome) return Response.jsonUnsafe(outcome, { status: 409 });
       const receipt = outcome.receipt;
       const refused = receipt?.state === "refused" || receipt?.state === "failed";
-      if (
-        receipt?.state === "running" &&
-        receipt.legs.some((leg) => leg.name === "handoff" && leg.status === "ok")
-      ) {
-        const { latch } = yield* HostLifecycle;
-        yield* Effect.forkDetach(
-          Effect.sleep("1 second").pipe(Effect.andThen(Deferred.succeed(latch, undefined))),
-        );
-      }
+      // No receipt means the acknowledgement was lost: the request exists (requestId) and its
+      // outcome is unknown. Recovery and the exit handoff belong to the reader, never to this reply.
       return Response.jsonUnsafe(
         {
-          accepted: !refused,
+          accepted: receipt !== null && !refused,
+          status: receipt?.state ?? "unknown",
           requestId: outcome.requestId,
           planId,
           receiptPath: receipt?.receiptPath ?? null,

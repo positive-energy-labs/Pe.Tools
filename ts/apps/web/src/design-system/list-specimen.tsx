@@ -6,15 +6,15 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 
-import { FactChip } from "#/components/lang/chip";
-import { CellListSelect, List, ListInput, ListPopup } from "#/components/lang/list-popup";
-import { Press } from "#/components/lang/press";
-import { Table } from "#/components/master-table/table";
+import { FactChip } from "@pe/kit/lang/chip";
+import { CellListSelect, List, ListInput, ListPopup } from "@pe/kit/lang/list-popup";
+import { Button } from "@pe/kit/lang/button";
+import { Table } from "@pe/kit/table/table";
 import { CHAT_SEEDS, CHAT_SEED_STATE, CHAT_SEED_THREADS } from "#/chat/seeds";
 import { DEMO_FAMILIES } from "#/families/seeds";
 import { DEMO_PODS } from "#/route/seeds";
 import { ZoneThumb } from "#/takeoff/zone-plan";
-import { selectSkillCommands } from "#/workbench/chat-state";
+import { selectSkillCommands } from "@pe/agent-contracts/chat-state";
 
 /* ── fixtures ────────────────────────────────────────────────────────────────────────────── */
 
@@ -35,9 +35,11 @@ interface LadderItem {
   failed?: boolean;
   refusal?: string;
 }
-const INVENTORY = CHAT_SEEDS.send.readings.inventory.sessions;
+const INVENTORY = CHAT_SEEDS.send.readings.machine.revit.sessions!.flatMap((s) =>
+  s.attachment ? [s.attachment] : [],
+);
 const SESSIONS: LadderItem[] = [
-  ...INVENTORY.map((s) => ({ key: s.sessionId, label: s.sessionId, sub: "connected" })),
+  ...INVENTORY.map((s) => ({ key: s.session, label: s.session, sub: "connected" })),
   { key: "pe.app-25", label: "pe.app-25", sub: "reading…", pending: true },
   { key: "pe.app-24", label: "pe.app-24", sub: "read failed: bridge closed", failed: true },
 ];
@@ -46,7 +48,7 @@ const LADDER = [
   {
     label: "document",
     items: (path: readonly LadderItem[]) =>
-      (INVENTORY.find((s) => s.sessionId === path[0]?.key)?.openDocuments ?? []).map((d) => ({
+      (INVENTORY.find((s) => s.session === path[0]?.key)?.documents ?? []).map((d) => ({
         key: d.openId,
         label: d.title,
         sub: d.isActive ? "active" : undefined,
@@ -174,22 +176,8 @@ export function SidebarPanel({ say }: { say: (text: string) => void }) {
         active: t.id === current,
         actions: (
           <>
-            <Press
-              size="icon"
-              tone="quiet"
-              title="rename"
-              onClick={() => say(`rename “${t.title}”`)}
-            >
-              <Pencil />
-            </Press>
-            <Press
-              size="icon"
-              tone="quiet"
-              title="delete"
-              onClick={() => say(`delete “${t.title}”`)}
-            >
-              <Trash2 />
-            </Press>
+            <Button icon={Pencil} label="rename" onClick={() => say(`rename “${t.title}”`)} />
+            <Button icon={Trash2} label="delete" onClick={() => say(`delete “${t.title}”`)} />
           </>
         ),
       })}
@@ -226,9 +214,9 @@ export function LadderPanel({ say }: { say: (text: string) => void }) {
       empty="no Revit session is running"
       onPick={(item, path) => say(`bound ${[...path, item].map((i) => i.label).join(" › ")}`)}
       footer={
-        <Press tone="quiet" size="value" onClick={() => say("target cleared")}>
+        <Button label="Clear target" onClick={() => say("target cleared")}>
           Clear target
-        </Press>
+        </Button>
       }
       row={(i) => ({
         label: i.label,
@@ -329,7 +317,9 @@ export function SlashPanel({ say }: { say: (text: string) => void }) {
           setText((t) => t.replace(/\/\w*$/, `${c.label} `));
           say(`inserted ${c.label}`);
         }}
-        row={(c) => ({ label: <span className="face-mono">{c.label}</span>, meta: c.sub })}
+        row={(c) => ({ label: <span className="face-mono">{c.label}</span> })}
+        // what the cursor row does, said once under the rows
+        detail={(c) => c.sub}
       />
     </div>
   );

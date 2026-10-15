@@ -1,4 +1,4 @@
-import { plural } from "#/components/lang/band";
+import { plural } from "#/components/work/band";
 import { Pane } from "#/components/lang/pane";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
@@ -23,7 +23,7 @@ import type { Rung } from "#/route/ladder";
 import { Ladder } from "#/route/ladder";
 import type { FamiliesObservationSummary } from "#/families/host";
 import { inventoryOf, previousOf } from "#/readings";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "@pe/kit/lang/button";
 
 const archiveDocument = (
   read: FamiliesObservationSummary,
@@ -84,12 +84,15 @@ function FamiliesArchivedView({ url }: { url?: boolean }) {
                     })),
                     note: error ? failure : loading ? "loading past reads…" : "no past reads",
                     extra: error ? (
-                      <ActionButton
+                      <Button
                         label="Retry"
                         reason={`Try loading the saved data again; does not read Revit · ${error}`}
-                        onClick={retry}
+                        kind="framed"
                         busy={loading}
-                      />
+                        onClick={retry}
+                      >
+                        Retry
+                      </Button>
                     ) : undefined,
                     picked: (id) => id === selectedId,
                     pick: select,
@@ -113,14 +116,7 @@ function FamiliesArchivedView({ url }: { url?: boolean }) {
       }
     >
       <div className="flex size-full min-h-0 min-w-0 flex-col">
-        <Pane
-          kind="content"
-          title="archived families"
-          help="A saved reading for inspection. Choose Audit to read or edit the current document."
-          scroll="clip"
-          flush
-          headerless
-        >
+        <Pane scroll="clip" flush>
           {lastReading ? (
             <FamiliesMatrix />
           ) : (
@@ -343,14 +339,7 @@ function FamiliesActiveView({ url }: { url?: boolean }) {
       ]}
     >
       <div className="flex size-full min-h-0 min-w-0 flex-col">
-        <Pane
-          kind="content"
-          title="families"
-          help="Families and types from the last explicit read. Open a row to inspect its family."
-          scroll="clip"
-          flush
-          headerless
-        >
+        <Pane scroll="clip" flush>
           <FamiliesMatrix />
         </Pane>
       </div>

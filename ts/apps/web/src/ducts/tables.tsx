@@ -4,9 +4,9 @@
  */
 import { useMemo } from "react";
 
-import type { Column } from "#/components/master-table/model";
-import { Table } from "#/components/master-table/table";
-import { EmptyState } from "#/components/lang/empty";
+import type { Column } from "@pe/kit/table/model";
+import { Table } from "@pe/kit/table/table";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 import { ISSUE_KINDS, IssueLegend, issueVerdict } from "./issues";
@@ -288,7 +288,7 @@ export function DuctsTables({
           }}
           start={
             <Pane
-              kind="content"
+              id="content"
               title="groups"
               meta={snapshot ? `${groups.length}` : undefined}
               scroll="clip"
@@ -319,7 +319,7 @@ export function DuctsTables({
               }}
               start={
                 <Pane
-                  kind="content"
+                  id="content"
                   title="segments"
                   meta={snapshot ? `${segments.length}` : undefined}
                   scroll="clip"
@@ -338,7 +338,7 @@ export function DuctsTables({
               }
               end={
                 <Pane
-                  kind="content"
+                  id="content"
                   title="issues"
                   meta={snapshot ? `${issues.length}` : undefined}
                   scroll="clip"
@@ -367,7 +367,7 @@ export function DuctsTables({
       }
       end={
         <Pane
-          kind="content"
+          id="content"
           title="layers"
           meta={snapshot ? `${snapshot.layers.length}` : undefined}
           scroll="clip"

@@ -1,0 +1,157 @@
+{
+  "result": {
+    "phase": "ok",
+    "registryRoot": "C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions",
+    "sessions": [
+      {
+        "case": "controlled-active",
+        "process": {
+          "pid": 71464,
+          "processStartUtc": "2026-10-14T04:06:31.8033171Z",
+          "executable": "C:\\Program Files\\Autodesk\\Revit 2025\\Revit.exe"
+        },
+        "bridge": {
+          "bridge": "ready",
+          "sessionDescriptor": "C:/Users/person/AppData/Local/Pe.Revit.Sdk/sessions/acc-r1/generations/20261014040555790/payload/Pe.App/Pe.App.session.json",
+          "queue": {
+            "health": "responsive",
+            "runningRequestId": null,
+            "runningKey": null,
+            "runningStartedUtc": null,
+            "depth": 0,
+            "lastTickUtc": "2026-10-14T04:11:26.3198728Z"
+          },
+          "modal": null,
+          "privateBytes": 2102054912,
+          "documents": [
+            {
+              "title": "B-copy",
+              "path": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\.artifacts\\accept\\r1\\docs\\B-copy.rvt",
+              "isActive": true,
+              "isFamily": false,
+              "isModified": false,
+              "projectGuid": null,
+              "modelGuid": null,
+              "region": null,
+              "openId": "36720a38fc29437da66eac4e43db77f0",
+              "window": "windowed",
+              "isWorkshared": false,
+              "isDetached": false,
+              "isCloud": false,
+              "centralPath": null,
+              "persistence": "local",
+              "centralFreshnessAtObservation": null,
+              "observedAtUtc": null,
+              "supportedActions": null
+            },
+            {
+              "title": "A",
+              "path": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\.artifacts\\accept\\r1\\docs\\A.rvt",
+              "isActive": false,
+              "isFamily": false,
+              "isModified": false,
+              "projectGuid": null,
+              "modelGuid": null,
+              "region": null,
+              "openId": "e54ad67d7ce64e61bf552c35c914e2a9",
+              "window": "windowed",
+              "isWorkshared": false,
+              "isDetached": false,
+              "isCloud": false,
+              "centralPath": null,
+              "persistence": "local",
+              "centralFreshnessAtObservation": null,
+              "observedAtUtc": null,
+              "supportedActions": null
+            }
+          ],
+          "unresponsive": false
+        },
+        "dialogs": null,
+        "id": "acc-r1",
+        "origin": "cli",
+        "project": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\dotnet\\Pe.App\\Pe.App.csproj",
+        "worktree": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+        "receipt": {
+          "payload": "checkout",
+          "generationId": "20261014040555790",
+          "buildStamp": "08a107fd8365",
+          "overridePath": "C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r1\\generations\\20261014040555790\\payload\\Pe.App\\Pe.App.runtime.json",
+          "generationRoot": "C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r1\\generations\\20261014040555790\\",
+          "receiptPath": "C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r1\\generations\\20261014040555790\\payload\\Pe.App\\Pe.App.session.json"
+        },
+        "detail": "SDK bridge answers with this session descriptor",
+        "shape": {
+          "payload": "checkout",
+          "reload": "hot",
+          "posture": "foreground",
+          "quarantine": true,
+          "purpose": "interactive"
+        },
+        "year": 2025,
+        "observedAtUtc": "2026-10-14T04:11:26.8885716Z",
+        "execution": {
+          "allowed": true,
+          "code": null,
+          "detail": null
+        }
+      },
+      {
+        "case": "gone-receipt",
+        "process": {
+          "pid": 73872,
+          "processStartUtc": "2026-10-13T04:08:31.4923720Z",
+          "executable": "C:\\Program Files\\Autodesk\\Revit 2025\\Revit.exe"
+        },
+        "id": "revit-25-52444",
+        "origin": "cli",
+        "project": null,
+        "worktree": "C:\\Users\\person\\AppData\\Local\\Positive Energy\\Pe.Tools",
+        "receipt": {
+          "payload": "installed",
+          "generationRoot": "C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\revit-25-52444\\generations\\20261013040831394\\",
+          "receiptPath": "C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\revit-25-52444\\generations\\20261013040831394\\descriptor.json"
+        },
+        "detail": "pid 73872 is gone",
+        "shape": {
+          "payload": "installed",
+          "reload": "none",
+          "posture": "foreground",
+          "quarantine": false,
+          "purpose": "interactive"
+        },
+        "year": 2025,
+        "observedAtUtc": "2026-10-14T04:11:26.8885716Z",
+        "execution": {
+          "allowed": false,
+          "code": "session.no-match",
+          "detail": "session 'revit-25-52444' belongs to installed root 'C:\\Users\\person\\AppData\\Local\\Positive Energy\\Pe.Tools', outside this command's execution boundary; observed ownership is not permission to execute"
+        }
+      }
+    ],
+    "unreadableReceipts": [],
+    "processReadErrors": [],
+    "quarantines": [],
+    "requestId": null,
+    "state": "ok"
+  },
+  "resolved": null,
+  "diagnostics": [],
+  "binary": {
+    "origin": "dev-installed",
+    "assembly": "C:\\Users\\person\\.nuget\\packages\\pe.revit.cli\\0.1.0-beta.207\\tools\\net8.0\\any\\Pe.Revit.Cli.dll",
+    "sha256": "093D7ADCEDA6A6D85673BB5BAC9D56713FC5BFE88B7870E9C3E3BF425EAB12C4",
+    "informationalVersion": "0.1.0-beta.207+d458282266a924c74a811d1bea54ae91516e8fb6",
+    "hostExecutable": "C:\\Program Files\\dotnet\\dotnet.exe"
+  },
+  "command": {
+    "cwd": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRoot": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRule": "checkout-manifest",
+    "commandManifest": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\product.payloads.json"
+  },
+  "nextSteps": ["pe-revit start"],
+  "guide": "session",
+  "related": ["pe-revit session list", "pe-revit doc list", "pe-revit guide session"],
+  "exitCode": 0
+}

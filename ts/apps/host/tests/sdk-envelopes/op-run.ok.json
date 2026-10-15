@@ -1,0 +1,327 @@
+{
+  "result": {
+    "state": "ok",
+    "requestId": "33b9743a-f636-4a48-9eae-67737ad0d506",
+    "key": "scripting.execute",
+    "result": {
+      "status": "Succeeded",
+      "output": "",
+      "diagnostics": [
+        {
+          "stage": "normalize",
+          "severity": "Info",
+          "message": "Inline snippet mode: Executing InlineSnippet.cs; captured 1 source file(s): InlineSnippet.cs.",
+          "source": "InlineSnippet.cs"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.Scripting.dll",
+          "source": "Pe.Revit.Scripting"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.dll",
+          "source": "Pe.Revit"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.Compat.dll",
+          "source": "Pe.Revit.Compat"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.DocumentData.dll",
+          "source": "Pe.Revit.DocumentData"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.FamilyFoundry.dll",
+          "source": "Pe.Revit.FamilyFoundry"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.Global.dll",
+          "source": "Pe.Revit.Global"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.Loader.dll",
+          "source": "Pe.Revit.Loader"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.Loader.Bootstrap.dll",
+          "source": "Pe.Revit.Loader.Bootstrap"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.Partition.dll",
+          "source": "Pe.Revit.Partition"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.Placement.dll",
+          "source": "Pe.Revit.Placement"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.SettingsRuntime.dll",
+          "source": "Pe.Revit.SettingsRuntime"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.Space.dll",
+          "source": "Pe.Revit.Space"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.Takeoff.dll",
+          "source": "Pe.Revit.Takeoff"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.Tasks.dll",
+          "source": "Pe.Revit.Tasks"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.Ui.dll",
+          "source": "Pe.Revit.Ui"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.Versioning.dll",
+          "source": "Pe.Revit.Versioning"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Program Files\\Autodesk\\Revit 2025\\NewtonSoft.Json.dll",
+          "source": "Newtonsoft.Json"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Shared.HostContracts.dll",
+          "source": "Pe.Shared.HostContracts"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Shared.Product.dll",
+          "source": "Pe.Shared.Product"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Shared.RevitData.dll",
+          "source": "Pe.Shared.RevitData"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Program Files\\Autodesk\\Revit 2025\\RevitAPI.dll",
+          "source": "RevitAPI"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Resolved reference hint path: C:\\Program Files\\Autodesk\\Revit 2025\\RevitAPIUI.dll",
+          "source": "RevitAPIUI"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Using already-loaded assembly 'Pe.Revit.Scripting' from 'C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.Scripting.dll'.",
+          "source": "Pe.Revit.Scripting"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Using already-loaded assembly 'Pe.Revit' from 'C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.dll'.",
+          "source": "Pe.Revit"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Using already-loaded assembly 'Pe.Revit.Compat' from 'C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.Compat.dll'.",
+          "source": "Pe.Revit.Compat"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Using already-loaded assembly 'Pe.Revit.DocumentData' from 'C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.DocumentData.dll'.",
+          "source": "Pe.Revit.DocumentData"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Using already-loaded assembly 'Pe.Revit.FamilyFoundry' from 'C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.FamilyFoundry.dll'.",
+          "source": "Pe.Revit.FamilyFoundry"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Using already-loaded assembly 'Pe.Revit.Global' from 'C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.Global.dll'.",
+          "source": "Pe.Revit.Global"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Using already-loaded assembly 'Pe.Revit.Loader' from 'C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\kernel\\net8.0-windows\\Pe.Revit.Loader.dll'.",
+          "source": "Pe.Revit.Loader"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Using already-loaded assembly 'Pe.Revit.Loader.Bootstrap' from 'C:\\Users\\person\\AppData\\Roaming\\Autodesk\\Revit\\Addins\\2025\\Pe.Revit.Sdk.Bootstrap\\Pe.Revit.Loader.Bootstrap.dll'.",
+          "source": "Pe.Revit.Loader.Bootstrap"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Using already-loaded assembly 'Pe.Revit.SettingsRuntime' from 'C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.SettingsRuntime.dll'.",
+          "source": "Pe.Revit.SettingsRuntime"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Using already-loaded assembly 'Pe.Revit.Space' from 'C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.Space.dll'.",
+          "source": "Pe.Revit.Space"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Using already-loaded assembly 'Pe.Revit.Tasks' from 'C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.Tasks.dll'.",
+          "source": "Pe.Revit.Tasks"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Using already-loaded assembly 'Pe.Revit.Ui' from 'C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Revit.Ui.dll'.",
+          "source": "Pe.Revit.Ui"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Using already-loaded assembly 'NewtonSoft.Json' from 'C:\\Program Files\\Autodesk\\Revit 2025\\NewtonSoft.Json.dll'.",
+          "source": "NewtonSoft.Json"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Using already-loaded assembly 'Pe.Shared.HostContracts' from 'C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Shared.HostContracts.dll'.",
+          "source": "Pe.Shared.HostContracts"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Using already-loaded assembly 'Pe.Shared.Product' from 'C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Shared.Product.dll'.",
+          "source": "Pe.Shared.Product"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Using already-loaded assembly 'Pe.Shared.RevitData' from 'C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014044702384\\payload\\Pe.App\\Pe.Shared.RevitData.dll'.",
+          "source": "Pe.Shared.RevitData"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Using already-loaded assembly 'RevitAPI' from 'C:\\Program Files\\Autodesk\\Revit 2025\\RevitAPI.dll'.",
+          "source": "RevitAPI"
+        },
+        {
+          "stage": "resolve",
+          "severity": "Info",
+          "message": "Using already-loaded assembly 'RevitAPIUI' from 'C:\\Program Files\\Autodesk\\Revit 2025\\RevitAPIUI.dll'.",
+          "source": "RevitAPIUI"
+        },
+        {
+          "stage": "policy",
+          "severity": "Info",
+          "message": "Compiling 1 entrypoint dependency source file(s): InlineSnippet.cs.",
+          "source": "InlineSnippet.cs"
+        }
+      ],
+      "revitVersion": "2025",
+      "targetFramework": "net8.0-windows",
+      "containerTypeName": "InlineScript",
+      "executionId": "a015a1745d6941a7afdd5a9fcfe559aa",
+      "artifacts": [
+        {
+          "name": "receipt.json",
+          "relativePath": "receipt.json",
+          "fullPath": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\.artifacts\\accept\\r2\\home\\Pe.Tools\\Pods\\default\\output\\20261014-045111-40b762c276384ac6b67fdbdd6ed78312\\receipt.json",
+          "contentType": "application/json",
+          "sizeBytes": 344
+        }
+      ],
+      "data": {
+        "title": "A",
+        "path": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\.artifacts\\accept\\r2\\docs\\A.rvt",
+        "modified": false
+      },
+      "attribution": {
+        "podId": "default",
+        "origin": "Operation",
+        "operation": "scripting.execute",
+        "outcome": "Succeeded",
+        "outputs": [
+          "input.json",
+          "source/00-inline.csx",
+          "effective/00-InlineSnippet.cs",
+          "effective/project.csproj"
+        ]
+      }
+    },
+    "late": null,
+    "dialogs": null
+  },
+  "resolved": {
+    "id": "acc-r2",
+    "how": "pinned",
+    "origin": "cli",
+    "pid": 43608,
+    "processStartUtc": "2026-10-14T04:48:06.2419090Z",
+    "buildStamp": "cdbd012e1820",
+    "observedAtUtc": "2026-10-14T04:51:13.5953850Z",
+    "payload": "checkout",
+    "sourceRoot": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "installedRoot": null
+  },
+  "diagnostics": [],
+  "binary": {
+    "origin": "dev-installed",
+    "assembly": "C:\\Users\\person\\.nuget\\packages\\pe.revit.cli\\0.1.0-beta.208\\tools\\net8.0\\any\\Pe.Revit.Cli.dll",
+    "sha256": "90EE5D4752601BE4E0F50AED84AA5E759BAA3F49FDF0C583904009B520E9CFEE",
+    "informationalVersion": "0.1.0-beta.208+44b07e06540622cf54543d1a155ce82ccc19d440",
+    "hostExecutable": "C:\\Program Files\\dotnet\\dotnet.exe"
+  },
+  "command": {
+    "cwd": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRoot": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRule": "checkout-manifest",
+    "commandManifest": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\product.payloads.json"
+  },
+  "nextSteps": ["pe-revit op result 33b9743a-f636-4a48-9eae-67737ad0d506"],
+  "guide": "session",
+  "related": ["pe-revit op list", "pe-revit op result <requestId>", "pe-revit guide session"],
+  "exitCode": 0
+}

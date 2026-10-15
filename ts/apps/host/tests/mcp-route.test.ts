@@ -1,21 +1,46 @@
+import "./device-test-home.ts";
+import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
+import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { Layer } from "effect";
+import { Layer, Effect, Deferred } from "effect";
+import { NodeHttpServer } from "@effect/platform-node";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { PostHog } from "posthog-node";
+import { ActionJournal } from "../src/action-journal.ts";
+import { createReceiptExport, type ReceiptExport } from "../src/receipt-export.ts";
 import { HttpRouter } from "effect/unstable/http";
 import { buildCapabilities } from "@pe/mcps";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
-import type { InvocationContext } from "@pe/mcps/context";
+import type { InvocationContext } from "@pe/runtime/context";
 import { createPeaMcpServer } from "@pe/mcps/server";
 import { createMcpDoor, mcpRoute } from "../src/mcp-route.ts";
+import { createDevices } from "../src/remote-device.ts";
 import { requestIdentityLayer, type IdentityOptions } from "../src/request-identity.ts";
-import { withInvocationContext } from "@pe/mcps/context";
-import { createServer } from "node:http";
+import { withInvocationContext } from "@pe/runtime/context";
+import { createServer, request as httpRequest } from "node:http";
 import { once } from "node:events";
+import { callerOf, mintContext, retireContext } from "../src/control.ts";
 
 const base = "http://127.0.0.1:5180";
 const version = "2025-11-25";
 const remote = (login: string) => ({ host: "box.tailabc.ts.net", "tailscale-user-login": login });
 const local = { host: "127.0.0.1:5180" };
+const asPea = (headers: Record<string, string>) => {
+  const token = mintContext({
+    kind: "pea",
+    thread: `test-${headers["tailscale-user-login"] ?? "local"}`,
+  });
+  dispose.push(async () => {
+    retireContext(token);
+  });
+  return { ...headers, "x-pe-context": token };
+};
+const devices = createDevices();
 const options: IdentityOptions = {
+  devices,
+  remoteIngress: [{ origin: "http://localhost:65180", transport: "ssh" }],
   port: () => 5180,
   frontendOrigin: () => undefined,
   share: {
@@ -36,12 +61,42 @@ const operations: HostOperationDefinition[] = [
   { key: "pod.member.write", intent: "Mutate", needs: "nothing" },
 ];
 const dispose: Array<() => Promise<void>> = [];
+test("access-084/086: one paired MCP session crosses transports and revoke refuses its next HTTP request", async () => {
+  const f = await fixture();
+  const claimed = devices.claim(devices.pair("mcp").code, "Laptop MCP", "tailnet", "one");
+  const session = await f.init({ ...remote("one"), authorization: `Bearer ${claimed.token}` });
+  const tunneled: Record<string, string> = { ...session, host: "localhost:65180" };
+  delete tunneled["tailscale-user-login"];
+  const message = { jsonrpc: "2.0", id: 2, method: "tools/list" };
+  expect((await f.send(message, tunneled)).status).toBe(200);
+  expect(devices.list().sessions.find((row) => row.id === claimed.session.id)?.transports).toEqual([
+    "tailnet",
+    "ssh",
+  ]);
+  devices.revoke(claimed.session.id);
+  const refused = await f.send(message, tunneled);
+  expect(refused.status).toBe(403);
+  expect(await refused.json()).toMatchObject({ refusal: { code: "device.revoked" } });
+});
 afterEach(async () => {
   await Promise.all(dispose.splice(0).map((close) => close()));
   vi.unstubAllGlobals();
 });
 
-async function fixture() {
+async function fixture(telemetry?: ReceiptExport) {
+  if (!telemetry) {
+    const root = mkdtempSync(join(tmpdir(), "pe-mcp-local-"));
+    telemetry = createReceiptExport({
+      journal: new ActionJournal(join(root, "journal.json")),
+      root,
+      stamps: { host: null, web: null },
+    });
+    const exporter = telemetry;
+    dispose.push(async () => {
+      await exporter.close();
+      rmSync(root, { recursive: true, force: true });
+    });
+  }
   let beforePost: () => Promise<void> = async () => {};
   const posts: Record<string, unknown>[] = [];
   const seen: Array<{ path: string; login: string | null }> = [];
@@ -51,19 +106,16 @@ async function fixture() {
     const login = new Headers(init?.headers).get("tailscale-user-login");
     seen.push({ path: url.pathname, login });
     if (url.pathname === "/pe/access") return Response.json({ guarded: true });
-    if (url.pathname.startsWith("/pe/scope/")) {
-      await Promise.resolve();
-      return Response.json({
-        defaultTarget: null,
-        revision: url.pathname.endsWith("/one") ? 1 : 2,
-      });
-    }
+    // An external MCP client holds no thread in wave 1: its own scope is absent.
+    if (url.pathname === "/pe/scope/self")
+      return Response.json({ error: "no thread" }, { status: 404 });
     if (url.pathname === "/pe/capabilities")
       return Response.json({
         at: new Date(0).toISOString(),
         sources: {},
-        sessions: [],
-        capabilities: buildCapabilities({ ops: operations, routes: [], pods: null, skills: [] }),
+        diagnostics: [],
+        machine: machineFixture(),
+        capabilities: buildCapabilities({ ops: operations, routes: [], packages: [], skills: [] }),
       });
     if (url.pathname === "/ops") return Response.json({ operations });
     if (url.pathname === "/call") return Response.json({ login });
@@ -79,6 +131,8 @@ async function fixture() {
       const { input: request, ...admission } = body;
       const row = {
         ...admission,
+        caller: { kind: "anonymous" },
+        basis: null,
         request,
         state: "succeeded",
         result: { login },
@@ -120,32 +174,74 @@ async function fixture() {
       backend.close((error) => (error ? reject(error) : resolve())),
     );
   });
-  const app = HttpRouter.toWebHandler(
-    Layer.mergeAll(
-      requestIdentityLayer(options),
-      mcpRoute(() => hostBase),
+  const server = createServer();
+  const port = () => {
+    const a = server.address();
+    return a && typeof a !== "string" ? a.port : 0;
+  };
+  const latch = Effect.runSync(Deferred.make<void>());
+  const done = Effect.runPromise(
+    Effect.raceFirst(
+      Layer.launch(
+        HttpRouter.serve(
+          Layer.mergeAll(
+            requestIdentityLayer({ ...options, port }),
+            mcpRoute(() => hostBase, telemetry),
+          ),
+          { disableLogger: true },
+        ).pipe(Layer.provide(NodeHttpServer.layer(() => server, { host: "127.0.0.1", port: 0 }))),
+      ),
+      Deferred.await(latch),
     ),
-    { disableLogger: true },
   );
-  dispose.push(app.dispose);
+  for (let i = 0; !port() && i < 200; i++) await new Promise((r) => setTimeout(r, 10));
+  const mcpBase = `http://127.0.0.1:${port()}`;
+  dispose.push(async () => {
+    Effect.runSync(Deferred.succeed(latch, undefined));
+    server.closeAllConnections();
+    await done.catch(() => {});
+  });
+  // Node fetch drops an overridden Host. Native HTTP carries the tailnet authority verbatim.
   const send = (
     body: unknown,
     headers: Record<string, string> = local,
     method = "POST",
     signal?: AbortSignal,
   ) =>
-    app.handler(
-      new Request(`${base}/mcp`, {
-        method,
-        headers: {
-          accept: "application/json, text/event-stream",
-          "content-type": "application/json",
-          ...headers,
+    new Promise<Response>((resolve, reject) => {
+      const req = httpRequest(
+        `${mcpBase}/mcp`,
+        {
+          method,
+          signal,
+          headers: {
+            accept: "application/json, text/event-stream",
+            "content-type": "application/json",
+            ...headers,
+            ...(headers.host === local.host ? { host: `127.0.0.1:${port()}` } : {}),
+          },
         },
-        ...(method === "POST" ? { body: JSON.stringify(body) } : {}),
-        signal,
-      }),
-    );
+        (response) => {
+          const chunks: Buffer[] = [];
+          response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+          response.on("end", () =>
+            resolve(
+              new Response(
+                response.statusCode === 204 || response.statusCode === 202
+                  ? null
+                  : Buffer.concat(chunks),
+                {
+                  status: response.statusCode,
+                  headers: response.headers as Record<string, string>,
+                },
+              ),
+            ),
+          );
+        },
+      );
+      req.on("error", reject);
+      req.end(method === "POST" ? JSON.stringify(body) : undefined);
+    });
   const init = async (headers: Record<string, string> = local) => {
     const response = await send(
       {
@@ -214,7 +310,6 @@ test("SDK HTTP initialization, tool discovery, notifications, versions, Origin, 
   expect((await f.send({}, { ...one, "mcp-protocol-version": "2099-01-01" })).status).toBe(400);
   expect((await f.send({}, { ...one, origin: "https://evil.example" })).status).toBe(403);
   expect((await f.send({}, { ...one, ...remote("two") })).status).toBe(403);
-  expect((await f.send({}, { ...one, "x-pe-thread": "changed" })).status).toBe(403);
   expect((await f.send({}, { ...one, "mcp-session-id": "absent" })).status).toBe(404);
   expect((await f.send({}, one, "GET")).status).toBe(405);
   expect((await f.send({}, one, "DELETE")).status).toBe(200);
@@ -234,7 +329,7 @@ test("SDK HTTP initialization, tool discovery, notifications, versions, Origin, 
 
 test("MCP tool operations do not consult the harness agent approval preference", async () => {
   const f = await fixture();
-  for (const caller of [local, remote("one")]) {
+  for (const caller of [asPea(local), asPea(remote("one"))]) {
     const session = await f.init(caller);
     const result = await (await f.call("pe_do", { key: "op:pod.member.write" }, session)).json();
     expect(result.result.isError, JSON.stringify(result)).not.toBe(true);
@@ -244,15 +339,16 @@ test("MCP tool operations do not consult the harness agent approval preference",
     expect(JSON.parse(read.result.content[0].text)).toMatchObject({ ok: true });
   }
   expect(f.posts).toHaveLength(2);
-  expect(f.posts[0]).toMatchObject({ actor: "agent", key: "pod.member.write" });
+  expect(f.posts[0]).toMatchObject({ key: "pod.member.write" });
+  expect(f.posts[0]).not.toHaveProperty("actor");
   expect(f.seen.some((request) => request.path === "/pe/access")).toBe(false);
 });
 
-test("concurrent principals retain separate thread scope, headers, and admission identities", async () => {
+test("concurrent principals retain separate headers and admission identities", async () => {
   const f = await fixture();
   const [one, two] = await Promise.all([
-    f.init({ ...remote("one"), "x-pe-thread": "one" }),
-    f.init({ ...remote("two"), "x-pe-thread": "two" }),
+    f.init(asPea(remote("one"))),
+    f.init(asPea(remote("two"))),
   ]);
   const replies = await Promise.all(
     [one, two].map(async (session) =>
@@ -260,22 +356,24 @@ test("concurrent principals retain separate thread scope, headers, and admission
     ),
   );
   for (const reply of replies) expect(reply.result.isError, JSON.stringify(reply)).not.toBe(true);
-  expect(replies.map((reply) => JSON.parse(reply.result.content[0].text).revision)).toEqual([1, 2]);
+  expect(replies.map((reply) => JSON.parse(reply.result.content[0].text).revision)).toEqual([0, 0]);
   expect(f.posts).toHaveLength(2);
   expect(new Set(f.posts.map((row) => row.id)).size).toBe(2);
-  expect(f.seen.filter((row) => row.path.startsWith("/pe/scope/"))).toEqual([
-    { path: "/pe/scope/one", login: "one" },
-    { path: "/pe/scope/two", login: "two" },
-  ]);
-  expect([...f.rows.values()].map((row) => row.result)).toEqual([
-    { login: "one" },
-    { login: "two" },
-  ]);
+  const byLogin = (a: { login: string | null }, b: { login: string | null }) =>
+    String(a.login).localeCompare(String(b.login));
+  expect(
+    f.seen
+      .filter((row) => row.path.startsWith("/pe/scope/"))
+      .every((row) => row.login === "one" || row.login === "two"),
+  ).toBe(true);
+  expect(
+    [...f.rows.values()].map((row) => row.result as { login: string | null }).sort(byLogin),
+  ).toEqual([{ login: "one" }, { login: "two" }]);
 });
 
 test("transport disconnect does not cancel an admitted action; replay reads the retained receipt", async () => {
   const f = await fixture();
-  const session = await f.init(remote("one"));
+  const session = await f.init(asPea(remote("one")));
   let release!: () => void;
   f.holdPost(
     () =>
@@ -323,7 +421,6 @@ test("session construction binds host and maps independently of ambient invocati
               headers: {
                 accept: "application/json, text/event-stream",
                 "content-type": "application/json",
-                "x-pe-thread": login,
               },
               body: JSON.stringify({
                 jsonrpc: "2.0",
@@ -340,8 +437,175 @@ test("session construction binds host and maps independently of ambient invocati
       ),
     ),
   );
-  expect(contexts.map((context) => context.thread)).toEqual(["one", "two"]);
+  expect(
+    contexts.map((context) =>
+      context.principal?.kind === "tailnet" ? context.principal.login : null,
+    ),
+  ).toEqual(["one", "two"]);
   expect(contexts[0]!.admissions).not.toBe(contexts[1]!.admissions);
   expect(contexts[0]!.running).not.toBe(contexts[1]!.running);
   expect(contexts.every((context) => context.hostBaseUrl === f.hostBase)).toBe(true);
+  for (const context of contexts) {
+    expect(callerOf(context.principal!, context.headers!)).toMatchObject({
+      caller: { kind: "external-mcp", label: "fixture" },
+    });
+  }
+  const tokens = contexts.map((context) => context.headers!["x-pe-context"]!);
+  expect(new Set(tokens).size).toBe(2);
+  await door.close();
+  for (const token of tokens)
+    expect(callerOf({ kind: "local" }, { "x-pe-context": token })).toMatchObject({
+      refusal: { code: "context.unknown" },
+    });
 });
+
+test("initialize ignores x-pe-thread and retains only a verified caller context", async () => {
+  const contexts: InvocationContext[] = [];
+  const door = createMcpDoor(
+    () => base,
+    async (context) => {
+      contexts.push(context);
+      return createPeaMcpServer(context);
+    },
+  );
+  dispose.push(() => door.close());
+  const token = mintContext({ kind: "pea", thread: "own-thread" });
+  const terminal = mintContext({ kind: "human", via: "cli" });
+  try {
+    const initializeHeaders: Record<string, string>[] = [
+      { "x-pe-thread": "foreign-thread" },
+      { "x-pe-context": token, "x-pe-thread": "foreign-thread" },
+      { "x-pe-context": terminal },
+    ];
+    for (const headers of initializeHeaders) {
+      const identity = callerOf({ kind: "local" }, headers);
+      if ("refusal" in identity) throw Error(identity.refusal.detail);
+      const response = await withInvocationContext(
+        { principal: { kind: "local" }, caller: identity.caller, headers: {} },
+        () =>
+          door.fetch(
+            new Request(`${base}/mcp`, {
+              method: "POST",
+              headers: {
+                accept: "application/json, text/event-stream",
+                "content-type": "application/json",
+                ...headers,
+              },
+              body: JSON.stringify({
+                jsonrpc: "2.0",
+                id: 1,
+                method: "initialize",
+                params: {
+                  protocolVersion: version,
+                  capabilities: {},
+                  clientInfo: { name: "external", version: "1" },
+                },
+              }),
+            }),
+          ),
+      );
+      expect(response.status).toBe(200);
+    }
+    expect(contexts[0]!.caller).toMatchObject({ kind: "external-mcp" });
+    expect(contexts[1]!.caller).toMatchObject({ kind: "pea", thread: "own-thread" });
+    expect(contexts[1]!.headers!["x-pe-context"]).toBe(token);
+    expect(contexts[2]!.caller).toMatchObject({ kind: "external-mcp" });
+    expect(contexts.every((context) => !("x-pe-thread" in context.headers!))).toBe(true);
+    await door.close();
+    expect(callerOf({ kind: "local" }, { "x-pe-context": token })).toMatchObject({
+      caller: { kind: "pea", thread: "own-thread" },
+    });
+  } finally {
+    retireContext(token);
+    retireContext(terminal);
+  }
+});
+
+test("an MCP session cannot borrow another thread's context on the same local principal", async () => {
+  const f = await fixture();
+  const first = mintContext({ kind: "pea", thread: "first" });
+  const second = mintContext({ kind: "pea", thread: "second" });
+  try {
+    const session = await f.init({ ...local, "x-pe-context": first });
+    expect(
+      (
+        await f.send(
+          { jsonrpc: "2.0", id: 2, method: "tools/list" },
+          { ...session, "x-pe-context": second },
+        )
+      ).status,
+    ).toBe(403);
+  } finally {
+    retireContext(first);
+    retireContext(second);
+  }
+});
+
+test("real HTTP MCP schemas/results match off/on; the adapter never sends directly or exports sentinel content", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pe-mcp-analytics-"));
+  const journal = new ActionJournal(join(dir, "journal.json"));
+  const sent: { properties: Record<string, unknown>; event: string }[] = [];
+  const client = new PostHog("test-ingest", {
+    flushInterval: 0,
+    disableGeoip: true,
+    enableExceptionAutocapture: false,
+  });
+  const capture = vi.spyOn(client, "capture");
+  const exporter = createReceiptExport({
+    journal,
+    root: dir,
+    stamps: { host: { ...receiptGoldenEnvelope.stamp!, component: "host" }, web: null },
+    client,
+    send: async (e) => {
+      sent.push(e);
+    },
+  });
+  try {
+    const off = await fixture(
+      createReceiptExport({ journal, root: dir, stamps: { host: null, web: null } }),
+    );
+    const on = await fixture(exporter);
+    const a = await off.init(local);
+    const b = await on.init(local);
+    const list = (f: Awaited<ReturnType<typeof fixture>>, session: Record<string, string>) =>
+      f.send({ jsonrpc: "2.0", id: 20, method: "tools/list" }, session).then((r) => r.text());
+    expect(await list(on, b)).toEqual(await list(off, a));
+    const read = (f: Awaited<ReturnType<typeof fixture>>, session: Record<string, string>) =>
+      f
+        .call(
+          "pe_read",
+          { key: "op:pod.list", input: { sentinel: "PRIVATE_ARGUMENT" } },
+          session,
+          21,
+        )
+        .then((r) => r.text());
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1_800_000_000_000);
+    expect(await read(on, b)).toEqual(await read(off, a));
+    const failed = (f: Awaited<ReturnType<typeof fixture>>, session: Record<string, string>) =>
+      f.call("pe_read", { key: "PRIVATE_RESULT" }, session, 22).then((r) => r.text());
+    expect(await failed(on, b)).toEqual(await failed(off, a));
+    clock.mockRestore();
+    await expect.poll(() => sent.filter((e) => e.event === "$mcp_tool_call").length).toBe(2);
+    await expect.poll(() => sent.filter((e) => e.event === "$exception").length).toBe(1);
+    expect(capture).not.toHaveBeenCalled();
+    expect(JSON.stringify(sent)).not.toMatch(
+      /PRIVATE_|parameters|response|intent|conversation_id|llm_model|user-agent/,
+    );
+    const usage = sent.filter((e) => e.event === "$mcp_tool_call");
+    expect(usage[0]!.properties).toMatchObject({
+      $mcp_tool_name: "pe_read",
+      $mcp_is_error: false,
+      $mcp_input_keys: ["input", "key"],
+      component: "host",
+    });
+    expect(usage[1]!.properties.$mcp_is_error).toBe(true);
+    expect(sent.find((e) => e.event === "$exception")!.properties.request_id).toBe(
+      usage[1]!.properties.request_id,
+    );
+    expect(usage[0]!.properties.$session_id).not.toBe(usage[0]!.properties.process_session_id);
+    expect(sent).toHaveLength(4);
+  } finally {
+    await exporter.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 15_000);

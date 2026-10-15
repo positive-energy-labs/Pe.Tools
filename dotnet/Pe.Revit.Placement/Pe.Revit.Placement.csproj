@@ -28,6 +28,7 @@
     <ItemGroup>
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj"/>
         <ProjectReference Include="..\Pe.Revit.DocumentData\Pe.Revit.DocumentData.csproj"/>
+        <ProjectReference Include="..\Pe.Shared.Product\Pe.Shared.Product.csproj"/>
     </ItemGroup>
 
 </Project>

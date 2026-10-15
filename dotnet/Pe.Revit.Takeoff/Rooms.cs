@@ -1,3 +1,4 @@
+using Pe.Shared.Product;
 using System.Security.Cryptography;
 using Pe.Revit.Space;
 using PartitionVerbs = Pe.Revit.Partition.Verbs;
@@ -340,7 +341,8 @@ public static class Rooms
                 var frame = new System.Diagnostics.StackTrace(ex).GetFrames()?.Select(f => f.GetMethod()?.DeclaringType?.Name + "." + f.GetMethod()?.Name)
                     .FirstOrDefault(m => m.StartsWith("Solve.") || m.StartsWith("Rooms."));
                 // Diagnostic dump: the exact solver inputs of the failed zone, replayable without Revit.
-                var dump = Path.Combine(Path.GetTempPath(), $"pe-rooms-{zone.Label}.json");
+                var dump = Path.Combine(ProductRuntimeLayout.ForCurrentUser().ScratchPath, $"pe-rooms-{zone.Label}.json");
+                Directory.CreateDirectory(Path.GetDirectoryName(dump)!);
                 File.WriteAllText(dump, Newtonsoft.Json.JsonConvert.SerializeObject(new { input.ZoneLoops, input.Proposals }));
                 failures.Add($"{zone.Label}: {ex.GetType().Name} {ex.Message} at {frame ?? "?"} (inputs {dump})");
                 continue;

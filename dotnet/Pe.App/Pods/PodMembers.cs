@@ -12,7 +12,7 @@ internal static class PodMembers {
     public static string SchemaUrl(ISettingsRootBinding library) =>
         HostEndpoint.ResolveHostBaseUrl().TrimEnd('/') + SettingsSchemaUrl.Path(library);
 
-    /// <summary>Installed pods whose manifest and entrypoints passed preparation.</summary>
+    /// <summary>Host-admitted snapshots whose manifest and entrypoint source passed native validation.</summary>
     public static IReadOnlyList<PreparedPod> Pods() =>
         new ScriptPodPreparationService().List().OfType<PreparedPod>().ToList();
 

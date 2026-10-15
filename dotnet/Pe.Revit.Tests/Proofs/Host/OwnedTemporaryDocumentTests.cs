@@ -50,6 +50,9 @@ public sealed class OwnedTemporaryDocumentTests {
             });
             Assert.That(receipt.Status, Is.EqualTo("acquired"), receipt.Detail);
             Assert.That(receipt.OpenId, Is.Not.EqualTo(borrowed.OpenId));
+            // One authority: the acquired receipt id is the tracker property and the SDK bridge's id.
+            Assert.That(tracker.Track(temporary!).OpenId, Is.EqualTo(receipt.OpenId));
+            Assert.That(PeDocumentIdentity.TryGetOpenId(temporary!, out var authority) ? authority : null, Is.EqualTo(receipt.OpenId));
             Assert.That(OwnedTemporaryDocuments.Acquire(ui, tracker, id, "project:F", () => throw new Exception("duplicate opener")), Is.EqualTo(receipt));
             Assert.That(opens, Is.EqualTo(1));
             Assert.That(temporary!.FamilyManager.CurrentType.Name, Is.EqualTo("Original"));

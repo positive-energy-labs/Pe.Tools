@@ -1,7 +1,7 @@
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 import { useEffect } from "react";
 import { useAtomValue } from "@effect/atom-react";
-import type { ContextBreakdown, ContextItem } from "../chat-state";
+import type { ContextBreakdown, ContextItem } from "@pe/agent-contracts/chat-state";
 import { useCurrentThreadView } from "../thread-view";
 import {
   computeCacheView,
@@ -10,6 +10,7 @@ import {
   type CacheState,
   type CacheView,
 } from "../world-cache";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export const PLAIN_CAP: Record<string, string> = {
   messages: "The context this thread has used, as the harness counts it.",
@@ -61,14 +62,11 @@ export const CACHE_TONE = {
 export function CacheBadge({ state }: { state: CacheState }) {
   if (state === "unknown") return null;
   return (
-    <span
-      className={CACHE_BASE}
-      data-tone={CACHE_TONE[state]}
-      data-wash
-      title="≈ inferred from a frontend snapshot diff, not provider usage"
-    >
-      {state === "cached" ? "≈ cached" : "≈ reproc"}
-    </span>
+    <TooltipHint content="≈ inferred from a frontend snapshot diff, not provider usage">
+      <span className={CACHE_BASE} data-tone={CACHE_TONE[state]} data-wash>
+        {state === "cached" ? "≈ cached" : "≈ reproc"}
+      </span>
+    </TooltipHint>
   );
 }
 

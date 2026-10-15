@@ -6,8 +6,8 @@
  */
 import { useMemo, useRef, useState } from "react";
 
-import { FactChip } from "#/components/lang/chip";
-import { Press } from "#/components/lang/press";
+import { FactChip } from "@pe/kit/lang/chip";
+import { Button } from "@pe/kit/lang/button";
 import type { Segment } from "./encoding";
 import type { DuctsPage } from "./manifest";
 import { contextOf, sceneOf, type DuctIndex, type SpatialView } from "./scene";
@@ -103,39 +103,25 @@ export function useIso(index: DuctIndex, page: Pick<DuctsPage, "group">): Spatia
     },
     band: (
       <>
-        <Press
-          type="button"
-          frame="line"
-          size="caption"
-          title="turn 90° left"
-          onClick={() => turn(-90)}
-        >
+        <Button type="button" kind="framed" label="turn 90° left" onClick={() => turn(-90)}>
           ⟲ 90°
-        </Press>
-        <Press
-          type="button"
-          frame="line"
-          size="caption"
-          title="turn 90° right"
-          onClick={() => turn(90)}
-        >
+        </Button>
+        <Button type="button" kind="framed" label="turn 90° right" onClick={() => turn(90)}>
           90° ⟳
-        </Press>
+        </Button>
         <FactChip title="yaw from north; drag to turn, shift-drag to pan, wheel to zoom">
           yaw <span className="face-mono">{(((yaw % 360) + 360) % 360).toFixed(0)}°</span> · 30°
           above
         </FactChip>
-        <Press
+        <Button
           type="button"
-          frame="line"
-          size="caption"
-          state={stretch === Z_STRETCH[1] ? "selected" : "rest"}
-          aria-pressed={stretch === Z_STRETCH[1]}
-          title="stretch vertical ×3 so drops and risers read; lengths along z are then not to scale"
+          kind="framed"
+          pressed={stretch === Z_STRETCH[1]}
+          label="stretch vertical ×3 so drops and risers read; lengths along z are then not to scale"
           onClick={() => setStretch((s) => (s === Z_STRETCH[0] ? Z_STRETCH[1] : Z_STRETCH[0]))}
         >
           vertical ×{stretch}
-        </Press>
+        </Button>
       </>
     ),
   };

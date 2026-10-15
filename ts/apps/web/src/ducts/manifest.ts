@@ -78,7 +78,7 @@ export const WRITTEN = [
   "unitStatics",
   "parameters",
 ] as const;
-export const stagedCells = (doc: DuctsRouteDocument | null) =>
+const stagedCells = (doc: DuctsRouteDocument | null) =>
   WRITTEN.flatMap((segment) =>
     Object.entries(doc?.[segment] ?? {}).flatMap(([key, cell]) =>
       cell?.staged ? [{ segment, key, cell }] : [],
@@ -117,7 +117,7 @@ const dispatch = async (
   return (answer.value ?? answer) as DuctsApply.Res.Response;
 };
 
-export const outcomeWords = (response: DuctsApply.Res.Response) =>
+const outcomeWords = (response: DuctsApply.Res.Response) =>
   Object.entries(response.counts)
     .filter(([, n]) => n)
     .map(([outcome, n]) => `${n} ${outcome}`)

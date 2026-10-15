@@ -4,12 +4,12 @@
  * Claude desktop, Claude Code or Codex to Pea's tools over MCP.
  */
 import { useState } from "react";
+import { Button } from "@pe/kit/lang/button";
+import { LoginLine, ProviderSetup } from "#/machine/pea";
 import type { Provider } from "@pe/agent-contracts";
-import { Press } from "#/components/lang/press";
-import { openMachine } from "#/machine/door";
 import { Switch } from "#/components/lang/switch";
 import { Switcher } from "#/components/lang/switcher";
-import { readinessSub, type ProvidersState } from "#/workbench/provider/providers";
+import { repairWord, type ProvidersState } from "#/workbench/provider/providers";
 
 /** Agent approvals choose the harness mode for new sessions. HTTP and MCP access are separate. */
 export function AccessSwitch({ providers }: { providers: ProvidersState }) {
@@ -30,39 +30,6 @@ export function AccessSwitch({ providers }: { providers: ProvidersState }) {
             : "harness full access for new sessions"}
       </span>
     </label>
-  );
-}
-
-/** The verb that readies a provider: the step its readiness names. */
-function ReadyVerb({ provider, providers }: { provider: Provider; providers: ProvidersState }) {
-  const { readiness } = provider;
-  if (readiness.state === "ready") return null;
-  if (provider.auth.kind === "endpoint")
-    return (
-      <Press tone="quiet" size="caption" frame="line" onClick={() => openMachine("pea")}>
-        Open providers
-      </Press>
-    );
-  if (readiness.state === "unknown")
-    return (
-      <Press
-        tone="quiet"
-        size="caption"
-        frame="line"
-        onClick={() => void providers.probe(provider.id)}
-      >
-        Probe
-      </Press>
-    );
-  return (
-    <Press
-      tone="quiet"
-      size="caption"
-      frame="line"
-      onClick={() => void providers.openLogin(provider.id)}
-    >
-      {readiness.step === "installed" ? "Install" : "Sign in"}
-    </Press>
   );
 }
 
@@ -94,29 +61,52 @@ export function FirstOpenCard({
       </div>
       {door === "here" ? (
         <>
-          {(providers.list ?? []).map((provider) => (
-            <div key={provider.id} className="flex items-center gap-3 t-small">
-              <span className="w-40 shrink-0">{provider.name}</span>
-              <span
-                className="face-mono min-w-0 flex-1 truncate"
-                data-tone="caution"
-                title={readinessSub(provider)}
-              >
-                {readinessSub(provider)}
-              </span>
-              <ReadyVerb provider={provider} providers={providers} />
-            </div>
-          ))}
-          {providers.error ? (
-            <p className="t-small" data-tone="caution">
-              {providers.error}
-            </p>
-          ) : null}
+          <ProviderSetup providers={providers} />
           <AccessSwitch providers={providers} />
         </>
       ) : (
         <OwnAppDoor host={origin} />
       )}
+    </section>
+  );
+}
+
+/**
+ * The provider this head runs on is not ready while another is: the composer carries that one
+ * provider's words and its one repair, so a logged-out harness is never a silent Send.
+ */
+export function ProviderRepair({
+  provider,
+  providers,
+}: {
+  provider: Provider;
+  providers: ProvidersState;
+}) {
+  const word = repairWord(provider);
+  return (
+    <section aria-label={`repair ${provider.name}`} className="hairline-b flex flex-col px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold">{provider.name}</span>
+        <span className="min-w-0 truncate" data-tone="caution">
+          {provider.readiness.state === "ready" ? "" : provider.readiness.message}
+        </span>
+        <span className="ml-auto flex gap-1">
+          <Button label="Probe" onClick={() => void providers.probe(provider.id)}>
+            Probe
+          </Button>
+          {word ? (
+            <Button
+              label={word}
+              kind="framed"
+              reason="open the harness installer or login in a console on this machine"
+              onClick={() => void providers.openLogin(provider.id)}
+            >
+              {word}
+            </Button>
+          ) : null}
+        </span>
+      </div>
+      <LoginLine provider={provider} providers={providers} />
     </section>
   );
 }
@@ -160,16 +150,15 @@ function OwnAppDoor({ host }: { host: string }) {
           <div className="flex items-center gap-2">
             <span>{snippet.app}</span>
             <span className="text-ink-2">{snippet.where}</span>
-            <Press
-              tone="quiet"
-              size="caption"
+            <Button
+              label={copied === snippet.app ? "copied" : "copy"}
               onClick={() => {
                 void navigator.clipboard?.writeText(snippet.text);
                 setCopied(snippet.app);
               }}
             >
               {copied === snippet.app ? "copied" : "copy"}
-            </Press>
+            </Button>
           </div>
           <pre className="face-mono overflow-auto rounded-sm px-2 py-1" data-surface="recess">
             {snippet.text}

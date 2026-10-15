@@ -3,17 +3,19 @@
  * runs filed against the open member. It performs no Revit action; a spec links to the product
  * route its `$schema` names.
  */
+import { z } from "zod";
 import { frozenDemo } from "#/host/demo-client";
 import { useEffect, useState } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 
-import { FactChip } from "#/components/lang/chip";
-import { EmptyState } from "#/components/lang/empty";
+import { FactChip } from "@pe/kit/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Pane, PaneSplit } from "#/components/lang/pane";
-import { List } from "#/components/lang/list-popup";
-import { Press } from "#/components/lang/press";
+import { List } from "@pe/kit/lang/list-popup";
+import { Button } from "@pe/kit/lang/button";
 import { RunsList } from "#/route/runs-list";
+import { PodPlugins } from "#/route/pod-plugins";
 import { Surface } from "#/components/lang/surface";
 import {
   RouteShell,
@@ -21,6 +23,7 @@ import {
   isSpecOf,
   useRoute,
   useRouteThread,
+  urlPage,
   type MemberRef,
   type PodRow,
 } from "#/route";
@@ -44,12 +47,20 @@ import {
   PODS_SEEDS,
 } from "#/route/seeds";
 import { SpecEditor, type DemoSpec } from "#/route/spec-editor";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** `/pods` writes no document; its target is the thread's document, which field options read. */
 export const manifest = defineRoute({
   key: "pods",
   name: "Pods",
   needs: "document",
+  runs: ["settings.write"],
+  page: z.object({
+    pod: z.string().optional(),
+    path: z.string().optional(),
+    demo: z.string().optional(),
+  }),
+  url: ["pod", "path", "demo"],
   seeds: PODS_SEEDS,
 });
 
@@ -90,13 +101,8 @@ export const DEMO_MEMBER_SPECS = new Map<string, DemoSpec>([
 ]);
 
 export const Route = createFileRoute("/pods")({
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { pod?: string; path?: string; demo?: string } => ({
-    pod: typeof search.pod === "string" ? search.pod : undefined,
-    path: typeof search.path === "string" ? search.path : undefined,
-    demo: typeof search.demo === "string" ? search.demo : undefined,
-  }),
+  validateSearch: urlPage(manifest)!.read,
+  search: { middlewares: [...urlPage(manifest)!.middlewares] },
   component: PodsRoute,
 });
 
@@ -134,7 +140,12 @@ export function PodsRouteContent({
   demo?: string;
   select: (ref: MemberRef) => void;
 }) {
-  const handle = useRoute(manifest, { target: target ?? null, thread });
+  const handle = useRoute(manifest, {
+    target: target ?? null,
+    thread,
+    url: false,
+    page: { pod, path, demo },
+  });
   const ladder = useDocumentLadder(handle);
   // Field options read the thread's document; choosing one here moves the thread (ledger 2026-09-17).
   const optionsFrom =
@@ -191,22 +202,25 @@ export function PodsRouteContent({
                     <>
                       {" "}
                       (
-                      <Link
-                        to={product.to}
-                        // The spec opens selected in the product route's apply stage; the demo
-                        // lane keeps its seed so the link lands on a rendered route.
-                        search={
-                          {
-                            stage: "apply",
-                            pod: row!.id,
-                            path: member!.path,
-                            ...(demo ? { demo: "apply" } : {}),
-                          } as never
-                        }
-                        title={`Open this spec in ${product.def.name}; apply happens there.`}
+                      <TooltipHint
+                        content={`Open this spec in ${product.def.name}; apply happens there.`}
                       >
-                        open in {product.def.name}
-                      </Link>
+                        <Link
+                          to={product.to}
+                          // The spec opens selected in the product route's apply stage; the demo
+                          // lane keeps its seed so the link lands on a rendered route.
+                          search={
+                            {
+                              stage: "apply",
+                              pod: row!.id,
+                              path: member!.path,
+                              ...(demo ? { demo: "apply" } : {}),
+                            } as never
+                          }
+                        >
+                          open in {product.def.name}
+                        </Link>
+                      </TooltipHint>
                       )
                     </>
                   ) : null}
@@ -238,7 +252,8 @@ export function PodsRouteContent({
         grow
         resize={{ target: "start", defaultSize: 300, minSize: 220, persist: "pods:members" }}
         start={
-          <Pane kind="navigation" flush title="members" meta={String(pods.length)} side="left">
+          <Pane flush title="members" meta={String(pods.length)}>
+            {!demo && pods.length > 0 && <PodPlugins pods={pods} />}
             {pods
               .filter((item) => item.diagnostics.length)
               .map((item) => (
@@ -280,7 +295,7 @@ export function PodsRouteContent({
             grow
             resize={{ target: "end", defaultSize: 300, minSize: 220, persist: "pods:runs" }}
             start={
-              <Pane kind="content" title="spec" meta={member?.path}>
+              <Pane title="spec" meta={member?.path}>
                 {member && !member.path.endsWith(".json") ? (
                   <EmptyState story="scope" exit="pick a JSON member to edit it">
                     {member.path} is source, not a spec
@@ -307,24 +322,24 @@ export function PodsRouteContent({
             }
             end={
               <Pane
-                kind="inspector"
                 title="runs"
                 meta={
                   <span className="flex items-center gap-1.5">
                     <span className="face-mono">{runs.length}</span>
-                    <Press
-                      type="button"
-                      tone="quiet"
-                      size="label"
-                      disabled={!member}
-                      title="A draft's run belongs to no member: the whole pod lists it."
+                    <Button
+                      label={runScope === "pod" ? "whole pod" : "this member"}
+                      refusal={
+                        member
+                          ? null
+                          : "This draft has no member yet, so its runs belong to the whole pod."
+                      }
+                      reason="A draft's run belongs to no member: the whole pod lists it."
                       onClick={() => setPodRuns(!podRuns)}
                     >
                       {runScope === "pod" ? "whole pod" : "this member"}
-                    </Press>
+                    </Button>
                   </span>
                 }
-                side="right"
               >
                 <RunsList
                   runs={runs}

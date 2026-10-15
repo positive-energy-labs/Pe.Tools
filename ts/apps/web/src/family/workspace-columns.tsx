@@ -1,9 +1,9 @@
 import { useMemo } from "react";
-import { ActionButton } from "#/components/lang/action-button";
-import { ListPopup } from "#/components/lang/list-popup";
-import { ReadCell, StateDot, VERDICT_INK, VerdictCell } from "#/components/master-table/cells";
-import type { Column, TableState, Verdict } from "#/components/master-table/model";
-import { visibleRows } from "#/components/master-table/view";
+import { Button } from "@pe/kit/lang/button";
+import { ListPopup } from "@pe/kit/lang/list-popup";
+import { ReadCell, StateDot, VERDICT_INK, VerdictCell } from "@pe/kit/table/cells";
+import type { Column, TableState, Verdict } from "@pe/kit/table/model";
+import { visibleRows } from "@pe/kit/table/view";
 import {
   AGREEMENT_TONE,
   MARK,
@@ -20,6 +20,7 @@ import {
 import type { FamilyWorkspaceCore } from "#/family/workspace-core";
 import { useFamilyIdentityColumns } from "#/family/workspace-identity-columns";
 import { useFamilyTypeColumn } from "#/family/workspace-type-column";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function useFamilyColumns(core: FamilyWorkspaceCore) {
   const {
@@ -142,11 +143,14 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
 
     return (
       <span className={className}>
-        <ActionButton
+        <Button
           label="bind…"
-          onClick={() => setBinding({ slug, property })}
           reason={`Bind ${slug}.${property} to a parameter — its one crossing, and the only verb that changes what CAN be said about this number. Offers every ${dataType} parameter already in the profile, or a new one named "${newName}" seeded with ${literal}. The ghost row then disappears into the parameter row that now represents it. Nothing leaves the page.`}
-        />
+          kind="framed"
+          onClick={() => setBinding({ slug, property })}
+        >
+          bind…
+        </Button>
       </span>
     );
   };
@@ -164,11 +168,11 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
     return (
       <span className="flex h-(--item-h) items-center gap-1 px-(--item-pad-x)">
         <StateDot tone="caution" />
-        <span
-          title={`UNBOUND — ${literal} is frozen into the geometry of ${slug}. Nothing in the profile, no type, and no schedule can reach it.`}
+        <TooltipHint
+          content={`UNBOUND — ${literal} is frozen into the geometry of ${slug}. Nothing in the profile, no type, and no schedule can reach it.`}
         >
-          unbound
-        </span>
+          <span>unbound</span>
+        </TooltipHint>
         {bindPicker(slug, property, row.dataType, "ml-auto")}
       </span>
     );
@@ -221,13 +225,14 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
         cell: (row) => {
           const state = agreementOf(world, draft, row, typeName);
           return (
-            <span
-              className="px-(--item-pad-x)"
-              style={{ color: VERDICT_INK[AGREEMENT_TONE[state]] }}
-              title={MARK_TITLE[state]}
-            >
-              {MARK[state]}
-            </span>
+            <TooltipHint content={MARK_TITLE[state]}>
+              <span
+                className="px-(--item-pad-x)"
+                style={{ color: VERDICT_INK[AGREEMENT_TONE[state]] }}
+              >
+                {MARK[state]}
+              </span>
+            </TooltipHint>
           );
         },
       },

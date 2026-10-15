@@ -1,6 +1,6 @@
 # 0015 — The harness drives; Pea is tools and UI
 
-Date: 2026-10-01. Status: accepted. Source: kaitpw, muse rounds 1 to 4 of 2026-10-01, over
+Date: 2026-10-01. Status: accepted; cutover completed in `47c37fb2`. Source: kaitpw, muse rounds 1 to 4 of 2026-10-01, over
 [RESEARCH-t3code-harness-wrapping.md](../features/agent/RESEARCH-t3code-harness-wrapping.md).
 
 ## Context
@@ -27,15 +27,17 @@ hands behind one `delegate` tool. Three facts changed the shape:
 - Pea's Revit tools reach the harness over the existing Pea MCP server, bound to the thread head.
 - The chat UI renders the ACP session stream. `session/request_permission` renders as an approval
   card and answers back through the adapter. Proposals stay host state, as today.
-- Inference and auth belong to the harness: `claude auth login`, `codex login`. Pea holds no model
-  key and no OAuth token for inference. The model picker lists what the harness offers through ACP
-  settings; a thread is bound to one harness.
-- The inference endpoint of [ADR 0014](0014-pea-talks-to-any-openai-compatible-endpoint.md) stays as
-  an advanced setting. It no longer feeds a Pea head. It becomes environment on the harness child
-  (`OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL`, and the key), the way T3 routes a harness through a
-  proxy. The `/settings` page and host probe stay.
+- Inference and auth belong to the harness: `claude auth login`, `codex login`. On the subscription
+  path Pea holds no model key and no OAuth token. A user-added endpoint provider stores its key in
+  `providers.json` under product state (`harness/providers.ts`); the key leaves that module only as
+  child env. The model picker lists what the harness offers through ACP settings; a thread is bound
+  to one harness.
+- Inference endpoints are per-harness providers ([ADR 0014](0014-pea-talks-to-any-openai-compatible-endpoint.md),
+  superseded 2026-10-12). Codex takes an endpoint as a custom model provider through `CODEX_CONFIG`
+  and `MODEL_PROVIDER`; Claude takes `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN`. The host probe
+  checks each harness's own API (`checkEndpoint`: Responses for Codex, Messages for Claude).
 - The Mastra agent, `peaModelAllowlist`, `resolveEndpointModel`, and observational memory are
-  deleted when the ACP head works. Until then they are the running product.
+  deleted.
 
 ## Consequences
 

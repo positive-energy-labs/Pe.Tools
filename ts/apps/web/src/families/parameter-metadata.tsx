@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
-import { PopupFrame } from "#/components/lang/list-popup";
-import { Press } from "#/components/lang/press";
+import { PopupFrame } from "@pe/kit/lang/list-popup";
+import { Button } from "@pe/kit/lang/button";
 import type { FamilyParameterSnapshot } from "#/host/loaded-families-view";
 import type { PivotRow } from "./pivot";
 import type { OverlayParameter } from "./patch-overlay";
@@ -22,8 +22,7 @@ function MetadataControl({
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger
-        render={<Press size="caption" tone={proposed ? "agent" : "quiet"} />}
-        aria-label={`Metadata for ${name}`}
+        render={<Button label={`Metadata for ${name}`} data-tone={proposed ? "pea" : undefined} />}
       >
         {proposed ? "metadata · proposed" : "metadata"}
       </Popover.Trigger>

@@ -1,4 +1,6 @@
-import { contextFetch as fetch } from "#invocation-context";
+import { createPeClient } from "@pe/agent-contracts/pe-api";
+import { readPeError } from "@pe/host-contracts/pe-api";
+import { contextFetch as fetch } from "@pe/runtime/context";
 import { type ActionReceipt } from "@pe/agent-contracts";
 import { readAction, type DetachedAction } from "./takeoff-action-client.ts";
 import { runCapability, CANCEL_KEY } from "./admission.ts";
@@ -28,7 +30,6 @@ type HostRpcCallerOptions = HostSessionScope & {
   hostBaseUrl?: string;
   timeoutMs?: number;
   requestId?: string;
-  actor?: "human" | "agent";
   /** Persist caller view identity before submitting a mutation; reads never invoke this. */
   beforeAdmission?: (id: string) => Promise<void>;
   /** Known host metadata or an injected catalog; skips the live /ops enrichment fetch. */
@@ -333,35 +334,31 @@ const runHostRpcEffect = Effect.fnUntraced(function* (
     try: async () => {
       const headers: Record<string, string> = { "content-type": "application/json" };
       if (options.requestId) headers["x-pe-action-id"] = options.requestId;
-      if (options.actor) headers["x-pe-action-actor"] = options.actor;
       if (options.session) headers[HOST_RPC_SDK_SESSION_HEADER] = JSON.stringify(options.session);
       if (options.bridgeSessionId)
         headers[HOST_RPC_BRIDGE_SESSION_HEADER] = options.bridgeSessionId;
       if (options.openDocumentId) headers[HOST_RPC_DOCUMENT_HEADER] = options.openDocumentId;
-      const response = await fetch(`${base}/call`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ key, request }),
-        signal:
-          options.timeoutMs == null
-            ? undefined
-            : AbortSignal.timeout(Math.max(options.timeoutMs, 1)),
-      });
+      const response = await createPeClient(base, fetch).response(
+        "operation.call",
+        { body: { key, request } },
+        {
+          headers,
+          signal:
+            options.timeoutMs == null
+              ? undefined
+              : AbortSignal.timeout(Math.max(options.timeoutMs, 1)),
+        },
+      );
       if (!response.ok) {
-        const problem = (await response.json().catch(() => undefined)) as
-          | { kind?: string; message?: string; [key: string]: unknown }
-          | undefined;
-        throw new HostCallError(
-          `${key}: ${problem?.message ?? response.statusText}`,
-          response.status,
-          {
-            ...problem,
-            kind: problem?.kind,
-            operationKey: key,
-            title: problem?.message ?? response.statusText,
-            status: response.status,
-          },
-        );
+        const failure = await readPeError(response);
+        const problem = failure.details as { kind?: string; [key: string]: unknown } | undefined;
+        throw new HostCallError(`${key}: ${failure.message}`, response.status, {
+          ...problem,
+          kind: problem?.kind,
+          operationKey: key,
+          title: failure.message,
+          status: response.status,
+        });
       }
       return {
         body: (await response.json()) as unknown,

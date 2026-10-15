@@ -1,11 +1,12 @@
 /** The Situation's grids: the ledger behind the gauge and the page log column. */
 import { useState, type ReactNode } from "react";
-import { Press } from "#/components/lang/press";
+import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "#/components/lang/switcher";
 import { Inspect, inspectableOf } from "./inspect";
 import type { RouteManifest } from "./manifest";
 import type { LogEntry } from "./route-owner";
 import { Label } from "./situation-verbs";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** Label gutter shared by every grid on the board, so columns line up across rows. */
 const GUTTER = "grid grid-cols-[9rem_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1 t-prose";
@@ -85,62 +86,67 @@ export function PageLog({
         {/* On the title line: the head is a fixed height, so a line under the rows would be clipped. */}
         <span className="ml-auto flex items-center gap-1">
           {open && shown.length > CAP ? (
-            <Press type="button" tone="quiet" size="caption" onClick={() => setAll(!all)}>
-              {all ? "newest 7 ▴" : `${shown.length - CAP} more ▸`}
-            </Press>
+            <Button
+              label={all ? "newest 7 ▴" : `${shown.length - CAP} more ▸`}
+              onClick={() => setAll(!all)}
+            >
+              {all ? (
+                "newest 7 ▴"
+              ) : (
+                <span className="face-mono">{`${shown.length - CAP} more ▸`}</span>
+              )}
+            </Button>
           ) : null}
           {collapsible && open ? (
-            <Press
-              type="button"
-              tone="quiet"
-              size="caption"
+            <Button
+              label="hide ▴"
               onClick={() => {
                 setOpen(false);
                 setAll(false);
               }}
             >
               hide ▴
-            </Press>
+            </Button>
           ) : null}
         </span>
       </div>
       <ul className={`hairline-t mt-1.5 t-prose ${open ? "h-[7lh] overflow-y-auto" : "h-[1lh]"}`}>
         {rows.map((entry, index) => (
-          <li
-            key={index}
-            title={`${entry.at} · ${entry.says}`}
-            className={`flex min-w-0 items-baseline gap-2${open ? "" : " cursor-pointer"}`}
-            onClick={
-              open
-                ? undefined
-                : (event) => {
-                    // The receipt link opens its inspectable; the rest of the row opens the log.
-                    if (!(event.target as Element).closest("a,button")) setOpen(true);
-                  }
-            }
-          >
-            {open ? (
-              <span className="face-mono shrink-0 t-small text-ink-mute">{entry.at}</span>
-            ) : null}
-            <span
-              className="w-[1ch] shrink-0 t-small"
-              data-tone={entry.refused ? "caution" : entry.kind === "verb" ? "done" : undefined}
+          <TooltipHint content={`${entry.at} · ${entry.says}`} key={index}>
+            <li
+              className={`flex min-w-0 items-baseline gap-2${open ? "" : " cursor-pointer"}`}
+              onClick={
+                open
+                  ? undefined
+                  : (event) => {
+                      // The receipt link opens its inspectable; the rest of the row opens the log.
+                      if (!(event.target as Element).closest("a,button")) setOpen(true);
+                    }
+              }
             >
-              {entry.refused ? "✕" : entry.kind === "verb" ? "✓" : ""}
-            </span>
-            <span className="min-w-0 truncate text-ink">
-              {entry.link && inspectableOf(manifest.inspectables, entry.link.kind) ? (
-                <Inspect
-                  spec={inspectableOf(manifest.inspectables, entry.link.kind)!}
-                  id={entry.link.id}
-                >
-                  {entry.label}
-                </Inspect>
-              ) : (
-                entry.label
-              )}
-            </span>
-          </li>
+              {open ? (
+                <span className="face-mono shrink-0 t-small text-ink-mute">{entry.at}</span>
+              ) : null}
+              <span
+                className="w-[1ch] shrink-0 t-small"
+                data-tone={entry.refused ? "caution" : entry.kind === "verb" ? "done" : undefined}
+              >
+                {entry.refused ? "✕" : entry.kind === "verb" ? "✓" : ""}
+              </span>
+              <span className="min-w-0 truncate text-ink">
+                {entry.link && inspectableOf(manifest.inspectables, entry.link.kind) ? (
+                  <Inspect
+                    spec={inspectableOf(manifest.inspectables, entry.link.kind)!}
+                    id={entry.link.id}
+                  >
+                    {entry.label}
+                  </Inspect>
+                ) : (
+                  entry.label
+                )}
+              </span>
+            </li>
+          </TooltipHint>
         ))}
       </ul>
     </div>

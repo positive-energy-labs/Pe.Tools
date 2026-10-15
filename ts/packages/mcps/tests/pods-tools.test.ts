@@ -1,4 +1,5 @@
-import { withInvocationContext } from "../src/shared/invocation-context.ts";
+import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
+import { withInvocationContext } from "@pe/runtime/context";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { settingsRouteState } from "@pe/agent-contracts";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
@@ -41,11 +42,12 @@ test("Pea enumerates Pod members and proposes revision-checked Work without rout
         return Response.json({
           at: new Date(0).toISOString(),
           sources: {},
-          sessions: [],
+          diagnostics: [],
+          machine: machineFixture(),
           capabilities: buildCapabilities({
             ops: tsOnlyOperationCatalog,
             routes: registrations.map((row) => row.spec),
-            pods: null,
+            packages: [],
             skills: [],
           }),
         });
@@ -59,7 +61,7 @@ test("Pea enumerates Pod members and proposes revision-checked Work without rout
       }
       if (url.pathname === "/pe/route-state/pods")
         return Response.json(await runtime.view(scope, "pods"));
-      if (url.pathname === "/pe/agent/route-state/pods/apply") {
+      if (url.pathname === "/pe/route-state/pods/apply") {
         const body = JSON.parse(await bodyText(init));
         return Response.json(
           await runtime.apply(scope, "pods", "agent", body.patches, body.expectedRevision),

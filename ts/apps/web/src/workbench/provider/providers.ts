@@ -17,16 +17,53 @@ export interface HeadDraft {
 export const EMPTY_HEAD: HeadDraft = { providerId: null, modelId: null, traits: {} };
 
 export const isReady = (provider: Provider) => provider.readiness.state === "ready";
-export const isFresh = (provider: Provider) =>
-  provider.probedAt !== null && Date.now() - Date.parse(provider.probedAt) < 60_000;
-
-/** Readiness as one dot and the host's words: the head chip, the first-open card and Settings. */
+/** Readiness as one dot and the host's words: the head chip, the first-open card and Settings.
+ * Optimistic (kaitpw, 2026-10-12): the last probe stands until a probe or a send says otherwise;
+ * a 60 s expiry read "probe expired" on providers that worked. */
 export const readinessSub = (provider: Provider) =>
-  provider.readiness.state === "ready"
-    ? isFresh(provider)
-      ? "● ready"
-      : "○ last ready · probe expired"
-    : `○ ${provider.readiness.message}`;
+  provider.readiness.state === "ready" ? "● ready" : `○ ${provider.readiness.message}`;
+
+/** The one press that repairs a subscription provider: Install when the CLI is missing, else Sign in. */
+export const repairWord = (provider: Provider): "Install" | "Sign in" | null =>
+  provider.auth.kind !== "subscription"
+    ? null
+    : provider.readiness.state === "refused" && provider.readiness.step === "installed"
+      ? "Install"
+      : "Sign in";
+
+/** One Sign in or Install press, from the click until a probe has answered. */
+export type Login =
+  | { state: "opening" }
+  | { state: "open"; probedAt: string | null }
+  | { state: "failed"; message: string };
+
+/**
+ * What a press is doing, in one line under its provider row. Null once the host has probed again
+ * (the row's own readiness speaks then) and before any press.
+ */
+export function loginLine(
+  provider: Provider,
+  login: Login | undefined,
+): { kind: "busy" | "advisory" | "error"; label: string } | null {
+  if (!login || isReady(provider)) return null;
+  const what =
+    provider.readiness.state === "refused" && provider.readiness.step === "installed"
+      ? "installer"
+      : "sign-in";
+  switch (login.state) {
+    case "opening":
+      return { kind: "busy", label: `Opening the ${provider.name} ${what} console` };
+    case "failed":
+      return { kind: "error", label: login.message };
+    case "open":
+      return login.probedAt === provider.probedAt
+        ? {
+            kind: "advisory",
+            label: `Finish ${what} in the console that opened; this updates when it closes`,
+          }
+        : null;
+  }
+}
 
 export function useProviders(origin: string, enabled = true, snapshot?: Machine) {
   const client = useMemo(() => harnessClient(origin), [origin]);
@@ -35,6 +72,7 @@ export function useProviders(origin: string, enabled = true, snapshot?: Machine)
   const list = machine?.providers ? [...machine.providers] : undefined;
   const access = machine?.access ?? undefined;
   const [error, setError] = useState<string>();
+  const [login, setLogin] = useState<Record<string, Login>>({});
   const run = useCallback(async (work: () => Promise<unknown>) => {
     try {
       setError(undefined);
@@ -51,12 +89,21 @@ export function useProviders(origin: string, enabled = true, snapshot?: Machine)
     access,
     error: error ?? machine?.legs.providers?.error ?? access?.readError,
     probe,
+    login,
     /** The harness's own login (or installer) in a console on this machine; re-probed on return. */
-    openLogin: (id: string) =>
-      run(async () => {
+    openLogin: async (id: string) => {
+      const press = (next: Login) => setLogin((current) => ({ ...current, [id]: next }));
+      press({ state: "opening" });
+      try {
         await client.openLogin(id);
+        press({ state: "open", probedAt: list?.find((item) => item.id === id)?.probedAt ?? null });
         window.addEventListener("focus", () => void probe(id), { once: true });
-      }),
+      } catch (caught) {
+        press({ state: "failed", message: errorMessage(caught) });
+      } finally {
+        dirty({ kind: "machine" });
+      }
+    },
     setAccess: (guarded: boolean) => run(() => client.setAccess({ guarded })),
     /** Throws the host's `{step, message}` refusal as its words, for the form to say inline. */
     add: async (input: AddProviderRequest) => {

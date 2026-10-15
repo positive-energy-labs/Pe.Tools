@@ -3,7 +3,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { availableTransitions, transitionPatches, type FamilyDraft } from "@pe/agent-contracts";
 
-import type { CellWire } from "#/components/lang/band";
+import type { CellWire } from "#/components/work/band";
 import type { FieldState } from "#/family/host";
 import { initialDraft, savedFrom } from "#/family/model";
 import { familySource } from "#/family/source";
@@ -13,7 +13,7 @@ import { useFamilyWorkspaceCore } from "#/family/workspace-core";
 import { FamilyWorkspaceDocPane } from "#/family/workspace-doc-pane";
 import { useFamilyTypeColumn } from "#/family/workspace-type-column";
 
-vi.mock("#/lib/token", () => ({ token: () => "currentColor", dash: () => "none" }));
+vi.mock("@pe/kit/lib/token", () => ({ token: () => "currentColor", dash: () => "none" }));
 afterEach(cleanup);
 
 const raw = JSON.stringify({

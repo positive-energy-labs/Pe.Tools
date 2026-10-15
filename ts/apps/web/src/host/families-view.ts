@@ -1,34 +1,17 @@
-import { hostFetch } from "#/host/runtime";
+import { peClient } from "./pe-client";
 import type { FamiliesView } from "@pe/agent-contracts";
-import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
-
-const url = (path = "") => peUrl(resolveWorkbenchConfig(), `/route-view/families${path}`);
-
-export async function publishFamiliesView(view: FamiliesView): Promise<number> {
-  const response = await hostFetch(url(), {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(view),
-  });
-  if (!response.ok) throw Error("Families view lease failed");
-  return ((await response.json()) as { revision: number }).revision;
+export async function publishFamiliesView(body: FamiliesView): Promise<number> {
+  return (await peClient.call("view.publish", { body })).revision as number;
 }
-
 export async function releaseFamiliesView(instance: string): Promise<void> {
-  await hostFetch(url(`/${instance}`), { method: "DELETE", keepalive: true });
+  await peClient.call("view.remove", { params: { instance } }, { keepalive: true });
 }
-
-export async function acknowledgeFamiliesQuery(input: {
+export async function acknowledgeFamiliesQuery(body: {
   instance: string;
   commandId: string;
   revision: number;
   query: string;
   counts: FamiliesView["counts"];
 }): Promise<void> {
-  const response = await hostFetch(url("/ack"), {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  if (!response.ok) throw Error("Families rule acknowledgement refused");
+  await peClient.call("view.ack", { body });
 }

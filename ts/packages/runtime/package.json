@@ -20,7 +20,12 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
-    }
+    },
+    "./context": {
+      "browser": "./src/invocation-context.browser.ts",
+      "default": "./src/invocation-context.ts"
+    },
+    "./runtime-owner": "./src/runtime-owner.ts"
   },
   "publishConfig": {
     "access": "public"

@@ -1,15 +1,18 @@
 import { z } from "zod";
+import { callerSchema } from "./caller.ts";
+import { mentionSchema } from "./mention.ts";
+import { threadHeadReadingSchema } from "./target.ts";
 
 /**
  * The harness-thread wire (ADR 0015: the harness drives; Pea is tools and UI).
  *
  * One thread is one ACP session on one harness child (claude-agent-acp or codex-acp), spawned by
- * the host with the Pea MCP server bound to the thread head (`PE_THREAD`). The host keeps the
+ * the host with the Pea MCP server bound to its thread by a `PE_CONTEXT` token. The host keeps the
  * durable record: an append-only log of `HarnessEvent`s per thread. The web renders that log and
  * the live tail of it over SSE; it never talks to a harness directly.
  *
- * Trust: the host binds loopback and these routes carry no token. Every mutating route requires
- * `content-type: application/json`, so a cross-origin simple request cannot reach it.
+ * Trust: admission requires a host-minted caller for writes and a human for consent.
+ * Browser human sessions use HttpOnly cookies; terminal and harness children carry scoped bearers.
  *
  * A provider is one harness with one auth source: the harness's own login (`subscription`, one per
  * harness, id = harness id) or a user-added `endpoint` (URL plus key, id `<harness>-<slug>`). The key
@@ -30,7 +33,15 @@ import { z } from "zod";
  *   GET    /pe/threads/:id                     -> HarnessThreadBody
  *   PUT    /pe/threads/:id    {title}          -> HarnessThreadSummary
  *   DELETE /pe/threads/:id
- *   POST   /pe/threads/:id/prompt {text}       -> { turnId }   (202 queued when a turn is running)
+ *   POST   /pe/threads/:id/prompt {id, text, attachments?, mentions?, delivery?} -> TurnState
+ *            (`id` is client-minted and becomes the turn's id: a retry with the same id and content
+ *            answers the turn's state and never sends twice; other content under it is 409.
+ *            `steer`, the default, interrupts a running turn: it ends cancelled, then this one starts;
+ *            409 when it does not stop. `queue` waits for the running turn and any steer to end, then
+ *            delivers in order. 400 on an unreadable attachment kind; a mention is never refused)
+ *   POST   /pe/threads/:id/queue {turnId, action: steer|cancel} -> TurnState   (a queued prompt only)
+ *   GET    /pe/threads/:id/wait?turn=<id>&timeoutMs=<n> -> TurnState   (answers once the turn
+ *            settles, or as it stands after `timeoutMs`, at most {@link TURN_WAIT_MAX_MS})
  *   POST   /pe/threads/:id/cancel
  *   POST   /pe/threads/:id/permission {requestId, optionId}
  *   POST   /pe/threads/:id/question {requestId, action, content?}   (answers an ACP elicitation form)
@@ -38,7 +49,8 @@ import { z } from "zod";
  *            (copies the log; same provider forks the ACP session, another re-feeds the transcript)
  *   POST   /pe/threads/:id/model {modelId}
  *   POST   /pe/threads/:id/trait {id, value}    (ACP `session/set_config_option`)
- *   GET    /pe/threads/:id/stream  (SSE; each `data:` is one HarnessEvent, from `?after=<seq>`)
+ *   A thread's events are followed as the `thread` Reading (`reading.ts`) over the host log,
+ *   from the summary's `cursor`; the list is the `threads` Reading.
  */
 
 export const harnessIds = ["claude", "codex"] as const;
@@ -55,13 +67,48 @@ export const authSourceViewSchema = z.discriminatedUnion("kind", [
 ]);
 export type AuthSourceView = z.infer<typeof authSourceViewSchema>;
 
+export const endpointFailureSchema = z.object({
+  kind: z.enum(["billing", "auth", "unreachable", "model", "other"]),
+  message: z.string(),
+  raw: z.string(),
+});
+export type EndpointFailure = z.infer<typeof endpointFailureSchema>;
+
+const readinessStepSchema = z.enum(["installed", "signed-in", "endpoint"]);
+/** One sanitized refusal record, shared by the host log and the provider's copyable details. */
+const providerRefusalSchema = z.object({
+  step: readinessStepSchema,
+  message: z.string(),
+  failure: endpointFailureSchema.optional(),
+  candidates: z.array(
+    z.object({ path: z.string(), reason: z.string(), win32Error: z.number().nullable() }),
+  ),
+  resolvedExecutable: z
+    .object({ path: z.string(), realPath: z.string(), size: z.number(), modifiedAt: z.string() })
+    .nullable(),
+  lookup: z
+    .object({ command: z.string(), status: z.number().nullable(), reason: z.string() })
+    .nullable(),
+  console: z
+    .object({
+      exitCode: z.number().nullable(),
+      commandExitCode: z.number().nullable(),
+      logPath: z.string(),
+      outputTail: z.string().max(8192),
+    })
+    .nullable(),
+});
+export type ProviderRefusal = z.infer<typeof providerRefusalSchema>;
+
 /** The first step that stands between the provider and a turn; `unknown` when the probe could not tell. */
 export const readinessSchema = z.discriminatedUnion("state", [
   z.object({ state: z.literal("ready") }),
   z.object({
     state: z.literal("refused"),
-    step: z.enum(["installed", "signed-in", "endpoint"]),
+    step: readinessStepSchema,
     message: z.string(),
+    failure: endpointFailureSchema.optional(),
+    detail: providerRefusalSchema.optional(),
   }),
   z.object({ state: z.literal("unknown"), message: z.string() }),
 ]);
@@ -106,11 +153,17 @@ export const addProviderRequestSchema = z.object({
 });
 export type AddProviderRequest = z.infer<typeof addProviderRequestSchema>;
 
-/** Guarded starts a session in the harness's own auto mode; unguarded in its full-access mode. */
+/** Harness approval policy only. Guarded starts auto mode; unguarded starts full access. Neither grants Revit rw. */
 export const accessSchema = z.object({ guarded: z.boolean(), readError: z.string().optional() });
 export type Access = z.infer<typeof accessSchema>;
 
-/** One ACP `session/update` notification body, kept verbatim. The web switches on `sessionUpdate`. */
+/**
+ * One ACP `session/update` notification body, kept verbatim. The web switches on `sessionUpdate`.
+ * An update or permission ask over {@link HARNESS_EVENT_MAX_BYTES} is kept bounded: its long
+ * strings cut, or only its identity when that is not enough, with `truncated` naming the bytes the
+ * harness sent. The harness itself read the whole value; only the record is bounded.
+ */
+export const HARNESS_EVENT_MAX_BYTES = 64 * 1024;
 export const acpSessionUpdateSchema = z.object({ sessionUpdate: z.string() }).passthrough();
 
 export const permissionOptionSchema = z.object({
@@ -118,6 +171,53 @@ export const permissionOptionSchema = z.object({
   name: z.string(),
   kind: z.enum(["allow_once", "allow_always", "reject_once", "reject_always"]),
 });
+
+/** One file the user attached to a prompt, as the composer read it: `text` for a text file, base64
+ * `data` for any other. The host makes each an ACP content block (`attachmentKind` says which). */
+export const promptAttachmentSchema = z
+  .object({
+    name: z.string().min(1),
+    mimeType: z.string(),
+    size: z.number().int().nonnegative(),
+    data: z.string().optional(),
+    text: z.string().optional(),
+  })
+  .refine((a) => (a.data === undefined) !== (a.text === undefined), "carries data or text");
+export type PromptAttachment = z.infer<typeof promptAttachmentSchema>;
+
+/** ACP `agentCapabilities.promptCapabilities` as the host read it at the session's `initialize`. */
+export const promptCapabilitiesSchema = z.object({
+  image: z.boolean(),
+  embeddedContext: z.boolean(),
+});
+export type PromptCapabilities = z.infer<typeof promptCapabilitiesSchema>;
+
+/** The image types both harnesses' models read; any other image crosses as a file. */
+const MODEL_IMAGES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+/** `image` an ACP image block, `text` an embedded text resource, `file` a link to the saved bytes. */
+export const attachmentKind = (a: PromptAttachment): "image" | "text" | "file" =>
+  a.text !== undefined ? "text" : MODEL_IMAGES.includes(a.mimeType) ? "image" : "file";
+
+/** The one attachment rule, host and composer alike: which kinds this harness refuses, in a
+ * sentence; null when every one crosses or the capabilities are not known yet. A file link needs
+ * no capability (ACP baseline). */
+export function attachmentRefusal(
+  attachments: readonly PromptAttachment[],
+  caps: PromptCapabilities | null,
+  harness: string,
+): string | null {
+  if (!caps) return null;
+  const refused = attachments.filter(
+    (a) =>
+      (attachmentKind(a) === "image" && !caps.image) ||
+      (attachmentKind(a) === "text" && !caps.embeddedContext),
+  );
+  if (!refused.length) return null;
+  const kinds = new Set(
+    refused.map((a) => (attachmentKind(a) === "image" ? "images" : "text files")),
+  );
+  return `${harness} cannot read attached ${[...kinds].join(" or ")}: remove ${refused.map((a) => a.name).join(", ")} to send`;
+}
 
 /** Append-only per-thread record. `seq` is 1-based and dense per thread. */
 export const harnessEventSchema = z.discriminatedUnion("kind", [
@@ -127,6 +227,8 @@ export const harnessEventSchema = z.discriminatedUnion("kind", [
     kind: z.literal("prompt"),
     turnId: z.string(),
     text: z.string(),
+    attachments: z.array(promptAttachmentSchema).optional(),
+    mentions: z.array(mentionSchema).optional(),
   }),
   /** `turnId` is null for updates the harness sends outside a turn (commands, mode, session info). */
   z.object({
@@ -135,14 +237,6 @@ export const harnessEventSchema = z.discriminatedUnion("kind", [
     kind: z.literal("update"),
     turnId: z.string().nullable(),
     update: acpSessionUpdateSchema,
-  }),
-  /** A prompt accepted while a turn runs; it becomes a `prompt` event when it starts. */
-  z.object({
-    seq: z.number(),
-    at: z.string(),
-    kind: z.literal("queued"),
-    turnId: z.string(),
-    text: z.string(),
   }),
   z.object({
     seq: z.number(),
@@ -207,12 +301,55 @@ export const harnessEventSchema = z.discriminatedUnion("kind", [
       by: z.enum(["cancel", "expired"]),
     }),
   ]),
+  /** A `queue` prompt admitted while a turn runs. Its `prompt` follows, same `turnId`, on delivery. */
+  z.object({
+    seq: z.number(),
+    at: z.string(),
+    kind: z.literal("prompt_queued"),
+    turnId: z.string(),
+    text: z.string(),
+    attachments: z.array(promptAttachmentSchema).optional(),
+    mentions: z.array(mentionSchema).optional(),
+  }),
+  /** A queued prompt that will never be delivered: the user dropped it, or the host restarted. */
+  z.object({
+    seq: z.number(),
+    at: z.string(),
+    kind: z.literal("prompt_dropped"),
+    turnId: z.string(),
+    by: z.enum(["user", "expired"]),
+  }),
+  /** The host spawned or resumed the harness child for this turn's prompt: nothing else is logged
+   * until it answers (seconds when a reaped child is respawned). Absent when a live child took it. */
+  z.object({ seq: z.number(), at: z.string(), kind: z.literal("starting"), turnId: z.string() }),
+  /** Who asked the running turn to stop, and through which door (the cancel route, or the prompt
+   * that interrupts it). Written before the harness is told, so it precedes the `turn_end`. */
+  z.object({
+    seq: z.number(),
+    at: z.string(),
+    kind: z.literal("cancel_requested"),
+    turnId: z.string(),
+    by: callerSchema,
+    door: z.string(),
+  }),
   z.object({
     seq: z.number(),
     at: z.string(),
     kind: z.literal("turn_end"),
     turnId: z.string(),
     stopReason: z.string(),
+    /** The harness's `PromptResponse.usage`, verbatim; absent when it sent none, and an unsent
+     * optional count stays absent, never zero. The context window is the separate `usage_update`. */
+    usage: z
+      .object({
+        totalTokens: z.number(),
+        inputTokens: z.number(),
+        outputTokens: z.number(),
+        thoughtTokens: z.number().optional(),
+        cachedReadTokens: z.number().optional(),
+        cachedWriteTokens: z.number().optional(),
+      })
+      .optional(),
   }),
   z.object({
     seq: z.number(),
@@ -220,6 +357,7 @@ export const harnessEventSchema = z.discriminatedUnion("kind", [
     kind: z.literal("error"),
     turnId: z.string().nullable(),
     message: z.string(),
+    failure: endpointFailureSchema.optional(),
   }),
   z.object({
     seq: z.number(),
@@ -262,7 +400,53 @@ export const harnessEventSchema = z.discriminatedUnion("kind", [
 ]);
 export type HarnessEvent = z.infer<typeof harnessEventSchema>;
 
+/** Product thread lifecycle. ACP child lifetime is private execution state. */
+export const threadLifecycleSchema = z.object({
+  revision: z.number().int().nonnegative(),
+  autoSettle: z.enum(["manual", "1d", "7d"]),
+  settledAt: z.iso.datetime().nullable(),
+  reopenedAt: z.iso.datetime().nullable(),
+  order: z.number().finite().nullable(),
+  pinned: z.boolean(),
+  status: z.enum(["active", "settled", "archived"]),
+  snoozedUntil: z.iso.datetime().nullable(),
+  snoozedSeq: z.number().int().nonnegative(),
+  readSeq: z.number().int().nonnegative(),
+  explicitUnread: z.boolean(),
+});
+export type ThreadLifecycle = z.infer<typeof threadLifecycleSchema>;
+export const emptyThreadLifecycle = (): ThreadLifecycle => ({
+  revision: 0,
+  autoSettle: "manual",
+  settledAt: null,
+  reopenedAt: null,
+  order: null,
+  pinned: false,
+  status: "active",
+  snoozedUntil: null,
+  snoozedSeq: 0,
+  readSeq: 0,
+  explicitUnread: false,
+});
+export const updateThreadRequestSchema = z
+  .strictObject({
+    expectedRevision: z.number().int().nonnegative().optional(),
+    autoSettle: z.enum(["manual", "1d", "7d"]).optional(),
+    order: z.number().finite().nullable().optional(),
+    title: z.string().trim().min(1).max(300).optional(),
+    pinned: z.boolean().optional(),
+    status: z.enum(["active", "settled", "archived"]).optional(),
+    snoozedUntil: z.iso.datetime().nullable().optional(),
+    readSeq: z.number().int().nonnegative().optional(),
+    explicitUnread: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "Choose a thread change");
+export type UpdateThreadRequest = z.infer<typeof updateThreadRequestSchema>;
+
 export const harnessThreadSummarySchema = z.object({
+  origin: z
+    .strictObject({ kind: z.literal("scheduled"), taskId: z.string().min(1), runId: z.uuid() })
+    .optional(),
   id: z.string(),
   harness: harnessIdSchema,
   providerId: z.string(),
@@ -273,23 +457,60 @@ export const harnessThreadSummarySchema = z.object({
   modelId: z.string().nullable(),
   /** Last event seq; a client continues its stream from here without reading the whole log. */
   lastSeq: z.number(),
+  /** The host log id this record was read at: follow the `thread` Reading from it. */
+  cursor: z.number().int().nonnegative(),
+  head: threadHeadReadingSchema,
+  lifecycle: threadLifecycleSchema,
+  activity: z.object({
+    state: z.enum(["idle", "running", "waiting", "failed"]),
+    pending: z.number().int().nonnegative(),
+    lastSeq: z.number().int().nonnegative(),
+    message: z.string().nullable(),
+  }),
 });
 export type HarnessThreadSummary = z.infer<typeof harnessThreadSummarySchema>;
 
 export const harnessThreadBodySchema = harnessThreadSummarySchema.extend({
   models: z.array(harnessModelSchema),
   traits: z.array(traitOptionSchema),
-  /** Derivable from `events` (a `prompt` with no `turn_end`/`error`; a `queued` with no `prompt`);
-   * carried so a one-shot reader need not fold the log. Open asks are the unresolved
-   * `permission_request` events. */
+  /** Derivable from `events` (a `prompt` with no `turn_end`/`error`); carried so a one-shot reader
+   * need not fold the log. Open asks are the unresolved `permission_request` events. */
   running: z.boolean(),
-  queued: z.array(z.object({ turnId: z.string(), text: z.string() })),
   session: z.enum(["started", "resumed", "forked", "detached", "closed"]),
+  /** From the last session's `initialize`; null until a harness child has started once. */
+  promptCapabilities: promptCapabilitiesSchema.nullable(),
   events: z.array(harnessEventSchema),
 });
 export type HarnessThreadBody = z.infer<typeof harnessThreadBodySchema>;
 
-export const promptRequestSchema = z.object({ text: z.string().min(1) });
+/** A refused attachment kind is 400 `{error}` with `attachmentRefusal`'s sentence. Each mention
+ * reaches the harness as one embedded `pe://<key>` resource after the text, or a text line when the
+ * harness reads no embedded context. */
+export const promptRequestSchema = z
+  .object({
+    id: z.uuid(),
+    delivery: z.enum(["steer", "queue"]).default("steer"),
+    text: z.string(),
+    attachments: z.array(promptAttachmentSchema).optional(),
+    mentions: z.array(mentionSchema).optional(),
+  })
+  .refine(
+    (p) => p.text.trim() || p.attachments?.length || p.mentions?.length,
+    "Enter a prompt, attachment or mention",
+  );
+/** Where one turn stands: `queued` and `running` are live; the rest are settled. */
+export const turnStateSchema = z.object({
+  turnId: z.string(),
+  state: z.enum(["queued", "running", "ended", "failed", "dropped"]),
+  stopReason: z.string().optional(),
+  message: z.string().optional(),
+});
+export type TurnState = z.infer<typeof turnStateSchema>;
+export const TURN_WAIT_MAX_MS = 5 * 60_000;
+export const queueRequestSchema = z.object({
+  turnId: z.string(),
+  action: z.enum(["steer", "cancel"]),
+});
 export const permissionResponseSchema = z.object({ requestId: z.string(), optionId: z.string() });
 /** `accept` carries the form's answers keyed by property; `decline` is "skip", the harness goes on. */
 export const questionResponseSchema = z.object({

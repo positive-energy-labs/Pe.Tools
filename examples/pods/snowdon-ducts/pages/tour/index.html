@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Snowdon ducts tour</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/pages/pe.css">
+<script src="/pages/pe.js"></script>
+<style>
+  main { max-width: 980px; margin: 0 auto; padding: 16px 20px 48px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--pe-line, #8884); }
+  tr[data-id] { cursor: pointer; }
+  tr.on { background: var(--pe-hover, #8882); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; align-items: center; }
+  .note { opacity: .75; font-size: 13px; }
+  .illustration { border: 1px dashed var(--pe-line, #8886); padding: 8px 12px; border-radius: 6px; }
+  img.facsimile { max-width: 100%; border: 1px solid var(--pe-line, #8886); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Snowdon ducts</h1>
+  <p class="note" id="doc">No reading yet. Bind this Page to a copy of the Snowdon Towers mechanical sample with the chip in the corner, then press Census.</p>
+
+  <div class="row">
+    <button id="census">Census</button>
+    <button id="inspect" disabled>Inspect selected system</button>
+    <button id="show" disabled>Show in Revit</button>
+    <button id="capture" disabled>Capture view</button>
+    <button id="experiment" disabled>Annotate ducts with velocity (copy only)</button>
+  </div>
+  <p id="status" class="note"></p>
+
+  <h2>Duct systems</h2>
+  <div id="systems" class="note">Nothing read.</div>
+
+  <h2>Run</h2>
+  <div id="run" class="note">Choose a system, then Inspect.</div>
+
+  <h2>Facsimile</h2>
+  <div id="picture" class="note">A picture appears here after Capture. It is exported from the bound document, not drawn by this Page.</div>
+
+  <h2>Warnings and journal</h2>
+  <div id="warnings" class="note">Appears with the census.</div>
+  <pre id="journal" class="note"></pre>
+
+  <h2>How loss is read</h2>
+  <div class="illustration">
+    <p><strong>Illustration, not a reading.</strong> A fitting's pressure drop is its loss coefficient C times the velocity pressure of the flow through it: <code>&Delta;p = C &middot; &rho; v&sup2; / 2</code>. Doubling the flow quadruples the drop; changing C changes it in proportion. No fitting in the Snowdon sample exposes a writable C, so the experiment does not touch it: on a copy it writes each duct's computed velocity and size into that duct's Comments and reads them back, so you can see the numbers a drop would be built from.</p>
+  </div>
+
+  <h2>Shared notes</h2>
+  <textarea id="note" rows="3" style="width:100%" placeholder="Observations the next reader or agent should see"></textarea>
+  <div class="row"><button id="save-note">Save note</button></div>
+  <ul id="notes"></ul>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const KEYS = {
+  census: "script:@snowdon-ducts/src/Census.cs",
+  inspect: "script:@snowdon-ducts/src/InspectRun.cs",
+  experiment: "script:@snowdon-ducts/src/CoefficientExperiment.cs",
+};
+// A script key answers the whole ScriptExecutionResult { status, data, ... }; the Page's rows are its data.
+const script = async (key, input) => {
+  const result = await pe.do(key, input);
+  if (result?.status !== "Succeeded") throw new Error(`${key} ${result?.status ?? "returned nothing"}`);
+  return result.data;
+};
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+// One kernel: the event log is shared with every copy of this Page and every agent.
+const reduce = (s, e) => {
+  switch (e.type) {
+    case "census": return { ...s, census: e.reading, run: null, picked: null };
+    case "pick": return { ...s, picked: e.id, run: null };
+    case "run": return { ...s, run: e.reading };
+    case "picture": return { ...s, picture: e.picture };
+    case "experiment": return { ...s, experiment: e.reading };
+    case "journal": return { ...s, journal: e.lines };
+    case "note": return { ...s, notes: [...s.notes, { text: e.text, at: e.at }] };
+    default: return s;
+  }
+};
+const base = { census: null, picked: null, run: null, picture: null, experiment: null, journal: [], notes: [] };
+
+const k = pe.kernel(reduce, base, draw);
+pe.describe(() => {
+  const s = k.state;
+  return [
+    "# Snowdon ducts tour",
+    s.census ? `Document: ${s.census.rows.document}. ${s.census.rows.systemCount} duct systems read at ${new Date(s.census.at).toISOString()}.` : "No census read yet.",
+    s.picked ? `Selected system id ${s.picked} (valid for this open lifetime only).` : "",
+    s.run ? `Run ${s.run.rows.system?.name ?? "?"}: ${s.run.rows.fittingCount ?? 0} fittings, ${s.run.rows.withLoss ?? 0} with a loss parameter.` : "",
+    s.experiment ? `Experiment: ${JSON.stringify(s.experiment.rows)}` : "",
+    ...s.notes.map((n) => `- note: ${n.text}`),
+  ].filter(Boolean).join("\n");
+});
+
+function draw(s = k.state) {
+  const c = s.census?.rows;
+  $("doc").textContent = c ? `Document ${c.document} (Revit ${c.revitVersion}), read ${new Date(s.census.at).toLocaleTimeString()}.` : $("doc").textContent;
+  $("systems").innerHTML = c
+    ? `<table><tr><th>System</th><th>Type</th><th>Elements</th><th>Fittings</th><th>Base equipment</th></tr>${c.systems
+        .map((x) => `<tr data-id="${x.id}" class="${s.picked === x.id ? "on" : ""}"><td><button class="pick">${esc(x.name)}</button></td><td>${esc(x.type)}</td><td>${x.elementCount}</td><td>${x.fittingCount}</td><td>${esc(x.baseEquipment ?? "none")}</td></tr>`)
+        .join("")}</table>${c.listed < c.systemCount ? `<p class="note">Listed ${c.listed} of ${c.systemCount}.</p>` : ""}`
+    : "Nothing read.";
+  const w = c?.ductWarnings;
+  $("warnings").innerHTML = w ? (w.length ? w.map((x) => `<div>${esc(x.text)} (${x.elementIds.length} elements)</div>`).join("") : "No warnings mention duct elements.") : "Appears with the census.";
+  $("journal").textContent = (s.journal || []).join("\n");
+  const r = s.run?.rows;
+  $("run").innerHTML = !r ? "Choose a system, then Inspect." : r.unavailable ? esc(r.unavailable)
+    : `<p>${esc(r.system?.name)}: ${r.fittingCount} fittings, ${r.withLoss} with a loss parameter.${r.note ? " " + esc(r.note) : ""}</p>` +
+      `<table><tr><th>Fitting</th><th>Loss</th><th>Connectors (direction : flow)</th></tr>${r.fittings.map((f) =>
+        `<tr><td>${esc(f.name)}</td><td>${f.loss == null ? "unavailable" : f.loss}</td><td>${f.connectors.map((q) => `${esc(q.direction)} : ${q.flow ?? "?"}`).join(", ")}</td></tr>`).join("")}</table>`;
+  $("picture").innerHTML = s.picture ? `<img class="facsimile" src="${esc(s.picture.url)}" alt="View ${esc(s.picture.viewName)}"><p class="note">${esc(s.picture.viewName)}, exported ${new Date(s.picture.at).toLocaleTimeString()}</p>` : $("picture").innerHTML;
+  $("notes").innerHTML = s.notes.map((n) => `<li>${esc(n.text)}</li>`).join("");
+  $("inspect").disabled = !s.picked;
+  const ids = (r?.fittings || []).map((f) => f.id);
+  $("show").disabled = !ids.length;
+  $("capture").disabled = !ids.length;
+  $("experiment").disabled = !c;
+  if (s.experiment) $("status").textContent = "Experiment: " + JSON.stringify(s.experiment.rows);
+}
+
+async function busy(label, fn) {
+  $("status").textContent = label + "...";
+  try { await fn(); if ($("status").textContent === label + "...") $("status").textContent = ""; }
+  catch (e) { $("status").textContent = e.message; } // pe.js also shows the host's refusal across the top
+}
+
+$("census").onclick = () => busy("Reading census", async () => {
+  const reading = await pe.reading(KEYS.census, () => script(KEYS.census, {}));
+  k.fire({ type: "census", reading });
+});
+$("systems").onclick = (ev) => {
+  const row = ev.target.closest("tr[data-id]");
+  if (row) k.fire({ type: "pick", id: Number(row.dataset.id) });
+};
+$("inspect").onclick = () => busy("Inspecting", async () => {
+  // InspectRun takes the selection's system, or the largest. Select an element of the chosen system in Revit first.
+  const reading = await pe.reading(KEYS.inspect, () => script(KEYS.inspect, {}));
+  k.fire({ type: "run", reading });
+});
+const runIds = () => (k.state.run?.rows.fittings || []).map((f) => f.id);
+$("show").onclick = () => busy("Showing", async () => {
+  const lens = await pe.do("revit.context.lens", { elementIds: runIds().slice(0, 20) });
+  await pe.do("revit.context.show-elements", { elementIds: runIds().slice(0, 20), viewId: lens.viewId });
+});
+$("capture").onclick = () => busy("Capturing", async () => {
+  k.fire({ type: "picture", picture: await pe.picture(runIds().slice(0, 20)) });
+});
+let armed = false;
+$("experiment").onclick = () => busy("Running experiment", async () => {
+  if (!armed) {
+    // Two presses: the first arms, the second changes the bound document.
+    armed = true;
+    $("experiment").textContent = "Confirm: write Comments on this copy";
+    return;
+  }
+  armed = false;
+  $("experiment").textContent = "Annotate ducts with velocity (copy only)";
+  const reading = await pe.reading(KEYS.experiment, () => script(KEYS.experiment, { permissionMode: "NoTransaction" }));
+  k.fire({ type: "experiment", reading });
+});
+$("save-note").onclick = () => {
+  const text = $("note").value.trim();
+  if (text) { k.fire({ type: "note", text, at: Date.now() }); $("note").value = ""; }
+};
+
+// Journal: new lines since the last poll, from the host's own read.
+let after = 0;
+setInterval(async () => {
+  if (!pe.doc) return;
+  try {
+    const j = await pe.read("revit.context.journal", { AfterLine: after, MaxLines: 20 });
+    if (j?.lines?.length) { after = j.nextLine ?? after + j.lines.length; k.fire({ type: "journal", lines: [...k.state.journal, ...j.lines].slice(-30) }); }
+  } catch { /* the banner already shows a refusal */ }
+}, 10000);
+
+pe.state(k).then(() => pe.target().catch(() => {}));
+draw();
+</script>
+</body>
+</html>

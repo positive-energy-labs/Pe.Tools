@@ -1,6 +1,5 @@
-import { Press } from "#/components/lang/press";
+import { Button } from "@pe/kit/lang/button";
 import { useState } from "react";
-import { Card, cardRecipe } from "#/components/lang/card";
 import {
   Dialog,
   DialogContent,
@@ -9,34 +8,27 @@ import {
   dialogRecipe,
 } from "#/components/lang/dialog";
 import { ValueDiff, valueDiffRecipe } from "#/components/lang/value-diff";
-import { Rail } from "#/components/lang/rail";
+import { Rail } from "@pe/kit/lang/rail";
 import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
 export function UiSurfaceSpecimens() {
   return (
     <>
-      <SpecimenFrame name="Rail" importPath="#/components/lang/rail">
+      <SpecimenFrame name="Rail" importPath="@pe/kit/lang/rail">
         <div className="grid w-80 gap-2">
           <Rail lead={<span className="t-small t-upper">lead only</span>} />
           <Rail
             ground="recess"
             lead={<span className="t-small t-upper">lead and trail</span>}
-            trail={<Press size="label">open</Press>}
+            trail={<Button label="open">open</Button>}
+          />
+          <Rail
+            lead={<Button label="Menu">Menu</Button>}
+            center={<span className="t-small">Centered title</span>}
+            trail={<Button label="Action">Action</Button>}
           />
         </div>
       </SpecimenFrame>
-      <RecipeGrid
-        name="Card"
-        importPath="#/components/lang/card"
-        recipe={cardRecipe}
-        render={() => (
-          <div className="w-80">
-            <Card>
-              <span className="t-title">Overhead Coiling Door 421</span>
-            </Card>
-          </div>
-        )}
-      />
       <RecipeGrid
         name="Dialog"
         importPath="#/components/lang/dialog"
@@ -57,9 +49,9 @@ function DialogSpecimen() {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Press size="label" onClick={() => setOpen(true)}>
+      <Button label="open dialog" onClick={() => setOpen(true)}>
         open dialog
-      </Press>
+      </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>

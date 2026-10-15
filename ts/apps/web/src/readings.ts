@@ -1,3 +1,4 @@
+import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { runtimeStreamUrl } from "#/host/runtime";
 /**
  * The read layer. One EventSource, one AtomRegistry, one vocabulary (fable law 5).
@@ -35,8 +36,9 @@ import type {
   OpKey,
 } from "@pe/host-contracts/operation-types";
 import { callHostRpc } from "#/host/client.ts";
+import { reportFault } from "#/host/diagnostics";
 import { HOST_READ_WAIT_S } from "#/route/waits";
-import { peUrl, resolveWorkbenchConfig } from "#/workbench/config.ts";
+import { resolveWorkbenchConfig } from "#/workbench/config.ts";
 
 export type { Lane };
 
@@ -67,6 +69,8 @@ export class PeReadings {
   private pendingFenced = false;
   private retry?: ReturnType<typeof setTimeout>;
   private closed = false;
+  /** A stream opened since the last loss: its loss is one fault, its reconnect attempts are not. */
+  private opened = false;
 
   constructor(
     private readonly url: () => string,
@@ -180,11 +184,14 @@ export class PeReadings {
     const current = () => this.generation === generation && this.source === source;
     source.onopen = () => {
       if (!current()) return;
+      this.opened = true;
       this.retiring?.close();
       this.retiring = undefined;
     };
     const lost = () => {
       if (this.closed || !current()) return;
+      if (this.opened) reportFault({ code: "stream.failed", streamKind: "readings" });
+      this.opened = false;
       this.lose(true);
     };
     source.onerror = lost;
@@ -209,7 +216,9 @@ export class PeReadings {
   }
 }
 
-export const peReadings = new PeReadings(() => peUrl(resolveWorkbenchConfig(), "/resources"));
+export const peReadings = new PeReadings(() =>
+  peRouteUrl("resources.stream", {}, resolveWorkbenchConfig().origin),
+);
 
 export type Readings = Pick<PeReadings, "subscribe" | "dirty">;
 
@@ -277,14 +286,36 @@ const makeAtoms = (source: Readings) => {
   const family = Atom.family((serialized: string) =>
     Atom.make<Reading<unknown>>((get) => {
       let reading: Reading<unknown> = absent;
-      get.addFinalizer(
-        source.subscribe(JSON.parse(serialized) as ReadingRequest, (frame) => {
-          const next = advance(reading, frame);
-          if (next === reading) return;
-          reading = next;
-          get.setSelf(reading);
-        }),
-      );
+      let deadline: ReturnType<typeof setTimeout> | undefined;
+      const request = JSON.parse(serialized) as ReadingRequest;
+      const set = (next: Reading<unknown>) => {
+        if (next === reading) return;
+        reading = next;
+        get.setSelf(reading);
+        clearTimeout(deadline);
+        // The `loading` state has advertised a deadline since it existed; nothing enforced it, so a
+        // host that never answers was a spinner with no end (DELL_PE, 2026-10-12). Now it fails.
+        // The kind is the closed subject word; the key names documents and never leaves the tab.
+        if (reading.state === "loading") {
+          const since = Date.now();
+          deadline = setTimeout(
+            () => {
+              reportFault(
+                {
+                  code: "reading.timeout",
+                  elapsedMs: Date.now() - since,
+                  readingKind: request.kind,
+                },
+                Error(`reading ${serialized}: the host sent nothing before its deadline`),
+              );
+              set({ state: "failed", message: "The host sent no reading in 30 s." });
+            },
+            Math.max(0, reading.deadline - since),
+          );
+        }
+      };
+      get.addFinalizer(source.subscribe(request, (frame) => set(advance(reading, frame))));
+      get.addFinalizer(() => clearTimeout(deadline));
       return reading;
     }).pipe(Atom.setIdleTTL(0)),
   );
@@ -412,10 +443,6 @@ export interface SessionInventory {
 
 const CUSTODIES: readonly Custody[] = ["controlled", "observed"];
 const LANES: readonly Lane[] = ["dev", "installed"];
-
-/** The id a Target names: the pe-revit session id when the payload has one, else the broker's. */
-export const sessionKey = (session: SessionInventory): string =>
-  session.sdkSessionId ?? session.sessionId;
 
 /** Wire entry (bridge.sessions.list) into inventory. Disconnected entries are not targets. */
 export function inventoryOf(entries: readonly BridgeSessionListEntry[]): SessionInventory[] {

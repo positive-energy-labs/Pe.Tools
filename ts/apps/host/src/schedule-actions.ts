@@ -28,7 +28,8 @@ import {
 } from "@pe/host-contracts/generated";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
 import { assertFresh, documentMarks } from "./document-marks.ts";
-import { ActionIncomplete, type ActionJournal } from "./action-journal.ts";
+import { ActionIncomplete, type ActionJournal, type Crossing } from "./action-journal.ts";
+import { requireEligibleCaller } from "./gateway-actions.ts";
 import { actionWorkspace, type TakeoffActionDependencies } from "./takeoff-actions.ts";
 import { readOriginalProcess, readNativeReceipt, type NativeProcess } from "./native-receipts.ts";
 import { StaleScheduleReading, type TakeoffCaptures } from "./takeoff-captures.ts";
@@ -275,6 +276,7 @@ function acknowledge(raw: unknown, edits: Edit[]) {
 }
 export async function admitScheduleAction(
   raw: unknown,
+  crossing: Crossing,
   owner: ActionJournal,
   captures: TakeoffCaptures,
   bridge: RevitBridge["Service"],
@@ -285,18 +287,18 @@ export async function admitScheduleAction(
   if (admission.kind !== "workflow" || !Object.hasOwn(scheduleActions, admission.key))
     throw refused("Unknown schedule action");
   const key = admission.key as keyof typeof scheduleActions;
-  if (scheduleActions[key].actor === "human" && admission.actor !== "human")
-    throw refused("This schedule action requires human approval");
+  requireEligibleCaller({ key, actor: scheduleActions[key].actor }, crossing.caller, "/actions");
   admission.input = scheduleActions[key].input.parse(admission.input);
   if (admission.destination.kind !== "document") throw refused("Exact document target required");
   const target = admission.destination.ref;
-  if (key !== "schedule.grid.push") return admitScheduleSpec(key, admission, owner, bridge, deps);
+  if (key !== "schedule.grid.push")
+    return admitScheduleSpec(key, { ...admission, ...crossing }, owner, bridge, deps);
   const { pod } = scheduleActions["schedule.grid.push"].input.parse(admission.input);
   const work = deps.workspace ?? actionWorkspace();
   const base = admission.bases.work;
   if (!work || !base) throw refused("Reviewed Work address and revision required");
   return owner.admit(
-    admission,
+    { ...admission, ...crossing },
     async () => {
       const view = await work.read(base.key, scheduleGridRouteState.route);
       if (!view || view.revision !== base.revision) throw refused("Work changed");
@@ -566,7 +568,7 @@ function pushReceipt(
 /** Capture writes a new member into the route's pod; apply composes a saved spec and creates a schedule. */
 function admitScheduleSpec(
   key: "schedule.capture" | "schedule.apply",
-  admission: ReturnType<typeof actionAdmissionSchema.parse>,
+  admission: ReturnType<typeof actionAdmissionSchema.parse> & Crossing,
   owner: ActionJournal,
   bridge: RevitBridge["Service"],
   deps: FamilyActionDependencies,

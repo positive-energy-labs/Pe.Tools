@@ -9,7 +9,7 @@
     "**/routeTree.gen.ts",
     "apps/host/src/pages/**"
   ],
-  "ignoreBinaries": ["vp", "vpx", "reg.exe", "tailscale"],
+  "ignoreBinaries": ["vp", "vpx", "reg.exe", "tailscale", "explorer.exe"],
   "ignoreDependencies": [
     "@typescript/native-preview",
     "bumpp",
@@ -27,13 +27,16 @@
       "entry": ["src/index.ts", "src/dev.ts", "scripts/*.{ts,mjs}", "tests/fake-acp-agent.mjs"]
     },
     "apps/web": {
-      "entry": ["src/routes/**/*.{ts,tsx}!", "scripts/*"]
+      "entry": ["src/routes/**/*.{ts,tsx}!", "src/revit/revit.js", "scripts/*"]
     },
     "packages/factory": {
       "entry": ["actuators/*.ts", "sensors/*.ts"]
     },
     "packages/host-contracts": {
       "entry": ["scripts/*.ts"]
+    },
+    "packages/kit": {
+      "entry": ["tests/browser.mjs"]
     },
     "packages/mcps": {
       "entry": ["src/server.ts"]

@@ -1,0 +1,363 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "renderer": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "chrome-ready"
+            }
+          },
+          "required": ["type"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "panel-pin"
+            },
+            "pinned": {
+              "type": "boolean"
+            }
+          },
+          "required": ["type", "pinned"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "panel-hide"
+            },
+            "unpinnedOnly": {
+              "type": "boolean"
+            }
+          },
+          "required": ["type", "unpinnedOnly"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "navigate-history"
+            },
+            "direction": {
+              "type": "string",
+              "enum": ["back", "forward"]
+            }
+          },
+          "required": ["type", "direction"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "open-window"
+            },
+            "url": {
+              "$ref": "#/$defs/__schema0"
+            }
+          },
+          "required": ["type", "url"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "notice-ready"
+            }
+          },
+          "required": ["type"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "notice-card"
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            }
+          },
+          "required": ["type", "height"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "notice-hide"
+            }
+          },
+          "required": ["type"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "notice-panel"
+            },
+            "url": {
+              "$ref": "#/$defs/__schema0"
+            }
+          },
+          "required": ["type"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "native": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "panel-state"
+            },
+            "pinned": {
+              "type": "boolean"
+            }
+          },
+          "required": ["type", "pinned"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "navigation-history"
+            },
+            "canGoBack": {
+              "type": "boolean"
+            },
+            "canGoForward": {
+              "type": "boolean"
+            }
+          },
+          "required": ["type", "canGoBack", "canGoForward"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "navigation-request"
+            },
+            "url": {
+              "$ref": "#/$defs/__schema0"
+            }
+          },
+          "required": ["type", "url"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "notice"
+            },
+            "notice": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/__schema1"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "view": {
+              "type": "object",
+              "properties": {
+                "visible": {
+                  "type": "boolean"
+                },
+                "focused": {
+                  "type": "boolean"
+                },
+                "pathname": {
+                  "type": "string"
+                },
+                "thread": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": ["visible", "focused", "pathname", "thread"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "notice"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "notice": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/__schema1"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": ["renderer", "native", "notice"],
+  "additionalProperties": false,
+  "$defs": {
+    "__schema0": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema1": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "href": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "attended": {
+          "type": "boolean"
+        },
+        "act": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "permission"
+                },
+                "threadId": {
+                  "$ref": "#/$defs/__schema0"
+                },
+                "requestId": {
+                  "$ref": "#/$defs/__schema0"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "optionId": {
+                        "$ref": "#/$defs/__schema0"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    },
+                    "required": ["optionId", "name", "kind"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": ["kind", "threadId", "requestId", "options"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "question"
+                },
+                "threadId": {
+                  "$ref": "#/$defs/__schema0"
+                },
+                "requestId": {
+                  "$ref": "#/$defs/__schema0"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "requestedSchema": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              },
+              "required": ["kind", "threadId", "requestId", "message", "requestedSchema"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "reply"
+                },
+                "threadId": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              "required": ["kind", "threadId"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "automatic-updates"
+                }
+              },
+              "required": ["kind"],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": ["id", "revision", "title", "body"],
+      "additionalProperties": false
+    }
+  }
+}

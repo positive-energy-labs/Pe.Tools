@@ -4,7 +4,11 @@
  * back by that id is the truth of what happened (`ActionReceiptView`).
  */
 import { actionAdmissionSchema, type ExecutionTarget } from "@pe/agent-contracts";
-import { isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
+import {
+  isAnyOperationKey,
+  isTsOnlyOperationKey,
+  type OpRequestOf,
+} from "@pe/host-contracts/operation-types";
 
 import {
   readAction,
@@ -27,10 +31,14 @@ export async function runOp(input: {
   base?: string;
 }): Promise<RunOutcome> {
   const started = performance.now();
+  const key = input.op.key;
+  if (!isAnyOperationKey(key))
+    throw Error(`Operation ${key} is absent from this client's contract; regenerate the catalog.`);
   if (!isMutation(input.op))
     return {
       kind: "value",
-      value: await input.call(input.op.key, input.request),
+      // The catalog form supplies JSON; the host validates it against this declared key's schema.
+      value: await input.call(key, input.request as OpRequestOf<typeof key>),
       elapsedMs: Math.round(performance.now() - started),
     };
   if (input.priorActionId) {
@@ -42,7 +50,6 @@ export async function runOp(input: {
     id: crypto.randomUUID(),
     kind: "operation",
     key: input.op.key,
-    actor: "human",
     destination: isTsOnlyOperationKey(input.op.key) ? { kind: "host" } : input.target,
     input: input.request ?? {},
     bases: {},

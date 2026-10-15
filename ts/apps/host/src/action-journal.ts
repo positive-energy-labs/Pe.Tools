@@ -1,8 +1,10 @@
 import { BridgeError } from "./bridge.ts";
-import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { renameReplacing } from "./rename-retry.ts";
 import { dirname, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
+import { z } from "zod";
 import {
   canonicalRouteInput,
   actionReceiptSchema,
@@ -10,10 +12,28 @@ import {
   actionBasesSchema,
   type ActionAdmission,
   type ActionStep,
+  type Basis,
+  type Caller,
   type DocumentRef,
   type ExecutionTarget,
   type ActionReceipt,
+  receiptSchema,
+  receiptBodySchema,
+  receiptJoinSchema,
+  receiptQuerySchema,
+  receiptStampSchema,
+  receiptMatches,
+  type Receipt,
+  type ReceiptFact,
+  type ReceiptJoin,
+  type ReceiptQuery,
+  type ReceiptReader,
+  type ReceiptStamp,
 } from "@pe/agent-contracts";
+import { live } from "./control.ts";
+
+/** Who crossed and why it was admitted: host-minted, stamped on the receipt beside the admission. */
+export type Crossing = { readonly caller: Caller; readonly basis: Basis | null };
 
 export type ActionExecution = {
   step<A>(
@@ -24,7 +44,13 @@ export type ActionExecution = {
   ): Promise<A>;
   publish(result: unknown): Promise<void>;
   readonly prepared: unknown;
+  /** The latest recorded step of this kind and key: the one a resume replays or redoes. */
   recorded(kind: ActionStep["kind"], key: string): ActionStep | undefined;
+  /**
+   * A resume retires a succeeded step whose lifetime SDK truth says ended (a dead Revit): it is
+   * kept as failed with what it returned, and the resume redoes it as a new step.
+   */
+  retire(id: string, reason: string): Promise<ActionStep>;
 };
 /** The bridge answers a cancelled request 499 (BridgeOperationExceptions.CancelledStatusCode). */
 const CANCELLED_STATUS = 499;
@@ -213,23 +239,186 @@ const unsettled = (row: ActionReceipt) => {
   return attempt;
 };
 
-/** One host journal. Execution never holds the authored Work lock or the journal write tail. */
-export class ActionJournal {
-  private rows: ActionReceipt[] = [];
-  private readonly loaded: Promise<void>;
+/** Settled receipts kept by compaction; open actions are never dropped. */
+const RETAIN_RECEIPTS = 10_000;
+/** A row that blocks overlapping admissions and must stay visible until recovered. */
+const isOpen = (row: ActionReceipt) =>
+  row.state === "running" || row.state === "unknown" || row.state === "incomplete";
+
+/**
+ * One host journal. Execution never holds the authored Work lock or the journal write tail.
+ *
+ * Storage is append-only lines: a `{"version":5}` header, then one `{receipt}` per committed
+ * revision and one `{mapping}` per minted opaque id; the last revision of an id wins. A commit
+ * appends only what it changed, and compaction rewrites the newest {@link RETAIN_RECEIPTS} settled
+ * receipts plus every open action once the file holds twice what is live.
+ */
+export class ActionJournal implements ReceiptReader {
+  private readonly rows = new Map<string, ActionReceipt>();
+  private readonly receipts = new Map<string, Receipt>();
+  private readonly mappings = new Map<string, string>();
+  /** Action id to its receipt id, and step id to its action id. */
+  private readonly actionReceipt = new Map<string, string>();
+  private readonly stepAction = new Map<string, string>();
+  private readonly open = new Set<string>();
+  /** Mapping keys minted since the last append, and since the last compaction. */
+  private fresh: string[] = [];
+  private minted = new Set<string>();
+  private lines = 0;
+  private header = false;
+  private torn = false;
+  private committed: Receipt[] = [];
+  private readonly subscribers = new Set<(receipt: Receipt) => void>();
+  private loaded?: Promise<void>;
   private tail: Promise<unknown> = Promise.resolve();
   private readonly pending = new Map<string, Promise<ActionReceipt>>();
   private readonly listeners = new Set<() => void>();
   private readonly reads = new OwnerReads();
-  constructor(private readonly path: string) {
-    this.loaded = this.load();
+  constructor(
+    private readonly path: string,
+    private readonly stamp: () => ReceiptStamp | null = () => null,
+    private readonly retain = RETAIN_RECEIPTS,
+  ) {}
+  private loadOnce(): Promise<void> {
+    return (this.loaded ??= this.load());
+  }
+
+  async read(query: ReceiptQuery): Promise<Receipt[]> {
+    const q = receiptQuerySchema.parse(query);
+    await this.loadOnce();
+    await this.tail;
+    return structuredClone([...this.receipts.values()].filter((r) => receiptMatches(r, q)));
+  }
+  subscribe(query: ReceiptQuery, consume: (receipt: Receipt) => void): () => void {
+    const q = receiptQuerySchema.parse(query);
+    const listener = (r: Receipt) => {
+      if (receiptMatches(r, q)) consume(structuredClone(r));
+    };
+    this.subscribers.add(listener);
+    return () => {
+      this.subscribers.delete(listener);
+    };
+  }
+  private mapped(kind: string, localId: string): string {
+    const key = JSON.stringify([kind, localId]);
+    let id = this.mappings.get(key);
+    if (!id) {
+      id = randomUUID();
+      this.mappings.set(key, id);
+      this.fresh.push(key);
+      this.minted.add(key);
+    }
+    return id;
+  }
+  async opaqueId(
+    kind: "thread" | "turn" | "process" | "request",
+    localId: string,
+  ): Promise<string> {
+    return this.serial(async () => {
+      const id = this.mapped(kind, localId);
+      await this.commit();
+      this.notify();
+      return id;
+    });
+  }
+  private rootJoin(id: string): ReceiptJoin {
+    return { actionId: this.mapped("action", id), requestId: this.mapped("action-request", id) };
+  }
+  async actionJoin(id: string): Promise<ReceiptJoin> {
+    return this.serial(async () => {
+      const join = this.rootJoin(id);
+      await this.commit();
+      this.notify();
+      return join;
+    });
+  }
+  private joinForRequest(id: string): ReceiptJoin {
+    const action = this.stepAction.get(id);
+    const root = action ? this.rootJoin(action) : null;
+    return {
+      requestId: z.uuid().safeParse(id).success ? id : this.mapped("request", id),
+      ...(root ? { actionId: root.actionId, parentRequestId: root.requestId } : {}),
+    };
+  }
+  async requestJoin(id: string): Promise<ReceiptJoin> {
+    return this.serial(async () => {
+      const join = this.joinForRequest(id);
+      await this.commit();
+      this.notify();
+      return join;
+    });
+  }
+  /** Only owner code admits stamps. HTTP producers submit facts through a verified adapter. */
+  async recordFact(
+    body: ReceiptFact,
+    join: ReceiptJoin = { requestId: randomUUID() },
+    stamp: ReceiptStamp | null = this.stamp(),
+    source?: Pick<Receipt, "id" | "at">,
+  ): Promise<Receipt> {
+    const fact = receiptBodySchema.parse(body);
+    if (fact.kind === "action") throw Error("Only action execution can settle an action receipt");
+    const admitted = {
+      body: fact,
+      join: receiptJoinSchema.parse(join),
+      stamp: stamp === null ? null : receiptStampSchema.parse(stamp),
+    };
+    const identity = source
+      ? { id: z.uuid().parse(source.id), at: z.iso.datetime().parse(source.at) }
+      : undefined;
+    return this.serial(() => this.appendFact(admitted, identity));
+  }
+  private async appendFact(
+    fact: Pick<Receipt, "body" | "join" | "stamp">,
+    source?: Pick<Receipt, "id" | "at">,
+  ): Promise<Receipt> {
+    const receipt = receiptSchema.parse({
+      schema: 1,
+      id: randomUUID(),
+      revision: 1,
+      at: new Date().toISOString(),
+      ...source,
+      ...fact,
+    });
+    const previous = this.receipts.get(receipt.id);
+    if (previous) {
+      if (canonicalRouteInput(previous) !== canonicalRouteInput(receipt))
+        throw Error("Receipt id conflicts with its committed fact");
+      return structuredClone(previous);
+    }
+    await this.commit([], [receipt]);
+    this.notify();
+    return structuredClone(receipt);
+  }
+  async recordQueue(
+    op: string,
+    requestId: string,
+    session: string,
+    phase: "queued" | "started",
+    depth: number,
+    waitMs?: number,
+  ): Promise<Receipt> {
+    return this.serial(() =>
+      this.appendFact({
+        body: {
+          kind: "queue",
+          op,
+          phase,
+          depth,
+          ...(waitMs === undefined ? {} : { waitMs }),
+          processSessionId: this.mapped("process", session),
+        },
+        join: this.joinForRequest(requestId),
+        stamp: this.stamp(),
+      }),
+    );
   }
 
   async list(target?: DocumentRef, id?: string): Promise<ActionReceipt[]> {
-    await this.loaded;
+    await this.loadOnce();
     await this.tail;
+    const rows = id ? [this.rows.get(id)].filter((row) => row !== undefined) : this.rows.values();
     return structuredClone(
-      this.rows.filter(
+      [...rows].filter(
         (row) =>
           (!target ||
             (row.destination.kind === "document" &&
@@ -257,10 +446,25 @@ export class ActionJournal {
     );
   }
   private notify() {
-    for (const listener of this.listeners) listener();
+    const committed = this.committed.splice(0);
+    for (const listener of this.listeners) {
+      try {
+        listener();
+      } catch (error) {
+        console.error("Action receipt listener failed", error);
+      }
+    }
+    for (const receipt of committed)
+      for (const listener of this.subscribers) {
+        try {
+          listener(receipt);
+        } catch (error) {
+          console.error("Receipt subscriber failed", error);
+        }
+      }
   }
   async wait(id: string): Promise<ActionReceipt> {
-    await this.loaded;
+    await this.loadOnce();
     const pending = this.pending.get(id);
     if (pending) return pending;
     const row = (await this.list(undefined, id))[0];
@@ -301,22 +505,22 @@ export class ActionJournal {
     const file = join(this.home(id), name);
     await mkdir(dirname(file), { recursive: true });
     await writeFile(`${file}.tmp`, JSON.stringify(value, null, 2), "utf8");
-    await rename(`${file}.tmp`, file);
+    await renameReplacing(`${file}.tmp`, file);
   }
   async admit(
-    raw: ActionAdmission,
+    raw: ActionAdmission & Crossing,
     prepare: () => Promise<unknown>,
     execute: (execution: ActionExecution) => Promise<unknown>,
     resume = false,
   ): Promise<ActionReceipt> {
-    const admission = actionAdmissionSchema.parse(raw);
+    const { caller, basis, ...authored } = raw;
+    const admission = actionAdmissionSchema.parse(authored);
     return this.serial(async () => {
-      const prior = this.rows.find((row) => row.id === admission.id);
+      const prior = this.rows.get(admission.id);
       const identity = (row: ActionReceipt) => ({
         id: row.id,
         kind: row.kind,
         key: row.key,
-        actor: row.actor,
         destination: row.destination,
         input: row.request,
         bases: row.bases,
@@ -324,7 +528,7 @@ export class ActionJournal {
       if (prior) {
         if (canonicalRouteInput(identity(prior)) !== canonicalRouteInput(admission))
           throw Error(
-            `request id '${admission.id}' conflicts with its admitted intent, actor, target or bases`,
+            `request id '${admission.id}' conflicts with its admitted intent, target or bases`,
           );
         if (!resume || (prior.state !== "unknown" && prior.state !== "incomplete"))
           return structuredClone(prior);
@@ -336,25 +540,27 @@ export class ActionJournal {
       const opening = admission.key === "instances.start" || admission.key === "instances.open";
       const blocked =
         !opening &&
-        this.rows.find(
-          (row) =>
-            row.id !== admission.id &&
-            (row.state === "running" ||
-              row.state === "unknown" ||
-              (row.key === "schedule.grid.push" && row.state === "incomplete")) &&
-            (overlaps(admission.destination, row.destination) ||
-              (row.key === "schedule.grid.push" &&
-                admission.key === row.key &&
-                admission.bases.work &&
-                canonicalRouteInput(admission.bases.work.key) ===
-                  canonicalRouteInput(
-                    actionBasesSchema.safeParse(row.bases).data?.work?.key ?? null,
-                  )) ||
-              (typeof admission.input.workspaceId === "string" &&
-                row.request.workspaceId === admission.input.workspaceId) ||
-              (typeof admission.input.path === "string" &&
-                row.request.path === admission.input.path)),
-        );
+        [...this.open]
+          .map((id) => this.rows.get(id)!)
+          .find(
+            (row) =>
+              row.id !== admission.id &&
+              (row.state === "running" ||
+                row.state === "unknown" ||
+                (row.key === "schedule.grid.push" && row.state === "incomplete")) &&
+              (overlaps(admission.destination, row.destination) ||
+                (row.key === "schedule.grid.push" &&
+                  admission.key === row.key &&
+                  admission.bases.work &&
+                  canonicalRouteInput(admission.bases.work.key) ===
+                    canonicalRouteInput(
+                      actionBasesSchema.safeParse(row.bases).data?.work?.key ?? null,
+                    )) ||
+                (typeof admission.input.workspaceId === "string" &&
+                  row.request.workspaceId === admission.input.workspaceId) ||
+                (typeof admission.input.path === "string" &&
+                  row.request.path === admission.input.path)),
+          );
       if (blocked)
         throw Error(
           `action '${blocked.id}' is ${blocked.state}; recover that attempt before submitting another`,
@@ -363,7 +569,9 @@ export class ActionJournal {
         id: admission.id,
         kind: admission.kind,
         key: admission.key,
-        actor: admission.actor,
+        // A resume is admitted afresh under its own caller; it never inherits the original basis.
+        caller,
+        basis,
         destination: admission.destination,
         request: admission.input,
         bases: admission.bases,
@@ -374,18 +582,12 @@ export class ActionJournal {
         startedAt: prior?.startedAt ?? new Date().toISOString(),
         state: "running",
       };
-      const admitted = prior
-        ? this.rows.map((current) => (current.id === row.id ? row : current))
-        : [...this.rows, row];
-      await this.persist(admitted);
-      this.rows = admitted;
+      await this.commit([row]);
       this.notify();
       const save = (update: (current: ActionReceipt) => ActionReceipt) =>
         this.serial(async () => {
           const nextRow = actionReceiptSchema.parse(update(row));
-          const next = this.rows.map((current) => (current.id === row.id ? nextRow : current));
-          await this.persist(next);
-          this.rows = next;
+          await this.commit([nextRow]);
           this.notify();
           row = nextRow;
         });
@@ -395,10 +597,32 @@ export class ActionJournal {
           return row.preparation.state === "ready" ? row.preparation.value : undefined;
         },
         recorded: (kind, key) =>
-          structuredClone(row.steps.find((step) => step.kind === kind && step.key === key)),
+          structuredClone(row.steps.findLast((step) => step.kind === kind && step.key === key)),
+        retire: async (id, reason) => {
+          const ended = row.steps.find((step) => step.id === id);
+          if (!resume || ended?.state !== "succeeded")
+            throw Error("Only a resumed attempt retires a succeeded step");
+          const retired: ActionStep = {
+            id,
+            key: ended.key,
+            kind: ended.kind,
+            input: ended.input,
+            state: "failed",
+            error: reason,
+            status: 410,
+            evidence: { result: ended.result },
+          };
+          await save((row) => ({
+            ...row,
+            steps: row.steps.map((step) => (step.id === id ? retired : step)),
+          }));
+          return structuredClone(retired);
+        },
         step: async (kind, key, input, effect) => {
           while (cursor < row.steps.length) {
             const priorStep = row.steps[cursor++]!;
+            // A failed step is an earlier attempt's history; the resume redoes from it.
+            if (resume && priorStep.state === "failed") continue;
             if (
               priorStep.kind !== kind ||
               priorStep.key !== key ||
@@ -406,7 +630,6 @@ export class ActionJournal {
             )
               throw Error("Original continuation differs from its recorded effect input");
             if (priorStep.state === "succeeded") return structuredClone(priorStep.result) as never;
-            if (resume && priorStep.state === "failed") continue;
             throw Error("An uncertain effect cannot be replayed");
           }
           const step: ActionStep = {
@@ -418,19 +641,20 @@ export class ActionJournal {
           };
           await save((row) => {
             if (opening && kind === "native") {
-              const running = this.rows.find(
-                (other) =>
-                  other.id !== row.id &&
-                  this.pending.has(other.id) &&
-                  other.state === "running" &&
-                  other.steps.some(
-                    (active) =>
-                      active.state === "running" &&
-                      active.kind === kind &&
-                      active.key === key &&
-                      canonicalRouteInput(active.input) === canonicalRouteInput(input),
-                  ),
-              );
+              const running = [...this.pending.keys()]
+                .map((id) => this.rows.get(id)!)
+                .find(
+                  (other) =>
+                    other.id !== row.id &&
+                    other.state === "running" &&
+                    other.steps.some(
+                      (active) =>
+                        active.state === "running" &&
+                        active.kind === kind &&
+                        active.key === key &&
+                        canonicalRouteInput(active.input) === canonicalRouteInput(input),
+                    ),
+                );
               if (running)
                 throw new BridgeError(
                   `action '${running.id}' is already opening this target`,
@@ -455,6 +679,8 @@ export class ActionJournal {
                 notDispatched: true,
               });
             });
+            const dead = live(row.basis);
+            if (dead) throw new BridgeError(dead.message, 403, { notDispatched: true });
             result = await effect(step.id);
           } catch (error) {
             await save((row) => ({
@@ -502,30 +728,27 @@ export class ActionJournal {
         .then((settled) => ({ ...unsettled(row), ...settled! }) as ActionReceipt)
         .then((finished) =>
           this.serial(async () => {
-            const index = this.rows.findIndex((current) => current.id === row.id);
-            const next = [...this.rows];
-            next[index] = actionReceiptSchema.parse({
+            const next = actionReceiptSchema.parse({
               ...finished,
               steps: interruptedSteps(finished.steps),
             });
             try {
-              await this.persist(next);
+              await this.commit([next]);
             } catch (error) {
-              this.rows[index] = {
+              this.index({
                 ...row,
                 state: "unknown",
                 error: `Completion could not be persisted: ${String(error)}`,
                 steps: interruptedSteps(row.steps),
                 status: 503,
-              };
+              });
               this.notify();
               this.pending.delete(row.id);
               throw error;
             }
-            this.rows = next;
             this.notify();
             this.pending.delete(row.id);
-            return actionReceiptSchema.parse(structuredClone(next[index]));
+            return actionReceiptSchema.parse(structuredClone(next));
           }),
         );
       this.pending.set(row.id, completion);
@@ -553,7 +776,14 @@ export class ActionJournal {
   }
   async recover(
     id: string,
-    read: (step: ActionStep, prepared: unknown) => Promise<{ step: ActionStep; evidence: unknown }>,
+    read: (
+      step: ActionStep,
+      prepared: unknown,
+    ) => Promise<{
+      step: ActionStep;
+      evidence: unknown;
+      observation?: Extract<ReceiptFact, { kind: "native" }>;
+    }>,
     revisit?: (step: ActionStep) => boolean,
   ): Promise<ActionReceipt> {
     const original = (await this.list(undefined, id))[0];
@@ -565,7 +795,11 @@ export class ActionJournal {
       original.preparation.state !== "ready"
     )
       return original;
-    const updates: { step: ActionStep; evidence: unknown }[] = [];
+    const updates: {
+      step: ActionStep;
+      evidence: unknown;
+      observation?: Extract<ReceiptFact, { kind: "native" }>;
+    }[] = [];
     for (const step of original.steps)
       if (
         step.kind === "native" &&
@@ -578,6 +812,7 @@ export class ActionJournal {
               ? {
                   step: update.step.state === "succeeded" ? update.step : step,
                   evidence: { previous: step, receipt: update.evidence },
+                  observation: update.observation,
                 }
               : update,
           );
@@ -586,7 +821,7 @@ export class ActionJournal {
         }
       }
     return this.serial(async () => {
-      const current = this.rows.find((row) => row.id === id)!;
+      const current = this.rows.get(id)!;
       if (canonicalRouteInput(current) !== canonicalRouteInput(original))
         return structuredClone(current);
       let nextRow: ActionReceipt = {
@@ -608,9 +843,29 @@ export class ActionJournal {
       const settled = settle(true, nextRow.steps, { kind: "recovered" });
       if (settled) nextRow = { ...unsettled(nextRow), ...settled } as ActionReceipt;
       nextRow = actionReceiptSchema.parse(nextRow);
-      const next = this.rows.map((row) => (row.id === id ? nextRow : row));
-      await this.persist(next);
-      this.rows = next;
+      const native = updates.flatMap((update) => {
+        if (!update.observation) return [];
+        const body = update.observation;
+        const old = [...this.receipts.values()].find(
+          (r) =>
+            r.body.kind === "native" &&
+            canonicalRouteInput(r.body.localRef) === canonicalRouteInput(body.localRef),
+        );
+        if (old && canonicalRouteInput(old.body) === canonicalRouteInput(body)) return [];
+        return [
+          receiptSchema.parse({
+            schema: 1,
+            id: old?.id ?? randomUUID(),
+            revision: (old?.revision ?? 0) + 1,
+            at: new Date().toISOString(),
+            // SDK recovery proves an outcome, not the build of the native producer.
+            stamp: null,
+            join: this.joinForRequest(update.step.id),
+            body,
+          }),
+        ];
+      });
+      await this.commit([nextRow], native);
       this.notify();
       return structuredClone(nextRow);
     });
@@ -618,7 +873,7 @@ export class ActionJournal {
   private serial<A>(work: () => Promise<A>): Promise<A> {
     const next = this.tail
       .catch(() => undefined)
-      .then(() => this.loaded)
+      .then(() => this.loadOnce())
       .then(work);
     this.tail = next.then(
       () => undefined,
@@ -628,18 +883,81 @@ export class ActionJournal {
   }
   private async load(): Promise<void> {
     const raw = await readFile(this.path, "utf8").catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return JSON.stringify({ version: 3, actions: [] });
+      if (error.code === "ENOENT") return null;
       throw error;
     });
-    const decoded = JSON.parse(raw);
-    if (decoded?.version !== 3 || !Array.isArray(decoded.actions))
-      throw Error("Invalid action journal envelope");
-    let changed = false;
-    const current = actionReceiptSchema.array().parse(decoded.actions);
-    const rows = current.map((row) => {
+    if (raw === null) return;
+    const lines = raw.split("\n");
+    const head = JSON.parse(lines[0]!);
+    const receipts: Receipt[] = [];
+    const mappings: [string, string][] = [];
+    if (head?.version === 4) {
+      // ponytail: one-way import of the whole-file journal; delete once no host holds a v4 file.
+      const envelope = z
+        .strictObject({
+          version: z.literal(4),
+          receipts: receiptSchema.array(),
+          mappings: z.record(z.string(), z.uuid()),
+        })
+        .parse(head);
+      receipts.push(...envelope.receipts);
+      mappings.push(...Object.entries(envelope.mappings));
+      this.torn = true;
+    } else if (head?.version === 5) {
+      const line = z.union([
+        z.strictObject({ receipt: receiptSchema }),
+        z.strictObject({ mapping: z.tuple([z.string(), z.uuid()]) }),
+      ]);
+      lines.slice(1).forEach((text, i) => {
+        if (!text) return;
+        let entry;
+        try {
+          entry = line.parse(JSON.parse(text));
+        } catch (error) {
+          // Only the last line can be torn by a crash; anything earlier is a corrupt journal.
+          if (i === lines.length - 2) return void (this.torn = true);
+          throw error;
+        }
+        if ("receipt" in entry) receipts.push(entry.receipt);
+        else mappings.push(entry.mapping);
+      });
+      this.lines = lines.length - 1;
+    } else {
+      // An older or unknown journal never stops a host: archive it beside itself and start fresh.
+      // Receipts are durable evidence of past actions, so the file is kept, never deleted.
+      const archived = `${this.path}.v${String(head?.version)}.${Date.now()}.archived`;
+      await renameReplacing(this.path, archived);
+      console.warn(
+        `${this.path} is journal version ${String(head?.version)}; this host reads version 5. Archived it as ${archived} and started a fresh journal.`,
+      );
+      return;
+    }
+    this.header = true;
+    for (const [key, id] of mappings) this.mappings.set(key, id);
+    if (new Set(this.mappings.values()).size !== this.mappings.size)
+      throw Error("Duplicate opaque identity in action journal");
+    for (const r of receipts) {
+      const previous = this.receipts.get(r.id);
+      if (previous && previous.revision >= r.revision)
+        throw Error("Duplicate receipt id in action journal");
+      this.keep(r);
+    }
+    const current = [...this.receipts.values()].flatMap((r) =>
+      r.body.kind === "action" ? [r.body.value] : [],
+    );
+    for (const r of this.receipts.values())
+      if (
+        r.body.kind === "action" &&
+        canonicalRouteInput(r.join) !== canonicalRouteInput(this.rootJoin(r.body.value.id))
+      )
+        throw Error("Action receipt join does not match its persisted mapping");
+    if (new Set(current.map((r) => r.id)).size !== current.length)
+      throw Error("Duplicate action id in action journal");
+    this.fresh = [];
+    const changed: ActionReceipt[] = [];
+    for (const row of current) {
       let next = row;
       if (row.state === "running") {
-        changed = true;
         const steps = interruptedSteps(row.steps);
         next = {
           ...unsettled(row),
@@ -647,20 +965,117 @@ export class ActionJournal {
           ...settle(row.preparation.state === "ready", steps, { kind: "interrupted" })!,
         } as ActionReceipt;
       }
-      if (next.steps.some((step) => step.state === "running")) {
-        changed = true;
+      if (next.steps.some((step) => step.state === "running"))
         next = { ...next, steps: interruptedSteps(next.steps) };
-      }
-      return actionReceiptSchema.parse(next);
-    });
-    if (changed) await this.persist(rows);
-    this.rows = rows;
+      next = actionReceiptSchema.parse(next);
+      this.index(next);
+      if (canonicalRouteInput(next) !== canonicalRouteInput(row)) changed.push(next);
+    }
+    if (this.torn) await this.compact();
+    if (changed.length) await this.commit(changed);
+    this.notify();
   }
 
-  private async persist(rows = this.rows): Promise<void> {
-    // ponytail: one bounded-use action receipt file; split by attempt when measured size requires it.
+  /** Append the revisions these rows and facts make, and any freshly minted mappings. */
+  private async commit(rows: readonly ActionReceipt[] = [], facts: readonly Receipt[] = []) {
+    const at = new Date().toISOString();
+    const receipts = rows.flatMap((row) => {
+      const old = this.receipts.get(this.actionReceipt.get(row.id) ?? "");
+      if (
+        old?.body.kind === "action" &&
+        canonicalRouteInput(old.body.value) === canonicalRouteInput(row)
+      )
+        return [];
+      return [
+        receiptSchema.parse({
+          schema: 1,
+          id: old?.id ?? randomUUID(),
+          revision: (old?.revision ?? 0) + 1,
+          at,
+          stamp: old ? old.stamp : this.stamp(),
+          join: old?.join ?? this.rootJoin(row.id),
+          body: { kind: "action", value: row },
+        }),
+      ];
+    });
+    receipts.push(...facts);
+    const lines = [
+      ...this.fresh.map((key) => ({ mapping: [key, this.mappings.get(key)] })),
+      ...receipts.map((receipt) => ({ receipt })),
+    ];
+    if (lines.length) {
+      if (!this.header) await mkdir(dirname(this.path), { recursive: true });
+      const text = `${this.torn ? "\n" : ""}${this.header ? "" : '{"version":5}\n'}${lines
+        .map((line) => `${JSON.stringify(line)}\n`)
+        .join("")}`;
+      try {
+        await appendFile(this.path, text, "utf8");
+      } catch (error) {
+        this.torn = true;
+        throw error;
+      }
+      this.header = true;
+      this.torn = false;
+      this.lines += lines.length;
+    }
+    this.fresh = [];
+    for (const row of rows) this.index(row);
+    for (const receipt of receipts) this.keep(receipt);
+    this.committed.push(...receipts);
+    if (
+      this.lines > 2 * Math.max(this.receipts.size, 1000) ||
+      this.receipts.size > this.retain + Math.max(this.retain / 10, 1)
+    )
+      await this.compact();
+  }
+
+  private index(row: ActionReceipt) {
+    this.rows.set(row.id, row);
+    for (const step of row.steps) this.stepAction.set(step.id, row.id);
+    if (isOpen(row)) this.open.add(row.id);
+    else this.open.delete(row.id);
+  }
+  private keep(receipt: Receipt) {
+    this.receipts.set(receipt.id, receipt);
+    if (receipt.body.kind === "action") this.actionReceipt.set(receipt.body.value.id, receipt.id);
+  }
+
+  /** Rewrite the newest settled receipts, every open action, and the mappings they still name. */
+  private async compact() {
+    const settled = [...this.receipts.values()].filter(
+      (r) => r.body.kind !== "action" || !this.open.has(r.body.value.id),
+    );
+    for (const r of settled.slice(0, Math.max(0, settled.length - this.retain))) {
+      this.receipts.delete(r.id);
+      if (r.body.kind !== "action") continue;
+      const row = r.body.value;
+      this.rows.delete(row.id);
+      this.actionReceipt.delete(row.id);
+      for (const step of row.steps) this.stepAction.delete(step.id);
+    }
+    const named = new Set(
+      [...this.receipts.values()].flatMap((r) => [
+        ...Object.values(r.join),
+        ...(r.body.kind === "queue" ? [r.body.processSessionId] : []),
+      ]),
+    );
+    for (const [key, id] of this.mappings)
+      if (!named.has(id) && !this.minted.has(key)) this.mappings.delete(key);
+    const lines = [
+      ...[...this.mappings].map((mapping) => ({ mapping })),
+      ...[...this.receipts.values()].map((receipt) => ({ receipt })),
+    ];
     await mkdir(dirname(this.path), { recursive: true });
-    await writeFile(`${this.path}.tmp`, JSON.stringify({ version: 3, actions: rows }), "utf8");
-    await rename(`${this.path}.tmp`, this.path);
+    await writeFile(
+      `${this.path}.tmp`,
+      `{"version":5}\n${lines.map((line) => `${JSON.stringify(line)}\n`).join("")}`,
+      "utf8",
+    );
+    await renameReplacing(`${this.path}.tmp`, this.path);
+    this.header = true;
+    this.torn = false;
+    this.fresh = [];
+    this.minted = new Set();
+    this.lines = lines.length;
   }
 }

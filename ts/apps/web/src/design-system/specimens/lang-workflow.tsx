@@ -2,7 +2,7 @@ import type { TrichotomyCellLike } from "@pe/agent-contracts";
 import { Save } from "lucide-react";
 
 import { ArmingStrip, armingStripRecipe } from "#/components/lang/arming-strip";
-import { ArtifactFrame, artifactFrameRecipe } from "#/components/lang/artifact-frame";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import {
   reviewAddresses,
   ReviewRow,
@@ -11,15 +11,16 @@ import {
   WorkStanding,
   workSummary,
   type CellWire,
-} from "#/components/lang/band";
-import { StateCell } from "#/components/lang/cell";
-import { Tag } from "#/components/lang/chip";
+} from "#/components/work/band";
+import { StateCell } from "@pe/kit/lang/cell";
+import { Tag } from "@pe/kit/lang/chip";
 import { Kbd } from "#/components/lang/kbd";
-import { ActionButton } from "#/components/lang/action-button";
-import { Verdict } from "#/components/lang/verdict";
+import { Button } from "@pe/kit/lang/button";
+import { Verdict } from "@pe/kit/lang/verdict";
 import { ARMING_SPECIMEN } from "#/design-system/specimens-data";
 
 import { RecipeGrid, SpecimenFrame, type GridVariantProps } from "./recipe-grid";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const noop = () => {};
 
@@ -43,31 +44,47 @@ export function LangWorkflowSpecimens() {
           <Kbd mute>Esc</Kbd>
         </div>
       </SpecimenFrame>
-      <SpecimenFrame name="Verdict" importPath="#/components/lang/verdict">
+      <SpecimenFrame name="Verdict" importPath="@pe/kit/lang/verdict">
         <div className="flex items-center gap-1">
-          <Verdict kind="accept" title="Stage Pea's proposal" onClick={noop} />
-          <Verdict kind="deny" title="Clear Pea's proposal" onClick={noop} />
-          <Verdict kind="unstage" title="Clear the staged value" onClick={noop} />
-          <Verdict kind="accept" title="Stage Pea's proposal on 3 cells" onClick={noop}>
-            3
-          </Verdict>
-          <Verdict kind="deny" title="Refuse this call" onClick={noop}>
-            deny
-          </Verdict>
-          <Verdict kind="accept" title="in flight" disabled onClick={noop}>
-            accept
-          </Verdict>
+          <TooltipHint content="Stage Pea's proposal">
+            <Verdict kind="accept" onClick={noop} />
+          </TooltipHint>
+          <TooltipHint content="Clear Pea's proposal">
+            <Verdict kind="deny" onClick={noop} />
+          </TooltipHint>
+          <TooltipHint content="Clear the staged value">
+            <Verdict kind="unstage" onClick={noop} />
+          </TooltipHint>
+          <TooltipHint content="Stage Pea's proposal on 3 cells">
+            <Verdict kind="accept" onClick={noop}>
+              3
+            </Verdict>
+          </TooltipHint>
+          <TooltipHint content="Refuse this call">
+            <Verdict kind="deny" onClick={noop}>
+              deny
+            </Verdict>
+          </TooltipHint>
+          <TooltipHint content="in flight">
+            <Verdict kind="accept" disabled onClick={noop}>
+              accept
+            </Verdict>
+          </TooltipHint>
         </div>
       </SpecimenFrame>
       <SpecimenFrame
         name="WorkSentence · WorkStanding · ReviewRow · UnstageAll"
-        importPath="#/components/lang/band"
+        importPath="#/components/work/band"
       >
         <WorkSentence
           summary={workSummary(REVIEW_SPECIMEN, { groupOf: (key) => [key] }, ["field"])}
           cells={REVIEW_SPECIMEN}
           wire={wire}
-          commit={<ActionButton label="save" reason="Write every staged field" onClick={noop} />}
+          commit={
+            <Button kind="framed" label="save" reason="Write every staged field" onClick={noop}>
+              save
+            </Button>
+          }
         />
         <UnstageAll wire={wire} cells={REVIEW_SPECIMEN} keys={["Face Width"]} done={noop} />
         {reviewAddresses(REVIEW_SPECIMEN).map(([address, cell]) => (
@@ -93,33 +110,30 @@ export function LangWorkflowSpecimens() {
         recipe={armingStripRecipe}
         render={(props) => <ArmingSpecimen props={props} />}
       />
-      <RecipeGrid
-        name="ArtifactFrame"
-        importPath="#/components/lang/artifact-frame"
-        recipe={artifactFrameRecipe}
-        render={() => (
-          <ArtifactFrame
-            head={<Tag>door 421</Tag>}
-            foot={
-              <>
-                <Tag>2 unsaved</Tag>
-                <ActionButton
-                  tone="commit"
-                  label="save"
-                  icon={Save}
-                  reason="Writes both values"
-                  onClick={noop}
-                />
-              </>
-            }
-          >
-            <div className="grid grid-cols-2 gap-3 px-3 py-3">
-              <StateCell value="24 in" />
-              <StateCell value="36 in" stage="staged" />
-            </div>
-          </ArtifactFrame>
-        )}
-      />
+      <SpecimenFrame name="ArtifactFrame" importPath="@pe/kit/lang/artifact-frame">
+        <ArtifactFrame
+          head={<Tag>door 421</Tag>}
+          foot={
+            <>
+              <Tag>2 unsaved</Tag>
+              <Button
+                kind="commit"
+                label="save"
+                icon={Save}
+                reason="Writes both values"
+                onClick={noop}
+              >
+                save
+              </Button>
+            </>
+          }
+        >
+          <div className="grid grid-cols-2 gap-3 px-3 py-3">
+            <StateCell value="24 in" />
+            <StateCell value="36 in" stage="staged" />
+          </div>
+        </ArtifactFrame>
+      </SpecimenFrame>
     </>
   );
 }

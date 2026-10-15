@@ -1,14 +1,27 @@
 import type { ReactNode } from "react";
+import { chordLabel } from "@pe/kit/keys";
 
-export function Kbd({ mute, children }: { mute?: boolean; children: ReactNode }) {
+/**
+ * A key or chord. Pass a registered chord as `hotkey` ("Mod+K") and it prints the way this
+ * platform spells it (Ctrl+K on Windows, ⌘ K on macOS); `children` is for a literal key word.
+ */
+export function Kbd({
+  mute,
+  hotkey,
+  children,
+}: { mute?: boolean } & (
+  | { hotkey: string; children?: never }
+  | { hotkey?: never; children: ReactNode }
+)) {
   return (
+    // Quiet by default: a hairline, no ground, the small rung in the sans face (a key is named, not
+    // measured) so a hint never outweighs the verb beside it.
     <kbd
-      data-surface="recess"
-      className={`face-mono t-small inline-flex min-w-7 shrink-0 items-center justify-center border px-1 py-0.5 ${
-        mute ? "border-line text-ink-mute" : "border-line-2 text-ink"
+      className={`t-small inline-flex h-[calc(var(--item-h)-4px)] shrink-0 font-sans items-center justify-center rounded-sm border border-line px-1.5 ${
+        mute ? "text-ink-mute" : "text-ink-2"
       }`}
     >
-      {children}
+      {hotkey === undefined ? children : chordLabel(hotkey)}
     </kbd>
   );
 }

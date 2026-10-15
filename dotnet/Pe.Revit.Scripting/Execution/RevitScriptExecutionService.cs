@@ -115,7 +115,7 @@ public sealed class RevitScriptExecutionService(
             revitVersion = plan.RevitVersion;
             try {
                 outputSink.Attribution = plan.Attribution ?? PodReceipt.ForOperation(
-                    ScriptPodPreparationService.ReadId(runPod) ?? throw new InvalidDataException($"The pod at {runPod} has no manifest id to store the run under."),
+                    new ScriptPodPreparationService().ResolveId(runPod),
                     "scripting.execute", null, PodRunOutcome.Failed, [], null);
                 outputSink.Artifacts.WriteInput(PodRuns.WithReviewBasis(RunInputMetadata(plan, request), null), RunInputFiles(plan, request));
             } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException) {
@@ -134,25 +134,9 @@ public sealed class RevitScriptExecutionService(
 
             AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Info(
                 "normalize",
-                $"{DescribeExecutionMode(plan.ExecutionMode)} Executing {plan.SourceSet.EntryPointSourceName}; compiling {plan.SourceSet.Files.Count} source file(s): {string.Join(", ", plan.SourceSet.Files.Select(file => file.Name))}.",
+                $"{DescribeExecutionMode(plan.ExecutionMode)} Executing {plan.SourceSet.EntryPointSourceName}; captured {plan.SourceSet.Files.Count} source file(s): {string.Join(", ", plan.SourceSet.Files.Select(file => file.Name))}.",
                 plan.SourceSet.EntryPointSourceName
             ));
-
-            cancellation.Token.ThrowIfCancellationRequested();
-            var policyDiagnostics = this._policyAnalyzer.Analyze(plan.SourceSet, plan.PermissionMode);
-            foreach (var diagnostic in policyDiagnostics)
-                AppendDiagnostic(diagnostics, diagnostic);
-            if (policyDiagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error)) {
-                return CreateResult(
-                    ScriptExecutionStatus.PolicyRejected,
-                    outputSink,
-                    diagnostics,
-                    revitVersion,
-                    targetFramework,
-                    containerTypeName,
-                    executionId
-                );
-            }
 
             var permissionDiagnostics = ValidatePermissionMode(plan);
             foreach (var diagnostic in permissionDiagnostics)
@@ -214,6 +198,21 @@ public sealed class RevitScriptExecutionService(
 
             using (runtimeReferenceScope.ResolverScope) {
                 cancellation.Token.ThrowIfCancellationRequested();
+                var policyUsings = ScriptFileTemplates.DefaultUsings.Concat(resolvedProject.Usings).ToList();
+                plan = plan with {
+                    SourceSet = ScriptSourceClosure.Select(plan.SourceSet, runtimeReferenceScope.MetadataReferences, policyUsings)
+                };
+                AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Info("policy",
+                    $"Compiling {plan.SourceSet.Files.Count} entrypoint dependency source file(s): {string.Join(", ", plan.SourceSet.Files.Select(file => file.Name))}.",
+                    plan.SourceSet.EntryPointSourceName));
+                var policyDiagnostics = this._policyAnalyzer.Analyze(plan.SourceSet, plan.PermissionMode,
+                    runtimeReferenceScope.MetadataReferences, policyUsings);
+                foreach (var diagnostic in policyDiagnostics)
+                    AppendDiagnostic(diagnostics, diagnostic);
+                if (policyDiagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error))
+                    return CreateResult(ScriptExecutionStatus.PolicyRejected, outputSink, diagnostics,
+                        revitVersion, targetFramework, containerTypeName, executionId);
+
                 var compilationResult = this.CompileScript(
                     plan,
                     runtimeReferenceScope.MetadataReferences,
@@ -468,6 +467,9 @@ public sealed class RevitScriptExecutionService(
                 sourceSet = captured.SourceSet;
                 executionMode = ScriptWorkspaceExecutionMode.Pod;
                 podManifest = captured.Manifest;
+                // The frozen manifest owns attribution; a renamed folder is only the current output locator.
+                workspaceRoot = new ScriptPodPreparationService().ResolveFolder(podManifest.Id);
+                workspaceKey = Path.GetFileName(workspaceRoot);
                 projectSeed = captured.ProjectSeed;
                 var member = preparation.Members.Single(item => string.Equals(item.Path, "src/" + sourceSet.EntryPointSourceName, StringComparison.OrdinalIgnoreCase));
                 // Outcome and output references are settled when CreateResult observes the final result.

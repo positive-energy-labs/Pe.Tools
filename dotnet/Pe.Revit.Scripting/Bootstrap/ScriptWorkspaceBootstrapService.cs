@@ -15,7 +15,6 @@ public sealed class ScriptWorkspaceBootstrapService(
 
     public ScriptWorkspaceBootstrapData Bootstrap(
         string workspaceKey,
-        bool createSampleScript,
         string revitVersion,
         string targetFramework,
         string runtimeAssemblyPath,
@@ -32,7 +31,6 @@ public sealed class ScriptWorkspaceBootstrapService(
         var assetsDirectory = Path.Combine(workspaceRoot, ProductPathNames.AssetsDirectoryName);
         var outputDirectory = Path.Combine(workspaceRoot, ProductPathNames.OutputDirectoryName);
         var vscodeDirectory = Path.Combine(workspaceRoot, ".vscode");
-        var sampleScriptPath = Path.Combine(sourceDirectory, RevitScriptingStorageLocations.SampleFileName);
         var podManifestPath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.PodManifestFileName);
         var agentsPath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.AgentsFileName);
         var readmePath = Path.Combine(workspaceRoot, RevitScriptingStorageLocations.ReadmeFileName);
@@ -67,10 +65,8 @@ public sealed class ScriptWorkspaceBootstrapService(
         EnsureFile(agentsPath, ScriptFileTemplates.CreatePodAgents(), generatedFiles);
         EnsureFile(readmePath, ScriptFileTemplates.CreatePodReadme(), generatedFiles);
         EnsureFile(vscodeSettingsPath, ScriptFileTemplates.CreateVscodeSettings(), generatedFiles);
-        if (createSampleScript) {
-            EnsureFile(sampleScriptPath, ScriptFileTemplates.CreateSampleScript(), generatedFiles);
-            EnsureFile(podManifestPath, ScriptFileTemplates.CreatePodManifest(workspaceKey), generatedFiles);
-        }
+        // An empty pod: a manifest with no entrypoints. Shipped examples arrive by import, never by bootstrap.
+        EnsureFile(podManifestPath, ScriptFileTemplates.CreatePodManifest(workspaceKey), generatedFiles);
 
         return new ScriptWorkspaceBootstrapData(
             workspaceKey,
@@ -82,7 +78,6 @@ public sealed class ScriptWorkspaceBootstrapService(
             readmePath,
             projectFilePath,
             podManifestPath,
-            sampleScriptPath,
             revitVersion,
             targetFramework,
             runtimeAssemblyPath,

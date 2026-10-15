@@ -9,6 +9,8 @@ import { address, bindWork } from "@pe/agent-contracts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { RevitBridge } from "../src/bridge.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
+import { sdkSessions } from "./native-receipt-fixture.ts";
 
 const target = { session: "session-a", openId: "open-a" };
 const work = bindWork("families", address("C:\\Models\\Air.rvt"), undefined, target);
@@ -56,6 +58,12 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
         ? [
             {
               sessionId: target.session,
+              connected: true,
+              processId: 42,
+              processStartUtcUnixMs: 1000,
+              lane: hostOwnership.lane,
+              sourceRoot: hostOwnership.sourceRoot,
+              serviceName: hostOwnership.serviceName,
               state: {
                 openDocuments: [
                   {
@@ -95,7 +103,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
   } as unknown as RevitBridge["Service"];
   const handler = (captures: TakeoffCaptures) =>
     HttpRouter.toWebHandler(
-      makeCallRoute(undefined, captures).pipe(
+      makeCallRoute(undefined, captures, { sdk: sdkSessions }).pipe(
         Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
       ),
       { disableLogger: true },

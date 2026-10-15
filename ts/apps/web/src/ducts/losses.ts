@@ -29,9 +29,9 @@ type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];
 type Connector = Node["connectors"][number];
 
-export type RowKind = "friction" | "fitting" | "tap-branch" | "tap-straight" | "terminal";
+type RowKind = "friction" | "fitting" | "tap-branch" | "tap-straight" | "terminal";
 
-export interface RowInputs {
+interface RowInputs {
   res: "Co" | "Cb" | "Cs";
   x: number;
   y?: number;
@@ -60,7 +60,7 @@ export interface Row {
   error?: string;
 }
 
-export interface LossError {
+interface LossError {
   id: number;
   rule?: string;
   table?: string;
@@ -77,13 +77,13 @@ export interface Overrides {
   componentDrop?: Readonly<Record<number, number>>;
 }
 
-export interface PathLoss {
+interface PathLoss {
   groupId: string;
   total: number;
   rows: Row[];
 }
 
-export interface RuleLoss {
+interface RuleLoss {
   /** Rule dp on the critical path. */
   critical: number;
   /** Rule dp per terminal path. */
@@ -119,7 +119,7 @@ const isTap = (node: Node | null | undefined) =>
  * root, `next` the one toward the terminal on this path (null for a tap passed straight), `parent`
  * the duct a tap hangs off.
  */
-export function fittingFacts(
+function fittingFacts(
   node: Node,
   prev: number | null,
   next: number | null,

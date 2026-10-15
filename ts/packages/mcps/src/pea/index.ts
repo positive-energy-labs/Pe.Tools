@@ -1,10 +1,20 @@
-import type { DocumentRequest } from "@pe/agent-contracts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
 import { readImage } from "../shared/read-image.ts";
 import { createCaptureViewTool } from "../shared/capture-view.ts";
 import { diagram } from "../shared/diagram.ts";
 import { revitApiFetch, revitApiSearch } from "../shared/rvt-api.ts";
-import { peDo, peFind, peRead, peaHostBaseUrl, scopeOf, targetSet } from "./capability-tools.ts";
+import {
+  peDo,
+  peFeedback,
+  peFind,
+  peRead,
+  peaHostBaseUrl,
+  scopeOf,
+  targetSet,
+} from "./capability-tools.ts";
+import { documentRequestSchema, type DocumentRequest } from "@pe/agent-contracts";
+import { createTool } from "../shared/tool.ts";
+import z from "zod";
 export { peDo, peFind, peRead } from "./capability-tools.ts";
 export {
   buildCapabilities,
@@ -15,41 +25,63 @@ export { type RouteRegistration, createRouteRegistrations } from "./routes.ts";
 export { PeaCliCommands } from "./PeaCliCommands.ts";
 export {
   bundledPeaSkills,
-  materializeBundledPeaSkills,
+  publishPeaSkills,
   resolvePeaProductHomePath,
   resolvePeaSkillPaths,
   resolvePeaStandardSkillsRoot,
-  peaProductHomeEnvVar,
   peaStandardSkillsRoot,
 } from "./skills.ts";
 
-/** The session a frozen default Target names, for the tools that take a selector, not a Target. */
-const sessionOf = (target: DocumentRequest | null | undefined): string | undefined =>
-  target ? (target.kind === "open" ? target.ref.session : target.session) : undefined;
-
-const captureView = createCaptureViewTool(async () => {
-  const target = (await scopeOf())?.defaultTarget;
-  // view-image needs an exact open document; a session alone is refused by the host.
+async function captureCaller(override?: DocumentRequest) {
+  const target = override ?? (await scopeOf())?.defaultTarget;
+  if (target?.kind !== "open")
+    throw new Error(
+      "capture_view requires an exact selected open document. Pass target {kind: open, ref: {session, openId}} from pe_find, or ask the user to select the thread head.",
+    );
   return new HostRpcCaller({
     hostBaseUrl: peaHostBaseUrl(),
-    bridgeSessionId: sessionOf(target),
-    openDocumentId: target?.kind === "open" ? target.ref.openId : undefined,
+    bridgeSessionId: target.ref.session,
+    openDocumentId: target.ref.openId,
   });
+}
+
+const capture = createCaptureViewTool(() => captureCaller());
+const captureView = createTool({
+  ...capture,
+  description: `${capture.description} Reads need no grant. An exact document target overrides this capture only; omission follows the thread head.`,
+  inputSchema: capture.inputSchema.extend({
+    target: z
+      .union([documentRequestSchema.options[0], capture.inputSchema.shape.target.unwrap().strict()])
+      .optional()
+      .describe(
+        "Exact open document read override, or a view selector within the thread head's document. Omit to follow the current head.",
+      ),
+  }),
+  execute: async (input) => {
+    const { target, ...options } = input;
+    const document = target && "kind" in target ? target : undefined;
+    const tool = createCaptureViewTool(() => captureCaller(document));
+    return tool.execute(
+      { ...options, target: target && "kind" in target ? undefined : target },
+      undefined,
+    );
+  },
 });
 
 /**
  * Pea's product surface: three capability doors over ONE catalog (`pe_find` ranks it, `pe_read`
  * runs rows that do not mutate, `pe_do` runs any row), one Target door (`target_set`), and the media
  * and docs helpers that do not fit a JSON row. Session lifecycle is in the catalog like everything
- * else: `route:instances.start` and `route:instances.open` run for any actor, the rest of the
- * lifecycle is `actor: human`. Every host-bound tool resolves its Revit session from the thread
- * head's default Target (`PE_THREAD`); no tool input names a session or a document.
+ * else. Writes cross the host grant check (ADR 0017); lifecycle checks cover the affected documents.
+ * Document calls follow the live thread head (`/pe/scope/self`) unless an exact per-call target
+ * is supplied. Reads need no grant; writes name Pea's own lifetimes or the granted head.
  */
 export const peaProductTools = {
   [peFind.id]: peFind,
   [peRead.id]: peRead,
   [peDo.id]: peDo,
   [targetSet.id]: targetSet,
+  [peFeedback.id]: peFeedback,
   [captureView.id]: captureView,
   [readImage.id]: readImage,
   [diagram.id]: diagram,

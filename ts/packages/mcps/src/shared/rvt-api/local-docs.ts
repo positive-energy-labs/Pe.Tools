@@ -11,7 +11,7 @@
  * product root.
  */
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
-import { homedir } from "node:os";
+import { productRoot } from "@pe/host-contracts/service-identity";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -61,11 +61,6 @@ export type LocalDocsOptions = {
 
 // ---------------------------------------------------------------------------
 // Discovery
-
-function productRoot(): string {
-  const base = process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local");
-  return join(base, "Positive Energy", "Pe.Tools");
-}
 
 export function findRevitInstallXmls(year: number): string[] {
   const programFiles = process.env.ProgramFiles ?? "C:\\Program Files";

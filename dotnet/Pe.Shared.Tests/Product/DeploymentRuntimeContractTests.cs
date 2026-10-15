@@ -16,7 +16,7 @@ public sealed class DeploymentRuntimeContractTests {
         var localAppData = Path.Combine(Path.GetTempPath(), $"pe-localapp-{Guid.NewGuid():N}");
 
         try {
-            var content = ProductUserContentLayout.ForCurrentUser(documents);
+            var content = ProductUserContentLayout.ForCurrentUser(Path.Combine(documents, "Pe.Tools"));
             Assert.That(
                 content.PreferencesPath,
                 Is.EqualTo(Path.Combine(documents, "Pe.Tools", "preferences.json"))
@@ -57,6 +57,98 @@ public sealed class DeploymentRuntimeContractTests {
         } finally {
             TryDeleteDirectory(documents);
             TryDeleteDirectory(localAppData);
+        }
+    }
+
+    // F6 (acceptance round 3): Revit-side script output landed in the owner's OneDrive Pods because
+    // this side ignored the override the host honoured. One variable names the whole home.
+    [Test, NonParallelizable]
+    public void Product_home_override_roots_every_user_content_path_and_nothing_resolves_under_documents() {
+        var home = Path.Combine(Path.GetTempPath(), $"pe-home-{Guid.NewGuid():N}", "Pe.Tools");
+        var defaultHome = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), ProductIdentity.ProductName);
+        var previous = Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable);
+        Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, home);
+        try {
+            var content = ProductUserContentLayout.ForCurrentUser();
+            var paths = new[] {
+                content.RootPath,
+                content.PreferencesPath,
+                content.AgentInstructionsPath,
+                content.ReadmePath,
+                content.Scripting.RootPath,
+                content.InlineScripts.RootPath,
+                content.Output.RootPath,
+                ScriptingWorkspaceLocations.GetDefaultBasePath(),
+                ScriptingWorkspaceLocations.ResolveWorkspaceRoot("accept-r3-snowdon"),
+                new ModuleStorage("census").Output().DirectoryPath
+            };
+            Assert.That(content.RootPath, Is.EqualTo(home));
+            Assert.That(content.Scripting.RootPath, Is.EqualTo(Path.Combine(home, "Pods")));
+            foreach (var path in paths) {
+                Assert.That(path.StartsWith(home, StringComparison.OrdinalIgnoreCase), Is.True, path);
+                Assert.That(path.StartsWith(defaultHome, StringComparison.OrdinalIgnoreCase), Is.False, path);
+            }
+        } finally {
+            Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, previous);
+            TryDeleteDirectory(Path.GetDirectoryName(home)!);
+        }
+    }
+
+    // ADV2-S4: acceptance hosts on worktrees shared the owner's %LOCALAPPDATA% state. The one
+    // override roots machine-local state too, under <home>\.local-state, matching the host's productRoot.
+    [Test, NonParallelizable]
+    public void Product_home_override_roots_machine_local_state_and_logs_and_nothing_resolves_under_local_app_data() {
+        var home = Path.Combine(Path.GetTempPath(), $"pe-home-{Guid.NewGuid():N}", "Pe.Tools");
+        var ownerRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Positive Energy", "Pe.Tools");
+        var previous = Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable);
+        Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, home);
+        try {
+            var runtime = ProductRuntimeLayout.ForCurrentUser();
+            var state = Path.Combine(home, ".local-state");
+            Assert.That(runtime.RootPath, Is.EqualTo(state));
+            var paths = new[] {
+                runtime.State.RootPath,
+                runtime.State.ApsCredentialsPath,
+                runtime.State.ApsTokenStorePath,
+                runtime.Logs.HostLogPath,
+                runtime.Cache.ResolveModuleCachePath("census"),
+                new GlobalStorage().DirectoryPath,
+                new ModuleStorage("census").State().DirectoryPath
+            };
+            foreach (var path in paths) {
+                Assert.That(path.StartsWith(state, StringComparison.OrdinalIgnoreCase), Is.True, path);
+                Assert.That(path.StartsWith(ownerRoot, StringComparison.OrdinalIgnoreCase), Is.False, path);
+            }
+            // An explicit local app data argument still wins over the environment.
+            Assert.That(
+                ProductRuntimeLayout.ForCurrentUser(Path.Combine(home, "explicit")).RootPath,
+                Is.EqualTo(Path.Combine(home, "explicit", "Positive Energy", "Pe.Tools")));
+        } finally {
+            Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, previous);
+            TryDeleteDirectory(Path.GetDirectoryName(home)!);
+        }
+    }
+
+    // Acceptance round 4 F6-A: the dev bridge supervisor took its service lease and read service files
+    // under the owner's %LOCALAPPDATA% even with the override set. It must use the one runtime root.
+    [Test, NonParallelizable]
+    public void Dev_bridge_supervisor_app_base_and_service_files_land_under_the_product_home_override() {
+        var home = Path.Combine(Path.GetTempPath(), $"pe-home-{Guid.NewGuid():N}", "Pe.Tools");
+        var ownerRoot = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Positive Energy", "Pe.Tools");
+        var previous = Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable);
+        Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, home);
+        try {
+            var appBase = Pe.App.Host.TsHostLauncher.ServiceAppBase;
+            var serviceFile = PeServiceDiscovery.ServiceFilePath(appBase, "pe-host-source-test");
+            Assert.That(appBase, Is.EqualTo(ProductRuntimeLayout.ForCurrentUser().RootPath));
+            Assert.That(serviceFile, Does.StartWith(Path.Combine(home, ".local-state", "state", "service")).IgnoreCase);
+            Assert.That(serviceFile, Does.Not.StartWith(ownerRoot).IgnoreCase);
+        } finally {
+            Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, previous);
+            TryDeleteDirectory(Path.GetDirectoryName(home)!);
         }
     }
 

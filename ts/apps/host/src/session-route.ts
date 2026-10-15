@@ -8,10 +8,17 @@ import {
 } from "@pe/agent-contracts";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
 import { join } from "node:path";
-import { docListArgv, doctorArgv, sessionListArgv } from "@pe/host-contracts/pe-revit-contract";
+import {
+  docListArgv,
+  doctorArgv,
+  sessionDialogsArgv,
+  sessionListArgv,
+  sessionLogsArgv,
+  opListArgv,
+} from "@pe/host-contracts/pe-revit-contract";
 import { checkoutLayout } from "@pe/host-contracts/service-identity";
 import { type HostLane } from "./host-ownership.ts";
-import { peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
+import { peRevitLauncher, validatePeRevitEnvelope, withStderr } from "./pe-revit-launch.ts";
 import { runHostChild } from "./host-child.ts";
 
 /**
@@ -116,14 +123,34 @@ export function executeSessionCli<R>(
 export const runPeRevitCli: SessionCliRunner = (args) =>
   Effect.gen(function* () {
     const launch = peRevitLauncher();
-    const { stdout } = yield* runHostChild(launch.cmd, [...launch.args, ...args], {
+    const { stdout, stderr } = yield* runHostChild(launch.cmd, [...launch.args, ...args], {
       cwd: launch.cwd,
     });
     return yield* Effect.try({
       try: () => validatePeRevitEnvelope(stdout, args, launch),
-      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+      catch: (error) => withStderr(error, stderr),
     });
   });
+
+/** The read-only SDK verb a Reading names. Dialogs lists windows; dismissal is an Instances action. */
+export function sdkReadingArgs(request: SdkReading): string[] {
+  switch (request.read) {
+    case "sessions":
+      return sessionStatusArgs(request.session, request.all);
+    case "doctor":
+      return doctorArgv({ timeoutSeconds: 20 });
+    case "recents":
+      return docRecentsArgs(request.year);
+    case "documents":
+      return docListArgs(request.session);
+    case "dialogs":
+      return sessionDialogsArgv({ ...request.session, all: request.all });
+    case "logs":
+      return sessionLogsArgv({ ...request.session, tail: request.tail ?? 100 });
+    case "ops":
+      return opListArgv({ ...request.session, tail: request.tail ?? 100 });
+  }
+}
 
 /** One SDK observation owner; the browser's former fleet timer lives here. */
 const sdkReads = new OwnerReads();
@@ -135,14 +162,7 @@ export function observeSdkReading(
   return sdkReads.observe(
     canonicalRouteInput(request),
     async () => {
-      const args =
-        request.read === "sessions"
-          ? sessionStatusArgs(request.session, request.all)
-          : request.read === "doctor"
-            ? doctorArgv({ timeoutSeconds: 20 })
-            : request.read === "recents"
-              ? docRecentsArgs(request.year)
-              : docListArgs(request.session);
+      const args = sdkReadingArgs(request);
       const result = await Effect.runPromise(
         executeSessionCli(args, runPeRevitCli, STATUS_TIMEOUT_MS, {
           action: request.read,
@@ -168,11 +188,12 @@ export const instancesReadingsRoute = HttpRouter.add("GET", "/instances/readings
   Effect.tryPromise(async () => {
     const { sdkReadingSchema } = await import("@pe/agent-contracts");
     const query = new URL(req.url, "http://host").searchParams;
-    if ([...query.keys()].some((key) => !["read", "session", "year", "all"].includes(key)))
+    if ([...query.keys()].some((key) => !["read", "session", "year", "all", "tail"].includes(key)))
       throw Error("Unknown SDK reading field; session accepts an id-or-pid object");
     const request = sdkReadingSchema.parse({
       kind: "sdk",
       read: query.get("read"),
+      ...(query.has("tail") ? { tail: Number(query.get("tail")) } : {}),
       ...(query.has("session") ? { session: JSON.parse(query.get("session")!) } : {}),
       ...(query.has("year") ? { year: query.get("year") } : {}),
       ...(query.has("all") ? { all: query.get("all") === "true" } : {}),

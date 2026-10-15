@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Input } from "#/components/lang/input";
+import { Input } from "@pe/kit/lang/input";
 
 import { frac } from "./math";
 

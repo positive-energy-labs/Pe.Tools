@@ -14,7 +14,6 @@ import {
 } from "@pe/agent-contracts";
 import { Equal, Hash, Option } from "effect";
 import { dirty, mapReading, readingAtom, peReadings, previousOf, type Readings } from "#/readings";
-import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
 import { causeRefusal, refuse, writeRefusal, type Refusal } from "./refusal";
 import { getRouteSalvage, postRouteWrite } from "./host";
 import { type Slice, appAtomRegistry, isRecord, useOwned } from "./route-owner";
@@ -38,19 +37,15 @@ class RouteAtomKey implements Equal.Equal {
   }
 }
 
-function routeUrl(
-  route: string,
-  operation: "apply" | "command" | typeof START_FRESH | "salvage",
-  key: WorkKey,
-) {
-  const url = new URL(peUrl(resolveWorkbenchConfig(), `/route-state/${route}/${operation}`));
-  if (key.work !== undefined) url.searchParams.set("work", key.work);
+function routeInput(route: string, key: WorkKey) {
+  const query: Record<string, string> = {};
+  if (key.work !== undefined) query.work = key.work;
   else {
-    if (key.target !== null) url.searchParams.set("target", key.target);
+    if (key.target !== null) query.target = key.target;
     const open = key.binding === "address" ? key.from : key.open;
-    if (open) url.searchParams.set("open", `${open.session}/${open.openId}`);
+    if (open) query.open = `${open.session}/${open.openId}`;
   }
-  return url.toString();
+  return { params: { route }, query };
 }
 
 const routeAtom = Atom.family((key: RouteAtomKey) => {
@@ -104,7 +99,7 @@ export function docWriter<S extends RouteStateSpec<any>>(
     onAccepted?: (base: number, revision: number) => void,
   ): Promise<Refusal | null> => {
     try {
-      const { status, result } = await postRouteWrite(routeUrl(spec.route, operation, key), body);
+      const { status, result } = await postRouteWrite(operation, routeInput(spec.route, key), body);
       if (!result) return refuse("failed", `${operation} failed (${status})`);
       if (!result.ok && result.code === "stale_revision" && conflict) registry.set(conflict, true);
       if (result.ok && body.expectedRevision !== undefined)
@@ -151,38 +146,43 @@ export function docWriter<S extends RouteStateSpec<any>>(
     /** The human door only; the host refuses Pea's door and readable Work. */
     startFresh: () => send(START_FRESH, {}),
     /** The human door only: what the route carries over from Work it can no longer read. */
-    salvage: () => getRouteSalvage(routeUrl(spec.route, "salvage", key)),
+    salvage: () => getRouteSalvage(routeInput(spec.route, key)),
   };
 }
 
-/**
- * One route's Work read and written by key, with no route owner: the Chat head's summary of Work
- * the thread's document holds. It reads the same Work atom a mounted route (the plugin pane) reads,
- * so both re-render from one Work; its writes are foreign to that route's own-write chain, so a
- * bound write either side refuses truthfully when the other landed first.
- */
-export function useRouteWork<S extends RouteStateSpec<any>>(spec: S, key: WorkKey | null) {
-  const id = key ? JSON.stringify(key) : null;
-  const slice = useMemo(
-    () => (key ? docAtom(spec, key, peReadings) : null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the key is identified by its JSON
-    [spec, id],
+/** A changing collection of Work subscriptions uses one React hook and the same per-Work atoms. */
+export function useRouteWorks<S extends RouteStateSpec<any>>(
+  entries: readonly { spec: S; key: WorkKey | null }[],
+) {
+  const sources = useMemo(
+    () =>
+      entries.map(({ spec, key }) => {
+        const slice = key ? docAtom(spec, key, peReadings) : null;
+        return {
+          key,
+          slice,
+          writer: key && slice ? docWriter(spec, key, appAtomRegistry, slice, undefined) : null,
+        };
+      }),
+    [entries],
   );
-  const reading = useOwned(appAtomRegistry, slice);
-  const writer = useMemo(
-    () => (key && slice ? docWriter(spec, key, appAtomRegistry, slice, undefined) : null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the key is identified by its JSON
-    [spec, slice],
+  const collection = useMemo(
+    () => Atom.make((get) => sources.map(({ slice }) => (slice ? get(slice) : null))),
+    [sources],
   );
-  const current = reading ? previousOf(reading) : undefined;
-  return {
-    doc: (current?.doc ?? null) as RouteDocOf<S> | null,
-    revision: current?.revision ?? null,
-    stale: reading?.state === "stale",
-    write: (patches: RouteStatePatch[], expectedRevision?: number) =>
-      writer ? writer.apply(patches, expectedRevision) : Promise.resolve(notHydrated),
-    reload: () => {
-      if (key) dirty({ ...key, kind: "work" });
-    },
-  };
+  const readings = useOwned(appAtomRegistry, collection);
+  return sources.map(({ key, writer }, index) => {
+    const reading = readings?.[index];
+    const current = reading ? previousOf(reading) : undefined;
+    return {
+      doc: (current?.doc ?? null) as RouteDocOf<S> | null,
+      revision: current?.revision ?? null,
+      stale: reading?.state === "stale",
+      write: (patches: RouteStatePatch[], expectedRevision?: number) =>
+        writer ? writer.apply(patches, expectedRevision) : Promise.resolve(notHydrated),
+      reload: () => {
+        if (key) dirty({ ...key, kind: "work" });
+      },
+    };
+  });
 }

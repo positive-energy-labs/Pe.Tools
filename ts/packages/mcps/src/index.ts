@@ -7,8 +7,7 @@ export {
   peDo,
   peFind,
   peRead,
-  materializeBundledPeaSkills,
-  peaProductHomeEnvVar,
+  publishPeaSkills,
   peaProductTools,
   peaStandardSkillsRoot,
   resolvePeaProductHomePath,
@@ -18,6 +17,7 @@ export {
 export type { CapabilityCatalogSource, RouteRegistration } from "./pea/index.ts";
 export type { PeaCliCommandOptions } from "./pea/PeaCliCommands.ts";
 export {
+  adoptTerminalContext,
   discoverHostBaseUrl,
   resolveHostBaseUrl,
   resolveLaneAndRoot,
@@ -36,9 +36,4 @@ export {
   scriptPodExportInputSchema,
   scriptPodImportInputSchema,
 } from "./shared/scripting.ts";
-export {
-  peaAgentInstructions,
-  peaAgentInstructionsFor,
-  peaRevitOrientation,
-  type PeaRuntimeCapabilities,
-} from "./pea/instructions.ts";
+export { peaAgentInstructions } from "./pea/instructions.ts";

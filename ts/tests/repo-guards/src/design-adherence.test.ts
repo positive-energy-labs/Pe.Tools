@@ -57,6 +57,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../../../apps/web/src");
+const KIT_ROOT = resolve(HERE, "../../../packages/kit/src");
 const BASELINE_PATH = join(HERE, "design-adherence.baseline.json");
 const SKIP_DIRS = new Set(["node_modules", "src"]);
 const SKIP_FILES = new Set(["routeTree.gen.ts"]);
@@ -80,7 +81,7 @@ const stripComments = (text: string): string =>
     .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
     .replace(/(^|[^:])\/\/[^\n]*/gm, (m, pre: string) => pre + " ".repeat(m.length - pre.length));
 
-const FILES = collect(ROOT, "", []);
+const FILES = [...collect(ROOT, "", []), ...collect(KIT_ROOT, "", [])];
 const lineOf = (text: string, i: number) => text.slice(0, i).split("\n").length;
 const area = (rel: string) => (rel.includes("/") ? rel.split("/")[0] : "(root)");
 /** A feature's own host/store files are the route's hands; the rule is about everything below. */

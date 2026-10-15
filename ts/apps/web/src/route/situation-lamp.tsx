@@ -2,14 +2,22 @@
 import { useContext, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { Gauge } from "lucide-react";
-import { Press } from "#/components/lang/press";
-import { StateDot } from "#/components/master-table/cells";
-import { ThemeToggle } from "#/components/lang/theme-toggle";
+import { Button } from "@pe/kit/lang/button";
+import { StateDot } from "@pe/kit/table/cells";
+import {
+  PrimaryRouteControls,
+  useHasGlobalNavigation,
+  useIsPrimaryRoute,
+  usePublishSituationSignal,
+  type SituationSignal,
+} from "#/navigation/route-controls";
+import { ThemeToggle } from "@pe/kit/lang/theme-toggle";
 import { RouteHelpButton } from "./help";
 import { FlowMatrix } from "./flow";
 import { HostedChrome } from "./hosted-chrome";
 import { RouteInspector } from "./inspector";
-import type { RouteHandle } from "./use-route";
+import type { RouteHandle } from "./handle";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /**
  * session › document, one instrument that says ONE thing at rest: the document (which is the
@@ -21,6 +29,8 @@ export function ChainLamp({
   health,
   session,
   document,
+  inspection = false,
+  stageWord,
 }: {
   handle: RouteHandle<any, any, any, any>;
   /** The document's complaint, when it has one ("needs initialization · 4 carriers"). */
@@ -29,6 +39,8 @@ export function ChainLamp({
   session: string | null;
   /** Diagnostic label only; the sentence owns target selection. */
   document: string | null;
+  inspection?: boolean;
+  stageWord?: string;
 }) {
   const resolution = handle.resolution;
   const sessionWord =
@@ -37,6 +49,53 @@ export function ChainLamp({
   const title = [`session · ${sessionWord}`, health ? `document · ${health}` : null]
     .filter(Boolean)
     .join("\n");
+  const primary = useIsPrimaryRoute(handle.manifest.key);
+  const kind: SituationSignal["kind"] = inspection
+    ? "archived"
+    : handle.failure
+      ? "failure"
+      : handle.busy
+        ? "busy"
+        : health
+          ? "health"
+          : document && session
+            ? "ready"
+            : "unbound";
+  const tone: SituationSignal["tone"] =
+    kind === "archived"
+      ? "nav"
+      : kind === "busy"
+        ? "commit"
+        : kind === "ready"
+          ? "done"
+          : "caution";
+  const stateWord =
+    kind === "archived"
+      ? "Archived · Saved observation"
+      : kind === "failure"
+        ? "Attention needed"
+        : kind === "busy"
+          ? `Running · ${handle.busy?.key}`
+          : kind === "health"
+            ? "Document needs attention"
+            : kind === "ready"
+              ? "Document bound"
+              : "No live document bound";
+  usePublishSituationSignal(handle.manifest.key, {
+    kind,
+    tone,
+    title: [
+      stateWord,
+      stageWord,
+      handle.failure?.message,
+      document ?? "no document selected",
+      inspection ? null : title,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    stamp: `${kind}|${stageWord}|${session}|${document}|${health}|${handle.failure?.message}|${handle.busy?.key}`,
+  });
+  if (primary || inspection) return null;
   const dot = (on: boolean, tone: "done" | "alarm" | "caution" | "mute" = "done") =>
     on ? (
       <StateDot tone={tone} />
@@ -44,16 +103,18 @@ export function ChainLamp({
       <span className="inline-block size-2 shrink-0 rounded-[1px] border border-ink-mute align-middle" />
     );
   return (
-    <span className="flex items-center gap-1.5 t-small face-mono text-ink-mute" title={title}>
-      {dot(session !== null, health ? "caution" : "done")}
-      <span
-        className={health ? undefined : "text-ink-2"}
-        data-tone={health ? "caution" : undefined}
-      >
-        {document ?? "no document selected"}
-        {health ? ` · ${health}` : ""}
+    <TooltipHint content={title}>
+      <span className="flex min-w-0 items-center gap-1.5 t-small face-mono text-ink-mute">
+        {dot(session !== null, health ? "caution" : "done")}
+        <span
+          className={`min-w-0 truncate ${health ? "" : "text-ink-2"}`}
+          data-tone={health ? "caution" : undefined}
+        >
+          {document ?? "no document selected"}
+          {health ? ` · ${health}` : ""}
+        </span>
       </span>
-    </span>
+    </TooltipHint>
   );
 }
 
@@ -67,25 +128,31 @@ export function ChainLamp({
 function StateGauge({
   handle,
   children,
+  word,
 }: {
   handle: RouteHandle<any, any, any, any>;
   children?: ReactNode;
+  word?: string;
 }) {
   if (!import.meta.env.DEV && children == null) return null;
   return (
     <Popover.Root>
       <Popover.Trigger
-        render={<Press tone="quiet" size="icon" />}
-        title="route state: what is bound, what ran, and the route's nouns"
-        aria-label="Route state"
-      >
-        <Gauge className="size-4" strokeWidth={1.5} />
-      </Popover.Trigger>
+        render={
+          <Button
+            label={word ?? "Route state"}
+            reason="route state: what is bound, what ran, and the route's nouns"
+            icon={Gauge}
+          >
+            {word}
+          </Button>
+        }
+      />
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={6} className="isolate z-popup">
           <Popover.Popup
             data-surface="artifact"
-            className="flex max-h-(--available-height) w-[44rem] max-w-(--available-width) flex-col gap-3 overflow-auto rounded-lg p-3 t-prose text-ink ring-1 ring-line outline-none"
+            className="flex max-h-(--available-height) w-[44rem] max-w-(--available-width) flex-col gap-3 overflow-auto p-3 t-prose text-ink float-surface"
           >
             {children}
             <FlowMatrix handle={handle} />
@@ -102,20 +169,34 @@ export function Cluster({
   handle,
   lamp,
   state,
+  helpUtilities = false,
 }: {
   handle: RouteHandle<any, any, any, any>;
   lamp: ReactNode;
   /** What the state gauge shows above the inspector (Chat hands in its ledger and log). */
   state?: ReactNode;
+  helpUtilities?: boolean;
 }) {
   const chrome = useContext(HostedChrome);
+  const globalNavigation = useHasGlobalNavigation();
+  const primary = useIsPrimaryRoute(handle.manifest.key);
   return (
-    <span className="flex shrink-0 items-center gap-1">
+    <>
       {lamp}
-      <StateGauge handle={handle}>{state}</StateGauge>
-      <RouteHelpButton name={handle.manifest.name} docs={handle.manifest.docs} />
-      <ThemeToggle />
-      {chrome}
-    </span>
+      <PrimaryRouteControls route={handle.manifest.key} slot="inspector">
+        <StateGauge handle={handle} word={primary ? "Inspector" : undefined}>
+          {state}
+        </StateGauge>
+      </PrimaryRouteControls>
+      <PrimaryRouteControls route={handle.manifest.key}>
+        <RouteHelpButton
+          name={handle.manifest.name}
+          docs={handle.manifest.docs}
+          utilities={helpUtilities}
+        />
+        {chrome}
+        {!globalNavigation && <ThemeToggle />}
+      </PrimaryRouteControls>
+    </>
   );
 }

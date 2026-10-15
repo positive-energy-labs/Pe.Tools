@@ -1,5 +1,11 @@
+import { createPeClient, peRoutes } from "@pe/agent-contracts/pe-api";
+import { pagePublicationSchema, pagePublicationResultSchema } from "@pe/host-contracts/pe-api";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
-import { contextFetch as fetch, invocationContext } from "#invocation-context";
+import {
+  carriesCallerContext,
+  contextFetch as fetch,
+  invocationContext,
+} from "@pe/runtime/context";
 import {
   sdkSessionSelectionSchema,
   instancesReading,
@@ -13,6 +19,7 @@ import {
   workKeySchema,
   type FamilyReadKey,
   actionBasesSchema,
+  refusalSchema,
   type SemanticActionKey,
   type ActionReceipt,
 } from "@pe/agent-contracts";
@@ -28,7 +35,7 @@ import { readScheduleCapture } from "../shared/schedule-client.ts";
  *
  * `pe_find` ranks the one capability catalog (no query → the map plus the connected sessions).
  * `pe_read` runs any row with `mutates: false`. `pe_do` runs any row. Two runners rather than one
- * so a harness that asks before a tool call can let reads through and ask for `pe_do`. Op calls may override their target without changing
+ * so reads run freely and writes cross the host's grant check. Op calls may override their target without changing
  * the thread head's default Target, and every result carries `revision` (the Scope revision it ran under) and `target` (what the host actually
  * resolved to), so the transcript card shows what was touched, not what was typed.
  */
@@ -43,14 +50,16 @@ import {
   resolveCallTarget,
   addressSchema,
   findCapabilities,
+  mentionOf,
   message,
-  parsePodKey,
+  parseContributionKey,
   parseRouteKey,
   scheduleGridRouteState,
   settingsRouteState,
   putTargetResultSchema,
   putTargetSchema,
   threadHeadSchema,
+  pageChoiceSchema,
   type Capability,
   type CapabilityCatalog,
   type DocumentRequest,
@@ -62,7 +71,7 @@ import { HostRpcCaller, type ResolvedTarget } from "../shared/host-rpc-caller.ts
 import type { RevitCatalogLoadedFamilies } from "@pe/host-contracts/generated";
 import { coerceJsonObject } from "../shared/coerce.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
-import { bundledPeaSkills } from "./skills.ts";
+import { peSourceTree } from "./source-tree.ts";
 
 function base(): string {
   // Hosted tools inherit the authority already admitted by the host middleware.
@@ -97,13 +106,18 @@ const targetDocument = (target: Target): DocumentRef | null =>
 /** A thread's head as a tool reads it. */
 export type Scope = ThreadHead & { thread: string };
 
-/** The live head of `PE_THREAD` (the harness child's thread); else none. */
+/** The live head of this caller's own thread (`/pe/scope/self`); none outside a harness context. */
 export async function scopeOf(): Promise<Scope | null> {
-  const thread = invocationContext()?.thread;
-  if (!thread) return null;
-  const response = await fetch(`${base()}/pe/scope/${encodeURIComponent(thread)}`);
-  const head = threadHeadSchema.parse(await response.json());
-  return { thread, ...head };
+  const caller = invocationContext()?.caller;
+  if (caller?.kind === "external-mcp" && !caller.device) return null;
+  if (!carriesCallerContext()) return null;
+  const response = await createPeClient(base(), fetch).response("scope.get", {
+    params: { id: "self" },
+  });
+  if (response.status === 404) return null;
+  const body = (await response.json()) as { thread?: unknown };
+  if (typeof body.thread !== "string") return null;
+  return { thread: body.thread, ...threadHeadSchema.parse(body) };
 }
 
 /** The Scope's default Target; a call with no Scope runs with none. */
@@ -148,7 +162,7 @@ async function routeWorkScope(target: Target): Promise<{ query: string; target: 
 export const peFind = createTool({
   id: "pe_find",
   description:
-    "Find a capability. No query returns the map: connected Revit sessions with their active document and custody, counts per kind, top rows per kind, and which sources answered. A query ranks rows across host operations (op:), the collaborative route documents you co-edit with the user and their commands (route:), pod buttons the user presses in Revit's Do palette (pod:), and skills (skill:). Filter with kind, needs, mutates. Every row you may run is visible; nothing is tiered, and human-only rows (the person's presses) are not offered. Then pe_read a non-mutating row or pe_do any row.",
+    "Find a capability. No query returns the map: connected Revit sessions with their active document and custody, counts per kind, top rows per kind, and which sources answered. A query ranks rows across host operations (op:), the collaborative route documents you co-edit with the user and their commands (route:), packaged scripts (script:@), Pages (page:@), skills (skill:@), and read-only members (member:@), documents open in Revit (doc:<session>/<openId>, the same pointer the user @-mentions), and Revit's recent documents, not open (recent:<path> or recent:cloud:<region>/<project>/<model>). Filter with kind, needs, mutates. Every row you may run is visible; nothing is tiered, and human-only rows (the person's presses) are not offered. Then pe_read a non-mutating row or pe_do any row.",
   inputSchema: z.object({
     query: z.string().optional().describe("Keywords describing what you need."),
     kind: capabilityKindSchema.optional(),
@@ -167,7 +181,10 @@ export const peFind = createTool({
     });
     if ("isError" in catalog) return catalog;
     // A human-only row is the person's press, never Pea's move: it is not offered at all.
-    const offered = catalog.capabilities.filter((row) => row.actor !== "human");
+    const principal = invocationContext()?.caller?.kind ?? "pea";
+    const offered = catalog.capabilities.filter(
+      (row) => principal !== "anonymous" && row.principal.includes(principal),
+    );
     const filtered = input.query || input.kind || input.needs || input.mutates !== undefined;
     if (!filtered)
       return {
@@ -175,16 +192,19 @@ export const peFind = createTool({
         target,
         revision,
         bridgeSessionId: catalog.bridgeSessionId,
-        sessions: catalog.sessions,
+        machine: catalog.machine,
         defaultDocument: targetDocument(target),
         sources: catalog.sources,
+        source: peSourceTree(),
+        diagnostics: catalog.diagnostics,
         map: capabilityMap(offered),
-        hint: "Query pe_find for rows. pe_read runs a row that does not mutate; pe_do runs any row and is approval-gated. The SDK decides session resolution, adoption and refusal. defaultDocument is the thread's default document, read live per call. Op target overrides affect one call only. Session work accepts SDK id-or-pid selection; host work needs no document. target_set changes later turns.",
+        hint: "Query pe_find for rows. pe_read runs a row that does not mutate; pe_do runs authorized actions through the host grant check. Reads need no grant: pe_read may name any open document by exact target, and a ReadOnly scripting.execute needs a target but no grant. Writes target Pea's own lifetimes or the granted head; to grant rw the user does one thing: select the open document in the composer; that selection is the rw grant and renews with each message. Any script refuses while another open document in its Revit lacks Pea's acquisition or the grant. External MCP clients cannot hold rw in this release. defaultDocument is read live per call. Op target overrides affect one call only. Session work accepts SDK id-or-pid selection; host work needs no document. target_set selects only Pea's own documents for later calls.",
       };
     const rows = findCapabilities(offered, input);
     return {
       at: catalog.at,
       sources: catalog.sources,
+      diagnostics: catalog.diagnostics,
       matches: rows.map((row) => ({
         key: row.key,
         kind: row.kind,
@@ -192,8 +212,10 @@ export const peFind = createTool({
         description: row.description,
         needs: row.needs,
         mutates: row.mutates,
-        actor: row.actor,
+        principal: row.principal,
         input: row.input,
+        package: row.package,
+        projection: row.projection,
       })),
     };
   },
@@ -206,7 +228,7 @@ const runInputSchema = z.object({
     .max(200)
     .optional()
     .describe(
-      "Work address: Pods uses the member's Work key; Schedules takes workspaceId from its schedule reading; Instances defaults to the shared instances workspace.",
+      "Work address: Pods uses the member's Work key; Schedules takes workspaceId from its schedule reading.",
     ),
   key: z.string().min(1).describe("A capability key from pe_find."),
   input: z.unknown().optional().describe("Matches the row's input schema."),
@@ -214,7 +236,7 @@ const runInputSchema = z.object({
     .union([sdkSessionSelectionSchema, documentRequestSchema.options[0]])
     .optional()
     .describe(
-      "Op calls only: SDK selection {id: name} or {pid: number} for session work, or {kind: open, ref: {session, openId}} for an exact product document. Overrides only this call; omission keeps the frozen turn default.",
+      "Op calls only: SDK selection {id: name} or {pid: number} for session work, or {kind: open, ref: {session, openId}} for an exact product document. Overrides only this call; omission follows the live thread head. Reads (non-mutating ops and ReadOnly scripts) may name any open document with no grant; writes target only Pea's own lifetimes or the granted head.",
     ),
   expectedRevision: z
     .number()
@@ -228,23 +250,87 @@ const runInputSchema = z.object({
 });
 type RunInput = z.infer<typeof runInputSchema>;
 
+// MCP tools require an object at the top level; the two strict arms still validate separately.
+const peDoInputSchema = z
+  .strictObject({
+    ...runInputSchema.shape,
+    key: runInputSchema.shape.key.optional(),
+    timeoutSeconds: z.number().min(5).max(900).optional(),
+    kind: z.literal("page").optional(),
+    slug: pagePublicationSchema.shape.slug.optional(),
+    title: pagePublicationSchema.shape.title.optional(),
+    html: pagePublicationSchema.shape.html.optional(),
+    width: pagePublicationSchema.shape.width,
+  })
+  .superRefine((input, context) => {
+    const parsed =
+      input.kind === "page"
+        ? pagePublicationSchema.safeParse(input)
+        : runInputSchema.strict().safeParse(input);
+    if (!parsed.success)
+      for (const issue of parsed.error.issues)
+        context.addIssue({ code: "custom", path: issue.path, message: issue.message });
+  });
+
 export const peRead = createTool({
   id: "pe_read",
   description:
-    "Run one capability that does not mutate: an op: row with mutates false, a route: document read, or a skill: body. Refuses mutating rows with a hint to use pe_do. Split from pe_do so reads never wait on an approval prompt. Runs under this thread's Scope; the result names the revision and the resolved target.",
+    "Run one capability that does not mutate: an op: row with mutates false, a route: document read, a skill: body, or a doc: row's mention (its session, openId, address and custody, read now), or a recent: row's mention (its path, year and the openWith source that opens it). Refuses mutating rows with a hint to use pe_do. Split from pe_do so reads never wait on an approval prompt. Runs under this thread's Scope; the result names the revision and the resolved target.",
   inputSchema: runInputSchema,
   execute: (input, context) =>
     executeTool(input, context, (row) =>
-      row.mutates ? `'${row.key}' mutates; run it with pe_do (approval-gated).` : null,
+      row.mutates ? `'${row.key}' mutates; run it with pe_do under the host grant check.` : null,
     ),
 });
 
 export const peDo = createTool({
   id: "pe_do",
   description:
-    "Do one capability by key from pe_find. Approval-gated because it may mutate; use pe_read for rows that do not. Human-only rows refuse. Op calls accept an exact per-call target override; omission uses the thread's default Target, read live. The result separately names Scope revision and actual target. For Takeoffs actions, retain input.actionId from the first result to recover the same attempt; never mint another ID after an uncertain outcome.",
-  inputSchema: runInputSchema,
-  execute: (input, context) => executeTool(input, context, () => null, true),
+    "Publish an authored HTML Page directly with {kind: 'page', slug, title, html, width?}; no target or discovery call is needed. Returns its canonical Page key, absolute openUrl and a real PNG image. HTML must be a valid document with a doctype; inline JavaScript is validated and preview errors preserve the prior Page. pe.js and pe.kit are optional. For corrections or updates, resubmit complete HTML through this same Page arm with the same slug; do not edit Page files through terminal tools. Or do one authorized capability by key from pe_find. The host admits writes only to Pea's own lifetimes or the granted head; the user grants rw in one step: select the open document in the composer; that selection is the rw grant and renews with each message. op:scripting.execute with permissionMode ReadOnly is a read: it needs an exact target, not a grant, and refuses while another open document in that Revit lacks Pea's acquisition or the grant. External MCP clients can read any document and write Pea's own, but cannot hold rw in this release. Use pe_read for rows that do not mutate. Human-only rows refuse. Op calls accept an exact per-call target override; omission follows the live thread head. The result separately names Scope revision and actual target. For Takeoffs actions, retain input.actionId from the first result to recover the same attempt; never mint another ID after an uncertain outcome.",
+  inputSchema: peDoInputSchema,
+  toModelOutput: (output) => {
+    const parsed = pagePublicationResultSchema.safeParse(output);
+    if (!parsed.success) return undefined;
+    const { capture, ...result } = parsed.data;
+    return {
+      type: "content",
+      value: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            ...result,
+            capture: {
+              mimeType: capture.mimeType,
+              url: capture.url,
+              sha256: capture.sha256,
+              width: capture.width,
+              height: capture.height,
+            },
+          }),
+        },
+        { type: "media", mediaType: capture.mimeType, data: capture.data },
+      ],
+    };
+  },
+  execute: async (input, context) => {
+    if (input.kind === "page")
+      return createPeClient(base(), fetch).call("page.publish", {
+        body: pagePublicationSchema.parse(input),
+      });
+    return executeTool(
+      runInputSchema.parse(input),
+      context,
+      (row) =>
+        row.kind === "document"
+          ? `'${row.key}' is a document, a pointer and not an action; pass its session and openId to an op as target {kind: open, ref: {session, openId}}.`
+          : row.kind === "recent"
+            ? `'${row.key}' is a recent document, a pointer and not an action; open it first: pe_read it for openWith, then open it with pe_do workflow:instances.open, input {source: <openWith>, into: {session: {id}} or {start: {year, owner: pea, addins: on}}}.`
+            : row.kind === "member"
+              ? `'${row.key}' is a read/mention-only member and cannot execute.`
+              : null,
+      true,
+    );
+  },
 });
 
 async function executeTool(
@@ -257,10 +343,25 @@ async function executeTool(
   const { target: defaultTarget, revision } = scope
     ? { target: scope.defaultTarget, revision: scope.revision }
     : { target: null, revision: 0 };
+  const contribution = parseContributionKey(input.key);
+  if (/^(pod|script|page|skill|member):/.test(input.key) && !contribution)
+    return refuse(
+      input.key,
+      defaultTarget,
+      revision,
+      "Legacy or malformed contribution key; obtain a canonical key with pe_find.",
+    );
+  if (contribution?.kind === "member" && replayOperations)
+    return refuse(
+      input.key,
+      defaultTarget,
+      revision,
+      "Members are read/mention-only and cannot execute.",
+    );
   // A known operation attempt replays before catalog or target discovery.
   if (
     replayOperations &&
-    (input.key.startsWith("op:") || input.key.startsWith("pod:")) &&
+    (input.key.startsWith("op:") || contribution?.kind === "script") &&
     !Object.hasOwn(actionControls, input.key.slice(3))
   ) {
     const id = requestIdentity(context);
@@ -268,47 +369,37 @@ async function executeTool(
     if (original) {
       let key = input.key.slice(3);
       let payload = coerceJsonObject(input.input) ?? {};
-      if (input.key.startsWith("pod:")) {
-        const pod = parsePodKey(input.key);
+      if (contribution?.kind === "script") {
         const preparation =
           original.preparation.state === "ready"
             ? (original.preparation.value as {
                 script?: { sourceBundle?: { files?: { path: string; bytesBase64: string }[] } };
               })
             : undefined;
-        const encoded = preparation?.script?.sourceBundle?.files?.find(
-          (file) => file.path === "pod.json",
-        )?.bytesBase64;
+        const bundle =
+          (original.request.sourceBundle as
+            | { files?: { path: string; bytesBase64: string }[] }
+            | undefined) ?? preparation?.script?.sourceBundle;
+        const encoded = bundle?.files?.find((file) => file.path === "pod.json")?.bytesBase64;
+        if (!encoded || original.kind !== "operation" || original.key !== "scripting.execute")
+          throw Error("Original script admission cannot be identified");
+        const manifest = JSON.parse(decodeCapturedManifest(encoded)) as { id: string };
         if (
-          !pod ||
-          !encoded ||
-          original.kind !== "operation" ||
-          original.key !== "scripting.execute"
+          manifest.id !== contribution.packageId ||
+          original.request.sourcePath !== contribution.path
         )
-          throw Error("Original Pod admission cannot be identified");
-        const manifest = JSON.parse(decodeCapturedManifest(encoded)) as {
-          entrypoints: { id: string; sourcePath: string }[];
-        };
-        const source = manifest.entrypoints.find(
-          (entry) => entry.id === pod.entrypoint,
-        )?.sourcePath;
-        if (
-          pod.workspace !== original.request.workspaceKey ||
-          source?.replaceAll("\\", "/").trim().toLowerCase() !==
-            String(original.request.sourcePath).replaceAll("\\", "/").trim().toLowerCase()
-        )
-          throw Error("Original Pod entrypoint conflicts");
+          throw Error("Original script contribution conflicts");
         key = "scripting.execute";
         payload = {
           ...payload,
-          workspaceKey: pod.workspace,
+          workspaceKey: original.request.workspaceKey,
           sourcePath: original.request.sourcePath,
+          ...(original.request.sourceBundle ? { sourceBundle: original.request.sourceBundle } : {}),
         };
       }
       const requested = input.target;
       const caller = new HostRpcCaller({
         hostBaseUrl: base(),
-        actor: "agent",
         requestId: id,
         ...transportScope(requested),
         timeoutMs: input.timeoutSeconds * 1000,
@@ -324,6 +415,19 @@ async function executeTool(
   );
   if ("isError" in catalog) return catalog;
   const row = catalog.capabilities.find((candidate) => candidate.key === input.key);
+  if (!row && contribution?.kind === "member" && !replayOperations && !input.target) {
+    const response = await createPeClient(base(), fetch).response("contributions.read", {
+      query: { key: input.key },
+    });
+    const result = await response.json();
+    return {
+      ok: response.ok,
+      key: input.key,
+      revision,
+      target: namedTarget(defaultTarget),
+      result,
+    };
+  }
   // TODO: with no Target, a row that needs a document is absent from the catalog and refuses as
   // "Unknown capability" instead of "no document" (ACP spike 2026-09-26, REPORT2.md reduced run).
   if (!row)
@@ -333,12 +437,28 @@ async function executeTool(
       revision,
       `Unknown capability '${input.key}'. Find keys with pe_find.`,
     );
-  if (row.actor === "human")
+  const principal = invocationContext()?.caller?.kind ?? "pea";
+  const caller = invocationContext()?.caller;
+  const pairedOperation =
+    caller?.kind === "external-mcp" &&
+    caller.device &&
+    (row.kind === "op" || row.kind === "script") &&
+    row.principal.includes("pea");
+  if (principal === "anonymous" || (!row.principal.includes(principal) && !pairedOperation))
     return refuse(
       row.key,
       defaultTarget,
       revision,
-      `'${row.key}' is human-only. Ask the user to press it in the ${row.title.split(":")[0]} workspace.`,
+      principal === "external-mcp"
+        ? "grant.context-cannot-hold: external MCP is read-only until human pairing exists."
+        : `'${row.key}' is human-only. Ask the user to press it in the ${row.title.split(":")[0]} workspace.`,
+    );
+  if (row.kind === "page" && !replayOperations && input.input)
+    return refuse(
+      row.key,
+      defaultTarget,
+      revision,
+      "pe_read reads a Page; use pe_do for an event or binding.",
     );
   const refusal = gate(row);
   if (refusal) return refuse(row.key, defaultTarget, revision, refusal);
@@ -350,7 +470,7 @@ async function executeTool(
       revision,
       "family.temporary.acquire has no turn-owned release on the harness lane.",
     );
-  if (input.target !== undefined && row.kind !== "op" && row.kind !== "pod")
+  if (input.target !== undefined && row.kind !== "op" && row.kind !== "script")
     return refuse(
       row.key,
       defaultTarget,
@@ -366,13 +486,30 @@ async function executeTool(
       scope?.thread,
       catalog,
     );
-    return { key: row.key, kind: row.kind, revision, ...outcome };
+    return {
+      key: row.key,
+      kind: row.kind,
+      revision,
+      package: row.package,
+      projection: row.projection,
+      ...outcome,
+    };
   } catch (error) {
+    const refusal = refusalSchema.safeParse((error as { refusal?: unknown } | null)?.refusal).data;
+    if (refusal)
+      return { ...refuse(row.key, defaultTarget, revision, JSON.stringify({ refusal })), refusal };
     return refuse(row.key, defaultTarget, revision, message(error));
   }
 }
 
-type Outcome = { ok: boolean; target: ResolvedTarget; result: unknown; elapsedMs?: number };
+type Outcome = {
+  ok: boolean;
+  target: ResolvedTarget;
+  result: unknown;
+  elapsedMs?: number;
+  source?: Capability["package"];
+  bytesBase64?: string;
+};
 
 async function dispatch(
   row: Capability,
@@ -393,7 +530,6 @@ async function dispatch(
         hostBaseUrl: base(),
         ...target,
         requestId: row.mutates ? requestId : undefined,
-        actor: "agent",
         timeoutMs: input.timeoutSeconds * 1000,
       });
       const key = row.key.replace(/^(op|workflow):/, "");
@@ -418,15 +554,10 @@ async function dispatch(
         };
       }
       if (Object.hasOwn(actionControls, key)) {
-        const result = await runCapability(key, payload, { hostBaseUrl: base(), actor: "agent" });
+        const result = await runCapability(key, payload, { hostBaseUrl: base() });
         return { ok: true, target: { session: null, document: null }, result };
       }
       if (row.key.startsWith("workflow:")) {
-        if (
-          semanticActions[key as SemanticActionKey].needs !== "nothing" &&
-          (!target.bridgeSessionId || !target.openDocumentId)
-        )
-          throw Error("Semantic action requires the exact selected lifetime");
         const { bases, actionId, ...intent } = payload;
         const row = (await runCapability(
           key,
@@ -434,7 +565,6 @@ async function dispatch(
           {
             hostBaseUrl: base(),
             ...target,
-            actor: "agent",
             bases: actionBasesSchema.parse(bases ?? {}),
             actionId: typeof actionId === "string" ? actionId : requestId,
             timeoutMs: input.timeoutSeconds * 1000,
@@ -501,13 +631,69 @@ async function dispatch(
         elapsedMs: result.elapsedMs,
       };
     }
-    case "skill": {
-      const skill = bundledPeaSkills.find((entry) => `skill:${entry.name}` === row.key);
-      return { ok: true, target: scopeTarget, result: skill?.content ?? "" };
+    case "document":
+    case "recent": {
+      // Reading a document pointer is its mention: the facts a first hop needs, read now.
+      if (!catalog) throw Error("A document row needs the catalog it was read from.");
+      return { ok: true, target: scopeTarget, result: mentionOf(row, catalog) };
     }
-    case "pod": {
-      const pod = parsePodKey(row.key);
-      if (!pod) throw new Error(`Malformed pod key '${row.key}'.`);
+    case "page": {
+      if (input.target) throw Error("A Page shelf takes no Revit target override.");
+      if (!row.projection?.openUrl)
+        throw Error("Page open URL unavailable from its host descriptor.");
+      const open = new URL(row.projection.openUrl, base());
+      if (open.origin !== new URL(base()).origin)
+        throw Error("Page descriptor has a foreign origin.");
+      const client = createPeClient(base(), fetch);
+      const params = { slug: decodeURIComponent(open.pathname.split("/")[2]!) };
+      const read = async (response: Response) => ({
+        ok: response.ok,
+        result: await response.json(),
+      });
+      // pe_do is the Page shelf's event/binding door; these cross their original host checks.
+      if (!input.input) {
+        const [state, target] = await Promise.all([
+          client.response("page.state", { params }).then(read),
+          client.response("page.target", { params }).then(read),
+        ]);
+        return {
+          ok: state.ok && target.ok,
+          target: scopeTarget,
+          result: { state: state.result, target: target.result },
+        };
+      }
+      const action = z
+        .union([
+          z.strictObject({ binding: pageChoiceSchema }),
+          z.strictObject({ event: z.record(z.string(), z.unknown()) }),
+        ])
+        .parse(coerceJsonObject(input.input));
+      const answer = await read(
+        "binding" in action
+          ? await client.response("page.bind", { params, body: action.binding })
+          : await client.response("page.append", { params, body: action.event }),
+      );
+      return { ...answer, target: scopeTarget };
+    }
+    case "route":
+    case "skill":
+    case "member": {
+      const answer = await contributionRead(row);
+      return {
+        ok: true,
+        target: scopeTarget,
+        result: answer.content,
+        source: row.package,
+        bytesBase64: answer.bytesBase64,
+      };
+    }
+    case "script": {
+      const reference = parseContributionKey(row.key);
+      if (!reference || reference.kind !== "script")
+        throw Error(`Malformed script key '${row.key}'.`);
+      const admitted = await contributionRead(row);
+      if (!admitted.sourceBundle || !admitted.folder)
+        throw Error("Frozen admitted script input unavailable");
       const definition = await new HostRpcCaller({
         hostBaseUrl: base(),
         ...transportScope(input.target, defaultTarget),
@@ -521,19 +707,14 @@ async function dispatch(
       const caller = new HostRpcCaller({
         hostBaseUrl: base(),
         ...target,
-        requestId: row.mutates ? requestId : undefined,
-        actor: "agent",
+        requestId,
         timeoutMs: input.timeoutSeconds * 1000,
       });
-      const pods = await caller.call("pod.list");
-      const sourcePath = pods.pods
-        .find((value) => value.folder === pod.workspace)
-        ?.entrypoints.find((entry) => entry.id === pod.entrypoint)?.sourcePath;
-      if (!sourcePath) throw Error("Declared Pod entrypoint unavailable");
       const result = await caller.callOperation("scripting.execute", {
         ...payload,
-        workspaceKey: pod.workspace,
-        sourcePath,
+        workspaceKey: admitted.folder,
+        sourcePath: reference.path,
+        sourceBundle: admitted.sourceBundle,
       });
       return {
         ok: result.ok,
@@ -543,21 +724,27 @@ async function dispatch(
     }
     case "route-doc":
     case "route-command": {
+      if (row.key === "route:threads.history") {
+        const response = await createPeClient(base(), fetch).response("threads.history", {
+          query: { query: JSON.stringify(payload) },
+        });
+        return {
+          ok: response.ok,
+          target: { session: null, document: null },
+          result: await response.json(),
+        };
+      }
       if (row.key === "route:families.view" || row.key === "route:families.set-query") {
-        if (!viewThread) throw Error("This MCP server has no thread (PE_THREAD is unset).");
+        if (!viewThread) throw Error("This MCP server has no thread (no harness context).");
         const query = new URLSearchParams({ thread: viewThread });
         if (row.key === "route:families.view" && typeof payload.instance === "string")
           query.set("instance", payload.instance);
-        const response = await fetch(
-          `${base()}/pe/route-view/families${row.key.endsWith(".view") ? `?${query.toString()}` : "/set-query"}`,
-          row.key.endsWith(".view")
-            ? undefined
-            : {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ ...payload, thread: viewThread }),
-              },
-        );
+        const client = createPeClient(base(), fetch);
+        const response = row.key.endsWith(".view")
+          ? await client.response("view.get", { query: Object.fromEntries(query) })
+          : await client.response("view.query", {
+              body: peRoutes["view.query"].body.parse({ ...payload, thread: viewThread }),
+            });
         const result = (await response.json()) as Record<string, unknown>;
         if (
           row.key === "route:families.view" &&
@@ -610,13 +797,10 @@ async function dispatch(
         );
       if (
         input.workspaceId &&
-        ![settingsRouteState.route, scheduleGridRouteState.route, "instances"].includes(
-          parsed.route,
-        )
+        ![settingsRouteState.route, scheduleGridRouteState.route].includes(parsed.route)
       )
-        throw new Error("workspaceId targets Pods, Schedules, or Instances Work only.");
-      const workspaceId =
-        parsed.route === "instances" ? (input.workspaceId ?? "instances") : input.workspaceId;
+        throw new Error("workspaceId targets Pods or Schedules Work only.");
+      const workspaceId = input.workspaceId;
       if (parsed.member === undefined) {
         const scope = workspaceId
           ? {
@@ -624,9 +808,7 @@ async function dispatch(
               target: { session: null, document: null },
             }
           : await routeWorkScope(defaultTarget);
-        const result = await routeFetch(
-          `/pe/route-state/${encodeURIComponent(parsed.route)}?${scope.query}`,
-        );
+        const result = await routeFetch(parsed.route, scope.query);
         if (parsed.route === familiesRouteState.route && !("isError" in result))
           result.hint =
             "This is authored Work. Read route:families.view for the currently visible matrix or archived reading; no matrix read is started.";
@@ -696,10 +878,29 @@ async function dispatch(
           command: parsed.member,
           input: payload,
         },
-        parsed.route === "instances" ? (input.workspaceId ?? "instances") : input.workspaceId,
+        workspaceId,
       );
     }
   }
+}
+
+async function contributionRead(row: Capability) {
+  if (!row.package) throw Error("Contribution has no admitted source");
+  const query = new URLSearchParams({ key: row.key, sha256: row.package.sha256 });
+  const response = await createPeClient(base(), fetch).response("contributions.read", {
+    query: Object.fromEntries(query),
+  });
+  const answer = (await response.json()) as {
+    content: string;
+    bytesBase64: string;
+    sha256: string;
+    folder?: string;
+    sourceBundle?: { files: { path: string; bytesBase64: string }[] };
+    error?: string;
+  };
+  if (!response.ok || answer.sha256 !== row.package.sha256)
+    throw Error(answer.error ?? "Admitted contribution revision unavailable");
+  return answer;
 }
 
 /** SDK selection and product document references travel on different fields. */
@@ -782,13 +983,12 @@ async function routeWrite(
       }
     : await routeWorkScope(defaultTarget);
   const { query } = scope;
-  const encoded = encodeURIComponent(route);
   const revision =
     expectedRevision ??
-    (await routeFetch(`/pe/route-state/${encoded}?${query}`).then((view) =>
+    (await routeFetch(route, query).then((view) =>
       typeof view.revision === "number" ? view.revision : 0,
     ));
-  const result = await routeFetch(`/pe/agent/route-state/${encoded}/${suffix}?${query}`, {
+  const result = await routeFetch(route, query, suffix, {
     ...body,
     expectedRevision: revision,
   });
@@ -811,18 +1011,33 @@ function parseTarget(value: unknown): ResolvedTarget | null {
   };
 }
 
-async function routeFetch(path: string, body?: unknown): Promise<Record<string, unknown>> {
-  const response = await fetch(
-    `${base()}${path}`,
-    body === undefined
-      ? undefined
-      : {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        },
-  );
-  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+async function routeFetch(
+  route: string,
+  queryString: string,
+  verb?: "apply" | "command",
+  body?: unknown,
+): Promise<Record<string, unknown>> {
+  const client = createPeClient(base(), fetch);
+  const params = { route };
+  const query = Object.fromEntries(new URLSearchParams(queryString));
+  const response =
+    verb === "apply"
+      ? await client.response("work.apply", {
+          params,
+          query,
+          body: peRoutes["work.apply"].body.parse(body),
+        })
+      : verb === "command"
+        ? await client.response("work.command", {
+            params,
+            query,
+            body: peRoutes["work.command"].body.parse(body),
+          })
+        : await client.response("work.get", { params, query });
+  const wire = (await response.json()) as Record<string, unknown>;
+  const payload = response.ok
+    ? wire
+    : ((wire.error as { details?: Record<string, unknown> })?.details ?? wire);
   if (!response.ok || payload.ok === false) {
     const hint = payload.hint ?? payload.agentHint ?? payload.error;
     return {
@@ -846,7 +1061,9 @@ export async function readCatalog(
     const query = new URLSearchParams(targetQuery(target));
     if (scope.bridgeSessionId) query.set("session", scope.bridgeSessionId);
     if (scope.session) query.set("sdk", JSON.stringify(scope.session));
-    const response = await fetch(`${url}/pe/capabilities?${query.toString()}`);
+    const response = await createPeClient(url, fetch).response("capabilities.find", {
+      query: Object.fromEntries(query),
+    });
     const parsed = capabilityCatalogSchema.safeParse(await response.json());
     if (!response.ok || !parsed.success)
       return { isError: true, content: `GET ${url}/pe/capabilities failed (${response.status}).` };
@@ -865,7 +1082,7 @@ function refuse(key: string, defaultTarget: Target, revision: number, content: s
 }
 
 function requestIdentity(context: unknown): string {
-  const record = context as {
+  const record = (context ?? {}) as {
     agent?: { toolCallId?: string };
     mcp?: { extra?: { requestId?: string | number } };
   };
@@ -879,22 +1096,34 @@ function requestIdentity(context: unknown): string {
 export const targetSet = createTool({
   id: "target_set",
   description:
-    "Propose the default Target for later calls. Name an exact open document (kind open, with its session and openId) or a saved document Address plus the session holding it (kind named). null removes the document default. Every call resolves this default against the live inventory, so closing or reopening a document never silently redirects a call. Host work needs no document; session operations take an explicit session target. Use an op target override for a document detour within this turn. The new revision applies to the next call.",
+    "Select Pea's own document as this thread's default Target for later calls. Name an exact open lifetime Pea acquired (pe_find access kind pea names its acquisition), or a saved Address in a Revit Pea's acquisition started. Only the human puts the head on a user document: they select the open document in the composer; that selection is the rw grant and renews with each message. null removes the default. Calls resolve against the live inventory; a close or reopen never silently redirects. Without a bound thread, use exact per-call op targets. The new revision applies to the next call.",
   inputSchema: z.object({ defaultTarget: documentRequestSchema.nullable() }),
   execute: async (input) => {
     const turn = await scopeOf();
-    if (!turn) return { isError: true, content: "target_set needs a thread; none is bound." };
+    if (!turn)
+      return {
+        isError: true,
+        content:
+          "grant.required: target_set needs a bound thread to change its head. External MCP clients cannot hold rw in this release; use an exact per-call target for reads or Pea's own documents.",
+      };
     const body = putTargetSchema.parse({
       defaultTarget: input.defaultTarget,
       expectedRevision: turn.revision,
     });
-    const response = await fetch(`${base()}/pe/scope/${encodeURIComponent(turn.thread)}`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
+    const response = await createPeClient(base(), fetch).response("scope.set", {
+      params: { id: "self" },
+      body,
     });
-    const result = putTargetResultSchema.safeParse(await response.json().catch(() => null)).data;
-    if (!result) return { isError: true, content: `target set failed (${response.status})` };
+    const wire = await response.json().catch(() => null);
+    const answer: unknown = response.ok ? wire : wire?.error?.details;
+    const result = putTargetResultSchema.safeParse(answer).data;
+    // A host refusal (`grant.required`, `context.foreign-thread`) is returned in its own words.
+    if (!result)
+      return {
+        isError: true,
+        content:
+          (answer as { error?: string } | null)?.error ?? `target set failed (${response.status})`,
+      };
     if (!result.ok)
       return {
         isError: true,
@@ -904,6 +1133,34 @@ export const targetSet = createTool({
       head: result.head,
       note: `The new Target (revision ${result.head.revision}) applies to the next call.`,
     };
+  },
+});
+
+/**
+ * A direct tool, not a catalog row: it mutates nothing in Revit, so it crosses no document grant
+ * and no principal filter. The host stamps commit, install, thread and turn (owner ruling
+ * 2026-10-14: agent feedback leaves the machine automatically while users are coworkers).
+ */
+export const peFeedback = createTool({
+  id: "pe_feedback",
+  description:
+    "Report a defect or gap in Pea's own tooling to the Pe.Tools maintainers: a tool that returned something false, a failure whose error did not explain itself, a description or doc that misled you, a capability you needed and could not find, a slow or flaky path, or a workaround you had to invent. File it the moment you notice, then keep working; it never blocks the turn and never reaches the user as a question. Name the surface exactly (tool name, op key, route, skill, or repo path:line from the shipped source tree), say what you expected and what happened, and attach any receipt or request ids you hold. The host stamps commit, install, thread and turn; never fill those. Not for the user's model, drawing or design problems, and not for asking the user anything: the reply owns those. Not a substitute for reading a failure before retrying. Returns a feedbackId. One report per distinct defect per thread.",
+  inputSchema: peRoutes["agent-feedback.submit"].body,
+  execute: async (input) => {
+    try {
+      const response = await createPeClient(base(), fetch).response("agent-feedback.submit", {
+        body: input,
+      });
+      const answer = (await response.json()) as { feedbackId?: unknown };
+      if (response.ok && typeof answer.feedbackId === "string")
+        return { feedbackId: answer.feedbackId };
+      return {
+        isError: true,
+        content: `Feedback was not kept (${response.status}); keep working.`,
+      };
+    } catch (error) {
+      return { isError: true, content: `Feedback was not kept (${message(error)}); keep working.` };
+    }
   },
 });
 

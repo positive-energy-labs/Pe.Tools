@@ -20,9 +20,10 @@
       "sizes": "512x512"
     }
   ],
-  "start_url": "/open",
+  "start_url": "/",
   "display": "standalone",
-  "launch_handler": { "client_mode": "focus-existing" },
+  "display_override": ["window-controls-overlay", "standalone"],
+  "launch_handler": { "client_mode": "navigate-new" },
   "shortcuts": [{ "name": "Open", "url": "/open" }],
   "theme_color": "#42815e",
   "background_color": "#fdfaf2"

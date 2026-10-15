@@ -21,10 +21,6 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts"
     },
-    "./context": {
-      "browser": "./src/shared/invocation-context.browser.ts",
-      "default": "./src/shared/invocation-context.ts"
-    },
     "./server": "./src/server.ts"
   },
   "publishConfig": {
@@ -41,6 +37,7 @@
     "@modelcontextprotocol/sdk": "catalog:",
     "@pe/agent-contracts": "workspace:*",
     "@pe/host-contracts": "workspace:*",
+    "@pe/runtime": "workspace:*",
     "effect": "4.0.0-beta.92",
     "gunshi": "^0.29.5",
     "parse5": "^8.0.1",
@@ -52,11 +49,5 @@
     "bumpp": "^11.1.0",
     "typescript": "^6.0.3",
     "vite-plus": "catalog:"
-  },
-  "imports": {
-    "#invocation-context": {
-      "browser": "./src/shared/invocation-context.browser.ts",
-      "default": "./src/shared/invocation-context.ts"
-    }
   }
 }

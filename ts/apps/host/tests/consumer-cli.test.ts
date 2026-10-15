@@ -11,9 +11,39 @@ import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { opsCatalogRoute } from "../src/ops-catalog.ts";
+import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { fakeRuntimeHost } from "../../../packages/mcps/tests/runtime-host-fixture.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
+import { callerOf, writeTerminalContext } from "../src/control.ts";
+import { withInvocationContext } from "@pe/runtime/context";
+import { resolveLaneAndRoot } from "@pe/mcps";
+
+test("untargeted /ops without bridge attachments returns local operations without SDK discovery", async () => {
+  const sdk = vi.fn(async () => {
+    throw new Error("SDK discovery should not run without a bridge attachment");
+  });
+  const invoke = vi.fn(() => Effect.die("native catalog should not run"));
+  const bridge = { list: Effect.succeed([]), invoke } as unknown as RevitBridge["Service"];
+  const web = HttpRouter.toWebHandler(
+    opsCatalogRoute(() => Effect.die("not navigation"), sdk).pipe(
+      Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
+    ),
+    { disableLogger: true },
+  );
+  try {
+    const response = await web.handler(new Request("http://host/ops"), Context.empty() as never);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      operations: tsOnlyOperationCatalog,
+      bridgeCatalogError: "No Revit session is connected to the bridge.",
+    });
+    expect(sdk).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalled();
+  } finally {
+    await web.dispose();
+  }
+});
 
 // Only native execution and SDK inventory are substituted. Gunshi, HTTP, admission,
 // durable steps, catalogue, local file/stdin decoding and original-ID replay are real.
@@ -31,7 +61,7 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
     id?: string;
   }[] = [];
   const partial = {
-    status: "partial",
+    status: "Succeeded",
     executionId: "native-original",
     revitVersion: "mock",
     output: "one item failed",
@@ -100,13 +130,18 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
       for await (const chunk of req) chunks.push(Buffer.from(chunk));
       const url = `http://127.0.0.1${req.url}`;
       paths.push(new URL(url).pathname);
-      const response = await web.handler(
-        new Request(url, {
-          method: req.method,
-          headers: req.headers as Record<string, string>,
-          ...(chunks.length ? { body: Buffer.concat(chunks) } : {}),
-        }),
-        Context.empty() as never,
+      // The identity middleware's caller step: the CLI's `x-pe-context` names the terminal human.
+      const minted = callerOf({ kind: "local" }, req.headers as Record<string, string>);
+      if ("refusal" in minted) throw Error(minted.refusal.code);
+      const response = await withInvocationContext({ caller: minted.caller }, () =>
+        web.handler(
+          new Request(url, {
+            method: req.method,
+            headers: req.headers as Record<string, string>,
+            ...(chunks.length ? { body: Buffer.concat(chunks) } : {}),
+          }),
+          Context.empty() as never,
+        ),
       );
       if (lose && req.method === "POST" && req.url === "/actions") {
         lose = false;
@@ -123,6 +158,8 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   fakeRuntimeHost(base);
+  // The host writes the owner's terminal token at start; the CLI adopts it (BUILD-RULES ruling 1).
+  const terminal = writeTerminalContext(resolveLaneAndRoot().serviceName);
   const printed: string[] = [];
   const log = vi.spyOn(console, "log").mockImplementation((...args) => {
     printed.push(args.join(" "));
@@ -133,8 +170,6 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
   const flags = (id: string, session: string) => [
     "--host",
     base,
-    "--actor",
-    "human",
     "--action-id",
     id,
     "--bridge-session-id",
@@ -155,7 +190,6 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
     await writeFile(request, JSON.stringify({ scriptContent: source, workspaceKey: "default" }));
     await runPeaMain([
       "host",
-      "operations",
       "call",
       "--key",
       "scripting.execute",
@@ -174,7 +208,12 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
       ),
     ).toBe(true);
     const original = (await owner.list(undefined, "cli-raw-A"))[0];
-    expect(original).toMatchObject({ actor: "human", kind: "operation", result: partial });
+    expect(original).toMatchObject({
+      caller: { kind: "human", via: "cli" },
+      basis: { kind: "human" },
+      kind: "operation",
+      result: partial,
+    });
     expect(printed.join("\n")).toContain('"failed"');
     await web.dispose();
     owner = new ActionJournal(journal);
@@ -183,7 +222,6 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
     // No target selectors and no catalogue/session: this is receipt replay by the original ID.
     await runPeaMain([
       "host",
-      "operations",
       "call",
       "--key",
       "scripting.execute",
@@ -191,8 +229,6 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
       request,
       "--host",
       base,
-      "--actor",
-      "human",
       "--action-id",
       "cli-raw-A",
     ]);
@@ -200,6 +236,8 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
     expect(effects).toHaveLength(3);
     expect(paths.every((path) => path === "/ops" || path === "/actions")).toBe(true);
   } finally {
+    terminal.retire();
+    delete process.env.PE_CONTEXT;
     Object.defineProperty(process, "stdin", stdinOriginal);
     log.mockRestore();
     server.closeAllConnections();

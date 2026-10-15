@@ -1133,9 +1133,7 @@
   background-size:
     100% var(--rv-hair),
     var(--rv-hair) 100%;
-  background-position:
-    bottom,
-    right;
+  background-position: bottom, right;
   background-repeat: no-repeat;
 }
 .rv-grid-fill[data-last] {

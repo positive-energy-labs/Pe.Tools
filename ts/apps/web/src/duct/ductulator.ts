@@ -70,8 +70,8 @@ export function geometry(f: Face) {
   const pitch = {
     friction: f.K,
     cfmFriction: EXP.cfm * f.K,
-    velocity: EXP.diameter * f.K / EXP.velocityDiameter,
-    cfmVelocity: EXP.diameter * f.K / EXP.velocityDiameter,
+    velocity: (EXP.diameter * f.K) / EXP.velocityDiameter,
+    cfmVelocity: (EXP.diameter * f.K) / EXP.velocityDiameter,
     diameter: EXP.diameter * f.K,
   };
   return {
@@ -137,7 +137,7 @@ export function ticks([min, max]: Range, labelled = [1, 2, 3, 4, 5, 6, 8]) {
   return out;
 }
 
-export const short = (v: number) =>
+const short = (v: number) =>
   v >= 1000 ? `${v / 1000}k` : v < 1 ? v.toFixed(2).replace(/0$/, "") : String(v);
 
 export const clamp = (v: number, [lo, hi]: Range) => Math.min(hi, Math.max(lo, v));

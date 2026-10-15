@@ -1,11 +1,12 @@
-import { RefreshCw, Save } from "lucide-react";
+import { Fragment } from "react";
+import { RefreshCw, Save, Upload } from "lucide-react";
 
-import { Press, pressRecipe } from "#/components/lang/press";
-import { ActionButton, ActionGroup, actionRecipe } from "#/components/lang/action-button";
+import { ActionGroup, Button } from "@pe/kit/lang/button";
+import { HotkeyCommand, HotkeyHint } from "#/components/lang/hotkey-command";
 import { Section } from "#/components/lang/section";
-import { SituationAction } from "#/route/situation-verbs";
 
-import { RecipeGrid } from "./recipe-grid";
+import { SpecimenFrame } from "./recipe-grid";
+import { SituationAction } from "#/route/situation-verbs";
 
 const noop = () => {};
 
@@ -27,55 +28,83 @@ const readVerb = {
   run: noop,
 } as never;
 
+const KINDS = ["quiet", "framed", "commit"] as const;
+
 export function LangPressSpecimens() {
   return (
     <>
-      <RecipeGrid
-        name="Press"
-        importPath="#/components/lang/press"
-        recipe={pressRecipe}
-        render={(props) => (
-          <Press
-            tone={props.tone as React.ComponentProps<typeof Press>["tone"]}
-            size={props.size as React.ComponentProps<typeof Press>["size"]}
-            state={props.state as React.ComponentProps<typeof Press>["state"]}
-            aria-pressed={props.state === "selectable"}
-          >
-            {String(props.size).startsWith("icon") ? <RefreshCw className="size-3" /> : "raw json"}
-          </Press>
-        )}
-      />
-      <RecipeGrid
-        name="ActionButton · ActionGroup"
-        importPath="#/components/lang/action-button"
-        recipe={actionRecipe}
-        render={(props) => {
-          const tone = props.tone as "act" | "commit" | "nav" | "agent";
-          const verb =
-            tone === "nav" ? (
-              <ActionButton
-                tone="nav"
-                direction="forward"
-                label="open"
-                reason="Opens the selected item"
+      <SpecimenFrame
+        name="HotkeyCommand · modifier symbols / written chord / name + chord"
+        importPath="#/components/lang/hotkey-command"
+      >
+        <div className="flex flex-wrap gap-4">
+          <HotkeyHint hotkey="Mod+Shift+K" face="compact" />
+          {(["compact", "medium", "full"] as const).map((face) => (
+            <HotkeyCommand
+              key={face}
+              face={face}
+              label={`Save fixture (${face})`}
+              word="Save"
+              hotkey="Mod+Shift+S"
+              invoke={noop}
+              bind={false}
+            />
+          ))}
+        </div>
+      </SpecimenFrame>
+      <SpecimenFrame
+        name="Button · kind × state (rest, pressed, refused, busy, icon-only)"
+        importPath="@pe/kit/lang/button"
+      >
+        <div className="grid grid-cols-[auto_repeat(5,auto)] items-center justify-start gap-x-4 gap-y-2">
+          {KINDS.map((kind) => (
+            <Fragment key={kind}>
+              <span className="t-small face-mono text-ink-2">{kind}</span>
+              <Button
+                kind={kind}
+                label="save profile"
+                icon={Save}
+                reason="Writes the profile"
                 onClick={noop}
-              />
-            ) : (
-              <ActionButton
-                tone={tone}
-                label={tone === "commit" ? "save profile" : tone}
-                icon={tone === "commit" ? Save : RefreshCw}
-                reason={`Runs the ${tone} action`}
+              >
+                save profile
+              </Button>
+              <Button kind={kind} label="raw json" pressed onClick={noop}>
+                raw json
+              </Button>
+              <Button
+                kind={kind}
+                label="sync to .r10"
+                refusal="no .r10 target is bound"
                 onClick={noop}
-              />
-            );
-          return (
-            <ActionGroup title="writes beyond the page" radius="document · model · external">
-              {verb}
-            </ActionGroup>
-          );
-        }}
-      />
+              >
+                sync to .r10
+              </Button>
+              <Button kind={kind} label="apply" busy onClick={noop}>
+                apply
+              </Button>
+              <Button kind={kind} label="Refresh the read" icon={RefreshCw} onClick={noop} />
+            </Fragment>
+          ))}
+          <span className="t-small face-mono text-ink-2">nav</span>
+          <Button kind="nav" direction="back" label="all types" onClick={noop}>
+            all types
+          </Button>
+          <Button kind="nav" direction="forward" label="open" onClick={noop}>
+            open
+          </Button>
+          <Button kind="nav" direction="out" label="open in RHVAC" onClick={noop}>
+            open in RHVAC
+          </Button>
+        </div>
+      </SpecimenFrame>
+      <Section label="ActionGroup · blast radius is a label">
+        <ActionGroup title="writes beyond the page" radius="document · model · external">
+          <Button kind="commit" label="apply to Revit" icon={Upload} onClick={noop}>
+            apply to Revit
+          </Button>
+        </ActionGroup>
+      </Section>
       <Section label="SituationAction · fresh · stale (caution edge and wash)">
         <span className="inline-flex gap-2">
           <SituationAction handle={handleOf(false)} name="read" action={readVerb} chord="R" />

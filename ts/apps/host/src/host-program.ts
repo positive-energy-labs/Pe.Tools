@@ -1,7 +1,8 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { dirname, join } from "node:path";
+import { promisify } from "node:util";
 import { Deferred, Effect, Layer, type Scope } from "effect";
-import { capture } from "@pe/runtime";
+import { hostReceiptExport, bindNativeProducers, recordUpdateFact } from "./receipt-export.ts";
 import { serviceFilePath, type ServiceFile } from "@pe/host-contracts/pe-service";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { productRoot } from "@pe/host-contracts/service-identity";
@@ -20,19 +21,39 @@ export const hostProgram = (
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
-      yield* Effect.sync(() =>
-        capture("app_boot", { component: "host", version: resolveHostVersion() }),
+      const telemetry = hostReceiptExport();
+      const unbindNative = bindNativeProducers(telemetry);
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(async () => {
+          unbindNative();
+          await telemetry.close();
+        }),
+      );
+      yield* Effect.promise(() =>
+        telemetry.record({ kind: "usage", event: "app_boot", counters: {} }),
       );
       const open = process.argv.includes("--open");
-      const reuse = (incumbent: ServiceFile) => {
+      const showTray = process.argv.includes("--show-tray");
+      if (showTray && hostOwnership.lane !== "installed")
+        throw Error("Use tools/dev-tray.ps1 to show the checkout tray.");
+      const reuse = async (incumbent: ServiceFile) => {
         console.log(
           `pe-host service '${hostOwnership.serviceName}' already serving on ${incumbent.port} (pid ${incumbent.pid})`,
         );
-        if (open) openWindow(incumbent.port);
+        if (open) await openWindow(incumbent.port);
+        if (showTray)
+          await promisify(execFile)(
+            installedTrayExecutable(),
+            installedTrayArguments(incumbent, true),
+            {
+              windowsHide: true,
+              timeout: 10_000,
+            },
+          );
       };
       const binding = yield* Effect.promise(() => prepareHostBinding(open, resolveHostVersion()));
       if (typeof binding !== "number") {
-        reuse(binding);
+        yield* Effect.promise(() => reuse(binding));
         return;
       }
       const port = binding;
@@ -40,7 +61,11 @@ export const hostProgram = (
       const latch = yield* Deferred.make<void>();
       const handle = yield* Deferred.make<ServiceHostHandle>();
       const webUrl = web ? yield* Deferred.make<string>() : undefined;
-      const updateReader = makeInstalledUpdateReader();
+      const updateReader = makeInstalledUpdateReader(
+        (fact) => recordUpdateFact(telemetry, fact),
+        // Let the POST/receipt frame flush before the launch scope tears the server down.
+        () => void setTimeout(() => Effect.runSync(Deferred.succeed(latch, undefined)), 1000),
+      );
       const HttpLive = makeHttpLive({
         port,
         webUrl,
@@ -48,7 +73,10 @@ export const hostProgram = (
         lifecycle: {
           latch,
           handle,
-          startTray: hostOwnership.lane === "installed" ? startInstalledTray : undefined,
+          startTray:
+            hostOwnership.lane === "installed"
+              ? (handle) => startInstalledTray(handle, showTray)
+              : undefined,
         },
         updateReader,
         webRoot: resolveWebRoot(),
@@ -65,7 +93,7 @@ export const hostProgram = (
         // Open only once the claim holds, on the port the service file names.
         yield* Effect.forkScoped(
           Deferred.await(handle).pipe(
-            Effect.tap((claimed) => Effect.sync(() => openWindow(claimed.serviceFile.port))),
+            Effect.tap((claimed) => Effect.promise(() => openWindow(claimed.serviceFile.port))),
           ),
         );
       const frontend =
@@ -90,7 +118,7 @@ export const hostProgram = (
                 Effect.flatMap((incumbent) =>
                   typeof incumbent === "number"
                     ? Effect.fail(error)
-                    : Effect.sync(() => reuse(incumbent)),
+                    : Effect.promise(() => reuse(incumbent)),
                 ),
               );
             }),
@@ -102,8 +130,26 @@ export const hostProgram = (
     }),
   );
 
+const installedTrayExecutable = () =>
+  join(dirname(hostOwnership.executablePath), "tray", "Pe.Host.Tray.exe");
+
+function installedTrayArguments(file: ServiceFile, show: boolean): string[] {
+  return [
+    "--parent-pid",
+    String(file.pid),
+    "--parent-start",
+    file.processStartUtc,
+    "--service-file",
+    serviceFilePath(productRoot(), hostOwnership.serviceName),
+    ...(show ? ["--show"] : []),
+  ];
+}
+
 /** Claim-owned child: EOF asks the shim to dispose, and the finalizer awaits its actual exit. */
-export async function startInstalledTray(handle: ServiceHostHandle): Promise<() => Promise<void>> {
+export async function startInstalledTray(
+  handle: ServiceHostHandle,
+  show = false,
+): Promise<() => Promise<void>> {
   let stopping = false;
   let retries = 0;
   let recovery: ReturnType<typeof setTimeout> | undefined;
@@ -128,15 +174,8 @@ export async function startInstalledTray(handle: ServiceHostHandle): Promise<() 
   };
   const launch = async () => {
     const child = spawn(
-      join(dirname(hostOwnership.executablePath), "tray", "Pe.Host.Tray.exe"),
-      [
-        "--parent-pid",
-        String(handle.serviceFile.pid),
-        "--parent-start",
-        handle.serviceFile.processStartUtc,
-        "--service-file",
-        serviceFilePath(productRoot(), hostOwnership.serviceName),
-      ],
+      installedTrayExecutable(),
+      installedTrayArguments(handle.serviceFile, show),
       { windowsHide: true, stdio: ["pipe", "ignore", "ignore"] },
     );
     child.stdin?.on("error", (error) => console.warn(`pe-host tray pipe: ${String(error)}`));

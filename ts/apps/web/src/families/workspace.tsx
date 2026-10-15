@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { familyCellValueSchema, type FamilyCellState } from "@pe/agent-contracts";
 
-import { runFanOut, type CellWire } from "#/components/lang/band";
+import { runFanOut, type CellWire } from "#/components/work/band";
 import type { FamiliesStore } from "#/families/store";
 import { useMeasuredParse } from "#/host/measured-parse";
 import {
