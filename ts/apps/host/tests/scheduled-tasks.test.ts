@@ -12,6 +12,7 @@ import {
   nextRun,
   revitTouching,
   scheduleSchema,
+  type ScheduledLaunch,
 } from "../src/scheduled-tasks.ts";
 import { threadHistory } from "../src/thread-history.ts";
 import { asCaller, human, pea } from "./callers.ts";
@@ -28,7 +29,10 @@ function fixture() {
   const path = join(dir, "tasks.json");
   let clock = new Date(at);
   const read = vi.fn(async () => [] as Receipt[]);
-  const launch = vi.fn(() => ({ threadId: randomUUID(), completion: Promise.resolve() }));
+  const launch = vi.fn((_input: ScheduledLaunch) => ({
+    threadId: randomUUID(),
+    completion: Promise.resolve(),
+  }));
   const options = { path, receipts: { read, subscribe: () => () => {} }, launch, now: () => clock };
   return {
     path,
@@ -297,6 +301,28 @@ test("human run-now honors the gate unless explicitly forced and preserves async
   await vi.waitFor(() => expect(service.list()[0]?.lastStatus).toBe("failed"));
   expect(service.list()[0]?.lastError).toContain("fake turn failed");
   expect(f.launch).toHaveBeenCalledOnce();
+  await service.close();
+});
+
+test("only a succeeded run advances the mining watermark; a failed start keeps its window", async () => {
+  const f = fixture();
+  const service = createScheduledTasks(f.options);
+  const epoch = new Date(0).toISOString();
+  const since = () => /since=(\S+),/.exec(f.launch.mock.calls.at(-1)![0].prompt)?.[1];
+  f.launch.mockImplementationOnce(() => ({
+    threadId: randomUUID(),
+    completion: Promise.reject(Error("provider failed to start")),
+  }));
+  await service.run("feedback-miner", true);
+  expect(service.list()[0]).toMatchObject({ lastStatus: "failed", lastStartedAt: null });
+  f.advance(60_000);
+  await service.run("feedback-miner", true);
+  expect(since()).toBe(epoch);
+  const mark = new Date(+at + 60_000).toISOString();
+  expect(service.list()[0]).toMatchObject({ lastStatus: "succeeded", lastStartedAt: mark });
+  f.advance(60_000);
+  await service.run("feedback-miner", true);
+  expect(since()).toBe(mark);
   await service.close();
 });
 

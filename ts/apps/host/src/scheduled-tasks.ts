@@ -49,7 +49,7 @@ const taskSchema = z.strictObject({
   createdAt: z.iso.datetime(),
   nextRunAt: z.iso.datetime(),
   lastRunAt: z.iso.datetime().nullable(),
-  // Skips do not consume the mining window; low-volume machines can accumulate enough evidence.
+  // The mining watermark: the start of the last succeeded run. Skips and failures leave it.
   lastStartedAt: z.iso.datetime().nullable(),
   lastStatus: z.enum(["never", "running", "succeeded", "failed", "skipped"]),
   lastError: z.string().nullable(),
@@ -177,10 +177,11 @@ export function createScheduledTasks(options: {
         prompt: `${row.prompt}\n\nMining window: since=${since}, before=${at.toISOString()}.`,
       });
       row.threadId = launched.threadId;
-      row.lastStartedAt = at.toISOString();
       save();
       await launched.completion;
       row.lastStatus = "succeeded";
+      // The window moves only past a run that finished: a failed one leaves its evidence for the next.
+      row.lastStartedAt = at.toISOString();
     } catch (error) {
       row.lastStatus = "failed";
       row.lastError = String(error);
