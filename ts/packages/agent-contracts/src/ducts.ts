@@ -56,8 +56,66 @@ export type DuctDrop = z.infer<typeof dropSchema>;
 const unitStaticSchema = z.strictObject({ inWg: z.number().nonnegative() });
 const elementKey = z.string().regex(/^\d+$/, { error: "a drop cell key is an element id" });
 
+/** Exact retained connector witness. A matching index alone does not establish the same port. */
+const elementIdentity = z.strictObject({
+  id: z.number().int().positive(),
+  uniqueId: z.string().min(1),
+});
+export const ductPortPinSchema = z.strictObject({
+  index: z.number().int().nonnegative(),
+  point: z.tuple([z.number(), z.number(), z.number()]),
+  shape: z.enum(["round", "rectangular", "oval", "other"]),
+  diameterIn: z.number().positive().nullable(),
+  widthIn: z.number().positive().nullable(),
+  heightIn: z.number().positive().nullable(),
+  direction: z.string().min(1),
+  connectedTo: elementIdentity.extend({ connector: z.number().int().nonnegative() }),
+});
+const designPoint = z.strictObject({
+  inWg: z.number().nonnegative(),
+  flowCfm: z.number().nonnegative(),
+  source: z.string().trim().min(1),
+});
+/** Calculation-only evidence; generic Work owns proposal/staging and persists it once. */
+export const ductCalculationSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("passive"),
+    element: elementIdentity,
+    ports: z.tuple([ductPortPinSchema, ductPortPinSchema]),
+    loss: designPoint,
+    source: z.string().trim().min(1),
+  }),
+  z
+    .strictObject({
+      kind: z.literal("fan"),
+      element: elementIdentity,
+      inlet: ductPortPinSchema.nullable(),
+      outlet: ductPortPinSchema.nullable(),
+      referencePressureInWg: z.number(),
+      designFlowCfm: z.number().nonnegative().nullable(),
+      source: z.string().trim().min(1),
+    })
+    .refine((v) => v.inlet !== null || v.outlet !== null, "A fan needs a physical external port"),
+  z.strictObject({
+    kind: z.literal("terminal"),
+    element: elementIdentity,
+    port: ductPortPinSchema,
+    role: z.enum(["demand", "reference"]),
+    flowCfm: z.number().nonnegative().nullable(),
+    pressureInWg: z.number(),
+    loss: designPoint.nullable(),
+    source: z.string().trim().min(1),
+  }),
+  z.strictObject({ kind: z.literal("balanced-design"), source: z.string().trim().min(1) }),
+]);
+export type DuctCalculation = z.infer<typeof ductCalculationSchema>;
+export type DuctPortPin = z.infer<typeof ductPortPinSchema>;
+
 export const ductsDocumentSchema = z
   .strictObject({
+    calculation: z
+      .record(z.string().min(1), trichotomyCellSchema(ductCalculationSchema))
+      .default({}),
     assumptions: z.record(z.string(), trichotomyCellSchema(ductAssumptionSchema)).default({}),
     rules: z
       .record(z.string(), trichotomyCellSchema(z.strictObject({ table: z.string().min(1) })))
@@ -93,6 +151,7 @@ const stagedOf = <V>(cells: Record<string, { staged?: { value?: V } | null } | u
 /** The person's staged values only, per segment; proposals never reach Revit. */
 export function stagedDucts(doc: DuctsRouteDocument | null) {
   return {
+    calculation: stagedOf(doc?.calculation ?? {}),
     rules: stagedOf(doc?.rules ?? {}),
     terminalDrops: stagedOf(doc?.terminalDrops ?? {}),
     componentDrops: stagedOf(doc?.componentDrops ?? {}),
@@ -188,9 +247,10 @@ export const ductsRouteState = {
   route: "ducts",
   title: "Ducts",
   description:
-    "Duct pressure-drop Work, one trichotomy cell per key. assumptions: an issue id from ducts.snapshot holds a verdict (capped, connect, ignore); flex-roughness:<flex type> (ft), fan-static:<equipment id> (in-wg) and component-drop:<family> (in-wg) hold overrides, never written to Revit. rules: a loss-rule key holds { table }, the ASHRAE table every instance of that fitting type is looked up under. terminalDrops and componentDrops: an element id holds { inWg, source }. unitStatics: an air mover's element id holds { inWg }, the external static written to it. parameters: fanStatic, fanFlow, componentDrop, terminalDrop, fittingCoefficient name the Revit parameter of each slot (person only); fittingCoefficient is the family parameter the Pe loss server reads (default Pe_C). Pea may propose rules and drops; a person stages; ducts.apply-losses writes the staged cells to Revit after ducts.preview-losses.",
+    "calculation: staged-only physical fan/passive/terminal port witnesses and balanced-design scenario with sources; element UniqueId and exact reciprocal port pins must match a new snapshot. Historical snapshots without UniqueId cannot certify circuits. Evidence is calculation-only, never native apply. Pea proposes; a person stages. Duct pressure-drop Work, one trichotomy cell per key. assumptions: an issue id from ducts.snapshot holds a verdict (capped, connect, ignore); flex-roughness:<flex type> (ft), fan-static:<equipment id> (in-wg) and component-drop:<family> (in-wg) hold overrides, never written to Revit. rules: a loss-rule key holds { table }, the ASHRAE table every instance of that fitting type is looked up under. terminalDrops and componentDrops: an element id holds { inWg, source }. unitStatics: an air mover's element id holds { inWg }, the external static written to it. parameters: fanStatic, fanFlow, componentDrop, terminalDrop, fittingCoefficient name the Revit parameter of each slot (person only); fittingCoefficient is the family parameter the Pe loss server reads (default Pe_C). Pea may propose rules and drops; a person stages; ducts.apply-losses writes the staged cells to Revit after ducts.preview-losses.",
   schema: ductsDocumentSchema,
   agentWriteMask: [
+    ["calculation", "*", "proposal"],
     ["assumptions", "*", "proposal"],
     ["rules", "*", "proposal"],
     ["terminalDrops", "*", "proposal"],

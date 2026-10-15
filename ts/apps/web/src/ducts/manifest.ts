@@ -152,6 +152,13 @@ export const manifest = defineRoute<
   work: ductsRouteState,
   cells: [
     {
+      segment: "calculation",
+      groupOf: (key) => [key],
+      nouns: ["calculation evidence"],
+      noun: "calculation evidence",
+      show: (value) => (value as { kind: string }).kind,
+    },
+    {
       segment: "assumptions",
       groupOf: (key) => [key.split(":")[0] ?? key],
       nouns: ["assumption"],

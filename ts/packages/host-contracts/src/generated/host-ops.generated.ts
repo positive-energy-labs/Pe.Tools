@@ -481,6 +481,7 @@ export namespace DuctsSnapshot {
       facts: DuctFact[];
       loss?: null | DuctLoss;
       terminalDrop?: null | DuctTerminalDrop;
+      uniqueId?: null | string;
     }
     /**
      * One physical HVAC connector. Kind is "end" or "curve" (a tap on a duct's side). Direction is Revit's
@@ -570,6 +571,7 @@ export namespace DuctsSnapshot {
       roughness: DuctRoughness;
       revit: DuctRevitValues;
       connectors: DuctConnector[];
+      uniqueId?: null | string;
     }
     export interface DuctRoughness {
       valueFt: number;

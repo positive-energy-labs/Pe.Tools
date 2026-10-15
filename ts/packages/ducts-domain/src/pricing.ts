@@ -97,13 +97,16 @@ export function price(
     terminalPs: byId(staged.terminalDrops, (drop) => drop.inWg),
     componentDrop: byId(staged.componentDrops, (drop) => drop.inWg),
   };
-  const same = Object.keys(staged.rules).length === 0 && !hasDrops(staged);
+  const same =
+    Object.keys(staged.rules).length === 0 &&
+    !hasDrops(staged) &&
+    !Object.keys(staged.calculation).length;
   const priced: Priced = {
     applied,
     choices,
     overrides,
     now,
-    next: same ? now : computeLosses(snapshot, grids, choices, overrides),
+    next: same ? now : computeLosses(snapshot, grids, choices, overrides, staged.calculation),
     staged,
   };
   entry.last = { doc, priced };
@@ -183,10 +186,12 @@ export function unitOf(snapshot: DuctSnapshot, result: LossResult, group: Group)
 }
 
 /**
- * Pe's fan static for a unit: parallel groups of one classification share the largest, and the
- * classifications a unit serves add (supply and return are in series). `parts` names each.
+ * Legacy classification arithmetic, not physical fan certification. Explicit staged fan/passive
+ * roles suppress this unit scalar; physical circuit pressure is retained separately.
  */
 export function proposedStatic(snapshot: DuctSnapshot, result: LossResult, unit: number) {
+  const role = result.design.graph.parts.find((part) => part.elementId === unit)?.continuity;
+  if (role === "passive" || role === "fan-boundary") return null;
   const byKind = new Map<string, number>();
   for (const group of snapshot.groups) {
     const solved = result.byGroup[group.id];
@@ -239,6 +244,15 @@ export function applyRequest(
       .sort((a, b) => a.id - b.id);
   const terminals = drops(priced.staged.terminalDrops);
   const components = drops(priced.staged.componentDrops);
+  const calculationOwners = new Set(
+    Object.values(priced.staged.calculation).flatMap((e) =>
+      e.kind === "fan" || e.kind === "passive" ? [e.element.id] : [],
+    ),
+  );
+  if (Object.keys(priced.staged.unitStatics).some((id) => calculationOwners.has(Number(id))))
+    throw Error(
+      "Physical fan circuits have no admitted manufacturer scalar ESP mapping; clear the unit static cell. Circuit evidence is calculation-only.",
+    );
   const equipment = Object.entries(priced.staged.unitStatics)
     .map(([id, { inWg }]) => ({ id: Number(id), externalStaticInWg: inWg }))
     .filter(({ id }) => !group || id === unit)

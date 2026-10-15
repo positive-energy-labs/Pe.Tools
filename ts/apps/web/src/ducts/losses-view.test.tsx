@@ -318,6 +318,7 @@ it("proposes a unit's static as the largest fan per classification, summed over 
     revitCritical: null,
   });
   const result = {
+    design: price(shared, {}, null).now.design,
     byGroup: {
       g10: solved(0.15),
       g20: solved(0.0516),
@@ -335,6 +336,7 @@ it("proposes a unit's static as the largest fan per classification, summed over 
   expect(proposedStatic(shared, result, 3)).toBeNull();
   // A group with no critical path contributes nothing.
   const dead = {
+    design: result.design,
     byGroup: { ...result.byGroup, g20: solved(0.0516, null) },
   } as unknown as typeof result;
   expect(proposedStatic(shared, dead, 1)?.total).toBe(0.15);

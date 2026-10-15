@@ -512,9 +512,9 @@ function GroupHead({
         <span className="t-small t-upper text-ink-2">fan static</span>
         <span className="t-small text-ink-2">Pe</span>
         <b className="face-mono" data-fan={group.id}>
-          {fmt(now?.fan)}
+          {fmt(demand?.calculationRole ? null : now?.fan)}
         </b>
-        {next && now && Math.abs(next.fan - now.fan) > 1e-9 ? (
+        {!demand?.calculationRole && next && now && Math.abs(next.fan - now.fan) > 1e-9 ? (
           <span data-tone="caution" data-fan-next={group.id}>
             <ValueDiff from="" to={fmt(next.fan)} />
           </span>

@@ -11,6 +11,8 @@
  * - fan = the largest path total in a group; the critical terminal is its argmax.
  * Physics in loss-physics.ts, interpolation in loss-grid.ts, rule data in loss-rules.ts.
  */
+import type { DuctCalculation } from "@pe/agent-contracts";
+import { designCircuits, type CircuitResult } from "./circuits.ts";
 import { transitionGeometry } from "./geometry.ts";
 import { GridError, lookupGrid, type Grids } from "./loss-grid.ts";
 import { friction, sectionOf } from "./loss-physics.ts";
@@ -73,6 +75,7 @@ export type Choices = Readonly<Record<string, string>>;
 
 export interface Overrides {
   /** Catalog static pressure per terminal id, in-wg; beats `terminalDrop.catalogDropInWg`, then `assignedPressureDropInWg`. */
+  terminalCfm?: Readonly<Record<number, number>>;
   terminalPs?: Readonly<Record<number, number>>;
   /** A stated drop per fitting or accessory id, in-wg; replaces the rule lookup (not for taps). */
   componentDrop?: Readonly<Record<number, number>>;
@@ -94,6 +97,7 @@ interface RuleLoss {
 }
 
 export interface LossResult {
+  design: CircuitResult;
   paths: Record<number, PathLoss>;
   /** Largest path total over every group, in-wg; 0 with no path. See `byGroup` for per-system fans. */
   fan: number;
@@ -243,15 +247,16 @@ export function computeLosses(
   grids: Grids,
   choices: Choices = {},
   overrides: Overrides = {},
+  evidence: Readonly<Record<string, DuctCalculation>> = {},
 ): LossResult {
-  const result: LossResult = {
+  const result = {
     paths: {},
     fan: 0,
     critical: null,
     byGroup: {},
     byRule: {},
     errors: [],
-  };
+  } as Omit<LossResult, "design">;
   const seen = new Set<string>();
   const priced = new Map<string, Set<number>>();
   const fail = (e: LossError) => {
@@ -304,7 +309,21 @@ export function computeLosses(
       ),
       instances: priced.get(rule.key)?.size ?? 0,
     };
-  return result;
+  const design = designCircuits(snapshot, evidence, overrides, (tree, below, circuitOverrides) =>
+    runsOf(tree).map((run) => {
+      const rows = pathRows(
+        tree,
+        run.path,
+        below,
+        grids,
+        choices,
+        circuitOverrides,
+        (e) => e.message,
+      );
+      return { terminalId: run.terminal, rows, total: rows.reduce((a, r) => a + r.dp, 0) };
+    }),
+  );
+  return { ...result, design };
 }
 
 /** Terminal design flow summed over every element subtree, cfm. */
@@ -432,7 +451,7 @@ function pathRows(
     const drop = node.terminalDrop;
     const ps =
       overrides.terminalPs?.[node.id] ?? drop?.catalogDropInWg ?? drop?.assignedPressureDropInWg;
-    const cfm = terminalCfm(node);
+    const cfm = overrides.terminalCfm?.[node.id] ?? terminalCfm(node);
     let error: string | undefined;
     if (ps == null)
       error = fail({ id: node.id, message: `terminal ${node.id} has no terminal drop` });
@@ -505,6 +524,15 @@ function pathRows(
     if (part.segment) return ductRows(part.segment, prev, next);
     const node = part.node!;
     if (node.kind === "terminal") return terminalRow(node);
+    if (node.kind === "equipment" && overrides.componentDrop?.[id] != null) {
+      rows.push({
+        id,
+        kind: "fitting",
+        dp: overrides.componentDrop[id]!,
+        desc: `passive equipment ${id}, sourced design-point drop`,
+      });
+      return;
+    }
     if (node.kind !== "fitting" && node.kind !== "accessory") return;
     if (isTap(node)) {
       const qb = below.get(node.id) ?? 0;

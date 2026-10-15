@@ -142,7 +142,7 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
       kind: "route-command",
       title: "Analyze duct pressure drop",
       description:
-        "Calculate pressure-drop demand over a complete retained duct graph without a mounted page. Use source fresh with an exact document and selector document for the first full inventory; reuse the returned artifact for equipment, terminal, group or exact space-text projections and pagination, with no further native reads. Totals expose incomplete inputs and native parity limits. Space text does not prove room identity. Read/calculation only; no model or Work mutation.",
+        "Calculate pressure-drop demand over a complete retained duct graph without a mounted page. Use source fresh with an exact document and selector document for the first full inventory; reuse the returned artifact for equipment, terminal, group or exact space-text projections and pagination, with no further native reads. Use projection ports for exact UID/connector evidence pins to propose in canonical Work; use projection circuits or circuit-path for staged physical fan/passive/terminal evidence and balanced-design demand; role evidence is proposed through generic ducts Work, staged only by a person. Mesh or fan allocation stays partial. Legacy path totals remain separate, and physical circuit pressure is not a manufacturer scalar ESP. Totals expose incomplete inputs and native parity limits. Space text does not prove room identity. Read/calculation only; no model or Work mutation.",
       finds: [
         "ducts",
         "pressure drop",

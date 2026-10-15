@@ -226,7 +226,43 @@ export function assessDucts(
     ownEquipment.filter(independentStreams).length,
     "Multiple air classifications serve this equipment; the model does not establish a shared physical fan circuit. Classification maxima are retained; their sum is arithmetic, not a verified single-fan ESP",
   );
+  const calculationOwners = new Set(
+    Object.values(work?.calculation ?? {}).flatMap((cell) => {
+      const e = cell.staged?.value;
+      return e?.kind === "fan" || e?.kind === "passive" ? [e.element.id] : [];
+    }),
+  );
+  const circuits = next.design.circuits.filter(
+    (c) =>
+      selector.kind === "document" ||
+      (selector.kind === "equipment"
+        ? c.equipmentId === selector.id
+        : [...c.inlet.elementIds, ...c.outlet.elementIds].some(
+            (id) =>
+              selectedTerminals.some((t) => t.id === id) ||
+              snapshot.nodes.some((n) => n.id === id && groupIds.has(n.groupId ?? "")) ||
+              snapshot.segments.some((s) => s.id === id && groupIds.has(s.groupId ?? "")),
+          )),
+  );
+  if (Object.keys(work?.calculation ?? {}).length) {
+    reason(
+      "physical-circuit-evidence",
+      next.design.reasons.length,
+      next.design.reasons.map((r) => r.message).join("; "),
+    );
+    reason(
+      "partial-physical-circuits",
+      circuits.filter((c) => c.status !== "complete-for-declared-design").length,
+      "Physical circuits contain explicit unresolved inputs; no mesh/fan allocation was manufactured",
+    );
+    reason(
+      "conditional-design-scenario",
+      circuits.filter((c) => c.status === "complete-for-declared-design").length,
+      "Complete only for the staged balanced-design scenario; not an actual operating-point or manufacturer scalar ESP certification",
+    );
+  }
   const equipment = ownEquipment.map((unit) => ({
+    calculationRole: calculationOwners.has(unit),
     id: unit,
     now: proposedStatic(snapshot, now, unit),
     next: proposedStatic(snapshot, next, unit),
@@ -235,12 +271,14 @@ export function assessDucts(
     )
       ? ("observed" as const)
       : ("unknown" as const),
-    requiredEspNowInWg: independentStreams(unit)
-      ? null
-      : (proposedStatic(snapshot, now, unit)?.total ?? null),
-    requiredEspStagedInWg: independentStreams(unit)
-      ? null
-      : (proposedStatic(snapshot, next, unit)?.total ?? null),
+    requiredEspNowInWg:
+      calculationOwners.has(unit) || independentStreams(unit)
+        ? null
+        : (proposedStatic(snapshot, now, unit)?.total ?? null),
+    requiredEspStagedInWg:
+      calculationOwners.has(unit) || independentStreams(unit)
+        ? null
+        : (proposedStatic(snapshot, next, unit)?.total ?? null),
     classificationParts: (proposedStatic(snapshot, next, unit)?.parts ?? []).map((part) => ({
       classification: part.kind,
       nowInWg:
@@ -250,6 +288,7 @@ export function assessDucts(
     })),
   }));
   return {
+    circuits,
     groups,
     selectedTerminals,
     reached,
@@ -276,6 +315,11 @@ export function assessDucts(
       spaceTextOf: selectedTerminals.length,
     } satisfies DuctsAnalysisResponse["completeness"],
     coverage: {
+      physicalCircuits: next.design.coverage.fanCircuits,
+      passiveEquipment: next.design.coverage.passiveEquipment,
+      unassignedEquipmentPorts: next.design.coverage.unassignedEquipmentPorts,
+      admittedCircuitTerminals: next.design.coverage.admittedTerminals,
+      reachedCircuitTerminals: next.design.coverage.reachedTerminals,
       groups: snapshot.groups.length,
       equipment: equipmentIds.length,
       terminals: terminals.length,

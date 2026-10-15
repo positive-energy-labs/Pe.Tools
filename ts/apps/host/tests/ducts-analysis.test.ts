@@ -8,6 +8,7 @@ import {
   ductsAnalysisResponseSchema,
   ductsDocumentSchema,
   ductsRouteState,
+  type DuctPortPin,
 } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { createDuctsAnalysis, type DuctsAnalysisSources } from "../src/ducts-analysis.ts";
@@ -330,4 +331,154 @@ test("the declared host route reads canonical Work and unreadable Work refuses b
   expect(await refused.text()).toContain("Unreadable fixture Work");
   expect(f.counts().nativeReads).toBe(counts.nativeReads);
   expect(writes).toBe(0);
+});
+
+test("physical circuits and path pages retain staged evidence and never acquire again historically", async () => {
+  const f = fixture();
+  for (const node of f.snapshot.nodes) node.uniqueId = `purpose-${node.id}`;
+  const pin = (id: number): DuctPortPin => ({
+    index: 1,
+    point: [0, 0, 0],
+    shape: "round",
+    diameterIn: 8,
+    widthIn: null,
+    heightIn: null,
+    direction: "bidirectional",
+    connectedTo: { id: id === 1 ? 2 : 1, connector: 1, uniqueId: `purpose-${id === 1 ? 2 : 1}` },
+  });
+  const doc = ductsDocumentSchema.parse({
+    calculation: {
+      scenario: {
+        staged: { value: { kind: "balanced-design", source: "Purpose balanced design" } },
+      },
+      fan: {
+        staged: {
+          value: {
+            kind: "fan",
+            element: { id: 1, uniqueId: "purpose-1" },
+            inlet: null,
+            outlet: pin(1),
+            referencePressureInWg: 0,
+            designFlowCfm: null,
+            source: "Purpose external-plane role",
+          },
+        },
+      },
+      terminal: {
+        staged: {
+          value: {
+            kind: "terminal",
+            element: { id: 2, uniqueId: "purpose-2" },
+            port: pin(2),
+            role: "demand",
+            flowCfm: null,
+            pressureInWg: 0,
+            loss: null,
+            source: "Purpose room reference",
+          },
+        },
+      },
+    },
+  });
+  f.sources.readWork = async () => ({ doc, revision: 9 });
+  const fresh = ductsAnalysisResponseSchema.parse(
+    await f.api.read(
+      read(
+        { kind: "fresh", target: f.target },
+        { kind: "equipment", id: 1 },
+        { projection: "circuits", limit: 1 },
+      ),
+    ),
+  );
+  expect(fresh.rows).toHaveLength(1);
+  expect(fresh.rows[0]).toMatchObject({
+    kind: "circuit",
+    requiredEspStagedInWg: null,
+    circuit: {
+      id: "fan",
+      status: "complete-for-declared-design",
+      requiredExternalTotalPressureInWg: 0.08,
+      manufacturerEsp: null,
+    },
+  });
+  const artifact = JSON.parse(await (await f.api.artifact(fresh.analysisId)).text());
+  expect(artifact.format).toBe("ducts-analysis-v2");
+  expect(JSON.parse(artifact.input.json).work).toEqual(doc);
+  expect(artifact.outputs.next.design.graph.ports).toHaveLength(2);
+  const counts = f.counts();
+  const historical = ductsAnalysisResponseSchema.parse(
+    await f.api.read(
+      read(
+        { kind: "artifact", id: fresh.analysisId },
+        { kind: "terminal", id: 2 },
+        { projection: "circuit-path", limit: 1 },
+      ),
+    ),
+  );
+  expect(historical.rows[0]).toMatchObject({
+    kind: "path",
+    path: { circuitId: "fan", circuitSide: "outlet", terminalId: 2, lossInWg: 0.08 },
+  });
+  expect(f.counts()).toEqual(counts);
+  const summary = await f.api.read(read({ kind: "artifact", id: fresh.analysisId }));
+  expect(summary.rows[0]?.requiredEspStagedInWg).toBeNull();
+  expect(summary.rows[0]?.classificationParts).toEqual([]);
+  const ports = ductsAnalysisResponseSchema.parse(
+    await f.api.read(
+      read(
+        { kind: "artifact", id: fresh.analysisId },
+        { kind: "document" },
+        { projection: "ports", limit: 1 },
+      ),
+    ),
+  );
+  expect(ports.page).toMatchObject({ total: 2, returned: 1, truncated: true });
+  expect(ports.rows[0]?.port).toMatchObject({
+    uniqueId: "purpose-1",
+    pin: pin(1),
+    origin: "native-snapshot",
+    reciprocal: true,
+  });
+  const second = await f.api.read(
+    read(
+      { kind: "artifact", id: fresh.analysisId },
+      { kind: "document" },
+      { projection: "ports", limit: 1, cursor: ports.page.nextCursor },
+    ),
+  );
+  expect(second.rows[0]?.id).toBe(2);
+  expect(f.counts()).toEqual(counts);
+  await expect(
+    f.api.read(
+      read(
+        { kind: "artifact", id: fresh.analysisId },
+        { kind: "equipment", id: 1 },
+        { projection: "ports", limit: 1, cursor: ports.page.nextCursor },
+      ),
+    ),
+  ).rejects.toThrow("Cursor does not belong");
+});
+
+test("port evidence exposes missing identity and half-joints without manufacturing admissible pins", async () => {
+  for (const missingIdentity of [true, false]) {
+    const f = fixture();
+    if (!missingIdentity) {
+      for (const n of f.snapshot.nodes) n.uniqueId = `purpose-${n.id}`;
+      f.snapshot.nodes[1]!.connectors[0]!.connectedTo = null;
+    }
+    const result = ductsAnalysisResponseSchema.parse(
+      await f.api.read(
+        read(
+          { kind: "fresh", target: f.target },
+          { kind: "equipment", id: 1 },
+          { projection: "ports" },
+        ),
+      ),
+    );
+    expect(result.rows[0]?.port?.pin).toBeNull();
+    expect(result.rows[0]?.port?.reason).toContain(
+      missingIdentity ? "identity missing" : "not reciprocal",
+    );
+    expect(result.rows[0]?.port?.connection).toEqual({ elementId: 2, connector: 1 });
+  }
 });

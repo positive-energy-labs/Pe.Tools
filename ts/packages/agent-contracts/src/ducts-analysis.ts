@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ductPortPinSchema } from "./ducts.ts";
 import { documentRefSchema } from "./target.ts";
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
@@ -16,7 +17,9 @@ export const ductsAnalysisRequestSchema = z
       z.strictObject({ kind: z.literal("artifact"), id: hash }),
     ]),
     selector: ductsAnalysisSelectorSchema,
-    projection: z.enum(["summary", "terminals", "path"]).default("summary"),
+    projection: z
+      .enum(["summary", "terminals", "path", "circuits", "circuit-path", "ports"])
+      .default("summary"),
     limit: z.number().int().min(1).max(100).default(20),
     cursor: z.strictObject({ offset: z.number().int().nonnegative(), basis: hash }).optional(),
   })
@@ -32,7 +35,7 @@ export type DuctsAnalysisRequest = z.infer<typeof ductsAnalysisRequestSchema>;
 
 const reason = z.strictObject({ code: z.string(), count: z.number().int(), message: z.string() });
 const row = z.strictObject({
-  kind: z.enum(["equipment", "terminal", "path"]),
+  kind: z.enum(["equipment", "terminal", "path", "circuit", "port"]),
   id: z.number().int(),
   label: z.string(),
   groupIds: z.array(z.string()),
@@ -50,9 +53,58 @@ const row = z.strictObject({
       stagedInWg: z.number(),
     }),
   ),
+  port: z
+    .strictObject({
+      origin: z.literal("native-snapshot"),
+      direction: z.string(),
+      classification: z.string().nullable(),
+      connection: z
+        .strictObject({ elementId: z.number().int(), connector: z.number().int() })
+        .nullable(),
+      reciprocal: z.boolean(),
+      section: z.strictObject({
+        shape: z.string(),
+        diameterIn: z.number().nullable(),
+        widthIn: z.number().nullable(),
+        heightIn: z.number().nullable(),
+        areaFt2: z.number().nullable(),
+      }),
+      uniqueId: z.string().nullable(),
+      index: z.number().int(),
+      pin: ductPortPinSchema.nullable(),
+      reason: z.string().nullable(),
+    })
+    .nullable(),
+  circuit: z
+    .strictObject({
+      id: z.string(),
+      uniqueId: z.string(),
+      status: z.enum(["complete-for-declared-design", "partial"]),
+      basis: z.literal("balanced-design-demand"),
+      requiredExternalTotalPressureInWg: z.number().nullable(),
+      requiredExternalStaticPressureInWg: z.number().nullable(),
+      manufacturerEsp: z.null(),
+      inletPort: z.number().int().nullable(),
+      outletPort: z.number().int().nullable(),
+      inletElements: z.number().int(),
+      outletElements: z.number().int(),
+      reasonCount: z.number().int(),
+      reasonsTruncated: z.boolean(),
+      reasons: z.array(
+        z.strictObject({
+          code: z.string(),
+          elementId: z.number().int().nullable(),
+          message: z.string(),
+        }),
+      ),
+    })
+    .nullable(),
   path: z
     .strictObject({
       terminalId: z.number().int(),
+      circuitId: z.string().nullable(),
+      circuitSide: z.enum(["inlet", "outlet"]).nullable(),
+      balancingInWg: z.number().nullable(),
       componentKind: z.enum(["friction", "fitting", "tap-branch", "tap-straight", "terminal"]),
       lossInWg: z.number().nullable(),
       coefficient: z.number().nullable(),
@@ -79,7 +131,7 @@ export const ductsAnalysisResponseSchema = z.strictObject({
     url: z.string(),
     sha256: hash,
     byteSize: z.number().int(),
-    format: z.literal("ducts-analysis-v1"),
+    format: z.literal("ducts-analysis-v2"),
   }),
   mode: z.enum(["fresh", "historical"]),
   target: documentRefSchema,
@@ -112,11 +164,17 @@ export const ductsAnalysisResponseSchema = z.strictObject({
     equipment: z.number().int(),
     terminals: z.number().int(),
     scope: z.string(),
+    physicalCircuits: z.number().int(),
+    passiveEquipment: z.number().int(),
+    unassignedEquipmentPorts: z.number().int(),
+    admittedCircuitTerminals: z.number().int(),
+    reachedCircuitTerminals: z.number().int(),
   }),
   rows: z.array(row).max(100),
   page: z.strictObject({
     total: z.number().int(),
     returned: z.number().int(),
+    truncated: z.boolean(),
     nextCursor: z.strictObject({ offset: z.number().int(), basis: hash }).nullable(),
   }),
 });

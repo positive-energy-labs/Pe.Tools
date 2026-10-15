@@ -11,6 +11,7 @@ import {
   bindWork,
   ductsDocumentSchema,
   stagedDucts,
+  type DuctPortPin,
   type DocumentRef,
   type DuctsRouteDocument,
   type WorkKey,
@@ -66,7 +67,7 @@ const solve = ({ snapshot, tables, work }: EffectiveInputs) => {
   };
 };
 type Artifact = {
-  format: "ducts-analysis-v1";
+  format: "ducts-analysis-v2";
   createdAt: string;
   producer: unknown;
   observation: Observation;
@@ -91,8 +92,11 @@ const space = (node: DuctSnapshot["nodes"][number]) =>
 const label = (node: DuctSnapshot["nodes"][number]) =>
   [node.family, node.type].filter(Boolean).join(" / ") || String(node.id);
 const inputOf = (artifact: Artifact): EffectiveInputs => {
+  if (artifact.format !== "ducts-analysis-v2")
+    throw Error(
+      "Unsupported analysis format; historical outputs were not recomputed or reinterpreted",
+    );
   if (
-    artifact.format !== "ducts-analysis-v1" ||
     sha256Hex(artifact.input.json) !== artifact.input.sha256 ||
     Buffer.byteLength(artifact.input.json) !== artifact.input.byteSize
   )
@@ -183,7 +187,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       JSON.stringify(owned?.doc) !== JSON.stringify(afterWork?.doc);
     const fresh = observedSince !== undefined && observedSince <= began;
     return {
-      format: "ducts-analysis-v1",
+      format: "ducts-analysis-v2",
       createdAt: new Date().toISOString(),
       producer: sources.producer,
       observation,
@@ -265,6 +269,8 @@ function project(
     spaceText: node ? space(node) : null,
     detail: null,
     path: null,
+    circuit: null,
+    port: null,
     classificationParts: [],
     servedGroupState: null,
   });
@@ -285,13 +291,16 @@ function project(
       requiredEspNowInWg: now.paths[node.id]?.total ?? null,
       requiredEspStagedInWg: next.paths[node.id]?.total ?? null,
     }));
-  else
+  else if (request.projection === "path")
     rows = reached.flatMap((node) =>
       next.paths[node.id]!.rows.map((row) => ({
         ...baseRow(nodes.get(row.id), row.id),
         kind: "path" as const,
         path: {
           terminalId: node.id,
+          circuitId: null,
+          circuitSide: null,
+          balancingInWg: null,
           componentKind: row.kind,
           lossInWg: row.error ? null : row.dp,
           coefficient: row.c ?? null,
@@ -315,6 +324,147 @@ function project(
         detail: `terminal ${node.id}; ${row.desc}${row.error ? `; UNPRICED: ${row.error}` : ""}`,
       })),
     );
+  else if (request.projection === "ports") {
+    const elements = new Map([...snapshot.nodes, ...snapshot.segments].map((e) => [e.id, e]));
+    const selected = new Set(
+      selector.kind === "equipment" || selector.kind === "terminal"
+        ? [selector.id]
+        : selector.kind === "space-text"
+          ? selectedTerminals.map((n) => n.id)
+          : selector.kind === "document"
+            ? [...elements.keys()]
+            : [...elements.values()]
+                .filter(
+                  (e) =>
+                    e.groupId === selector.id ||
+                    ("kind" in e &&
+                      e.kind === "equipment" &&
+                      groups.some((g) => g.rootIds.includes(e.id))),
+                )
+                .map((e) => e.id),
+    );
+    rows = [...elements.values()]
+      .filter((e) => selected.has(e.id))
+      .sort((a, b) => a.id - b.id)
+      .flatMap((e) =>
+        e.connectors.map((c) => {
+          const other = c.connectedTo ? elements.get(c.connectedTo.elementId) : undefined;
+          const own = e.connectors.filter((p) => p.index === c.index);
+          const otherPorts =
+            other?.connectors.filter((p) => p.index === c.connectedTo?.connector) ?? [];
+          const reciprocal =
+            own.length === 1 &&
+            otherPorts.length === 1 &&
+            otherPorts[0]!.connectedTo?.elementId === e.id &&
+            otherPorts[0]!.connectedTo?.connector === c.index;
+          const pin: DuctPortPin | null =
+            e.uniqueId && other?.uniqueId && reciprocal && c.connectedTo && c.point.length === 3
+              ? {
+                  index: c.index,
+                  point: c.point as [number, number, number],
+                  shape: c.shape,
+                  diameterIn: c.diameterIn ?? null,
+                  widthIn: c.widthIn ?? null,
+                  heightIn: c.heightIn ?? null,
+                  direction: c.direction,
+                  connectedTo: {
+                    id: c.connectedTo.elementId,
+                    connector: c.connectedTo.connector,
+                    uniqueId: other.uniqueId,
+                  },
+                }
+              : null;
+          return {
+            ...baseRow(nodes.get(e.id), e.id),
+            kind: "port" as const,
+            requiredEspNowInWg: null,
+            requiredEspStagedInWg: null,
+            port: {
+              origin: "native-snapshot",
+              direction: c.direction,
+              classification: c.classification ?? null,
+              connection: c.connectedTo ?? null,
+              reciprocal,
+              section: {
+                shape: c.shape,
+                diameterIn: c.diameterIn ?? null,
+                widthIn: c.widthIn ?? null,
+                heightIn: c.heightIn ?? null,
+                areaFt2: c.areaFt2 ?? null,
+              },
+              uniqueId: e.uniqueId ?? null,
+              index: c.index,
+              pin,
+              reason: pin
+                ? null
+                : !e.uniqueId || (c.connectedTo && !other?.uniqueId)
+                  ? "Native stable identity missing; no admissible evidence pin"
+                  : !reciprocal
+                    ? "Physical attachment is absent, ambiguous or not reciprocal"
+                    : "Connector has no complete point",
+            },
+          };
+        }),
+      );
+  } else {
+    const circuitRows = assessment.circuits.flatMap<DuctsAnalysisResponse["rows"][number]>((c) => {
+      const base = {
+        ...baseRow(nodes.get(c.equipmentId), c.equipmentId),
+        requiredEspNowInWg: null,
+        requiredEspStagedInWg: null,
+        flowCfm: c.flowCfm,
+        circuit: {
+          id: c.id,
+          uniqueId: c.uniqueId,
+          status: c.status,
+          basis: "balanced-design-demand" as const,
+          requiredExternalTotalPressureInWg: c.requiredExternalTotalPressureInWg,
+          requiredExternalStaticPressureInWg: c.requiredExternalStaticPressureInWg,
+          manufacturerEsp: null,
+          inletPort: c.inlet.port,
+          outletPort: c.outlet.port,
+          inletElements: c.inlet.elementIds.length,
+          outletElements: c.outlet.elementIds.length,
+          reasons: c.reasons.slice(0, 20),
+          reasonCount: c.reasons.length,
+          reasonsTruncated: c.reasons.length > 20,
+        },
+      };
+      if (request.projection === "circuits") return [{ ...base, kind: "circuit" as const }];
+      return (["inlet", "outlet"] as const).flatMap((side) =>
+        c[side].paths.flatMap((p) =>
+          p.rows.map((row) => ({
+            ...base,
+            id: row.id,
+            kind: "path" as const,
+            path: {
+              terminalId: p.terminalId,
+              circuitId: c.id,
+              circuitSide: side,
+              balancingInWg: p.balancingInWg,
+              componentKind: row.kind,
+              lossInWg: row.error ? null : row.dp,
+              coefficient: row.c ?? null,
+              table: row.table ?? null,
+              velocityPressureInWg: row.pv ?? null,
+              velocityFpm: row.fpm ?? null,
+              lookup: row.inputs
+                ? {
+                    result: row.inputs.res,
+                    x: row.inputs.x,
+                    y: row.inputs.y ?? null,
+                    xLabel: row.inputs.xLabel,
+                    yLabel: row.inputs.yLabel ?? null,
+                  }
+                : null,
+              error: row.error ?? null,
+            },
+          })),
+        ),
+      );
+    });
+    rows = circuitRows;
+  }
   const basis = sha256Hex(
     JSON.stringify({ id, selector, projection: request.projection, limit: request.limit }),
   );
@@ -329,7 +479,7 @@ function project(
       url: `/pe/ducts/analyses/${id}/artifact`,
       sha256: id,
       byteSize,
-      format: "ducts-analysis-v1",
+      format: "ducts-analysis-v2",
     },
     mode: request.source.kind === "fresh" ? "fresh" : "historical",
     target: artifact.observation.target,
@@ -349,6 +499,7 @@ function project(
     page: {
       total: rows.length,
       returned: pageRows.length,
+      truncated: offset > 0 || pageRows.length < rows.length,
       nextCursor:
         offset + pageRows.length < rows.length ? { offset: offset + pageRows.length, basis } : null,
     },

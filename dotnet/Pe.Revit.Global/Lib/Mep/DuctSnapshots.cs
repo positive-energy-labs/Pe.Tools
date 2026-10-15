@@ -179,7 +179,7 @@ public static class DuctSnapshots {
                 Converted(curve, BuiltInParameter.RBS_VELOCITY, UnitTypeId.FeetPerMinute),
                 Converted(curve, BuiltInParameter.RBS_FRICTION, UnitTypeId.InchesOfWater60DegreesFahrenheitPer100Feet),
                 Converted(curve, BuiltInParameter.RBS_PRESSURE_DROP, UnitTypeId.InchesOfWater60DegreesFahrenheit)),
-            connectors);
+            connectors, curve.UniqueId);
     }
 
     private static DuctNodeKind Fitting(Element e) =>
@@ -228,7 +228,7 @@ public static class DuctSnapshots {
             HvacConnectors(e).Select(c => Connector(c, network)).ToList(),
             facts.Where(f => f.Value is not null || f.Text is not null).ToList(),
             kind is DuctNodeKind.Fitting or DuctNodeKind.Accessory ? Loss(e, schemas) : null,
-            kind == DuctNodeKind.Terminal ? Terminal(e, slots) : null);
+            kind == DuctNodeKind.Terminal ? Terminal(e, slots) : null, e.UniqueId);
     }
 
     private static IReadOnlyList<DuctLayer> Layers(DuctNetwork.Analysis a, IReadOnlyList<DuctSystem> systems, DuctParameterSlots slots) {

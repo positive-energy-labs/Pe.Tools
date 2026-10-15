@@ -254,7 +254,8 @@ public sealed record DuctNode(
     IReadOnlyList<DuctConnector> Connectors,
     IReadOnlyList<DuctFact> Facts,
     DuctLoss? Loss = null,
-    DuctTerminalDrop? TerminalDrop = null);
+    DuctTerminalDrop? TerminalDrop = null,
+    string? UniqueId = null);
 
 public sealed record DuctRoughness(double ValueFt, DuctProvenance Provenance);
 
@@ -282,7 +283,8 @@ public sealed record DuctSegment(
     string? Classification,
     DuctRoughness Roughness,
     DuctRevitValues Revit,
-    IReadOnlyList<DuctConnector> Connectors);
+    IReadOnlyList<DuctConnector> Connectors,
+    string? UniqueId = null);
 
 /// <summary>Pass-1 flow: terminal design flow summed up the tree from the single root. At a tapped duct it is the upstream-end flow.</summary>
 public sealed record DuctFlow(long SegmentId, double Cfm, DuctProvenance Provenance);
