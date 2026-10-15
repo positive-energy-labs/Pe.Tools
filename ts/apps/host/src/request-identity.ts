@@ -2,6 +2,7 @@ import { Deferred, Effect, Option } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import {
   BRIDGE_PATH,
+  HOST_CONTEXT_HEADER,
   HOST_RUNTIME_SERVICE_HEADER,
   HOST_RUNTIME_SERVICE_QUERY,
 } from "@pe/host-contracts/contracts";
@@ -308,6 +309,9 @@ export async function readRequestIdentity(
             device: device?.id,
             headers: {
               ...result.headers,
+              ...(headers[HOST_CONTEXT_HEADER]
+                ? { [HOST_CONTEXT_HEADER]: headers[HOST_CONTEXT_HEADER] }
+                : {}),
               ...(credential?.audience === "mcp"
                 ? { authorization: `Bearer ${credential.token}` }
                 : {}),

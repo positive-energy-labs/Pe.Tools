@@ -1,8 +1,22 @@
+import { unavailableShare } from "../src/machine.ts";
+import { peRead, peDo, buildCapabilities } from "@pe/mcps";
+import { withInvocationContext } from "@pe/runtime/context";
+import { readRequestIdentity } from "../src/request-identity.ts";
+import {
+  admitAnonymousCall,
+  currentCaller,
+  mintContext,
+  retireContext,
+  Refused,
+} from "../src/control.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
+import { emptyThreadHead } from "@pe/agent-contracts";
+import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test } from "vite-plus/test";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
   ductsAnalysisRequestSchema,
   ductsAnalysisResponseSchema,
@@ -11,7 +25,11 @@ import {
   type DuctPortPin,
 } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { createDuctsAnalysis, type DuctsAnalysisSources } from "../src/ducts-analysis.ts";
+import {
+  createDuctsAnalysis,
+  ductsNativeRead,
+  type DuctsAnalysisSources,
+} from "../src/ducts-analysis.ts";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -484,5 +502,84 @@ test("port evidence exposes missing identity and half-joints without manufacturi
       missingIdentity ? "identity missing" : "not reciprocal",
     );
     expect(result.rows[0]?.port?.connection).toEqual({ elementId: 2, connector: 1 });
+  }
+});
+
+test("MCP analysis retains admitted caller through the real route and nested native reads", async () => {
+  const f = fixture();
+  const base = "http://127.0.0.1:5180";
+  const token = mintContext({ kind: "pea", thread: "analysis-context-test" });
+  const options = {
+    port: () => 5180,
+    frontendOrigin: () => undefined,
+    share: { read: async () => ({ state: "off", desired: "off" }), observe: () => {} },
+  };
+  const seen: string[] = [];
+  const routes = createPeRoutes({
+    registrations: [],
+    heads: { observe: () => () => {} },
+    store: { getState: async () => null, setState: async () => {} },
+    ductsAnalysis: { ...f.sources, call: ductsNativeRead(base) },
+  });
+  vi.stubEnv("PE_CONTEXT", "");
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    const headers = Object.fromEntries(request.headers);
+    headers.host = url.host;
+    const identity = await readRequestIdentity(headers, url.pathname, options, request.method);
+    if ("refusal" in identity) return Response.json(identity, { status: 403 });
+    return withInvocationContext({ ...identity, hostBaseUrl: base }, async () => {
+      if (url.pathname === "/pe/scope/self")
+        return Response.json({ thread: "analysis-context-test", ...emptyThreadHead });
+      if (url.pathname === "/pe/capabilities")
+        return Response.json({
+          at: new Date().toISOString(),
+          machine: machineFixture(),
+          sources: {},
+          diagnostics: [],
+          capabilities: buildCapabilities({ ops: [], routes: [], packages: [], skills: [] }),
+        });
+      if (url.pathname === "/pe/ducts/analysis") return routes.fetch(request);
+      if (url.pathname === "/call") {
+        const body = (await request.json()) as { key: string };
+        try {
+          admitAnonymousCall(currentCaller(), body.key);
+        } catch (error) {
+          if (error instanceof Refused) return Response.json(error.refusal, { status: 403 });
+          throw error;
+        }
+        expect(request.headers.get("x-pe-context")).toBe(token);
+        expect(request.headers.get("x-pe-bridge-session-id")).toBe(f.target.session);
+        expect(request.headers.get("x-pe-open-document-id")).toBe(f.target.openId);
+        seen.push(body.key);
+        return Response.json(
+          body.key === "ducts.snapshot" ? f.snapshot : { tables: {}, missing: [], unsupported: [] },
+        );
+      }
+      throw Error(`Unexpected fixture URL ${url.pathname}`);
+    });
+  });
+  try {
+    const input = {
+      key: "route:ducts.analysis",
+      input: { source: { kind: "fresh", target: f.target }, selector: { kind: "document" } },
+    };
+    for (const execute of [
+      () =>
+        peRead.execute(peRead.inputSchema.parse(input), { agent: { toolCallId: "fixture-read" } }),
+      () => peDo.execute(peDo.inputSchema.parse(input), { agent: { toolCallId: "fixture-do" } }),
+    ]) {
+      const result = await withInvocationContext(
+        { hostBaseUrl: base, headers: { "x-pe-context": token } },
+        execute,
+      );
+      expect(result).toMatchObject({ ok: true, result: { target: f.target } });
+    }
+    expect(seen).toEqual(["ducts.snapshot", "ducts.tables", "ducts.snapshot", "ducts.tables"]);
+  } finally {
+    retireContext(token);
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   }
 });

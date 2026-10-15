@@ -19,7 +19,7 @@ import {
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { createDevices, DEVICE_COOKIE } from "../src/remote-device.ts";
-import { mintBrowserContext, mintContext } from "../src/control.ts";
+import { mintBrowserContext, mintContext, retireContext } from "../src/control.ts";
 
 // Existing browser fixtures acquire a host-minted session before entering the API.
 const readRequestIdentity: typeof rawReadRequestIdentity = (headers, ...rest) => {
@@ -563,4 +563,40 @@ test("identity mints the caller: minted browser cookie is human, an actor header
       "POST",
     ),
   ).toMatchObject({ caller: { kind: "human", via: "tailnet", login: "operator@example.com" } });
+});
+
+test("only an admitted context token survives nested same-host requests", async () => {
+  const token = mintContext({ kind: "pea", thread: "nested-route" });
+  const headers = { ...local, [HOST_CONTEXT_HEADER]: token };
+  try {
+    const identity = await rawReadRequestIdentity(headers, "/pe/ducts/analysis", options, "POST");
+    expect(identity).toMatchObject({
+      caller: { kind: "pea", thread: "nested-route" },
+      headers: { [HOST_CONTEXT_HEADER]: token },
+    });
+    expect(
+      await rawReadRequestIdentity(
+        { ...headers, origin: "https://evil.example" },
+        "/pe/ducts/analysis",
+        options,
+        "POST",
+      ),
+    ).toHaveProperty("refusal");
+    expect(
+      await rawReadRequestIdentity(
+        { ...headers, [HOST_CONTEXT_HEADER]: "wrong" },
+        "/pe/ducts/analysis",
+        options,
+        "POST",
+      ),
+    ).toMatchObject({ refusal: { code: "context.unknown" } });
+  } finally {
+    retireContext(token);
+  }
+  expect(
+    await rawReadRequestIdentity(headers, "/pe/ducts/analysis", options, "POST"),
+  ).toMatchObject({ refusal: { code: "context.unknown" } });
+  expect(await rawReadRequestIdentity(local, "/pe/ducts/analysis", options, "POST")).toMatchObject({
+    caller: { kind: "anonymous" },
+  });
 });
