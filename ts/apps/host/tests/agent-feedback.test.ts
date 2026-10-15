@@ -112,3 +112,61 @@ test("export failure still returns a feedbackId and keeps the local row", async 
     await f.close();
   }
 });
+
+test("an undelivered report is replayed at the next start under its feedbackId, and only once", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pe-agent-feedback-replay-"));
+  const sent: { uuid?: string; event: string; properties: Record<string, unknown> }[] = [];
+  const start = (send: (event: (typeof sent)[number]) => Promise<void>) =>
+    createReceiptExport({
+      journal: new ActionJournal(join(dir, "journal.json"), () => stamp),
+      root: dir,
+      stamps: { host: stamp, web: null },
+      send: async (event) => send(event),
+    });
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const down = start(async () => {
+      throw Error("posthog down");
+    });
+    const { feedbackId } = await down.submitAgentFeedback(report, "pea", "thread-1", context);
+    await down.close();
+    const up = start(async (event) => void sent.push(event));
+    await up.close();
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ uuid: feedbackId, event: "agent_feedback" });
+    expect(sent[0]!.properties).toMatchObject({ ...report, feedback_id: feedbackId });
+    await start(async (event) => void sent.push(event)).close();
+    expect(sent).toHaveLength(1);
+  } finally {
+    console.warn = warn;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("reports share the 64-pending export limit and every one stays kept locally", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pe-agent-feedback-limit-"));
+  let started = 0;
+  const exporter = createReceiptExport({
+    journal: new ActionJournal(join(dir, "journal.json"), () => stamp),
+    root: dir,
+    stamps: { host: stamp, web: null },
+    deadlineMs: 1000,
+    send: (_event, signal) =>
+      new Promise((_, reject) => {
+        started++;
+        signal.addEventListener("abort", () => reject(Error("deadline")));
+      }),
+  });
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    for (let i = 0; i < 65; i++) await exporter.submitAgentFeedback(report, "pea", null, null);
+    await exporter.close();
+    expect(started).toBe(64);
+    expect(rows(dir)).toHaveLength(65);
+  } finally {
+    console.warn = warn;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
