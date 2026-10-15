@@ -353,3 +353,147 @@ test("pea host call reaches a declared HTTP route through the principal-carrying
     vi.unstubAllEnvs();
   }
 });
+
+test.each([
+  ...[
+    "ReferenceResolutionFailed",
+    "CompilationFailed",
+    "RuntimeFailed",
+    "Rejected",
+    "PolicyRejected",
+    "Cancelled",
+    "TimedOut",
+  ].map((status) => ({ json: true, status, count: 1 })),
+  { json: false, status: "PolicyRejected", count: 1 },
+  { json: true, status: "PolicyRejected", count: 65 },
+])(
+  "script CLI retains dispatched diagnostics ($status, json=$json)",
+  async ({ json, status, count }) => {
+    const originalExitCode = process.exitCode;
+    const base = fakeRuntimeHost("http://127.0.0.1:19998");
+    const native = {
+      status,
+      executionId: "5f894ab15210479c8202297e93ac7c8a",
+      diagnostics: [
+        {
+          stage: "policy",
+          severity: "Error",
+          source: "TargetRepair.cs",
+          message:
+            "WriteTransaction scripts may not create their own Revit transactions; the host owns the transaction.",
+        },
+      ],
+    };
+    native.diagnostics = Array.from({ length: count }, () => native.diagnostics[0]!);
+    const calls: string[] = [];
+    let actionId: string | undefined;
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      calls.push(url.pathname);
+      if (url.pathname === "/ops")
+        return Response.json({
+          bridgeSessionId: "fixture-session",
+          operations: [{ key: "scripting.execute", intent: "Mutate", needs: "document" }],
+        });
+      expect(url.pathname).toBe("/actions");
+      const admission = JSON.parse(await new Response(init?.body).text());
+      actionId = admission.id;
+      return Response.json({
+        kind: admission.kind,
+        id: admission.id,
+        key: admission.key,
+        caller: { kind: "anonymous" },
+        basis: null,
+        destination: admission.destination,
+        request: admission.input,
+        bases: admission.bases,
+        steps: [],
+        preparation: { state: "ready", value: { sourceBundle: "MUST NOT PRINT" } },
+        recovery: [],
+        startedAt: "2026-10-15T00:00:00Z",
+        publication: { state: "unrequested" },
+        state: "failed",
+        status: 422,
+        error: `Script execution ${status}`,
+        evidence: {
+          result: {
+            ...native,
+            data: { assembly: "MUST NOT PRINT" },
+            sourceBundle: "MUST NOT PRINT",
+          },
+        },
+      });
+    });
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const command = new PeaCliCommands({ hostBaseUrl: base }).scriptCommand();
+    try {
+      process.exitCode = 0;
+      const invoke = () =>
+        cli(
+          [
+            "execute",
+            "--script-content",
+            "using var tx = new Transaction(doc);",
+            "--permission-mode",
+            "WriteTransaction",
+            "--bridge-session-id",
+            "fixture-session",
+            "--open-document-id",
+            "fixture-open",
+            ...(json ? ["--json"] : []),
+          ],
+          command,
+          { subCommands: command.subCommands },
+        );
+      if (json) {
+        await invoke();
+        expect(stdout).toHaveBeenCalledTimes(1);
+        const outcome = JSON.parse(String(stdout.mock.calls[0]![0]));
+        expect(outcome).toMatchObject({
+          actionId,
+          state: "failed",
+          status: 422,
+          evidence: { result: { ...native, diagnostics: native.diagnostics.slice(0, 64) } },
+        });
+        if (count > 64)
+          expect(outcome.evidence.result).toMatchObject({
+            diagnosticsTotal: count,
+            diagnosticsTruncated: true,
+          });
+        else expect(outcome.evidence.result).not.toHaveProperty("diagnosticsTruncated");
+        expect(outcome.error).toContain(`Script execution ${status}`);
+        expect(outcome).not.toHaveProperty("request");
+        expect(JSON.stringify(outcome)).not.toContain("MUST NOT PRINT");
+        expect(process.exitCode).toBe(1);
+      } else {
+        await expect(invoke()).rejects.toThrow(/: failed: Script execution PolicyRejected/);
+        expect(stdout).not.toHaveBeenCalled();
+      }
+      expect(calls.filter((path) => path === "/actions")).toHaveLength(1);
+      expect(calls).not.toContain("/call");
+    } finally {
+      process.exitCode = originalExitCode;
+      stdout.mockRestore();
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  },
+);
+
+test("script --json emits a structured input failure without dispatch", async () => {
+  const originalExitCode = process.exitCode;
+  const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+  const command = new PeaCliCommands().scriptCommand();
+  try {
+    process.exitCode = 0;
+    await cli(["execute", "--json"], command, { subCommands: command.subCommands });
+    expect(stdout).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(stdout.mock.calls[0]![0]))).toEqual({
+      error: "Provide --file, --stdin, --script-content, or --source-path.",
+    });
+    expect(process.exitCode).toBe(1);
+  } finally {
+    process.exitCode = originalExitCode;
+    stdout.mockRestore();
+  }
+});
