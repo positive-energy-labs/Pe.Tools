@@ -271,7 +271,7 @@ public static class DuctApplier {
                 return item.Refuse($"the {Name(server.ToString())} schema has no field {field} (fields: {string.Join(", ", schema.ListFields().Select(f => f.FieldName))})");
         // Unchanged: the same server, and the same fields (a number compares as a number).
         var want = fields.Select(f => f.Value).Where(v => v.Length > 0).ToList();
-        if (g == server && existing is not null && existing.Count == want.Count && existing.Zip(want).All(pair =>
+        if (g == server && existing is not null && existing.Count == want.Count && existing.Zip(want, (first, second) => (First: first, Second: second)).All(pair =>
                 double.TryParse(pair.First, NumberStyles.Float, CultureInfo.InvariantCulture, out var had) && double.TryParse(pair.Second, NumberStyles.Float, CultureInfo.InvariantCulture, out var w)
                     ? Math.Abs(had - w) <= 1e-9 * Math.Max(1, Math.Abs(had))
                     : string.Equals(pair.First, pair.Second, StringComparison.Ordinal)))
