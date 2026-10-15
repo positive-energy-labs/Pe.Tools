@@ -13,7 +13,7 @@ export interface CircuitSide {
   flowCfm: number | null;
   continuityResidualCfm: number | null;
   jointFlows: { from: string; to: string; cfm: number }[];
-  pressureInWg: number | null;
+  totalPressureInWg: number | null;
   paths: {
     terminalId: number;
     flowCfm: number;
@@ -95,7 +95,7 @@ export function designCircuits(
       flowCfm: null,
       continuityResidualCfm: null,
       jointFlows: [],
-      pressureInWg: pin ? null : fan.referencePressureInWg,
+      totalPressureInWg: pin ? null : fan.referenceTotalPressureInWg,
       paths: [],
       backEdges: [],
       reasons: [],
@@ -326,7 +326,7 @@ export function designCircuits(
                 "Stated loss is only valid at its sourced design flow; no curve was fabricated",
               ),
             );
-          if (passive.loss.flowCfm === 0 && passive.loss.inWg !== 0)
+          if (passive.loss.flowCfm === 0 && passive.loss.totalLossInWg !== 0)
             s.side.reasons.push(
               reason(
                 "nonzero-loss-at-zero-flow",
@@ -334,7 +334,7 @@ export function designCircuits(
                 "Passive aerodynamic design loss cannot be nonzero at zero flow",
               ),
             );
-          componentDrop[part] = passive.loss.inWg;
+          componentDrop[part] = passive.loss.totalLossInWg;
         }
         const element = elements.get(part)!;
         if (new Set(element.connectors.map((c) => c.index)).size !== element.connectors.length)
@@ -426,7 +426,7 @@ export function designCircuits(
                   "Catalog design-point loss does not match terminal flow",
                 ),
               );
-            if (t.loss.flowCfm === 0 && t.loss.inWg !== 0)
+            if (t.loss.flowCfm === 0 && t.loss.totalLossInWg !== 0)
               s.side.reasons.push(
                 reason(
                   "nonzero-loss-at-zero-flow",
@@ -434,35 +434,16 @@ export function designCircuits(
                   "Terminal aerodynamic design loss cannot be nonzero at zero flow",
                 ),
               );
-            terminalPs[part] = t.loss.inWg;
-          } else if (t.role === "reference")
+            terminalPs[part] = t.loss.totalLossInWg;
+          } else {
             s.side.reasons.push(
               reason(
-                "reference-opening-loss-unknown",
+                "terminal-total-loss-unknown",
                 part,
-                "Outdoor/reference opening loss requires explicit design-point evidence, including an explicit sourced zero",
+                "Explicit terminal TOTAL-loss design point is required; legacy catalog/static cells have no admitted pressure-basis conversion",
               ),
             );
-          else if (terminalPs[part] == null && node?.terminalDrop?.catalogDropInWg == null)
-            s.side.reasons.push(
-              reason(
-                "terminal-drop-authority",
-                part,
-                "No catalog parameter or explicit staged terminal loss",
-              ),
-            );
-          else if (
-            t.flowCfm != null &&
-            !close(t.flowCfm, terminalCfm(node) ?? NaN) &&
-            terminalPs[part] == null
-          )
-            s.side.reasons.push(
-              reason(
-                "terminal-loss-off-design-point",
-                part,
-                "Changed terminal demand needs a matching sourced loss",
-              ),
-            );
+          }
         }
       }
       if (s.side.reasons.length || circuitReasons.length) continue;
@@ -516,11 +497,13 @@ export function designCircuits(
       if (!s.side.reasons.length) {
         const pressures = s.side.paths.map(
           (p) =>
-            terminals.get(p.terminalId)!.pressureInWg + (which === "outlet" ? p.total : -p.total),
+            terminals.get(p.terminalId)!.boundaryTotalPressureInWg +
+            (which === "outlet" ? p.total : -p.total),
         );
-        s.side.pressureInWg = which === "outlet" ? Math.max(...pressures) : Math.min(...pressures);
+        s.side.totalPressureInWg =
+          which === "outlet" ? Math.max(...pressures) : Math.min(...pressures);
         s.side.paths.forEach((p, i) => {
-          p.balancingInWg = Math.abs(s.side.pressureInWg! - pressures[i]!);
+          p.balancingInWg = Math.abs(s.side.totalPressureInWg! - pressures[i]!);
         });
       }
     }
@@ -587,9 +570,11 @@ export function designCircuits(
         ),
       );
     const total =
-      allReasons.length || inlet.side.pressureInWg == null || outlet.side.pressureInWg == null
+      allReasons.length ||
+      inlet.side.totalPressureInWg == null ||
+      outlet.side.totalPressureInWg == null
         ? null
-        : outlet.side.pressureInWg - inlet.side.pressureInWg;
+        : outlet.side.totalPressureInWg - inlet.side.totalPressureInWg;
     // Static/total conversion belongs to the exact exterior planes, not a summed classification maximum.
     const velocityPressure = (pin: DuctPortPin | null) => {
       if (!pin) return 0;

@@ -124,7 +124,7 @@ function evidence(s: DuctSnapshot): Record<string, DuctCalculation> {
       element: identity(100),
       inlet: null,
       outlet: pin(s, 100, 0),
-      referencePressureInWg: 0,
+      referenceTotalPressureInWg: 0,
       designFlowCfm: null,
       source: "Purpose fan external-plane role",
     },
@@ -132,7 +132,7 @@ function evidence(s: DuctSnapshot): Record<string, DuctCalculation> {
       kind: "passive",
       element: identity(200),
       ports: [pin(s, 200, 1), pin(s, 200, 2)],
-      loss: { flowCfm: 100, inWg: 0.1, source: "Purpose catalog point at100CFM" },
+      loss: { flowCfm: 100, totalLossInWg: 0.1, source: "Purpose catalog point at100CFM" },
       source: "Purpose inline filter role",
     },
     grille: {
@@ -141,8 +141,12 @@ function evidence(s: DuctSnapshot): Record<string, DuctCalculation> {
       port: pin(s, 300, 0),
       role: "demand",
       flowCfm: null,
-      pressureInWg: 0,
-      loss: null,
+      boundaryTotalPressureInWg: 0,
+      loss: {
+        totalLossInWg: 0.03,
+        flowCfm: 100,
+        source: "Purpose explicitly stated TOTAL-loss point",
+      },
       source: "Purpose room pressure/design demand",
     },
   };
@@ -195,12 +199,12 @@ it("keeps sourced zero losses valid at zero flow, and refuses assigned default-z
   s.nodes.find((n) => n.id === 300)!.facts[0]!.value = 0;
   if (e.filter?.kind !== "passive" || e.grille?.kind !== "terminal")
     throw Error("Purpose fixture kind");
-  e.filter.loss = { flowCfm: 0, inWg: 0, source: "Purpose explicit zero-flow loss" };
-  e.grille.loss = { flowCfm: 0, inWg: 0, source: "Purpose explicit zero-flow loss" };
+  e.filter.loss = { flowCfm: 0, totalLossInWg: 0, source: "Purpose explicit zero-flow loss" };
+  e.grille.loss = { flowCfm: 0, totalLossInWg: 0, source: "Purpose explicit zero-flow loss" };
   const c = price(s, {}, work(e)).next.design.circuits[0]!;
   expect(c.status).toBe("complete-for-declared-design");
   expect(c.requiredExternalTotalPressureInWg).toBe(0);
-  e.filter.loss.inWg = 0.1;
+  e.filter.loss.totalLossInWg = 0.1;
   expect(
     price(s, {}, work(e)).next.design.circuits[0]!.reasons.some(
       (r) => r.code === "nonzero-loss-at-zero-flow",
@@ -208,6 +212,8 @@ it("keeps sourced zero losses valid at zero flow, and refuses assigned default-z
   ).toBe(true);
   const unknown = fixture(),
     u = evidence(unknown);
+  if (u.grille?.kind !== "terminal") throw Error("Purpose fixture kind");
+  u.grille.loss = null;
   unknown.nodes.find((n) => n.id === 300)!.terminalDrop = {
     catalogDropInWg: null,
     assignedPressureDropInWg: 0,
@@ -216,7 +222,7 @@ it("keeps sourced zero losses valid at zero flow, and refuses assigned default-z
   };
   const partial = price(unknown, {}, work(u)).next.design.circuits[0]!;
   expect(partial.requiredExternalTotalPressureInWg).toBeNull();
-  expect(partial.reasons.some((r) => r.code === "terminal-drop-authority")).toBe(true);
+  expect(partial.reasons.some((r) => r.code === "terminal-total-loss-unknown")).toBe(true);
 });
 
 it("keeps contradictory native fan direction and repeated passive ports unadmitted", () => {
@@ -300,7 +306,7 @@ it("pairs two independent ERV fans by exact ports instead of classifications", (
       element: identity(100),
       inlet: pin(s, 100, i),
       outlet: pin(s, 100, o),
-      referencePressureInWg: 0,
+      referenceTotalPressureInWg: 0,
       designFlowCfm: 100,
       source: "Purpose two-blower mapping",
     };
@@ -311,9 +317,11 @@ it("pairs two independent ERV fans by exact ports instead of classifications", (
       port: pin(s, id, 0),
       role: "demand",
       flowCfm: 100,
-      pressureInWg: 0,
+      boundaryTotalPressureInWg: 0,
       loss: {
-        inWg: s.nodes.find((n) => n.id === id)!.terminalDrop!.catalogDropInWg!,
+        totalLossInWg: ({ 301: 0.04, 302: 0.16, 303: 0.12, 304: 0.06 } as Record<number, number>)[
+          id
+        ]!,
         flowCfm: 100,
         source: "Purpose exact catalog point",
       },
@@ -378,7 +386,7 @@ it("retains parallel joints and refuses mesh/multiple fan allocation without cut
         element: identity(400),
         inlet: null,
         outlet: pin(s, 400, 0),
-        referencePressureInWg: 0,
+        referenceTotalPressureInWg: 0,
         designFlowCfm: 50,
         source: "Purpose second fan",
       };
@@ -392,4 +400,36 @@ it("retains parallel joints and refuses mesh/multiple fan allocation without cut
     ).toBe(true);
     if (mesh) expect(result.circuits[0]!.outlet.backEdges.length).toBeGreaterThan(0);
   }
+});
+
+it("refuses unqualified legacy static input and accepts only caller-converted explicit total pressure", () => {
+  const s = fixture(),
+    e = evidence(s);
+  if (e.grille?.kind !== "terminal") throw Error("Purpose fixture kind");
+  e.grille.loss = null;
+  s.nodes.find((n) => n.id === 300)!.terminalDrop!.catalogDropInWg = 0.05;
+  const unknown = price(s, {}, work(e)).next.design.circuits[0]!;
+  expect(unknown.requiredExternalTotalPressureInWg).toBeNull();
+  expect(unknown.reasons.some((r) => r.code === "terminal-total-loss-unknown")).toBe(true);
+  const callerTotal = 0.05 + 0.02 - 0.01;
+  expect(callerTotal).toBeCloseTo(0.06, 12);
+  e.grille.loss = {
+    totalLossInWg: callerTotal,
+    flowCfm: 100,
+    source:
+      "Purpose caller conversion: static loss .05, upstream Pv .02, downstream Pv .01 at explicitly declared planes",
+  };
+  const solved = price(s, {}, work(e)).next.design.circuits[0]!;
+  expect(solved.status).toBe("complete-for-declared-design");
+  expect(solved.outlet.paths[0]!.rows.find((r) => r.id === 300)?.dp).toBeCloseTo(0.06, 12);
+  expect(solved.requiredExternalTotalPressureInWg).toBeCloseTo(
+    2 * friction(roundSection(8), 100, 5, 0.0003).dp + 0.1 + 0.06,
+    12,
+  );
+  expect(() =>
+    work({
+      ...e,
+      grille: { ...e.grille, loss: { inWg: 0.06, flowCfm: 100, source: "Ambiguous old field" } },
+    } as unknown as Record<string, DuctCalculation>),
+  ).toThrow();
 });

@@ -72,9 +72,25 @@ export const ductPortPinSchema = z.strictObject({
   connectedTo: elementIdentity.extend({ connector: z.number().int().nonnegative() }),
 });
 const designPoint = z.strictObject({
-  inWg: z.number().nonnegative(),
-  flowCfm: z.number().nonnegative(),
-  source: z.string().trim().min(1),
+  totalLossInWg: z
+    .number()
+    .nonnegative()
+    .describe(
+      "Dissipative TOTAL pressure loss in in-wg at flowCfm between the source's exact upstream/downstream planes. Not catalog static pressure. If starting with static loss, caller must establish both velocity pressures and convert: totalLoss = staticLoss + PvUp - PvDown. No automatic conversion or invented curve.",
+    ),
+  flowCfm: z
+    .number()
+    .nonnegative()
+    .describe(
+      "The exact flow of this sourced TOTAL-loss design point. It is not a curve and is not extrapolated to another flow.",
+    ),
+  source: z
+    .string()
+    .trim()
+    .min(1)
+    .describe(
+      "Inspectable source or staged design assumption identifying pressure basis, measurement planes and flow; retain any caller static-to-total conversion inputs and rationale.",
+    ),
 });
 /** Calculation-only evidence; generic Work owns proposal/staging and persists it once. */
 export const ductCalculationSchema = z.discriminatedUnion("kind", [
@@ -89,9 +105,21 @@ export const ductCalculationSchema = z.discriminatedUnion("kind", [
     .strictObject({
       kind: z.literal("fan"),
       element: elementIdentity,
-      inlet: ductPortPinSchema.nullable(),
-      outlet: ductPortPinSchema.nullable(),
-      referencePressureInWg: z.number(),
+      inlet: ductPortPinSchema
+        .nullable()
+        .describe(
+          "Exact exterior inlet port. Null explicitly declares a lossless connection to the stated quiescent reference reservoir (Pv=0), not an unknown port to omit. Source must justify this design assumption; no implicit entrance loss is added.",
+        ),
+      outlet: ductPortPinSchema
+        .nullable()
+        .describe(
+          "Exact exterior outlet port. Null explicitly declares a lossless connection to the stated quiescent reference reservoir (Pv=0), not an unknown port to omit. Source must justify this design assumption; no implicit discharge loss is added.",
+        ),
+      referenceTotalPressureInWg: z
+        .number()
+        .describe(
+          "TOTAL pressure in in-wg at a declared implicit reservoir plane on a null-port side. A quiescent reservoir has static=total and Pv=0. Ignored when both physical ports are supplied; never an invented cabinet pressure or manufacturer ESP.",
+        ),
       designFlowCfm: z.number().nonnegative().nullable(),
       source: z.string().trim().min(1),
     })
@@ -102,8 +130,16 @@ export const ductCalculationSchema = z.discriminatedUnion("kind", [
     port: ductPortPinSchema,
     role: z.enum(["demand", "reference"]),
     flowCfm: z.number().nonnegative().nullable(),
-    pressureInWg: z.number(),
-    loss: designPoint.nullable(),
+    boundaryTotalPressureInWg: z
+      .number()
+      .describe(
+        "TOTAL pressure in in-wg at the external room/outdoor reference plane beyond the terminal on discharge paths or before it on intake paths. The terminal's explicit total loss is charged separately. Still-air static=total is a stated design assumption; duct static with nonzero Pv must not be supplied unchanged.",
+      ),
+    loss: designPoint
+      .nullable()
+      .describe(
+        "Explicit sourced TOTAL-loss point for this terminal/opening, including justified zero. Null remains unknown: legacy terminalDrops and native catalog/assigned static values are not reinterpreted as total pressure.",
+      ),
     source: z.string().trim().min(1),
   }),
   z.strictObject({ kind: z.literal("balanced-design"), source: z.string().trim().min(1) }),
