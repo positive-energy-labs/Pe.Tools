@@ -157,6 +157,8 @@ export function createUpdateReader(options: {
   let automaticPending = false;
   let terminalDiagnosticPending = false;
   const handedOff = new Set<string>();
+  // The marker is re-read on every read, so writing or deleting it takes effect without a host restart.
+  const automaticOn = () => !(options.automaticOffPath && existsSync(options.automaticOffPath));
   let value: MachineUpdate = {
     plan: null,
     receipt: null,
@@ -164,7 +166,7 @@ export function createUpdateReader(options: {
     admittedPlanId: null,
     planLeg: unreadLeg(),
     receiptLeg: unreadLeg(),
-    automatic: !(options.automaticOffPath && existsSync(options.automaticOffPath)),
+    automatic: automaticOn(),
   };
 
   const load = () =>
@@ -426,7 +428,7 @@ export function createUpdateReader(options: {
     apply,
     setAutomatic,
     announce: (fact: UpdateFact) => options.fact?.(fact),
-    current: () => value,
+    current: () => (value = { ...value, automatic: automaticOn() }),
     automaticPending: () => automaticPending,
   };
 }
