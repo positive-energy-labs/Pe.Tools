@@ -433,3 +433,390 @@ it("refuses unqualified legacy static input and accepts only caller-converted ex
     } as unknown as Record<string, DuctCalculation>),
   ).toThrow();
 });
+
+function sharedFlowFixture() {
+  const s = fixture();
+  const owner = s.nodes[0]!;
+  s.nodes = [
+    { ...owner, id: 100, uniqueId: "purpose-100", connectors: [port(0, 500, 0)] },
+    { ...owner, id: 400, uniqueId: "purpose-400", connectors: [port(0, 500, 1)] },
+    {
+      ...owner,
+      id: 500,
+      uniqueId: "purpose-500",
+      kind: "fitting",
+      connectors: [port(0, 100, 0), port(1, 400, 0), port(2, 300, 0)],
+    },
+    {
+      ...owner,
+      id: 300,
+      uniqueId: "purpose-300",
+      kind: "terminal",
+      connectors: [port(0, 500, 2, "in")],
+      facts: [],
+    },
+  ];
+  s.segments = [];
+  s.groups = [group("shared", [100, 400], 1)];
+  const e: Record<string, DuctCalculation> = {
+    scenario: { kind: "balanced-design", source: "Synthetic design" },
+    a: {
+      kind: "fan",
+      element: identity(100),
+      inlet: null,
+      outlet: pin(s, 100, 0),
+      referenceTotalPressureInWg: 0,
+      designFlowCfm: 100,
+      source: "Synthetic100",
+    },
+    b: {
+      kind: "fan",
+      element: identity(400),
+      inlet: null,
+      outlet: pin(s, 400, 0),
+      referenceTotalPressureInWg: 0,
+      designFlowCfm: 200,
+      source: "Synthetic200",
+    },
+    t: {
+      kind: "terminal",
+      element: identity(300),
+      port: pin(s, 300, 0),
+      role: "demand",
+      flowCfm: 300,
+      boundaryTotalPressureInWg: 0,
+      loss: null,
+      source: "Synthetic300",
+    },
+  };
+  return { s, e };
+}
+it("solves shared component flow once without claiming shared pressure completion", () => {
+  const { s, e } = sharedFlowFixture();
+  const d = price(s, {}, work(e)).next.design;
+  const c = d.componentFlows.find((c) => c.elementIds.includes(100))!;
+  expect(c.status).toBe("unique");
+  expect(c.maxResidualCfm).toBe(0);
+  expect(
+    c.edges
+      .filter((e) => e.kind === "joint")
+      .map((e) => Math.abs(e.signedCfm!))
+      .sort((a, b) => a - b),
+  ).toEqual([100, 200, 300]);
+  expect(d.circuits.map((c) => c.flowCfm)).toEqual([100, 200]);
+  expect(
+    d.circuits
+      .flatMap((c) => c.reasons)
+      .some((r) => r.code === "inconsistent-design-flow" || r.code === "inconsistent-mass-demand"),
+  ).toBe(false);
+  expect(
+    d.circuits.every((c) => c.status === "partial" && c.requiredExternalTotalPressureInWg === null),
+  ).toBe(true);
+});
+it("does not invent a shared fan split or silently repair imbalanced demand", () => {
+  const { s, e } = sharedFlowFixture();
+  if (e.a?.kind !== "fan" || e.b?.kind !== "fan" || e.t?.kind !== "terminal")
+    throw Error("fixture roles");
+  e.a.designFlowCfm = null;
+  e.b.designFlowCfm = null;
+  expect(
+    price(s, {}, work(e)).next.design.componentFlows.find((c) => c.elementIds.includes(100))!
+      .status,
+  ).toBe("underdetermined");
+  e.a.designFlowCfm = 100;
+  e.b.designFlowCfm = 200;
+  e.t.flowCfm = 290;
+  expect(
+    price(s, {}, work(e)).next.design.componentFlows.find((c) => c.elementIds.includes(100))!
+      .status,
+  ).toBe("inconsistent");
+});
+
+function parallelFlowFixture() {
+  const { s, e } = sharedFlowFixture();
+  const owner = s.nodes[0]!;
+  s.nodes = [
+    { ...owner, id: 100, uniqueId: "purpose-100", connectors: [port(0, 500, 0)] },
+    {
+      ...owner,
+      id: 500,
+      uniqueId: "purpose-500",
+      kind: "fitting",
+      connectors: [port(0, 100, 0), port(1, 10, 0), port(2, 20, 0)],
+    },
+    {
+      ...owner,
+      id: 600,
+      uniqueId: "purpose-600",
+      kind: "fitting",
+      connectors: [port(0, 10, 1), port(1, 20, 1), port(2, 300, 0)],
+    },
+    {
+      ...owner,
+      id: 300,
+      uniqueId: "purpose-300",
+      kind: "terminal",
+      connectors: [port(0, 600, 2, "in")],
+      facts: [],
+    },
+  ];
+  s.segments = [10, 20].map((id, i) => {
+    const a = port(0, 500, i + 1),
+      b = port(1, 600, i);
+    b.point = [5, 0, 0];
+    return { ...fixture().segments[0]!, id, uniqueId: `purpose-${id}`, connectors: [a, b] };
+  });
+  delete e.b;
+  if (e.a?.kind !== "fan" || e.t?.kind !== "terminal") throw Error("fixture roles");
+  e.a.designFlowCfm = 300;
+  e.a.outlet = pin(s, 100, 0);
+  e.t.port = pin(s, 300, 0);
+  return { s, e };
+}
+it("admits sourced cycle allocation by conservation while pressure and KVL remain partial", () => {
+  const { s, e } = parallelFlowFixture();
+  const before = price(s, {}, work(e)).next.design.componentFlows[0]!;
+  expect(before.cycleRank).toBe(1);
+  expect(before.status).toBe("underdetermined");
+  const constraint = {
+    element: identity(10),
+    port: pin(s, 10, 0),
+    signedCfm: -200,
+    source: "Synthetic stated200 design allocation, NOT operating point",
+  };
+  e.flow = {
+    kind: "component-flow",
+    componentWitness: structuredClone(before.componentWitness),
+    constraints: [constraint],
+    source: "Synthetic single component design",
+  };
+  const d = price(s, {}, work(e)).next.design,
+    c = d.componentFlows[0]!;
+  expect(c.status).toBe("unique");
+  expect(c.edges.filter((e) => e.kind === "duct-subrun").map((e) => e.signedCfm)).toEqual([
+    200, 100,
+  ]);
+  expect(c.edges).toHaveLength(before.edges.length);
+  expect(d.circuits[0]!.requiredExternalTotalPressureInWg).toBeNull();
+  expect(d.circuits[0]!.reasons.some((r) => r.code === "mesh-not-solved")).toBe(true);
+  const staged = work(e);
+  s.document.readAt = "2099-01-01";
+  expect(price(s, {}, staged).next.design.componentFlows[0]!.status).toBe("unique");
+  s.segments[0]!.lengthFt = 6;
+  expect(
+    price(s, {}, staged).next.design.componentFlows[0]!.reasons.some(
+      (r) => r.code === "stale-component-flow",
+    ),
+  ).toBe(true);
+  s.segments[0]!.lengthFt = 5;
+  if (e.flow.kind !== "component-flow") throw Error("flow fixture");
+  e.flow.constraints.push({ ...constraint, signedCfm: -150 });
+  expect(
+    price(s, {}, work(e)).next.design.componentFlows[0]!.reasons.some(
+      (r) => r.code === "conflicting-flow-constraint",
+    ),
+  ).toBe(true);
+});
+it("duplicate constraints do not close a second independent cycle", () => {
+  const { s, e } = parallelFlowFixture();
+  s.nodes.find((n) => n.id === 500)!.connectors.push(port(3, 30, 0));
+  s.nodes.find((n) => n.id === 600)!.connectors.push(port(3, 30, 1));
+  const a = port(0, 500, 3),
+    b = port(1, 600, 3);
+  b.point = [5, 0, 0];
+  s.segments.push({ ...s.segments[0]!, id: 30, uniqueId: "purpose-30", connectors: [a, b] });
+  const baseline = price(s, {}, work(e)).next.design.componentFlows[0]!;
+  expect(baseline.cycleRank).toBe(2);
+  const constraint = {
+    element: identity(10),
+    port: pin(s, 10, 0),
+    signedCfm: -200,
+    source: "Synthetic200",
+  };
+  e.flow = {
+    kind: "component-flow",
+    componentWitness: baseline.componentWitness,
+    constraints: [constraint, constraint],
+    source: "Dependent constraints",
+  };
+  expect(price(s, {}, work(e)).next.design.componentFlows[0]!.status).toBe("underdetermined");
+});
+it("reports real mid-duct subruns4ft at300CFM and6ft at200CFM", () => {
+  const { s, e } = sharedFlowFixture(),
+    owner = s.nodes[0]!;
+  s.nodes = [
+    { ...owner, id: 100, uniqueId: "purpose-100", connectors: [port(0, 10, 0)] },
+    {
+      ...owner,
+      id: 500,
+      uniqueId: "purpose-500",
+      kind: "fitting",
+      connectors: [port(0, 10, 2), port(1, 600, 0)],
+    },
+    {
+      ...owner,
+      id: 300,
+      uniqueId: "purpose-300",
+      kind: "terminal",
+      connectors: [port(0, 10, 1, "in")],
+    },
+    {
+      ...owner,
+      id: 600,
+      uniqueId: "purpose-600",
+      kind: "terminal",
+      connectors: [port(0, 500, 1, "in")],
+    },
+  ];
+  const ps = [port(0, 100, 0), port(1, 300, 0), port(2, 500, 0)];
+  ps[1]!.point = [10, 0, 0];
+  ps[2]!.point = [4, 0, 0];
+  s.segments = [
+    {
+      ...fixture().segments[0]!,
+      id: 10,
+      uniqueId: "purpose-10",
+      lengthFt: 10,
+      polyline: [
+        [0, 0, 0],
+        [10, 0, 0],
+      ],
+      connectors: ps,
+    },
+  ];
+  delete e.b;
+  if (e.a?.kind !== "fan" || e.t?.kind !== "terminal") throw Error("fixture roles");
+  e.a.designFlowCfm = 300;
+  e.a.outlet = pin(s, 100, 0);
+  e.t.flowCfm = 200;
+  e.t.port = pin(s, 300, 0);
+  e.branch = { ...e.t, element: identity(600), port: pin(s, 600, 0), flowCfm: 100 };
+  const c = price(s, {}, work(e)).next.design.componentFlows.find((c) =>
+    c.elementIds.includes(100),
+  )!;
+  expect(c.status).toBe("unique");
+  expect(
+    c.edges
+      .filter((e) => e.kind === "duct-subrun")
+      .map((e) => ({ length: e.lengthFt, q: e.signedCfm })),
+  ).toEqual([
+    { length: 4, q: 300 },
+    { length: 6, q: 200 },
+  ]);
+});
+it("requires sourced signed sense for a bidirectional terminal and refuses foreign constraints", () => {
+  const { s, e } = sharedFlowFixture();
+  s.nodes.find((n) => n.id === 300)!.connectors[0]!.direction = "bidirectional";
+  if (e.t?.kind !== "terminal") throw Error("fixture terminal");
+  e.t.port = pin(s, 300, 0);
+  const baseline = price(s, {}, work(e)).next.design.componentFlows[0]!;
+  expect(baseline.status).toBe("underdetermined");
+  const constraint = {
+    element: identity(300),
+    port: pin(s, 300, 0),
+    signedCfm: -300,
+    source: "Explicit300CFM withdrawal",
+  };
+  e.flow = {
+    kind: "component-flow",
+    componentWitness: baseline.componentWitness,
+    constraints: [constraint],
+    source: "Known signed terminal sense",
+  };
+  expect(price(s, {}, work(e)).next.design.componentFlows[0]!.status).toBe("unique");
+  constraint.element.uniqueId = "foreign";
+  expect(
+    price(s, {}, work(e)).next.design.componentFlows[0]!.reasons.some(
+      (r) => r.code === "stale-flow-constraint",
+    ),
+  ).toBe(true);
+});
+
+it("never treats a KCL-compatible sourced equal split as KVL/pressure certification or native apply input", () => {
+  const { s, e } = parallelFlowFixture();
+  const witness = price(s, {}, work(e)).next.design.componentFlows[0]!.componentWitness;
+  e.flow = {
+    kind: "component-flow",
+    componentWitness: witness,
+    constraints: [
+      {
+        element: identity(10),
+        port: pin(s, 10, 0),
+        signedCfm: -150,
+        source: "Synthetic equal split, NOT hydraulic proof",
+      },
+    ],
+    source: "Sourced conditional design",
+  };
+  const p = price(s, {}, work(e)),
+    c = p.next.design.componentFlows[0]!;
+  expect(c.status).toBe("unique");
+  expect(c.edges.filter((e) => e.kind === "duct-subrun").map((e) => e.signedCfm)).toEqual([
+    150, 150,
+  ]);
+  expect(p.next.design.circuits[0]!.status).toBe("partial");
+  expect(p.next.design.circuits[0]!.requiredExternalTotalPressureInWg).toBeNull();
+  expect(JSON.stringify(applyRequest(s, p, "purpose-time", ""))).not.toContain("componentWitness");
+  expect(JSON.stringify(applyRequest(s, p, "purpose-time", ""))).not.toContain("signedCfm");
+});
+it("does not allow independently derived inlet/outlet demands to leak mass through one fan", () => {
+  const { s, e } = sharedFlowFixture(),
+    owner = s.nodes[0]!;
+  s.nodes = [
+    { ...owner, id: 100, uniqueId: "purpose-100", connectors: [port(0, 300, 0), port(1, 600, 0)] },
+    {
+      ...owner,
+      id: 300,
+      uniqueId: "purpose-300",
+      kind: "terminal",
+      connectors: [port(0, 100, 0, "out")],
+    },
+    {
+      ...owner,
+      id: 600,
+      uniqueId: "purpose-600",
+      kind: "terminal",
+      connectors: [port(0, 100, 1, "in")],
+    },
+  ];
+  delete e.b;
+  if (e.a?.kind !== "fan" || e.t?.kind !== "terminal") throw Error("fixture roles");
+  e.a.inlet = pin(s, 100, 0);
+  e.a.outlet = pin(s, 100, 1);
+  e.a.designFlowCfm = null;
+  e.t.port = pin(s, 300, 0);
+  e.t.flowCfm = 100;
+  e.other = { ...e.t, element: identity(600), port: pin(s, 600, 0), flowCfm: 200 };
+  const cs = price(s, {}, work(e)).next.design.componentFlows;
+  expect(cs.every((c) => c.status === "inconsistent")).toBe(true);
+  expect(cs.every((c) => c.reasons.some((r) => r.code === "fan-mass-continuity"))).toBe(true);
+});
+
+it("stale component-flow evidence cannot leave a previously complete tree pressure result certified", () => {
+  const { s, e } = sharedFlowFixture();
+  s.nodes = s.nodes.filter((n) => n.id === 100 || n.id === 300);
+  s.nodes[0]!.connectors = [port(0, 300, 0)];
+  s.nodes[1]!.connectors = [port(0, 100, 0, "in")];
+  delete e.b;
+  if (e.a?.kind !== "fan" || e.t?.kind !== "terminal") throw Error("fixture roles");
+  e.a.outlet = pin(s, 100, 0);
+  e.t.port = pin(s, 300, 0);
+  e.t.flowCfm = 100;
+  e.t.loss = { flowCfm: 100, totalLossInWg: 0.03, source: "Explicit synthetic TOTAL loss" };
+  const before = price(s, {}, work(e)).next.design;
+  expect(before.circuits[0]!.status).toBe("complete-for-declared-design");
+  const witness = structuredClone(before.componentFlows[0]!.componentWitness);
+  witness[0]!.family = "stale family";
+  e.flow = {
+    kind: "component-flow",
+    componentWitness: witness,
+    constraints: [
+      { element: identity(100), port: pin(s, 100, 0), signedCfm: 100, source: "Design100" },
+    ],
+    source: "Old component witness",
+  };
+  const after = price(s, {}, work(e)).next.design;
+  expect(after.componentFlows[0]!.status).toBe("inconsistent");
+  expect(after.circuits[0]!.status).toBe("partial");
+  expect(after.circuits[0]!.requiredExternalTotalPressureInWg).toBeNull();
+});

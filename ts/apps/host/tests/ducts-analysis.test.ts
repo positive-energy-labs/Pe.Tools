@@ -657,3 +657,223 @@ test("browser human analysis retains its admitted identity through nested native
     vi.unstubAllEnvs();
   }
 });
+
+test("component flow projection is canonical, bounded and historical", async () => {
+  const f = fixture();
+  const initial = await f.api.read(read({ kind: "fresh", target: f.target }));
+  const counts = f.counts();
+  const response = await f.api.read(
+    read(
+      { kind: "artifact", id: initial.analysisId },
+      { kind: "document" },
+      { projection: "flows", limit: 1 },
+    ),
+  );
+  expect(response.rows).toHaveLength(1);
+  expect(response.rows[0]?.flow).toMatchObject({ kind: "joint", signedCfm: null });
+  expect(Buffer.byteLength(JSON.stringify(response))).toBeLessThanOrEqual(65536);
+  expect(response.rows[0]).not.toHaveProperty("componentWitness");
+  expect(f.counts()).toEqual(counts);
+});
+
+test("canonical staged component constraints drive shared analysis without claiming pressure completion", async () => {
+  const f = fixture(),
+    owner = f.snapshot.nodes[0]!;
+  const makePort = (index: number, id: number, connector: number) => ({
+    ...owner.connectors[0]!,
+    index,
+    connectedTo: { elementId: id, connector },
+  });
+  f.snapshot.nodes = [
+    { ...owner, id: 1, uniqueId: "flow-1", connectors: [makePort(0, 4, 0)] },
+    { ...owner, id: 3, uniqueId: "flow-3", connectors: [makePort(0, 4, 1)] },
+    {
+      ...owner,
+      id: 4,
+      uniqueId: "flow-4",
+      kind: "fitting",
+      connectors: [makePort(0, 1, 0), makePort(1, 3, 0), makePort(2, 2, 0)],
+    },
+    { ...f.snapshot.nodes[1]!, id: 2, uniqueId: "flow-2", connectors: [makePort(0, 4, 2)] },
+  ];
+  const resolve = f.sources.resolve;
+  f.sources.resolve = async (target) => ({
+    ...(await resolve(target)),
+    address: "C:/flow-fixture.rvt",
+  });
+  const pin = (id: number, index: number): DuctPortPin => {
+    const p = f.snapshot.nodes.find((n) => n.id === id)!.connectors.find((p) => p.index === index)!;
+    return {
+      index,
+      point: [0, 0, 0],
+      shape: "round",
+      diameterIn: 8,
+      widthIn: null,
+      heightIn: null,
+      direction: p.direction,
+      connectedTo: {
+        id: p.connectedTo!.elementId,
+        uniqueId: `flow-${p.connectedTo!.elementId}`,
+        connector: p.connectedTo!.connector,
+      },
+    };
+  };
+  const doc = ductsDocumentSchema.parse({
+    calculation: {
+      scenario: { staged: { value: { kind: "balanced-design", source: "Synthetic design" } } },
+      a: {
+        staged: {
+          value: {
+            kind: "fan",
+            element: { id: 1, uniqueId: "flow-1" },
+            inlet: null,
+            outlet: pin(1, 0),
+            designFlowCfm: 100,
+            referenceTotalPressureInWg: 0,
+            source: "Synthetic100",
+          },
+        },
+      },
+      b: {
+        staged: {
+          value: {
+            kind: "fan",
+            element: { id: 3, uniqueId: "flow-3" },
+            inlet: null,
+            outlet: pin(3, 0),
+            designFlowCfm: 200,
+            referenceTotalPressureInWg: 0,
+            source: "Synthetic200",
+          },
+        },
+      },
+      t: {
+        staged: {
+          value: {
+            kind: "terminal",
+            element: { id: 2, uniqueId: "flow-2" },
+            port: pin(2, 0),
+            role: "demand",
+            flowCfm: 300,
+            boundaryTotalPressureInWg: 0,
+            loss: null,
+            source: "Synthetic300",
+          },
+        },
+      },
+    },
+  });
+  f.sources.readWork = async () => ({ doc, revision: 1 });
+  const baseline = await f.api.read(
+    read({ kind: "fresh", target: f.target }, { kind: "document" }, { projection: "components" }),
+  );
+  const raw = JSON.parse(await (await f.api.artifact(baseline.analysisId)).text());
+  expect(baseline.rows[0]!.component?.status).toBe("underdetermined");
+  const design = {
+    kind: "component-flow",
+    componentWitness: raw.outputs.next.design.componentFlows[0].componentWitness,
+    constraints: [
+      {
+        element: { id: 2, uniqueId: "flow-2" },
+        port: pin(2, 0),
+        signedCfm: -300,
+        source: "Explicit signed300 withdrawal",
+      },
+    ],
+    source: "One component design",
+  };
+  let staged = ductsDocumentSchema.parse({
+    ...doc,
+    calculation: { ...doc.calculation, flow: { proposal: { value: design } } },
+  });
+  f.sources.readWork = async () => ({ doc: staged, revision: 2 });
+  const proposal = await f.api.read(
+    read({ kind: "fresh", target: f.target }, { kind: "document" }, { projection: "components" }),
+  );
+  expect(proposal.rows[0]!.component?.status).toBe("underdetermined");
+  staged = ductsDocumentSchema.parse({
+    ...doc,
+    calculation: { ...doc.calculation, flow: { staged: { value: design } } },
+  });
+  const fresh = ductsAnalysisResponseSchema.parse(
+    await f.api.read(
+      read(
+        { kind: "fresh", target: f.target },
+        { kind: "document" },
+        { projection: "flows", limit: 100 },
+      ),
+    ),
+  );
+  expect(
+    fresh.rows
+      .filter((r) => r.flow?.kind === "joint")
+      .map((r) => Math.abs(r.flow!.signedCfm!))
+      .sort((a, b) => a - b),
+  ).toEqual([100, 200, 300]);
+  const before = f.counts();
+  const historical = ductsAnalysisResponseSchema.parse(
+    await f.api.read(
+      read(
+        { kind: "artifact", id: fresh.analysisId },
+        { kind: "document" },
+        { projection: "flows", limit: 100 },
+      ),
+    ),
+  );
+  expect(historical.rows).toEqual(fresh.rows);
+  expect(f.counts()).toEqual(before);
+  const circuits = await f.api.read(
+    read(
+      { kind: "artifact", id: fresh.analysisId },
+      { kind: "document" },
+      { projection: "circuits" },
+    ),
+  );
+  expect(
+    circuits.rows.every(
+      (r) =>
+        r.circuit?.status === "partial" && r.circuit.requiredExternalTotalPressureInWg === null,
+    ),
+  ).toBe(true);
+});
+test("analysis pages obey byte budget and preserve complete historical row coverage", async () => {
+  const f = fixture(),
+    owner = f.snapshot.nodes[0]!;
+  for (let i = 3; i < 23; i++)
+    f.snapshot.nodes.push({
+      ...owner,
+      id: i,
+      uniqueId: `large-${i}`,
+      family: "X".repeat(10000),
+      connectors: [],
+    });
+  const first = await f.api.read(
+    read(
+      { kind: "fresh", target: f.target },
+      { kind: "document" },
+      { projection: "summary", limit: 100 },
+    ),
+  );
+  expect(first.rows.length).toBeLessThan(21);
+  expect(first.page.nextCursor).not.toBeNull();
+  const ids = first.rows.map((r) => r.id);
+  let cursor = first.page.nextCursor;
+  while (cursor) {
+    const page = await f.api.read(
+      read(
+        { kind: "artifact", id: first.analysisId },
+        { kind: "document" },
+        { projection: "summary", limit: 100, cursor },
+      ),
+    );
+    expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThanOrEqual(65536);
+    ids.push(...page.rows.map((r) => r.id));
+    cursor = page.page.nextCursor;
+  }
+  expect(new Set(ids).size).toBe(21);
+  expect(ids).toHaveLength(21);
+  f.snapshot.nodes[0]!.family = "X".repeat(70000);
+  await expect(f.api.read(read({ kind: "fresh", target: f.target }))).rejects.toThrow(
+    /65536-byte budget.*artifact/,
+  );
+});

@@ -287,7 +287,18 @@ export function assessDucts(
       stagedInWg: part.fan,
     })),
   }));
+  const selectedIds = new Set([
+    ...groups.flatMap((g) => g.rootIds),
+    ...snapshot.nodes.filter((n) => groupIds.has(n.groupId ?? "")).map((n) => n.id),
+    ...snapshot.segments.filter((n) => groupIds.has(n.groupId ?? "")).map((n) => n.id),
+    ...selectedTerminals.map((n) => n.id),
+  ]);
+  if (selector.kind === "equipment" || selector.kind === "terminal") selectedIds.add(selector.id);
+  const componentFlows = next.design.componentFlows.filter(
+    (c) => selector.kind === "document" || c.elementIds.some((id) => selectedIds.has(id)),
+  );
   return {
+    componentFlows,
     circuits,
     groups,
     selectedTerminals,

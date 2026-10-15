@@ -1,3 +1,4 @@
+import { componentFlows, type ComponentFlow } from "./component-flows.ts";
 import { physicalGraph, type PhysicalGraph, type CircuitReason } from "./physical-graph.ts";
 import type { DuctCalculation, DuctPortPin } from "@pe/agent-contracts";
 import type { GroupTree } from "./topology.ts";
@@ -50,6 +51,7 @@ export interface CircuitResult {
     reachedTerminals: number;
   };
   circuits: DesignCircuit[];
+  componentFlows: ComponentFlow[];
   reasons: CircuitReason[];
 }
 const key = (id: number, port: number) => `${id}:${port}`;
@@ -72,6 +74,8 @@ export function designCircuits(
     overrides: Overrides,
   ) => { terminalId: number; rows: Row[]; total: number }[],
 ): CircuitResult {
+  const physical = physicalGraph(snapshot, evidence);
+  const flowComponents = componentFlows(physical);
   const {
     elements,
     nodes,
@@ -84,7 +88,7 @@ export function designCircuits(
     graph,
     adjacent,
     badJoints,
-  } = physicalGraph(snapshot, evidence);
+  } = physical;
   const makeSide = (
     fan: Fan,
     pin: DuctPortPin | null,
@@ -158,7 +162,7 @@ export function designCircuits(
         reason(
           "unresolved-fan-allocation",
           fan.element.id,
-          "External component has multiple/unknown equipment boundaries; tree first slice does not allocate shared or series fan heads",
+          "Shared/series component pressure allocation and converging loss regimes are not implemented; component KCL flow is reported separately",
         ),
       );
     if (side.backEdges.length)
@@ -242,14 +246,23 @@ export function designCircuits(
         ),
       );
     const totals = [inlet, outlet]
-      .filter((s) => s.tree)
+      .filter((s) => s.tree && !s.side.reasons.some((r) => r.code === "unresolved-fan-allocation"))
       .map((s) =>
         [...s.terminalFlows.values()].every((q) => q != null)
           ? [...s.terminalFlows.values()].reduce<number>((a, b) => a + b!, 0)
           : null,
       );
     const known = totals.filter((q): q is number => q != null);
-    const q = fan.designFlowCfm ?? known[0] ?? null;
+    const boundaryFlows = flowComponents.flatMap((c) =>
+      c.status === "unique"
+        ? c.boundaries
+            .filter((b) =>
+              [fan.inlet, fan.outlet].some((p) => p && b.port === key(fan.element.id, p.index)),
+            )
+            .map((b) => Math.abs(b.injectionCfm!))
+        : [],
+    );
+    const q = fan.designFlowCfm ?? boundaryFlows[0] ?? known[0] ?? null;
     if (q == null)
       circuitReasons.push(
         reason(
@@ -272,6 +285,32 @@ export function designCircuits(
     ] as const) {
       s.side.flowCfm = q;
       if (!s.tree) continue;
+      const component = flowComponents.find((c) =>
+        c.edges.some(
+          (e) =>
+            e.from === key(fan.element.id, s.side.port!) ||
+            e.to === key(fan.element.id, s.side.port!),
+        ),
+      );
+      if (component) {
+        s.side.jointFlows = component.edges
+          .filter((e) => e.kind === "joint" && e.signedCfm != null)
+          .map((e) => ({
+            from: e.signedCfm! >= 0 ? e.from : e.to,
+            to: e.signedCfm! >= 0 ? e.to : e.from,
+            cfm: Math.abs(e.signedCfm!),
+          }));
+        if (
+          component.status === "inconsistent" ||
+          (component.status !== "unique" &&
+            s.side.reasons.some((r) => r.code === "unresolved-fan-allocation"))
+        )
+          s.side.reasons.push(...component.reasons);
+      }
+      if (s.side.reasons.some((r) => r.code === "unresolved-fan-allocation")) {
+        s.side.continuityResidualCfm = component?.maxResidualCfm ?? null;
+        continue;
+      }
       const unknown = [...s.terminalFlows].filter(([, v]) => v == null);
       const knownSum = [...s.terminalFlows.values()].reduce<number>((a, b) => a + (b ?? 0), 0);
       if (
@@ -635,5 +674,12 @@ export function designCircuits(
       circuits.flatMap((c) => [...c.inlet.paths, ...c.outlet.paths].map((p) => p.terminalId)),
     ).size,
   };
-  return { basis: "balanced-design-demand", graph, coverage, circuits, reasons };
+  return {
+    basis: "balanced-design-demand",
+    graph,
+    coverage,
+    circuits,
+    componentFlows: flowComponents,
+    reasons,
+  };
 }

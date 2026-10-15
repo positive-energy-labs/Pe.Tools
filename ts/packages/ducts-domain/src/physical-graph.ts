@@ -51,7 +51,7 @@ export function physicalGraph(
   const fans: { id: string; value: Fan }[] = [];
   const claims = new Map<string, string[]>();
   const scenarios = entries.filter(([, e]) => e.kind === "balanced-design");
-  const identity = (e: Exclude<DuctCalculation, { kind: "balanced-design" }>) =>
+  const identity = (e: Exclude<DuctCalculation, { kind: "balanced-design" | "component-flow" }>) =>
     elements.get(e.element.id)?.uniqueId === e.element.uniqueId;
   const pinMatches = (id: number, pin: DuctPortPin) => {
     const cs = elements.get(id)?.connectors.filter((c) => c.index === pin.index) ?? [];
@@ -77,14 +77,14 @@ export function physicalGraph(
       c.direction === pin.direction
     );
   };
-  const pinsOf = (e: Exclude<DuctCalculation, { kind: "balanced-design" }>) =>
+  const pinsOf = (e: Exclude<DuctCalculation, { kind: "balanced-design" | "component-flow" }>) =>
     e.kind === "passive"
       ? e.ports
       : e.kind === "terminal"
         ? [e.port]
         : [e.inlet, e.outlet].filter((p) => p !== null);
   for (const [id, e] of entries) {
-    if (e.kind === "balanced-design") continue;
+    if (e.kind === "balanced-design" || e.kind === "component-flow") continue;
     const element = nodes.get(e.element.id);
     if (!identity(e) || !pinsOf(e).every((p) => pinMatches(e.element.id, p))) {
       reasons.push(
@@ -217,6 +217,8 @@ export function physicalGraph(
     }
   for (const list of adjacent.values()) list.sort((a, b) => a - b);
   return {
+    pinMatches,
+    flowDesigns: entries.filter(([, e]) => e.kind === "component-flow"),
     elements,
     nodes,
     segments,

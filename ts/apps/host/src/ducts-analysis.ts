@@ -245,6 +245,8 @@ function project(
 ): DuctsAnalysisResponse {
   const { snapshot, work } = input;
   const { now, next } = artifact.outputs;
+  if (!Array.isArray(next.design.componentFlows))
+    throw Error("Retained analysis predates component-flow evidence; acquire a new analysis");
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
   const selector = request.selector;
   const assessment = assessDucts(snapshot, work, artifact.outputs, {
@@ -269,13 +271,49 @@ function project(
     spaceText: node ? space(node) : null,
     detail: null,
     path: null,
+    component: null,
+    flow: null,
     circuit: null,
     port: null,
     classificationParts: [],
     servedGroupState: null,
   });
   let rows: DuctsAnalysisResponse["rows"];
-  if (request.projection === "summary")
+  if (request.projection === "components")
+    rows = assessment.componentFlows.map((c) => ({
+      ...baseRow(undefined, c.elementIds[0]!),
+      kind: "component",
+      label: `Component ${c.id}`,
+      flowCfm: null,
+      requiredEspNowInWg: null,
+      requiredEspStagedInWg: null,
+      component: {
+        id: c.id,
+        status: c.status,
+        nodeCount: c.nodeCount,
+        edgeCount: c.edges.length,
+        cycleRank: c.cycleRank,
+        unknownEdges: c.unknownEdges,
+        maxResidualCfm: c.maxResidualCfm,
+        reasonCount: c.reasons.length,
+        reasonsTruncated: c.reasons.length > 20,
+        reasons: c.reasons.slice(0, 20),
+        pressureCertification: "not-established-by-flow-check",
+      },
+    }));
+  else if (request.projection === "flows")
+    rows = assessment.componentFlows.flatMap((c) =>
+      c.edges.map((e) => ({
+        ...baseRow(nodes.get(e.elementId), e.elementId),
+        kind: "flow" as const,
+        label: e.id,
+        flowCfm: e.signedCfm,
+        requiredEspNowInWg: null,
+        requiredEspStagedInWg: null,
+        flow: { componentId: c.id, componentStatus: c.status, ...e },
+      })),
+    );
+  else if (request.projection === "summary")
     rows = equipment.map((unit) => ({
       ...baseRow(nodes.get(unit.id), unit.id),
       kind: "equipment",
@@ -472,7 +510,7 @@ function project(
     throw Error("Cursor does not belong to this analysis, selector, projection and limit");
   const offset = request.cursor?.offset ?? 0;
   const pageRows = rows.slice(offset, offset + request.limit);
-  return {
+  const response: DuctsAnalysisResponse = {
     analysisId: id,
     artifact: {
       id,
@@ -504,4 +542,18 @@ function project(
         offset + pageRows.length < rows.length ? { offset: offset + pageRows.length, basis } : null,
     },
   };
+  // Full input/witnesses stay in the artifact; every normal reading has a hard UTF-8 byte budget.
+  const byteLimit = 65536;
+  while (Buffer.byteLength(JSON.stringify(response), "utf8") > byteLimit && response.rows.length) {
+    response.rows.pop();
+    response.page.returned = response.rows.length;
+    response.page.truncated = true;
+    response.page.nextCursor = { offset: offset + response.rows.length, basis };
+  }
+  if (
+    Buffer.byteLength(JSON.stringify(response), "utf8") > byteLimit ||
+    (rows.length > offset && !response.rows.length)
+  )
+    throw Error(`Analysis reading exceeds 65536-byte budget; inspect full artifact ${id}`);
+  return response;
 }

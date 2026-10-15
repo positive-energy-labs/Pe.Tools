@@ -18,7 +18,19 @@ export const ductsAnalysisRequestSchema = z
     ]),
     selector: ductsAnalysisSelectorSchema,
     projection: z
-      .enum(["summary", "terminals", "path", "circuits", "circuit-path", "ports"])
+      .enum([
+        "summary",
+        "terminals",
+        "path",
+        "circuits",
+        "circuit-path",
+        "ports",
+        "components",
+        "flows",
+      ])
+      .describe(
+        "components reports whole-component stated-design flow status, not pressure certification; flows pages every physical joint and ordered duct subrun with signed CFM. Full componentWitness is in the artifact for canonical Work staging. Normal responses are limited to100 rows and65536 UTF-8 bytes; oversized rows refuse with artifact id.",
+      )
       .default("summary"),
     limit: z.number().int().min(1).max(100).default(20),
     cursor: z.strictObject({ offset: z.number().int().nonnegative(), basis: hash }).optional(),
@@ -35,7 +47,7 @@ export type DuctsAnalysisRequest = z.infer<typeof ductsAnalysisRequestSchema>;
 
 const reason = z.strictObject({ code: z.string(), count: z.number().int(), message: z.string() });
 const row = z.strictObject({
-  kind: z.enum(["equipment", "terminal", "path", "circuit", "port"]),
+  kind: z.enum(["equipment", "terminal", "path", "circuit", "port", "component", "flow"]),
   id: z.number().int(),
   label: z.string(),
   groupIds: z.array(z.string()),
@@ -53,6 +65,43 @@ const row = z.strictObject({
       stagedInWg: z.number(),
     }),
   ),
+  component: z
+    .strictObject({
+      id: z.string(),
+      status: z.enum(["unique", "underdetermined", "inconsistent"]),
+      nodeCount: z.number().int(),
+      edgeCount: z.number().int(),
+      cycleRank: z.number().int(),
+      unknownEdges: z.number().int(),
+      maxResidualCfm: z.number().nullable(),
+      reasonCount: z.number().int(),
+      reasonsTruncated: z.boolean(),
+      reasons: z
+        .array(
+          z.strictObject({
+            code: z.string(),
+            elementId: z.number().nullable(),
+            message: z.string(),
+          }),
+        )
+        .max(20),
+      pressureCertification: z.literal("not-established-by-flow-check"),
+    })
+    .nullable(),
+  flow: z
+    .strictObject({
+      componentId: z.string(),
+      componentStatus: z.enum(["unique", "underdetermined", "inconsistent"]),
+      elementId: z.number().int(),
+      id: z.string(),
+      kind: z.enum(["joint", "duct-subrun", "fitting-arm", "passive"]),
+      from: z.string(),
+      to: z.string(),
+      lengthFt: z.number().nullable(),
+      signedCfm: z.number().nullable(),
+      source: z.enum(["conservation", "staged-constraint"]).nullable(),
+    })
+    .nullable(),
   port: z
     .strictObject({
       origin: z.literal("native-snapshot"),
