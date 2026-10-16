@@ -41,14 +41,17 @@ Design flows for 79 fans; intent for the open ends that are not near misses; FC-
 
 ## Owed (route gaps from the SA 19 loop, in order)
 
-- Loss rules for rectangular mitered elbows (vaned and plain) and rectangular transitions at 45 and 60 degrees; nine fittings on SA 19 have no rule.
-- Transitions whose connectors are not one In and one Out: orient from the tree walk, not the family.
-- Takeoffs entered from the collar (the last run to each grille): price the branch leg.
-- Grille drops: a per-type catalog drop (Price LBP15A by neck size and cfm) as a rule, not an unsourced zero; the firm-wide catalog store stays owed in the design-system ledger.
-- An AHU with an inline dehumidifier on the same group is a series arrangement, not `multi-root`; give FC-17 its required static.
+- 2026-10-16, closed on the branch (48724cae, 7cc5b776, 2277b7e1), PROVEN[session, controlled `pdrop-sa19`, dev lane, R2025, Pea turns 7 to 9 on thread 82ebc684]: an inline unit without a load-preview system sits in series on the one that has it (`series-by-inference`; kaitpw: a dehu does not count, and `HVAC-chadds.xlsx` has no DH tag); rules `elbow-mitered` (CR3-6), `elbow-mitered-vaned` (CR3-14, stageable CR3-9..16), `trx-rect` (SR4-1); transitions without one In and one Out take the tree's direction with a row note; a takeoff entered from its collar prices as its branch turn at Qb/Qc = 1. SA 19 now: FC-17 0.081 in-wg, FC-35 0.152 in-wg, every row on both worst paths priced but the grille drop. The six SA 19 open ends are staged `capped` (kaitpw: "should all be capped, will check later").
+- Grille drops: a per-type catalog drop (Price LBP15A by neck size and cfm) as a rule, not an unsourced zero; waits on kaitpw's GRD manufacturer data discussion. Price's LBP/LBPH performance tables end at 6 in (`.artifacts/runs/pdrop-muse/codex-evidence/critic/price-wide-size-frontier-1/REPORT.md` keeps the official URLs; the PDFs went with the deleted run folder).
+- Rows say whether a table is the rule default or a staged choice; Pea had to tell the person "the route chose these" (turns 8, 9).
+- `series-by-inference` fired 38 times model-wide; audit them, since an ERV on a fan coil's group would read the same.
+- `Rectangular Elbow - Radius` (171 on Chadds) has no rule: CR3-1 is Cp with an angle factor K.
+- The H/W of a mitered elbow reads Revit's Width as the side in the plane of the turn; a connector frame would settle it per instance.
+- A duct entered from its curve connector charges friction over its whole length, not from the tap on.
 - `ducts.propose` from Pea binds Work to an empty address, so its proposal is invisible to the analysis; bind by the same address the analysis uses and print that address in the summary so a person stages to it.
 - A read that lists every parameter of one element; today the element op takes ten names per call and Pea needed a script.
 - `PE_M___ServesRoom` and `PE_G___Location` on units are the firm's room assignment today; read them as facts for the rooms link.
+- `pnpm --filter @pe/pea` also matches the stale copy under `ts/apps/host/dist-installed`; filter by path (`./apps/pea`).
 - Session `pdrop-sa19` and the worktree dev host (pnpm pid 33372, port moves on restart) were left running overnight on purpose for the next turn; stop with `pe-revit stop --id pdrop-sa19` and `Stop-Process 33372`.
 - Wave 2: fold `preview-losses`/`apply-losses`/`analysis-artifact` into survey/stage/apply; flag the solver modules; fold views; unify issues, circuit reasons, loss errors and apply refusals into one finding type.
 - Wave 3: SA 19 end to end in a dev session (not installed); then the Pea skill as the operator manual for the three verbs; measure interventions per run.
