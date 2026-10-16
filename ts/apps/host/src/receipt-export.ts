@@ -989,7 +989,11 @@ export function recordUpdateFact(exporter: ReceiptExport, fact: UpdateFact) {
         event: "update_outcome",
         counters:
           fact.kind === "available"
-            ? { phase: "available", candidateVersion: fact.version }
+            ? {
+                phase: "available",
+                candidateVersion: fact.version,
+                mode: fact.automatic ? "automatic" : "manual",
+              }
             : {
                 phase: fact.state === "ok" ? "finished" : "failed",
                 ...(fact.version ? { candidateVersion: fact.version } : {}),

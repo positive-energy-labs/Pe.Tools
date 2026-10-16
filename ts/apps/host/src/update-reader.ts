@@ -119,7 +119,7 @@ export const isUpdatePlanId = (id: unknown): id is string =>
  * receipt (a successor host loading it, the diagnostic re-persist) announces nothing twice.
  */
 export type UpdateFact =
-  | { readonly kind: "available"; readonly version: string }
+  | { readonly kind: "available"; readonly version: string; readonly automatic: boolean }
   | {
       readonly kind: "settled";
       readonly requestId: string;

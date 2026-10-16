@@ -88,12 +88,15 @@ export function noticeOf(r: Receipt, context: NoticeContext): MachineNotice | nu
     }
     case "usage": {
       if (body.event !== "update_outcome") return null;
-      const { phase, outcome, candidateVersion } = body.counters;
+      const { phase, outcome, candidateVersion, mode } = body.counters;
       if (phase === "available")
         return {
           ...base,
-          title: `Pe.Tools ${candidateVersion ?? "update"} is available`,
-          body: "Automatic updates are off. Update from the tray panel.",
+          title: `Pe.Tools ${candidateVersion ?? "update"} is ready`,
+          body:
+            mode === "automatic"
+              ? "It installs once Revit has been closed for two minutes. Update now from the tray panel."
+              : "Automatic updates are off. Update from the tray panel.",
           act: { kind: "automatic-updates" },
         };
       // Applying and restarting are progress, not an ending; the settled revision speaks.

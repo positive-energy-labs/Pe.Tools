@@ -1081,6 +1081,37 @@ test("a switched-off automatic update announces its version once and never appli
     expect(f.sources.update.announce).toHaveBeenCalledExactlyOnceWith({
       kind: "available",
       version: "0.9.0",
+      automatic: false,
+    });
+  } finally {
+    machine.close();
+    f.machine.close();
+    vi.useRealTimers();
+  }
+});
+
+test("an automatic update that cannot apply yet still announces its version once", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  const machine = createMachine(f.sources, {
+    automaticUpdates: { peaActive: () => true },
+  });
+  Object.assign(f.sources.update.current(), {
+    automatic: true,
+    plan: { planId: "idle-plan", latest: "0.9.0", available: true, blockers: [], revits: [] },
+  });
+  vi.mocked(f.sources.sessions).mockResolvedValue([]);
+  vi.mocked(f.sources.attachments).mockResolvedValue([]);
+  try {
+    await machine.refresh();
+    vi.advanceTimersByTime(300_000);
+    await machine.refresh();
+    await machine.refresh();
+    expect(f.sources.update.apply).not.toHaveBeenCalled();
+    expect(f.sources.update.announce).toHaveBeenCalledExactlyOnceWith({
+      kind: "available",
+      version: "0.9.0",
+      automatic: true,
     });
   } finally {
     machine.close();

@@ -147,9 +147,15 @@ test("each shared fact projects to one card and nothing else speaks", () => {
   });
 
   expect(noticeOf(update("available"), context)).toMatchObject({
-    title: "Pe.Tools 0.9.0 is available",
+    title: "Pe.Tools 0.9.0 is ready",
+    body: "Automatic updates are off. Update from the tray panel.",
     act: { kind: "automatic-updates" },
   });
+  const waiting = update("available");
+  if (waiting.body.kind === "usage") waiting.body.counters.mode = "automatic";
+  expect(noticeOf(waiting, context)?.body).toBe(
+    "It installs once Revit has been closed for two minutes. Update now from the tray panel.",
+  );
   expect(noticeOf(update("applying"), context)).toBeNull();
   expect(noticeOf(update("finished", "succeeded"), context)?.title).toBe(
     "Pe.Tools 0.9.0 installed",

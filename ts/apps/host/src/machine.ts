@@ -326,15 +326,14 @@ export function createMachine(
       const offered = sources.update.current();
       // Once per version per host boot; the spine's id/revision dedupe covers the restart repeat.
       const latestVersion = offered.plan?.latest;
-      if (
-        policy &&
-        !offered.automatic &&
-        offered.plan?.available &&
-        latestVersion &&
-        latestVersion !== announced
-      ) {
+      // Automatic or not, the person hears once: with Revit always open, automatic can wait for days.
+      if (policy && offered.plan?.available && latestVersion && latestVersion !== announced) {
         announced = latestVersion;
-        sources.update.announce({ kind: "available", version: latestVersion });
+        sources.update.announce({
+          kind: "available",
+          version: latestVersion,
+          automatic: offered.automatic,
+        });
       }
       const eligible =
         policy !== undefined &&
