@@ -32,6 +32,24 @@ Design flows for 79 fans; intent for the open ends that are not near misses; FC-
 ## Owed
 
 - 2026-10-16, wave 1 landed (deterministic, 1fe0917d, 13adf0d9, f0ef52ef): `proximity.ts` `tolerate()` joins sub-tolerance gaps and near-miss taps as `joined-by-proximity`/`tap-by-proximity` findings with `loop-by-inference`; `load-preview.ts` parses the paste (Chadds: 42 systems, 40 tagged, sum 29,260 against the sheet's 29,261); `terminal-flows.ts` splits a system's CFM by neck area with a `flows[id]` override; `loads`/`flows` cells in the work document; `mark` fact on equipment. Not yet wired into the survey or the web.
+- 2026-10-16, wave 3 first pass PROVEN[session, controlled `pdrop-sa19`, dev lane, R2025, `Chadds-preserved-before-install.rvt` headless, branch 4d39b139; six `pea --prompt` turns on one thread 82ebc684, tally `.artifacts/runs/pdrop-sa19/INTERVENTIONS.md`]: Pea surveys through the route alone, no scripts, model untouched. Tolerance joined 60 near misses (401 groups to 358). The firm's equipment tag is the shared instance parameter `PE_G___TagInstance` (Mark and Type Mark are blank on 154 of 157 units); the mark fact reads it first. SA 19 is three units: MSVT36 = FC-17 (1,200 cfm over 8 terminals by neck area), MSVT18 = FC-35 (600 cfm over 2), dehumidifier DH-21 unmatched. Priced parts give 0.030 to 0.099 in-wg per path and a required static of 0.099 in-wg for FC-35; FC-17 gets none because the route refuses a group with two roots. Interventions per turn: 0, 0, 0, 0, 1 (an allowed read-only parameter dump, since no op lists all parameters), 0.
+- 2026-10-16, mechanics: a person stages headless with `POST /pe/route-state/ducts/apply?target=<address the analysis reports>&open=<session>/<openId>` and the `x-pe-context` token from `state/service/<service>.context`; the analysis keys Work by the address Revit reports for the document, which for a moved file is its pre-move path. Hot reload baselines on the package-local build: `dotnet build Pe.App -c Debug.R25 -p:PeIsolatedBuild=false` then `session hr`; plain terminal builds go to `.artifacts/build` and never reach the session. The detached Chadds copy raises the coordination-model modal on open; `.artifacts/tmp/click-dialog.ps1` presses Cancel.
+
+## Tried & rejected (addendum)
+
+- 2026-10-16: `SA n` equals load-preview `System n`: falsified (System 19 is a 600 cfm suite; SA 19's MSVT36 is FC-17, System 23).
+
+## Owed (route gaps from the SA 19 loop, in order)
+
+- Loss rules for rectangular mitered elbows (vaned and plain) and rectangular transitions at 45 and 60 degrees; nine fittings on SA 19 have no rule.
+- Transitions whose connectors are not one In and one Out: orient from the tree walk, not the family.
+- Takeoffs entered from the collar (the last run to each grille): price the branch leg.
+- Grille drops: a per-type catalog drop (Price LBP15A by neck size and cfm) as a rule, not an unsourced zero; the firm-wide catalog store stays owed in the design-system ledger.
+- An AHU with an inline dehumidifier on the same group is a series arrangement, not `multi-root`; give FC-17 its required static.
+- `ducts.propose` from Pea binds Work to an empty address, so its proposal is invisible to the analysis; bind by the same address the analysis uses and print that address in the summary so a person stages to it.
+- A read that lists every parameter of one element; today the element op takes ten names per call and Pea needed a script.
+- `PE_M___ServesRoom` and `PE_G___Location` on units are the firm's room assignment today; read them as facts for the rooms link.
+- Session `pdrop-sa19` and the worktree dev host (pnpm pid 33372, port moves on restart) were left running overnight on purpose for the next turn; stop with `pe-revit stop --id pdrop-sa19` and `Stop-Process 33372`.
 - Wave 2: fold `preview-losses`/`apply-losses`/`analysis-artifact` into survey/stage/apply; flag the solver modules; fold views; unify issues, circuit reasons, loss errors and apply refusals into one finding type.
 - Wave 3: SA 19 end to end in a dev session (not installed); then the Pea skill as the operator manual for the three verbs; measure interventions per run.
 - Family migration plan through Family Foundry for the grille and unit families (connector direction, classification, flow binding, Specific Loss slot), once per library.
