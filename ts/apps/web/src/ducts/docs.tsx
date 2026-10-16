@@ -101,7 +101,7 @@ const ROWS: [string, string, string, string, string][] = [
     "Grille or diffuser",
     "The manufacturer's static pressure at its airflow and size; often the largest single term",
     "Missing: the firm's grille families carry no performance data",
-    "Manufacturer PDFs only; nowhere in our system",
+    "Revit has the slot (a terminal connector's pressure drop, bound to a family parameter); the catalog number for each neck and airflow lives only in manufacturer PDFs",
     "Hard: per manufacturer, model and core. Price's LBP tables stop at 6 in; Chadds uses 8 to 18 in",
   ],
   [
@@ -192,19 +192,26 @@ export function DuctsDocs() {
           Revit's arithmetic is right: straight duct matches a hand calculation within 0.1%.
         </li>
         <li>
-          Its fitting method "Coefficient from ASHRAE Table" works, but only on a fitting that
-          stores a table, and fittings start empty: on the Chadds model 388 of 4,571 did. An empty
-          fitting charges 0 with no error.
+          Its fitting method "Coefficient from ASHRAE Table" works: once a fitting stores a table,
+          Revit reads the shipped grid exactly and keeps it live. But fittings start empty, and an
+          empty fitting charges 0 with no error. On a fresh open of the Chadds model 183 of 4,571
+          fittings stored a table (an earlier copy read 388; the difference is unexplained).
         </li>
         <li>
-          When Revit picks a table itself, it takes the first one its matcher allows in
-          alphabetical order, not the right shape: 221 round elbows on Chadds carry CD3-11, a
-          flat-back elbow.
+          When Revit fills a table itself, it takes the first one its matcher allows in text order,
+          not the right shape: 221 round elbows on Chadds carry CD3-11, a flat-back elbow.
         </li>
         <li>
-          The matcher measures each fitting's angle from its connectors with almost no tolerance.
-          About 7% of Chadds' round elbows bend a hair off 90 degrees (the plan is rotated 10.68
-          degrees) and can never hold a table, so they always charge 0. Tested 2026-10-05.
+          The matcher reads an elbow's angle from the two ducts drawn into it, not from the family,
+          and allows almost no tolerance. The same 90-degree family works in one place and not
+          another: two identical elbows on Chadds differ only because one meets its ducts at
+          90.0013 degrees. 87 of 1,235 round elbows (about 7%) have a duct a hair off its
+          direction, can never hold a table, and always charge 0. That is drafting, not the family:
+          no family edit fixes it. Tested 2026-10-05.
+        </li>
+        <li>
+          On open, every fitting on Chadds reads 0 and the critical paths Revit reports are stale
+          until something in that system changes. Why is unexplained.
         </li>
         <li>
           Nobody fixes it because the number has no reader, the state is invisible, it is set per
