@@ -8,7 +8,7 @@
 import { stagedDucts, type DuctFinding, type DuctsRouteDocument } from "@pe/agent-contracts";
 
 import { tolerate } from "./proximity.ts";
-import { terminalFlows, type FlowFinding, type TerminalFlow } from "./terminal-flows.ts";
+import { markOf, terminalFlows, type FlowFinding, type TerminalFlow } from "./terminal-flows.ts";
 import { groupTree } from "./topology.ts";
 import type { DuctSnapshot } from "./types.ts";
 
@@ -80,7 +80,38 @@ const ignoreKey = (work: DuctsRouteDocument | null) =>
     .sort()
     .join("|");
 
+/**
+ * A group several units feed, where exactly one carries a Load Preview system, is that unit's
+ * tree; the others sit in series on it (Chadds SA 19: an inline dehumidifier on FC-17's supply,
+ * kaitpw 2026-10-16 "a dehu does not count"). Their air stays out of the calculation.
+ */
+export function series(snapshot: DuctSnapshot, tags: Set<string>) {
+  const nodeById = new Map(snapshot.nodes.map((n) => [n.id, n]));
+  const findings: DuctFinding[] = [];
+  const dropped = new Set<string>();
+  const groups = snapshot.groups.map((g) => {
+    if (g.rootIds.length < 2) return g;
+    const owners = g.rootIds.filter((id) => tags.has(markOf(nodeById.get(id)) ?? ""));
+    if (owners.length !== 1) return g;
+    const inline = g.rootIds.filter((id) => id !== owners[0]);
+    dropped.add(g.id);
+    findings.push({
+      id: `series:${g.id}`,
+      kind: "series-by-inference",
+      elementIds: inline,
+      note: `${inline.join(", ")} sit in series on ${markOf(nodeById.get(owners[0]!))} (${owners[0]}); only it has a load preview system`,
+      assumed: "the inline units move no design air of their own",
+      clearer: "pea",
+    });
+    return { ...g, rootIds: owners };
+  });
+  if (!dropped.size) return { snapshot, findings };
+  const issues = snapshot.issues.filter((i) => !(i.kind === "multi-root" && dropped.has(i.groupId)));
+  return { snapshot: { ...snapshot, groups, issues }, findings };
+}
+
 const tolerated = new WeakMap<DuctSnapshot, Map<string, ReturnType<typeof tolerate>>>();
+const inSeries = new WeakMap<DuctSnapshot, Map<string, ReturnType<typeof series>>>();
 const last = new WeakMap<DuctSnapshot, { work: DuctsRouteDocument | null; survey: Survey }>();
 
 export function survey(snapshot: DuctSnapshot, work: DuctsRouteDocument | null): Survey {
@@ -89,17 +120,23 @@ export function survey(snapshot: DuctSnapshot, work: DuctsRouteDocument | null):
   const byIgnore = tolerated.get(snapshot) ?? tolerated.set(snapshot, new Map()).get(snapshot)!;
   const key = ignoreKey(work);
   const t = byIgnore.get(key) ?? byIgnore.set(key, tolerate(snapshot, work)).get(key)!;
-  const trees = t.snapshot.groups.map((g) => groupTree(t.snapshot, g.id));
   const staged = stagedDucts(work);
-  const flows = terminalFlows(t.snapshot, staged.loads.preview, staged.flows, trees);
+  const tags = (staged.loads.preview?.systems ?? []).flatMap((x) => (x.tag ? [x.tag] : [])).sort();
+  const bySeries = inSeries.get(t.snapshot) ?? inSeries.set(t.snapshot, new Map()).get(t.snapshot)!;
+  const s =
+    bySeries.get(tags.join("|")) ??
+    bySeries.set(tags.join("|"), series(t.snapshot, new Set(tags))).get(tags.join("|"))!;
+  const trees = s.snapshot.groups.map((g) => groupTree(s.snapshot, g.id));
+  const flows = terminalFlows(s.snapshot, staged.loads.preview, staged.flows, trees);
   const findings: DuctFinding[] = [
+    ...s.findings,
     ...t.findings.map((f) => ({
       ...f,
       assumed: f.kind === "loop-by-inference" ? null : f.note,
       clearer: f.kind === "loop-by-inference" ? ("person" as const) : ("pea" as const),
     })),
     ...flows.findings.map(flowFinding),
-    ...t.snapshot.issues.map((i) => ({
+    ...s.snapshot.issues.map((i) => ({
       id: i.id,
       kind: i.kind,
       elementIds: i.elementId == null ? [] : [i.elementId],
@@ -112,7 +149,7 @@ export function survey(snapshot: DuctSnapshot, work: DuctsRouteDocument | null):
       clearer: PERSON.has(i.kind) ? ("person" as const) : ("route" as const),
     })),
   ];
-  const result = { snapshot: t.snapshot, flows: flows.flows, findings };
+  const result = { snapshot: s.snapshot, flows: flows.flows, findings };
   last.set(snapshot, { work, survey: result });
   return result;
 }
