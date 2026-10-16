@@ -19,6 +19,8 @@ The surface that makes a firm model compute duct pressure drop: a grille-first d
 - 2026-10-16, kaitpw: **terminal design flow** comes from the load tool's Load Preview per room and system, tagged by equipment Mark, until grilles carry their own. Split across a system's terminals by neck area, overridable per terminal; even split is an acceptable interim. Load balancing between terminals is later. No era check between the August workbook and the October model: this is a demo made as real as cheaply possible.
 - 2026-10-16, kaitpw: the frontier is one identity spine shared by every route: rooms, zoning (room to system to mark), loads in, terminal flows, network, ESP, equipment selection, BoD. Each is its own route with its own findings; they share only Revit ids plus the takeoff GUID. Pdrop is the fourth link (`.artifacts/poc-flow/sot-scratchpad.html` holds the ruling that Revit owns identity and the load tool owns loads only).
 
+- 2026-10-16, kaitpw: the whole-product map (rooms to basis of design, each link's parts, data location, effort, status) is one data file, `ts/packages/agent-contracts/src/product-map.ts`, drawn by its own route `/map` and by each route's help page; Pea reads it later. Temporary home. Status is set by hand until routes' findings set it.
+
 ## Open decisions (2026-10-16, shown to the senior engineer on the `/ducts` help page, `ts/apps/web/src/ducts/docs.tsx`)
 
 1. Rules are fixed; a firm adds its own rule instead of swapping a table (kaitpw's proposal). The table swap exists because a Revit family does not name its tested fitting (double-vaned mitered elbow: CR3-14, 15 or 16, C 0.38, 0.25, 0.41). Custom rules would be built on the master table's filter bar.

@@ -1,176 +1,13 @@
 /**
  * The ducts help page body (Alt+/): why Pe computes duct pressure drop instead of Revit, what each
- * part of a duct path needs and where its data is, and the open decisions. The record behind each
- * claim is `docs/features/pressure-drop/LEDGER.md` and `WHY-NOT-REVIT.md`. Mermaid loads only when
- * the page opens.
+ * part of a duct path needs and where its data is, and the open decisions. Parts and statuses come
+ * from the product map (`@pe/agent-contracts/product-map`); the record behind each claim is
+ * `docs/features/pressure-drop/LEDGER.md` and `WHY-NOT-REVIT.md`.
  */
-import { useEffect, useRef } from "react";
+import { mapLink } from "@pe/agent-contracts/product-map";
+import { Legend, Mermaid, PartsTable, chainChart, pathChart } from "#/product-map/diagram";
 
-let renders = 0;
-
-function Mermaid({ chart }: { chart: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    // A fresh id per render: mermaid reuses an existing element by id, and dev mode runs effects twice.
-    const id = `ducts-mermaid-${++renders}`;
-    let live = true;
-    void import("mermaid").then(async ({ default: mermaid }) => {
-      mermaid.initialize({
-        startOnLoad: false,
-        theme: "neutral",
-        look: "classic",
-        securityLevel: "strict",
-        flowchart: { nodeSpacing: 16, rankSpacing: 22, padding: 6 },
-        themeVariables: { fontSize: "13px" },
-      });
-      const { svg } = await mermaid.render(id, chart);
-      if (live && ref.current) ref.current.innerHTML = svg;
-    });
-    return () => {
-      live = false;
-    };
-  }, [chart]);
-  return <div ref={ref} className="my-3 overflow-x-auto" />;
-}
-
-const READY = { fill: "#dcefdc", stroke: "#3a7a3a" };
-const PARTIAL = { fill: "#fbefd0", stroke: "#a07a10" };
-const MISSING = { fill: "#f6dada", stroke: "#a03a3a" };
-const classDef = (name: string, c: { fill: string; stroke: string }) =>
-  `classDef ${name} fill:${c.fill},stroke:${c.stroke}`;
-const CLASSES = [
-  classDef("ready", READY),
-  classDef("partial", PARTIAL),
-  classDef("missing", MISSING),
-].join("\n");
-
-const PATH = `flowchart LR
-  fan["Fan"]:::partial
-  inline["Inline parts"]:::missing
-  duct["Straight duct"]:::ready
-  fit["Fittings"]:::ready
-  flex["Flex duct"]:::partial
-  damper["Dampers"]:::partial
-  grille["Grille"]:::missing
-  room["Room"]:::partial
-  flow["Design airflow"]:::partial
-  esp["Fan's available static"]:::missing
-  fan --> inline --> duct --> fit --> flex --> damper --> grille --> room
-  room -. load sets .-> flow
-  flow -. sets velocity in .-> fit
-  fan -. checked against .-> esp
-${CLASSES}`;
-
-const CHAIN = `flowchart LR
-  rooms["Rooms"]:::partial
-  zoning["Zoning"]:::partial
-  loads["Loads"]:::partial
-  flows["Grille airflows"]:::partial
-  network["Duct network"]:::partial
-  pdrop["Pressure drop"]:::ready
-  select["Equipment selection"]:::missing
-  bod["Basis of design"]:::missing
-  rooms --> zoning --> loads --> flows --> network --> pdrop --> select --> bod
-${CLASSES}`;
-
-function Legend() {
-  const swatch = (c: { fill: string; stroke: string }, label: string) => (
-    <span className="inline-flex items-center gap-1.5">
-      <span
-        className="inline-block size-3 rounded-sm border"
-        style={{ background: c.fill, borderColor: c.stroke }}
-      />
-      {label}
-    </span>
-  );
-  return (
-    <div className="flex gap-4 t-small">
-      {swatch(READY, "works today")}
-      {swatch(PARTIAL, "works with gaps")}
-      {swatch(MISSING, "no data yet")}
-    </div>
-  );
-}
-
-const ROWS: [string, string, string, string, string][] = [
-  [
-    "Straight duct",
-    "Friction from length, size, airflow and roughness",
-    "Yes",
-    "Revit model",
-    "Already modeled",
-  ],
-  [
-    "Flex duct",
-    "Same, with a rougher wall",
-    "Partly. Revit uses the rigid-duct roughness unless the flex type sets its own. Pe flags it.",
-    "Revit duct types",
-    "Easy. One value per flex type.",
-  ],
-  [
-    "Elbows, transitions, takeoffs",
-    "C times velocity pressure. C comes from an ASHRAE table.",
-    "Mostly. Pe has rules for the families on Chadds except rectangular radius elbows.",
-    "Tables ship with Revit. Rules are in Pe's code. Apply writes the table onto each fitting.",
-    "Medium. A firm rulebook, set up once.",
-  ],
-  [
-    "Dampers",
-    "Drop from ASHRAE table CD9-1",
-    "Partly. Priced fully open. The balancing position is unknown.",
-    "Pe's rules",
-    "Easy if fully open is acceptable",
-  ],
-  [
-    "Grille or diffuser",
-    "Manufacturer static pressure at its airflow and size. Often the largest single term.",
-    "No. The firm's grille families have no performance data.",
-    "Revit has a slot for it: the terminal connector's pressure drop, bound to a family parameter. The numbers are only in manufacturer PDFs.",
-    "Hard. Per manufacturer, model and core. Price's LBP tables stop at 6 in; Chadds uses 8 to 18 in.",
-  ],
-  [
-    "Room",
-    "Its load sets the airflow of the grilles that serve it",
-    "Partly. Units list the rooms they serve in PE_M___ServesRoom. Grilles are not linked to rooms or loads.",
-    "Revit rooms and spaces; RHVAC",
-    "Medium. Depends on the rooms and zoning work.",
-  ],
-  [
-    "Design airflow at each grille",
-    "Sets the velocity, so every other term",
-    "Partly. Each unit's airflow comes from the RHVAC Load Preview and is split over its grilles by neck size. Any grille can be overridden.",
-    "The pasted Load Preview, on this computer until apply. Grilles in Revit carry no design flow.",
-    "Medium. Every unit needs its tag in Revit and in the load file.",
-  ],
-  [
-    "Inline equipment (coil, filter, dehumidifier, ERV core)",
-    "A fixed drop at design airflow, from the product's submittal",
-    "No",
-    "Submittals",
-    "Hard. Per product, and depends on what the unit's own rating already includes.",
-  ],
-  [
-    "Which unit is the fan",
-    "Where every path starts",
-    "Partly. When one unit on a network has a load system, Pe treats the others as inline.",
-    "Pe's inference",
-    "Medium. Needs a role per unit (decision 5).",
-  ],
-  [
-    "Connectivity",
-    "The path must connect from fan to grille",
-    "Partly. Pe joins gaps under an inch and near-miss taps and lists them. Real open ends need a person.",
-    "Revit model",
-    "Medium. Modeling care.",
-  ],
-  [
-    "Fan's available static",
-    "What the required static is checked against",
-    "No. The firm's fan static parameter reads 0 on Chadds.",
-    "Equipment family, from the submittal",
-    "Hard. Comes with equipment selection.",
-  ],
-];
+const PRESSURE_DROP = mapLink("pressure-drop")!;
 
 const DECISIONS: [string, string][] = [
   [
@@ -253,29 +90,8 @@ export function DuctsDocs() {
 
       <h3>The parts of a duct path</h3>
       <Legend />
-      <Mermaid chart={PATH} />
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse t-small [&_td]:border-t [&_td]:py-1.5 [&_td]:pr-3 [&_td]:align-top [&_th]:pr-3 [&_th]:text-left">
-          <thead>
-            <tr>
-              <th>Part</th>
-              <th>What it adds</th>
-              <th>Automatic today?</th>
-              <th>Where the data is</th>
-              <th>How hard to get</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ROWS.map((row) => (
-              <tr key={row[0]}>
-                {row.map((cell, i) => (
-                  <td key={i}>{cell}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Mermaid chart={pathChart(PRESSURE_DROP)} />
+      <PartsTable parts={PRESSURE_DROP.parts} />
 
       <h3>What has to work before pressure drop is automatic</h3>
       <p>
@@ -283,7 +99,7 @@ export function DuctsDocs() {
         needs 0.081 in. w.g. and FC-35 needs 0.152 in. w.g. To run this without a person, every
         step below needs its data, and today most of it is spread across files or missing.
       </p>
-      <Mermaid chart={CHAIN} />
+      <Mermaid chart={chainChart()} />
       <p>
         Zoning maps each room to a system and a unit tag. Loads come from the RHVAC Load Preview.
         Equipment selection gives the fan curve and available static. Each step is its own route,

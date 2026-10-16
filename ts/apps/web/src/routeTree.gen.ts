@@ -21,6 +21,7 @@ import { Route as FamiliesRouteImport } from "./routes/families";
 import { Route as FamilyRouteImport } from "./routes/family";
 import { Route as GrillesRouteImport } from "./routes/grilles";
 import { Route as LabRouteImport } from "./routes/lab";
+import { Route as MapRouteImport } from "./routes/map";
 import { Route as OpenRouteImport } from "./routes/open";
 import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as ParamTablesRouteImport } from "./routes/param-tables";
@@ -99,6 +100,11 @@ const GrillesRoute = GrillesRouteImport.update({
 const LabRoute = LabRouteImport.update({
   id: "/lab",
   path: "/lab",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const MapRoute = MapRouteImport.update({
+  id: "/map",
+  path: "/map",
   getParentRoute: () => rootRouteImport,
 } as any);
 const OpenRoute = OpenRouteImport.update({
@@ -210,6 +216,7 @@ export interface FileRoutesByFullPath {
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
   "/lab": typeof LabRoute;
+  "/map": typeof MapRoute;
   "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
@@ -243,6 +250,7 @@ export interface FileRoutesByTo {
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
   "/lab": typeof LabRoute;
+  "/map": typeof MapRoute;
   "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
@@ -277,6 +285,7 @@ export interface FileRoutesById {
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
   "/lab": typeof LabRoute;
+  "/map": typeof MapRoute;
   "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
@@ -312,6 +321,7 @@ export interface FileRouteTypes {
     | "/family"
     | "/grilles"
     | "/lab"
+    | "/map"
     | "/open"
     | "/ops"
     | "/param-tables"
@@ -345,6 +355,7 @@ export interface FileRouteTypes {
     | "/family"
     | "/grilles"
     | "/lab"
+    | "/map"
     | "/open"
     | "/ops"
     | "/param-tables"
@@ -378,6 +389,7 @@ export interface FileRouteTypes {
     | "/family"
     | "/grilles"
     | "/lab"
+    | "/map"
     | "/open"
     | "/ops"
     | "/param-tables"
@@ -412,6 +424,7 @@ export interface RootRouteChildren {
   FamilyRoute: typeof FamilyRoute;
   GrillesRoute: typeof GrillesRoute;
   LabRoute: typeof LabRoute;
+  MapRoute: typeof MapRoute;
   OpenRoute: typeof OpenRoute;
   OpsRoute: typeof OpsRoute;
   ParamTablesRoute: typeof ParamTablesRoute;
@@ -516,6 +529,13 @@ declare module "@tanstack/react-router" {
       path: "/lab";
       fullPath: "/lab";
       preLoaderRoute: typeof LabRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/map": {
+      id: "/map";
+      path: "/map";
+      fullPath: "/map";
+      preLoaderRoute: typeof MapRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/open": {
@@ -678,6 +698,7 @@ const rootRouteChildren: RootRouteChildren = {
   FamilyRoute: FamilyRoute,
   GrillesRoute: GrillesRoute,
   LabRoute: LabRoute,
+  MapRoute: MapRoute,
   OpenRoute: OpenRoute,
   OpsRoute: OpsRoute,
   ParamTablesRoute: ParamTablesRoute,
