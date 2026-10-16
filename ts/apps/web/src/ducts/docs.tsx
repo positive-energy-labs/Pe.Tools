@@ -148,7 +148,7 @@ const DECISIONS: [string, string][] = [
   ],
   [
     "One loss engine.",
-    "The browser, the host and Pea price with one engine. Revit's own recalculation goes through Pe's loss server, which is separate code. Today they disagree: the server cannot price rectangular elbows, transitions without an In/Out pair, or takeoffs entered from the collar, so Revit's number would come out lower than Pe's. Options: Revit stores the coefficient Pe's engine computed (frozen until the next apply), or the server is rebuilt on the same rules. Revit's own critical path is meant to be the check, so this must close before it means anything.",
+    "The browser, the host and Pea price with one engine. Revit's own recalculation goes through Pe's loss server, which is separate code. Today they disagree: the server cannot price rectangular elbows, transitions without an In/Out pair, or takeoffs entered from the collar, so Revit's number would come out lower than Pe's. Options: Revit stores the coefficient Pe's engine computed (frozen until the next apply); the server is rebuilt on the same rules; or Pe writes the right table name into Revit's own ASHRAE method wherever Revit's matcher accepts it, and falls back to one of the others where it refuses (off-square elbows, shapes with no table). Revit's own critical path is meant to be the check, so this must close before it means anything.",
   ],
   [
     "Grille performance data.",
@@ -192,9 +192,19 @@ export function DuctsDocs() {
           Revit's arithmetic is right: straight duct matches a hand calculation within 0.1%.
         </li>
         <li>
-          Its automatic fitting method, "Coefficient from ASHRAE Table", computes 0 on every duct
-          fitting in Revit 2025 and 2026. A model looks finished while every fitting is free.
-          Tested 2026-10-04.
+          Its fitting method "Coefficient from ASHRAE Table" works, but only on a fitting that
+          stores a table, and fittings start empty: on the Chadds model 388 of 4,571 did. An empty
+          fitting charges 0 with no error.
+        </li>
+        <li>
+          When Revit picks a table itself, it takes the first one its matcher allows in
+          alphabetical order, not the right shape: 221 round elbows on Chadds carry CD3-11, a
+          flat-back elbow.
+        </li>
+        <li>
+          The matcher measures each fitting's angle from its connectors with almost no tolerance.
+          About 7% of Chadds' round elbows bend a hair off 90 degrees (the plan is rotated 10.68
+          degrees) and can never hold a table, so they always charge 0. Tested 2026-10-05.
         </li>
         <li>
           Nobody fixes it because the number has no reader, the state is invisible, it is set per
