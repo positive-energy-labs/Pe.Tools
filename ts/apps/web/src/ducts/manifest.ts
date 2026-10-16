@@ -18,6 +18,7 @@ import {
 
 import { defineRoute, semanticActionInput, type Ctx } from "#/route/manifest";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
+import { ductsDocs } from "#/ducts/docs";
 import {
   actionResult,
   readAction,
@@ -147,7 +148,7 @@ export const manifest = defineRoute<
 >({
   key: "ducts",
   name: "Ducts",
-  docs: "Read every duct network in the document by connector topology, choose one, and see what is known and what is missing before a pressure-loss solve. Then price every grille's path (friction, fittings by type, the terminal's drop), stage the ASHRAE table each fitting type is looked up under and the drops you know, preview what Revit would accept, and apply: Pe writes the coefficients, drops and fan static into Revit, beside Revit's own critical path.",
+  docs: ductsDocs,
   needs: "project",
   work: ductsRouteState,
   cells: [

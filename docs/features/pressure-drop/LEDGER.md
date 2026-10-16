@@ -19,6 +19,17 @@ The surface that makes a firm model compute duct pressure drop: a grille-first d
 - 2026-10-16, kaitpw: **terminal design flow** comes from the load tool's Load Preview per room and system, tagged by equipment Mark, until grilles carry their own. Split across a system's terminals by neck area, overridable per terminal; even split is an acceptable interim. Load balancing between terminals is later. No era check between the August workbook and the October model: this is a demo made as real as cheaply possible.
 - 2026-10-16, kaitpw: the frontier is one identity spine shared by every route: rooms, zoning (room to system to mark), loads in, terminal flows, network, ESP, equipment selection, BoD. Each is its own route with its own findings; they share only Revit ids plus the takeoff GUID. Pdrop is the fourth link (`.artifacts/poc-flow/sot-scratchpad.html` holds the ruling that Revit owns identity and the load tool owns loads only).
 
+## Open decisions (2026-10-16, shown to the senior engineer on the `/ducts` help page, `ts/apps/web/src/ducts/docs.tsx`)
+
+1. Rules are fixed; a firm adds its own rule instead of swapping a table (kaitpw's proposal). The table swap exists because a Revit family does not name its tested fitting (double-vaned mitered elbow: CR3-14, 15 or 16, C 0.38, 0.25, 0.41). Custom rules would be built on the master table's filter bar.
+2. One loss engine. FALSIFIED[deterministic read of `DuctFittingPricing.cs`, branch 377246c6]: the Revit loss server is separate code from `ducts-domain` and cannot price rectangular elbows, transitions without an In/Out pair, or collar-entry takeoffs, so Revit's recalculation would disagree with Pe's. Options: Revit stores the coefficient Pe computed, or the server is rebuilt on the same rules.
+3. Grille performance data: firm-wide catalog tables, in the same shape as the ASHRAE tables (Price LBP: per core, size by cfm/ft gives static pressure; total = static + velocity pressure; returns 0.8 x static). Source PDF kept at `.artifacts/pdrop/price-lbp/lbp.pdf` (main checkout). Wanted next: a muse round on one catalog-table system for fittings and GRDs, then an autonomous Pea test that builds the LBP tables from the PDF with page citations.
+4. Inline equipment drops (coil, filter, dehumidifier, ERV core): source, storage, and not double-counting what the unit's rating includes. kaitpw: tally as open.
+5. A role per unit (fan, inline, own system), read from what the unit is and overridable; replaces the load-match inference, which would mistake an ERV on a fan coil's group for a passive part.
+6. Design airflow source: Load Preview split is interim; long term each grille carries its own flow from the rooms and zoning link.
+7. Whether staged inputs (loads, overrides, table choices) should travel with the model before apply; today they stay on one computer.
+8. The fan's available static, from equipment selection.
+
 ## Tried & rejected
 
 - 2026-10-04, round 1 (A ledger of every element, B route tree, C grille bars with per-element edit, D proposal queue) and round 2 (E rules table, G rule × grille matrix): lose to F.
