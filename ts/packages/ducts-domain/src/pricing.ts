@@ -169,7 +169,8 @@ export function instancesOf(result: LossResult, key: string): Map<number, Row> {
 const inputsOf = ({ inputs }: Row) => {
   if (!inputs) return "";
   const at = (n: number) => +n.toPrecision(4);
-  return Object.entries(inputs.coordinates).map(([name, value]) => `${name}=${at(value)}`).join(", ");
+  const x = `${inputs.xLabel}=${at(inputs.x)}`;
+  return inputs.y == null ? x : `${x}, ${inputs.yLabel ?? "y"}=${at(inputs.y)}`;
 };
 
 const round4 = (n: number) => Math.round(n * 1e4) / 1e4;

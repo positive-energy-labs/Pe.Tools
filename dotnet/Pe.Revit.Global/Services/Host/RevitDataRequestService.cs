@@ -121,7 +121,7 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    [Op("ducts.tables", Does = "Read ASHRAE duct fitting coefficient grids (Co, Cb, Cs) by table id from the .tbl files Revit installs, verbatim: a named primary axis and sparse named row coordinates, zero through three dimensions; missing cells remain missing. Read-only; needs no document.", Title = "Get ASHRAE Duct Tables", Finds = ["ducts", "ashrae", "tables", "coefficient", "fittings", "pressure"], Actor = OpActor.Any, Cost = OpCost.Cheap, Example = "{ \"ids\": [\"CD3-2\", \"SD5-9\"] }")]
+    [Op("ducts.tables", Does = "Read ASHRAE duct fitting coefficient grids (Co, Cb, Cs) by table id from the .tbl files Revit installs, verbatim: axes, labels and values for a web lookup. Read-only; needs no document.", Title = "Get ASHRAE Duct Tables", Finds = ["ducts", "ashrae", "tables", "coefficient", "fittings", "pressure"], Actor = OpActor.Any, Cost = OpCost.Cheap, Example = "{ \"ids\": [\"CD3-2\", \"SD5-9\"] }")]
     private static DuctTablesData GetDuctTablesCore(DuctTablesRequest request) {
         try {
             return AshraeTables.Read(AshraeTables.DefaultFolder, request.Ids);

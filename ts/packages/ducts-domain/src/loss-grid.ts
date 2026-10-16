@@ -1,76 +1,118 @@
-/** Sparse named ASHRAE coordinates. The generated C# DTO is the only wire authority. */
-import type { DuctsTables } from "@pe/host-contracts/generated";
-export type Grid = DuctsTables.Res.AshraeGrid;
+/**
+ * ASHRAE fitting-coefficient grids and their interpolation. Pure.
+ * A table is one grid per result (`Co`, or `Cb` / `Cs` for a tee). 1-D grids vary with x only;
+ * 2-D grids have one row per y and one column per x. Interpolation is linear in 1-D, bilinear in
+ * 2-D (interpolate each row along x, then the column along y), clamped to the grid edge with a note
+ * (as `ctable.py` `i1` / `lookup`). Axes must ascend.
+ */
+
+/** The shape `ducts.tables` returns for one result of one table. */
+export interface Grid {
+  title: string;
+  xLabel: string;
+  x: number[];
+  yLabel?: string;
+  y?: number[];
+  grid: number[][] | number[];
+}
+
+/** TABLE (upper case, e.g. "CD3-2") -> result ("Co", "Cb", "Cs") -> grid. */
 export type Grids = Record<string, Record<string, Grid>>;
-export interface Lookup { value: number; notes: string[]; inputs: string; }
+
+export interface Lookup {
+  value: number;
+  /** One note per clamped axis. */
+  notes: string[];
+  inputs: string;
+}
+
 export class GridError extends Error {}
 
-const numbers = (v: unknown): v is number[] => Array.isArray(v) && v.every((n) => typeof n === "number" && Number.isFinite(n));
-export function validateGrid(raw: unknown, where: string): asserts raw is Grid {
-  if (!raw || typeof raw !== "object") throw new GridError(`${where}: not a grid`);
-  const g = raw as Partial<Grid>;
-  if (Object.keys(g).some((k) => !["title", "axis", "rowAxes", "rows"].includes(k)) ||
-      typeof g.title !== "string" || !Array.isArray(g.rowAxes) || g.rowAxes.length > 2 ||
-      !g.rowAxes.every((n) => typeof n === "string" && n.trim().length > 0) || !Array.isArray(g.rows) || !g.rows.length)
-    throw new GridError(`${where}: invalid named dimensions`);
-  const names = [...g.rowAxes];
-  let width = 1;
-  if (g.axis !== null) {
-    const a = g.axis;
-    if (!a || Object.keys(a).some((k) => !["name", "values"].includes(k)) || typeof a.name !== "string" || !a.name.trim() || !numbers(a.values) || !a.values.length || a.values.some((n, i) => i > 0 && a.values[i - 1]! >= n))
-      throw new GridError(`${where}: primary axis must be finite and strictly ascending`);
-    names.unshift(a.name); width = a.values.length;
-  } else if (g.rowAxes.length || g.rows.length !== 1) throw new GridError(`${where}: invalid constant`);
-  if (new Set(names).size !== names.length) throw new GridError(`${where}: duplicate axis names`);
-  const keys = new Set<string>();
-  for (const r of g.rows) {
-    if (!r || Object.keys(r).some((k) => !["coordinates", "values"].includes(k)) || !numbers(r.coordinates) || r.coordinates.length !== g.rowAxes.length || !numbers(r.values) || r.values.length !== width)
-      throw new GridError(`${where}: row does not match named axes`);
-    const key = JSON.stringify(r.coordinates);
-    if (keys.has(key)) throw new GridError(`${where}: duplicate sparse row`);
-    keys.add(key);
-  }
+function interp1(x: number, xs: number[], ys: number[], label: string): [number, string?] {
+  const last = xs.length - 1;
+  if (x <= xs[0]!) return [ys[0]!, x < xs[0]! ? `${label} clamped at ${xs[0]}` : undefined];
+  if (x >= xs[last]!)
+    return [ys[last]!, x > xs[last]! ? `${label} clamped at ${xs[last]}` : undefined];
+  for (let k = 0; k < last; k++)
+    if (xs[k]! <= x && x <= xs[k + 1]!) {
+      const t = (x - xs[k]!) / (xs[k + 1]! - xs[k]!);
+      return [ys[k]! + t * (ys[k + 1]! - ys[k]!)];
+    }
+  throw new GridError(`${label} ${x} is not on an ascending axis`);
 }
+
+const flat = (grid: Grid): grid is Grid & { grid: number[] } => !grid.y;
+
+const isNumbers = (v: unknown): v is number[] =>
+  Array.isArray(v) && v.every((n) => typeof n === "number");
+
+function toGrid(raw: unknown, where: string): Grid {
+  const g = raw as Partial<Grid> | null;
+  if (!g || typeof g !== "object" || typeof g.title !== "string" || !isNumbers(g.x))
+    throw new GridError(`${where}: not a grid`);
+  const y = g.y ?? undefined;
+  const ok =
+    y == null
+      ? isNumbers(g.grid)
+      : isNumbers(y) &&
+        Array.isArray(g.grid) &&
+        g.grid.length === y.length &&
+        g.grid.every((row) => isNumbers(row) && row.length === g.x!.length);
+  if (!ok) throw new GridError(`${where}: grid does not match its axes`);
+  return {
+    title: g.title,
+    xLabel: g.xLabel ?? "x",
+    x: g.x,
+    ...(y == null ? {} : { y, yLabel: g.yLabel ?? "y" }),
+    grid: g.grid as Grid["grid"],
+  };
+}
+
+/** Narrow a `ducts.tables` response (typed `unknown` on the wire) to `Grids`; throws on a malformed grid. */
 export function toGrids(response: unknown): Grids {
   const tables = (response as { tables?: Record<string, Record<string, unknown>> } | null)?.tables;
-  if (!tables || typeof tables !== "object" || Array.isArray(tables)) throw new GridError("ducts.tables response has no tables");
+  if (!tables || typeof tables !== "object")
+    throw new GridError("ducts.tables response has no tables");
   const out: Grids = {};
   for (const [id, results] of Object.entries(tables)) {
-    if (!results || typeof results !== "object" || Array.isArray(results)) throw new GridError(`${id}: not result grids`);
-    const key = id.toUpperCase();
-    if (Object.hasOwn(out, key)) throw new GridError(`${id}: duplicate table identity`);
-    out[key] = {};
-    for (const [res, raw] of Object.entries(results)) { validateGrid(raw, `${id} ${res}`); out[key]![res] = raw; }
+    out[id.toUpperCase()] = {};
+    for (const [res, raw] of Object.entries(results))
+      out[id.toUpperCase()]![res] = toGrid(raw, `${id} ${res}`);
   }
   return out;
 }
-/** Exact coordinates shrink the corner set. Every remaining positive-weight corner must exist. */
-export function lookupGrid(grid: Grid, coordinates: Readonly<Record<string, number>>): Lookup {
-  validateGrid(grid, grid.title);
-  const names = grid.axis ? [grid.axis.name, ...grid.rowAxes] : [];
-  if (Object.keys(coordinates).length !== names.length || names.some((n) => !Object.hasOwn(coordinates, n)) || Object.values(coordinates).some((v) => !Number.isFinite(v)))
-    throw new GridError(`${grid.title}: exact finite named coordinates required: ${names.join(", ")}`);
-  if (!grid.axis) return {value: grid.rows[0]!.values[0]!, notes: [], inputs: "constant"};
-  const axes = [grid.axis.values, ...grid.rowAxes.map((_, i) => [...new Set(grid.rows.map((r) => r.coordinates[i]!))].sort((a,b) => a-b))];
-  let corners: {at: number[]; weight: number}[] = [{at: [], weight: 1}];
-  for (const [i, name] of names.entries()) {
-    const xs = axes[i]!; const q = coordinates[name]!;
-    if (q < xs[0]! || q > xs[xs.length-1]!) throw new GridError(`${name} outside published domain`);
-    let bracket: {at: number; weight: number}[];
-    if (xs.includes(q)) bracket = [{at:q, weight:1}];
-    else {
-      const k = xs.findIndex((a,k) => a < q && q < xs[k+1]!);
-      const t = (q-xs[k]!)/(xs[k+1]!-xs[k]!);
-      bracket = [{at:xs[k]!,weight:1-t},{at:xs[k+1]!,weight:t}];
-    }
-    corners = corners.flatMap((c) => bracket.filter((p) => p.weight > 0).map((p) => ({at:[...c.at,p.at],weight:c.weight*p.weight})));
+
+/** Look `x` (and `y` for a 2-D grid) up; throws `GridError` when the inputs do not fit the grid. */
+export function lookupGrid(grid: Grid, x: number, y?: number | null): Lookup {
+  if (grid.x.length > 0 && !Number.isFinite(x))
+    throw new GridError(`${grid.xLabel} is not a number`);
+  if (grid.x.length === 0) {
+    // A constant table ("Co = 0.12"): one value, no axes.
+    const v = (grid.grid as number[])[0];
+    if (v == null) throw new GridError(`${grid.title} has no value`);
+    return { value: v, notes: [], inputs: "constant" };
   }
-  let value = 0;
-  for (const c of corners) {
-    const rows = grid.rows.filter((r) => r.coordinates.every((v,i) => v === c.at[i+1]));
-    if (rows.length !== 1) throw new GridError(`${grid.title}: missing published bracketing corner`);
-    value += rows[0]!.values[grid.axis.values.indexOf(c.at[0]!)]! * c.weight;
+  const notes: string[] = [];
+  const note = (n?: string) => n && notes.push(n);
+  if (flat(grid)) {
+    if (y != null) throw new GridError(`${grid.title} takes ${grid.xLabel} only`);
+    const [value, n] = interp1(x, grid.x, grid.grid, grid.xLabel);
+    note(n);
+    return { value, notes, inputs: `${grid.xLabel}=${+x.toPrecision(4)}` };
   }
-  if (!Number.isFinite(value)) throw new GridError(`${grid.title}: interpolation is not finite`);
-  return {value, notes: [], inputs:names.map((n) => `${n}=${+coordinates[n]!.toPrecision(4)}`).join(", ")};
+  if (y == null || !Number.isFinite(y))
+    throw new GridError(`${grid.title} needs ${grid.yLabel ?? "y"}`);
+  const rows = grid.grid as number[][];
+  const column = rows.map((row) => {
+    const [v, n] = interp1(x, grid.x, row, grid.xLabel);
+    if (n && !notes.includes(n)) notes.push(n);
+    return v;
+  });
+  const [value, n] = interp1(y, grid.y!, column, grid.yLabel ?? "y");
+  note(n);
+  return {
+    value,
+    notes,
+    inputs: `${grid.xLabel}=${+x.toPrecision(4)}, ${grid.yLabel ?? "y"}=${+y.toPrecision(4)}`,
+  };
 }

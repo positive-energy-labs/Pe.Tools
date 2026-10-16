@@ -36,7 +36,10 @@ type RowKind = "friction" | "fitting" | "tap-branch" | "tap-straight" | "termina
 
 interface RowInputs {
   res: "Co" | "Cb" | "Cs";
-  coordinates: Record<string, number>;
+  x: number;
+  y?: number;
+  xLabel: string;
+  yLabel?: string;
   notes?: string[];
 }
 
@@ -373,7 +376,7 @@ function pathRows(
     if (!grid) return bad(`${table} ${input.res} is not loaded`);
     let found;
     try {
-      found = lookupGrid(grid, input.coordinates);
+      found = lookupGrid(grid, input.x, input.y);
     } catch (e) {
       if (e instanceof GridError) return bad(e.message);
       throw e;
@@ -389,7 +392,10 @@ function pathRows(
       dp: found.value * f.pv,
       inputs: {
         res: input.res as RowInputs["res"],
-        coordinates: input.coordinates,
+        x: input.x,
+        ...(input.y == null ? {} : { y: input.y }),
+        xLabel: grid.xLabel,
+        ...(grid.yLabel ? { yLabel: grid.yLabel } : {}),
         ...(found.notes.length ? { notes: found.notes } : {}),
       },
       desc: `${rule.family} ${node.id}, ${table} ${input.res} ${round4(found.value)} x Pv ${Math.round(f.fpm)} fpm (${found.inputs})`,

@@ -10,40 +10,31 @@ public sealed record LossLeg(int Index, double Flow, double Area, bool Round, st
 /// <summary>One leg Revit prices: the connector pair of a `DuctFittingAndAccessoryPressureDropItem`.</summary>
 public sealed record LossItem(int Begin, int End);
 
-/// <summary>Named-coordinate interpolation only inside completely populated bracketing cells. No extrapolation.</summary>
+/// <summary>ASHRAE grid interpolation, row for row with the web's `lookupGrid`: linear in 1-D, bilinear in 2-D, clamped at the edges.</summary>
 public static class AshraeLookup {
-    public static double Value(AshraeGrid grid, IReadOnlyDictionary<string, double> coordinates) {
-        grid.Validate();
-        var names = grid.Axis is null ? grid.RowAxes.ToList() : new[] { grid.Axis.Name }.Concat(grid.RowAxes).ToList();
-        if (coordinates.Count != names.Count || names.Any(n => !coordinates.ContainsKey(n)) || coordinates.Values.Any(v => (double.IsNaN(v) || double.IsInfinity(v))))
-            throw new ArgumentException($"{grid.Title}: exact finite named coordinates required: {string.Join(", ", names)}");
-        if (grid.Axis is null) return grid.Rows[0].Values[0];
-        var axes = new List<IReadOnlyList<double>> { grid.Axis.Values };
-        for (var i = 0; i < grid.RowAxes.Count; i++) axes.Add(grid.Rows.Select(r => r.Coordinates[i]).Distinct().OrderBy(v => v).ToList());
-        var corners = new List<(List<double> At, double Weight)> { ([], 1) };
-        for (var i = 0; i < names.Count; i++) {
-            var xs = axes[i];
-            var q = coordinates[names[i]];
-            if (q < xs[0] || q > xs[^1]) throw new ArgumentException($"{names[i]} outside published domain");
-            var bracket = new List<(double At, double Weight)>();
-            if (xs.Contains(q)) bracket.Add((q, 1));
-            else {
-                var k = Enumerable.Range(0, xs.Count - 1).First(k => xs[k] < q && q < xs[k + 1]);
-                var t = (q - xs[k]) / (xs[k + 1] - xs[k]);
-                bracket.Add((xs[k], 1 - t)); bracket.Add((xs[k + 1], t));
+    public static double Value(AshraeGrid g, double x, double? y = null) {
+        if (g.X.Count == 0) return Flat(g)[0];
+        if (g.Y is null) return Interp(x, g.X, Flat(g), g.XLabel);
+        if (y is null || double.IsNaN(y.Value)) throw new ArgumentException($"{g.Title} needs {g.YLabel ?? "y"}");
+        var rows = g.Grid as IReadOnlyList<IReadOnlyList<double>> ?? throw new ArgumentException($"{g.Title}: grid rows are not numbers");
+        var column = rows.Select(row => Interp(x, g.X, row, g.XLabel)).ToList();
+        return Interp(y.Value, g.Y, column, g.YLabel ?? "y");
+    }
+
+    private static IReadOnlyList<double> Flat(AshraeGrid g) =>
+        g.Grid as IReadOnlyList<double> ?? throw new ArgumentException($"{g.Title}: grid is not a number row");
+
+    private static double Interp(double x, IReadOnlyList<double> xs, IReadOnlyList<double> ys, string label) {
+        if (double.IsNaN(x)) throw new ArgumentException($"{label} is not a number");
+        var last = xs.Count - 1;
+        if (x <= xs[0]) return ys[0];
+        if (x >= xs[last]) return ys[last];
+        for (var k = 0; k < last; k++)
+            if (xs[k] <= x && x <= xs[k + 1]) {
+                var t = (x - xs[k]) / (xs[k + 1] - xs[k]);
+                return ys[k] + t * (ys[k + 1] - ys[k]);
             }
-            corners = corners.SelectMany(c => bracket.Where(p => p.Weight > 0).Select(p =>
-                (c.At.Append(p.At).ToList(), c.Weight * p.Weight))).ToList();
-        }
-        var value = 0.0;
-        foreach (var corner in corners) {
-            var rows = grid.Rows.Where(r => r.Coordinates.SequenceEqual(corner.At.Skip(1))).ToList();
-            if (rows.Count != 1) throw new ArgumentException($"{grid.Title}: missing published bracketing corner");
-            var x = grid.Axis.Values.ToList().IndexOf(corner.At[0]);
-            value += rows[0].Values[x] * corner.Weight;
-        }
-        if ((double.IsNaN(value) || double.IsInfinity(value))) throw new ArgumentException($"{grid.Title}: interpolation is not finite");
-        return value;
+        throw new InvalidOperationException($"{label} {x} is not on an ascending axis");
     }
 }
 
@@ -97,10 +88,7 @@ public static class DuctFittingPricing {
         var straight = leg.Round == inlet.Round && Math.Abs(leg.Area - inlet.Area) <= 0.02 * inlet.Area;
         var result = straight ? "Cs" : "Cb";
         if (!table.TryGetValue(result, out var grid)) return Unknown($"The table has no {result} junction result");
-        if (grid.RowAxes.Count > 1) return Unknown("Junction pricing does not qualify three-coordinate or mixing tables");
-        var coordinates = new Dictionary<string, double> { [straight ? "Qs/Qc" : "Qb/Qc"] = q };
-        if (grid.RowAxes.Count == 1) coordinates[straight ? "As/Ac" : "Ab/Ac"] = straight ? 1 : leg.Area / inlet.Area;
-        return Known(AshraeLookup.Value(grid, coordinates));
+        return Known(AshraeLookup.Value(grid, q, grid.Y is null ? null : straight ? 1 : leg.Area / inlet.Area));
     }
 
     private static LossPrice TransitionCo(IReadOnlyDictionary<string, AshraeGrid> table,
@@ -113,14 +101,14 @@ public static class DuctFittingPricing {
         if (!Finite(inlet.Area) || inlet.Area <= 0 || !Finite(outlet.Area) || outlet.Area <= 0)
             return Unknown("Transition cross-section is unknown or invalid");
         if (!table.TryGetValue("Co", out var co)) return Unknown("The table has no Co transition result");
-        return Known(AshraeLookup.Value(co, new Dictionary<string, double> { ["Theta"] = angle, ["Ao/A1"] = outlet.Area / inlet.Area }));
+        return Known(AshraeLookup.Value(co, angle, co.Y is null ? null : outlet.Area / inlet.Area));
     }
 
     private static LossPrice Single(IReadOnlyDictionary<string, AshraeGrid> table, IReadOnlyList<LossLeg> legs, LossItem item) {
-        if (!table.TryGetValue("Co", out var co) || co.RowAxes.Count != 0 || co.Axis?.Name.IndexOf("r/D", StringComparison.OrdinalIgnoreCase) >= 0)
+        if (!table.TryGetValue("Co", out var co) || co.Y is not null || co.XLabel.IndexOf("r/D", StringComparison.OrdinalIgnoreCase) >= 0)
             return Unknown("The elbow table needs geometry this pricing input does not carry");
         var inlet = legs.First(l => l.Index == item.Begin);
         if (!inlet.Round || !Finite(inlet.Area) || inlet.Area <= 0) return Unknown("The round elbow cross-section is unknown or invalid");
-        return Known(AshraeLookup.Value(co, new Dictionary<string, double> { ["D, in.(mm)"] = Math.Sqrt(4 * inlet.Area / Math.PI) * 12 }));
+        return Known(AshraeLookup.Value(co, Math.Sqrt(4 * inlet.Area / Math.PI) * 12));
     }
 }

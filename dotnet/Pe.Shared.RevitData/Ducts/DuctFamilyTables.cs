@@ -95,15 +95,15 @@ public static class DuctFamilyTables {
     }
 
     private static AshraeGrid Co(DuctTablesData tables, string id) =>
-        tables.Tables.TryGetValue(id, out var t) && t.TryGetValue("Co", out var co) && co.RowAxes.Count == 0 && co.Axis?.Name == "D, in.(mm)"
+        tables.Tables.TryGetValue(id, out var t) && t.TryGetValue("Co", out var co) && co.Y is null
             ? co
             : throw new InvalidOperationException($"ASHRAE table {id} (Co over D) is required to build {ElbowTable}; read it with ducts.tables");
 
     /// <summary>The value at the largest grid diameter not above D, else the smallest grid value.</summary>
     private static double Hold(AshraeGrid g, double d) {
-        var values = g.Rows.Single().Values;
+        var values = (IReadOnlyList<double>)g.Grid;
         var at = -1;
-        for (var i = 0; i < g.Axis!.Values.Count; i++) if (g.Axis!.Values[i] <= d) at = i;
+        for (var i = 0; i < g.X.Count; i++) if (g.X[i] <= d) at = i;
         return values[at < 0 ? 0 : at];
     }
 }

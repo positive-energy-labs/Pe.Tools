@@ -42,15 +42,17 @@ function parseTbl(name: string): Record<string, Grid> {
       }
       out[res] = {
         title,
-        axis: { name: xLabel!.trim(), values: xs!.trim().split(/\s+/).map(Number) },
-        rowAxes: [rest[head + 1]!.trim()],
-        rows: y.map((at, i) => ({ coordinates: [at], values: grid[i]! })),
+        xLabel: xLabel!.trim(),
+        x: xs!.trim().split(/\s+/).map(Number),
+        yLabel: rest[head + 1]!.trim(),
+        y,
+        grid,
       };
     } else {
       const header = rest.find((l) => /\d+\(\d+\)/.test(l))!;
       const x = [...header.matchAll(/(\d+(?:\.\d+)?)\(\d+\)/g)].map((m) => Number(m[1]));
       const co = rest.find((l) => l.trim().startsWith("Co"))!;
-      out.Co = { title, axis: { name: "D, in.(mm)", values: x }, rowAxes: [], rows: [{ coordinates: [], values: co.trim().split(/\s+/).slice(1).map(Number) }] };
+      out.Co = { title, xLabel: "D", x, grid: co.trim().split(/\s+/).slice(1).map(Number) };
     }
   }
   return out;
@@ -65,16 +67,18 @@ const grids: Grids = {
 
 it("interpolates the real tables to the values ctable.md lists", () => {
   // 1-D, exact node and clamped.
-  expect(lookupGrid(grids["CD3-2"]!.Co!, { "D, in.(mm)": 8 }).value).toBeCloseTo(0.24, 6);
-  expect(lookupGrid(grids["CD3-2"]!.Co!, { "D, in.(mm)": 4.5 }).value).toBeCloseTo(0.335, 6); // 0.37 -> 0.30
-  expect(() => lookupGrid(grids["CD3-2"]!.Co!, { "D, in.(mm)": 12 })).toThrow("outside published domain");
+  expect(lookupGrid(grids["CD3-2"]!.Co!, 8).value).toBeCloseTo(0.24, 6);
+  expect(lookupGrid(grids["CD3-2"]!.Co!, 4.5).value).toBeCloseTo(0.335, 6); // 0.37 -> 0.30
+  const clamped = lookupGrid(grids["CD3-2"]!.Co!, 12);
+  expect(clamped.value).toBe(0.24);
+  expect(clamped.notes).toEqual(["D clamped at 10"]);
   // 2-D bilinear.
-  expect(lookupGrid(grids["SD5-9"]!.Cb!, { "Qb/Qc": .4292, "Ab/Ac": .36 }).value).toBeCloseTo(0.9704, 4);
-  expect(lookupGrid(grids["SD5-9"]!.Cs!, { "Qs/Qc": .5708, "As/Ac": 1 }).value).toBeCloseTo(0.1788, 4);
-  expect(lookupGrid(grids["SR4-3"]!.Co!, { Theta:45, "Ao/A1":1.698 }).value).toBeCloseTo(0.921, 3);
+  expect(lookupGrid(grids["SD5-9"]!.Cb!, 0.4292, 0.36).value).toBeCloseTo(0.9704, 4);
+  expect(lookupGrid(grids["SD5-9"]!.Cs!, 0.5708, 1).value).toBeCloseTo(0.1788, 4);
+  expect(lookupGrid(grids["SR4-3"]!.Co!, 45, 1.698).value).toBeCloseTo(0.921, 3);
   // A grid refuses inputs it does not take.
-  expect(() => lookupGrid(grids["CD3-2"]!.Co!, { "D, in.(mm)":8, extra:1 })).toThrow();
-  expect(() => lookupGrid(grids["SR4-3"]!.Co!, { Theta:45 })).toThrow();
+  expect(() => lookupGrid(grids["CD3-2"]!.Co!, 8, 1)).toThrow();
+  expect(() => lookupGrid(grids["SR4-3"]!.Co!, 45)).toThrow();
 });
 
 it("matches the hand-calc friction row", () => {
@@ -323,8 +327,14 @@ it("fanout moves only the terminals whose path crosses the rule", () => {
   // The grille transition sits on terminal 6 only; a stand-in SR4-1 grid lowers its C.
   const half: Grid = {
     title: "stand-in",
-    axis: { name: "Theta", values: [10, 180] }, rowAxes: ["Ao/A1"],
-    rows: [ { coordinates:[.1], values:[.001,.001] }, { coordinates:[16], values:[.001,.001] } ],
+    xLabel: "Theta",
+    yLabel: "Ao/A1",
+    x: [10, 180],
+    y: [0.1, 16],
+    grid: [
+      [0.001, 0.001],
+      [0.001, 0.001],
+    ],
   };
   const withHalf: Grids = { ...grids, "SR4-1": { Co: half } };
   const f = fanout(snapshot, withHalf, {}, "trx-grille", "SR4-1");
@@ -369,12 +379,12 @@ it("runs the whole pipeline over W1's synthetic snapshot", () => {
 it("narrows a ducts.tables response and reads a constant table", () => {
   const g = toGrids({
     tables: {
-      "cd9-1": { Co: { title: "const", axis:null, rowAxes:[], rows:[{coordinates:[],values:[.12]}] } },
-      "cd3-2": { Co: { title:"t", axis:{name:"D",values:[3,4]}, rowAxes:[], rows:[{coordinates:[],values:[.44,.37]}] } },
+      "cd9-1": { Co: { title: "const", xLabel: "x", x: [], grid: [0.12] } },
+      "cd3-2": { Co: { title: "t", xLabel: "D", x: [3, 4], grid: [0.44, 0.37] } },
     },
   });
-  expect(lookupGrid(g["CD9-1"]!.Co!, {}).value).toBe(0.12);
-  expect(lookupGrid(g["CD3-2"]!.Co!, {D:3.5}).value).toBeCloseTo(0.405, 6);
+  expect(lookupGrid(g["CD9-1"]!.Co!, 99).value).toBe(0.12);
+  expect(lookupGrid(g["CD3-2"]!.Co!, 3.5).value).toBeCloseTo(0.405, 6);
   expect(() =>
     toGrids({ tables: { A: { Co: { title: "t", x: [1], y: [1, 2], grid: [[1]] } } } }),
   ).toThrow();
@@ -392,10 +402,11 @@ it("prices under the table a person staged in the Work document", () => {
   const elbow = r.paths[30]!.rows.find((x) => x.rule === "elbow-1d-gt10")!;
   expect(elbow).toMatchObject({
     table: "CD3-2",
-    error: expect.stringContaining("outside published domain"),
+    c: 0.24,
+    inputs: { res: "Co", x: 12, xLabel: "D", notes: ["D clamped at 10"] },
   });
   const tap = r.paths[31]!.rows.find((x) => x.kind === "tap-branch")!;
-  expect(tap.inputs).toMatchObject({ res: "Cb", coordinates: { "Qb/Qc": expect.any(Number), "Ab/Ac": .25 } });
+  expect(tap.inputs).toMatchObject({ res: "Cb", xLabel: "Qb/Qc", yLabel: "Ab/Ac", y: 0.25 });
 });
 
 it("prices once per snapshot: a Work change reuses the applied solve and answers as a fresh solve would", () => {
