@@ -79,7 +79,7 @@ const PRESSURE_DROP_PARTS: MapPart[] = [
     status: "works",
     adds: "Elbows, transitions, takeoffs: C times velocity pressure. C comes from an ASHRAE table.",
     automatic: "Mostly. Pe has rules for the families on Chadds except rectangular radius elbows.",
-    data: "Tables ship with Revit. Rules are in Pe's code. Apply writes the table onto each fitting.",
+    data: "Tables ship with Revit. Rules are in Pe's code. Apply stores Pe's C per path on each fitting.",
     effort: "Medium. A firm rulebook, set up once.",
   },
   {

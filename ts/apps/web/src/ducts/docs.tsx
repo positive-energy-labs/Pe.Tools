@@ -15,8 +15,8 @@ const DECISIONS: [string, string][] = [
     "Today a person can change the ASHRAE table under a rule, because a Revit family does not say which tested fitting it is. A double-vaned mitered elbow could be CR3-14, 15 or 16 (C 0.38, 0.25, 0.41). Proposal: shipped rules never change, and a firm rule (a family and condition filter, built on the master table's filter bar) overrides a shipped one.",
   ],
   [
-    "One loss engine.",
-    "The browser, host and Pea use one engine. Revit's recalculation uses Pe's loss server, which is separate code. The server cannot price rectangular elbows, transitions without an In/Out pair, or takeoffs entered from the collar, so Revit's number would come out lower than Pe's. Options: (a) Revit stores the coefficient Pe computed, fixed until the next apply; (b) rebuild the server on the same rules; (c) Pe writes the right table name into Revit's own ASHRAE method where Revit accepts it, and uses (a) or (b) where it refuses.",
+    "One loss engine. Decided 2026-10-16.",
+    "Pe computes every loss; Revit stores the results. Apply saves each fitting's C per path (a tee's straight and branch paths separately), and Pe's loss server only hands Revit that stored C. Revit still applies its own live velocity, but C updates only on the next apply, and the route flags fittings that are out of date. A PC without Pe shows Revit's missing-server dialog and charges 0.",
   ],
   [
     "Grille performance data.",
