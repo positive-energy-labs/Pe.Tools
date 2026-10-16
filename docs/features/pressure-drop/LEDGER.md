@@ -21,6 +21,8 @@ The surface that makes a firm model compute duct pressure drop: a grille-first d
 
 - 2026-10-16, kaitpw: the whole-product map (rooms to basis of design, each link's parts, data location, effort, status) is one data file, `ts/packages/agent-contracts/src/product-map.ts`, drawn by its own route `/map` and by each route's help page; Pea reads it later. Temporary home. Status is set by hand until routes' findings set it.
 
+- 2026-10-16, kaitpw: the Chadds walkthrough page is merged into the control panel (`Pages/pdrop-tour`): its primers as a "Start here" fold with the ASHRAE primer corrected, census items c05, c09 and SA 26 at scale, and the piping items under "Outside ducts"; c01 and c02 dropped as superseded. The walkthrough moved to `OneDrive/Documents/Pe.Tools/_archive-2026-10-16/pdrop-walkthrough`. The control panel also carries the SA 19 findings (p7), apply through Pe's loss server (f46), Pe's damper rule (f47), and the two 2026-10-16 falsifications.
+
 ## Open decisions (2026-10-16, shown to the senior engineer on the `/ducts` help page, `ts/apps/web/src/ducts/docs.tsx`)
 
 1. Rules are fixed; a firm adds its own rule instead of swapping a table (kaitpw's proposal). The table swap exists because a Revit family does not name its tested fitting (double-vaned mitered elbow: CR3-14, 15 or 16, C 0.38, 0.25, 0.41). Custom rules would be built on the master table's filter bar.
