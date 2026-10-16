@@ -8,6 +8,9 @@
  * - `terminalDrops` (terminal id) and `componentDrops` (fitting or accessory id): a stated drop in
  *   in-wg and where it came from.
  * - `unitStatics` (air mover id): the external static Pe writes to a unit, in in-wg.
+ * - `loads`, one cell keyed `preview`: the load tool's Load Preview as parsed (systems, each tagged
+ *   by the equipment Mark in its name, with its rooms). `flows` (terminal id): a stated design flow
+ *   in cfm that overrides the preview split. Neither is written to Revit.
  * - `parameters`: which Revit parameter carries each slot; person-only, Pea cannot propose.
  * `ducts.apply` writes the staged rules, drops, unit statics and slots to Revit.
  */
@@ -55,6 +58,27 @@ export type DuctDrop = z.infer<typeof dropSchema>;
 /** The external static Pe writes to an air mover (a unit id key); staged only, never a side effect. */
 const unitStaticSchema = z.strictObject({ inWg: z.number().nonnegative() });
 const elementKey = z.string().regex(/^\d+$/, { error: "a drop cell key is an element id" });
+
+/** The load tool's Load Preview: one system per equipment (its Mark is the tag), its rooms under it. */
+const loadRoomSchema = z.strictObject({
+  name: z.string().min(1),
+  number: z.string().nullable(),
+  cfm: z.number().nonnegative().nullable(),
+});
+export const ductLoadPreviewSchema = z.strictObject({
+  systems: z.array(
+    z.strictObject({
+      name: z.string().min(1),
+      tag: z.string().nullable(),
+      cfm: z.number().nonnegative().nullable(),
+      rooms: z.array(loadRoomSchema),
+    }),
+  ),
+});
+export type DuctLoadPreview = z.infer<typeof ductLoadPreviewSchema>;
+/** A terminal's stated design flow; `source` says where (a balancing report, a note, a person). */
+const flowSchema = z.strictObject({ cfm: z.number().nonnegative(), source: z.string().optional() });
+export type DuctFlow = z.infer<typeof flowSchema>;
 
 /** Exact retained connector witness. A matching index alone does not establish the same port. */
 const elementIdentity = z.strictObject({
@@ -281,6 +305,10 @@ export const ductsDocumentSchema = z
     terminalDrops: z.record(elementKey, trichotomyCellSchema(dropSchema)).default({}),
     componentDrops: z.record(elementKey, trichotomyCellSchema(dropSchema)).default({}),
     unitStatics: z.record(elementKey, trichotomyCellSchema(unitStaticSchema)).default({}),
+    loads: z
+      .partialRecord(z.literal("preview"), trichotomyCellSchema(ductLoadPreviewSchema))
+      .default({}),
+    flows: z.record(elementKey, trichotomyCellSchema(flowSchema)).default({}),
     parameters: z
       .partialRecord(z.enum(DUCT_PARAMETER_KEYS), trichotomyCellSchema(z.string().min(1)))
       .default({}),
@@ -314,6 +342,8 @@ export function stagedDucts(doc: DuctsRouteDocument | null) {
     terminalDrops: stagedOf(doc?.terminalDrops ?? {}),
     componentDrops: stagedOf(doc?.componentDrops ?? {}),
     unitStatics: stagedOf(doc?.unitStatics ?? {}),
+    loads: stagedOf(doc?.loads ?? {}) as { preview?: DuctLoadPreview },
+    flows: stagedOf(doc?.flows ?? {}) as Record<string, DuctFlow>,
     parameters: stagedOf(doc?.parameters ?? {}) as Partial<Record<DuctParameterKey, string>>,
   };
 }
@@ -405,7 +435,7 @@ export const ductsRouteState = {
   route: "ducts",
   title: "Ducts",
   description:
-    "calculation: staged-only physical fan/passive/terminal port witnesses, balanced-design scenario, and component-flow design with one complete componentWitness plus sourced signed joint constraints (positive owner to reciprocal partner); flow conservation is not pressure certification; required hydraulics:null or staged prescribed-flow TOTAL closure with complete port-flow-vector point laws, physical versus gauge anchors and explicit fan allocations; no automatic balancing or nonlinear circulation; source strings remain declared premises; element UniqueId and exact connected/open physical port pins must match a new snapshot. Historical snapshots without UniqueId cannot certify circuits. Evidence is calculation-only, never native apply. Pea proposes; a person stages. Duct pressure-drop Work, one trichotomy cell per key. assumptions: an issue id from ducts.snapshot holds a verdict (capped, connect, ignore); flex-roughness:<flex type> (ft), fan-static:<equipment id> (in-wg) and component-drop:<family> (in-wg) hold overrides, never written to Revit. rules: a loss-rule key holds { table }, the ASHRAE table every instance of that fitting type is looked up under. terminalDrops and componentDrops: an element id holds { inWg, source }. unitStatics: an air mover's element id holds { inWg }, the external static written to it. parameters: fanStatic, fanFlow, componentDrop, terminalDrop, fittingCoefficient name the Revit parameter of each slot (person only); fittingCoefficient is the family parameter the Pe loss server reads (default Pe_C). Pea may propose rules and drops; a person stages; ducts.apply-losses writes the staged cells to Revit after ducts.preview-losses.",
+    "calculation: staged-only physical fan/passive/terminal port witnesses, balanced-design scenario, and component-flow design with one complete componentWitness plus sourced signed joint constraints (positive owner to reciprocal partner); flow conservation is not pressure certification; required hydraulics:null or staged prescribed-flow TOTAL closure with complete port-flow-vector point laws, physical versus gauge anchors and explicit fan allocations; no automatic balancing or nonlinear circulation; source strings remain declared premises; element UniqueId and exact connected/open physical port pins must match a new snapshot. Historical snapshots without UniqueId cannot certify circuits. Evidence is calculation-only, never native apply. Pea proposes; a person stages. Duct pressure-drop Work, one trichotomy cell per key. assumptions: an issue id from ducts.snapshot holds a verdict (capped, connect, ignore); flex-roughness:<flex type> (ft), fan-static:<equipment id> (in-wg) and component-drop:<family> (in-wg) hold overrides, never written to Revit. rules: a loss-rule key holds { table }, the ASHRAE table every instance of that fitting type is looked up under. terminalDrops and componentDrops: an element id holds { inWg, source }. unitStatics: an air mover's element id holds { inWg }, the external static written to it. parameters: fanStatic, fanFlow, componentDrop, terminalDrop, fittingCoefficient name the Revit parameter of each slot (person only); fittingCoefficient is the family parameter the Pe loss server reads (default Pe_C). loads: the one key preview holds the load tool's Load Preview as parsed ({ systems: [{ name, tag, cfm, rooms }] }, tag = the equipment Mark in the system name); flows: a terminal id holds { cfm, source }, a design flow overriding the preview split. Pea may propose rules, drops, loads and flows; a person stages; ducts.apply-losses writes the staged cells to Revit after ducts.preview-losses.",
   schema: ductsDocumentSchema,
   agentWriteMask: [
     ["calculation", "*", "proposal"],
@@ -414,6 +444,8 @@ export const ductsRouteState = {
     ["terminalDrops", "*", "proposal"],
     ["componentDrops", "*", "proposal"],
     ["unitStatics", "*", "proposal"],
+    ["loads", "*", "proposal"],
+    ["flows", "*", "proposal"],
   ],
   commands: {},
 } satisfies RouteStateSpec<typeof ductsDocumentSchema>;

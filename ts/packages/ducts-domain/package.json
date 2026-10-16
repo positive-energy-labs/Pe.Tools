@@ -10,7 +10,8 @@
     }
   },
   "scripts": {
-    "check": "vp check"
+    "check": "vp check",
+    "test": "vp test"
   },
   "dependencies": {
     "@pe/agent-contracts": "workspace:*",
