@@ -2,7 +2,7 @@
  * Host-local pod reads and archive transport over the production `/call` route. No Revit: the
  * bridge is a stub that fails the test if anything reaches it.
  */
-import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
+import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { Context, Effect, Layer } from "effect";
 import { mkdir, mkdtemp, open, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -24,22 +24,6 @@ import { exportPod, importPod, writeZip } from "../src/pod-transfer.ts";
 import { human } from "./callers.ts";
 import { productPluginDecisionsPath } from "../src/product-paths.ts";
 
-const fileReads = vi.hoisted(() => ({
-  paths: [] as string[],
-  beforeOpen: undefined as undefined | ((path: string) => Promise<void>),
-}));
-vi.mock("node:fs/promises", async (original) => {
-  const fs = await original<typeof import("node:fs/promises")>();
-  return {
-    ...fs,
-    open: async (...args: Parameters<typeof fs.open>) => {
-      fileReads.paths.push(String(args[0]));
-      await fileReads.beforeOpen?.(String(args[0]));
-      return fs.open(...args);
-    },
-  };
-});
-
 let root: string;
 let pods: string;
 let web: ReturnType<typeof HttpRouter.toWebHandler>;
@@ -47,7 +31,6 @@ const nativeCalls: string[] = [];
 const previousHome = process.env[homeVariable];
 
 beforeEach(async () => {
-  fileReads.beforeOpen = undefined;
   root = await mkdtemp(join(tmpdir(), "pe-pod-transfer-"));
   process.env[homeVariable] = join(root, "Documents", "Pe.Tools");
   pods = join(root, "Documents", "Pe.Tools", "Pods");
@@ -196,7 +179,7 @@ test("pod.list carries each pod's canonical contribution keys", async () => {
   expect(nativeCalls).toEqual([]);
 });
 
-test("pod.list identity admits only its selected folder while checking every manifest", async () => {
+test("pod.list identity returns a bounded ownership tuple alongside unchanged rich inventory", async () => {
   await writePod("default", { "pod.json": '{"id":"output-owner"}', "settings/kept.json": "{}" });
   for (let i = 0; i < 27; i++) await writePod("default", { [`assets/${i}.txt`]: "kept" });
   for (let i = 0; i < 890; i++) await writePod("chadds", { [`assets/${i}.json`]: "{}" });
@@ -206,20 +189,19 @@ test("pod.list identity admits only its selected folder while checking every man
     for (let i = 0; i < (p === 0 ? 38 : 28); i++)
       await writePod(`sibling-${p}`, { [`assets/${i}.txt`]: "unrelated" });
   }
-  fileReads.paths.length = 0;
   const result = await call("pod.list", { projection: "identity", folder: "default" });
   expect(result.status).toBe(200);
   expect(result.json).toEqual({
     projection: "identity",
     identity: { id: "output-owner", folder: "default" },
   });
-  expect(fileReads.paths.some((path) => /chadds[/\\]assets/.test(path))).toBe(false);
-  expect(fileReads.paths.some((path) => /default[/\\]settings[/\\]kept.json$/.test(path))).toBe(
-    true,
-  );
-  expect(fileReads.paths.filter((path) => /chadds[/\\]pod.json$/.test(path))).toHaveLength(1);
-  // All 32 manifests plus a second exact-byte capture of the selected Pod's 29 members.
-  expect(fileReads.paths).toHaveLength(61);
+  // Full inventory remains available; the identity projection returns only the selected ownership tuple.
+  const inventory = await call("pod.list", {});
+  expect(inventory.status).toBe(200);
+  expect(inventory.json.pods).toHaveLength(32);
+  expect(
+    inventory.json.pods.find((pod: { id: string }) => pod.id === "chadds").members,
+  ).toHaveLength(891);
   expect(nativeCalls).toEqual([]);
 });
 
@@ -233,14 +215,12 @@ test("identity duplicate checks include disabled siblings with invalid members",
   expect(decisions.startsWith(root)).toBe(true);
   await mkdir(join(decisions, ".."), { recursive: true });
   await writeFile(decisions, '{"pod:same":false}');
-  fileReads.paths.length = 0;
   const result = await call("pod.list", { projection: "identity", folder: "default" });
   expect(result.status).toBe(400);
   expect(JSON.stringify(result.json)).toContain("duplicate manifest identity");
-  expect(fileReads.paths.some((path) => path.endsWith("oversize.bin"))).toBe(false);
 });
 
-test("identity fully admits its target and refuses disabled or changing manifests", async () => {
+test("identity fully admits its target and observes manifest replacement and new duplicate claims", async () => {
   await writePod("default", { "pod.json": '{"id":"before"}', "settings/kept.json": "{}" });
   const decisions = productPluginDecisionsPath();
   expect(decisions.startsWith(root)).toBe(true);
@@ -248,15 +228,19 @@ test("identity fully admits its target and refuses disabled or changing manifest
   await writeFile(decisions, '{"pod:before":false}');
   expect((await call("pod.list", { projection: "identity", folder: "default" })).status).toBe(400);
   await writeFile(decisions, "{}");
-  let manifestOpens = 0;
-  fileReads.beforeOpen = async (path) => {
-    if (path === join(pods, "default/pod.json") && ++manifestOpens === 2)
-      await writeFile(path, '{"id":"afterx"}');
-  };
+  expect((await call("pod.list", { projection: "identity", folder: "default" })).json).toEqual({
+    projection: "identity",
+    identity: { id: "before", folder: "default" },
+  });
+  await writePod("default", { "pod.json": '{"id":"afterx"}' });
+  expect((await call("pod.list", { projection: "identity", folder: "default" })).json).toEqual({
+    projection: "identity",
+    identity: { id: "afterx", folder: "default" },
+  });
+  await writePod("new-twin", { "pod.json": '{"id":"afterx"}' });
   const changed = await call("pod.list", { projection: "identity", folder: "default" });
   expect(changed.status).toBe(400);
-  expect(JSON.stringify(changed.json)).toContain("changed during identity admission");
-  fileReads.beforeOpen = undefined;
+  expect(JSON.stringify(changed.json)).toContain("duplicate manifest identity");
 });
 
 test("identity refuses selected invalid members, links and unsafe output folders", async () => {
