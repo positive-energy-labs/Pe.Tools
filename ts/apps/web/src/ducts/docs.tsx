@@ -1,8 +1,8 @@
 /**
- * The ducts help page body (Alt+/): the case for Pe's pressure drop to a senior engineer, what in a
- * duct path is ready to price automatically and where its data lives, and the decisions still open.
- * The record behind every claim is `docs/features/pressure-drop/LEDGER.md`; this page restates it
- * for a reader who has not seen the ledger. Mermaid loads only when the page opens.
+ * The ducts help page body (Alt+/): why Pe computes duct pressure drop instead of Revit, what each
+ * part of a duct path needs and where its data is, and the open decisions. The record behind each
+ * claim is `docs/features/pressure-drop/LEDGER.md` and `WHY-NOT-REVIT.md`. Mermaid loads only when
+ * the page opens.
  */
 import { useEffect, useRef } from "react";
 
@@ -33,126 +33,157 @@ function Mermaid({ chart }: { chart: string }) {
   return <div ref={ref} className="my-3 overflow-x-auto" />;
 }
 
-const READY = "fill:#dcefdc,stroke:#3a7a3a";
-const PARTIAL = "fill:#fbefd0,stroke:#a07a10";
-const MISSING = "fill:#f6dada,stroke:#a03a3a";
+const READY = { fill: "#dcefdc", stroke: "#3a7a3a" };
+const PARTIAL = { fill: "#fbefd0", stroke: "#a07a10" };
+const MISSING = { fill: "#f6dada", stroke: "#a03a3a" };
+const classDef = (name: string, c: { fill: string; stroke: string }) =>
+  `classDef ${name} fill:${c.fill},stroke:${c.stroke}`;
+const CLASSES = [
+  classDef("ready", READY),
+  classDef("partial", PARTIAL),
+  classDef("missing", MISSING),
+].join("\n");
 
 const PATH = `flowchart LR
-  fan["Fan<br/>partial"]:::partial
-  inline["Inline parts<br/>missing"]:::missing
-  duct["Straight duct<br/>ready"]:::ready
-  fit["Fittings<br/>mostly ready"]:::ready
-  flex["Flex duct<br/>partial"]:::partial
-  damper["Dampers<br/>partial"]:::partial
-  grille["Grille<br/>missing"]:::missing
-  flow["Design airflow<br/>partial"]:::partial
-  esp["Fan's available static<br/>missing"]:::missing
-  fan --> inline --> duct --> fit --> flex --> damper --> grille
-  flow -. sets every velocity .-> fit
+  fan["Fan"]:::partial
+  inline["Inline parts"]:::missing
+  duct["Straight duct"]:::ready
+  fit["Fittings"]:::ready
+  flex["Flex duct"]:::partial
+  damper["Dampers"]:::partial
+  grille["Grille"]:::missing
+  room["Room"]:::partial
+  flow["Design airflow"]:::partial
+  esp["Fan's available static"]:::missing
+  fan --> inline --> duct --> fit --> flex --> damper --> grille --> room
+  room -. load sets .-> flow
+  flow -. sets velocity in .-> fit
   fan -. checked against .-> esp
-  classDef ready ${READY}
-  classDef partial ${PARTIAL}
-  classDef missing ${MISSING}`;
+${CLASSES}`;
 
 const CHAIN = `flowchart LR
-  rooms["Rooms<br/>partial"]:::partial
-  zoning["Zoning<br/>partial"]:::partial
-  loads["Loads<br/>partial"]:::partial
-  flows["Grille airflows<br/>partial"]:::partial
-  network["Duct network<br/>partial"]:::partial
-  pdrop["Pressure drop<br/>ready but for data"]:::ready
-  select["Equipment selection<br/>missing"]:::missing
-  bod["Basis of design<br/>missing"]:::missing
+  rooms["Rooms"]:::partial
+  zoning["Zoning"]:::partial
+  loads["Loads"]:::partial
+  flows["Grille airflows"]:::partial
+  network["Duct network"]:::partial
+  pdrop["Pressure drop"]:::ready
+  select["Equipment selection"]:::missing
+  bod["Basis of design"]:::missing
   rooms --> zoning --> loads --> flows --> network --> pdrop --> select --> bod
-  classDef ready ${READY}
-  classDef partial ${PARTIAL}
-  classDef missing ${MISSING}`;
+${CLASSES}`;
+
+function Legend() {
+  const swatch = (c: { fill: string; stroke: string }, label: string) => (
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        className="inline-block size-3 rounded-sm border"
+        style={{ background: c.fill, borderColor: c.stroke }}
+      />
+      {label}
+    </span>
+  );
+  return (
+    <div className="flex gap-4 t-small">
+      {swatch(READY, "works today")}
+      {swatch(PARTIAL, "works with gaps")}
+      {swatch(MISSING, "no data yet")}
+    </div>
+  );
+}
 
 const ROWS: [string, string, string, string, string][] = [
   [
     "Straight duct",
-    "Friction over its length, from size, airflow and roughness",
-    "Ready",
-    "The Revit model",
-    "Free: already modeled",
+    "Friction from length, size, airflow and roughness",
+    "Yes",
+    "Revit model",
+    "Already modeled",
   ],
   [
     "Flex duct",
-    "The same, with a rougher wall",
-    "Partial: Revit gives flex the rigid-duct roughness unless the type says otherwise; Pe flags it",
+    "Same, with a rougher wall",
+    "Partly. Revit uses the rigid-duct roughness unless the flex type sets its own. Pe flags it.",
     "Revit duct types",
-    "Easy: one value per flex type, set once as a firm standard",
+    "Easy. One value per flex type.",
   ],
   [
     "Elbows, transitions, takeoffs",
-    "A coefficient C times the velocity pressure; C comes from an ASHRAE table",
-    "Mostly ready: rules cover the families Chadds uses; rectangular radius elbows have no rule yet",
-    "Tables ship with Revit; the rules live in Pe's code; the chosen table is written onto each fitting when you apply",
-    "Medium: a firm rulebook, built once",
+    "C times velocity pressure. C comes from an ASHRAE table.",
+    "Mostly. Pe has rules for the families on Chadds except rectangular radius elbows.",
+    "Tables ship with Revit. Rules are in Pe's code. Apply writes the table onto each fitting.",
+    "Medium. A firm rulebook, set up once.",
   ],
   [
     "Dampers",
-    "A drop from ASHRAE table CD9-1",
-    "Partial: priced fully open; the real balancing position is unknown",
+    "Drop from ASHRAE table CD9-1",
+    "Partly. Priced fully open. The balancing position is unknown.",
     "Pe's rules",
-    "Easy, if fully open is acceptable",
+    "Easy if fully open is acceptable",
   ],
   [
     "Grille or diffuser",
-    "The manufacturer's static pressure at its airflow and size; often the largest single term",
-    "Missing: the firm's grille families carry no performance data",
-    "Revit has the slot (a terminal connector's pressure drop, bound to a family parameter); the catalog number for each neck and airflow lives only in manufacturer PDFs",
-    "Hard: per manufacturer, model and core. Price's LBP tables stop at 6 in; Chadds uses 8 to 18 in",
+    "Manufacturer static pressure at its airflow and size. Often the largest single term.",
+    "No. The firm's grille families have no performance data.",
+    "Revit has a slot for it: the terminal connector's pressure drop, bound to a family parameter. The numbers are only in manufacturer PDFs.",
+    "Hard. Per manufacturer, model and core. Price's LBP tables stop at 6 in; Chadds uses 8 to 18 in.",
+  ],
+  [
+    "Room",
+    "Its load sets the airflow of the grilles that serve it",
+    "Partly. Units list the rooms they serve in PE_M___ServesRoom. Grilles are not linked to rooms or loads.",
+    "Revit rooms and spaces; RHVAC",
+    "Medium. Depends on the rooms and zoning work.",
   ],
   [
     "Design airflow at each grille",
     "Sets the velocity, so every other term",
-    "Partial: the unit's airflow from the RHVAC Load Preview, split over its grilles by neck size, overridable per grille",
-    "The pasted Load Preview, kept on this computer until applied; the grilles in Revit carry no design flow",
-    "Medium: every unit needs its tag in Revit and in the load file",
+    "Partly. Each unit's airflow comes from the RHVAC Load Preview and is split over its grilles by neck size. Any grille can be overridden.",
+    "The pasted Load Preview, on this computer until apply. Grilles in Revit carry no design flow.",
+    "Medium. Every unit needs its tag in Revit and in the load file.",
   ],
   [
     "Inline equipment (coil, filter, dehumidifier, ERV core)",
     "A fixed drop at design airflow, from the product's submittal",
-    "Missing",
-    "Submittals only",
-    "Hard: per product, and it depends on what the unit's own rating already includes",
+    "No",
+    "Submittals",
+    "Hard. Per product, and depends on what the unit's own rating already includes.",
   ],
   [
     "Which unit is the fan",
     "Where every path starts",
-    "Partial: inferred; when one unit on a network has a load system, the others are treated as inline",
+    "Partly. When one unit on a network has a load system, Pe treats the others as inline.",
     "Pe's inference",
-    "Medium: a role per unit (open decision 5)",
+    "Medium. Needs a role per unit (decision 5).",
   ],
   [
     "Connectivity",
-    "A path must be continuous from fan to grille",
-    "Partial: sub-inch gaps and near-miss taps are joined and named; real open ends need a person",
-    "The Revit model",
-    "Medium: modeling care",
+    "The path must connect from fan to grille",
+    "Partly. Pe joins gaps under an inch and near-miss taps and lists them. Real open ends need a person.",
+    "Revit model",
+    "Medium. Modeling care.",
   ],
   [
     "Fan's available static",
     "What the required static is checked against",
-    "Missing: the firm's fan static parameter reads 0 on Chadds",
-    "The equipment family, from the submittal",
-    "Hard: the equipment selection link",
+    "No. The firm's fan static parameter reads 0 on Chadds.",
+    "Equipment family, from the submittal",
+    "Hard. Comes with equipment selection.",
   ],
 ];
 
 const DECISIONS: [string, string][] = [
   [
-    "Rules are fixed; a firm adds its own rule instead of changing a table.",
-    "Today a person can swap the ASHRAE table under a rule. The swap exists because a Revit family does not say which tested fitting it is: a double-vaned mitered elbow is CR3-14, 15 or 16 (C 0.38, 0.25, 0.41). Proposal: ship rules that never change, and let the firm add a rule (a family and condition filter, built on the master table's filter bar) that wins over the shipped one. The rule on screen is then the whole explanation.",
+    "Rules stay fixed. A firm adds its own rule instead of changing a table.",
+    "Today a person can change the ASHRAE table under a rule, because a Revit family does not say which tested fitting it is. A double-vaned mitered elbow could be CR3-14, 15 or 16 (C 0.38, 0.25, 0.41). Proposal: shipped rules never change, and a firm rule (a family and condition filter, built on the master table's filter bar) overrides a shipped one.",
   ],
   [
     "One loss engine.",
-    "The browser, the host and Pea price with one engine. Revit's own recalculation goes through Pe's loss server, which is separate code. Today they disagree: the server cannot price rectangular elbows, transitions without an In/Out pair, or takeoffs entered from the collar, so Revit's number would come out lower than Pe's. Options: Revit stores the coefficient Pe's engine computed (frozen until the next apply); the server is rebuilt on the same rules; or Pe writes the right table name into Revit's own ASHRAE method wherever Revit's matcher accepts it, and falls back to one of the others where it refuses (off-square elbows, shapes with no table). Revit's own critical path is meant to be the check, so this must close before it means anything.",
+    "The browser, host and Pea use one engine. Revit's recalculation uses Pe's loss server, which is separate code. The server cannot price rectangular elbows, transitions without an In/Out pair, or takeoffs entered from the collar, so Revit's number would come out lower than Pe's. Options: (a) Revit stores the coefficient Pe computed, fixed until the next apply; (b) rebuild the server on the same rules; (c) Pe writes the right table name into Revit's own ASHRAE method where Revit accepts it, and uses (a) or (b) where it refuses.",
   ],
   [
     "Grille performance data.",
-    "Where catalog tables live firm-wide, how they get in (Pea reads the manufacturer PDF and cites the page), and what happens past the catalog's sizes.",
+    "Where the catalog tables live for the whole firm, how they get in (Pea reads the manufacturer PDF and cites the page), and what to do past the catalog's sizes.",
   ],
   [
     "Inline equipment drops.",
@@ -160,19 +191,19 @@ const DECISIONS: [string, string][] = [
   ],
   [
     "A role per unit: fan, inline, or its own system.",
-    "Read from what the unit is, overridable by a person. Replaces today's guess, which would mistake an ERV ducted into a fan coil for a passive part.",
+    "Set from the unit type and overridable by a person. Pe's current guess would treat an ERV ducted into a fan coil as a passive part.",
   ],
   [
     "Where design airflow comes from.",
-    "The Load Preview split is the interim. Long term, each grille carries its own design flow from the rooms and zoning link.",
+    "For now, the Load Preview split. Later, each grille gets its flow from its room through the rooms and zoning work.",
   ],
   [
     "Where staged inputs live.",
-    "Pasted loads, overrides and table choices stay on one computer until apply. Should they travel with the model before then?",
+    "Pasted loads, overrides and table choices stay on one computer until apply. Should they be saved with the model before that?",
   ],
   [
     "The fan's available static.",
-    "Without it there is nothing to compare the required static to; it belongs to equipment selection.",
+    "Needed to check the required static. Comes from equipment selection.",
   ],
 ];
 
@@ -180,52 +211,48 @@ export function DuctsDocs() {
   return (
     <div className="flex flex-col gap-3 [&>p]:max-w-[80ch] [&>ul]:max-w-[80ch] [&>ol]:max-w-[80ch]">
       <p>
-        Read every duct network in the document, price every grille's path from the fan, and see
-        who must answer each gap: the route, Pea, or you. Stage what you know, preview what Revit
-        would accept, and apply: Pe writes the coefficients, drops and fan static into Revit, beside
-        Revit's own critical path.
+        Pe reads every duct network in the document, prices each grille's path from the fan, and
+        lists each gap with who answers it: the route, Pea, or you. You stage what you know,
+        preview what Revit would accept, and apply. Apply writes the coefficients, drops and fan
+        static into Revit, next to Revit's own critical path.
       </p>
 
       <h3>Why not Revit's own pressure drop</h3>
       <ul className="list-disc pl-5">
+        <li>Revit's straight-duct math matches a hand calculation within 0.1%.</li>
         <li>
-          Revit's arithmetic is right: straight duct matches a hand calculation within 0.1%.
+          Revit's "Coefficient from ASHRAE Table" method works once a fitting stores a table. New
+          fittings store none and charge 0 with no warning. On a fresh open of Chadds, 183 of 4,571
+          fittings stored a table. An earlier copy showed 388; we don't know why.
         </li>
         <li>
-          Its fitting method "Coefficient from ASHRAE Table" works: once a fitting stores a table,
-          Revit reads the shipped grid exactly and keeps it live. But fittings start empty, and an
-          empty fitting charges 0 with no error. On a fresh open of the Chadds model 183 of 4,571
-          fittings stored a table (an earlier copy read 388; the difference is unexplained).
+          When Revit picks a table itself, it takes the first allowed one in text order, which is
+          often the wrong shape. 221 round elbows on Chadds have CD3-11, a flat-back elbow.
         </li>
         <li>
-          When Revit fills a table itself, it takes the first one its matcher allows in text order,
-          not the right shape: 221 round elbows on Chadds carry CD3-11, a flat-back elbow.
+          Revit measures an elbow's angle from the two ducts connected to it in the project, with
+          almost no tolerance. So two elbows of the same 90-degree family can differ: on Chadds one
+          meets its ducts at exactly 90 and gets a table, the other at 90.0013 and gets none. 87 of
+          1,235 round elbows on Chadds can never get a table and always charge 0. Editing the
+          family does not help; the ducts would have to be redrawn. Tested 2026-10-05.
         </li>
         <li>
-          The matcher reads an elbow's angle from the two ducts drawn into it, not from the family,
-          and allows almost no tolerance. The same 90-degree family works in one place and not
-          another: two identical elbows on Chadds differ only because one meets its ducts at
-          90.0013 degrees. 87 of 1,235 round elbows (about 7%) have a duct a hair off its
-          direction, can never hold a table, and always charge 0. That is drafting, not the family:
-          no family edit fixes it. Tested 2026-10-05.
+          When Chadds opens, every fitting reads 0 and Revit's critical paths are out of date until
+          something in that system changes. We don't know why.
         </li>
         <li>
-          On open, every fitting on Chadds reads 0 and the critical paths Revit reports are stale
-          until something in that system changes. Why is unexplained.
+          Fitting losses are set one fitting at a time, with no type default, no schedule, and 0
+          when unset. The grille drop, often the largest term, is not in the model. So nobody sees
+          the number or fixes it.
         </li>
         <li>
-          Nobody fixes it because the number has no reader, the state is invisible, it is set per
-          fitting with no type default, a missing value reads as 0 without an error, and the
-          largest term, the grille, is not in the model at all.
-        </li>
-        <li>
-          Pe makes the number visible per grille, names every assumption, and writes the result
-          back so it travels with the model. The bar is design-grade with named assumptions, not
-          certification.
+          Pe shows the number per grille, lists every assumption, and writes results back into the
+          model. The goal is design-grade numbers with stated assumptions, not certification.
         </li>
       </ul>
 
-      <h3>What a path is made of, and how ready each part is</h3>
+      <h3>The parts of a duct path</h3>
+      <Legend />
       <Mermaid chart={PATH} />
       <div className="overflow-x-auto">
         <table className="w-full border-collapse t-small [&_td]:border-t [&_td]:py-1.5 [&_td]:pr-3 [&_td]:align-top [&_th]:pr-3 [&_th]:text-left">
@@ -233,9 +260,9 @@ export function DuctsDocs() {
             <tr>
               <th>Part</th>
               <th>What it adds</th>
-              <th>Ready to run automatically?</th>
-              <th>Where its data lives</th>
-              <th>How hard the data is to get</th>
+              <th>Automatic today?</th>
+              <th>Where the data is</th>
+              <th>How hard to get</th>
             </tr>
           </thead>
           <tbody>
@@ -250,18 +277,17 @@ export function DuctsDocs() {
         </table>
       </div>
 
-      <h3>Solving the calculation is not the same as automatic</h3>
+      <h3>What has to work before pressure drop is automatic</h3>
       <p>
-        The calculation itself now works: on the Chadds model, supply system SA 19 prices end to
-        end. Fan coil FC-17 needs 0.081 in. w.g. and FC-35 needs 0.152 in. w.g., with every part
-        priced except the grille drop. Making it automatic needs every link before it, and the
-        equipment link after it, to carry data the firm does not hold in one place today.
+        On Chadds supply system SA 19, every part prices except the grille drop. Fan coil FC-17
+        needs 0.081 in. w.g. and FC-35 needs 0.152 in. w.g. To run this without a person, every
+        step below needs its data, and today most of it is spread across files or missing.
       </p>
       <Mermaid chart={CHAIN} />
       <p>
-        Zoning is room to system to unit tag. Loads come from the RHVAC Load Preview. Equipment
-        selection supplies the fan curve and available static. Each link is its own route with its
-        own findings; they share only Revit element ids.
+        Zoning maps each room to a system and a unit tag. Loads come from the RHVAC Load Preview.
+        Equipment selection gives the fan curve and available static. Each step is its own route,
+        and they share Revit element ids.
       </p>
 
       <h3>Open decisions</h3>
