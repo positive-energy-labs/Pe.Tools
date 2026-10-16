@@ -28,9 +28,10 @@ Authority runs user, then skill, then this file. A stance is a posture, not a pr
 | lens | `purge` | Shiva at the winnowing floor, Occam, the Iconoclast, the burn boss — delete at least as much as you add | bloat: adding to a place that already has too much | no | no |  |
 | pass | `relay` | Herald — the message to the next session | the dropped baton: the next session re-derives what this one knew | no | **yes** | baton delivered |
 | pass | `release` | Ferryman — the crossing ends on the other bank | premature release closure: shipped bytes never made the crossing | no | no | exact published bytes reached the consumer, promised outcomes proven, failures and gaps recorded |
+| pass | `retro` | After-action review — what was meant, what happened, why, what to keep; no blame, no grade | the repeated wound: a costly session pattern paid again because nobody measured it | no | no | report on disk; every finding anchored, quantified, ranked by rung, and handed to `reflect`, `docs`, or the owner |
 | loop | `close` | Keystone — a settled surface needs its backend real | shims for done: a settled surface over a fake backend | yes | no | shims zero or deferred, workflow driven by hand |
+| loop | `control` | Governor — the flyball reads the engine and moves one valve, never the piston | the unbounded run: work with no frozen edge, or the same wave sent twice at a plateau | yes | **yes** | every signature landed, given up, or owed; or two dry waves |
 | loop | `diagnose` | Coroner — something is broken | guessed fix: a diff before a cause | yes | no | cause, wound, red loop |
-| loop | `goal` | Crusade — an unattended push at a number | wheel-spinning: the same wave sent twice at a plateau | yes | **yes** | two dry waves |
 | loop | `grill` | Socrates — an idea, settleable by talking | decisions made for the user: a plan built on verdicts never given | yes | no | frontier empty, user confirms |
 | loop | `muse` | Demiurge in the realm of forms — architecture, API, data shape, seam is open | first shape kept: a seam settled before the alternatives were seen | yes | no | two rounds adding no shape and killing none |
 | loop | `protoui` | Lineup and Toile — a product surface is unsettled | wrong product: canonizing a surface nobody felt | yes | no | two dry rounds |
@@ -42,7 +43,7 @@ Authority runs user, then skill, then this file. A stance is a posture, not a pr
 | slot | `page` | the orrery, not the painting — a page that holds state and turns | the painting: a page with no state behind it | - | - | - |
 | slot | `show-me` | the sketch on the back of the envelope | the wall of text: a topic explained in prose that a diagram would settle | - | - | - |
 
-Real work starts with two accounts (`AGENTS.md`, Always): the ask restated, then what the terrain shows. `protoui`, `muse`, `purge`, `diagnose`, and `goal` often form a session's main loop. A pasted failure is `diagnose`. `delegate`, `goal` and `relay` are user-only; name them then stop. Suggest "/realy" when you and the user seem to be consistently misaligned.
+Real work starts with two accounts (`AGENTS.md`, Always): the ask restated, then what the terrain shows. `protoui`, `muse`, `purge`, `diagnose`, and `control` often form a session's main loop. A pasted failure is `diagnose`. `delegate`, `control` and `relay` are user-only; name them then stop. Suggest "/realy" when you and the user seem to be consistently misaligned.
 
 ## Approach
 
@@ -125,7 +126,7 @@ Shared words, the only home for figure aliases. Each is a rule compressed to a n
 | **shim** | Anything between the surface and reality; censused, then retired in order. `close` calls it centring |
 | **owed** | Open work; lives in a ledger, nowhere else |
 | **frontier** | Every decision whose prerequisites are settled; clear the frontier with `grill` |
-| **round** | One build-or-ask, one verdict, then reshape; every loop iterates in rounds, and `goal` calls its fan-out round a wave. A dry round retired nothing and narrowed nothing; two in a row end a loop |
+| **round** | One build-or-ask, one verdict, then reshape; every loop iterates in rounds, and `control` calls its fan-out round a wave. A dry round retired nothing and narrowed nothing; two in a row end a loop |
 | **verdict** | A user decision; the top signal; always persisted |
 | **LAW / LORE** | Physics vs convention; LORE may be defied, say when. New LAW is always captured. |
 | **proof lane** | Which kind of run proves a claim; `execute` names them; the stamp is `PROVEN[lane, where, commit, when]` |

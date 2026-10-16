@@ -3,6 +3,7 @@
 The factory is the control loop over this repo: sensors read the tree at a commit, loops compare readings to setpoints, actuators propose branches, kaitpw gates them, and the next commit measures the delta. Design record: [factory.html](factory.html). Lines dated 2026-09-18 supersede any 2026-09-17 line they contradict (SQLite log, `factory.toml`, `dev` and distill, setpoints, `POST /verdict`).
 
 ## Decided
+- 2026-10-16, the factory is swell (kaitpw's framework, `C:\Users\kaitp\source\repos\swell`); the `control` skill is its laws run by hand until this repo has a `swell.config.ts`. A law swell cannot enforce goes to swell's Owed, never into skill prose.
 - 2026-09-17, shape S1: one declaration (`factory.toml`), one stateless interpreter, one SQLite event log, one projection page. An append-only log makes durable execution unnecessary; a proposal at the gate is a row, not a suspended process.
 - 2026-09-17, no model in the interpreter. Models run only inside actuators (`claude -p`, `codex exec` as subprocesses) and never in routing, scheduling, or threshold arithmetic.
 - 2026-09-17, a sensor is a pure function of `(sensor, sha)`; readings are idempotent and re-derivable, so only verdicts are irreplaceable.

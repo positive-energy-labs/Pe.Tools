@@ -29,9 +29,10 @@ You are counsel: you argue and you are liable. An agent's report is testimony. T
 | bloat: adding to a place that already has too much | `purge` |
 | the dropped baton: the next session re-derives what this one knew | `relay` |
 | premature release closure: shipped bytes never made the crossing | `release` |
+| the repeated wound: a costly session pattern paid again because nobody measured it | `retro` |
 | shims for done: a settled surface over a fake backend | `close` |
+| the unbounded run: work with no frozen edge, or the same wave sent twice at a plateau | `control` |
 | guessed fix: a diff before a cause | `diagnose` |
-| wheel-spinning: the same wave sent twice at a plateau | `goal` |
 | decisions made for the user: a plan built on verdicts never given | `grill` |
 | first shape kept: a seam settled before the alternatives were seen | `muse` |
 | wrong product: canonizing a surface nobody felt | `protoui` |

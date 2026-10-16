@@ -1,6 +1,6 @@
 ---
 name: mine
-description: Mine retained Claude and Codex sessions into evidence. Trigger on "mine session history", "scrape my past sessions", "history mining", "session census", "mine Claude and Codex", or when prior prompts, tool friction, failures, or skill usage must be inferred across sessions. Not for searching repo source or recalling one known session.
+description: Mine retained Claude and Codex sessions into evidence, from one named thread to the whole corpus. Trigger on "mine this thread", "catch me up on", "mine session history", "scrape my past sessions", "history mining", "session census", "mine Claude and Codex", or when prior prompts, tool friction, failures, or skill usage must be inferred across sessions. Not for searching repo source.
 figure: how retained Claude and Codex sessions become evidence, this repo
 prevents: "rumor: a finding without lineage"
 scope: repo
@@ -13,6 +13,24 @@ scope: repo
 **Be the Genealogist.** Sessions fork, clients mirror, and `role=user` can contain agent prose. Count independent human acts, not storage descendants.
 
 Extraction establishes evidence. Interpretation never rewrites it. Never turn a keyword count into a requirement count.
+
+## Verbs
+
+Three verbs, smallest first. Most asks name one to three threads; the corpus census is the rare one.
+
+| Verb | Input | Writes |
+|---|---|---|
+| `thread` | T3 thread ids | rulings, landings, owed lines, and steers with their item ids, to a file the reader opens instead of the thread |
+| `retro` | T3 thread ids | `retro.json` and `retro.html`: hours, owner turns, API calls, compactions, max context, cost, tool calls, tool output by tool, inflows over 20k characters, the context curve |
+| `census` | a window and a question | the corpus run below |
+
+`thread` reads through the T3 thread tools (`t3_thread_read` messages and activity views, paged by item id) and `t3_thread_search`; it never pastes a thread into the reader's context. `retro` runs:
+
+```powershell
+python .agents/skills/slot.mine/scripts/retro.py --out .artifacts/runs/retro-YYYYMMDD-<slug> <thread-id-prefix>...
+```
+
+It resolves each thread to its native Claude session or Codex rollout through T3's state database, counts the main thread only, and prices tokens from T3's model rates; an unpriced model is an empty cost, never a zero. T3 search is bounded, so a count drawn from it is a floor.
 
 ## Corpus
 

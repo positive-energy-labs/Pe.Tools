@@ -4,6 +4,8 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 
 ## Decided
 
+- 2026-10-16, `goal` becomes `control` (kaitpw): one loop for attended and unattended pushes, `MODE manual|auto` replacing the split, written in swell's control-theory nouns (plant, sensor, signature, observer, actuator, move, operator) so the form ports to `swell.config.ts` without translation. The form gains a frozen SIGNATURES list, per-actuator timeouts and file ownership, and two attempts then give up; done is the next sensor reading, never a predicate. Evidence: thread 36f4d81e's Codex run, one 11-hour turn on "until every terminal is covered" with 402 unfillable terminals and 8 reinstalls; the meta-muse retro (`.artifacts/runs/retro-metamuse-20261014/`). Figure Crusade becomes Governor.
+- 2026-10-16, `pass.retro` is new and `mine` gains three verbs, `thread`, `retro` and `census` (kaitpw). Since 2026-10-01, 7 of 9 mining asks named one to three threads (a T3 search floor); the corpus census is the rare verb. `scripts/retro.py` is the meta-muse retro's four scripts as one, taking thread ids. Mine output does not adopt swell's measurement format yet (kaitpw).
 - 2026-10-05, delegated implementation defaults to Sol 6.1 (`gpt-6.1-sol`) at the user's request; this replaces the Sol 6 model guidance that caused an outdated selection. Model IDs come from the live catalog, and an explicit user choice wins.
 
 ### Drivers
@@ -96,6 +98,7 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 
 ## Tried & rejected
 
+- 2026-10-16, vaulted from `goal`: the figure "Crusade, an unattended push at a number"; MISSION and NUMBER as form lines (a number is a predicate with no frozen edge; the Codex run had one); keeping goal and campaign as two loops.
 - 2026-08-31, encyclopedic `slot.execute`: 265 lines mixed stable proof choices with a beta-specific CLI manual, incident fixes, prototype mechanics, browser fallbacks, and the full Herdr protocol. A cold reader could not find the next command. The rewrite keeps lane choice, custody, safety boundaries, and authoritative entrypoints inline; git holds the killed laws, and caveats return only when they change a repeated decision.
 - One disposition doc instead of skills: a cold model cannot be primed for every phase at once.
 - Lexicon-only modes the user types: the user invokes by name and expects the loop to drive itself.
