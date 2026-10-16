@@ -109,7 +109,7 @@ const PRESSURE_DROP_PARTS: MapPart[] = [
     automatic: "No. The firm's grille families have no performance data.",
     data: "Revit has a slot for it: the terminal connector's pressure drop, bound to a family parameter. The numbers are only in manufacturer PDFs.",
     effort:
-      "Hard. Per manufacturer, model and core. Price's LBP tables stop at 6 in; Chadds uses 8 to 18 in.",
+      "Hard. Per manufacturer, model and core. Price's LBP tables cover slot widths 1.5 to 6 in: 268 of the 351 LBP grilles on Chadds fit, 83 are 8 to 18 in wide.",
   },
   {
     id: "room",
