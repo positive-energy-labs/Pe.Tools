@@ -6,7 +6,11 @@ import type { MemberRef } from "#/route/manifest";
 
 import { callHostRpc } from "./client";
 
-export const listPods = async () => [...(await callHostRpc("pod.list")).pods];
+export const listPods = async () => {
+  const result = await callHostRpc("pod.list");
+  if (!("pods" in result)) throw Error("pod.list returned identity instead of full inventory");
+  return [...result.pods];
+};
 
 export const readMember = (ref: MemberRef) => callHostRpc("pod.member.read", ref);
 
