@@ -550,13 +550,14 @@ it.each(rootAttached.cases)(
           .connectors.forEach((c) => {
             c.direction = "in";
           });
+        // No In/Out pair: the tree walk orients it, and the row says so (tolerance over repair).
         expect(
           computeLosses(contradictory, grids).paths[terminalId]!.rows.find(
             (r) => r.id === fitting.id,
-          )!.error,
-        ).toContain("exactly one In and one Out");
+          )!.notes,
+        ).toContain("oriented by the tree walk; its connectors state no In/Out pair");
       } else {
-        // Attachment truth is retained, but rectangular pricing is a separate frontier.
+        // Attachment truth is retained; these grids carry no rectangular tables.
         expect(row.error).toBeDefined();
         expect(row.dp).toBe(0);
       }
@@ -565,7 +566,7 @@ it.each(rootAttached.cases)(
 );
 
 // The manual angle below is an explicit test input, not an observation added to retained Chadds.
-it("does not substitute a root-relative transition inlet or an assumed angle", () => {
+it("orients a transition by the tree walk only when its connectors state no In/Out pair, and never assumes an angle", () => {
   const missingAngle = structuredClone(snapshot);
   const trx = missingAngle.nodes.find((n) => n.id === 5)!;
   trx.connectors[0]!.direction = "in";
@@ -575,7 +576,8 @@ it("does not substitute a root-relative transition inlet or an assumed angle", (
   expect(row().error).toContain("measured included angle");
   trx.facts = [{ key: "angle", value: 45, unit: "deg", provenance: "designer-stated" }];
   trx.connectors[0]!.direction = "out";
-  expect(row().error).toContain("exactly one In and one Out");
+  expect(row().error).toBeUndefined();
+  expect(row().notes).toContain("oriented by the tree walk; its connectors state no In/Out pair");
 });
 
 it.each(physicalTransitions.nodes)(
@@ -611,8 +613,9 @@ it.each(physicalTransitions.nodes)(
       fitting.connectors.reverse();
       expect(row().inputs?.y).toBeCloseTo(4 / Math.PI, 12);
     } else {
-      expect(row().error).toContain("exactly one In and one Out");
-      expect(row().dp).toBe(0);
+      // The walk orients it onto a rule; these grids carry no rectangular table to price it.
+      expect(row().rule).toBeDefined();
+      expect(row().error).toContain("is not loaded");
     }
   },
 );

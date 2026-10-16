@@ -157,11 +157,6 @@ export function assessDucts(
     "Transition included angle is not measured; type labels and a fixed 45-degree value do not establish table inputs",
   );
   reason(
-    "unknown-transition-orientation",
-    transitions.filter((input) => !input.inlet || !input.outlet).length,
-    "Transition direction is unknown or contradictory; the root walk does not establish a physical In/Out pair",
-  );
-  reason(
     "unreadable-model-store",
     snapshot.storeError ? 1 : 0,
     "The model loss store is unreadable; applied table and provenance choices are unknown",

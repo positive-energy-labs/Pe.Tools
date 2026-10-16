@@ -113,7 +113,14 @@ const LEG_KIND = { C: "fitting", Cb: "tap-branch", Cs: "tap-straight" } as const
 const factOf = (node: Node, key: string) => node.facts.find((f) => f.key === key)?.value ?? null;
 
 const portOf = (c: Connector | undefined): Port | null =>
-  c ? { shape: c.shape, section: sectionOf(c.shape, c.diameterIn, c.widthIn, c.heightIn) } : null;
+  c
+    ? {
+        shape: c.shape,
+        section: sectionOf(c.shape, c.diameterIn, c.widthIn, c.heightIn),
+        widthIn: c.widthIn,
+        heightIn: c.heightIn,
+      }
+    : null;
 
 const segmentSection = (s: Segment) => sectionOf(s.shape, s.diameterIn, s.widthIn, s.heightIn);
 
@@ -153,8 +160,10 @@ function fittingFacts(
       node.connectors.find((c) => c !== walkedInlet && c.connectedTo?.elementId !== prev));
   const transition = node.partType === "Transition";
   const physical = transition ? transitionGeometry(node) : null;
-  const inlet = physical ? physical.inlet : walkedInlet;
-  const outlet = physical ? physical.outlet : walkedOutlet;
+  // Connectors that are not one In and one Out (bidirectional on Chadds) take the tree walk's direction.
+  const walked = physical != null && physical.inlet == null;
+  const inlet = physical?.inlet ?? walkedInlet;
+  const outlet = physical?.outlet ?? walkedOutlet;
   const inletPort = portOf(inlet) ?? { shape: "other", section: null };
   const outletPort = portOf(outlet);
   const ratio =
@@ -175,10 +184,12 @@ function fittingFacts(
         : null;
   return {
     kind: node.kind === "accessory" ? "accessory" : "fitting",
+    family: node.family ?? null,
     partType: node.partType ?? null,
     rOverD: factOf(node, "rOverD"),
     aoOverA1: transition ? ratio : (factOf(node, "aoOverA1") ?? ratio),
-    angleDeg: physical?.angleDeg ?? null,
+    angleDeg: physical ? physical.angleDeg : factOf(node, "angle"),
+    ...(walked ? { note: "oriented by the tree walk; its connectors state no In/Out pair" } : {}),
     inputError: physical?.error,
     inlet: inletPort,
     outlet: outletPort,
@@ -401,7 +412,7 @@ function pathRows(
         ...(found.notes.length ? { notes: found.notes } : {}),
       },
       desc: `${rule.family} ${node.id}, ${table} ${input.res} ${round4(found.value)} x Pv ${Math.round(f.fpm)} fpm (${found.inputs})`,
-      ...(found.notes.length ? { notes: found.notes } : {}),
+      ...(found.notes.length || facts.note ? { notes: [...found.notes, ...(facts.note ? [facts.note] : [])] } : {}),
     };
   };
 

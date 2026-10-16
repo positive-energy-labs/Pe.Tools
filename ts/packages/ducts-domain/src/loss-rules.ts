@@ -13,6 +13,8 @@ import type { Section } from "./loss-physics.ts";
 export interface Port {
   shape: string;
   section: Section | null;
+  widthIn?: number | null;
+  heightIn?: number | null;
 }
 
 /**
@@ -21,6 +23,7 @@ export interface Port {
  */
 export interface FittingFacts {
   kind: "fitting" | "accessory";
+  family: string | null;
   partType: string | null;
   rOverD: number | null;
   /** Outlet area over inlet area. */
@@ -28,6 +31,8 @@ export interface FittingFacts {
   /** Measured included transition angle, degrees; never inferred from a type name. */
   angleDeg?: number | null;
   inputError?: string;
+  /** An assumption the inputs rest on, carried onto the priced row. */
+  note?: string;
   inlet: Port;
   /** Physical outlet for a transition; otherwise the port toward the terminal. Null for a tap/dead end. */
   outlet: Port | null;
@@ -72,6 +77,7 @@ export interface LossRule {
 const ELBOWS = ["CD3-2", "CD3-21", "CD3-9", "CD3-1", "CD3-11", "CD3-10"] as const;
 const TAPS = ["SD5-9", "SD5-10", "SD5-11", "SD5-12", "SD5-13", "SD5-1", "SD5-2"] as const;
 const TRANSITIONS = ["SR4-3", "SR4-1", "SR4-2", "SD4-2", "SD4-1"] as const;
+const VANED = ["CR3-14", "CR3-15", "CR3-16", "CR3-9", "CR3-10", "CR3-11", "CR3-12", "CR3-13"] as const;
 
 const near = (a: number | null, b: number) => a != null && Math.abs(a - b) < 1e-3;
 const elbow = (f: FittingFacts) => f.partType === "Elbow" && f.inlet.shape === "round";
@@ -85,6 +91,11 @@ const roundTo = (f: FittingFacts) => f.inlet.shape === "round" && f.outlet?.shap
 const toRect = (f: FittingFacts) =>
   f.inlet.shape === "round" && f.outlet != null && f.outlet.shape !== "round";
 const fromRect = (f: FittingFacts) => f.inlet.shape !== "round" && f.outlet?.shape === "round";
+const rectTo = (f: FittingFacts) =>
+  f.inlet.shape === "rectangular" && f.outlet?.shape === "rectangular";
+const mitered = (f: FittingFacts) =>
+  f.partType === "Elbow" && f.inlet.shape === "rectangular" && /mitered/i.test(f.family ?? "");
+const vaned = (f: FittingFacts) => /vane/i.test(f.family ?? "");
 const transition = (f: FittingFacts) => f.partType === "Transition";
 /** Elbow input: r/D for the r/D table, else the diameter. */
 const elbowInput = (f: FittingFacts, _flows: Flows, table: string) =>
@@ -184,6 +195,44 @@ export const LOSS_RULES: readonly LossRule[] = [
     options: TRANSITIONS,
     basis: "Pv downstream (outlet)",
     when: (f) => transition(f) && roundTo(f),
+    input: angleInput,
+    basisOf: outletBasis,
+  },
+  {
+    key: "elbow-mitered",
+    family: "Rectangular Elbow - Mitered",
+    type: "",
+    cond: "no vanes",
+    table: "CR3-6",
+    options: ["CR3-6"],
+    basis: "Pv of the elbow",
+    when: (f) => mitered(f) && !vaned(f),
+    // ponytail: H/W reads Revit's Width as the side in the plane of the turn (its rectangular elbow
+    // families bend across Width); a connector frame would settle it per instance.
+    input: (f) => ({ res: "Co", x: (f.inlet.heightIn ?? NaN) / (f.inlet.widthIn ?? NaN), y: f.angleDeg ?? NaN }),
+    basisOf: inletBasis,
+  },
+  {
+    key: "elbow-mitered-vaned",
+    family: "Rectangular Elbow - Mitered - Double Thickness Vanes",
+    type: "",
+    cond: "turning vanes",
+    table: "CR3-14",
+    options: VANED,
+    basis: "Pv of the elbow",
+    when: (f) => mitered(f) && vaned(f),
+    input: () => ({ res: "Co", x: 0 }),
+    basisOf: inletBasis,
+  },
+  {
+    key: "trx-rect",
+    family: "Rectangular Transition - Angle",
+    type: "Measured angle",
+    cond: "rectangular to rectangular",
+    table: "SR4-1",
+    options: TRANSITIONS,
+    basis: "Pv downstream (outlet)",
+    when: (f) => transition(f) && rectTo(f),
     input: angleInput,
     basisOf: outletBasis,
   },

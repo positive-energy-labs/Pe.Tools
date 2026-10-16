@@ -26,7 +26,11 @@ const SKIPPED = /^(Ventilation|Misc\.? Return|Zone \d+|Building)$/i;
 const CFM_HEADER = /^(air ?flow|sys\.? act\.? cfm)$/i;
 const DEFAULT_CFM_COLUMN = 6;
 
-const tagOf = (name: string) => name.split(/\s+/).findLast((token) => TAG.test(token)) ?? null;
+const tagOf = (name: string) =>
+  name
+    .split(/\s+/)
+    .reverse()
+    .find((token) => TAG.test(token)) ?? null;
 const numberOf = (name: string) => {
   const last = name.split(/\s+/).at(-1) ?? "";
   return ROOM_NUMBER.test(last) ? last : null;
