@@ -62,7 +62,7 @@ const receipt = (requestId: string, state: string, detail = "confirmed leg"): Up
         status: state === "failed" ? "failed" : "ok",
         observedAtUtc: "2026-10-09T00:00:01Z",
         detail,
-        exitCode: null,
+        exitCode: state === "failed" ? 1603 : null,
       },
     ],
   }) as UpdateReceipt;
@@ -141,6 +141,9 @@ test("a settled update announces on its transition into terminal, and a re-read 
         state: "ok",
         version: "0.8.0",
         detail: "done",
+        automatic: false,
+        failedLeg: null,
+        exitCode: null,
       },
     ]);
     // A third host loading the already-terminal admission re-announces the same request: the
@@ -153,14 +156,23 @@ test("a settled update announces on its transition into terminal, and a re-read 
   }
 });
 
-test("a failed update announces failure with the last leg detail", async () => {
+test("a failed automatic update announces its trigger, failed leg and exit code", async () => {
   const f = await fixture("failed");
   try {
     const reader = f.make();
     await reader.refresh();
-    await reader.apply(PLAN_ID);
+    await reader.apply(PLAN_ID, true);
     await f.make().refresh();
-    expect(f.facts).toMatchObject([{ kind: "settled", state: "failed", detail: "no space" }]);
+    expect(f.facts).toMatchObject([
+      {
+        kind: "settled",
+        state: "failed",
+        detail: "no space",
+        automatic: true,
+        failedLeg: "done",
+        exitCode: 1603,
+      },
+    ]);
   } finally {
     await f.close();
   }

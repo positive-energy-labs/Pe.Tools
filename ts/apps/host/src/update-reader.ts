@@ -107,6 +107,8 @@ const admissionSchema = z.object({
   receiptError: z.string().nullable().default(null),
   /** The version this request installs, read from the plan it was admitted against. */
   candidate: z.string().nullable().default(null),
+  /** Whether the machine admitted this request on its own; null on admissions older than 0.7.31. */
+  automatic: z.boolean().nullable().default(null),
 });
 type Admission = z.infer<typeof admissionSchema>;
 export type UpdateRunner = (args: string[], detached?: boolean) => Promise<Envelope<unknown>>;
@@ -126,6 +128,10 @@ export type UpdateFact =
       readonly state: "ok" | "failed" | "refused";
       readonly version: string | null;
       readonly detail: string | null;
+      readonly automatic: boolean | null;
+      /** The first leg that did not finish ok, and its exit code: the remote-safe failure reason. */
+      readonly failedLeg: string | null;
+      readonly exitCode: number | null;
     };
 
 /** One persisted recovery handle. A lost acknowledgement is never permission to dispatch again. */
@@ -367,6 +373,7 @@ export function createUpdateReader(options: {
         receipt: null,
         receiptError: null,
         candidate: value.plan?.planId === planId ? value.plan.latest : null,
+        automatic: noShortcutArgs,
       };
       // Flush and atomically install identity BEFORE the detached child can have effects.
       await persist(record);
@@ -438,12 +445,16 @@ const hasHandoff = (receipt: UpdateReceipt | null) =>
   receipt.legs.some((leg) => leg.name === "handoff" && leg.status === "ok");
 
 function settledFact(record: Admission, state: "ok" | "failed" | "refused"): UpdateFact {
+  const failed = state === "ok" ? undefined : record.receipt?.legs.find((l) => l.status !== "ok");
   return {
     kind: "settled",
     requestId: record.requestId,
     state,
     version: record.candidate,
     detail: record.receipt?.legs.at(-1)?.detail ?? null,
+    automatic: record.automatic,
+    failedLeg: failed?.name ?? null,
+    exitCode: failed?.exitCode ?? null,
   };
 }
 

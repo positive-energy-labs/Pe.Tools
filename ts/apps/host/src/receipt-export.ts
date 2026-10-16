@@ -59,7 +59,16 @@ const eventFields = {
   host_fault: ["route_code", "fault_code", "status"],
   telemetry_dropped: ["producer", "count"],
   refusal_count: ["reason_code", "count"],
-  update_outcome: ["phase", "outcome", "fault_code", "duration_ms", "candidate_version"],
+  update_outcome: [
+    "phase",
+    "outcome",
+    "fault_code",
+    "duration_ms",
+    "candidate_version",
+    "mode",
+    "failed_leg",
+    "exit_code",
+  ],
   $exception: ["fault_code", "$exception_fingerprint", "$exception_list", ...mcpFields],
   $mcp_tool_call: mcpFields,
   $mcp_initialize: mcpFields,
@@ -291,6 +300,8 @@ export function projectReceipt(
           !["command", "task", "script"].includes(c.itemKind ?? "") ||
           (c.mode && !["read-only", "write"].includes(c.mode)))
       )
+        return null;
+      if (event === "update_outcome" && c.mode && !["automatic", "manual"].includes(c.mode))
         return null;
       properties =
         event === "$exception"
@@ -999,6 +1010,11 @@ export function recordUpdateFact(exporter: ReceiptExport, fact: UpdateFact) {
                 ...(fact.version ? { candidateVersion: fact.version } : {}),
                 outcome: fact.state === "ok" ? "succeeded" : fact.state,
                 ...(fact.state === "failed" ? { faultCode: "update.failed" as const } : {}),
+                ...(fact.automatic === null
+                  ? {}
+                  : { mode: fact.automatic ? "automatic" : "manual" }),
+                ...(fact.failedLeg ? { failedLeg: fact.failedLeg } : {}),
+                ...(fact.exitCode === null ? {} : { exitCode: fact.exitCode }),
               },
       };
       // A successor rereads the same update id. The first committed emitter/time owns the fact.

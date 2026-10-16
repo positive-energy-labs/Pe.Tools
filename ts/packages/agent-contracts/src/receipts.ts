@@ -128,6 +128,9 @@ export const receiptCountersSchema = z.strictObject({
     .enum(["started", "finished", "failed", "available", "applying", "restarting"])
     .optional(),
   candidateVersion: token.optional(),
+  /** An update's first unfinished leg (an SDK-owned name) and that leg's exit code. */
+  failedLeg: token.optional(),
+  exitCode: z.number().int().optional(),
   producer: receiptComponentSchema.optional(),
   /** Pe.Tools add-in manifests Revit can load that are not this install's own. */
   foreignAddinCount: count.optional(),

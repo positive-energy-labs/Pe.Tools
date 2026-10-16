@@ -423,6 +423,9 @@ test("thread and update adapters keep opaque joins and honest endings, with noti
       state: "failed",
       version: null,
       detail: "private stderr",
+      automatic: true,
+      failedLeg: "msi",
+      exitCode: 1603,
     });
     await expect.poll(async () => (await f.journal.read({ kinds: ["usage"] })).length).toBe(1);
     recordUpdateFact(f.exporter, {
@@ -431,9 +434,16 @@ test("thread and update adapters keep opaque joins and honest endings, with noti
       state: "failed",
       version: null,
       detail: "private stderr",
+      automatic: true,
+      failedLeg: "msi",
+      exitCode: 1603,
     });
     await f.exporter.close();
     expect(await f.journal.read({ kinds: ["usage"] })).toHaveLength(1);
+    expect(f.sent.at(-1)).toMatchObject({
+      event: "update_outcome",
+      properties: { mode: "automatic", failed_leg: "msi", exit_code: 1603 },
+    });
   } finally {
     await f.close();
   }
