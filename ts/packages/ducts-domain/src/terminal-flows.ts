@@ -22,6 +22,7 @@ export type FlowFinding =
   | { kind: "tag-without-mark"; tag: string; system: string }
   | { kind: "mark-without-system"; mark: string; equipment: number }
   | { kind: "no-terminals"; mark: string; equipment: number }
+  | { kind: "no-mark"; equipment: number; label: string }
   | { kind: "no-flow"; terminal: number };
 
 export const markOf = (node: Node | null | undefined) =>
@@ -85,6 +86,13 @@ export function terminalFlows(
     const mark = markOf(eq);
     if (mark && !tagged.has(mark))
       findings.push({ kind: "mark-without-system", mark, equipment: eq.id });
+    // Only once loads exist: without a Mark no preview system can ever reach this unit's terminals.
+    if (!mark && loads && trees.some((t) => t.root?.equipment === eq.id && downstream(t).length))
+      findings.push({
+        kind: "no-mark",
+        equipment: eq.id,
+        label: [eq.family, eq.type].filter(Boolean).join(" / ") || String(eq.id),
+      });
   }
 
   const flows = new Map<number, TerminalFlow>();

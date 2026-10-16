@@ -18,7 +18,7 @@ export interface Survey {
   findings: DuctFinding[];
 }
 
-const PERSON = new Set(["open-end", "no-root", "multi-root", "no-fan-static", "no-terminal-flow"]);
+const PERSON = new Set(["open-end", "no-root", "multi-root", "no-terminal-flow"]);
 
 const flowFinding = (f: FlowFinding): DuctFinding => {
   switch (f.kind) {
@@ -46,6 +46,15 @@ const flowFinding = (f: FlowFinding): DuctFinding => {
         kind: f.kind,
         elementIds: [f.equipment],
         note: `${f.mark} (${f.equipment}) roots no tree with a terminal; its load has nowhere to go`,
+        assumed: null,
+        clearer: "person",
+      };
+    case "no-mark":
+      return {
+        id: `flow:no-mark:${f.equipment}`,
+        kind: f.kind,
+        elementIds: [f.equipment],
+        note: `${f.label} (${f.equipment}) feeds terminals but carries no Mark; no load preview system can match it`,
         assumed: null,
         clearer: "person",
       };
@@ -94,7 +103,11 @@ export function survey(snapshot: DuctSnapshot, work: DuctsRouteDocument | null):
       id: i.id,
       kind: i.kind,
       elementIds: i.elementId == null ? [] : [i.elementId],
-      note: i.note,
+      // Fan static is the route's output, not an input a person owes.
+      note:
+        i.kind === "no-fan-static"
+          ? `${i.note}; computed by the route when the path prices`
+          : i.note,
       assumed: null,
       clearer: PERSON.has(i.kind) ? ("person" as const) : ("route" as const),
     })),

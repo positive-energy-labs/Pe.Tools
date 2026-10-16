@@ -541,6 +541,14 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
   };
 }
 
+/** Person findings survive the byte budget first: what a person must answer is never cut. */
+const CLEARER_RANK = { person: 0, pea: 1, route: 2 } as const;
+const countBy = <T>(items: T[], key: (item: T) => string) =>
+  items.reduce<Record<string, number>>((acc, item) => {
+    acc[key(item)] = (acc[key(item)] ?? 0) + 1;
+    return acc;
+  }, {});
+
 function project(
   artifact: Artifact,
   input: EffectiveInputs,
@@ -573,6 +581,7 @@ function project(
         : node
           ? (flows.get(node.id)?.cfm ?? null)
           : null,
+    flowSource: null,
     spaceText: node ? space(node) : null,
     detail: null,
     path: null,
@@ -654,6 +663,7 @@ function project(
     rows = selectedTerminals.map((node) => ({
       ...baseRow(node, node.id),
       kind: "terminal",
+      flowSource: flows.get(node.id)?.source ?? null,
       requiredEspNowInWg: now.paths[node.id]?.total ?? null,
       requiredEspStagedInWg: next.paths[node.id]?.total ?? null,
     }));
@@ -874,7 +884,14 @@ function project(
     completeness: assessment.completeness,
     coverage: assessment.coverage,
     rows: pageRows,
-    findings: request.projection === "summary" ? assessment.findings : [],
+    findings:
+      request.projection === "summary"
+        ? assessment.findings.toSorted((a, b) => CLEARER_RANK[a.clearer] - CLEARER_RANK[b.clearer])
+        : [],
+    findingCounts: {
+      byKind: countBy(assessment.findings, (f) => f.kind),
+      byClearer: { route: 0, pea: 0, person: 0, ...countBy(assessment.findings, (f) => f.clearer) },
+    },
     page: {
       total: rows.length,
       returned: pageRows.length,

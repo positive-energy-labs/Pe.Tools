@@ -1664,8 +1664,17 @@ test("the survey joins a sub-tolerance gap, takes the terminal flow from the loa
       clearer: "pea",
       assumed: expect.stringContaining("0.40 in apart; joined"),
     }),
-    expect.objectContaining({ kind: "no-fan-static", elementIds: [1], clearer: "person" }),
+    expect.objectContaining({
+      kind: "no-fan-static",
+      elementIds: [1],
+      clearer: "route",
+      note: expect.stringContaining("computed by the route when the path prices"),
+    }),
   ]);
+  expect(summary.findingCounts).toEqual({
+    byKind: { "joined-by-proximity": 1, "no-fan-static": 1 },
+    byClearer: { route: 1, pea: 1, person: 0 },
+  });
   expect(summary.completeness.reasons.map((r) => r.code)).not.toContain("unreached-terminals");
   expect(summary.completeness.reasons.map((r) => r.code)).not.toContain("unknown-terminal-flow");
   const terminals = ductsAnalysisResponseSchema.parse(
@@ -1681,7 +1690,27 @@ test("the survey joins a sub-tolerance gap, takes the terminal flow from the loa
   );
   // Revit states 100 cfm on the grille; the staged load preview's 250 wins for the staged solve.
   expect(terminals.rows).toEqual([
-    expect.objectContaining({ id: 2, flowCfm: 250, requiredEspStagedInWg: 0.08 }),
+    expect.objectContaining({
+      id: 2,
+      flowCfm: 250,
+      flowSource: "load-preview:FC-4",
+      requiredEspStagedInWg: 0.08,
+    }),
   ]);
   expect(terminals.findings).toEqual([]);
+  expect(terminals.findingCounts).toEqual(summary.findingCounts);
+
+  // Without a Mark the unit cannot match any preview system, and the survey says so to the person.
+  fan.facts = fan.facts.filter((fact) => fact.key !== "mark");
+  const markless = ductsAnalysisResponseSchema.parse(
+    await f.api.read(read({ kind: "fresh", target: f.target })),
+  );
+  expect(markless.findings.slice(0, 2).map((finding) => finding.clearer)).toEqual([
+    "person",
+    "person",
+  ]);
+  expect(markless.findings).toContainEqual(
+    expect.objectContaining({ kind: "no-mark", elementIds: [1], clearer: "person" }),
+  );
+  expect(markless.findingCounts.byClearer).toEqual({ route: 1, pea: 1, person: 2 });
 });

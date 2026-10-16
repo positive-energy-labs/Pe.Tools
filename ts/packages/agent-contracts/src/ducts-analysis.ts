@@ -78,6 +78,8 @@ const row = z.strictObject({
   requiredEspStagedInWg: z.number().nullable(),
   availableFanStaticInWg: z.number().nullable(),
   flowCfm: z.number().nullable(),
+  /** Where a terminal row's `flowCfm` came from: "override" | "load-preview:<tag>" | "revit". */
+  flowSource: z.string().nullable(),
   spaceText: z.string().nullable(),
   detail: z.string().nullable(),
   servedGroupState: z.enum(["observed", "unknown"]).nullable(),
@@ -371,8 +373,17 @@ export const ductsAnalysisResponseSchema = z.strictObject({
     reachedCircuitTerminals: z.number().int(),
   }),
   rows: z.array(row).max(100),
-  /** The survey's findings; the summary projection carries them, trimmed last under the byte budget. */
+  /** The survey's findings; the summary projection carries them, person first, trimmed last under the byte budget. */
   findings: z.array(ductFindingSchema),
+  /** Every finding counted, never budgeted: what the trimmed list cannot show. */
+  findingCounts: z.strictObject({
+    byKind: z.record(z.string(), z.number().int()),
+    byClearer: z.strictObject({
+      route: z.number().int(),
+      pea: z.number().int(),
+      person: z.number().int(),
+    }),
+  }),
   page: z.strictObject({
     total: z.number().int(),
     returned: z.number().int(),

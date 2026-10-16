@@ -184,6 +184,23 @@ describe("terminalFlows", () => {
     expect(flows[31]!.cfm).toBe(300);
   });
 
+  it("names a markless unit that feeds terminals, only once loads exist", () => {
+    const s = snapshot(0.7854);
+    s.nodes.find((n) => n.id === 1)!.facts = [];
+    const withLoads = terminalFlows(s, loads, {}, trees(s)).findings;
+    expect(withLoads).toContainEqual({
+      kind: "no-mark",
+      equipment: 1,
+      label: "equipment / Standard",
+    });
+    expect(withLoads).not.toContainEqual(
+      expect.objectContaining({ kind: "no-mark", equipment: 2 }),
+    );
+    expect(terminalFlows(s, null, {}, trees(s)).findings).not.toContainEqual(
+      expect.objectContaining({ kind: "no-mark" }),
+    );
+  });
+
   it("lets a staged flow override every other source", () => {
     const { flows } = run(0.7854, { "31": { cfm: 150, source: "balancing report" } });
     expect(flows[31]).toEqual({ cfm: 150, source: "override" });
