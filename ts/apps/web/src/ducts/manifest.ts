@@ -25,6 +25,7 @@ import {
   runSemanticAction,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type { DuctsApply } from "@pe/host-contracts/generated";
+import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
 import { applyRequest, price } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -63,7 +64,7 @@ const ductsPageSchema = z.object({
   evaluation: z.custom<DuctsEvaluation>().nullable().default(null),
 });
 export type DuctsPage = z.infer<typeof ductsPageSchema>;
-export type DuctsReading = "ducts" | "tables";
+export type DuctsReading = "ducts" | "tables" | "catalogs";
 type DuctsCtx = Ctx<DuctsRouteDocument, DuctsReading, DuctsPage>;
 
 const observed = <T>(ctx: DuctsCtx, key: DuctsReading) => {
@@ -80,7 +81,7 @@ export const WRITTEN = [
   "parameters",
 ] as const;
 const stagedCells = (doc: DuctsRouteDocument | null) =>
-  WRITTEN.flatMap((segment) =>
+  ([...WRITTEN, "catalogs"] as const).flatMap((segment) =>
     Object.entries(doc?.[segment] ?? {}).flatMap(([key, cell]) =>
       cell?.staged ? [{ segment, key, cell }] : [],
     ),
@@ -95,7 +96,12 @@ const built = (ctx: DuctsCtx) => {
   if (ctx.work.revision === null) throw Error("The Work is not read yet");
   if (snapshot.storeError)
     throw Error(`Pe's provenance store in this model is unreadable: ${snapshot.storeError}`);
-  const priced = price(snapshot, grids, ctx.work.doc);
+  const priced = price(
+    snapshot,
+    grids,
+    ctx.work.doc,
+    observed<Catalogs>(ctx, "catalogs") ?? EMPTY_CATALOGS,
+  );
   return applyRequest(snapshot, priced, new Date().toISOString(), ctx.page.group);
 };
 
@@ -181,6 +187,13 @@ export const manifest = defineRoute<
       show: (value) => (value as { table: string }).table,
     },
     {
+      segment: "catalogs",
+      groupOf: (key) => [key],
+      nouns: ["catalog link"],
+      noun: "grille catalog links",
+      show: (value) => (value as { table: string }).table,
+    },
+    {
       segment: "terminalDrops",
       groupOf: (key) => [key],
       nouns: ["terminal"],
@@ -211,7 +224,7 @@ export const manifest = defineRoute<
   ],
   // Both are host reads the route owns (`host.ts`) and provides to the verbs: the snapshot keyed on
   // target, subject, slots and epoch; the tables on the session.
-  readings: { ducts: () => null, tables: () => null },
+  readings: { ducts: () => null, tables: () => null, catalogs: () => null },
   page: ductsPageSchema,
   stages: DUCTS_STAGES,
   actions: {
@@ -269,7 +282,7 @@ export const manifest = defineRoute<
               ? "The staged Work or the snapshot changed since the preview; preview again"
               : null,
       run: async (ctx) => {
-        const applied = stagedCells(ctx.work.doc);
+        const applied = stagedCells(ctx.work.doc).filter((cell) => cell.segment !== "catalogs");
         const response = await dispatch(ctx, "ducts.apply-losses", built(ctx));
         ctx.note("apply", outcomeWords(response), response.counts.refused > 0);
         // The staged cells are in Revit now; the snapshot and its store are their home.

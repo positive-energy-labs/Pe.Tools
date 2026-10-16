@@ -1,4 +1,5 @@
 import type {
+  DuctFinding,
   DuctsAnalysisRequest,
   DuctsAnalysisResponse,
   DuctsRouteDocument,
@@ -19,7 +20,10 @@ const terminal = (node: DuctSnapshot["nodes"][number]) => node.kind === "termina
 export function assessDucts(
   raw: DuctSnapshot,
   work: DuctsRouteDocument | null,
-  solved: Pick<Priced, "now" | "next"> & { readiness: Record<string, GroupReadiness> },
+  solved: Pick<Priced, "now" | "next"> & {
+    readiness: Record<string, GroupReadiness>;
+    catalogFindings?: string[];
+  },
   options: {
     selector: DuctsAnalysisRequest["selector"];
     freshness?: Pick<DuctsAnalysisResponse["freshness"], "state" | "reason">;
@@ -27,7 +31,35 @@ export function assessDucts(
 ) {
   const { now, next } = solved;
   // The survey's snapshot is the one the solves ran on: gaps joined, taps inferred.
-  const { snapshot, flows, findings } = survey(raw, work);
+  const surveyed = survey(raw, work);
+  const { snapshot, flows } = surveyed;
+  const findings: DuctFinding[] = [
+    ...surveyed.findings,
+    ...Object.values(next.paths).flatMap((path) =>
+      path.rows.flatMap((row) =>
+        row.finding
+          ? [
+              {
+                id: `catalog:${row.id}`,
+                kind: row.finding,
+                elementIds: [row.id],
+                note: row.error!,
+                assumed: row.notes?.join("; ") || null,
+                clearer: "person" as const,
+              },
+            ]
+          : [],
+      ),
+    ),
+    ...(solved.catalogFindings ?? []).map((note, i) => ({
+      id: `catalog-file:${i}`,
+      kind: "catalog-file",
+      elementIds: [],
+      note,
+      assumed: null,
+      clearer: "person" as const,
+    })),
+  ];
   const freshness = options.freshness ?? {
     state: "unknown",
     reason: "Observation freshness is unknown",
@@ -116,12 +148,10 @@ export function assessDucts(
   );
   const reached = selectedTerminals.filter((node) => next.paths[node.id]);
   const dropKnown = (node: DuctSnapshot["nodes"][number]) => {
-    const drop = node.terminalDrop;
-    // Assigned connector loss has no catalog-source provenance, even under SpecificLoss.
-    // A named catalog parameter or a person's staged value can explicitly state zero as well.
+    const row = next.paths[node.id]?.rows.find((r) => r.kind === "terminal");
     return (
-      drop?.catalogDropInWg != null ||
-      work?.terminalDrops[String(node.id)]?.staged?.value !== undefined
+      row?.dp != null &&
+      (!!row.source || work?.terminalDrops[String(node.id)]?.staged?.value !== undefined)
     );
   };
   const priced = reached.filter(
@@ -130,7 +160,7 @@ export function assessDucts(
   reason(
     "terminal-drop-authority",
     selectedTerminals.filter((node) => !dropKnown(node)).length,
-    "An assigned connector loss, including SpecificLoss/zero, does not attest catalog provenance; name a catalog parameter or stage an explicit terminal drop",
+    "An assigned connector loss, including SpecificLoss/zero, does not attest catalog provenance; link a cited catalog table or stage an explicit terminal drop",
   );
   reason(
     "unreached-terminals",

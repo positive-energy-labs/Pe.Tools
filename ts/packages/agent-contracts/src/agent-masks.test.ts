@@ -51,6 +51,7 @@ it("ducts: Pea proposes rules and drops but never stages them, and never touches
   const spec = ductsRouteState as unknown as RouteStateSpec<z.ZodType>;
   const envelope: RouteEnvelope<unknown> = { version: 1, revision: 0, doc: spec.schema.parse({}) };
   const cases = [
+    ["catalogs", JSON.stringify(["Grille", "12 X 4"]), { table: "price-lbp-15a" }],
     ["rules", "tap-std", { table: "SD5-10" }],
     ["terminalDrops", "31", { inWg: 0.08, source: "catalog p. 12" }],
     ["componentDrops", "22", { inWg: 0.05 }],

@@ -26,6 +26,7 @@ import type { Column } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
 import type { DuctsEvaluation, DuctsPage } from "./manifest";
 import { assessDucts } from "@pe/ducts-domain/assessment";
+import { catalogLinkKey } from "@pe/ducts-domain/catalog";
 import { parseLoadPreview } from "@pe/ducts-domain/load-preview";
 import { LOSS_RULES, ruleByKey } from "@pe/ducts-domain/loss-rules";
 import type { LossResult, Row } from "@pe/ducts-domain/losses";
@@ -89,7 +90,7 @@ function terminalStatus(
   if (ready?.walk.some((id) => issues.get(id)?.kind === "open-end")) out.push("open-end");
   if (node.terminalDrop && !node.terminalDrop.writable) out.push("refuses");
   const terminal = priced.next.paths[node.id]?.rows.find((row) => row.kind === "terminal");
-  if (terminal?.error || !dropKnown) out.push("no-drop");
+  if (terminal?.error || (terminal?.dp == null && !dropKnown)) out.push("no-drop");
   return out;
 }
 /** Stage a rule's table; staging the table already staged takes it back. */
@@ -195,6 +196,39 @@ function DropCell({
     </span>
   );
 }
+function CatalogLink({ node, priced, work }: { node: Node; priced: Priced; work: LossesWork }) {
+  const key = catalogLinkKey(node.family, node.type);
+  const cell = work.doc?.catalogs[key] ?? {};
+  const held = node.facts.find((f) => f.key === "Pe_Catalog")?.text ?? "";
+  const wire: CellWire = { segment: "catalogs", revision: work.revision, write: work.write };
+  return (
+    <span aria-label={`catalog for ${node.family} : ${node.type}`}>
+      <StateCell
+        {...cellFromTrichotomy(cell, {
+          value: (cell.staged ?? cell.proposal)?.value?.table ?? held,
+          cap: "editable",
+          note: priced.staged.catalogs[key]
+            ? "Staged for every instance of this family/type"
+            : "Pe_Catalog type parameter",
+        })}
+        scale="row"
+        placeholder="link catalog table id"
+        onCommit={(table: string) => {
+          if (!Object.hasOwn(priced.catalogs, table)) return "Choose a loaded catalog table id";
+          return work
+            .write(
+              transitionPatches(["catalogs"], key, cell, {
+                kind: "stage",
+                rung: { value: { table } },
+              }),
+            )
+            .then((refusal) => refusal?.message);
+        }}
+        transitions={reviewTransitions(wire, key, cell)}
+      />
+    </span>
+  );
+}
 function Chips({ ruleKey, priced, work }: { ruleKey: string; priced: Priced; work: LossesWork }) {
   const rule = ruleByKey(ruleKey)!;
   const staged = priced.staged.rules[ruleKey]?.table.toUpperCase();
@@ -270,7 +304,7 @@ const Drawer = memo(function Drawer({
   const node = nodes.get(terminal);
   const columns = useMemo<Column<DrawerRow>[]>(() => {
     const total = path?.total ?? 0;
-    const sum = (list: Row[]) => list.reduce((a, row) => a + row.dp, 0);
+    const sum = (list: Row[]) => list.reduce((a, row) => a + (row.dp ?? 0), 0);
     const own = (row: DrawerRow): Row[] =>
       row.kind === "component" ? [row.row] : row.kind === "instances" ? [] : row.rows;
     const revitOf = (ids: Iterable<number>) => {
@@ -349,6 +383,12 @@ const Drawer = memo(function Drawer({
           return (
             <span className="block truncate px-(--item-pad-x)" data-terminal-row={terminal}>
               {node?.family ?? "terminal"} : {node?.type ?? ""}
+              {row.rows[0]?.error ? <span data-tone="caution"> · {row.rows[0].error}</span> : null}
+              {row.rows[0]?.notes?.map((note) => (
+                <span className="block text-ink-2" key={note}>
+                  {note}
+                </span>
+              ))}
             </span>
           );
         },
@@ -371,15 +411,21 @@ const Drawer = memo(function Drawer({
               label={`component ${row.row.id} drop`}
             />
           ) : row.kind === "terminal" ? (
-            <DropCell
-              segment="terminalDrops"
-              id={terminal}
-              held={
-                node?.terminalDrop?.catalogDropInWg ?? node?.terminalDrop?.assignedPressureDropInWg
-              }
-              work={work}
-              label={`terminal ${terminal} drop`}
-            />
+            <span className="block px-(--item-pad-x)">
+              <CatalogLink node={node!} priced={priced} work={work} />
+              {row.rows[0]?.source ? (
+                <a
+                  className="block"
+                  href={`${row.rows[0].source.url}#page=${row.rows[0].source.pdfPage}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {row.rows[0].table} · {row.rows[0].source.file} p. {row.rows[0].source.page}
+                </a>
+              ) : (
+                row.rows[0]?.table
+              )}
+            </span>
           ) : null,
       },
       {
@@ -427,14 +473,22 @@ const Drawer = memo(function Drawer({
         label: "Δp",
         width: "w-20",
         title: "in-wg on this grille's path",
-        cell: (row) => <span className={mono}>{fmt(sum(own(row))) || ""}</span>,
+        cell: (row) => (
+          <span className={mono}>
+            {own(row).some((r) => r.dp == null) ? "—" : fmt(sum(own(row))) || ""}
+          </span>
+        ),
       },
       {
         key: "share",
         label: "share",
         title: "of this grille's total",
         width: "w-12",
-        cell: (row) => <span className={mono}>{pct(sum(own(row)), total)}</span>,
+        cell: (row) => (
+          <span className={mono}>
+            {own(row).some((r) => r.dp == null) ? "" : pct(sum(own(row)), total)}
+          </span>
+        ),
       },
       {
         key: "revit",
@@ -603,7 +657,7 @@ function Bars({
         const by = new Map<Part, number>();
         for (const row of path.rows) {
           const part = partOf(row, nodes.get(row.id));
-          by.set(part, (by.get(part) ?? 0) + row.dp);
+          by.set(part, (by.get(part) ?? 0) + (row.dp ?? 0));
         }
         const next = priced.next.paths[id]?.total ?? path.total;
         const moved = Math.abs(next - path.total) > 1e-9;
@@ -852,8 +906,10 @@ export function DuctsLosses({
           <PartChip key={part} part={part} />
         ))}
         {priced.next.errors.length ? (
-          <TooltipHint content="a rule matched but its table gave no coefficient; the bars count it as 0">
-            <span data-tone="caution">{priced.next.errors.length} unpriced, counted 0</span>
+          <TooltipHint content="Some rows have no pressure value. Bars and path totals show only the priced subtotal.">
+            <span data-tone="caution">
+              {priced.next.errors.length} unpriced; totals are partial
+            </span>
           </TooltipHint>
         ) : null}
       </div>
@@ -899,11 +955,20 @@ export function StagedLosses({
   group: string;
 }) {
   const keys = Object.keys(priced.staged.rules).sort();
+  const catalogLinks = Object.entries(priced.staged.catalogs);
   const terminals = Object.keys(priced.staged.terminalDrops).length;
   const components = Object.keys(priced.staged.componentDrops).length;
   const units = Object.keys(priced.staged.unitStatics).sort();
   const slots = Object.entries(priced.staged.parameters);
-  if (!keys.length && !terminals && !components && !units.length && !slots.length) return null;
+  if (
+    !keys.length &&
+    !catalogLinks.length &&
+    !terminals &&
+    !components &&
+    !units.length &&
+    !slots.length
+  )
+    return null;
   // What a write sends: the group in the sentence, or the whole document; the rules' tables are
   // document-wide either way.
   const all = applyRequest(snapshot, priced, "", "");
@@ -917,11 +982,19 @@ export function StagedLosses({
     const doc = work.doc;
     if (!doc) return;
     void work.write(
-      (["rules", "terminalDrops", "componentDrops", "unitStatics", "parameters"] as const).flatMap(
-        (segment) =>
-          Object.entries(doc[segment] ?? {}).flatMap(([key, cell]) =>
-            cell?.staged ? transitionPatches([segment], key, cell, { kind: "unstage" }) : [],
-          ),
+      (
+        [
+          "rules",
+          "catalogs",
+          "terminalDrops",
+          "componentDrops",
+          "unitStatics",
+          "parameters",
+        ] as const
+      ).flatMap((segment) =>
+        Object.entries(doc[segment] ?? {}).flatMap(([key, cell]) =>
+          cell?.staged ? transitionPatches([segment], key, cell, { kind: "unstage" }) : [],
+        ),
       ),
     );
   };
@@ -973,6 +1046,19 @@ export function StagedLosses({
           <ValueDiff from={fmt(fanOf(priced.now))} to={fmt(fanOf(priced.next))} /> in-wg
         </div>
       ) : null}
+      {catalogLinks.map(([key, { table }]) => {
+        const matches = snapshot.nodes.filter(
+          (node) => node.kind === "terminal" && catalogLinkKey(node.family, node.type) === key,
+        );
+        const ids = new Set(matches.map((node) => node.id));
+        const count = sent.terminals.filter((row) => ids.has(row.id)).length;
+        return (
+          <div key={key} data-staged-catalog={key}>
+            {matches[0]?.family} : {matches[0]?.type} · {table} · {matches.length} grilles share
+            this catalog link · {count} total-pressure drops in this apply
+          </div>
+        );
+      })}
       {units.map((id) => {
         const unit = snapshot.nodes.find((n) => n.id === Number(id));
         const planned = (evaluation?.response.writes ?? []).find(

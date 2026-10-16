@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "tables": [
+    {
+      "id": "price-lbp-15a",
+      "title": "Price LBP/LBPH Core 15A",
+      "source": {
+        "file": "lbp.pdf",
+        "title": "LBP/LBPH/LBM/LBMH Linear Bar Grille Performance Data",
+        "edition": "v100",
+        "url": "https://priceindustries.com/wp-content/uploads/Assets/literature/catalogs/performance-data/section%20a/lbplbph-linear-bar-grille-performance-data.pdf",
+        "page": 8,
+        "pdfPage": 1
+      },
+      "rows": {
+        "quantity": "slot width",
+        "unit": "in",
+        "values": [1.5, 2, 2.5, 3, 3.5, 4, 5, 6],
+        "input": {
+          "field": "connector.heightIn"
+        }
+      },
+      "columns": {
+        "quantity": "static-pressure",
+        "unit": "in-wg",
+        "values": [0.011, 0.024, 0.044, 0.069, 0.098, 0.133, 0.175, 0.222]
+      },
+      "cells": {
+        "quantity": "flow per active length",
+        "unit": "cfm/ft",
+        "input": {
+          "field": "flowCfm",
+          "divideBy": {
+            "field": "connector.widthIn",
+            "scale": 0.08333333333333333
+          }
+        },
+        "values": [
+          [12, 19, 25, 31, 37, 43, 50, 56],
+          [19, 28, 37, 47, 56, 66, 75, 84],
+          [26, 39, 52, 65, 78, 91, 104, 117],
+          [33, 50, 66, 83, 100, 116, 133, 149],
+          [41, 61, 82, 102, 122, 143, 163, 184],
+          [49, 73, 98, 122, 146, 171, 195, 220],
+          [63, 94, 125, 157, 188, 220, 251, 282],
+          [78, 116, 155, 194, 233, 272, 310, 349]
+        ]
+      },
+      "result": {
+        "from": "columns",
+        "quantity": "static-pressure",
+        "unit": "in-wg",
+        "toInWg": 1,
+        "velocityBasis": "connector",
+        "note": "Assumption: active grille length = connector widthIn; slot width = connector heightIn. Total = static + connector neck velocity pressure at standard air density 0.075 lb/ft3. Price note 7 does not identify the velocity basis; confirm with manufacturer.",
+        "returnAir": {
+          "factor": 0.8,
+          "source": {
+            "file": "lbp.pdf",
+            "title": "LBP/LBPH/LBM/LBMH Linear Bar Grille Performance Data",
+            "edition": "v100",
+            "url": "https://priceindustries.com/wp-content/uploads/Assets/literature/catalogs/performance-data/section%20a/lbplbph-linear-bar-grille-performance-data.pdf",
+            "page": 11,
+            "pdfPage": 4
+          }
+        },
+        "totalPressureSource": {
+          "file": "lbp.pdf",
+          "title": "LBP/LBPH/LBM/LBMH Linear Bar Grille Performance Data",
+          "edition": "v100",
+          "url": "https://priceindustries.com/wp-content/uploads/Assets/literature/catalogs/performance-data/section%20a/lbplbph-linear-bar-grille-performance-data.pdf",
+          "page": 11,
+          "pdfPage": 4
+        }
+      }
+    }
+  ]
+}

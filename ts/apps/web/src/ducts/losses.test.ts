@@ -259,8 +259,8 @@ it("measures root-duct taps from the equipment port regardless of curve storage 
   expect(reversed).toEqual(forward);
 });
 
-it("solves a synthetic network end to end", () => {
-  const r = computeLosses(snapshot, grids);
+it("solves a synthetic network end to end with explicit manual terminal overrides", () => {
+  const r = computeLosses(snapshot, grids, {}, { terminalPs: { 6: 0.05, 8: 0.08 } });
   expect(r.errors).toEqual([]);
   expect(r.paths[6]!.total).toBeCloseTo(T6, 7);
   expect(r.paths[8]!.total).toBeCloseTo(T8, 7);
@@ -297,7 +297,12 @@ it("honours overrides and reports a missing table", () => {
     { terminalPs: { 8: 0.1 }, componentDrop: { 2: 0.5 } },
   );
   expect(r.paths[8]!.total).toBeCloseTo(T8 - 0.08 + 0.1 - 0.0110481 + 0.5, 6);
-  const missing = computeLosses(snapshot, grids, { "elbow-1d-le10": "CD3-9" });
+  const missing = computeLosses(
+    snapshot,
+    grids,
+    { "elbow-1d-le10": "CD3-9" },
+    { terminalPs: { 6: 0.05, 8: 0.08 } },
+  );
   expect(missing.errors).toEqual([
     expect.objectContaining({ id: 2, rule: "elbow-1d-le10", table: "CD3-9" }),
   ]);
@@ -363,7 +368,7 @@ it("runs the whole pipeline over W1's synthetic snapshot", () => {
   //  T31  duct 10 0.0035563 + tap branch SD5-9 Cb(.25, abOverAc .25) 1.38 x Pv(100 cfm in 6 in)
   //       0.0223083 + duct 12 (6 in, 7.5 ft, 100 cfm) 0.0063438 + terminal 0.05       = 0.0822084
   const snap = synthetic as unknown as DuctSnapshot;
-  const r = computeLosses(snap, grids);
+  const r = computeLosses(snap, grids, {}, { terminalPs: { 30: 0, 31: 0.05 } });
   expect(r.errors).toEqual([]);
   expect(r.paths[30]!.total).toBeCloseTo(0.01157782, 7);
   expect(r.paths[31]!.total).toBeCloseTo(0.08220842, 7);
@@ -436,7 +441,7 @@ it("the scene carries Pe's loss per element, counting the rows paths share once"
   const priced = price(snap, grids, null);
   const rows = (terminal: number, id: number) =>
     priced.now.paths[terminal]!.rows.filter((row) => row.id === id);
-  const sum = (list: { dp: number }[]) => list.reduce((a, row) => a + row.dp, 0);
+  const sum = (list: { dp: number | null }[]) => list.reduce((a, row) => a + (row.dp ?? 0), 0);
   const losses = lossesOf(priced.now);
   // Duct 10 is walked by both paths and tapped once: its first interval is the same row on each
   // path, its second belongs to the path that carries on. Summing every path would count the
@@ -447,7 +452,8 @@ it("the scene carries Pe's loss per element, counting the rows paths share once"
   expect(losses.get(10)).toBeLessThan(sum(rows(30, 10)) + sum(rows(31, 10)) - 1e-6);
   // A tap's straight and branch legs are alternatives: the larger one shows.
   expect(losses.get(22)).toBeCloseTo(0.0223083, 6);
-  expect(losses.get(31)).toBeCloseTo(0.05, 9);
+  // Native assigned static is no catalog total-pressure loss.
+  expect(losses.has(31)).toBe(false);
   // An element no priced path crosses has no loss, not zero.
   expect(losses.has(1)).toBe(false);
 

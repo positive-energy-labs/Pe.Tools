@@ -198,6 +198,8 @@ public static class DuctSnapshots {
         switch (kind) {
             case DuctNodeKind.Terminal:
                 facts.Add(Fact(DuctNetwork.TerminalFlow, Converted(e, BuiltInParameter.RBS_DUCT_FLOW_PARAM, UnitTypeId.CubicFeetPerMinute), "cfm", DuctProvenance.DesignerStated));
+                if (fi?.Symbol.LookupParameter("Pe_Catalog")?.AsString() is { Length: > 0 } catalog)
+                    facts.Add(new DuctFact("Pe_Catalog", null, catalog, "", DuctProvenance.DesignerStated));
                 if (Space(fi) is { } space) facts.Add(new DuctFact("space", null, space, "", DuctProvenance.Geometry));
                 break;
             case DuctNodeKind.Accessory:

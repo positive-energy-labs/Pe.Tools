@@ -27,8 +27,45 @@ import { manifest, type DuctsPage } from "./manifest";
 import { applyRequest, price, proposedStatic } from "@pe/ducts-domain/pricing";
 import synthetic from "./fixtures/synthetic-snapshot.json";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { catalogSchema, catalogLinkKey } from "@pe/ducts-domain/catalog";
+import catalogFixture from "../../../../packages/ducts-domain/src/fixtures/catalogs/price-lbp/catalog.json";
 
 afterEach(cleanup);
+
+it("stages a family/type catalog link, prices the path and shows the source page and findings", async () => {
+  const model = structuredClone(synthetic) as unknown as DuctSnapshot;
+  const node = model.nodes.find((n) => n.id === 30)!;
+  node.connectors = [{ ...node.connectors[0]!, shape: "rectangular", widthIn: 12, heightIn: 4 }];
+  node.facts = [{ key: "flow", value: 98, text: null, unit: "cfm", provenance: "designer-stated" }];
+  const table = catalogSchema.parse(catalogFixture).tables[0]!;
+  const catalogs = { [table.id]: table };
+  const view = render(<Harness model={model} catalogs={catalogs} />);
+  fireEvent.click(view.container.querySelector('[data-terminal="30"]')!);
+  const drawer = view.container.querySelector('[data-drawer="30"]')!;
+  expect(drawer.textContent).toContain("No Pe_Catalog");
+  const editor = within(drawer as HTMLElement).getByRole("textbox");
+  fireEvent.change(editor, { target: { value: table.id } });
+  fireEvent.blur(editor);
+  await waitFor(() => expect(drawer.textContent).toContain("lbp.pdf p. 8"));
+  expect(view.container.querySelector("[data-staged-catalog]")?.textContent).toContain(
+    "1 total-pressure drops in this apply",
+  );
+  expect(drawer.textContent).toContain("connector neck velocity");
+  const link = within(drawer as HTMLElement).getByRole("link", { name: /price-lbp-15a/ });
+  expect(link.getAttribute("href")).toBe(`${table.source.url}#page=1`);
+  const doc = ductsRouteState.schema.parse({
+    catalogs: {
+      [catalogLinkKey(node.family, node.type)]: { staged: { value: { table: table.id } } },
+    },
+  });
+  const row = price(model, grids, doc, catalogs).next.paths[30]!.rows.at(-1)!;
+  expect(drawer.textContent).toContain(row.dp!.toFixed(4));
+  expect(row.staticInWg).toBe(0.044);
+  const outside = structuredClone(model);
+  outside.nodes.find((n) => n.id === 30)!.connectors[0]!.heightIn = 8;
+  const miss = price(outside, grids, doc, catalogs).next.paths[30]!.rows.at(-1)!;
+  expect(miss).toMatchObject({ dp: null, finding: "catalog-out-of-range" });
+});
 
 const snapshot = synthetic as unknown as DuctSnapshot;
 const flat = (title: string, x: number[], grid: number[]): Grid => ({
@@ -87,10 +124,16 @@ function land(doc: DuctsRouteDocument, patches: RouteStatePatch[]) {
 }
 
 /** The view and the band over one in-memory Work, as the route wires them. */
-function Harness() {
+function Harness({
+  model = snapshot,
+  catalogs = {},
+}: {
+  model?: DuctSnapshot;
+  catalogs?: Parameters<typeof price>[3];
+}) {
   const [page, setPageState] = useState(PAGE);
   const [doc, setDoc] = useState<DuctsRouteDocument>(() => ductsRouteState.schema.parse({}));
-  const priced = price(snapshot, grids, doc);
+  const priced = price(model, grids, doc, catalogs);
   const work = {
     doc,
     revision: 0,
@@ -103,7 +146,7 @@ function Harness() {
   return (
     <>
       <StagedLosses
-        snapshot={snapshot}
+        snapshot={model}
         grids={grids}
         priced={priced}
         evaluation={null}
@@ -112,7 +155,7 @@ function Harness() {
         group=""
       />
       <DuctsLosses
-        snapshot={snapshot}
+        snapshot={model}
         grids={grids}
         priced={priced}
         ready={{}}
@@ -134,7 +177,7 @@ it("draws one bar per grille, opens a grille's rules, and a table chip stages th
     el.getAttribute("data-terminal"),
   );
   expect(bars).toEqual(["31", "30"]);
-  expect(q('[data-fan="g10"]')?.textContent).toBe("0.0822");
+  expect(q('[data-fan="g10"]')?.textContent).toBe("0.0322");
   expect(q('[data-revit="g10"]')?.textContent).toBe("0.1000");
   // Grille 30 has no drop and a connector Revit refuses a drop on.
   const status30 = [...q('[data-terminal="30"]')!.querySelectorAll("[data-status]")].map((el) =>
@@ -155,9 +198,9 @@ it("draws one bar per grille, opens a grille's rules, and a table chip stages th
   await view.findByText(/grilles · fan/);
   expect(q('[data-staged-rule="tap-std"]')?.textContent).toContain("SD5-9→SD5-10");
   expect(q('[data-fanout="tap-std"]')?.textContent).toBe(
-    "1 fittings · 2 grilles · fan 0.0822→0.0761",
+    "1 fittings · 2 grilles · fan 0.0322→0.0261",
   );
-  expect(q('[data-fan-next="g10"]')?.textContent).toContain("0.0761");
+  expect(q('[data-fan-next="g10"]')?.textContent).toContain("0.0261");
   expect(q('[data-ghost="31"]')).not.toBeNull();
   // Pressing the staged chip again takes it back.
   fireEvent.click(within(rowOf('[data-rule="tap-std"]')).getByText("SD5-10"));
@@ -425,7 +468,7 @@ it("the band names a staged fan static that lands on the unit's type, and folds 
       ["unitStatics"],
       "1",
       {},
-      { kind: "stage", rung: { value: { inWg: 0.0761 } } },
+      { kind: "stage", rung: { value: { inWg: 0.0261 } } },
     ),
   );
   const shared = "the type is shared with 2 other units (6564593, 6078870)";
@@ -437,7 +480,7 @@ it("the band names a staged fan static that lands on the unit's type, and folds 
         kind: "equipment",
         outcome: "planned",
         before: null,
-        after: "type 'PE_ESP' 0.0761 in-wg",
+        after: "type 'PE_ESP' 0.0261 in-wg",
       },
       { id: 1, kind: "equipment", outcome: "refused", reason: shared },
       // A unit nobody staged never appears, even when Revit refused it.
@@ -502,10 +545,10 @@ it("the band says how many instances this group writes of the whole document", (
 it("the group head stages Pe's rounded fan static on its unit, and again takes it back", async () => {
   const view = render(<Harness />);
   const q = (selector: string) => view.container.querySelector(selector);
-  expect(q('[data-unit="1"]')?.textContent).toContain("Pe proposes0.0822");
+  expect(q('[data-unit="1"]')?.textContent).toContain("Pe proposes0.0322");
   expect(q("[data-staged-band]")).toBeNull();
   fireEvent.click(within(q('[data-unit="1"]') as HTMLElement).getByText("stage"));
-  await view.findByText(/unit 1: fan static 0.0822 in-wg/);
+  await view.findByText(/unit 1: fan static 0.0322 in-wg/);
   fireEvent.click(within(q('[data-unit="1"]') as HTMLElement).getByText("staged"));
   await waitFor(() => expect(q("[data-staged-band]")).toBeNull());
 });

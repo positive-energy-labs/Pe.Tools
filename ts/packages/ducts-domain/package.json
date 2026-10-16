@@ -15,7 +15,8 @@
   },
   "dependencies": {
     "@pe/agent-contracts": "workspace:*",
-    "@pe/host-contracts": "workspace:*"
+    "@pe/host-contracts": "workspace:*",
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

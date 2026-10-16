@@ -46,6 +46,7 @@ export function lossesOf(result: LossResult): Map<number, number> {
       unique.set(`${row.id}|${row.kind}|${row.leg ?? ""}|${row.desc}`, row);
   const losses = new Map<number, number>();
   for (const row of unique.values()) {
+    if (row.dp == null) continue;
     const was = losses.get(row.id);
     losses.set(row.id, row.kind === "friction" ? (was ?? 0) + row.dp : Math.max(was ?? 0, row.dp));
   }

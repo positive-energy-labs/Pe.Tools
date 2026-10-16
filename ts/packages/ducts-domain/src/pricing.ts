@@ -5,6 +5,7 @@
  */
 import { stagedDucts, type DuctsApplyInput, type DuctsRouteDocument } from "@pe/agent-contracts";
 
+import { catalogLinkKey, EMPTY_CATALOGS, type Catalogs } from "./catalog.ts";
 import type { Grids } from "./loss-grid.ts";
 import { LOSS_RULES, ruleByKey } from "./loss-rules.ts";
 import {
@@ -42,6 +43,7 @@ const byId = <V>(cells: Record<string, V>, pick: (value: V) => number) =>
 /** The solves run on the surveyed snapshot; `snapshot`, `flows` and `findings` are its survey. */
 export interface Priced extends Survey {
   applied: Choices;
+  catalogs: Catalogs;
   /** Applied plus staged: what apply would leave in Revit. */
   choices: Choices;
   overrides: Overrides;
@@ -63,29 +65,35 @@ interface Solved {
   fanouts: Map<string, Fanout>;
 }
 
-const solved = new WeakMap<DuctSnapshot, WeakMap<Grids, Solved>>();
+const solved = new WeakMap<DuctSnapshot, WeakMap<Grids, WeakMap<Catalogs, Solved>>>();
 
-function solvedFor(snapshot: DuctSnapshot, grids: Grids): Solved {
+function solvedFor(snapshot: DuctSnapshot, grids: Grids, catalogs: Catalogs): Solved {
   const byGrids = solved.get(snapshot) ?? solved.set(snapshot, new WeakMap()).get(snapshot)!;
-  let entry = byGrids.get(grids);
+  const byCatalogs = byGrids.get(grids) ?? byGrids.set(grids, new WeakMap()).get(grids)!;
+  let entry = byCatalogs.get(catalogs);
   if (!entry) {
     const applied = appliedChoices(snapshot);
     entry = {
       applied,
-      now: computeLosses(snapshot, grids, applied),
+      now: computeLosses(snapshot, grids, applied, {}, {}, catalogs),
       last: null,
       fanouts: new Map(),
     };
-    byGrids.set(grids, entry);
+    byCatalogs.set(catalogs, entry);
   }
   return entry;
 }
 
 /** Cached per (snapshot, grids) and, for the last one, per `doc`: callers may price freely. */
-export function price(raw: DuctSnapshot, grids: Grids, doc: DuctsRouteDocument | null): Priced {
+export function price(
+  raw: DuctSnapshot,
+  grids: Grids,
+  doc: DuctsRouteDocument | null,
+  catalogs: Catalogs = EMPTY_CATALOGS,
+): Priced {
   const surveyed = survey(raw, doc);
   const { snapshot } = surveyed;
-  const entry = solvedFor(snapshot, grids);
+  const entry = solvedFor(snapshot, grids, catalogs);
   if (entry.last?.doc === doc) return entry.last.priced;
   const staged = stagedDucts(doc);
   const { applied, now } = entry;
@@ -99,21 +107,26 @@ export function price(raw: DuctSnapshot, grids: Grids, doc: DuctsRouteDocument |
         f.cfm != null && f.source !== "revit" ? [[id, f.cfm]] : [],
       ),
     ),
+    catalogLinks: staged.catalogs,
     terminalPs: byId(staged.terminalDrops, (drop) => drop.inWg),
     componentDrop: byId(staged.componentDrops, (drop) => drop.inWg),
   };
   const same =
+    Object.keys(staged.catalogs).length === 0 &&
     Object.keys(staged.rules).length === 0 &&
     !hasDrops(staged) &&
     !Object.keys(overrides.terminalCfm!).length &&
     !Object.keys(staged.calculation).length;
   const priced: Priced = {
     ...surveyed,
+    catalogs,
     applied,
     choices,
     overrides,
     now,
-    next: same ? now : computeLosses(snapshot, grids, choices, overrides, staged.calculation),
+    next: same
+      ? now
+      : computeLosses(snapshot, grids, choices, overrides, staged.calculation, catalogs),
     staged,
   };
   entry.last = { doc, priced };
@@ -137,11 +150,14 @@ export function stagedFanout(
   const rule = ruleByKey(key);
   if (!table || !rule?.options.includes(table.toUpperCase())) return null;
   // Depends on the applied state and the one rule, never on the rest of the Work.
-  const { fanouts } = solvedFor(snapshot, grids);
+  const { fanouts } = solvedFor(snapshot, grids, priced.catalogs);
   const at = `${key}|${table.toUpperCase()}`;
   let f = fanouts.get(at);
   if (!f)
-    fanouts.set(at, (f = fanout(snapshot, grids, priced.applied, key, table, {}, priced.now)));
+    fanouts.set(
+      at,
+      (f = fanout(snapshot, grids, priced.applied, key, table, {}, priced.now, priced.catalogs)),
+    );
   return f;
 }
 
@@ -250,7 +266,31 @@ export function applyRequest(
       .filter(([id]) => inScope(Number(id)))
       .map(([id, drop]) => ({ id: Number(id), inWg: drop.inWg, source: drop.source ?? null }))
       .sort((a, b) => a.id - b.id);
-  const terminals = drops(priced.staged.terminalDrops);
+  // A staged link authorizes result writes, not a write to the family type's Pe_Catalog.
+  const linked = Object.values(priced.next.paths).flatMap((path) =>
+    path.rows.flatMap((row) => {
+      const node = nodes.get(row.id);
+      if (
+        row.kind !== "terminal" ||
+        row.dp == null ||
+        !row.source ||
+        !node ||
+        !inScope(row.id) ||
+        !priced.staged.catalogs[catalogLinkKey(node.family, node.type)]
+      )
+        return [];
+      return [
+        {
+          id: row.id,
+          inWg: row.dp,
+          source: `${row.table}; ${row.source.file} p. ${row.source.page} (PDF ${row.source.pdfPage}); ${row.source.url}; total pressure; ${row.notes?.join("; ")}`,
+        },
+      ];
+    }),
+  );
+  const terminals = [
+    ...new Map([...linked, ...drops(priced.staged.terminalDrops)].map((t) => [t.id, t])).values(),
+  ].sort((a, b) => a.id - b.id);
   const components = drops(priced.staged.componentDrops);
   const calculationOwners = new Set(
     Object.values(priced.staged.calculation).flatMap((e) =>

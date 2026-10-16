@@ -11,7 +11,7 @@ import { stagedDucts, type TrichotomyCellLike } from "@pe/agent-contracts";
 import type { Reading } from "@pe/agent-contracts";
 
 import { Surface } from "#/components/lang/surface";
-import { SAVED, useDuctSnapshot, useDuctTables } from "./host";
+import { SAVED, useDuctSnapshot, useDuctTables, useDuctCatalogs } from "./host";
 import { RouteShell, useRoute, useRouteThread } from "#/route";
 import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
@@ -68,9 +68,12 @@ export function DuctsRoute({
   const [chosen] = useChooseTarget();
   const thread = useRouteThread();
   // The snapshot and tables are read below, once the target resolves; the verbs see them here.
-  const [provided, setProvided] = useState<Record<"ducts" | "tables", Reading<unknown>>>({
+  const [provided, setProvided] = useState<
+    Record<"ducts" | "tables" | "catalogs", Reading<unknown>>
+  >({
     ducts: { state: "absent" },
     tables: { state: "absent" },
+    catalogs: { state: "absent" },
   });
   const handle = useRoute(manifest, {
     target: chosen,
@@ -92,16 +95,21 @@ export function DuctsRoute({
   const { snapshot, error, pending } = useDuctSnapshot(doc, page.epoch, staged.parameters);
   // The spatial views ink Pe's losses, so they read the tables too; the other views do not.
   const priceable = page.view === "losses" || page.view === "plan" || page.view === "iso";
+  const catalogs = useDuctCatalogs(page.epoch);
   const tables = useDuctTables(priceable ? (doc?.session ?? null) : null);
   useEffect(() => {
     setProvided({
+      catalogs: { state: "ready", observation: catalogs.tables },
       ducts: snapshot ? { state: "ready", observation: snapshot } : { state: "absent" },
       tables: tables.grids ? { state: "ready", observation: tables.grids } : { state: "absent" },
     });
-  }, [snapshot, tables.grids]);
+  }, [snapshot, tables.grids, catalogs.tables]);
   const priced = useMemo(
-    () => (snapshot && tables.grids ? price(snapshot, tables.grids, handle.work.doc) : null),
-    [snapshot, tables.grids, handle.work.doc],
+    () =>
+      snapshot && tables.grids
+        ? price(snapshot, tables.grids, handle.work.doc, catalogs.tables)
+        : null,
+    [snapshot, tables.grids, handle.work.doc, catalogs.tables],
   );
 
   // The URL carries the view, subject, level, layers and selection, so a link lands on the same place.
@@ -288,6 +296,11 @@ export function DuctsRoute({
                 counted,
                 draw: (_summary, line) => (
                   <>
+                    {catalogs.findings.map((finding) => (
+                      <p key={finding} data-tone="caution">
+                        {finding}
+                      </p>
+                    ))}
                     {page.view === "losses" && snapshot && tables.grids && priced ? (
                       <StagedLosses
                         snapshot={snapshot}

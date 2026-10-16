@@ -2,7 +2,7 @@
  * Duct pressure drop per terminal path, pure and deterministic: `ducts.snapshot` + ASHRAE grids +
  * staged table choices (+ typed overrides) in, rows out. Nothing is stored.
  * - A path runs from the group root (`topology.ts`) to one terminal and sums friction rows,
- *   fitting rows (C x Pv, rules in loss-rules.ts) and the terminal catalog static pressure.
+ *   fitting rows (C x Pv, rules in loss-rules.ts) and the terminal catalog total pressure.
  * - A tapped duct is split at each tap along its centerline: the part up to a tap carries the
  *   upstream flow; a tap the path passes charges Cs x Pv(main downstream); the tap the path leaves
  *   by charges Cb x Pv(branch) and ends the main friction there (handcalc.py).
@@ -11,6 +11,13 @@
  * - fan = the largest path total in a group; the critical terminal is its argmax.
  * Physics in loss-physics.ts, interpolation in loss-grid.ts, rule data in loss-rules.ts.
  */
+import {
+  catalogLoss,
+  EMPTY_CATALOGS,
+  type Catalogs,
+  type CatalogFinding,
+  type CatalogTable,
+} from "./catalog.ts";
 import type { DuctCalculation } from "@pe/agent-contracts";
 import { designCircuits, type CircuitResult } from "./circuits.ts";
 import { transitionGeometry } from "./geometry.ts";
@@ -53,7 +60,10 @@ export interface Row {
   c?: number;
   pv?: number;
   fpm?: number;
-  dp: number;
+  dp: number | null;
+  source?: CatalogTable["source"];
+  finding?: CatalogFinding;
+  staticInWg?: number | null;
   /** The table lookup behind a fitting or tap row, structured so callers never parse `desc`. */
   inputs?: RowInputs;
   /** Revit's own reported drop for the fitting, shown beside dp; never an input. */
@@ -76,8 +86,9 @@ export type Choices = Readonly<Record<string, string>>;
 export interface Overrides {
   /** Design flow per terminal id, cfm; beats the snapshot's `flow` fact (survey: override > load preview > Revit). */
   terminalCfm?: Readonly<Record<number, number>>;
-  /** Catalog static pressure per terminal id, in-wg; beats `terminalDrop.catalogDropInWg`, then `assignedPressureDropInWg`. */
+  /** Explicit manual drop per terminal id, in-wg. Native scalar drops do not attest a catalog total. */
   terminalPs?: Readonly<Record<number, number>>;
+  catalogLinks?: Readonly<Record<string, { table: string }>>;
   /** A stated drop per fitting or accessory id, in-wg; replaces the rule lookup (not for taps). */
   componentDrop?: Readonly<Record<number, number>>;
 }
@@ -260,6 +271,7 @@ export function computeLosses(
   choices: Choices = {},
   overrides: Overrides = {},
   evidence: Readonly<Record<string, DuctCalculation>> = {},
+  catalogs: Catalogs = EMPTY_CATALOGS,
 ): LossResult {
   const result = {
     paths: {},
@@ -286,8 +298,8 @@ export function computeLosses(
     let fan = 0;
     let critical: number | null = null;
     for (const run of runsOf(tree)) {
-      const rows = pathRows(tree, run.path, below, grids, choices, overrides, fail);
-      const total = rows.reduce((a, r) => a + r.dp, 0);
+      const rows = pathRows(tree, run.path, below, grids, choices, overrides, fail, catalogs);
+      const total = rows.reduce((a, r) => a + (r.dp ?? 0), 0);
       result.paths[run.terminal] = { groupId: group.id, total, rows };
       if (critical == null || total > fan || (total === fan && run.terminal < critical)) {
         fan = total;
@@ -312,7 +324,7 @@ export function computeLosses(
   }
 
   const ruleDp = (rows: Row[], key: string) =>
-    rows.filter((r) => r.rule === key).reduce((a, r) => a + r.dp, 0);
+    rows.filter((r) => r.rule === key).reduce((a, r) => a + (r.dp ?? 0), 0);
   for (const rule of LOSS_RULES)
     result.byRule[rule.key] = {
       critical: result.critical == null ? 0 : ruleDp(result.paths[result.critical]!.rows, rule.key),
@@ -331,8 +343,9 @@ export function computeLosses(
         choices,
         circuitOverrides,
         (e) => e.message,
+        catalogs,
       );
-      return { terminalId: run.terminal, rows, total: rows.reduce((a, r) => a + r.dp, 0) };
+      return { terminalId: run.terminal, rows, total: rows.reduce((a, r) => a + (r.dp ?? 0), 0) };
     }),
   );
   return { ...result, design };
@@ -361,6 +374,7 @@ function pathRows(
   choices: Choices,
   overrides: Overrides,
   fail: (e: LossError) => string,
+  catalogs: Catalogs,
 ): Row[] {
   const rows: Row[] = [];
   /** Main flow upstream of the tap the path leaves by, recorded while its duct is walked. */
@@ -412,7 +426,9 @@ function pathRows(
         ...(found.notes.length ? { notes: found.notes } : {}),
       },
       desc: `${rule.family} ${node.id}, ${table} ${input.res} ${round4(found.value)} x Pv ${Math.round(f.fpm)} fpm (${found.inputs})`,
-      ...(found.notes.length || facts.note ? { notes: [...found.notes, ...(facts.note ? [facts.note] : [])] } : {}),
+      ...(found.notes.length || facts.note
+        ? { notes: [...found.notes, ...(facts.note ? [facts.note] : [])] }
+        : {}),
     };
   };
 
@@ -461,22 +477,25 @@ function pathRows(
   };
 
   const terminalRow = (node: Node) => {
-    const drop = node.terminalDrop;
-    const ps =
-      overrides.terminalPs?.[node.id] ?? drop?.catalogDropInWg ?? drop?.assignedPressureDropInWg;
     const cfm = overrides.terminalCfm?.[node.id] ?? terminalCfm(node);
-    let error: string | undefined;
-    if (ps == null)
-      error = fail({ id: node.id, message: `terminal ${node.id} has no terminal drop` });
-    else if (cfm == null)
-      error = fail({ id: node.id, message: `terminal ${node.id} has no design flow` });
+    const manual = overrides.terminalPs?.[node.id];
+    if (manual != null) {
+      rows.push({
+        id: node.id,
+        kind: "terminal",
+        leg: "ps",
+        dp: manual,
+        desc: `terminal ${node.id}, manual pressure override`,
+      });
+      return;
+    }
+    const loss = catalogLoss(node, cfm, catalogs, overrides.catalogLinks);
+    if (loss.dp === null) fail({ id: node.id, table: loss.table, message: loss.error });
     rows.push({
       id: node.id,
       kind: "terminal",
-      leg: "ps",
-      dp: ps ?? 0,
-      desc: `terminal ${node.id} at ${cfm ?? "?"} cfm, terminal drop`,
-      ...(error ? { error } : {}),
+      ...loss,
+      desc: `terminal ${node.id} at ${cfm ?? "?"} cfm, catalog total pressure`,
     });
   };
 
@@ -553,7 +572,13 @@ function pathRows(
       // Entered from the collar (Chadds: the last run to a grille, fed through the tap's side into
       // a duct capped at its far end), all of the air turns through it: its branch leg at Qb/Qc = 1.
       if (!fromMain && qb > 0) {
-        const facts = fittingFacts(node, prev, next, tree.parts.get(prev!)?.segment ?? null, tree.root);
+        const facts = fittingFacts(
+          node,
+          prev,
+          next,
+          tree.parts.get(prev!)?.segment ?? null,
+          tree.root,
+        );
         const rule = ruleByKey("tap-std")!;
         return void rows.push(
           ruleRow(
@@ -603,13 +628,22 @@ export function fanout(
   ruleKey: string,
   newTable: string,
   overrides: Overrides = {},
-  before: LossResult = computeLosses(snapshot, grids, choices, overrides),
+  before?: LossResult,
+  catalogs: Catalogs = EMPTY_CATALOGS,
 ): Fanout {
+  before ??= computeLosses(snapshot, grids, choices, overrides, {}, catalogs);
   const rule = ruleByKey(ruleKey);
   if (!rule) throw new Error(`no loss rule ${ruleKey}`);
   const table = newTable.toUpperCase();
   if (!rule.options.includes(table)) throw new Error(`${table} is not a candidate for ${ruleKey}`);
-  const after = computeLosses(snapshot, grids, { ...choices, [ruleKey]: table }, overrides);
+  const after = computeLosses(
+    snapshot,
+    grids,
+    { ...choices, [ruleKey]: table },
+    overrides,
+    {},
+    catalogs,
+  );
   const movedTerminals = Object.keys(after.paths)
     .map(Number)
     .filter((t) => Math.abs(after.paths[t]!.total - (before.paths[t]?.total ?? NaN)) > 1e-9);

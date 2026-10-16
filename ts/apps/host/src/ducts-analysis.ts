@@ -24,6 +24,8 @@ import {
   type DuctsAnalysisRequest,
   type DuctsAnalysisResponse,
 } from "@pe/agent-contracts";
+import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
+import { readDuctCatalogs } from "./duct-catalogs.ts";
 import { assessDucts } from "@pe/ducts-domain/assessment";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 import {
@@ -47,6 +49,7 @@ type Observation = {
 };
 export interface DuctsAnalysisSources {
   root: string;
+  catalogs?: () => Promise<{ tables: Catalogs; findings: string[] }>;
   producer: unknown;
   marks: DocumentMarks;
   resolve: (target: DocumentRef) => Promise<Observation>;
@@ -57,9 +60,21 @@ export interface DuctsAnalysisSources {
   ) => Promise<Response>;
   readWork: (key: WorkKey) => Promise<{ doc: unknown; revision: number } | null>;
 }
-type EffectiveInputs = { snapshot: DuctSnapshot; tables: unknown; work: DuctsRouteDocument | null };
-const solve = ({ snapshot: raw, tables, work }: EffectiveInputs) => {
-  const priced = price(raw, toGrids(tables), work);
+type EffectiveInputs = {
+  snapshot: DuctSnapshot;
+  tables: unknown;
+  work: DuctsRouteDocument | null;
+  catalogs?: Catalogs;
+  catalogFindings?: string[];
+};
+const solve = ({
+  snapshot: raw,
+  tables,
+  work,
+  catalogs = EMPTY_CATALOGS,
+  catalogFindings = [],
+}: EffectiveInputs) => {
+  const priced = price(raw, toGrids(tables), work, catalogs);
   // The surveyed snapshot: gaps joined and taps inferred, as the solves saw it.
   const { snapshot } = priced;
   const equipmentIds = [
@@ -69,6 +84,7 @@ const solve = ({ snapshot: raw, tables, work }: EffectiveInputs) => {
     ]),
   ].sort((a, b) => a - b);
   return {
+    catalogFindings,
     now: priced.now,
     next: priced.next,
     readiness: readiness(snapshot, work),
@@ -329,7 +345,14 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       Object.keys(slots).length ? { slots } : {},
     )) as DuctSnapshot;
     const tables = await read("ducts.tables", { ids: [...TABLE_IDS] });
-    const inputJson = JSON.stringify({ snapshot, tables, work } satisfies EffectiveInputs);
+    const catalogs = await (sources.catalogs ?? readDuctCatalogs)();
+    const inputJson = JSON.stringify({
+      snapshot,
+      tables,
+      work,
+      catalogs: catalogs.tables,
+      catalogFindings: catalogs.findings,
+    } satisfies EffectiveInputs);
     if (Buffer.byteLength(inputJson) > MAX_BYTES)
       throw Error("Full analysis inputs exceed the byte budget; graph was not clipped");
     const effective = JSON.parse(inputJson) as EffectiveInputs;
@@ -418,10 +441,11 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
     const group = request.selector.kind === "group" ? request.selector.id : "";
     if (group && !input.snapshot.groups.some((g) => g.id === group))
       throw Error("Apply request group is unavailable");
-    const priced = price(input.snapshot, toGrids(input.tables), work);
+    const priced = price(input.snapshot, toGrids(input.tables), work, input.catalogs);
     if (
       ![
         priced.staged.rules,
+        priced.staged.catalogs,
         priced.staged.terminalDrops,
         priced.staged.componentDrops,
         priced.staged.unitStatics,
