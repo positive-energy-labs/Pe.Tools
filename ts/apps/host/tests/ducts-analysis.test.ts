@@ -1630,3 +1630,58 @@ test("ports exposes exact open fan pins and derived exterior flow without histor
   expect(historical.rows).toEqual(fresh.rows);
   expect(f.counts()).toEqual(before);
 });
+
+test("the survey joins a sub-tolerance gap, takes the terminal flow from the load preview and emits findings", async () => {
+  const f = fixture();
+  const [fan, grille] = f.snapshot.nodes as [
+    DuctSnapshot["nodes"][number],
+    DuctSnapshot["nodes"][number],
+  ];
+  // A 0.4 in gap: neither port is attached, the grille sits 0.4 in down the x axis.
+  fan.connectors[0]!.connectedTo = null;
+  grille.connectors[0]!.connectedTo = null;
+  grille.connectors[0]!.point = [0.4 / 12, 0, 0];
+  fan.facts.push({ key: "mark", text: "FC-4", unit: "", provenance: "revit-reported" });
+  const doc = ductsDocumentSchema.parse({
+    loads: {
+      preview: {
+        staged: {
+          value: {
+            systems: [{ name: "System 1 Office FC-4", tag: "FC-4", cfm: 250, rooms: [] }],
+          },
+        },
+      },
+    },
+  });
+  f.sources.readWork = async () => ({ doc, revision: 3 });
+  const summary = ductsAnalysisResponseSchema.parse(
+    await f.api.read(read({ kind: "fresh", target: f.target })),
+  );
+  expect(summary.findings).toEqual([
+    expect.objectContaining({
+      kind: "joined-by-proximity",
+      elementIds: [1, 2],
+      clearer: "pea",
+      assumed: expect.stringContaining("0.40 in apart; joined"),
+    }),
+    expect.objectContaining({ kind: "no-fan-static", elementIds: [1], clearer: "person" }),
+  ]);
+  expect(summary.completeness.reasons.map((r) => r.code)).not.toContain("unreached-terminals");
+  expect(summary.completeness.reasons.map((r) => r.code)).not.toContain("unknown-terminal-flow");
+  const terminals = ductsAnalysisResponseSchema.parse(
+    await f.api.read(
+      read(
+        { kind: "artifact", id: summary.analysisId },
+        { kind: "document" },
+        {
+          projection: "terminals",
+        },
+      ),
+    ),
+  );
+  // Revit states 100 cfm on the grille; the staged load preview's 250 wins for the staged solve.
+  expect(terminals.rows).toEqual([
+    expect.objectContaining({ id: 2, flowCfm: 250, requiredEspStagedInWg: 0.08 }),
+  ]);
+  expect(terminals.findings).toEqual([]);
+});

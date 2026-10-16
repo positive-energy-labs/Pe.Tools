@@ -74,8 +74,9 @@ interface LossError {
 export type Choices = Readonly<Record<string, string>>;
 
 export interface Overrides {
-  /** Catalog static pressure per terminal id, in-wg; beats `terminalDrop.catalogDropInWg`, then `assignedPressureDropInWg`. */
+  /** Design flow per terminal id, cfm; beats the snapshot's `flow` fact (survey: override > load preview > Revit). */
   terminalCfm?: Readonly<Record<number, number>>;
+  /** Catalog static pressure per terminal id, in-wg; beats `terminalDrop.catalogDropInWg`, then `assignedPressureDropInWg`. */
   terminalPs?: Readonly<Record<number, number>>;
   /** A stated drop per fitting or accessory id, in-wg; replaces the rule lookup (not for taps). */
   componentDrop?: Readonly<Record<number, number>>;
@@ -270,7 +271,7 @@ export function computeLosses(
 
   for (const group of snapshot.groups) {
     const tree = groupTree(snapshot, group.id);
-    const below = flowBelow(tree);
+    const below = flowBelow(tree, overrides);
     let fan = 0;
     let critical: number | null = null;
     for (const run of runsOf(tree)) {
@@ -327,11 +328,12 @@ export function computeLosses(
 }
 
 /** Terminal design flow summed over every element subtree, cfm. */
-function flowBelow(tree: GroupTree): Map<number, number> {
+function flowBelow(tree: GroupTree, overrides: Overrides): Map<number, number> {
   const below = new Map<number, number>();
   const visit = (id: number): number => {
     const node = tree.parts.get(id)!.node;
-    const own = node?.kind === "terminal" ? (terminalCfm(node) ?? 0) : 0;
+    const own =
+      node?.kind === "terminal" ? (overrides.terminalCfm?.[id] ?? terminalCfm(node) ?? 0) : 0;
     const sum = tree.children.get(id)!.reduce((a, c) => a + visit(c), own);
     below.set(id, sum);
     return sum;

@@ -66,7 +66,9 @@ import {
   type TargetInventory,
   type DocumentRef,
   type ThreadHead,
+  transitionPatches,
 } from "@pe/agent-contracts";
+import { parseLoadPreview } from "@pe/ducts-domain/load-preview";
 import { HostRpcCaller, type ResolvedTarget } from "../shared/host-rpc-caller.ts";
 import type { RevitCatalogLoadedFamilies } from "@pe/host-contracts/generated";
 import { coerceJsonObject } from "../shared/coerce.ts";
@@ -872,13 +874,26 @@ async function dispatch(
       if (row.kind === "route-doc") {
         if (input.expectedRevision === undefined)
           throw new Error(`Read route:${parsed.route} first and pass its expectedRevision.`);
+        // Ducts: a raw Load Preview paste is parsed here and proposed as loads/preview.
+        const loads =
+          parsed.route === "ducts" && typeof payload.loadsText === "string"
+            ? transitionPatches(
+                ["loads"],
+                "preview",
+                {},
+                {
+                  kind: "propose",
+                  rung: { value: { systems: parseLoadPreview(payload.loadsText).systems } },
+                },
+              )
+            : [];
         return routeWrite(
           parsed.route,
           "apply",
           defaultTarget,
           input.expectedRevision,
           {
-            patches: payload.patches,
+            patches: [...(Array.isArray(payload.patches) ? payload.patches : []), ...loads],
           },
           workspaceId,
         );

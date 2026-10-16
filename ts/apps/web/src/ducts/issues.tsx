@@ -6,6 +6,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  * meaning rides `data-tone`); `shade` orders the kinds inside a class. Shades have no tokens yet
  * (owed in the design-system ledger), so a view draws `tone` and may use `shade` only as order.
  */
+import type { DuctFinding } from "@pe/agent-contracts";
 import { ISSUE_BLOCKS, type Blocks, type IssueKind } from "@pe/ducts-domain/issues";
 import type { VerdictTone } from "@pe/kit/table/model";
 export interface IssueKindInfo {
@@ -105,6 +106,31 @@ const BLOCKS_WORD: Record<Blocks, string> = {
   budgetable: "blocks the budget",
   none: "advisory",
 };
+const CLEARERS: DuctFinding["clearer"][] = ["person", "pea", "route"];
+/** The survey's findings, grouped by who clears them; what the route assumed is spelled out. */
+export function FindingsList({ findings }: { findings: readonly DuctFinding[] }) {
+  if (!findings.length) return null;
+  return (
+    <dl className="grid grid-cols-[auto_1fr] gap-x-3 t-small" data-findings="">
+      {CLEARERS.filter((c) => findings.some((f) => f.clearer === c)).map((clearer) => (
+        <div key={clearer} className="contents">
+          <dt className="t-upper text-ink-2">{clearer} clears</dt>
+          <dd>
+            {findings
+              .filter((f) => f.clearer === clearer)
+              .map((f) => (
+                <div key={f.id} data-finding={f.id}>
+                  <span data-tone={f.assumed ? "caution" : "alarm"}>{f.kind}</span>{" "}
+                  <span className="face-mono">{f.elementIds.join(" ")}</span> {f.note}
+                  {f.assumed ? <span className="text-ink-2"> · assumed: {f.assumed}</span> : null}
+                </div>
+              ))}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
 /** The legend every view shows beside its issues: class, then kinds in shade order. */
 export function IssueLegend() {
   return (

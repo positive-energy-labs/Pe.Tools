@@ -59,6 +59,16 @@ export const ductsAnalysisRequestSchema = z
 export type DuctsAnalysisRequest = z.infer<typeof ductsAnalysisRequestSchema>;
 
 const reason = z.strictObject({ code: z.string(), count: z.number().int(), message: z.string() });
+/** One thing the survey found: what the route assumed about it, if anything, and who clears it. */
+export const ductFindingSchema = z.strictObject({
+  id: z.string(),
+  kind: z.string(),
+  elementIds: z.array(z.number().int()),
+  note: z.string(),
+  assumed: z.string().nullable(),
+  clearer: z.enum(["route", "pea", "person"]),
+});
+export type DuctFinding = z.infer<typeof ductFindingSchema>;
 const row = z.strictObject({
   kind: z.enum(["equipment", "terminal", "path", "circuit", "port", "component", "flow"]),
   id: z.number().int(),
@@ -361,6 +371,8 @@ export const ductsAnalysisResponseSchema = z.strictObject({
     reachedCircuitTerminals: z.number().int(),
   }),
   rows: z.array(row).max(100),
+  /** The survey's findings; the summary projection carries them, trimmed last under the byte budget. */
+  findings: z.array(ductFindingSchema),
   page: z.strictObject({
     total: z.number().int(),
     returned: z.number().int(),

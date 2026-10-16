@@ -26,6 +26,7 @@ import type { Column } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
 import type { DuctsEvaluation, DuctsPage } from "./manifest";
 import { assessDucts } from "@pe/ducts-domain/assessment";
+import { parseLoadPreview } from "@pe/ducts-domain/load-preview";
 import { LOSS_RULES, ruleByKey } from "@pe/ducts-domain/loss-rules";
 import type { LossResult, Row } from "@pe/ducts-domain/losses";
 import { systemFor } from "@pe/ducts-domain/losses";
@@ -44,6 +45,7 @@ import {
 import type { Grids } from "@pe/ducts-domain/loss-grid";
 import { snapshotById, type GroupReadiness } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { FindingsList } from "./issues";
 type Node = DuctSnapshot["nodes"][number];
 type Group = DuctSnapshot["groups"][number];
 type Assessment = ReturnType<typeof assessDucts>;
@@ -613,6 +615,7 @@ function Bars({
           assessment.terminalDrops[node.id] ?? false,
         );
         const opened = selected === String(id);
+        const flow = assessment.flows.get(id);
         return (
           <Fragment key={id}>
             <ListRow
@@ -624,7 +627,10 @@ function Bars({
                 <span className="flex items-center gap-2" data-terminal={id}>
                   <span className="w-56 shrink-0 truncate">
                     <span className="face-mono">{id}</span> {node.family ?? ""} ·{" "}
-                    {Math.round(node.facts.find((f) => f.key === "flow")?.value ?? 0)} cfm
+                    {Math.round(flow?.cfm ?? 0)} cfm{" "}
+                    <span className="text-ink-2" data-flow-source={flow?.source ?? ""}>
+                      {flow?.source ?? "no flow"}
+                    </span>
                   </span>
                   <span className="relative flex h-4 flex-1 bg-(--pe-recess)">
                     {PARTS.filter((part) => by.get(part)).map((part) => (
@@ -818,6 +824,29 @@ export function DuctsLosses({
   return (
     <div className="flex flex-col gap-3 overflow-auto px-(--item-pad-x) py-2">
       <Slots snapshot={snapshot} work={work} />
+      <div className="flex items-baseline gap-2 t-small">
+        <Button
+          label="Stage the load tool's Load Preview from the clipboard as this document's loads"
+          onClick={() =>
+            void navigator.clipboard.readText().then((text) =>
+              work.write(
+                transitionPatches(["loads"], "preview", work.doc?.loads.preview ?? {}, {
+                  kind: "stage",
+                  rung: { value: { systems: parseLoadPreview(text).systems } },
+                }),
+              ),
+            )
+          }
+        >
+          paste loads
+        </Button>
+        <span className="text-ink-2">
+          {work.doc?.loads.preview?.staged
+            ? `${work.doc.loads.preview.staged.value.systems.length} systems staged`
+            : "no load preview"}
+        </span>
+      </div>
+      <FindingsList findings={assessment.findings} />
       <div className="flex flex-wrap items-baseline gap-3 t-small text-ink-2">
         {PARTS.map((part) => (
           <PartChip key={part} part={part} />

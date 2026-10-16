@@ -17,6 +17,7 @@ import {
   type Overrides,
   type Row,
 } from "./losses.ts";
+import { survey, type Survey } from "./survey.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 type Node = DuctSnapshot["nodes"][number];
@@ -38,7 +39,8 @@ const appliedChoices = (snapshot: DuctSnapshot): Choices =>
 const byId = <V>(cells: Record<string, V>, pick: (value: V) => number) =>
   Object.fromEntries(Object.entries(cells).map(([id, value]) => [Number(id), pick(value)]));
 
-export interface Priced {
+/** The solves run on the surveyed snapshot; `snapshot`, `flows` and `findings` are its survey. */
+export interface Priced extends Survey {
   applied: Choices;
   /** Applied plus staged: what apply would leave in Revit. */
   choices: Choices;
@@ -80,11 +82,9 @@ function solvedFor(snapshot: DuctSnapshot, grids: Grids): Solved {
 }
 
 /** Cached per (snapshot, grids) and, for the last one, per `doc`: callers may price freely. */
-export function price(
-  snapshot: DuctSnapshot,
-  grids: Grids,
-  doc: DuctsRouteDocument | null,
-): Priced {
+export function price(raw: DuctSnapshot, grids: Grids, doc: DuctsRouteDocument | null): Priced {
+  const surveyed = survey(raw, doc);
+  const { snapshot } = surveyed;
   const entry = solvedFor(snapshot, grids);
   if (entry.last?.doc === doc) return entry.last.priced;
   const staged = stagedDucts(doc);
@@ -94,14 +94,21 @@ export function price(
     ...Object.fromEntries(Object.entries(staged.rules).map(([key, { table }]) => [key, table])),
   };
   const overrides: Overrides = {
+    terminalCfm: Object.fromEntries(
+      [...surveyed.flows].flatMap(([id, f]) =>
+        f.cfm != null && f.source !== "revit" ? [[id, f.cfm]] : [],
+      ),
+    ),
     terminalPs: byId(staged.terminalDrops, (drop) => drop.inWg),
     componentDrop: byId(staged.componentDrops, (drop) => drop.inWg),
   };
   const same =
     Object.keys(staged.rules).length === 0 &&
     !hasDrops(staged) &&
+    !Object.keys(overrides.terminalCfm!).length &&
     !Object.keys(staged.calculation).length;
   const priced: Priced = {
+    ...surveyed,
     applied,
     choices,
     overrides,
@@ -225,7 +232,8 @@ export function applyRequest(
     .sort()
     .flatMap((ruleKey) =>
       [...instancesOf(priced.next, ruleKey).values()]
-        .filter((row) => row.c != null && !row.error && inScope(row.id))
+        // Inferred taps (negative ids) are survey assumptions, never Revit elements.
+        .filter((row) => row.c != null && !row.error && row.id > 0 && inScope(row.id))
         .map((row) => ({
           id: row.id,
           // The Pe server charges the family's own coefficient when it has one, else prices the legs from this table.

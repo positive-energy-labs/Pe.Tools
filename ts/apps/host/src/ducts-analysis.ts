@@ -34,7 +34,6 @@ import {
   TABLE_IDS,
 } from "@pe/ducts-domain/pricing";
 import { readiness } from "@pe/ducts-domain/readiness";
-import { terminalCfm } from "@pe/ducts-domain/topology";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { DocumentMarks } from "./document-marks.ts";
 import { sha256Hex, writeArtifact } from "./page-artifacts.ts";
@@ -59,8 +58,10 @@ export interface DuctsAnalysisSources {
   readWork: (key: WorkKey) => Promise<{ doc: unknown; revision: number } | null>;
 }
 type EffectiveInputs = { snapshot: DuctSnapshot; tables: unknown; work: DuctsRouteDocument | null };
-const solve = ({ snapshot, tables, work }: EffectiveInputs) => {
-  const priced = price(snapshot, toGrids(tables), work);
+const solve = ({ snapshot: raw, tables, work }: EffectiveInputs) => {
+  const priced = price(raw, toGrids(tables), work);
+  // The surveyed snapshot: gaps joined and taps inferred, as the solves saw it.
+  const { snapshot } = priced;
   const equipmentIds = [
     ...new Set([
       ...snapshot.nodes.filter((node) => node.kind === "equipment").map((node) => node.id),
@@ -548,16 +549,16 @@ function project(
   byteSize: number,
   candidate: DuctsAnalysisResponse["applyRequest"] = null,
 ): DuctsAnalysisResponse {
-  const { snapshot, work } = input;
+  const { work } = input;
   const outputs = hydrateOutputs(artifact);
   const { now, next } = outputs;
-  const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
   const selector = request.selector;
-  const assessment = assessDucts(snapshot, work, outputs, {
+  const assessment = assessDucts(input.snapshot, work, outputs, {
     selector,
     freshness: artifact.freshness,
   });
-  const { groups, selectedTerminals, reached, equipment } = assessment;
+  const { snapshot, flows, groups, selectedTerminals, reached, equipment } = assessment;
+  const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
   const baseRow = (node: DuctSnapshot["nodes"][number] | undefined, elementId: number) => ({
     id: elementId,
     label: node ? label(node) : String(elementId),
@@ -570,7 +571,7 @@ function project(
       node?.kind === "equipment"
         ? (node.facts.find((fact) => fact.key === "fanFlow")?.value ?? null)
         : node
-          ? terminalCfm(node)
+          ? (flows.get(node.id)?.cfm ?? null)
           : null,
     spaceText: node ? space(node) : null,
     detail: null,
@@ -873,6 +874,7 @@ function project(
     completeness: assessment.completeness,
     coverage: assessment.coverage,
     rows: pageRows,
+    findings: request.projection === "summary" ? assessment.findings : [],
     page: {
       total: rows.length,
       returned: pageRows.length,
@@ -888,6 +890,14 @@ function project(
     response.page.returned = response.rows.length;
     response.page.truncated = true;
     response.page.nextCursor = { offset: offset + response.rows.length, basis };
+  }
+  // Findings go last; the full list is the web's (no byte budget) and the artifact's inputs.
+  while (
+    Buffer.byteLength(JSON.stringify(response), "utf8") > byteLimit &&
+    response.findings.length
+  ) {
+    response.findings.pop();
+    response.page.truncated = true;
   }
   if (
     Buffer.byteLength(JSON.stringify(response), "utf8") > byteLimit ||

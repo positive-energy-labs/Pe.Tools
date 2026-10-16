@@ -260,7 +260,18 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
       z.object({
         patches: z
           .array(z.object({ path: z.array(z.union([z.string(), z.number()])), value: z.unknown() }))
-          .min(1),
+          .min(1)
+          .optional(),
+        ...(spec.route === "ducts"
+          ? {
+              loadsText: z
+                .string()
+                .optional()
+                .describe(
+                  "The load tool's Load Preview pasted raw (tab-separated); parsed and proposed as loads/preview.",
+                ),
+            }
+          : {}),
       }),
     ) as Record<string, unknown>,
     source: "route registry",

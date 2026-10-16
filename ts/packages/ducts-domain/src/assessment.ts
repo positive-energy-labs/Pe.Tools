@@ -5,8 +5,9 @@ import type {
 } from "@pe/agent-contracts";
 import { transitionGeometry } from "./geometry.ts";
 import { proposedStatic, unitOf, type Priced } from "./pricing.ts";
-import { groupTree, terminalCfm } from "./topology.ts";
+import { groupTree } from "./topology.ts";
 import type { GroupReadiness } from "./readiness.ts";
+import { survey } from "./survey.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 const space = (node: DuctSnapshot["nodes"][number]) =>
@@ -16,7 +17,7 @@ const terminal = (node: DuctSnapshot["nodes"][number]) => node.kind === "termina
 /** One pure assessment for headless and human consumers. Observation coherence is supplied by
  * the acquiring adapter; demand completeness does not require a known existing fan capacity. */
 export function assessDucts(
-  snapshot: DuctSnapshot,
+  raw: DuctSnapshot,
   work: DuctsRouteDocument | null,
   solved: Pick<Priced, "now" | "next"> & { readiness: Record<string, GroupReadiness> },
   options: {
@@ -25,6 +26,8 @@ export function assessDucts(
   } = { selector: { kind: "document" } },
 ) {
   const { now, next } = solved;
+  // The survey's snapshot is the one the solves ran on: gaps joined, taps inferred.
+  const { snapshot, flows, findings } = survey(raw, work);
   const freshness = options.freshness ?? {
     state: "unknown",
     reason: "Observation freshness is unknown",
@@ -141,8 +144,8 @@ export function assessDucts(
   );
   reason(
     "unknown-terminal-flow",
-    selectedTerminals.filter((node) => terminalCfm(node) == null).length,
-    "Terminal design flow is unknown",
+    selectedTerminals.filter((node) => flows.get(node.id)?.cfm == null).length,
+    "Terminal design flow is unknown: no override, load preview share or positive Revit flow",
   );
   const selectedNodes = snapshot.nodes.filter((node) => groupIds.has(node.groupId ?? ""));
   const transitions = selectedNodes
@@ -298,6 +301,9 @@ export function assessDucts(
     (c) => selector.kind === "document" || c.elementIds.some((id) => selectedIds.has(id)),
   );
   return {
+    snapshot,
+    flows,
+    findings,
     componentFlows,
     circuits,
     groups,
