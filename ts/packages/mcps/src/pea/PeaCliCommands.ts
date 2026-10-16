@@ -419,6 +419,8 @@ export class PeaCliCommands {
       toKebab: true,
       run: async (ctx) => {
         const result = await this.createScriptingTools(ctx.values).listPods();
+        if (!("pods" in result))
+          throw Error("pod.list returned identity instead of full inventory");
         writeScriptPodList(result);
       },
     });

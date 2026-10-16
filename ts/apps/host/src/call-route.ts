@@ -85,6 +85,7 @@ import {
 import {
   composeMember,
   listPods,
+  resolvePodIdentity,
   listRuns,
   readMember,
   saveMember,
@@ -1024,8 +1025,12 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
       return yield* tailLogs(yield* decodeRequest(key, request));
     case "host.shell.open":
       return yield* openShellPath(yield* decodeRequest(key, request));
-    case "pod.list":
-      return yield* listPods();
+    case "pod.list": {
+      const input = yield* decodeRequest(key, request);
+      return input.projection === "identity"
+        ? yield* resolvePodIdentity(input.folder)
+        : yield* listPods();
+    }
     case "pod.capture": {
       const { pod } = yield* decodeRequest(key, request);
       return yield* Effect.tryPromise({
