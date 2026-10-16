@@ -549,13 +549,27 @@ function pathRows(
     if (node.kind !== "fitting" && node.kind !== "accessory") return;
     if (isTap(node)) {
       const qb = below.get(node.id) ?? 0;
-      // A takeoff is priced only when the path enters it from its main duct.
-      const qc =
-        prev != null && prev === factOf(node, "mainSegment") ? mainFlowAt.get(node.id) : null;
+      const fromMain = prev != null && prev === factOf(node, "mainSegment");
+      // Entered from the collar (Chadds: the last run to a grille, fed through the tap's side into
+      // a duct capped at its far end), all of the air turns through it: its branch leg at Qb/Qc = 1.
+      if (!fromMain && qb > 0) {
+        const facts = fittingFacts(node, prev, next, tree.parts.get(prev!)?.segment ?? null, tree.root);
+        const rule = ruleByKey("tap-std")!;
+        return void rows.push(
+          ruleRow(
+            node,
+            rule,
+            { ...facts, note: "entered from the collar: priced as its branch turn at Qb/Qc = 1" },
+            { q: qb, qb, qc: qb, qs: 0 },
+            "Cb",
+          ),
+        );
+      }
+      const qc = fromMain ? mainFlowAt.get(node.id) : null;
       if (qc == null) {
         const message = fail({
           id: node.id,
-          message: `tap ${node.id} is entered from the collar or has no main segment, no takeoff rule applies`,
+          message: `tap ${node.id} carries no branch flow or its main flow is unknown, no takeoff rule applies`,
         });
         return void rows.push({
           id: node.id,

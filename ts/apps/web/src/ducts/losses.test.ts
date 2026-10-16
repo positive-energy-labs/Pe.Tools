@@ -303,7 +303,7 @@ it("honours overrides and reports a missing table", () => {
   ]);
 });
 
-it("prices a tap as a takeoff only when entered from its main, never from the collar", () => {
+it("prices a tap entered from its main as a takeoff, and one entered from the collar as its branch turn", () => {
   const main = computeLosses(snapshot, grids).paths[8]!.rows.find((x) => x.id === 4)!;
   expect(main.error).toBeUndefined();
   expect(main.c).toBeGreaterThan(0);
@@ -317,10 +317,11 @@ it("prices a tap as a takeoff only when entered from its main, never from the co
   flipped.segments.find((x) => x.id === 7)!.connectors[1] = conn(1, [100, 0], round(6));
   const r = computeLosses(flipped, grids);
   const row = r.paths[6]!.rows.find((x) => x.id === 4)!;
-  expect(row).toMatchObject({ kind: "tap-branch", dp: 0 });
-  expect(row.error).toMatch(/entered from the collar/);
-  expect(row.c).toBeUndefined();
-  expect(r.errors).toEqual([expect.objectContaining({ id: 4 })]);
+  // All of the air turns through it: SD5-9 Cb at Qb/Qc = 1, and the row names the assumption.
+  expect(row).toMatchObject({ kind: "tap-branch", rule: "tap-std", inputs: { x: 1 } });
+  expect(row.error).toBeUndefined();
+  expect(row.c).toBeGreaterThan(0);
+  expect(row.notes).toContain("entered from the collar: priced as its branch turn at Qb/Qc = 1");
 });
 
 it("fanout moves only the terminals whose path crosses the rule", () => {
