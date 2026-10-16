@@ -206,6 +206,8 @@ public static class DuctSnapshots {
             case DuctNodeKind.Equipment:
                 facts.Add(Fact(DuctNetwork.ExternalStatic, Converted(Named(e, slots.FanStatic), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
                 facts.Add(Fact("fanFlow", Converted(Named(e, slots.FanFlow), UnitTypeId.CubicFeetPerMinute), "cfm", DuctProvenance.DesignerStated));
+                // The equipment tag: joins a load-tool system ("System 1 Golf Sim FC-4") to this unit.
+                if (Text(e, BuiltInParameter.ALL_MODEL_MARK) is { Length: > 0 } mark) facts.Add(new DuctFact("mark", null, mark, "", DuctProvenance.DesignerStated));
                 break;
             case DuctNodeKind.Fitting:
                 if (DuctFittingGeometry.Angle(e) is { } angle) facts.Add(angle);
