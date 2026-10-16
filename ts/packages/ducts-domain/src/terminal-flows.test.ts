@@ -69,9 +69,9 @@ const duct = (id: number, groupId: string, connectors: Connector[]): Segment =>
     connectors,
   }) as unknown as Segment;
 const mark = (text: string): Node["facts"][number] =>
-  ({ key: "mark", text, unit: "", provenance: "revit" }) as Node["facts"][number];
+  ({ key: "mark", text, unit: "", provenance: "revit" }) as unknown as Node["facts"][number];
 const flow = (value: number): Node["facts"][number] =>
-  ({ key: "flow", value, unit: "cfm", provenance: "revit" }) as Node["facts"][number];
+  ({ key: "flow", value, unit: "cfm", provenance: "revit" }) as unknown as Node["facts"][number];
 
 /**
  * Equipment 1 (FC-4) feeds duct 10, which taps duct 11; terminals 30 (12"ø) and 31 hang off them.
