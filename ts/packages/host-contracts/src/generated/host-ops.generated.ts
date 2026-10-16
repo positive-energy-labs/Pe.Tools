@@ -716,7 +716,7 @@ export namespace DuctsSnapshot {
   }
 }
 
-/** Read ASHRAE duct fitting coefficient grids (Co, Cb, Cs) by table id from the .tbl files Revit installs, verbatim: axes, labels and values for a web lookup. Read-only; needs no document. */
+/** Read ASHRAE duct fitting coefficient grids (Co, Cb, Cs) by table id from the .tbl files Revit installs, verbatim: a named primary axis and sparse named row coordinates, zero through three dimensions; missing cells remain missing. Read-only; needs no document. */
 export namespace DuctsTables {
   export namespace Req {
     /**
@@ -730,8 +730,7 @@ export namespace DuctsTables {
     /**
      * Tables keyed by upper-case id, then by result key (Co, Cb, Cs; a block printed twice gets "#2").
      * A table Revit ships as "No table" has no results. Missing names ids with no file in Folder. Unsupported maps
-     * an id to why it was not parsed: three-axis tables (a second Y such as Re or As/Ac) and fixed-width rows whose
-     * numbers run together; a wrong grid is worse than none.
+     * an id to why it was not parsed: malformed dimensions or numeric fields; a wrong grid is worse than none.
      *
      */
     export interface Response {
@@ -746,19 +745,22 @@ export namespace DuctsTables {
         [k: string]: string;
       };
     }
-    /**
-     * One coefficient grid; the wire shape the web's loss-grid.ts reads. With Y present, Grid is number[][]: one row
-     * per Y, one column per X. With Y absent, Grid is number[] over X; a constant ("Co= 0.12") is one value with X
-     * empty. Grid is typed object because the wire is a union; Rows and Values build it.
-     *
-     */
     export interface AshraeGrid {
       title: string;
-      xLabel: string;
-      x: number[];
-      yLabel?: null | string;
-      y?: number[] | null;
-      grid: unknown;
+      axis?: null | AshraeAxis;
+      rowAxes: string[];
+      rows: AshraeRow[];
+    }
+    /**
+     * A primary sampled axis and zero, one or two named sparse row coordinates. No missing cells are invented.
+     */
+    export interface AshraeAxis {
+      name: string;
+      values: number[];
+    }
+    export interface AshraeRow {
+      coordinates: number[];
+      values: number[];
     }
   }
 }

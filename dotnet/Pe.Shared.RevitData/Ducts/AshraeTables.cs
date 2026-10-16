@@ -12,8 +12,7 @@ public sealed record DuctTablesRequest(IReadOnlyList<string> Ids);
 /// <summary>
 ///     Tables keyed by upper-case id, then by result key (Co, Cb, Cs; a block printed twice gets "#2").
 ///     A table Revit ships as "No table" has no results. Missing names ids with no file in Folder. Unsupported maps
-///     an id to why it was not parsed: three-axis tables (a second Y such as Re or As/Ac) and fixed-width rows whose
-///     numbers run together; a wrong grid is worse than none.
+///     an id to why it was not parsed: malformed dimensions or numeric fields; a wrong grid is worse than none.
 /// </summary>
 public sealed record DuctTablesData(
     string Folder,
@@ -21,23 +20,27 @@ public sealed record DuctTablesData(
     IReadOnlyList<string> Missing,
     IReadOnlyDictionary<string, string> Unsupported);
 
-/// <summary>
-///     One coefficient grid; the wire shape the web's loss-grid.ts reads. With Y present, Grid is number[][]: one row
-///     per Y, one column per X. With Y absent, Grid is number[] over X; a constant ("Co= 0.12") is one value with X
-///     empty. Grid is typed object because the wire is a union; Rows and Values build it.
-/// </summary>
-public sealed record AshraeGrid(
-    string Title,
-    string XLabel,
-    IReadOnlyList<double> X,
-    string? YLabel,
-    IReadOnlyList<double>? Y,
-    object Grid) {
-    public static AshraeGrid Rows(string title, string xLabel, IReadOnlyList<double> x, string? yLabel, IReadOnlyList<double> y,
-        IReadOnlyList<IReadOnlyList<double>> rows) => new(title, xLabel, x, yLabel, y, rows);
+/// <summary>A primary sampled axis and zero, one or two named sparse row coordinates. No missing cells are invented.</summary>
+public sealed record AshraeAxis(string Name, IReadOnlyList<double> Values);
+public sealed record AshraeRow(IReadOnlyList<double> Coordinates, IReadOnlyList<double> Values);
+public sealed record AshraeGrid(string Title, AshraeAxis? Axis, IReadOnlyList<string> RowAxes, IReadOnlyList<AshraeRow> Rows) {
+    public static AshraeGrid Primary(string title, string name, IReadOnlyList<double> axis, IReadOnlyList<double> values) =>
+        new(title, new(name, axis), [], [new([], values)]);
+    public static AshraeGrid Constant(string title, double value) => new(title, null, [], [new([], [value])]);
 
-    public static AshraeGrid Values(string title, string xLabel, IReadOnlyList<double> x, IReadOnlyList<double> values) =>
-        new(title, xLabel, x, null, null, values);
+    public void Validate() {
+        var names = Axis is null ? RowAxes.ToList() : new[] { Axis.Name }.Concat(RowAxes).ToList();
+        if (RowAxes.Count > 2 || names.Any(string.IsNullOrWhiteSpace) || names.Distinct(StringComparer.Ordinal).Count() != names.Count)
+            throw new FormatException($"{Title}: invalid axis names or dimensions");
+        if (Axis is { } axis && (axis.Values.Count == 0 || axis.Values.Any(v => (double.IsNaN(v) || double.IsInfinity(v))) ||
+            axis.Values.Zip(axis.Values.Skip(1), (a, b) => a >= b).Any(v => v)))
+            throw new FormatException($"{Title}: primary axis must be finite and strictly ascending");
+        if (Rows.Count == 0 || Rows.Any(r => r.Coordinates.Count != RowAxes.Count ||
+            r.Values.Count != (Axis?.Values.Count ?? 1) || r.Coordinates.Concat(r.Values).Any(v => (double.IsNaN(v) || double.IsInfinity(v)))) ||
+            Rows.Select(r => string.Join("|", r.Coordinates.Select(v => v.ToString("R", CultureInfo.InvariantCulture)))).Distinct().Count() != Rows.Count ||
+            (Axis is null && (RowAxes.Count != 0 || Rows.Count != 1)))
+            throw new FormatException($"{Title}: invalid or duplicate sparse rows");
+    }
 }
 
 /// <summary>Reads and parses Revit's shipped ASHRAE .tbl files. Revit-free.</summary>
@@ -106,22 +109,31 @@ public static class AshraeTables {
             if (j < lines.Count && ResultRow.Match(lines[j]) is { Success: true } one) {
                 var values = Numbers(one.Groups[2].Value).ToList();
                 if (values.Count != x.Count) throw new FormatException($"{one.Groups[1].Value}: {values.Count} values for {x.Count} columns");
-                yield return (one.Groups[1].Value, AshraeGrid.Values(title, parts[0].Trim(), x, values));
+                yield return (one.Groups[1].Value, AshraeGrid.Primary(title, parts[0].Trim(), x, values));
                 i = j;
                 continue;
             }
-            string? yLabel = null;
-            if (j < lines.Count && !StartsNumeric(lines[j])) yLabel = lines[j++].Trim();
-            var ys = new List<double>();
-            var grid = new List<IReadOnlyList<double>>();
+            var rowAxes = new List<string>();
+            if (j < lines.Count && !StartsNumeric(lines[j]))
+                rowAxes = lines[j++].Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).ToList();
+            if (rowAxes.Count is < 1 or > 2) throw new FormatException($"{key}: expected one or two row axes");
+            var rows = new List<AshraeRow>();
+            double? outer = null;
             for (; j < lines.Count && StartsNumeric(lines[j]); j++) {
-                var row = Numbers(lines[j]).ToList();
-                if (row.Count != x.Count + 1)
-                    throw new FormatException($"{key}: row {ys.Count + 1} has {row.Count - 1} values for {x.Count} columns (a second Y axis or run-together numbers)");
-                ys.Add(row[0]);
-                grid.Add(row.Skip(1).ToList());
+                var tokens = LexRow(lines[j]);
+                var coordinateCount = tokens.Count - x.Count;
+                if (coordinateCount != rowAxes.Count && !(rowAxes.Count == 2 && coordinateCount == 1 && outer.HasValue))
+                    throw new FormatException($"{key}: row {rows.Count + 1} does not match its named coordinates and {x.Count} samples");
+                var coordinates = tokens.Take(coordinateCount).ToList();
+                if (rowAxes.Count == 2) {
+                    if (coordinateCount == 2) outer = coordinates[0];
+                    else coordinates.Insert(0, outer!.Value);
+                }
+                rows.Add(new(coordinates, tokens.Skip(coordinateCount).ToList()));
             }
-            yield return (key, AshraeGrid.Rows(title, parts[0].Trim(), x, yLabel, ys, grid));
+            var grid = new AshraeGrid(title, new(parts[0].Trim(), x), rowAxes, rows);
+            grid.Validate();
+            yield return (key, grid);
             i = j - 1;
         }
     }
@@ -135,12 +147,12 @@ public static class AshraeTables {
                 var values = Numbers(r.Groups[2].Value).ToList();
                 if (values.Count == 0) continue;
                 if (line.Contains("=") && values.Count == 1)
-                    yield return (r.Groups[1].Value, AshraeGrid.Values(title, "", [], values));
+                    yield return (r.Groups[1].Value, AshraeGrid.Constant(title, values[0]));
                 else if (x is not null && values.Count > x.Count)
                     throw new FormatException($"{r.Groups[1].Value}: {values.Count} values for {x.Count} columns");
                 else if (x is not null)
                     yield return (r.Groups[1].Value,
-                        AshraeGrid.Values(title, label!, x.Skip(Math.Max(0, x.Count - values.Count)).ToList(), values));
+                        AshraeGrid.Primary(title, label!, x.Skip(Math.Max(0, x.Count - values.Count)).ToList(), values));
                 continue;
             }
             var tokens = line.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
@@ -155,11 +167,18 @@ public static class AshraeTables {
     private static void Add(Dictionary<string, AshraeGrid> results, string key, AshraeGrid grid) {
         var k = key;
         for (var n = 2; results.ContainsKey(k); n++) k = $"{key}#{n}";
+        grid.Validate();
         results[k] = grid;
     }
 
-    private static bool StartsNumeric(string line) =>
-        line.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries) is { Length: > 1 } t && t.All(x => Number.IsMatch(x));
+    private static bool StartsNumeric(string line) => Regex.IsMatch(line, @"^\s*-?\d");
+
+    private static List<double> LexRow(string line) {
+        var matches = Regex.Matches(line, @"-?\d+(?:\.\d*)?");
+        if (Regex.Replace(line, @"-?\d+(?:\.\d*)?", "").Trim().Length != 0)
+            throw new FormatException("Unrecognized numeric row text");
+        return matches.Cast<Match>().Select(m => Value(m.Value)).ToList();
+    }
 
     private static IEnumerable<double> Numbers(string text) =>
         text.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries).Where(t => Number.IsMatch(t)).Select(Value);

@@ -64,7 +64,7 @@ export interface LossRule {
     flows: Flows,
     table: string,
     leg: Leg,
-  ): { res: string; x: number; y?: number };
+  ): { res: string; coordinates: Record<string, number> };
   /** The section and flow whose velocity pressure the leg is charged on. */
   basisOf(f: FittingFacts, flows: Flows, leg: Leg): { section: Section | null; cfm: number };
 }
@@ -88,8 +88,8 @@ const fromRect = (f: FittingFacts) => f.inlet.shape !== "round" && f.outlet?.sha
 const transition = (f: FittingFacts) => f.partType === "Transition";
 /** Elbow input: r/D for the r/D table, else the diameter. */
 const elbowInput = (f: FittingFacts, _flows: Flows, table: string) =>
-  table === "CD3-12" ? { res: "Co", x: f.rOverD ?? NaN } : { res: "Co", x: dIn(f) };
-const angleInput = (f: FittingFacts) => ({ res: "Co", x: f.angleDeg ?? NaN, y: f.aoOverA1 ?? NaN });
+  table === "CD3-12" ? { res: "Co", coordinates: { "r/D": f.rOverD ?? NaN } } : { res: "Co", coordinates: { "D, in.(mm)": dIn(f) } };
+const angleInput = (f: FittingFacts) => ({ res: "Co", coordinates: { Theta: f.angleDeg ?? NaN, "Ao/A1": f.aoOverA1 ?? NaN } });
 
 export const LOSS_RULES: readonly LossRule[] = [
   {
@@ -139,11 +139,11 @@ export const LOSS_RULES: readonly LossRule[] = [
     when: (f, flows) => f.takeoff && (flows.qb ?? 0) > 0 && flows.qc! > 0,
     input: (f, flows, _t, leg) => {
       const qc = flows.qc!;
-      if (leg === "Cs") return { res: "Cs", x: flows.qs! / qc, y: 1 };
+      if (leg === "Cs") return { res: "Cs", coordinates: { "Qs/Qc": flows.qs! / qc, "As/Ac": 1 } };
       return {
         res: "Cb",
-        x: flows.qb! / qc,
-        y: f.abOverAc ?? (f.inlet.section?.areaFt2 ?? NaN) / (f.main?.section?.areaFt2 ?? NaN),
+        coordinates: { "Qb/Qc": flows.qb! / qc,
+          "Ab/Ac": f.abOverAc ?? (f.inlet.section?.areaFt2 ?? NaN) / (f.main?.section?.areaFt2 ?? NaN) },
       };
     },
     basisOf: (f, flows, leg) =>
@@ -196,7 +196,7 @@ export const LOSS_RULES: readonly LossRule[] = [
     options: ["CD9-1"],
     basis: "Pv of the damper",
     when: (f) => f.kind === "accessory",
-    input: () => ({ res: "Co", x: 0, y: 1 }),
+    input: () => ({ res: "Co", coordinates: { Theta: 0, "D/Do": 1 } }),
     basisOf: inletBasis,
   },
 ];

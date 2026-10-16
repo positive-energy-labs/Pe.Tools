@@ -200,7 +200,7 @@ function hydrateOutputs(artifact: Artifact): Outputs {
 }
 
 type Artifact = {
-  format: "ducts-analysis-v5";
+  format: "ducts-analysis-v6";
   createdAt: string;
   producer: unknown;
   observation: Observation;
@@ -227,7 +227,7 @@ const space = (node: DuctSnapshot["nodes"][number]) =>
 const label = (node: DuctSnapshot["nodes"][number]) =>
   [node.family, node.type].filter(Boolean).join(" / ") || String(node.id);
 const inputOf = (artifact: Artifact): EffectiveInputs => {
-  if (artifact.format !== "ducts-analysis-v5")
+  if (artifact.format !== "ducts-analysis-v6")
     throw Error(
       "Unsupported analysis format; historical outputs were not recomputed or reinterpreted",
     );
@@ -343,7 +343,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       JSON.stringify(owned?.doc) !== JSON.stringify(afterWork?.doc);
     const fresh = observedSince !== undefined && observedSince <= began;
     return {
-      format: "ducts-analysis-v5",
+      format: "ducts-analysis-v6",
       createdAt: new Date().toISOString(),
       producer: sources.producer,
       observation,
@@ -675,10 +675,7 @@ function project(
           lookup: row.inputs
             ? {
                 result: row.inputs.res,
-                x: row.inputs.x,
-                y: row.inputs.y ?? null,
-                xLabel: row.inputs.xLabel,
-                yLabel: row.inputs.yLabel ?? null,
+                coordinates: row.inputs.coordinates,
               }
             : null,
           error: row.error ?? null,
@@ -827,10 +824,7 @@ function project(
               lookup: row.inputs
                 ? {
                     result: row.inputs.res,
-                    x: row.inputs.x,
-                    y: row.inputs.y ?? null,
-                    xLabel: row.inputs.xLabel,
-                    yLabel: row.inputs.yLabel ?? null,
+                    coordinates: row.inputs.coordinates,
                   }
                 : null,
               error: row.error ?? null,
@@ -856,7 +850,7 @@ function project(
       url: `/pe/ducts/analyses/${id}/artifact`,
       sha256: id,
       byteSize,
-      format: "ducts-analysis-v5",
+      format: "ducts-analysis-v6",
     },
     mode: request.source.kind === "fresh" ? "fresh" : "historical",
     target: artifact.observation.target,

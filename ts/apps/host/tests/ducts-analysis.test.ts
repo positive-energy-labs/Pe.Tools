@@ -442,7 +442,7 @@ test("physical circuits and path pages retain staged evidence and never acquire 
     },
   });
   const artifact = JSON.parse(await (await f.api.artifact(fresh.analysisId)).text());
-  expect(artifact.format).toBe("ducts-analysis-v5");
+  expect(artifact.format).toBe("ducts-analysis-v6");
   expect(
     JSON.parse(gunzipSync(Buffer.from(artifact.input.data, "base64")).toString("utf8")).work,
   ).toEqual(doc);
@@ -984,7 +984,7 @@ test("artifact v5 interns witness records without merging different role partiti
     read({ kind: "fresh", target: f.target }, { kind: "document" }, { projection: "components" }),
   );
   const artifact = JSON.parse(await (await f.api.artifact(response.analysisId)).text());
-  expect(artifact.format).toBe("ducts-analysis-v5");
+  expect(artifact.format).toBe("ducts-analysis-v6");
   expect(artifact.witnessElements.length).toBeGreaterThan(2);
   const now = artifact.outputs.now.design.componentFlows[0],
     next = artifact.outputs.next.design.componentFlows[0];
@@ -1070,7 +1070,7 @@ test("v5 stores exact effective UTF8 input in bounded gzip-base64", async () => 
   const f = fixture();
   const response = await f.api.read(read({ kind: "fresh", target: f.target }));
   const artifact = JSON.parse(await (await f.api.artifact(response.analysisId)).text());
-  expect(artifact.format).toBe("ducts-analysis-v5");
+  expect(artifact.format).toBe("ducts-analysis-v6");
   expect(artifact.input.encoding).toBe("gzip-base64");
 });
 
@@ -1218,7 +1218,7 @@ test("actual analysis handler shares bounded prescribed hydraulic closure and ex
   expect(f.counts()).toEqual(before);
   expect(createHash("sha256").update(saved).digest("hex")).toBe(response.analysisId);
   const encoded = JSON.parse(saved.toString("utf8"));
-  expect(encoded.format).toBe("ducts-analysis-v5");
+  expect(encoded.format).toBe("ducts-analysis-v6");
   const stored = encoded.outputs.next.design.componentFlows[0].hydraulics;
   expect(stored.lawEvidence).toBeUndefined();
   expect(stored.lawIndices.length).toBeGreaterThan(0);
@@ -1505,7 +1505,7 @@ test("apply-request uses canonical staged fitting lookup and names unpriced inst
         ? {}
         : {
             "CD3-2": {
-              Co: { title: "Purpose constant coefficient", xLabel: "D", x: [], grid: [0.24] },
+              Co: { title: "Purpose constant coefficient", axis:null, rowAxes:[], rows:[{coordinates:[],values:[.24]}] },
             },
           },
       missing: [],

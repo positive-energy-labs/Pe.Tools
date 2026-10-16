@@ -229,10 +229,7 @@ const row = z.strictObject({
       lookup: z
         .strictObject({
           result: z.enum(["Co", "Cb", "Cs"]),
-          x: z.number(),
-          y: z.number().nullable(),
-          xLabel: z.string(),
-          yLabel: z.string().nullable(),
+          coordinates: z.record(z.string(), z.number()),
         })
         .nullable(),
       error: z.string().nullable(),
@@ -321,7 +318,7 @@ export const ductsAnalysisResponseSchema = z.strictObject({
     url: z.string(),
     sha256: hash,
     byteSize: z.number().int(),
-    format: z.literal("ducts-analysis-v5"),
+    format: z.literal("ducts-analysis-v6"),
   }),
   mode: z.enum(["fresh", "historical"]),
   target: documentRefSchema,

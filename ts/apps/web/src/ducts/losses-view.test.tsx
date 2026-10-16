@@ -33,21 +33,12 @@ afterEach(cleanup);
 const snapshot = synthetic as unknown as DuctSnapshot;
 const flat = (title: string, x: number[], grid: number[]): Grid => ({
   title,
-  xLabel: "D",
-  x,
-  grid,
+  axis: { name:"D, in.(mm)", values:x }, rowAxes:[], rows:[{coordinates:[],values:grid}],
 });
 /** A tee grid that answers `value` everywhere. */
 const even = (title: string, value: number): Grid => ({
   title,
-  xLabel: "Qb/Qc",
-  x: [0, 1],
-  yLabel: "Ab/Ac",
-  y: [0, 2],
-  grid: [
-    [value, value],
-    [value, value],
-  ],
+  axis: { name:title.endsWith("Cs") ? "Qs/Qc" : "Qb/Qc", values:[0,1] }, rowAxes:[title.endsWith("Cs") ? "As/Ac" : "Ab/Ac"], rows:[{coordinates:[0],values:[value,value]},{coordinates:[2],values:[value,value]}],
 });
 const grids: Grids = {
   "CD3-21": {
