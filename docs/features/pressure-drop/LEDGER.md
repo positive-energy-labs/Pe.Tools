@@ -31,11 +31,11 @@ Design flows for 79 fans; intent for the open ends that are not near misses; FC-
 
 ## Owed
 
-- Wave 1: tolerant joints and proximity taps in `physical-graph.ts`/`topology.ts` as assumptions with findings; Load Preview parser and per-terminal flow derivation with override cell; `mark` fact on equipment nodes in `DuctSnapshots.cs`.
+- 2026-10-16, wave 1 landed (deterministic, 1fe0917d, 13adf0d9, f0ef52ef): `proximity.ts` `tolerate()` joins sub-tolerance gaps and near-miss taps as `joined-by-proximity`/`tap-by-proximity` findings with `loop-by-inference`; `load-preview.ts` parses the paste (Chadds: 42 systems, 40 tagged, sum 29,260 against the sheet's 29,261); `terminal-flows.ts` splits a system's CFM by neck area with a `flows[id]` override; `loads`/`flows` cells in the work document; `mark` fact on equipment. Not yet wired into the survey or the web.
 - Wave 2: fold `preview-losses`/`apply-losses`/`analysis-artifact` into survey/stage/apply; flag the solver modules; fold views; unify issues, circuit reasons, loss errors and apply refusals into one finding type.
 - Wave 3: SA 19 end to end in a dev session (not installed); then the Pea skill as the operator manual for the three verbs; measure interventions per run.
 - Family migration plan through Family Foundry for the grille and unit families (connector direction, classification, flow binding, Specific Loss slot), once per library.
 - Tutorial page: the engineer-facing "why not Revit native" argument, each claim re-checked against the revised proofs (static vs total basis, angle, refusal).
-- Codex's uncommitted tee-table three-coordinate reader is committed as WIP, unverified (ADR 0020 lineage).
+- Codex's tee-table three-coordinate reader (ADR 0020 lineage) is parked on branch `wip/tee-table-reader` (1ffe9f2c) and reverted from the working branch: it left one host test and four web tests red and the web tests still spoke the old grid shape. Re-land it only once a tee rule is on the path of an accepted number.
 - Port `/ducts` to `manifest.url` when the branch merges; F's fan-out con (a table change moves every grille sharing the rule) still needs a visible fan-out before the change lands; where fan static lands (counsel: on the unit, and a Units card column) is unruled; the firm-wide cited catalog store stays owed in the design-system ledger.
 - Installed product on this machine is `0.7.36-pdrop.1` with automatic updates off; reinstall stock and re-enable when the campaign ends.
