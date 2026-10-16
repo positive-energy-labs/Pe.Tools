@@ -207,8 +207,10 @@ public static class DuctSnapshots {
                 facts.Add(Fact(DuctNetwork.ExternalStatic, Converted(Named(e, slots.FanStatic), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
                 facts.Add(Fact("fanFlow", Converted(Named(e, slots.FanFlow), UnitTypeId.CubicFeetPerMinute), "cfm", DuctProvenance.DesignerStated));
                 // The equipment tag: joins a load-tool system ("System 1 Golf Sim FC-4") to this unit.
-                // Instance Mark first; the firm tags units by Type Mark (one type per unit), so that is the fallback.
-                var mark = Text(e, BuiltInParameter.ALL_MODEL_MARK);
+                // The firm's tag lives in the shared instance parameter PE_G___TagInstance (Chadds: FC-17 on a unit whose Mark
+                // and Type Mark are both blank); Mark, then Type Mark, are the fallbacks for other libraries.
+                var mark = e.LookupParameter("PE_G___TagInstance") is { HasValue: true, StorageType: StorageType.String } tag ? tag.AsString() : null;
+                if (string.IsNullOrEmpty(mark)) mark = Text(e, BuiltInParameter.ALL_MODEL_MARK);
                 if (string.IsNullOrEmpty(mark) && fi?.Symbol is { } symbol) mark = Text(symbol, BuiltInParameter.ALL_MODEL_TYPE_MARK);
                 if (mark is { Length: > 0 }) facts.Add(new DuctFact("mark", null, mark, "", DuctProvenance.DesignerStated));
                 break;
