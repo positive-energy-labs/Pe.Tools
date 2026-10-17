@@ -29,6 +29,8 @@ The surface that makes a firm model compute duct pressure drop: a grille-first d
 
 - 2026-10-16, kaitpw (catalog round 1): portability comes first in any catalog shape; Family Foundry should one day rebuild a working fitting from a declaration JSON. Past a catalog's range Pe estimates nothing: a missing table is an engineering miss, shown as a finding. Firm-wide sharing is unsolved: send the unit by hand now, cloud sync or shared roots set in settings later (as with pods and pages). Geometry in a firm rule is not a platform limit: the master table filter bar already has `= != > >= < <=` (`packages/kit/src/components/master-table/query.tsx`), so fitting facts as columns are filterable.
 
+- 2026-10-16, kaitpw: **no assumptions in real work.** Any value that can change a number an MEP engineer stamps comes from a cited source or a person, never from Pea's or Pe's estimate; when it is missing, the work stops at an open item. Bad values spread once made, so the product steers away from making them. Pea tests may need assumptions because kaitpw cannot answer every engineering question; those are labelled test-only. Work storage (local, keyed by the reported file path) is deferred: good enough for a long time.
+
 ## Open decisions (2026-10-16, shown to the senior engineer on the `/ducts` help page, `ts/apps/web/src/ducts/docs.tsx`)
 
 1. Rules are fixed; a firm adds its own rule instead of swapping a table (kaitpw's proposal). The table swap exists because a Revit family does not name its tested fitting (double-vaned mitered elbow: CR3-14, 15 or 16, C 0.38, 0.25, 0.41). Custom rules would be built on the master table's filter bar.
