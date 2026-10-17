@@ -5,7 +5,7 @@
  */
 import { stagedDucts, type DuctsApplyInput, type DuctsRouteDocument } from "@pe/agent-contracts";
 
-import { catalogLinkKey, EMPTY_CATALOGS, type Catalogs } from "./catalog.ts";
+import { stagedLink, EMPTY_CATALOGS, type Catalogs } from "./catalog.ts";
 import type { Grids } from "./loss-grid.ts";
 import { LOSS_RULES, ruleByKey } from "./loss-rules.ts";
 import {
@@ -276,7 +276,7 @@ export function applyRequest(
         !row.source ||
         !node ||
         !inScope(row.id) ||
-        !priced.staged.catalogs[catalogLinkKey(node.family, node.type)]
+        !stagedLink(priced.staged.catalogs, node)
       )
         return [];
       return [

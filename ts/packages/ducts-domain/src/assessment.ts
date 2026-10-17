@@ -150,8 +150,9 @@ export function assessDucts(
   const dropKnown = (node: DuctSnapshot["nodes"][number]) => {
     const row = next.paths[node.id]?.rows.find((r) => r.kind === "terminal");
     return (
-      row?.dp != null &&
-      (!!row.source || work?.terminalDrops[String(node.id)]?.staged?.value !== undefined)
+      node.terminalDrop?.catalogDropInWg != null ||
+      (row?.dp != null &&
+        (!!row.source || work?.terminalDrops[String(node.id)]?.staged?.value !== undefined))
     );
   };
   const priced = reached.filter(
@@ -160,7 +161,7 @@ export function assessDucts(
   reason(
     "terminal-drop-authority",
     selectedTerminals.filter((node) => !dropKnown(node)).length,
-    "An assigned connector loss, including SpecificLoss/zero, does not attest catalog provenance; link a cited catalog table or stage an explicit terminal drop",
+    "An assigned connector loss, including SpecificLoss/zero, does not attest catalog provenance; name a catalog parameter, link a cited catalog table, or stage an explicit terminal drop",
   );
   reason(
     "unreached-terminals",

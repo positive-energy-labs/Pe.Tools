@@ -29,17 +29,10 @@ export async function readDuctCatalogs(root = productCatalogsRootPath()): Promis
         JSON.parse(await readFile(join(dir, "catalog.json"), "utf8")),
       );
       for (const table of catalog.tables) {
-        for (const source of [
-          table.source,
-          table.result.returnAir?.source,
-          table.result.totalPressureSource,
-        ]) {
-          if (!source) continue;
-          const file = await realpath(resolve(dir, source.file));
-          const child = relative(dir, file);
-          if (child.startsWith("..") || isAbsolute(child) || !(await stat(file)).isFile())
-            throw Error(`Source must be a file inside its catalog: ${source.file}`);
-        }
+        const file = await realpath(resolve(dir, table.source.file));
+        const child = relative(dir, file);
+        if (child.startsWith("..") || isAbsolute(child) || !(await stat(file)).isFile())
+          throw Error(`Source must be a file inside its catalog: ${table.source.file}`);
       }
       for (const table of catalog.tables) {
         if (tables[table.id] || duplicates.has(table.id)) {

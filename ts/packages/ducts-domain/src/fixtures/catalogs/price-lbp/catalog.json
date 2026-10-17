@@ -55,23 +55,9 @@
         "note": "Assumption: active grille length = connector widthIn; slot width = connector heightIn. Total = static + connector neck velocity pressure at standard air density 0.075 lb/ft3. Price note 7 does not identify the velocity basis; confirm with manufacturer.",
         "returnAir": {
           "factor": 0.8,
-          "source": {
-            "file": "lbp.pdf",
-            "title": "LBP/LBPH/LBM/LBMH Linear Bar Grille Performance Data",
-            "edition": "v100",
-            "url": "https://priceindustries.com/wp-content/uploads/Assets/literature/catalogs/performance-data/section%20a/lbplbph-linear-bar-grille-performance-data.pdf",
-            "page": 11,
-            "pdfPage": 4
-          }
+          "page": 11
         },
-        "totalPressureSource": {
-          "file": "lbp.pdf",
-          "title": "LBP/LBPH/LBM/LBMH Linear Bar Grille Performance Data",
-          "edition": "v100",
-          "url": "https://priceindustries.com/wp-content/uploads/Assets/literature/catalogs/performance-data/section%20a/lbplbph-linear-bar-grille-performance-data.pdf",
-          "page": 11,
-          "pdfPage": 4
-        }
+        "totalPage": 11
       }
     }
   ]

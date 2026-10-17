@@ -54,8 +54,12 @@ export const catalogTableSchema = z
       toInWg: z.number().positive(),
       velocityBasis: z.literal("connector"),
       note: z.string().min(1),
-      returnAir: z.strictObject({ factor: z.number().positive(), source: sourceSchema }).optional(),
-      totalPressureSource: sourceSchema.optional(),
+      /** Return/exhaust static multiplier and the page that states it. */
+      returnAir: z
+        .strictObject({ factor: z.number().positive(), page: z.number().int().positive() })
+        .optional(),
+      /** The page that says total = static + velocity pressure. */
+      totalPage: z.number().int().positive().optional(),
     }),
   })
   .superRefine((t, ctx) => {
@@ -88,6 +92,11 @@ export const catalogLinkKey = (
   family: string | null | undefined,
   type: string | null | undefined,
 ) => JSON.stringify([family ?? "", type ?? ""]);
+/** The staged link for this family/type, else for the whole family (key with an empty type). */
+export const stagedLink = <V>(
+  links: Readonly<Record<string, V>>,
+  node: { family?: string | null; type?: string | null },
+) => links[catalogLinkKey(node.family, node.type)] ?? links[catalogLinkKey(node.family, "")];
 
 type Node = DuctSnapshot["nodes"][number];
 type Input = z.infer<typeof inputSchema>;
@@ -121,8 +130,7 @@ export function catalogLoss(
   links: Readonly<Record<string, { table: string }>> = {},
 ): CatalogLoss {
   const table =
-    links[catalogLinkKey(node.family, node.type)]?.table ??
-    node.facts.find((f) => f.key === "Pe_Catalog")?.text?.trim();
+    stagedLink(links, node)?.table ?? node.facts.find((f) => f.key === "Pe_Catalog")?.text?.trim();
   const t = table && Object.hasOwn(catalogs, table) ? catalogs[table] : undefined;
   const base = {
     ...(table ? { table } : {}),
@@ -203,9 +211,7 @@ export function catalogLoss(
     isReturn && t.result.quantity === "static-pressure" ? (t.result.returnAir?.factor ?? 1) : 1;
   const staticInWg = t.result.quantity === "static-pressure" ? pressure * factor : null;
   if (factor !== 1)
-    base.notes.push(
-      `Return static x ${factor}; ${t.result.returnAir!.source.file} p. ${t.result.returnAir!.source.page}`,
-    );
+    base.notes.push(`Return static x ${factor}; ${t.source.file} p. ${t.result.returnAir!.page}`);
   const dp =
     staticInWg == null
       ? t.result.quantity === "coefficient"

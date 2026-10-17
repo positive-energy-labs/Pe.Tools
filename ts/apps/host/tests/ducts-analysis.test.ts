@@ -29,7 +29,6 @@ import {
   ductsRouteState,
   type DuctPortPin,
 } from "@pe/agent-contracts";
-import { catalogSchema } from "@pe/ducts-domain/catalog";
 import { price, applyRequest } from "@pe/ducts-domain/pricing";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -57,47 +56,6 @@ function fixture() {
     point: [0, 0, 0],
     connectedTo: { elementId: other, connector: 1 },
   });
-  const table = catalogSchema.parse({
-    version: 1,
-    tables: [
-      {
-        id: "test-terminal",
-        title: "Synthetic total-pressure table, not manufacturer data",
-        source: {
-          file: "synthetic.pdf",
-          title: "Synthetic test fixture",
-          edition: "test",
-          url: "https://example.test/catalog",
-          page: 1,
-          pdfPage: 1,
-        },
-        rows: {
-          quantity: "diameter",
-          unit: "in",
-          values: [1, 20],
-          input: { field: "connector.diameterIn" },
-        },
-        columns: { quantity: "flow", unit: "cfm", values: [0, 1000], input: { field: "flowCfm" } },
-        cells: {
-          quantity: "total-pressure",
-          unit: "in-wg",
-          values: [
-            [0.08, 0.08],
-            [0.08, 0.08],
-          ],
-        },
-        result: {
-          from: "cells",
-          quantity: "total-pressure",
-          unit: "in-wg",
-          toInWg: 1,
-          velocityBasis: "connector",
-          note: "Synthetic test total pressure",
-        },
-      },
-    ],
-  }).tables[0]!;
-  const catalogs = { [table.id]: table };
   const snapshot: DuctSnapshot = {
     coordinateEncoding: "native-double",
     document: {
@@ -141,7 +99,6 @@ function fixture() {
         point: [0, 0, 0],
         connectors: [connector(1)],
         facts: [
-          { key: "Pe_Catalog", text: table.id, unit: "", provenance: "designer-stated" },
           { key: "flow", value: 100, unit: "cfm", provenance: "designer-stated" },
           { key: "space", text: "101 Office", unit: "", provenance: "revit-reported" },
         ],
@@ -177,7 +134,6 @@ function fixture() {
     workReads = 0,
     mark: number | null = null;
   const sources: DuctsAnalysisSources = {
-    catalogs: async () => ({ tables: catalogs, findings: [] }),
     root,
     producer: {
       version: "purpose-1",
@@ -215,7 +171,6 @@ function fixture() {
     root,
     target,
     snapshot,
-    catalogs,
     sources,
     api: createDuctsAnalysis(sources),
     counts: () => ({ nativeReads, resolutions, workReads }),
@@ -249,25 +204,6 @@ test("required demand does not need a known fan rating; evidence contains the ex
   ).toEqual(f.snapshot);
   expect(artifact.acquisition[0].headers["x-pe-native-request-id"]).toBe("fixture-1");
   expect(artifact.transportLabel).toContain("not original native");
-  const effective = JSON.parse(
-    gunzipSync(Buffer.from(artifact.input.data, "base64")).toString("utf8"),
-  );
-  expect(effective.catalogs).toEqual(f.catalogs);
-  // Editing the file source changes only the next acquisition, not this analysis's replay.
-  f.catalogs["test-terminal"]!.cells.values = [
-    [0.16, 0.16],
-    [0.16, 0.16],
-  ];
-  const replay = await f.api.read(
-    read(
-      { kind: "artifact", id: result.analysisId },
-      { kind: "terminal", id: 2 },
-      { projection: "terminals" },
-    ),
-  );
-  expect(replay.rows[0]?.requiredEspNowInWg).toBe(0.08);
-  const acquired = await f.api.read(read({ kind: "fresh", target: f.target }));
-  expect(acquired.rows[0]?.requiredEspNowInWg).toBe(0.16);
 });
 
 test("historical selectors and pagination make zero acquisitions; corruption and wrong cursors refuse", async () => {
@@ -304,7 +240,6 @@ test("historical selectors and pagination make zero acquisitions; corruption and
 test("an intervening mark and unknown drops prevent a complete demand verdict", async () => {
   const f = fixture();
   f.snapshot.nodes[1]!.terminalDrop = null;
-  f.snapshot.nodes[1]!.facts = f.snapshot.nodes[1]!.facts.filter((f) => f.key !== "Pe_Catalog");
   const original = f.sources.call;
   f.sources.call = async (...args) => {
     const response = await original(...args);
@@ -344,7 +279,6 @@ test("a present passive equipment node stays in inventory with unknown demand", 
 
 test("an implicit connector zero is unknown; explicitly stated zero remains known", async () => {
   const f = fixture();
-  f.snapshot.nodes[1]!.facts = f.snapshot.nodes[1]!.facts.filter((f) => f.key !== "Pe_Catalog");
   f.snapshot.nodes[1]!.terminalDrop = {
     assignedPressureDropInWg: 0,
     connectorLossMethod: "NotDefined",
@@ -360,10 +294,10 @@ test("an implicit connector zero is unknown; explicitly stated zero remains know
   expect(assigned.completeness.verdict).toBe("partial");
   f.snapshot.nodes[1]!.terminalDrop!.catalogDropInWg = 0;
   const stated = await f.api.read(read({ kind: "fresh", target: f.target }));
-  expect(stated.completeness.verdict).toBe("partial");
-  expect(stated.findings.some((f) => f.kind === "catalog-missing-link")).toBe(true);
-  // An uncited native scalar is not a linked total-pressure table, even if explicitly zero.
-  // A staged manual override remains an explicit source.
+  expect(stated.completeness.verdict).toBe("complete");
+  expect(stated.rows[0]?.requiredEspStagedInWg).toBe(0);
+  // Catalog zero above is a contract fixture: today's native Converted() filters zero out.
+  // An explicit staged zero exercises the source the shipped native collector cannot return.
   f.snapshot.nodes[1]!.terminalDrop!.catalogDropInWg = null;
   f.sources.readWork = async () => ({
     revision: 1,
@@ -1330,27 +1264,6 @@ function candidateWork() {
 }
 const candidateRead = (id: string, selector: unknown = { kind: "document" }) =>
   read({ kind: "artifact", id }, selector, { projection: "apply-request" });
-
-test("a staged catalog link alone produces a cited native terminal result candidate", async () => {
-  const f = fixture();
-  const doc = ductsDocumentSchema.parse({
-    catalogs: {
-      '["Grille","Fixture"]': { staged: { value: { table: "test-terminal" } } },
-    },
-  });
-  f.sources.readWork = async () => ({ doc, revision: 1 });
-  const analysis = await f.api.read(read({ kind: "fresh", target: f.target }));
-  const result = await f.api.read(candidateRead(analysis.analysisId));
-  const plan = JSON.parse(await (await f.api.artifact(result.applyRequest!.artifact.id)).text());
-  expect(plan.payload.terminals).toEqual([
-    expect.objectContaining({
-      id: 2,
-      inWg: 0.08,
-      source: expect.stringContaining("synthetic.pdf p. 1"),
-    }),
-  ]);
-  expect(plan.payload.store.terminals["2"].inWg).toBe(0.08);
-});
 const hashJson = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 function storeChanged(f: ReturnType<typeof fixture>, artifact: unknown) {

@@ -490,6 +490,18 @@ function pathRows(
       return;
     }
     const loss = catalogLoss(node, cfm, catalogs, overrides.catalogLinks);
+    // No catalog link: the drop the model holds (named catalog parameter, then assigned connector loss).
+    const held = node.terminalDrop?.catalogDropInWg ?? node.terminalDrop?.assignedPressureDropInWg;
+    if (loss.dp === null && loss.finding === "catalog-missing-link" && held != null) {
+      rows.push({
+        id: node.id,
+        kind: "terminal",
+        leg: "ps",
+        dp: held,
+        desc: `terminal ${node.id} at ${cfm ?? "?"} cfm, terminal drop`,
+      });
+      return;
+    }
     if (loss.dp === null) fail({ id: node.id, table: loss.table, message: loss.error });
     rows.push({
       id: node.id,

@@ -90,7 +90,7 @@ function terminalStatus(
   if (ready?.walk.some((id) => issues.get(id)?.kind === "open-end")) out.push("open-end");
   if (node.terminalDrop && !node.terminalDrop.writable) out.push("refuses");
   const terminal = priced.next.paths[node.id]?.rows.find((row) => row.kind === "terminal");
-  if (terminal?.error || (terminal?.dp == null && !dropKnown)) out.push("no-drop");
+  if (terminal?.error || !dropKnown) out.push("no-drop");
   return out;
 }
 /** Stage a rule's table; staging the table already staged takes it back. */
@@ -412,6 +412,16 @@ const Drawer = memo(function Drawer({
             />
           ) : row.kind === "terminal" ? (
             <span className="block px-(--item-pad-x)">
+              <DropCell
+                segment="terminalDrops"
+                id={terminal}
+                held={
+                  node?.terminalDrop?.catalogDropInWg ??
+                  node?.terminalDrop?.assignedPressureDropInWg
+                }
+                work={work}
+                label={`terminal ${terminal} drop`}
+              />
               <CatalogLink node={node!} priced={priced} work={work} />
               {row.rows[0]?.source ? (
                 <a
@@ -1048,7 +1058,9 @@ export function StagedLosses({
       ) : null}
       {catalogLinks.map(([key, { table }]) => {
         const matches = snapshot.nodes.filter(
-          (node) => node.kind === "terminal" && catalogLinkKey(node.family, node.type) === key,
+          (node) =>
+            node.kind === "terminal" &&
+            [catalogLinkKey(node.family, node.type), catalogLinkKey(node.family, "")].includes(key),
         );
         const ids = new Set(matches.map((node) => node.id));
         const count = sent.terminals.filter((row) => ids.has(row.id)).length;
