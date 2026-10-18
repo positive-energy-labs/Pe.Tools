@@ -198,6 +198,10 @@ restated here.
 
 ## Owed
 
+- 2026-10-17, kaitpw: product skills now overwrite any same-named folder in `.claude/skills` and `.agents/skills`, receipt or not (`skill-publication.ts`). Owed: a shape where users can edit a product skill and still receive product updates reliably.
+- 2026-10-17: SDK `pe-revit doc list` with no selector spends ~41 s in its `cwd-project` ladder step (`--pid` takes 1 s). The host now passes the pid when exactly one owned Revit is attached (`sdk-session.ts`); several attached Revits still pay the slow ladder against the host's 30 s budget. Owed upstream: SDK ladder speed.
+- 2026-10-17: `PE_TOOLS_PRODUCT_HOME` isolates the host, but Revit's add-in reads the variable from its own process, so an isolated Pea reaches Revit only through a session started with the same variable. Owed: say so in the Pea test procedure, or let a session bind to a named host.
+
 - 2026-10-14, ADR 0019: miner acceptance. One real gated run on a coworker machine with enough Revit receipts; finding quality and the `threads.history` read path under a real turn are unproven.
 - 2026-10-14, ADR 0019: installed lane. An MSI carrying `app/bin/host/src`, `pe_find`'s installed source sha, and one `agent_feedback` read back in PostHog are unproven.
 - 2026-10-14, ADR 0019: 03:00 with a ten-minute grace never fires on a machine asleep at that hour; the schedule wants an owner ruling once miner runs are observed.
