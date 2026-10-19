@@ -9,6 +9,7 @@ import type { DashRole } from "#/lib/token";
 import { token } from "#/lib/token";
 import { VERDICT_INK } from "#/components/master-table/cells";
 import { ISSUE_KINDS, type Blocks } from "./issues";
+import type { Claim, Leg } from "./legs";
 import type { DuctSnapshot } from "./readiness";
 
 export type Segment = DuctSnapshot["segments"][number];
@@ -27,6 +28,8 @@ export interface EncodingFacts {
   derivedCfm?: number | null;
   issues: readonly Issue[];
   pressure?: PressurePoint;
+  /** The subject leg the element lies on (`subjectScene`); null off every leg, absent in a group scene. */
+  leg?: Leg | null;
 }
 export interface SegmentFacts extends EncodingFacts {
   segment: Segment;
@@ -219,6 +222,24 @@ export const ENCODINGS = {
       3,
     ),
   },
+  legs: {
+    label: "legs",
+    says: "The subject's legs at full weight, cut at equipment, accessories, terminals, caps and level crossings; an element the cut put on no leg is a place or a gap edge",
+    layer: null,
+    bins: {
+      leg: {
+        word: "on a leg",
+        says: "a subject element inside one leg",
+        stroke: { ink: CLEAN_INK, width: 3.5, dash: null },
+      },
+      off: {
+        word: "off every leg",
+        says: "a subject element the cut placed on no leg: a place, or the edge of a gap",
+        stroke: { ink: VERDICT_INK.mute, width: 2, dash: "seam" },
+      },
+    },
+    bin: ({ leg }) => (leg ? "leg" : "off"),
+  },
   provenance: {
     label: "provenance",
     says: "Where the segment's flow comes from: Revit's calculation, the pass-1 walk, or geometry only",
@@ -263,6 +284,14 @@ export const nodeInk = (encoding: Encoding, issues: readonly Issue[]) => {
   const worst = encoding === ENCODINGS.health ? worstBlocks(issues) : null;
   return worst ? blocksInk(worst) : CLEAN_INK;
 };
+
+/** A claim pin's ink by its state, through the same tones an issue wears: proven done, assumed caution, unproven alarm. */
+const CLAIM_TONE: Record<Claim["state"], keyof typeof VERDICT_INK> = {
+  proven: "done",
+  assumed: "caution",
+  unproven: "alarm",
+};
+export const claimInk = (claim: Pick<Claim, "state">) => VERDICT_INK[CLAIM_TONE[claim.state]];
 
 /** An issue marker's ink: its kind's tone, from `ISSUE_KINDS` only. */
 export const issueInk = (issue: Issue) => VERDICT_INK[ISSUE_KINDS[issue.kind].color.tone];

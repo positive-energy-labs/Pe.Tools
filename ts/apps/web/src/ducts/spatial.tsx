@@ -3,24 +3,30 @@
  * under one legend band, beside the facts of what is hovered or selected. Both scope the same way
  * (the subject group at full weight, the rest faint) and ink the same way (`encoding.tsx`); they
  * differ only in the projection and what they hand it (`plan.tsx`, `iso.tsx`).
+ * `page.scene` `subject` swaps the group scene for the subject scene (`subjectScene`): the ordered
+ * ids cut into legs (`legs.ts`), with the claims pinned and listed under the drawing. Selection is
+ * one place set across plan, iso, the inset and the claim list: a claim selects its places and
+ * their legs; an element on a leg selects the leg.
  */
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { EmptyState } from "#/components/lang/empty";
 import { FactChip } from "#/components/lang/chip";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 import { Switcher } from "#/components/lang/switcher";
+import { ClaimsList, LegFacts, nameOf, PlaceFacts, ShowInRevit } from "./claims";
 import { DuctDrawing, GlyphKey, type Scene } from "./drawing";
 import { DASH_CLASS, ENCODING_KEYS, ENCODINGS, encodingOf, type Encoding } from "./encoding";
 import { NodeFactsView, SegmentFactsView } from "./facts";
 import { IssueLegend } from "./issues";
 import { useIso } from "./iso";
+import { legsOf, type Claim } from "./legs";
 import type { DuctsPage } from "./manifest";
 import { usePlan } from "./plan";
 import type { Priced } from "./pricing";
-import type { DuctSnapshot, GroupReadiness } from "./readiness";
-import { indexOf, type DuctIndex } from "./scene";
+import { snapshotById, type DuctSnapshot, type GroupReadiness } from "./readiness";
+import { indexOf, subjectScene, type DuctIndex } from "./scene";
 import { READY } from "./tables";
 import { groupTree, runsOf } from "./topology";
 
@@ -86,6 +92,12 @@ function EncodingBand({
   );
 }
 
+/** The authored half of a subject scene: the ordered ids and the claims over them. */
+export interface Subject {
+  ids: readonly number[];
+  claims: readonly Claim[];
+}
+
 export function DuctsSpatial({
   snapshot,
   ready,
@@ -93,6 +105,8 @@ export function DuctsSpatial({
   page,
   setPage,
   empty,
+  subject = null,
+  doc = null,
 }: {
   snapshot: DuctSnapshot | null;
   ready: Record<string, GroupReadiness>;
@@ -101,6 +115,10 @@ export function DuctsSpatial({
   page: DuctsPage;
   setPage: (next: Partial<DuctsPage>) => void;
   empty: { says: string; exit: string } | null;
+  /** The subject scene's authored layers; null when none is staged, and the scene switch is hidden. */
+  subject?: Subject | null;
+  /** The connected document; null hides every crossing into Revit. */
+  doc?: { session: string; openId: string } | null;
 }) {
   const index = useMemo(() => (snapshot ? indexOf(snapshot, priced) : null), [snapshot, priced]);
   if (!index || empty)
@@ -111,7 +129,17 @@ export function DuctsSpatial({
         </EmptyState>
       </div>
     );
-  return <Spatial index={index} ready={ready} priced={priced} page={page} setPage={setPage} />;
+  return (
+    <Spatial
+      index={index}
+      ready={ready}
+      priced={priced}
+      page={page}
+      setPage={setPage}
+      subject={subject}
+      doc={doc}
+    />
+  );
 }
 
 function Spatial({
@@ -120,34 +148,74 @@ function Spatial({
   priced,
   page,
   setPage,
+  subject,
+  doc,
 }: {
   index: DuctIndex;
   ready: Record<string, GroupReadiness>;
   priced: Priced | null;
   page: DuctsPage;
   setPage: (next: Partial<DuctsPage>) => void;
+  subject: Subject | null;
+  doc: { session: string; openId: string } | null;
 }) {
   const [hovered, setHovered] = useState<number | null>(null);
   const encoding = encodingOf(page.encoding);
-  const plan = usePlan(index, page);
-  const iso = useIso(index, page);
+  // A place's name is its Mark where the snapshot carries one; the cut falls back to type and kind.
+  const markOf = useCallback(
+    (id: number) =>
+      snapshotById(index.snapshot)
+        .nodes.get(id)
+        ?.facts.find((fact) => fact.key === "Mark")?.text ?? null,
+    [index],
+  );
+  const subjectDrawn = useMemo(
+    () =>
+      page.scene === "subject" && subject
+        ? subjectScene(
+            index,
+            subject.ids,
+            legsOf(index.snapshot, subject.ids, markOf),
+            subject.claims,
+          )
+        : null,
+    [index, page.scene, subject, markOf],
+  );
+  const plan = usePlan(index, page, subjectDrawn);
+  const iso = useIso(index, page, subjectDrawn);
   const view = page.view === "iso" ? iso : plan;
-  const selected = page.selected ? Number(page.selected) : null;
+  const sub = view.scene.subject ?? null;
+  // `page.selected` is an element id, or a claim id in a subject scene.
+  const claimPicked = sub?.claims.find((claim) => claim.id === page.selected) ?? null;
+  const selected = page.selected && !claimPicked ? Number(page.selected) : null;
   const tree = useMemo(() => groupTree(index.snapshot, page.group), [index, page.group]);
   // Pe's critical terminal for the group, when priced; else the longest run stands in.
   const criticalTerminal = page.group ? priced?.now.byGroup[page.group]?.critical : null;
   const criticalRun =
     criticalTerminal == null ? null : runsOf(tree).find((run) => run.terminal === criticalTerminal);
   const critical = new Set(criticalRun?.path ?? tree.longest);
-  const selection = useMemo(
-    () =>
-      new Set(
-        selected == null
-          ? []
-          : (runsOf(tree).find((run) => run.terminal === selected)?.path ?? [selected]),
-      ),
-    [tree, selected],
-  );
+  const selection = useMemo(() => {
+    if (sub && claimPicked) {
+      const ids = new Set(claimPicked.at);
+      for (const leg of sub.cut.legs)
+        if (
+          claimPicked.at.some(
+            (id) => leg.ids.includes(id) || leg.from.id === id || leg.to.id === id,
+          )
+        )
+          for (const id of leg.ids) ids.add(id);
+      return ids;
+    }
+    if (sub && selected != null) {
+      const leg = sub.legOf.get(selected);
+      return new Set(leg ? [selected, ...leg.ids] : [selected]);
+    }
+    return new Set(
+      selected == null
+        ? []
+        : (runsOf(tree).find((run) => run.terminal === selected)?.path ?? [selected]),
+    );
+  }, [tree, selected, sub, claimPicked]);
   const readiness = page.group ? ready[page.group] : undefined;
   const shown = hovered ?? selected;
   const pickedIssue = page.issue
@@ -156,6 +224,11 @@ function Spatial({
 
   const segment = shown == null ? null : view.scene.segments.find((f) => f.segment.id === shown);
   const node = shown == null ? null : view.scene.nodes.find((f) => f.node.id === shown);
+  const place = sub && shown != null ? sub.placeOf.get(shown) : undefined;
+  const leg = sub && shown != null ? sub.legOf.get(shown) : undefined;
+  const meta = sub
+    ? `${sub.cut.legs.length} legs · ${sub.cut.nodes.length} places · ${sub.cut.gaps.length} gaps · ${sub.claims.length} claims`
+    : `${view.scene.segments.length} segments · ${view.scene.issues.length} issues`;
 
   return (
     <PaneSplit
@@ -163,18 +236,37 @@ function Spatial({
       grow
       resize={{ target: "end", defaultSize: 360, minSize: 240, persist: "pe.ducts.factsWidth" }}
       start={
-        <Pane
-          kind="content"
-          title={view.label}
-          meta={`${view.scene.segments.length} segments · ${view.scene.issues.length} issues`}
-          scroll="clip"
-          flush
-        >
+        <Pane kind="content" title={view.label} meta={meta} scroll="clip" flush>
           <div className="flex size-full min-h-0 flex-col">
             <div className="flex flex-col gap-1 px-1 py-1">
               <div className="flex flex-wrap items-center gap-1">
+                {subject ? (
+                  <Switcher
+                    ariaLabel="scene"
+                    value={page.scene}
+                    onChange={(value) =>
+                      setPage({
+                        scene: value === "subject" ? "subject" : "",
+                        selected: "",
+                        issue: "",
+                      })
+                    }
+                    options={[
+                      {
+                        value: "",
+                        label: "group",
+                        title: "the chosen group at full weight, the rest faint",
+                      },
+                      {
+                        value: "subject",
+                        label: "subject",
+                        title: "the staged subject cut into legs, with its claims pinned",
+                      },
+                    ]}
+                  />
+                ) : null}
                 {view.band}
-                {readiness ? (
+                {sub ? null : readiness ? (
                   <FactChip
                     tone={READY[readiness.level].tone}
                     title={`${READY[readiness.level].note}; open blockers: walking/budget`}
@@ -211,11 +303,13 @@ function Spatial({
               encoding={encoding}
               fitKey={view.fitKey}
               selected={selection}
-              critical={critical}
+              critical={sub ? undefined : critical}
               hovered={hovered}
               issue={page.issue}
+              claim={claimPicked?.id ?? ""}
               onHover={setHovered}
               onSelect={(id) => setPage({ selected: id == null ? "" : String(id), issue: "" })}
+              onSelectClaim={(claim) => setPage({ selected: claim.id, issue: "" })}
               onSelectIssue={(issue) =>
                 setPage({
                   issue: issue.id,
@@ -225,12 +319,43 @@ function Spatial({
               onDrag={view.onDrag}
               underlay={view.underlay}
             />
+            {sub ? (
+              <div className="max-h-56 shrink-0 overflow-auto border-t border-line">
+                <ClaimsList
+                  subject={sub}
+                  verdicts={page.verdicts}
+                  selected={claimPicked?.id ?? ""}
+                  onSelect={(claim) =>
+                    setPage({ selected: claim.id === page.selected ? "" : claim.id, issue: "" })
+                  }
+                  onVerdict={(claim, verdict) =>
+                    setPage({ verdicts: { ...page.verdicts, [claim.id]: verdict } })
+                  }
+                />
+              </div>
+            ) : null}
           </div>
         </Pane>
       }
       end={
         <Pane kind="content" title="facts" scroll="auto">
           <div className="flex flex-col gap-3">
+            {place ? <PlaceFacts place={place} /> : null}
+            {leg ? <LegFacts leg={leg} /> : null}
+            {doc && shown != null && (place || leg) ? (
+              <ShowInRevit
+                doc={doc}
+                elementIds={place ? [shown] : leg!.ids}
+                what={place ? "place" : "leg"}
+              />
+            ) : null}
+            {sub && claimPicked ? (
+              <p data-picked-claim={claimPicked.id}>
+                claim <span className="face-mono">{claimPicked.id}</span> ({claimPicked.state}):{" "}
+                {claimPicked.text} · at{" "}
+                {[...new Set(claimPicked.at.map((id) => nameOf(sub, id)))].join(", ")}
+              </p>
+            ) : null}
             {segment ? (
               <SegmentFactsView {...segment} />
             ) : node ? (
