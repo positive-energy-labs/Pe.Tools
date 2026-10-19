@@ -93,6 +93,8 @@ function EncodingBand({
   );
 }
 
+const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
 /** The authored half of a subject scene: the ordered ids and the claims over them. */
 export interface Subject {
   ids: readonly number[];
@@ -224,7 +226,13 @@ function Spatial({
   const place = sub && shown != null ? sub.placeOf.get(shown) : undefined;
   const leg = sub && shown != null ? sub.legOf.get(shown) : undefined;
   const meta = sub
-    ? `${sub.cut.legs.length} legs · ${sub.cut.nodes.length} places · ${sub.cut.gaps.length} gaps · ${sub.claims.length} claims`
+    ? [
+        `${sub.cut.legs.length} legs`,
+        `${sub.cut.nodes.length} places`,
+        count(sub.cut.gaps.length, "gap"),
+        ...(sub.cut.omissions.length ? [count(sub.cut.omissions.length, "omission")] : []),
+        `${sub.claims.length} claims`,
+      ].join(" · ")
     : `${view.scene.segments.length} segments · ${view.scene.issues.length} issues`;
 
   return (

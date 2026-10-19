@@ -102,7 +102,7 @@ it("subjectScene draws the ids' elements in order and bounds the context to touc
 
 it("subjectScene resolves a gap to the model points it spans", () => {
   const index = indexOf(snapshot);
-  const cut: SubjectCut = { legs: [], nodes: [], gaps: [{ after: 11, before: 3 }] };
+  const cut: SubjectCut = { legs: [], nodes: [], gaps: [{ after: 11, before: 3 }], omissions: [] };
   const scene = subjectScene(index, SUBJECT, cut, []);
   expect(scene.subject?.gaps).toEqual([
     { after: 11, before: 3, from: [10, 0, 1], to: [10, 20, 1] },

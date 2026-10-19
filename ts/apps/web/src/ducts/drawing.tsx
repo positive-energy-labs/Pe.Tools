@@ -478,6 +478,7 @@ export function DuctDrawing({
               screen={screen}
               size={size}
               selected={selected}
+              hovered={hovered}
               claim={claim}
               click={click}
               onSelect={onSelect}
@@ -533,6 +534,7 @@ function SubjectLayer({
   screen,
   size,
   selected,
+  hovered,
   claim,
   click,
   onSelect,
@@ -543,6 +545,7 @@ function SubjectLayer({
   screen: (point: Point2) => Point2;
   size: Viewport2;
   selected: ReadonlySet<number>;
+  hovered: number | null;
   claim: string;
   click: (run: () => void) => (event: { stopPropagation: () => void }) => void;
   onSelect: (id: number | null) => void;
@@ -552,7 +555,7 @@ function SubjectLayer({
     const point = subject.pointOf(id);
     return point ? screen(project(point)) : null;
   };
-  const { cut, claims, gaps } = subject;
+  const { cut, claims, gaps, omissions } = subject;
   const places = cut.nodes.flatMap((place) => {
     const xy = at(place.id);
     return xy ? [{ place, x: xy[0], y: xy[1] }] : [];
@@ -600,6 +603,45 @@ function SubjectLayer({
           </g>
         );
       })}
+      {omissions.map((omission) => {
+        const points = omission.line.map((p) => screen(project(p)));
+        const mid = points[Math.floor(points.length / 2)];
+        const lit =
+          (hovered != null && omission.skipped.includes(hovered)) ||
+          omission.skipped.some((id) => selected.has(id));
+        const n = omission.skipped.length;
+        return (
+          <g
+            key={`${omission.after}-${omission.before}`}
+            data-omission={`${omission.after}-${omission.before}`}
+          >
+            <title>{`omission: Pea skipped ${n} connected element${n === 1 ? "" : "s"} here (${omission.skipped.join(", ")})`}</title>
+            {lit ? (
+              <polyline
+                points={points.map(([x, y]) => `${x},${y}`).join(" ")}
+                fill="none"
+                stroke={token("veil")}
+                strokeWidth={10}
+                strokeLinecap="round"
+              />
+            ) : null}
+            <polyline
+              points={points.map(([x, y]) => `${x},${y}`).join(" ")}
+              fill="none"
+              stroke={token("ink")}
+              strokeOpacity={0.5}
+              strokeWidth={3}
+              strokeLinecap="round"
+              className={DASH_CLASS.reference}
+            />
+            {mid ? (
+              <Caption x={mid[0]} y={mid[1] - 8} anchor="middle">
+                {`skipped ${n}`}
+              </Caption>
+            ) : null}
+          </g>
+        );
+      })}
       {cut.legs.map((leg) => {
         if (leg.lengthFt < LABEL_LEG_FT) return null;
         const middle = leg.ids[Math.floor(leg.ids.length / 2)];
@@ -608,7 +650,7 @@ function SubjectLayer({
         return (
           <g key={`${leg.name}|${leg.ids[0]}`} data-leg-label={leg.name}>
             <Caption x={xy[0] + 6} y={xy[1] - 6}>
-              {`${leg.size ?? "?"} · ${leg.lengthFt} ft · ${leg.fittings} elb`}
+              {`${leg.size ?? "?"} · ${leg.lengthFt.toFixed(1)} ft · ${leg.fittings} elb`}
             </Caption>
           </g>
         );

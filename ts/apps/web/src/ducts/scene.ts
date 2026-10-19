@@ -161,6 +161,8 @@ export interface SubjectDrawn {
   pointOf: (id: number) => number[] | null;
   /** Each gap with the model points it spans: the end of `after`, the start of `before`. */
   gaps: readonly { after: number; before: number; from: number[]; to: number[] }[];
+  /** Each omission with one model polyline from `after` through the skipped elements to `before`. */
+  omissions: readonly { after: number; before: number; skipped: number[]; line: number[][] }[];
   /** The levels the subject touches, lowest first. */
   levels: readonly Level[];
   /** Each subject element's level id (null when the snapshot names none). */
@@ -246,6 +248,22 @@ export function subjectScene(
     const to = segmentById.get(before)?.polyline[0] ?? nodeById.get(before)?.point;
     return from && to ? [{ after, before, from, to }] : [];
   });
+  // Each skipped segment runs from whichever end is nearer the point before it.
+  const omissions = cut.omissions.map(({ after, before, skipped }) => {
+    const line: number[][] = [];
+    const near = (p: number[]) => {
+      const last = line.at(-1);
+      return last ? Math.hypot(...p.map((v, i) => v - last[i]!)) : 0;
+    };
+    for (const id of [after, ...skipped, before]) {
+      const poly = segmentById.get(id)?.polyline;
+      const node = nodeById.get(id)?.point;
+      if (poly?.length)
+        line.push(...(near(poly.at(-1)!) < near(poly[0]!) ? [...poly].reverse() : poly));
+      else if (node) line.push(node);
+    }
+    return { after, before, skipped, line };
+  });
   return {
     segments,
     nodes,
@@ -258,6 +276,7 @@ export function subjectScene(
       placeOf,
       pointOf: point,
       gaps,
+      omissions,
       levels: index.levels.filter((level) => levels.has(level.id)),
       levelAt,
     },

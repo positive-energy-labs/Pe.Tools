@@ -7,7 +7,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { expect, it } from "vite-plus/test";
 
-import { labelOfNode, legsOf } from "./legs";
+import { labelOfNode, legsOf, OMISSION_HOPS } from "./legs";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { groupTree } from "@pe/ducts-domain/topology";
 import trace from "./fixtures/makeup-path.json";
@@ -172,13 +172,45 @@ it("makeup route: 88 elements cut into 9 legs and 7 nodes at equipment, the damp
   );
 });
 
-it("a subject that skips an element reports the gap as a fact and keeps cutting", () => {
+it("a subject that skips a connected element reports an omission, not a gap, and keeps cutting", () => {
   const snapshot = makeupSnapshot(rows);
   const skipped = ids.filter((id) => id !== 14606587); // the duct between elbows 3 and 5
   const cut = legsOf(snapshot, skipped);
-  expect(cut.gaps).toEqual([{ after: 14606595, before: 14606630 }]);
+  expect(cut.gaps).toEqual([]);
+  expect(cut.omissions).toEqual([{ after: 14606595, before: 14606630, skipped: [14606587] }]);
   expect(cut.legs).toHaveLength(9);
   expect(() => legsOf(snapshot, [1])).toThrow("subject id 1 is not in the snapshot");
+});
+
+it("a break the snapshot bridges outside the subject is an omission; one it cannot bridge is a gap", () => {
+  // The wave-3 Chadds cases, as a chain: open duct 14122436 is NOT joined to end cap 14107111, while
+  // FR-1 13760866 reaches FC-23 13760867 only through 13761466, 13761629 and 13761574.
+  const chain = [
+    14088043, 14107098, 14106988, 14107111, 14122436, 14199815, 13760866, 13761466, 13761629,
+    13761574, 13760867,
+  ];
+  const snapshot = makeupSnapshot(
+    chain.map((id, i) => ({ id, k: i % 2 ? "fitting" : "accessory", p: [i, 0, 0] })),
+  );
+  // makeupSnapshot chains every row to its neighbour; cut the one real break.
+  for (const node of snapshot.nodes)
+    for (const c of node.connectors)
+      if (
+        (node.id === 14107111 && c.connectedTo?.elementId === 14122436) ||
+        (node.id === 14122436 && c.connectedTo?.elementId === 14107111)
+      )
+        c.connectedTo = null;
+  const subject = [14088043, 14107098, 14106988, 14107111, 14122436, 14199815, 13760866, 13760867];
+  const cut = legsOf(snapshot, subject);
+  expect(cut.gaps).toEqual([{ after: 14107111, before: 14122436 }]);
+  expect(cut.omissions).toEqual([
+    { after: 13760866, before: 13760867, skipped: [13761466, 13761629, 13761574] },
+  ]);
+  // A chain longer than the search cap is a gap: nothing is claimed past OMISSION_HOPS connections.
+  const long = Array.from({ length: OMISSION_HOPS + 2 }, (_, i) => 900 + i);
+  const far = makeupSnapshot(long.map((id, i) => ({ id, k: "fitting", p: [i, 0, 0] })));
+  expect(legsOf(far, [900, long.at(-1)!]).gaps).toHaveLength(1);
+  expect(legsOf(far, [900, long.at(-2)!]).omissions[0]?.skipped).toHaveLength(OMISSION_HOPS - 1);
 });
 
 // The client model stays outside git; the dev knob `PE_DUCTS_FIXTURE` names it (vite.config.ts).
@@ -197,6 +229,8 @@ it.skipIf(!FIXTURE || !existsSync(FIXTURE))(
     const covered = [...cut.legs.flatMap((leg) => leg.ids), ...cut.nodes.map((n) => n.id)];
     expect(covered.sort((a, b) => a - b)).toEqual([...subject].sort((a, b) => a - b));
     const broken = subject.filter((_, i) => i !== 3);
-    expect(legsOf(snapshot, broken).gaps).toHaveLength(1);
+    expect(legsOf(snapshot, broken).omissions).toEqual([
+      { after: subject[2], before: subject[4], skipped: [subject[3]] },
+    ]);
   },
 );

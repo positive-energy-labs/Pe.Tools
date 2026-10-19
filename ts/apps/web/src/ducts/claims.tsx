@@ -205,7 +205,7 @@ export function LegFacts({ leg }: { leg: Leg }) {
       <dt className="text-ink-2">leg</dt>
       <dd>{leg.name}</dd>
       <dt className="text-ink-2">length</dt>
-      <dd className="face-mono">{leg.lengthFt} ft</dd>
+      <dd className="face-mono">{leg.lengthFt.toFixed(1)} ft</dd>
       <dt className="text-ink-2">fittings</dt>
       <dd className="face-mono">{leg.fittings}</dd>
       <dt className="text-ink-2">size</dt>

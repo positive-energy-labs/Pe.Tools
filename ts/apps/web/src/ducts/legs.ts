@@ -7,8 +7,10 @@
  * - A level change between consecutive ducts (the snapshot's `levelId`, never z) ends the leg at
  *   a place of kind `level`, named for the level entered, id the first duct on it.
  * - A subject that starts or ends on a duct or fitting starts or ends at a place of kind `open`.
- * - Two consecutive ids that share no connector are a `gap`: a fact about the subject, not an error.
- *   The leg runs on through it.
+ * - Two consecutive ids that share no connector are a break, and the leg runs on through it. When
+ *   the snapshot joins them through at most `OMISSION_HOPS` connections over elements outside the
+ *   subject, the break is an `omission` carrying the skipped ids (the subject left them out);
+ *   otherwise it is a `gap` (the model is not connected there). Both are facts, not errors.
  * - Mark is not a concept here (the firm does not use it): a place is named by `labelOf(id)`, else
  *   `family type`, else `kind id`.
  */
@@ -62,9 +64,14 @@ export interface SubjectCut {
   legs: Leg[];
   /** The element places and open ends, in subject order; level crossings are leg boundaries only. */
   nodes: Place[];
-  /** `after` and `before` are the two consecutive subject ids that share no connector. */
+  /** `after` and `before` are two consecutive subject ids the snapshot does not connect. */
   gaps: { after: number; before: number }[];
+  /** Consecutive ids the snapshot connects only through `skipped`, in path order, none in the subject. */
+  omissions: { after: number; before: number; skipped: number[] }[];
 }
+
+/** The longest chain of connections a break is searched across before it is called a gap. */
+export const OMISSION_HOPS = 12;
 
 const PLACE_KINDS = new Set<Node["kind"]>(["equipment", "accessory", "terminal", "cap"]);
 const isNode = (element: Element): element is Node => "category" in element;
@@ -72,6 +79,53 @@ const isNode = (element: Element): element is Node => "category" in element;
 const reaches = (a: Element, b: Element) =>
   a.connectors.some((c) => c.connectedTo?.elementId === b.id) ||
   b.connectors.some((c) => c.connectedTo?.elementId === a.id);
+
+/** Every element's connected neighbours, read from both ends of each connector. */
+function neighboursOf(snapshot: DuctSnapshot): Map<number, Set<number>> {
+  const out = new Map<number, Set<number>>();
+  const link = (a: number, b: number) => {
+    if (!out.has(a)) out.set(a, new Set());
+    out.get(a)!.add(b);
+  };
+  for (const element of [...snapshot.nodes, ...snapshot.segments])
+    for (const connector of element.connectors) {
+      const to = connector.connectedTo?.elementId;
+      if (to == null || to === element.id) continue;
+      link(element.id, to);
+      link(to, element.id);
+    }
+  return out;
+}
+
+/**
+ * The elements strictly between `from` and `to` on the shortest connected path that crosses no
+ * `subject` element, within `OMISSION_HOPS` connections; null when there is none.
+ */
+function skippedBetween(
+  neighbours: ReadonlyMap<number, ReadonlySet<number>>,
+  from: number,
+  to: number,
+  subject: ReadonlySet<number>,
+): number[] | null {
+  const parent = new Map<number, number>([[from, from]]);
+  let frontier = [from];
+  for (let hop = 0; hop < OMISSION_HOPS && frontier.length; hop++) {
+    const next: number[] = [];
+    for (const id of frontier)
+      for (const n of neighbours.get(id) ?? []) {
+        if (parent.has(n) || (n !== to && subject.has(n))) continue;
+        parent.set(n, id);
+        if (n === to) {
+          const path: number[] = [];
+          for (let at = parent.get(to)!; at !== from; at = parent.get(at)!) path.unshift(at);
+          return path;
+        }
+        next.push(n);
+      }
+    frontier = next;
+  }
+  return null;
+}
 
 /** `legsOf`'s `labelOf` for a snapshot: the node's `label`, which `ducts.snapshot` fills from the staged labelParameter. */
 export const labelOfNode = (snapshot: DuctSnapshot) => {
@@ -110,6 +164,9 @@ export function legsOf(
   const legs: Leg[] = [];
   const nodes: Place[] = [];
   const gaps: SubjectCut["gaps"] = [];
+  const omissions: SubjectCut["omissions"] = [];
+  const subject = new Set(ids);
+  let neighbours: Map<number, Set<number>> | null = null;
   let from: Place | null = null;
   let members: Element[] = [];
   let legLevel: number | null = null;
@@ -138,7 +195,12 @@ export function legsOf(
   const elements = ids.map(elementOf);
   elements.forEach((element, i) => {
     const next = elements[i + 1];
-    if (next && !reaches(element, next)) gaps.push({ after: element.id, before: next.id });
+    if (next && !reaches(element, next)) {
+      neighbours ??= neighboursOf(snapshot);
+      const skipped = skippedBetween(neighbours, element.id, next.id, subject);
+      if (skipped?.length) omissions.push({ after: element.id, before: next.id, skipped });
+      else gaps.push({ after: element.id, before: next.id });
+    }
 
     if (isNode(element) && PLACE_KINDS.has(element.kind)) {
       const here = place(element, element.kind as Place["kind"]);
@@ -165,5 +227,5 @@ export function legsOf(
     close(end);
     nodes.push(end);
   }
-  return { legs, nodes, gaps };
+  return { legs, nodes, gaps, omissions };
 }
