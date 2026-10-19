@@ -5,6 +5,11 @@
  * `physicalGraph`, `groupTree` and the loss walk need no notion of inference. Points are model
  * feet (DuctContracts.cs); `tolIn` is inches. A staged `ignore` verdict on a finding id withholds
  * that one inference. Nothing here is stored and nothing reaches Revit.
+ * A duct landing on a duct's side and a duct landing on an end cap are one rule (kaitpw
+ * 2026-10-19): each duct is a solid, its polyline swept by its cross-section, closed at an end an
+ * end cap closes; an open connector whose point is near that surface, whose axis points into it,
+ * and whose point lies within the face, lands there. Centering is not required and any number of
+ * connectors may land on one face.
  */
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "./types.ts";
@@ -25,8 +30,10 @@ export interface InferredTap {
   segment: number;
   kind: "tap-by-proximity";
   gapIn: number;
-  /** Along the segment's polyline from its first point, ft. */
+  /** Along the segment's polyline from its first point, ft; a capped end's is 0 or its length. */
   at: number;
+  /** Where the tap sits on the segment's centerline, ft. */
+  point: number[];
 }
 export interface ProximityFinding {
   id: string;
@@ -46,23 +53,155 @@ const parse = (k: string) => {
   return { elementId: id!, connector: index! };
 };
 const dist = (p: number[], q: number[]) => Math.hypot(...p.map((v, k) => v - q[k]!));
+const sub = (p: number[], q: number[]) => p.map((v, k) => v - q[k]!);
+const add = (p: number[], q: number[], by = 1) => p.map((v, k) => v + q[k]! * by);
+const dot = (p: number[], q: number[]) => p.reduce((s, v, k) => s + v * q[k]!, 0);
+const unit = (p: number[]) => {
+  const n = Math.hypot(...p);
+  return n < 1e-9 ? null : p.map((v) => v / n);
+};
 
-/** The nearest point of a polyline to `p`: distance, the point, and the run to it, all ft. */
-function nearestOnPolyline(poly: number[][], p: number[]) {
-  let best = { d: Infinity, point: p, at: 0 };
+/**
+ * ponytail: tuned by one case (Chadds 14122436 short of cap 14107111, 1.6 in of air to the cap
+ * face). Move to a ruled per-document value if more models disagree.
+ */
+export const FACE_TOL_IN = 2;
+/** ponytail: one measured cap (Chadds 14107111's face sits 1.0 in outboard of the duct end); caps carry no size in the snapshot. */
+export const CAP_THICKNESS_IN = 1;
+/** The least cosine between a landing connector's outward axis and the face's inward normal. */
+const AXIS_COS = 0.7;
+
+/**
+ * A segment's cross-section on an axis `u`, ft. A rectangle whose roll is known has half-sides
+ * `w` along `x` and `h` along `y`; otherwise a band `inner..outer` from the centerline.
+ * ponytail: the snapshot carries no rect roll; a non-vertical rect is taken in Revit's default
+ * roll (width horizontal), and a vertical one (or an oval) as the round-equivalent band from its
+ * half-short-side to its half-diagonal, so any roll lands.
+ */
+type Section =
+  | { w: number; h: number; x: number[]; y: number[] }
+  | { inner: number; outer: number };
+function sectionOf(s: Segment, u: number[]): Section | null {
+  const [w, h] = [(s.widthIn ?? 0) / 24, (s.heightIn ?? 0) / 24];
+  if (s.shape === "round" || (!w && !h)) {
+    const r = (s.diameterIn ?? 0) / 24;
+    return r > 0 ? { inner: r, outer: r } : null;
+  }
+  if (!w || !h) return null;
+  const x = s.shape === "rectangular" && Math.abs(u[2]!) < 0.99 ? unit([-u[1]!, u[0]!, 0]) : null;
+  if (!x) return { inner: Math.min(w, h), outer: Math.hypot(w, h) };
+  const y = [
+    u[1]! * x[2]! - u[2]! * x[1]!,
+    u[2]! * x[0]! - u[0]! * x[2]!,
+    u[0]! * x[1]! - u[1]! * x[0]!,
+  ];
+  return { w, h, x, y };
+}
+
+/** The side face nearest `r` (an offset square to the axis): signed distance out of the solid, the inward normal, and whether `r` lies within that face. */
+function side(section: Section, r: number[]) {
+  if ("inner" in section) {
+    const n = Math.hypot(...r);
+    if (n < 1e-9) return null;
+    const d = n > section.outer ? n - section.outer : n < section.inner ? n - section.inner : 0;
+    return { d, normal: r.map((v) => -v / n), within: true };
+  }
+  const [x, y] = [dot(r, section.x), dot(r, section.y)];
+  const [dx, dy] = [Math.abs(x) - section.w, Math.abs(y) - section.h];
+  return dx >= dy
+    ? { d: dx, normal: section.x.map((v) => -Math.sign(x) * v), within: dy <= 0 }
+    : { d: dy, normal: section.y.map((v) => -Math.sign(y) * v), within: dx <= 0 };
+}
+
+/** Whether `r` (an offset in an end face's plane) lies within that face. */
+const withinEnd = (section: Section, r: number[]) =>
+  "inner" in section
+    ? Math.hypot(...r) <= section.outer
+    : Math.abs(dot(r, section.x)) <= section.w && Math.abs(dot(r, section.y)) <= section.h;
+
+/**
+ * An open connector's outward axis. A segment's end reads its polyline; a node's port points from
+ * the node's point, or, when the node's point is that port (a transition's insertion), away from
+ * its other ports. A segment's side (`curve`) port has none.
+ * ponytail: the snapshot carries no connector frame; derived from geometry, as above.
+ */
+function axisOf(e: Element, c: Element["connectors"][number]): number[] | null {
+  if ("polyline" in e) {
+    const poly = e.polyline;
+    if (c.kind === "curve" || poly.length < 2) return null;
+    const first = dist(c.point, poly[0]!) <= dist(c.point, poly.at(-1)!);
+    return first ? unit(sub(poly[0]!, poly[1]!)) : unit(sub(poly.at(-1)!, poly.at(-2)!));
+  }
+  const out = sub(c.point, e.point);
+  if (Math.hypot(...out) > 0.01) return unit(out);
+  const others = e.connectors.filter((o) => o !== c && o.point.length === 3);
+  if (!others.length) return null;
+  const mid = c.point.map((_, k) => others.reduce((s, o) => s + o.point[k]!, 0) / others.length);
+  return unit(sub(c.point, mid));
+}
+
+/** Which polyline ends of each segment an end cap closes: 0 the first point, 1 the last. */
+function cappedEnds(snapshot: DuctSnapshot) {
+  const byId = new Map(snapshot.segments.map((s) => [s.id, s]));
+  const out = new Map<number, Set<0 | 1>>();
+  for (const cap of snapshot.nodes)
+    if (cap.kind === "cap")
+      for (const c of cap.connectors) {
+        const s = c.connectedTo ? byId.get(c.connectedTo.elementId) : undefined;
+        const end = s?.connectors.find((p) => p.index === c.connectedTo!.connector);
+        if (!s || !end || s.polyline.length < 2) continue;
+        const first = dist(end.point, s.polyline[0]!) <= dist(end.point, s.polyline.at(-1)!);
+        if (!out.has(s.id)) out.set(s.id, new Set());
+        out.get(s.id)!.add(first ? 0 : 1);
+      }
+  return out;
+}
+
+interface Landing {
+  segment: Segment;
+  /** Signed distance out of the face, ft; negative is inside. */
+  d: number;
+  at: number;
+  point: number[];
+  face: "side" | "capped end";
+}
+
+/** The face of `s` that `point`, with outward `axis`, lands on within `tol` ft; the nearest. */
+function landOn(
+  s: Segment,
+  capped: ReadonlySet<0 | 1> | undefined,
+  point: number[],
+  axis: number[],
+  tol: number,
+): Landing | null {
+  const poly = s.polyline;
+  const found: Landing[] = [];
   let run = 0;
   for (let i = 1; i < poly.length; i++) {
     const a = poly[i - 1]!,
-      ab = poly[i]!.map((v, k) => v - a[k]!);
-    const len2 = ab.reduce((s, v) => s + v * v, 0);
-    const dot = ab.reduce((s, v, k) => s + v * (p[k]! - a[k]!), 0);
-    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, dot / len2));
-    const point = a.map((v, k) => v + ab[k]! * t);
-    const d = dist(point, p);
-    if (d < best.d) best = { d, point, at: run + t * Math.sqrt(len2) };
-    run += Math.sqrt(len2);
+      len = dist(a, poly[i]!),
+      u = unit(sub(poly[i]!, a));
+    const section = u && sectionOf(s, u);
+    const t = u ? dot(sub(point, a), u) : -1;
+    const face = section && t >= 0 && t <= len ? side(section, add(sub(point, a), u!, -t)) : null;
+    if (face?.within && dot(axis, face.normal) > AXIS_COS)
+      found.push({ segment: s, d: face.d, at: run + t, point: add(a, u!, t), face: "side" });
+    run += len;
   }
-  return best;
+  for (const end of capped ?? []) {
+    const [e, f] = end ? [poly.at(-1)!, poly.at(-2)!] : [poly[0]!, poly[1]!];
+    const out = unit(sub(e, f));
+    const section = out && sectionOf(s, out);
+    if (!out || !section || dot(axis, out) >= -AXIS_COS) continue;
+    const v = sub(point, add(e, out, CAP_THICKNESS_IN / 12));
+    const d = dot(v, out);
+    if (withinEnd(section, add(v, out, -d)))
+      found.push({ segment: s, d, at: end ? run : 0, point: e, face: "capped end" });
+  }
+  return (
+    found.filter((l) => Math.abs(l.d) <= tol).sort((x, y) => Math.abs(x.d) - Math.abs(y.d))[0] ??
+    null
+  );
 }
 
 const ignored = (work: DuctsRouteDocument | null, id: string) => {
@@ -98,11 +237,11 @@ function components(elements: Element[], equipment: ReadonlySet<number>) {
 }
 
 /**
- * Joints and taps the model implies within `tolIn` inches. (a) Two open connectors within
- * tolerance join, nearest pair first, each port once; shape compatibility is not required.
- * (b) An open connector left over whose nearest segment interior is within tolerance, away from
- * that segment's own end connectors, taps it. Each inference is a finding; one that joins two
- * elements already in one component is also a `loop-by-inference` finding.
+ * Joints and taps the model implies. (a) Two open connectors within `tolIn` inches join, nearest
+ * pair first, each port once; shape compatibility is not required. (b) An open connector left
+ * over that lands on a duct's face within `FACE_TOL_IN` (a side, or an end a cap closes, the cap
+ * counted as the duct's) taps that duct where it lands, nearest face first. Each inference is a
+ * finding; one that joins two elements already in one component is also a `loop-by-inference`.
  */
 export function inferJoints(
   snapshot: DuctSnapshot,
@@ -155,28 +294,38 @@ export function inferJoints(
     });
     closes(id, a.id, b.id);
   }
+  const capped = cappedEnds(snapshot);
+  const faceTol = FACE_TOL_IN / 12;
+  const byId = new Map(elements.map((e) => [e.id, e]));
   for (const p of open) {
     if (used.has(p.k)) continue;
-    let best: { segment: Segment; d: number; at: number } | null = null;
+    const element = byId.get(p.id)!;
+    const axis = axisOf(element, element.connectors.find((c) => c.index === p.index)!);
+    if (!axis) continue;
+    let best: Landing | null = null;
     for (const s of snapshot.segments) {
       if (s.id === p.id || s.polyline.length < 2) continue;
-      const near = nearestOnPolyline(s.polyline, p.point);
-      if (near.d > tol || (best && near.d >= best.d)) continue;
-      if (s.connectors.some((c) => c.kind !== "curve" && dist(c.point, near.point) <= tol))
-        continue;
-      best = { segment: s, d: near.d, at: near.at };
+      const landing = landOn(s, capped.get(s.id), p.point, axis, faceTol);
+      if (landing && (!best || Math.abs(landing.d) < Math.abs(best.d))) best = landing;
     }
     if (!best) continue;
     const id = `proximity:${p.k}|${best.segment.id}`;
     if (ignored(work, id)) continue;
     used.add(p.k);
     const gapIn = best.d * 12;
-    taps.push({ a: p.k, segment: best.segment.id, kind: "tap-by-proximity", gapIn, at: best.at });
+    taps.push({
+      a: p.k,
+      segment: best.segment.id,
+      kind: "tap-by-proximity",
+      gapIn,
+      at: best.at,
+      point: best.point,
+    });
     findings.push({
       id,
       kind: "tap-by-proximity",
       elementIds: [p.id, best.segment.id],
-      note: `open end ${p.k} is ${gapIn.toFixed(2)} in from duct ${best.segment.id} at ${best.at.toFixed(2)} ft along it; tapped`,
+      note: `open end ${p.k} lands on the ${best.face} of duct ${best.segment.id}, ${Math.abs(gapIn).toFixed(2)} in ${gapIn < 0 ? "into" : "short of"} its face, ${best.at.toFixed(2)} ft along it; tapped`,
     });
     closes(id, p.id, best.segment.id);
   }
@@ -257,7 +406,7 @@ export function tolerate(
     const main = byId.get(t.segment) as Segment;
     const branch = parse(t.a);
     const p = port(t.a);
-    const point = nearestOnPolyline(main.polyline, p.point).point;
+    const point = t.point;
     const index = Math.max(-1, ...main.connectors.map((c) => c.index)) + 1;
     main.connectors.push({
       ...p,
