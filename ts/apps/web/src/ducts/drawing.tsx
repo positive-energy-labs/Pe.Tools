@@ -22,6 +22,7 @@ import {
   type Segment,
   type SegmentFacts,
 } from "./encoding";
+import { denseRegion, Schematic } from "./inset";
 import type { Claim } from "./legs";
 import type { SubjectDrawn } from "./scene";
 
@@ -57,6 +58,7 @@ const PIN = 8;
 const PIN_APART = PIN * 2;
 /** A leg shorter than this carries no label (its endpoints' names say enough). */
 const LABEL_LEG_FT = 2;
+const INSET = { width: 300, height: 170, margin: 12 } as const;
 
 const d = (segments: readonly Pick<Segment, "polyline">[], project: Project) => {
   let out = "";
@@ -474,6 +476,7 @@ export function DuctDrawing({
               subject={scene.subject}
               project={project}
               screen={screen}
+              size={size}
               selected={selected}
               claim={claim}
               click={click}
@@ -528,6 +531,7 @@ function SubjectLayer({
   subject,
   project,
   screen,
+  size,
   selected,
   claim,
   click,
@@ -537,6 +541,7 @@ function SubjectLayer({
   subject: SubjectDrawn;
   project: Project;
   screen: (point: Point2) => Point2;
+  size: Viewport2;
   selected: ReadonlySet<number>;
   claim: string;
   click: (run: () => void) => (event: { stopPropagation: () => void }) => void;
@@ -552,6 +557,7 @@ function SubjectLayer({
     const xy = at(place.id);
     return xy ? [{ place, x: xy[0], y: xy[1] }] : [];
   });
+  const dense = denseRegion(places.map(({ place, x, y }) => ({ id: place.id, x, y })));
   // Pins land on the first `at` element; a second pin on the same pixel steps right by one pin.
   const taken: Point2[] = [];
   const pins = claims.flatMap((item, i) => {
@@ -662,6 +668,27 @@ function SubjectLayer({
           </g>
         );
       })}
+      {dense ? (
+        <g
+          data-inset-for={[...dense.ids].join(",")}
+          transform={`translate(${size.width - INSET.width - INSET.margin} ${size.height - INSET.height - INSET.margin})`}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <Schematic
+            cut={cut}
+            ids={dense.ids}
+            levels={subject.levels}
+            levelAt={subject.levelAt}
+            selected={selected}
+            onSelect={onSelect}
+            width={INSET.width}
+            height={INSET.height}
+          />
+          <Caption x={6} y={-4}>
+            {`detail: ${dense.ids.size} places crowd within ${Math.round(dense.box.maxX - dense.box.minX)} px`}
+          </Caption>
+        </g>
+      ) : null}
     </g>
   );
 }
