@@ -6,9 +6,11 @@
  * feet (DuctContracts.cs); `tolIn` is inches. A staged `ignore` verdict on a finding id withholds
  * that one inference. Nothing here is stored and nothing reaches Revit.
  * A duct landing on a duct's side and a duct landing on an end cap are one rule (kaitpw
- * 2026-10-19): each duct is a solid, its polyline swept by its cross-section, closed at an end an
- * end cap closes; an open connector whose point is near that surface, whose axis points into it,
- * and whose point lies within the face, lands there. Centering is not required and any number of
+ * 2026-10-19), and so is a duct landing on an open connector's mouth off its centre (Chadds SA 19
+ * duct 8750451 under grille 8747668): each duct is a solid, its polyline swept by its
+ * cross-section, closed at an end an end cap closes, and each open connector is a face its size
+ * wide; an open connector whose point is near a face, whose axis points into it, and whose point
+ * lies within the face's outline, lands there. Centering is not required and any number of
  * connectors may land on one face.
  */
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
@@ -72,8 +74,9 @@ export const CAP_THICKNESS_IN = 1;
 const AXIS_COS = 0.7;
 
 /**
- * A segment's cross-section on an axis `u`, ft. A rectangle whose roll is known has half-sides
- * `w` along `x` and `h` along `y`; otherwise a band `inner..outer` from the centerline.
+ * A cross-section on an axis `u`, ft, from a segment's or a connector's size. A rectangle whose
+ * roll is known has half-sides `w` along `x` and `h` along `y`; otherwise a band `inner..outer`
+ * from the centerline.
  * ponytail: the snapshot carries no rect roll; a non-vertical rect is taken in Revit's default
  * roll (width horizontal), and a vertical one (or an oval) as the round-equivalent band from its
  * half-short-side to its half-diagonal, so any roll lands.
@@ -81,7 +84,8 @@ const AXIS_COS = 0.7;
 type Section =
   | { w: number; h: number; x: number[]; y: number[] }
   | { inner: number; outer: number };
-function sectionOf(s: Segment, u: number[]): Section | null {
+type Sized = Pick<Segment, "shape" | "widthIn" | "heightIn" | "diameterIn">;
+function sectionOf(s: Sized, u: number[]): Section | null {
   const [w, h] = [(s.widthIn ?? 0) / 24, (s.heightIn ?? 0) / 24];
   if (s.shape === "round" || (!w && !h)) {
     const r = (s.diameterIn ?? 0) / 24;
@@ -97,27 +101,6 @@ function sectionOf(s: Segment, u: number[]): Section | null {
   ];
   return { w, h, x, y };
 }
-
-/** The side face nearest `r` (an offset square to the axis): signed distance out of the solid, the inward normal, and whether `r` lies within that face. */
-function side(section: Section, r: number[]) {
-  if ("inner" in section) {
-    const n = Math.hypot(...r);
-    if (n < 1e-9) return null;
-    const d = n > section.outer ? n - section.outer : n < section.inner ? n - section.inner : 0;
-    return { d, normal: r.map((v) => -v / n), within: true };
-  }
-  const [x, y] = [dot(r, section.x), dot(r, section.y)];
-  const [dx, dy] = [Math.abs(x) - section.w, Math.abs(y) - section.h];
-  return dx >= dy
-    ? { d: dx, normal: section.x.map((v) => -Math.sign(x) * v), within: dy <= 0 }
-    : { d: dy, normal: section.y.map((v) => -Math.sign(y) * v), within: dx <= 0 };
-}
-
-/** Whether `r` (an offset in an end face's plane) lies within that face. */
-const withinEnd = (section: Section, r: number[]) =>
-  "inner" in section
-    ? Math.hypot(...r) <= section.outer
-    : Math.abs(dot(r, section.x)) <= section.w && Math.abs(dot(r, section.y)) <= section.h;
 
 /**
  * An open connector's outward axis. A segment's end reads its polyline; a node's port points from
@@ -140,68 +123,137 @@ function axisOf(e: Element, c: Element["connectors"][number]): number[] | null {
   return unit(sub(c.point, mid));
 }
 
-/** Which polyline ends of each segment an end cap closes: 0 the first point, 1 the last. */
-function cappedEnds(snapshot: DuctSnapshot) {
-  const byId = new Map(snapshot.segments.map((s) => [s.id, s]));
-  const out = new Map<number, Set<0 | 1>>();
-  for (const cap of snapshot.nodes)
-    if (cap.kind === "cap")
-      for (const c of cap.connectors) {
-        const s = c.connectedTo ? byId.get(c.connectedTo.elementId) : undefined;
-        const end = s?.connectors.find((p) => p.index === c.connectedTo!.connector);
-        if (!s || !end || s.polyline.length < 2) continue;
-        const first = dist(end.point, s.polyline[0]!) <= dist(end.point, s.polyline.at(-1)!);
-        if (!out.has(s.id)) out.set(s.id, new Set());
-        out.get(s.id)!.add(first ? 0 : 1);
-      }
-  return out;
-}
-
-interface Landing {
-  segment: Segment;
-  /** Signed distance out of the face, ft; negative is inside. */
-  d: number;
-  at: number;
+/** An open connector: its key, element, index, point and outward axis (null when none derives). */
+interface Port {
+  k: string;
+  id: number;
+  index: number;
   point: number[];
-  face: "side" | "capped end";
+  axis: number[] | null;
+}
+/** Where a landing joins: a tap on a segment's centerline, or the open port whose face it is. */
+type Onto = { segment: Segment; at: number; point: number[] } | { port: Port };
+/**
+ * A face something can land on, owned by element `owner`. A `side` is one polyline piece of a
+ * segment swept by its section; a planar face (a capped segment end, an open connector's mouth)
+ * is a plane through `origin` facing out along `normal`, bounded by `section`.
+ */
+type Face =
+  | {
+      label: "side";
+      owner: number;
+      segment: Segment;
+      a: number[];
+      u: number[];
+      len: number;
+      run: number;
+      section: Section;
+    }
+  | {
+      label: "capped end" | "connector face";
+      owner: number;
+      origin: number[];
+      normal: number[];
+      section: Section;
+      onto: Onto;
+    };
+
+/**
+ * Every face in the snapshot: each segment's sides, each end an end cap closes (the cap counted
+ * as the segment's, its face `CAP_THICKNESS_IN` outboard), and each open connector's mouth.
+ */
+function facesOf(snapshot: DuctSnapshot, open: readonly Port[]): Face[] {
+  const faces: Face[] = [];
+  const byId = new Map(snapshot.segments.map((s) => [s.id, s]));
+  for (const s of snapshot.segments) {
+    let run = 0;
+    for (let i = 1; i < s.polyline.length; i++) {
+      const a = s.polyline[i - 1]!,
+        len = dist(a, s.polyline[i]!),
+        u = unit(sub(s.polyline[i]!, a)),
+        section = u && sectionOf(s, u);
+      if (u && section)
+        faces.push({ label: "side", owner: s.id, segment: s, a, u, len, run, section });
+      run += len;
+    }
+  }
+  for (const cap of snapshot.nodes)
+    for (const c of cap.kind === "cap" ? cap.connectors : []) {
+      const s = c.connectedTo ? byId.get(c.connectedTo.elementId) : undefined;
+      const end = s?.connectors.find((p) => p.index === c.connectedTo!.connector);
+      const poly = s?.polyline ?? [];
+      if (!s || !end || poly.length < 2) continue;
+      const first = dist(end.point, poly[0]!) <= dist(end.point, poly.at(-1)!);
+      const [e, f] = first ? [poly[0]!, poly[1]!] : [poly.at(-1)!, poly.at(-2)!];
+      const normal = unit(sub(e, f));
+      const section = normal && sectionOf(s, normal);
+      if (!normal || !section) continue;
+      const at = first ? 0 : s.polyline.slice(1).reduce((t, q, i) => t + dist(poly[i]!, q), 0);
+      faces.push({
+        label: "capped end",
+        owner: s.id,
+        origin: add(e, normal, CAP_THICKNESS_IN / 12),
+        normal,
+        section,
+        onto: { segment: s, at, point: e },
+      });
+    }
+  const elements = new Map<number, Element>(
+    [...snapshot.nodes, ...snapshot.segments].map((e) => [e.id, e]),
+  );
+  for (const port of open) {
+    const c = elements.get(port.id)!.connectors.find((x) => x.index === port.index)!;
+    const section = port.axis && sectionOf(c, port.axis);
+    if (port.axis && section)
+      faces.push({
+        label: "connector face",
+        owner: port.id,
+        origin: port.point,
+        normal: port.axis,
+        section,
+        onto: { port },
+      });
+  }
+  return faces;
 }
 
-/** The face of `s` that `point`, with outward `axis`, lands on within `tol` ft; the nearest. */
-function landOn(
-  s: Segment,
-  capped: ReadonlySet<0 | 1> | undefined,
-  point: number[],
-  axis: number[],
-  tol: number,
-): Landing | null {
-  const poly = s.polyline;
-  const found: Landing[] = [];
-  let run = 0;
-  for (let i = 1; i < poly.length; i++) {
-    const a = poly[i - 1]!,
-      len = dist(a, poly[i]!),
-      u = unit(sub(poly[i]!, a));
-    const section = u && sectionOf(s, u);
-    const t = u ? dot(sub(point, a), u) : -1;
-    const face = section && t >= 0 && t <= len ? side(section, add(sub(point, a), u!, -t)) : null;
-    if (face?.within && dot(axis, face.normal) > AXIS_COS)
-      found.push({ segment: s, d: face.d, at: run + t, point: add(a, u!, t), face: "side" });
-    run += len;
+/**
+ * How `p` (outward `axis`) lands on `face`: the signed distance out of it, ft (negative is
+ * inside), and where it joins; null when it points away or lies outside the face's outline.
+ */
+function land(face: Face, p: number[], axis: number[]): { d: number; onto: Onto } | null {
+  const { section } = face;
+  if (face.label === "side") {
+    const t = dot(sub(p, face.a), face.u);
+    if (t < 0 || t > face.len) return null;
+    const r = add(sub(p, face.a), face.u, -t);
+    let d: number, normal: number[];
+    if ("inner" in section) {
+      const n = Math.hypot(...r);
+      if (n < 1e-9) return null;
+      d = n > section.outer ? n - section.outer : n < section.inner ? n - section.inner : 0;
+      normal = r.map((v) => -v / n);
+    } else {
+      const [x, y] = [dot(r, section.x), dot(r, section.y)];
+      const [dx, dy] = [Math.abs(x) - section.w, Math.abs(y) - section.h];
+      if (Math.min(dx, dy) > 0) return null;
+      [d, normal] =
+        dx >= dy
+          ? [dx, section.x.map((v) => -Math.sign(x) * v)]
+          : [dy, section.y.map((v) => -Math.sign(y) * v)];
+    }
+    if (dot(axis, normal) <= AXIS_COS) return null;
+    return { d, onto: { segment: face.segment, at: face.run + t, point: add(face.a, face.u, t) } };
   }
-  for (const end of capped ?? []) {
-    const [e, f] = end ? [poly.at(-1)!, poly.at(-2)!] : [poly[0]!, poly[1]!];
-    const out = unit(sub(e, f));
-    const section = out && sectionOf(s, out);
-    if (!out || !section || dot(axis, out) >= -AXIS_COS) continue;
-    const v = sub(point, add(e, out, CAP_THICKNESS_IN / 12));
-    const d = dot(v, out);
-    if (withinEnd(section, add(v, out, -d)))
-      found.push({ segment: s, d, at: end ? run : 0, point: e, face: "capped end" });
-  }
-  return (
-    found.filter((l) => Math.abs(l.d) <= tol).sort((x, y) => Math.abs(x.d) - Math.abs(y.d))[0] ??
-    null
-  );
+  if (dot(axis, face.normal) >= -AXIS_COS) return null;
+  const v = sub(p, face.origin);
+  const d = dot(v, face.normal);
+  const r = add(v, face.normal, -d);
+  const within =
+    "inner" in section
+      ? Math.hypot(...r) <= section.outer
+      : Math.abs(dot(r, section.x)) <= section.w && Math.abs(dot(r, section.y)) <= section.h;
+  return within ? { d, onto: face.onto } : null;
 }
 
 const ignored = (work: DuctsRouteDocument | null, id: string) => {
@@ -239,9 +291,11 @@ function components(elements: Element[], equipment: ReadonlySet<number>) {
 /**
  * Joints and taps the model implies. (a) Two open connectors within `tolIn` inches join, nearest
  * pair first, each port once; shape compatibility is not required. (b) An open connector left
- * over that lands on a duct's face within `FACE_TOL_IN` (a side, or an end a cap closes, the cap
- * counted as the duct's) taps that duct where it lands, nearest face first. Each inference is a
- * finding; one that joins two elements already in one component is also a `loop-by-inference`.
+ * over that lands on a face within `FACE_TOL_IN`, nearest face first, joins what owns it: a duct's
+ * side or an end a cap closes (the cap counted as the duct's) is tapped where it lands; an open
+ * connector's mouth (terminal, equipment, duct, fitting) is joined, off-centre or not, and several
+ * ends may land on one face. Each inference is a finding; one that joins two elements already in
+ * one component is also a `loop-by-inference`.
  */
 export function inferJoints(
   snapshot: DuctSnapshot,
@@ -251,10 +305,16 @@ export function inferJoints(
   const tol = tolIn / 12;
   const elements: Element[] = [...snapshot.nodes, ...snapshot.segments];
   const equipment = new Set(snapshot.nodes.filter((n) => n.kind === "equipment").map((n) => n.id));
-  const open = elements.flatMap((e) =>
+  const open: Port[] = elements.flatMap((e) =>
     e.connectors
       .filter((c) => !c.connectedTo && c.point.length === 3)
-      .map((c) => ({ k: key(e.id, c.index), id: e.id, index: c.index, point: c.point })),
+      .map((c) => ({
+        k: key(e.id, c.index),
+        id: e.id,
+        index: c.index,
+        point: c.point,
+        axis: axisOf(e, c),
+      })),
   );
   const { find, union } = components(elements, equipment);
   const joints: InferredJoint[] = [],
@@ -294,40 +354,50 @@ export function inferJoints(
     });
     closes(id, a.id, b.id);
   }
-  const capped = cappedEnds(snapshot);
+  const faces = facesOf(snapshot, open);
   const faceTol = FACE_TOL_IN / 12;
-  const byId = new Map(elements.map((e) => [e.id, e]));
   for (const p of open) {
-    if (used.has(p.k)) continue;
-    const element = byId.get(p.id)!;
-    const axis = axisOf(element, element.connectors.find((c) => c.index === p.index)!);
-    if (!axis) continue;
-    let best: Landing | null = null;
-    for (const s of snapshot.segments) {
-      if (s.id === p.id || s.polyline.length < 2) continue;
-      const landing = landOn(s, capped.get(s.id), p.point, axis, faceTol);
-      if (landing && (!best || Math.abs(landing.d) < Math.abs(best.d))) best = landing;
+    if (used.has(p.k) || !p.axis) continue;
+    let best: { d: number; onto: Onto; face: Face["label"] } | null = null;
+    for (const face of faces) {
+      if (face.owner === p.id) continue;
+      const hit = land(face, p.point, p.axis);
+      if (hit && Math.abs(hit.d) <= faceTol && (!best || Math.abs(hit.d) < Math.abs(best.d)))
+        best = { ...hit, face: face.label };
     }
     if (!best) continue;
-    const id = `proximity:${p.k}|${best.segment.id}`;
+    const gapIn = best.d * 12;
+    const how = `${Math.abs(gapIn).toFixed(2)} in ${gapIn < 0 ? "into" : "short of"} its face`;
+    if ("port" in best.onto) {
+      const q = best.onto.port;
+      const id = `proximity:${[p, q]
+        .sort((x, y) => x.id - y.id || x.index - y.index)
+        .map((x) => x.k)
+        .join("|")}`;
+      if (ignored(work, id)) continue;
+      used.add(p.k).add(q.k);
+      joints.push({ a: p.k, b: q.k, kind: "joined-by-proximity", gapIn });
+      findings.push({
+        id,
+        kind: "joined-by-proximity",
+        elementIds: [p.id, q.id],
+        note: `open end ${p.k} lands on open connector ${q.k}'s face, ${how}, ${dist(p.point, q.point) * 12 > 0.005 ? `${(dist(p.point, q.point) * 12).toFixed(2)} in from its centre` : "centred"}; joined`,
+      });
+      closes(id, p.id, q.id);
+      continue;
+    }
+    const { segment, at, point } = best.onto;
+    const id = `proximity:${p.k}|${segment.id}`;
     if (ignored(work, id)) continue;
     used.add(p.k);
-    const gapIn = best.d * 12;
-    taps.push({
-      a: p.k,
-      segment: best.segment.id,
-      kind: "tap-by-proximity",
-      gapIn,
-      at: best.at,
-      point: best.point,
-    });
+    taps.push({ a: p.k, segment: segment.id, kind: "tap-by-proximity", gapIn, at, point });
     findings.push({
       id,
       kind: "tap-by-proximity",
-      elementIds: [p.id, best.segment.id],
-      note: `open end ${p.k} lands on the ${best.face} of duct ${best.segment.id}, ${Math.abs(gapIn).toFixed(2)} in ${gapIn < 0 ? "into" : "short of"} its face, ${best.at.toFixed(2)} ft along it; tapped`,
+      elementIds: [p.id, segment.id],
+      note: `open end ${p.k} lands on the ${best.face} of duct ${segment.id}, ${how}, ${at.toFixed(2)} ft along it; tapped`,
     });
-    closes(id, p.id, best.segment.id);
+    closes(id, p.id, segment.id);
   }
   return { joints, taps, findings };
 }
@@ -396,10 +466,18 @@ export function tolerate(
     alias.set(drop, keep);
   };
   for (const j of inference.joints) {
-    port(j.a).connectedTo = parse(j.b);
-    port(j.b).connectedTo = parse(j.a);
-    consumed.add(j.a).add(j.b);
-    bridge(parse(j.a).elementId, parse(j.b).elementId);
+    let b = j.b;
+    if (consumed.has(b)) {
+      // Several ends landing on one connector's face: each later one joins a copy of that port.
+      const owner = byId.get(parse(b).elementId)!;
+      const index = Math.max(-1, ...owner.connectors.map((c) => c.index)) + 1;
+      owner.connectors.push({ ...port(b), index, connectedTo: null });
+      b = key(owner.id, index);
+    }
+    port(j.a).connectedTo = parse(b);
+    port(b).connectedTo = parse(j.a);
+    consumed.add(j.a).add(b);
+    bridge(parse(j.a).elementId, parse(b).elementId);
   }
   inference.taps.forEach((t, i) => {
     const id = -(i + 1);

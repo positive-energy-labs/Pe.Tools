@@ -98,7 +98,7 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
         note: "open",
       })),
   );
-  const groupIds = [...new Set(segments.map((s) => s.groupId!))];
+  const groupIds = [...new Set([...segments, ...nodes].map((s) => s.groupId!))];
   return {
     coordinateEncoding: "native-double",
     document: {
@@ -114,7 +114,7 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
       classifications: ["Supply Air"],
       systemNames: ["SA 1"],
       terminalCount: 0,
-      elementCount: segments.filter((s) => s.groupId === id).length,
+      elementCount: [...segments, ...nodes].filter((s) => s.groupId === id).length,
       loops: 0,
       issueIds: issues.filter((i) => i.groupId === id).map((i) => i.id),
     })),
@@ -159,8 +159,8 @@ it("a 0.4 in gap joins the two open ends and merges their groups", () => {
   expect(before.groups).toHaveLength(2);
 });
 
-it("a 2 in gap stays open", () => {
-  const before = snap([duct(1, [0, 0, 0], [10, 0, 0]), duct(2, [10 + 2 * IN, 0, 0], [20, 0, 0])]);
+it("a 2.5 in gap stays open: past the 1 in end-to-end rule and past FACE_TOL_IN of either mouth", () => {
+  const before = snap([duct(1, [0, 0, 0], [10, 0, 0]), duct(2, [10 + 2.5 * IN, 0, 0], [20, 0, 0])]);
   expect(inferJoints(before)).toEqual({ joints: [], taps: [], findings: [] });
   expect(tolerate(before).snapshot).toBe(before);
 });
@@ -306,4 +306,63 @@ it("an ignore verdict withholds one landing and keeps the other on the same face
   const before = snap([plenum(), onSide(2, 3, 0, 0.5), onSide(3, 6, 0, 0.5)]);
   const { taps } = tolerate(before, ignoring("proximity:2:1|1"));
   expect(taps.map((t) => t.a)).toEqual(["3:1"]);
+});
+
+/** A 16x8 grille whose one open connector faces down at `at`, its body 1 in above. */
+const grille = (id: number, at: number[]): Node => ({
+  id,
+  kind: "terminal",
+  category: "Air Terminals",
+  family: "Price LBP15A Supply",
+  type: "16 X 8",
+  partType: null,
+  levelId: 1,
+  point: [at[0]!, at[1]!, at[2]! + IN],
+  groupId: `g${id}`,
+  systemName: "SA 19",
+  classification: "Supply Air",
+  connectors: [
+    {
+      ...conn(1, at),
+      shape: "rectangular",
+      size: "16x8",
+      diameterIn: null,
+      widthIn: 16,
+      heightIn: 8,
+    },
+  ],
+  facts: [],
+  uniqueId: null,
+});
+
+it("a duct rising into a grille's mouth 2 in off its centre joins the grille (Chadds SA 19)", () => {
+  // 8750451's open end sits in grille 8747668's connector plane, 2.0 in off its centre in x.
+  const riser = rect(2, [0, 0, 12], [0, 0, 10], 16, 8, "g2");
+  const before = snap([riser], [grille(9, [2 * IN, 0, 12])]);
+  const { joints, findings, snapshot } = tolerate(before);
+  expect(joints).toEqual([
+    { a: "9:1", b: "2:1", kind: "joined-by-proximity", gapIn: expect.closeTo(0, 6) },
+  ]);
+  // The grille is read first, so it is the one landing; the rule is symmetric.
+  expect(findings[0]!.id).toBe("proximity:2:1|9:1");
+  expect(findings[0]!.note).toContain("2.00 in from its centre");
+  expect(snapshot.nodes[0]!.connectors[0]!.connectedTo).toEqual({ elementId: 2, connector: 1 });
+  // Beside the mouth, not under it: no join.
+  expect(inferJoints(snap([riser], [grille(9, [12 * IN, 0, 12])])).joints).toEqual([]);
+});
+
+it("two ducts landing on one connector's face both join it, each to its own copy of the port", () => {
+  const a = duct(2, [-3 * IN, 0, 12], [-3 * IN, 0, 10], "g2");
+  const b = duct(3, [3 * IN, 0, 12], [3 * IN, 0, 10], "g3");
+  const { joints, snapshot } = tolerate(snap([a, b], [grille(9, [0, 0, 12])]));
+  expect(joints.map((j) => [j.a, j.b])).toEqual([
+    ["9:1", "2:1"],
+    ["3:1", "9:1"],
+  ]);
+  const ports = snapshot.nodes[0]!.connectors.map((c) => [c.index, c.connectedTo]);
+  expect(ports).toEqual([
+    [1, { elementId: 2, connector: 1 }],
+    [2, { elementId: 3, connector: 1 }],
+  ]);
+  expect(snapshot.segments[1]!.connectors[0]!.connectedTo).toEqual({ elementId: 9, connector: 2 });
 });
