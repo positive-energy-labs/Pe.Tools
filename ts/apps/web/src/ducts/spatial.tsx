@@ -15,7 +15,7 @@ import { FactChip } from "@pe/kit/lang/chip";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 import { Switcher } from "#/components/lang/switcher";
-import { ClaimsList, LegFacts, nameOf, PlaceFacts, ShowInRevit } from "./claims";
+import { ClaimsList, elementNamer, LegFacts, nameOf, PlaceFacts, ShowInRevit } from "./claims";
 import { DuctDrawing, GlyphKey, type Scene } from "./drawing";
 import { DASH_CLASS, ENCODING_KEYS, ENCODINGS, encodingOf, type Encoding } from "./encoding";
 import { NodeFactsView, SegmentFactsView } from "./facts";
@@ -184,6 +184,7 @@ function Spatial({
   const iso = useIso(index, page, subjectDrawn);
   const view = page.view === "iso" ? iso : plan;
   const sub = view.scene.subject ?? null;
+  const nameOfId = useMemo(() => elementNamer(index.snapshot, sub), [index, sub]);
   // `page.selected` is an element id, or a claim id in a subject scene.
   const claimPicked = sub?.claims.find((claim) => claim.id === page.selected) ?? null;
   const selected = page.selected && !claimPicked ? Number(page.selected) : null;
@@ -329,10 +330,14 @@ function Spatial({
                 <ClaimsList
                   subject={sub}
                   selected={claimPicked?.id ?? ""}
+                  nameOfId={nameOfId}
+                  doc={doc}
                   onSelect={(claim) =>
                     setPage({ selected: claim.id === page.selected ? "" : claim.id, issue: "" })
                   }
                   onVerdict={subject.onVerdict}
+                  onHover={setHovered}
+                  onPick={(id) => setPage({ selected: String(id), issue: "" })}
                 />
               </div>
             ) : null}

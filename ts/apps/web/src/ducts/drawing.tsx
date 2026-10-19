@@ -353,6 +353,7 @@ export function DuctDrawing({
                   data-segment={id}
                   data-critical={critical?.has(id) ? "" : undefined}
                   data-selected={selected.has(id) ? "" : undefined}
+                  data-hovered={id === hovered ? "" : undefined}
                 >
                   {critical?.has(id) ? (
                     <path
@@ -430,6 +431,7 @@ export function DuctDrawing({
                 data-node-id={id}
                 data-critical={critical?.has(id) ? "" : undefined}
                 data-selected={selected.has(id) ? "" : undefined}
+                data-hovered={id === hovered ? "" : undefined}
                 transform={`translate(${x} ${y})`}
                 style={{ cursor: "pointer" }}
                 onMouseEnter={() => onHover(id)}

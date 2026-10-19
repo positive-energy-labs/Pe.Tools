@@ -4,13 +4,17 @@
  * `ducts.snapshot` plus the five claims written over it. Mounted only under `?demo=scene`
  * (`route.tsx`). Sizes, system names and every name but MUAS-1, FC-23 and the silencer are
  * fixture stand-ins: the trace carried ids, kinds and geometry only.
+ * Every row connects to the next, as the 2026-10-19 Chadds read did, but one: the louver side ends
+ * at end cap 14107111 and the MUAS-1 side starts at open duct 14122436, 0.2 ft apart, unjoined (a
+ * gap). The subject leaves out 13761466, 13761629 and 13761574 between FR-1 and FC-23, as Claude's
+ * did (an omission).
  */
 import type { DuctClaim } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 interface Row {
   id: number;
-  k: "duct" | "fitting" | "equipment" | "accessory";
+  k: "duct" | "fitting" | "equipment" | "accessory" | "terminal" | "cap";
   p: number[];
   line?: number[][];
 }
@@ -27,11 +31,24 @@ const NAMES: Record<number, string> = {
   14577394: "MUAS-1 coil",
   14577396: "MUAS-1 fan",
   14607308: "silencer",
-  13760866: "FC-23 plenum",
+  14088043: "ESD-403 louver",
+  13760866: "FR-1",
   13760867: "FC-23",
 };
 
 const ROWS: Row[] = [
+  { id: 14088043, k: "terminal", p: [479.02, 686.9, 19.23] },
+  { id: 14107098, k: "fitting", p: [479.02, 686.4, 19.23] },
+  {
+    id: 14106988,
+    k: "duct",
+    p: [479.02, 686.2, 19.23],
+    line: [
+      [479.02, 686.2, 19.23],
+      [479.02, 683.7, 19.23],
+    ],
+  },
+  { id: 14107111, k: "cap", p: [479.02, 683.63, 19.23] },
   {
     id: 14122436,
     k: "duct",
@@ -479,6 +496,26 @@ const levelAt = (z: number) =>
 const length = (line: number[][]) =>
   line.slice(1).reduce((sum, p, i) => sum + Math.hypot(...p.map((v, j) => v - line[i]![j]!)), 0);
 
+/** Where the model is not joined: the louver side's end cap and the MUAS-1 side's open duct. */
+const UNJOINED = new Set([14107111, 14122436]);
+const OMITTED = new Set([13761466, 13761629, 13761574]);
+
+/** Connector 1 reaches the row before, connector 2 the row after, except across `UNJOINED`. */
+const connectorsOf = (i: number) =>
+  ([ROWS[i - 1], ROWS[i + 1]] as const).map((to, end) => ({
+    index: end + 1,
+    kind: "end",
+    point: ROWS[i]!.line?.[end ? ROWS[i]!.line!.length - 1 : 0] ?? ROWS[i]!.p,
+    shape: "round" as const,
+    size: '12"ø',
+    diameterIn: 12,
+    direction: "bidirectional",
+    connectedTo:
+      to && !(UNJOINED.has(to.id) && UNJOINED.has(ROWS[i]!.id))
+        ? { elementId: to.id, connector: end ? 1 : 2 }
+        : null,
+  }));
+
 const snapshot: DuctSnapshot = {
   coordinateEncoding: "native-double",
   document: {
@@ -489,18 +526,24 @@ const snapshot: DuctSnapshot = {
   },
   levels: [...SCENE_LEVELS],
   groups: [],
-  nodes: ROWS.filter((row) => row.k !== "duct").map((row) => ({
-    id: row.id,
-    kind: row.k as "fitting" | "equipment" | "accessory",
-    category: row.k,
-    type: NAMES[row.id] ?? null,
-    levelId: levelAt(row.p[2]!),
-    point: row.p,
-    connectors: [],
-    facts: [],
-    label: NAMES[row.id] ?? null,
-  })),
-  segments: ROWS.filter((row) => row.line).map((row) => ({
+  nodes: ROWS.flatMap((row, i) =>
+    row.k === "duct"
+      ? []
+      : [
+          {
+            id: row.id,
+            kind: row.k,
+            category: row.k,
+            type: NAMES[row.id] ?? null,
+            levelId: levelAt(row.p[2]!),
+            point: row.p,
+            connectors: connectorsOf(i),
+            facts: [],
+            label: NAMES[row.id] ?? null,
+          },
+        ],
+  ),
+  segments: ROWS.flatMap((row, i) => (row.line ? [{ row, i }] : [])).map(({ row, i }) => ({
     id: row.id,
     kind: "duct",
     curveKind: "line",
@@ -512,7 +555,7 @@ const snapshot: DuctSnapshot = {
     levelId: levelAt(row.p[2]!),
     roughness: { valueFt: 0.0003, provenance: "revit-default" },
     revit: {},
-    connectors: [],
+    connectors: connectorsOf(i),
   })),
   flows: [],
   issues: [],
@@ -526,7 +569,7 @@ const snapshot: DuctSnapshot = {
   },
 };
 
-export const SCENE_SUBJECT: number[] = ROWS.map((row) => row.id);
+export const SCENE_SUBJECT: number[] = ROWS.map((row) => row.id).filter((id) => !OMITTED.has(id));
 
 export const SCENE_CLAIMS: Record<string, DuctClaim> = {
   c1: {
@@ -541,8 +584,8 @@ export const SCENE_CLAIMS: Record<string, DuctClaim> = {
   },
   c3: {
     state: "unproven",
-    ids: [14122436],
-    text: "The intake is unresolved: the path ends at an open connector with no intake terminal.",
+    ids: [14122436, 14107111],
+    text: "The intake is not connected: duct 14122436 ends open 0.2 ft from end cap 14107111 on the plenum 14106988 that feeds louver 14088043.",
   },
   c4: {
     state: "assumed",

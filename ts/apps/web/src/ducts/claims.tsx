@@ -2,7 +2,9 @@
  * The claims of the subject scene as a list under the drawing, and the one crossing into Revit a
  * place or a leg offers: `revit.context.show-elements` selects and zooms, and mutates nothing.
  * A verdict is the person's answer on one claim; `verdictPatches` stages it into the claim's Work
- * cell, the same path the assumptions editor uses.
+ * cell, the same path the assumptions editor uses. An element id in a claim's text reads as that
+ * element's name (`claimParts`): hovering it lights the element in the drawing, clicking it selects
+ * it in Revit. Pea writes ids; the route names them.
  */
 import { useState } from "react";
 import {
@@ -15,9 +17,13 @@ import { FactChip } from "@pe/kit/lang/chip";
 import { Button } from "@pe/kit/lang/button";
 import { callHostRpc } from "#/host/client";
 import { tokenRef } from "@pe/kit/lib/token";
+import { snapshotById } from "@pe/ducts-domain/readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { claimInk } from "./encoding";
 import type { Claim, Leg, Place } from "./legs";
 import type { SubjectDrawn } from "./scene";
+
+type RevitDoc = { session: string; openId: string };
 
 export type Verdict = NonNullable<Claim["verdict"]>;
 export const VERDICTS: readonly { value: Verdict; word: string; says: string }[] = [
@@ -54,18 +60,149 @@ export const verdictPatches = (
 export const nameOf = (subject: SubjectDrawn, id: number) =>
   subject.placeOf.get(id)?.name ?? subject.legOf.get(id)?.name ?? `element ${id}`;
 
+const KIND_WORD: Record<DuctSnapshot["nodes"][number]["kind"], string> = {
+  equipment: "equipment",
+  terminal: "terminal",
+  fitting: "fitting",
+  accessory: "accessory",
+  cap: "end cap",
+};
+const ELEMENT_PLACES = new Set<Place["kind"]>(["equipment", "accessory", "terminal", "cap"]);
+
+/**
+ * A person's name for any snapshot element, null when the id is not in the snapshot: the node's
+ * label, else its place name in the cut (never a `kind id` fallback), else a short kind (`end cap`,
+ * `10″ duct`).
+ */
+export function elementNamer(snapshot: DuctSnapshot, subject: SubjectDrawn | null) {
+  const { nodes, segments } = snapshotById(snapshot);
+  return (id: number): string | null => {
+    const node = nodes.get(id);
+    if (node?.label) return node.label;
+    const place = subject?.placeOf.get(id);
+    if (place && ELEMENT_PLACES.has(place.kind) && !place.name.endsWith(String(id)))
+      return place.name;
+    if (node) return KIND_WORD[node.kind];
+    const segment = segments.get(id);
+    if (!segment) return null;
+    const size = segment.size.replaceAll('"', "″").replaceAll("ø", "").trim();
+    return `${size ? `${size} ` : ""}${segment.kind}`;
+  };
+}
+
+/** An element id resolved in a claim's text; `dot` when the prose just before already names it. */
+export type ClaimPart = string | { id: number; name: string; dot: boolean };
+
+/** How far back (chars) the prose is searched for the name's last word before a dot stands in. */
+const NAMED_BEFORE = 30;
+
+/**
+ * A claim's text cut into prose and resolved ids: every 7–9 digit number `nameOf` knows becomes its
+ * name, or a dot when the 30 chars before it already hold the name's last word ("end cap 14107111").
+ * A number `nameOf` does not know stays prose.
+ */
+export function claimParts(text: string, nameOf: (id: number) => string | null): ClaimPart[] {
+  const parts: ClaimPart[] = [];
+  let at = 0;
+  for (const match of text.matchAll(/\b\d{7,9}\b/g)) {
+    const id = Number(match[0]);
+    const name = nameOf(id);
+    if (!name) continue;
+    if (match.index > at) parts.push(text.slice(at, match.index));
+    const word = name.trim().split(/\s+/).at(-1)!.toLowerCase();
+    const before = text.slice(Math.max(0, match.index - NAMED_BEFORE), match.index).toLowerCase();
+    parts.push({ id, name, dot: before.includes(word) });
+    at = match.index + match[0].length;
+  }
+  if (at < text.length) parts.push(text.slice(at));
+  return parts;
+}
+
+/** `revit.context.show-elements`: select and zoom to the ids; resolves to what Revit answered. */
+const showElements = (doc: RevitDoc, elementIds: readonly number[]) =>
+  callHostRpc(
+    "revit.context.show-elements",
+    { elementIds: [...elementIds] },
+    { bridgeSessionId: doc.session, openDocumentId: doc.openId },
+  ).then(
+    (answer) =>
+      `${answer.shown.length} shown in ${answer.viewName}${answer.missing.length ? `, ${answer.missing.length} missing` : ""}`,
+    (error: unknown) => (error instanceof Error ? error.message : String(error)),
+  );
+
+function ClaimText({
+  parts,
+  doc,
+  onHover,
+  onPick,
+  onShown,
+}: {
+  parts: readonly ClaimPart[];
+  doc: RevitDoc | null;
+  onHover: (id: number | null) => void;
+  onPick: (id: number) => void;
+  onShown: (word: string) => void;
+}) {
+  return parts.map((part, i) =>
+    typeof part === "string" ? (
+      <span key={i}>{part}</span>
+    ) : (
+      <button
+        key={i}
+        type="button"
+        data-claim-element={part.id}
+        aria-label={`${part.name} ${part.id}`}
+        title={`${part.name} · element ${part.id}: ${doc ? "click to select it in Revit" : "click to select it in the drawing"}`}
+        className="cursor-pointer underline decoration-dotted underline-offset-2"
+        onMouseEnter={() => onHover(part.id)}
+        onMouseLeave={() => onHover(null)}
+        onFocus={() => onHover(part.id)}
+        onBlur={() => onHover(null)}
+        onClick={() => {
+          if (!doc) return onPick(part.id);
+          onShown("selecting…");
+          void showElements(doc, [part.id]).then(onShown);
+        }}
+      >
+        {part.dot ? (
+          <span
+            aria-hidden
+            className="inline-block size-1.5 rounded-full align-middle"
+            style={{ backgroundColor: tokenRef("ink-2") }}
+          />
+        ) : (
+          part.name
+        )}
+      </button>
+    ),
+  );
+}
+
 export function ClaimsList({
   subject,
   selected,
+  nameOfId,
+  doc = null,
   onSelect,
   onVerdict,
+  onHover,
+  onPick,
 }: {
   subject: SubjectDrawn;
   /** The selected claim id; "" = none. */
   selected: string;
+  /** `elementNamer` over the read snapshot. */
+  nameOfId: (id: number) => string | null;
+  /** The connected document; null keeps an id's click in the drawing. */
+  doc?: RevitDoc | null;
   onSelect: (claim: Claim) => void;
   onVerdict: (claim: Claim, verdict: Verdict) => void;
+  /** The drawing's hover: an id named in a claim lights its element. */
+  onHover: (id: number | null) => void;
+  /** Select an element in the drawing (no document to send it to). */
+  onPick: (id: number) => void;
 }) {
+  const [said, setSaid] = useState<string | null>(null);
   if (!subject.claims.length)
     return (
       <p className="text-ink-2 px-1 py-1" data-claims="none">
@@ -95,25 +232,32 @@ export function ClaimsList({
           >
             <button
               type="button"
-              className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 text-left"
+              aria-label={`select claim ${i + 1}`}
+              className="face-mono mt-0.5 inline-flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[10px]"
+              style={{ backgroundColor: claimInk(claim), color: tokenRef("page") }}
               onClick={() => onSelect(claim)}
               title={`select claim ${i + 1}: its places and legs light up in the drawing`}
             >
-              <span
-                aria-hidden
-                className="face-mono mt-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-full text-[10px]"
-                style={{ backgroundColor: claimInk(claim), color: tokenRef("page") }}
-              >
-                {i + 1}
-              </span>
-              <span className="min-w-0">
-                <span>{claim.text}</span>{" "}
-                <span className="text-ink-2 face-mono t-small">
-                  {claim.state} · at {names.join(", ")}
-                  {verdict ? ` · ${VERDICTS.find((v) => v.value === verdict)?.word}` : ""}
-                </span>
-              </span>
+              {i + 1}
             </button>
+            <span className="min-w-0 flex-1">
+              <ClaimText
+                parts={claimParts(claim.text, nameOfId)}
+                doc={doc}
+                onHover={onHover}
+                onPick={onPick}
+                onShown={setSaid}
+              />{" "}
+              <button
+                type="button"
+                className="text-ink-2 face-mono t-small cursor-pointer text-left"
+                onClick={() => onSelect(claim)}
+                title={`select claim ${i + 1}: its places and legs light up in the drawing`}
+              >
+                {claim.state} · at {names.join(", ")}
+                {verdict ? ` · ${VERDICTS.find((v) => v.value === verdict)?.word}` : ""}
+              </button>
+            </span>
             <span
               className="flex shrink-0 items-center gap-1"
               role="group"
@@ -137,6 +281,11 @@ export function ClaimsList({
           </li>
         );
       })}
+      {said ? (
+        <li>
+          <FactChip title="what revit.context.show-elements answered">{said}</FactChip>
+        </li>
+      ) : null}
     </ol>
   );
 }
@@ -150,7 +299,7 @@ export function ShowInRevit({
   elementIds,
   what,
 }: {
-  doc: { session: string; openId: string };
+  doc: RevitDoc;
   elementIds: readonly number[];
   what: string;
 }) {
@@ -165,17 +314,7 @@ export function ShowInRevit({
         data-show-in-revit={what}
         onClick={() => {
           setWord("selecting…");
-          callHostRpc(
-            "revit.context.show-elements",
-            { elementIds: [...elementIds] },
-            { bridgeSessionId: doc.session, openDocumentId: doc.openId },
-          ).then(
-            (answer) =>
-              setWord(
-                `${answer.shown.length} shown in ${answer.viewName}${answer.missing.length ? `, ${answer.missing.length} missing` : ""}`,
-              ),
-            (error: unknown) => setWord(error instanceof Error ? error.message : String(error)),
-          );
+          void showElements(doc, elementIds).then(setWord);
         }}
       >
         select {what} in Revit
