@@ -315,14 +315,17 @@ export namespace DuctsApply {
   }
 }
 
-/** Read every duct network in the project: ducts, flex, fittings, accessories, terminals and HVAC equipment with their connectors, grouped by topology with equipment cut out, plus pass-1 terminal flow, fitting geometry ratios, fitting and accessory loss methods, terminal drops, Revit's supply/return/exhaust systems with critical path and sections, issues and the query behind each layer. Slots name the fan static, fan flow, component drop and terminal catalog drop parameters. Read-only. */
+/** Read every duct network in the project: ducts, flex, fittings, accessories, terminals and HVAC equipment with their connectors, grouped by topology with equipment cut out, plus pass-1 terminal flow, fitting geometry ratios, fitting and accessory loss methods, terminal drops, Revit's supply/return/exhaust systems with critical path and sections, issues and the query behind each layer. Slots name the fan static, fan flow, component drop and terminal catalog drop parameters; labelParameter names the instance parameter whose value names equipment for people (each node's label). Read-only. */
 export namespace DuctsSnapshot {
   export namespace Req {
     /**
-     * Optional: which parameters carry the designer-stated values. Absent reads the defaults.
+     * Optional: which parameters carry the designer-stated values (absent reads the defaults), and LabelParameter, the
+     * instance parameter whose string value names equipment for people (absent reads no label).
+     *
      */
     export interface Request {
       slots?: null | DuctParameterSlots;
+      labelParameter?: null | string;
     }
     /**
      * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
@@ -428,6 +431,7 @@ export namespace DuctsSnapshot {
       facts: DuctFact[];
       loss?: null | DuctLoss;
       terminalDrop?: null | DuctTerminalDrop;
+      label?: null | string;
     }
     /**
      * One physical HVAC connector. Kind is "end" or "curve" (a tap on a duct's side). Direction is Revit's

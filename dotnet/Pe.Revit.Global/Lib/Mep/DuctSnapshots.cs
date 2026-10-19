@@ -24,7 +24,7 @@ public static class DuctSnapshots {
         [new Guid("46245996-eebb-4536-ac17-9c1cd917d8cf")] = DuctLossMethod.SpecificLoss
     };
 
-    public static DuctSnapshotData Snapshot(Document doc, DuctParameterSlots? slots = null) {
+    public static DuctSnapshotData Snapshot(Document doc, DuctParameterSlots? slots = null, string? labelParameter = null) {
         // The names the person staged win, then the names the last apply recorded in the store, then the defaults.
         var (store, storeError) = DuctApplier.ReadStore(doc);
         slots = (slots?.Over(store?.Slots) ?? store?.Slots ?? new DuctParameterSlots()).WithDefaults();
@@ -45,11 +45,11 @@ public static class DuctSnapshots {
             .OfType<MEPCurve>().Select(c => Segment(doc, c, network)).ToList();
         var schemas = LossSchemas();
         var nodes = new List<DuctNode>();
-        nodes.AddRange(Of(BuiltInCategory.OST_DuctFitting).Select(e => Node(e, Fitting(e), slots, schemas, network)));
-        nodes.AddRange(Of(BuiltInCategory.OST_DuctAccessory).Select(e => Node(e, DuctNodeKind.Accessory, slots, schemas, network)));
-        nodes.AddRange(Of(BuiltInCategory.OST_DuctTerminal).Select(e => Node(e, DuctNodeKind.Terminal, slots, schemas, network)));
+        nodes.AddRange(Of(BuiltInCategory.OST_DuctFitting).Select(e => Node(e, Fitting(e), slots, schemas, network, labelParameter)));
+        nodes.AddRange(Of(BuiltInCategory.OST_DuctAccessory).Select(e => Node(e, DuctNodeKind.Accessory, slots, schemas, network, labelParameter)));
+        nodes.AddRange(Of(BuiltInCategory.OST_DuctTerminal).Select(e => Node(e, DuctNodeKind.Terminal, slots, schemas, network, labelParameter)));
         nodes.AddRange(Of(BuiltInCategory.OST_MechanicalEquipment)
-            .Where(e => HvacConnectors(e).Any()).Select(e => Node(e, DuctNodeKind.Equipment, slots, schemas, network)));
+            .Where(e => HvacConnectors(e).Any()).Select(e => Node(e, DuctNodeKind.Equipment, slots, schemas, network, labelParameter)));
         var systems = new FilteredElementCollector(doc).OfClass(typeof(MechanicalSystem)).Cast<MechanicalSystem>()
             .Where(m => m.SystemType is DuctSystemType.SupplyAir or DuctSystemType.ReturnAir or DuctSystemType.ExhaustAir)
             .OrderBy(m => m.Name, StringComparer.Ordinal)
@@ -178,7 +178,7 @@ public static class DuctSnapshots {
     private static DuctNodeKind Fitting(Element e) =>
         (e as FamilyInstance)?.MEPModel is MechanicalFitting { PartType: PartType.Cap } ? DuctNodeKind.Cap : DuctNodeKind.Fitting;
 
-    private static DuctNode Node(Element e, DuctNodeKind kind, DuctParameterSlots slots, Dictionary<Guid, Schema?> schemas, bool network) {
+    private static DuctNode Node(Element e, DuctNodeKind kind, DuctParameterSlots slots, Dictionary<Guid, Schema?> schemas, bool network, string? labelParameter) {
         var fi = e as FamilyInstance;
         var facts = new List<DuctFact>();
         switch (kind) {
@@ -219,8 +219,17 @@ public static class DuctSnapshots {
             HvacConnectors(e).Select(c => Connector(c, network)).ToList(),
             facts.Where(f => f.Value is not null || f.Text is not null).ToList(),
             kind is DuctNodeKind.Fitting or DuctNodeKind.Accessory ? Loss(e, schemas) : null,
-            kind == DuctNodeKind.Terminal ? Terminal(e, slots) : null);
+            kind == DuctNodeKind.Terminal ? Terminal(e, slots) : null,
+            Label(e, labelParameter));
     }
+
+    /// <summary>The instance parameter's string value when the request named one and this element carries it; never the type's.</summary>
+    private static string? Label(Element e, string? labelParameter) =>
+        !string.IsNullOrWhiteSpace(labelParameter)
+        && e.LookupParameter(labelParameter) is { HasValue: true } param
+        && (param.StorageType == StorageType.String ? param.AsString() : param.AsValueString()) is { Length: > 0 } s
+            ? s
+            : null;
 
     private static IReadOnlyList<DuctLayer> Layers(DuctNetwork.Analysis a, IReadOnlyList<DuctSystem> systems, DuctParameterSlots slots) {
         var segs = a.Segments;

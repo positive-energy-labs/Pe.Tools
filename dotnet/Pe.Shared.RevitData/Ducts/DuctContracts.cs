@@ -74,8 +74,11 @@ public enum DuctIssueKind {
     [EnumMember(Value = "high-velocity")] HighVelocity
 }
 
-/// <summary>Optional: which parameters carry the designer-stated values. Absent reads the defaults.</summary>
-public sealed record DuctSnapshotRequest(DuctParameterSlots? Slots = null);
+/// <summary>
+///     Optional: which parameters carry the designer-stated values (absent reads the defaults), and LabelParameter, the
+///     instance parameter whose string value names equipment for people (absent reads no label).
+/// </summary>
+public sealed record DuctSnapshotRequest(DuctParameterSlots? Slots = null, string? LabelParameter = null);
 
 /// <summary>
 ///     Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
@@ -244,7 +247,8 @@ public sealed record DuctNode(
     IReadOnlyList<DuctConnector> Connectors,
     IReadOnlyList<DuctFact> Facts,
     DuctLoss? Loss = null,
-    DuctTerminalDrop? TerminalDrop = null);
+    DuctTerminalDrop? TerminalDrop = null,
+    string? Label = null);
 
 public sealed record DuctRoughness(double ValueFt, DuctProvenance Provenance);
 
