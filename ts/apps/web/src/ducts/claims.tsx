@@ -9,6 +9,8 @@ import { useState } from "react";
 import { FactChip } from "#/components/lang/chip";
 import { Press } from "#/components/lang/press";
 import { callHostRpc } from "#/host/client";
+import { tokenRef } from "#/lib/token";
+import { claimInk } from "./encoding";
 import type { Claim, Leg, Place } from "./legs";
 import type { SubjectDrawn } from "./scene";
 
@@ -22,6 +24,85 @@ export const VERDICTS: readonly { value: Verdict; word: string; says: string }[]
 /** A human name for a subject element: its place, else the leg it lies on, else its id. */
 export const nameOf = (subject: SubjectDrawn, id: number) =>
   subject.placeOf.get(id)?.name ?? subject.legOf.get(id)?.name ?? `element ${id}`;
+
+export function ClaimsList({
+  subject,
+  verdicts,
+  selected,
+  onSelect,
+  onVerdict,
+}: {
+  subject: SubjectDrawn;
+  verdicts: Readonly<Record<string, Verdict>>;
+  /** The selected claim id; "" = none. */
+  selected: string;
+  onSelect: (claim: Claim) => void;
+  onVerdict: (claim: Claim, verdict: Verdict) => void;
+}) {
+  if (!subject.claims.length)
+    return (
+      <p className="text-ink-2 px-1 py-1" data-claims="none">
+        no claims on this subject
+      </p>
+    );
+  return (
+    <ol className="flex flex-col gap-1 px-1 py-1" aria-label="claims" data-claims={subject.claims.length}>
+      {subject.claims.map((claim, i) => {
+        const on = claim.id === selected;
+        const verdict = verdicts[claim.id] ?? claim.verdict;
+        const names = [...new Set(claim.at.map((id) => nameOf(subject, id)))];
+        return (
+          <li
+            key={claim.id}
+            data-claim-row={claim.id}
+            data-selected={on ? "" : undefined}
+            className="flex items-start gap-2"
+            style={{ outline: on ? `2px solid ${tokenRef("select")}` : undefined, outlineOffset: 2 }}
+          >
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 text-left"
+              onClick={() => onSelect(claim)}
+              title={`select claim ${i + 1}: its places and legs light up in the drawing`}
+            >
+              <span
+                aria-hidden
+                className="face-mono mt-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-full text-[10px]"
+                style={{ backgroundColor: claimInk(claim), color: tokenRef("page") }}
+              >
+                {i + 1}
+              </span>
+              <span className="min-w-0">
+                <span>{claim.text}</span>{" "}
+                <span className="text-ink-2 face-mono t-small">
+                  {claim.state} · at {names.join(", ")}
+                  {verdict ? ` · ${VERDICTS.find((v) => v.value === verdict)?.word}` : ""}
+                </span>
+              </span>
+            </button>
+            <span className="flex shrink-0 items-center gap-1" role="group" aria-label={`verdict on claim ${i + 1}`}>
+              {VERDICTS.map((option) => (
+                <Press
+                  key={option.value}
+                  type="button"
+                  frame="line"
+                  size="caption"
+                  state={verdict === option.value ? "selected" : "rest"}
+                  aria-pressed={verdict === option.value}
+                  title={option.says}
+                  data-verdict={option.value}
+                  onClick={() => onVerdict(claim, option.value)}
+                >
+                  {option.word}
+                </Press>
+              ))}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
 
 /**
  * Select and zoom to the element ids in Revit. Only mounted with a connected document: the verb

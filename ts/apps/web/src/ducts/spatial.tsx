@@ -15,7 +15,7 @@ import { FactChip } from "#/components/lang/chip";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 import { Switcher } from "#/components/lang/switcher";
-import { LegFacts, nameOf, PlaceFacts, ShowInRevit } from "./claims";
+import { ClaimsList, LegFacts, nameOf, PlaceFacts, ShowInRevit } from "./claims";
 import { DuctDrawing, GlyphKey, type Scene } from "./drawing";
 import { DASH_CLASS, ENCODING_KEYS, ENCODINGS, encodingOf, type Encoding } from "./encoding";
 import { NodeFactsView, SegmentFactsView } from "./facts";
@@ -307,6 +307,21 @@ function Spatial({
               onDrag={view.onDrag}
               underlay={view.underlay}
             />
+            {sub ? (
+              <div className="max-h-56 shrink-0 overflow-auto border-t border-line">
+                <ClaimsList
+                  subject={sub}
+                  verdicts={page.verdicts}
+                  selected={claimPicked?.id ?? ""}
+                  onSelect={(claim) =>
+                    setPage({ selected: claim.id === page.selected ? "" : claim.id, issue: "" })
+                  }
+                  onVerdict={(claim, verdict) =>
+                    setPage({ verdicts: { ...page.verdicts, [claim.id]: verdict } })
+                  }
+                />
+              </div>
+            ) : null}
           </div>
         </Pane>
       }
