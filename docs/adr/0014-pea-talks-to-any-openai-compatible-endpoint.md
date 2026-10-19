@@ -1,7 +1,13 @@
 # 0014 — Pea talks to any OpenAI-compatible endpoint
 
-Date: 2026-09-30. Status: accepted. Source: kaitpw, inference-routing conversation.
+Date: 2026-09-30. Status: superseded by [ADR 0015](0015-the-harness-drives-pea-is-tools-and-ui.md) (2026-10-12). Source: kaitpw, inference-routing conversation.
 
+> Superseded 2026-10-12 by ADR 0015: an endpoint is now a per-harness provider (`harness/providers.ts`).
+> A Claude provider speaks the Messages API, a Codex provider the Responses API, each with its own
+> probe. Pea keeps no single global `{ baseUrl, apiKey }`, and the Machine page
+> (`web/src/machine/pea.tsx`) owns provider settings. The text below is history. The optional
+> externally hosted endpoint stays a valid choice for a user.
+>
 > Superseded in part, 2026-10-09 (host ledger, MACHINE CONTROL PLANE ruling 7): inbound share of the
 > installed host over the user's tailnet is a product switch (`share.ts` owns one Tailscale Serve
 > mapping; `request-identity.ts` verifies the Serve identity header before every handler). The
@@ -13,10 +19,7 @@ Date: 2026-09-30. Status: accepted. Source: kaitpw, inference-routing conversati
 
 Pea needs inference on machines that are not the developer's PC: a Revit runner laptop, a shared
 office laptop, a coworker's install. Each case had been imagined as its own feature (a Tailscale
-link, a key-sharing scheme, a "Pea Cloud" gateway, Clerk sign-in). Pea's model layer is Mastra
-(`createMastraCodeGateway` in `ts/packages/runtime/src/pea-runtime.ts`). Mastra reads
-`OPENAI_BASE_URL` and `OPENAI_API_KEY` from the process environment, and `peaModelAllowlist`
-already lists `openai/*` models. A subscription proxy (CLIProxyAPI over a ChatGPT login) was proven
+link, a key-sharing scheme, a "Pea Cloud" gateway, Clerk sign-in). Pea's former model layer read `OPENAI_BASE_URL` and `OPENAI_API_KEY` from the process environment. A subscription proxy (CLIProxyAPI over a ChatGPT login) was proven
 on 2026-09-30 to answer `/v1/chat/completions` behind a plain key. Every imagined case reduces to
 one pair of values.
 
@@ -40,5 +43,3 @@ one pair of values.
   re-litigating this ADR.
 - Coworkers today paste an endpoint and a key. That fragility is accepted until a gateway with
   sign-in replaces the key, and the replacement changes nothing in Pea's model layer.
-- Mastra's env contract is now load-bearing. If a Mastra upgrade stops honouring `OPENAI_BASE_URL`,
-  the endpoint setting breaks and the host probe must say so.

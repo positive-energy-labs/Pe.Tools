@@ -1,4 +1,5 @@
 {
+  "coordinateEncoding": "native-double",
   "document": {
     "title": "Synthetic",
     "readAt": "2026-10-04T00:00:00+00:00",
@@ -323,6 +324,7 @@
     {
       "id": 10,
       "kind": "duct",
+      "curveKind": "line",
       "type": "Round Duct",
       "shape": "round",
       "size": "12\"ø",
@@ -392,6 +394,7 @@
     {
       "id": 11,
       "kind": "duct",
+      "curveKind": "line",
       "type": "Round Duct",
       "shape": "round",
       "size": "12\"ø",
@@ -446,6 +449,7 @@
     {
       "id": 12,
       "kind": "duct",
+      "curveKind": "line",
       "type": "Round Duct",
       "shape": "round",
       "size": "6\"ø",
@@ -552,6 +556,7 @@
   "slots": {
     "fanStatic": "PE_M_Fan_ExternalStaticPressure",
     "fanFlow": "PE_M_Fan_AirFlow",
-    "componentDrop": "Pressure Drop"
+    "componentDrop": "Pressure Drop",
+    "fittingCoefficient": "Pe_C"
   }
 }

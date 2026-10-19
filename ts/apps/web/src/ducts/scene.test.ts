@@ -5,7 +5,7 @@
 import { expect, it } from "vite-plus/test";
 
 import { legsOf, type SubjectCut } from "./legs";
-import type { DuctSnapshot } from "./readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { CONTEXT_PAD_FT, indexOf, subjectScene } from "./scene";
 
 type Segment = DuctSnapshot["segments"][number];
@@ -14,6 +14,7 @@ type Node = DuctSnapshot["nodes"][number];
 const segment = (id: number, from: number[], to: number[], levelId: number): Segment => ({
   id,
   kind: "duct",
+  curveKind: "line",
   shape: "round",
   size: '10"ø',
   lengthFt: Math.hypot(to[0]! - from[0]!, to[1]! - from[1]!, to[2]! - from[2]!),
@@ -40,6 +41,7 @@ const L1 = 1;
 const L2 = 2;
 const L3 = 3;
 const snapshot = {
+  coordinateEncoding: "native-double",
   document: {
     title: "t",
     readAt: "2026-10-19T00:00:00Z",
@@ -73,7 +75,7 @@ const snapshot = {
   issues: [],
   layers: [],
   systems: [],
-  slots: { fanStatic: "a", fanFlow: "b", componentDrop: "c" },
+  slots: { fanStatic: "a", fanFlow: "b", componentDrop: "c", fittingCoefficient: "d" },
 } as DuctSnapshot;
 
 const SUBJECT = [1, 11, 2, 12, 3];

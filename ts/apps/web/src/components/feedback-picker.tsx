@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Popover } from "@base-ui/react/popover";
 import { MessageSquarePlus, Send } from "lucide-react";
 
-import { ActionButton } from "#/components/lang/action-button";
-import { PopupFrame } from "#/components/lang/list-popup";
+import { Button } from "@pe/kit/lang/button";
+import { HotkeyCommand } from "#/components/lang/hotkey-command";
+import { PopupFrame } from "@pe/kit/lang/list-popup";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Textarea } from "#/components/lang/textarea";
-import { sendFeedback } from "#/host/feedback";
+import { deliverFeedback, sendFeedback, type FeedbackReceipt } from "#/host/feedback";
 import { useAction } from "#/readings";
-import { useScopeKeys } from "#/route/keys";
+import { useScopeKeys } from "@pe/kit/keys";
 
-// Pick one element, write a note, send it with a cropped picture to PostHog through the host.
+// Pick one element, write a note, send it with a cropped picture through the host, which keeps it
+// first and hands it to PostHog second. A kept note that did not deliver says so and can retry.
 type Grab = typeof import("react-grab/primitives");
 type Rect = { x: number; y: number; width: number; height: number };
 type Picked = {
@@ -23,28 +26,48 @@ const PAD = 20;
 const NOTE_LABEL = "feedback note";
 /** Chrome the picture leaves out; the pick mark stays in so the crop shows what was meant. */
 const CHROME = "data-feedback-chrome";
+const START_FEEDBACK = "pe:start-feedback";
 
-export function FeedbackPicker() {
+/** Use the one picker from a tutorial or a message's own feedback control. */
+export function startFeedback(element?: Element) {
+  window.dispatchEvent(new CustomEvent(START_FEEDBACK, { detail: element }));
+}
+
+export function FeedbackPicker({ hideTrigger = false }: { hideTrigger?: boolean }) {
   const grab = useRef<Grab | null>(null);
+  const capture = useRef(0);
   const [picking, setPicking] = useState(false);
   const [hover, setHover] = useState<Rect | null>(null);
   const [picked, setPicked] = useState<Picked | null>(null);
   const [note, setNote] = useState("");
+  const [kept, setKept] = useState<FeedbackReceipt | null>(null);
+  const [cancelHost, setCancelHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    const update = () => setCancelHost(document.getElementById("pe-feedback-cancel"));
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
 
   const close = () => {
+    capture.current++;
     setPicking(false);
     setHover(null);
     setPicked(null);
     setNote("");
+    setKept(null);
   };
+  const settle = (receipt: FeedbackReceipt) =>
+    receipt.delivery === "accepted" ? close() : setKept(receipt);
 
-  // Send waits on PostHog: a failure keeps the popover and the typed note.
+  // A refusal keeps the popover and the typed note; a kept, undelivered note keeps its receipt.
   const send = useAction(async ({ context, rect }: Picked) => {
     const picture = await snapshot(rect).then(
       (dataUrl) => ({ dataUrl, error: null }),
       (error: unknown) => ({ dataUrl: null, error: String(error) }),
     );
-    await sendFeedback({
+    return sendFeedback({
       comment: note.trim(),
       url: location.href,
       selector: context.selector,
@@ -56,18 +79,47 @@ export function FeedbackPicker() {
       picture: picture.dataUrl,
       picture_error: picture.error,
     });
-  }, close);
-  const submit = () => picked && note.trim() && !send.isPending && send.mutate(picked);
+  }, settle);
+  const deliver = useAction(deliverFeedback, settle);
+  const submit = () => picked && note.trim() && !kept && !send.isPending && send.mutate(picked);
 
-  useScopeKeys([
-    {
-      hotkey: "Escape",
-      callback: close,
-      label: "cancel feedback",
-      says: "stop picking without sending a note",
-      options: { enabled: picking && !picked },
-    },
-  ]);
+  useEffect(() => {
+    const start = (event: Event) => {
+      const element = (event as CustomEvent<Element | undefined>).detail;
+      close();
+      setPicking(true);
+      if (!element) return;
+      const attempt = capture.current;
+      void import("react-grab/primitives")
+        .then(async (g) => {
+          grab.current = g;
+          const context = await g.getElementContext(element);
+          if (attempt === capture.current && element.isConnected)
+            setPicked({ element, rect: g.getElementBounds(element), context });
+        })
+        .catch(() => {
+          /* The regular picker remains available when direct capture fails. */
+        });
+    };
+    window.addEventListener(START_FEEDBACK, start);
+    return () => {
+      capture.current++;
+      window.removeEventListener(START_FEEDBACK, start);
+    };
+  }, []);
+
+  // Bound only while picking: idle, it would sit beside the route's own Escape on the document.
+  useScopeKeys(
+    [
+      {
+        hotkey: "Escape",
+        callback: close,
+        label: "cancel feedback",
+        says: "stop picking without sending a note",
+      },
+    ],
+    picking && !picked ? undefined : null,
+  );
 
   useEffect(() => {
     if (!picking || picked) return;
@@ -116,18 +168,43 @@ export function FeedbackPicker() {
           style={{ left: box.x, top: box.y, width: box.width, height: box.height }}
         />
       )}
-      <div {...{ [CHROME]: "" }} data-react-grab-ignore className="fixed bottom-2 left-2 z-popup">
-        <ActionButton
-          label={picking ? "cancel feedback" : "feedback"}
-          icon={MessageSquarePlus}
-          onClick={() => (picking ? close() : setPicking(true))}
-          reason={
-            picking
-              ? "Stop picking without sending a note"
-              : "Pick one thing on this page and send a note about it"
-          }
-        />
-      </div>
+      {picking && cancelHost
+        ? createPortal(
+            <span {...{ [CHROME]: "" }} data-react-grab-ignore>
+              <HotkeyCommand
+                label="cancel feedback"
+                word="Cancel"
+                hotkey="Escape"
+                invoke={close}
+                bind={false}
+                face="responsive"
+                reason="Stop picking without sending a note"
+              />
+            </span>,
+            cancelHost,
+          )
+        : null}
+      {(!hideTrigger || picking) && !cancelHost ? (
+        <div
+          {...{ [CHROME]: "" }}
+          data-react-grab-ignore
+          className="fixed bottom-(--gutter) left-(--gutter) z-popup flex h-(--rail-h) items-center"
+        >
+          <Button
+            kind="framed"
+            label={picking ? "cancel feedback" : "feedback"}
+            icon={MessageSquarePlus}
+            onClick={() => (picking ? close() : setPicking(true))}
+            reason={
+              picking
+                ? "Stop picking without sending a note"
+                : "Pick one thing on this page and send a note about it"
+            }
+          >
+            {picking ? "cancel feedback" : "feedback"}
+          </Button>
+        </div>
+      ) : null}
       <Popover.Root
         open={!!picked}
         // Only cancel and Esc drop a note; a stray outside click must not lose typed text.
@@ -152,21 +229,42 @@ export function FeedbackPicker() {
                 }}
               />
               {send.error && <OutcomeLine kind="error" label={send.error.message} />}
-              <div className="flex justify-end gap-2">
-                <ActionButton label="cancel" onClick={close} reason="Drop this note" />
-                <ActionButton
-                  tone="commit"
-                  label="send"
-                  icon={Send}
-                  busy={send.isPending}
-                  disabled={!note.trim() || send.isPending}
-                  onClick={submit}
-                  reason={
-                    note.trim()
-                      ? "Send this note and a picture of the marked element to PostHog"
-                      : "Write a note first"
-                  }
+              {kept && kept.delivery !== "accepted" ? (
+                <OutcomeLine
+                  kind="refused"
+                  label={`kept ${kept.feedbackId.slice(0, 8)}, ${kept.delivery === "failed" ? "not delivered" : "delivery unconfirmed"}: ${kept.error}`}
+                  says="the note is on this host; deliver it again or close"
                 />
+              ) : null}
+              {deliver.error && <OutcomeLine kind="error" label={deliver.error.message} />}
+              <div className="flex justify-end gap-2">
+                <Button kind="framed" label="cancel" onClick={close} reason="Drop this note">
+                  cancel
+                </Button>
+                {kept ? (
+                  <Button
+                    kind="commit"
+                    label="deliver again"
+                    icon={Send}
+                    busy={deliver.isPending}
+                    onClick={() => deliver.mutate(kept.feedbackId)}
+                    reason="Hand the note this host kept to PostHog again; the browser does not resend it"
+                  >
+                    deliver again
+                  </Button>
+                ) : (
+                  <Button
+                    kind="commit"
+                    label="send"
+                    icon={Send}
+                    busy={send.isPending}
+                    refusal={note.trim() ? null : "Write a note first"}
+                    onClick={submit}
+                    reason="Send this note and a picture of the marked element to PostHog"
+                  >
+                    send
+                  </Button>
+                )}
               </div>
             </div>
           </PopupFrame>

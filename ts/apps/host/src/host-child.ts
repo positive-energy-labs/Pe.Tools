@@ -21,29 +21,34 @@ export function runHostChild(
             let closed = false;
             let stdout = "";
             let output = "";
+            let stderr = "";
             child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
               stdout += chunk;
               if (options.all) output += chunk;
             });
-            if (options.all)
-              child.stderr.setEncoding("utf8").on("data", (chunk: string) => (output += chunk));
-            else child.stderr.resume();
+            child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
+              if (options.all) output += chunk;
+              stderr = (stderr + chunk).slice(-4096);
+            });
             const exited = new Promise<void>((resolve) =>
               child.once("close", () => {
                 closed = true;
                 resolve();
               }),
             );
-            const result = new Promise<{ stdout: string; output: string; exitCode: number | null }>(
-              (resolve, reject) => {
-                child.once("error", reject);
-                child.stdout.once("error", reject);
-                child.stderr.once("error", reject);
-                child.once("close", (exitCode) =>
-                  resolve({ stdout, output: options.all ? output : stdout, exitCode }),
-                );
-              },
-            );
+            const result = new Promise<{
+              stdout: string;
+              output: string;
+              stderr: string;
+              exitCode: number | null;
+            }>((resolve, reject) => {
+              child.once("error", reject);
+              child.stdout.once("error", reject);
+              child.stderr.once("error", reject);
+              child.once("close", (exitCode) =>
+                resolve({ stdout, output: options.all ? output : stdout, stderr, exitCode }),
+              );
+            });
             return { child, exited, needsCleanup: () => !closed, result };
           },
           catch: (error) => (error instanceof Error ? error : new Error(String(error))),

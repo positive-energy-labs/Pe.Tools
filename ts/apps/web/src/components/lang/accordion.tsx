@@ -1,8 +1,6 @@
 /**
- * ACCORDION — groups that open one at a time, each header carrying its group's critical state
- * (machine control plane, design-system ledger 2026-10-09). The header is the summary a folded
- * group owes the reader: it states what the body would show first, never a count that hides a
- * hazard. Which group is open is the caller's state; this owns only the drawing.
+ * Groups that open one at a time; each header states its group's critical state, never a count
+ * that hides a hazard. Which group is open is the caller's state.
  */
 import type { ReactNode } from "react";
 

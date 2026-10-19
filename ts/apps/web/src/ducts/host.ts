@@ -7,11 +7,13 @@
 import { useEffect, useMemo, useState } from "react";
 import type { DuctParameterKey } from "@pe/agent-contracts";
 
+import { hostFetch } from "#/host/runtime";
+import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
 import { useHostOp } from "#/readings";
 import { NATIVE_READ_WAIT_S } from "#/route/waits";
-import { toGrids, type Grids } from "./loss-grid";
-import { TABLE_IDS } from "./pricing";
-import type { DuctSnapshot } from "./readiness";
+import { toGrids, type Grids } from "@pe/ducts-domain/loss-grid";
+import { TABLE_IDS } from "@pe/ducts-domain/pricing";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 /** The saved snapshot's URL in dev, else undefined. */
 export const SAVED: string | undefined = import.meta.env.DEV
@@ -118,4 +120,33 @@ export function useDuctTables(session: string | null) {
     error: grids.error ?? saved.error ?? call.error?.message ?? null,
     pending: SAVED ? !saved.data && !saved.error : call.pending,
   };
+}
+
+/** Portable catalog tables are host files, independent of Revit's ASHRAE grids. */
+export function useDuctCatalogs(epoch: number) {
+  const [state, setState] = useState<{ tables: Catalogs; findings: string[] }>({
+    tables: EMPTY_CATALOGS,
+    findings: [],
+  });
+  useEffect(() => {
+    let live = true;
+    hostFetch("/ducts/catalogs")
+      .then((r) => (r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)))
+      .then(
+        (value) => {
+          if (live) setState(value);
+        },
+        (error) => {
+          if (live)
+            setState({
+              tables: EMPTY_CATALOGS,
+              findings: [`Catalog read failed: ${String(error)}`],
+            });
+        },
+      );
+    return () => {
+      live = false;
+    };
+  }, [epoch]);
+  return state;
 }

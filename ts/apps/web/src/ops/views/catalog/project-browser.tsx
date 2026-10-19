@@ -1,4 +1,4 @@
-import { EmptyState } from "#/components/lang/empty";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
 import { type TreeNode, TreeView } from "#/ops/primitives";
 import {
@@ -10,6 +10,7 @@ import {
   asString,
 } from "#/ops/registry";
 import { IssuesNote, MonoAside, insertPath, pageNote } from "./viz-cycle";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function ProjectBrowserView({ data }: OpViewProps) {
   const record = asRecord(data);
@@ -98,9 +99,11 @@ export function ProjectBrowserView({ data }: OpViewProps) {
     <Section
       label="Project Browser"
       aside={
-        <span title={asString(record.browserSnapshotId)}>
-          <MonoAside>snapshot ·{(asString(record.browserSnapshotId) ?? "∅").slice(-8)}</MonoAside>
-        </span>
+        <TooltipHint content={asString(record.browserSnapshotId)}>
+          <span>
+            <MonoAside>snapshot ·{(asString(record.browserSnapshotId) ?? "∅").slice(-8)}</MonoAside>
+          </span>
+        </TooltipHint>
       }
     >
       <TreeView nodes={roots} dense />

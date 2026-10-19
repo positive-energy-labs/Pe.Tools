@@ -1,0 +1,324 @@
+/* Conversation grammar (conversation.tsx): the transcript turn and the composer frame.
+   Turn head: speaker and clock are one phrase; your head sits right, over your bubble. */
+.dl-message-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line-height);
+  font-weight: var(--weight-strong);
+  color: var(--pe-ink);
+}
+.dl-message-head[data-role="user"] {
+  justify-content: flex-end;
+}
+/* The answering harness's glyph: ranks under the name, in secondary ink. */
+.dl-message-mark {
+  display: inline-flex;
+  align-self: center;
+  margin-right: -2px;
+  color: var(--pe-ink-2);
+}
+/* Three ranks: speaker > clock > turn index, separated by space, not a dot that weighs them equal.
+   A clock is words, so it wears the body face; the turn index is a count, so it is mono. */
+.dl-message-meta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  font-family: var(--font-body);
+  font-weight: var(--weight-regular);
+  font-size: var(--type-small-size);
+  font-variant-numeric: tabular-nums;
+  color: var(--pe-ink-2);
+}
+.dl-message-meta > [data-slot="turn"] {
+  font-family: var(--font-mono);
+  font-size-adjust: var(--mono-adjust);
+  font-weight: var(--weight-mono);
+  letter-spacing: var(--track-mono);
+  color: var(--pe-ink-mute);
+}
+.dl-message-body,
+.dl-message-body .prose {
+  font-family: var(--font-body);
+  font-size: var(--type-prose-size);
+  line-height: var(--type-prose-line-height);
+}
+/* A reply's h1/h2 climb one rung; prose elsewhere keeps flat heads. */
+.dl-message-body .prose :is(h1, h2) {
+  font-size: var(--type-title-size);
+  line-height: var(--type-title-line-height);
+}
+/* What you sent: the one enclosed block in the transcript. Square: only freestanding controls round. */
+.dl-message-bubble {
+  padding: 8px 14px;
+  color: var(--pe-ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* A call's outcome: done whispers; what asks or failed speaks in tone. */
+.dl-tool-status {
+  flex: none;
+  font-size: var(--type-small-size);
+  font-family: var(--font-mono);
+  font-size-adjust: var(--mono-adjust);
+  font-weight: var(--weight-mono);
+}
+.dl-tool-status[data-state="done"] {
+  color: var(--pe-ink-mute);
+}
+.dl-tool-status[data-state="working"] {
+  font-style: italic;
+}
+/* Composer: the same `--chat-measure` and lane inset as the transcript, so the box sits under the
+   words it answers. One closed box, top to bottom: work, the text, the bottom row. */
+.dl-composer-frame {
+  width: 100%;
+  max-width: var(--chat-measure, 750px);
+  margin-inline: auto;
+  padding: 0 20px var(--gutter);
+  font-family: var(--font-body);
+}
+.dl-composer-box {
+  position: relative;
+  border: 1px solid var(--pe-line);
+  outline: 3px solid transparent;
+  /* Chrome is one rung; only the message text reads at prose. */
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line-height);
+  transition:
+    border-color var(--motion-control),
+    outline-color var(--motion-control);
+}
+/* Focus is a ring of the hairline, never a hue. */
+.dl-composer-box:focus-within {
+  border-color: var(--pe-line-2);
+  outline-color: color-mix(in srgb, var(--pe-line-2) 22%, transparent);
+}
+/* The box: one line at rest, the pickers' marks stacked on its left and Send on its
+   right; open while you write, the draft grows to its content (`--composer-lines`, then it scrolls) over a
+   bottom row of pickers, tools and Send. Both states are one grid template: at rest the bottom
+   row is zero tall, Send rides up into the text row by `translate` and the marks sit over its
+   left edge, so the motion is plain transitions (block sizes, translate, opacity) on one easing,
+   and the box's height moves monotonically with no second paint. The template itself never animates: Chrome
+   hands interpolated `fr` slack to the auto rows, and the box wobbled. */
+.dl-composer-box {
+  --composer-mark: 20px;
+  --composer-rest: calc(var(--composer-mark) * 2);
+  --composer-pad: calc(var(--gutter) / 2);
+  /* The draft grows to this many lines, then scrolls: the page's composer is taller than the tray's. */
+  --composer-lines: 5;
+  --composer-ease: var(--motion-control) ease-out;
+  /* Lets the draft's `block-size` move between one line and `auto`. */
+  interpolate-size: allow-keywords;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "work work work"
+    "text text text"
+    "refusal refusal refusal"
+    "pick tools send";
+  column-gap: var(--composer-pad);
+  padding: var(--composer-pad);
+}
+.dl-composer-box[data-variant="full"] {
+  --composer-lines: 7;
+}
+.dl-composer-box > [data-composer-refusal] {
+  grid-area: refusal;
+}
+/* Asks and attachments line up with the marks and Send: the box's padding is their inset. */
+.dl-composer-box > [data-composer-work] {
+  grid-area: work;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--composer-pad);
+  padding-bottom: var(--composer-pad);
+}
+.dl-composer-box > [data-composer-work] > * {
+  padding-inline: 0;
+  padding-top: 0;
+}
+.dl-composer-box > [data-composer-work]:empty {
+  display: none;
+}
+.dl-composer-box > textarea {
+  grid-area: text;
+  inline-size: 100%;
+  field-sizing: content;
+  min-block-size: 0;
+  block-size: var(--type-prose-line-height);
+  max-block-size: calc(
+    var(--type-prose-line-height) * var(--composer-lines) + var(--composer-pad) * 2
+  );
+  /* Centred in the rest row; room on the sides for the marks and Send riding over it. */
+  margin-block: calc((var(--composer-rest) - var(--type-prose-line-height)) / 2);
+  padding: 0 calc(var(--control-h) + var(--composer-pad)) 0
+    calc(var(--composer-mark) + var(--composer-pad));
+  overflow: hidden;
+  transition:
+    block-size var(--composer-ease),
+    margin-block var(--composer-ease),
+    padding var(--composer-ease);
+}
+.dl-composer-box[data-open] > textarea {
+  block-size: auto;
+  margin-block: 0;
+  padding: var(--composer-pad);
+  overflow-y: auto;
+}
+/* The bottom row: each item grows from zero to its own height, so the row moves on one curve. */
+.dl-composer-box > [data-composer-pickers],
+.dl-composer-box > [data-composer-tools],
+.dl-composer-box > [data-composer-send] {
+  block-size: auto;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--composer-pad);
+  transition:
+    block-size var(--composer-ease),
+    translate var(--composer-ease),
+    opacity var(--composer-ease),
+    visibility var(--composer-ease);
+}
+.dl-composer-box > [data-composer-pickers] {
+  grid-area: pick;
+  flex-wrap: wrap;
+  /* The marks restack between states; each flip fades them in where they now sit. */
+  animation: composer-marks-rest var(--composer-ease);
+}
+/* At rest the row's items are zero tall; Send overflows it, ridden up a row. */
+.dl-composer-box:not([data-open]) > [data-composer-tools],
+.dl-composer-box:not([data-open]) > [data-composer-send] {
+  block-size: 0;
+  align-items: flex-start;
+}
+/* Out of the row at rest: a closing row then measures tools and Send alone, whose heights hold,
+   instead of the restacked marks (the first frame of a close swelled by their column). */
+.dl-composer-box:not([data-open]) > [data-composer-pickers] {
+  /* Placed in its own (zero-tall) cell, which is its containing block: the rest row's corner. */
+  position: absolute;
+  grid-area: text;
+  inset-inline-start: 0;
+  inset-block-start: 0;
+  /* Drawn the rest row's height, held at zero underneath so an open grows them from nothing. */
+  block-size: 0;
+  min-block-size: var(--composer-rest);
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 0;
+}
+.dl-composer-box:not([data-open]) > [data-composer-pickers] [data-list-trigger] {
+  width: var(--composer-mark);
+  height: var(--composer-mark);
+}
+.dl-composer-box[data-open] > [data-composer-pickers] {
+  animation-name: composer-marks-open;
+}
+.dl-composer-box > [data-composer-tools] {
+  grid-area: tools;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  color: var(--pe-ink-2);
+}
+.dl-composer-box:not([data-open]) > [data-composer-tools] {
+  visibility: hidden;
+  opacity: 0;
+}
+.dl-composer-box > [data-composer-send] {
+  grid-area: send;
+}
+.dl-composer-box:not([data-open]) > [data-composer-send] {
+  grid-area: text;
+  justify-self: end;
+  translate: 0 calc((var(--composer-rest) - var(--control-h)) / 2);
+}
+/* Two names, one fade: changing the name restarts the animation on every flip. */
+@keyframes composer-marks-rest {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes composer-marks-open {
+  from {
+    opacity: 0;
+  }
+}
+/* The reply has no marks: its rest draft keeps only the open inset, so the text never slides. */
+.dl-composer-box[data-variant="reply"]:not([data-open]) > textarea {
+  padding-inline-start: var(--composer-pad);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dl-composer-box,
+  .dl-composer-box > * {
+    transition: none;
+    animation: none;
+  }
+}
+/* Work at the top of the box: the pending requests' disclosure, then its panel. */
+.dl-composer-pending {
+  padding: var(--gutter) var(--gutter) 0;
+}
+.dl-composer-pending > button {
+  width: 100%;
+}
+.dl-composer-queue {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: var(--gutter);
+  text-align: left;
+}
+.dl-composer-requests {
+  max-height: min(40dvh, calc(var(--item-h) * 12));
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+/* The box's ring says where keys go; the pane's outline would be a second frame for the same fact. */
+[data-slot="pane"]:has(.dl-composer-frame) {
+  --pane-halo: transparent;
+}
+/* Message controls occupy the turn gap even while hidden; keyboard and touch keep access. */
+.dl-message-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-unit);
+  min-height: var(--control-h);
+  margin-top: var(--space-unit);
+  color: var(--pe-ink-mute);
+  opacity: 0;
+  transition: opacity var(--motion-control);
+}
+.dl-message-controls[data-role="user"] {
+  justify-content: flex-end;
+}
+.dl-message-controls time {
+  font-family: var(--font-mono);
+  font-size-adjust: var(--mono-adjust);
+  font-weight: var(--weight-mono);
+  font-size: var(--type-small-size);
+  margin-right: var(--space-unit);
+}
+[data-annotation="moment"]:hover .dl-message-controls,
+[data-annotation="moment"]:focus-within .dl-message-controls {
+  opacity: 1;
+}
+@media (hover: none) {
+  .dl-message-controls {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dl-message-controls {
+    transition: none;
+  }
+}
+.dl-message-body .prose :is(h3, h4, h5, h6) {
+  font-size: var(--type-prose-size);
+  line-height: var(--type-prose-line-height);
+}

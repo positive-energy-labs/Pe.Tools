@@ -8,9 +8,10 @@ import type { ReactNode } from "react";
 import type { DuctDrawing, NodeFacts, Scene } from "./drawing";
 import type { DuctNode, Issue, Segment, SegmentFacts } from "./encoding";
 import type { Claim, Leg, Place, SubjectCut } from "./legs";
-import type { LossResult } from "./losses";
-import type { Priced } from "./pricing";
-import { snapshotById, type DuctSnapshot } from "./readiness";
+import type { LossResult } from "@pe/ducts-domain/losses";
+import type { Priced } from "@pe/ducts-domain/pricing";
+import { snapshotById } from "@pe/ducts-domain/readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 type Level = DuctSnapshot["levels"][number];
 
@@ -47,6 +48,7 @@ export function lossesOf(result: LossResult): Map<number, number> {
       unique.set(`${row.id}|${row.kind}|${row.leg ?? ""}|${row.desc}`, row);
   const losses = new Map<number, number>();
   for (const row of unique.values()) {
+    if (row.dp == null) continue;
     const was = losses.get(row.id);
     losses.set(row.id, row.kind === "friction" ? (was ?? 0) + row.dp : Math.max(was ?? 0, row.dp));
   }

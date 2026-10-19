@@ -1,5 +1,5 @@
-import { token } from "#/lib/token";
-import { EmptyState } from "#/components/lang/empty";
+import { token } from "@pe/kit/lib/token";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { Provenance } from "#/components/lang/section";
 import {
   type OpViewProps,
@@ -11,27 +11,27 @@ import {
   text,
 } from "#/ops/registry";
 import { HandleChip, IssueLines, handleId } from "./kind-viz";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 function ScoreBar({ score, max, muted }: { score: number; max: number; muted: boolean }) {
   const frac = max > 0 ? Math.max(0, Math.min(1, score / max)) : 0;
   return (
-    <span
-      className="inline-flex shrink-0 items-center gap-1.5"
-      title={`score ${score} of max ${max} in this set`}
-    >
-      <span className="inline-block h-[3px] w-[72px]">
-        <span
-          className="block h-full"
-          style={{
-            width: `${frac * 100}%`,
-            backgroundColor: muted ? token("ink-mute") : token("viz-1"),
-          }}
-        />
+    <TooltipHint content={`score ${score} of max ${max} in this set`}>
+      <span className="inline-flex shrink-0 items-center gap-1.5">
+        <span className="inline-block h-[3px] w-[72px]">
+          <span
+            className="block h-full"
+            style={{
+              width: `${frac * 100}%`,
+              backgroundColor: muted ? token("ink-mute") : token("viz-1"),
+            }}
+          />
+        </span>
+        <span className="" style={{ color: muted ? token("ink-mute") : undefined }}>
+          {score}
+        </span>
       </span>
-      <span className="" style={{ color: muted ? token("ink-mute") : undefined }}>
-        {score}
-      </span>
-    </span>
+    </TooltipHint>
   );
 }
 

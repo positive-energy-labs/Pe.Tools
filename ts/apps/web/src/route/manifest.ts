@@ -5,21 +5,20 @@
  * TanStack `Route`, so the type is `RouteManifest` and the per-route export is `manifest`.
  */
 import { noteCaptured, type Inspectable, type InspectableRef } from "./inspect";
-import type { PodList } from "@pe/host-contracts/operation-types";
+import type { OpKey, OpCallArgs, OpResponseOf, PodList } from "@pe/host-contracts/operation-types";
 import { previousOf } from "#/readings";
-import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type { ReactNode } from "react";
 import { z } from "zod";
-import type { Chord } from "./keys";
+import type { Chord } from "@pe/kit/keys";
 import {
   hostActions,
   sameValue,
   semanticActions,
   stagedEntries,
-  type ActionBases,
   type Rung,
   type SemanticActionKey,
   type ExecutionTarget,
+  type HostActionKey,
   type Reading,
   type ReadingRequest,
   type RouteStatePatch,
@@ -28,8 +27,11 @@ import {
   type WorkKey,
 } from "@pe/agent-contracts";
 import type { ActionIdentity } from "./facts";
+import { isSpecOf, workflow } from "./workflow";
 import type { Refusal } from "./refusal";
 import type { Cells } from "./cells";
+import type { GlobalOption, PageOption } from "#/settings/option-state";
+import { registerGlobalOptions } from "#/settings/option-catalogue";
 
 export const semanticActionInput = (
   key: SemanticActionKey,
@@ -43,7 +45,10 @@ type ReadingSpec<P> = ReadingRequest | ((page: P, work: WorkKey) => ReadingReque
 type WorkSpec<W> = RouteStateSpec<z.ZodType<W>>;
 
 /** A call bound to a resolved ExecutionTarget. */
-export type HostCaller = (operation: string, input?: unknown) => Promise<unknown>;
+export type HostCaller = <K extends OpKey>(
+  operation: K,
+  ...args: OpCallArgs<K, never>
+) => Promise<OpResponseOf<K>>;
 
 /** What `ready` and `run` receive. No React, no render state. */
 export interface Ctx<W, R extends string, P> {
@@ -130,20 +135,24 @@ export interface RouteManifest<W, R extends string, P, A extends string> {
       (K extends "read" | "refresh" ? { rereads: R | "work" } : unknown);
   };
   views?: readonly View<R>[];
+  /** Host actions this route's views run that no declared verb `does`: with the verbs, what a
+   * transcript record of that action opens (`workbench/chat-plugins.ts` `actionRoute`). */
+  runs?: readonly HostActionKey[];
   seeds?: Readonly<Partial<Record<A, Seed<W, R, P>>>>;
   docs?: ReactNode;
+  /** Projections bind to this route instance's Page and disappear with its owner. */
+  options?: readonly PageOption<P>[];
+  /** External owner bindings remain available in Settings after this Page unmounts. */
+  globalOptions?: readonly GlobalOption[];
 }
 
 /** Identity, for inference only. Exactly one `manifest` per route module (fable §8). */
 export const defineRoute = <W, const R extends string, P, const A extends string>(
   m: RouteManifest<W, R, P, A>,
-): RouteManifest<W, R, P, A> => m;
-
-/** An empty manifest is a legal manifest: the shell must render one. */
-export const emptyManifest = (
-  key: string,
-  name: string,
-): RouteManifest<never, never, never, never> => ({ key, name });
+): RouteManifest<W, R, P, A> => {
+  registerGlobalOptions(m.key, m.name, m.globalOptions ?? []);
+  return m;
+};
 
 /* ── The entity route kernel ─────────────────────────────────────────────────── */
 
@@ -188,15 +197,6 @@ export interface PlanEntry {
 }
 
 /** Apply each plan action's included rows, one host apply per plan, as `{ plan, hashes }`. */
-export const byPlan = (included: readonly PlanEntry[]) => {
-  const plans = new Map<string, Record<string, string>>();
-  for (const row of included) {
-    if (!row.plan) throw Error(`the planned row for ${row.name} names no plan`);
-    (plans.get(row.plan) ?? plans.set(row.plan, {}).get(row.plan)!)[row.hashKey ?? row.id] =
-      row.planHash;
-  }
-  return [...plans].map(([plan, expectedPlanHashes]) => ({ plan, expectedPlanHashes }));
-};
 
 /** The plan apply confirms (dogma law 9), as the plan workflow returned it. */
 export interface PlanSheet {
@@ -319,76 +319,8 @@ export interface EntityRouteDef<W, R extends string, P> {
   docs?: ReactNode;
 }
 
-/** `$schema` is an absolute URL on whichever host served it; the path is what names the library. */
-export const isSpecOf = (schema: string | null | undefined, path: string | readonly string[]) => {
-  if (!schema) return false;
-  try {
-    return [path].flat().includes(new URL(schema, "http://host").pathname);
-  } catch {
-    return false;
-  }
-};
-
 type EntityCtx = Ctx<unknown, string, EntityPage>;
 type Viewed = { page: EntityPage; readings: Readonly<Record<string, Reading<unknown>>> };
-
-export const documentOf = (ctx: { target: ExecutionTarget }) => {
-  if (ctx.target.kind !== "document") throw Error("pick a document");
-  return ctx.target.ref;
-};
-
-/** A host workflow's result, or its refusal as an error. */
-export const workflow = async (
-  key: SemanticActionKey,
-  input: Record<string, unknown>,
-  ctx: { target: ExecutionTarget },
-  bases?: ActionBases,
-): Promise<Record<string, unknown>> => {
-  const action = await runSemanticAction(key, input, documentOf(ctx), bases);
-  if (action.state !== "succeeded")
-    throw Error(
-      "error" in action && action.error ? String(action.error) : `${key} ${action.state}`,
-    );
-  return (action as unknown as { result: Record<string, unknown> }).result;
-};
-
-/**
- * The plan lane for a plan/apply workflow pair (dogma law 14): `plan` returns `{ plan }` and
- * mutates nothing, `apply` requires the hashes it returned. The result is one plan or one per
- * subject; apply sends each included row's hash as `expectedPlanHashes`.
- * `authored` is what the route's Work adds to both; with it, plan reads against that revision.
- */
-export const admissionPlan = <W, R extends string, P>(
-  keys: { plan: SemanticActionKey; apply: SemanticActionKey },
-  row: (plan: unknown) => PlanEntry,
-  authored?: (work: W) => { executionOptions?: unknown } & Record<string, unknown>,
-  /** Who the plan result says held rows back, named by the sheet's own rows. */
-  held?: (result: Record<string, unknown>, entries: readonly PlanEntry[]) => readonly HeldRow[],
-): ApplyPlan<W, R, P> => {
-  const workOf = (
-    ctx: Ctx<W, R | EntityReading, P & EntityPage>,
-  ): { input: { executionOptions?: unknown }; bases?: ActionBases } => {
-    if (!authored) return { input: {} };
-    const { doc, key, revision } = ctx.work;
-    if (!doc || revision === null) throw Error("author the route's Work first");
-    return { input: authored(doc), bases: { work: { key: key as WorkKey, revision } } };
-  };
-  return {
-    read: async (ctx, source) => {
-      const { input, bases } = workOf(ctx);
-      const result = await workflow(keys.plan, { source, ...input }, ctx, bases);
-      const entries = [result.plan]
-        .flat()
-        .map((plan) => ({ ...row(plan), plan: String(result.id) }));
-      const rows = held?.(result, entries) ?? [];
-      return rows.length ? { entries, held: rows } : { entries };
-    },
-    // The plan sealed the source and options; apply names that plan and the hashes it confirms.
-    apply: async (ctx, included) => {
-      for (const input of byPlan(included)) await workflow(keys.apply, input, ctx);
-    },
-  };
-};
 
 /** A re-reading pod list still answers with what it last saw; only "never read" is empty. */
 const podsOf = (view: Viewed) =>
@@ -442,6 +374,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     | "page"
     | "url"
     | "actions"
+    | "runs"
     | "seeds"
   > = {},
 ): RouteManifest<W, R | EntityReading, P & EntityPage, A | EntityAction> {
@@ -596,6 +529,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
       ...(def.capture ? { capture } : {}),
       apply,
     } as never,
+    runs: audit.runs,
     seeds: audit.seeds as never,
   });
 }

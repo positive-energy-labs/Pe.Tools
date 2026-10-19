@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
 
 import { Section } from "#/components/lang/section";
-import type { RecipeMetadata } from "#/lib/tv";
+import type { RecipeMetadata } from "@pe/kit/lib/tv";
 
-type ImportPath = `#/components/${"lang" | "ui"}/${string}`;
+type ImportPath =
+  | `#/components/${"lang" | "work" | "master-table"}/${string}`
+  | `@pe/kit/${"lang" | "table"}/${string}`;
 export type GridVariantProps = Record<string, string | boolean>;
 type Axis = readonly [name: string, values: readonly string[]];
 

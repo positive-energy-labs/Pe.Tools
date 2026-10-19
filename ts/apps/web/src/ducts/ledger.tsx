@@ -1,3 +1,5 @@
+import type { IssueKind, Blocks } from "@pe/ducts-domain/issues";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * T2 `ledger`: the engineer's worksheet, table first. Groups with their readiness; the chosen
  * group's runs from the root out to each terminal, Manual D style; its issues with the one
@@ -7,26 +9,29 @@
  */
 import { useContext, useMemo } from "react";
 import { type DuctsRouteDocument, type RouteStatePatch } from "@pe/agent-contracts";
-
 import { AssumptionCell } from "./assumptions";
-import { EmptyState } from "#/components/lang/empty";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
-import type { Column } from "#/components/master-table/model";
-import { Table } from "#/components/master-table/table";
-import { tokenRef } from "#/lib/token";
+import type { Column } from "@pe/kit/table/model";
+import { Table } from "@pe/kit/table/table";
+import { tokenRef } from "@pe/kit/lib/token";
 import { ChatHosted } from "#/route/situation-ladder";
-import { ISSUE_KINDS, IssueLegend, issueVerdict, type Blocks, type IssueKind } from "./issues";
+import { ISSUE_KINDS, IssueLegend, issueVerdict } from "./issues";
 import type { DuctsPage } from "./manifest";
-import type { DuctSnapshot, GroupReadiness } from "./readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import type { GroupReadiness } from "@pe/ducts-domain/readiness";
 import { READY } from "./tables";
-import { groupTree, runsOf, terminalCfm, type GroupTree, type Run } from "./topology";
-
+import {
+  groupTree,
+  runsOf,
+  terminalCfm,
+  type GroupTree,
+  type Run,
+} from "@pe/ducts-domain/topology";
 type Issue = DuctSnapshot["issues"][number];
-
 const num = (value: number | null | undefined, digits = 0) =>
   value == null ? "" : value.toFixed(digits);
-
 const CLASS_ORDER: readonly Blocks[] = ["walkable", "budgetable", "none"];
 /** Kinds in class-then-shade order, so counts read the same everywhere. */
 const KIND_ORDER = (Object.keys(ISSUE_KINDS) as IssueKind[]).sort(
@@ -34,7 +39,6 @@ const KIND_ORDER = (Object.keys(ISSUE_KINDS) as IssueKind[]).sort(
     CLASS_ORDER.indexOf(ISSUE_KINDS[a].blocks) - CLASS_ORDER.indexOf(ISSUE_KINDS[b].blocks) ||
     ISSUE_KINDS[a].color.shade - ISSUE_KINDS[b].color.shade,
 );
-
 /** Issue counts by kind, each in its kind's tone: `3 open end · 1 loop`. */
 function KindCounts({ issues }: { issues: readonly Issue[] }) {
   const counts = new Map<IssueKind, number>();
@@ -44,22 +48,22 @@ function KindCounts({ issues }: { issues: readonly Issue[] }) {
   return (
     <span>
       {kinds.map((kind, i) => (
-        <span key={kind} data-tone={ISSUE_KINDS[kind].color.tone} title={ISSUE_KINDS[kind].what}>
-          {i ? " · " : ""}
-          {counts.get(kind)} {ISSUE_KINDS[kind].label}
-        </span>
+        <TooltipHint key={kind} content={ISSUE_KINDS[kind].what}>
+          <span data-tone={ISSUE_KINDS[kind].color.tone}>
+            {i ? " · " : ""}
+            {counts.get(kind)} {ISSUE_KINDS[kind].label}
+          </span>
+        </TooltipHint>
       ))}
     </span>
   );
 }
-
 type GroupRow = DuctSnapshot["groups"][number] & {
   readiness: GroupReadiness;
   cfm: number;
   longestFt: number | null;
   own: Issue[];
 };
-
 export function DuctsLedger({
   snapshot,
   ready,
@@ -72,8 +76,14 @@ export function DuctsLedger({
   ready: Record<string, GroupReadiness>;
   page: DuctsPage;
   setPage: (next: Partial<DuctsPage>) => void;
-  empty: { says: string; exit: string } | null;
-  work: { doc: DuctsRouteDocument | null; write: (patch: RouteStatePatch[]) => Promise<unknown> };
+  empty: {
+    says: string;
+    exit: string;
+  } | null;
+  work: {
+    doc: DuctsRouteDocument | null;
+    write: (patch: RouteStatePatch[]) => Promise<unknown>;
+  };
 }) {
   const hosted = useContext(ChatHosted);
   const issuesByGroup = useMemo(() => {
@@ -119,7 +129,6 @@ export function DuctsLedger({
   const issues = [...(page.group ? (issuesByGroup.get(page.group) ?? []) : [])].sort(
     (a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || a.id.localeCompare(b.id),
   );
-
   const groupColumns: Column<GroupRow>[] = [
     {
       key: "id",
@@ -177,7 +186,6 @@ export function DuctsLedger({
       sort: (g) => g.own.length,
     },
   ];
-
   const runColumns: Column<Run>[] = [
     {
       key: "terminal",
@@ -233,7 +241,6 @@ export function DuctsLedger({
       sort: (r) => r.issues.length,
     },
   ];
-
   const issueColumns: Column<Issue>[] = [
     {
       key: "kind",
@@ -274,7 +281,6 @@ export function DuctsLedger({
     },
     { key: "note", label: "note", cell: (i) => i.note, search: (i) => i.note },
   ];
-
   const none = empty ? (
     <EmptyState story="scope" exit={empty.exit}>
       {empty.says}
@@ -288,7 +294,6 @@ export function DuctsLedger({
   const equipment = snapshot?.nodes.find((n) => n.id === tree?.root?.equipment);
   const esp = equipment?.facts.find((f) => f.key === "externalStatic")?.value;
   const longest = runs.find((r) => r.longest);
-
   return (
     <PaneSplit
       axis="vertical"
@@ -312,7 +317,7 @@ export function DuctsLedger({
           }}
           start={
             <Pane
-              kind="content"
+              id="content"
               title="groups"
               meta={snapshot ? `${groups.length}` : undefined}
               scroll="clip"
@@ -333,7 +338,7 @@ export function DuctsLedger({
           }
           end={
             <Pane
-              kind="content"
+              id="content"
               title="runs"
               meta={tree ? `${runs.length}` : undefined}
               scroll="clip"
@@ -376,7 +381,7 @@ export function DuctsLedger({
           }}
           start={
             <Pane
-              kind="content"
+              id="content"
               title="issues"
               meta={page.group ? `${issues.length} · ${readiness?.level ?? ""}` : undefined}
               scroll="clip"
@@ -397,11 +402,7 @@ export function DuctsLedger({
             </Pane>
           }
           end={
-            <Pane
-              kind="content"
-              title="plan"
-              meta={active ? `run to ${active.terminal}` : undefined}
-            >
+            <Pane id="content" title="plan" meta={active ? `run to ${active.terminal}` : undefined}>
               {tree ? <MiniMap tree={tree} run={active} selected={selected} /> : pick}
             </Pane>
           }
@@ -410,7 +411,6 @@ export function DuctsLedger({
     />
   );
 }
-
 /** The group's plan footprint (Revit xy, north up), the active run dark, the selection filled. */
 function MiniMap({
   tree,

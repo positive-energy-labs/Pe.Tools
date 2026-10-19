@@ -1,3 +1,4 @@
+import type { IssueKind } from "@pe/ducts-domain/issues";
 // @vitest-environment jsdom
 /**
  * /ducts spatial views, deterministic: the plan and the isometric draw the subject group over a
@@ -9,7 +10,7 @@ import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeAll, expect, it } from "vite-plus/test";
 import { ductsRouteState } from "@pe/agent-contracts";
 
-import { VERDICT_INK } from "#/components/master-table/cells";
+import { VERDICT_INK } from "@pe/kit/table/cells";
 import {
   ENCODINGS,
   ENCODING_KEYS,
@@ -18,10 +19,11 @@ import {
   type Issue,
   type Segment,
 } from "./encoding";
-import { ISSUE_KINDS, type IssueKind } from "./issues";
+import { ISSUE_KINDS } from "./issues";
 import { gridAngle, isoProject } from "./iso";
 import type { DuctsPage } from "./manifest";
-import { readiness, type DuctSnapshot } from "./readiness";
+import { readiness } from "@pe/ducts-domain/readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { DuctsSpatial } from "./spatial";
 
 let resizeDrawing: (width: number, height: number) => void;
@@ -56,6 +58,7 @@ const segment = (
 ): Segment => ({
   id,
   kind: "duct",
+  curveKind: "line",
   shape: "round",
   size: '8"ø',
   diameterIn: 8,
@@ -83,6 +86,7 @@ const issues: Issue[] = KINDS.map((kind, i) => ({
 }));
 
 const slice = {
+  coordinateEncoding: "native-double",
   document: {
     title: "slice",
     readAt: "2026-09-26T00:00:00Z",
@@ -140,6 +144,7 @@ const slice = {
     fanStatic: "PE_M_Fan_ExternalStaticPressure",
     fanFlow: "PE_M_Fan_AirFlow",
     componentDrop: "Pressure Drop",
+    fittingCoefficient: "Pe_C",
   },
   layers: [
     {

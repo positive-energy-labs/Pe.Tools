@@ -15,7 +15,9 @@ test("rectangular: hydraulic and Huebscher equivalent diameters", () => {
   const r = solve({ shape: "rect", a: 12, b: 12, cfm: 1000, ...std });
   expect(r.hydraulicDiameter).toBeCloseTo(12);
   expect(r.equivalentDiameter).toBeCloseTo(13.1, 1);
-  expect(solve({ shape: "rect", a: 24, b: 6, cfm: 1000, ...std }).hydraulicDiameter).toBeCloseTo(9.6);
+  expect(solve({ shape: "rect", a: 24, b: 6, cfm: 1000, ...std }).hydraulicDiameter).toBeCloseTo(
+    9.6,
+  );
 });
 
 test("zero flow is zero loss, not NaN", () => {

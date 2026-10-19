@@ -1,11 +1,12 @@
-import { FactChip } from "#/components/lang/chip";
+import { FactChip } from "@pe/kit/lang/chip";
 import { CoverageBar } from "#/components/lang/coverage-bar";
-import { EmptyState } from "#/components/lang/empty";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
 import { VizChip } from "#/ops/primitives";
 import { UnrecognizedShape, asNumber, asRecord, asRecords, asString, text } from "#/ops/registry";
 import type { SyntheticViewProps } from "#/lab/synthetic";
 import { MonoAside, SERIES_META, Stat, categoryViz, composition, obs } from "./viz-cycle";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {
   const res = asRecord(results["revit.glance.model"]);
@@ -49,9 +50,9 @@ export function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {
     <div className="flex flex-col gap-5">
       <div className="min-w-0 px-3 py-2">
         <div className="flex min-w-0 flex-wrap items-baseline gap-2">
-          <span className="min-w-0 truncate" title={path || undefined}>
-            {doc ? text(doc.title) : "no active document"}
-          </span>
+          <TooltipHint content={path || undefined}>
+            <span className="min-w-0 truncate">{doc ? text(doc.title) : "no active document"}</span>
+          </TooltipHint>
           {doc && (
             <span className="">
               {doc.isFamilyDocument === true

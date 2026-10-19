@@ -1,0 +1,45 @@
+/**
+ * The one enclosure: the artifact plane (ground plus its hairline), no radius, no shadow.
+ * Frame only a machine-operated object that carries state; plain content is never enclosed.
+ */
+import { Rail } from "./rail";
+
+import "./lang.css";
+
+interface ArtifactFrameProps {
+  /** Recessed band across the top — the object's name and its machine-measured facts. */
+  head?: React.ReactNode;
+  headTrail?: React.ReactNode;
+  /** Recessed band across the bottom — counts, receipts, and the object's one commit verb. */
+  foot?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+  label?: string;
+  /** The frame as a `Connectors` anchor. */
+  "data-key"?: string;
+}
+
+export function ArtifactFrame({
+  head,
+  headTrail,
+  foot,
+  children,
+  className,
+  label,
+  "data-key": key,
+}: ArtifactFrameProps) {
+  return (
+    <div
+      data-surface="artifact"
+      data-slot="artifact-frame"
+      data-key={key}
+      className={className}
+      role={label ? "group" : undefined}
+      aria-label={label}
+    >
+      {head != null ? <Rail ground="recess" lead={head} trail={headTrail} /> : null}
+      {children}
+      {foot != null ? <Rail ground="recess" lead={foot} edge="top" /> : null}
+    </div>
+  );
+}

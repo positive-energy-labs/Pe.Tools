@@ -5,8 +5,8 @@
  */
 import type { RoomsTrace } from "@pe/host-contracts/generated";
 
-import { FactChip } from "#/components/lang/chip";
-import { tokenRef } from "#/lib/token";
+import { FactChip } from "@pe/kit/lang/chip";
+import { tokenRef } from "@pe/kit/lib/token";
 import type { Point2 } from "#/lib/affine-frame";
 
 export type TraceData = RoomsTrace.Res.Response;

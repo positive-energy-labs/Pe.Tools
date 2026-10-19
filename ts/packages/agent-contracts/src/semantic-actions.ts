@@ -176,7 +176,6 @@ export const actionAdmissionSchema = z
     id: z.string().min(1),
     kind: z.enum(["operation", "workflow"]),
     key: z.string().min(1),
-    actor: z.enum(["human", "agent"]),
     destination: executionTargetSchema,
     input: z.record(z.string(), z.unknown()),
     bases: actionBasesSchema.default({}),

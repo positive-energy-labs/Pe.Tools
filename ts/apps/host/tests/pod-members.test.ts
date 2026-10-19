@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { Effect, FileSystem, PlatformError } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memberWork, settingsRouteState } from "@pe/agent-contracts";
@@ -22,6 +22,7 @@ import {
   type PodContext,
 } from "../src/settings.ts";
 import type { RevitBridge } from "../src/bridge.ts";
+import { crossingOf } from "./callers.ts";
 
 let root: string;
 const member = { pod: "sample", path: "settings/file.json" };
@@ -46,7 +47,7 @@ beforeEach(async () => {
       id: "sample",
       name: "Sample",
       version: "1.0.0",
-      entrypoints: [{ id: "run", sourcePath: "src/Run.cs" }],
+      entrypoints: [{ sourcePath: "src/Run.cs" }],
     }),
   );
 });
@@ -80,10 +81,11 @@ test("pods list by manifest id; a bad member never hides its siblings; runs list
   expect(sample).toMatchObject({
     id: "sample",
     name: "Sample",
-    entrypoints: [{ id: "run", sourcePath: "src/Run.cs" }],
+    entrypoints: [{ sourcePath: "src/Run.cs" }],
   });
-  // Members only: a run is not a member, and `pod.runs` is where runs answer.
+  // Admission includes the manifest; runs still answer through pod.runs.
   expect(sample.members).toEqual([
+    { path: "pod.json", sha256: expect.any(String), schema: null },
     { path: "settings/broken.json", sha256: expect.any(String), schema: null },
     {
       path: "settings/file.json",
@@ -461,11 +463,11 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
         id,
         kind: "workflow",
         key: "settings.write",
-        actor: "human",
         destination: { kind: "host" },
         input: { member, write },
         bases: { work: { key: scope, revision } },
       },
+      crossingOf("human"),
       owner,
       new TakeoffCaptures(join(root, "captures")),
       {} as RevitBridge["Service"],
@@ -520,4 +522,17 @@ test("partial temp write failure cleans only the acquired temp and preserves des
   ).rejects.toMatchObject({ note: expect.stringContaining("injected partial write") });
   expect(await readFile(file(), "utf8")).toBe("original");
   expect(await readdir(join(root, "Renamed In Explorer", "settings"))).toEqual(["file.json"]);
+});
+
+test("listing hashes current bytes even when file size and timestamp are unchanged", async () => {
+  await writeFile(file(), '{"width":1}');
+  const before = await stat(file());
+  const first = await run(listPods(ctx()));
+  await writeFile(file(), '{"width":2}');
+  await utimes(file(), before.atime, before.mtime);
+  const second = await run(listPods(ctx()));
+  const find = (listing: typeof first) =>
+    listing.pods[0]!.members.find((row) => row.path === member.path)!;
+  expect(find(second).sha256).toBe(digest('{"width":2}'));
+  expect(find(second).sha256).not.toBe(find(first).sha256);
 });

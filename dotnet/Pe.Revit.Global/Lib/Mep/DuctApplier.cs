@@ -10,20 +10,24 @@ using System.Globalization;
 namespace Pe.Revit.Global.Lib.Mep;
 
 /// <summary>
-///     The Revit half of `ducts.apply`. Plans every write first (preview stops there, no transaction), then follows the
-///     the campaign recipe (pressure-drop ledger): every targeted fitting and accessory to Not Defined and
-///     committed, then each one's server entity (Revit's own, required by Revit) and its server, terminal connector
-///     drops, fan static and Pe's store, committed. The two commits sit in one TransactionGroup: a failed stage rolls
-///     the whole apply back and names itself, a clean apply is one undo step.
+///     The Revit half of `ducts.apply`. Plans every write first (preview stops there, no transaction), then follows
+///     the campaign recipe (pressure-drop ledger): every targeted fitting and accessory to Not Defined and committed,
+///     then each one's server entity and its server, terminal connector drops, fan static and Pe's store, committed.
+///     Fittings go to the Pe loss server (live) or Specific Coefficient (the frozen export); Revit's own table route
+///     is never written, it keeps a stale per-leg slot across method switches (Decided 2026-10-08, 2026-10-12). The
+///     commits sit in one TransactionGroup: a failed stage rolls the whole apply back and names itself, a clean
+///     apply is one undo step.
 /// </summary>
 public static class DuctApplier {
     private static readonly Guid NotDefined = new("76eff5da-2e71-45f7-b940-cc5716328ba0");
     private static readonly Guid SpecificCoefficient = new("5a598293-1504-46cc-a9c0-de55c82848b9");
     private static readonly Guid SpecificLoss = new("46245996-eebb-4536-ac17-9c1cd917d8cf");
+    private static readonly Guid AshraeTable = new("8baf7d75-8b9b-46d0-b8ce-3ad1c19e6b19");
 
     // The entity fields of Revit's servers (campaign s6_schemas, V2 e1_elbowpd). PressureLoss is internal units.
     private const string CoefficientField = "Coefficient";
     private const string PressureLossField = "PressureLoss";
+    private const string TableField = "ASHRAETableName";
 
     internal static readonly ProjectInfoText StoreText = new(
         new Guid("91e80aa7-f842-43ac-adbe-9b1f6a40c2d2"),
@@ -48,8 +52,8 @@ public static class DuctApplier {
         public string? After { get; set; }
         public Func<string>? Write { get; set; }
         public Element? Element { get; init; }
-        /// <summary>Fittings and accessories: the server to set after the Not Defined commit, and its entity value.</summary>
-        public (Guid Server, Schema Schema, string Field, string Value)? Loss { get; init; }
+        /// <summary>Fittings and accessories: the server to set after the Not Defined commit, and its entity fields.</summary>
+        public (Guid Server, Schema Schema, IReadOnlyList<(string Field, string Value)> Fields)? Loss { get; init; }
 
         public Item Refuse(string reason) {
             this.Outcome = "refused";
@@ -69,7 +73,9 @@ public static class DuctApplier {
         var slots = (request.Slots?.Over(request.Store.Slots) ?? request.Store.Slots ?? new DuctParameterSlots()).WithDefaults();
         var schemas = new Dictionary<Guid, Schema?> {
             [SpecificCoefficient] = Schema(SpecificCoefficient),
-            [SpecificLoss] = Schema(SpecificLoss)
+            [SpecificLoss] = Schema(SpecificLoss),
+            [AshraeTable] = Schema(AshraeTable),
+            [PeLossServer.Id] = Try(PeLossServer.Schema)
         };
         var items = new List<Item>();
         var seen = new HashSet<(string, long)>();
@@ -84,11 +90,10 @@ public static class DuctApplier {
         }
 
         foreach (var w in request.Fittings ?? [])
-            items.Add(Duplicate("fitting", w.Id) ?? Plan("fitting", w.Id, () => Lossy(doc, w.Id, "fitting", BuiltInCategory.OST_DuctFitting, SpecificCoefficient, schemas, CoefficientField,
-                Finite(w.Coefficient) ? w.Coefficient.ToString("R", CultureInfo.InvariantCulture) : null, w.Coefficient, $"specific-coefficient {w.Coefficient:0.####}")));
+            items.Add(Duplicate("fitting", w.Id) ?? Plan("fitting", w.Id, () => Fitting(doc, w, slots, schemas)));
         foreach (var w in request.Components ?? [])
-            items.Add(Duplicate("component", w.Id) ?? Plan("component", w.Id, () => Lossy(doc, w.Id, "component", BuiltInCategory.OST_DuctAccessory, SpecificLoss, schemas, PressureLossField,
-                Finite(w.InWg) ? UnitUtils.ConvertToInternalUnits(w.InWg, InWg).ToString("R", CultureInfo.InvariantCulture) : null, w.InWg, $"specific-loss {w.InWg:0.####} in-wg")));
+            items.Add(Duplicate("component", w.Id) ?? Plan("component", w.Id, () => Lossy(doc, w.Id, "component", BuiltInCategory.OST_DuctAccessory, SpecificLoss, schemas,
+                [(PressureLossField, Finite(w.InWg) ? UnitUtils.ConvertToInternalUnits(w.InWg, InWg).ToString("R", CultureInfo.InvariantCulture) : "")], w.InWg, $"specific-loss {w.InWg:0.####} in-wg")));
         foreach (var w in request.Terminals ?? []) items.Add(Duplicate("terminal", w.Id) ?? Plan("terminal", w.Id, () => Terminal(doc, w, slots)));
         foreach (var w in request.Equipment ?? []) items.Add(Duplicate("equipment", w.Id) ?? Plan("equipment", w.Id, () => Equipment(doc, w, slots)));
         SharedTypes(items, request.Equipment ?? []);
@@ -160,9 +165,9 @@ public static class DuctApplier {
             // discards Revit's recalculation and the fittings commit with a 0 drop (W3, Project A).
             foreach (var i in planned.Where(i => i.Loss is null)) Write(i);
             foreach (var i in lossy) {
-                var (server, schema, field, value) = i.Loss!.Value;
+                var (server, schema, fields) = i.Loss!.Value;
                 var entity = new Entity(schema);
-                entity.Set(field, value);
+                foreach (var (field, value) in fields) entity.Set(field, value);
                 i.Element!.SetEntity(entity);
                 _ = i.Element.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM).Set(server.ToString());
                 i.Outcome = "written";
@@ -209,31 +214,69 @@ public static class DuctApplier {
         }
     }
 
+    /// <summary>
+    ///     A fitting under the ruled composite (2026-10-08, 2026-10-12): the Pe server charges the family's own
+    ///     coefficient when the family carries one, else prices the legs live from the rule's table; Specific
+    ///     Coefficient is the frozen export. Each refuses what it cannot honor: no server in this Revit, neither a
+    ///     coefficient parameter on the family nor a table named.
+    /// </summary>
+    private static Item Fitting(Document doc, DuctFittingWrite w, DuctParameterSlots slots, Dictionary<Guid, Schema?> schemas) {
+        const string kind = "fitting";
+        switch (w.Method) {
+            case DuctFittingMethod.PeServer: {
+                var e = doc.GetElement(w.Id.ToElementId());
+                var table = w.Table?.Trim().ToUpperInvariant() ?? "";
+                if (e is not null && e.Category.ToBuiltInCategory() == BuiltInCategory.OST_DuctFitting) {
+                    if (!PeLossServer.IsRegistered) return new Item(w.Id, kind, null) { Element = e }.Refuse("the Pe loss server is not registered in this Revit; it registers at Pe.App startup");
+                    var own = e.LookupParameter(slots.FittingCoefficient) is { StorageType: StorageType.Double };
+                    if (!own && table.Length == 0)
+                        return new Item(w.Id, kind, null) { Element = e }.Refuse($"the family has no number parameter '{slots.FittingCoefficient}' (the FittingCoefficient slot) and the write names no table; stamp it with ducts.family-patch or name the rule's table");
+                    if (table.Length > 0 && PeLossServer.Table(table) is null)
+                        return new Item(w.Id, kind, null) { Element = e }.Refuse($"Revit ships no readable ASHRAE table {table}");
+                }
+                return Lossy(doc, w.Id, kind, BuiltInCategory.OST_DuctFitting, PeLossServer.Id, schemas,
+                    [(PeLossServer.ParameterField, slots.FittingCoefficient), (PeLossServer.TableField, table)], 0,
+                    table.Length > 0 ? $"pe-server reads '{slots.FittingCoefficient}', else {table}" : $"pe-server reads '{slots.FittingCoefficient}'");
+            }
+            case DuctFittingMethod.SpecificCoefficient:
+                return Lossy(doc, w.Id, kind, BuiltInCategory.OST_DuctFitting, SpecificCoefficient, schemas,
+                    [(CoefficientField, Finite(w.Coefficient) ? w.Coefficient.ToString("R", CultureInfo.InvariantCulture) : "")], w.Coefficient, $"specific-coefficient {w.Coefficient:0.####}");
+            default:
+                return new Item(w.Id, kind, null).Refuse($"unknown method {w.Method}");
+        }
+    }
+
     private static Item Lossy(Document doc, long id, string kind, BuiltInCategory category, Guid server,
-        Dictionary<Guid, Schema?> schemas, string field, string? value, double number, string after) {
+        Dictionary<Guid, Schema?> schemas, IReadOnlyList<(string Field, string Value)> fields, double number, string after) {
         var e = doc.GetElement(id.ToElementId());
         if (e is null) return new Item(id, kind, null).Refuse($"element {id} is not in the document");
         var method = e.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM);
         var current = method?.AsString();
-        // The element's own server's entity, read through that schema's own field (it may differ from the target's).
+        // The element's own server's entity, read through that schema's own string fields (they may differ from the target's).
         var existing = Guid.TryParse(current, out var g) && schemas.TryGetValue(g, out var s) && s is not null
-                       && s.ListFields().FirstOrDefault(f => f.ValueType == typeof(string)) is { } own
-                       && e.GetEntity(s) is { } en && en.IsValid() ? en.Get<string>(own) : null;
-        var shown = g == SpecificLoss && double.TryParse(existing, NumberStyles.Float, CultureInfo.InvariantCulture, out var raw)
+                       && e.GetEntity(s) is { } en && en.IsValid()
+            ? s.ListFields().Where(f => f.ValueType == typeof(string)).Select(f => en.Get<string>(f) ?? "").Where(v => v.Length > 0).ToList()
+            : null;
+        var shown = g == SpecificLoss && existing is [var one] && double.TryParse(one, NumberStyles.Float, CultureInfo.InvariantCulture, out var raw)
             ? $"{UnitUtils.ConvertFromInternalUnits(raw, InWg):0.####} in-wg"
-            : existing;
+            : existing is null ? null : string.Join(" ", existing);
         var item = new Item(id, kind, $"{Name(current)}{(shown is { Length: > 0 } ? " " + shown : "")}") { Element = e };
         if (e.Category.ToBuiltInCategory() != category)
             return item.Refuse($"not a {(category == BuiltInCategory.OST_DuctFitting ? "duct fitting" : "duct accessory")} ({e.Category?.Name ?? "no category"})");
         if (method is null || method.IsReadOnly) return item.Refuse("the element has no writable loss method server parameter");
-        if (value is null || number < 0) return item.Refuse("the value must be a finite number of 0 or more");
+        if (fields.Count == 0 || fields[0].Value.Length == 0 || number < 0) return item.Refuse("the value must be a finite number of 0 or more");
         if (schemas[server] is not { } schema) return item.Refuse($"Revit's {Name(server.ToString())} server has no data schema");
-        if (schema.GetField(field) is null)
-            return item.Refuse($"Revit's {Name(server.ToString())} schema has no field {field} (fields: {string.Join(", ", schema.ListFields().Select(f => f.FieldName))})");
-        if (g == server && existing is not null && double.TryParse(existing, NumberStyles.Float, CultureInfo.InvariantCulture, out var had)
-            && Math.Abs(had - double.Parse(value, CultureInfo.InvariantCulture)) <= 1e-9 * Math.Max(1, Math.Abs(had)))
+        foreach (var (field, _) in fields)
+            if (schema.GetField(field) is null)
+                return item.Refuse($"the {Name(server.ToString())} schema has no field {field} (fields: {string.Join(", ", schema.ListFields().Select(f => f.FieldName))})");
+        // Unchanged: the same server, and the same fields (a number compares as a number).
+        var want = fields.Select(f => f.Value).Where(v => v.Length > 0).ToList();
+        if (g == server && existing is not null && existing.Count == want.Count && existing.Zip(want, (first, second) => (First: first, Second: second)).All(pair =>
+                double.TryParse(pair.First, NumberStyles.Float, CultureInfo.InvariantCulture, out var had) && double.TryParse(pair.Second, NumberStyles.Float, CultureInfo.InvariantCulture, out var w)
+                    ? Math.Abs(had - w) <= 1e-9 * Math.Max(1, Math.Abs(had))
+                    : string.Equals(pair.First, pair.Second, StringComparison.Ordinal)))
             return item.Unchanged(after);
-        return item with { Loss = (server, schema, field, value), After = after };
+        return item with { Loss = (server, schema, fields), After = after };
     }
 
     /// <summary>
@@ -376,7 +419,8 @@ public static class DuctApplier {
         ? g == NotDefined ? "not-defined"
         : g == SpecificCoefficient ? "specific-coefficient"
         : g == SpecificLoss ? "specific-loss"
-        : g == new Guid("8baf7d75-8b9b-46d0-b8ce-3ad1c19e6b19") ? "ashrae-table"
+        : g == AshraeTable ? "ashrae-table"
+        : g == PeLossServer.Id ? "pe-server"
         : server!
         : "no server";
 

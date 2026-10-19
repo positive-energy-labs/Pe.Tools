@@ -1,0 +1,151 @@
+{
+  "result": {
+    "id": "acc-r2",
+    "phase": "ready",
+    "session": {
+      "case": "controlled-active",
+      "process": {
+        "pid": 3068,
+        "processStartUtc": "2026-10-14T04:58:22.4257706Z",
+        "executable": "C:\\Program Files\\Autodesk\\Revit 2025\\Revit.exe"
+      },
+      "bridge": {
+        "bridge": "ready",
+        "sessionDescriptor": "C:/Users/person/AppData/Local/Pe.Revit.Sdk/sessions/acc-r2/generations/20261014045738694/payload/Pe.App/Pe.App.session.json",
+        "queue": {
+          "health": "responsive",
+          "runningRequestId": null,
+          "runningKey": null,
+          "runningStartedUtc": null,
+          "depth": 0,
+          "lastTickUtc": "2026-10-14T04:59:58.7416002Z"
+        },
+        "modal": null,
+        "privateBytes": 1474846720,
+        "documents": [
+          {
+            "title": "quote 'B'",
+            "path": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\.artifacts\\accept\\r2\\docs\\quote 'B'.rvt",
+            "isActive": true,
+            "isFamily": false,
+            "isModified": false,
+            "projectGuid": null,
+            "modelGuid": null,
+            "region": null,
+            "openId": "09e427e5521a4ba79d128c241fea7ae8",
+            "window": "windowed",
+            "isWorkshared": false,
+            "isDetached": false,
+            "isCloud": false,
+            "centralPath": null,
+            "persistence": "local",
+            "centralFreshnessAtObservation": null,
+            "observedAtUtc": null,
+            "supportedActions": null
+          }
+        ],
+        "unresponsive": false
+      },
+      "dialogs": null,
+      "id": "acc-r2",
+      "origin": "cli",
+      "project": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\dotnet\\Pe.App\\Pe.App.csproj",
+      "worktree": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+      "receipt": {
+        "payload": "checkout",
+        "generationId": "20261014045738694",
+        "buildStamp": "cdbd012e1820",
+        "overridePath": "C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014045738694\\payload\\Pe.App\\Pe.App.runtime.json",
+        "generationRoot": "C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014045738694\\",
+        "receiptPath": "C:\\Users\\person\\AppData\\Local\\Pe.Revit.Sdk\\sessions\\acc-r2\\generations\\20261014045738694\\payload\\Pe.App\\Pe.App.session.json"
+      },
+      "detail": "SDK bridge answers with this session descriptor",
+      "shape": {
+        "payload": "checkout",
+        "reload": "hot",
+        "posture": "foreground",
+        "quarantine": true,
+        "purpose": "interactive"
+      },
+      "year": 2025,
+      "observedAtUtc": "2026-10-14T04:59:59.4920975Z",
+      "execution": {
+        "allowed": true,
+        "code": null,
+        "detail": null
+      }
+    },
+    "legs": [
+      {
+        "name": "dismiss",
+        "status": "none",
+        "detail": "no owned top-level window",
+        "observedAtUtc": "2026-10-14T04:57:28.3557917Z"
+      },
+      {
+        "name": "close",
+        "status": "refused",
+        "detail": "quote 'B' openId ccf966d3488249b399dd81f90c0b5ef5 (requestId 51648f3d-2daf-4da6-830a-2f65a5fd6e8e)",
+        "observedAtUtc": "2026-10-14T04:57:28.5731834Z"
+      },
+      {
+        "name": "restart",
+        "status": "started",
+        "detail": "documents remain open after the close pass",
+        "observedAtUtc": "2026-10-14T04:57:28.5962055Z"
+      },
+      {
+        "name": "attach-emitter",
+        "status": "booting",
+        "detail": "the detached emitter is booting at workspace",
+        "observedAtUtc": "2026-10-14T04:59:44.9027212Z"
+      },
+      {
+        "name": "reopen",
+        "status": "ok",
+        "detail": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\.artifacts\\accept\\r2\\docs\\quote 'B'.rvt (requestId 6073d4a8-dd27-453b-8673-ae62f346b59b, openId 09e427e5521a4ba79d128c241fea7ae8)",
+        "observedAtUtc": "2026-10-14T04:59:50.5323921Z"
+      }
+    ],
+    "reopened": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\.artifacts\\accept\\r2\\docs\\quote 'B'.rvt",
+    "dropped": [],
+    "requestId": "5616df5e-c96d-44e3-a232-9502d729daec",
+    "state": "ok"
+  },
+  "resolved": {
+    "id": "acc-r2",
+    "how": "pinned",
+    "origin": "cli",
+    "pid": 3068,
+    "processStartUtc": "2026-10-14T04:58:22.4257706Z",
+    "buildStamp": "cdbd012e1820",
+    "observedAtUtc": "2026-10-14T04:59:59.5245572Z",
+    "payload": "checkout",
+    "sourceRoot": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "installedRoot": null
+  },
+  "diagnostics": [
+    {
+      "code": "doc.no-active-replacement",
+      "detail": "closing quote 'B' openId ccf966d3488249b399dd81f90c0b5ef5 ended 'refused': Revit will not close 'quote 'B'' from the API: it is the session's ACTIVE document and no other document is open to activate in its place (Document.Close and UIDocument.SaveAndClose refuse the active document). Nothing was saved. Open another document first, or stop the session with --unsaved.",
+      "fix": "pe-revit op result 51648f3d-2daf-4da6-830a-2f65a5fd6e8e"
+    }
+  ],
+  "binary": {
+    "origin": "dev-installed",
+    "assembly": "C:\\Users\\person\\.nuget\\packages\\pe.revit.cli\\0.1.0-beta.208\\tools\\net8.0\\any\\Pe.Revit.Cli.dll",
+    "sha256": "90EE5D4752601BE4E0F50AED84AA5E759BAA3F49FDF0C583904009B520E9CFEE",
+    "informationalVersion": "0.1.0-beta.208+44b07e06540622cf54543d1a155ce82ccc19d440",
+    "hostExecutable": "C:\\Program Files\\dotnet\\dotnet.exe"
+  },
+  "command": {
+    "cwd": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRoot": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRule": "checkout-manifest",
+    "commandManifest": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\product.payloads.json"
+  },
+  "nextSteps": ["pe-revit doc list --id acc-r2"],
+  "guide": "session",
+  "related": ["pe-revit session list", "pe-revit doc list", "pe-revit guide session"],
+  "exitCode": 0
+}

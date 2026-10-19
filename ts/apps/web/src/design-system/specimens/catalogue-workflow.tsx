@@ -2,12 +2,12 @@ import { useState } from "react";
 import { Save } from "lucide-react";
 
 import { ArmingStrip } from "#/components/lang/arming-strip";
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { Code, JsonEditor } from "#/components/lang/code";
-import { StateCell } from "#/components/lang/cell";
-import { FactChip, Tag } from "#/components/lang/chip";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { Code, JsonEditor } from "@pe/kit/lang/code";
+import { StateCell } from "@pe/kit/lang/cell";
+import { FactChip, Tag } from "@pe/kit/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "@pe/kit/lang/button";
 import { CounterExample, Demo, Gap } from "#/design-system/exhibit";
 import { ARMING_SPECIMEN } from "#/design-system/specimens-data";
 
@@ -35,13 +35,15 @@ export function CatalogueWorkflow() {
             foot={
               <>
                 <Tag>2 unsaved</Tag>
-                <ActionButton
-                  tone="commit"
+                <Button
+                  kind="commit"
                   label="save profile"
                   icon={Save}
                   onClick={noop}
                   reason="Writes both staged values into the family profile"
-                />
+                >
+                  save profile
+                </Button>
               </>
             }
           >
@@ -139,13 +141,10 @@ function ArmingCatalogue() {
           onCancel={() => setReason("")}
         />
       </div>
-      <CounterExample why="a commit ActionButton alone hides the reason, target, plan identity, and refusal path">
-        <ActionButton
-          tone="commit"
-          label="apply to Revit"
-          onClick={noop}
-          reason="Writes 42 parameters"
-        />
+      <CounterExample why="a commit Button alone hides the reason, target, plan identity, and refusal path">
+        <Button kind="commit" label="apply to Revit" onClick={noop} reason="Writes 42 parameters">
+          apply to Revit
+        </Button>
       </CounterExample>
       <Gap>
         the component has no armed-at or armed-by identity. It must say that the plan age is unknown

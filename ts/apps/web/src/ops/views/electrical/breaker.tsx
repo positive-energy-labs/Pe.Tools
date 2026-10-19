@@ -1,9 +1,9 @@
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 import type { ReactNode } from "react";
-import { EmptyState } from "#/components/lang/empty";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
-import { type Column } from "#/components/master-table/model";
-import { Table } from "#/components/master-table/table";
+import { type Column } from "@pe/kit/table/model";
+import { Table } from "@pe/kit/table/table";
 import {
   asNumber,
   asRecord,
@@ -12,6 +12,7 @@ import {
   type OpViewProps,
   UnrecognizedShape,
 } from "#/ops/registry";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 type Rec = Record<string, unknown>;
 
@@ -104,12 +105,13 @@ function BreakerHalf({ slot, side }: { slot: BreakerCell | undefined; side: "lef
     </span>
   );
   const load = (
-    <span
-      className={`min-w-0 flex-1 truncate px-1.5 py-1 ${side === "right" ? "text-right" : ""}`}
-      title={slot?.load}
-    >
-      {slot ? (slot.load ?? <span className="">—</span>) : ""}
-    </span>
+    <TooltipHint content={slot?.load}>
+      <span
+        className={`min-w-0 flex-1 truncate px-1.5 py-1 ${side === "right" ? "text-right" : ""}`}
+      >
+        {slot ? (slot.load ?? <span className="">—</span>) : ""}
+      </span>
+    </TooltipHint>
   );
   const inner =
     side === "left" ? (
@@ -216,9 +218,9 @@ function PanelScheduleCard({ entry }: { entry: Rec }) {
           { backgroundColor: token("recess"), "--pe-on": token("recess") } as React.CSSProperties
         }
       >
-        <h3 className="truncate" title={panelName}>
-          {panelName}
-        </h3>
+        <TooltipHint content={panelName}>
+          <h3 className="truncate">{panelName}</h3>
+        </TooltipHint>
         <MonoAside>
           {joinNonEmpty([
             asString(entry.scheduleName),

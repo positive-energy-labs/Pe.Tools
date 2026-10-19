@@ -11,8 +11,9 @@ import { applyPatches, ductsRouteState, type DuctsRouteDocument } from "@pe/agen
 import { DuctsLedger } from "./ledger";
 import { verdictPatches } from "./assumptions";
 import type { DuctsPage } from "./manifest";
-import { readiness, type DuctSnapshot } from "./readiness";
-import { chainsOf, groupTree, runsOf } from "./topology";
+import { readiness } from "@pe/ducts-domain/readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { chainsOf, groupTree, runsOf } from "@pe/ducts-domain/topology";
 import { DuctsTree, layoutTree } from "./tree";
 
 afterEach(cleanup);
@@ -84,6 +85,7 @@ const duct = (id: number, lengthFt: number, size: string): Segment =>
   ({
     id,
     kind: "duct",
+    curveKind: "line",
     type: "Rect",
     shape: "rectangular",
     size,
@@ -102,6 +104,7 @@ const flow = (cfm: number) =>
 
 const OPEN = "open-end:g1:9:1";
 const snapshot = {
+  coordinateEncoding: "native-double",
   document: {
     title: "t",
     readAt: "2026-09-26T00:00:00Z",
@@ -158,6 +161,7 @@ const snapshot = {
     fanStatic: "PE_M_Fan_ExternalStaticPressure",
     fanFlow: "PE_M_Fan_AirFlow",
     componentDrop: "Pressure Drop",
+    fittingCoefficient: "Pe_C",
   },
 } as DuctSnapshot;
 

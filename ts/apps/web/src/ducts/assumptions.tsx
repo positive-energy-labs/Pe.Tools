@@ -1,3 +1,5 @@
+import type { IssueKind } from "@pe/ducts-domain/issues";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * The verdict half of Work's `assumptions`: one issue id, one answer (capped, connect, ignore).
  * Numeric overrides are not staged here; the losses view owns them.
@@ -9,13 +11,16 @@ import {
   type RouteStatePatch,
 } from "@pe/agent-contracts";
 import { Switcher } from "#/components/lang/switcher";
-import { ISSUE_KINDS, type IssueKind } from "./issues";
-import type { DuctSnapshot } from "./readiness";
-
+import { ISSUE_KINDS } from "./issues";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 type Issue = DuctSnapshot["issues"][number];
-type Verdict = Extract<DuctAssumption, { kind: "verdict" }>["verdict"];
+type Verdict = Extract<
+  DuctAssumption,
+  {
+    kind: "verdict";
+  }
+>["verdict"];
 type Choice = Verdict | "unset";
-
 /** The verdicts an issue kind can take: open ends all three; the rest that `ignore` resolves. */
 const CHOICES: Partial<Record<IssueKind, readonly Verdict[]>> = {
   "open-end": ["capped", "connect", "ignore"],
@@ -28,7 +33,6 @@ const CHOICE_TITLE: Record<Choice, string> = {
   ignore: "Ignore: leave this out of the walk. Resolves it.",
   unset: "No staged answer.",
 };
-
 /** The patches one verdict choice makes on an issue's cell: stage it, or unstage for `unset`. */
 export const verdictPatches = (
   doc: DuctsRouteDocument | null,
@@ -43,17 +47,18 @@ export const verdictPatches = (
       ? { kind: "unstage" }
       : { kind: "stage", rung: { value: { kind: "verdict", verdict: choice } } },
   );
-
 const verdictAt = (value: DuctAssumption | undefined) =>
   value?.kind === "verdict" ? value.verdict : null;
-
 /** The staged verdict of one issue, and its editor where a verdict can answer it. */
 export function AssumptionCell({
   issue,
   work,
 }: {
   issue: Issue;
-  work: { doc: DuctsRouteDocument | null; write: (patch: RouteStatePatch[]) => Promise<unknown> };
+  work: {
+    doc: DuctsRouteDocument | null;
+    write: (patch: RouteStatePatch[]) => Promise<unknown>;
+  };
 }) {
   const cell = work.doc?.assumptions[issue.id];
   const staged = verdictAt(cell?.staged?.value);
@@ -85,9 +90,9 @@ export function AssumptionCell({
         onChange={(choice) => void work.write(verdictPatches(work.doc, issue.id, choice))}
       />
       {proposed && proposed !== staged ? (
-        <span data-tone="pea" title="Pea proposed this; choose it to stage it">
-          Pea: {proposed}
-        </span>
+        <TooltipHint content="Pea proposed this; choose it to stage it">
+          <span data-tone="pea">Pea: {proposed}</span>
+        </TooltipHint>
       ) : null}
     </span>
   );

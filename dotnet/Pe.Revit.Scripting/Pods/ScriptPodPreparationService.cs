@@ -1,6 +1,8 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.Bcl.Compat;
+using Pe.Shared.HostContracts.Transport;
+using Pe.Shared.Scripting.Execution;
 using Pe.Revit.Scripting.Storage;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.Scripting;
@@ -28,7 +30,9 @@ public sealed record PreparedPod(
     PodManifest Manifest,
     IReadOnlyList<PodMember> Members,
     IReadOnlyList<ScriptDiagnostic> Diagnostics
-) : PodPreparation(Folder, Members, Diagnostics);
+) : PodPreparation(Folder, Members, Diagnostics) {
+    public IReadOnlyList<PodContribution> Contributions { get; init; } = [];
+}
 
 /// <summary>The manifest or an entrypoint failed; the error diagnostics say which.</summary>
 public sealed record RefusedPod(
@@ -63,50 +67,63 @@ public sealed record PodCapturedSource(
     PodRunOrigin Origin
 );
 
-/// <summary>
-///     Reads pods under the pods root. A pod's folder is an address; its manifest `id` is lineage and
-///     `@&lt;id&gt;/...` references resolve by scanning installed manifests. Member SHA-256 is derived, never stored.
-/// </summary>
-public sealed class ScriptPodPreparationService(string? podsRoot = null) {
-    public const string Stage = "pod";
-    public const string ImportedFileName = "imported.json";
-    private const long MaxFileBytes = ScriptPodSourceBounds.MaxFileBytes;
-    private const long MaxTotalBytes = ScriptPodSourceBounds.MaxTotalBytes;
-    private const int MaxFileCount = ScriptPodSourceBounds.MaxFileCount;
-    private const int MaxDirectoryCount = ScriptPodSourceBounds.MaxDirectoryCount;
-    private static readonly string[] RootFiles = ["pod.json", "PeScripts.csproj", ImportedFileName];
-    private static readonly string[] MemberDirectories = ["src", "settings", "assets"];
+public sealed record PodContribution(string Key, string Kind, string MemberPath);
+public sealed record PodCapture(string Id, string Folder, string Directory, IReadOnlyList<PodContribution> Contributions, ScriptPodSourceBundle MemberBundle, ScriptPodSourceBundle SourceBundle);
+public sealed record PodCaptureResult(PodCapture? Capture, string? Code, string? Reason);
 
+/// <summary>Native composition and bundle validation. The host alone admits package membership.</summary>
+public sealed class ScriptPodPreparationService(string? podsRoot = null, Func<string, object, JObject>? admission = null) {
+    public const string Stage = "pod";
+    private const long MaxFileBytes = ScriptPodMemberBounds.MaxFileBytes;
     public string PodsRoot { get; } = podsRoot ?? RevitScriptingStorageLocations.GetDefaultBasePath();
 
-    public IReadOnlyList<PodPreparation> List() => Directory.Exists(this.PodsRoot)
-        ? Directory.EnumerateDirectories(this.PodsRoot)
-            .Where(folder => File.Exists(Path.Combine(folder, "pod.json")))
-            .OrderBy(folder => folder, StringComparer.OrdinalIgnoreCase)
-            .Select(Prepare)
-            .ToList()
-        : [];
-
-    public static PodPreparation Prepare(string folder) {
-        var diagnostics = new List<ScriptDiagnostic>();
-        var files = Capture(folder, diagnostics);
-        return Prepare(folder, files, diagnostics);
-    }
-
-    public static PodPreparation Prepare(string folder, ScriptPodSourceBundle bundle) {
-        var files = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
-        foreach (var file in bundle.Files) {
-            var path = NormalizeMemberPath(file.Path);
-            var bytes = Convert.FromBase64String(file.BytesBase64);
-            if (bytes.LongLength > MaxFileBytes)
-                throw new InvalidDataException($"Captured pod file exceeds {MaxFileBytes} bytes: {path}");
-            if (!files.TryAdd(path, bytes))
-                throw new InvalidDataException($"Captured pod path is duplicated: {path}");
+    // These two reads are host-local; neither may enter the Revit bridge while native code awaits it.
+    private JObject ReadAdmission(string key, object request) {
+        try {
+            return admission is null
+                ? TsHostCallClient.Call<JObject>(key, request, TimeSpan.FromSeconds(10))
+                : admission(key, request);
+        } catch (OperationCanceledException exception) {
+            // This dependency owns only its HTTP deadline, never the script's cancellation token.
+            throw new InvalidDataException($"Host admission '{key}' exceeded its 10s dependency deadline.", exception);
         }
-        if (files.Count > MaxFileCount || files.Values.Sum(bytes => bytes.LongLength) > MaxTotalBytes)
-            throw new InvalidDataException($"Captured pod exceeds {MaxFileCount} files or {MaxTotalBytes} bytes.");
-        return Prepare(folder, files, []);
     }
+
+    public PodCaptureResult Capture(string podId) {
+        try {
+            var capture = this.ReadAdmission("pod.capture", new { pod = podId }).ToObject<PodCapture>()
+                ?? throw new InvalidDataException("Host returned no package capture.");
+            if (capture.Id != podId || !string.Equals(Path.GetFullPath(capture.Directory), Path.GetFullPath(FullPath(this.PodsRoot, capture.Folder)), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Host package capture identity or local folder disagrees.");
+            return new(capture, null, null);
+        } catch (Exception exception) {
+            return new(null, "package.unavailable", exception.Message);
+        }
+    }
+
+    public IReadOnlyList<PodPreparation> List() {
+        JObject listing;
+        try { listing = this.ReadAdmission("pod.list", new { }); }
+        catch (Exception exception) {
+            Serilog.Log.Warning(exception, "package.unavailable: host admission could not list Pods");
+            return [new RefusedPod(this.PodsRoot, [], [ScriptDiagnosticFactory.Error("package.unavailable", exception.Message)])];
+        }
+        var pods = new List<PodPreparation>();
+        foreach (var row in listing["pods"] ?? new JArray()) {
+            var id = row.Value<string>("id") ?? throw new InvalidDataException("Host package lacks identity.");
+            var result = this.Capture(id);
+            if (result.Capture is not { } capture) {
+                pods.Add(new RefusedPod(row.Value<string>("folder") ?? id, [], [ScriptDiagnosticFactory.Error(result.Code!, result.Reason!)]));
+                continue;
+            }
+            var prepared = Prepare(capture.Directory, capture.MemberBundle);
+            pods.Add(prepared is PreparedPod pod ? pod with { Contributions = capture.Contributions } : prepared);
+        }
+        return pods;
+    }
+
+    public static PodPreparation Prepare(string folder, ScriptPodSourceBundle bundle) =>
+        Prepare(folder, ScriptPodSourceNormalizer.DecodeFiles(bundle), []);
 
     private static PodPreparation Prepare(string folder, IReadOnlyDictionary<string, byte[]> files, List<ScriptDiagnostic> diagnostics) {
         var members = files.OrderBy(pair => pair.Key, StringComparer.Ordinal)
@@ -123,13 +140,13 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
 
         foreach (var entrypoint in manifest.Manifest.Entrypoints) {
             if (!files.TryGetValue(entrypoint.SourcePath, out var source)) {
-                diagnostics.Add(ScriptDiagnosticFactory.Error(Stage, $"Entrypoint '{entrypoint.Id}' has no source file.", entrypoint.SourcePath));
+                diagnostics.Add(ScriptDiagnosticFactory.Error(Stage, $"Entrypoint '{entrypoint.SourcePath}' has no source file.", entrypoint.SourcePath));
                 continue;
             }
             var types = new Pe.Shared.Scripting.Analysis.ScriptEntryPointResolver("PeScriptContainer")
                 .ResolveContainerTypeNames(Encoding.UTF8.GetString(source));
             if (types.Count != 1)
-                diagnostics.Add(ScriptDiagnosticFactory.Error(Stage, $"Entrypoint '{entrypoint.Id}' must declare exactly one non-abstract PeScriptContainer; found {types.Count}.", entrypoint.SourcePath));
+                diagnostics.Add(ScriptDiagnosticFactory.Error(Stage, $"Entrypoint '{entrypoint.SourcePath}' must declare exactly one non-abstract PeScriptContainer; found {types.Count}.", entrypoint.SourcePath));
         }
         return diagnostics.Any(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error)
             ? new RefusedPod(folder, members, diagnostics)
@@ -138,29 +155,26 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
 
     /// <summary>The one installed pod folder whose manifest id matches. Zero or several matches fail and name the folders.</summary>
     public string ResolveFolder(string podId) {
-        var matches = Directory.Exists(this.PodsRoot)
-            ? Directory.EnumerateDirectories(this.PodsRoot)
-                .Where(folder => (File.GetAttributes(folder) & FileAttributes.ReparsePoint) == 0 && ReadId(folder) == podId)
-                .OrderBy(folder => folder, StringComparer.OrdinalIgnoreCase)
-                .ToList()
-            : [];
+        var matches = (this.ReadAdmission("pod.list", new { })["pods"] ?? new JArray())
+            .Where(row => row.Value<string>("id") == podId).Select(row => row.Value<string>("folder")!).ToList();
         return matches.Count switch {
-            1 => matches[0],
-            0 => throw new InvalidDataException($"No installed pod has id '{podId}' under {this.PodsRoot}."),
+            1 => FullPath(this.PodsRoot, matches[0]),
+            0 => throw new InvalidDataException($"No installed pod has id '{podId}'."),
             _ => throw new InvalidDataException($"Pod id '{podId}' is ambiguous between folders: {string.Join(", ", matches)}.")
         };
     }
 
-    /// <summary>The `id` a pod folder's manifest declares; null when it has no readable manifest.</summary>
-    internal static string? ReadId(string folder) {
-        var path = Path.Combine(folder, "pod.json");
-        if (!File.Exists(path) || new FileInfo(path).Length > MaxFileBytes)
-            return null;
-        try {
-            return JObject.Parse(File.ReadAllText(path))["id"]?.Value<string>();
-        } catch (JsonException) {
-            return null; // ponytail: an unparseable neighbour cannot own an id; pod.list reports it.
-        }
+    /// <summary>Resolve a local output folder through the same admitted host inventory.</summary>
+    public string ResolveId(string folder) {
+        var relative = BclCompat.GetRelativePath(this.PodsRoot, folder).Replace('\\', '/');
+        _ = FullPath(this.PodsRoot, relative);
+        var response = this.ReadAdmission("pod.list", new { projection = "identity", folder = relative });
+        var identity = response["identity"];
+        if (response.Value<string>("projection") != "identity" || identity?.Value<string>("id") is not { } id
+            || identity.Value<string>("folder") is not { } selected
+            || !string.Equals(FullPath(this.PodsRoot, selected), Path.GetFullPath(folder), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"No unique admitted pod owns output folder '{folder}'.");
+        return id;
     }
 
     internal static PodCapturedSource CaptureComposeSource(PodMemberComposeRequest request) {
@@ -175,15 +189,23 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
         return new PodCapturedSource(source.Id, source.Path, source.Sha256, bytes, content, source.Origin);
     }
 
-    /// <summary>Creates a new member. Never overwrites: capture always creates.</summary>
-    public string WriteMember(string podId, string path, string content) {
-        var fullPath = this.MemberFullPath(podId, path);
+    /// <summary>Native schedule capture writes a new settings member into a host-resolved pod.</summary>
+    public string WriteSettingsMember(string podId, string path, string content) {
+        path = NormalizeMemberPath(path);
+        if (!path.StartsWith("settings/", StringComparison.Ordinal))
+            throw new InvalidDataException("A settings capture must name settings/<path>.");
+        var fullPath = FullPath(this.ResolveFolder(podId), path);
         var bytes = Encoding.UTF8.GetBytes(content);
-        if (bytes.LongLength > MaxFileBytes)
-            throw new InvalidDataException($"Member exceeds {MaxFileBytes} bytes: {path}");
+        if (bytes.LongLength > MaxFileBytes) throw new InvalidDataException($"Settings capture exceeds {MaxFileBytes} bytes.");
+        var parent = Path.GetDirectoryName(fullPath);
+        while (parent is not null && parent.Length >= this.PodsRoot.Length) {
+            if (Directory.Exists(parent) && (File.GetAttributes(parent) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidDataException("Settings capture cannot follow directory links.");
+            parent = Path.GetDirectoryName(parent);
+        }
         _ = Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-        using (var stream = new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write))
-            stream.Write(bytes, 0, bytes.Length);
+        using var stream = new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write);
+        stream.Write(bytes, 0, bytes.Length);
         return Sha256(bytes);
     }
 
@@ -191,19 +213,29 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
     public PodMemberComposition Compose(string? podId, string path, string? draftContent, PodCapturedSource? capturedSource = null) {
         if (podId is null && draftContent is null)
             throw new InvalidDataException("A saved member requires a pod id.");
-        var folder = podId is null ? null : this.ResolveFolder(podId);
         path = podId is null
             ? SettingsPathing.NormalizeRelativePath(path, nameof(path))
             : NormalizeMemberPath(path);
         if (path.Length == 0)
             throw new InvalidDataException("A draft path is required.");
+        var snapshots = new Dictionary<string, IReadOnlyDictionary<string, byte[]>>(StringComparer.Ordinal);
+        byte[] ReadMember(string owner, string memberPath) {
+            if (!snapshots.TryGetValue(owner, out var files)) {
+                var admitted = this.Capture(owner);
+                if (admitted.Capture is not { } capture) throw new InvalidDataException($"{admitted.Code}: {admitted.Reason}");
+                files = ScriptPodSourceNormalizer.DecodeFiles(capture.MemberBundle);
+                snapshots.Add(owner, files);
+            }
+            return files.TryGetValue(memberPath, out var bytes) ? bytes
+                : throw new InvalidDataException($"No admitted member '{memberPath}' in pod '{owner}'.");
+        }
         var source = capturedSource ?? CaptureRoot();
         var result = PodComposer.Compose(path, source.Content, Resolve);
         return new PodMemberComposition(result.Content, source, result.Diagnostics, result.Dependencies);
 
         PodCapturedSource CaptureRoot() {
             var bytes = draftContent is null
-                ? ReadBoundedFile(FullPath(folder!, path))
+                ? ReadMember(podId!, path)
                 : Encoding.UTF8.GetBytes(draftContent);
             return new PodCapturedSource(
                 podId,
@@ -219,21 +251,15 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
             if (!TryParseReference(reference, out var referencedId, out var referencedPath, out reason))
                 return false;
             try {
-                if (referencedId == "local" && folder is null) {
+                if (referencedId == "local" && podId is null) {
                     reason = $"Reference '{reference}' needs a pod context; choose a pod or use an explicit @<id>/ reference.";
                     return false;
                 }
                 var owner = referencedId == "local" ? podId! : referencedId;
-                var ownerFolder = referencedId == "local" ? folder! : this.ResolveFolder(referencedId);
-                var fullPath = FullPath(ownerFolder, referencedPath);
-                if (!File.Exists(fullPath)) {
-                    reason = $"Reference '{reference}' names no member '{referencedPath}' in pod '{owner}' ({ownerFolder}).";
-                    return false;
-                }
-                var bytes = ReadBoundedFile(fullPath);
+                var bytes = ReadMember(owner, referencedPath);
                 dependency = new PodConsumedDependency(owner, referencedPath, Sha256(bytes), bytes, Encoding.UTF8.GetString(bytes));
                 return true;
-            } catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException) {
+            } catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException or InvalidOperationException) {
                 reason = $"Reference '{reference}': {exception.Message}";
                 return false;
             }
@@ -268,15 +294,9 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
     }
 
     public static string NormalizeMemberPath(string path) {
-        var relative = (path ?? string.Empty).Replace('\\', '/');
-        var inRoot = RootFiles.Contains(relative, StringComparer.OrdinalIgnoreCase)
-            || MemberDirectories.Any(directory => relative.StartsWith(directory + "/", StringComparison.OrdinalIgnoreCase));
-        if (!inRoot || relative.Split('/').Any(segment => segment is "" or "." or ".." || segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0))
-            throw new InvalidDataException($"'{path}' is not a pod member path (pod.json, PeScripts.csproj, {ImportedFileName}, src/, settings/, assets/).");
-        return relative;
+        try { return ScriptPodSourceNormalizer.ValidateMemberPath(path); }
+        catch (ArgumentException exception) { throw new InvalidDataException(exception.Message, exception); }
     }
-
-    private string MemberFullPath(string podId, string path) => FullPath(this.ResolveFolder(podId), NormalizeMemberPath(path));
 
     public static string FullPath(string folder, string path) {
         var fullPath = Path.GetFullPath(Path.Combine(folder, path.Replace('/', Path.DirectorySeparatorChar)));
@@ -298,62 +318,4 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null) {
         }
     }
 
-    internal static Dictionary<string, byte[]> Capture(string folder, ICollection<ScriptDiagnostic> diagnostics) {
-        var files = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
-        if ((File.GetAttributes(folder) & FileAttributes.ReparsePoint) != 0) {
-            diagnostics.Add(ScriptDiagnosticFactory.Error(Stage, "Pod folders cannot be links.", folder));
-            return files;
-        }
-        var total = 0L;
-        foreach (var path in MemberFiles(folder, diagnostics)) {
-            var relative = BclCompat.GetRelativePath(folder, path).Replace('\\', '/');
-            var info = new FileInfo(path);
-            if ((info.Attributes & FileAttributes.ReparsePoint) != 0) {
-                diagnostics.Add(ScriptDiagnosticFactory.Error(Stage, "Pod members cannot be links.", relative));
-                continue;
-            }
-            if (files.Count >= MaxFileCount || info.Length > MaxFileBytes || (total += info.Length) > MaxTotalBytes) {
-                diagnostics.Add(ScriptDiagnosticFactory.Error(Stage, $"Pod exceeds {MaxFileCount} files, {MaxFileBytes} bytes per file, or {MaxTotalBytes} bytes total.", relative));
-                continue;
-            }
-            files[relative] = ReadBoundedFile(path);
-        }
-        return files;
-    }
-
-    private static IEnumerable<string> MemberFiles(string folder, ICollection<ScriptDiagnostic> diagnostics) {
-        foreach (var name in RootFiles) {
-            var path = Path.Combine(folder, name);
-            if (File.Exists(path))
-                yield return path;
-        }
-        var directoryCount = 1;
-        foreach (var name in MemberDirectories) {
-            var pending = new Stack<string>();
-            var root = Path.Combine(folder, name);
-            if (Directory.Exists(root))
-                pending.Push(root);
-            while (pending.Count > 0) {
-                var directory = pending.Pop();
-                if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0) {
-                    diagnostics.Add(ScriptDiagnosticFactory.Error(Stage, "Pod directories cannot be links.", BclCompat.GetRelativePath(folder, directory).Replace('\\', '/')));
-                    continue;
-                }
-                if (++directoryCount > MaxDirectoryCount) {
-                    diagnostics.Add(ScriptDiagnosticFactory.Error(Stage, $"Pod exceeds {MaxDirectoryCount} directories.", name));
-                    yield break;
-                }
-                foreach (var child in Directory.EnumerateDirectories(directory))
-                    pending.Push(child);
-                foreach (var path in Directory.EnumerateFiles(directory))
-                    yield return path;
-            }
-        }
-    }
-
-    private static byte[] ReadBoundedFile(string path) {
-        if (new FileInfo(path).Length > MaxFileBytes)
-            throw new InvalidDataException($"Pod file exceeds {MaxFileBytes} bytes: {path}");
-        return File.ReadAllBytes(path);
-    }
 }

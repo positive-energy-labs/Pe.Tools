@@ -1,25 +1,31 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { resolveWorkbenchConfig } from "../config";
-import { selectRunStatus, selectTurnFailure } from "../chat-state";
+import { selectRunStatus, selectTurnFailure } from "@pe/agent-contracts/chat-state";
 import { previousOf, useHostStatus } from "#/readings";
 import { appAtomRegistry, useRouteOwner } from "#/route/route-owner";
 import { createChatPageStore } from "../store";
-import type { WorkbenchAttachment } from "../prompt";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
 import { WorkbenchContext } from "./thread-summary";
 import { chatLoading, useThreadStream } from "./thread-stream";
-import { harnessClient, notFound } from "./harness-client";
+import { harnessClient, notFound, type PromptRequest } from "./harness-client";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { CHAT_SEEDS } from "#/chat/seeds";
 import { errorMessage } from "./use-workbench";
 import { EMPTY_HEAD, isReady, useProviders, type HeadDraft } from "./providers";
+import { targetKey, type DocumentRequest } from "@pe/agent-contracts";
+import { demoThreads } from "#/chat/thread-navigation";
+import { mergeThreadRoster, mergeThreadSummary } from "./thread-merge";
+import { emptyPrompt } from "../prompt";
+import { soleUserDocument } from "#/chat/scope";
+import { machineOf } from "#/machine/model";
+import { useMachine } from "#/machine/use-machine";
 
 export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const config = useMemo(() => resolveWorkbenchConfig(), []);
-  const navigate = useNavigate({ from: "/chat" });
-  const search = useSearch({ from: "/chat" });
+  const navigate = useNavigate({ from: "/pea" });
+  const search = useSearch({ from: "/pea" });
   const currentThreadId = search.thread ?? "";
   const store = useRouteOwner(() =>
     createChatPageStore({
@@ -37,7 +43,15 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const info = previousOf(hostStatus);
   const client = useMemo(() => harnessClient(config.origin), [config.origin]);
   const [threads, setThreads] = useState<StoredThreadSummary[]>([]);
+  const rosterEpoch = useRef(0);
   const [draft, setDraft] = useState<HeadDraft>(EMPTY_HEAD);
+  // Undefined until the human picks or clears: the draft then shows the sole user document, if any.
+  const [chosenTarget, setDraftTarget] = useState<DocumentRequest | null>();
+  const machine = machineOf(useMachine().reading);
+  const draftTarget = useMemo(
+    () => (chosenTarget === undefined ? soleUserDocument(machine) : chosenTarget),
+    [chosenTarget, machine],
+  );
   const [error, setError] = useState<string>();
 
   // `?demo=<seed>`: the transcript shows that seed's thread and nothing is fetched.
@@ -49,8 +63,26 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   );
   const refreshThreads = useCallback(async () => {
     if (demo) return;
+    const started = rosterEpoch.current;
     const listed = await client.threads();
-    setThreads([...listed].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)));
+    if (started === rosterEpoch.current)
+      setThreads((current) => mergeThreadRoster(current, listed));
+  }, [client, demo]);
+  useEffect(() => {
+    if (demo) {
+      setThreads(demoThreads(demo));
+      return;
+    }
+    let fault: string | undefined;
+    return client.summaries(
+      (listed) => {
+        rosterEpoch.current++;
+        setThreads((current) => mergeThreadRoster(current, listed));
+        // A fresh roster ends the list's own staleness, never another verb's complaint.
+        setError((current) => (current === fault ? undefined : current));
+      },
+      (caught) => setError((fault = errorMessage(caught))),
+    );
   }, [client, demo]);
 
   const stream = useThreadStream({
@@ -95,21 +127,45 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const drafted = draft.providerId
     ? providers.list?.find((item) => item.id === draft.providerId)
     : providers.list?.find(isReady);
-  /** Why the first send cannot create a thread now, or undefined when it can. */
-  const newRefusal = demo
+  /** The provider the open thread is bound to; a thread never changes provider. */
+  const bound = currentThreadId
+    ? providers.list?.find(
+        (item) =>
+          item.id ===
+          (chat.providerId || threads.find((t) => t.id === currentThreadId)?.providerId),
+      )
+    : undefined;
+  /** Why a send cannot go now, in the provider's own words, or undefined when it can. */
+  const sendRefusal = demo
     ? undefined
     : !providers.list
       ? "Providers are loading"
-      : !providers.list.some(isReady)
-        ? "no provider is ready"
-        : drafted && !isReady(drafted)
-          ? `${drafted.name} is not ready`
-          : undefined;
+      : currentThreadId
+        ? bound && !isReady(bound)
+          ? `${bound.name} is not ready: ${bound.readiness.state === "ready" ? "" : bound.readiness.message}`
+          : undefined
+        : !providers.list.some(isReady)
+          ? "no provider is ready"
+          : drafted && !isReady(drafted)
+            ? `${drafted.name} is not ready`
+            : undefined;
 
   /** Binds the draft: the thread is created on its provider, then takes the draft's model and traits. */
   const createThread = useCallback(async () => {
-    if (newRefusal || !drafted) throw Error(newRefusal ?? "no provider is ready");
+    if (sendRefusal || !drafted) throw Error(sendRefusal ?? "no provider is ready");
     const created = await client.create(drafted.id);
+    if (draftTarget) {
+      const displayLabel = threads.find(
+        (thread) => targetKey(thread.head.defaultTarget) === targetKey(draftTarget),
+      )?.head.displayLabel;
+      const outcome = await client.target(created.id, {
+        defaultTarget: draftTarget,
+        revision: created.head.revision,
+        displayLabel,
+      });
+      if (!outcome.ok)
+        throw Error("The new thread target changed; choose its target before sending");
+    }
     if (draft.modelId && draft.modelId !== created.modelId)
       await client.model(created.id, draft.modelId);
     for (const [id, value] of Object.entries(draft.traits))
@@ -117,16 +173,16 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     await refreshThreads();
     await gotoThread(created.id);
     return created.id;
-  }, [client, draft, drafted, gotoThread, newRefusal, refreshThreads]);
+  }, [client, draft, draftTarget, drafted, gotoThread, sendRefusal, refreshThreads]);
 
   const sendPrompt = useCallback(
-    async (text: string, attachments?: WorkbenchAttachment[]) => {
-      const prompt = text.trim();
-      if (!prompt) throw Error("Enter a prompt");
-      if (attachments?.length) throw Error("Attachments do not cross the harness wire yet");
-      // The host queues a send behind a running turn; the browser never gates on it.
+    async (input: PromptRequest) => {
+      const text = input.text.trim();
+      const empty = emptyPrompt(input);
+      if (empty) throw Error(empty);
+      // A send on a running turn is the host's interrupt; the browser never gates on it.
       const ok = await attempt(async () =>
-        client.prompt(currentThreadId || (await createThread()), prompt),
+        client.prompt(currentThreadId || (await createThread()), { ...input, text }),
       );
       if (!ok) throw Error("Send failed");
     },
@@ -187,7 +243,9 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       providers,
       draft,
       setDraft,
-      newRefusal,
+      draftTarget,
+      setDraftTarget,
+      sendRefusal,
       missingThread,
       currentThreadId,
       turn: search.turn,
@@ -199,8 +257,41 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       operationError,
       sendPrompt,
       cancel: onThread((id) => client.cancel(id)),
-      newThread: async () =>
-        void (await navigate({ search: (previous) => ({ ...previous, thread: undefined }) })),
+      newThread: async (target) => {
+        setDraftTarget(target);
+        await navigate({ search: (previous) => ({ ...previous, thread: undefined }) });
+      },
+      updateThread: (threadId, change) =>
+        attempt(async () => {
+          if (demo && change.readSeq !== undefined) return;
+          if (demo)
+            throw Error(
+              "Fixture threads are read-only; open a real thread to change its lifecycle",
+            );
+          const current =
+            threads.find((item) => item.id === threadId) ??
+            (chat.id === threadId ? chat : undefined);
+          const updated = await client
+            .update(threadId, {
+              expectedRevision: current?.lifecycle.revision,
+              ...change,
+            })
+            .catch((caught) => {
+              if (
+                change.readSeq !== undefined &&
+                change.explicitUnread === undefined &&
+                (caught as { status?: number }).status === 409
+              )
+                return undefined;
+              throw caught;
+            });
+          if (!updated) return;
+          setThreads((previous) =>
+            previous.map((item) =>
+              item.id === updated.id ? mergeThreadSummary(item, updated) : item,
+            ),
+          );
+        }),
       openThread: (threadId) => void gotoThread(threadId),
       renameThread: async (threadId, title) =>
         void (await attempt(async () => {
@@ -231,11 +322,12 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       error,
       forkThread,
       draft,
+      draftTarget,
       info,
       isRunning,
       loading,
       missingThread,
-      newRefusal,
+      sendRefusal,
       onThread,
       operationError,
       patchThreadView,

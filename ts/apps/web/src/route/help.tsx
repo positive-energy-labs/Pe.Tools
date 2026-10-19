@@ -1,19 +1,22 @@
 /**
- * The help page (Alt+/). The layout is the data: the body measures the rendered panes, reads every
- * hotkey registration back from TanStack, and joins them by `meta.region`. Manifest chords (no
- * region) sit in a band above the chart; pane and widget keys hang off their region with a leader;
- * the route's `docs` prose renders below. Nothing here is a second list of keys.
+ * The help page (Alt+/). The layout is the data: the body measures the visible panes, reads every
+ * hotkey registration back from TanStack, and joins them to a pane by `meta.scope`. Chords bound
+ * above any pane sit in a band over the chart; a pane's keys hang off it with a leader; the route's
+ * `docs` prose renders below. Nothing here is a second list of keys.
  *
- * ponytail: `useHotkeyRegistrations()` returns a fresh snapshot per read, so a component that both
- * registers and reads re-renders forever. The body registers nothing and mounts only while open.
+ * Panes and registrations are read once as the body mounts (it exists only while open), so the page
+ * is a still picture of the route, not a subscriber that re-renders on every registration.
  */
-import { Fragment, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
-import { CircleHelp } from "lucide-react";
 
 import { Kbd } from "#/components/lang/kbd";
-import { Press } from "#/components/lang/press";
-import { readKeyMeta, useHotkeyRegistrations, useScopeKeys, type KeyMeta } from "./keys";
+import { Button } from "@pe/kit/lang/button";
+import { HotkeyCommand } from "#/components/lang/hotkey-command";
+import { startFeedback } from "#/components/feedback-picker";
+import { SettingsHelpTrigger } from "#/machine/navigation";
+import { readKeyMeta, readRegistrations, useScopeKeys, type KeyMeta } from "@pe/kit/keys";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 interface Region {
   id: string;
@@ -26,20 +29,21 @@ interface Bound extends KeyMeta {
 }
 
 const CARD_W = 240;
+/** The chord that opens this page; the page does not list it among the keys it explains. */
+const HELP_CHORD = { hotkey: "Alt+/", label: "How this route works" } as const;
+const CARD_GAP = 12;
+/** Below this the chart keeps one column of cards instead of two. */
+const TWO_COLUMNS_W = 800;
 
-const measureRegions = (): { regions: Region[]; frame: DOMRect } | null => {
-  const els = [...document.querySelectorAll<HTMLElement>('[data-slot="pane"]')];
-  if (els.length === 0) return null;
-  const frame = els[0]!.closest<HTMLElement>("main, [role='region']")?.getBoundingClientRect() ?? {
-    left: Math.min(...els.map((el) => el.getBoundingClientRect().left)),
-    top: Math.min(...els.map((el) => el.getBoundingClientRect().top)),
-    right: Math.max(...els.map((el) => el.getBoundingClientRect().right)),
-    bottom: Math.max(...els.map((el) => el.getBoundingClientRect().bottom)),
-  };
-  const f = frame as DOMRect;
-  return {
-    frame: new DOMRect(f.left, f.top, f.right - f.left, f.bottom - f.top),
-    regions: els.map((el, index) => ({
+/**
+ * The panes the user can see now. A pane under `<Activity mode="hidden">` stays mounted with
+ * `display: none`, so it measures 0x0 at the origin; `checkVisibility()` is false for it and for
+ * anything inside a hidden subtree, which is exactly what "drawn" means.
+ */
+const measureRegions = (): Region[] =>
+  [...document.querySelectorAll<HTMLElement>('[data-slot="pane"]')]
+    .filter((el) => el.checkVisibility())
+    .map((el, index) => ({
       id: el.dataset.paneId ?? `${el.dataset.kind ?? "pane"}-${index}`,
       label:
         el.querySelector('[data-slot="pane-title"]')?.textContent?.trim() ||
@@ -49,38 +53,57 @@ const measureRegions = (): { regions: Region[]; frame: DOMRect } | null => {
         el.dataset.kind ||
         `pane ${index + 1}`,
       rect: el.getBoundingClientRect(),
-    })),
-  };
+    }));
+
+const unionOf = (regions: readonly Region[]) => {
+  const left = Math.min(...regions.map((r) => r.rect.left));
+  const top = Math.min(...regions.map((r) => r.rect.top));
+  return new DOMRect(
+    left,
+    top,
+    Math.max(...regions.map((r) => r.rect.right)) - left,
+    Math.max(...regions.map((r) => r.rect.bottom)) - top,
+  );
 };
 
-function Rows({ keys }: { keys: readonly Bound[] }) {
+/** `flow` wraps the pairs across the line (the route band); default is one column (a card). */
+function Rows({ keys, flow = false }: { keys: readonly Bound[]; flow?: boolean }) {
   return (
-    <dl className="grid grid-cols-[auto_1fr] items-center gap-x-2.5 gap-y-1 t-small">
+    <dl
+      className={
+        flow
+          ? "flex min-w-0 flex-wrap gap-x-5 gap-y-1 t-small"
+          : "grid grid-cols-[auto_1fr] items-center gap-x-2.5 gap-y-1 t-small"
+      }
+    >
       {keys.map((k) => (
-        <Fragment key={`${k.hotkey}:${k.name}`}>
+        <div
+          key={`${k.hotkey}:${k.name}`}
+          className={flow ? "flex items-center gap-2.5" : "contents"}
+        >
           <dt>
-            <Kbd mute={Boolean(k.refusal)}>{k.hotkey}</Kbd>
+            <Kbd mute={Boolean(k.refusal)} hotkey={k.hotkey} />
           </dt>
-          <dd
-            className={k.refusal ? "text-ink-mute" : "text-ink"}
-            title={k.refusal ?? k.description}
-          >
-            {k.name}
-            {k.refusal ? ` — refuses now: ${k.refusal}` : ""}
-          </dd>
-        </Fragment>
+          <TooltipHint content={k.refusal ?? k.description}>
+            <dd className={k.refusal ? "text-ink-mute" : "text-ink"}>
+              {k.name}
+              {k.refusal ? ` — refuses now: ${k.refusal}` : ""}
+            </dd>
+          </TooltipHint>
+        </div>
       ))}
     </dl>
   );
 }
 
+/** Where a card's body ends; `Rows` draws one 22 px line per key under a 30 px head. */
+const cardHeight = (keys: number) => 30 + 17 + keys * 22;
+
 function Chart({
   regions,
-  frame,
   byRegion,
 }: {
   regions: Region[];
-  frame: DOMRect;
   byRegion: ReadonlyMap<string, Bound[]>;
 }) {
   const mid = useRef<HTMLDivElement>(null);
@@ -96,158 +119,267 @@ function Chart({
     return () => observer?.disconnect();
   }, []);
 
-  const left = regions.filter(
-    (r) => r.rect.left + r.rect.width / 2 <= frame.left + frame.width / 2,
+  const frame = unionOf(regions);
+  const twoColumns = size !== null && size.w >= TWO_COLUMNS_W;
+  const sideOf = (region: Region) =>
+    twoColumns && region.rect.left + region.rect.width / 2 <= frame.left + frame.width / 2
+      ? "left"
+      : "right";
+  // The chart is never shorter than its tallest column of cards; the page scrolls instead.
+  const need = Math.max(
+    ...(["left", "right"] as const).map((side) =>
+      regions
+        .filter((region) => sideOf(region) === side)
+        .reduce((sum, region) => {
+          const keys = byRegion.get(region.id)?.length ?? 0;
+          return keys ? sum + cardHeight(keys) + CARD_GAP : sum;
+        }, 8),
+    ),
   );
-  const right = regions.filter((r) => !left.includes(r));
+  const view = (() => {
+    if (!size) return null;
+    // One scale for both axes, so a pane keeps its shape on the chart.
+    const room = {
+      w: size.w - (twoColumns ? 2 : 1) * (CARD_W + 72) - (twoColumns ? 0 : 24),
+      h: size.h - 24,
+    };
+    const k = Math.min(
+      Math.max(room.w, 160) / frame.width,
+      room.h / frame.height,
+      720 / frame.width,
+    );
+    const w = frame.width * k;
+    const h = frame.height * k;
+    const x = twoColumns ? (size.w - w) / 2 : 24;
+    const y = (size.h - h) / 2;
+    return {
+      w,
+      h,
+      sx: (v: number) => x + (v - frame.left) * k,
+      sy: (v: number) => y + (v - frame.top) * k,
+    };
+  })();
+
+  // A region with keys gets a card on the side it sits on; a keyless region is outlined and named,
+  // and says nothing more. Cards stack in anchor order so leaders never cross.
+  const cards = view
+    ? (["left", "right"] as const).flatMap((side) => {
+        let floor = 8;
+        const placed = regions
+          .flatMap((region, index) => {
+            const keys = byRegion.get(region.id) ?? [];
+            const left = side === "left";
+            if (keys.length === 0 || sideOf(region) !== side) return [];
+            return [
+              {
+                region,
+                keys,
+                n: index + 1,
+                ax: view.sx(left ? region.rect.left : region.rect.right),
+                ay: view.sy(region.rect.top + region.rect.height / 2),
+              },
+            ];
+          })
+          .sort((p, q) => p.ay - q.ay)
+          .map((card) => {
+            const top = Math.max(floor, card.ay - 16);
+            floor = top + cardHeight(card.keys.length) + CARD_GAP;
+            return { ...card, side, top };
+          });
+        const overflow = Math.max(0, floor - CARD_GAP - (size!.h - 8));
+        return placed.map((card) => ({ ...card, top: Math.max(8, card.top - overflow) }));
+      })
+    : [];
 
   return (
-    <div ref={mid} className="relative size-full min-h-0 min-w-[808px]">
-      {size
-        ? (() => {
-            const mapW = Math.max(200, Math.min(size.w - 2 * (CARD_W + 64), 640));
-            const mapH = Math.max(120, Math.min(size.h - 24, mapW * (frame.height / frame.width)));
-            const mapX = (size.w - mapW) / 2;
-            const mapY = (size.h - mapH) / 2;
-            const sx = (x: number) => mapX + ((x - frame.left) / frame.width) * mapW;
-            const sy = (y: number) => mapY + ((y - frame.top) / frame.height) * mapH;
-            const cardY = (column: Region[], index: number) => {
-              const spacing = Math.min(200, (size.h - 16) / Math.max(column.length, 1));
-              return size.h / 2 - (column.length * spacing) / 2 + index * spacing;
-            };
-            const card = (r: Region, x: number, y: number) => (
-              <div
-                key={r.id}
-                data-surface="page"
-                className="absolute flex flex-col border border-line-2"
-                style={{ width: CARD_W, left: x, top: y }}
-              >
-                <div className="t-small t-upper px-2.5 py-1.5 text-ink">{r.label} · keys</div>
-                <div className="hairline-t px-2.5 py-2">
-                  {byRegion.get(r.id)?.length ? (
-                    <Rows keys={byRegion.get(r.id)!} />
-                  ) : (
-                    <span className="t-small text-ink-mute">
-                      no keys while this region is focused
-                    </span>
-                  )}
-                </div>
+    <div ref={mid} className="relative min-w-0 flex-1" style={{ minHeight: Math.max(need, 280) }}>
+      {size && view ? (
+        <>
+          <svg width={size.w} height={size.h} className="absolute inset-0 text-ink-mute">
+            {regions.map((r, i) => (
+              <g key={`${r.id}:${i}`}>
+                <rect
+                  x={view.sx(r.rect.left)}
+                  y={view.sy(r.rect.top)}
+                  width={Math.max(view.sx(r.rect.right) - view.sx(r.rect.left), 4)}
+                  height={Math.max(view.sy(r.rect.bottom) - view.sy(r.rect.top), 4)}
+                  fill="none"
+                  stroke="currentColor"
+                />
+                <text
+                  x={view.sx(r.rect.left) + 6}
+                  y={view.sy(r.rect.top) + 14}
+                  fill="currentColor"
+                  fontSize={10}
+                >
+                  {i + 1} {r.label}
+                </text>
+              </g>
+            ))}
+            {cards.map((c) => (
+              <g key={c.region.id + c.n}>
+                <line
+                  x1={c.side === "left" ? 24 + CARD_W : size.w - 24 - CARD_W}
+                  y1={c.top + 16}
+                  x2={c.ax}
+                  y2={c.ay}
+                  stroke="currentColor"
+                />
+                <circle cx={c.ax} cy={c.ay} r={2.5} fill="currentColor" />
+              </g>
+            ))}
+          </svg>
+          {cards.map((c) => (
+            <div
+              key={c.region.id + c.n}
+              data-surface="page"
+              className="absolute flex flex-col border border-line-2"
+              style={{
+                width: CARD_W,
+                left: c.side === "left" ? 24 : size.w - 24 - CARD_W,
+                top: c.top,
+              }}
+            >
+              <div className="t-small t-upper truncate px-2.5 py-1.5 text-ink">
+                {c.n} {c.region.label} · keys
               </div>
-            );
-            const leader = (r: Region, fromX: number, y: number, into: number) => (
-              <polyline
-                key={r.id}
-                points={`${fromX},${y} ${into},${sy(r.rect.top + r.rect.height / 2)} ${sx(r.rect.left + r.rect.width / 2)},${sy(r.rect.top + r.rect.height / 2)}`}
-                fill="none"
-                stroke="currentColor"
-              />
-            );
-            return (
-              <>
-                <svg width={size.w} height={size.h} className="absolute inset-0 text-ink-mute">
-                  {left.map((r, i) => leader(r, 24 + CARD_W, cardY(left, i) + 20, mapX - 24))}
-                  {right.map((r, i) =>
-                    leader(r, size.w - 24 - CARD_W, cardY(right, i) + 20, mapX + mapW + 24),
-                  )}
-                  <rect
-                    x={mapX}
-                    y={mapY}
-                    width={mapW}
-                    height={mapH}
-                    fill="none"
-                    stroke="currentColor"
-                  />
-                  {regions.map((r, i) => (
-                    <g key={r.id}>
-                      <rect
-                        x={sx(r.rect.left) + 2}
-                        y={sy(r.rect.top) + 2}
-                        width={Math.max((r.rect.width / frame.width) * mapW - 4, 4)}
-                        height={Math.max((r.rect.height / frame.height) * mapH - 4, 4)}
-                        fill="none"
-                        stroke="currentColor"
-                      />
-                      <text
-                        x={sx(r.rect.left) + 8}
-                        y={sy(r.rect.top) + 16}
-                        fill="currentColor"
-                        fontSize={10}
-                      >
-                        {i + 1} {r.label}
-                      </text>
-                    </g>
-                  ))}
-                </svg>
-                {left.map((r, i) => card(r, 24, cardY(left, i)))}
-                {right.map((r, i) => card(r, size.w - 24 - CARD_W, cardY(right, i)))}
-              </>
-            );
-          })()
-        : null}
+              <div className="hairline-t px-2.5 py-2">
+                <Rows keys={c.keys} />
+              </div>
+            </div>
+          ))}
+        </>
+      ) : null}
     </div>
   );
 }
 
-function HelpBody({ docs, name }: { docs: ReactNode; name: string }) {
-  const { hotkeys } = useHotkeyRegistrations();
-  const layout = useMemo(measureRegions, []);
-  const bound: Bound[] = hotkeys.flatMap((reg) => {
+function HelpBody({
+  docs,
+  name,
+  utilities,
+  close,
+}: {
+  docs: ReactNode;
+  name: string;
+  utilities?: boolean;
+  close: () => void;
+}) {
+  const hotkeys = useMemo(readRegistrations, []);
+  const regions = useMemo(measureRegions, []);
+  // A chord bound at several nodes reads once, at the shallowest.
+  const bound = new Map<string, Bound>();
+  for (const reg of hotkeys) {
     const meta = readKeyMeta(reg.options.meta);
-    return meta ? [{ ...meta, hotkey: reg.hotkey }] : [];
-  });
-  // The chart's cards are the measured panes; every other scope node's keys read as the route's.
-  const drawn = new Set((layout?.regions ?? []).map((region) => region.id));
-  const band = bound.filter((k) => !drawn.has(k.scope));
+    if (!meta || (reg.hotkey === HELP_CHORD.hotkey && meta.name === HELP_CHORD.label)) continue;
+    const key = `${reg.hotkey}:${meta.name}`;
+    if ((bound.get(key)?.depth ?? Infinity) > meta.depth)
+      bound.set(key, { ...meta, hotkey: reg.hotkey });
+  }
+  // The chart's cards are the visible panes; every other scope node's keys read as the route's.
+  const drawn = new Set(regions.map((region) => region.id));
+  const band: Bound[] = [];
   const byRegion = new Map<string, Bound[]>();
-  for (const k of bound)
+  for (const k of bound.values())
     if (drawn.has(k.scope)) byRegion.set(k.scope, [...(byRegion.get(k.scope) ?? []), k]);
+    else band.push(k);
 
   return (
-    <div className="absolute inset-0 flex flex-col">
+    <div className="absolute inset-0 flex flex-col overflow-y-auto">
       <div className="flex shrink-0 items-baseline gap-6 px-8 pt-6 pb-3">
         <span className="t-title text-ink">{name}</span>
         {band.length ? (
-          <Rows keys={band} />
+          <Rows keys={band} flow />
         ) : (
           <span className="t-small text-ink-mute">this route declares no chords</span>
         )}
       </div>
-      {layout ? (
-        <div className="min-h-0 flex-1 overflow-x-auto">
-          <Chart regions={layout.regions} frame={layout.frame} byRegion={byRegion} />
-        </div>
+      {regions.length ? (
+        <Chart regions={regions} byRegion={byRegion} />
       ) : (
         <div className="flex flex-1 items-center justify-center t-small text-ink-mute">
           this route draws no panes to explain
         </div>
       )}
       {docs ? <div className="shrink-0 overflow-y-auto px-8 pt-3 pb-8 t-prose">{docs}</div> : null}
+      {utilities ? (
+        <div className="hairline-t flex shrink-0 items-center gap-3 px-8 py-3">
+          <Button
+            label="Send feedback"
+            onClick={() => {
+              close();
+              startFeedback();
+            }}
+          >
+            Send feedback
+          </Button>
+          <SettingsHelpTrigger onOpen={close} />
+        </div>
+      ) : null}
     </div>
   );
 }
 
-export function RouteHelpButton({ docs, name }: { docs?: ReactNode; name: string }) {
+/** Every mounted help button's opener, newest last. Several mount at once while navigation hands
+ *  the top bar from one route to the next, so none of them binds the chord itself. */
+const openers: (() => void)[] = [];
+
+/** The one Alt+/ binding (AppChrome): on the document, so help opens with focus anywhere, the
+ *  composer's draft included; it opens the newest help button's page. */
+export function HelpChord() {
+  useScopeKeys(
+    [
+      {
+        hotkey: HELP_CHORD.hotkey,
+        label: HELP_CHORD.label,
+        callback: () => openers.at(-1)?.(),
+        options: { ignoreInputs: false },
+      },
+    ],
+    document.documentElement,
+  );
+  return null;
+}
+
+export function RouteHelpButton({
+  docs,
+  name,
+  utilities = false,
+}: {
+  docs?: ReactNode;
+  name: string;
+  utilities?: boolean;
+}) {
   const [open, setOpen] = useState(false);
-  useScopeKeys([
-    {
-      hotkey: "Alt+/",
-      callback: () => setOpen(true),
-      label: "help",
-      says: "how this route works — its regions and every key bound right now",
-    },
-  ]);
+  // Focus the page itself, not its first tabbable (a footer button) that would scroll it to the end.
+  const popup = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const opener = () => setOpen(true);
+    openers.push(opener);
+    return () => void openers.splice(openers.indexOf(opener), 1);
+  }, []);
   return (
     <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
       <DialogPrimitive.Trigger
-        render={<Press tone="quiet" size="icon" />}
-        title="how this route works — its regions and every key bound right now (Alt+/)"
-      >
-        <CircleHelp className="size-4" strokeWidth={1.5} />
-      </DialogPrimitive.Trigger>
+        render={
+          <HotkeyCommand
+            bind={false}
+            label={HELP_CHORD.label}
+            word="Tutorial"
+            hotkey={HELP_CHORD.hotkey}
+            reason="how this route works — its regions and every key bound right now (Alt+/)"
+            invoke={() => setOpen(true)}
+          />
+        }
+      />
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Popup className="fixed inset-0 z-modal outline-none">
+        <DialogPrimitive.Popup
+          ref={popup}
+          initialFocus={popup}
+          className="fixed inset-0 z-modal outline-none"
+        >
           <div data-surface="page" className="absolute inset-0" onClick={() => setOpen(false)} />
-          <HelpBody docs={docs} name={name} />
+          <HelpBody docs={docs} name={name} utilities={utilities} close={() => setOpen(false)} />
         </DialogPrimitive.Popup>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>

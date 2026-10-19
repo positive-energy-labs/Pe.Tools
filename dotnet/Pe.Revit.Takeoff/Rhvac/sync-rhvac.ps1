@@ -57,6 +57,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '../../../tools/product-paths.ps1')
+$scratch = Join-Path (Resolve-ProductRuntimeRoot) 'scratch'
+[void][IO.Directory]::CreateDirectory($scratch)
 $lane = $PSCmdlet.ParameterSetName
 $ps32 = 'C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe'
 $exportScript = Join-Path $PSScriptRoot 'export-rhvac.ps1'
@@ -79,7 +82,7 @@ try { ([IO.File]::Open($targetPath, 'Open', 'ReadWrite', 'None')).Dispose() }
 catch { throw "Cannot take an exclusive handle on $targetPath; close the project in RHVAC first. ($($_.Exception.Message))" }
 
 # --- 2. Census helper: table row counts + the Room identity map, read through the 32-bit lane --
-$censusScript = Join-Path ([IO.Path]::GetTempPath()) "rhvac-census-$PID.ps1"
+$censusScript = Join-Path $scratch "rhvac-census-$PID.ps1"
 @'
 param([Parameter(Mandatory)][string]$Path)
 Add-Type -AssemblyName System.Data
@@ -125,7 +128,7 @@ $before = Get-Census $targetPath
 # and seeded-system count to know what the row counts are allowed to be.
 $laneResultPath = if ($lane -eq 'Sync') {
     if ($ResultJson) { [IO.Path]::GetFullPath($ResultJson) }
-    else { Join-Path ([IO.Path]::GetTempPath()) "rhvac-sync-result-$PID.json" }
+    else { Join-Path $scratch "rhvac-sync-result-$PID.json" }
 } else { $null }
 
 $laneArguments = switch ($lane) {

@@ -1,3 +1,6 @@
+import type { Caller } from "@pe/agent-contracts";
+import { withInvocationContext } from "@pe/runtime/context";
+import { human, pea } from "./callers.ts";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -9,6 +12,8 @@ import { captureListSchema } from "@pe/agent-contracts";
 import { RevitBridge } from "../src/bridge.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { CaptureStore, capturesRoute } from "../src/captures-route.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
+import { sdkSessions } from "./native-receipt-fixture.ts";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -29,6 +34,10 @@ async function host(
     list: Effect.succeed([
       {
         sessionId: "bridge-a",
+        connected: true,
+        lane: hostOwnership.lane,
+        sourceRoot: hostOwnership.sourceRoot,
+        serviceName: hostOwnership.serviceName,
         processId: 42,
         processStartUtcUnixMs: 1000,
         state: {
@@ -81,7 +90,7 @@ async function host(
   const spa = () => Effect.succeed(HttpServerResponse.text("spa"));
   const web = HttpRouter.toWebHandler(
     Layer.mergeAll(
-      makeCallRoute(undefined, undefined, { captureStore: store }),
+      makeCallRoute(undefined, undefined, { captureStore: store, sdk: sdkSessions }),
       capturesRoute(spa, () => store),
     ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
     { disableLogger: true },
@@ -92,17 +101,19 @@ async function host(
   );
   const fetch = (path: string, init?: RequestInit) =>
     web.handler(new Request(`http://host${path}`, init), Context.empty() as never);
-  const capture = (request: unknown, headers: Record<string, string> = {}) =>
-    fetch("/call", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-pe-bridge-session-id": "bridge-a",
-        "x-pe-open-document-id": "open-a",
-        ...headers,
-      },
-      body: JSON.stringify({ key: "revit.context.view-image", request }),
-    });
+  const capture = (request: unknown, headers: Record<string, string> = {}, as: Caller = human) =>
+    withInvocationContext({ caller: as }, () =>
+      fetch("/call", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-pe-bridge-session-id": "bridge-a",
+          "x-pe-open-document-id": "open-a",
+          ...headers,
+        },
+        body: JSON.stringify({ key: "revit.context.view-image", request }),
+      }),
+    );
   return { dir, store, fetch, capture };
 }
 
@@ -117,9 +128,7 @@ test("every view-image answer through /call keeps one blob per sha and one recei
   expect(first.status, await first.clone().text()).toBe(200);
   const id = first.headers.get("x-pe-capture-id");
   expect(first.headers.get("x-pe-capture-url")).toBe(`/captures/${sha(l1)}.png`);
-  expect((await capture({ target: { name: "L1" } }, { "x-pe-action-actor": "agent" })).status).toBe(
-    200,
-  );
+  expect((await capture({ target: { name: "L1" } }, {}, pea())).status).toBe(200);
   expect((await capture({ target: { name: "L2" } })).status).toBe(200);
 
   expect((await readdir(join(dir, "store", "blobs"))).sort()).toHaveLength(2);

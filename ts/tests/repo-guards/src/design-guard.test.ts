@@ -55,7 +55,7 @@
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join, posix, resolve } from "node:path";
+import { dirname, join, posix, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "../../../apps/web/node_modules/typescript/lib/typescript.js";
 import { describe, expect, it } from "vite-plus/test";
@@ -64,6 +64,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../../../apps/web/src");
+const KIT_ROOT = resolve(HERE, "../../../packages/kit/src");
 const SKIP_DIRS = new Set(["node_modules", "src"]); // src/src is a stray vite artifact
 /* revit/revit.css is the Revit facsimile (explainers compose fake Revit UI without images). It is
    off-system on purpose and draws every value from the --rv-* block in base.css, so the house value
@@ -71,7 +72,7 @@ const SKIP_DIRS = new Set(["node_modules", "src"]); // src/src is a stray vite a
    Ruling: docs/features/design-system/LEDGER.md, "Revit facsimile" (2026-10-05). */
 const SKIP_FILES = new Set(["routeTree.gen.ts", "revit.css"]);
 
-type Entry = { rel: string; text: string };
+type Entry = { rel: string; text: string; abs?: string };
 
 const collect = (dir: string, relBase: string, out: Entry[], match: RegExp): Entry[] => {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
@@ -82,16 +83,25 @@ const collect = (dir: string, relBase: string, out: Entry[], match: RegExp): Ent
     }
     if (SKIP_FILES.has(e.name)) continue;
     if (!match.test(e.name)) continue;
-    out.push({ rel, text: readFileSync(join(dir, e.name), "utf8") });
+    out.push({ rel, abs: join(dir, e.name), text: readFileSync(join(dir, e.name), "utf8") });
   }
   return out;
 };
 
-const FILES: Entry[] = collect(ROOT, "", [], /\.(?:tsx?|css)$/);
+const FILES: Entry[] = [
+  ...collect(ROOT, "", [], /\.(?:tsx?|css)$/),
+  ...collect(KIT_ROOT, "", [], /\.(?:tsx?|css)$/),
+];
 /** Data files are scanned only for the dash-authority rule — see the JSON gate below. */
 const JSON_FILES: Entry[] = collect(ROOT, "", [], /\.json$/);
 
 describe("design guard â€” current token authority", () => {
+  it("has one source owner for every shared instrument path", () => {
+    const paths = FILES.filter((file) =>
+      /^(components\/|lib\/|base\.css$|design-lang\.css$)/.test(file.rel),
+    ).map((file) => file.rel);
+    expect(paths.filter((path, index) => paths.indexOf(path) !== index)).toEqual([]);
+  });
   it("declares each authored class in one CSS owner", () => {
     const owners = ["base.css", "design-lang.css", "components/lang/lang.css"];
     const declarations = new Map<string, string[]>();
@@ -166,8 +176,12 @@ describe("design guard â€” current token authority", () => {
     expect(blockOf(base, ".t-small {")).not.toMatch(/\bcolor\s*:/);
     expect(blockOf(base, ".face-mono {")).toMatch(/font-family:\s*var\(--font-mono\)/);
     expect(blockOf(base, ".face-mono {")).toMatch(/font-variant-numeric:\s*tabular-nums/);
-    expect(blockOf(base, ".t-upper {")).toMatch(/font-weight:\s*var\(--weight-medium\)/);
-    expect(blockOf(base, ".t-upper {")).toMatch(/letter-spacing:\s*0\.08em/);
+    expect(blockOf(base, ".t-upper {")).toMatch(/font-weight:\s*var\(--weight-strong\)/);
+    expect(base).toMatch(/:root\s*\{[^}]*--type-small-size:\s*12px;/);
+    expect(base).toMatch(/:root\s*\{[^}]*--gutter:\s*8px;/);
+    expect(base).not.toMatch(/--type-(navigation|conversation|composer)-/);
+    expect(blockOf(base, ".t-upper {")).toMatch(/letter-spacing:\s*var\(--track-upper\)/);
+    expect(base).toMatch(/:root\s*\{[^}]*--track-upper:\s*0\.06em;/);
     expect(blockOf(base, ".t-upper {")).toMatch(/text-transform:\s*uppercase/);
   });
 
@@ -822,6 +836,8 @@ const cssRel = (specifier: string, importer: string): string | undefined => {
   const clean = specifier.replace(/\?.*$/, "");
   if (!clean.endsWith(".css")) return undefined;
   if (clean.startsWith("#/")) return clean.slice(2);
+  if (clean.startsWith("@pe/kit/lang/")) return clean.replace("@pe/kit/lang/", "components/lang/");
+  if (clean.startsWith("@pe/kit/")) return clean.slice("@pe/kit/".length);
   return clean.startsWith(".")
     ? posix.normalize(posix.join(posix.dirname(importer), clean))
     : undefined;
@@ -872,7 +888,10 @@ const cssClasses = (css: string): Set<string> => {
 
 const APP_CSS = [...CSS_ENTRIES]
   .sort()
-  .map((rel) => `@import "./${rel}";`)
+  .map(
+    (rel) =>
+      `@import "./${relative(ROOT, FILES.find((file) => file.rel === rel)!.abs!).replace(/\\/g, "/")}";`,
+  )
   .join("\n");
 const CSS_ENTRY = join(ROOT, "styles.css");
 const compiler = await tailwindNode.compile(APP_CSS, {
@@ -967,7 +986,7 @@ const AUTHORING =
 const COLOR_ROLE =
   "(?:page|artifact|recess|select|document|scrim|ink|ink-2|ink-mute|line|line-2|pea|pea-ink|alarm|caution|done|commit|on-commit|nav|on|viz-[1-6])(?:/[\\d.]+)?";
 const MEANING_FILL_STROKE = new RegExp(
-  `^(?:(?:bg|text|fill|stroke|from|via|to)-${COLOR_ROLE}|border(?:-[xytrblse])?-${COLOR_ROLE}|divide-${COLOR_ROLE}|ring-${COLOR_ROLE}|outline-${COLOR_ROLE}|hairline-(?:(?:[tblrxy])(?:-2|-faint)?|rows)|boundary-[tl]|on-(?:page|artifact|recess|select)|(?:ink|commit|alarm|pea|caution)-wash(?:-artifact)?|caution-hatch|inset-ring)$`,
+  `^(?:(?:bg|text|fill|stroke|from|via|to)-${COLOR_ROLE}|border(?:-[xytrblse])?-${COLOR_ROLE}|divide-${COLOR_ROLE}|ring-${COLOR_ROLE}|outline-${COLOR_ROLE}|hairline-(?:(?:[tblrxy])(?:-2|-faint)?|rows)|boundary-[tl]|on-(?:page|recess|select)|(?:ink|commit|alarm|pea|caution)-wash(?:-artifact)?|caution-hatch)$`,
 );
 const ALLOWLIST_VIOLATIONS = CLASS_USES.filter(
   (use) =>
@@ -1031,7 +1050,11 @@ const SPECIMEN_JSX = new Set<string>();
 const RECIPE_GRID_USES = new Map<string, number>();
 const SPECIMEN_PATH_USES = new Map<string, number>();
 for (const specimen of FILES.filter(
-  (file) => file.rel.startsWith("design-system/specimens/") && file.rel.endsWith(".tsx"),
+  // The popup satellite is an executable specimen. Its delay provider lives once at the app root.
+  (file) =>
+    (file.rel.startsWith("design-system/specimens/") && file.rel.endsWith(".tsx")) ||
+    file.rel === "routes/design-system_.popovers.tsx" ||
+    file.rel === "routes/__root.tsx",
 )) {
   const source = ts.createSourceFile(
     specimen.rel,
@@ -1085,29 +1108,29 @@ const BAD_RECIPE_GRIDS = [...REQUIRED_RECIPE_GRIDS]
   .sort();
 
 const REQUIRED_SPECIMEN_PATHS = [
+  "#/components/lang/navigation",
+  "#/components/lang/conversation",
   "#/components/lang/arming-strip",
-  "#/components/lang/artifact-frame",
-  "#/components/lang/cell",
+  "@pe/kit/lang/artifact-frame",
+  "@pe/kit/lang/cell",
   "#/components/lang/cell-key",
-  "#/components/lang/chip",
+  "@pe/kit/lang/chip",
   "#/components/lang/coverage-bar",
-  "#/components/lang/empty",
+  "@pe/kit/lang/empty",
   "#/components/lang/help",
   "#/components/lang/outcome",
-  "#/components/lang/press",
+  "@pe/kit/lang/button",
   "#/components/lang/section",
   "#/components/lang/switcher",
-  "#/components/lang/action-button",
-  "#/components/lang/card",
   "#/components/lang/dialog",
-  "#/components/lang/input",
+  "@pe/kit/lang/input",
   "#/components/lang/label",
   "#/components/lang/pane",
   "#/components/lang/kbd",
   "#/components/lang/switch",
   "#/components/lang/textarea",
   "#/components/lang/value-diff",
-  "#/components/lang/verdict",
+  "@pe/kit/lang/verdict",
 ] as const;
 const BAD_SPECIMEN_PATHS = REQUIRED_SPECIMEN_PATHS.filter(
   (importPath) => SPECIMEN_PATH_USES.get(importPath) !== 1,
@@ -1122,6 +1145,30 @@ describe("design checks — code holds the boundary", () => {
       offences,
       report(offences.map((offence) => ({ ...offence, match: offence.token }))),
     ).toEqual([]);
+  });
+
+  it("paints the artifact ground only at the plane, and the plane draws its edge", () => {
+    // The plane (lang.css), the wash utilities (base.css, design-lang.css) and the token specimen
+    // are the whole vocabulary. Any other route to the ground (a `--pe-artifact` in a rule or a
+    // style, `bg-artifact`, the deleted `on-artifact`) is a smear with no hairline.
+    const OWNERS = new Set([
+      "base.css",
+      "design-lang.css",
+      "components/lang/lang.css",
+      "design-system/specimens/tokens.tsx",
+    ]);
+    const strays = scan(
+      FILES.filter((file) => !OWNERS.has(file.rel)).map((file) => ({
+        ...file,
+        text: stripComments(file.text),
+      })),
+      /--pe-artifact|\b(?:bg|on)-artifact\b/g,
+    );
+    expect(strays, report(strays)).toEqual([]);
+    const lang = stripComments(FILES.find((file) => file.rel === "components/lang/lang.css")!.text);
+    expect(lang).toMatch(
+      /:where\(\s*\[data-surface="artifact"\]:not\(\[data-surface="artifact"\] \*\),[^{]*\)\s*\{[^}]*border:\s*1px solid var\(--pe-line\)/,
+    );
   });
 
   it("data-tone values come from the closed tone set", () => {

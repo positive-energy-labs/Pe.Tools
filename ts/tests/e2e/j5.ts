@@ -6,8 +6,8 @@ const HEAD = '[aria-label="Pea proposals"]';
 const COMPOSER = 'textarea[aria-label="Message"]';
 
 await journey("J5", async (page, step) => {
-  step(`open ${WEB}/chat, click "new"`);
-  await page.open(`${WEB}/chat`);
+  step(`open ${WEB}/pea, click "new"`);
+  await page.open(`${WEB}/pea`);
   await page.click("new");
   await page.waitText("NO MESSAGES IN THIS THREAD YET");
   await setPea(page);

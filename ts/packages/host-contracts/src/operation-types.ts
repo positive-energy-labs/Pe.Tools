@@ -143,6 +143,24 @@ export const memberIssueSchema = Schema.Struct({
 });
 export type MemberIssue = Schema.Schema.Type<typeof memberIssueSchema>;
 
+/** `sourcePath` is the entrypoint identity; canonical keys live on `contributions`. */
+const podEntrypointSchema = Schema.Struct({
+  sourcePath: Schema.String,
+  name: Schema.optional(Schema.NullOr(Schema.String)),
+  description: Schema.optional(Schema.NullOr(Schema.String)),
+});
+
+/** One admitted contribution (`packages.ts`): kind follows the path; `key` is the canonical host key. */
+export const podContributionSchema = Schema.Struct({
+  kind: Schema.Literals(["script", "page", "skill", "member", "route"]),
+  path: Schema.String,
+  memberPath: Schema.String,
+  key: Schema.String,
+  name: Schema.String,
+  description: Schema.NullOr(Schema.String),
+});
+export type PodContribution = Schema.Schema.Type<typeof podContributionSchema>;
+
 export const podListResponseSchema = Schema.Struct({
   pods: Schema.Array(
     Schema.Struct({
@@ -150,14 +168,8 @@ export const podListResponseSchema = Schema.Struct({
       name: Schema.String,
       version: Schema.String,
       folder: Schema.String,
-      entrypoints: Schema.Array(
-        Schema.Struct({
-          id: Schema.String,
-          sourcePath: Schema.String,
-          name: Schema.optional(Schema.NullOr(Schema.String)),
-          description: Schema.optional(Schema.NullOr(Schema.String)),
-        }),
-      ),
+      entrypoints: Schema.Array(podEntrypointSchema),
+      contributions: Schema.Array(podContributionSchema),
       members: Schema.Array(
         Schema.Struct({
           path: Schema.String,
@@ -172,6 +184,100 @@ export const podListResponseSchema = Schema.Struct({
   unreadable: Schema.Array(Schema.Struct({ folder: Schema.String, message: Schema.String })),
 });
 export type PodList = Schema.Schema.Type<typeof podListResponseSchema>;
+export const podListRequestSchema = Schema.Union([
+  Schema.Struct({ projection: Schema.optional(Schema.Literals(["full"])) }),
+  Schema.Struct({ projection: Schema.Literals(["identity"]), folder: Schema.String }),
+]);
+const podListIdentityResponseSchema = Schema.Struct({
+  projection: Schema.Literals(["identity"]),
+  identity: Schema.Struct({ id: Schema.String, folder: Schema.String }),
+});
+
+/**
+ * One pod's frozen execution input, read once from its admitted package. The native palette reads
+ * this before it dispatches into Revit; the host never calls back into Revit to answer it.
+ */
+export const podCaptureRequestSchema = Schema.Struct({ pod: Schema.String });
+export type PodCaptureRequest = Schema.Schema.Type<typeof podCaptureRequestSchema>;
+export const podCaptureResponseSchema = Schema.Struct({
+  id: Schema.String,
+  folder: Schema.String,
+  directory: Schema.String,
+  entrypoints: Schema.Array(podEntrypointSchema),
+  contributions: Schema.Array(podContributionSchema),
+  sourceBundle: Schema.Struct({
+    files: Schema.Array(Schema.Struct({ path: Schema.String, bytesBase64: Schema.String })),
+  }),
+  memberBundle: Schema.Struct({
+    files: Schema.Array(Schema.Struct({ path: Schema.String, bytesBase64: Schema.String })),
+  }),
+});
+export type PodCapture = Schema.Schema.Type<typeof podCaptureResponseSchema>;
+
+// --- Pod transport (host-only: no Revit session; pod-transfer.ts) ------------------------------
+
+const podMemberDigestSchema = Schema.Struct({ path: Schema.String, sha256: Schema.String });
+
+export const podExportRequestSchema = Schema.Struct({
+  pod: Schema.String,
+  archivePath: Schema.String,
+});
+export type PodExportRequest = Schema.Schema.Type<typeof podExportRequestSchema>;
+export const podExportResponseSchema = Schema.Struct({
+  id: Schema.String,
+  archivePath: Schema.String,
+  archiveSha256: Schema.String,
+  members: Schema.Array(podMemberDigestSchema),
+  /** Foreign fragments carried under settings/_vendor/<id>/, with the sha of their original bytes. */
+  vendored: Schema.Array(
+    Schema.Struct({ id: Schema.String, path: Schema.String, sha256: Schema.String }),
+  ),
+  /** Every member the crossing rewrote, with hashes before and after. */
+  transforms: Schema.Array(
+    Schema.Struct({
+      path: Schema.String,
+      transform: Schema.Literals(["vendor-references", "portable-project"]),
+      beforeSha256: Schema.String,
+      afterSha256: Schema.String,
+    }),
+  ),
+  /** Capture shas carried as captures/<sha>.png. */
+  captures: Schema.Array(Schema.String),
+});
+export type PodExport = Schema.Schema.Type<typeof podExportResponseSchema>;
+
+export const podImportRequestSchema = Schema.Struct({
+  archivePath: Schema.String,
+  /** Local folder under Pods/; the pod.json id when omitted. The folder is only an address. */
+  folder: Schema.optional(Schema.String),
+});
+export type PodImportRequest = Schema.Schema.Type<typeof podImportRequestSchema>;
+export const podImportResponseSchema = Schema.Struct({
+  id: Schema.String,
+  folder: Schema.String,
+  directory: Schema.String,
+  archiveSha256: Schema.String,
+  members: Schema.Array(podMemberDigestSchema),
+  diagnostics: Schema.Array(memberIssueSchema),
+});
+export type PodImport = Schema.Schema.Type<typeof podImportResponseSchema>;
+
+export const podPromoteRequestSchema = Schema.Struct({
+  /** The scratch Page folder under Pages/. */
+  page: Schema.String,
+  /** The new pod's manifest id. */
+  id: Schema.String,
+  name: Schema.optional(Schema.String),
+});
+export type PodPromoteRequest = Schema.Schema.Type<typeof podPromoteRequestSchema>;
+export const podPromoteResponseSchema = Schema.Struct({
+  id: Schema.String,
+  folder: Schema.String,
+  directory: Schema.String,
+  /** The promoted Page's canonical key, `page:@<id>/pages/<page>`. */
+  key: Schema.String,
+});
+export type PodPromote = Schema.Schema.Type<typeof podPromoteResponseSchema>;
 
 /** Runs of one pod, optionally narrowed to the member a route has open. */
 export const podRunsRequestSchema = Schema.Struct({
@@ -366,6 +472,8 @@ export const hostProbeDataSchema = Schema.Struct({
   processId: Schema.optional(Schema.Number),
   runtimeIdentity: Schema.String,
   serviceName: Schema.String,
+  // The host's release version ('dev' on a checkout; 'unknown' when the installed manifest is unreadable). Lets a browser or a person see which host answered.
+  version: Schema.String,
   sourceRoot: Schema.optional(Schema.NullOr(Schema.String)),
   installedRoot: Schema.optional(Schema.NullOr(Schema.String)),
   world: Schema.Struct({
@@ -755,7 +863,24 @@ export const tsOnlyOperationSchemas = {
     response: rhvacListDataSchema,
   },
   "pod.list": {
-    response: podListResponseSchema,
+    request: podListRequestSchema,
+    response: Schema.Union([podListResponseSchema, podListIdentityResponseSchema]),
+  },
+  "pod.capture": {
+    request: podCaptureRequestSchema,
+    response: podCaptureResponseSchema,
+  },
+  "pod.export": {
+    request: podExportRequestSchema,
+    response: podExportResponseSchema,
+  },
+  "pod.import": {
+    request: podImportRequestSchema,
+    response: podImportResponseSchema,
+  },
+  "pod.promote": {
+    request: podPromoteRequestSchema,
+    response: podPromoteResponseSchema,
   },
   "pod.runs": {
     request: podRunsRequestSchema,
@@ -956,6 +1081,62 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     searchTerms: ["pods", "members", "settings", "specs", "list", "browse"],
   },
   {
+    key: "pod.capture",
+    origin: "host-local",
+    displayName: "Capture Pod",
+    description:
+      "One installed pod's frozen execution input by manifest id: admitted member bytes (memberBundle), entrypoints and canonical contribution keys, read once from its admitted package. A pod with error diagnostics refuses. No Revit session is needed.",
+    intent: "Read",
+    visibility: "ExpertOnly",
+    costTier: "Cheap",
+    needs: "nothing",
+    requestTypeName: "PodCaptureRequest",
+    responseTypeName: "PodCapture",
+    searchTerms: ["pod", "capture", "source", "bundle", "entrypoints", "palette"],
+  },
+  {
+    key: "pod.export",
+    origin: "host-local",
+    displayName: "Export Pod",
+    description:
+      "Export an installed pod (by manifest id) as a .zip archive at an absolute path, without Revit. Foreign $include/$preset fragments are vendored under settings/_vendor/<id>/ with references rewritten to @local/_vendor/<id>/...; PeScripts.csproj is made portable; captures a member names travel as captures/<sha>.png. Bindings, grants, output/ and imported.json never travel. Every rewrite is reported with hashes before and after; a missing capture or foreign member refuses.",
+    intent: "Mutate",
+    visibility: "DefaultVisible",
+    costTier: "Mutation",
+    needs: "nothing",
+    requestTypeName: "PodExportRequest",
+    responseTypeName: "PodExport",
+    searchTerms: ["pod", "export", "publish", "share", "zip", "archive", "vendor"],
+  },
+  {
+    key: "pod.import",
+    origin: "host-local",
+    displayName: "Import Pod",
+    description:
+      "Import a pod .zip archive into a new folder under Documents/Pe.Tools/Pods (default: the manifest id), without Revit. Bounded, all-or-nothing: refuses an installed id, an existing folder, host state, traversal, links, case twins or oversized entries. Bytes land unchanged plus imported.json (archive sha256, locator, date); Pages start unbound; carried captures join this host's store by hash.",
+    intent: "Mutate",
+    visibility: "DefaultVisible",
+    costTier: "Mutation",
+    needs: "nothing",
+    requestTypeName: "PodImportRequest",
+    responseTypeName: "PodImport",
+    searchTerms: ["pod", "import", "install", "zip", "archive"],
+  },
+  {
+    key: "pod.promote",
+    origin: "host-local",
+    displayName: "Promote Page to Pod",
+    description:
+      "Wrap a scratch Page (Documents/Pe.Tools/Pages/<page>/) as a new pod <id> holding pages/<page>/ byte for byte, so it can be exported and shared. The HTML is never rewritten; the scratch Page stays; the binding does not travel. Returns the promoted Page's key.",
+    intent: "Mutate",
+    visibility: "DefaultVisible",
+    costTier: "Mutation",
+    needs: "nothing",
+    requestTypeName: "PodPromoteRequest",
+    responseTypeName: "PodPromote",
+    searchTerms: ["pod", "promote", "page", "share", "publish", "wrap"],
+  },
+  {
     key: "pod.runs",
     origin: "host-local",
     displayName: "Pod Runs",
@@ -1150,9 +1331,8 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
 
 /**
  * Strict key space for the typed client surface: only keys the checked-in
- * typegen output (or the hand-authored TS-only map) knows about. Runtime-
- * registered ops the types haven't caught up with go through the explicit
- * dynamic escape hatch (`callHostDynamic`) instead of weakening every call.
+ * typegen output (or the hand-authored TS-only map) knows about. Regenerate
+ * before calling a newly registered operation; there is no untyped bypass.
  */
 export type OpKey = AnyOperationKey;
 

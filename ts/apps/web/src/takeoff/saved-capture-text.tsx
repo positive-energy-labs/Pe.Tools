@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { Code } from "#/components/lang/code";
+import { Code } from "@pe/kit/lang/code";
 import { readSavedTakeoffText } from "../../../../packages/mcps/src/shared/takeoff-capture-client";
 import { useHostCall } from "#/readings";
 

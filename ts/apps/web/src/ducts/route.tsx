@@ -12,7 +12,7 @@ import type { Reading } from "@pe/agent-contracts";
 
 import { Surface } from "#/components/lang/surface";
 import { frozenDemo } from "#/host/demo-client";
-import { SAVED, useDuctSnapshot, useDuctTables } from "./host";
+import { SAVED, useDuctSnapshot, useDuctTables, useDuctCatalogs } from "./host";
 import { SCENE_CLAIMS, SCENE_FIXTURE } from "./scene.fixture";
 import { RouteShell, useRoute, useRouteThread } from "#/route";
 import { Ladder } from "#/route/ladder";
@@ -21,8 +21,9 @@ import { Situation } from "#/route/situation";
 import { LadderPicker, useDocumentLadder } from "#/route/situation-ladder";
 import { manifest, previewFresh, WRITTEN, type DuctsPage } from "./manifest";
 import { DuctsLosses, revitSays, StagedLosses } from "./losses-view";
-import { price } from "./pricing";
-import { readiness, type DuctSnapshot } from "./readiness";
+import { price } from "@pe/ducts-domain/pricing";
+import { readiness } from "@pe/ducts-domain/readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { verdictPatches } from "./claims";
 import { claimsOf, type Claim } from "./legs";
 import { DuctsLedger } from "./ledger";
@@ -75,9 +76,12 @@ export function DuctsRoute({
   const demo = useMemo(() => (frozenDemo() === "scene" ? SCENE_FIXTURE : null), []);
   const [demoClaims, setDemoClaims] = useState<Record<string, DuctClaim>>(SCENE_CLAIMS);
   // The snapshot and tables are read below, once the target resolves; the verbs see them here.
-  const [provided, setProvided] = useState<Record<"ducts" | "tables", Reading<unknown>>>({
+  const [provided, setProvided] = useState<
+    Record<"ducts" | "tables" | "catalogs", Reading<unknown>>
+  >({
     ducts: { state: "absent" },
     tables: { state: "absent" },
+    catalogs: { state: "absent" },
   });
   const handle = useRoute(manifest, {
     target: chosen,
@@ -107,13 +111,15 @@ export function DuctsRoute({
   const pending = demo ? false : read.pending;
   // The spatial views ink Pe's losses, so they read the tables too; the other views do not.
   const priceable = page.view === "losses" || page.view === "plan" || page.view === "iso";
+  const catalogs = useDuctCatalogs(page.epoch);
   const tables = useDuctTables(priceable ? (doc?.session ?? null) : null);
   useEffect(() => {
     setProvided({
+      catalogs: { state: "ready", observation: catalogs.tables },
       ducts: snapshot ? { state: "ready", observation: snapshot } : { state: "absent" },
       tables: tables.grids ? { state: "ready", observation: tables.grids } : { state: "absent" },
     });
-  }, [snapshot, tables.grids]);
+  }, [snapshot, tables.grids, catalogs.tables]);
   // The subject scene is the person's staged subject, else Pea's proposal; null until one exists.
   const subjectIds = demo
     ? demo.subject
@@ -141,8 +147,11 @@ export function DuctsRoute({
     };
   }, [demo, demoClaims, subjectIds, handle.work.doc, handle.work.write]);
   const priced = useMemo(
-    () => (snapshot && tables.grids ? price(snapshot, tables.grids, handle.work.doc) : null),
-    [snapshot, tables.grids, handle.work.doc],
+    () =>
+      snapshot && tables.grids
+        ? price(snapshot, tables.grids, handle.work.doc, catalogs.tables)
+        : null,
+    [snapshot, tables.grids, handle.work.doc, catalogs.tables],
   );
 
   // The URL carries the view, subject, level, layers and selection, so a link lands on the same place.
@@ -340,6 +349,11 @@ export function DuctsRoute({
                 counted,
                 draw: (_summary, line) => (
                   <>
+                    {catalogs.findings.map((finding) => (
+                      <p key={finding} data-tone="caution">
+                        {finding}
+                      </p>
+                    ))}
                     {page.view === "losses" && snapshot && tables.grids && priced ? (
                       <StagedLosses
                         snapshot={snapshot}

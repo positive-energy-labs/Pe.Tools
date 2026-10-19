@@ -8,14 +8,15 @@
 import { useState, type ReactNode } from "react";
 import type { RowData } from "@tanstack/react-table";
 
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { NarrowChip } from "#/components/lang/chip";
-import { Press } from "#/components/lang/press";
-import { resolveStateColumn } from "#/components/master-table/master-table-columns";
-import type { Column, QueryVocabulary, TableState } from "#/components/master-table/model";
-import { ConditionTarget, QueryBox } from "#/components/master-table/query";
-import { selectableKeys, type TableSelection } from "#/components/master-table/table";
-import { conditionValues, quoted, visibleRows } from "#/components/master-table/view";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { NarrowChip } from "@pe/kit/lang/chip";
+import { Button } from "@pe/kit/lang/button";
+import { resolveStateColumn } from "@pe/kit/table/master-table-columns";
+import type { Column, QueryCommand, QueryVocabulary, TableState } from "@pe/kit/table/model";
+import { ConditionTarget, QueryBox } from "@pe/kit/table/query";
+import { selectableKeys, type TableSelection } from "@pe/kit/table/table";
+import { conditionValues, quoted, visibleRows } from "@pe/kit/table/view";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export interface TableFrameProps<Row extends RowData> {
   /** What is in scope, said as the strip's lead. */
@@ -31,9 +32,14 @@ export interface TableFrameProps<Row extends RowData> {
   /** A route's own vocabulary, for rows it narrows before the frame sees them (families); absent,
    * the box names the columns that declare a `condition`. */
   query?: QueryVocabulary;
+  /** A second vocabulary after `→`: the route's command over the rows the query keeps. */
+  command?: QueryCommand;
   /** Route-owned filters narrowing the rows before the table sees them: one chip each. Present
    * (even empty), the box reserves its line, so a chip appearing never moves the grid. */
   chips?: { label: string; onClear: () => void }[];
+  /** Route-owned controls at the head of the filters band (a source switcher, a year pick) that
+   * write the same query the box shows as chips: one state, two inputs. */
+  filters?: ReactNode;
   modes?: ReactNode;
   actions?: ReactNode;
   /** Present, the strip offers select-all over the shown rows. */
@@ -73,7 +79,9 @@ export function TableFrame<Row extends RowData>({
   summary,
   searchPlaceholder,
   query,
+  command,
   chips,
+  filters,
   modes,
   actions,
   selection,
@@ -92,7 +100,9 @@ export function TableFrame<Row extends RowData>({
   const boxed =
     searchPlaceholder !== undefined ||
     query !== undefined ||
+    command !== undefined ||
     chips !== undefined ||
+    filters !== undefined ||
     conditioned ||
     Boolean(state.query);
   return (
@@ -100,12 +110,9 @@ export function TableFrame<Row extends RowData>({
       className="flex min-h-0 flex-1 flex-col"
       head={
         <>
-          <span
-            className="t-small t-upper"
-            title="Everything currently in scope. This table is never hidden and never narrowed silently — every filter acting on it is a chip in its query box."
-          >
-            {label}
-          </span>
+          <TooltipHint content="Everything currently in scope. This table is never hidden and never narrowed silently — every filter acting on it is a chip in its query box.">
+            <span className="t-small t-upper">{label}</span>
+          </TooltipHint>
           {summary && <span className="face-mono t-small text-ink-2">{summary}</span>}
           {!query && boxed && (
             <span className="face-mono t-small text-ink-2">
@@ -120,10 +127,11 @@ export function TableFrame<Row extends RowData>({
         <>
           {modes}
           {selection && reach.length > 0 && (
-            <Press
+            <Button
               type="button"
-              tone="quiet"
-              size="label"
+              label={
+                selectedShown === reach.length ? `clear ${reach.length}` : `select ${reach.length}`
+              }
               onClick={() => {
                 const next = new Set(selection.selected);
                 if (selectedShown === reach.length) for (const key of reach) next.delete(key);
@@ -132,14 +140,18 @@ export function TableFrame<Row extends RowData>({
               }}
             >
               {selectedShown === reach.length ? `clear ${reach.length}` : `select ${reach.length}`}
-            </Press>
+            </Button>
           )}
           {actions}
         </>
       }
     >
       {boxed && (
-        <div data-slot="table-filters" className="flex shrink-0 items-center px-2 hairline-b">
+        <div
+          data-slot="table-filters"
+          className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-px px-2 hairline-b"
+        >
+          {filters}
           <QueryBox
             vocabulary={query ?? columnVocabulary(rows, visibleColumns, state)}
             state={state}
@@ -148,6 +160,7 @@ export function TableFrame<Row extends RowData>({
             onDraft={setDraft}
             onInput={setBox}
             placeholder={searchPlaceholder}
+            command={command}
           >
             {chips?.map((chip) => (
               <NarrowChip

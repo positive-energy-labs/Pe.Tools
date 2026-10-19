@@ -76,7 +76,7 @@ internal static class LookupFormulaInspector {
 
         for (var i = openParenIndex; i < formula.Length; i++) {
             var currentChar = formula[i];
-            if (currentChar == '"')
+            if (Pe.Revit.Extensions.FamDocument.Formula.IsInchMarkSafeDelimiter(formula, i, inString))
                 inString = !inString;
 
             if (inString)
@@ -107,8 +107,9 @@ internal static class LookupFormulaInspector {
         var depth = 0;
         var inString = false;
 
-        foreach (var currentChar in argumentsText) {
-            if (currentChar == '"')
+        for (var i = 0; i < argumentsText.Length; i++) {
+            var currentChar = argumentsText[i];
+            if (Pe.Revit.Extensions.FamDocument.Formula.IsInchMarkSafeDelimiter(argumentsText, i, inString))
                 inString = !inString;
 
             if (!inString) {

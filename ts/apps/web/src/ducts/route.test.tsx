@@ -18,7 +18,8 @@ import {
 import { Route } from "#/routes/ducts";
 import { ChatHosted } from "#/route/situation-ladder";
 import type { DuctsSnapshot } from "@pe/host-contracts/generated";
-import type { DuctSnapshot } from "./readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
 
 let work = ductsRouteState.schema.parse({ assumptions: {} });
 let revision = 0;
@@ -47,6 +48,7 @@ const connectors = (id: number) =>
       connectedTo: { elementId: pair.find((other) => other !== id)!, connector: 0 },
     }));
 const snapshot: DuctSnapshot = {
+  coordinateEncoding: "native-double",
   document: {
     title: "Duct route slice",
     readAt: "2026-09-26T00:00:00Z",
@@ -89,6 +91,7 @@ const snapshot: DuctSnapshot = {
   segments: [1, 3, 5].map((id) => ({
     id,
     kind: "duct",
+    curveKind: "line",
     shape: "round",
     size: "8 in",
     diameterIn: 8,
@@ -120,6 +123,7 @@ const snapshot: DuctSnapshot = {
     fanStatic: "PE_M_Fan_ExternalStaticPressure",
     fanFlow: "PE_M_Fan_AirFlow",
     componentDrop: "Pressure Drop",
+    fittingCoefficient: "Pe_C",
   },
 };
 
@@ -161,11 +165,21 @@ beforeEach(() => {
             const request = readingRequestSchema.parse(raw);
             const emit = () => {
               const value =
-                request.kind === "inventory"
-                  ? inventory
-                  : request.kind === "work"
-                    ? { doc: work, revision }
-                    : undefined;
+                request.kind === "machine"
+                  ? machineFixture(
+                      inventory.sessions.map((session) => ({
+                        session: session.sessionId,
+                        documents: session.openDocuments.map((document) => ({
+                          ...document,
+                          isActive: document.openId === "doc",
+                        })),
+                      })),
+                    )
+                  : request.kind === "inventory"
+                    ? inventory
+                    : request.kind === "work"
+                      ? { doc: work, revision }
+                      : undefined;
               if (value !== undefined)
                 this.onmessage?.({
                   data: JSON.stringify({ kind: "snapshot", key: readingKey(request), value }),
@@ -354,6 +368,9 @@ test("an exact document lifetime change fences a pending read, including returni
 
 test("page selection follows iso to tables and ledger, and a ledger run lights plan and iso", async () => {
   const { container, router } = await mount();
+  await waitFor(() =>
+    expect(container.querySelector('[data-segment="3"] path:last-child')).not.toBeNull(),
+  );
   fireEvent.click(container.querySelector('[data-segment="3"] path:last-child')!);
   await waitFor(() => expect(router.state.location.search.selected).toBe("3"));
   await view("tables");

@@ -71,7 +71,9 @@ public enum DuctIssueKind {
     /// <summary>A group attached to more than one equipment port.</summary>
     [EnumMember(Value = "multi-root")] MultiRoot,
     /// <summary>A segment whose Revit-reported velocity is 2000 fpm or more.</summary>
-    [EnumMember(Value = "high-velocity")] HighVelocity
+    [EnumMember(Value = "high-velocity")] HighVelocity,
+    /// <summary>A tee, tap, wye or cross with a leg carrying no pass-1 flow: Revit's table route charges that leg 0 and the branch grid has no point there.</summary>
+    [EnumMember(Value = "no-flow-leg")] NoFlowLeg
 }
 
 /// <summary>
@@ -82,13 +84,17 @@ public sealed record DuctSnapshotRequest(DuctParameterSlots? Slots = null, strin
 
 /// <summary>
 ///     Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
-///     equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop.
+///     equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop,
+///     FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
+///     live (the configurable door, kaitpw 2026-10-08).
 /// </summary>
 public sealed record DuctParameterSlots(
     string FanStatic = "PE_M_Fan_ExternalStaticPressure",
     string FanFlow = "PE_M_Fan_AirFlow",
     string ComponentDrop = "Pressure Drop",
-    string? TerminalDrop = null) {
+    string? TerminalDrop = null,
+    string FittingCoefficient = DuctParameterSlots.DefaultFittingCoefficient) {
+    public const string DefaultFittingCoefficient = "Pe_C";
     private static readonly DuctParameterSlots Defaults = new();
 
     /// <summary>Each name this leaves blank (a partial wire object) comes from <paramref name="under" />.</summary>
@@ -98,14 +104,16 @@ public sealed record DuctParameterSlots(
             string.IsNullOrWhiteSpace(this.FanStatic) ? under.FanStatic : this.FanStatic,
             string.IsNullOrWhiteSpace(this.FanFlow) ? under.FanFlow : this.FanFlow,
             string.IsNullOrWhiteSpace(this.ComponentDrop) ? under.ComponentDrop : this.ComponentDrop,
-            string.IsNullOrWhiteSpace(this.TerminalDrop) ? under.TerminalDrop : this.TerminalDrop);
+            string.IsNullOrWhiteSpace(this.TerminalDrop) ? under.TerminalDrop : this.TerminalDrop,
+            string.IsNullOrWhiteSpace(this.FittingCoefficient) ? under.FittingCoefficient : this.FittingCoefficient);
 
     /// <summary>A partial slots object from the wire deserializes missing names as null, not the defaults; this restores them.</summary>
     public DuctParameterSlots WithDefaults() => new(
         string.IsNullOrWhiteSpace(this.FanStatic) ? Defaults.FanStatic : this.FanStatic,
         string.IsNullOrWhiteSpace(this.FanFlow) ? Defaults.FanFlow : this.FanFlow,
         string.IsNullOrWhiteSpace(this.ComponentDrop) ? Defaults.ComponentDrop : this.ComponentDrop,
-        string.IsNullOrWhiteSpace(this.TerminalDrop) ? null : this.TerminalDrop);
+        string.IsNullOrWhiteSpace(this.TerminalDrop) ? null : this.TerminalDrop,
+        string.IsNullOrWhiteSpace(this.FittingCoefficient) ? Defaults.FittingCoefficient : this.FittingCoefficient);
 }
 
 /// <summary>
@@ -114,6 +122,7 @@ public sealed record DuctParameterSlots(
 /// </summary>
 public sealed record DuctSnapshotData(
     DuctDocument Document,
+    DuctCoordinateEncoding CoordinateEncoding,
     IReadOnlyList<DuctLevel> Levels,
     IReadOnlyList<DuctGroup> Groups,
     IReadOnlyList<DuctNode> Nodes,
@@ -125,6 +134,12 @@ public sealed record DuctSnapshotData(
     DuctParameterSlots Slots,
     DuctLossStore? Store = null,
     string? StoreError = null);
+
+/// <summary>Physical XYZ and segment LengthFt preserve native model-foot binary64 values; other facts retain their stated units/rounding.</summary>
+[JsonConverter(typeof(StringEnumConverter))]
+public enum DuctCoordinateEncoding {
+    [EnumMember(Value = "native-double")] NativeDouble
+}
 
 /// <summary>
 ///     The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
@@ -153,10 +168,12 @@ public sealed record DuctSection(int Number, double? FlowCfm, double? TotalPress
 [JsonConverter(typeof(StringEnumConverter))]
 public enum DuctLossMethod {
     [EnumMember(Value = "not-defined")] NotDefined,
-    /// <summary>"Coefficient from ASHRAE Table": computes zero on every fitting in R2025 and R2026 (pressure-drop ledger).</summary>
+    /// <summary>Revit's "Coefficient from ASHRAE Table": read only; it keeps a stale per-leg slot across method switches, so Pe never writes it (pressure-drop ledger 2026-10-08, 2026-10-12).</summary>
     [EnumMember(Value = "ashrae-table")] AshraeTable,
     [EnumMember(Value = "specific-coefficient")] SpecificCoefficient,
     [EnumMember(Value = "specific-loss")] SpecificLoss,
+    /// <summary>Pe's own loss server: the family's coefficient parameter (the FittingCoefficient slot) when it has one, else each leg priced live from the rule's ASHRAE table.</summary>
+    [EnumMember(Value = "pe-server")] PeServer,
     /// <summary>A server this census does not know, or no server parameter.</summary>
     [EnumMember(Value = "other")] Other
 }
@@ -248,7 +265,8 @@ public sealed record DuctNode(
     IReadOnlyList<DuctFact> Facts,
     DuctLoss? Loss = null,
     DuctTerminalDrop? TerminalDrop = null,
-    string? Label = null);
+    string? Label = null,
+    string? UniqueId = null);
 
 public sealed record DuctRoughness(double ValueFt, DuctProvenance Provenance);
 
@@ -259,9 +277,19 @@ public sealed record DuctRevitValues(
     double? FrictionInWgPer100Ft,
     double? PressureDropInWg);
 
+/// <summary>The native path form; samples alone do not certify nonlinear curve arclength stations.</summary>
+[JsonConverter(typeof(StringEnumConverter))]
+public enum DuctCurveKind {
+    [EnumMember(Value = "line")] Line,
+    [EnumMember(Value = "arc")] Arc,
+    [EnumMember(Value = "flex-polyline")] FlexPolyline,
+    [EnumMember(Value = "other")] Other
+}
+
 public sealed record DuctSegment(
     long Id,
     DuctSegmentKind Kind,
+    DuctCurveKind CurveKind,
     string? Type,
     DuctShape Shape,
     string Size,
@@ -276,7 +304,8 @@ public sealed record DuctSegment(
     string? Classification,
     DuctRoughness Roughness,
     DuctRevitValues Revit,
-    IReadOnlyList<DuctConnector> Connectors);
+    IReadOnlyList<DuctConnector> Connectors,
+    string? UniqueId = null);
 
 /// <summary>Pass-1 flow: terminal design flow summed up the tree from the single root. At a tapped duct it is the upstream-end flow.</summary>
 public sealed record DuctFlow(long SegmentId, double Cfm, DuctProvenance Provenance);

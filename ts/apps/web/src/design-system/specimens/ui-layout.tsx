@@ -1,7 +1,7 @@
 import { Pane, PaneSplit, paneRecipe } from "#/components/lang/pane";
 import { PaneResizeHandle, paneSplitRecipe } from "#/components/lang/pane-resize";
 import { Switch, switchRecipe } from "#/components/lang/switch";
-import { Tooltip, UiTooltipProvider, tooltipRecipe } from "#/components/lang/tooltip";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@pe/kit/lang/tooltip";
 import { Surface } from "#/components/lang/surface";
 import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
@@ -19,11 +19,7 @@ export function UiLayoutSpecimens() {
         recipe={paneRecipe}
         render={(props) => (
           <div className="h-32 w-56">
-            <Pane
-              kind={(props.kind as "navigation" | "visual" | "content" | "inspector") ?? "content"}
-              scroll={props.scroll as "auto" | "clip" | "visible"}
-              title="pane"
-            >
+            <Pane scroll={props.scroll as "auto" | "clip" | "visible"} title="pane">
               body
             </Pane>
           </div>
@@ -63,28 +59,12 @@ export function UiLayoutSpecimens() {
         recipe={switchRecipe}
         render={(props) => <Switch size={props.size as "sm" | "default"} />}
       />
-      <RecipeGrid
-        name="Tooltip"
-        importPath="#/components/lang/tooltip"
-        recipe={tooltipRecipe}
-        render={(props) => (
-          <UiTooltipProvider>
-            <Tooltip.Root defaultOpen>
-              <Tooltip.Trigger
-                kind={props.kind as "icon" | "label"}
-                size={props.size as "default" | "compact"}
-              >
-                ?
-              </Tooltip.Trigger>
-              <Tooltip.Portal>
-                <Tooltip.Positioner>
-                  <Tooltip.Popup>tooltip</Tooltip.Popup>
-                </Tooltip.Positioner>
-              </Tooltip.Portal>
-            </Tooltip.Root>
-          </UiTooltipProvider>
-        )}
-      />
+      <SpecimenFrame name="Tooltip" importPath="@pe/kit/lang/tooltip">
+        <Tooltip>
+          <TooltipTrigger>Hover or focus</TooltipTrigger>
+          <TooltipContent>A shared hint.</TooltipContent>
+        </Tooltip>
+      </SpecimenFrame>
     </>
   );
 }

@@ -1,7 +1,9 @@
-import { dirname } from "node:path";
-import { familyFixturesDir } from "./checkout-paths.ts";
+import path, { dirname, resolve } from "node:path";
+import { checkoutRoot, familyFixturesDir } from "./checkout-paths.ts";
+import { devIcons } from "./dev-icons.ts";
 import { checkoutIngress, checkoutServiceName, devHostProxy } from "./dev-proxy.ts";
-import { hostProcessIdentity } from "@pe/host-contracts/service-identity";
+import { receiptBuildDefines } from "../host/src/build-stamp.ts";
+import { devFrontendPort, hostProcessIdentity } from "@pe/host-contracts/service-identity";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { devtools } from "@tanstack/devtools-vite";
@@ -34,11 +36,14 @@ const config = defineConfig(({ mode, command }) => {
       "import.meta.env.VITE_DUCTS_FIXTURE": JSON.stringify(
         ductsFixture ? `/@fs/${ductsFixture.replaceAll("\\", "/")}` : "",
       ),
+      __PE_WEB_RECEIPT_BUILD__: receiptBuildDefines(command === "build" ? "release" : "dev")
+        .__PE_WEB_RECEIPT_BUILD__,
       "import.meta.env.PE_RUNTIME_SERVICE": JSON.stringify(
         command === "build" ? hostProcessIdentity.serviceName : checkoutServiceName(),
       ),
     },
     plugins: [
+      devIcons(),
       checkoutIngress(),
       tanstackStart({
         router: {
@@ -66,6 +71,10 @@ const config = defineConfig(({ mode, command }) => {
     ],
     server: {
       host: "127.0.0.1",
+      // Per checkout, so worktrees run dev side by side. A collision walks to the next free port; the
+      // host records the origin that actually bound (dev.ts), so nothing else names this number.
+      port: devFrontendPort(checkoutRoot),
+      strictPort: false,
       allowedHosts: ["127.0.0.1"],
       cors: false,
       fs: {
@@ -84,8 +93,21 @@ const config = defineConfig(({ mode, command }) => {
       dedupe: ["react", "react-dom"],
       alias: { "@family-fixtures": familyFixturesDir },
     },
-    // Feedback notes name the picked component; minified names would read `p`.
-    build: { rolldownOptions: { output: { keepNames: true } } },
+    build: {
+      // Private symbolication only: "hidden" emits maps without a sourceMappingURL, the chunk and
+      // its map share a debug id, sources are repo-relative, and no source text is embedded.
+      // stage-web.mjs moves every map out of the served client tree.
+      sourcemap: "hidden",
+      rolldownOptions: {
+        output: {
+          // Feedback notes name the picked component; minified names would read `p`.
+          keepNames: true,
+          sourcemapDebugIds: true,
+          sourcemapExcludeSources: true,
+          sourcemapPathTransform: repoRelativeSource,
+        },
+      },
+    },
     optimizeDeps: {
       // ponytail: the dev host's optimizer held its bundle until static-import crawl end and the
       // crawl never ended on 2026-09-11 (504 Outdated Optimize Dep forever, `deps_temp_*` never
@@ -100,11 +122,26 @@ const config = defineConfig(({ mode, command }) => {
       },
     },
     fmt: {},
-    test: { setupFiles: ["./src/test-setup.ts"] },
+    // Vitest's 5 s default fails honest tests when this box runs several suites at once (a 1.2 s grid
+    // test took 5 s). 15 s still fails a hang within the minute.
+    test: {
+      setupFiles: ["../../tests/isolated-home/setup.ts", "./src/test-setup.ts"],
+      testTimeout: 15_000,
+      globalSetup: ["../../tests/isolated-home/global-setup.ts"],
+    },
   };
 });
 
 export default config;
+
+const repoRoot = resolve(import.meta.dirname, "../../..");
+/** Map sources name repo files only; anything outside the checkout keeps just its file name. */
+function repoRelativeSource(source: string, mapPath: string) {
+  const relative = path.relative(repoRoot, resolve(dirname(mapPath), source));
+  return relative.startsWith("..") || path.isAbsolute(relative)
+    ? `external/${path.basename(source)}`
+    : relative.split(path.sep).join("/");
+}
 
 // SHIM: TanStack Start's dev-server plugin silently skips registering its SSR document middleware
 // under Vite 8 / Vite+ (its `isRunnableDevEnvironment` guard rejects the Vite+ ssr environment), so

@@ -1,8 +1,7 @@
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { FactChip } from "#/components/lang/chip";
-import { Press } from "#/components/lang/press";
-import { ActionButton, ActionGroup } from "#/components/lang/action-button";
-import { fmtNum } from "#/components/master-table/model";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { FactChip } from "@pe/kit/lang/chip";
+import { ActionGroup, Button } from "@pe/kit/lang/button";
+import { fmtNum } from "@pe/kit/table/model";
 import { SENSIBLE_CAP_BTUH } from "#/takeoff/world";
 import type { TakeoffsController } from "#/takeoff/controller";
 import { ZonePeek } from "#/takeoff/zone-peek";
@@ -12,6 +11,7 @@ import type { ModelRoom, ModelSystem, ModelZone } from "#/takeoff/world";
 import type { AtlasActions } from "#/takeoff/atlas";
 import { hostReason } from "#/takeoff/room-actions";
 import { STAGE_BLURB, type RoomState } from "#/takeoff/room-state";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function ZoneCard({
   store,
@@ -44,6 +44,20 @@ export function ZoneCard({
     : null;
   const zoneSystems = systems.filter((s) => s.zoneKeys.includes(zone.zone.key));
   const partitionRefusal = store.handle.actions.partition.refusal;
+  const partitionLabel =
+    store.zones.length > 1
+      ? `partition ${store.zones.length} selected zones`
+      : zone.rooms.length + zone.residues.length > 0
+        ? "remeasure / compare"
+        : "partition zone";
+  const partitionWhy =
+    partitionRefusal ??
+    hostReason(
+      live,
+      busy,
+      "First run creates native regions. Reruns measure current native regions and show a temporary solver comparison; geometry and roles are preserved.",
+      "fixture · nothing to partition",
+    );
 
   return (
     <div
@@ -59,15 +73,13 @@ export function ZoneCard({
             <ZoneThumb zone={zone.zone} className="size-4" />
             <span className="face-mono shrink-0">{zone.zone.key}</span>
             <span className="t-small t-upper min-w-0 flex-1 truncate text-ink-2">{zone.name}</span>
-            <Press
-              type="button"
+            <Button
+              label="deselect zone"
               onClick={onClose}
-              title="deselect this zone (Esc) — the table widens back to the whole house"
-              tone="quiet"
-              size="value"
+              reason="deselect this zone (Esc) — the table widens back to the whole house"
             >
               ×
-            </Press>
+            </Button>
           </>
         }
       >
@@ -94,9 +106,11 @@ export function ZoneCard({
           </div>
           <div className="face-mono flex items-center gap-1.5 text-ink-2">
             <ZoneStateBar zone={zone} states={states} className="w-16" />
-            <span title={STAGE_BLURB[zone.stage]}>
-              {zone.rooms.length} rooms · {fmtNum(zone.zone.declaredSqft, 0)} sf · {zone.stage}
-            </span>
+            <TooltipHint content={STAGE_BLURB[zone.stage]}>
+              <span>
+                {zone.rooms.length} rooms · {fmtNum(zone.zone.declaredSqft, 0)} sf · {zone.stage}
+              </span>
+            </TooltipHint>
           </div>
           {run && (
             <FactChip
@@ -118,27 +132,15 @@ export function ZoneCard({
           {live && (
             <div className="pt-0.5">
               <ActionGroup title="zone verbs" radius="document · model">
-                <ActionButton
-                  tone="commit"
-                  label={
-                    store.zones.length > 1
-                      ? `partition ${store.zones.length} selected zones`
-                      : zone.rooms.length + zone.residues.length > 0
-                        ? "remeasure / compare"
-                        : "partition zone"
-                  }
-                  disabled={busy !== null || partitionRefusal !== null}
-                  reason={
-                    partitionRefusal ??
-                    hostReason(
-                      live,
-                      busy,
-                      "First run creates native regions. Reruns measure current native regions and show a temporary solver comparison; geometry and roles are preserved.",
-                      "fixture · nothing to partition",
-                    )
-                  }
+                <Button
+                  kind="commit"
+                  label={partitionLabel}
+                  refusal={busy !== null || partitionRefusal !== null ? partitionWhy : null}
+                  reason={partitionWhy}
                   onClick={actions.partition}
-                />
+                >
+                  {partitionLabel}
+                </Button>
               </ActionGroup>
             </div>
           )}

@@ -1,10 +1,10 @@
 import { useState } from "react";
 
 import { ArmingStrip } from "#/components/lang/arming-strip";
-import { StateCell } from "#/components/lang/cell";
-import { FactChip } from "#/components/lang/chip";
+import { StateCell } from "@pe/kit/lang/cell";
+import { FactChip } from "@pe/kit/lang/chip";
 import { Provenance } from "#/components/lang/section";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "@pe/kit/lang/button";
 import { CounterExample, Gap, Law } from "#/design-system/exhibit";
 import { ARMING_SPECIMEN, PARAM_ROWS, cellProps } from "#/design-system/specimens-data";
 
@@ -70,12 +70,9 @@ function CeremonyLaw({ owner }: { owner: string }) {
         />
       </div>
       <CounterExample why="the write has no visible target, reason, or plan identity">
-        <ActionButton
-          tone="commit"
-          label="apply to Revit"
-          onClick={noop}
-          reason="Writes to the model"
-        />
+        <Button kind="commit" label="apply to Revit" onClick={noop} reason="Writes to the model">
+          apply to Revit
+        </Button>
       </CounterExample>
       <Gap>
         ArmingStrip cannot show who armed it or how old the plan is because that identity does not

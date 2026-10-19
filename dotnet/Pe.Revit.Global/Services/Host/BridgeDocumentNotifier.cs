@@ -115,7 +115,7 @@ internal sealed class BridgeDocumentNotifier : IDisposable {
             if (this._disposed)
                 return;
 
-            this._changedOpenIds.Add(tracked.OpenId());
+            this._changedOpenIds.Add(tracked.OpenId);
             var utcNow = DateTime.UtcNow;
             if (utcNow - this._lastDocumentChangedNotificationUtc < DocumentChangedMinInterval) {
                 this.ArmTrailingPublish();

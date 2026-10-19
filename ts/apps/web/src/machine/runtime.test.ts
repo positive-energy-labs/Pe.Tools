@@ -20,7 +20,10 @@ test("matched ownership is displayed only for a current real reading", () => {
   const stale = { ...MACHINE_SEEDS.disconnected, previous: matched } as Reading<Machine>;
   expect(chipText(stale)).toBe("Installed · 0.7.0 · stale");
   expect(chipText(ready(matched), true)).toBe("Fixture · 0.7.0");
-  expect(chipText({ state: "absent" })).toBe("Runtime unknown");
+  expect(chipText({ state: "absent" })).toBe("");
+  expect(chipText({ state: "failed", message: "host down" })).toBe("This machine");
+  expect(runtimeIdentity({ state: "failed", message: "host down" }).detail).toBe("host down");
+  expect(chipText(ready({ ...matched, host: null }))).toBe("This machine");
   expect(
     chipText(ready({ ...matched, host: { ...matched.host!, installedRoot: null } })),
   ).toContain("identity unverified");

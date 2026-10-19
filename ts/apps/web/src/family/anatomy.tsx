@@ -37,15 +37,16 @@
  * an ink stroke, exactly as the table's focused row does.
  */
 import type { TrichotomyCellLike } from "@pe/agent-contracts";
-import { cellFromTrichotomy, StateCell, type CellTransition } from "#/components/lang/cell";
+import { cellFromTrichotomy, StateCell, type CellTransition } from "@pe/kit/lang/cell";
 import { HelpTip } from "#/components/lang/help";
 import type { FamilyModel } from "#/family/family-model";
 import { bindingOf, type Draft, type Focus, type FamilyPageModel } from "#/family/model";
 import { boundParam } from "#/family/world";
-import { List } from "#/components/lang/list-popup";
+import { List } from "@pe/kit/lang/list-popup";
 import { AnatomyViews } from "#/family/anatomy-fixture-views";
 import { ModelViews } from "#/family/anatomy-model-views";
-import { Code, stringify } from "#/components/lang/code";
+import { Code, stringify } from "@pe/kit/lang/code";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function AnatomyDrawing({
   world,
@@ -183,12 +184,11 @@ export function AnatomyDrawing({
                   ))}
                 </>
               ) : unbound > 0 ? (
-                <span
-                  data-tone="caution"
-                  title={`${unbound} of this constituent's dimensions are frozen literals no parameter drives. They are the ghost rows at the bottom of the table.`}
+                <TooltipHint
+                  content={`${unbound} of this constituent's dimensions are frozen literals no parameter drives. They are the ghost rows at the bottom of the table.`}
                 >
-                  {unbound}⚠
-                </span>
+                  <span data-tone="caution">{unbound}⚠</span>
+                </TooltipHint>
               ) : undefined,
               active: inspecting === part.slug,
               onMouseEnter: () => onFocus({ kind: "part", id: part.slug }),

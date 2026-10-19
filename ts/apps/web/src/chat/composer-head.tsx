@@ -1,28 +1,28 @@
-/**
- * THE COMPOSER HEAD — Chat's whole Situation (design-system ledger, 2026-09-13). Chat has no
- * route head: "Pea on project-a" with the document's health, a document-only target bound through
- * the thread head (`PUT /scope/:thread`; a `?target` pin seeds a document-less thread once), Send as the one verb with the
- * Situation's flag, and Pea's proposals as the Work band under the verb row, so approve and
- * reject have one location and the stream stays a record.
- */
+/** Chat's whole Situation, drawn in the composer: Work and live asks at the top of the box, the
+ *  next turn's provider, traits and document target in its bottom row beside Send. The target binds
+ *  through the thread head (`PUT /scope/:thread`); a `?target` pin seeds a document-less thread once. */
 import { useEffect, useRef } from "react";
-import { resolveCallTarget, toolTitle, type TargetResolution } from "@pe/agent-contracts";
-import { ArrowDown, X } from "lucide-react";
+import {
+  resolveCallTarget,
+  machineInventory,
+  type TargetResolution,
+  type Machine,
+  type Reading,
+} from "@pe/agent-contracts";
+import { Check, Copy, File, X } from "lucide-react";
 import { Popover } from "@base-ui/react/popover";
-import { PopupFrame } from "#/components/lang/list-popup";
+import { PopupFrame } from "@pe/kit/lang/list-popup";
 import { useAtomValue } from "@effect/atom-react";
 
-import { ActionButton } from "#/components/lang/action-button";
-import { Press } from "#/components/lang/press";
-import { Rail } from "#/components/lang/rail";
-import { targetInventory } from "#/readings";
+import { Button } from "@pe/kit/lang/button";
+import { useCopy } from "@pe/kit/lib/use-copy";
+import { previousOf } from "#/readings";
 import { Ladder } from "#/route/ladder";
 import { Ledger, PageLog } from "#/route/situation-grids";
 import { useDocumentLadder } from "#/route/situation-ladder";
 import { Cluster } from "#/route/situation-lamp";
-import { SituationCell } from "#/route/situation-marks";
 import { parseTarget } from "#/route/route-target";
-import type { ActionHandle, RouteHandle } from "#/route/use-route";
+import type { ActionHandle, RouteHandle } from "#/route/handle";
 import type { ChatReading, ChatActionKey } from "#/chat/manifest";
 import { useThreadScope } from "#/chat/scope";
 import type { ChatPage } from "#/chat/seeds";
@@ -34,13 +34,18 @@ import {
   selectTitle,
   selectToolCalls,
   type ChatState,
-} from "#/workbench/chat-state";
+} from "@pe/agent-contracts/chat-state";
 import { useWorkbench } from "#/workbench/provider";
 
 import { useHeadWorks } from "./head-works";
+import { targetClosure, targetLabel } from "./thread-navigation";
 import { ProposalHead } from "./proposal-head";
-import { QuestionForm } from "./question-form";
-import type { ChatDraft } from "#/workbench/prompt";
+import { ComposerOpenMode } from "./composer-open";
+import { ComposerPending } from "./composer-pending";
+import { GrantChip, HeadLadder } from "./head-chips";
+import { emptyPrompt, type ChatDraft } from "#/workbench/prompt";
+import { usePublishSituationSignal } from "#/navigation/route-controls";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export type ChatHandle = RouteHandle<ChatState, ChatReading, ChatPage, ChatActionKey>;
 
@@ -54,14 +59,14 @@ export function useSend(
   onSent?: (sent: ChatDraft) => void,
 ): ActionHandle {
   const send = handle.actions.send;
-  const empty = !draft.text.trim() && draft.attachments.length === 0;
   return {
     ...send,
-    refusal: send.refusal ?? (empty ? "Enter a prompt or attachment" : null),
+    refusal: send.refusal ?? emptyPrompt(draft),
     run: async () => {
       const result = await send.run({
         text: draft.text.trim(),
         attachments: draft.attachments.length ? draft.attachments : undefined,
+        mentions: draft.mentions.length ? draft.mentions : undefined,
       });
       if (!result) onSent?.(draft);
       return result;
@@ -86,7 +91,7 @@ const complaint = (resolution: TargetResolution): string | null =>
           }[resolution.reason];
 
 /** The one open document at a `?target` address pin; none when absent or held twice. */
-const pinnedRef = (inventory: ReturnType<typeof targetInventory>, target?: string) => {
+const pinnedRef = (inventory: ReturnType<typeof machineInventory>, target?: string) => {
   const parsed = parseTarget(target);
   if (parsed?.kind !== "address" || inventory.kind !== "ready") return null;
   const refs = Object.entries(inventory.sessions).flatMap(([session, found]) =>
@@ -101,7 +106,7 @@ const pinnedRef = (inventory: ReturnType<typeof targetInventory>, target?: strin
 
 /** The bound document's Address, which keys document-owned Work. */
 const documentAddress = (
-  inventory: ReturnType<typeof targetInventory>,
+  inventory: ReturnType<typeof machineInventory>,
   ref: { session: string; openId: string } | null,
 ) => {
   const found = ref && inventory.kind === "ready" ? inventory.sessions[ref.session] : undefined;
@@ -110,14 +115,28 @@ const documentAddress = (
     : null;
 };
 
+/** The thread's head, or the draft's own target before the first send creates a thread. */
+function useThreadHead(handle: ChatHandle) {
+  const { currentThreadId, draftTarget, setDraftTarget } = useWorkbench();
+  const scope = useThreadScope(currentThreadId, !handle.demo, handle.readings.head);
+  return currentThreadId || handle.demo
+    ? scope
+    : {
+        ...scope,
+        defaultTarget: draftTarget,
+        set: async (target: Parameters<typeof scope.set>[0]) => {
+          setDraftTarget(target);
+          return true;
+        },
+      };
+}
+
 /** What both the composer head and the thread head's cluster read: the thread's target and its
  *  health. Called ONCE per surface (ChatSurface) and handed to both. */
 export function useChatSituation(handle: ChatHandle) {
   const { currentThreadId, threads, chat, missingThread } = useWorkbench();
-  const head = useThreadScope(currentThreadId, !handle.demo, handle.readings.head);
-  const inventory = targetInventory(
-    handle.readings.inventory as Parameters<typeof targetInventory>[0],
-  );
+  const head = useThreadHead(handle);
+  const inventory = machineInventory(previousOf(handle.readings.machine as Reading<Machine>));
   const resolution = resolveCallTarget({ needs: "document" }, head.defaultTarget, inventory);
   const bound =
     resolution.kind === "resolved" && resolution.target.kind === "document"
@@ -126,20 +145,116 @@ export function useChatSituation(handle: ChatHandle) {
   const ladder = useDocumentLadder(handle, undefined, {
     bound,
     bind: (ref) => {
-      void head.set({ kind: "open", ref });
+      const label = documentAddress(inventory, ref)?.split(/[\\/]/).at(-1);
+      void head.set({ kind: "open", ref }, label);
     },
   });
   const health = head.defaultTarget ? complaint(resolution) : null;
+  // The inventory is the authority; the saved target is a request, shown as missing when gone.
+  const closed = targetClosure(head.defaultTarget, inventory);
+  const closedWord = closed ? `${targetLabel({ head })} · closed` : null;
   // A thread the host does not know names nothing: the transcript says "no such thread".
   const threadLabel = missingThread
     ? ""
     : selectTitle(chat) ||
       threads.find((item) => item.id === currentThreadId)?.title ||
       currentThreadId;
-  return { head, inventory, bound, ladder, health, threadLabel };
+  return {
+    head: {
+      ...head,
+      grantView: bound && handle.readings.machine.state === "ready" ? head.grantView : null,
+    },
+    inventory,
+    bound,
+    ladder,
+    health,
+    closedWord,
+    threadLabel,
+    threadId: missingThread ? null : currentThreadId,
+  };
 }
 
 export type ChatSituation = ReturnType<typeof useChatSituation>;
+
+function ThreadIdentity({ id }: { id: string }) {
+  const { copy, copied } = useCopy();
+  return (
+    <span className="flex min-w-0 items-center gap-2" data-testid="thread-identity">
+      <TooltipHint content={id}>
+        <span className="min-w-0 truncate face-mono">{id}</span>
+      </TooltipHint>
+      <Button
+        label={copied ? "Copied thread ID" : "Copy thread ID"}
+        icon={copied ? Check : Copy}
+        onClick={() => copy(id)}
+      />
+    </span>
+  );
+}
+
+/** The global head observes the same composer owners; Send keeps its controls locally. */
+export function ChatSituationHead({
+  handle,
+  situation,
+  status,
+}: {
+  handle: ChatHandle;
+  situation: ChatSituation;
+  status: ComposerStatus;
+}) {
+  const { head, threadLabel, threadId } = situation;
+  const kind = status.caution
+    ? "failure"
+    : status.text === "waiting for you"
+      ? "health"
+      : status.text === "ready"
+        ? "ready"
+        : "busy";
+  usePublishSituationSignal(handle.manifest.key, {
+    kind,
+    tone:
+      kind === "failure"
+        ? "alarm"
+        : kind === "ready"
+          ? "done"
+          : kind === "busy"
+            ? "commit"
+            : "caution",
+    title: `Pea · ${status.text}${status.detail ? ` · ${status.detail}` : ""}`,
+    stamp: `${threadLabel}|${kind}|${head.revision}|${head.stale}|${status.detail ?? ""}`,
+  });
+  return (
+    <div data-surface="page" className="flex min-w-0 flex-col gap-2 p-3" aria-label="Pea Situation">
+      <Ledger
+        rows={[
+          [
+            "thread",
+            threadId && threadLabel === threadId ? "Untitled thread" : threadLabel || "New thread",
+          ],
+          ...(threadId
+            ? [["thread id", <ThreadIdentity key={threadId} id={threadId} />] as const]
+            : []),
+          [
+            "target",
+            head.defaultTarget
+              ? (situation.ladder.docWord ??
+                (head.defaultTarget.kind === "named"
+                  ? head.defaultTarget.address
+                  : head.defaultTarget.ref.session))
+              : "none · Chat runs; Revit operations need a document",
+          ],
+          ["state", status.text],
+        ]}
+      />
+      {head.stale && (
+        <p className="text-ink-2">
+          Thread context is not current; composer controls wait for its owner.
+        </p>
+      )}
+      {status.detail && <p data-tone="caution">{status.detail}</p>}
+    </div>
+  );
+}
 
 /** Lamp · gauge · help · theme for Chat — it rides the thread head, not the composer. */
 export function ChatCluster({
@@ -152,6 +267,7 @@ export function ChatCluster({
   return (
     <Cluster
       handle={handle}
+      helpUtilities
       // No lamp: the composer sentence names the target, and a hosted route draws its own.
       lamp={null}
       state={
@@ -174,37 +290,23 @@ export function ChatCluster({
   );
 }
 
-export function ComposerHead({
-  handle,
+/** The pickers as marks: provider › model › traits, then the document target. `open` adds the
+ *  target/open switch (the open composer's bottom row). */
+export function ComposerPickers({
   situation,
-  status,
   urlTarget,
+  open,
 }: {
   /** The URL's `?target` pin: a thread with no document takes it once (e2e finding 7). */
   urlTarget?: string;
-  handle: ChatHandle;
   situation: ChatSituation;
-  /** Thread-level loading/failure. It lives HERE, not in a rail above the transcript: the
-   * Situation already answers "what is bound and how is it", and a rail that appears and
-   * disappears over the chat shifted the whole lane every time it spoke. */
-  status?: { text: string; caution: boolean; detail?: string };
+  open: boolean;
 }) {
-  const {
-    currentThreadId,
-    threads,
-    chat,
-    missingThread,
-    openThread,
-    resolveApproval,
-    answerQuestion,
-    store,
-  } = useWorkbench();
+  const { currentThreadId, chat } = useWorkbench();
   const isRunning = selectRunStatus(chat) !== "idle";
-  const { head, inventory, bound, ladder, health, threadLabel } = situation;
-  const refusal =
-    head.refusal ?? (handle.outcome?.key === "send" ? handle.outcome.refusal?.message : null);
+  const { head, inventory, ladder, health, closedWord } = situation;
   // A new thread under a `?target` address pin binds to the one open document at that address,
-  // once per thread: "new" keeps the URL's document. A later clear in the sentence stands.
+  // once per thread: "new" keeps the URL's document. A later clear in the picker stands.
   const pinned = useRef<string | null>(null);
   const pinRef = pinnedRef(inventory, urlTarget);
   useEffect(() => {
@@ -221,28 +323,87 @@ export function ComposerHead({
     currentThreadId,
   ]);
   const targetDisabled = isRunning || head.stale;
+  // A closed target names itself in the first empty slot, in the caution tone, and the picker
+  // lists only the live inventory.
+  const unbound = ladder.levels.findIndex((level) => level.label === null);
   const levels = ladder.levels.map((level, index) =>
     index === 0
       ? {
           ...level,
-          placeholder: head.defaultTarget ? level.placeholder : "optional Revit target",
-          extra: head.defaultTarget ? (
-            <div className="hairline-t mt-1 px-2 pt-1">
-              <ActionButton
-                tone="act"
-                icon={X}
-                label="Clear target"
-                reason="Run this chat without a Revit target"
-                disabled={targetDisabled}
-                onClick={() => {
-                  void head.set(null);
-                }}
-              />
-            </div>
-          ) : undefined,
+          placeholder: !head.defaultTarget
+            ? "choose a Revit document (optional)"
+            : index === unbound && closedWord
+              ? closedWord
+              : level.placeholder,
+          extra: (
+            <>
+              {level.extra}
+              {head.defaultTarget ? (
+                <div className="hairline-t mt-1 px-2 pt-1">
+                  <Button
+                    kind="framed"
+                    icon={X}
+                    label="Clear target"
+                    reason="Run this chat without a Revit target"
+                    refusal={targetDisabled ? "Run this chat without a Revit target" : null}
+                    onClick={() => {
+                      void head.set(null);
+                    }}
+                  >
+                    Clear target
+                  </Button>
+                </div>
+              ) : null}
+            </>
+          ),
         }
-      : level,
+      : index === unbound && closedWord
+        ? { ...level, placeholder: closedWord }
+        : level,
   );
+  return (
+    <section aria-label="Situation" className="contents" data-testid="composer-head">
+      <HeadLadder face="icon" />
+      <ComposerOpenMode switcher={open}>
+        <Ladder
+          face="icon"
+          mark={<File className="size-3.5" data-tone={situation.bound ? "done" : undefined} />}
+          levels={levels}
+          caution={Boolean(health)}
+          disabled={targetDisabled}
+          title={
+            ladder.sessionWord
+              ? `${ladder.sessionWord} › ${ladder.docWord ?? "no document"}; pick to change`
+              : "choose a session and a document; Chat runs without one, Revit operations do not"
+          }
+        />
+      </ComposerOpenMode>
+    </section>
+  );
+}
+
+/** The grant and Pea's plan beside the pickers. Send owns run state. */
+export function ComposerState({ situation: { head, ladder } }: { situation: ChatSituation }) {
+  const { chat } = useWorkbench();
+  return (
+    <>
+      <GrantChip
+        grant={head.grantView}
+        document={ladder.docWord ?? undefined}
+        onRevoke={() => void head.revoke()}
+      />
+      <PlanChip tasks={selectPlan(chat)} />
+    </>
+  );
+}
+
+export type ComposerStatus = { text: string; caution: boolean; detail?: string };
+
+/** Pea's live asks, then the Work the bound document holds: the top of the composer box, so
+ *  approve and reject have one location and the draft sits under what is staged. */
+export function ComposerWork({ situation }: { situation: ChatSituation }) {
+  const { chat, resolveApproval, answerQuestion, store } = useWorkbench();
+  const { inventory, bound, ladder } = situation;
   // Live asks only: an expired ask is a transcript record, never a head row.
   const approvals = selectApprovals(chat);
   const questions = selectQuestions(chat);
@@ -251,178 +412,32 @@ export function ComposerHead({
     planIn: store.actions.planIn,
     planRefusal: useAtomValue(store.atoms.planRefusal),
   });
-  // "Do" alone says nothing about what is being asked for: the ask row names the call's target.
-  const callsById = new Map(selectToolCalls(chat).map((call) => [call.id, call]));
-  const selectedThread = threads.find((item) => item.id === currentThreadId);
-  const threadOptions =
-    selectedThread || missingThread
-      ? threads
-      : [{ id: currentThreadId, title: currentThreadId, updatedAt: "" }, ...threads].filter(
-          (thread) => thread.id,
-        );
   return (
-    <section aria-label="Situation" className="flex min-w-0 flex-col" data-testid="composer-head">
-      <Rail
-        ground="recess"
-        lead={
-          <p className="t-prose text-ink-2 [&_b]:font-semibold [&_b]:text-ink">
-            <b>Pea</b> in{" "}
-            <SituationCell io="rw">
-              <Ladder
-                levels={[
-                  {
-                    key: "thread",
-                    label: threadLabel,
-                    placeholder: "choose a thread",
-                    options: threadOptions.map((thread) => ({
-                      id: thread.id,
-                      label: thread.title,
-                      sub: thread.updatedAt || undefined,
-                    })),
-                    picked: (id) => id === currentThreadId,
-                    pick: openThread,
-                  },
-                ]}
-                title="choose the active chat thread"
-              />
-            </SituationCell>{" "}
-            on{" "}
-            <SituationCell io="rw" empty={!head.defaultTarget}>
-              <Ladder
-                levels={levels}
-                caution={Boolean(health)}
-                disabled={targetDisabled}
-                title={
-                  ladder.sessionWord
-                    ? `${ladder.sessionWord} › ${ladder.docWord ?? "no document"}; pick to change`
-                    : "choose a session and a document; Chat runs without one, Revit operations do not"
-                }
-              />
-            </SituationCell>
-            {refusal ? (
-              <span className="ml-3 t-small" data-tone="caution">
-                {refusal}
-              </span>
-            ) : null}
-            {status ? (
-              <span
-                aria-live="polite"
-                className="ml-3 t-small t-upper"
-                data-tone={status.caution ? "caution" : undefined}
-                data-testid="composer-status"
-              >
-                {status.text}
-              </span>
-            ) : null}
-          </p>
-        }
-        trail={
-          <span className="flex shrink-0 items-center gap-3">
-            <PlanChip tasks={selectPlan(chat)} />
-            <Press
-              tone="quiet"
-              size="icon"
-              title="Jump to the latest turn"
-              aria-label="Jump to latest"
-              onClick={() => window.dispatchEvent(new Event("pe:focus-tail"))}
-            >
-              <ArrowDown className="size-4" />
-            </Press>
-          </span>
-        }
+    <>
+      <ComposerPending
+        approvals={approvals}
+        questions={questions}
+        calls={selectToolCalls(chat)}
+        resolveApproval={resolveApproval}
+        answerQuestion={answerQuestion}
       />
-      {status?.detail ? (
-        <div
-          role="alert"
-          className="hairline-b px-2 py-1 t-small"
-          data-testid="composer-status-detail"
-          data-tone="caution"
-        >
-          {status.detail}
-        </div>
-      ) : null}
-      <ProposalHead
-        asks={[
-          ...questions.map((question) => (
-            <QuestionForm
-              key={question.requestId}
-              question={question}
-              onAnswer={(action, content) =>
-                void answerQuestion(question.requestId, action, content)
-              }
-            />
-          )),
-          ...approvals.map((approval) => {
-            const call = callsById.get(approval.toolCallId);
-            return (
-              <div
-                key={approval.requestId}
-                className="flex flex-wrap items-baseline gap-3 py-0.5"
-                data-tool-id={approval.toolCallId}
-              >
-                <span className="face-mono text-ink">⌗ {toolTitle(approval.toolName)}</span>
-                {call?.target ? (
-                  <code className="face-mono t-small text-ink" data-testid="approval-target">
-                    {call.target}
-                  </code>
-                ) : null}
-                <div className="hairline-y hairline-rows flex w-full min-w-0 flex-col [&>button]:w-full">
-                  {approval.options.map((option, index) => (
-                    <Press
-                      key={option.optionId}
-                      size="value"
-                      aria-label={option.name}
-                      data-kind={option.kind}
-                      onClick={() => void resolveApproval(approval.requestId, option.optionId)}
-                    >
-                      <span className="grid w-full grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-2 px-2 py-1.5 text-left">
-                        <span aria-hidden="true" className="face-mono text-ink-2">
-                          {index + 1}.
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block">{option.name}</span>
-                          <span
-                            className="mt-0.5 block t-small text-ink-2"
-                            data-tone={option.kind === "allow_always" ? "caution" : undefined}
-                          >
-                            {VERDICT[option.kind]}
-                          </span>
-                        </span>
-                      </span>
-                    </Press>
-                  ))}
-                </div>
-              </div>
-            );
-          }),
-        ]}
-        works={works}
-      />
-    </section>
+      <ProposalHead asks={[]} works={works} />
+    </>
   );
 }
 
-/** What each ACP permission option kind covers, said under the harness's own option name. From
- *  the kind only, in neutral words: the call may be a file write, a command, or a Pea door. */
-const VERDICT = {
-  allow_once: "this call only",
-  allow_always: "every call of this kind in this session, beyond this thread",
-  reject_once: "refuse",
-  reject_always: "refuse every call of this kind in this session, beyond this thread",
-} as const;
-
 type PlanTask = ReturnType<typeof selectPlan>[number];
 
-/** Pea's plan as one `plan x/y` press in the cluster; the list opens over the lane, never adding
- *  height to the head. Nothing when pea has no plan. */
+/** Pea's plan as one framed `plan x/y` button; the list opens over the lane. Nothing without a plan. */
 function PlanChip({ tasks }: { tasks: readonly PlanTask[] }) {
   if (tasks.length === 0) return null;
   const done = tasks.filter((task) => task.status === "completed").length;
   return (
     <Popover.Root>
       <Popover.Trigger
-        render={<Press tone="quiet" size="caption" />}
-        title="Pea's plan for this run"
+        render={
+          <Button kind="framed" label="Pea's plan for this run" reason="Pea's plan for this run" />
+        }
       >
         <span className="face-mono">
           plan {done}/{tasks.length}

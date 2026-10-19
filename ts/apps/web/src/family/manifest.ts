@@ -308,6 +308,14 @@ export const FAMILY_DEMO_PODS: readonly PodRow[] = [
     version: "0.1.0",
     folder: "Documents/Pe.Tools/Pods/demo",
     entrypoints: [],
+    contributions: FAMILY_NAMES.map((name) => ({
+      kind: "member" as const,
+      path: demoPath(name),
+      memberPath: demoPath(name),
+      key: `member:@${DEMO_POD}/${demoPath(name)}`,
+      name: demoPath(name),
+      description: null,
+    })),
     members: FAMILY_NAMES.map((name, index) => ({
       path: demoPath(name),
       sha256: demoHash(index + 1),
@@ -513,6 +521,7 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
         },
       },
     } as never,
+    runs: ["family.plan"],
     seeds: {
       read: familySeed("box", "sheet", "audit", false),
       build: familySeed("refline", "drill", "apply"),

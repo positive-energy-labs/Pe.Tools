@@ -6,8 +6,8 @@
 import { compare, render } from "./revit.js";
 import type { Note, Spec } from "./revit.js";
 
-export { diff, set } from "./revit.js";
-export type { Change, Dialog, Note, Palette, Piece, Ribbon, Spec, Task } from "./revit.js";
+export { set } from "./revit.js";
+export type { Dialog, Note, Palette, Piece, Ribbon, Spec, Task } from "./revit.js";
 
 /** One Revit window from its spec, with optional anchored notes. */
 export function Revit(props: { spec: Spec; notes?: Note[] }) {

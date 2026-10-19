@@ -5,7 +5,7 @@
 import { Link } from "@tanstack/react-router";
 import type { ActionReceipt } from "@pe/agent-contracts";
 
-import { Press } from "#/components/lang/press";
+import { Button } from "@pe/kit/lang/button";
 import { previousOf, useReading } from "#/readings";
 import {
   actionRoute,
@@ -28,9 +28,9 @@ export function ProposedLine({ record }: { record: ProposedRecord }) {
         {chatPluginTitle(record.route)}
         {record.subject ? ` · ${record.subject}` : ""}
       </span>
-      <Press tone="quiet" size="caption" onClick={() => store.actions.setPlugin(record.route)}>
+      <Button label="open ›" onClick={() => store.actions.setPlugin(record.route)}>
         open ›
-      </Press>
+      </Button>
     </div>
   );
 }
@@ -66,9 +66,9 @@ export function ActionLine({ call }: { call: ActionCall }) {
         </span>
       </span>
       {route ? (
-        <Press tone="quiet" size="caption" onClick={() => store.actions.setPlugin(route)}>
+        <Button label="open ›" onClick={() => store.actions.setPlugin(route)}>
           open ›
-        </Press>
+        </Button>
       ) : (
         <Link to="/ops" search={{ actionId: call.id }}>
           receipt ›

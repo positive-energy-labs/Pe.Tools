@@ -1,130 +1,97 @@
+// The thread's composer: fills the one `Composer` box with attachments, slash and `@` menus and
+// the pickers. Logic lives in the hooks and `useSend`.
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import { ArrowUp, GitFork, Paperclip, Square } from "lucide-react";
 import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type DragEvent as ReactDragEvent,
-  type FormEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type ReactNode,
-  type Dispatch,
-  type SetStateAction,
-} from "react";
-import { Paperclip, X } from "lucide-react";
-import { QueuedMessages } from "./queued-messages";
-import { HeadLadder, TraitsChip } from "#/chat/head-chips";
-import { FirstOpenCard } from "#/chat/first-open";
+  capabilityCatalogSchema,
+  type Capability,
+  type Machine,
+  type Reading,
+} from "@pe/agent-contracts";
+import { FirstOpenCard, ProviderRepair } from "#/chat/first-open";
 import { isReady } from "#/workbench/provider/providers";
-import { Textarea } from "#/components/lang/textarea";
-import { Pane, type PaneShortcut } from "#/components/lang/pane";
+import { Pane } from "#/components/lang/pane";
+import { ScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import { useWorkbench } from "#/workbench/provider";
-import { EMPTY_CHAT_DRAFT, type ChatDraft, type WorkbenchAttachment } from "#/workbench/prompt";
-import { formatBytes, selectRunStatus, selectSkillCommands } from "#/workbench/chat-state";
-import { Press } from "#/components/lang/press";
-import { chipRecipe } from "#/components/lang/chip";
-import { filterItems, type Collection } from "#/components/lang/collection";
-import { ListPopup } from "#/components/lang/list-popup";
-import { Thumbnail } from "#/workbench/thumbnail";
+import { useSurfaceHost } from "#/navigation/surface-host";
+import { EMPTY_CHAT_DRAFT, type ChatDraft } from "#/workbench/prompt";
+import { selectRunStatus, selectSkillCommands } from "@pe/agent-contracts/chat-state";
+import { ListPopup } from "@pe/kit/lang/list-popup";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
 import { SituationAction } from "#/route/situation-verbs";
+import { Composer, ComposerFrame, type ComposerHandle } from "#/components/lang/conversation";
+import { Button } from "@pe/kit/lang/button";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { MentionChip } from "@pe/kit/lang/chip";
+import { previousOf } from "#/readings";
+import { AttachmentChip } from "./attachment-chip";
+import { useAttachments } from "./use-attachments";
+import { useSlashMenu, type SlashCommand } from "./use-slash-menu";
+import {
+  dropMention,
+  liveCatalog,
+  MENTION_GROUP_CAP,
+  MENTION_KINDS,
+  mentionFace,
+  mentionWord,
+  useMentions,
+  withText,
+} from "./use-mentions";
 
-/** A slash command the harness advertises (`available_commands_update`). `new` is a route verb
- * (`chat/manifest.ts`). */
-interface SlashCommand {
-  name: string;
-  description: string;
-}
-
-function Composer({
+/** The route handle's Enter runs Send scoped to this draft; `work` is the box's top section (live
+ * asks, staged Work), `pickers` the provider and document pickers, `state` the run's. */
+export function ThreadComposer({
   handle,
-  topBar,
-  draft,
-  setDraft,
+  pickers,
+  state,
+  work,
+  refusal,
+  initialDraft = EMPTY_CHAT_DRAFT,
 }: {
-  /** The route handle; Enter runs its Send verb scoped to this draft, the head draws the same. */
   handle: ChatHandle;
-  /** Rendered flush at the top edge of the box — the composer head and the budget bar. */
-  topBar?: ReactNode;
-  draft: ChatDraft;
-  setDraft: Dispatch<SetStateAction<ChatDraft>>;
+  pickers: (open: boolean) => ReactNode;
+  state?: ReactNode;
+  work?: ReactNode;
+  refusal?: string | null;
+  initialDraft?: ChatDraft;
 }) {
-  const { chat, providers, config } = useWorkbench();
+  const [draft, setDraft] = useState(initialDraft);
+  const { chat, providers, config, currentThreadId, threads, draft: head } = useWorkbench();
   // Loaded and none ready: the composer carries the first-open doors and Send says why it waits.
   const noneReady = providers.list !== undefined && !providers.list.some(isReady);
+  // Some ready, but not the one this head runs on: that provider carries its own repair.
+  const headId = currentThreadId
+    ? chat.providerId || threads.find((item) => item.id === currentThreadId)?.providerId
+    : head.providerId;
+  const unready = noneReady ? undefined : providers.list?.find((item) => item.id === headId);
+  const repairing = unready && !isReady(unready) ? unready : undefined;
   const isRunning = selectRunStatus(chat) !== "idle";
-  const { text, attachments } = draft;
-  const send = useSend(handle, draft, (sent) =>
-    setDraft((current) => (current === sent ? EMPTY_CHAT_DRAFT : current)),
-  );
-  const setText = (value: string) => {
-    setDraft((previous) => ({ ...previous, text: value }));
-  };
-  const setAttachments = (
-    value: WorkbenchAttachment[] | ((previous: WorkbenchAttachment[]) => WorkbenchAttachment[]),
-  ) => {
-    const update = (previous: { text: string; attachments: WorkbenchAttachment[] }) => ({
-      ...previous,
-      attachments: typeof value === "function" ? value(previous.attachments) : value,
-    });
-    setDraft(update);
-  };
-  const fileRef = useRef<HTMLInputElement>(null);
-  const formRef = useRef<HTMLFormElement>(null);
-  const [dragging, setDragging] = useState(false);
-  const [refusal, setRefusal] = useState<string>();
-  const addFiles = async (list: ArrayLike<File>) => {
-    const { admitted, refusal } = admitFiles(Array.from(list), attachments.length);
-    setRefusal(refusal);
-    if (admitted.length === 0) return;
-    const next = await Promise.all(admitted.map(readAttachment));
-    setAttachments((previous) => [...previous, ...next]);
-  };
-  // A file dropped anywhere else must not navigate the tab to it.
-  useEffect(() => {
-    const guard = (event: DragEvent) => {
-      if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
-    };
-    window.addEventListener("dragover", guard);
-    window.addEventListener("drop", guard);
-    return () => {
-      window.removeEventListener("dragover", guard);
-      window.removeEventListener("drop", guard);
-    };
-  }, []);
-  const carriesFiles = (event: ReactDragEvent) =>
-    Array.from(event.dataTransfer?.types ?? []).includes("Files");
-  const onDragOver = (event: ReactDragEvent) => {
-    if (!carriesFiles(event)) return;
-    event.preventDefault();
-    setDragging(true);
-  };
-  const [area, setArea] = useState<HTMLTextAreaElement | null>(null);
-  const [menuDismissed, setMenuDismissed] = useState(false);
-  // The slash menu's keys are the list's (R14); Tab also picks, so the composer reads its cursor.
-  const menu = useRef<Collection<SlashCommand> | null>(null);
-
+  const variant = useSurfaceHost().shell.mount === "compact" ? "compact" : "full";
+  const box = useRef<ComposerHandle>(null);
+  const send = useSend(handle, draft, (sent) => {
+    setDraft((current) => (current === sent ? EMPTY_CHAT_DRAFT : current));
+    box.current?.rest();
+  });
+  const files = useAttachments(draft, setDraft);
+  const refusedSend = handle.outcome?.key === "send" ? handle.outcome.refusal?.message : null;
   const commands = useMemo<SlashCommand[]>(() => selectSkillCommands(chat), [chat]);
-  const slash = text.startsWith("/") ? text.slice(1).split(/\s+/)[0]!.toLowerCase() : undefined;
-  const showMenu =
-    !menuDismissed &&
-    slash !== undefined &&
-    !text.includes(" ") &&
-    filterItems(commands, (command) => command.name, "substring", slash).length > 0;
-
-  const pick = (command: SlashCommand) => setText(`/${command.name} `);
-
-  const sendCurrent = () => {
-    void send.run();
-  };
+  const slash = useSlashMenu(draft.text, commands);
+  const [area, setArea] = useState<HTMLTextAreaElement | null>(null);
+  const form = area?.form ?? null;
+  // Documents come from the live inventory, never the catalog read at mount.
+  const machine = previousOf(handle.readings.machine as Reading<Machine>);
+  const catalog = useMemo(() => {
+    const read = capabilityCatalogSchema.safeParse(previousOf(handle.readings.capabilities)).data;
+    return read && machine && liveCatalog(read, machine);
+  }, [handle.readings.capabilities, machine]);
+  const mentions = useMentions(draft, setDraft, catalog, area, slash.open);
+  const setText = (text: string) => setDraft((previous) => withText(previous, text));
+  const sendCurrent = () => void send.run();
+  const SkillIcon = MENTION_KINDS.skill.icon;
 
   const paneOwnsFocus = () =>
-    document.activeElement === formRef.current?.closest<HTMLElement>("[data-slot='pane']");
-  const beginSlashCommand = () => {
-    if (!paneOwnsFocus()) return;
-    if (!text) setText("/");
-    formRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
-  };
-  const shortcuts: PaneShortcut[] = [
+    document.activeElement === form?.closest<HTMLElement>("[data-slot='pane']");
+  const shortcuts: ScopeKey[] = [
     {
       hotkey: "Enter",
       label: "send message",
@@ -138,291 +105,194 @@ function Composer({
       hotkey: "/",
       label: "skill commands",
       says: "Starts the composer skill menu from an empty draft.",
-      callback: beginSlashCommand,
+      callback: () => {
+        if (!paneOwnsFocus()) return;
+        if (!draft.text) setText("/");
+        area?.focus();
+      },
       options: { preventDefault: false, stopPropagation: false },
+    },
+    {
+      hotkey: "Shift+2",
+      label: "@ point at a thing",
+      says: "Starts the composer mention menu from an empty draft.",
+      callback: () => {
+        if (!paneOwnsFocus()) return;
+        if (!draft.text) {
+          setText("@");
+          mentions.onCaret(1);
+          mentions.reset();
+        }
+        area?.focus();
+      },
+      options: { preventDefault: true, stopPropagation: false },
     },
   ];
 
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    sendCurrent();
-  };
-
-  const onKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.nativeEvent.isComposing) return;
-    if (showMenu) {
-      // ↑/↓, Enter and Escape belong to the open list; Tab is the composer's second pick key.
-      if (event.key === "Tab" && !event.shiftKey && menu.current?.cursor) {
-        event.preventDefault();
-        menu.current.pick(menu.current.cursor);
-      }
-      return;
-    }
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      sendCurrent();
-    }
-  };
-
-  const onFiles = async (files: FileList | null) => {
-    if (!files?.length) return;
-    await addFiles(files);
-    if (fileRef.current) fileRef.current.value = "";
-  };
-
   return (
-    <Pane
-      kind="content"
-      scroll="visible"
-      flush
-      id="composer"
-      title="composer"
-      help="Drafts stay with their visited thread until sent or deleted."
-      headerSurface="recess"
-      boundary={false}
-      headerless
-      shortcuts={shortcuts}
-    >
-      <QueuedMessages />
-      <form ref={formRef} onSubmit={submit} className="relative w-full">
-        <ListPopup<SlashCommand>
-          anchor="caret"
-          caret={area}
-          owner={area}
-          open={showMenu}
-          onOpenChange={(open) => (open ? undefined : setMenuDismissed(true))}
-          query={slash ?? ""}
-          onCollection={(collection) => (menu.current = collection)}
-          aria-label="Commands"
-          items={commands}
-          keyOf={(command) => command.name}
-          labelOf={(command) => command.name}
-          filter="substring"
-          empty="no skills in this thread"
-          maxHeight="13rem"
-          onPick={pick}
-          row={(command) => ({
-            // a slash command is a machine identifier — mono
-            label: <span className="face-mono">/{command.name}</span>,
-            meta: command.description,
-          })}
-        />
-
-        {/* The composer is a box on the artifact ground — a closed edge all the way around, so the
-          input reads as a place you write rather than a strip the transcript ran into. */}
-        {/* Files dropped anywhere on the box attach; while a file drag is over it, the box takes
-          the recess ground. */}
-        <div
-          className="hairline-x-faint hairline-y-faint overflow-hidden rounded-sm"
-          data-surface={dragging ? "recess" : "artifact"}
-          data-drop-zone=""
-          onDragEnter={onDragOver}
-          onDragOver={onDragOver}
-          onDragLeave={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null))
-              setDragging(false);
-          }}
-          onDrop={(event) => {
-            if (!carriesFiles(event)) return;
-            event.preventDefault();
-            setDragging(false);
-            void addFiles(event.dataTransfer.files);
-          }}
-        >
-          {topBar}
-
-          {attachments.length > 0 ? (
-            <div className="flex flex-wrap items-end gap-1.5 px-3 pt-3">
-              {attachments.map((attachment, index) => (
-                <AttachmentChip
-                  key={index}
-                  attachment={attachment}
-                  onRemove={() =>
-                    setAttachments((previous) =>
-                      previous.filter((_, position) => position !== index),
-                    )
-                  }
-                />
-              ))}
-            </div>
-          ) : null}
-          {refusal ? (
-            <div className="px-3 pt-2 t-small" data-tone="caution">
-              {refusal}
-            </div>
-          ) : null}
-
-          {noneReady ? <FirstOpenCard providers={providers} origin={config.origin} /> : null}
-          <div className="p-2 px-2 py-1.5">
-            <Textarea
-              name="input"
-              aria-label="Message"
-              ref={setArea}
-              aria-autocomplete="list"
-              aria-haspopup="listbox"
-              size="compact"
-              surface="embedded"
-              placeholder={noneReady ? "no provider is ready" : "Ask Pea…  ( / for skills )"}
-              rows={1}
-              autoFocus
-              value={text}
-              onChange={(event) => {
-                setText(event.currentTarget.value);
-                setMenuDismissed(false);
-              }}
-              onKeyDown={onKeyDown}
-              onPaste={(event) => {
-                const files = event.clipboardData.files;
-                if (files.length === 0) return;
-                event.preventDefault();
-                void addFiles(files);
-              }}
-            />
-            {/* Control row: attachments + the head chips (provider › model, traits), then Send — the same
-              manifest verb Enter runs, with the Situation's flag (moved here from the head,
-              2026-09-14: a composer's send belongs beside its text). */}
-            <div className="flex items-center gap-1.5 pt-1">
-              <Press
-                tone="quiet"
-                size="icon"
-                title="Attach files"
-                onClick={() => fileRef.current?.click()}
-              >
-                <Paperclip className="size-4" />
-              </Press>
-              <input
-                ref={fileRef}
-                type="file"
-                multiple
-                hidden
-                onChange={(event) => void onFiles(event.currentTarget.files)}
+    <Pane id="composer" scroll="visible" flush>
+      <ScopeKeys keys={shortcuts} />
+      <ComposerFrame>
+        <Composer
+          ref={box}
+          variant={variant}
+          // Files dropped anywhere on the box attach; a file drag over it takes the recess ground.
+          dragging={files.dragging}
+          drop={files.dropProps}
+          menus={
+            <>
+              <ListPopup<Capability>
+                anchor="caret"
+                caret={form}
+                side="top"
+                owner={area}
+                open={mentions.open}
+                onOpenChange={(open) => (open ? undefined : mentions.dismiss())}
+                query={mentions.query}
+                onCollection={mentions.bind}
+                aria-label="Mentions"
+                items={mentions.rows}
+                keyOf={(row) => row.key}
+                labelOf={(row) => row.title}
+                groupOf={(row) => MENTION_KINDS[row.kind].group}
+                groupCap={MENTION_GROUP_CAP}
+                empty="nothing to mention"
+                maxHeight="min(20rem, 45dvh)"
+                onPick={mentions.pick}
+                detail={(row) => catalog && mentionFace(row, catalog).detail}
+                row={(row) => {
+                  const Icon = MENTION_KINDS[row.kind].icon;
+                  const face = catalog && mentionFace(row, catalog);
+                  return {
+                    lead: <Icon aria-hidden />,
+                    label: face?.title ?? row.title,
+                    aside: face?.mono ? <span className="face-mono">{face.fact}</span> : face?.fact,
+                    title: row.key,
+                  };
+                }}
               />
-              {/* Thread verbs: the same route actions the shell lists, refusals shown the same way. */}
-              <SituationAction handle={handle} name="new" action={handle.actions.new} />
-              <SituationAction handle={handle} name="fork" action={handle.actions.fork} />
-              <HeadLadder />
-              <TraitsChip />
-              <span className="ml-auto flex items-center gap-1.5">
-                {noneReady ? (
-                  <span className="t-small" data-tone="caution">
-                    no provider is ready
-                  </span>
-                ) : null}
-                {isRunning ? (
-                  <SituationAction handle={handle} name="cancel" action={handle.actions.cancel} />
-                ) : null}
-                <SituationAction handle={handle} name="send" action={send} commit />
-              </span>
-            </div>
-          </div>
-        </div>
-      </form>
+              <ListPopup<SlashCommand>
+                // Above the whole composer, never over its work or text.
+                anchor="caret"
+                caret={form}
+                side="top"
+                owner={area}
+                open={slash.open}
+                onOpenChange={(open) => (open ? undefined : slash.dismiss())}
+                query={slash.query}
+                onCollection={slash.bind}
+                aria-label="Commands"
+                items={commands}
+                keyOf={(command) => command.name}
+                labelOf={(command) => command.name}
+                filter="substring"
+                empty="no skills in this thread"
+                maxHeight="min(20rem, 45dvh)"
+                onPick={(command) => setText(slash.pick(command))}
+                // a slash command is a machine identifier — mono; what it does reads in the footer
+                row={(command) => ({
+                  lead: <SkillIcon aria-hidden />,
+                  label: <span className="face-mono">/{command.name}</span>,
+                })}
+                detail={(command) => command.description}
+              />
+            </>
+          }
+          work={
+            <>
+              {work}
+              {noneReady ? <FirstOpenCard providers={providers} origin={config.origin} /> : null}
+              {repairing ? <ProviderRepair provider={repairing} providers={providers} /> : null}
+              {files.attachments.length > 0 || draft.mentions.length > 0 ? (
+                <div className="flex flex-wrap items-end gap-1.5">
+                  {draft.mentions.map((mention) => (
+                    <MentionChip
+                      key={mention.key}
+                      label={mention.title}
+                      kind={mentionWord(mention.kind)}
+                      pointer={mention.key}
+                      facts={mention.facts}
+                      takenAt={mention.takenAt}
+                      onRemove={() => setDraft((previous) => dropMention(previous, mention.key))}
+                    />
+                  ))}
+                  {files.attachments.map((attachment, index) => (
+                    <AttachmentChip
+                      key={index}
+                      attachment={attachment}
+                      onRemove={() => files.remove(index)}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </>
+          }
+          pickers={pickers}
+          refusal={files.refusal ?? refusedSend ?? refusal}
+          tools={
+            <>
+              {state}
+              {noneReady ? <span data-tone="caution">no provider is ready</span> : null}
+              <SituationAction
+                handle={handle}
+                name="fork"
+                action={handle.actions.fork}
+                icon={GitFork}
+              />
+              <Button
+                kind="framed"
+                icon={Paperclip}
+                label="Attach files: images and text, 5 MB each, 10 a message"
+                onClick={files.browse}
+              />
+              <input {...files.fileInputProps} />
+            </>
+          }
+          send={
+            isRunning ? (
+              <SituationAction
+                handle={handle}
+                name="stop"
+                action={handle.actions.stop}
+                icon={Square}
+                tone="alarm"
+              />
+            ) : (
+              <TooltipHint content={refusedSend ?? send.refusal ?? send.says}>
+                <Button
+                  kind="commit"
+                  label={send.label}
+                  icon={ArrowUp}
+                  busy={handle.busy?.key === "send"}
+                  data-tone={refusedSend ? "caution" : undefined}
+                  aria-disabled={Boolean(send.refusal) || undefined}
+                  onClick={sendCurrent}
+                />
+              </TooltipHint>
+            )
+          }
+          onSend={sendCurrent}
+          onKey={(event) => slash.onKeyDown(event) || mentions.onKeyDown(event)}
+          name="input"
+          aria-label="Message"
+          areaRef={setArea}
+          aria-autocomplete="list"
+          aria-haspopup="listbox"
+          placeholder={
+            noneReady ? "no provider is ready" : "Ask Pea; / for a skill, @ to point at a thing"
+          }
+          autoFocus
+          value={draft.text}
+          onChange={(event) => {
+            setText(event.currentTarget.value);
+            mentions.onCaret(event.currentTarget.selectionStart);
+            slash.reset();
+            mentions.reset();
+          }}
+          onSelect={(event) => mentions.onCaret(event.currentTarget.selectionStart)}
+          onPaste={files.pasteHandler}
+        />
+      </ComposerFrame>
     </Pane>
   );
-}
-
-function AttachmentChip({
-  attachment,
-  onRemove,
-}: {
-  attachment: WorkbenchAttachment;
-  onRemove: () => void;
-}) {
-  const { base, label, count } = chipRecipe();
-  const name = attachment.name ?? "attachment";
-  return (
-    <span
-      className={base({
-        class:
-          attachment.data && attachment.mimeType?.startsWith("image/")
-            ? "h-auto py-[3px]"
-            : undefined,
-      })}
-      data-surface="artifact"
-      title={`${name} is attached to the next message`}
-    >
-      {attachment.data && attachment.mimeType?.startsWith("image/") ? (
-        <Thumbnail
-          src={`data:${attachment.mimeType};base64,${attachment.data}`}
-          name={name}
-          fit="chip"
-        />
-      ) : null}
-      <span className={label()}>{name}</span>
-      {!(attachment.data && attachment.mimeType?.startsWith("image/")) &&
-      attachment.size !== undefined ? (
-        <span className={count()}>{formatBytes(attachment.size)}</span>
-      ) : null}
-      <Press type="button" tone="quiet" title={`Remove ${name}`} onClick={onRemove}>
-        <X className="size-3" />
-      </Press>
-    </span>
-  );
-}
-
-// ponytail: our own ceiling, 5 MB a file and 10 a message; the model provider's limit is the real
-// authority. Raise these when a provider accepts more and users hit them.
-const ATTACHMENT_LIMITS = { fileBytes: 5 * 1024 * 1024, files: 10 };
-
-/** The one attachment rule: which files fit beside `held` ones, and one line naming the rest. */
-function admitFiles(files: File[], held: number): { admitted: File[]; refusal?: string } {
-  const admitted: File[] = [];
-  const tooBig: string[] = [];
-  const tooMany: string[] = [];
-  for (const file of files) {
-    if (file.size > ATTACHMENT_LIMITS.fileBytes) tooBig.push(file.name);
-    else if (held + admitted.length >= ATTACHMENT_LIMITS.files) tooMany.push(file.name);
-    else admitted.push(file);
-  }
-  const reasons = [
-    tooBig.length
-      ? `${tooBig.join(", ")} (over the ${ATTACHMENT_LIMITS.fileBytes / 1024 / 1024} MB limit per file)`
-      : "",
-    tooMany.length
-      ? `${tooMany.join(", ")} (${ATTACHMENT_LIMITS.files} files per message at most)`
-      : "",
-  ].filter(Boolean);
-  return { admitted, refusal: reasons.length ? `Not added: ${reasons.join("; ")}` : undefined };
-}
-
-async function readAttachment(file: File): Promise<WorkbenchAttachment> {
-  const textual =
-    file.type.startsWith("text/") ||
-    /\.(md|txt|json|jsonc|csv|tsv|ts|tsx|js|jsx|cs|py|rb|go|rs|java|yaml|yml|toml|xml|html|css)$/i.test(
-      file.name,
-    );
-  if (textual) {
-    return {
-      name: file.name,
-      mimeType: file.type || "text/plain",
-      size: file.size,
-      text: await file.text(),
-    };
-  }
-  return {
-    name: file.name,
-    mimeType: file.type || "application/octet-stream",
-    size: file.size,
-    data: base64FromBuffer(await file.arrayBuffer()),
-  };
-}
-
-export function ThreadComposer({
-  handle,
-  topBar,
-  initialDraft = EMPTY_CHAT_DRAFT,
-}: {
-  handle: ChatHandle;
-  topBar?: ReactNode;
-  initialDraft?: ChatDraft;
-}) {
-  const [draft, setDraft] = useState(initialDraft);
-  return <Composer handle={handle} topBar={topBar} draft={draft} setDraft={setDraft} />;
-}
-
-function base64FromBuffer(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
 }

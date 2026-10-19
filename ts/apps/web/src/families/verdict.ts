@@ -1,7 +1,7 @@
 /** Each family row's verdict on the /families matrix: its apply receipt, else its plan row. */
 import type { FfReceipt } from "@pe/agent-contracts";
 
-import type { Verdict } from "#/components/master-table/model";
+import type { Verdict } from "@pe/kit/table/model";
 import type { PlanSheet, PlanEntry } from "#/route";
 
 /**

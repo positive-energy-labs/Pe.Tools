@@ -7,7 +7,7 @@ namespace Pe.Shared.Tests.RevitData;
 [TestFixture]
 public sealed class DuctGeometryTests {
     private static DuctConnector Round(int index, double d, long? to = null, int toPort = 0, string kind = "end") =>
-        new(index, kind, [0, 0, 0], DuctShape.Round, $"{d}\"ø", d, null, null, null, "bidirectional", null,
+        new(index, kind, [0, 0, 0], DuctShape.Round, $"{d}\"ÃƒÆ’Ã‚Â¸", d, null, null, null, "bidirectional", null,
             to is { } id ? new DuctRef(id, toPort) : null);
 
     private static DuctConnector Rect(int index, double w, double h, long? to = null, int toPort = 0) =>
@@ -18,7 +18,7 @@ public sealed class DuctGeometryTests {
         new(id, kind, kind.ToString(), "Fam", "Type", part, null, [0, 0, 0], null, "SA 1", "Supply Air", ports, facts);
 
     private static DuctSegment Duct(long id, double d, params DuctConnector[] ports) =>
-        new(id, DuctSegmentKind.Duct, "Round", DuctShape.Round, $"{d}\"ø", d, null, null, 10,
+        new(id, DuctSegmentKind.Duct, DuctCurveKind.Line, "Round", DuctShape.Round, $"{d}\"ÃƒÆ’Ã‚Â¸", d, null, null, 10,
             [[0, 0, 0], [10, 0, 0]], null, null, "SA 1", "Supply Air",
             new DuctRoughness(0.0003, DuctProvenance.RevitDefault), new DuctRevitValues(null, null, null, null), ports);
 
@@ -29,7 +29,7 @@ public sealed class DuctGeometryTests {
     private static DuctNetwork.Analysis Build() {
         var nodes = new List<DuctNode> {
             Node(1, DuctNodeKind.Equipment, null, [Rect(1, 16, 12, 20, 1)]),
-            Node(20, DuctNodeKind.Fitting, "Transition", [Round(2, 12, 10, 1), Rect(1, 16, 12, 1, 1)]),
+            Node(20, DuctNodeKind.Fitting, "Transition", [Round(2, 12, 10, 1) with { Direction = "out" }, Rect(1, 16, 12, 1, 1) with { Direction = "in" }]),
             Node(21, DuctNodeKind.Fitting, "Elbow", [Round(1, 12, 10, 2), Round(2, 12, 11, 1)],
                 new DuctFact(DuctNetwork.CenterRadius, 12, null, "in", DuctProvenance.Geometry)),
             Node(22, DuctNodeKind.Fitting, "TapPerpendicular", [Round(1, 6, 10, 3), Round(2, 6, 12, 1)]),
@@ -49,10 +49,10 @@ public sealed class DuctGeometryTests {
         Assert.That(F(Build(), 21, DuctNetwork.ROverD), Is.EqualTo(1.0));
 
     [Test]
-    public void Transition_ratio_follows_flow_from_the_root() {
+    public void Transition_ratio_follows_explicit_physical_flow() {
         var a = Build();
         Assert.That(F(a, 20, DuctNetwork.Inlet), Is.EqualTo(1), "the rect connector faces the unit");
-        Assert.That(F(a, 20, DuctNetwork.AoOverA1), Is.EqualTo(Math.Round(Math.PI / 4 * 144 / (16 * 12), 4)));
+        Assert.That(F(a, 20, DuctNetwork.AoOverA1), Is.EqualTo(Math.PI / 4 * 144 / (16 * 12)).Within(1e-12));
         Assert.That(a.Nodes.Single(n => n.Id == 20).Facts.Single(f => f.Key == DuctNetwork.AoOverA1).Provenance,
             Is.EqualTo(DuctProvenance.Geometry));
     }
@@ -66,6 +66,35 @@ public sealed class DuctGeometryTests {
         Assert.That(F(a, 22, DuctNetwork.AbOverAc), Is.EqualTo(0.25));
         Assert.That(F(a, 21, DuctNetwork.Takeoff), Is.Null, "an elbow on duct ends is not a takeoff");
         Assert.That(a.Flows.Single(f => f.SegmentId == 10).Cfm, Is.EqualTo(400));
+    }
+
+    [Test]
+    public void Retained_return_transition_geometry_uses_physical_inlet_even_at_the_root() {
+        // Chadds 12398836 / equipment 10205336: exact retained sizes, port indices and directions.
+        var fitting = Node(12398836, DuctNodeKind.Fitting, "Transition", [
+            Rect(0, 12, 12, 11599307, 1) with { Direction = "in" },
+            Round(1, 10, 10205336, 2) with { Direction = "out" }
+        ]);
+        var equipment = Node(10205336, DuctNodeKind.Equipment, null,
+            [Round(2, 10, 12398836, 1) with { Direction = "in" }]);
+        foreach (var ports in new[] { fitting.Connectors, fitting.Connectors.Reverse().ToArray() }) {
+            var analysis = DuctNetwork.Analyze([fitting with { Connectors = ports }, equipment], []);
+            Assert.That(F(analysis, fitting.Id, DuctNetwork.Inlet), Is.EqualTo(0));
+            Assert.That(F(analysis, fitting.Id, DuctNetwork.AoOverA1), Is.EqualTo(Math.PI * 100 / 576).Within(1e-12));
+        }
+    }
+
+    [TestCase("in", "in")]
+    [TestCase("out", "out")]
+    [TestCase("bidirectional", "bidirectional")]
+    [TestCase("in", "n/a")]
+    public void Unknown_or_contradictory_transition_directions_do_not_create_physical_facts(string first, string second) {
+        var analysis = DuctNetwork.Analyze([
+            Node(1, DuctNodeKind.Equipment, null, [Round(0, 10, 20, 1)]),
+            Node(20, DuctNodeKind.Fitting, "Transition", [Round(1, 10, 1, 0) with { Direction = first }, Round(2, 8) with { Direction = second }])
+        ], []);
+        Assert.That(F(analysis, 20, DuctNetwork.Inlet), Is.Null);
+        Assert.That(F(analysis, 20, DuctNetwork.AoOverA1), Is.Null);
     }
 
     [Test]

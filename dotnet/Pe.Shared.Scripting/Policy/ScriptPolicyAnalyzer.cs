@@ -1,3 +1,4 @@
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Scripting.Execution;
@@ -16,11 +17,13 @@ public sealed class ScriptPolicyAnalyzer(
 
     public IReadOnlyList<ScriptDiagnostic> Analyze(
         ScriptSourceSet sourceSet,
-        ScriptPermissionMode permissionMode
+        ScriptPermissionMode permissionMode,
+        IReadOnlyList<MetadataReference>? references = null,
+        IReadOnlyList<string>? usings = null
     ) {
         var context = new ScriptPolicyContext(permissionMode);
         var diagnostics = new List<ScriptDiagnostic>();
-        foreach (var sourceFile in sourceSet.Files) {
+        foreach (var sourceFile in ScriptSourceClosure.Select(sourceSet, references, usings).Files) {
             var root = CSharpSyntaxTree.ParseText(sourceFile.Content, path: sourceFile.Name)
                 .GetCompilationUnitRoot();
             foreach (var rule in this._rules)

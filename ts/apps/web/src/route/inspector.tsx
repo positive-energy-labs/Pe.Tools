@@ -17,15 +17,16 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { exportSeed, type Reading } from "@pe/agent-contracts";
 
-import { FactChip } from "#/components/lang/chip";
-import { Code, stringify } from "#/components/lang/code";
+import { FactChip } from "@pe/kit/lang/chip";
+import { Code, stringify } from "@pe/kit/lang/code";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { Press } from "#/components/lang/press";
+import { Button } from "@pe/kit/lang/button";
 import { Section } from "#/components/lang/section";
 
 import { PageLog } from "./situation-grids";
 import type { RouteAction } from "./manifest";
-import type { RouteHandle } from "./use-route";
+import type { RouteHandle } from "./handle";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /* ── Marks ─────────────────────────────────────────────────────────────────── */
 
@@ -60,12 +61,9 @@ function readingWord(reading: Reading<unknown>, now: number): string {
  */
 function Gap({ says }: { says: string }) {
   return (
-    <span
-      className="hairline-b seam-border text-ink-mute"
-      title={`the RouteHandle does not carry this — ${says}`}
-    >
-      not carried
-    </span>
+    <TooltipHint content={`the RouteHandle does not carry this — ${says}`}>
+      <span className="hairline-b seam-border text-ink-mute">not carried</span>
+    </TooltipHint>
   );
 }
 
@@ -85,16 +83,13 @@ function Row({ name, raw, children }: { name: string; raw?: unknown; children: R
         <span className="w-28 shrink-0 t-small face-mono text-ink-2">{name}</span>
         <span className="min-w-0 flex-1 t-small">{children}</span>
         {raw === undefined ? null : (
-          <Press
-            type="button"
-            tone="quiet"
-            size="label"
+          <Button
+            label={`raw JSON of ${name}`}
             aria-expanded={open}
-            title={`raw JSON of ${name}`}
             onClick={() => setOpen((value) => !value)}
           >
             <span className="face-mono text-ink-mute">{open ? "{–}" : "{…}"}</span>
-          </Press>
+          </Button>
         )}
       </div>
       {open && raw !== undefined ? (
@@ -215,8 +210,8 @@ function InspectorBody<W, R extends string, P, A extends string>({
             <span className="text-ink-mute">no session is bound</span>
           )}
         </Row>
-        <Row name="resolved by">
-          <Gap says="TargetResolution records no provenance — whether the thread head, ?target, or a lone inventory candidate chose it, and at what time" />
+        <Row name="resolved by" raw={handle.targetProvenance}>
+          <span className="face-mono">{handle.targetProvenance.source}</span>
         </Row>
       </Section>
 
@@ -268,13 +263,14 @@ function InspectorBody<W, R extends string, P, A extends string>({
             return (
               <Row key={key} name={key} raw={{ request, reading }}>
                 <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-                  <span
-                    className={reading.state === "failed" ? "face-mono" : "face-mono text-ink-2"}
-                    data-tone={reading.state === "failed" ? "alarm" : undefined}
-                    title={word}
-                  >
-                    {MARK[reading.state]}
-                  </span>
+                  <TooltipHint content={word}>
+                    <span
+                      className={reading.state === "failed" ? "face-mono" : "face-mono text-ink-2"}
+                      data-tone={reading.state === "failed" ? "alarm" : undefined}
+                    >
+                      {MARK[reading.state]}
+                    </span>
+                  </TooltipHint>
                   <span className={reading.state === "failed" ? undefined : "text-ink-2"}>
                     {word}
                   </span>
@@ -361,15 +357,13 @@ function InspectorBody<W, R extends string, P, A extends string>({
       <Section
         label="Last outcome"
         aside={
-          <Press
-            type="button"
-            tone="quiet"
-            size="label"
-            title="copy this moment as a Seed — the Work, every ready Reading, and the Page"
+          <Button
+            label="copy Seed"
+            reason="copy this moment as a Seed — the Work, every ready Reading, and the Page"
             onClick={() => void navigator.clipboard?.writeText(seed())}
           >
             copy Seed
-          </Press>
+          </Button>
         }
       >
         {busy ? (

@@ -1,3 +1,4 @@
+import type { Blocks } from "@pe/ducts-domain/issues";
 /**
  * The one encoding substrate of the /ducts drawings: an encoding sorts each drawn segment into one
  * of its bins, and a bin is the stroke (ink, width, dash) and the legend row. The plan and the
@@ -5,19 +6,19 @@
  * per-element loss) is one entry in `ENCODINGS`, never a new drawing. Issue inks come only from
  * `ISSUE_KINDS` (`issues.tsx`) by their `blocks` class; everything else is a house token.
  */
-import type { DashRole } from "#/lib/token";
-import { token } from "#/lib/token";
-import { VERDICT_INK } from "#/components/master-table/cells";
-import { ISSUE_KINDS, type Blocks } from "./issues";
+import type { DashRole } from "@pe/kit/lib/token";
+import { token } from "@pe/kit/lib/token";
+import { VERDICT_INK } from "@pe/kit/table/cells";
+import { ISSUE_KINDS } from "./issues";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { Claim, Leg } from "./legs";
-import type { DuctSnapshot } from "./readiness";
 
 export type Segment = DuctSnapshot["segments"][number];
 export type DuctNode = DuctSnapshot["nodes"][number];
 export type Issue = DuctSnapshot["issues"][number];
 
 /** Pe's own loss at one element (`lossesOf`, `scene.ts`): the summed `dp` of its priced rows, in-wg. */
-export interface PressurePoint {
+interface PressurePoint {
   drop: number | null;
 }
 

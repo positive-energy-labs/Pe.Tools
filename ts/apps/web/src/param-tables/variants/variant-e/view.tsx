@@ -1,11 +1,11 @@
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 import { useState } from "react";
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { fmtNum, StateCell, type StateCellProps } from "#/components/lang/cell";
-import { FactChip } from "#/components/lang/chip";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { fmtNum, StateCell, type StateCellProps } from "@pe/kit/lang/cell";
+import { FactChip } from "@pe/kit/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { Switcher } from "#/components/lang/switcher";
-import { ActionButton } from "#/components/lang/action-button";
+import { Button } from "@pe/kit/lang/button";
 import { Pane } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
 import { FC_UNITS } from "#/param-tables/variants/data";
@@ -32,6 +32,7 @@ import {
 import { VariantGridLens } from "./grid-lens";
 import { VariantFomLens } from "./fom-lens";
 import { VariantBodLens } from "./bod-lens";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function VariantE() {
   const [lens, setLens] = useState<Lens>("grid");
@@ -202,7 +203,7 @@ export function VariantE() {
 
   return (
     <Surface>
-      <Pane kind="content" title="parameter table" scroll="clip" flush>
+      <Pane title="parameter table" scroll="clip" flush>
         <div className="flex min-h-0 flex-1 flex-col">
           <ArtifactFrame
             head={
@@ -249,11 +250,17 @@ export function VariantE() {
                   >
                     fixture · ProjectA_Clone_Aug_11
                   </FactChip>
-                  <ActionButton
-                    tone="commit"
+                  <Button
+                    kind="commit"
                     label="Apply staged writes"
                     onClick={apply}
-                    disabled={applicable.length === 0}
+                    refusal={
+                      applicable.length === 0
+                        ? refusals.length > 0
+                          ? "every staged write refuses — the edited fact only targets formula-owned types"
+                          : "nothing is staged — edit a design fact in the authored lane first"
+                        : null
+                    }
                     reason={
                       applicable.length > 0
                         ? `Writes ${applicable.length} type parameter${applicable.length === 1 ? "" : "s"} (${stagedRows} rows) in ProjectA_Clone_Aug_11${refusals.length > 0 ? ` — ${refusals.length} target${refusals.length === 1 ? "" : "s"} will refuse (formula-owned)` : ""} · mock, in-memory`
@@ -261,7 +268,9 @@ export function VariantE() {
                           ? "every staged write refuses — the edited fact only targets formula-owned types"
                           : "nothing is staged — edit a design fact in the authored lane first"
                     }
-                  />
+                  >
+                    Apply staged writes
+                  </Button>
                 </span>
               </span>
             }
@@ -276,27 +285,27 @@ export function VariantE() {
                     {refusals.length > 0 ? ` · ${refusals.length} will refuse` : ""}
                   </span>
                 ) : outcomes[0] ? (
-                  <span
-                    role="status"
-                    title={outcomes
+                  <TooltipHint
+                    content={outcomes
                       .slice(1)
                       .map((o) => `${o.label}${o.says ? ` — ${o.says}` : ""}`)
                       .join(" · ")}
-                    data-tone={outcomes[0].kind === "error" ? "caution" : undefined}
-                    style={outcomes[0].kind === "error" ? undefined : muted}
                   >
-                    {outcomes[0].label}
-                  </span>
+                    <span
+                      role="status"
+                      data-tone={outcomes[0].kind === "error" ? "caution" : undefined}
+                      style={outcomes[0].kind === "error" ? undefined : muted}
+                    >
+                      {outcomes[0].label}
+                    </span>
+                  </TooltipHint>
                 ) : (
                   <span style={muted}>no staged writes</span>
                 )}
                 {driftRows > 0 ? (
-                  <span
-                    data-tone="alarm"
-                    title="the model disagrees with a committed authored fact on these rows"
-                  >
-                    {driftRows} rows drift
-                  </span>
+                  <TooltipHint content="the model disagrees with a committed authored fact on these rows">
+                    <span data-tone="alarm">{driftRows} rows drift</span>
+                  </TooltipHint>
                 ) : null}
                 <span className="ml-auto" style={muted}>
                   lens: {lens}

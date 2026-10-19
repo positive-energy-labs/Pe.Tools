@@ -5,6 +5,7 @@
  */
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
+import { asCaller, human } from "./callers.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,7 +29,14 @@ const metrics = {
 const input: DuctsApplyInput = {
   slots: { fanStatic: "PE_ESP" },
   fittings: [
-    { id: 22, coefficient: 1.38, table: "SD5-10", inputs: "Qb/Qc=0.25", ruleKey: "tap-std" },
+    {
+      id: 22,
+      method: "pe-server",
+      coefficient: 1.38,
+      table: "SD5-10",
+      inputs: "Qb/Qc=0.25",
+      ruleKey: "tap-std",
+    },
   ],
   terminals: [{ id: 31, inWg: 0.08, source: "catalog" }],
   components: [],
@@ -68,7 +76,7 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>) =>
     );
     const post = (body: unknown) =>
       Effect.promise(() =>
-        web.handler(
+        asCaller(human, web.handler)(
           new Request("http://host/actions", {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -99,7 +107,6 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>) =>
       id,
       key,
       kind: "workflow" as const,
-      actor: "human" as const,
       destination: { kind: "document" as const, ref: { ...target, openId } },
       input,
       bases: {},

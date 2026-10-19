@@ -1,6 +1,6 @@
-import { token } from "#/lib/token";
-import { FactChip } from "#/components/lang/chip";
-import { EmptyState } from "#/components/lang/empty";
+import { token } from "@pe/kit/lib/token";
+import { FactChip } from "@pe/kit/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
 import { KVGrid, VizChip, type VizIndex } from "#/ops/primitives";
 import {
@@ -12,6 +12,7 @@ import {
   asString,
   text,
 } from "#/ops/registry";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const KIND_VIZ: Record<string, VizIndex> = {
   Document: 3,
@@ -123,15 +124,17 @@ export function ContextSummaryView({ data }: OpViewProps) {
       <div className="min-w-0 px-4 py-3">
         <div className="">DOCUMENT</div>
         <div className="mt-0.5 flex min-w-0 items-baseline gap-2">
-          <span className="min-w-0 truncate" title={activeDoc ? text(activeDoc.title) : undefined}>
-            {activeDoc ? text(activeDoc.title) : "no active document"}
-          </span>
+          <TooltipHint content={activeDoc ? text(activeDoc.title) : undefined}>
+            <span className="min-w-0 truncate">
+              {activeDoc ? text(activeDoc.title) : "no active document"}
+            </span>
+          </TooltipHint>
           {activeDoc && <span className="shrink-0">{docKind(activeDoc)}</span>}
         </div>
         {docPath && (
-          <div className="mt-0.5" title={docPath}>
-            {truncateMiddle(docPath, 72)}
-          </div>
+          <TooltipHint content={docPath}>
+            <div className="mt-0.5">{truncateMiddle(docPath, 72)}</div>
+          </TooltipHint>
         )}
         {activeDoc && (
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
@@ -145,9 +148,9 @@ export function ContextSummaryView({ data }: OpViewProps) {
             <VizChip viz={activeView.isSheet === true ? 2 : 1} title="view kind">
               {text(activeView.viewType)}
             </VizChip>
-            <span className="min-w-0 truncate" title={text(activeView.title)}>
-              {text(activeView.title)}
-            </span>
+            <TooltipHint content={text(activeView.title)}>
+              <span className="min-w-0 truncate">{text(activeView.title)}</span>
+            </TooltipHint>
             <span className="">1:{text(activeView.scale)}</span>
             {asString(activeView.levelName) && (
               <FactChip title="level of the active view">{text(activeView.levelName)}</FactChip>
@@ -158,16 +161,19 @@ export function ContextSummaryView({ data }: OpViewProps) {
               </FactChip>
             )}
             {sheetPlacements.map((p, i) => (
-              <span
+              <TooltipHint
+                content={p.isActiveSheet === true ? "this is the active sheet" : undefined}
                 key={i}
-                className=""
-                style={{
-                  color: p.isActiveSheet === true ? token("ink") : token("ink-2"),
-                }}
-                title={p.isActiveSheet === true ? "this is the active sheet" : undefined}
               >
-                on {text(p.sheetNumber)} {text(p.sheetName)}
-              </span>
+                <span
+                  className=""
+                  style={{
+                    color: p.isActiveSheet === true ? token("ink") : token("ink-2"),
+                  }}
+                >
+                  on {text(p.sheetNumber)} {text(p.sheetName)}
+                </span>
+              </TooltipHint>
             ))}
           </div>
         )}

@@ -57,7 +57,7 @@ internal static class EngineEdge {
         var tracked = DocumentTrackerAccessor.Current?.Find(document);
         return new {
             kind = document.IsFamilyDocument ? "family-document" : "project-document",
-            openId = tracked?.OpenId(),
+            openId = tracked?.OpenId,
             document.Title,
             path = string.IsNullOrWhiteSpace(document.PathName) ? null : document.PathName,
             process = ProcessEvidence(),

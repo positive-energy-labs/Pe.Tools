@@ -11,10 +11,10 @@ import {
   type RouteStatePatch,
 } from "@pe/agent-contracts";
 
-import { FactChip } from "#/components/lang/chip";
-import { Press } from "#/components/lang/press";
+import { FactChip } from "@pe/kit/lang/chip";
+import { Button } from "@pe/kit/lang/button";
 import { callHostRpc } from "#/host/client";
-import { tokenRef } from "#/lib/token";
+import { tokenRef } from "@pe/kit/lib/token";
 import { claimInk } from "./encoding";
 import type { Claim, Leg, Place } from "./legs";
 import type { SubjectDrawn } from "./scene";
@@ -120,19 +120,18 @@ export function ClaimsList({
               aria-label={`verdict on claim ${i + 1}`}
             >
               {VERDICTS.map((option) => (
-                <Press
+                <Button
                   key={option.value}
                   type="button"
-                  frame="line"
-                  size="caption"
-                  state={verdict === option.value ? "selected" : "rest"}
-                  aria-pressed={verdict === option.value}
-                  title={option.says}
+                  kind="framed"
+                  label={option.word}
+                  reason={option.says}
+                  pressed={verdict === option.value}
                   data-verdict={option.value}
                   onClick={() => onVerdict(claim, option.value)}
                 >
                   {option.word}
-                </Press>
+                </Button>
               ))}
             </span>
           </li>
@@ -158,11 +157,11 @@ export function ShowInRevit({
   const [word, setWord] = useState<string | null>(null);
   return (
     <span className="flex items-center gap-1">
-      <Press
+      <Button
         type="button"
-        frame="line"
-        size="caption"
-        title={`revit.context.show-elements: select ${elementIds.length} element(s) and zoom the active view to them; changes nothing in the model`}
+        kind="framed"
+        label={`select ${what} in Revit`}
+        reason={`revit.context.show-elements: select ${elementIds.length} element(s) and zoom the active view to them; changes nothing in the model`}
         data-show-in-revit={what}
         onClick={() => {
           setWord("selecting…");
@@ -180,7 +179,7 @@ export function ShowInRevit({
         }}
       >
         select {what} in Revit
-      </Press>
+      </Button>
       {word ? <FactChip title="what revit.context.show-elements answered">{word}</FactChip> : null}
     </span>
   );

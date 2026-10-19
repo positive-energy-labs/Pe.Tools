@@ -1,48 +1,106 @@
 /* pe.js — a page's doors into Revit. One script tag, one global:
  *
  *   <script src="/pages/pe.js"></script>
- *   await pe.target();                                   // which Revit session and document the page talks to
- *   await pe.find("show elements");                      // rank the catalog by words → [{ key, intent, description }]
- *   await pe.read("revit.context.summary");              // run a read; the answer is the op's response
- *   await pe.do("revit.context.show-elements", { elementIds: [1234] });   // run a mutation; waits until it settles
+ *   await pe.target();                                   // the document this page's binding names: { session, openId, title }
+ *   await pe.find("show elements");                      // the host's catalog ranked by words → [{ key, kind, title, description }]
+ *   await pe.read("revit.context.summary");              // run a read on the bound document; the answer is the op's response
+ *   await pe.do("revit.context.show-elements", { elementIds: [1234] });   // run a mutation as this page; waits until it settles
  *   await pe.script("checks/census.csx");                // run C# in Revit: a source string, or a .cs/.csx path beside the page
+ *   await pe.do("script:@snowdon-ducts/src/Census.cs");  // run a package's declared script on the bound document
  *   await pe.state(kernel);                              // share a kit kernel's event log with every copy and every agent
  *   pe.describe(() => `# ${kernel.state.title}`);        // what the page says, as markdown, kept beside the snapshot for agents
  *   await pe.picture([1234]);                            // lens then view-image: { url, sha, at, viewId, viewName, registration }
  *   await pe.reading("checks/census.csx", run);          // one reading: { source, at, rows } with rows = what `run()` answered
  *   await pe.diff([1234], ["Mark"], run);                // read the parameters, run, read again: the rows that changed
  *
- * `find`, `read` and `do` are the same words and keys as Pea's `pe_find`, `pe_read` and `pe_do`, over the same
- * endpoints an agent uses by hand (`/ops`, `/call`, `/actions`). The script only adds what every page gets wrong
- * first time: the target headers, the read-versus-write door, and the shared log.
+ * `find`, `read` and `do` are the same words and keys as Pea's `pe_find`, `pe_read` and `pe_do`. The host knows which
+ * page is calling from the page's own path (`pe.page` is the key it minted) and which document from the page's
+ * binding, set with the chip in SPA chrome (Bind… opens the picker in the app). A page never names its own origin or
+ * target. Reads run on the bound document; a write runs as this page under the binding: a thread binding writes
+ * with that thread's rw grant, a pinned document only when it is Pea's own. Anything the host refuses is thrown with
+ * the host's words and shown across the top of the page.
+ *
+ * The host refuses a browser request that does not name the runtime that served the page. Every door here names
+ * it; a page's own request to its host goes through `pe.fetch(url, init)` (same signature as `fetch`).
  */
 (() => {
-  const H = {
-    session: "x-pe-bridge-session-id",
-    doc: "x-pe-open-document-id",
-    origin: "x-pe-origin",
-    actor: "x-pe-action-actor",
-  };
+  // The serving host writes `{ header, query, service }` here (pages-route), so the page names the runtime that
+  // served it, like the web app's `hostFetch`: a host that later takes over the port refuses this copy.
+  const RUNTIME = /*pe:runtime*/ null;
+  if (!RUNTIME) throw new Error("pe.js was not served by a Pe host; load it from /pages/pe.js");
   const pe = {
     /** The page's slug, from its URL. */
     slug: (location.pathname.match(/^\/pages\/([^/]+)/) || [])[1] || "",
-    /** The chosen document `{ session, openId, title }`, after `pe.target()`. */
+    /** The page key the host minted into `<meta name="pe-page">`: `page:@pages/<slug>` or `page:@<pod>/pages/<page>`. */
+    page:
+      (typeof document !== "undefined" &&
+        document.querySelector?.('meta[name="pe-page"]')?.getAttribute("content")) ||
+      null,
+    /** The bound document `{ session, openId, title }`, after `pe.target()`. */
     doc: null,
   };
-  const headers = () => ({
-    "content-type": "application/json",
-    [H.origin]: `page:${pe.slug}`,
-    ...(pe.doc ? { [H.session]: pe.doc.session, [H.doc]: pe.doc.openId } : {}),
+  const pageInput = (body) => ({
+    params: { slug: pe.slug },
+    ...(body === undefined ? {} : { body }),
   });
-  // The host's own refusal, word for word, is the error message.
+  /** `fetch` that names this page's runtime on same-origin requests; the host refuses a browser request without it. */
+  pe.fetch = (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+      location.href,
+    );
+    if (url.origin !== location.origin) return fetch(input, init);
+    const h = new Headers(init.headers ?? (input instanceof Request ? input.headers : undefined));
+    h.set(RUNTIME.header, RUNTIME.service);
+    return fetch(input, { ...init, headers: h });
+  };
+  const client = /*pe:client*/ null;
+  // EventSource cannot send headers: the runtime rides the query, as the web app's `runtimeStreamUrl` does.
+  const streamUrl = (path) => {
+    const url = new URL(path, location.href);
+    url.searchParams.set(RUNTIME.query, RUNTIME.service);
+    return url.href;
+  };
+  /** The host's refusal across the top of the page, word for word; one banner, the latest refusal. */
+  const banner = (message) => {
+    if (typeof document === "undefined" || !document.body) return;
+    let note = document.getElementById("pe-refusal");
+    if (!note) {
+      note = document.createElement("div");
+      note.id = "pe-refusal";
+      note.setAttribute("role", "alert");
+      note.style.cssText =
+        "position:sticky;top:0;z-index:2147483647;padding:8px 12px;background:#7f1d1d;color:#fff;font:13px/1.4 system-ui,sans-serif;white-space:pre-wrap";
+      document.body.prepend(note);
+    }
+    note.textContent = message;
+  };
+  /**
+   * The host's own refusal, word for word, is the error message. A door refusal (`refusal.code`, e.g. `grant.required`,
+   * `page.unbound`) or a binding that names no one document (`resolution`, `choose: ambiguous`) is also shown on the
+   * page and carried on the error as `code`, `refusal` and `resolution`.
+   */
   const fail = async (r, body) => {
     const b = body === undefined ? await r.text().catch(() => "") : body;
     let m = typeof b === "string" ? b : "";
+    let j = null;
     try {
-      const j = typeof b === "string" ? JSON.parse(b) : b;
+      j = typeof b === "string" ? JSON.parse(b) : b;
+      if (j.error && typeof j.error === "object")
+        j = { ...j.error.details, message: j.error.message };
       m = j.message || j.error || j.title || m;
     } catch {}
-    throw new Error(`${r.status} ${r.statusText}${m ? `: ${m}` : ""}`);
+    const error = new Error(`${r.status} ${r.statusText}${m ? `: ${m}` : ""}`);
+    if (j && (j.refusal || j.resolution)) {
+      Object.assign(error, {
+        name: "PeRefusal",
+        code: j.refusal ? j.refusal.code : j.resolution.reason || j.resolution.kind,
+        refusal: j.refusal || null,
+        resolution: j.resolution || null,
+      });
+      banner(m);
+    }
+    throw error;
   };
   // A capture's URL rides a response header (`x-pe-capture-url`); it is copied onto the answer so a page can `<img src>` it.
   const json = async (r) => {
@@ -53,93 +111,83 @@
       Object.assign(body, { captureUrl: capture, captureId: r.headers.get("x-pe-capture-id") });
     return body;
   };
-  const post = (path, body) =>
-    fetch(path, { method: "POST", headers: headers(), body: JSON.stringify(body) });
+
+  /** The host's reading of this page's default slot: binding, resolution, document, and what a write would do. */
+  const readTarget = async () => {
+    const reading = await json(await client.response("page.target", pageInput()));
+    pe.doc = reading.document;
+    return reading;
+  };
 
   /**
-   * Choose the Revit session and document. `?session=<id>&doc=<openId>` or `?title=<part of the title>` on the
-   * page URL pins one; otherwise the only connected session and its active document. Sets `pe.doc`.
+   * The document this page's binding names, as the host resolves it now; sets `pe.doc`. A binding that names no one
+   * document (no binding, a pinned file open twice or closed, a thread pointed nowhere) is thrown as a
+   * `PeTargetRefusal` with the resolver's word as `code` (`ambiguous`, `document-closed`, `session-gone`, `missing`)
+   * and shown on the page; nothing is ever picked for it. Bind the page from the chip.
    */
-  pe.target = async (want = Object.fromEntries(new URLSearchParams(location.search))) => {
-    const { sessions } = await json(
-      await post("/call", { key: "bridge.sessions.list", request: {} }),
-    );
-    const s =
-      sessions.find((x) => x.sessionId === want.session) ||
-      (sessions.length === 1
-        ? sessions[0]
-        : sessions.find((x) => (x.openDocuments || []).some((d) => d.isActive)));
-    if (!s)
+  pe.target = async (...selector) => {
+    // A page no longer names its target; a selector here would be silently ignored, so it is refused.
+    if (selector.length)
       throw new Error(
-        sessions.length
-          ? `${sessions.length} Revit sessions are connected; add ?session=<id> to the page URL (${sessions.map((x) => x.sessionId).join(", ")})`
-          : "no Revit session is connected to the host (pe-revit session start, or open Revit with Pe.Tools installed)",
+        "pe.target takes no selector: the page's binding names its document (Bind… on the chip)",
       );
-    const docs = s.openDocuments || [];
-    const d =
-      docs.find((x) => x.openId === want.doc) ||
-      (want.title && docs.find((x) => x.title.toLowerCase().includes(want.title.toLowerCase()))) ||
-      docs.find((x) => x.isActive) ||
-      docs[0];
-    if (!d) throw new Error(`Revit session ${s.sessionId} has no open document`);
-    pe.doc = { session: s.sessionId, openId: d.openId, title: d.title };
-    return pe.doc;
-  };
-
-  /** Rank the catalog by words, like `pe_find`. No words lists everything. */
-  pe.find = async (words = "") => {
-    const q = pe.doc ? `?session=${encodeURIComponent(pe.doc.session)}` : "";
-    const { operations } = await json(
-      await fetch(`/ops${q}`, { headers: { accept: "application/json" } }),
+    const reading = await readTarget();
+    if (reading.resolution.kind === "resolved") return pe.doc;
+    const code = reading.resolution.reason || reading.resolution.kind;
+    const error = new Error(
+      `pe.target: this page's binding names no one document (${code}). Bind it from the chip.`,
     );
-    const terms = words.toLowerCase().split(/\s+/).filter(Boolean);
-    return operations
-      .map((op) => {
-        const text = `${op.key} ${op.displayName || ""} ${op.description || ""}`.toLowerCase();
-        return {
-          key: op.key,
-          intent: op.intent,
-          description: op.description || "",
-          score: terms.filter((t) => text.includes(t)).length,
-        };
-      })
-      .filter((op) => !terms.length || op.score)
-      .sort((a, b) => b.score - a.score)
-      .map(({ score: _score, ...op }) => op);
-  };
-
-  /** Run a read through `/call`. A mutation is refused here by the host; use `pe.do`. */
-  pe.read = async (key, request = {}) => {
-    if (!pe.doc) await pe.target();
-    return json(await post("/call", { key, request }));
+    Object.assign(error, { name: "PeTargetRefusal", code, resolution: reading.resolution });
+    banner(error.message);
+    throw error;
   };
 
   /**
-   * Run any op. A read answers at once through `/call`; a mutation is admitted through `/actions` as a human act
-   * and this waits until its receipt settles. The answer is the op's response either way.
+   * Find catalog rows by words, exactly as `pe_find` and the `@` menu do: the host's one catalog and ranker answer,
+   * in its order (`/pe/capabilities`). `kind` narrows (`op`, `script`, `page`, `skill`, `member`, ...). Rows are
+   * `{ key, kind, title, description }`; `pe.do(row.key)` runs an `op:` or `script:` row.
+   */
+  pe.find = async (words = "", { kind } = {}) => {
+    const q = new URLSearchParams({ query: words });
+    if (kind) q.set("kind", kind);
+    if (pe.doc) q.set("session", pe.doc.session);
+    const { capabilities } = await json(
+      await client.response("capabilities.find", { query: Object.fromEntries(q) }),
+    );
+    return capabilities.map(({ key, kind, title, description }) => ({
+      key,
+      kind,
+      title,
+      description,
+    }));
+  };
+
+  /** Run a read on the bound document (`/pages/<slug>/call`). A mutation is refused here by the host; use `pe.do`. */
+  pe.read = async (key, request = {}) =>
+    json(await client.response("page.call", pageInput({ key, request })));
+
+  /**
+   * Run any op. A read answers at once on the bound document; a mutation runs as this page through
+   * `/pages/<slug>/act`, under the binding (the bound thread's rw grant, or Pea's own document for a pin), and this
+   * waits until its receipt settles. The answer is the op's response either way. A package script key
+   * (`script:@snowdon-ducts/src/Census.cs`) always acts: it runs that package's declared script on the binding's
+   * document, as this page; `input` passes only `permissionMode` and `timeoutSeconds`.
    */
   pe.do = async (key, input = {}) => {
-    if (!pe.doc) await pe.target();
-    const r = await post("/call", { key, request: input });
-    if (r.ok) return json(r);
-    const refusal = await r.json().catch(() => null);
-    if (!(r.status === 409 && refusal && refusal.notDispatched)) return fail(r, refusal ?? "");
-    const id = crypto.randomUUID();
-    let row = await json(
-      await post("/actions", {
-        id,
-        kind: "operation",
-        key,
-        actor: "human",
-        destination: { kind: "document", ref: { session: pe.doc.session, openId: pe.doc.openId } },
-        input,
-      }),
-    );
+    if (!key.startsWith("script:")) {
+      const r = await client.response("page.call", pageInput({ key, request: input }));
+      if (r.ok) return json(r);
+      const wire = await r.json().catch(() => null);
+      const answer = wire?.error?.details ?? wire;
+      // Only "this is a mutation" moves on to act; a binding that names no one document stops here.
+      if (!(r.status === 409 && answer && answer.notDispatched && !answer.resolution))
+        return fail(r, answer ?? "");
+    }
+    let row = await json(await client.response("page.act", pageInput({ key, input })));
+    const id = row.id;
     while (row.state === "running") {
       await new Promise((ok) => setTimeout(ok, 250));
-      [row = row] = await json(
-        await fetch(`/actions?id=${encodeURIComponent(id)}`, { headers: headers() }),
-      );
+      [row = row] = await json(await client.response("actions.read", { query: { id } }));
     }
     if (row.state !== "succeeded")
       throw new Error(`${key} ${row.state}: ${row.message || row.error || ""}`.trim());
@@ -157,7 +205,7 @@
   pe.script = async (source, { mode = "ReadOnly", timeoutSeconds = 120 } = {}) => {
     let scriptContent = source;
     if (!source.includes("\n") && /\.csx?$/i.test(source)) {
-      const r = await fetch(new URL(source, location.href), { cache: "no-store" });
+      const r = await pe.fetch(new URL(source, location.href), { cache: "no-store" });
       if (!r.ok) return fail(r);
       scriptContent = await r.text();
     }
@@ -293,27 +341,18 @@
    */
   pe.state = async (k, { local = [] } = {}) => {
     const isLocal = (ev) => ev.type === "nav" || local.includes(ev.type);
-    const base = `/pages/${pe.slug}`;
     const mine = new Set();
     let seq = 0;
     let timer;
     const snapshot = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
-        fetch(`${base}/snapshot`, {
-          method: "PUT",
-          headers: headers(),
-          body: JSON.stringify(k.state),
-        }).catch(() => {});
+        client.response("page.snapshot", pageInput(k.state)).catch(() => {});
         if (describe)
-          fetch(`${base}/text`, {
-            method: "PUT",
-            headers: { ...headers(), "content-type": "text/markdown" },
-            body: String(describe(k.state)),
-          }).catch(() => {});
+          client.response("page.text", pageInput(String(describe(k.state)))).catch(() => {});
       }, 150);
     };
-    const saved = await json(await fetch(`${base}/state`));
+    const saved = await json(await client.response("page.state", pageInput()));
     seq = saved.seq;
     k.replay(
       saved.events.map((row) => row.event),
@@ -326,7 +365,8 @@
       if (!fire(ev)) return false;
       mine.add(ev.eventId);
       snapshot();
-      post(`${base}/events`, ev)
+      client
+        .response("page.append", pageInput(ev))
         .then(json)
         .then((row) => (seq = Math.max(seq, row.seq)))
         .catch((e) => console.error("pe.state: the host did not keep an event", e));
@@ -338,7 +378,9 @@
     let retryMs = 1000;
     let heard = Date.now();
     const follow = () => {
-      const es = new EventSource(`${base}/events?after=${seq}`);
+      const es = new EventSource(
+        streamUrl(client.url("page.events", { ...pageInput(), query: { after: seq } })),
+      );
       heard = Date.now();
       es.onopen = () => ((retryMs = 1000), (heard = Date.now()));
       es.addEventListener("ping", () => (heard = Date.now()));
@@ -366,18 +408,52 @@
     return k;
   };
 
-  // A tab never learns its page file changed, so a stale copy keeps running old code: kaitpw pressed pre-fix
-  // buttons for two hours while the fix was on disk (2026-10-05). Re-read the page's own file and reload on change.
-  // ponytail: polls the whole file every 15 s; a host-sent mtime on the events heartbeat replaces it if pages get big.
-  if (pe.slug) {
-    const own = () => fetch(location.pathname, { cache: "no-store" }).then((r) => (r.ok ? r.text() : null));
-    own().then((first) =>
-      setInterval(
-        () => own().then((now) => now != null && first != null && now !== first && location.reload(), () => {}),
-        15000,
-      ),
-    );
+  // Keep the Page's source fresh. Binding and grant controls belong to SPA chrome.
+  if (pe.slug && typeof EventSource === "function") {
+    const followFiles = () => {
+      const events = new EventSource(
+        streamUrl(
+          client.url("page.events", { ...pageInput(), query: { after: Number.MAX_SAFE_INTEGER } }),
+        ),
+      );
+      events.addEventListener("file", (message) => {
+        if (/\.(html|m?js|css)$/i.test(JSON.parse(message.data).path)) location.reload();
+      });
+      events.onerror = () => {
+        events.close();
+        setTimeout(followFiles, 2000);
+      };
+      window.addEventListener("pagehide", () => events.close(), { once: true });
+    };
+    followFiles();
   }
 
   window.pe = pe;
+  /** One host-served presentation bundle; pages await this before mounting their instruments. */
+  pe.kitReady = new Promise((resolve, reject) => {
+    if (!document.head || !document.createElement) return resolve(null);
+    const style = document.createElement("link");
+    style.rel = "stylesheet";
+    style.href = "/pages/kit/pe-kit.css";
+    const script = document.createElement("script");
+    script.src = "/pages/kit/pe-kit.js";
+    let styled = false;
+    let loaded = false;
+    const ready = () => {
+      if (!styled || !loaded) return;
+      if (pe.kit) resolve(pe.kit);
+      else reject(new Error("Page kit did not expose pe.kit"));
+    };
+    style.onload = () => {
+      styled = true;
+      ready();
+    };
+    style.onerror = () => reject(new Error("Page kit styles could not load from this host"));
+    script.onload = () => {
+      loaded = true;
+      ready();
+    };
+    script.onerror = () => reject(new Error("Page kit could not load from this host"));
+    document.head.append(style, script);
+  });
 })();

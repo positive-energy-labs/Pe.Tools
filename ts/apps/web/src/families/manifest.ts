@@ -33,7 +33,7 @@ import {
 
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { applyOutcome, applyTally, type PlanRun } from "./apply-outcome";
-import { plural } from "#/components/lang/band";
+import { plural } from "#/components/work/band";
 import {
   archivedFamiliesObservation,
   readFamiliesObservation,
@@ -475,5 +475,6 @@ export const manifest = entityRoute<
       },
     },
   },
+  runs: ["families.plan"],
   seeds: FAMILIES_SEEDS as never,
 });

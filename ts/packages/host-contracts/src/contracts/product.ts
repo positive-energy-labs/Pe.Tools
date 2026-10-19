@@ -5,6 +5,10 @@
 import { payload, productIdentity as generatedIdentity } from "../vendor/generated/product.g.ts";
 export const HOST_RUNTIME_SERVICE_HEADER = "x-pe-runtime-service";
 export const HOST_RUNTIME_SERVICE_QUERY = "peRuntimeService";
+/** A host-minted caller context token (ADR 0017 D2); the host derives the principal from it. */
+export const HOST_CONTEXT_HEADER = "x-pe-context";
+/** The env var a harness child and its shell carry their context token in. */
+export const HOST_CONTEXT_VARIABLE = "PE_CONTEXT";
 export { productInstallLayout } from "../vendor/generated/product.g.ts";
 
 export const productIdentity = {
@@ -28,6 +32,10 @@ export const productPathNames = {
   podManifestFileName: "pod.json",
   hostLogFileName: "host.log.txt",
   revitAppLogFileName: "revit.log.txt",
+  /** The one override for the whole product home; host, Pea and Revit read it identically. */
+  productHomeVariable: "PE_TOOLS_PRODUCT_HOME",
+  /** Under an override, machine-local state, logs and service files live in `<home>\.local-state`. */
+  localStateDirectoryName: ".local-state",
 } as const;
 
 const hostService = payload("VersionedApp", "host")?.service;

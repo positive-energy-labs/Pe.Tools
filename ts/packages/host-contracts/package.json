@@ -12,6 +12,11 @@
       "import": "./src/contracts/index.ts",
       "default": "./src/contracts/index.ts"
     },
+    "./failure-summary": {
+      "types": "./src/failure-summary.ts",
+      "import": "./src/failure-summary.ts",
+      "default": "./src/failure-summary.ts"
+    },
     "./product-paths": {
       "types": "./src/product-paths.ts",
       "import": "./src/product-paths.ts",
@@ -51,7 +56,14 @@
       "types": "./src/vendor/pe-revit-cli.ts",
       "import": "./src/vendor/pe-revit-cli.ts",
       "default": "./src/vendor/pe-revit-cli.ts"
-    }
+    },
+    "./pe-api": {
+      "types": "./src/pe-api.ts",
+      "import": "./src/pe-api.ts",
+      "default": "./src/pe-api.ts"
+    },
+    "./native-adapter": "./src/native-adapter.ts",
+    "./host-descriptor": "./src/host-descriptor.ts"
   },
   "publishConfig": {
     "access": "public"
@@ -67,7 +79,8 @@
     "codegen:verify-live": "vpx node --import jiti/register scripts/host-typegen.ts --check"
   },
   "dependencies": {
-    "effect": "4.0.0-beta.92"
+    "effect": "4.0.0-beta.92",
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

@@ -1,3 +1,4 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * The losses view (`page.view = "losses"`): the grille is the unit (pressure-drop ledger, F). Per
  * group, one bar per terminal segmented by what eats the pressure; the longest is the fan. Pe's
@@ -14,38 +15,41 @@ import {
   type DuctsRouteDocument,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
-
-import { reviewTransitions, type CellWire } from "#/components/lang/band";
-import { cellFromTrichotomy, StateCell } from "#/components/lang/cell";
-import { EmptyState } from "#/components/lang/empty";
-import { Press } from "#/components/lang/press";
-import { Row as ListRow } from "#/components/lang/row";
+import { reviewTransitions, type CellWire } from "#/components/work/band";
+import { cellFromTrichotomy, StateCell } from "@pe/kit/lang/cell";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { Button } from "@pe/kit/lang/button";
+import { Row as ListRow } from "@pe/kit/lang/row";
 import { Switcher } from "#/components/lang/switcher";
 import { ValueDiff } from "#/components/lang/value-diff";
-import type { Column } from "#/components/master-table/model";
-import { Table } from "#/components/master-table/table";
+import type { Column } from "@pe/kit/table/model";
+import { Table } from "@pe/kit/table/table";
 import type { DuctsEvaluation, DuctsPage } from "./manifest";
-import { LOSS_RULES, ruleByKey } from "./loss-rules";
-import type { LossResult, Row } from "./losses";
-import { systemFor } from "./losses";
+import { assessDucts } from "@pe/ducts-domain/assessment";
+import { catalogLinkKey } from "@pe/ducts-domain/catalog";
+import { parseLoadPreview } from "@pe/ducts-domain/load-preview";
+import { LOSS_RULES, ruleByKey } from "@pe/ducts-domain/loss-rules";
+import type { LossResult, Row } from "@pe/ducts-domain/losses";
+import { systemFor } from "@pe/ducts-domain/losses";
 import {
   applyRequest,
   instancesOf,
   partOf,
   PARTS,
-  proposedStatic,
   stagedFanout,
   tableOf,
   unitOf,
   unpriced,
   type Part,
   type Priced,
-} from "./pricing";
-import type { Grids } from "./loss-grid";
-import { snapshotById, type DuctSnapshot, type GroupReadiness } from "./readiness";
-
+} from "@pe/ducts-domain/pricing";
+import type { Grids } from "@pe/ducts-domain/loss-grid";
+import { snapshotById, type GroupReadiness } from "@pe/ducts-domain/readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { FindingsList } from "./issues";
 type Node = DuctSnapshot["nodes"][number];
 type Group = DuctSnapshot["groups"][number];
+type Assessment = ReturnType<typeof assessDucts>;
 export interface LossesWork {
   doc: DuctsRouteDocument | null;
   revision: number | null;
@@ -53,7 +57,6 @@ export interface LossesWork {
   preview?: DuctsApply.Res.Response | null;
   write: CellWire["write"];
 }
-
 /** One viz hue per part, as a class: the bar and the chip wear the same one. */
 const PART_BG: Record<Part, string> = {
   friction: "bg-(--viz-6)",
@@ -67,7 +70,6 @@ const fmt = (n: number | null | undefined) => (n == null ? "" : n.toFixed(4));
 const fmtC = (n: number) => n.toFixed(2);
 const pct = (a: number, b: number) => (b > 0 ? `${Math.round((a / b) * 100)}%` : "");
 const NO_ROOT = "no air mover; priced from the open end";
-
 /** Why this grille's number is not yet Revit's too: the word, and what it means. The group-wide
  * reasons (no mover) are said once in the group head, never per row. */
 const STATUS = {
@@ -76,24 +78,23 @@ const STATUS = {
   "no-drop": ["no drop", "no terminal drop is known; stage one from the catalog"],
 } as const;
 type Status = keyof typeof STATUS;
-
-export function terminalStatus(
+function terminalStatus(
   snapshot: DuctSnapshot,
   ready: GroupReadiness | undefined,
   node: Node,
   priced: Priced,
+  dropKnown: boolean,
 ): Status[] {
   const { issues } = snapshotById(snapshot);
   const out: Status[] = [];
   if (ready?.walk.some((id) => issues.get(id)?.kind === "open-end")) out.push("open-end");
   if (node.terminalDrop && !node.terminalDrop.writable) out.push("refuses");
   const terminal = priced.next.paths[node.id]?.rows.find((row) => row.kind === "terminal");
-  if (terminal?.error) out.push("no-drop");
+  if (terminal?.error || !dropKnown) out.push("no-drop");
   return out;
 }
-
 /** Stage a rule's table; staging the table already staged takes it back. */
-export const tablePatches = (
+const tablePatches = (
   doc: DuctsRouteDocument | null,
   key: string,
   table: string,
@@ -103,11 +104,9 @@ export const tablePatches = (
     ? transitionPatches(["rules"], key, cell, { kind: "unstage" })
     : transitionPatches(["rules"], key, cell, { kind: "stage", rung: { value: { table } } });
 };
-
 const kindWord = (kind: string) => kind.replace(/ air$/i, "").toLowerCase();
-
 /** Stage Pe's fan static for a unit; staging the number already staged takes it back. */
-export const fanPatches = (
+const fanPatches = (
   doc: DuctsRouteDocument | null,
   unit: number,
   inWg: number,
@@ -118,10 +117,16 @@ export const fanPatches = (
     ? transitionPatches(["unitStatics"], key, cell, { kind: "unstage" })
     : transitionPatches(["unitStatics"], key, cell, { kind: "stage", rung: { value: { inWg } } });
 };
-
 /** Refusals folded per reason: the shared-type refusal names the same peers for every unit of a type. */
 export function foldRefusals(writes: readonly DuctsApply.Res.DuctWrite[]) {
-  const by = new Map<string, { reason: string; kinds: Set<string>; ids: number[] }>();
+  const by = new Map<
+    string,
+    {
+      reason: string;
+      kinds: Set<string>;
+      ids: number[];
+    }
+  >();
   for (const w of writes) {
     if (w.outcome !== "refused") continue;
     const reason = w.reason ?? "no reason";
@@ -136,7 +141,6 @@ export function foldRefusals(writes: readonly DuctsApply.Res.DuctWrite[]) {
     ids,
   }));
 }
-
 function DropCell({
   segment,
   id,
@@ -192,7 +196,39 @@ function DropCell({
     </span>
   );
 }
-
+function CatalogLink({ node, priced, work }: { node: Node; priced: Priced; work: LossesWork }) {
+  const key = catalogLinkKey(node.family, node.type);
+  const cell = work.doc?.catalogs[key] ?? {};
+  const held = node.facts.find((f) => f.key === "Pe_Catalog")?.text ?? "";
+  const wire: CellWire = { segment: "catalogs", revision: work.revision, write: work.write };
+  return (
+    <span aria-label={`catalog for ${node.family} : ${node.type}`}>
+      <StateCell
+        {...cellFromTrichotomy(cell, {
+          value: (cell.staged ?? cell.proposal)?.value?.table ?? held,
+          cap: "editable",
+          note: priced.staged.catalogs[key]
+            ? "Staged for every instance of this family/type"
+            : "Pe_Catalog type parameter",
+        })}
+        scale="row"
+        placeholder="link catalog table id"
+        onCommit={(table: string) => {
+          if (!Object.hasOwn(priced.catalogs, table)) return "Choose a loaded catalog table id";
+          return work
+            .write(
+              transitionPatches(["catalogs"], key, cell, {
+                kind: "stage",
+                rung: { value: { table } },
+              }),
+            )
+            .then((refusal) => refusal?.message);
+        }}
+        transitions={reviewTransitions(wire, key, cell)}
+      />
+    </span>
+  );
+}
 function Chips({ ruleKey, priced, work }: { ruleKey: string; priced: Priced; work: LossesWork }) {
   const rule = ruleByKey(ruleKey)!;
   const staged = priced.staged.rules[ruleKey]?.table.toUpperCase();
@@ -222,21 +258,35 @@ function Chips({ ruleKey, priced, work }: { ruleKey: string; priced: Priced; wor
     />
   );
 }
-
 /** One drawer row: a rule on this path, the path's straight duct, a component, the terminal, or a rule's instance list. */
 type DrawerRow =
-  | { kind: "rule"; key: string; rows: Row[] }
-  | { kind: "instances"; key: string }
-  | { kind: "friction"; rows: Row[] }
-  | { kind: "component"; row: Row }
-  | { kind: "terminal"; rows: Row[] };
+  | {
+      kind: "rule";
+      key: string;
+      rows: Row[];
+    }
+  | {
+      kind: "instances";
+      key: string;
+    }
+  | {
+      kind: "friction";
+      rows: Row[];
+    }
+  | {
+      kind: "component";
+      row: Row;
+    }
+  | {
+      kind: "terminal";
+      rows: Row[];
+    };
 const rowId = (row: DrawerRow) =>
   row.kind === "rule" || row.kind === "instances"
     ? `${row.kind}:${row.key}`
     : row.kind === "component"
       ? `component:${row.row.id}`
       : row.kind;
-
 const Drawer = memo(function Drawer({
   snapshot,
   priced,
@@ -254,7 +304,7 @@ const Drawer = memo(function Drawer({
   const node = nodes.get(terminal);
   const columns = useMemo<Column<DrawerRow>[]>(() => {
     const total = path?.total ?? 0;
-    const sum = (list: Row[]) => list.reduce((a, row) => a + row.dp, 0);
+    const sum = (list: Row[]) => list.reduce((a, row) => a + (row.dp ?? 0), 0);
     const own = (row: DrawerRow): Row[] =>
       row.kind === "component" ? [row.row] : row.kind === "instances" ? [] : row.rows;
     const revitOf = (ids: Iterable<number>) => {
@@ -293,20 +343,20 @@ const Drawer = memo(function Drawer({
             const rule = ruleByKey(row.key)!;
             const missing = unpriced(priced, row.key);
             return (
-              <span
-                className="block truncate px-(--item-pad-x)"
-                data-rule={row.key}
-                title={`${rule.family} : ${rule.type}${rule.cond ? ` · ${rule.cond}` : ""}`}
+              <TooltipHint
+                content={`${rule.family} : ${rule.type}${rule.cond ? ` · ${rule.cond}` : ""}`}
               >
-                {rule.family} : {rule.type}
-                {rule.cond ? <span className="text-ink-2"> · {rule.cond}</span> : null}
-                {missing ? (
-                  <span data-tone="caution">
-                    {" "}
-                    · {missing} with no value under {tableOf(priced, row.key)}
-                  </span>
-                ) : null}
-              </span>
+                <span className="block truncate px-(--item-pad-x)" data-rule={row.key}>
+                  {rule.family} : {rule.type}
+                  {rule.cond ? <span className="text-ink-2"> · {rule.cond}</span> : null}
+                  {missing ? (
+                    <span data-tone="caution">
+                      {" "}
+                      · {missing} with no value under {tableOf(priced, row.key)}
+                    </span>
+                  ) : null}
+                </span>
+              </TooltipHint>
             );
           }
           if (row.kind === "instances")
@@ -333,6 +383,12 @@ const Drawer = memo(function Drawer({
           return (
             <span className="block truncate px-(--item-pad-x)" data-terminal-row={terminal}>
               {node?.family ?? "terminal"} : {node?.type ?? ""}
+              {row.rows[0]?.error ? <span data-tone="caution"> · {row.rows[0].error}</span> : null}
+              {row.rows[0]?.notes?.map((note) => (
+                <span className="block text-ink-2" key={note}>
+                  {note}
+                </span>
+              ))}
             </span>
           );
         },
@@ -355,15 +411,31 @@ const Drawer = memo(function Drawer({
               label={`component ${row.row.id} drop`}
             />
           ) : row.kind === "terminal" ? (
-            <DropCell
-              segment="terminalDrops"
-              id={terminal}
-              held={
-                node?.terminalDrop?.catalogDropInWg ?? node?.terminalDrop?.assignedPressureDropInWg
-              }
-              work={work}
-              label={`terminal ${terminal} drop`}
-            />
+            <span className="block px-(--item-pad-x)">
+              <DropCell
+                segment="terminalDrops"
+                id={terminal}
+                held={
+                  node?.terminalDrop?.catalogDropInWg ??
+                  node?.terminalDrop?.assignedPressureDropInWg
+                }
+                work={work}
+                label={`terminal ${terminal} drop`}
+              />
+              <CatalogLink node={node!} priced={priced} work={work} />
+              {row.rows[0]?.source ? (
+                <a
+                  className="block"
+                  href={`${row.rows[0].source.url}#page=${row.rows[0].source.pdfPage}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {row.rows[0].table} · {row.rows[0].source.file} p. {row.rows[0].source.page}
+                </a>
+              ) : (
+                row.rows[0]?.table
+              )}
+            </span>
           ) : null,
       },
       {
@@ -373,10 +445,8 @@ const Drawer = memo(function Drawer({
         title: "distinct fittings the rule prices; press to list them",
         cell: (row) =>
           row.kind !== "rule" ? null : (
-            <Press
-              size="caption"
-              tone="quiet"
-              title="show the instances under this rule"
+            <Button
+              label="show the instances under this rule"
               onClick={() =>
                 setOpen((was) => {
                   const next = new Set(was);
@@ -386,7 +456,7 @@ const Drawer = memo(function Drawer({
               }
             >
               {instancesOf(priced.next, row.key).size}
-            </Press>
+            </Button>
           ),
       },
       {
@@ -413,14 +483,22 @@ const Drawer = memo(function Drawer({
         label: "Δp",
         width: "w-20",
         title: "in-wg on this grille's path",
-        cell: (row) => <span className={mono}>{fmt(sum(own(row))) || ""}</span>,
+        cell: (row) => (
+          <span className={mono}>
+            {own(row).some((r) => r.dp == null) ? "—" : fmt(sum(own(row))) || ""}
+          </span>
+        ),
       },
       {
         key: "share",
         label: "share",
         title: "of this grille's total",
         width: "w-12",
-        cell: (row) => <span className={mono}>{pct(sum(own(row)), total)}</span>,
+        cell: (row) => (
+          <span className={mono}>
+            {own(row).some((r) => r.dp == null) ? "" : pct(sum(own(row)), total)}
+          </span>
+        ),
       },
       {
         key: "revit",
@@ -458,28 +536,27 @@ const Drawer = memo(function Drawer({
     </div>
   );
 });
-
 const PartChip = ({ part }: { part: Part }) => (
   <span className="inline-flex items-center gap-1 t-small face-mono">
     <span className={`inline-block size-2 ${PART_BG[part]}`} />
     {part}
   </span>
 );
-
 /** Revit's critical path as a word, whatever the engine flag: a system with no path reads "no path". */
 export const revitSays = (inWg: number | null | undefined) =>
   inWg == null ? "no path" : fmt(inWg);
-
 /** Pe's fan beside Revit's critical path, with the staged fan when it differs. */
 function GroupHead({
   snapshot,
   group,
   priced,
+  assessment,
   work,
 }: {
   snapshot: DuctSnapshot;
   group: Group;
   priced: Priced;
+  assessment: Assessment;
   work: LossesWork;
 }) {
   const now = priced.now.byGroup[group.id];
@@ -488,8 +565,9 @@ function GroupHead({
   const revit = critical == null ? null : systemFor(snapshot, critical);
   // The air mover Pe's number would be written to; nothing reaches it until a person stages it.
   const unit = unitOf(snapshot, priced.now, group);
-  const sum = unit == null ? null : proposedStatic(snapshot, priced.next, unit);
-  const proposed = sum?.total ?? null;
+  const demand = assessment.equipment.find((equipment) => equipment.id === unit);
+  const sum = demand?.next ?? null;
+  const proposed = demand?.requiredEspStagedInWg ?? null;
   const stagedStatic = unit == null ? undefined : priced.staged.unitStatics[String(unit)]?.inWg;
   return (
     <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 py-1" data-group-head={group.id}>
@@ -500,9 +578,9 @@ function GroupHead({
         <span className="t-small t-upper text-ink-2">fan static</span>
         <span className="t-small text-ink-2">Pe</span>
         <b className="face-mono" data-fan={group.id}>
-          {fmt(now?.fan)}
+          {fmt(demand?.calculationRole ? null : now?.fan)}
         </b>
-        {next && now && Math.abs(next.fan - now.fan) > 1e-9 ? (
+        {!demand?.calculationRole && next && now && Math.abs(next.fan - now.fan) > 1e-9 ? (
           <span data-tone="caution" data-fan-next={group.id}>
             <ValueDiff from="" to={fmt(next.fan)} />
           </span>
@@ -538,31 +616,29 @@ function GroupHead({
             </span>
           ) : null}
           {proposed == null ? null : (
-            <Press
-              size="caption"
-              tone="quiet"
+            <Button
               data-tone={stagedStatic === proposed ? "caution" : undefined}
               onClick={() => void work.write(fanPatches(work.doc, unit, proposed))}
-              title={
+              label={
                 stagedStatic === proposed
                   ? "Take the staged fan static back"
                   : `Stage ${proposed} in-wg as unit ${unit}'s external static; it is not in Revit until written`
               }
             >
               {stagedStatic === proposed ? "staged" : "stage"}
-            </Press>
+            </Button>
           )}
         </span>
       )}
     </div>
   );
 }
-
 function Bars({
   snapshot,
   group,
   ready,
   priced,
+  assessment,
   max,
   selected,
   setPage,
@@ -572,6 +648,7 @@ function Bars({
   group: Group;
   ready: GroupReadiness | undefined;
   priced: Priced;
+  assessment: Assessment;
   max: number;
   selected: string;
   setPage: (next: Partial<DuctsPage>) => void;
@@ -590,12 +667,19 @@ function Bars({
         const by = new Map<Part, number>();
         for (const row of path.rows) {
           const part = partOf(row, nodes.get(row.id));
-          by.set(part, (by.get(part) ?? 0) + row.dp);
+          by.set(part, (by.get(part) ?? 0) + (row.dp ?? 0));
         }
         const next = priced.next.paths[id]?.total ?? path.total;
         const moved = Math.abs(next - path.total) > 1e-9;
-        const statuses = terminalStatus(snapshot, ready, node, priced);
+        const statuses = terminalStatus(
+          snapshot,
+          ready,
+          node,
+          priced,
+          assessment.terminalDrops[node.id] ?? false,
+        );
         const opened = selected === String(id);
+        const flow = assessment.flows.get(id);
         return (
           <Fragment key={id}>
             <ListRow
@@ -607,17 +691,23 @@ function Bars({
                 <span className="flex items-center gap-2" data-terminal={id}>
                   <span className="w-56 shrink-0 truncate">
                     <span className="face-mono">{id}</span> {node.family ?? ""} ·{" "}
-                    {Math.round(node.facts.find((f) => f.key === "flow")?.value ?? 0)} cfm
+                    {Math.round(flow?.cfm ?? 0)} cfm{" "}
+                    <span className="text-ink-2" data-flow-source={flow?.source ?? ""}>
+                      {flow?.source ?? "no flow"}
+                    </span>
                   </span>
                   <span className="relative flex h-4 flex-1 bg-(--pe-recess)">
                     {PARTS.filter((part) => by.get(part)).map((part) => (
-                      <span
+                      <TooltipHint
                         key={part}
-                        data-part={part}
-                        className={PART_BG[part]}
-                        style={{ width: `${(by.get(part)! / max) * 100}%` }}
-                        title={`${part}: ${fmt(by.get(part))} (${pct(by.get(part)!, path.total)})`}
-                      />
+                        content={`${part}: ${fmt(by.get(part))} (${pct(by.get(part)!, path.total)})`}
+                      >
+                        <span
+                          data-part={part}
+                          className={PART_BG[part]}
+                          style={{ width: `${(by.get(part)! / max) * 100}%` }}
+                        />
+                      </TooltipHint>
                     ))}
                     {moved ? (
                       <span
@@ -632,14 +722,11 @@ function Bars({
                     aria-label="status"
                   >
                     {statuses.map((status) => (
-                      <span
-                        key={status}
-                        data-tone="caution"
-                        data-status={status}
-                        title={STATUS[status][1]}
-                      >
-                        {STATUS[status][0]}
-                      </span>
+                      <TooltipHint key={status} content={STATUS[status][1]}>
+                        <span data-tone="caution" data-status={status}>
+                          {STATUS[status][0]}
+                        </span>
+                      </TooltipHint>
                     ))}
                   </span>
                 </span>
@@ -666,7 +753,6 @@ function Bars({
     </div>
   );
 }
-
 /** One group's head and bars; memoized so only a group whose own inputs moved re-renders. */
 const GroupSection = memo(function GroupSection(props: ComponentProps<typeof Bars>) {
   return (
@@ -675,21 +761,22 @@ const GroupSection = memo(function GroupSection(props: ComponentProps<typeof Bar
         snapshot={props.snapshot}
         group={props.group}
         priced={props.priced}
+        assessment={props.assessment}
         work={props.work}
       />
       <Bars {...props} />
     </section>
   );
 });
-
 const SLOT_WORDS = {
   fanStatic: "fan static (on the unit, in-wg)",
   fanFlow: "fan flow (on the unit, CFM)",
   componentDrop: "component drop (on accessories, in-wg)",
   terminalDrop:
     "terminal drop (on grilles, in-wg; Revit refuses the connector, so a family parameter carries it)",
+  fittingCoefficient:
+    "fitting coefficient (on fittings, a number the family computes; the Pe loss server reads it live)",
 } as const;
-
 /** The Revit parameter each value travels in; staged names ride the next snapshot read and apply. */
 function Slots({ snapshot, work }: { snapshot: DuctSnapshot; work: LossesWork }) {
   const wire: CellWire = { segment: "parameters", revision: work.revision, write: work.write };
@@ -701,40 +788,36 @@ function Slots({ snapshot, work }: { snapshot: DuctSnapshot; work: LossesWork })
         const held = snapshot.slots[slot] ?? "";
         const authored = (cell.staged ?? cell.proposal)?.value;
         return (
-          <span
-            key={slot}
-            className="inline-flex items-baseline gap-1"
-            data-slot={slot}
-            title={SLOT_WORDS[slot]}
-          >
-            <span className="text-ink-2">{slot}</span>
-            <StateCell
-              {...cellFromTrichotomy(cell, {
-                value: authored ?? held,
-                cap: "editable",
-                note: authored && held ? `the snapshot read ${held}` : undefined,
-              })}
-              scale="row"
-              placeholder={slot === "terminalDrop" ? "name a parameter" : "—"}
-              onCommit={(text: string) =>
-                work
-                  .write(
-                    transitionPatches(["parameters"], slot, cell, {
-                      kind: "stage",
-                      rung: { value: text.trim() },
-                    }),
-                  )
-                  .then((refused) => refused?.message)
-              }
-              transitions={reviewTransitions(wire, slot, cell)}
-            />
-          </span>
+          <TooltipHint key={slot} content={SLOT_WORDS[slot]}>
+            <span className="inline-flex items-baseline gap-1" data-slot={slot}>
+              <span className="text-ink-2">{slot}</span>
+              <StateCell
+                {...cellFromTrichotomy(cell, {
+                  value: authored ?? held,
+                  cap: "editable",
+                  note: authored && held ? `the snapshot read ${held}` : undefined,
+                })}
+                scale="row"
+                placeholder={slot === "terminalDrop" ? "name a parameter" : "—"}
+                onCommit={(text: string) =>
+                  work
+                    .write(
+                      transitionPatches(["parameters"], slot, cell, {
+                        kind: "stage",
+                        rung: { value: text.trim() },
+                      }),
+                    )
+                    .then((refused) => refused?.message)
+                }
+                transitions={reviewTransitions(wire, slot, cell)}
+              />
+            </span>
+          </TooltipHint>
         );
       })}
     </div>
   );
 }
-
 export function DuctsLosses({
   snapshot,
   grids,
@@ -751,16 +834,31 @@ export function DuctsLosses({
   ready: Record<string, GroupReadiness>;
   page: DuctsPage;
   setPage: (next: Partial<DuctsPage>) => void;
-  empty: { says: string; exit: string } | null;
+  empty: {
+    says: string;
+    exit: string;
+  } | null;
   work: LossesWork;
 }) {
+  const assessment = useMemo(
+    () =>
+      snapshot && priced
+        ? assessDucts(
+            snapshot,
+            work.doc,
+            { now: priced.now, next: priced.next, readiness: ready },
+            { selector: page.group ? { kind: "group", id: page.group } : { kind: "document" } },
+          )
+        : null,
+    [snapshot, priced, ready, work.doc, page.group],
+  );
   if (empty || !snapshot)
     return (
       <EmptyState story="scope" exit={empty?.exit ?? "wait for the snapshot"}>
         {empty?.says ?? "reading ducts…"}
       </EmptyState>
     );
-  if (!grids || !priced)
+  if (!grids || !priced || !assessment)
     return (
       <EmptyState
         story="scope"
@@ -790,17 +888,39 @@ export function DuctsLosses({
   return (
     <div className="flex flex-col gap-3 overflow-auto px-(--item-pad-x) py-2">
       <Slots snapshot={snapshot} work={work} />
+      <div className="flex items-baseline gap-2 t-small">
+        <Button
+          label="Stage the load tool's Load Preview from the clipboard as this document's loads"
+          onClick={() =>
+            void navigator.clipboard.readText().then((text) =>
+              work.write(
+                transitionPatches(["loads"], "preview", work.doc?.loads.preview ?? {}, {
+                  kind: "stage",
+                  rung: { value: { systems: parseLoadPreview(text).systems } },
+                }),
+              ),
+            )
+          }
+        >
+          paste loads
+        </Button>
+        <span className="text-ink-2">
+          {work.doc?.loads.preview?.staged
+            ? `${work.doc.loads.preview.staged.value.systems.length} systems staged`
+            : "no load preview"}
+        </span>
+      </div>
+      <FindingsList findings={assessment.findings} />
       <div className="flex flex-wrap items-baseline gap-3 t-small text-ink-2">
         {PARTS.map((part) => (
           <PartChip key={part} part={part} />
         ))}
         {priced.next.errors.length ? (
-          <span
-            data-tone="caution"
-            title="a rule matched but its table gave no coefficient; the bars count it as 0"
-          >
-            {priced.next.errors.length} unpriced, counted 0
-          </span>
+          <TooltipHint content="Some rows have no pressure value. Bars and path totals show only the priced subtotal.">
+            <span data-tone="caution">
+              {priced.next.errors.length} unpriced; totals are partial
+            </span>
+          </TooltipHint>
         ) : null}
       </div>
       {groups.map((group) => (
@@ -810,6 +930,7 @@ export function DuctsLosses({
           group={group}
           ready={ready[group.id]}
           priced={priced}
+          assessment={assessment}
           max={max}
           // Only the group holding the open grille sees `selected`, so a pick re-renders one group.
           selected={
@@ -822,7 +943,6 @@ export function DuctsLosses({
     </div>
   );
 }
-
 /**
  * The staged band's body (variant J): each staged rule with what it moves before it lands, the
  * staged drops and slots, the last preview's outcome, and discard.
@@ -845,11 +965,20 @@ export function StagedLosses({
   group: string;
 }) {
   const keys = Object.keys(priced.staged.rules).sort();
+  const catalogLinks = Object.entries(priced.staged.catalogs);
   const terminals = Object.keys(priced.staged.terminalDrops).length;
   const components = Object.keys(priced.staged.componentDrops).length;
   const units = Object.keys(priced.staged.unitStatics).sort();
   const slots = Object.entries(priced.staged.parameters);
-  if (!keys.length && !terminals && !components && !units.length && !slots.length) return null;
+  if (
+    !keys.length &&
+    !catalogLinks.length &&
+    !terminals &&
+    !components &&
+    !units.length &&
+    !slots.length
+  )
+    return null;
   // What a write sends: the group in the sentence, or the whole document; the rules' tables are
   // document-wide either way.
   const all = applyRequest(snapshot, priced, "", "");
@@ -863,11 +992,19 @@ export function StagedLosses({
     const doc = work.doc;
     if (!doc) return;
     void work.write(
-      (["rules", "terminalDrops", "componentDrops", "unitStatics", "parameters"] as const).flatMap(
-        (segment) =>
-          Object.entries(doc[segment] ?? {}).flatMap(([key, cell]) =>
-            cell?.staged ? transitionPatches([segment], key, cell, { kind: "unstage" }) : [],
-          ),
+      (
+        [
+          "rules",
+          "catalogs",
+          "terminalDrops",
+          "componentDrops",
+          "unitStatics",
+          "parameters",
+        ] as const
+      ).flatMap((segment) =>
+        Object.entries(doc[segment] ?? {}).flatMap(([key, cell]) =>
+          cell?.staged ? transitionPatches([segment], key, cell, { kind: "unstage" }) : [],
+        ),
       ),
     );
   };
@@ -919,6 +1056,21 @@ export function StagedLosses({
           <ValueDiff from={fmt(fanOf(priced.now))} to={fmt(fanOf(priced.next))} /> in-wg
         </div>
       ) : null}
+      {catalogLinks.map(([key, { table }]) => {
+        const matches = snapshot.nodes.filter(
+          (node) =>
+            node.kind === "terminal" &&
+            [catalogLinkKey(node.family, node.type), catalogLinkKey(node.family, "")].includes(key),
+        );
+        const ids = new Set(matches.map((node) => node.id));
+        const count = sent.terminals.filter((row) => ids.has(row.id)).length;
+        return (
+          <div key={key} data-staged-catalog={key}>
+            {matches[0]?.family} : {matches[0]?.type} · {table} · {matches.length} grilles share
+            this catalog link · {count} total-pressure drops in this apply
+          </div>
+        );
+      })}
       {units.map((id) => {
         const unit = snapshot.nodes.find((n) => n.id === Number(id));
         const planned = (evaluation?.response.writes ?? []).find(
@@ -980,14 +1132,9 @@ export function StagedLosses({
         ) : (
           <span className="text-ink-2">not previewed</span>
         )}
-        <Press
-          size="caption"
-          tone="quiet"
-          onClick={discard}
-          title="Unstage every staged rule, drop, fan static and slot"
-        >
+        <Button onClick={discard} label="Unstage every staged rule, drop, fan static and slot">
           discard
-        </Press>
+        </Button>
       </div>
     </div>
   );

@@ -262,6 +262,7 @@ export const schedulesManifest = () =>
           },
         },
       },
+      runs: ["schedule.grid.push"],
       seeds: SCHEDULE_SEEDS as never,
     },
   );

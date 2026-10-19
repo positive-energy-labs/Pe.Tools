@@ -1,105 +1,136 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * The one duct-issue taxonomy: every view, the tables, the legend and Chat read it from here.
  * C# emits only the kind (`DuctIssueKind`); what it means, what it blocks and how it is coloured
- * live here. Readiness derives from `blocks`. Colour is one tone per `blocks` class (house law:
+ * live here. Blocking semantics come from the shared ducts domain. Colour is one tone per `blocks` class (house law:
  * meaning rides `data-tone`); `shade` orders the kinds inside a class. Shades have no tokens yet
  * (owed in the design-system ledger), so a view draws `tone` and may use `shade` only as order.
  */
-import type { DuctsSnapshot } from "@pe/host-contracts/generated";
-
-import type { VerdictTone } from "#/components/master-table/model";
-
-export type IssueKind = DuctsSnapshot.Res.DuctIssueKind;
-export type Blocks = "walkable" | "budgetable" | "none";
-
+import type { DuctFinding } from "@pe/agent-contracts";
+import { ISSUE_BLOCKS, type Blocks, type IssueKind } from "@pe/ducts-domain/issues";
+import type { VerdictTone } from "@pe/kit/table/model";
 export interface IssueKindInfo {
   /** One to three words. */
   label: string;
   /** One sentence. */
   what: string;
   blocks: Blocks;
-  color: { tone: VerdictTone; shade: number };
+  color: {
+    tone: VerdictTone;
+    shade: number;
+  };
 }
-
 const TONE: Record<Blocks, VerdictTone> = {
   walkable: "alarm",
   budgetable: "caution",
   none: "mute",
 };
-const kind = (label: string, what: string, blocks: Blocks, shade: number): IssueKindInfo => ({
+const kind = (key: IssueKind, label: string, what: string, shade: number): IssueKindInfo => ({
   label,
   what,
-  blocks,
-  color: { tone: TONE[blocks], shade },
+  blocks: ISSUE_BLOCKS[key],
+  color: { tone: TONE[ISSUE_BLOCKS[key]], shade },
 });
-
 export const ISSUE_KINDS: Record<IssueKind, IssueKindInfo> = {
   "open-end": kind(
+    "open-end",
     "open end",
     "A connector with nothing attached; caps are not open ends.",
-    "walkable",
     1,
   ),
-  loop: kind(
-    "loop",
-    "The network closes on itself, so flow direction is ambiguous.",
-    "walkable",
-    2,
-  ),
-  "no-root": kind("no root", "No equipment port feeds the network.", "walkable", 3),
+  loop: kind("loop", "loop", "The network closes on itself, so flow direction is ambiguous.", 2),
+  "no-root": kind("no-root", "no root", "No equipment port feeds the network.", 3),
   "multi-root": kind(
+    "multi-root",
     "many roots",
     "More than one equipment port feeds the network.",
-    "walkable",
     4,
   ),
-  "no-terminal-flow": kind("terminal no flow", "A terminal states no design flow.", "walkable", 5),
+  "no-terminal-flow": kind(
+    "no-terminal-flow",
+    "terminal no flow",
+    "A terminal states no design flow.",
+    5,
+  ),
   "no-fan-static": kind(
+    "no-fan-static",
     "no fan static",
     "The root equipment states no external static pressure.",
-    "budgetable",
     1,
   ),
   "no-component-drop": kind(
+    "no-component-drop",
     "no component drop",
     "An accessory in the path states no pressure drop.",
-    "budgetable",
     2,
   ),
   "default-flex-roughness": kind(
+    "default-flex-roughness",
     "default flex roughness",
     "Flex carries the rigid galvanized roughness Revit ships.",
-    "budgetable",
     3,
   ),
-  stub: kind("stub", "A duct under 3 in long, a connector stub between fittings.", "none", 1),
-  "implausible-size": kind("odd size", "A size or aspect ratio no real duct has.", "none", 2),
+  "no-flow-leg": kind(
+    "no-flow-leg",
+    "no-flow leg",
+    "A tee or tap leg carries no flow; every table prices it 0, so the leg is not on the budget.",
+    4,
+  ),
+  stub: kind("stub", "stub", "A duct under 3 in long, a connector stub between fittings.", 1),
+  "implausible-size": kind(
+    "implausible-size",
+    "odd size",
+    "A size or aspect ratio no real duct has.",
+    2,
+  ),
   "mixed-classification": kind(
+    "mixed-classification",
     "mixed systems",
     "The network carries more than one system classification.",
-    "none",
     3,
   ),
   "high-velocity": kind(
+    "high-velocity",
     "high velocity",
     "Revit reports 2000 fpm or more on the segment.",
-    "none",
     4,
   ),
 };
-
 /** The table's issue column: the kind's word in its class's tone. */
 export const issueVerdict = (issueKind: IssueKind) => {
   const info = ISSUE_KINDS[issueKind];
   return { word: info.label, tone: info.color.tone, note: info.what };
 };
-
 const BLOCKS_WORD: Record<Blocks, string> = {
   walkable: "blocks walking",
   budgetable: "blocks the budget",
   none: "advisory",
 };
-
+const CLEARERS: DuctFinding["clearer"][] = ["person", "pea", "route"];
+/** The survey's findings, grouped by who clears them; what the route assumed is spelled out. */
+export function FindingsList({ findings }: { findings: readonly DuctFinding[] }) {
+  if (!findings.length) return null;
+  return (
+    <dl className="grid grid-cols-[auto_1fr] gap-x-3 t-small" data-findings="">
+      {CLEARERS.filter((c) => findings.some((f) => f.clearer === c)).map((clearer) => (
+        <div key={clearer} className="contents">
+          <dt className="t-upper text-ink-2">{clearer} clears</dt>
+          <dd>
+            {findings
+              .filter((f) => f.clearer === clearer)
+              .map((f) => (
+                <div key={f.id} data-finding={f.id}>
+                  <span data-tone={f.assumed ? "caution" : "alarm"}>{f.kind}</span>{" "}
+                  <span className="face-mono">{f.elementIds.join(" ")}</span> {f.note}
+                  {f.assumed ? <span className="text-ink-2"> · assumed: {f.assumed}</span> : null}
+                </div>
+              ))}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
 /** The legend every view shows beside its issues: class, then kinds in shade order. */
 export function IssueLegend() {
   return (
@@ -112,9 +143,9 @@ export function IssueLegend() {
               .filter(([, info]) => info.blocks === blocks)
               .sort(([, a], [, b]) => a.color.shade - b.color.shade)
               .map(([key, info]) => (
-                <span key={key} title={info.what} data-tone={info.color.tone}>
-                  {info.label}{" "}
-                </span>
+                <TooltipHint key={key} content={info.what}>
+                  <span data-tone={info.color.tone}>{info.label} </span>
+                </TooltipHint>
               ))}
           </dd>
         </div>

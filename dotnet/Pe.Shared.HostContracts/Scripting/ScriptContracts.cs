@@ -17,7 +17,6 @@ public record ScriptWorkspaceBootstrapData(
     string WorkspaceReadmePath,
     string ProjectFilePath,
     string PodManifestPath,
-    string SampleScriptPath,
     string RevitVersion,
     string TargetFramework,
     string RuntimeAssemblyPath,
@@ -133,16 +132,6 @@ public record PodConsumedSourceData(
     [property: JsonProperty(Required = Required.Always)] string Path,
     [property: JsonProperty(Required = Required.Always)] string Sha256,
     [property: JsonProperty(Required = Required.Always)] string BytesBase64);
-
-public record PodDependencyData(string Id, string Path, string Sha256);
-
-public record PodExportRequest(string Pod, string ArchivePath);
-
-public record PodExportData(string ArchivePath, List<PodDependencyData> Vendored);
-
-public record PodImportRequest(string ArchivePath, string? Folder = null);
-
-public record PodImportData(string Id, string Folder, IReadOnlyList<ScriptDiagnostic>? Diagnostics = null);
 
 [JsonConverter(typeof(StringEnumConverter))]
 public enum ScriptExecutionStatus {

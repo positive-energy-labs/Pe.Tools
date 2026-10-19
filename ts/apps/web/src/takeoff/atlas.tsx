@@ -1,10 +1,10 @@
 import { takeoffDecisionKey } from "@pe/agent-contracts";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 
-import type { TableState } from "#/components/master-table/model";
-import { visibleRows as viewRows } from "#/components/master-table/view";
+import type { TableState } from "@pe/kit/table/model";
+import { visibleRows as viewRows } from "@pe/kit/table/view";
 import { useTableChips } from "#/components/anatomy";
-import type { PaneShortcut } from "#/components/lang/pane";
+import type { ScopeKey } from "@pe/kit/keys";
 import {
   atlasRoomState,
   type AtlasRow as Row,
@@ -149,7 +149,7 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     const flag = cursorRow?.open[0];
     if (cursorRow && flag) decide(cursorRow.room, flag, verdict);
   };
-  const reviewShortcuts: readonly PaneShortcut[] = [
+  const reviewShortcuts: readonly ScopeKey[] = [
     {
       hotkey: "J",
       label: "next room",
@@ -181,7 +181,7 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
       options: { ignoreInputs: true, enabled: zoneKey !== null || cursor !== null },
     },
   ];
-  const scopeShortcuts: readonly PaneShortcut[] = [
+  const scopeShortcuts: readonly ScopeKey[] = [
     {
       hotkey: "Escape",
       label: "clear room scope",

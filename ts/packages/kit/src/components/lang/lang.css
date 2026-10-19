@@ -1,0 +1,498 @@
+/* Shared grammar: tones, planes, selection, the row, the control frame. A primitive's own CSS lives beside its tsx. */
+:root {
+  --head-h: calc(var(--item-h) * 5);
+}
+/* Tones: call sites declare state; the language owns its rendering. */
+:where([data-tone="alarm"]) {
+  --tone: var(--pe-alarm);
+  color: var(--tone);
+}
+
+:where([data-tone="caution"]) {
+  --tone: var(--pe-caution);
+  color: var(--tone);
+}
+
+:where([data-tone="done"]) {
+  --tone: var(--pe-done);
+  color: var(--tone);
+}
+
+:where([data-tone="commit"]) {
+  --tone: var(--pe-commit);
+  color: var(--tone);
+}
+
+:where([data-tone="nav"]) {
+  --tone: var(--pe-nav);
+  color: var(--tone);
+}
+
+:where([data-tone="pea"]) {
+  --tone: var(--pe-pea-ink);
+  color: var(--tone);
+}
+
+:where([data-tone][data-wash]) {
+  border: 0.5px solid color-mix(in srgb, currentColor 55%, transparent);
+  background: color-mix(in srgb, currentColor 10%, var(--pe-on));
+}
+
+/* The one selection paint: a fill, never a hue, re-grounding what sits on it (`--pe-on`). */
+:where(
+  [aria-selected="true"],
+  /* A text field that owns an open list is where you type, not a picked thing: it keeps its ground. */
+  [aria-expanded="true"]:not(textarea, input),
+  [aria-pressed="true"],
+  [data-selected],
+  [data-highlighted],
+  .on-select
+) {
+  background-color: var(--pe-select);
+  --pe-on: var(--pe-select);
+}
+
+/* The pick mark: the element a feedback note is about. The veil, never the opaque select fill (it
+   would hide the target), plus a full-ink outline (line-2 vanished over real content). */
+.pick-mark {
+  background-image: var(--fill-veil);
+  outline: 2px solid var(--pe-ink);
+  outline-offset: 2px;
+  pointer-events: none;
+}
+
+:where(svg [aria-selected="true"], svg [data-selected]) {
+  fill: var(--pe-select);
+}
+
+/* Planes: call sites name the plane; the language owns its ground and ink. */
+:where([data-surface="page"]) {
+  --pe-surface: var(--pe-page);
+}
+
+:where([data-surface="artifact"]) {
+  --pe-surface: var(--pe-artifact);
+}
+
+/* THE ARTIFACT EDGE: artifact ground never appears without a 1px --pe-line hairline. A border, not
+   an outline: outline is the focus ring's property (a pane's transparent ring erased the edge), and
+   positioned children (rows, sticky heads) paint over an inset outline, never over a border.
+   Unlayered, it is the call-site `border border-line` (one edge); `.seam-border` still dashes it.
+   Artifact ground inside artifact ground is a wash: no edge, except a frame, which is an object. */
+:where([data-surface="artifact"]:not([data-surface="artifact"] *), [data-slot="artifact-frame"]) {
+  border: 1px solid var(--pe-line);
+}
+
+:where([data-surface="recess"]) {
+  --pe-surface: var(--pe-recess);
+}
+
+:where([data-surface="document"]) {
+  --pe-surface: var(--pe-document);
+}
+
+:where(
+  [data-surface="page"],
+  [data-surface="artifact"],
+  [data-surface="recess"],
+  [data-surface="document"]
+) {
+  background: var(--pe-surface);
+  --pe-on: var(--pe-surface);
+  --tw-ring-color: var(--pe-line);
+}
+
+:where(svg [data-surface]) {
+  fill: var(--pe-surface);
+}
+
+:where([data-tone][data-fill="tone"]) {
+  background-color: currentColor;
+}
+
+:where([data-tone="commit"][data-fill="solid"]) {
+  background-color: var(--pe-commit);
+  color: var(--pe-on-commit);
+}
+
+.prose-pe a {
+  color: var(--pe-nav);
+}
+
+:where([data-pe] [data-slot="input"]::file-selector-button) {
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line-height);
+}
+
+@media (min-width: 48rem) {
+  :where([data-pe] [data-slot="input"], [data-pe] [data-slot="textarea"]) {
+    font-size: var(--type-small-size);
+    line-height: var(--type-small-line-height);
+  }
+}
+
+/* Row (row.tsx): states are data. cursor = the veil · selected = the select fill · active = the
+   left rail · pending = italic · failed = caution squiggle on the label · refused = aria-disabled. */
+.dl-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--item-h);
+  padding: 0 var(--item-mark-pad-x);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line-height);
+  color: var(--pe-ink);
+  cursor: default;
+  user-select: none;
+}
+tr.dl-row {
+  display: table-row;
+  height: var(--item-h);
+  padding: 0;
+  /* a table's values stay copyable */
+  user-select: auto;
+}
+/* In a table the active row takes the select fill: a rail on a tr would have no cell to sit in. */
+tr.dl-row[data-active] {
+  background-color: var(--pe-select);
+  --pe-on: var(--pe-select);
+}
+tr.dl-row[data-active]::before {
+  content: none;
+}
+.dl-row[data-lines="2"] {
+  min-height: calc(var(--item-h) * 2);
+}
+.dl-row[data-lines="3"] {
+  min-height: calc(var(--item-h) * 3);
+}
+.dl-row-eyebrow {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  overflow: hidden;
+  color: var(--pe-ink-2);
+  font-family: var(--font-mono);
+  font-size-adjust: var(--mono-adjust);
+  font-weight: var(--weight-mono);
+  font-size: var(--type-small-size);
+}
+.dl-row-meta [data-fact="word"] {
+  font-family: var(--font-body);
+}
+/* INLINE CODE: a machine token inside a sentence, and the quietest mark in it. It sizes off its
+   sentence at 1em; the mono tokens in base.css seat it just under the sans and lighten it. A soft
+   wash, no stroke: a bordered chip outshouted the prose around it. A token split across lines
+   keeps its padding and corners on every fragment. Bold stays unsaved. */
+[data-pe] .prose-pe :not(pre) > code {
+  /* The typography plugin bolds code; this beats it. */
+  font-weight: var(--weight-mono);
+  padding: 0.05em 0.3em;
+  border: 0;
+  background: color-mix(in srgb, var(--pe-ink) 6%, transparent);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.prose-pe :not(pre) > code::before,
+.prose-pe :not(pre) > code::after {
+  content: none;
+}
+/* PROSE TABLES wear Table's cell grammar (master-table-header/-body): the recess ground and
+   small caps under the head, faint column rules, hairline row rules, tabular figures, square
+   corners. Separate borders so no edge doubles. GFM's own
+   `text-align` lands inline and still wins, so a `---:` column stays right-aligned. */
+.prose-pe table {
+  width: 100%;
+  margin: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 0.5px solid var(--pe-line);
+  font-variant-numeric: tabular-nums;
+}
+.prose-pe :is(th, td) {
+  padding: calc(var(--space-unit) * 1.5) var(--gutter);
+  border: 0;
+  text-align: left;
+  vertical-align: top;
+}
+.prose-pe :is(th, td) + :is(th, td) {
+  border-left: 0.5px solid var(--pe-line);
+}
+[data-pe] .prose-pe thead th {
+  background: var(--pe-recess);
+  --pe-on: var(--pe-recess);
+  border-bottom: 0.5px solid var(--pe-line);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-upper);
+  text-transform: uppercase;
+  vertical-align: bottom;
+}
+.prose-pe tbody tr + tr td {
+  border-top: 0.5px solid var(--pe-line);
+}
+/* The quiet inline trigger: a word with a row-sized hit box; the veil is held while its list is open. */
+[data-list-trigger="inline"] {
+  height: var(--item-h);
+  padding: 0 var(--item-pad-x);
+  border-radius: var(--control-radius);
+}
+[data-list-trigger="inline"]:not([data-tone]) {
+  color: var(--pe-ink-2);
+}
+[data-list-trigger="inline"]:hover,
+[data-list-trigger="inline"][data-popup-open] {
+  background-image: var(--fill-veil);
+  color: var(--pe-ink);
+}
+.dl-row[data-cursor] {
+  background-image: var(--fill-veil);
+}
+.dl-row[data-active]::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 0;
+  width: 2px;
+  background: var(--pe-ink);
+}
+.dl-row[data-pending] {
+  color: var(--pe-ink-2);
+  font-style: italic;
+}
+.dl-row[data-failed] .dl-row-title {
+  text-decoration: underline wavy var(--pe-caution);
+  text-underline-offset: 3px;
+}
+.dl-row[aria-disabled="true"] {
+  color: var(--pe-ink-2);
+  font-style: italic;
+}
+.dl-row-lead {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+.dl-row-label {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* A row's second line is words; a measured value opts into `face-mono` itself. */
+.dl-row-sub {
+  overflow: hidden;
+  font-family: var(--font-body);
+  color: var(--pe-ink-2);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.dl-row-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+.dl-row-title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* THE TRAILING SLOT: the state (`.dl-row-fact`) and the verbs (`.dl-row-actions`) stack in one
+   grid cell, right-aligned, as wide as the wider and one line tall, so a swap never shifts the
+   row. With hover the verbs replace the state on hover, keyboard focus, the list cursor or an
+   open menu; without hover the state stays and the verbs lie unseen over it, so a tap opens them. */
+.dl-row-meta {
+  display: inline-grid;
+  flex-shrink: 0;
+  align-items: center;
+  justify-items: end;
+  font-family: var(--font-mono);
+  font-size-adjust: var(--mono-adjust);
+  font-weight: var(--weight-mono);
+  color: var(--pe-ink-2);
+  white-space: nowrap;
+}
+.dl-row-meta > * {
+  grid-area: 1 / 1;
+}
+.dl-row-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.dl-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  visibility: hidden;
+}
+/* Glyphs sit on the row's type scale, one recipe for every call site: a lead mark, thumbnail or
+   row verb is one text line tall (1.2em of t-small); a verb is one line square, the slot's height. */
+.dl-row-lead > svg,
+.dl-row-lead > img,
+.dl-row-actions svg {
+  width: 1.2em;
+  height: 1.2em;
+}
+.dl-row .dl-row-meta > .dl-row-actions > :is(.dl-button, button, a) {
+  width: auto;
+  min-height: 0;
+  height: 1lh;
+  aspect-ratio: 1;
+}
+.dl-row-actions .dl-button:focus-visible {
+  outline-offset: -1px;
+}
+@media (hover: hover) {
+  .dl-row:is(:hover, :focus-visible, :has(:focus-visible), [data-cursor]) .dl-row-actions,
+  .dl-row-actions:has([aria-expanded="true"]) {
+    visibility: visible;
+  }
+  .dl-row:is(:hover, :focus-visible, :has(:focus-visible), [data-cursor])
+    .dl-row-meta:has(> .dl-row-actions)
+    > .dl-row-fact,
+  .dl-row-meta:has([aria-expanded="true"]) > .dl-row-fact {
+    visibility: hidden;
+  }
+}
+@media (hover: none) {
+  .dl-row-actions {
+    justify-self: stretch;
+    visibility: visible;
+    opacity: 0;
+  }
+  .dl-row .dl-row-meta > .dl-row-actions > :is(.dl-button, button, a) {
+    flex: 1;
+    aspect-ratio: auto;
+  }
+}
+.dl-row-sep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--pe-line);
+}
+/* A group head IS the roster's shelf head (navigation.css): sentence case, its count quiet, a
+   hairline to the edge. No fill: it stands on the ground it sits on, so rows pass under it. */
+.dl-row-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--item-h);
+  padding: 0 var(--item-mark-pad-x);
+  background: var(--pe-on);
+  font-size: var(--type-small-size);
+  font-weight: var(--weight-strong);
+  color: var(--pe-ink-2);
+}
+.dl-row-head > :first-child::first-letter {
+  text-transform: uppercase;
+}
+.dl-row-head > [data-slot="count"] {
+  font-weight: var(--weight-regular);
+  font-variant-numeric: tabular-nums;
+  color: var(--pe-ink-mute);
+}
+.dl-row-head > [data-slot="rule"] {
+  flex: 1;
+  height: 1px;
+  margin-inline: 4px;
+  background: var(--pe-line);
+}
+.dl-row-aside {
+  margin-left: 0.5em;
+  color: var(--pe-ink-2);
+}
+/* A list's DETAIL: the cursor row's description, said once under the rows. Two lines are always
+   held, so the popup never moves as the cursor does. */
+.dl-list-detail {
+  display: -webkit-box;
+  height: 2lh;
+  box-sizing: content-box;
+  overflow: hidden;
+  padding: 4px var(--item-mark-pad-x) 2px;
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line-height);
+  color: var(--pe-ink-2);
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* The control frame: one height, hairline, radius and ground for every freestanding control. An
+   embedded field (inside a frame) never wears it. Unlayered on purpose: utilities cannot restyle half of it. */
+.dl-control {
+  box-sizing: border-box;
+  /* a floor, not a height: a multi pick's chips may wrap */
+  min-height: var(--control-h);
+  border: 1px solid var(--pe-line);
+  border-radius: var(--control-radius);
+  background-color: color-mix(in srgb, var(--pe-line) 20%, transparent);
+  transition: border-color var(--motion-control);
+}
+.dl-control:is(:hover, :focus-visible, :focus-within):not(:disabled, :has(input:disabled)) {
+  border-color: var(--pe-line-2);
+}
+.dl-control[aria-invalid="true"] {
+  border-color: var(--pe-caution);
+}
+.dl-control:is(:disabled, :has(input:disabled)) {
+  background-color: transparent;
+}
+
+/* THE CONNECTOR: a line between two anchors, stroked in the current tone (ink-2 untoned), hairline
+   or the 2px boundary; an end clamped to a scroller's edge draws hollow; the band is the tone at a
+   quarter, under the line, for the fraction of the length a grant has left. */
+.dl-connector {
+  color: var(--pe-ink-2);
+}
+.dl-connector-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+}
+.dl-connector[data-strong] .dl-connector-line {
+  stroke-width: 2;
+}
+.dl-connector[data-dashed] .dl-connector-line {
+  stroke-dasharray: 4 3;
+}
+.dl-connector-band {
+  fill: none;
+  stroke: color-mix(in srgb, currentColor 24%, transparent);
+  stroke-width: 9;
+  stroke-linecap: butt;
+}
+.dl-connector-end {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1;
+}
+.dl-connector-end[data-off] {
+  fill: var(--pe-page);
+  stroke-dasharray: 1.5 1.5;
+}
+.dl-connector-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 12;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+.dl-connector-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  white-space: nowrap;
+}
+.dl-connector-label[data-before] {
+  transform: translate(-100%, -50%);
+}

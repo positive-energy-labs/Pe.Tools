@@ -8,8 +8,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { expect, it } from "vite-plus/test";
 
 import { labelOfNode, legsOf } from "./legs";
-import type { DuctSnapshot } from "./readiness";
-import { groupTree } from "./topology";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { groupTree } from "@pe/ducts-domain/topology";
 import trace from "./fixtures/makeup-path.json";
 
 type Node = DuctSnapshot["nodes"][number];

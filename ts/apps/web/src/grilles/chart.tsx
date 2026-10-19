@@ -1,4 +1,4 @@
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 /**
  * THE FIELD — every buildable (opening width × qty) for the active row's stock and borders,
  * free % on y (the outcome), qty on x, one line per opening width. Clicking a point writes

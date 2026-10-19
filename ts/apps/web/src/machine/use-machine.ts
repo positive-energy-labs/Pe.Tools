@@ -8,21 +8,28 @@ import type { Machine, Reading } from "@pe/agent-contracts";
 
 import { frozenDemo } from "#/host/demo-client";
 import { acknowledgeUpdate } from "#/host/install";
-import { MACHINE_SEEDS, OPEN_SEEDS } from "#/open/seeds";
+import { BAY_RECENTS, MACHINE_SEEDS, OPEN_SEEDS } from "#/open/seeds";
 import { dirty, useAction, useReading } from "#/readings";
 
+import { setAccepting } from "./accepting";
 import { machineOf, planWaits } from "./model";
 
 const ABSENT: Reading<Machine> = { state: "absent" };
 
 /** The recorded machine a frozen demo draws: a machine fixture by name, else the Open seed's. */
-export function demoMachine(demo: string): Reading<Machine> {
+function demoMachine(demo: string): Reading<Machine> {
   if (Object.hasOwn(MACHINE_SEEDS, demo)) return MACHINE_SEEDS[demo as keyof typeof MACHINE_SEEDS];
   const seeded = OPEN_SEEDS[demo as keyof typeof OPEN_SEEDS]?.readings.machine as
     | Machine
     | undefined;
   return seeded ? { state: "ready", observation: seeded } : ABSENT;
 }
+
+/** The recents a frozen demo draws beside its machine: the Open seed's, else the patch bay's. */
+export const demoRecents = (demo: string) =>
+  (OPEN_SEEDS[demo as keyof typeof OPEN_SEEDS]?.readings.recents as
+    | typeof BAY_RECENTS
+    | undefined) ?? BAY_RECENTS;
 
 const still = () => () => {};
 
@@ -42,9 +49,11 @@ export function useUpdateConsent(reading: Reading<Machine>, fixture: boolean) {
   const machine = machineOf(reading);
   const [requestId, setRequestId] = useState<string | null>(null);
   const run = useCallback(async (planId: string) => {
+    setAccepting(true);
     try {
       return await acknowledgeUpdate(planId);
     } finally {
+      setAccepting(false);
       dirty({ kind: "machine" });
     }
   }, []);

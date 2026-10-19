@@ -1,6 +1,7 @@
-import { StateCell } from "#/components/lang/cell";
+import { StateCell } from "@pe/kit/lang/cell";
 import { FC_UNITS, FOM_HWCH_PLANT } from "#/param-tables/variants/data";
 import { HEAT_CAP_SUM, hairline, muted, secondary } from "./type-values";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function VariantFomLens() {
   return (
@@ -59,18 +60,21 @@ export function VariantFomLens() {
                   />
                 </td>
               ) : (
-                <td
-                  key={i}
-                  className={`px-3 py-1 text-center ${i >= 3 ? "" : ""}`}
-                  style={{ border: hairline }}
-                  title={
+                <TooltipHint
+                  content={
                     i >= 3
                       ? "dead text in the SXL exhibit — would become an authored fact or an inbound reading"
                       : undefined
                   }
+                  key={i}
                 >
-                  {cell}
-                </td>
+                  <td
+                    className={`px-3 py-1 text-center ${i >= 3 ? "" : ""}`}
+                    style={{ border: hairline }}
+                  >
+                    {cell}
+                  </td>
+                </TooltipHint>
               ),
             )}
           </tr>

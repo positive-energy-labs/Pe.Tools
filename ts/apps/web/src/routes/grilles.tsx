@@ -1,5 +1,5 @@
-import { RouteShell, emptyManifest } from "#/route";
-import { token } from "#/lib/token";
+import { RouteShell, useRoute } from "#/route";
+import { token } from "@pe/kit/lib/token";
 /**
  * /grilles — the custom wood floor grille calculator.
  *
@@ -19,10 +19,10 @@ import { token } from "#/lib/token";
  * Rows live in memory for the page view (persistence is Owed in the feature ledger).
  */
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, type SetStateAction } from "react";
 
-import { FactChip } from "#/components/lang/chip";
-import { ActionButton } from "#/components/lang/action-button";
+import { FactChip } from "@pe/kit/lang/chip";
+import { Button } from "@pe/kit/lang/button";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
 import { FieldChart, stepField } from "#/grilles/chart";
@@ -31,26 +31,24 @@ import { type GrilleInput, enumerate, ribToFill, solve } from "#/grilles/math";
 import { type SheetRow, Sheet, seedRows } from "#/grilles/sheet";
 import { SpecDrawing } from "#/grilles/spec-drawing";
 
-/** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
-const manifest = emptyManifest("grilles", "Grilles");
+import { grillesManifest as manifest } from "#/route/surface-manifests";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
-function RouteShelledGrillesRoute() {
-  return (
-    <RouteShell manifest={manifest}>
-      <GrillesRoute />
-    </RouteShell>
-  );
-}
-
-export const Route = createFileRoute("/grilles")({ component: RouteShelledGrillesRoute });
+export const Route = createFileRoute("/grilles")({ component: GrillesRoute });
 
 function GrillesRoute() {
-  const [rows, setRows] = useState<SheetRow[]>(seedRows);
-  const [activeId, setActiveId] = useState("row7");
-  const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set(["row7"]));
-  const [drawingCollapsed, setDrawingCollapsed] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [project, setProject] = useState("");
+  const handle = useRoute(manifest, { target: null });
+  const [page, setPage] = handle.page;
+  const { rows, activeId, drawingCollapsed, exporting, project } = page;
+  const picked = new Set(page.picked);
+  const setRows = (next: SetStateAction<SheetRow[]>) =>
+    setPage({ rows: typeof next === "function" ? next(rows) : next });
+  const setActiveId = (activeId: string) => setPage({ activeId });
+  const setPicked = (picked: ReadonlySet<string>) => setPage({ picked: [...picked] });
+  const setDrawingCollapsed = (next: SetStateAction<boolean>) =>
+    setPage({ drawingCollapsed: typeof next === "function" ? next(drawingCollapsed) : next });
+  const setExporting = (exporting: boolean) => setPage({ exporting });
+  const setProject = (project: string) => setPage({ project });
   const active = rows.find((r) => r.id === activeId) ?? rows[0];
 
   const set = (id: string, p: Partial<GrilleInput>) =>
@@ -75,7 +73,7 @@ function GrillesRoute() {
 
   const drawing = (
     <Pane
-      kind="visual"
+      scroll="clip"
       flush
       title="drawing"
       meta={
@@ -84,19 +82,22 @@ function GrillesRoute() {
           : "plan + section A-A of the active profile · type on any dimension to set it for every row; rib auto-spaces"
       }
       actions={
-        <ActionButton
+        <Button
           label={drawingCollapsed ? "show" : "hide"}
+          kind="framed"
           onClick={() => setDrawingCollapsed((c) => !c)}
           reason={
             drawingCollapsed
               ? "Show the drawing again."
               : "Collapse the drawing. Its header strip stays, so only the height changes."
           }
-        />
+        >
+          {drawingCollapsed ? "show" : "hide"}
+        </Button>
       }
     >
       {active && !drawingCollapsed && (
-        <div className="h-full overflow-auto">
+        <div data-surface="artifact" className="h-full overflow-auto">
           <SpecDrawing g={active} set={setAll} px={26} />
         </div>
       )}
@@ -105,22 +106,27 @@ function GrillesRoute() {
 
   const table = (
     <Pane
-      kind="content"
       flush
       title="profiles"
       meta={`${rows.length} candidate profiles · ${picked.size} on the export sheet`}
       actions={
         <>
-          <ActionButton
+          <Button
             label={`export ${picked.size} drawing${picked.size === 1 ? "" : "s"}`}
+            kind="framed"
             onClick={() => setExporting(true)}
             reason="Open the export sheet: the ticked profiles drawn read-only on one page, print to PDF or save each as .svg."
-          />
-          <ActionButton
+          >
+            {`export ${picked.size} drawing${picked.size === 1 ? "" : "s"}`}
+          </Button>
+          <Button
             label="reset"
+            kind="framed"
             onClick={() => setRows(seedRows())}
             reason="Throw away every edit and re-read the six workbook rows."
-          />
+          >
+            reset
+          </Button>
         </>
       }
     >
@@ -138,83 +144,85 @@ function GrillesRoute() {
 
   const chart = (
     <Pane
-      kind="inspector"
       flush
       title="field"
       meta={`free % vs qty, per opening width · ${field.length} buildable profiles for this stock`}
     >
       {active && (
-        <div
-          tabIndex={0}
-          title="Focus, then arrow keys: left/right walk qty, up/down walk opening width"
-          onKeyDown={(e) => {
-            if (!e.key.startsWith("Arrow")) return;
-            e.preventDefault();
-            e.stopPropagation();
-            const next = stepField(field, active, e.key);
-            if (next) set(active.id, next);
-          }}
-        >
-          <FieldChart field={field} active={active} onPick={(p) => set(active.id, p)} />
-          <p className="px-2">
-            click a point, or focus and use arrow keys: ←→ qty · ↑↓ opening width
-          </p>
-        </div>
+        <TooltipHint content="Focus, then arrow keys: left/right walk qty, up/down walk opening width">
+          <div
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (!e.key.startsWith("Arrow")) return;
+              e.preventDefault();
+              e.stopPropagation();
+              const next = stepField(field, active, e.key);
+              if (next) set(active.id, next);
+            }}
+          >
+            <FieldChart field={field} active={active} onPick={(p) => set(active.id, p)} />
+            <p className="px-2">
+              click a point, or focus and use arrow keys: ←→ qty · ↑↓ opening width
+            </p>
+          </div>
+        </TooltipHint>
       )}
     </Pane>
   );
 
   return (
-    <Surface>
-      <header
-        className="flex flex-wrap items-baseline gap-2 px-3 py-2"
-        style={{ borderColor: token("line") }}
-      >
-        <span>wood floor grille</span>
-        <span>free area calculator</span>
-        <FactChip
-          tone="caution"
-          dashed
-          title="Seeded from the six rows of PE Custom Wood Floor Grille Calculator.xlsx. Edits live in memory for this page view and are written nowhere."
+    <RouteShell manifest={manifest} handle={handle}>
+      <Surface>
+        <header
+          className="flex flex-wrap items-baseline gap-2 px-3 py-2"
+          style={{ borderColor: token("line") }}
         >
-          xlsx rows · in memory · writes nowhere
-        </FactChip>
-      </header>
+          <span>wood floor grille</span>
+          <span>free area calculator</span>
+          <FactChip
+            tone="caution"
+            dashed
+            title="Seeded from the six rows of PE Custom Wood Floor Grille Calculator.xlsx. Edits live in memory for this page view and are written nowhere."
+          >
+            xlsx rows · in memory · writes nowhere
+          </FactChip>
+        </header>
 
-      <PaneSplit
-        axis="vertical"
-        grow
-        resize={{
-          target: "start",
-          defaultSize: 420,
-          minSize: 34,
-          collapse: {
-            collapsed: drawingCollapsed,
-            onCollapsedChange: setDrawingCollapsed,
-            collapsedSize: 34,
-            collapseBelow: 90,
-          },
-        }}
-        start={
-          <PaneSplit
-            axis="horizontal"
-            grow
-            resize={{ target: "end", defaultSize: 500, minSize: 420, minOtherSize: 560 }}
-            start={drawing}
-            end={chart}
-          />
-        }
-        end={table}
-      />
-
-      {exporting && (
-        <ExportSheet
-          rows={rows.filter((r) => picked.has(r.id))}
-          project={project}
-          onProject={setProject}
-          onClose={() => setExporting(false)}
+        <PaneSplit
+          axis="vertical"
+          grow
+          resize={{
+            target: "start",
+            defaultSize: 420,
+            minSize: 34,
+            collapse: {
+              collapsed: drawingCollapsed,
+              onCollapsedChange: setDrawingCollapsed,
+              collapsedSize: 34,
+              collapseBelow: 90,
+            },
+          }}
+          start={
+            <PaneSplit
+              axis="horizontal"
+              grow
+              resize={{ target: "end", defaultSize: 500, minSize: 420, minOtherSize: 560 }}
+              start={drawing}
+              end={chart}
+            />
+          }
+          end={table}
         />
-      )}
-    </Surface>
+
+        {exporting && (
+          <ExportSheet
+            rows={rows.filter((r) => picked.has(r.id))}
+            project={project}
+            onProject={setProject}
+            onClose={() => setExporting(false)}
+          />
+        )}
+      </Surface>
+    </RouteShell>
   );
 }

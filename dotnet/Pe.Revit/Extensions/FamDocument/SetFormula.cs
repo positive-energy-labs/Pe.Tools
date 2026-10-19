@@ -177,12 +177,21 @@ public static class Formula {
         return new SizeLookupFormulaContext(args, maskedFormula, true);
     }
 
+    public static bool IsInchMarkSafeDelimiter(string text, int i, bool inString) => IsStringDelimiter(text, i, inString);
+
+    /// <summary>
+    ///     A double quote opens or closes a string unless it follows a digit outside a string: Revit's inch mark
+    ///     (`1"`, `Duct Radius * 24 / 1"`), which the validator refused as an unclosed string (family ledger, 2026-10-08).
+    /// </summary>
+    internal static bool IsStringDelimiter(string text, int i, bool inString) =>
+        text[i] == '"' && (inString || i == 0 || !(char.IsDigit(text[i - 1]) || text[i - 1] == '.'));
+
     private static bool TryFindMatchingParen(string formula, int openParenIndex, out int closeParenIndex) {
         var depth = 0;
         var inString = false;
         for (var i = openParenIndex; i < formula.Length; i++) {
             var c = formula[i];
-            if (c == '"')
+            if (IsStringDelimiter(formula, i, inString))
                 inString = !inString;
 
             if (inString)
@@ -209,8 +218,9 @@ public static class Formula {
         var depth = 0;
         var inString = false;
 
-        foreach (var c in argsText) {
-            if (c == '"')
+        for (var i = 0; i < argsText.Length; i++) {
+            var c = argsText[i];
+            if (IsStringDelimiter(argsText, i, inString))
                 inString = !inString;
 
             if (!inString) {

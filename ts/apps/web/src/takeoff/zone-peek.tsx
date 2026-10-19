@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { Key } from "#/components/anatomy";
-import { FactChip } from "#/components/lang/chip";
-import { fmtNum } from "#/components/master-table/model";
-import { token } from "#/lib/token";
+import { FactChip } from "@pe/kit/lang/chip";
+import { fmtNum } from "@pe/kit/table/model";
+import { token } from "@pe/kit/lib/token";
 import { contentViewport, fitFrame, type Bounds2, unionBounds } from "#/lib/affine-frame";
 import { loopBounds, pathD } from "#/takeoff/model";
 import { ABSENT_INK, CURSOR_INK, STATE_META, stateInk, type RoomState } from "#/takeoff/room-state";

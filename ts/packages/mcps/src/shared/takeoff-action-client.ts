@@ -1,5 +1,8 @@
-import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
-import { contextFetch as fetch, invocationContext } from "#invocation-context";
+import { createPeClient } from "@pe/agent-contracts/pe-api";
+import { readPeError } from "@pe/host-contracts/pe-api";
+import { z } from "zod";
+import { instancesSessionSelection, refusalSchema } from "@pe/agent-contracts";
+import { contextFetch as fetch, invocationContext } from "@pe/runtime/context";
 import { actionListFilterSchema, type ActionListFilter } from "@pe/agent-contracts";
 import {
   canonicalRouteInput,
@@ -18,6 +21,19 @@ import {
   type WorkKey,
 } from "@pe/agent-contracts";
 import { readTakeoffObservation } from "./takeoff-capture-client.ts";
+
+/**
+ * A refused admission. A door's typed refusal rides on the error (`refusal`) and its sentence is
+ * the message; any other body stays text, because only a host door speaks the typed shape.
+ */
+async function refusedAdmission(id: string, response: Response) {
+  const problem = await readPeError(response);
+  const typed = z.object({ refusal: refusalSchema }).safeParse(problem.details);
+  if (!typed.success) return Error(`Action '${id}' refused: ${problem.message}`);
+  const { reason, remedy } = typed.data.refusal;
+  const said = remedy && !reason.includes(remedy) ? `${reason} ${remedy}` : reason;
+  return Object.assign(Error(`Action '${id}' refused. ${said}`), { refusal: typed.data.refusal });
+}
 
 const retained = new Map<string, ActionAdmission>();
 const retentionKey = (base: string, key: string, target: DocumentRef | undefined, path: unknown) =>
@@ -62,20 +78,15 @@ export const runningAdmissions = () => [...inFlight()].map(([id, base]) => ({ id
  * the row settles `cancelled` at the operation's next checkpoint. Work already written stands.
  */
 export async function cancelAction(id: string, base = "") {
-  const response = await fetch(`${base}/actions/cancel`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id }),
-    signal: AbortSignal.timeout(30_000),
-  });
+  const response = await createPeClient(base, fetch).response(
+    "action.cancel",
+    { body: { id } },
+    {
+      signal: AbortSignal.timeout(30_000),
+    },
+  );
   if (!response.ok) {
-    // The host refuses with `{ error }`; anything else (a dev server's 404 page) never reached it.
-    const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
-    throw Error(
-      typeof body?.error === "string"
-        ? body.error
-        : `The stop did not reach the host (${response.status} ${response.statusText}).`,
-    );
+    throw Error((await readPeError(response)).message);
   }
   return actionReceiptSchema.parse(await response.json());
 }
@@ -84,7 +95,11 @@ export async function cancelAction(id: string, base = "") {
 export const cancelRunningAdmissions = () =>
   Promise.allSettled(runningAdmissions().map(({ id, base }) => cancelAction(id, base)));
 export async function readAction(id: string, base = "", signal?: AbortSignal) {
-  const response = await fetch(`${base}/actions?id=${encodeURIComponent(id)}`, { signal });
+  const response = await createPeClient(base, fetch).response(
+    "actions.read",
+    { query: { id } },
+    { signal },
+  );
   if (!response.ok) throw Error(`Action recovery failed (${response.status})`);
   return actionReceiptSchema.array().parse(await response.json())[0];
 }
@@ -93,7 +108,6 @@ export async function runSemanticAction(
   input: Record<string, unknown>,
   target: DocumentRef | undefined,
   bases: ActionBases = {},
-  actor: "human" | "agent" = "human",
   base = "",
   id?: string | (() => string),
   waitMs = Infinity,
@@ -120,30 +134,23 @@ export async function runSemanticAction(
         consumed.captureId = observation.capture.id;
       }
       if (!consumed.fileVersion) {
-        const response = await fetch(
-          `${base}/actions?file=${encodeURIComponent(String(input.path))}`,
-        );
+        const response = await createPeClient(base, fetch).response("actions.read", {
+          query: { file: String(input.path) },
+        });
         if (!response.ok) throw Error("Could not read the RHVAC file base");
         consumed.fileVersion = ((await response.json()) as { fileVersion: string }).fileVersion;
       }
     }
+    const sessionSelection = key.startsWith("instances.") ? instancesSessionSelection(input) : null;
     admission = {
       id: typeof id === "function" ? id() : (id ?? crypto.randomUUID()),
       kind: "workflow",
       key,
-      actor,
-      destination:
-        key.startsWith("instances.") &&
-        input.session &&
-        typeof input.session === "object" &&
-        "selection" in input.session
-          ? {
-              kind: "sdk-session",
-              selection: sdkSessionSelectionSchema.parse(input.session.selection),
-            }
-          : target
-            ? { kind: "document", ref: target }
-            : { kind: "host" },
+      destination: sessionSelection
+        ? { kind: "sdk-session", selection: sessionSelection }
+        : target
+          ? { kind: "document", ref: target }
+          : { kind: "host" },
       input,
       bases: consumed,
     };
@@ -179,12 +186,13 @@ export async function submitAction(
   let row: ActionReceipt | undefined;
   let response: Response | undefined;
   try {
-    response = await fetch(`${base}/actions`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(admission),
-      signal: admitted(),
-    });
+    response = await createPeClient(base, fetch).response(
+      "actions.admit",
+      { body: admission },
+      {
+        signal: admitted(),
+      },
+    );
   } catch (error) {
     if (Date.now() >= deadline) return detached("unknown");
     row = await readAction(admission.id, base, signal()).catch(() => undefined);
@@ -194,17 +202,24 @@ export async function submitAction(
     }
   }
   if (response) {
-    if (!response.ok) throw Error(`Action '${admission.id}' refused: ${await response.text()}`);
+    if (!response.ok) throw await refusedAdmission(admission.id, response);
     row = actionReceiptSchema.parse(await response.json());
   }
   if (!row) throw Error(`Action '${admission.id}' has no receipt`);
   inFlight().set(admission.id, base);
+  // A host may record the request parsed (defaults applied) or as sent; compare both parsed.
+  const schema = (semanticActions as Record<string, { input: z.ZodType } | undefined>)[
+    admission.key
+  ]?.input;
+  const intent = (input: unknown) => {
+    const parsed = schema?.safeParse(input);
+    return canonicalRouteInput(parsed?.success ? parsed.data : input);
+  };
   try {
     if (
       row.kind !== admission.kind ||
       row.key !== admission.key ||
-      row.actor !== admission.actor ||
-      canonicalRouteInput(row.request) !== canonicalRouteInput(admission.input) ||
+      intent(row.request) !== intent(admission.input) ||
       canonicalRouteInput(row.destination) !== canonicalRouteInput(admission.destination) ||
       canonicalRouteInput(row.bases) !== canonicalRouteInput(admission.bases)
     )
@@ -225,9 +240,13 @@ export async function submitAction(
     inFlight().delete(admission.id);
   }
 }
+export class ActionResultError extends Error {
+  constructor(readonly action: ActionReceipt | DetachedAction) {
+    super(`${action.id}: ${action.state}: ${"error" in action ? action.error : "outcome pending"}`);
+  }
+}
 export function actionResult(row: ActionReceipt | DetachedAction): unknown {
-  if (row.state !== "succeeded")
-    throw Error(`${row.id}: ${row.state}: ${"error" in row ? row.error : "outcome pending"}`);
+  if (row.state !== "succeeded") throw new ActionResultError(row);
   return row.result;
 }
 
@@ -242,7 +261,6 @@ export async function controlAction(
   key: ActionControlKey,
   input: unknown,
   base = "",
-  actor?: "human" | "agent",
 ): Promise<ActionReceipt> {
   const { id } = actionControls[key].input.parse(input);
   if (key === "action.read") {
@@ -250,12 +268,13 @@ export async function controlAction(
     if (!row) throw Error("Original action not found");
     return row;
   }
-  const response = await fetch(`${base}/actions/${key.slice("action.".length)}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id, ...(actor ? { actor } : {}) }),
-    signal: AbortSignal.timeout(30_000),
-  });
+  const response = await createPeClient(base, fetch).response(
+    key,
+    { body: { id } },
+    {
+      signal: AbortSignal.timeout(30_000),
+    },
+  );
   if (!response.ok) throw Error(await response.text());
   return actionReceiptSchema.parse(await response.json());
 }
@@ -292,7 +311,6 @@ export async function saveSettingsAction(
     input,
     undefined,
     { work: { key: scope, revision } },
-    "human",
     base,
     id,
   );
@@ -306,7 +324,11 @@ export async function readScopedActionStatuses(
 ) {
   const query = new URLSearchParams({ scope: JSON.stringify(actionListFilterSchema.parse(scope)) });
   if (include) query.set("include", include);
-  const response = await fetch(`${base}/actions?${query.toString()}`, { signal });
+  const response = await createPeClient(base, fetch).response(
+    "actions.read",
+    { query: Object.fromEntries(query) },
+    { signal },
+  );
   if (!response.ok)
     throw Error(`Action list failed (${response.status}): ${await response.text()}`);
   return actionStatusSchema.array().parse(await response.json());

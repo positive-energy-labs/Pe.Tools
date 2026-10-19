@@ -1,9 +1,14 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
+import { productPathNames } from "../src/contracts/product.ts";
 import {
-  documentsRootEnvVar,
   parseDocumentsKnownFolder,
-  userDocumentsPath,
+  productHomePath,
+  testHomeRootVariable,
 } from "../src/product-paths.ts";
+
+const homeVariable = productPathNames.productHomeVariable;
 
 // The real `reg query` output on a OneDrive-redirected profile: the value stays REG_EXPAND_SZ,
 // so the redirection survives only if the reader expands it itself.
@@ -33,15 +38,29 @@ test("an unreadable known folder fails loudly instead of falling back to the pro
   expect(() => parseDocumentsKnownFolder(oneDrive, {})).toThrow("undefined variable 'USERPROFILE'");
 });
 
-test("the environment override wins and is read live, never from the cache", () => {
-  const original = process.env[documentsRootEnvVar];
+test("the product home override names the home itself, read live, never from the cache", () => {
+  const original = process.env[homeVariable];
   try {
-    process.env[documentsRootEnvVar] = "D:\\override";
-    expect(userDocumentsPath()).toBe("D:\\override");
-    process.env[documentsRootEnvVar] = "D:\\second";
-    expect(userDocumentsPath()).toBe("D:\\second");
+    process.env[homeVariable] = join(tmpdir(), "override");
+    expect(productHomePath()).toBe(join(tmpdir(), "override"));
+    process.env[homeVariable] = join(tmpdir(), "second");
+    expect(productHomePath()).toBe(join(tmpdir(), "second"));
   } finally {
-    if (original === undefined) delete process.env[documentsRootEnvVar];
-    else process.env[documentsRootEnvVar] = original;
+    if (original === undefined) delete process.env[homeVariable];
+    else process.env[homeVariable] = original;
+  }
+});
+
+test("under a test run no product home may resolve outside the temp directory", () => {
+  const original = process.env[homeVariable];
+  try {
+    expect(process.env[testHomeRootVariable]).toBeTruthy();
+    process.env[homeVariable] = "C:UserssomeoneDocumentsPe.Tools";
+    expect(() => productHomePath()).toThrow("Test isolation");
+    delete process.env[homeVariable];
+    expect(() => productHomePath()).toThrow("Test isolation"); // the unset override is the real home
+  } finally {
+    if (original === undefined) delete process.env[homeVariable];
+    else process.env[homeVariable] = original;
   }
 });

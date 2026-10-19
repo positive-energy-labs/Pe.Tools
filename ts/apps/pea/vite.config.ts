@@ -1,4 +1,5 @@
 import { defineConfig } from "vite-plus";
+import { receiptBuildDefines } from "../host/src/build-stamp.ts";
 
 export default defineConfig({
   pack: {
@@ -6,6 +7,9 @@ export default defineConfig({
     outDir: "dist-installed/bundle",
     clean: ["dist-installed"],
     shims: true,
+    define: {
+      __PE_SOURCE_COMMIT__: receiptBuildDefines("release").__PE_SOURCE_COMMIT__,
+    },
     deps: {
       alwaysBundle: [/./],
       onlyBundle: false,
@@ -26,4 +30,11 @@ export default defineConfig({
     },
   },
   fmt: {},
+  // mcp.test.ts imports the host module graph (mcp-route -> receipt-export -> host-ownership),
+  // which resolves PE_LANE at module load; declare the dev lane as the host's own tests do.
+  test: {
+    env: { PE_LANE: "dev" },
+    globalSetup: ["../../tests/isolated-home/global-setup.ts"],
+    setupFiles: ["../../tests/isolated-home/setup.ts"],
+  },
 });

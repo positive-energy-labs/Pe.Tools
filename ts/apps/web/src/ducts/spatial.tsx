@@ -10,8 +10,8 @@
  */
 import { useMemo, useState } from "react";
 
-import { EmptyState } from "#/components/lang/empty";
-import { FactChip } from "#/components/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { FactChip } from "@pe/kit/lang/chip";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 import { Switcher } from "#/components/lang/switcher";
@@ -24,11 +24,12 @@ import { useIso } from "./iso";
 import { labelOfNode, legsOf, type Claim } from "./legs";
 import type { DuctsPage } from "./manifest";
 import { usePlan } from "./plan";
-import type { Priced } from "./pricing";
-import { type DuctSnapshot, type GroupReadiness } from "./readiness";
+import type { Priced } from "@pe/ducts-domain/pricing";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import type { GroupReadiness } from "@pe/ducts-domain/readiness";
 import { indexOf, subjectScene, type DuctIndex } from "./scene";
 import { READY } from "./tables";
-import { groupTree, runsOf } from "./topology";
+import { groupTree, runsOf } from "@pe/ducts-domain/topology";
 
 function EncodingBand({
   encoding,
@@ -232,7 +233,7 @@ function Spatial({
       grow
       resize={{ target: "end", defaultSize: 360, minSize: 240, persist: "pe.ducts.factsWidth" }}
       start={
-        <Pane kind="content" title={view.label} meta={meta} scroll="clip" flush>
+        <Pane id="content" title={view.label} meta={meta} scroll="clip" flush>
           <div className="flex size-full min-h-0 flex-col">
             <div className="flex flex-col gap-1 px-1 py-1">
               <div className="flex flex-wrap items-center gap-1">
@@ -331,7 +332,7 @@ function Spatial({
         </Pane>
       }
       end={
-        <Pane kind="content" title="facts" scroll="auto">
+        <Pane id="content" title="facts" scroll="auto">
           <div className="flex flex-col gap-3">
             {place ? <PlaceFacts place={place} /> : null}
             {leg ? <LegFacts leg={leg} /> : null}

@@ -98,7 +98,7 @@ connector-measured Theta is not exactly 90. Then PROVEN on a fresh copy: 6751193
 and its Angle parameter agree; the palette rounds to 90.00), its twin exactly 90. A decoy probe (write CR3-1 through
 the hop; replaced means offered) on 36 sampled elbows sets Revit's tolerance between 1.25e-7 and 3.1e-7 degrees. Of
 1235 round elbows near 90 degrees on Chadds, 87 are 6e-6 degrees or more off and can never hold a table: about 7%,
-from ducts drawn a hair off square in a plan rotated 10.68 degrees to the project axes. The same probe showed the
+from ducts drawn a hair off square in a plan rotated 10.68 degrees to the project axes. Corrected the same day (control panel `Pages/pdrop-tour`, `offaxis.csx`, 1235 elbows): plan rotation is not the cause; a duct a hair off its direction is. On-axis elbows refuse at 5.5%, 45-degree ducts at 4.5%, almost-on-axis at 45%; 10.68 degrees describes only the ducts at 6751193. The same probe showed the
 Not Defined hop alone stores the first offered table on a bare fitting: the hop is Revit's auto-assign.
 Stamp: PROVEN[session, controlled `ducts-ground`, R2025 detached Chadds copy reopened 2026-10-05 12:11, `theta.csx`,
 `probe-census.csx`]. An attempt to square the ducts by script snapped one to the world axes, broke two joints, and the

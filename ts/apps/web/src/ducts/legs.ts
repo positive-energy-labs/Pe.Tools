@@ -14,7 +14,8 @@
  */
 import type { DuctClaim } from "@pe/agent-contracts";
 
-import { snapshotById, type DuctSnapshot } from "./readiness";
+import { snapshotById } from "@pe/ducts-domain/readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];

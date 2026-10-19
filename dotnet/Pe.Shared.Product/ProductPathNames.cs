@@ -20,4 +20,10 @@ public static class ProductPathNames {
     public const string PodManifestFileName = "pod.json";
     public const string HostLogFileName = "host.log.txt";
     public const string RevitAppLogFileName = "revit.log.txt";
+
+    /// <summary>The one override for the whole product home; host, Pea and Revit read it identically.</summary>
+    public const string ProductHomeVariable = "PE_TOOLS_PRODUCT_HOME";
+
+    /// <summary>Under an override, machine-local state, logs and service files live in <c>&lt;home&gt;\.local-state</c>.</summary>
+    public const string LocalStateDirectoryName = ".local-state";
 }

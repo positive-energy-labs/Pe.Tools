@@ -13,7 +13,8 @@ import type { Reading } from "@pe/agent-contracts";
 
 import { MARK } from "./inspector";
 import type { RouteAction } from "./manifest";
-import type { RouteHandle } from "./use-route";
+import type { RouteHandle } from "./handle";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function FlowMatrix({ handle }: { handle: RouteHandle<any, any, any, any> }) {
   const { manifest, readings, resolution, work } = handle;
@@ -45,14 +46,14 @@ export function FlowMatrix({ handle }: { handle: RouteHandle<any, any, any, any>
         {readingKeys.map((key) => {
           const reading = readings[key] as Reading<unknown>;
           return (
-            <span
-              key={key}
-              className="t-small face-mono text-ink-2"
-              title={`${key} · ${reading.state}`}
-              data-tone={reading.state === "failed" ? "caution" : undefined}
-            >
-              {MARK[reading.state]} {key}
-            </span>
+            <TooltipHint content={`${key} · ${reading.state}`} key={key}>
+              <span
+                className="t-small face-mono text-ink-2"
+                data-tone={reading.state === "failed" ? "caution" : undefined}
+              >
+                {MARK[reading.state]} {key}
+              </span>
+            </TooltipHint>
           );
         })}
         <span className="t-small t-upper text-ink-mute">needs</span>
@@ -67,15 +68,16 @@ export function FlowMatrix({ handle }: { handle: RouteHandle<any, any, any, any>
             {readingKeys.map((key) => {
               const hit = action.dirties.includes(key);
               return (
-                <span
-                  key={key}
-                  className={`text-center face-mono ${hit ? "text-ink" : "text-ink-mute"}`}
-                  title={
+                <TooltipHint
+                  content={
                     hit ? `${action.label} dirties ${key}` : `${action.label} leaves ${key} alone`
                   }
+                  key={key}
                 >
-                  {hit ? "●" : "·"}
-                </span>
+                  <span className={`text-center face-mono ${hit ? "text-ink" : "text-ink-mute"}`}>
+                    {hit ? "●" : "·"}
+                  </span>
+                </TooltipHint>
               );
             })}
             <span className="t-small face-mono text-ink-mute">{handle.actions[name].needs}</span>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Provenance, Section } from "#/components/lang/section";
 import { Gap } from "#/design-system/exhibit";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 interface TokenSpec {
   token: string;
@@ -207,11 +208,9 @@ export function TokenSpecimens() {
               key={t.token}
               className="grid grid-cols-[2.25rem_minmax(0,10rem)_minmax(0,1fr)] items-center gap-x-3 gap-y-1 py-1 sm:grid-cols-[2.25rem_minmax(0,10rem)_minmax(0,1fr)_minmax(0,20rem)]"
             >
-              <span
-                className="h-5 w-9"
-                style={{ backgroundColor: `var(${t.token})` }}
-                title={values[t.token] ?? t.token}
-              />
+              <TooltipHint content={values[t.token] ?? t.token}>
+                <span className="hairline h-5 w-9" style={{ backgroundColor: `var(${t.token})` }} />
+              </TooltipHint>
               <span className="t-small face-mono text-ink">{t.token}</span>
               <span className="min-w-0 t-small t-upper text-ink-2">{t.means}</span>
               <span className="col-span-3 t-small face-mono text-ink-mute sm:col-span-1">

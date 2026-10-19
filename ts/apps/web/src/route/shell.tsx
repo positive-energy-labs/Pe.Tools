@@ -4,19 +4,27 @@
  * the shell draws none of its own when a route hands one in.
  *
  * No connected-or-not lamp: those states left product chrome (host ledger 2026-10-09). Machine
- * state, update included, is the version chip's drawer (`machine/drawer.tsx`).
+ * state and repair actions live on the canonical Machine route; configuration lives in Settings.
  */
 import { useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
-import { ThemeToggle } from "#/components/lang/theme-toggle";
+import {
+  PrimaryRouteControls,
+  useHasGlobalNavigation,
+  useIsPrimaryRoute,
+} from "#/navigation/route-controls";
+import { ThemeToggle } from "@pe/kit/lang/theme-toggle";
+import { usePublishRouteOptions } from "#/settings/options";
 
 import { RouteHelpButton } from "./help";
 import { HostedChrome } from "./hosted-chrome";
-import { KeysNode, manifestChords } from "./keys";
+import { KeysNode } from "@pe/kit/keys";
+import { manifestChords } from "./keys";
 import type { RouteManifest } from "./manifest";
 import { SituationAction } from "./situation-verbs";
-import { useRoute, type RouteHandle } from "./use-route";
+import { useRoute } from "./use-route";
+import type { RouteHandle } from "./handle";
 
 /* ── The verb row ─────────────────────────────────────────────────────────── */
 
@@ -80,7 +88,7 @@ export function useChooseTarget(): [string | null, (target: string | null) => vo
 
 /**
  * The thread this page's target lives on, from `?thread`. A page opened without one mints a fresh
- * thread and writes it into the URL, the way `/chat` opens an empty thread; the root retains it on
+ * thread and writes it into the URL, the way `/pea` opens an empty thread; the root retains it on
  * every link after that. (Re-openable: "latest thread" instead of a fresh one.)
  */
 export function useRouteThread(): string {
@@ -131,6 +139,15 @@ function BaselineShell<W, R extends string, P, A extends string>({
   children,
 }: ShellProps<W, R, P, A>) {
   const chrome = useContext(HostedChrome);
+  const globalNavigation = useHasGlobalNavigation();
+  const primary = useIsPrimaryRoute(manifest.key);
+  usePublishRouteOptions(
+    manifest.key,
+    manifest.name,
+    manifest.options,
+    handle.page[0],
+    handle.page[1],
+  );
   return (
     // The one landmark of the primitive. A route may override the printed head with its own word
     // (chat prints the thread's label), so the shell names itself with the MANIFEST's name: that
@@ -143,16 +160,24 @@ function BaselineShell<W, R extends string, P, A extends string>({
       <KeysNode id={manifest.name} keys={manifestChords(handle)}>
         {situation ?? (
           <>
-            <div className="flex min-w-0 items-center justify-between gap-4">
-              <h1 className="t-head face-display text-ink">{name ?? manifest.name}</h1>
-              <span className="flex shrink-0 items-center gap-3">
-                {aside}
-                <RouteHelpButton name={manifest.name} docs={manifest.docs} />
-                <ThemeToggle />
-                {chrome}
-              </span>
-            </div>
-            {head ?? <ShellVerbs handle={handle} />}
+            <PrimaryRouteControls route={manifest.key} slot="situation">
+              {(aside || head || Object.keys(handle.actions).length > 0 || !primary) && (
+                <div data-surface="page" className="flex min-w-0 flex-col gap-2 p-3">
+                  {!primary && (
+                    <div className="flex min-w-0 items-center justify-between gap-4">
+                      <h1 className="t-head face-display text-ink">{name ?? manifest.name}</h1>
+                    </div>
+                  )}
+                  {aside}
+                  {head ?? <ShellVerbs handle={handle} />}
+                </div>
+              )}
+            </PrimaryRouteControls>
+            <PrimaryRouteControls route={manifest.key}>
+              <RouteHelpButton name={manifest.name} docs={manifest.docs} />
+              {!globalNavigation && <ThemeToggle />}
+              {chrome}
+            </PrimaryRouteControls>
           </>
         )}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>

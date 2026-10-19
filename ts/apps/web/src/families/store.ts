@@ -28,8 +28,8 @@ import {
 } from "@pe/agent-contracts";
 import { z } from "zod";
 
-import type { CellWire } from "#/components/lang/band";
-import type { TableState } from "#/components/master-table/model";
+import type { CellWire } from "#/components/work/band";
+import type { TableState } from "@pe/kit/table/model";
 import { useHostCall, previousOf, useReading } from "#/readings";
 import { useRoute, type EntityPage } from "#/route";
 import { usePodList } from "#/route/pods";

@@ -19,7 +19,7 @@ It is not the installed-layout authority. `product.payloads.json` is the single 
 - `ProductPathNames` — product-owned state and user-content names.
 - `ProductRuntimeLayout` — LocalAppData state/log/cache trees, including APS tokens. No binary paths.
 - `ProductUserContentLayout` / `ScriptingWorkspaceLayout` — `Documents\Pe.Tools\preferences.json` and portable Pods.
-- `ProductPathing` — safe subdirectory resolution and LocalAppData lookup.
+- `ProductPathing` — the product home (`PE_TOOLS_PRODUCT_HOME`, else `Documents\Pe.Tools`; the host resolves the same variable), safe subdirectory resolution and the machine-local runtime root (`%LOCALAPPDATA%\Positive Energy\Pe.Tools`, or `<home>\.local-state` when the override is set, so an isolated run shares no state with the owner's host; the host's `productRoot` resolves the same way).
 
 ## Hard Dependency Rule
 
@@ -51,5 +51,6 @@ The local folder is a filesystem address, not pod identity. Authored JSON, scrip
 ## Consumer Guidance
 
 - Ask for intentful paths and perform IO at the caller boundary; resolution creates no directories.
+- Every Pe.Tools-owned path, including scratch, must derive from `ProductRuntimeLayout` / `ProductUserContentLayout`, TS `productRoot` / `product-paths`, or PowerShell `tools/product-paths.ps1`. `PE_TOOLS_PRODUCT_HOME` selects the whole environment. The production-only `product-environment.guard.test.ts` rejects direct OS-root reads outside these resolvers; each third-party or SDK exception names its reason.
 - Build and installer code reads installed-layout facts directly from `product.payloads.json`.
 - Repo artifact topology belongs to `build/ProductLayoutAuthority.cs` and `build/BuildArtifactLayout.cs`.

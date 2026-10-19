@@ -10,11 +10,8 @@ public sealed record ProductUserContentLayout(
     public string AgentInstructionsPath => Path.Combine(this.RootPath, ProductPathNames.AgentInstructionsFileName);
     public string ReadmePath => Path.Combine(this.RootPath, ProductPathNames.ReadmeFileName);
 
-    public static ProductUserContentLayout ForCurrentUser(string? documentsPath = null) {
-        var rootPath = Path.Combine(
-            ProductPathing.ResolveDocuments(documentsPath),
-            ProductIdentity.ProductName
-        );
+    public static ProductUserContentLayout ForCurrentUser(string? productHomePath = null) {
+        var rootPath = ProductPathing.ResolveProductHome(productHomePath);
 
         return new ProductUserContentLayout(
             rootPath,

@@ -7,7 +7,8 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { familyCellKey, type FamilyCellState } from "@pe/agent-contracts";
 
-import { Table } from "#/components/master-table/table";
+import { Table } from "@pe/kit/table/table";
+import { TooltipProvider } from "@pe/kit/lang/tooltip";
 
 import { ParamCell, useLiveCells, type ParamColumn, type TypeRow } from "./matrix-columns";
 
@@ -84,12 +85,20 @@ const matrix = (
       />
     );
   }
-  const view = render(<Matrix cells={initialCells} />);
+  const view = render(
+    <TooltipProvider delay={0}>
+      <Matrix cells={initialCells} />
+    </TooltipProvider>,
+  );
   return {
     view,
     input: view.container.querySelector<HTMLInputElement>("input.dl-cell-input")!,
     updateCells: (cells: Record<string, FamilyCellState>) =>
-      view.rerender(<Matrix cells={cells} />),
+      view.rerender(
+        <TooltipProvider delay={0}>
+          <Matrix cells={cells} />
+        </TooltipProvider>,
+      ),
   };
 };
 
@@ -146,12 +155,13 @@ test("typed text is Revit's to read, and Revit's answer is what is staged", asyn
   );
 });
 
-test("a measured parameter with no reported display unit is locked with a reason", () => {
+test("a measured parameter with no reported display unit is locked with a reason", async () => {
   const propose = vi.fn(async () => null);
   const { input, view } = matrix({ specTypeId: CFM.specTypeId }, propose);
   expect(input).toBeNull();
   expect(propose).not.toHaveBeenCalled();
-  expect(view.container.innerHTML).toContain("cannot be staged");
+  fireEvent.mouseEnter(view.container.querySelector("tbody [data-base-ui-tooltip-trigger]")!);
+  expect((await screen.findByRole("tooltip")).textContent).toContain("cannot be staged");
 });
 
 test("feet, inches and fractions go to Revit; its exact answer is staged", async () => {
@@ -229,16 +239,19 @@ test("unitless doubles and integers refuse malformed input, then accept correcte
   );
 });
 
-test("ElementId cells are visibly locked with a specific reason", () => {
+test("ElementId cells are visibly locked with a specific reason", async () => {
   const propose = vi.fn(async () => null);
   const row: TypeRow = { ...ROWS[0]!, storageTypes: { [PARAMETER]: "ElementId" } };
   const { input, view } = matrix(null, propose, undefined, [row]);
   expect(input).toBeNull();
-  expect(view.container.innerHTML).toContain("cannot safely select that element");
+  fireEvent.mouseEnter(view.container.querySelector("tbody [data-base-ui-tooltip-trigger]")!);
+  expect((await screen.findByRole("tooltip")).textContent).toContain(
+    "cannot safely select that element",
+  );
   expect(propose).not.toHaveBeenCalled();
 });
 
-test("formula and project-bound cells explain why typing is refused", () => {
+test("formula and project-bound cells explain why typing is refused", async () => {
   const propose = vi.fn(async () => null);
   for (const [change, reason] of [
     [{ formulas: { [PARAMETER]: "Present" } }, "Driven by a formula"],
@@ -246,7 +259,8 @@ test("formula and project-bound cells explain why typing is refused", () => {
   ] as const) {
     const { view, input } = matrix(null, propose, undefined, [{ ...ROWS[0]!, ...change }]);
     expect(input).toBeNull();
-    expect(view.container.innerHTML).toContain(reason);
+    fireEvent.mouseEnter(view.container.querySelector("tbody [data-base-ui-tooltip-trigger]")!);
+    expect((await screen.findByRole("tooltip")).textContent).toContain(reason);
     view.unmount();
   }
   expect(propose).not.toHaveBeenCalled();
@@ -297,7 +311,7 @@ test("Yes/No stays a closed choice and says when staging is refused", async () =
   );
   expect(view.container.textContent).toContain("Reading changed; retry.");
   const refusal = view.container.querySelector<HTMLButtonElement>(
-    'button[title="Reading changed; retry. — click to dismiss"]',
+    'button[aria-label="Reading changed; retry."]',
   );
   expect(refusal).not.toBeNull();
   expect(refusal?.closest("[data-cell-editor]")).toBeNull();

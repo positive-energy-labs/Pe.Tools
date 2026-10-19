@@ -1,20 +1,39 @@
 namespace Pe.Shared.Product;
 
 internal static class ProductPathing {
-    public static string ResolveLocalAppData(string? localAppData) =>
-        string.IsNullOrWhiteSpace(localAppData)
+    /// <summary>
+    ///     The machine-local product root: an explicit <c>%LOCALAPPDATA%</c>, else
+    ///     <c>&lt;product home&gt;\.local-state</c> when <see cref="ProductPathNames.ProductHomeVariable" /> is set
+    ///     (an isolated run shares no state with the owner's host), else <c>%LOCALAPPDATA%\Vendor\Product</c>.
+    ///     The host's <c>productRoot</c> resolves the same way.
+    /// </summary>
+    public static string ResolveRuntimeRoot(string? localAppData) {
+        if (string.IsNullOrWhiteSpace(localAppData) &&
+            !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable)))
+            return Path.Combine(ResolveProductHome(null), ProductPathNames.LocalStateDirectoryName);
+        var local = string.IsNullOrWhiteSpace(localAppData)
             ? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
             : Path.GetFullPath(localAppData);
+        return Path.Combine(local, ProductIdentity.VendorName, ProductIdentity.ProductName);
+    }
 
     public static string ResolveApplicationData(string? applicationData) =>
         string.IsNullOrWhiteSpace(applicationData)
             ? Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
             : Path.GetFullPath(applicationData);
 
-    public static string ResolveDocuments(string? documentsPath) =>
-        string.IsNullOrWhiteSpace(documentsPath)
-            ? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
-            : Path.GetFullPath(documentsPath);
+    /// <summary>
+    ///     The product home: an explicit path, else <see cref="ProductPathNames.ProductHomeVariable" />,
+    ///     else <c>Documents\Pe.Tools</c>. The host's <c>productHomePath</c> resolves the same way.
+    /// </summary>
+    public static string ResolveProductHome(string? productHomePath) {
+        var explicitHome = string.IsNullOrWhiteSpace(productHomePath)
+            ? Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable)
+            : productHomePath;
+        return string.IsNullOrWhiteSpace(explicitHome)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), ProductIdentity.ProductName)
+            : Path.GetFullPath(explicitHome.Trim());
+    }
 
     public static string ResolveSafeSubDirectoryPath(string rootPath, string? subdirectory, string paramName) {
         var normalized = NormalizeRelativePath(subdirectory, paramName);

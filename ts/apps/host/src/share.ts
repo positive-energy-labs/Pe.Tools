@@ -1,9 +1,9 @@
+import { peRoutes, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { execFile } from "node:child_process";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Effect } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
-import { invocationContext } from "@pe/mcps/context";
+import { HttpRouter, HttpEffect } from "effect/unstable/http";
 import type { MachineShare } from "@pe/agent-contracts";
 import type { IdentityResult } from "./request-identity.ts";
 
@@ -72,7 +72,7 @@ export function createShare(options: ShareOptions) {
   const listeners = new Set<() => void>();
   let intent: Intent = { desired: "off", mapping: null };
   let state: MachineShare = {
-    allowRemoteAdministration: true,
+    allowRemoteAdministration: false,
     desired: "off",
     state: "unknown",
     url: null,
@@ -89,11 +89,25 @@ export function createShare(options: ShareOptions) {
   const refused = (code: string, detail: string) => {
     state = {
       ...state,
-      allowRemoteAdministration: intent.allowRemoteAdministration ?? true,
+      allowRemoteAdministration: intent.allowRemoteAdministration ?? false,
       desired: intent.desired,
       state: "refused",
       url: null,
       refusal: { code, detail },
+    };
+    return state;
+  };
+  // A missing `tailscale` binary is a state of the machine, not something the host refused.
+  const failed = (error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+      return refused("share.unavailable", String(error));
+    state = {
+      ...state,
+      allowRemoteAdministration: intent.allowRemoteAdministration ?? false,
+      desired: intent.desired,
+      state: "needs-tailscale",
+      url: null,
+      refusal: null,
     };
     return state;
   };
@@ -111,7 +125,7 @@ export function createShare(options: ShareOptions) {
     state = {
       ...state,
       desired: intent.desired,
-      allowRemoteAdministration: intent.allowRemoteAdministration ?? true,
+      allowRemoteAdministration: intent.allowRemoteAdministration ?? false,
     };
   }
   async function status() {
@@ -168,7 +182,7 @@ export function createShare(options: ShareOptions) {
     try {
       await status();
     } catch (error) {
-      refused("share.unavailable", String(error));
+      failed(error);
     } finally {
       checkedAt = Date.parse(now());
     }
@@ -231,7 +245,7 @@ export function createShare(options: ShareOptions) {
             return refused("share.not-verified", "Serve did not confirm the requested mapping.");
           return state;
         } catch (error) {
-          return refused("share.unavailable", String(error));
+          return failed(error);
         } finally {
           checkedAt = Date.parse(now());
           notify();
@@ -289,34 +303,16 @@ export function createShare(options: ShareOptions) {
 export type ShareOwner = ReturnType<typeof createShare>;
 
 export const shareRoute = (share: ShareOwner) =>
-  HttpRouter.add("PUT", "/pe/share", (request) =>
-    Effect.gen(function* () {
-      if (invocationContext()?.principal?.kind !== "local")
-        return HttpServerResponse.jsonUnsafe(
-          { error: "Sharing is an installed local switch." },
-          { status: 403 },
-        );
-      const parsed = yield* Effect.result(request.json);
-      const body = parsed._tag === "Success" ? parsed.success : null;
-      if (
-        !body ||
-        typeof body !== "object" ||
-        Object.keys(body).length !== 1 ||
-        ((!("on" in body) || typeof body.on !== "boolean") &&
-          (!("allowRemoteAdministration" in body) ||
-            typeof body.allowRemoteAdministration !== "boolean"))
-      )
-        return HttpServerResponse.jsonUnsafe(
-          { error: "Expected { on: boolean } or { allowRemoteAdministration: boolean }" },
-          { status: 400 },
-        );
-      const value = yield* Effect.promise(() =>
-        "on" in body
-          ? share.set(body.on as boolean)
-          : share.setRemoteAdministration(body.allowRemoteAdministration as boolean),
-      );
-      return HttpServerResponse.jsonUnsafe(value, {
-        status: value.state === "refused" ? 409 : 200,
-      });
-    }),
+  HttpRouter.add(
+    peRoutes["share.set"].method,
+    peRoutes["share.set"].path,
+    HttpEffect.fromWebHandler((request) =>
+      servePeRoute(request, async (request) => {
+        const body = peRoutes["share.set"].body.parse(await request.json());
+        const value = await ("on" in body
+          ? share.set(body.on)
+          : share.setRemoteAdministration(body.allowRemoteAdministration));
+        return Response.json(value, { status: value.state === "refused" ? 409 : 200 });
+      }),
+    ),
   );

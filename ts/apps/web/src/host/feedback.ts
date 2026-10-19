@@ -1,27 +1,9 @@
-import { hostFetch } from "#/host/runtime";
-import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
-
-export type Feedback = {
-  comment: string;
-  url: string;
-  selector: string | null;
-  component: string | null;
-  components: string[];
-  html: string;
-  rect: { x: number; y: number; width: number; height: number };
-  viewport: { width: number; height: number; dpr: number };
-  picture: string | null;
-  picture_error: string | null;
-};
-
-/** Resolves once the host has handed the note to PostHog; throws the host's reason otherwise. */
-export async function sendFeedback(feedback: Feedback): Promise<void> {
-  const response = await hostFetch(peUrl(resolveWorkbenchConfig(), "/feedback"), {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(feedback),
-  });
-  if (response.ok) return;
-  const body = (await response.json().catch(() => null)) as { error?: string } | null;
-  throw new Error(body?.error ?? `feedback failed (${response.status})`);
-}
+import type { z } from "zod";
+import { peRoutes } from "@pe/agent-contracts/pe-api";
+import { peClient } from "./pe-client";
+export type Feedback = z.input<(typeof peRoutes)["feedback.submit"]["body"]>;
+export type FeedbackReceipt = z.output<(typeof peRoutes)["feedback.submit"]["output"]>;
+/** Kept and delivered are different facts; uncertain delivery never resubmits the note. */
+export const sendFeedback = (body: Feedback) => peClient.call("feedback.submit", { body });
+export const deliverFeedback = (id: string) =>
+  peClient.call("feedback.deliver", { params: { id } });

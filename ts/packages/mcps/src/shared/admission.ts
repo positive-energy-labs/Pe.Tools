@@ -12,6 +12,7 @@ import {
   scheduleReads,
   semanticActions,
   actionControls,
+  instancesSessionSelection,
   type ActionControlKey,
   canonicalRouteInput,
   type ActionReceipt,
@@ -33,13 +34,12 @@ import {
 } from "./takeoff-action-client.ts";
 
 export interface AdmissionContext {
+  /** Caller identity travels in x-pe-context, never in the admission body. */
   hostBaseUrl: string;
   /** Explicit session selector; omitted means "the session the catalog answered from". */
   bridgeSessionId?: string;
   session?: SdkSessionSelection;
   openDocumentId?: string;
-  /** Required for mutation; never inferred from the transport. */
-  actor?: "human" | "agent";
   /** Reuse an original action id to replay its receipt instead of starting a new attempt. */
   actionId?: string;
   timeoutMs?: number;
@@ -99,7 +99,7 @@ export type CapabilityIntent = {
  *
  * An original `actionId` with no named session is a replay: its receipt is the authority for
  * kind and destination, so no catalog or session is read. The host journal refuses a replay whose
- * key, actor, input, target, or bases differ from the original.
+ * key, input, target, or bases differ from the original.
  */
 export async function readCapabilityIntent(
   key: string,
@@ -140,7 +140,7 @@ export async function readCapabilityIntent(
   throw new Error(
     catalog.bridgeCatalogError
       ? `The operation catalog of session '${session}' is unreachable: ${catalog.bridgeCatalogError}. '${key}' was not checked; retry once the session answers.`
-      : `'${key}' is not in the operation catalog of session '${session}'. Run \`pea host operations search\`.`,
+      : `'${key}' is not in the operation catalog of session '${session}'. Run \`pea find\`.`,
   );
 }
 
@@ -170,7 +170,8 @@ const exactDocument = (context: AdmissionContext) => {
 /**
  * Run any catalogued capability by key. Reads go to `/call` (schedule readings to their host
  * route); mutations are admitted at `/actions` and followed to a terminal receipt, whose result
- * is returned unwrapped. A caller that already read the intent passes it.
+ * is returned unwrapped. The host checks the process context and exact lifetime grant; this
+ * builder never supplies an actor or a grant. A caller that already read the intent passes it.
  */
 export async function runCapability(
   key: string,
@@ -179,16 +180,7 @@ export async function runCapability(
   intent?: CapabilityIntent,
 ): Promise<unknown> {
   if (Object.hasOwn(actionControls, key)) {
-    if (key === "action.resume" && context.actor === "agent") {
-      const original = await controlAction("action.read", input, context.hostBaseUrl);
-      if (
-        original.kind === "workflow" &&
-        Object.hasOwn(semanticActions, original.key) &&
-        semanticActions[original.key as SemanticActionKey].actor === "human"
-      )
-        throw Error("This original action requires human approval to resume");
-    }
-    return controlAction(key as ActionControlKey, input, context.hostBaseUrl, context.actor);
+    return controlAction(key as ActionControlKey, input, context.hostBaseUrl);
   }
   intent ??= await readCapabilityIntent(key, context);
   if (intent.kind === "schedule-read")
@@ -204,10 +196,9 @@ export async function runCapability(
       key as never,
       (Object.keys(input).length ? input : undefined) as never,
     );
-  if (!context.actor)
-    throw new Error(`'${key}' mutates; name the initiating actor (--actor human|agent).`);
   if (intent.kind === "workflow" && !intent.prior) {
-    if (intent.needs !== "nothing")
+    // A lifecycle action names its own session; the head lifetime is not its destination.
+    if (intent.needs !== "nothing" && instancesSessionSelection(input) === null)
       admissionDestination(key, intent.needs, {
         bridgeSessionId: context.bridgeSessionId,
         openDocumentId: context.openDocumentId,
@@ -217,7 +208,6 @@ export async function runCapability(
       input,
       context.openDocumentId ? exactDocument(context) : undefined,
       context.bases,
-      context.actor,
       context.hostBaseUrl,
       context.actionId,
       context.timeoutMs ?? 30_000,
@@ -228,7 +218,6 @@ export async function runCapability(
     id: context.actionId ?? crypto.randomUUID(),
     kind: intent.kind,
     key,
-    actor: context.actor,
     destination:
       intent.destination ??
       admissionDestination(key, intent.needs, {
@@ -246,7 +235,6 @@ export async function runCapability(
     if (
       prior.kind !== admission.kind ||
       prior.key !== key ||
-      prior.actor !== context.actor ||
       canonicalRouteInput(prior.request) !== canonicalRouteInput(input) ||
       canonicalRouteInput(prior.bases) !== canonicalRouteInput(admission.bases)
     )

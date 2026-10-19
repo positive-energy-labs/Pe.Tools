@@ -1,63 +1,275 @@
-/**
- * /design-system/popovers — SATELLITE. What it stress-tests: **popover POSITION, per component,
- * at every corner of a real viewport.**
- *
- * Standing directive (CLEANROOM, ruled 2026-08-16): every popover-bearing component is tested
- * across viewport positions. A harness that puts nine instances of the same specimen at the
- * corners, edges and centre of the viewport turns "it sometimes opens wrong" into a picture.
- *
- * THIS PAGE OWNS NO POPUP FIXES. Each specimen is mounted EXACTLY as its real consumer mounts it,
- * so what you see here is what that consumer ships. The notes distinguish current defects from
- * repairs now owned by the shared language primitives.
- *
- * The facet filter and the picker chip are compositions of the one `ListPopup` (the list grammar),
- * repeated here as their consumers write them. `FieldOptionSelect` and `FieldOptionPicker` are
- * real exported components and are mounted directly.
- *
- * SPECIMEN DATA, ANNOUNCED: the option lists are `design-system/specimens-data.ts`. No host, no document, no
- * live catalogue call (SHIMS entry 4).
- */
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-
-import { ThemeToggle } from "#/components/lang/theme-toggle";
-import { FactChip } from "#/components/lang/chip";
-import { ListPopup } from "#/components/lang/list-popup";
-import { Switcher } from "#/components/lang/switcher";
+import { Button } from "@pe/kit/lang/button";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@pe/kit/lang/tooltip";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  PopoverTitle,
+  PopoverDescription,
+  PopoverClose,
+} from "@pe/kit/lang/popover";
+import { HoverCard, HoverCardTrigger, HoverCardContent } from "@pe/kit/lang/hover-card";
+import { ThemeToggle } from "@pe/kit/lang/theme-toggle";
+import { ListPopup } from "@pe/kit/lang/list-popup";
+import { Table } from "@pe/kit/table/table";
 import { FieldOptionPicker, FieldOptionSelect, type FieldOption } from "#/host/field-options";
 import { CATEGORY_OPTIONS } from "#/design-system/specimens-data";
-import { cn } from "#/lib/utils";
+import type { HostActiveDocumentSummary } from "@pe/host-contracts/operation-types";
+import type { PodRouteDescriptor } from "@pe/host-contracts/pe-api";
+import type { Machine } from "@pe/agent-contracts";
+import { previousOf, useInventory, useReading } from "#/readings";
+import { usePodRoutes } from "#/route/pod-routes";
+import { hostFetch } from "#/host/runtime";
 
 export const Route = createFileRoute("/design-system_/popovers")({ component: PopoverHarness });
 
+const documentFixture = {
+  title: "North wing · Mechanical",
+  key: "fixture-document",
+  path: "Models/North wing.rvt",
+  isFamilyDocument: false,
+  isModelInCloud: false,
+  isWorkshared: true,
+  observedAtUnixMs: Date.parse("2026-10-14T14:30:00Z"),
+} satisfies HostActiveDocumentSummary;
+const podFixture = {
+  key: "route:@mechanical/routes/air-balance",
+  packageId: "mechanical",
+  sourcePath: "routes/air-balance/index.js",
+  name: "Air balance",
+  description: "Compare supply and return observations by room.",
+  page: "pages/air-balance",
+  workRoute: "air-balance",
+  sha256: "a".repeat(64),
+  trusted: false,
+} satisfies PodRouteDescriptor;
+type PagePeek = { title: string; url: string | null; slug: string };
+
+/** Owner rulings 2026-10-14: a resource previews as a bare hint unless it declares state (G) or
+ *  content (H); only a Page shows its miniature (F). */
+function ResourcePreviews() {
+  const inventory = useInventory();
+  const session = previousOf(inventory)?.sessions.find((entry) => entry.activeDocumentTitle);
+  const machineReading = useReading<Machine>({ kind: "machine" });
+  const machine = previousOf(machineReading);
+  const routes = usePodRoutes();
+  const pod = routes?.rows[0] ?? podFixture;
+  const [pages, setPages] = useState<PagePeek[]>([]);
+  const [pageState, setPageState] = useState("Reading Pages from this host…");
+  useEffect(() => {
+    const abort = new AbortController();
+    void hostFetch("/pages", { signal: abort.signal })
+      .then(async (response) => {
+        if (!response.ok) throw Error(`Pages refused (${response.status})`);
+        const { pages: rows } = (await response.json()) as { pages: PagePeek[] };
+        setPages(rows);
+        setPageState(
+          rows.length
+            ? "No Page on this host has an address."
+            : "This host has no Pages. Import a Pod with a Page to inspect its render.",
+        );
+      })
+      .catch((error: unknown) => {
+        if (!abort.signal.aborted) setPageState(String(error));
+      });
+    return () => abort.abort();
+  }, []);
+  const page = pages.find((row) => row.url);
+  const title = session?.activeDocumentTitle ?? documentFixture.title;
+  const freshness = session ? inventory.state : "fixture · unavailable";
+  return (
+    <section aria-label="Resource previews" className="space-y-3">
+      <h2>Resource previews</h2>
+      <p className="text-ink-2">
+        A bare hint by default. A resource that declares its state or content previews that; only a
+        Page shows its render.
+      </p>
+      <div className="hairline-rows">
+        <PreviewRow motif="E" name="Default · bare hint · Document">
+          <Tooltip>
+            <TooltipTrigger aria-label="Preview E">{title}</TooltipTrigger>
+            <TooltipContent data-motif="E">
+              {title} · {freshness}
+            </TooltipContent>
+          </Tooltip>
+        </PreviewRow>
+        <PreviewRow motif="G" name="Declared state · Pod route" label={pod.name} width="w-80">
+          <div className="space-y-3">
+            <p className="t-display" data-tone={pod.trusted ? "done" : "caution"}>
+              {pod.trusted ? "Trusted" : "Not trusted"}
+            </p>
+            <p>
+              {pod.name} · {pod.packageId}
+            </p>
+            <p>
+              {pod.trusted
+                ? "Admitted to the route loader."
+                : "Execution is blocked until you grant trust."}
+            </p>
+            <p className="text-ink-2">
+              {routes?.rows.length ? "Host route inventory" : "Fixture · host has no Pod route"}
+            </p>
+            <Link to="/tool/$key" params={{ key: pod.key }}>
+              Review route
+            </Link>
+          </div>
+        </PreviewRow>
+        <PreviewRow
+          motif="H"
+          name="Declared content · Reading"
+          label="Machine observations"
+          width="w-[42rem]"
+        >
+          <div className="space-y-3">
+            <div className="flex justify-between gap-2">
+              <PopoverTitle>Machine observations</PopoverTitle>
+              <span>{machineReading.state} · host Reading</span>
+            </div>
+            <p className="face-mono break-all">
+              {machine?.host?.serviceName ?? "Waiting for host"}
+            </p>
+            <Table
+              label="Reading rows"
+              rows={Object.entries(machine?.legs ?? {}).map(([key, leg]) => ({ key, ...leg }))}
+              rowKey={(row) => row.key}
+              maxHeight="10rem"
+              columns={[
+                { key: "subject", label: "Subject", cell: (row) => row.key },
+                {
+                  key: "observed",
+                  label: "Observed UTC",
+                  cell: (row) => <span className="face-mono">{row.observedAtUtc ?? "Never"}</span>,
+                },
+                {
+                  key: "result",
+                  label: "Result",
+                  cell: (row) => row.error ?? (row.observedAtUtc ? "Observed" : "Not observed"),
+                },
+              ]}
+              empty={
+                machineReading.state === "failed" ? machineReading.message : "No observation yet."
+              }
+            />
+            <Link to="/settings">Open Settings</Link>
+          </div>
+        </PreviewRow>
+        <PreviewRow
+          motif="F"
+          name="Page miniature"
+          label={page?.title ?? "No Page"}
+          width="w-[28rem] p-0"
+        >
+          <figure>
+            {page?.url ? (
+              <div className="h-56 overflow-hidden" aria-hidden="true">
+                {/* Pages draw with script; an opaque origin keeps the app out of their reach. */}
+                <iframe
+                  title={`Page miniature: ${page.title}`}
+                  src={page.url}
+                  sandbox="allow-scripts"
+                  className="h-[28rem] w-[200%] origin-top-left scale-50 pointer-events-none"
+                  tabIndex={-1}
+                />
+              </div>
+            ) : (
+              <p className="p-4">{pageState}</p>
+            )}
+            <figcaption className="flex items-center justify-between gap-3 p-3">
+              <span>{page?.title ?? "Page unavailable"} · live render, isolated from this app</span>
+              {page?.url ? (
+                <a href={page.url} target="_blank" rel="noreferrer">
+                  Open Page
+                </a>
+              ) : null}
+            </figcaption>
+          </figure>
+        </PreviewRow>
+      </div>
+    </section>
+  );
+}
+
+function PreviewRow({
+  motif,
+  name,
+  label,
+  width,
+  children,
+}: {
+  motif: string;
+  name: string;
+  /** Absent, `children` is the whole hover (a bare hint draws its own trigger). */
+  label?: string;
+  width?: string;
+  children: ReactNode;
+}) {
+  return (
+    <article data-lineup={motif} className="flex flex-wrap items-center justify-between gap-2 py-3">
+      <h3>
+        {motif} · {name}
+      </h3>
+      {label === undefined ? (
+        children
+      ) : (
+        <HoverCard>
+          <HoverCardTrigger aria-label={`Preview ${motif}`}>{label}</HoverCardTrigger>
+          <HoverCardContent data-motif={motif} aria-label={`${name} preview`} className={width}>
+            {children}
+          </HoverCardContent>
+        </HoverCard>
+      )}
+    </article>
+  );
+}
+
+function HintSpecimen() {
+  return (
+    <Tooltip>
+      <TooltipTrigger aria-label="Hint specimen">Hint</TooltipTrigger>
+      <TooltipContent>Read the last saved observation.</TooltipContent>
+    </Tooltip>
+  );
+}
+function ClickSpecimen() {
+  const [checked, setChecked] = useState(false);
+  return (
+    <Popover>
+      <PopoverTrigger>Click details</PopoverTrigger>
+      <PopoverContent>
+        <PopoverTitle>Observation options</PopoverTitle>
+        <PopoverDescription>Interactive content stays open while you work.</PopoverDescription>
+        <Button label="Include archived" pressed={checked} onClick={() => setChecked(!checked)}>
+          Archived: {checked ? "included" : "hidden"}
+        </Button>
+        <PopoverClose render={<Button label="Close details">Close</Button>} />
+      </PopoverContent>
+    </Popover>
+  );
+}
+function HoverSpecimen() {
+  return (
+    <HoverCard>
+      <HoverCardTrigger>Hover preview</HoverCardTrigger>
+      <HoverCardContent aria-label="Preview specimen">
+        <p>Hover holds this preview. Click or Enter exposes the same controls.</p>
+        <PopoverClose render={<Button label="Close preview">Close</Button>} />
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
 const FIELD_OPTIONS: FieldOption[] = CATEGORY_OPTIONS.map((o) => ({
   value: o.value,
   label: o.label,
   description: o.description ?? null,
 }));
-
-/* ── the specimens ───────────────────────────────────────────────────────────────────────── */
-
-interface Specimen {
-  id: string;
-  name: string;
-  /** Named inline — the index law applies to satellites too. */
-  consumers: string;
-  /** What this composition does that the others do not. */
-  shape: string;
-  /** Current observation or a defect discharged by the shared primitive. */
-  defects: readonly string[];
-  render: () => React.ReactNode;
-}
-
 type Choice = { value: string; label: string; description?: string };
 const CHOICES: Choice[] = CATEGORY_OPTIONS.map((o) => ({
   value: o.value,
   label: o.label,
   description: o.description ?? undefined,
 }));
-
-/** As `master-table-header.tsx`'s `ColFilter` composes it: a filling trigger, search above 8. */
 function FacetFilterSpecimen() {
   const [value, setValue] = useState("");
   const choices = [{ value: "", label: "any" }, ...CHOICES];
@@ -132,136 +344,73 @@ function FieldMultiSpecimen() {
   );
 }
 
-const SPECIMENS: readonly Specimen[] = [
-  {
-    id: "facet",
-    name: "ListPopup · facet filter",
-    consumers:
-      "components/master-table/master-table-header.tsx → every Table column header (atlas/takeoffs, families, data-tables)",
-    shape: "ListPopup face=fill · search above 8 · the trigger is the anchor",
-    defects: [
-      "FIXED — the list grammar cutover: the trigger is always the anchor, so no consumer writes an anchor `div`.",
-      "OBSERVED — flip works (bottom edge opens upward) but the in-popup search input stays at the popup's top, so after a flip the search box is the FURTHEST thing from the trigger you just clicked.",
-    ],
-    render: () => <FacetFilterSpecimen />,
-  },
-  {
-    id: "picker",
-    name: "ListPopup · picker chip",
-    consumers: "chat/head-chips.tsx (Ladder face=inline) → the chat composer, families",
-    shape: "ListPopup face=inline · searchable · two-line rows · collision fit",
-    defects: [
-      "FIXED — the list grammar cutover: one trigger recipe with three faces (inline, fill, field); the chip and the facet differ only by face.",
-    ],
-    render: () => <PickerChipSpecimen />,
-  },
-  {
-    id: "field",
-    name: "FieldOptionSelect",
-    consumers: "routes/ops.tsx, ops/views-catalog.tsx, parameter-links/ProfileEditor.tsx",
-    shape: "ListPopup face=field · async status · a stale value stays, refused",
-    defects: [
-      "FIXED — the list grammar cutover: the description is the Row's `sub` slot, one size in every consumer.",
-    ],
-    render: () => <FieldSelectSpecimen />,
-  },
-  {
-    id: "multi",
-    name: "FieldOptionPicker",
-    consumers: "routes/ops.tsx, ops/views-catalog.tsx, parameter-links/ProfileEditor.tsx",
-    shape: "ListPopup face=field, select=multi · chips are the trigger's face",
-    defects: [
-      "OBSERVED — the trigger is the chips row, which grows as chips are added, so an open popup can re-position mid-selection at the bottom edge.",
-    ],
-    render: () => <FieldMultiSpecimen />,
-  },
+const SPECIMENS = [
+  { name: "Tooltip", render: HintSpecimen },
+  { name: "Popover", render: ClickSpecimen },
+  { name: "HoverCard", render: HoverSpecimen },
+  { name: "Facet filter", render: FacetFilterSpecimen },
+  { name: "Picker chip", render: PickerChipSpecimen },
+  { name: "Field select", render: FieldSelectSpecimen },
+  { name: "Multi select", render: FieldMultiSpecimen },
 ];
-
-/* ── the harness ─────────────────────────────────────────────────────────────────────────── */
-
-const POSITIONS: readonly { id: string; cls: string }[] = [
-  { id: "top-left", cls: "items-start justify-start" },
-  { id: "top-centre", cls: "items-start justify-center" },
-  { id: "top-right", cls: "items-start justify-end" },
-  { id: "mid-left", cls: "items-center justify-start" },
-  { id: "centre", cls: "items-center justify-center" },
-  { id: "mid-right", cls: "items-center justify-end" },
-  { id: "bottom-left", cls: "items-end justify-start" },
-  { id: "bottom-centre", cls: "items-end justify-center" },
-  { id: "bottom-right", cls: "items-end justify-end" },
-];
-
 function PopoverHarness() {
-  const [id, setId] = useState<string>(SPECIMENS[0]!.id);
-  const specimen = SPECIMENS.find((s) => s.id === id) ?? SPECIMENS[0]!;
-
+  const [specimen, setSpecimen] = useState("Tooltip");
+  const Specimen = SPECIMENS.find((item) => item.name === specimen)!.render;
   return (
-    /* The grid IS the viewport — no page header, because a header would push the top row down and
-       the top row is the whole point. The control panel lives in the centre cell, which is the one
-       position with nothing to clamp against. */
-    <div className="grid h-dvh min-h-0 grid-cols-3 grid-rows-3 gap-2 overflow-hidden p-2">
-      {POSITIONS.map((p) => (
-        <div key={p.id} className={cn("flex min-h-0 min-w-0", p.cls)}>
-          <span>{p.id}</span>
-          {p.id === "centre" ? (
-            <div className="flex max-h-full min-h-0 flex-col items-center gap-3 overflow-auto">
-              <Panel specimen={specimen} onPick={setId} />
-              <div key={`${specimen.id}-${p.id}`}>{specimen.render()}</div>
-            </div>
-          ) : (
-            <div key={`${specimen.id}-${p.id}`}>{specimen.render()}</div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) => void }) {
-  return (
-    <div className="max-w-[34rem] min-w-0 p-3">
-      <div className="flex flex-wrap items-baseline gap-2 pb-2">
-        <Link to="/design-system">← design system</Link>
-        <span>popover position harness</span>
-        <FactChip dashed title="Fixture option lists — no host, no live catalogue call.">
-          fixture
-        </FactChip>
+    <main className="space-y-5 p-3">
+      <header className="flex flex-wrap items-baseline justify-between gap-2">
+        <Link to="/design-system">Back to design system</Link>
+        <h1>Popovers</h1>
         <ThemeToggle />
-      </div>
-
-      <div className="pt-2">
-        <Switcher
-          ariaLabel="specimen"
-          value={specimen.id}
-          onChange={onPick}
-          options={SPECIMENS.map((s) => ({
-            value: s.id,
-            label: s.name,
-            title: `Mount ${s.name} at all nine positions`,
-          }))}
+      </header>
+      <section aria-label="Floating family" className="space-y-2">
+        <h2>Hint · detail · preview</h2>
+        <p className="text-ink-2">
+          Hints warm up in 350 ms. Interactive previews wait 500 ms and allow 200 ms to cross the
+          gap. Escape dismisses.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <HintSpecimen />
+          <ClickSpecimen />
+          <HoverSpecimen />
+        </div>
+      </section>
+      <ResourcePreviews />
+      <section aria-label="Collision harness" className="space-y-2">
+        <h2>Viewport edges</h2>
+        <p className="text-ink-2">
+          Scroll each edge into view. All seven real kit compositions share the same collision
+          boundary.
+        </p>
+        <ListPopup
+          anchor="trigger"
+          triggerLabel="Position specimen"
+          trigger={specimen}
+          aria-label="Position specimen"
+          items={SPECIMENS}
+          keyOf={(item) => item.name}
+          labelOf={(item) => item.name}
+          select="single"
+          selected={[specimen]}
+          empty="No specimens"
+          onPick={(item) => setSpecimen(item.name)}
+          row={(item) => ({ label: item.name })}
         />
-      </div>
-
-      <div className="flex flex-col gap-1.5 pt-2.5">
-        <span>consumers: {specimen.consumers}</span>
-        <span>shape: {specimen.shape}</span>
-        {specimen.defects.map((d) => (
-          <p key={d} className="pl-2">
-            <span>finding · </span>
-            {d}
-          </p>
-        ))}
-        <p className="pl-2">
-          <span>the headline · </span>
-          Select matches its trigger. A single-value Combobox uses the greater of its anchor and a
-          10rem reading floor. A multiple Combobox matches its chips anchor. Both families open
-          bottom/start with Base UI collision handling unless a consumer explicitly changes align.
-        </p>
-        <p className="pt-1">
-          Open the same specimen at all nine positions and compare. Each instance is mounted exactly
-          as its consumer mounts it, so the remaining defects here are the defects that ship.
-        </p>
-      </div>
-    </div>
+        <div className="grid h-[560px] grid-cols-3 grid-rows-3 gap-2" key={specimen}>
+          {Array.from({ length: 9 }, (_, index) => (
+            <div
+              key={index}
+              className="flex min-w-0"
+              style={{
+                justifyContent: ["start", "center", "end"][index % 3],
+                alignItems: ["start", "center", "end"][Math.floor(index / 3)],
+              }}
+            >
+              <Specimen />
+            </div>
+          ))}
+        </div>
+      </section>
+    </main>
   );
 }

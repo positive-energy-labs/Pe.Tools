@@ -1,15 +1,16 @@
-import { EmptyState } from "#/components/lang/empty";
-import { FactChip } from "#/components/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { FactChip } from "@pe/kit/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { Switcher } from "#/components/lang/switcher";
-import { ActionButton } from "#/components/lang/action-button";
-import { Table } from "#/components/master-table/table";
+import { Button } from "@pe/kit/lang/button";
+import { Table } from "@pe/kit/table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
 import { Pane } from "#/components/lang/pane";
 
 import { OVERLAY_LABEL, OVERLAY_TITLE, type PRow } from "#/family/model";
 import { useFamilyWorkspace } from "#/family/workspace-context";
-import { cn } from "#/lib/utils";
+import { cn } from "@pe/kit/lib/utils";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function FamilyWorkspaceTable() {
   const {
@@ -81,50 +82,61 @@ export function FamilyWorkspaceTable() {
 
   const tableActions = drillType ? (
     <>
-      <ActionButton
+      <Button
         label="all types"
-        tone="nav"
+        reason="Leave the drill-in and return to the cross-type table. Nothing is decided by leaving — every mark you did not settle is still standing. Esc does the same."
+        kind="nav"
         direction="back"
         onClick={() => setDrillType(null)}
-        reason="Leave the drill-in and return to the cross-type table. Nothing is decided by leaving — every mark you did not settle is still standing. Esc does the same."
-      />
-      <ActionButton
+      >
+        all types
+      </Button>
+      <Button
         label={`capture ${drillType}`}
-        disabled={driftCells.every((cell) => cell.typeName !== drillType)}
-        onClick={() => captureAll([drillType])}
-        reason={
-          driftCells.some((cell) => cell.typeName === drillType)
-            ? `Let Revit win on every drifting parameter of the ${drillType} type. Each live value is written into the profile as a ${drillType} override; the model is not touched, so this stays a safe verb.`
-            : `Nothing is drifting at ${drillType}, so there is nothing to pull back.`
+        reason={`Let Revit win on every drifting parameter of the ${drillType} type. Each live value is written into the profile as a ${drillType} override; the model is not touched, so this stays a safe verb.`}
+        kind="framed"
+        refusal={
+          driftCells.every((cell) => cell.typeName !== drillType)
+            ? `Nothing is drifting at ${drillType}, so there is nothing to pull back.`
+            : null
         }
-      />
+        onClick={() => captureAll([drillType])}
+      >
+        {`capture ${drillType}`}
+      </Button>
     </>
   ) : (
     <>
-      <ActionButton
+      <Button
         label="capture all"
-        disabled={overlay !== "live" || driftCells.length === 0}
-        onClick={() => captureAll(world.typeNames)}
-        reason={
+        reason={`Let Revit win on all ${driftCells.length} drifting cells, across every type — every alarm cell you can see right now. Each live value lands in the profile as that type's override; Revit is not touched.`}
+        kind="framed"
+        refusal={
           overlay !== "live"
             ? "Switch to the ⇄ live overlay first. Capture rewrites the profile with Revit's numbers in bulk, and this is the one view where those numbers are on screen — pressing it from here would be a write you cannot see the far side of."
             : driftCells.length === 0
               ? "Nothing is drifting anywhere, so there is nothing to pull back. Capture only ever moves values the two sides disagree about."
-              : `Let Revit win on all ${driftCells.length} drifting cells, across every type — every alarm cell you can see right now. Each live value lands in the profile as that type's override; Revit is not touched.`
+              : null
         }
-      />
-      <ActionButton
+        onClick={() => captureAll(world.typeNames)}
+      >
+        capture all
+      </Button>
+      <Button
         label="capture live"
+        reason="Re-read the family open in Revit and re-stamp the evidence — this is what the ⇄ live overlay and the drift marks are readings OF. It moves nothing into the profile: that is capture all, under the overlay. Refuses in Revit's own words if no family document is active there."
+        kind="framed"
         busy={capturing}
-        disabled={lane.document == null || capturing || captureRefusal != null}
-        onClick={() => void store.actions.capture().catch(() => undefined)}
-        reason={
+        refusal={
           captureRefusal ??
           (lane.document == null
             ? "The fixture lane has no session behind it — its live readings are checked into `src/family/world.ts`. Open a real family.json to read Revit."
-            : "Re-read the family open in Revit and re-stamp the evidence — this is what the ⇄ live overlay and the drift marks are readings OF. It moves nothing into the profile: that is capture all, under the overlay. Refuses in Revit's own words if no family document is active there.")
+            : null)
         }
-      />
+        onClick={() => void store.actions.capture().catch(() => undefined)}
+      >
+        capture live
+      </Button>
     </>
   );
 
@@ -239,15 +251,17 @@ export function FamilyWorkspaceTable() {
       state={drillState}
       onStateChange={setDrillState}
       summary={
-        <span title="What this one type is asking of you. The same counts as the cross-type table, narrowed to this column of it.">
-          {openProposals.filter((entry) => (entry.typeName ?? null) === drillType).length} open ·{" "}
-          <FactChip
-            tone={driftCells.some((cell) => cell.typeName === drillType) ? "alarm" : undefined}
-            title="Cells where Revit disagrees with this type's draft."
-          >
-            {driftCells.filter((cell) => cell.typeName === drillType).length} drift
-          </FactChip>
-        </span>
+        <TooltipHint content="What this one type is asking of you. The same counts as the cross-type table, narrowed to this column of it.">
+          <span>
+            {openProposals.filter((entry) => (entry.typeName ?? null) === drillType).length} open ·{" "}
+            <FactChip
+              tone={driftCells.some((cell) => cell.typeName === drillType) ? "alarm" : undefined}
+              title="Cells where Revit disagrees with this type's draft."
+            >
+              {driftCells.filter((cell) => cell.typeName === drillType).length} drift
+            </FactChip>
+          </span>
+        </TooltipHint>
       }
       searchPlaceholder="parameter"
       actions={tableActions}
@@ -281,33 +295,7 @@ export function FamilyWorkspaceTable() {
   ) : null;
 
   const tablePane = (
-    <Pane
-      kind="content"
-      flush
-      scroll="clip"
-      headerless
-      // The type's own NAME is the title while drilled in — a pane whose title still said
-      // "parameters × types" would be claiming to show something it is not.
-      title={drillType ?? "parameters × types"}
-      meta={
-        drillType
-          ? "one type"
-          : overlay === "live"
-            ? "live overlay"
-            : overlay === "saved"
-              ? "saved overlay"
-              : "all types"
-      }
-      help={
-        drillType
-          ? "One type, the same table — profile, spine and live side by side for the type you drilled into."
-          : overlay === "live"
-            ? "LIVE OVERLAY — Revit's numbers in place, read-only. The alarm is where the document disagrees with the profile."
-            : overlay === "saved"
-              ? "SAVED OVERLAY — what is on disk, read-only. Caution marks what a save would overwrite."
-              : "Every type side by side — the spread across types is the audit."
-      }
-    >
+    <Pane flush scroll="clip">
       {drillIn ?? crossType}
     </Pane>
   );

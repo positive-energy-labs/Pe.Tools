@@ -34,6 +34,8 @@ const mocks = vi.hoisted(() => ({
   release: vi.fn(),
   dispose: vi.fn(),
   spawn: vi.fn(),
+  execFile: vi.fn(),
+  openWindow: vi.fn(),
   bind: vi.fn(),
   update: vi.fn(),
 }));
@@ -54,6 +56,7 @@ vi.mock("node:fs", async (original) => ({
 vi.mock("node:child_process", async (original) => ({
   ...(await original<object>()),
   spawn: mocks.spawn,
+  execFile: mocks.execFile,
 }));
 vi.mock("@pe/host-contracts/pe-service", async (original) => ({
   ...(await original<object>()),
@@ -65,7 +68,16 @@ vi.mock("@pe/host-contracts/pe-service-host", async (original) => ({
   claimServiceHost: mocks.claim,
   rememberServicePort: async () => {},
 }));
-vi.mock("@pe/runtime", () => ({ capture: () => {} }));
+// The claim holder writes the owner's terminal context; a mocked product root must not reach the real one.
+vi.mock("../src/control.ts", async (original) => ({
+  ...(await original<object>()),
+  writeTerminalContext: () => ({ retire() {} }),
+}));
+vi.mock("../src/receipt-export.ts", () => ({
+  hostReceiptExport: () => ({ record: async () => {}, close: async () => {} }),
+  bindNativeProducers: () => () => {},
+  recordUpdateFact: () => {},
+}));
 vi.mock("../src/update-route.ts", () => ({
   makeInstalledUpdateReader: () => ({}),
   updateWhenNoRevit: mocks.update,
@@ -120,6 +132,8 @@ beforeEach(() => {
   mocks.sleep.mockResolvedValue(undefined);
   mocks.alive.mockReturnValue(false);
   mocks.update.mockResolvedValue(false);
+  mocks.openWindow.mockResolvedValue(undefined);
+  mocks.execFile.mockImplementation((_exe, _args, _options, callback) => callback(null, "", ""));
   mocks.bind.mockReturnValue(undefined);
   mocks.claim.mockImplementation(async (_root: string, descriptor: ServiceHostDescriptor) => ({
     claimed: true,
@@ -150,6 +164,7 @@ beforeEach(() => {
     }),
   );
   vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(lifecycle, "openWindow").mockImplementation(mocks.openWindow);
 });
 afterEach(() => {
   process.argv = originalArgv;
@@ -167,7 +182,7 @@ async function launch() {
   });
 }
 const trays = () => mocks.spawn.mock.calls.filter(([, args]) => args.includes("--parent-pid"));
-const windows = () => mocks.spawn.mock.calls.filter(([, args]) => args.includes("start"));
+const windows = () => mocks.openWindow.mock.calls;
 
 test("foreign occupant refuses before bind and names pid, executable, and recorded service", async () => {
   mocks.portAvailable.mockResolvedValue(false);
@@ -260,6 +275,35 @@ test("installed start binds only 5180; tray belongs to the winning claim and dis
   expect(windows()).toHaveLength(0);
 });
 
+test("installed tray entry shows the first claim-owned tray", async () => {
+  process.argv.push("--show-tray");
+  await launch();
+  expect(trays()).toHaveLength(1);
+  expect(trays()[0]![1].at(-1)).toBe("--show");
+  expect(windows()).toHaveLength(0);
+});
+
+test("installed tray entry focuses the verified incumbent tray without replacing the host", async () => {
+  process.argv.push("--show-tray");
+  mocks.discover.mockResolvedValue({ ...incumbent, version: "new" });
+  mocks.occupants.mockResolvedValue([{ pid: incumbent.pid, executable: incumbent.executablePath }]);
+  await launch();
+  expect(mocks.bind).not.toHaveBeenCalled();
+  expect(mocks.claim).not.toHaveBeenCalled();
+  expect(mocks.retire).not.toHaveBeenCalled();
+  expect(mocks.spawn).not.toHaveBeenCalled();
+  expect(mocks.execFile).toHaveBeenCalledOnce();
+  expect(mocks.execFile.mock.calls[0]![1]).toEqual([
+    "--parent-pid",
+    "42",
+    "--parent-start",
+    incumbent.processStartUtc,
+    "--service-file",
+    expect.stringMatching(/state[\\/]service[\\/]host.json$/),
+    "--show",
+  ]);
+});
+
 test.each([false, true])(
   "ordinary installed start reuses a same-version incumbent; open=%s",
   async (open) => {
@@ -275,7 +319,7 @@ test.each([false, true])(
     expect(mocks.update).not.toHaveBeenCalled();
     expect(trays()).toHaveLength(0);
     expect(windows()).toHaveLength(open ? 1 : 0);
-    if (open) expect(windows()[0]![1]).toContain("http://127.0.0.1:5180/");
+    if (open) expect(windows()[0]![0]).toBe(5180);
     expect(console.log).toHaveBeenCalledWith(
       expect.stringContaining("'host' already serving on 5180 (pid 42)"),
     );
@@ -423,7 +467,7 @@ test("dev --open still reuses its same-version service", async () => {
   expect(mocks.bind).not.toHaveBeenCalled();
   expect(mocks.occupants).not.toHaveBeenCalled();
   expect(windows()).toHaveLength(1);
-  expect(windows()[0]![1]).toContain("http://127.0.0.1:6000/");
+  expect(windows()[0]![0]).toBe(6000);
 });
 
 test.each([

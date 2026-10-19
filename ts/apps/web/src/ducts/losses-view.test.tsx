@@ -20,13 +20,13 @@ import {
 
 import type { DuctsApply } from "@pe/host-contracts/generated";
 
-import type { Grid, Grids } from "./loss-grid";
-import { computeLosses } from "./losses";
+import type { Grid, Grids } from "@pe/ducts-domain/loss-grid";
+import { computeLosses } from "@pe/ducts-domain/losses";
 import { DuctsLosses, foldRefusals, StagedLosses } from "./losses-view";
 import { manifest, type DuctsPage } from "./manifest";
-import { applyRequest, price, proposedStatic } from "./pricing";
+import { applyRequest, price, proposedStatic } from "@pe/ducts-domain/pricing";
 import synthetic from "./fixtures/synthetic-snapshot.json";
-import type { DuctSnapshot } from "./readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 afterEach(cleanup);
 
@@ -141,7 +141,7 @@ it("draws one bar per grille, opens a grille's rules, and a table chip stages th
   const status30 = [...q('[data-terminal="30"]')!.querySelectorAll("[data-status]")].map((el) =>
     el.getAttribute("data-status"),
   );
-  expect(status30).toEqual(["refuses"]);
+  expect(status30).toEqual(["refuses", "no-drop"]);
   expect(q("[data-staged-band]")).toBeNull();
   // The slot a terminal drop travels in is a cell a person can name.
   expect(q('[data-slot="terminalDrop"]')).not.toBeNull();
@@ -217,6 +217,7 @@ it("builds the ducts.apply request from the staged cells only, exactly", () => {
     fittings: [
       {
         id: 22,
+        method: "pe-server",
         coefficient: 1,
         table: "SD5-10",
         inputs: "Qb/Qc=0.25, Ab/Ac=0.25",
@@ -237,6 +238,7 @@ it("builds the ducts.apply request from the staged cells only, exactly", () => {
         fanStatic: "PE_M_Fan_ExternalStaticPressure",
         fanFlow: "PE_M_Fan_AirFlow",
         componentDrop: "Pressure Drop",
+        fittingCoefficient: "Pe_C",
       },
       workRevision: 0,
       appliedAt: at,
@@ -317,6 +319,7 @@ it("proposes a unit's static as the largest fan per classification, summed over 
     revitCritical: null,
   });
   const result = {
+    design: price(shared, {}, null).now.design,
     byGroup: {
       g10: solved(0.15),
       g20: solved(0.0516),
@@ -334,6 +337,7 @@ it("proposes a unit's static as the largest fan per classification, summed over 
   expect(proposedStatic(shared, result, 3)).toBeNull();
   // A group with no critical path contributes nothing.
   const dead = {
+    design: result.design,
     byGroup: { ...result.byGroup, g20: solved(0.0516, null) },
   } as unknown as typeof result;
   expect(proposedStatic(shared, dead, 1)?.total).toBe(0.15);
@@ -519,4 +523,27 @@ it("folds refusals with an identical reason into one line naming every id", () =
     { reason: "shared", kind: "equipment", ids: [1, 2] },
     { reason: "other", kind: "terminal", ids: [3] },
   ]);
+});
+
+it("does not offer a combined fan static for unresolved equipment air circuits", () => {
+  const shared: DuctSnapshot = {
+    ...snapshot,
+    groups: [{ ...snapshot.groups[0]!, classifications: ["Supply Air", "Exhaust Air"] }],
+  };
+  const doc = ductsRouteState.schema.parse({});
+  const view = render(
+    <DuctsLosses
+      snapshot={shared}
+      grids={grids}
+      priced={price(shared, grids, doc)}
+      ready={{}}
+      page={PAGE}
+      setPage={() => {}}
+      empty={null}
+      work={{ doc, revision: 0, write: async () => null }}
+    />,
+  );
+  const unit = view.container.querySelector('[data-unit="1"]')!;
+  expect(unit.textContent).toContain("Pe proposes\u2014");
+  expect(within(unit as HTMLElement).queryByText("stage")).toBeNull();
 });

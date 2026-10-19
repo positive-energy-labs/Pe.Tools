@@ -1,4 +1,10 @@
-import { bindWork, workKey, workKeySchema, type WorkKey } from "@pe/agent-contracts";
+import {
+  bindWork,
+  pendingProposals,
+  workKey,
+  workKeySchema,
+  type WorkKey,
+} from "@pe/agent-contracts";
 import { z } from "zod";
 import { OwnerReads, type OwnerValue } from "./owner-read.ts";
 import {
@@ -48,6 +54,13 @@ export interface RouteWorkspaceEvent {
 export interface RouteDocumentStore {
   getState(input: { targetKey: string; route: string }): Promise<unknown>;
   setState(input: { targetKey: string; route: string; value: unknown }): Promise<void>;
+  /** Enumerates canonical persisted records without materializing absent Work. */
+  listState?(): Promise<{
+    records: { targetKey: string; route: string; value: unknown }[];
+    unindexed: number;
+    unreadable: number;
+    truncated: boolean;
+  }>;
 }
 
 export interface RouteWorkspaceOptions {
@@ -68,13 +81,21 @@ export class RouteWorkspace {
 
   constructor(private readonly options: RouteWorkspaceOptions) {
     for (const registration of options.registrations) {
-      const route = registration.spec.route;
-      if (route.includes(":")) throw new Error(`route name '${route}' cannot contain ':'`);
-      if (this.#registry.has(route)) throw new Error(`duplicate route '${route}'`);
-      toJsonSchema(registration.spec.schema);
-      for (const command of Object.values(registration.spec.commands)) toJsonSchema(command.input);
-      this.#registry.set(route, registration);
+      this.register(registration);
     }
+  }
+
+  /** A trusted plugin's lifetime owns registration, never its saved Work bytes. */
+  register(registration: RouteWorkspaceRegistration): () => void {
+    const route = registration.spec.route;
+    if (route.includes(":")) throw new Error(`route name '${route}' cannot contain ':'`);
+    if (this.#registry.has(route)) throw new Error(`duplicate route '${route}'`);
+    toJsonSchema(registration.spec.schema);
+    for (const command of Object.values(registration.spec.commands)) toJsonSchema(command.input);
+    this.#registry.set(route, registration);
+    return () => {
+      if (this.#registry.get(route) === registration) this.#registry.delete(route);
+    };
   }
 
   list() {
@@ -83,6 +104,60 @@ export class RouteWorkspace {
       title: spec.title,
       description: spec.description,
     }));
+  }
+
+  /** Persisted instances, not the registration catalogue. Never calls read/view or carry-over. */
+  async instances() {
+    return this.#serialized(async () => {
+      if (!this.options.store.listState)
+        return { works: [], unindexed: 0, unreadable: 0, truncated: false, available: false };
+      const census = await this.options.store.listState();
+      let invalidIdentities = 0;
+      const works = census.records.flatMap((record) => {
+        if (
+          record.route.includes(START_FRESH_ASIDE) ||
+          (record.route === OPEN_REGISTER.route && record.targetKey === OPEN_REGISTER.targetKey)
+        )
+          return [];
+        const scope = storedWorkKey(record.targetKey, record.route);
+        if (!scope) {
+          invalidIdentities++;
+          return [];
+        }
+        const spec = this.#registry.get(record.route)?.spec;
+        let revision: number | null = null;
+        let proposals = 0;
+        let state: "ready" | "unreadable" | "unregistered" = spec ? "unreadable" : "unregistered";
+        if (spec) {
+          try {
+            const envelope = parseEnvelope(record.value, spec);
+            revision = envelope.revision;
+            proposals = pendingProposals(envelope.doc);
+            state = "ready";
+          } catch {
+            // Keep the address discoverable without exposing the unreadable document.
+          }
+        }
+        return [
+          {
+            id: workKey(scope),
+            scope,
+            route: record.route,
+            title: spec?.title ?? record.route,
+            revision,
+            state,
+            proposals,
+          },
+        ];
+      });
+      return {
+        works,
+        unindexed: census.unindexed,
+        unreadable: census.unreadable + invalidIdentities,
+        truncated: census.truncated,
+        available: true,
+      };
+    });
   }
 
   /** The route's Work at the scope; null when the route is unregistered or no Work exists yet. */
@@ -453,9 +528,34 @@ export class RouteWorkspace {
 
 const envelopeSchema = z.object({
   version: z.literal(ENVELOPE_VERSION),
-  revision: z.number().int(),
+  revision: z.number().int().nonnegative(),
   doc: z.unknown(),
 });
+
+/** Decodes the canonical encoder's words, never document content or a filename. */
+function storedWorkKey(value: string, route: string): WorkKey | null {
+  const prefix = `${route}/`;
+  if (!value.startsWith(prefix)) return null;
+  const suffix = value.slice(prefix.length);
+  let candidate: unknown;
+  if (suffix.startsWith("workspace:"))
+    candidate = bindWork(route, null, suffix.slice("workspace:".length));
+  else if (suffix.startsWith("target:")) {
+    const target = suffix.slice("target:".length);
+    candidate = { binding: target ? "address" : "host", route, target: target || null };
+  } else if (suffix.startsWith("open:")) {
+    const parts = suffix.slice("open:".length).split("/");
+    if (parts.length !== 2) return null;
+    candidate = {
+      binding: "open",
+      route,
+      target: null,
+      open: { session: parts[0], openId: parts[1] },
+    };
+  } else return null;
+  const parsed = workKeySchema.safeParse(candidate);
+  return parsed.success && workKey(parsed.data) === value ? parsed.data : null;
+}
 
 function emptyEnvelope(spec: RouteStateSpec<z.ZodType>): RouteEnvelope<unknown> {
   return { version: ENVELOPE_VERSION, revision: 0, doc: spec.schema.parse({}) };

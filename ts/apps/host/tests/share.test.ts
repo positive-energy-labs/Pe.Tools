@@ -6,6 +6,8 @@ import { Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { createShare, shareIntentFile, tailscaleCommand, shareRoute } from "../src/share.ts";
 import { requestIdentityLayer } from "../src/request-identity.ts";
+import { mintContext } from "../src/control.ts";
+import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
 
 test("fake tailscale binary: foreign rule refused; own changes re-read status; observations stay bounded", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-share-fake-"));
@@ -79,18 +81,30 @@ else if(args.includes('--https=443')) {
     await writeFile(config, JSON.stringify(unrelated));
     expect(await share.set(true)).toHaveProperty("state", "on");
     share.observe(
-      { principal: { kind: "tailnet", login: "one", authority }, headers: {} },
+      {
+        principal: { kind: "tailnet", login: "one", authority },
+        headers: {},
+        caller: { kind: "anonymous" },
+      },
       "/mcp",
       authority,
     );
     time = "2026-10-09T01:00:00.000Z";
     share.observe(
-      { principal: { kind: "tailnet", login: "one", authority }, headers: {} },
+      {
+        principal: { kind: "tailnet", login: "one", authority },
+        headers: {},
+        caller: { kind: "anonymous" },
+      },
       "/pe/resources",
       authority,
     );
     for (let i = 0; i < 40; i++)
-      share.observe({ refusal: { code: "missing-user", detail: "no user" } }, "/mcp", authority);
+      share.observe(
+        { refusal: { code: "identity.missing-user", detail: "no user" } },
+        "/mcp",
+        authority,
+      );
     expect(share.current().callers).toEqual([{ login: "one", lastAtUtc: time, door: "pe" }]);
     expect(share.current().refused).toHaveLength(32);
     expect(await share.set(false)).toMatchObject({ desired: "off", state: "off", url: null });
@@ -101,7 +115,7 @@ else if(args.includes('--https=443')) {
   }
 });
 
-test("PUT share is local-only and validates the switch before invoking the owner", async () => {
+test("PUT share is local, human-only and validates the switch before invoking the owner", async () => {
   let commands = 0;
   const share = createShare({
     installed: false,
@@ -135,7 +149,11 @@ test("PUT share is local-only and validates the switch before invoking the owner
     ),
     { disableLogger: true },
   );
-  const put = (body: unknown, headers: Record<string, string> = { host: "127.0.0.1:5180" }) =>
+  const human = {
+    host: "127.0.0.1:5180",
+    [HOST_CONTEXT_HEADER]: mintContext({ kind: "human", via: "cli" }),
+  };
+  const put = (body: unknown, headers: Record<string, string> = human) =>
     app.handler(
       new Request("http://127.0.0.1:5180/pe/share", {
         method: "PUT",
@@ -148,6 +166,8 @@ test("PUT share is local-only and validates the switch before invoking the owner
       (await put({ on: true }, { host: "box.tailabc.ts.net", "tailscale-user-login": "one" }))
         .status,
     ).toBe(403);
+    // ADR 0017 D2: anonymous loopback is read-only.
+    expect((await put({ on: true }, { host: "127.0.0.1:5180" })).status).toBe(403);
     for (const body of [
       null,
       {},
@@ -159,7 +179,7 @@ test("PUT share is local-only and validates the switch before invoking the owner
       expect((await put(body)).status).toBe(400);
     const response = await put({ on: true });
     expect(response.status).toBe(409);
-    expect(await response.json()).toHaveProperty("refusal.code", "share.installed-only");
+    expect(await response.json()).toHaveProperty("error.code", "share.installed-only");
     expect(commands).toBe(0);
     expect(
       (
@@ -203,6 +223,32 @@ test("dev never invokes tailscale; failed verification never advertises on; fore
     },
   });
   expect(await share.set(true)).toMatchObject({ desired: "on", state: "refused", url: null });
+});
+
+test("a machine without the tailscale binary is needs-tailscale, not refused; other failures stay refusals", async () => {
+  const base = {
+    installed: true,
+    port: () => 5180,
+    load: async () => null,
+    save: async () => {},
+  };
+  const missing = createShare({ ...base, run: tailscaleCommand("pe-no-such-tailscale-binary") });
+  expect(await missing.read()).toMatchObject({ state: "needs-tailscale", refusal: null });
+  expect(await missing.set(true)).toMatchObject({
+    desired: "off",
+    state: "needs-tailscale",
+    refusal: null,
+  });
+  const broken = createShare({
+    ...base,
+    run: async () => {
+      throw Error("synthetic status unavailable");
+    },
+  });
+  expect(await broken.read()).toMatchObject({
+    state: "refused",
+    refusal: { code: "share.unavailable" },
+  });
 });
 
 test("share reads coalesce and reuse only a bounded verified snapshot", async () => {
@@ -266,7 +312,7 @@ test("Off persists cancellation even when Tailscale status is unavailable", asyn
   expect(commands).toBe(2);
 });
 
-test("remote administration defaults on, persists locally and never runs a Tailscale mutation", async () => {
+test("remote administration defaults off, persists locally and never runs a Tailscale mutation", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-share-policy-"));
   const path = join(dir, "intent.json");
   let calls = 0;
@@ -281,7 +327,7 @@ test("remote administration defaults on, persists locally and never runs a Tails
   };
   try {
     const owner = createShare(options);
-    expect((await owner.read()).allowRemoteAdministration).toBe(true);
+    expect((await owner.read()).allowRemoteAdministration).toBe(false);
     expect((await owner.setRemoteAdministration(false)).allowRemoteAdministration).toBe(false);
     expect(calls).toBe(1);
     expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({

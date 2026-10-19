@@ -1,28 +1,54 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { RouteShell } from "#/route";
+import { SettingsBody } from "#/machine/body";
+import { GROUP_KEYS, settingsDestination, type GroupKey } from "#/machine/model";
+import { useMachine } from "#/machine/use-machine";
+import { useDestination } from "#/navigation/state";
+import { useSurfaceHost } from "#/navigation/surface-host";
+import { settingsManifest as manifest } from "#/route/surface-manifests";
 
-import { RouteShell, emptyManifest } from "#/route";
-import { AccessSwitch } from "#/chat/first-open";
-import { useProviders } from "#/workbench/provider/providers";
-
-const manifest = {
-  ...emptyManifest("settings", "Settings"),
-  docs: "UI settings, and whether Pea asks before each change. Providers, sign-in and endpoints live in the machine drawer behind the version chip, because harness readiness is machine state.",
-};
-
-export const Route = createFileRoute("/settings")({ component: SettingsRoute });
-
+export function settingsSearch(search: Record<string, unknown>): {
+  section?: GroupKey;
+  session?: string;
+} {
+  return {
+    section:
+      typeof search.section === "string" && GROUP_KEYS.includes(search.section as GroupKey)
+        ? (search.section as GroupKey)
+        : undefined,
+    session:
+      typeof search.session === "string" && search.session.trim() ? search.session : undefined,
+  };
+}
+export const Route = createFileRoute("/settings")({
+  validateSearch: settingsSearch,
+  component: SettingsRoute,
+});
 function SettingsRoute() {
-  const providers = useProviders("");
+  const { section, session } = Route.useSearch();
+  const { reading, fixture } = useMachine();
+  const host = useSurfaceHost();
+  const go = useDestination();
   return (
     <RouteShell manifest={manifest}>
-      <div className="flex flex-col gap-4 p-6">
-        <AccessSwitch providers={providers} />
-        {providers.error ? (
-          <p className="t-small" data-tone="caution">
-            {providers.error}
-          </p>
-        ) : null}
-      </div>
+      <main
+        data-surface="page"
+        className="h-full w-full min-w-0 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable] px-3 py-2"
+        aria-label="settings"
+      >
+        <div className="mx-auto w-full max-w-3xl">
+          <SettingsBody
+            reading={reading}
+            fixture={fixture}
+            shell={host.surface}
+            group={section}
+            session={session}
+            onGroup={(next) =>
+              go(settingsDestination(next, next === "revit" ? session : undefined))
+            }
+          />
+        </div>
+      </main>
     </RouteShell>
   );
 }

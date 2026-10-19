@@ -52,12 +52,11 @@ core model held with zero changes; everything else was hand-rolled four times.
    (clobber-safety is structural); commands are `Atom.fn` with `AsyncResult`
    pending/error. v3→v4 Atom rename table: `docs/features/host/EFFECT-V4-PATTERNS.md` §4c.
 
-5. **Route docs are durable across host restarts** via a file-backed store
-   (`packages/runtime/src/route-state-store.ts`): `route:*` session-state keys
-   write through atomically to `<peaStateDir>/route-state/<resourceId>.json` and
-   rehydrate (absent-keys-only) before the first read. This seam exists because
-   Mastra persists thread history but resets session state; a canonical persisted
-   state model would subsume it.
+5. **Route docs are durable across host restarts.** `RouteWorkspace`
+   (`packages/runtime/src/route-workspace.ts`) writes each route envelope through its
+   store (`#persist`) before it publishes. The host owns the thread, so no session-state
+   key store exists. (Superseded by [ADR 0015](0015-the-harness-drives-pea-is-tools-and-ui.md), 2026-10-12:
+   the former `route-state-store.ts` existed because Mastra reset session state.)
 
 6. **Typed command context**: `RouteStateCommandContext<TDoc>` inferred from the route
    schema; `registerRouteState` binds handlers to `z.infer<TSchema>` — no

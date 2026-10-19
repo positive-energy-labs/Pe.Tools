@@ -1,7 +1,7 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createServer } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
@@ -15,7 +15,6 @@ import {
   type ServiceFile,
 } from "@pe/host-contracts/pe-service";
 import {
-  authorizeShutdownFor,
   claimServiceHost,
   chooseServicePort,
   rememberServicePort,
@@ -24,12 +23,13 @@ import {
 } from "@pe/host-contracts/pe-service-host";
 import { hostOwnership, productRoot, type HostOwnership } from "./host-ownership.ts";
 import { runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
+import { currentCaller, writeTerminalContext } from "./control.ts";
 
 // The dev script authorizes same-checkout dev takeover only; the SDK owns cooperative retirement.
 const DEV_TAKEOVER_ARGUMENT = "--take-over-host";
 const installedPort = 5180;
 
-export type PortOccupant = {
+type PortOccupant = {
   readonly pid: number;
   readonly executable: string;
   readonly serviceName?: string;
@@ -67,7 +67,7 @@ export function tcpListenerPids(stdout: string, port: number): number[] {
 }
 
 /** Read-only Windows census; SDK readers own record parsing. Never signal an occupant. */
-export async function readPortOccupants(appBase: string, port: number): Promise<PortOccupant[]> {
+async function readPortOccupants(appBase: string, port: number): Promise<PortOccupant[]> {
   // Get-NetTCPConnection requires CIM, which is unavailable even to SYSTEM in Windows Sandbox.
   // netstat reads the native TCP table; Get-Process/SDK discovery retain independent PID/path/start proof.
   const tcp = await promisify(execFile)("netstat", ["-ano", "-p", "tcp"], {
@@ -365,6 +365,12 @@ export const ServiceFileLive = Layer.effectDiscard(
       ),
       (handle) => Effect.promise(() => handle.release()),
     );
+    // The owner's terminal context belongs to the claim holder alone: written after the claim,
+    // removed with it. A host that loses the claim never touches the holder's file.
+    yield* Effect.acquireRelease(
+      Effect.sync(() => writeTerminalContext(hostOwnership.serviceName)),
+      (terminal) => Effect.sync(() => terminal.retire()),
+    );
     yield* Effect.result(
       Effect.promise(() => rememberServicePort(appBase, hostOwnership.serviceName, port)),
     );
@@ -395,52 +401,72 @@ export const ServiceFileLive = Layer.effectDiscard(
  * No dev-lane header guard: the installed-lane C# supervisor no longer evicts a healthy dev host (D4),
  * so the token alone is the authority.
  */
-export const adminShutdownRoute = HttpRouter.add(
-  "POST",
-  hostProcessIdentity.shutdownPath,
-  (request) =>
-    Effect.gen(function* () {
-      const { latch, handle: handleDeferred } = yield* HostLifecycle;
-      const handle = yield* Deferred.await(handleDeferred);
+export const adminShutdownRoute = HttpRouter.add("POST", hostProcessIdentity.shutdownPath, () => {
+  const caller = currentCaller();
+  return Effect.gen(function* () {
+    if (caller.kind !== "service" || caller.service !== hostOwnership.serviceName)
+      return yield* Response.json({ error: "Forbidden" }, { status: 403 });
+    const { latch } = yield* HostLifecycle;
 
-      // Token auth via the SDK-owned validator: X-Pe-Service-Token header or JSON body { token }.
-      const body = yield* Effect.orElseSucceed(request.json, () => null);
-      if (!authorizeShutdownFor(handle)(request.headers, body))
-        return yield* Response.json({ error: "Forbidden" }, { status: 403 });
+    yield* Effect.forkDetach(Deferred.succeed(latch, undefined));
+    return yield* Response.json({ shuttingDown: true, lane: hostOwnership.lane });
+  });
+});
 
-      yield* Effect.forkDetach(Deferred.succeed(latch, undefined));
-      return yield* Response.json({ shuttingDown: true, lane: hostOwnership.lane });
-    }),
-);
-
-/** Edge app mode is the desktop window (host ledger 2026-10-08): Edge ships with Windows, `--app`
- * drops the tabs and address bar, and the product's own profile keeps the window apart from the
- * user's browsing. The default browser is the fallback when Edge is absent. */
-export function openWindow(port: number): void {
-  const url = `http://127.0.0.1:${port}/`;
-  const edge = [process.env["ProgramFiles(x86)"], process.env.ProgramFiles]
-    .filter((root): root is string => root !== undefined)
-    .map((root) => join(root, "Microsoft", "Edge", "Application", "msedge.exe"))
-    .find((candidate) => existsSync(candidate));
-  console.log(`pe-host opening ${url}${edge ? " in an Edge app window" : ""}`);
-  // detached: on Windows a non-detached child dies with this process, and the reuse path exits at once.
-  const [command, args] = edge
-    ? [
-        edge,
-        [`--app=${url}`, `--user-data-dir=${join(productRoot(), "edge-app")}`, "--no-first-run"],
-      ]
-    : ["cmd.exe", ["/c", "start", "", url]];
-  // windowsHide only for cmd: it passes SW_HIDE, which a GUI exe may apply to its first window.
-  spawn(command, args, { detached: true, windowsHide: !edge, stdio: "ignore" }).unref();
+/** The native launcher owns PWA identity, registration and the browser's install flow. */
+export async function openWindow(port: number): Promise<void> {
+  const backend = `http://127.0.0.1:${port}/`;
+  const response = await fetch(backend, {
+    headers: { Accept: "text/html" },
+    redirect: "manual",
+    signal: AbortSignal.timeout(60_000),
+  });
+  const location = response.headers.get("location");
+  if (!response.ok && !(response.status >= 300 && response.status < 400 && location))
+    throw Error(`Window page is unavailable (HTTP ${response.status}).`);
+  const destination = new URL(location ?? backend, backend);
+  if (
+    destination.protocol !== "http:" ||
+    destination.hostname !== "127.0.0.1" ||
+    destination.username ||
+    destination.password
+  )
+    throw Error("Window page is not this local frontend.");
+  await response.body?.cancel();
+  const executable =
+    hostOwnership.lane === "installed"
+      ? join(dirname(hostOwnership.executablePath), "tray", "Pe.Host.Tray.exe")
+      : join(
+          hostOwnership.sourceRoot!,
+          ".artifacts",
+          "build",
+          "Pe.Host.Tray",
+          "Debug.R25",
+          "Pe.Host.Tray.exe",
+        );
+  if (!existsSync(executable)) throw Error("Native PWA launcher is not built for this runtime.");
+  await promisify(execFile)(executable, ["--launch-window", destination.href], {
+    windowsHide: true,
+    timeout: 10_000,
+  });
 }
 
-/** The tray's Open window: the same Edge app window as `--open`, authorized by the claim token. */
-export const adminWindowRoute = HttpRouter.add("POST", "/admin/window", (request) =>
-  Effect.gen(function* () {
-    const handle = yield* Deferred.await((yield* HostLifecycle).handle);
-    if (!authorizeShutdownFor(handle)(request.headers, null))
+/** Same installed-PWA/install flow as the tray and --open, authorized by the claim token. */
+export const adminWindowRoute = HttpRouter.add("POST", "/admin/window", () => {
+  const caller = currentCaller();
+  return Effect.gen(function* () {
+    if (caller.kind !== "service" || caller.service !== hostOwnership.serviceName)
       return yield* Response.json({ error: "Forbidden" }, { status: 403 });
-    openWindow(handle.serviceFile.port);
+    const handle = yield* Deferred.await((yield* HostLifecycle).handle);
+    const opened = yield* Effect.tryPromise(() => openWindow(handle.serviceFile.port)).pipe(
+      Effect.map(() => true),
+      Effect.catch(() => Effect.succeed(false)),
+    );
+    if (!opened)
+      return yield* Response.json(
+        { error: "Could not open the PWA or its install page." },
+        { status: 502 },
+      );
     return yield* Response.json({ opened: true });
-  }),
-);
+  });
+});

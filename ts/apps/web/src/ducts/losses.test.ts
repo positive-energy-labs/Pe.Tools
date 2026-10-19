@@ -9,14 +9,16 @@ import { join } from "node:path";
 import { expect, it } from "vite-plus/test";
 import { ductsRouteState, stagedDucts } from "@pe/agent-contracts";
 
-import { lookupGrid, toGrids, type Grid, type Grids } from "./loss-grid";
-import { friction, roundSection } from "./loss-physics";
-import { computeLosses, fanout, systemFor } from "./losses";
-import { price, stagedFanout } from "./pricing";
+import { lookupGrid, toGrids, type Grid, type Grids } from "@pe/ducts-domain/loss-grid";
+import { friction, roundSection, sectionOf } from "@pe/ducts-domain/loss-physics";
+import { computeLosses, fanout, systemFor } from "@pe/ducts-domain/losses";
+import { price, stagedFanout } from "@pe/ducts-domain/pricing";
 import { indexOf, lossesOf, sceneOf } from "./scene";
-import { groupTree } from "./topology";
+import { groupTree } from "@pe/ducts-domain/topology";
 import synthetic from "./fixtures/synthetic-snapshot.json";
-import type { DuctSnapshot } from "./readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import rootAttached from "./fixtures/root-attached-fittings.json";
+import physicalTransitions from "./fixtures/physical-transitions.json";
 
 // ---- test-only .tbl reader (ctable.py parse) ------------------------------------------------
 function parseTbl(name: string): Record<string, Grid> {
@@ -60,6 +62,7 @@ const grids: Grids = {
   "CD3-21": parseTbl("Cd3-21"),
   "SD5-9": parseTbl("Sd5-9"),
   "SR4-3": parseTbl("Sr4-3"),
+  "SD4-2": parseTbl("Sd4-2"),
 };
 
 it("interpolates the real tables to the values ctable.md lists", () => {
@@ -131,6 +134,7 @@ const duct = (
   ({
     id,
     kind: "duct",
+    curveKind: "line",
     ...size,
     lengthFt,
     polyline,
@@ -141,6 +145,7 @@ const duct = (
   }) as unknown as DuctSnapshot["segments"][number];
 
 const snapshot = {
+  coordinateEncoding: "native-double",
   document: { title: "t", readAt: "2026-10-04T00:00:00Z", elapsedMs: 1 },
   levels: [],
   groups: [
@@ -169,7 +174,8 @@ const snapshot = {
     }),
     node(5, "fitting", {
       partType: "Transition",
-      connectors: [conn(0, [3, 1], round(8)), conn(1, [6, 0], rect(12, 4))],
+      connectors: [{ ...conn(0, [3, 1], round(8)), direction: "in" }, conn(1, [6, 0], rect(12, 4))],
+      facts: [{ key: "angle", value: 45, unit: "deg", provenance: "designer-stated" }],
     }),
     node(6, "terminal", {
       terminalDrop: { catalogDropInWg: 0.05, writable: false },
@@ -237,6 +243,22 @@ const snapshot = {
 const T6 = 0.09187933;
 const T8 = 0.16736657;
 
+it("measures root-duct taps from the equipment port regardless of curve storage direction", () => {
+  const rooted = structuredClone(snapshot);
+  rooted.nodes = rooted.nodes.filter((n) => n.id !== 2);
+  rooted.segments = rooted.segments.filter((s) => s.id !== 1);
+  rooted.nodes.find((n) => n.id === 100)!.connectors = [conn(7, [3, 0], round(8))];
+  const main = rooted.segments.find((s) => s.id === 3)!;
+  main.connectors.find((c) => c.index === 0)!.connectedTo = { elementId: 100, connector: 7 };
+  const forward = computeLosses(rooted, grids);
+  const common = friction(roundSection(8), 300, 5, 0.0003).dp;
+  const branch = forward.paths[8]!;
+  expect(branch.rows.find((r) => r.id === 3 && r.kind === "friction")!.dp).toBeCloseTo(common, 12);
+  main.polyline.reverse();
+  const reversed = computeLosses(rooted, grids);
+  expect(reversed).toEqual(forward);
+});
+
 it("solves a synthetic network end to end", () => {
   const r = computeLosses(snapshot, grids);
   expect(r.errors).toEqual([]);
@@ -281,7 +303,7 @@ it("honours overrides and reports a missing table", () => {
   ]);
 });
 
-it("prices a tap as a takeoff only when entered from its main, never from the collar", () => {
+it("prices a tap entered from its main as a takeoff, and one entered from the collar as its branch turn", () => {
   const main = computeLosses(snapshot, grids).paths[8]!.rows.find((x) => x.id === 4)!;
   expect(main.error).toBeUndefined();
   expect(main.c).toBeGreaterThan(0);
@@ -295,10 +317,11 @@ it("prices a tap as a takeoff only when entered from its main, never from the co
   flipped.segments.find((x) => x.id === 7)!.connectors[1] = conn(1, [100, 0], round(6));
   const r = computeLosses(flipped, grids);
   const row = r.paths[6]!.rows.find((x) => x.id === 4)!;
-  expect(row).toMatchObject({ kind: "tap-branch", dp: 0 });
-  expect(row.error).toMatch(/entered from the collar/);
-  expect(row.c).toBeUndefined();
-  expect(r.errors).toEqual([expect.objectContaining({ id: 4 })]);
+  // All of the air turns through it: SD5-9 Cb at Qb/Qc = 1, and the row names the assumption.
+  expect(row).toMatchObject({ kind: "tap-branch", rule: "tap-std", inputs: { x: 1 } });
+  expect(row.error).toBeUndefined();
+  expect(row.c).toBeGreaterThan(0);
+  expect(row.notes).toContain("entered from the collar: priced as its branch turn at Qb/Qc = 1");
 });
 
 it("fanout moves only the terminals whose path crosses the rule", () => {
@@ -413,7 +436,7 @@ it("the scene carries Pe's loss per element, counting the rows paths share once"
   const priced = price(snap, grids, null);
   const rows = (terminal: number, id: number) =>
     priced.now.paths[terminal]!.rows.filter((row) => row.id === id);
-  const sum = (list: { dp: number }[]) => list.reduce((a, row) => a + row.dp, 0);
+  const sum = (list: { dp: number | null }[]) => list.reduce((a, row) => a + (row.dp ?? 0), 0);
   const losses = lossesOf(priced.now);
   // Duct 10 is walked by both paths and tapped once: its first interval is the same row on each
   // path, its second belongs to the path that carries on. Summing every path would count the
@@ -439,3 +462,161 @@ it("the scene carries Pe's loss per element, counting the rows paths share once"
   expect(sceneOf(indexOf(snap), "g10", () => true).segments.every((f) => !f.pressure)).toBe(true);
   expect(sceneOf(indexOf(snap, priced), "", () => true).context.flat()).toHaveLength(3);
 });
+
+it.each(rootAttached.cases)(
+  "resolves the exact root attachment of retained fitting $fitting.id",
+  (captured) => {
+    for (const reverse of [false, true]) {
+      const fitting = structuredClone(captured.fitting) as DuctSnapshot["nodes"][number];
+      const equipment = structuredClone(captured.equipment) as DuctSnapshot["nodes"][number];
+      const terminalId = 900000001;
+      fitting.groupId = "root-regression";
+      const outlet = fitting.connectors.find((port) => port.index === captured.outletIndex)!;
+      outlet.connectedTo = { elementId: terminalId, connector: 0 };
+      equipment.connectors = equipment.connectors.filter(
+        (port) => port.index === captured.rootEquipmentPort,
+      );
+      if (reverse) fitting.connectors.reverse();
+      const snap: DuctSnapshot = {
+        ...structuredClone(snapshot),
+        groups: [
+          {
+            id: fitting.groupId,
+            rootIds: [equipment.id],
+            classifications: ["SupplyAir"],
+            systemNames: ["regression"],
+            terminalCount: 1,
+            elementCount: 2,
+            loops: 0,
+            issueIds: [],
+          },
+        ],
+        nodes: [
+          equipment,
+          fitting,
+          node(terminalId, "terminal", {
+            groupId: fitting.groupId,
+            connectors: [
+              {
+                ...outlet,
+                index: 0,
+                connectedTo: { elementId: fitting.id, connector: outlet.index },
+              },
+            ],
+            facts: [{ key: "flow", value: 100, unit: "cfm", provenance: "designer-stated" }],
+            terminalDrop: { catalogDropInWg: 0, writable: false },
+          }),
+        ],
+        segments: [],
+        systems: [],
+        flows: [],
+        issues: [],
+      };
+      const root = groupTree(snap, fitting.groupId).root!;
+      expect(root).toEqual({
+        equipment: equipment.id,
+        port: captured.rootEquipmentPort,
+        element: fitting.id,
+      });
+      const inlet = fitting.connectors.find(
+        (port) =>
+          port.connectedTo?.elementId === root.equipment &&
+          port.connectedTo.connector === root.port,
+      )!;
+      const inletSection = sectionOf(inlet.shape, inlet.diameterIn, inlet.widthIn, inlet.heightIn)!;
+      const outletSection = sectionOf(
+        outlet.shape,
+        outlet.diameterIn,
+        outlet.widthIn,
+        outlet.heightIn,
+      )!;
+      expect(inlet.index).toBe(captured.inletIndex);
+      expect(outletSection.areaFt2 / inletSection.areaFt2).toBeCloseTo(captured.ratio, 12);
+      const result = computeLosses(snap, grids);
+      const row = result.paths[terminalId]!.rows.find((row) => row.id === fitting.id)!;
+      if (fitting.id === 12398836) {
+        expect(row.error).toContain("measured included angle");
+        // Explicit manual test angle overlays the retained geometry; it is not a native observation.
+        fitting.facts.push({ key: "angle", value: 45, unit: "deg", provenance: "designer-stated" });
+        const physical = computeLosses(snap, grids).paths[terminalId]!.rows.find(
+          (r) => r.id === fitting.id,
+        )!;
+        expect(physical.error).toBeUndefined();
+        expect(physical.table).toBe("SD4-2");
+        expect(physical.inputs?.y).toBeCloseTo((Math.PI * 100) / 576, 12);
+        expect(physical.c).toBeCloseTo(0.05455015305021264, 12);
+        const contradictory = structuredClone(snap);
+        contradictory.nodes
+          .find((n) => n.id === fitting.id)!
+          .connectors.forEach((c) => {
+            c.direction = "in";
+          });
+        // No In/Out pair: the tree walk orients it, and the row says so (tolerance over repair).
+        expect(
+          computeLosses(contradictory, grids).paths[terminalId]!.rows.find(
+            (r) => r.id === fitting.id,
+          )!.notes,
+        ).toContain("oriented by the tree walk; its connectors state no In/Out pair");
+      } else {
+        // Attachment truth is retained; these grids carry no rectangular tables.
+        expect(row.error).toBeDefined();
+        expect(row.dp).toBe(0);
+      }
+    }
+  },
+);
+
+// The manual angle below is an explicit test input, not an observation added to retained Chadds.
+it("orients a transition by the tree walk only when its connectors state no In/Out pair, and never assumes an angle", () => {
+  const missingAngle = structuredClone(snapshot);
+  const trx = missingAngle.nodes.find((n) => n.id === 5)!;
+  trx.connectors[0]!.direction = "in";
+  trx.connectors[1]!.direction = "out";
+  trx.facts = [];
+  const row = () => computeLosses(missingAngle, grids).paths[6]!.rows.find((r) => r.id === 5)!;
+  expect(row().error).toContain("measured included angle");
+  trx.facts = [{ key: "angle", value: 45, unit: "deg", provenance: "designer-stated" }];
+  trx.connectors[0]!.direction = "out";
+  expect(row().error).toBeUndefined();
+  expect(row().notes).toContain("oriented by the tree walk; its connectors state no In/Out pair");
+});
+
+it.each(physicalTransitions.nodes)(
+  "uses retained transition $id physical directions independently of its non-root walk",
+  (captured) => {
+    const fitting = structuredClone(captured) as DuctSnapshot["nodes"][number];
+    fitting.groupId = "g1";
+    fitting.facts = [{ key: "angle", value: 45, unit: "deg", provenance: "designer-stated" }];
+    fitting.connectors[0]!.connectedTo = { elementId: 1, connector: 1 };
+    fitting.connectors[1]!.connectedTo = { elementId: 6, connector: 0 };
+    const network = structuredClone(snapshot);
+    network.groups[0]!.terminalCount = 1;
+    network.nodes = [
+      network.nodes.find((n) => n.id === 100)!,
+      fitting,
+      network.nodes.find((n) => n.id === 6)!,
+    ];
+    network.nodes.find((n) => n.id === 6)!.connectors[0]!.connectedTo = {
+      elementId: fitting.id,
+      connector: fitting.connectors[1]!.index,
+    };
+    network.segments = [network.segments.find((s) => s.id === 1)!];
+    network.segments[0]!.connectors[1]!.connectedTo = {
+      elementId: fitting.id,
+      connector: fitting.connectors[0]!.index,
+    };
+    const row = () =>
+      computeLosses(network, grids).paths[6]!.rows.find((r) => r.id === fitting.id)!;
+    if (fitting.id === 12809620) {
+      expect(row().error).toBeUndefined();
+      expect(row().table).toBe("SR4-3");
+      expect(row().inputs?.y).toBeCloseTo(4 / Math.PI, 12);
+      fitting.connectors.reverse();
+      expect(row().inputs?.y).toBeCloseTo(4 / Math.PI, 12);
+    } else {
+      // The walk orients it onto a rule; these grids carry no rectangular table to price it.
+      expect(row().rule).toBeDefined();
+      expect(row().error).toContain("is not loaded");
+    }
+  },
+);

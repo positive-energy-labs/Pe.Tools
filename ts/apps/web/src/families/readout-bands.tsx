@@ -2,14 +2,14 @@ import { useContext, useEffect, useRef } from "react";
 import { ChatFocus } from "#/route/situation-ladder";
 import { showFamilyCell, type FamiliesPatchCell, type PodDraftSource } from "@pe/agent-contracts";
 
-import { FactChip } from "#/components/lang/chip";
-import { EmptyState } from "#/components/lang/empty";
+import { FactChip } from "@pe/kit/lang/chip";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { ActionButton } from "#/components/lang/action-button";
-import { ReviewRow } from "#/components/lang/band";
+import { Button } from "@pe/kit/lang/button";
+import { ReviewRow } from "#/components/work/band";
 import { ValueDiff } from "#/components/lang/value-diff";
-import type { Column } from "#/components/master-table/model";
-import { Table } from "#/components/master-table/table";
+import type { Column } from "@pe/kit/table/model";
+import { Table } from "@pe/kit/table/table";
 import { familyCellEntries } from "#/families/staged";
 import type { SalvagedExclusion } from "#/families/store";
 import { filterWords } from "#/families/scope-band";
@@ -17,7 +17,8 @@ import { useFamiliesWorkspace } from "#/families/workspace-context";
 import { ParamCell } from "#/families/matrix-columns";
 import { ARTIFACT } from "#/families/manifest";
 import { Inspect } from "#/route/inspect";
-import { cn } from "#/lib/utils";
+import { cn } from "@pe/kit/lib/utils";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** THE RECEIPTS: one bare `Table` row per family, as the op reported it. */
 type Receipt = NonNullable<
@@ -65,16 +66,17 @@ const receiptColumns: Column<Receipt>[] = [
     key: "errors",
     label: "errors",
     cell: (entry) => (
-      <span
-        className={cn(CELL, "text-ink-2")}
-        title={
+      <TooltipHint
+        content={
           entry.errors.length > 0
             ? `Errors reported by this family: ${entry.errors.join(", ")}.`
             : (entry.error ?? "No errors reported.")
         }
       >
-        {entry.errors.join(" · ") || (entry.error ?? "")}
-      </span>
+        <span className={cn(CELL, "text-ink-2")}>
+          {entry.errors.join(" · ") || (entry.error ?? "")}
+        </span>
+      </TooltipHint>
     ),
   },
   {
@@ -289,7 +291,7 @@ export function FamiliesCarryOverLine() {
     <div className="flex flex-wrap items-baseline gap-2 px-4 py-1 t-small" role="status">
       <span>the old Work {said.filter(Boolean).join("; ")}</span>
       {resolved || scope ? (
-        <ActionButton
+        <Button
           label="restore these"
           reason={[
             scope ? "Stage the old scope again" : null,
@@ -300,14 +302,20 @@ export function FamiliesCarryOverLine() {
             .filter(Boolean)
             .join(", and ")
             .concat(", in one write")}
+          kind="framed"
           onClick={() => void store.actions.restore(salvaged)}
-        />
+        >
+          restore these
+        </Button>
       ) : null}
-      <ActionButton
+      <Button
         label="dismiss"
         reason="Keep the fresh Work as it is; the old one stays set aside"
+        kind="framed"
         onClick={store.actions.dismissCarryOver}
-      />
+      >
+        dismiss
+      </Button>
     </div>
   );
 }

@@ -67,7 +67,9 @@ import {
 } from "@pe/host-contracts/contracts";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
 import { assertFresh, documentMarks } from "./document-marks.ts";
-import { ActionIncomplete, type ActionJournal } from "./action-journal.ts";
+import { ActionIncomplete, type ActionJournal, type Crossing } from "./action-journal.ts";
+import { requireEligibleCaller } from "./gateway-actions.ts";
+import { routeActorOf } from "./control.ts";
 import { actionWorkspace, type TakeoffActionDependencies } from "./takeoff-actions.ts";
 import { readOriginalProcess, readNativeReceipt, type NativeProcess } from "./native-receipts.ts";
 import {
@@ -401,6 +403,7 @@ const appliedSomething = (result: unknown) => {
 
 export async function admitFamilyAction(
   raw: unknown,
+  crossing: Crossing,
   owner: ActionJournal,
   captures: TakeoffCaptures,
   bridge: RevitBridge["Service"],
@@ -417,8 +420,7 @@ export async function admitFamilyAction(
       throw refused("Recover the interrupted Families apply from its native run before resuming");
   }
   const definition = familyActions[key];
-  if (definition.actor === "human" && admission.actor !== "human")
-    throw refused("This action requires human approval");
+  requireEligibleCaller({ key, actor: definition.actor }, crossing.caller, "/actions");
   admission.input = definition.input.parse(admission.input);
   if ((key === "settings.write") !== (admission.destination.kind === "host"))
     throw refused("Wrong action destination");
@@ -428,7 +430,7 @@ export async function admitFamilyAction(
   const work = deps.workspace ?? actionWorkspace();
   const pods = podContext(deps, bridge, target);
   return owner.admit(
-    admission,
+    { ...admission, ...crossing },
     async (): Promise<Prepared> => {
       if (key === "settings.write") {
         const input = familyActions["settings.write"].input.parse(admission.input);
@@ -1009,7 +1011,7 @@ export async function admitFamilyAction(
             ...(consumed.patch && !patchConverged ? { patch: undefined } : {}),
           };
           const retired = await execution.step("publication", "work.retire", retiring, () =>
-            retire(work, retiring, admission.actor),
+            retire(work, retiring, routeActorOf(crossing.caller)),
           );
           await execution.publish(retired);
           return { executionContext: target, native: result, retired, ...(await readback()) };
@@ -1035,7 +1037,7 @@ export async function admitFamilyAction(
       const publication = await work.apply(
         base.key,
         settingsRouteState.route,
-        admission.actor,
+        routeActorOf(crossing.caller),
         [
           {
             path: ["basis"],

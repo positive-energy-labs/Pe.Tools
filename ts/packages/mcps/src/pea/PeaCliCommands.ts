@@ -1,10 +1,18 @@
+import { contextFetch } from "@pe/runtime/context";
+import { createPeClient, isPeRouteId } from "@pe/agent-contracts/pe-api";
 import { actionBasesSchema } from "@pe/agent-contracts";
 import { readCapabilityIntent, runCapability, type AdmissionContext } from "../shared/admission.ts";
 import { define } from "gunshi";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { HostLogTarget, type HostOpResponse } from "@pe/host-contracts/operation-types";
-import { capabilityKindSchema, capabilityNeedsSchema, findCapabilities } from "@pe/agent-contracts";
+import {
+  capabilityKindSchema,
+  capabilityNeedsSchema,
+  findCapabilities,
+  mentionOf,
+} from "@pe/agent-contracts";
+import { ActionResultError } from "../shared/takeoff-action-client.ts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
 import type { PodList } from "@pe/host-contracts/operation-types";
 import { readCatalog } from "./capability-tools.ts";
@@ -28,6 +36,7 @@ export class PeaCliCommands {
 
   commands() {
     return {
+      find: this.findCommand(),
       host: this.hostCommand(),
       script: this.scriptCommand(),
     };
@@ -40,13 +49,12 @@ export class PeaCliCommands {
       examples: [
         "pea host status",
         "pea host logs --target revit --tail 50",
-        "pea host operations search --query schedules",
-        "pea host operations call --key revit.context.summary --request {}",
+        "pea host call --key revit.context.summary --request {}",
       ].join("\n"),
       subCommands: {
         status: this.hostStatusCommand(),
         logs: this.hostLogsCommand(),
-        operations: this.hostOperationsCommand(),
+        call: this.hostOperationCallCommand(),
       },
       run: () => {
         console.log("Run `pea host --help` to list host commands.");
@@ -89,7 +97,6 @@ export class PeaCliCommands {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
         openDocumentId: commonArgs.openDocumentId,
-        actor: commonArgs.actor,
         actionId: commonArgs.actionId,
       },
       run: async (ctx) => {
@@ -129,36 +136,22 @@ export class PeaCliCommands {
     });
   }
 
-  private hostOperationsCommand() {
+  findCommand() {
     return define({
-      name: "operations",
-      description: "Search the capability catalog and call a generated public host operation.",
-      subCommands: {
-        search: this.hostOperationSearchCommand(),
-        call: this.hostOperationCallCommand(),
-      },
-      run: () => {
-        console.log("Run `pea host operations --help` to list operation commands.");
-      },
-    });
-  }
-
-  private hostOperationSearchCommand() {
-    return define({
-      name: "search",
+      name: "find",
       description:
-        "Search the one capability catalog (ops, route documents, pods, skills) — the same rows and ranking pe_find gives the agent.",
+        "Find in the one capability catalog (ops, route documents, pods, skills, open and recent documents) — the same rows and ranking pe_find gives Pea. --mention prints the pointer Pea gets when the user @-mentions a row.",
       args: {
         host: commonArgs.host,
         bridgeSessionId: {
           type: "string",
           description:
-            "Revit session whose operations to include; without it only host operations, pods, and skills are searched.",
+            "Revit session whose operations to include; without it only host operations, pods, skills, and open and recent documents are searched.",
         },
-        query: { type: "string", description: "Optional search query." },
         kind: {
           type: "string",
-          description: "Optional kind filter: op, route-doc, route-command, pod, or skill.",
+          description:
+            "Optional kind filter: op, route-doc, route-command, script, page, skill, member, document, or recent.",
         },
         needs: {
           type: "string",
@@ -166,29 +159,51 @@ export class PeaCliCommands {
             "Optional needs filter: nothing, document, project-document, family-document, or session.",
         },
         limit: { type: "number", description: "Maximum rows to print.", default: 8 },
+        mention: {
+          type: "string",
+          description:
+            "Print the mention (key, kind, title, facts, takenAt) of this row key as JSON.",
+        },
+        json: { type: "boolean", description: "Print the matched rows as JSON.", default: false },
       },
       toKebab: true,
+      examples: [
+        "pea find schedules",
+        "pea find --kind document",
+        "pea find --kind recent belmont",
+        "pea find riser --json",
+        "pea find --mention doc:<session>/<openId>",
+      ].join("\n"),
       run: async (ctx) => {
-        // The URL is disclosed BEFORE the fetch: a bare `fetch failed` with no URL was the
-        // 2026-08-19/20 dead end — an empty catalog and a wrong-lane resolution are told apart
-        // by reading the output rather than by guessing.
+        // The URL is disclosed BEFORE the fetch (on stderr, so --json stays one object): a bare
+        // `fetch failed` with no URL was the 2026-08-19/20 dead end.
         const hostBaseUrl = this.resolveHostBaseUrl(ctx.values.host);
-        console.log(`host ${hostBaseUrl}`);
+        console.error(`host ${hostBaseUrl}`);
         const catalog = await readCatalog(undefined, hostBaseUrl, {
           bridgeSessionId: asOptionalString(ctx.values.bridgeSessionId),
         });
         if ("isError" in catalog) throw new Error(catalog.content);
-        const rows = findCapabilities(catalog.capabilities, {
-          query: firstNonBlank(ctx.values.query),
-          kind: capabilityKindSchema.optional().parse(firstNonBlank(ctx.values.kind)),
-          needs: capabilityNeedsSchema.optional().parse(firstNonBlank(ctx.values.needs)),
-          limit: ctx.values.limit,
-        });
-        for (const row of rows) {
-          console.log(`${row.key}  ${row.title}`);
-          console.log(`  ${row.description}`);
-          console.log(`  ${row.needs}${row.mutates ? ", mutates" : ""}`);
+        for (const diagnostic of catalog.diagnostics)
+          console.error(`${diagnostic.code}: ${diagnostic.message}`);
+        const key = firstNonBlank(ctx.values.mention);
+        if (key) {
+          const row = catalog.capabilities.find((candidate) => candidate.key === key);
+          if (!row) throw new Error(`No row '${key}' in the catalog. Find keys with \`pea find\`.`);
+          console.log(JSON.stringify(mentionOf(row, catalog), null, 2));
+          return;
         }
+        // Same filter as pe_find: a human-only row is the person's press, never offered.
+        const rows = findCapabilities(
+          catalog.capabilities.filter((row) => row.principal.includes("pea")),
+          {
+            query: firstNonBlank(ctx.positionals.slice(ctx.commandPath.length).join(" ")),
+            kind: capabilityKindSchema.optional().parse(firstNonBlank(ctx.values.kind)),
+            needs: capabilityNeedsSchema.optional().parse(firstNonBlank(ctx.values.needs)),
+            limit: ctx.values.limit,
+          },
+        );
+        if (ctx.values.json) console.log(JSON.stringify(rows, null, 2));
+        else for (const row of rows) console.log(`${row.key}  ${row.kind}  ${row.title}`);
       },
     });
   }
@@ -196,20 +211,20 @@ export class PeaCliCommands {
   private hostOperationCallCommand() {
     return define({
       name: "call",
-      description: "Call a generated public host operation by key with an optional JSON request.",
+      description:
+        "Call a public host operation under the process caller context. Reads need no grant; anonymous writes refuse context.missing.",
       args: {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
         openDocumentId: commonArgs.openDocumentId,
-        actor: commonArgs.actor,
         actionId: commonArgs.actionId,
         key: {
           type: "string",
-          description: "Operation key, with or without the `op:` prefix `search` prints.",
+          description: "Operation key, or http:<route-id> from the declared HTTP contract.",
         },
         request: {
           type: "string",
-          description: "JSON request object. Omit for NoRequest operations.",
+          description: "Operation input, or {params, query, body} for a declared HTTP route.",
         },
         requestFile: {
           type: "string",
@@ -230,12 +245,19 @@ export class PeaCliCommands {
           hostBaseUrl: this.resolveHostBaseUrl(ctx.values.host),
           bridgeSessionId: asOptionalString(ctx.values.bridgeSessionId),
           openDocumentId: asOptionalString(ctx.values.openDocumentId),
-          actor:
-            ctx.values.actor === "human" || ctx.values.actor === "agent"
-              ? ctx.values.actor
-              : undefined,
           actionId: asOptionalString(ctx.values.actionId),
         };
+        const routeId = key.replace(/^http:/, "");
+        if (isPeRouteId(routeId) || key.startsWith("http:")) {
+          const result = await createPeClient(context.hostBaseUrl, contextFetch).invoke(
+            routeId,
+            request,
+          );
+          if (result instanceof Response) {
+            if (result.body) for await (const chunk of result.body) process.stdout.write(chunk);
+          } else console.log(JSON.stringify(result, null, 2));
+          return;
+        }
         const intent = await readCapabilityIntent(key, context);
         if (intent.kind === "operation" && !intent.mutates) {
           // Operation reads keep `/call`'s enriched result, so --verbosity still means something.
@@ -308,27 +330,50 @@ export class PeaCliCommands {
         "Get-Content .\\Probe.cs | pea script execute --stdin --source-name Probe.cs",
       ].join("\n"),
       run: async (ctx) => {
-        const scriptContent = await resolveCliScriptContent(ctx.values);
-        const sourcePath = firstNonBlank(ctx.values.sourcePath);
-        if (!scriptContent && !sourcePath)
-          throw new Error("Provide --file, --stdin, --script-content, or --source-path.");
-        if (scriptContent && sourcePath)
-          throw new Error(
-            "Provide inline content (--file/--stdin/--script-content) or --source-path, not both.",
-          );
+        try {
+          const scriptContent = await resolveCliScriptContent(ctx.values);
+          const sourcePath = firstNonBlank(ctx.values.sourcePath);
+          if (!scriptContent && !sourcePath)
+            throw new Error("Provide --file, --stdin, --script-content, or --source-path.");
+          if (scriptContent && sourcePath)
+            throw new Error(
+              "Provide inline content (--file/--stdin/--script-content) or --source-path, not both.",
+            );
 
-        const timeoutSeconds = asOptionalNumber(ctx.values.timeoutSeconds);
-        const result = await this.createScriptingTools(ctx.values, timeoutSeconds).execute({
-          scriptContent,
-          sourcePath,
-          workspaceKey: ctx.values.workspace,
-          sourceName: firstNonBlank(ctx.values.sourceName),
-          permissionMode: parseCliPermissionMode(ctx.values.permissionMode),
-          timeoutSeconds,
-        } satisfies ScriptExecuteInput);
-        if (result.status !== "Succeeded") process.exitCode = 1;
-        if (ctx.values.json) process.stdout.write(`${JSON.stringify(result)}\n`);
-        else writeScriptExecution(result);
+          const timeoutSeconds = asOptionalNumber(ctx.values.timeoutSeconds);
+          const result = await this.createScriptingTools(ctx.values, timeoutSeconds).execute({
+            scriptContent,
+            sourcePath,
+            workspaceKey: ctx.values.workspace,
+            sourceName: firstNonBlank(ctx.values.sourceName),
+            permissionMode: parseCliPermissionMode(ctx.values.permissionMode),
+            timeoutSeconds,
+          } satisfies ScriptExecuteInput);
+          if (result.status !== "Succeeded") process.exitCode = 1;
+          if (ctx.values.json) process.stdout.write(`${JSON.stringify(result)}\n`);
+          else writeScriptExecution(result);
+        } catch (error) {
+          if (!ctx.values.json) throw error;
+          process.exitCode = 1;
+          const action = error instanceof ActionResultError ? error.action : undefined;
+          process.stdout.write(
+            `${JSON.stringify({
+              error: error instanceof Error ? error.message : String(error),
+              ...(action
+                ? {
+                    actionId: action.id,
+                    state: action.state,
+                    ...("status" in action ? { status: action.status } : {}),
+                    ...("evidence" in action && action.evidence
+                      ? { evidence: { result: scriptFailureDiagnostics(action.evidence.result) } }
+                      : {}),
+                    ...("acceptance" in action ? { acceptance: action.acceptance } : {}),
+                  }
+                : {}),
+              ...(error instanceof Error && "refusal" in error ? { refusal: error.refusal } : {}),
+            })}\n`,
+          );
+        }
       },
     });
   }
@@ -342,7 +387,6 @@ export class PeaCliCommands {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
         openDocumentId: commonArgs.openDocumentId,
-        actor: commonArgs.actor,
         actionId: commonArgs.actionId,
         requestId: {
           type: "string",
@@ -370,12 +414,13 @@ export class PeaCliCommands {
         host: commonArgs.host,
         bridgeSessionId: commonArgs.bridgeSessionId,
         openDocumentId: commonArgs.openDocumentId,
-        actor: commonArgs.actor,
         actionId: commonArgs.actionId,
       },
       toKebab: true,
       run: async (ctx) => {
         const result = await this.createScriptingTools(ctx.values).listPods();
+        if (!("pods" in result))
+          throw Error("pod.list returned identity instead of full inventory");
         writeScriptPodList(result);
       },
     });
@@ -406,9 +451,6 @@ export class PeaCliCommands {
       description: "Import a Pod zip archive into Documents/Pe.Tools/Pods.",
       args: {
         host: commonArgs.host,
-        bridgeSessionId: commonArgs.bridgeSessionId,
-        openDocumentId: commonArgs.openDocumentId,
-        actor: commonArgs.actor,
         actionId: commonArgs.actionId,
         archive: { type: "string", description: "Path to the Pod zip archive to import." },
         folder: {
@@ -437,9 +479,6 @@ export class PeaCliCommands {
         "Export an installed pod as a portable zip archive with its foreign fragments vendored.",
       args: {
         host: commonArgs.host,
-        bridgeSessionId: commonArgs.bridgeSessionId,
-        openDocumentId: commonArgs.openDocumentId,
-        actor: commonArgs.actor,
         actionId: commonArgs.actionId,
         pod: { type: "string", description: "Manifest id of the pod to export." },
         output: { type: "string", description: "Path of the .zip archive to write." },
@@ -466,7 +505,6 @@ export class PeaCliCommands {
       hostBaseUrl: this.resolveHostBaseUrl(values.host),
       bridgeSessionId: asOptionalString(values.bridgeSessionId),
       openDocumentId: asOptionalString(values.openDocumentId),
-      actor: values.actor === "human" || values.actor === "agent" ? values.actor : undefined,
       actionId: asOptionalString(values.actionId),
       timeoutMs: scriptClientTimeoutMs(scriptTimeoutSeconds),
       workspaceKey: this.resolveWorkspaceKey(values.workspace),
@@ -482,7 +520,6 @@ export class PeaCliCommands {
       bridgeSessionId: asOptionalString(values.bridgeSessionId),
       openDocumentId: asOptionalString(values.openDocumentId),
       requestId: asOptionalString(values.actionId),
-      actor: values.actor === "human" || values.actor === "agent" ? values.actor : undefined,
       ...(scriptTimeoutSeconds != null
         ? { timeoutMs: scriptClientTimeoutMs(scriptTimeoutSeconds) }
         : {}),
@@ -499,11 +536,6 @@ export class PeaCliCommands {
 }
 
 const commonArgs = {
-  actor: {
-    type: "string",
-    description:
-      "Initiating actor: human or agent. Required for mutation; never inferred from CLI transport.",
-  },
   actionId: {
     type: "string",
     description: "Original action ID. Reuse for receipt replay, never replace an unknown attempt.",
@@ -572,16 +604,13 @@ function writeScriptBootstrap(result: HostOpResponse<"scripting.workspace.bootst
   console.log(`workspace    ${result.workspaceRootPath}`);
   console.log(`project      ${result.projectFilePath}`);
   console.log(`pod          ${result.podManifestPath}`);
-  console.log(`sample       ${result.sampleScriptPath}`);
 }
 
 function writeScriptPodList(result: PodList) {
   for (const pod of result.pods) {
     console.log(`${pod.id}  ${pod.name} v${pod.version}  ${pod.folder}`);
     for (const entrypoint of pod.entrypoints)
-      console.log(
-        `  ${entrypoint.id}  ${entrypoint.sourcePath}${entrypoint.name ? `  ${entrypoint.name}` : ""}`,
-      );
+      console.log(`  ${entrypoint.sourcePath}${entrypoint.name ? `  ${entrypoint.name}` : ""}`);
     for (const diagnostic of pod.diagnostics)
       console.error(`  ${diagnostic.severity} ${diagnostic.path}: ${diagnostic.message}`);
   }
@@ -620,4 +649,27 @@ function parseOptionalJson(value: unknown, file: unknown): unknown {
   if (text && path) throw new Error("Use either --request or --request-file, not both.");
   if (!text && !path) return undefined;
   return JSON.parse(path ? readFileSync(path, "utf8") : text!);
+}
+
+/** Failure stdout is diagnostic evidence, not a source/assembly/data dump; actionId recovers the receipt. */
+function scriptFailureDiagnostics(value: unknown) {
+  if (!value || typeof value !== "object") return undefined;
+  const result: Record<string, unknown> = Object.fromEntries(
+    Object.entries(value).filter(([key]) => ["status", "executionId", "diagnostics"].includes(key)),
+  );
+  if (Array.isArray(result.diagnostics) && result.diagnostics.length > 64) {
+    result.diagnosticsTotal = result.diagnostics.length;
+    result.diagnosticsTruncated = true;
+    const priority = (diagnostic: unknown) => {
+      const severity =
+        diagnostic && typeof diagnostic === "object" && "severity" in diagnostic
+          ? diagnostic.severity
+          : undefined;
+      return severity === "Error" ? 0 : severity === "Warning" ? 1 : 2;
+    };
+    result.diagnostics = [...result.diagnostics]
+      .sort((a: unknown, b: unknown) => priority(a) - priority(b))
+      .slice(0, 64);
+  }
+  return result;
 }

@@ -1,35 +1,13 @@
 /**
- * OUTCOME LINE — what a verb did, after it did it.
- *
- * CONSUMERS: soon — the families and takeoffs receipts lanes; the design-system exhibit.
- *
- * RULINGS EMBODIED:
- * - OUTCOME RECEIPTS READ AS COLOURED MONO TEXT, not left bars — round 1 measured that vertical
- *   bars were simply not understood.
- * - EVERY KIND REUSES A MEANING ROLE ALREADY IN THE CONTRACT. No outcome gets a hue of its own,
- *   and the mapping is documented once, in design-lang.css, next to the tokens it spends:
- *     busy → ink-2 · receipt → done · refused → alarm · advisory → ink-2 · error → caution
- *   Two of those are arguments, not conveniences: a plan-hash REFUSAL is the model disagreeing,
- *   so it earns the one alarm; a busy bridge is NOT the model disagreeing, so an ERROR gets
- *   caution instead.
- * - BOLD STAYS RESERVED FOR UNSAVED. Outcomes take their punch from colour, the icon, and the
- *   artifact frame they sit near — never from the type axis (round-2 scoping ruling).
- * - ERROR wears the squiggly-under — the same decoration family the cells use — which is why it
- *   reads as unfinished without weight.
- * - BORDER BUDGET: an outcomes lane is PLAIN CONTENT. It reports on a machine-operated object;
- *   it is not one. Never wrap these in an `ArtifactFrame`.
- *
- * ponytail: an outcome carries no verb, no time, no target and no item list, which means a lane
- * of these cannot say which write produced
- * which receipt, and "4 staged for retry" has nowhere for the 4 to live. No rendering has been
- * ruled for any of it, so no slot is taken here. Upgrade path: the state model grows the link
- * first, then this signature.
+ * What a verb did, after it did it: coloured mono text spending existing meaning roles (busy ink-2,
+ * receipt done, refused alarm, advisory ink-2, error caution + squiggle). Never wrap a lane of
+ * these in an `ArtifactFrame`; it reports on a machine-operated object, it is not one.
  */
 import { Ban, Check, Info, LoaderCircle, TriangleAlert, type LucideIcon } from "lucide-react";
 
-import { tv } from "#/lib/tv";
+import { tv } from "@pe/kit/lib/tv";
 
-import "./lang.css";
+import "@pe/kit/lang/lang.css";
 
 export const outcomeLineRecipe = tv({
   slots: {

@@ -1,9 +1,9 @@
 import { useMemo } from "react";
 import { Key } from "#/components/anatomy";
-import { EmptyState } from "#/components/lang/empty";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan-image";
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 import {
   contentViewport,
   fitFrame,

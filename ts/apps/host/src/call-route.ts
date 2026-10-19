@@ -1,6 +1,11 @@
+import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { sdkSession, readSessionScope } from "./sdk-session.ts";
 import { admitScheduleAction, recoverScheduleAction, readSchedule } from "./schedule-actions.ts";
-import { admitInstancesAction, recoverInstancesAction } from "./instances-actions.ts";
+import {
+  admitInstancesAction,
+  cancelInstancesAction,
+  recoverInstancesAction,
+} from "./instances-actions.ts";
 import { instancesActions } from "@pe/agent-contracts";
 import { actionControls, semanticActions } from "@pe/agent-contracts";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
@@ -10,8 +15,19 @@ import {
   recoverGatewayAction,
   operationDefinition,
   gatewayTarget,
-  requireEligibleActor,
+  requireEligibleCaller,
 } from "./gateway-actions.ts";
+import {
+  admitCrossing,
+  admitScript,
+  consentedRead,
+  currentCaller,
+  readsOnly,
+  Refused,
+  refusalHeaders,
+  admitAnonymousCall,
+} from "./control.ts";
+import type { Caller } from "@pe/agent-contracts";
 import { actionBasesSchema, actionListFilterSchema } from "@pe/agent-contracts";
 import {
   admitFamilyAction,
@@ -54,7 +70,8 @@ import {
   registerViewImage,
   type CaptureStore,
 } from "./captures-route.ts";
-import { boundedPayload, capture } from "@pe/runtime";
+import { randomUUID } from "node:crypto";
+import { recordHostFact } from "./receipt-export.ts";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
 import { RevitBridge, BridgeError, CANCEL_OPERATION_KEY, NoRevitSession } from "./bridge.ts";
 import { apsAuthLogin, apsAuthLogout, apsAuthStatus, apsAuthToken } from "./aps-auth.ts";
@@ -68,6 +85,7 @@ import {
 import {
   composeMember,
   listPods,
+  resolvePodIdentity,
   listRuns,
   readMember,
   saveMember,
@@ -75,6 +93,8 @@ import {
   type PodContext,
 } from "./settings.ts";
 import { LocalOpError, localOpHttpStatus } from "./local-error.ts";
+import { capturePackage } from "./packages.ts";
+import { exportPod, importPod, promotePage, TransferRefused } from "./pod-transfer.ts";
 import {
   rhvacAssemblies,
   rhvacLaunch,
@@ -93,6 +113,13 @@ import {
   type HostSessionScope,
 } from "@pe/host-contracts/operation-types";
 import type { HostErrorKind } from "@pe/host-contracts/contracts";
+
+/** A door refusal: 403, named, and never dispatched. */
+const refusedResponse = (error: Refused) =>
+  Response.jsonUnsafe(
+    { error: error.message, message: error.message, refusal: error.refusal, notDispatched: true },
+    { status: 403, headers: refusalHeaders(error.refusal.code) },
+  );
 
 /** A refusal's own words. `BridgeError` is a plain class, so `String()` would say [object Object]. */
 const said = (error: unknown): string =>
@@ -115,7 +142,6 @@ export type CallRouteDispatch = (
   Effect.Services<ReturnType<typeof dispatchTsOnlyOperation>>
 >;
 
-const ACTOR_HEADER = "x-pe-action-actor";
 export function makeCallRoute(
   operations?: ActionJournal,
   captures?: TakeoffCaptures,
@@ -127,8 +153,8 @@ export function makeCallRoute(
   composition?: {
     readonly forwardBase: string | null;
     readonly dispatch: CallRouteDispatch;
-    readonly captureHostOp?: typeof captureHostOp;
-    readonly local?: Parameters<typeof admitGatewayAction>[3];
+    readonly captureHostOp?: typeof recordHostOp;
+    readonly local?: Parameters<typeof admitGatewayAction>[4];
   },
 ) {
   const CALL_FORWARD_BASE = process.env.PE_TOOLS_CALL_FORWARD?.trim().replace(/\/$/, "");
@@ -136,25 +162,42 @@ export function makeCallRoute(
     throw Error(
       "Host forwarding is disabled: execution requires this runtime's own host and Revit.",
     );
-  const captureOperation = composition?.captureHostOp ?? captureHostOp;
+  const recordOperation = composition?.captureHostOp ?? recordHostOp;
   const dispatch: CallRouteDispatch = (...args) =>
     (composition?.dispatch ?? dispatchTsOnlyOperation)(...args);
   const observations = () => (captures ??= hostTakeoffCaptures());
   const owner = () => (operations ??= hostActionJournal());
-  const admit = (raw: unknown, bridge: RevitBridge["Service"], resume = false) => {
+  /** Door 2: the strict admission (no `actor`), then the crossing for the host-minted caller. */
+  const admit = async (
+    raw: unknown,
+    bridge: RevitBridge["Service"],
+    caller: Caller,
+    resume = false,
+  ) => {
     const input = actionAdmissionSchema.parse(raw);
+    const reads = readsOnly(input.key, input.input);
+    const crossing = { caller, basis: admitCrossing(caller, input.destination, "/actions", reads) };
     return input.kind === "workflow" && Object.hasOwn(scheduleActions, input.key)
-      ? admitScheduleAction(input, owner(), observations(), bridge, actionDeps, resume)
+      ? admitScheduleAction(input, crossing, owner(), observations(), bridge, actionDeps, resume)
       : input.kind === "workflow" && Object.hasOwn(instancesActions, input.key)
-        ? admitInstancesAction(input, owner(), actionDeps, resume)
+        ? admitInstancesAction(input, crossing, owner(), actionDeps, resume)
         : input.kind === "workflow" && Object.hasOwn(familyActions, input.key)
-          ? admitFamilyAction(input, owner(), observations(), bridge, actionDeps, resume)
+          ? admitFamilyAction(input, crossing, owner(), observations(), bridge, actionDeps, resume)
           : input.kind === "workflow" && Object.hasOwn(takeoffActions, input.key)
-            ? admitTakeoffAction(input, owner(), observations(), bridge, actionDeps, resume)
+            ? admitTakeoffAction(
+                input,
+                crossing,
+                owner(),
+                observations(),
+                bridge,
+                actionDeps,
+                resume,
+              )
             : input.kind === "workflow" && Object.hasOwn(ductsActions, input.key)
-              ? admitDuctsAction(input, owner(), bridge, actionDeps, resume)
+              ? admitDuctsAction(input, crossing, owner(), bridge, actionDeps, resume)
               : admitGatewayAction(
                   input,
+                  crossing,
                   owner(),
                   bridge,
                   composition?.local ??
@@ -164,16 +207,36 @@ export function makeCallRoute(
                   resume,
                 );
   };
-  const post = HttpRouter.add("POST", "/call", (req) => {
+  const callDoor = peRoutes["operation.call"];
+  const post = HttpRouter.add(callDoor.method, callDoor.path, (req) => {
     let captureId: string | undefined;
     // Set once dispatch begins so the catch below can attribute failures to the op.
     let op:
-      | { key: string; request: unknown; tsOnly: boolean; startedAt: number; origin: string }
+      | {
+          key: string;
+          tsOnly: boolean;
+          startedAt: number;
+          origin: string;
+          originClass: "human" | "pea" | "page" | "external" | "system";
+          requestId: string;
+        }
       | undefined;
+    const caller = currentCaller();
+    const requestId = randomUUID();
     return Effect.gen(function* () {
       // Lenient by ruling (queue-provenance §1): origin is attribution, not authorization —
       // a missing header is counted as "unknown", never rejected. No registry, no validation.
       const origin = req.headers[HOST_RPC_ORIGIN_HEADER]?.trim() || "unknown";
+      const originClass =
+        caller.kind === "human"
+          ? "human"
+          : caller.kind === "pea"
+            ? "pea"
+            : caller.kind === "page"
+              ? "page"
+              : caller.kind === "external-mcp"
+                ? "external"
+                : "system";
       const body = yield* req.json.pipe(Effect.mapError(() => invalidBody("unreadable JSON body")));
       if (!isRecord(body) || typeof body.key !== "string")
         return yield* Effect.fail(invalidBody("body must be { key: string, request?: object }"));
@@ -183,6 +246,7 @@ export function makeCallRoute(
       const unknownKey = Object.keys(body).find((k) => k !== "key" && k !== "request");
       if (unknownKey) return yield* Effect.fail(invalidBody(unknownBodyKeyMessage(unknownKey)));
       const key = body.key;
+      yield* Effect.try({ try: () => admitAnonymousCall(caller, key), catch: (error) => error });
       const request = "request" in body ? body.request : undefined;
       const scope = yield* Effect.try({
         try: () => readSessionScope(req.headers),
@@ -192,9 +256,9 @@ export function makeCallRoute(
       let openDocumentId: string | null | undefined = scope.openDocumentId;
 
       if (key === "takeoffs.saved") {
-        op = { key, request, tsOnly: true, startedAt: Date.now(), origin };
+        op = { key, tsOnly: true, startedAt: Date.now(), origin, originClass, requestId };
         const value = yield* savedTakeoffs(request, observations());
-        captureOperation(op, { ok: true });
+        recordOperation(op, { ok: true });
         return Response.jsonUnsafe(value);
       }
 
@@ -205,7 +269,14 @@ export function makeCallRoute(
           ? yield* sdkSession(bridge, scope, actionDeps.sdk)
           : undefined;
       bridgeSessionId = resolvedSession?.sessionId ?? bridgeSessionId;
-      op = { key, request, tsOnly: isTsOnlyOperationKey(key), startedAt: Date.now(), origin };
+      op = {
+        key,
+        tsOnly: isTsOnlyOperationKey(key),
+        startedAt: Date.now(),
+        origin,
+        originClass,
+        requestId,
+      };
       if (
         key !== "takeoffs.snapshot" &&
         key !== "host.ops.catalog" &&
@@ -215,7 +286,12 @@ export function makeCallRoute(
           try: () => operationDefinition(key, bridge, resolvedSession),
           catch: (error) => error,
         });
-        if (definition.intent === "Mutate") {
+        const ref =
+          resolvedSession && typeof openDocumentId === "string"
+            ? { session: resolvedSession.sessionId, openId: openDocumentId }
+            : undefined;
+        const intent = consentedRead(caller, key, request, ref) ? "Read" : definition.intent;
+        if (intent === "Mutate") {
           return yield* Effect.fail(
             new BridgeError(
               "Submit the original exact admission to /actions; raw mutation dispatch is retired",
@@ -224,13 +300,12 @@ export function makeCallRoute(
             ),
           );
         }
-        if (definition.intent !== "Read")
+        if (intent !== "Read")
           return yield* Effect.fail(
             new BridgeError("Unknown operation intent", 409, { notDispatched: true }),
           );
-        // No actor header is a human caller (browser/CLI); agents are stamped by host-rpc-caller.
         yield* Effect.try({
-          try: () => requireEligibleActor(definition, req.headers[ACTOR_HEADER] ?? "human"),
+          try: () => requireEligibleCaller(definition, caller, "/call"),
           catch: (error) => error,
         });
         if (!isTsOnlyOperationKey(key)) {
@@ -242,6 +317,29 @@ export function makeCallRoute(
           if (target.kind !== "host")
             bridgeSessionId = target.kind === "document" ? target.ref.session : target.session;
           openDocumentId = target.kind === "document" ? target.ref.openId : null;
+          if (key === "scripting.execute" && resolvedSession) {
+            const current = yield* sdkSession(
+              bridge,
+              {
+                bridgeSessionId: resolvedSession.sessionId,
+                openDocumentId: openDocumentId ?? undefined,
+              },
+              actionDeps.sdk,
+            );
+            yield* Effect.try({
+              try: () =>
+                admitScript(
+                  caller,
+                  current.state?.openDocuments.map((doc) => ({
+                    session: current.sessionId,
+                    openId: doc.openId,
+                  })) ?? [],
+                  "/call",
+                  target.kind === "document" && readsOnly(key, request) ? target.ref : undefined,
+                ),
+              catch: (error) => error,
+            });
+          }
         }
       }
       const result = isTsOnlyOperationKey(key)
@@ -271,7 +369,7 @@ export function makeCallRoute(
                   async () => {
                     const [result, index] = await Promise.all([
                       Effect.runPromise(
-                        bridge.invoke(key, request ?? {}, target.session, target.openId),
+                        bridge.invoke(key, request ?? {}, target.session, target.openId, requestId),
                       ),
                       Effect.runPromise(
                         bridge.invoke(
@@ -306,41 +404,55 @@ export function makeCallRoute(
               catch: (error) =>
                 error instanceof BridgeError ? error : new BridgeError(String(error), 409),
             })
-          : yield* bridge.invoke(key, request ?? {}, bridgeSessionId, openDocumentId);
+          : yield* bridge.invoke(key, request ?? {}, bridgeSessionId, openDocumentId, requestId);
       const kept =
         key === VIEW_IMAGE_KEY
           ? yield* registerViewImage(
               actionDeps.captureStore ?? hostCaptures(),
               result.value,
               request,
-              captureOrigin(origin, req.headers[ACTOR_HEADER]),
+              captureOrigin(origin, caller),
               bridge,
               { session: bridgeSessionId, openId: openDocumentId },
             )
           : null;
-      captureOperation(op, { ok: true });
+      recordOperation(op, { ok: true });
       // Every /call response names the target it actually ran against, so a tool card can show
       // what was touched rather than the selector that was typed. Headers, not a payload wrapper.
       // A TS-only op touched no Revit, so it stamps nothing rather than the latest session.
       const headers = result.target ? resolvedTargetHeaders(result.target) : {};
+      if (!op.tsOnly && key !== CANCEL_OPERATION_KEY) headers["x-pe-native-request-id"] = requestId;
       if (captureId) headers["x-pe-takeoff-capture-id"] = captureId;
       if (kept)
         Object.assign(headers, { "x-pe-capture-id": kept.id, "x-pe-capture-url": kept.url });
       return Response.jsonUnsafe(result.value ?? null, { headers });
     }).pipe(
       Effect.catch((error) => {
-        if (op) captureOperation(op, { ok: false, problem: toProblem(error) });
+        const problem = toProblem(error);
+        if (op) recordOperation(op, { ok: false, problem });
+        else if (problem.status >= 500)
+          recordHostFact(
+            {
+              kind: "usage",
+              event: "host_fault",
+              counters: { routeCode: "call", faultCode: "host.failed", status: problem.status },
+            },
+            { requestId },
+          );
         return Effect.succeed(
-          Response.jsonUnsafe(toProblem(error), {
-            status: toProblem(error).status,
-            headers: { "content-type": "application/problem+json" },
-          }),
+          error instanceof Refused
+            ? refusedResponse(error)
+            : Response.jsonUnsafe(problem, {
+                status: problem.status,
+                headers: { "content-type": "application/problem+json" },
+              }),
         );
       }),
     );
   });
-  const familiesReadings = HttpRouter.add("*", "/families/readings", (req) =>
-    RevitBridge.use((bridge) =>
+  const familiesReadings = HttpRouter.add("*", "/families/readings", (req) => {
+    const caller = currentCaller();
+    return RevitBridge.use((bridge) =>
       Effect.tryPromise({
         try: async () => {
           if (req.method === "GET") {
@@ -401,7 +513,7 @@ export function makeCallRoute(
             bridge,
             resolvedSession,
           );
-          requireEligibleActor(definition, req.headers[ACTOR_HEADER] ?? "human");
+          requireEligibleCaller(definition, caller, "/families/readings");
           if (definition.intent !== "Read") throw Error("Matrix operation must be a read");
           const resolved = gatewayTarget(
             "revit.matrix.loaded-families",
@@ -464,8 +576,8 @@ export function makeCallRoute(
           Effect.succeed(Response.jsonUnsafe({ error: said(error) }, { status: 409 })),
         ),
       ),
-    ),
-  );
+    );
+  });
   const captured = HttpRouter.add("GET", "/takeoffs/observations", (req) =>
     Effect.tryPromise({
       try: async () => {
@@ -502,33 +614,39 @@ export function makeCallRoute(
       ),
     ),
   );
-  const actions = HttpRouter.add("POST", "/actions", (req) =>
+  const admitDoor = peRoutes["actions.admit"];
+  const actions = HttpRouter.add(admitDoor.method, admitDoor.path, (req) =>
     Effect.gen(function* () {
+      // The caller lives in AsyncLocalStorage; the Node body read resumes outside it. Read first.
+      const caller = currentCaller();
       const body = yield* req.json;
       const bridge = yield* RevitBridge;
       const row = yield* Effect.tryPromise({
-        try: () => admit(body, bridge),
+        try: () => admit(body, bridge, caller),
         catch: (error) => error,
       });
       return Response.jsonUnsafe(row, { status: row.state === "running" ? 202 : 200 });
     }).pipe(
       Effect.catch((error) =>
         Effect.succeed(
-          Response.jsonUnsafe(
-            {
-              error: String(error),
-              message:
-                typeof error === "object" && error && "message" in error
-                  ? String(error.message)
-                  : String(error),
-            },
-            { status: 409 },
-          ),
+          error instanceof Refused
+            ? refusedResponse(error)
+            : Response.jsonUnsafe(
+                {
+                  error: String(error),
+                  message:
+                    typeof error === "object" && error && "message" in error
+                      ? String(error.message)
+                      : String(error),
+                },
+                { status: 409 },
+              ),
         ),
       ),
     ),
   );
-  const actionReads = HttpRouter.add("GET", "/actions", (req) =>
+  const readDoor = peRoutes["actions.read"];
+  const actionReads = HttpRouter.add(readDoor.method, readDoor.path, (req) =>
     Effect.tryPromise({
       try: async () => {
         const query = new URL(req.url, "http://host").searchParams;
@@ -570,11 +688,7 @@ export function makeCallRoute(
               continue;
             }
             if (scope.kind === "instances") {
-              if (
-                Object.hasOwn(instancesActions, row.key) &&
-                row.request.workspaceId === scope.workspaceId
-              )
-                selected.push(row);
+              if (Object.hasOwn(instancesActions, row.key)) selected.push(row);
               continue;
             }
             const member = (row.request.member ?? row.request.source) as
@@ -605,12 +719,14 @@ export function makeCallRoute(
     ),
   );
   // action.read is GET /actions; every other control is POST /actions/<verb>, the path the client builds.
-  const controlVerbs = Object.keys(actionControls)
-    .filter((key) => key !== "action.read")
-    .map((key) => key.slice("action.".length));
-  const controls = controlVerbs.map((choice) =>
-    HttpRouter.add("POST", `/actions/${choice}`, (req) =>
-      RevitBridge.use((bridge) =>
+  const controlVerbs = Object.keys(actionControls).filter(
+    (key): key is Exclude<keyof typeof actionControls, "action.read"> => key !== "action.read",
+  );
+  const controls = controlVerbs.map((id) => {
+    const choice = id.slice("action.".length);
+    return HttpRouter.add(peRoutes[id].method, peRoutes[id].path, (req) => {
+      const caller = currentCaller();
+      return RevitBridge.use((bridge) =>
         Effect.tryPromise({
           try: async () => {
             const body = await Effect.runPromise(req.json);
@@ -619,33 +735,40 @@ export function makeCallRoute(
             const controlled = (await owner().list(undefined, body.id))[0];
             if (body.kind !== undefined && body.kind !== controlled?.kind)
               throw Error("Original admission kind mismatch");
-            if (body.actor !== undefined) {
-              if (body.actor !== "human" && body.actor !== "agent")
-                throw Error("Explicit control actor invalid");
-              const required =
-                controlled?.kind === "workflow"
-                  ? semanticActions[controlled.key as keyof typeof semanticActions]?.actor
-                  : controlled?.preparation.state === "ready"
-                    ? (controlled.preparation.value as { actor?: string }).actor
-                    : undefined;
-              if (required && required !== "any" && required !== body.actor)
-                throw Error("Control actor is not eligible for the original admission");
-            }
+            if (!controlled) throw Error(`Action '${body.id}' has no admitted receipt`);
+            // Cancel and recover belong to a human or the context that admitted the original.
+            if (
+              choice !== "resume" &&
+              caller.kind !== "human" &&
+              !(
+                "context" in caller &&
+                "context" in controlled.caller &&
+                caller.context === controlled.caller.context
+              )
+            )
+              throw new Refused({
+                code: caller.kind === "anonymous" ? "context.missing" : "human.only",
+                door: `/actions/${choice}`,
+                reason: `Refused at /actions/${choice}: only a human or the caller that admitted '${body.id}' may ${choice} it.`,
+              });
             if (choice === "cancel")
               return Response.jsonUnsafe(
-                await owner().cancel(body.id, async (requestId) => {
-                  const { value } = await Effect.runPromise(
-                    bridge
-                      .invoke(CANCEL_OPERATION_KEY, { requestId })
-                      .pipe(Effect.catchCause(Effect.failCause)) as Effect.Effect<
-                      { value: unknown },
-                      unknown
-                    >,
-                  );
-                  // Revit answers 200 even when the id is not in flight; that is a refusal, not a stop.
-                  const answer = value as { cancelled?: boolean; message?: string } | null;
-                  if (answer?.cancelled === false) throw Error(answer.message);
-                }),
+                // An Instances step is an SDK request: the SDK cancels it, not the Revit bridge.
+                await (Object.hasOwn(instancesActions, controlled.key)
+                  ? cancelInstancesAction(body.id, owner(), actionDeps)
+                  : owner().cancel(body.id, async (requestId) => {
+                      const { value } = await Effect.runPromise(
+                        bridge
+                          .invoke(CANCEL_OPERATION_KEY, { requestId })
+                          .pipe(Effect.catchCause(Effect.failCause)) as Effect.Effect<
+                          { value: unknown },
+                          unknown
+                        >,
+                      );
+                      // Revit answers 200 even when the id is not in flight; that is a refusal, not a stop.
+                      const answer = value as { cancelled?: boolean; message?: string } | null;
+                      if (answer?.cancelled === false) throw Error(answer.message);
+                    })),
                 { status: 202 },
               );
             if (choice === "recover") {
@@ -666,19 +789,27 @@ export function makeCallRoute(
             }
             // A control added to actionControls gets a route before it gets a handler.
             if (choice !== "resume") throw Error(`Action control '${choice}' has no handler`);
-            const prior = (await owner().list(undefined, body.id))[0];
-            if (!prior) throw Error("Original action has no resumable authored admission");
+            // A resume re-crosses under the current caller and never inherits the original basis.
+            if (controlled.kind === "workflow")
+              requireEligibleCaller(
+                {
+                  key: controlled.key,
+                  actor: semanticActions[controlled.key as keyof typeof semanticActions]?.actor,
+                },
+                caller,
+                "/actions/resume",
+              );
             const row = await admit(
               {
-                id: prior.id,
-                kind: prior.kind,
-                key: prior.key,
-                actor: prior.actor,
-                destination: prior.destination,
-                input: prior.request,
-                bases: prior.bases,
+                id: controlled.id,
+                kind: controlled.kind,
+                key: controlled.key,
+                destination: controlled.destination,
+                input: controlled.request,
+                bases: controlled.bases,
               },
               bridge,
+              caller,
               true,
             );
             return Response.jsonUnsafe(row, { status: row.state === "running" ? 202 : 200 });
@@ -686,12 +817,16 @@ export function makeCallRoute(
           catch: (error) => error,
         }).pipe(
           Effect.catch((error) =>
-            Effect.succeed(Response.jsonUnsafe({ error: said(error) }, { status: 409 })),
+            Effect.succeed(
+              error instanceof Refused
+                ? refusedResponse(error)
+                : Response.jsonUnsafe({ error: said(error) }, { status: 409 }),
+            ),
           ),
         ),
-      ),
-    ),
-  );
+      );
+    });
+  });
   const familyReadings = HttpRouter.add("*", "/family/readings", (req) =>
     RevitBridge.use((bridge) =>
       Effect.tryPromise({
@@ -780,26 +915,44 @@ const savedTakeoffs = Effect.fnUntraced(function* (request: unknown, captures: T
   });
 });
 
-/** The host_op event: input, outcome, duration. Outputs are deliberately NOT captured —
- * they doubled event volume for no diagnostic value (the op key + input reproduce them);
- * failures carry the problem message instead. */
-function captureHostOp(
-  op: { key: string; request: unknown; tsOnly: boolean; startedAt: number; origin: string },
-  outcome: { ok: true } | { ok: false; problem: { kind: string; message: string } },
+/** Reads are observations joined to the exact dispatch UUID; inputs and errors stay local. */
+function recordHostOp(
+  op: {
+    key: string;
+    tsOnly: boolean;
+    startedAt: number;
+    origin: string;
+    originClass: "human" | "pea" | "page" | "external" | "system";
+    requestId: string;
+  },
+  outcome: { ok: true } | { ok: false; problem: { kind: string; message: string; status: number } },
 ): void {
-  const input = boundedPayload(op.request ?? null);
-  capture("host_op", {
-    op: op.key,
-    origin: op.origin,
-    ts_only: op.tsOnly,
-    ok: outcome.ok,
-    error_kind: outcome.ok ? undefined : outcome.problem.kind,
-    error_message: outcome.ok ? undefined : outcome.problem.message,
-    duration_ms: Date.now() - op.startedAt,
-    input: input.json,
-    input_truncated: input.truncated,
-    input_bytes: input.bytes,
-  });
+  const refused = !outcome.ok && outcome.problem.status >= 400 && outcome.problem.status < 500;
+  const join = { requestId: op.requestId };
+  recordHostFact(
+    {
+      kind: "usage",
+      event: "host_op",
+      counters: {
+        op: op.key,
+        originClass: op.originClass,
+        tsOnly: op.tsOnly,
+        outcome: outcome.ok ? "incomplete" : refused ? "refused" : "failed",
+        ...(outcome.ok || refused ? {} : { faultCode: "host.failed" as const }),
+        durationMs: Date.now() - op.startedAt,
+      },
+    },
+    join,
+  );
+  if (!outcome.ok && !refused)
+    recordHostFact(
+      {
+        kind: "usage",
+        event: "host_fault",
+        counters: { routeCode: "call", faultCode: "host.failed", status: outcome.problem.status },
+      },
+      join,
+    );
 }
 
 const RESOLVED_SESSION_HEADER = "x-pe-resolved-session";
@@ -872,8 +1025,43 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
       return yield* tailLogs(yield* decodeRequest(key, request));
     case "host.shell.open":
       return yield* openShellPath(yield* decodeRequest(key, request));
-    case "pod.list":
-      return yield* listPods();
+    case "pod.list": {
+      const input = yield* decodeRequest(key, request);
+      return input.projection === "identity"
+        ? yield* resolvePodIdentity(input.folder)
+        : yield* listPods();
+    }
+    case "pod.capture": {
+      const { pod } = yield* decodeRequest(key, request);
+      return yield* Effect.tryPromise({
+        try: () => capturePackage(pod),
+        catch: (error) => packageError(key, error),
+      }).pipe(
+        Effect.map(
+          ({ id, folder, directory, entrypoints, contributions, memberBundle, sourceBundle }) => ({
+            id,
+            folder,
+            directory,
+            entrypoints,
+            contributions,
+            memberBundle,
+            sourceBundle,
+          }),
+        ),
+      );
+    }
+    case "pod.export": {
+      const input = yield* decodeRequest(key, request);
+      return yield* transfer(key, () => exportPod(input));
+    }
+    case "pod.import": {
+      const input = yield* decodeRequest(key, request);
+      return yield* transfer(key, () => importPod(input));
+    }
+    case "pod.promote": {
+      const input = yield* decodeRequest(key, request);
+      return yield* transfer(key, () => promotePage(input));
+    }
     case "pod.runs":
       return yield* listRuns(yield* decodeRequest(key, request));
     case "pod.member.read":
@@ -909,6 +1097,29 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
       return yield* apsAuthToken(yield* decodeRequest(key, request));
   }
 });
+
+/**
+ * Archive transport is host-only. A refusal is a settled answer (the transfer is all-or-nothing, so
+ * nothing landed): it fails the receipt with its own status instead of leaving it unknown.
+ */
+const transfer = <A>(key: "pod.export" | "pod.import" | "pod.promote", run: () => Promise<A>) =>
+  Effect.tryPromise({
+    try: run,
+    catch: (error) =>
+      error instanceof TransferRefused
+        ? new BridgeError(error.message, error.status, { dispatched: true })
+        : new LocalOpError(key, error instanceof Error ? error.message : String(error)),
+  });
+
+/** A package refusal keeps its own words; identity misses are 404, twins 409, bad members 422. */
+const packageError = (key: string, error: unknown) => {
+  const note = error instanceof Error ? error.message : String(error);
+  return new LocalOpError(
+    key,
+    note,
+    note.startsWith("No installed pod") ? 404 : note.includes("claimed by folders") ? 409 : 422,
+  );
+};
 
 /** A session-less host composes schema-only; it never pretends a bridge is there. */
 const podContext = Effect.fnUntraced(function* (
@@ -953,6 +1164,8 @@ function toProblem(error: unknown): {
   result?: unknown;
   resolvedTarget?: BridgeError["evidence"]["resolvedTarget"];
 } {
+  if (error instanceof Refused)
+    return { kind: "InvalidRequest", message: error.message, status: 403, notDispatched: true };
   if (error instanceof Error) return { kind: "HostFailure", message: error.message, status: 500 };
   if (
     !(

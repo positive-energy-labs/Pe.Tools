@@ -6,6 +6,7 @@
  * load for the tab (sessionStorage), so `/pods?demo=…&live=1` browses what a route just wrote.
  */
 import { address, exportSeed, type DemoSeed } from "@pe/agent-contracts";
+import { hostFetch } from "#/host/runtime";
 
 const search = () =>
   typeof location === "undefined" ? null : new URLSearchParams(location.search);
@@ -107,8 +108,8 @@ const store = (kind: Kind, base: string) => {
   }
 };
 
-async function createOwner(kind: Kind, fetchHost: typeof fetch) {
-  const response = await fetchHost("/demo/instances", {
+async function createOwner(kind: Kind) {
+  const response = await hostFetch("/demo/instances", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ seed: exportSeed(kind === "family" ? familySeed() : projectSeed()) }),
@@ -162,7 +163,6 @@ function install(owner: Promise<string>) {
       );
     }
   };
-  return fetchHost;
 }
 
 /** Boot the lane once per page load, before any route reads the host. */
@@ -178,7 +178,7 @@ function boot() {
   const known = stored(kind);
   let resolve!: (base: string) => void;
   const owner = new Promise<string>((done) => (resolve = done));
-  const fetchHost = install(owner);
+  install(owner);
   const retarget = (base: string) => {
     const url = new URL(location.href);
     url.searchParams.set("target", base.slice("/demo/instances/".length));
@@ -189,7 +189,7 @@ function boot() {
   if (known) {
     resolve(known);
     // A host restart retires every owner; start over rather than talk to a dead one.
-    void fetchHost(`${known}/description`).then((response) => {
+    void hostFetch(`${known}/description`).then((response) => {
       if (response.ok) return;
       for (const key of ["family", "project", "last"])
         sessionStorage.removeItem(`pe-demo-live:${key}`);
@@ -197,7 +197,7 @@ function boot() {
     });
     return;
   }
-  void createOwner(kind === "last" ? "project" : kind, fetchHost).then((base) => {
+  void createOwner(kind === "last" ? "project" : kind).then((base) => {
     store(kind === "last" ? "project" : kind, base);
     // Bind the route to the owner's one session; the reload mounts every reading against it.
     if (kind === "last") location.reload();

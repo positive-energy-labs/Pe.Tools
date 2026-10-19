@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useRouterState } from "@tanstack/react-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { ModeDial } from "#/chat/mode-dial";
 import { NewThreadButton, ThreadDialog, ThreadsSidebar } from "#/chat/thread-palette";
@@ -11,25 +12,41 @@ import {
   selectBreakdown,
   selectRunStatus,
   selectTitle,
+  selectStarting,
   selectWaitingSeconds,
-} from "#/workbench/chat-state";
-import { EmptyState } from "#/components/lang/empty";
-import { buildTraceCells, ToolCellBody, TraceCellView } from "#/workbench/lens/context-strip";
-import { Press } from "#/components/lang/press";
-import { X } from "lucide-react";
+} from "@pe/agent-contracts/chat-state";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { Button } from "@pe/kit/lang/button";
+import { Menu, X } from "lucide-react";
 import { chatPluginTitle, type ChatPluginRoute } from "#/workbench/chat-plugins";
 import { useChatPluginHost } from "#/workbench/route-panes";
-import { ChatCluster, ComposerHead, useChatSituation } from "#/chat/composer-head";
+import {
+  ChatCluster,
+  ChatSituationHead,
+  ComposerPickers,
+  ComposerState,
+  ComposerWork,
+  useChatSituation,
+} from "#/chat/composer-head";
 import { RouteShell, useRoute } from "#/route";
 import { appAtomRegistry } from "#/route/route-owner";
-import { useScopeKeys } from "#/route/keys";
+import { useScopeKeys } from "@pe/kit/keys";
+import { PagePaletteButton } from "#/route/situation-marks";
+import { PrimaryRouteControls, usePublishPagePalette } from "#/navigation/route-controls";
+import { useSurfaceHost } from "#/navigation/surface-host";
+import { Ledger } from "#/navigation/ledger";
+import { LEDGER_PRESENTATIONS } from "#/navigation/ledger-model";
 import { chatManifest } from "#/chat/manifest";
+import { readThreadTarget } from "#/chat/thread-navigation";
 import "#/workbench/lens.css";
-import { CurrentThreadViewOwner, useCurrentThreadView } from "#/workbench/thread-view";
+import "./chat-shell.css";
+import { CurrentThreadViewOwner } from "#/workbench/thread-view";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { Surface as PageSurface } from "#/components/lang/surface";
 import { ThreadBody } from "#/workbench/lens/thread-body";
 import { ComposerBank } from "#/chat/composer-bank";
+import { Dialog, DialogContent, DialogTitle } from "#/components/lang/dialog";
+import { useThreadPresence } from "#/machine/os-notices";
 
 type Plugin = { plugin?: ChatPluginRoute; focus?: string; target?: string };
 
@@ -52,6 +69,34 @@ function CurrentThreadChatSurface(props: Plugin) {
 }
 
 function ChatSurface({ plugin, focus, target }: Plugin) {
+  const columnRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const column = columnRef.current;
+    const composer = composerRef.current;
+    if (!column || !composer) return;
+    const measure = () =>
+      column.style.setProperty("--chat-composer-height", `${composer.offsetHeight}px`);
+    const observer = new ResizeObserver(measure);
+    observer.observe(composer);
+    measure();
+    return () => observer.disconnect();
+  }, []);
+  const compact = useSurfaceHost().shell.mount === "compact";
+  // The tray's Inbox: with no thread in the address, the body is the open-work ledger.
+  const addressedThread = useRouterState({
+    select: (state) => (state.location.search as { thread?: string }).thread,
+  });
+  // "New thread" in the tray: no address would show the Inbox again, so the draft is its own state
+  // until the first send addresses the thread it creates.
+  const [composing, setComposing] = useState(false);
+  useEffect(() => {
+    if (addressedThread) setComposing(false);
+  }, [addressedThread]);
+  useEffect(() => {
+    if (composing) composerRef.current?.querySelector("textarea")?.focus();
+  }, [composing]);
+  const inbox = compact && !addressedThread && !composing;
   const {
     store,
     chat,
@@ -66,15 +111,37 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
     operationError,
     sendPrompt,
     cancel,
-    newThread,
+    newThread: startThread,
     forkThread,
-    newRefusal,
+    sendRefusal,
     missingThread,
+    draftTarget,
     openThread,
     renameThread,
     deleteThread,
+    updateThread,
   } = useWorkbench();
+  useThreadPresence(inbox ? null : currentThreadId);
+  const newThread = useCallback(
+    (target?: Parameters<typeof startThread>[0]) => {
+      setComposing(true);
+      return startThread(target);
+    },
+    [startThread],
+  );
   const [mode, setMode] = useMode();
+  const [viewportNarrow, setViewportNarrow] = useState(false);
+  const narrow = compact || viewportNarrow;
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 720px)");
+    const changed = () => {
+      setViewportNarrow(media.matches);
+      if (compact || media.matches) store.actions.setSideOpen(false);
+    };
+    changed();
+    media.addEventListener("change", changed);
+    return () => media.removeEventListener("change", changed);
+  }, [compact, store]);
   // The route, re-declared with this thread and the provider's verbs bound.
   const manifest = useMemo(
     () =>
@@ -82,29 +149,47 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
         thread: currentThreadId,
         ready: !loading,
         running: isRunning,
-        send: (input) => sendPrompt(input.text, input.attachments),
+        send: sendPrompt,
         cancel,
         newThread: () => newThread(),
         forkThread: () => forkThread(),
-        newRefusal,
+        sendRefusal,
+        promptCapabilities: chat.promptCapabilities,
+        providerName: chat.providerName,
+        draftTarget,
       }),
-    [currentThreadId, loading, isRunning, sendPrompt, cancel, newThread, forkThread, newRefusal],
+    [
+      currentThreadId,
+      loading,
+      isRunning,
+      sendPrompt,
+      cancel,
+      newThread,
+      forkThread,
+      sendRefusal,
+      chat.promptCapabilities,
+      chat.providerName,
+      draftTarget,
+    ],
   );
   // The handle is owned here, not inside the shell: Chat has no route head, and its composer
   // head is the Situation, which needs the same handle the shell's chords run through.
   const handle = useRoute(manifest);
   const situation = useChatSituation(handle);
+  // The live inventory decides what a saved target is: a request that may be closed.
+  const sidebarThreads = useMemo(
+    () => threads.map((thread) => readThreadTarget(thread, situation.inventory)),
+    [threads, situation.inventory],
+  );
   const handleRenameThread = (id: string, title: string) => void renameThread(id, title);
   const [deletedThreadIds, setDeletedThreadIds] = useState<ReadonlySet<string>>(() => new Set());
   const handleDeleteThread = async (id: string) => {
     if (await deleteThread(id)) setDeletedThreadIds((previous) => new Set([...previous, id]));
   };
   const paletteOpen = useAtomValue(store.atoms.paletteOpen);
+  usePublishPagePalette(handle.manifest.key, paletteOpen, store.actions.setPaletteOpen);
   const sideOpen = useAtomValue(store.atoms.sideOpen);
   const pluginOpen = useAtomValue(store.atoms.pluginOpen);
-  // A tool call clicked open in the transcript owns the trace lane's inspect window until unpinned.
-  const view = useCurrentThreadView();
-  const pinKey = useAtomValue(view.atoms.lensPinKey);
   useEffect(() => {
     if (plugin) store.actions.setPluginOpen(true);
   }, [plugin, store]);
@@ -124,23 +209,15 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
   const chrome = plugin ? (
     <>
       {focusPath ? (
-        <Press
-          tone="quiet"
-          size="caption"
-          title="Show the whole Work"
+        <Button
+          label="Show the whole Work"
+          reason="Show the whole Work"
           onClick={() => store.actions.setPlugin(plugin)}
         >
-          {focusPath.join(" › ")} <X />
-        </Press>
+          <span className="face-mono">{focusPath.join(" › ")}</span> <X />
+        </Button>
       ) : null}
-      <Press
-        tone="quiet"
-        size="icon"
-        title="Close workspace"
-        onClick={() => store.actions.setPlugin(undefined)}
-      >
-        <X className="size-4" strokeWidth={1.5} />
-      </Press>
+      <Button label="Close workspace" icon={X} onClick={() => store.actions.setPlugin(undefined)} />
     </>
   ) : null;
   const host = useChatPluginHost(plugin, currentThreadId, intent, focusPath, pluginOpen, chrome);
@@ -153,20 +230,20 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
     [chat.events],
   );
   const cache = useCacheView(breakdown, userTurns);
-  const traceCells = useMemo(() => buildTraceCells(chat), [chat]);
-  const traceCell = traceCells.find((cell) => cell.key === pinKey) ?? null;
   const retryBody = useAtomRefresh(bodyAtom);
 
   // Surface chords, not manifest actions: they move Page state and never refuse. They bind on
   // whatever scope node the chat surface sits in, so help lists them beside the route's chords.
+  const togglePagePalette = () => store.actions.setPaletteOpen((open) => !open);
   useScopeKeys([
     {
       hotkey: "Mod+K",
-      callback: () => store.actions.setPaletteOpen((open) => !open),
+      callback: togglePagePalette,
+      options: { ignoreInputs: false },
       label: "palette",
       says: "open or close the Do palette",
     },
-    ...(["Mod+1", "Mod+2", "Mod+3"] as const).map((hotkey, i) => ({
+    ...(["Mod+1", "Mod+2"] as const).map((hotkey, i) => ({
       hotkey,
       callback: () => setMode(MODES[i]!),
       label: `${MODES[i]} mode`,
@@ -183,26 +260,39 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
         ? "loading thread state"
         : runStatus === "waiting"
           ? "waiting for you"
-          : silentFor !== undefined
-            ? `waiting on the model for ${silentFor} s`
-            : runStatus === "running"
-              ? "running"
-              : "ready",
+          : selectStarting(chat)
+            ? "starting the harness"
+            : silentFor !== undefined
+              ? `waiting on the model for ${silentFor} s`
+              : runStatus === "running"
+                ? "running"
+                : "ready",
     caution: turnFailure !== undefined,
     detail: operationError ?? turnFailure,
   };
   const chatColumn = (
-    <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)_auto] gap-y-[var(--gutter)]">
-      <div className="min-h-0 min-w-0 flex-1">
+    <div data-chat-column="" ref={columnRef} className="chat-column min-h-0 min-w-0 flex-1">
+      <div data-chat-transcript="" className="min-h-0 min-w-0">
         <Pane
-          kind="content"
           scroll="clip"
           flush
           id="transcript"
+          name
+          titleAlign="center"
+          meta={handle.demo ? "Fixture" : undefined}
           title={
             selectTitle(chat) ||
             threads.find((thread) => thread.id === currentThreadId)?.title ||
             "thread"
+          }
+          leadingActions={
+            narrow ? (
+              <Button
+                icon={Menu}
+                label="Open threads"
+                onClick={() => store.actions.setSideOpen(true)}
+              />
+            ) : null
           }
           actions={<ChatCluster handle={handle} situation={situation} />}
           boundaryKey={currentThreadId}
@@ -217,26 +307,24 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
               <NewThreadButton onNew={() => void newThread()} />
             </div>
           ) : (
-            <ThreadBody bodyAtom={bodyAtom} state={chat} mode={mode} sideOpen={sideOpen} />
+            <ThreadBody bodyAtom={bodyAtom} state={chat} />
           )}
         </Pane>
       </div>
-      <ComposerBank
-        currentThreadId={currentThreadId}
-        deletedThreadIds={deletedThreadIds}
-        prompt={prompt}
-        handle={handle}
-        topBar={
-          <>
-            <ComposerHead
-              handle={handle}
-              situation={situation}
-              status={status}
-              urlTarget={target}
-            />
-          </>
-        }
-      />
+      <div data-chat-composer="" ref={composerRef}>
+        <ComposerBank
+          currentThreadId={currentThreadId}
+          deletedThreadIds={deletedThreadIds}
+          prompt={prompt}
+          handle={handle}
+          pickers={(open) => (
+            <ComposerPickers situation={situation} urlTarget={target} open={open} />
+          )}
+          state={<ComposerState situation={situation} />}
+          work={<ComposerWork situation={situation} />}
+          refusal={situation.head.refusal ?? status.detail}
+        />
+      </div>
     </div>
   );
 
@@ -247,65 +335,59 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
       data-plugin={plugin}
       className="size-full min-h-0 min-w-0 font-sans text-ink"
     >
+      <PrimaryRouteControls route="chat" slot="palette">
+        <PagePaletteButton open={togglePagePalette} />
+      </PrimaryRouteControls>
+      <PrimaryRouteControls route="chat" slot="situation">
+        <ChatSituationHead handle={handle} situation={situation} status={status} />
+      </PrimaryRouteControls>
       {/* The route shell owns the chords and the remaining-height conversation column. Chat has
-          no route head: the Situation is the composer head (`ComposerHead`), so the shell draws
-          none of its own. */}
+          no generic route head: its global Situation observes the composer owners. */}
       <RouteShell manifest={manifest} handle={handle} situation={<></>}>
         <PageSurface>
           <PaneSplit
             axis="horizontal"
             grow
-            resize={{
-              target: "start",
-              defaultSize: 300,
-              minSize: 240,
-              persist: "pe.sideWidth",
-              collapse: { collapsed: !sideOpen, collapsedSize: 40 },
-            }}
+            hide={narrow ? "start" : undefined}
+            resize={
+              narrow
+                ? undefined
+                : {
+                    target: "start",
+                    defaultSize: 300,
+                    minSize: 240,
+                    persist: "pe.sideWidth",
+                    collapse: {
+                      collapsed: !sideOpen,
+                      onCollapsedChange: (collapsed) => store.actions.setSideOpen(!collapsed),
+                      collapsedSize: 40,
+                      title: "threads",
+                    },
+                  }
+            }
             start={
               <Pane
-                kind="flank"
-                flush
+                scroll="clip"
                 id="threads"
+                ground="artifact"
                 title="threads"
                 meta={threads.length}
-                actions={<ModeDial mode={mode} setMode={setMode} />}
-                collapsed={!sideOpen}
-                onCollapsedChange={(collapsed) => store.actions.setSideOpen(!collapsed)}
+                tabs={<ModeDial mode={mode} setMode={setMode} count={threads.length} />}
               >
                 {mode === "threads" ? (
                   <ThreadsSidebar
-                    threads={threads}
+                    threads={sidebarThreads}
                     providers={providers.list ?? []}
-                    currentThreadId={currentThreadId}
+                    currentThreadId={currentThreadId || chat.id}
                     onSelect={openThread}
                     onNew={() => void newThread()}
                     onFork={(id, providerId) => void forkThread(providerId, id)}
                     onRename={handleRenameThread}
                     onDelete={handleDeleteThread}
                     onSearch={() => store.actions.setPaletteOpen(true)}
+                    onUpdate={updateThread}
+                    onNewTarget={(target) => void newThread(target)}
                   />
-                ) : mode === "trace" ? (
-                  <div data-annotation="trace-frame">
-                    <div data-annotation="trace-pin">
-                      {traceCells.map((cell) => (
-                        <TraceCellView key={cell.key} cell={cell} registerRef={() => {}} />
-                      ))}
-                    </div>
-                    {traceCell ? (
-                      <div data-annotation="inspect" data-pinned>
-                        <Press
-                          tone="quiet"
-                          size="caption"
-                          title="Unpin this call"
-                          onClick={() => view.actions.setLensPinKey(null)}
-                        >
-                          unpin
-                        </Press>
-                        <ToolCellBody call={traceCell.call} />
-                      </div>
-                    ) : null}
-                  </div>
                 ) : (
                   <SessionStrip breakdown={breakdown} cache={cache} sendNumber={userTurns} />
                 )}
@@ -315,27 +397,42 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
               <PaneSplit
                 axis="horizontal"
                 grow
-                resize={{
-                  target: "end",
-                  defaultSize: 640,
-                  minSize: 480,
-                  persist: "pe.pluginWidth",
-                  collapse: { collapsed: !plugin || !pluginOpen, collapsedSize: 40 },
-                }}
-                start={chatColumn}
+                hide={compact ? "end" : undefined}
+                resize={
+                  compact
+                    ? undefined
+                    : {
+                        target: "end",
+                        defaultSize: 640,
+                        minSize: 480,
+                        persist: "pe.pluginWidth",
+                        collapse: {
+                          collapsed: !plugin || !pluginOpen,
+                          onCollapsedChange: (collapsed) => store.actions.setPluginOpen(!collapsed),
+                          collapsedSize: 40,
+                          title: plugin ? chatPluginTitle(plugin) : undefined,
+                        },
+                      }
+                }
+                start={
+                  inbox ? (
+                    <Ledger
+                      presentation={LEDGER_PRESENTATIONS.tray}
+                      head={
+                        <p className="m-0 flex justify-end px-2 py-1 hairline-b">
+                          <Button label="Start a new Pea thread" onClick={() => void newThread()}>
+                            New thread
+                          </Button>
+                        </p>
+                      }
+                    />
+                  ) : (
+                    chatColumn
+                  )
+                }
                 end={
-                  plugin ? (
-                    <Pane
-                      kind="flank"
-                      flush
-                      side="right"
-                      id="plugin"
-                      title={chatPluginTitle(plugin)}
-                      collapsed={!pluginOpen}
-                      onCollapsedChange={(collapsed) => store.actions.setPluginOpen(!collapsed)}
-                      actions={chrome}
-                      headerless
-                    >
+                  !compact && plugin ? (
+                    <Pane flush id="plugin">
                       <div ref={host.slot} className="contents" />
                     </Pane>
                   ) : null
@@ -347,10 +444,49 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
       </RouteShell>
 
       {host.kept}
+      {compact && plugin && pluginOpen ? (
+        <Dialog open onOpenChange={store.actions.setPluginOpen}>
+          <DialogContent>
+            <DialogTitle>{plugin ? chatPluginTitle(plugin) : "Workspace"}</DialogTitle>
+            <div ref={host.slot} className="h-[75dvh] min-h-0 min-w-0" />
+          </DialogContent>
+        </Dialog>
+      ) : null}
+      {narrow && sideOpen ? (
+        <Dialog open onOpenChange={(open) => store.actions.setSideOpen(open)}>
+          <DialogContent>
+            <DialogTitle>Threads</DialogTitle>
+            <div className="h-[75dvh] min-h-0 min-w-0">
+              <ThreadsSidebar
+                threads={sidebarThreads}
+                providers={providers.list ?? []}
+                currentThreadId={currentThreadId || chat.id}
+                onSelect={(id) => {
+                  openThread(id);
+                  store.actions.setSideOpen(false);
+                }}
+                onNew={() => {
+                  void newThread();
+                  store.actions.setSideOpen(false);
+                }}
+                onFork={(id, providerId) => void forkThread(providerId, id)}
+                onRename={handleRenameThread}
+                onDelete={handleDeleteThread}
+                onSearch={() => store.actions.setPaletteOpen(true)}
+                onUpdate={updateThread}
+                onNewTarget={(target) => {
+                  void newThread(target);
+                  store.actions.setSideOpen(false);
+                }}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
       <ThreadDialog
-        threads={threads}
+        threads={sidebarThreads}
         providers={providers.list ?? []}
-        currentThreadId={currentThreadId}
+        currentThreadId={currentThreadId || chat.id}
         open={paletteOpen}
         onOpenChange={store.actions.setPaletteOpen}
         onSelect={openThread}
@@ -358,6 +494,8 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
         onFork={(id, providerId) => void forkThread(providerId, id)}
         onRename={handleRenameThread}
         onDelete={handleDeleteThread}
+        onUpdate={updateThread}
+        onNewTarget={(target) => void newThread(target)}
       />
     </main>
   );

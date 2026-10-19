@@ -26,11 +26,11 @@ import {
   type SettingsSnapshot,
 } from "@pe/agent-contracts";
 
-import { ActionButton } from "#/components/lang/action-button";
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { FactChip, Tag } from "#/components/lang/chip";
-import { Code, JsonEditor } from "#/components/lang/code";
-import { EmptyState } from "#/components/lang/empty";
+import { Button } from "@pe/kit/lang/button";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { FactChip, Tag } from "@pe/kit/lang/chip";
+import { Code, JsonEditor } from "@pe/kit/lang/code";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Switcher } from "#/components/lang/switcher";
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
@@ -38,22 +38,17 @@ import { projectHostValidationState } from "#/lib/schema-to-field-render/field-s
 import { inventoryOf, previousOf, useHostStatus, useInventory } from "#/readings";
 import { schemaFormModel } from "#/settings/schema-form";
 import {
-  reviewAddresses,
-  type CellWire,
-  ReviewRow,
-  WorkSentence,
-  WorkStanding,
-  workSummary,
-} from "#/components/lang/band";
-import {
   actionResult,
   saveSettingsAction,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 import { defineRoute, type MemberRef } from "./manifest";
 import { Ladder } from "./ladder";
+import { ProposalReview } from "./proposal-review";
 import { podHost, type Composed } from "./pods";
-import { useRoute, type RouteHandle } from "./use-route";
+import { useRoute } from "./use-route";
+import type { RouteHandle } from "./handle";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** The demo lane's member: no host is asked for anything. `fields` seeds its proposal lane. */
 export interface DemoSpec {
@@ -238,85 +233,6 @@ const seededWork = (
         fields: fixture.fields,
       }
     : undefined;
-
-const display = (rung: { value?: unknown; delete?: true } | null | undefined) =>
-  rung?.delete
-    ? "DELETE"
-    : rung?.value === undefined
-      ? "—"
-      : typeof rung.value === "string"
-        ? rung.value
-        : JSON.stringify(rung.value);
-
-/**
- * Pea's proposals and the staged fields on the open member, on the Work band: accept stages, deny
- * clears, unstage clears the staged value, and save writes every staged field. It stays out of the
- * way while the Work is clean.
- */
-function ProposalLane({ work, readSha }: { work: MemberWorkHandle; readSha: string | null }) {
-  const doc = work.work.doc;
-  // The root raw edit is the editor's draft, not a card.
-  const { [""]: _draft, ...fields } = doc?.fields ?? {};
-  const items = reviewAddresses(fields);
-  const basisSha = doc?.basis?.sha256 ?? null;
-  // The Work reviews bytes the editor no longer sees on disk: only a person may adopt the new ones.
-  const moved = !work.demo && readSha !== null && basisSha !== null && readSha !== basisSha;
-  if (!items.length && !moved) return null;
-  const wire: CellWire = {
-    segment: "fields",
-    write: work.work.write,
-    revision: work.work.revision,
-  };
-  const busy = work.busy !== null;
-  return (
-    <ArtifactFrame
-      head={
-        <>
-          <Tag>pea</Tag>
-          {moved ? (
-            <ActionButton
-              label="adopt disk bytes"
-              disabled={busy}
-              reason="The member changed on disk after these proposals were made. Adopting discards them and the staged fields."
-              onClick={() => void work.actions.adopt.run({ sha256: readSha } as never)}
-            />
-          ) : null}
-        </>
-      }
-    >
-      <div className="px-3">
-        <WorkSentence
-          summary={workSummary(fields, { groupOf: (key) => [key] }, ["field"])}
-          cells={fields}
-          wire={wire}
-          commit={
-            <ActionButton
-              label="save"
-              reason={work.actions.save.refusal ?? "Write every staged field to the member"}
-              disabled={work.actions.save.refusal != null || busy}
-              onClick={() => void work.actions.save.run().catch(() => undefined)}
-            />
-          }
-        />
-        <WorkStanding
-          conflict={work.work.conflict}
-          reload={work.work.reload}
-          unresolved={work.failure ? [work.failure.message] : []}
-        />
-        {items.map(([path, cell]) => (
-          <ReviewRow
-            key={path}
-            wire={wire}
-            address={path}
-            label={<span className="face-mono">{path}</span>}
-            cell={cell}
-            facts={{ value: display(cell.staged ?? cell.proposal) }}
-          />
-        ))}
-      </div>
-    </ArtifactFrame>
-  );
-}
 
 /** The document a field asks for its options. Explicit, never implicit, never stored. */
 export interface OptionsFrom {
@@ -579,10 +495,17 @@ export function SpecEditor({
             : hostErrors.length
               ? `The host called this draft invalid: ${hostErrors.length === 1 ? "1 error" : `${hostErrors.length} errors`}, first ${hostErrors[0]!.path || "the member"}: ${hostErrors[0]!.message}.`
               : null;
+  const saveWhy =
+    saveReason ??
+    (viaWork
+      ? "Write the draft with the staged fields on top; refuses if the member changed on disk."
+      : "Overwrite this member; refuses if it changed on disk since it was read.");
+  const saveAsWhy =
+    saveReason ?? "File the draft as a new member beside this one; apply reads saved members only.";
 
   return (
     <div className="flex min-h-0 flex-col gap-1.5">
-      <ProposalLane work={work} readSha={basisSha} />
+      <ProposalReview work={work} readSha={basisSha} />
       <ArtifactFrame
         head={
           <>
@@ -607,12 +530,11 @@ export function SpecEditor({
               {session ? "semantic" : "schema only"}
             </FactChip>
             {options.owned ? (
-              <span
-                className="t-small"
-                title="The document this form reads field options from. With none chosen the form offers the schema's own options only."
-              >
-                options from <Ladder levels={options.levels} />
-              </span>
+              <TooltipHint content="The document this form reads field options from. With none chosen the form offers the schema's own options only.">
+                <span className="t-small">
+                  options from <Ladder levels={options.levels} />
+                </span>
+              </TooltipHint>
             ) : (
               <FactChip
                 tone={options.word ? "meta" : "caution"}
@@ -642,29 +564,26 @@ export function SpecEditor({
                 { value: "raw", label: "raw", title: "Edit the JSON text." },
               ]}
             />
-            <ActionButton
-              tone="commit"
+            <Button
+              kind="commit"
               label="save"
               busy={saving}
-              disabled={!!saveReason || saving || !basisSha}
-              reason={
-                saveReason ??
-                (viaWork
-                  ? "Write the draft with the staged fields on top; refuses if the member changed on disk."
-                  : "Overwrite this member; refuses if it changed on disk since it was read.")
-              }
+              refusal={saveReason || saving || !basisSha ? saveWhy : null}
+              reason={saveWhy}
               onClick={() => save(false)}
-            />
-            <ActionButton
+            >
+              save
+            </Button>
+            <Button
+              kind="framed"
               label="save as new"
               busy={saving}
-              disabled={!!saveReason || saving}
-              reason={
-                saveReason ??
-                "File the draft as a new member beside this one; apply reads saved members only."
-              }
+              refusal={saveReason || saving ? saveAsWhy : null}
+              reason={saveAsWhy}
               onClick={() => save(true)}
-            />
+            >
+              save as new
+            </Button>
           </>
         }
       >

@@ -1,8 +1,9 @@
-import { cn } from "#/lib/utils";
-import { FactChip } from "#/components/lang/chip";
-import { StateDot } from "#/components/master-table/cells";
+import { cn } from "@pe/kit/lib/utils";
+import { FactChip } from "@pe/kit/lang/chip";
+import { StateDot } from "@pe/kit/table/cells";
 import type { ModelZone } from "#/takeoff/world";
 import { ROOM_STATES, STATE_META, stateMeta, type RoomState } from "#/takeoff/room-state";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function ZoneStateBar({
   zone,
@@ -34,16 +35,16 @@ export function ZoneStateBar({
   // The bar is a FIXED width (the caller's), right-aligned by its flex parent: a zone with more
   // rooms shows more, thinner segments, never a wider bar (annotation verdict 2026-08-31).
   return (
-    <span
-      data-zone-bar=""
-      className={cn("flex h-2.5 w-10 items-center gap-px", className)}
-      title={`${zone.zone.key} — ${states.length} rooms · ${census
+    <TooltipHint
+      content={`${zone.zone.key} — ${states.length} rooms · ${census
         .map((c) => `${c.n} ${STATE_META[c.s].label}`)
         .join(", ")}`}
     >
-      {states.map((s, i) => (
-        <StateDot key={i} bar {...stateMeta(s)} dim={s === "unreviewed"} />
-      ))}
-    </span>
+      <span data-zone-bar="" className={cn("flex h-2.5 w-10 items-center gap-px", className)}>
+        {states.map((s, i) => (
+          <StateDot key={i} bar {...stateMeta(s)} dim={s === "unreviewed"} />
+        ))}
+      </span>
+    </TooltipHint>
   );
 }

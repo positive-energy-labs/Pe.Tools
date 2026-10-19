@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { reviewTransitions } from "#/components/lang/band";
+import { reviewTransitions } from "#/components/work/band";
 import type { FamilyStore } from "#/family/store";
 import {
   consumersOf,
@@ -17,7 +17,7 @@ import {
 } from "#/family/model";
 import type { ProtoProposal } from "#/family/world";
 import { useMeasuredParse } from "#/host/measured-parse";
-import { useScopeKeys } from "#/route/keys";
+import { useScopeKeys } from "@pe/kit/keys";
 
 export function useFamilyWorkspaceCore(store: FamilyStore) {
   const profile = store.profile;

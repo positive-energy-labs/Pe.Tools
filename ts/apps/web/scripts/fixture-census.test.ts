@@ -19,6 +19,18 @@ const sourceFiles = (dir: string): string[] =>
   });
 
 describe("fixture census", () => {
+  it("publishes the Pea route and retires the Chat route address", () => {
+    const routeTree = readFileSync(new URL("../src/routeTree.gen.ts", import.meta.url), "utf8");
+    const census = censusFromRouteTree(routeTree);
+
+    expect(census.classifiedMaintainedRoutes).toContainEqual({
+      route: "/pea",
+      canonicalReviewUrl: "/pea?demo=diagram",
+      fixtureKind: "demo-fixture",
+    });
+    expect(census.discoveredRenderedRoutes).not.toContain("/chat");
+  });
+
   it("admits every maintained route in the generated route tree", () => {
     const routeTree = readFileSync(new URL("../src/routeTree.gen.ts", import.meta.url), "utf8");
     const census = censusFromRouteTree(routeTree);
@@ -29,13 +41,15 @@ describe("fixture census", () => {
       fixtureKind: "live-route",
     });
     expect(census.nonFixtureLiveRoutes.map(({ route }) => route)).toEqual([
+      "/bind",
       "/captures",
       "/data-tables",
       "/ducts",
       "/ops",
       "/parameter-links",
       "/rooms",
-      "/settings",
+
+      "/tool/$key",
     ]);
     expect(census.classifiedPrototypeRoutes).toContainEqual({
       route: "/lab",
@@ -43,18 +57,22 @@ describe("fixture census", () => {
       fixtureKind: "prototype-fixture",
     });
     expect(census.missingReviewUrls).toEqual([]);
-    // /ducts (2026-09-26) is live-route debt: its fixture is a private client snapshot (PE_DUCTS_FIXTURE), not a ?demo seed.
-    expect(census.missingCanonicalFixtures).toBe(5);
+    expect(census.classifiedMaintainedRoutes).toContainEqual({
+      route: "/tool/$key",
+      canonicalReviewUrl: `/tool/${encodeURIComponent("route:@snowdon-circuits/routes/voltage-drop/index.js")}`,
+      fixtureKind: "live-route",
+    });
+    expect(census.missingCanonicalFixtures).toBe(8);
   });
 
   it("uses real manifest seed names for every demo review URL", () => {
     const routeTree = readFileSync(new URL("../src/routeTree.gen.ts", import.meta.url), "utf8");
     const census = censusFromRouteTree(routeTree);
     const seeds = {
-      "/chat": CHAT_SEEDS,
+      "/pea": CHAT_SEEDS,
       "/families": familiesManifest.seeds,
       "/family": familyManifest().seeds,
-      "/machine": MACHINE_SEEDS,
+      "/settings": MACHINE_SEEDS,
       "/open": OPEN_SEEDS,
       "/pods": PODS_SEEDS,
       "/schedules": SCHEDULE_SEEDS,

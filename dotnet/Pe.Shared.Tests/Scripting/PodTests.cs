@@ -5,37 +5,25 @@ using Pe.Revit.Scripting.Pods;
 using Pe.Revit.Scripting.References;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Scripting.Pods;
-using System.IO.Compression;
+using Pe.Shared.Scripting.Execution;
 using System.Text;
 
 namespace Pe.Revit.Tests;
 
 [TestFixture]
 public sealed class PodTests {
-    [Test]
-    public void V1_archive_imports_with_an_upgrade_diagnostic_and_preserves_source_bytes() {
-        var manifest = """{"schemaVersion":1,"id":"old","name":"Old","version":"1"}""";
-        var archivePath = Path.Combine(this._root, "old.zip");
-        using (var archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
-        using (var writer = new StreamWriter(archive.CreateEntry("pod.json").Open())) writer.Write(manifest);
-        var imported = Archive(this._service).Import(new(archivePath), "2025", "net8.0-windows", typeof(PeScriptContainer).Assembly.Location);
-        var prepared = ScriptPodPreparationService.Prepare(imported.Folder);
-        Assert.That(prepared, Is.TypeOf<PreparedPod>());
-        Assert.That(((PreparedPod)prepared).Manifest.SchemaVersion, Is.EqualTo(2));
-        Assert.That(imported.Diagnostics!.Single().Message, Does.Contain("upgraded from 1 to 2"));
-        Assert.That(prepared.Diagnostics.Single().Message, Does.Contain("upgraded from 1 to 2"));
-        Assert.That(File.ReadAllText(Path.Combine(imported.Folder, "pod.json")), Is.EqualTo(manifest));
-    }
     private string _root = null!;
     private string _pods = null!;
     private ScriptPodPreparationService _service = null!;
+    private readonly Dictionary<string, string> _folders = new();
 
     [SetUp]
     public void SetUp() {
         this._root = Path.Combine(Path.GetTempPath(), "pod-tests", Guid.NewGuid().ToString("N"));
         this._pods = Path.Combine(this._root, "Pods");
         Directory.CreateDirectory(this._pods);
-        this._service = new ScriptPodPreparationService(this._pods);
+        this._folders.Clear();
+        this._service = new ScriptPodPreparationService(this._pods, this.Admission);
     }
 
     [TearDown]
@@ -60,7 +48,7 @@ public sealed class PodTests {
             ["output/run/receipt.json"] = "{}"
         });
 
-        var pod = ScriptPodPreparationService.Prepare(folder);
+        var pod = ScriptPodPreparationService.Prepare(folder, Bundle(folder));
 
         Assert.Multiple(() => {
             Assert.That(pod, Is.TypeOf<PreparedPod>(), string.Join("; ", pod.Diagnostics.Select(d => d.Message)));
@@ -78,9 +66,9 @@ public sealed class PodTests {
     public void Preparation_gates_entrypoint_source() {
         var folder = this.WritePod("scripts", "scripts",
             new() { ["src/Two.cs"] = "public sealed class A : PeScriptContainer {} public sealed class B : PeScriptContainer {}" },
-            ""","entrypoints":[{"id":"missing","sourcePath":"src/Missing.cs"},{"id":"two","sourcePath":"src/Two.cs"}]""");
+            ""","entrypoints":[{"sourcePath":"src/Missing.cs"},{"sourcePath":"src/Two.cs"}]""");
 
-        var pod = ScriptPodPreparationService.Prepare(folder);
+        var pod = ScriptPodPreparationService.Prepare(folder, Bundle(folder));
 
         Assert.That(pod, Is.TypeOf<RefusedPod>());
         Assert.That(pod.Diagnostics.Select(diagnostic => diagnostic.Source), Is.SupersetOf(new[] { "src/Missing.cs", "src/Two.cs" }));
@@ -93,6 +81,7 @@ public sealed class PodTests {
             ["settings/_fields/Title.json"] = "{\"title\":\"from-global\"}"
         });
         Directory.Move(Path.Combine(this._pods, "Global"), Path.Combine(this._pods, "Renamed In Explorer"));
+        this._folders["Global"] = Path.Combine(this._pods, "Renamed In Explorer");
         this.WritePod("Office", "office", new() {
             ["settings/family.json"] = "{\"$preset\":\"@global/_fields/Header\",\"local\":{\"$include\":\"@local/part\"}}",
             ["settings/part.json"] = "[1]"
@@ -216,57 +205,20 @@ public sealed class PodTests {
 
         Assert.That(result.Composed, Is.Null);
         Assert.That(result.Diagnostics.Single().Message,
-            Does.Contain(Path.Combine(this._pods, "One")).And.Contain(Path.Combine(this._pods, "Two")));
+            Does.Contain("One").And.Contain("Two"));
     }
 
     [Test]
     public void Member_write_creates_and_refuses_an_existing_path() {
         this.WritePod("Office", "office");
 
-        var sha = this._service.WriteMember("office", "settings/captured.json", "{}");
+        var sha = this._service.WriteSettingsMember("office", "settings/captured.json", "{}");
 
         var saved = this._service.Compose("office", "settings/captured.json", null).Source;
         Assert.That((saved.Content, saved.Sha256, saved.Origin), Is.EqualTo(("{}", sha, PodRunOrigin.SavedMember)));
-        Assert.Throws<IOException>(() => this._service.WriteMember("office", "settings/captured.json", "{\"x\":1}"));
-        Assert.Throws<InvalidDataException>(() => this._service.WriteMember("office", "output/x.json", "{}"));
-        Assert.Throws<InvalidDataException>(() => this._service.WriteMember("office", "settings/../pod.json", "{}"));
-    }
-
-    [Test]
-    public void Export_vendors_foreign_fragments_and_import_composes_without_the_foreign_pod() {
-        const string header = "{\n  \"title\": \"header\"\n}";
-        this.WritePod("Global", "global", new() { ["settings/_fields/Header.json"] = header });
-        this.WritePod("Office", "office", new() {
-            ["settings/family.json"] = "{\"$preset\":\"@global/_fields/Header\",\"x\":1}",
-            ["settings/leaf.json"] = "{ \"untouched\": true }"
-        });
-        File.WriteAllText(Path.Combine(this._pods, "Office", ScriptPodPreparationService.ImportedFileName), "{}");
-        var archivePath = Path.Combine(this._root, "office.zip");
-
-        var exported = Archive(this._service).Export(new PodExportRequest("office", archivePath), "net8.0-windows");
-        var consumerPods = Path.Combine(this._root, "Other Machine");
-        Directory.CreateDirectory(consumerPods);
-        var consumer = new ScriptPodPreparationService(consumerPods);
-        var imported = Archive(consumer).Import(new PodImportRequest(archivePath), "2025", "net8.0-windows", typeof(PeScriptContainer).Assembly.Location);
-        var composed = consumer.Compose("office", "settings/family.json", null);
-
-        Assert.Multiple(() => {
-            Assert.That(exported.Vendored.Select(d => (d.Id, d.Path)), Is.EqualTo(new[] { ("global", "settings/_fields/Header.json") }));
-            Assert.That(imported, Is.EqualTo(new PodImportData("office", Path.Combine(consumerPods, "office"))));
-            Assert.That(File.ReadAllText(Path.Combine(imported.Folder, "settings", "_vendor", "global", "_fields", "Header.json")), Is.EqualTo(header));
-            Assert.That(File.ReadAllText(Path.Combine(imported.Folder, "settings", "family.json")), Does.Contain("@local/_vendor/global/_fields/Header.json"));
-            Assert.That(File.ReadAllText(Path.Combine(imported.Folder, "settings", "leaf.json")), Is.EqualTo("{ \"untouched\": true }"));
-            Assert.That(composed.Diagnostics, Is.Empty);
-            Assert.That(JObject.Parse(composed.Composed!)["title"]!.Value<string>(), Is.EqualTo("header"));
-            Assert.That(composed.Dependencies.Single().PodId, Is.EqualTo("office"));
-            var provenance = JObject.Parse(File.ReadAllText(Path.Combine(imported.Folder, ScriptPodPreparationService.ImportedFileName)));
-            Assert.That(provenance["locator"]!.Value<string>(), Is.EqualTo(archivePath));
-            Assert.That(provenance["archiveSha256"]!.Value<string>(), Has.Length.EqualTo(64));
-        });
-        using (var archive = ZipFile.OpenRead(archivePath))
-            Assert.That(archive.Entries.Select(entry => entry.FullName), Has.None.EqualTo(ScriptPodPreparationService.ImportedFileName));
-        Assert.Throws<InvalidDataException>(() => Archive(consumer).Import(
-            new PodImportRequest(archivePath), "2025", "net8.0-windows", typeof(PeScriptContainer).Assembly.Location));
+        Assert.Throws<IOException>(() => this._service.WriteSettingsMember("office", "settings/captured.json", "{\"x\":1}"));
+        Assert.Throws<InvalidDataException>(() => this._service.WriteSettingsMember("office", "output/x.json", "{}"));
+        Assert.Throws<InvalidDataException>(() => this._service.WriteSettingsMember("office", "settings/../pod.json", "{}"));
     }
 
     [Test]
@@ -549,22 +501,117 @@ public sealed class PodTests {
     [Test]
     public void Capture_enforces_the_file_count_bound() {
         var folder = this.WritePod("Bounded", "bounded");
-        Directory.CreateDirectory(Path.Combine(folder, "assets"));
-        for (var index = 0; index < 200; index++)
-            File.WriteAllText(Path.Combine(folder, "assets", $"{index:D3}.txt"), string.Empty);
-
-        Assert.That(ScriptPodPreparationService.Prepare(folder), Is.TypeOf<RefusedPod>());
+        var bundle = Bundle(folder) with { Files = [.. Bundle(folder).Files,
+            .. Enumerable.Range(0, ScriptPodMemberBounds.MaxFileCount).Select(i => new ScriptPodSourceFile($"assets/{i}.txt", ""))] };
+        Assert.Throws<ArgumentException>(() => ScriptPodPreparationService.Prepare(folder, bundle));
     }
 
-    private static ScriptPodArchiveService Archive(ScriptPodPreparationService pods) {
-        var generator = new ScriptProjectGenerator(new CsProjReader());
-        var bootstrap = new ScriptWorkspaceBootstrapService(generator, key => Path.Combine(pods.PodsRoot, key), Path.Combine(pods.PodsRoot, "..", "product"));
-        return new ScriptPodArchiveService(bootstrap, generator, pods);
+    [Test]
+    public void Large_members_remain_listable_and_composable_under_membership_bounds() {
+        var content = "{\"text\":\"" + new string('x', 614400) + "\"}";
+        this.WritePod("Large", "large", new() {
+            ["assets/image.bin"] = new string('a', 614400),
+            ["settings/large.json"] = content,
+            ["settings/root.json"] = "{\"$include\":\"@local/large\"}"
+        });
+        Assert.That(this._service.List().Single(), Is.TypeOf<PreparedPod>());
+        var composed = this._service.Compose("large", "settings/root.json", null);
+        Assert.That(composed.Diagnostics, Is.Empty);
+        Assert.That(JObject.Parse(composed.Composed!)["text"]!.Value<string>(), Has.Length.EqualTo(614400));
+    }
+
+    private static ScriptPodSourceBundle Bundle(string folder) => new(Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)
+        .Where(path => !Path.GetRelativePath(folder, path).Replace('\\', '/').StartsWith("output/", StringComparison.Ordinal))
+        .Select(path => new ScriptPodSourceFile(Path.GetRelativePath(folder, path).Replace('\\', '/'), Convert.ToBase64String(File.ReadAllBytes(path)))).ToList());
+
+    private JObject Admission(string key, object request) {
+        var rows = this._folders.Values.Select(folder => new {
+            id = JObject.Parse(File.ReadAllText(Path.Combine(folder, "pod.json"))).Value<string>("id"),
+            folder = Path.GetFileName(folder), directory = folder
+        }).ToList();
+        if (key == "pod.list") {
+            var input = JObject.FromObject(request);
+            if (input.Value<string>("projection") != "identity") return JObject.FromObject(new { pods = rows });
+            var selected = rows.Single(row => row.folder == input.Value<string>("folder"));
+            if (rows.Count(row => row.id == selected.id) != 1) throw new InvalidDataException("Duplicate Pod identity");
+            return JObject.FromObject(new { projection = "identity", identity = new { selected.id, selected.folder } });
+        }
+        if (key != "pod.capture") throw new InvalidOperationException($"Unexpected native admission call: {key}");
+        var id = JObject.FromObject(request).Value<string>("pod");
+        var matches = rows.Where(item => item.id == id).ToList();
+        if (matches.Count != 1) throw new InvalidDataException($"Pod id '{id}' is claimed by folders {string.Join(", ", matches.Select(item => item.folder))}.");
+        var row = matches[0];
+        return JObject.FromObject(new { row.id, row.folder, row.directory, contributions = Array.Empty<object>(), memberBundle = Bundle(row.directory) });
+    }
+
+    [Test]
+    public void Output_identity_uses_the_explicit_host_projection_and_checks_its_folder() {
+        var folder = this.WritePod("Renamed", "stable-id");
+        Assert.That(this._service.ResolveId(folder), Is.EqualTo("stable-id"));
+        var wrong = new ScriptPodPreparationService(this._pods, (key, request) => {
+            var input = JObject.FromObject(request);
+            Assert.That(key, Is.EqualTo("pod.list"));
+            Assert.That(input.Value<string>("projection"), Is.EqualTo("identity"));
+            Assert.That(input.Value<string>("folder"), Is.EqualTo("Renamed"));
+            return JObject.FromObject(new { projection = "identity", identity = new { id = "stable-id", folder = "Other" } });
+        });
+        Assert.Throws<InvalidDataException>(() => wrong.ResolveId(folder));
+    }
+
+    [Test]
+    public void Admission_dependency_timeout_is_not_script_cancellation() {
+        var folder = this.WritePod("Default", "default");
+        var service = new ScriptPodPreparationService(this._pods, (_, _) => throw new OperationCanceledException("HTTP deadline"));
+        var error = Assert.Throws<InvalidDataException>(() => service.ResolveId(folder));
+        Assert.That(error!.Message, Does.Contain("Host admission 'pod.list'").And.Contain("10s dependency deadline"));
+        Assert.That(error.InnerException, Is.TypeOf<OperationCanceledException>());
+    }
+
+    [Test]
+    public void Captured_support_files_are_retained_but_only_CSharp_sources_compile() {
+        var folder = this.WritePod("Office", "office", new() {
+            ["src/Run.cs"] = "public sealed class Run : PeScriptContainer {}",
+            ["src/readme.txt"] = "Support", ["skills/inspect/SKILL.md"] = "Skill", ["README.md"] = "Guide"
+        }, ""","entrypoints":[{"sourcePath":"src/Run.cs"}]""");
+        var bundle = Bundle(folder);
+        var prepared = ScriptPodPreparationService.Prepare(folder, bundle);
+        File.WriteAllText(Path.Combine(folder, "src", "Run.cs"), "changed after capture");
+        var normalized = ScriptPodSourceNormalizer.Normalize(bundle, "Office", "src/Run.cs");
+        Assert.That(prepared, Is.TypeOf<PreparedPod>());
+        Assert.That(prepared.Members.Select(member => member.Path), Does.Contain("skills/inspect/SKILL.md"));
+        Assert.That(normalized.SourceSet.Files.Select(file => file.Name), Is.EqualTo(new[] { "Run.cs" }));
+        Assert.That(normalized.SourceSet.Files[0].Content, Does.Contain("PeScriptContainer"));
+    }
+
+    [TestCase("src/../Run.cs")]
+    [TestCase("src\\Run.cs")]
+    [TestCase("/src/Run.cs")]
+    [TestCase("assets/CON.txt")]
+    public void Captured_paths_refuse_noncanonical_spelling(string path) {
+        Assert.Throws<ArgumentException>(() => ScriptPodSourceNormalizer.DecodeFiles(new([new(path, "")] )));
+    }
+
+    [Test]
+    public void Captured_paths_refuse_case_collisions() {
+        Assert.Throws<ArgumentException>(() => ScriptPodSourceNormalizer.DecodeFiles(new([new("src/Run.cs", ""), new("src/run.cs", "")] )));
+    }
+
+    [Test]
+    public void Host_admission_unavailable_is_a_typed_result_without_filesystem_fallback() {
+        this.WritePod("Office", "office");
+        var service = new ScriptPodPreparationService(this._pods, (_, _) => throw new IOException("Host unavailable"));
+        var result = service.Capture("office");
+        Assert.That(result.Capture, Is.Null);
+        Assert.That(result.Code, Is.EqualTo("package.unavailable"));
+        Assert.That(result.Reason, Does.Contain("Host unavailable"));
+        Assert.That(service.List().Single(), Is.TypeOf<RefusedPod>());
+        Assert.That(service.List().Single().Diagnostics.Single().Stage, Is.EqualTo("package.unavailable"));
     }
 
     private string WritePod(string folderName, string id, Dictionary<string, string>? files = null, string extraManifest = "") {
         var folder = Path.Combine(this._pods, folderName);
         Directory.CreateDirectory(folder);
+        this._folders[folderName] = folder;
         File.WriteAllText(Path.Combine(folder, "pod.json"), $$"""{"schemaVersion":2,"id":"{{id}}","name":"{{id}}","version":"1"{{extraManifest}}}""");
         foreach (var file in files ?? []) {
             var path = Path.Combine(folder, file.Key.Replace('/', Path.DirectorySeparatorChar));

@@ -15,6 +15,9 @@ import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts
 import { makeCallRoute } from "../src/call-route.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { RevitBridge } from "../src/bridge.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
+import { sdkSessions } from "./native-receipt-fixture.ts";
+import { asCaller, human } from "./callers.ts";
 
 const at = address("C:\\Models\\Capture.rvt");
 const target = { session: "bridge-a", openId: "open-a" };
@@ -50,6 +53,12 @@ test("actual snapshot read leaves real Work revision and a concurrent authored e
     list: Effect.succeed([
       {
         sessionId: target.session,
+        connected: true,
+        processId: 42,
+        processStartUtcUnixMs: 1000,
+        lane: hostOwnership.lane,
+        sourceRoot: hostOwnership.sourceRoot,
+        serviceName: hostOwnership.serviceName,
         state: {
           openDocuments: [
             { openId: target.openId, address: at, title: "Capture.rvt", isActive: true },
@@ -71,10 +80,13 @@ test("actual snapshot read leaves real Work revision and a concurrent authored e
       }),
   } as unknown as RevitBridge["Service"];
   const web = HttpRouter.toWebHandler(
-    makeCallRoute(undefined, captures).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+    makeCallRoute(undefined, captures, { sdk: sdkSessions }).pipe(
+      Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
+    ),
     { disableLogger: true },
   );
-  const request = (req: Request) => web.handler(req, Context.empty() as never);
+  // As the identity middleware would: a person reads takeoffs; an anonymous /call reads only Pods.
+  const request = asCaller(human, (req: Request) => web.handler(req, Context.empty() as never));
   let state: unknown;
   const work = new RouteWorkspace({
     registrations: [{ spec: takeoffsRouteState, handlers: {} }],
@@ -162,6 +174,12 @@ test("actual /call rejects a closed openId and a late generation; saved HTTP rea
     list: Effect.sync(() => [
       {
         sessionId: target.session,
+        connected: true,
+        processId: 42,
+        processStartUtcUnixMs: 1000,
+        lane: hostOwnership.lane,
+        sourceRoot: hostOwnership.sourceRoot,
+        serviceName: hostOwnership.serviceName,
         state: {
           openDocuments: open ? [{ openId: target.openId, address: at, title: "Capture.rvt" }] : [],
         },
@@ -181,10 +199,12 @@ test("actual /call rejects a closed openId and a late generation; saved HTTP rea
       }),
   } as unknown as RevitBridge["Service"];
   const web = HttpRouter.toWebHandler(
-    makeCallRoute(undefined, captures).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+    makeCallRoute(undefined, captures, { sdk: sdkSessions }).pipe(
+      Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
+    ),
     { disableLogger: true },
   );
-  const read = () =>
+  const read = asCaller(human, () =>
     web.handler(
       new Request("http://host/call", {
         method: "POST",
@@ -192,7 +212,8 @@ test("actual /call rejects a closed openId and a late generation; saved HTTP rea
         body: JSON.stringify({ key: "takeoffs.snapshot" }),
       }),
       Context.empty() as never,
-    );
+    ),
+  );
   try {
     const late = read();
     await vi.waitFor(() => expect(entered).toBe(1));
@@ -219,7 +240,7 @@ test("actual /call rejects a closed openId and a late generation; saved HTTP rea
         Context.empty() as never,
       );
       expect(saved.status).toBe(200);
-      const mcpRead = await restored.handler(
+      const mcpRead = await asCaller(human, restored.handler)(
         new Request("http://host/call", {
           method: "POST",
           headers: { "content-type": "application/json" },

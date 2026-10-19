@@ -1,23 +1,21 @@
 # Pea instruction system
 
-Pea has no prompt compiler. The provider request is composed by native Mastra owners, and every
-rule has exactly one of them. Do not judge Pea's behavior from a source string: the two captures
-(`system-prompt-capture.ts`, `tool-list-capture.ts`) record the latest system text and a lossy
-tool summary from the most recent provider call, independently and uncorrelated. They are
-inspection aids, not an exact resolved request.
+Pea has no prompt compiler. The lab harness (Claude Code or Codex, ADR 0015) composes the provider
+request, and each Pea rule has exactly one carrier. Do not judge Pea's behavior from a source
+string: the harness owns the final request and Pea cannot capture it.
 
 | Concern | Owner | Rule |
 |---|---|---|
-| Identity, authority, evidence, loop, voice, the `<user delivery="while-active">` wire | `peaAgentInstructions` (static kernel, ~500 tokens) | Capability-neutral. Names no tool that can be absent. |
-| Revit routing hint | `peaRevitOrientation` | Appended by `peaAgentInstructionsFor` only when `capabilities.revit` is true, the same flag that admits Revit tools. The runtime defaults closed; the root TUI/ACP, `pea --prompt`, and the default host assert Revit. |
-| Workspace root, containment, granted paths | Mastra Workspace processor | Kernel never hardcodes a path. |
-| Which tools exist and what they do | Tool definitions and generated host-operation metadata | Routing stays local to the tool description. |
-| Who may call what | `resolvePeaToolCategory` + access-level policies | Every provider-visible name (product, native `mastra_workspace_*`, `skill*`) resolves to an intentional category; unknown names fall to `other`, which all levels deny. The category names the door, not the effect behind it. |
-| Reusable workflow judgment | Bundled skills in `@pe/mcps` `skills.ts`, materialized under the product home | Each skill is a method with a crisp trigger. Materialization removes only `retiredPeaSkillNames`; user skills are never touched. |
-| Durable user and project facts | Observational Memory (`memory/profiles.ts`) | Live Revit/runtime state is excluded by the observer instruction. |
-| Active task state | `TaskSignalProvider` | One signal owner; no Pea copy. |
-| Pod-authoring rules at the moment of authoring | Generated workspace docs, C#-owned (`Pe.Revit.Scripting/Bootstrap/ScriptFileTemplates.cs`) | Mastra auto-injects a nested `AGENTS.md` when a tool call touches a path near it, so the workspace `AGENTS.md` reaches the prompt exactly while Pea edits the Pod. It and `build-pod` must agree; nothing enforces that yet. `AGENTS.md` rewrites on bootstrap, `README`/`JOIN_GUIDE` are create-once. |
-| Current document orientation | None yet | The old context signal is deleted: it had no producer and replayed stale snapshots. Return only with source, observation time, and clear-on-absence. |
+| Identity, authority, evidence, loop, voice | `peaAgentInstructions` (`@pe/mcps` `pea/instructions.ts`, static kernel) | Capability-neutral. Names no tool that can be absent. Reaches Claude as the MCP server `instructions` (`createPeaMcpServer`). |
+| Kernel carrier for Codex | `developer_instructions` in `CODEX_CONFIG` (`childEnv` in `harness/threads.ts`) | Codex ignores MCP `instructions`, so the host writes the kernel and `CODEX_QUESTION_RULE` there. |
+| Revit routing | `pe_find` discovery and the generated operation catalog | Connections and the selected document are volatile. The kernel never states them. |
+| Workspace root and containment | The harness child's cwd (`worldRoot`) | The kernel never hardcodes a path. |
+| Which tools exist and what they do | `peaProductTools` descriptions and generated host-operation metadata | Routing stays local to the tool description. |
+| Who may call what | The harness permission mode, rendered as `permission_request` cards | Pea holds no tool-category policy. |
+| Reusable workflow judgment | Bundled skills in `@pe/mcps` `pea/skills.ts`, materialized under the product home for each harness root | Each skill is a method with a crisp trigger. Materialization deletes a folder only when the product receipt proves it wrote those bytes (retired names included); any other folder is left byte-exact with one notice naming its path. |
+| Durable user and project facts | The harness's own memory and context | Pea keeps no memory layer. |
+| Pod-authoring rules at the moment of authoring | Generated workspace docs, C#-owned (`Pe.Revit.Scripting/Bootstrap/ScriptFileTemplates.cs`) | The harness reads the workspace `AGENTS.md` from its cwd. It and `build-pod` must agree; nothing enforces that yet. `AGENTS.md` rewrites on bootstrap, `README`/`JOIN_GUIDE` are create-once. |
+| Current document orientation | None | Return only with source, observation time, and clear-on-absence. |
 
 ## Skill set
 
@@ -30,5 +28,5 @@ Not exposed: index, docs, relay, delegate, goal, mine, reflect, protoui, house.
 
 ## Proof
 
-`packages/runtime/tests/pea-instructions.test.ts` pins the neutral kernel, the conditioned
-orientation, the wire tag, native-name classification, and skill frontmatter validity.
+`ts/packages/mcps/tests/pea-instructions.test.ts` pins the neutral kernel and the MCP discovery path;
+`ts/packages/mcps/tests/pea-skills.test.ts` pins skill frontmatter and retired-name materialization.

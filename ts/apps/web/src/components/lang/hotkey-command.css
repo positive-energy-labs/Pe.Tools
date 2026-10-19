@@ -1,0 +1,73 @@
+.dl-hotkey-command {
+  display: inline-flex;
+  flex: none;
+  white-space: nowrap;
+}
+.dl-hotkey-command > .dl-button {
+  min-height: var(--control-h);
+  min-width: var(--control-h);
+  justify-content: center;
+  padding-inline: 2px;
+}
+.dl-hotkey-command > .dl-button > svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+}
+.dl-hotkey-command [data-command-keys] {
+  display: none;
+  align-items: center;
+  gap: 1px;
+}
+.dl-hotkey-command [data-command-keys] kbd {
+  padding-inline: 3px;
+}
+.dl-hotkey-command [data-command-symbols] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+.dl-hotkey-command :is([data-key-symbol], [data-command-key]) {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  font-size: var(--type-small-size);
+}
+.dl-hotkey-command [data-command-key] {
+  font-size: var(--type-prose-size);
+  font-weight: var(--weight-strong);
+}
+.dl-hotkey-command:where([data-command-face="full"], [data-command-face="responsive"])
+  > .dl-button
+  > svg,
+.dl-hotkey-command:where([data-command-face="medium"]) [data-command-word],
+.dl-hotkey-command:where([data-command-face="compact"])
+  :is([data-command-word], [data-command-chord]) {
+  display: none;
+}
+.dl-hotkey-command:where([data-command-face="compact"]) [data-command-keys] {
+  display: inline-flex;
+}
+@container app-chrome (max-width: 1000px) {
+  .dl-hotkey-command:where([data-command-face="responsive"]) [data-command-word] {
+    display: none;
+  }
+  .dl-hotkey-command:where([data-command-face="responsive"]) > .dl-button > svg {
+    display: block;
+  }
+}
+@container app-chrome (max-width: 700px) {
+  .dl-hotkey-command:where([data-command-face="responsive"]) [data-command-chord] {
+    display: none;
+  }
+  .dl-hotkey-command:where([data-command-face="responsive"]) [data-command-keys] {
+    display: inline-flex;
+  }
+  .dl-hotkey-command:where([data-command-face="responsive"]) > .dl-button {
+    gap: 2px;
+  }
+}

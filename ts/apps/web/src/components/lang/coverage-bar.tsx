@@ -1,22 +1,13 @@
 /**
- * COVERAGE BAR — proportions with an honest legend; THE viz ladder's first catalogued
- * consumer (design-lang.css: "--viz-* … governed by the grayscale law (from ops CoverageBar,
- * this palette's first shipped consumer)").
- *
- * CONSUMERS: src/ops/views/detail/parameter-coverage.tsx, src/lab/glance/** and the design-system specimen.
- *
- * RULINGS EMBODIED:
- * - Segments spend the VIZ ladder by INDEX (`viz: 1..6`), never a meaning role and never a
- *   named hue — a viz colour asserts "different from its neighbours" and nothing else.
- * - THE GRAYSCALE LAW: width, order and the legend (label + count) carry the meaning; colour
- *   only speeds it up. That is why the legend is not optional.
- * - An empty denominator renders NOTHING here: the caller owns its EmptyState, because only
- *   the caller knows the exit ("run a read", "widen the scope") — a primitive cannot.
+ * Proportions with an honest legend. Segments spend the viz ladder by index (`viz: 1..6`), never a
+ * meaning role; width, order and the legend carry meaning, colour only speeds it up. An empty
+ * denominator renders nothing: the caller owns its EmptyState.
  */
-import { token } from "#/lib/token";
-import { tv } from "#/lib/tv";
+import { token } from "@pe/kit/lib/token";
+import { tv } from "@pe/kit/lib/tv";
 
-import "./lang.css";
+import "@pe/kit/lang/lang.css";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export const coverageBarRecipe = tv({
   slots: {
@@ -65,23 +56,24 @@ export function CoverageBar({
     <div className={base()}>
       <div className={bar()}>
         {segments.map((s) => (
-          <div
-            key={s.label}
-            title={`${s.label}: ${s.count}`}
-            className={segment()}
-            style={{
-              width: `${(s.count / denom) * 100}%`,
-              backgroundColor: `color-mix(in srgb, ${token(`viz-${s.viz}`)} 55%, transparent)`,
-            }}
-          />
+          <TooltipHint content={`${s.label}: ${s.count}`} key={s.label}>
+            <div
+              className={segment()}
+              style={{
+                width: `${(s.count / denom) * 100}%`,
+                backgroundColor: `color-mix(in srgb, ${token(`viz-${s.viz}`)} 55%, transparent)`,
+              }}
+            />
+          </TooltipHint>
         ))}
         {sum < denom && (
-          <div
-            title={`unaccounted: ${denom - sum}`}
-            data-surface="recess"
-            className={rest()}
-            style={{ width: `${((denom - sum) / denom) * 100}%` }}
-          />
+          <TooltipHint content={`unaccounted: ${denom - sum}`}>
+            <div
+              data-surface="recess"
+              className={rest()}
+              style={{ width: `${((denom - sum) / denom) * 100}%` }}
+            />
+          </TooltipHint>
         )}
       </div>
       <div className={legend()}>

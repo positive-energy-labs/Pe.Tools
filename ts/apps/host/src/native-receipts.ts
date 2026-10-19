@@ -3,6 +3,8 @@ import {
   nativeReceiptSchema as receiptSchema,
   nativeReceiptFailureSchema as responseFailure,
   type NativeProcess,
+  nativeVerdictSchema,
+  type ReceiptFact,
 } from "@pe/agent-contracts";
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
@@ -72,7 +74,11 @@ export async function readNativeReceipt(
   original: NativeProcess,
   read: SdkReceiptReader = run,
   successor?: Successor,
-): Promise<{ step: ActionStep; evidence: unknown }> {
+): Promise<{
+  step: ActionStep;
+  evidence: unknown;
+  observation: Extract<ReceiptFact, { kind: "native" }>;
+}> {
   const args = nativeReceiptArgs(step.id, original, step.key);
   const evidence = await sdkResult<OpReceiptResponseResult | OpReceiptResult | OpStateResult>(
     args,
@@ -80,7 +86,24 @@ export async function readNativeReceipt(
   );
   const result = evidence.result;
   const receipt = receiptSchema.safeParse("receipt" in result ? result.receipt : undefined);
-  const unchanged = () => ({ step, evidence });
+  const matches =
+    result.requestId === step.id &&
+    (receipt.success
+      ? receipt.data.requestId === step.id &&
+        receipt.data.key === step.key &&
+        receipt.data.pid === original.pid &&
+        receipt.data.processStartUtc === original.processStartUtc &&
+        receipt.data.verdict === result.state &&
+        evidence.diagnostics.length === 0
+      : !["ok", "failed", "cancelled", "rejected"].includes(result.state));
+  const verdict = matches ? nativeVerdictSchema.safeParse(result.state).data : undefined;
+  const observation: Extract<ReceiptFact, { kind: "native" }> = {
+    kind: "native",
+    verdict: verdict ?? "unknown",
+    localRef: { requestId: step.id, key: step.key, process: original },
+  };
+  const unchanged = () => ({ step, evidence, observation });
+  const intent = { id: step.id, key: step.key, kind: step.kind, input: step.input };
   const codes = evidence.diagnostics.map((diagnostic) => diagnostic.code);
   const replaced =
     successor !== undefined &&
@@ -97,10 +120,7 @@ export async function readNativeReceipt(
   if (gone)
     return {
       step: {
-        id: step.id,
-        key: step.key,
-        kind: step.kind,
-        input: step.input,
+        ...intent,
         state: "failed",
         error: `Revit process ${original.pid} ended before '${step.key}' recorded an outcome`,
         status: 503,
@@ -113,29 +133,22 @@ export async function readNativeReceipt(
         },
       },
       evidence: { sdk: evidence, ...(replaced ? { successor } : {}) },
+      observation,
     };
   // Settled only when the answer is the receipt's own terminal verdict with its response: not
   // `running`, not a dead incarnation's bare receipt, not a superseded or late answer.
-  if (
-    !("response" in result) ||
-    result.requestId !== step.id ||
-    !receipt.success ||
-    result.state !== receipt.data.verdict ||
-    receipt.data.requestId !== step.id ||
-    receipt.data.key !== step.key ||
-    receipt.data.pid !== original.pid ||
-    receipt.data.processStartUtc !== original.processStartUtc ||
-    evidence.diagnostics.length
-  )
-    return unchanged();
-  const intent = { id: step.id, key: step.key, kind: step.kind, input: step.input };
+  if (!("response" in result) || !receipt.success || !matches) return unchanged();
   if (receipt.data.verdict === "ok" && result.response !== undefined)
-    return { step: { ...intent, state: "succeeded", result: result.response }, evidence };
+    return {
+      step: { ...intent, state: "succeeded", result: result.response },
+      evidence,
+      observation,
+    };
   const failed = responseFailure.safeParse(result.response);
   if (!failed.success) return unchanged();
   const { error, statusCode: status, outcome: nativeOutcome } = failed.data;
   if (receipt.data.verdict === "cancelled" && status === 499)
-    return { step: { ...intent, state: "cancelled", error, status }, evidence };
+    return { step: { ...intent, state: "cancelled", error, status }, evidence, observation };
   // A coarse failed/rejected verdict cannot establish dispatch. Use the native typed outcome only.
   if (
     nativeOutcome &&
@@ -146,6 +159,7 @@ export async function readNativeReceipt(
     return {
       step: { ...intent, state: "failed", error, status, nativeOutcome, notDispatched: true },
       evidence,
+      observation,
     };
   if (receipt.data.verdict === "failed")
     return {
@@ -157,6 +171,7 @@ export async function readNativeReceipt(
         ...(nativeOutcome ? { nativeOutcome } : {}),
       },
       evidence,
+      observation,
     };
   return unchanged();
 }

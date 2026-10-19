@@ -1,8 +1,9 @@
 import { Link } from "@tanstack/react-router";
 
-import { ThemeToggle } from "#/components/lang/theme-toggle";
-import { FactChip } from "#/components/lang/chip";
+import { ThemeToggle } from "@pe/kit/lang/theme-toggle";
+import { FactChip } from "@pe/kit/lang/chip";
 
+import { LangBaySpecimens } from "./lang-bay";
 import { LangCellSpecimens } from "./lang-cells";
 import { LangMachineSpecimens } from "./lang-machine";
 import { LangStatusSpecimens } from "./lang-status";
@@ -12,6 +13,7 @@ import { LangWorkflowSpecimens } from "./lang-workflow";
 import { UiInputSpecimens } from "./ui-inputs";
 import { UiLayoutSpecimens } from "./ui-layout";
 import { UiSurfaceSpecimens } from "./ui-surfaces";
+import { LangChatSpecimens } from "./lang-chat";
 
 export function SwatchSpecimens() {
   return (
@@ -44,9 +46,11 @@ export function SwatchSpecimens() {
         </div>
         <LangWorkflowSpecimens />
         <LangListSpecimens />
+        <LangChatSpecimens />
         <LangCellSpecimens />
         <LangStatusSpecimens />
         <LangMachineSpecimens />
+        <LangBaySpecimens />
         <LangPressSpecimens />
         <p className="t-small t-upper text-ink-2">ui · the surviving application component layer</p>
         <UiInputSpecimens />

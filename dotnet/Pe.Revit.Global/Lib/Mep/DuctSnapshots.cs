@@ -21,7 +21,8 @@ public static class DuctSnapshots {
         [new Guid("76eff5da-2e71-45f7-b940-cc5716328ba0")] = DuctLossMethod.NotDefined,
         [new Guid("8baf7d75-8b9b-46d0-b8ce-3ad1c19e6b19")] = DuctLossMethod.AshraeTable,
         [new Guid("5a598293-1504-46cc-a9c0-de55c82848b9")] = DuctLossMethod.SpecificCoefficient,
-        [new Guid("46245996-eebb-4536-ac17-9c1cd917d8cf")] = DuctLossMethod.SpecificLoss
+        [new Guid("46245996-eebb-4536-ac17-9c1cd917d8cf")] = DuctLossMethod.SpecificLoss,
+        [PeLossServer.Id] = DuctLossMethod.PeServer
     };
 
     public static DuctSnapshotData Snapshot(Document doc, DuctParameterSlots? slots = null, string? labelParameter = null) {
@@ -35,12 +36,18 @@ public static class DuctSnapshots {
 
         var levels = new FilteredElementCollector(doc).OfClass(typeof(Level)).Cast<Level>()
             .OrderBy(l => l.ProjectElevation)
-            .Select(l => new DuctLevel(l.Id.Value, l.Name, R(l.ProjectElevation)))
+            .Select(l => new DuctLevel(l.Id.Value(), l.Name, R(l.ProjectElevation)))
             .ToList();
 
         // FOOTGUN (pdrop-w3, 2026-10-04): under network-based calculations Revit 2025's Connector.Flow getter can raise an
         // AccessViolationException on Project A (uncatchable in .NET 8; it killed Revit mid-snapshot). Read it only on the legacy engine.
+#if REVIT2023
+        // Duct network-based calculations were introduced in Revit 2024.
+        // https://help.autodesk.com/cloudhelp/2024/ENU/Revit-WhatsNew/files/GUID-DB2E2193-D0FE-46EC-B721-2CE6910DBE96.htm
+        const bool network = false;
+#else
         var network = DuctSettings.GetDuctSettings(doc).NetworkBasedCalculations;
+#endif
         var segments = Of(BuiltInCategory.OST_DuctCurves).Concat(Of(BuiltInCategory.OST_FlexDuctCurves))
             .OfType<MEPCurve>().Select(c => Segment(doc, c, network)).ToList();
         var schemas = LossSchemas();
@@ -59,6 +66,7 @@ public static class DuctSnapshots {
         var analysis = DuctNetwork.Analyze(nodes, segments);
         return new DuctSnapshotData(
             new DuctDocument(doc.Title, readAt, clock.ElapsedMilliseconds, network),
+            DuctCoordinateEncoding.NativeDouble,
             levels,
             analysis.Groups,
             analysis.Nodes,
@@ -84,13 +92,13 @@ public static class DuctSnapshots {
                     k,
                     Try(() => (double?)R(UnitUtils.ConvertFromInternalUnits(section.Flow, UnitTypeId.CubicFeetPerMinute), 1)),
                     Try(() => (double?)R(UnitUtils.ConvertFromInternalUnits(section.TotalPressureLoss, UnitTypeId.InchesOfWater60DegreesFahrenheit), 5)),
-                    section.GetElementIds().Select(id => id.Value).ToList()));
+                    section.GetElementIds().Select(id => id.Value()).ToList()));
         return new DuctSystem(
-            m.Id.Value,
+            m.Id.Value(),
             m.Name,
             m.SystemType.ToString(),
             Try(() => (bool?)m.IsWellConnected),
-            Try(() => m.BaseEquipment?.Id.Value),
+            Try(() => m.BaseEquipment?.Id.Value()),
             Try(() => m.BaseEquipmentConnector?.Id),
             Try(() => (double?)R(UnitUtils.ConvertFromInternalUnits(m.PressureLossOfCriticalPath, UnitTypeId.InchesOfWater60DegreesFahrenheit), 5)),
             critical,
@@ -145,23 +153,29 @@ public static class DuctSnapshots {
         var type = doc.GetElement(curve.GetTypeId()) as MEPCurveType;
         var roughness = type?.Roughness ?? 0;
         var connectors = HvacConnectors(curve).Select(c => Connector(c, network)).ToList();
+        var nativeCurve = (curve.Location as LocationCurve)?.Curve;
         var polyline = curve is FlexDuct fd
             ? fd.Points.Select(P).ToList()
-            : curve.Location is LocationCurve { Curve: var line }
-                ? new List<double[]> { P(line.GetEndPoint(0)), P(line.GetEndPoint(1)) }
+            : nativeCurve is not null
+                ? new List<double[]> { P(nativeCurve.GetEndPoint(0)), P(nativeCurve.GetEndPoint(1)) }
                 : [];
         return new DuctSegment(
-            curve.Id.Value,
+            curve.Id.Value(),
             flex ? DuctSegmentKind.Flex : DuctSegmentKind.Duct,
+            flex ? DuctCurveKind.FlexPolyline : nativeCurve switch {
+                Line => DuctCurveKind.Line,
+                Arc => DuctCurveKind.Arc,
+                _ => DuctCurveKind.Other
+            },
             type?.Name,
             connectors.FirstOrDefault(c => c.Kind == "end")?.Shape ?? DuctShape.Other,
             Text(curve, BuiltInParameter.RBS_CALCULATED_SIZE) ?? "",
             Inches(curve, BuiltInParameter.RBS_CURVE_DIAMETER_PARAM),
             Inches(curve, BuiltInParameter.RBS_CURVE_WIDTH_PARAM),
             Inches(curve, BuiltInParameter.RBS_CURVE_HEIGHT_PARAM),
-            R(curve.get_Parameter(BuiltInParameter.CURVE_ELEM_LENGTH)?.AsDouble() ?? 0),
+            nativeCurve?.Length ?? curve.get_Parameter(BuiltInParameter.CURVE_ELEM_LENGTH)?.AsDouble() ?? 0,
             polyline,
-            curve.ReferenceLevel?.Id.Value,
+            curve.ReferenceLevel?.Id.Value(),
             null,
             Text(curve, BuiltInParameter.RBS_SYSTEM_NAME_PARAM),
             Text(curve, BuiltInParameter.RBS_SYSTEM_CLASSIFICATION_PARAM),
@@ -172,7 +186,7 @@ public static class DuctSnapshots {
                 Converted(curve, BuiltInParameter.RBS_VELOCITY, UnitTypeId.FeetPerMinute),
                 Converted(curve, BuiltInParameter.RBS_FRICTION, UnitTypeId.InchesOfWater60DegreesFahrenheitPer100Feet),
                 Converted(curve, BuiltInParameter.RBS_PRESSURE_DROP, UnitTypeId.InchesOfWater60DegreesFahrenheit)),
-            connectors);
+            connectors, curve.UniqueId);
     }
 
     private static DuctNodeKind Fitting(Element e) =>
@@ -184,6 +198,8 @@ public static class DuctSnapshots {
         switch (kind) {
             case DuctNodeKind.Terminal:
                 facts.Add(Fact(DuctNetwork.TerminalFlow, Converted(e, BuiltInParameter.RBS_DUCT_FLOW_PARAM, UnitTypeId.CubicFeetPerMinute), "cfm", DuctProvenance.DesignerStated));
+                if (fi?.Symbol.LookupParameter("Pe_Catalog")?.AsString() is { Length: > 0 } catalog)
+                    facts.Add(new DuctFact("Pe_Catalog", null, catalog, "", DuctProvenance.DesignerStated));
                 if (Space(fi) is { } space) facts.Add(new DuctFact("space", null, space, "", DuctProvenance.Geometry));
                 break;
             case DuctNodeKind.Accessory:
@@ -192,26 +208,35 @@ public static class DuctSnapshots {
             case DuctNodeKind.Equipment:
                 facts.Add(Fact(DuctNetwork.ExternalStatic, Converted(Named(e, slots.FanStatic), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
                 facts.Add(Fact("fanFlow", Converted(Named(e, slots.FanFlow), UnitTypeId.CubicFeetPerMinute), "cfm", DuctProvenance.DesignerStated));
+                // The equipment tag: joins a load-tool system ("System 1 Golf Sim FC-4") to this unit.
+                // The firm's tag lives in the shared instance parameter PE_G___TagInstance (Chadds: FC-17 on a unit whose Mark
+                // and Type Mark are both blank); Mark, then Type Mark, are the fallbacks for other libraries.
+                var mark = e.LookupParameter("PE_G___TagInstance") is { HasValue: true, StorageType: StorageType.String } tag ? tag.AsString() : null;
+                if (string.IsNullOrEmpty(mark)) mark = Text(e, BuiltInParameter.ALL_MODEL_MARK);
+                if (string.IsNullOrEmpty(mark) && fi?.Symbol is { } symbol) mark = Text(symbol, BuiltInParameter.ALL_MODEL_TYPE_MARK);
+                if (mark is { Length: > 0 }) facts.Add(new DuctFact("mark", null, mark, "", DuctProvenance.DesignerStated));
                 break;
             case DuctNodeKind.Fitting:
-                if (e.LookupParameter("Angle") is { HasValue: true, StorageType: StorageType.Double } angle)
-                    facts.Add(new DuctFact("angle", R(angle.AsDouble() * 180 / Math.PI), null, "deg", DuctProvenance.Geometry));
+                if (DuctFittingGeometry.Angle(e) is { } angle) facts.Add(angle);
                 // Revit's elbow families carry "Center Radius" as an instance length; r/D is derived in DuctNetwork.
                 if (e.LookupParameter("Center Radius") is { HasValue: true, StorageType: StorageType.Double } radius && radius.AsDouble() > 0)
                     facts.Add(new DuctFact(DuctNetwork.CenterRadius, R(radius.AsDouble() * 12), null, "in", DuctProvenance.Geometry));
+                // The family's own coefficient (a lookup-table formula, -1 when its table has no row): what the Pe loss server charges.
+                if (e.LookupParameter(slots.FittingCoefficient) is { HasValue: true, StorageType: StorageType.Double } own)
+                    facts.Add(new DuctFact(DuctNetwork.FamilyCoefficient, R(own.AsDouble(), 4), null, "", DuctProvenance.RevitReported));
                 break;
         }
         var levelId = e.LevelId != ElementId.InvalidElementId
             ? e.LevelId
             : e.get_Parameter(BuiltInParameter.FAMILY_LEVEL_PARAM)?.AsElementId();
         return new DuctNode(
-            e.Id.Value,
+            e.Id.Value(),
             kind,
             e.Category?.Name ?? "",
             fi?.Symbol?.FamilyName,
             fi?.Symbol?.Name,
             (fi?.MEPModel as MechanicalFitting)?.PartType.ToString(),
-            levelId is { } id && id != ElementId.InvalidElementId ? id.Value : null,
+            levelId is { } id && id != ElementId.InvalidElementId ? id.Value() : null,
             Where(e),
             null,
             Text(e, BuiltInParameter.RBS_SYSTEM_NAME_PARAM),
@@ -220,7 +245,8 @@ public static class DuctSnapshots {
             facts.Where(f => f.Value is not null || f.Text is not null).ToList(),
             kind is DuctNodeKind.Fitting or DuctNodeKind.Accessory ? Loss(e, schemas) : null,
             kind == DuctNodeKind.Terminal ? Terminal(e, slots) : null,
-            Label(e, labelParameter));
+            Label(e, labelParameter),
+            e.UniqueId);
     }
 
     /// <summary>The instance parameter's string value when the request named one and this element carries it; never the type's.</summary>
@@ -277,7 +303,7 @@ public static class DuctSnapshots {
                 "OST_DuctTerminal instances: FamilyInstance.Space (Number Name)",
                 new(terminals.Count(t => t.Facts.Any(f => f.Key == "space")), terminals.Count), DuctProvenance.Geometry),
             new("fitting-geometry", "Fitting geometry",
-                "OST_DuctFitting: LookupParameter(\"Angle\"), LookupParameter(\"Center Radius\"); connector sizes; DuctNetwork derives rOverD (round elbows), inlet and aoOverA1 (rooted transitions), takeoff, mainDiameter, mainArea and abOverAc (fittings on a duct's curve connector)",
+                $"OST_DuctFitting: instance-to-symbol Angle parameter (Angle spec, exact origin retained), LookupParameter(\"Center Radius\"), LookupParameter(\"{slots.FittingCoefficient}\") (familyCoefficient); connector sizes; DuctNetwork derives rOverD (round elbows), inlet and aoOverA1 (explicit physical In/Out transitions), takeoff, mainDiameter, mainArea and abOverAc (fittings on a duct's curve connector)",
                 new(fittings.Count(n => n.Facts.Any(f => f.Key is DuctNetwork.ROverD or DuctNetwork.AoOverA1 or DuctNetwork.AbOverAc)), fittings.Count), DuctProvenance.Geometry),
             new("loss-method", "Fitting and accessory loss method",
                 "RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM; ExternalServiceRegistry DuctFittingAndAccessoryPressureDropService GetServer(id).GetDataSchema(), Element.GetEntity(schema) string fields (ASHRAETableName, Coefficient); RBS_DUCT_PRESSURE_DROP",
@@ -322,7 +348,7 @@ public static class DuctSnapshots {
             c.ConnectorType == ConnectorType.Curve ? "curve" : "end",
             P(c.Origin),
             shape,
-            diameter is { } d ? $"{d:0.#}\"ø" : width is { } w && height is { } h ? $"{w:0.#}x{h:0.#}" : "",
+            diameter is { } d ? $"{d:0.#}\"ÃƒÂ¸" : width is { } w && height is { } h ? $"{w:0.#}x{h:0.#}" : "",
             diameter,
             width,
             height,
@@ -341,7 +367,7 @@ public static class DuctSnapshots {
         if (!c.IsConnected) return null;
         foreach (Connector other in c.AllRefs)
             if (other.Owner.Id != c.Owner.Id && other.ConnectorType is ConnectorType.End or ConnectorType.Curve)
-                return new DuctRef(other.Owner.Id.Value, other.Id);
+                return new DuctRef(other.Owner.Id.Value(), other.Id);
         return null;
     }
 
@@ -391,6 +417,6 @@ public static class DuctSnapshots {
         ex is Autodesk.Revit.Exceptions.ApplicationException or InvalidOperationException
         || ex.GetType().Namespace?.StartsWith("Autodesk.Revit", StringComparison.Ordinal) == true;
 
-    private static double[] P(XYZ p) => [R(p.X), R(p.Y), R(p.Z)];
+    private static double[] P(XYZ p) => [p.X, p.Y, p.Z];
     private static double R(double v, int digits = 3) => Math.Round(v, digits);
 }

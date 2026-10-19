@@ -41,8 +41,7 @@ export function solve(d: DuctInput): DuctResult {
   const [a, b] = d.shape === "round" ? [d.a, d.a] : [d.a, d.b];
   const area = (d.shape === "round" ? (Math.PI * a * a) / 4 : a * b) / 144;
   const hydraulicDiameter = d.shape === "round" ? a : (2 * a * b) / (a + b);
-  const equivalentDiameter =
-    d.shape === "round" ? a : (1.3 * (a * b) ** 0.625) / (a + b) ** 0.25;
+  const equivalentDiameter = d.shape === "round" ? a : (1.3 * (a * b) ** 0.625) / (a + b) ** 0.25;
   const velocity = area > 0 ? d.cfm / area : 0;
   // Re = 8.56·D_h·V for standard air (D_h in, V fpm).
   const reynolds = 8.56 * hydraulicDiameter * velocity;

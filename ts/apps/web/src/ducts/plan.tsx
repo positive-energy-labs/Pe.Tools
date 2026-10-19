@@ -6,9 +6,9 @@
  */
 import { useMemo } from "react";
 
-import { FactChip } from "#/components/lang/chip";
+import { FactChip } from "@pe/kit/lang/chip";
 import type { Bounds2 } from "#/lib/affine-frame";
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 import type { Scene } from "./drawing";
 import type { DuctsPage } from "./manifest";
 import { contextOf, sceneOf, type DuctIndex, type SpatialView } from "./scene";

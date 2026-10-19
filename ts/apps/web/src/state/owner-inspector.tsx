@@ -3,7 +3,7 @@ import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { inspectAtomRegistry } from "./atom-inspect";
 import { appAtomRegistry } from "#/route/route-owner";
 import { inspectRetainedActions } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import { Code, stringify } from "#/components/lang/code";
+import { Code, stringify } from "@pe/kit/lang/code";
 
 /** Presentation only. Its subscription observes inspector notifications, never producer atoms. */
 export function OwnerInspector({

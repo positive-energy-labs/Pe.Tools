@@ -1,0 +1,36 @@
+{
+  "result": {
+    "state": "refused",
+    "requestId": "cdc77035-87fa-43e2-97ff-ba643dca983e",
+    "receipt": {
+      "requestId": "cdc77035-87fa-43e2-97ff-ba643dca983e",
+      "key": "doc.open",
+      "pid": 71464,
+      "processStartUtc": "2026-10-14T04:06:31.8033171Z",
+      "verdict": "refused",
+      "responsePath": "cdc77035-87fa-43e2-97ff-ba643dca983e.71464-639275475918033171.response.json",
+      "startedUtc": "2026-10-14T04:07:41.4961661Z",
+      "completedUtc": "2026-10-14T04:07:53.1139318Z"
+    },
+    "response": null
+  },
+  "resolved": null,
+  "diagnostics": [],
+  "binary": {
+    "origin": "dev-installed",
+    "assembly": "C:\\Users\\person\\.nuget\\packages\\pe.revit.cli\\0.1.0-beta.208\\tools\\net8.0\\any\\Pe.Revit.Cli.dll",
+    "sha256": "90EE5D4752601BE4E0F50AED84AA5E759BAA3F49FDF0C583904009B520E9CFEE",
+    "informationalVersion": "0.1.0-beta.208+44b07e06540622cf54543d1a155ce82ccc19d440",
+    "hostExecutable": "C:\\Program Files\\dotnet\\dotnet.exe"
+  },
+  "command": {
+    "cwd": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRoot": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1",
+    "commandRule": "checkout-manifest",
+    "commandManifest": "C:\\Users\\person\\source\\repos\\Pe.Tools-we1\\product.payloads.json"
+  },
+  "nextSteps": ["pe-revit op list", "pe-revit session list"],
+  "guide": "session",
+  "related": ["pe-revit op list", "pe-revit op result <requestId>", "pe-revit guide session"],
+  "exitCode": 3
+}

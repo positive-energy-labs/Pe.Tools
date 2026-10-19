@@ -5,7 +5,7 @@
  * crowd lasts, never a hover popover; it sits in a corner of the drawing in screen space.
  */
 import { boundsOf, type Bounds2, type Point2 } from "#/lib/affine-frame";
-import { token } from "#/lib/token";
+import { token } from "@pe/kit/lib/token";
 import type { Leg, Place, SubjectCut } from "./legs";
 
 /**

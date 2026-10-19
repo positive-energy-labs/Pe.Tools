@@ -1,3 +1,5 @@
+import { createPeClient, matchPeRoute } from "@pe/agent-contracts/pe-api";
+import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { afterEach, expect, vi } from "vite-plus/test";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
@@ -23,9 +25,13 @@ import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts"
 import { documentMarks } from "../src/document-marks.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
-import { sdkSessions, sdkEnvelope, originalProcess } from "./native-receipt-fixture.ts";
+import { sdkSessions, originalProcess } from "./native-receipt-fixture.ts";
+import { replayAnswer } from "./sdk-replay.ts";
 import { detailResponse } from "./schedule-fixture.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
+import { withInvocationContext } from "@pe/runtime/context";
+import type { Caller } from "@pe/agent-contracts";
+import { human, pea } from "./callers.ts";
 
 /** The host's schedule reading endpoint, read the way a route client reads it. */
 async function readScheduleCapture(
@@ -82,11 +88,12 @@ export async function setup() {
       read: async () => ({
         at: new Date().toISOString(),
         sources: { catalog: "ok" },
-        sessions: [],
+        diagnostics: [],
+        machine: machineFixture(),
         capabilities: buildCapabilities({
           ops: [],
           routes: [scheduleGridRouteState],
-          pods: null,
+          packages: [],
           skills: [],
         }),
       }),
@@ -202,17 +209,19 @@ export async function setup() {
   const sdk = async (args: readonly string[]) => {
     if (args[0] === "session" || args[0] === "doc") return sdkSessions(args);
     const id = args[2];
-    return sdkEnvelope({
-      state: "ok",
-      requestId: id,
-      receipt: {
+    return replayAnswer(args, {
+      result: {
+        state: "ok",
         requestId: id,
-        key: "schedule.cells.apply",
-        ...originalProcess,
-        pid: Number(args[args.indexOf("--pid") + 1]),
-        verdict: "ok",
+        receipt: {
+          requestId: id,
+          key: "schedule.cells.apply",
+          processStartUtc: originalProcess.processStartUtc,
+          pid: Number(args[args.indexOf("--pid") + 1]),
+          verdict: "ok",
+        },
+        response,
       },
-      response,
     });
   };
   const mount = () =>
@@ -232,6 +241,8 @@ export async function setup() {
     for (const row of await owner.list()) await owner.wait(row.id);
   });
   const requests: { path: string; body: string; result?: unknown }[] = [];
+  // The identity middleware's stand-in: every request crosses as `as`.
+  let as: Caller = human;
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const request = new Request(
       new URL(
@@ -241,18 +252,20 @@ export async function setup() {
       init,
     );
     const url = new URL(request.url);
-    if (url.pathname.startsWith("/pe/")) {
+    if (matchPeRoute(request.method, url.pathname)?.route.owner === "pe") {
       const row = {
         path: url.pathname + url.search,
         body: await request.clone().text(),
         result: undefined as unknown,
       };
       requests.push(row);
-      const response = await app.fetch(request);
+      const response = await withInvocationContext({ caller: as }, () => app.fetch(request));
       row.result = await response.clone().json();
       return response;
     }
-    const result = await server.handler(request, Context.empty() as never);
+    const result = await withInvocationContext({ caller: as }, () =>
+      server.handler(request, Context.empty() as never),
+    );
     if (lost && url.pathname === "/actions" && request.method === "POST") {
       lost = false;
       throw Error("lost acceptance");
@@ -272,23 +285,29 @@ export async function setup() {
     target: null,
     work: reading.workspaceId,
   };
-  const view = async () =>
-    (await fetch(`/pe/route-state/schedules?work=${scope.work}`)).json() as Promise<{
+  const client = createPeClient();
+  const view = () =>
+    client.call("work.get", {
+      params: { route: "schedules" },
+      query: { work: scope.work },
+    }) as Promise<{
       revision: number;
       doc: { basis?: { captureId: string }; cells: Record<string, any> };
     }>;
   const patch = async (patches: RouteStatePatch[], actor = "human") => {
     const previous = await view();
-    return (
-      await fetch(
-        `/pe/${actor === "agent" ? "agent/" : ""}route-state/schedules/apply?work=${scope.work}`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ patches, expectedRevision: previous?.revision ?? 0 }),
-        },
-      )
-    ).json();
+    as = actor === "agent" ? pea() : human;
+    try {
+      return (
+        await client.response("work.apply", {
+          params: { route: "schedules" },
+          query: { work: scope.work },
+          body: { patches, expectedRevision: previous?.revision ?? 0 },
+        })
+      ).json();
+    } finally {
+      as = human;
+    }
   };
   expect(
     await patch([
@@ -301,7 +320,6 @@ export async function setup() {
     id,
     kind: "workflow",
     key: "schedule.grid.push",
-    actor: "human",
     destination: { kind: "document", ref: b },
     input: {},
     bases: { work: { key: scope, revision: (await view()).revision } },

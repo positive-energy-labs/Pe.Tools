@@ -7,8 +7,9 @@
  */
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { partitionFixture } from "./partition-fixture.ts";
+import { readJournal, writeJournalFile } from "./journal-fixture.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Fiber, Layer, Queue } from "effect";
@@ -19,6 +20,10 @@ import { ActionJournal } from "../src/action-journal.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { readNativeReceipt } from "../src/native-receipts.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
+import { bindRevoke } from "../src/revoke.ts";
+import { admitCrossing, bindControl, emitRevoke } from "../src/control.ts";
+import type { DocumentRef, ThreadHead } from "@pe/agent-contracts";
+import { asCaller, crossingOf, human, pea } from "./callers.ts";
 
 const metrics = {
   requestBytes: 0,
@@ -42,14 +47,16 @@ const lane = <A, E, R>(body: (harness: Harness) => Effect.Effect<A, E, R>) =>
       { disableLogger: true },
     );
     const post = (path: string, body: unknown) =>
-      Effect.promise(() =>
-        web.handler(
-          new Request(`http://host${path}`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
-          }),
-          Context.empty() as never,
+      Effect.promise(
+        asCaller(human, () =>
+          web.handler(
+            new Request(`http://host${path}`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(body),
+            }),
+            Context.empty() as never,
+          ),
         ),
       );
     const get = (path: string) =>
@@ -198,29 +205,39 @@ test("an exact cancelled SDK receipt settles a lost reply once without replaying
   let effects = 0;
   try {
     const interrupted = new ActionJournal(path);
+    const nativeStarted = Promise.withResolvers<void>();
     await interrupted.admit(
-      intent,
+      { ...intent, ...crossingOf("human") },
       async () => ({ kind: "native-leaf", originalProcess }),
       async (execution) => {
         await execution.step("file", "prior", {}, async () => ++effects);
         return execution.step("native", "takeoffs.partition", {}, async () => {
           ++effects;
+          nativeStarted.resolve();
           return new Promise(() => undefined);
         });
       },
     );
-    while (JSON.parse(await readFile(path, "utf8")).actions[0].steps.length !== 2)
-      await new Promise((resolve) => setTimeout(resolve, 1));
-    const envelope = JSON.parse(await readFile(path, "utf8"));
-    const nativeId = envelope.actions[0].steps[1].id;
-    envelope.actions[0].steps.push({
+    // Polling this file races its Windows rename; entry proves persistence and export finished.
+    await Promise.race([
+      nativeStarted.promise,
+      interrupted.wait(intent.id).then((row) => {
+        throw Error(`Action settled before native entry: ${JSON.stringify(row)}`);
+      }),
+    ]);
+    const envelope = (await readJournal(path)) as {
+      receipts: any[];
+      mappings: Record<string, string>;
+    };
+    const nativeId = envelope.receipts[0].body.value.steps[1].id;
+    envelope.receipts[0].body.value.steps.push({
       id: "22222222-2222-4222-8222-222222222222",
       key: "native.followup",
       kind: "native",
       input: {},
       state: "running",
     });
-    await writeFile(path, JSON.stringify(envelope));
+    await writeJournalFile(path, envelope);
 
     const recovered = new ActionJournal(path);
     const read = (_args: readonly string[]) => {
@@ -408,5 +425,250 @@ test("a reply lost mid-write settles unknown and blocks the next mutation on the
       expect(((yield* Effect.promise(() => blocked.json())) as { message: string }).message).toBe(
         "action 'lost-mid-write' is unknown; recover that attempt before submitting another",
       );
+    }),
+  ));
+
+function revokeHead(lifetime: DocumentRef): ThreadHead {
+  return {
+    defaultTarget: { kind: "open", ref: lifetime },
+    revision: 1,
+    lastHumanMessageAt: null,
+    grant: {
+      lifetime,
+      revoked: null,
+      grantedVia: "local",
+      grantedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    },
+  };
+}
+
+const nativeValue = async (
+  bridge: RevitBridge["Service"],
+  target: DocumentRef,
+  key: string,
+  id: string,
+) => {
+  const result = await Effect.runPromise(
+    Effect.result(bridge.invoke(key, {}, target.session, target.openId, id)),
+  );
+  if (result._tag === "Failure") throw result.failure;
+  return result.success.value;
+};
+
+test("F-c revoke lets a dispatched step report and refuses the next step without rollback", () =>
+  lane(({ owner, outgoing, answer, fixture }) =>
+    Effect.gen(function* () {
+      const bridge = yield* RevitBridge;
+      const intent = fixture.intent("revoke-begun");
+      const target = intent.destination.ref;
+      const head = revokeHead(target);
+      bindControl({ heads: () => head });
+      const unbind = bindRevoke(owner, bridge);
+      try {
+        const caller = pea();
+        const row = yield* Effect.promise(() =>
+          owner.admit(
+            { ...intent, caller, basis: admitCrossing(caller, intent.destination, "/actions") },
+            async () => null,
+            async (execution) => {
+              await execution.step("native", "first", {}, (id) =>
+                nativeValue(bridge, target, "first", id),
+              );
+              return execution.step("native", "second", {}, (id) =>
+                nativeValue(bridge, target, "second", id),
+              );
+            },
+          ),
+        );
+        const first = yield* Queue.take(outgoing);
+        expect(first.request?.operationKey).toBe("first");
+        head.grant!.revoked = { at: new Date().toISOString() };
+        emitRevoke("thread-1", head.grant!);
+        yield* Effect.sleep("50 millis");
+        expect(yield* Queue.size(outgoing)).toBe(0);
+        yield* answer(first.request!.requestId, {
+          ok: true,
+          statusCode: 200,
+          payloadJson: '{"preserved":true}',
+        });
+        const result = yield* Effect.promise(() => owner.wait(row.id));
+        expect(result.steps).toMatchObject([
+          { key: "first", state: "succeeded", result: { preserved: true } },
+          {
+            key: "second",
+            state: "failed",
+            notDispatched: true,
+            error: expect.stringContaining("grant.revoked"),
+          },
+        ]);
+        expect(yield* Queue.size(outgoing)).toBe(0);
+        expect(result.steps).toHaveLength(2);
+      } finally {
+        unbind();
+        bindControl({ heads: null });
+      }
+    }),
+  ));
+
+test.each([false, true])(
+  "F-c revoke cancels only matching host-queued requests before dispatch (delayed journal %s)",
+  (delayed) =>
+    lane(({ owner, outgoing, answer, fixture }) =>
+      Effect.gen(function* () {
+        const bridge = yield* RevitBridge;
+        const target = fixture.intent("probe").destination.ref;
+        const head = revokeHead(target);
+        const otherTarget = { ...target, openId: "other-open" };
+        const other = revokeHead(otherTarget);
+        bindControl({
+          heads: (thread) => (thread === "thread-1" ? head : other),
+        });
+        const unbind = bindRevoke(owner, bridge);
+        const holding = yield* Effect.forkScoped(
+          bridge.invoke("holder", {}, target.session, null, "holder"),
+        );
+        yield* Queue.take(outgoing);
+        const started = Promise.withResolvers<void>();
+        try {
+          const queued = yield* Effect.promise(() =>
+            owner.admit(
+              {
+                ...fixture.intent("revoke-queued"),
+                caller: pea(),
+                basis: admitCrossing(pea(), { kind: "document", ref: target }, "/actions"),
+              },
+              async () => null,
+              (execution) =>
+                execution.step("native", "queued", {}, (id) => {
+                  const result = nativeValue(bridge, target, "queued", id);
+                  started.resolve();
+                  return result;
+                }),
+            ),
+          );
+          yield* Effect.promise(() => started.promise);
+          yield* Effect.sleep("50 millis");
+          const otherStarted = Promise.withResolvers<void>();
+          const unrelated = yield* Effect.promise(() =>
+            owner.admit(
+              {
+                ...fixture.intent("other-thread"),
+                input: {},
+                destination: { kind: "document", ref: otherTarget },
+                caller: pea("other"),
+                basis: admitCrossing(
+                  pea("other"),
+                  { kind: "document", ref: otherTarget },
+                  "/actions",
+                ),
+              },
+              async () => null,
+              (execution) =>
+                execution.step("native", "unrelated", {}, (id) => {
+                  const result = nativeValue(bridge, otherTarget, "unrelated", id);
+                  otherStarted.resolve();
+                  return result;
+                }),
+            ),
+          );
+          yield* Effect.promise(() => otherStarted.promise);
+          yield* Effect.sleep("50 millis");
+          const censusReady = Promise.withResolvers<void>();
+          if (delayed) {
+            const list = owner.list.bind(owner);
+            owner.list = async (...args) => {
+              owner.list = list;
+              const rows = await list(...args);
+              await censusReady.promise;
+              return rows;
+            };
+          }
+          head.grant!.revoked = { at: new Date().toISOString() };
+          emitRevoke("thread-1", head.grant!);
+          // The driver records every wire request, including an erroneous op.cancel.
+          const wire: string[] = [];
+          const driver = yield* Effect.forkScoped(
+            Effect.forever(
+              Effect.gen(function* () {
+                const frame = yield* Queue.take(outgoing);
+                wire.push(frame.request!.operationKey);
+                yield* answer(frame.request!.requestId, {
+                  ok: true,
+                  statusCode: 200,
+                  payloadJson: "{}",
+                });
+              }),
+            ),
+          );
+          yield* answer("holder", { ok: true, statusCode: 200, payloadJson: "{}" });
+          yield* Fiber.join(holding);
+          yield* Effect.sleep("50 millis");
+          const beforeCensus = [...wire];
+          censusReady.resolve();
+          const result = yield* Effect.promise(() => owner.wait(queued.id));
+          const otherResult = yield* Effect.promise(() => owner.wait(unrelated.id));
+          yield* Fiber.interrupt(driver);
+          expect(otherResult.state).toBe("succeeded");
+          if (delayed) expect(beforeCensus).toEqual([]);
+          expect(result.steps).toMatchObject([
+            {
+              key: "queued",
+              state: "failed",
+              notDispatched: true,
+              nativeOutcome: "CancelledBeforeDispatch",
+            },
+          ]);
+          expect(wire).toEqual(["unrelated"]);
+        } finally {
+          unbind();
+          bindControl({ heads: null });
+        }
+      }),
+    ),
+);
+
+test("F-c revoke stops a begun step that has not reached the bridge queue yet", () =>
+  lane(({ owner, outgoing, fixture }) =>
+    Effect.gen(function* () {
+      const bridge = yield* RevitBridge;
+      const intent = fixture.intent("revoke-before-queue");
+      const target = intent.destination.ref;
+      const head = revokeHead(target);
+      bindControl({ heads: () => head });
+      const unbind = bindRevoke(owner, bridge);
+      try {
+        const caller = pea();
+        // The step has begun in the journal, and awaits (as a script step does while it validates
+        // its session) before it reaches the bridge; the revoke lands in that gap.
+        const inGap = Promise.withResolvers<void>();
+        const leaveGap = Promise.withResolvers<void>();
+        const row = yield* Effect.promise(() =>
+          owner.admit(
+            { ...intent, caller, basis: admitCrossing(caller, intent.destination, "/actions") },
+            async () => null,
+            (execution) =>
+              execution.step("native", "gapped", {}, async (id) => {
+                inGap.resolve();
+                await leaveGap.promise;
+                return nativeValue(bridge, target, "gapped", id);
+              }),
+          ),
+        );
+        yield* Effect.promise(() => inGap.promise);
+        head.grant!.revoked = { at: new Date().toISOString() };
+        emitRevoke("thread-1", head.grant!);
+        yield* Effect.sleep("50 millis");
+        leaveGap.resolve();
+        yield* Effect.sleep("50 millis");
+        expect(yield* Queue.size(outgoing)).toBe(0);
+        const result = yield* Effect.promise(() => owner.wait(row.id));
+        expect(result.steps).toMatchObject([
+          { key: "gapped", state: "failed", notDispatched: true },
+        ]);
+      } finally {
+        unbind();
+        bindControl({ heads: null });
+      }
     }),
   ));

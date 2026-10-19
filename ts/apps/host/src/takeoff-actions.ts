@@ -32,7 +32,7 @@ import type {
   RhvacSyncResult,
 } from "@pe/host-contracts/operation-types";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
-import { type ActionJournal } from "./action-journal.ts";
+import { type ActionJournal, type Crossing } from "./action-journal.ts";
 import { type TakeoffCaptures } from "./takeoff-captures.ts";
 import { rhvacOpen, rhvacSync } from "./rhvac-ops.ts";
 
@@ -56,6 +56,7 @@ const refused = (message: string) => new BridgeError(message, 409, { notDispatch
 
 export async function admitTakeoffAction(
   raw: unknown,
+  crossing: Crossing,
   owner: ActionJournal,
   captures: TakeoffCaptures,
   bridge: RevitBridge["Service"],
@@ -144,7 +145,7 @@ export async function admitTakeoffAction(
     return { process, edits: submitted?.edits ?? {}, decisions: submitted?.decisions ?? {} };
   };
   return owner.admit(
-    admission,
+    { ...admission, ...crossing },
     validate,
     async (execution) => {
       const frozen = preparedTakeoffSchema.parse(execution.prepared);

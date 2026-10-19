@@ -62,6 +62,7 @@ export const manifest = defineRoute<
     inventory: { kind: "inventory" },
   } as never,
   page: parameterLinksPageSchema,
+  url: ["view"],
   actions: {
     refresh: {
       label: "refresh",
@@ -109,13 +110,9 @@ export const manifest = defineRoute<
         if (revision === null) throw Error("Parameter Links Work unavailable");
         const { readingId } = input;
         actionResult(
-          await runSemanticAction(
-            "parameter-links.apply",
-            { readingId },
-            targetOf(ctx),
-            { work: { key: ctx.work.key, revision } },
-            "human",
-          ),
+          await runSemanticAction("parameter-links.apply", { readingId }, targetOf(ctx), {
+            work: { key: ctx.work.key, revision },
+          }),
         );
       },
     },

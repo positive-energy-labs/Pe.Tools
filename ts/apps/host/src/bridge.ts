@@ -1,7 +1,8 @@
 import { Context, Deferred, Effect, Layer, PubSub, Ref, Schema } from "effect";
 import type { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpServerResponse as Response } from "effect/unstable/http";
-import { capture } from "@pe/runtime";
+import { recordBridgeQueue } from "./gateway-owner.ts";
+import { receiptProducerSchema, type ReceiptProducer } from "@pe/agent-contracts";
 import { randomUUID } from "node:crypto";
 import { runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
 import { hostOwnership } from "./host-ownership.ts";
@@ -134,6 +135,27 @@ export type HostBridgeEvent = {
   readonly prevDocTitle?: string | null;
 };
 
+export type NativeReceiptProducer = {
+  readonly fact: ReceiptProducer;
+  readonly connection: Readonly<{
+    sessionId: string;
+    processId: number;
+    processStartUtcUnixMs: number | null;
+    lane: Lane | null;
+    buildStamp: string | null;
+  }>;
+};
+const receiptProducers = new Set<(producer: NativeReceiptProducer) => void>();
+/** Host-only intake. The export owner validates emitter metadata and supplies opaque identity. */
+export function subscribeReceiptProducers(
+  consume: (producer: NativeReceiptProducer) => void,
+): () => void {
+  receiptProducers.add(consume);
+  return () => {
+    receiptProducers.delete(consume);
+  };
+}
+
 /** Backpressure cap for transient world notifications; current state remains query-owned. */
 const EVENT_STREAM_CAPACITY = 500;
 
@@ -172,6 +194,8 @@ export class RevitBridge extends Context.Service<
       { value: unknown; target: { session: string; document: string | null } },
       BridgeError | NoRevitSession
     >;
+    /** Retire only a host-queued request; never send op.cancel to Revit. */
+    readonly cancelQueued: (requestIds: Promise<readonly string[]>) => Promise<void>;
     readonly snapshot: (bridgeSessionId?: string) => Effect.Effect<BridgeSessionView>;
     readonly list: Effect.Effect<readonly BridgeSessionView[]>;
     readonly lastRegistrationRefusal: Effect.Effect<string | null>;
@@ -425,6 +449,32 @@ export const RevitBridgeLive = Layer.effect(
               yield* Effect.logWarning("bridge Event frame missing event");
               return;
             }
+            // This is producer evidence, never a browser event, including when malformed.
+            if (frame.event.eventName === "receipt.producer") {
+              if (!session || (yield* Ref.get(sessions)).get(session.sessionId) !== session) return;
+              const raw = frame.event.payloadJson;
+              try {
+                if (!raw || raw.length > 256 * 1024) throw Error("Invalid producer size");
+                const fact = receiptProducerSchema.parse(JSON.parse(raw));
+                const connection = {
+                  sessionId: session.sessionId,
+                  processId: session.processId,
+                  processStartUtcUnixMs: session.processStartUtcUnixMs,
+                  lane: session.lane,
+                  buildStamp: session.buildStamp,
+                };
+                for (const consume of receiptProducers) {
+                  try {
+                    consume({ fact: structuredClone(fact), connection: { ...connection } });
+                  } catch {
+                    yield* Effect.logWarning("Native receipt subscriber failed");
+                  }
+                }
+              } catch {
+                yield* Effect.logWarning("Native receipt producer envelope refused");
+              }
+              return;
+            }
             yield* Effect.log(`bridge event: ${frame.event.eventName}`);
             if (session)
               yield* emit({
@@ -453,6 +503,8 @@ export const RevitBridgeLive = Layer.effect(
       return yield* Effect.scoped(handleConnectionScoped(req));
     });
 
+    let revocation: Promise<void> = Promise.resolve();
+
     const invokeSession = Effect.fnUntraced(function* (
       session: Session,
       operationKey: string,
@@ -463,12 +515,46 @@ export const RevitBridgeLive = Layer.effect(
       reserved?: Deferred.Deferred<BridgeResponse, BridgeError>,
     ) {
       const reply = reserved ?? (yield* Deferred.make<BridgeResponse, BridgeError>());
-      yield* trackBridgeRequest(session.requests, {
-        operationKey,
-        requestId,
-        reply,
-        phase: "dispatched",
-      });
+      // A revoke fences dispatch synchronously, before its asynchronous journal census answers.
+      // Checking that fence and changing the request phase are one atomic decision.
+      while (true) {
+        const fence = revocation;
+        if (reserved)
+          yield* Effect.tryPromise({
+            try: () => fence,
+            catch: (error) =>
+              new BridgeError(`Grant revoke census failed: ${String(error)}`, 503, {
+                notDispatched: true,
+              }),
+          });
+        if (reserved) {
+          const live = (yield* Ref.get(sessions)).get(session.sessionId);
+          if (live !== session) return yield* Effect.fail(new NoRevitSession());
+          const state = yield* Ref.get(session.state);
+          if (openDocumentId && !state.openDocuments.some((doc) => doc.openId === openDocumentId))
+            return yield* Effect.fail(
+              new BridgeError("The selected document lifetime closed before dispatch", 409, {
+                notDispatched: true,
+              }),
+            );
+        }
+        const phase = yield* Ref.modify(session.requests, (requests) => {
+          if (requests.get(requestId)?.phase === "cancelled")
+            return ["cancelled", requests] as const;
+          if (reserved && fence !== revocation) return ["waiting", requests] as const;
+          const next = new Map(requests);
+          next.set(requestId, { operationKey, requestId, reply, phase: "dispatched" });
+          return ["dispatched", next] as const;
+        });
+        if (phase === "dispatched") break;
+        if (phase === "cancelled")
+          return yield* Effect.fail(
+            new BridgeError(`'${operationKey}' was cancelled before dispatch.`, 499, {
+              notDispatched: true,
+              nativeOutcome: "CancelledBeforeDispatch",
+            }),
+          );
+      }
       return yield* Effect.gen(function* () {
         const payloadJson = yield* encodePayloadJson(payload);
         yield* session.send({
@@ -507,6 +593,34 @@ export const RevitBridgeLive = Layer.effect(
         };
       }).pipe(Effect.ensuring(forgetBridgeRequest(session.requests, requestId)));
     });
+
+    // Ids a revoke named before their request reached this registry: a begun step may still be
+    // validating when the revoke lands. Such a request is refused the moment it queues.
+    const revokedBeforeQueue = new Set<string>();
+
+    const cancelQueuedRequest = Effect.fnUntraced(function* (requestId: string) {
+      let known = false;
+      for (const session of (yield* Ref.get(sessions)).values()) {
+        const cancelled = yield* Ref.modify(session.requests, (requests) => {
+          const request = requests.get(requestId);
+          if (request?.phase !== "queued") return [false, requests] as const;
+          const next = new Map(requests);
+          next.set(requestId, { ...request, phase: "cancelled" });
+          return [true, next] as const;
+        });
+        if (cancelled) return true;
+        known ||= (yield* Ref.get(session.requests)).has(requestId);
+      }
+      if (!known) revokedBeforeQueue.add(requestId);
+      return false;
+    });
+
+    const cancelQueued = (requestIds: Promise<readonly string[]>): Promise<void> => {
+      revocation = Promise.all([revocation, requestIds]).then(async ([, ids]) => {
+        for (const id of ids) await Effect.runPromise(cancelQueuedRequest(id));
+      });
+      return revocation;
+    };
 
     /**
      * The whole point of cancel: it walks past the per-session FIFO gate, so it reaches Revit
@@ -598,56 +712,42 @@ export const RevitBridgeLive = Layer.effect(
         operationKey,
         requestId: wireId,
         reply,
-        phase: "queued",
+        phase: revokedBeforeQueue.delete(wireId) ? "cancelled" : "queued",
       });
 
       const myGate = yield* Deferred.make<void>();
       const previousGate = yield* Ref.getAndSet(session.queueTail, myGate);
       const queuedAt = Date.now();
-      capture("bridge_queue", {
-        op: operationKey,
-        session_id: session.sessionId,
-        queue_depth: depth,
-        phase: "queued",
-      });
-      yield* Effect.logInfo(
-        `Revit queue queued op=${operationKey} session=${session.sessionId} depth=${depth}`,
-      );
       return yield* Effect.gen(function* () {
+        // Depth includes this op; a contended enqueue stays visible even if the gate never opens.
+        if (depth > 1)
+          yield* Effect.promise(() =>
+            recordBridgeQueue(operationKey, wireId, session.sessionId, "queued", depth).catch(
+              (error) => {
+                console.error("Queue receipt persistence failed", error);
+              },
+            ),
+          );
+        yield* Effect.logInfo(
+          `Revit queue queued op=${operationKey} session=${session.sessionId} depth=${depth}`,
+        );
         yield* Deferred.await(previousGate);
         const startedAt = Date.now();
-        capture("bridge_queue", {
-          op: operationKey,
-          session_id: session.sessionId,
-          queue_depth: depth,
-          phase: "started",
-          wait_ms: Date.now() - queuedAt,
-        });
+        yield* Effect.promise(() =>
+          recordBridgeQueue(
+            operationKey,
+            wireId,
+            session.sessionId,
+            "started",
+            depth,
+            startedAt - queuedAt,
+          ).catch((error) => {
+            console.error("Queue receipt persistence failed", error);
+          }),
+        );
         yield* Effect.logInfo(
           `Revit queue started op=${operationKey} session=${session.sessionId} depth=${depth} wait_ms=${startedAt - queuedAt}`,
         );
-        // The session may have died — or been taken over by a reconnect — while we queued.
-        const live = (yield* Ref.get(sessions)).get(session.sessionId);
-        if (live !== session) return yield* Effect.fail(new NoRevitSession());
-        // Cancelled while it waited: Revit never sees it, so this is the CancelledBeforeDispatch
-        // the native queue reports for the same situation on its own side.
-        if ((yield* Ref.get(session.requests)).get(wireId)?.phase === "cancelled")
-          return yield* Effect.fail(
-            new BridgeError(`'${operationKey}' was cancelled before dispatch.`, 499, {
-              notDispatched: true,
-              nativeOutcome: "CancelledBeforeDispatch",
-            }),
-          );
-        const currentState = yield* Ref.get(session.state);
-        if (
-          selectedDocument &&
-          !currentState.openDocuments.some((doc) => doc.openId === selectedDocument)
-        )
-          return yield* Effect.fail(
-            new BridgeError("The selected document lifetime closed before dispatch", 409, {
-              notDispatched: true,
-            }),
-          );
         const result = yield* invokeSession(
           session,
           operationKey,
@@ -696,6 +796,7 @@ export const RevitBridgeLive = Layer.effect(
 
     return {
       invoke,
+      cancelQueued,
       snapshot,
       list,
       handleConnection,

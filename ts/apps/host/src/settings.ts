@@ -1,3 +1,4 @@
+import { lstat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { isUtf8 } from "node:buffer";
 import { join, win32 } from "node:path";
@@ -23,6 +24,8 @@ import type {
   SettingsValidate,
 } from "@pe/host-contracts/generated";
 import type { PodDraftSource, PodMemberSource } from "@pe/agent-contracts";
+import { isPackageMember, listPackages, readPackage, resolvePackageIdentity } from "./packages.ts";
+import { requirePackageEnabled, activePackages } from "./package-lifecycle.ts";
 import { LocalOpError } from "./local-error.ts";
 import { productPodsRootPath } from "./product-paths.ts";
 import {
@@ -49,26 +52,38 @@ const schemaCache = new Map<string, ValidateFunction | string>();
 
 export const listPods = Effect.fnUntraced(function* (ctx: PodContext = {}) {
   const root = ctx.podsRoot ?? productPodsRootPath();
-  const found = yield* readManifests(root);
-  const pods: PodList["pods"][number][] = [];
-  for (const pod of found.pods) {
-    const twins = found.pods.filter((other) => other.id === pod.id);
-    const members = yield* listMembers(join(root, pod.folder), "");
-    pods.push({
-      ...pod,
-      members,
-      diagnostics:
-        twins.length > 1
-          ? [
-              issue(
-                "DuplicatePodId",
-                `Pod id '${pod.id}' is claimed by folders ${twins.map((t) => t.folder).join(", ")}.`,
-              ),
-            ]
-          : [],
-    });
-  }
-  return { pods, unreadable: found.unreadable } satisfies PodList;
+  const found = yield* Effect.tryPromise({
+    try: () => listPackages(root),
+    catch: (error) => new LocalOpError("pod.list", errorMessage(error), 400),
+  });
+  return {
+    pods: (yield* Effect.promise(() => activePackages(found.packages, root))).map((pod) => ({
+      id: pod.id,
+      name: pod.name,
+      version: pod.version,
+      folder: pod.folder,
+      entrypoints: pod.entrypoints,
+      contributions: pod.contributions,
+      members: pod.members.map(({ path, sha256, schema }) => ({ path, sha256, schema })),
+      diagnostics: pod.diagnostics,
+    })),
+    unreadable: found.unreadable,
+  } satisfies PodList;
+});
+
+export const resolvePodIdentity = Effect.fnUntraced(function* (
+  folder: string,
+  ctx: PodContext = {},
+) {
+  const root = ctx.podsRoot ?? productPodsRootPath();
+  return yield* Effect.tryPromise({
+    try: async () => {
+      const identity = await resolvePackageIdentity(folder, root);
+      await requirePackageEnabled(identity.id, root);
+      return { projection: "identity" as const, identity };
+    },
+    catch: (error) => new LocalOpError("pod.list", errorMessage(error), 400),
+  });
 });
 
 /**
@@ -213,22 +228,37 @@ function parseReceipt(content: string): PodReceipt | string {
 }
 
 export const readMember = Effect.fnUntraced(function* (member: PodMember, ctx: PodContext = {}) {
-  const path = yield* memberFile(member, ctx, "pod.member.read");
-  const read = yield* readText(path, "pod.member.read");
-  if (!read)
+  yield* Effect.tryPromise({
+    try: () => requirePackageEnabled(member.pod, ctx.podsRoot),
+    catch: (error) => new LocalOpError("pod.member.read", errorMessage(error), 403),
+  });
+  const admitted = yield* Effect.tryPromise({
+    try: () => readPackage(member.pod, ctx.podsRoot ?? productPodsRootPath()),
+    catch: (error) =>
+      new LocalOpError(
+        "pod.member.read",
+        errorMessage(error),
+        errorMessage(error).includes("claimed") ? 409 : 404,
+      ),
+  });
+  const captured = admitted.members.find((item) => item.path === member.path);
+  if (!captured)
     return yield* Effect.fail(
       new LocalOpError(
         "pod.member.read",
-        `No member '${member.path}' in pod '${member.pod}'.`,
+        `No admitted member '${member.path}' in pod '${member.pod}'.`,
         404,
       ),
     );
-  // Text members round-trip exactly; a replacement character would silently change the bytes.
-  if (!read.utf8)
+  if (!isUtf8(captured.bytes))
     return yield* Effect.fail(
       new LocalOpError("pod.member.read", "The member is not valid UTF-8 text.", 400),
     );
-  return { content: read.content, sha256: read.sha256, bytesBase64: read.bytesBase64 };
+  return {
+    content: new TextDecoder("utf-8", { ignoreBOM: true }).decode(captured.bytes),
+    sha256: captured.sha256,
+    bytesBase64: Buffer.from(captured.bytes).toString("base64"),
+  };
 });
 
 /**
@@ -487,17 +517,20 @@ export const composedSpec = Effect.fnUntraced(function* (
 
 export const podFolder = Effect.fnUntraced(function* (podId: string, ctx: PodContext = {}) {
   const root = ctx.podsRoot ?? productPodsRootPath();
-  const matches = (yield* readManifests(root)).pods.filter((pod) => pod.id === podId);
-  if (matches.length === 1) return join(root, matches[0]!.folder);
-  return yield* Effect.fail(
-    new LocalOpError(
-      "pod.resolve",
-      matches.length
-        ? `Pod id '${podId}' is claimed by folders ${matches.map((m) => m.folder).join(", ")}.`
-        : `No installed pod has id '${podId}'.`,
-      matches.length ? 409 : 404,
-    ),
-  );
+  yield* Effect.tryPromise({
+    try: () => requirePackageEnabled(podId, root),
+    catch: (error) => new LocalOpError("pod.resolve", errorMessage(error), 403),
+  });
+  const pod = yield* Effect.tryPromise({
+    try: () => readPackage(podId, root),
+    catch: (error) =>
+      new LocalOpError(
+        "pod.resolve",
+        errorMessage(error),
+        errorMessage(error).includes("claimed") ? 409 : 404,
+      ),
+  });
+  return pod.directory;
 });
 
 const memberFile = Effect.fnUntraced(function* (
@@ -506,70 +539,22 @@ const memberFile = Effect.fnUntraced(function* (
   operationKey: string,
 ) {
   const folder = yield* podFolder(member.pod, ctx);
-  return yield* Effect.try({
-    try: () => safeJoin(folder, normalizeMemberPath(member.path)),
+  return yield* Effect.tryPromise({
+    try: async () => {
+      const normalized = normalizeMemberPath(member.path);
+      let path = folder;
+      for (const segment of normalized.split("/")) {
+        path = join(path, segment);
+        try {
+          if ((await lstat(path)).isSymbolicLink()) throw Error("Pod members cannot follow links.");
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        }
+      }
+      return safeJoin(folder, normalized);
+    },
     catch: (error) => new LocalOpError(operationKey, errorMessage(error), 400),
   });
-});
-
-const readManifests = Effect.fnUntraced(function* (root: string) {
-  const pods: Omit<PodList["pods"][number], "members" | "diagnostics">[] = [];
-  const unreadable: { folder: string; message: string }[] = [];
-  for (const entry of yield* readDirectoryEntriesOrEmpty(root, "pod.list")) {
-    if (entry.info.type !== "Directory") continue;
-    const manifest = yield* readText(join(root, entry.name, "pod.json"), "pod.list");
-    if (!manifest) continue;
-    try {
-      const value = JSON.parse(manifest.content.replace(/^\uFEFF/, "")) as Record<string, unknown>;
-      if (typeof value.id !== "string" || !value.id) throw Error("pod.json has no id");
-      pods.push({
-        id: value.id,
-        name: typeof value.name === "string" ? value.name : value.id,
-        version: typeof value.version === "string" ? value.version : "",
-        folder: entry.name,
-        entrypoints: Array.isArray(value.entrypoints)
-          ? value.entrypoints.flatMap((e) =>
-              isRecord(e) && typeof e.id === "string" && typeof e.sourcePath === "string"
-                ? [
-                    {
-                      id: e.id,
-                      sourcePath: e.sourcePath,
-                      name: typeof e.name === "string" ? e.name : null,
-                      description: typeof e.description === "string" ? e.description : null,
-                    },
-                  ]
-                : [],
-            )
-          : [],
-      });
-    } catch (error) {
-      unreadable.push({ folder: entry.name, message: errorMessage(error) });
-    }
-  }
-  return { pods, unreadable };
-});
-
-const listMembers: (
-  folder: string,
-  relative: string,
-) => Effect.Effect<
-  PodList["pods"][number]["members"][number][],
-  LocalOpError,
-  FileSystem.FileSystem
-> = Effect.fnUntraced(function* (folder: string, relative: string) {
-  const members: PodList["pods"][number]["members"][number][] = [];
-  const entries = yield* readDirectoryEntriesOrEmpty(join(folder, relative), "pod.list");
-  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-    const path = relative ? `${relative}/${entry.name}` : entry.name;
-    // Members only. `output/` is runs (dogma law 1) and answers to `pod.runs`; `pod.json` is the manifest.
-    if (path === "pod.json" || path === "output") continue;
-    if (entry.info.type === "Directory") members.push(...(yield* listMembers(folder, path)));
-    else if (entry.info.type === "File") {
-      const read = yield* readText(join(folder, path), "pod.list");
-      if (read) members.push({ path, sha256: read.sha256, schema: declaredSchema(path, read) });
-    }
-  }
-  return members;
 });
 
 /** Reads bytes once; a member that is not UTF-8 still lists, it just declares no schema. */
@@ -589,16 +574,6 @@ const readText = Effect.fnUntraced(function* (path: string, operationKey: string
     bytesBase64: Buffer.from(result.success).toString("base64"),
   };
 });
-
-function declaredSchema(path: string, read: { content: string }): string | null {
-  if (!path.toLowerCase().endsWith(".json")) return null;
-  try {
-    const value: unknown = JSON.parse(read.content.replace(/^\uFEFF/, ""));
-    return isRecord(value) && typeof value.$schema === "string" ? value.$schema : null;
-  } catch {
-    return null;
-  }
-}
 
 function validateStructure(schemaJson: string, value: unknown, into: MemberIssue[]) {
   let validate = schemaCache.get(schemaJson);
@@ -669,11 +644,8 @@ function hasDirectives(value: unknown): boolean {
 }
 
 function normalizeMemberPath(input: string): string {
-  if (win32.isAbsolute(input)) throw new Error("Member paths are pod-relative.");
-  const segments = input.replace(/\\/g, "/").split("/").filter(Boolean);
-  if (!segments.length || segments.some((s) => s === "." || s === ".."))
-    throw new Error(`Invalid member path '${input}'.`);
-  return segments.join("/");
+  if (!isPackageMember(input)) throw Error(`'${input}' is not an authored package member.`);
+  return input;
 }
 
 function safeJoin(rootPath: string, relativePath: string): string {

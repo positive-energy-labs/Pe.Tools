@@ -6,12 +6,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { CaptureReceipt } from "@pe/agent-contracts";
 
-import { ArtifactFrame } from "#/components/lang/artifact-frame";
-import { FactChip } from "#/components/lang/chip";
-import { Code, stringify } from "#/components/lang/code";
-import { EmptyState } from "#/components/lang/empty";
-import { Press } from "#/components/lang/press";
-import { useCopy } from "#/lib/use-copy";
+import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
+import { FactChip } from "@pe/kit/lang/chip";
+import { Code, stringify } from "@pe/kit/lang/code";
+import { EmptyState } from "@pe/kit/lang/empty";
+import { Button } from "@pe/kit/lang/button";
+import { useCopy } from "@pe/kit/lib/use-copy";
 
 /** What the request cropped to, in words; `whole view` when it named no focus. */
 const focusWords = (focus: CaptureReceipt["focus"]): string =>
@@ -63,12 +63,23 @@ function CaptureFrame({ receipt, focused }: { receipt: CaptureReceipt; focused: 
             <a href={receipt.url} target="_blank" rel="noreferrer">
               open png
             </a>
-            <Press tone="nav" size="value" onClick={() => copy(absolute)} title={absolute}>
+            <Button
+              kind="nav"
+              direction="forward"
+              label={copied ? "copied" : "copy url"}
+              reason={absolute}
+              onClick={() => copy(absolute)}
+            >
               {copied ? "copied" : "copy url"}
-            </Press>
-            <Press tone="nav" size="value" onClick={() => setOpen((was) => !was)}>
+            </Button>
+            <Button
+              kind="nav"
+              direction="forward"
+              label={open ? "hide receipt" : "receipt"}
+              onClick={() => setOpen((was) => !was)}
+            >
               {open ? "hide receipt" : "receipt"}
-            </Press>
+            </Button>
           </span>
         }
       >

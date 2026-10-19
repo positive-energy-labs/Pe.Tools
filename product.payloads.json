@@ -2,7 +2,7 @@
   "product": "Pe.Tools",
   "vendor": "Positive Energy",
   "releases": "positive-energy-labs/Pe.Tools",
-  "version": "0.7.20",
+  "version": "0.7.36-pdrop.1",
   "sdk": {
     "feed": null,
     "clientDir": "ts/packages/host-contracts/src/vendor/generated"
@@ -21,6 +21,9 @@
       "app/bin/host/Pe.Host.exe",
       "app/bin/host/tray/Pe.Host.Tray.exe",
       "app/bin/host/web/client/index.html",
+      "app/bin/host/pods/snowdon-ducts.zip",
+      "app/bin/host/src/Pe.Tools.slnx",
+      "app/bin/host/src-manifest.json",
       "app/bin/pea/pea.exe"
     ]
   },
@@ -92,10 +95,10 @@
       "source": "ts/apps/host/dist-installed",
       "entry": "Pe.Host.exe",
       "shortcut": {
-        "name": "Pe.Tools",
-        "arguments": "--open",
+        "name": "Pe.Tools Tray",
+        "arguments": "--show-tray",
         "icon": "web/client/favicon.ico",
-        "description": "Open Pe.Tools in its own window; Revit joins this host when it starts"
+        "description": "Start or show the Pe.Tools tray; Revit joins this host when it starts"
       },
       "dev": "vp run @pe/host#attach",
       "build": "pnpm --dir ts --filter @pe/host build:payload",
@@ -122,7 +125,7 @@
       "type": "PathShim",
       "name": "pea",
       "target": "versionedApp:pea",
-      "dev": "corepack pnpm@11.13.1 --dir \"{root}/ts\" --filter @pe/pea pea"
+      "dev": "node \"{root}/ts/node_modules/jiti/lib/jiti-cli.mjs\" \"{root}/ts/apps/pea/src/main.ts\""
     }
   ]
 }

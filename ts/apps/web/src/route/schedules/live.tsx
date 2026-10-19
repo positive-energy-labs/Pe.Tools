@@ -13,7 +13,8 @@ import {
 } from "@pe/agent-contracts";
 import { changedInRevit, previousOf, useHostStatus } from "#/readings";
 import { refuse, useRoute } from "#/route";
-import { KeysNode, manifestChords, useScopeKeys } from "#/route/keys";
+import { manifestChords } from "#/route/keys";
+import { KeysNode, useScopeKeys } from "@pe/kit/keys";
 import { EntityRouteView } from "#/route/entity";
 import { ActionFlag } from "#/route/situation-verbs";
 import { usePodList } from "#/route/pods";
@@ -343,7 +344,7 @@ export function LiveScheduleGridWorkspace({
     </ActionFlag.Provider>
   );
   return (
-    // A chat pane does not own the URL, so its undo keys never bind on /chat's document.
+    // A chat pane does not own the URL, so its undo keys never bind on /pea's document.
     <KeysNode
       id={handle.manifest.name}
       keys={framed && url ? manifestChords(handle) : []}

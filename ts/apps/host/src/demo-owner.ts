@@ -28,6 +28,8 @@ import {
 } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
 import { ActionJournal } from "./action-journal.ts";
+import { withInvocationContext } from "@pe/runtime/context";
+import { matchPeRoute } from "@pe/agent-contracts/pe-api";
 import { TakeoffCaptures } from "./takeoff-captures.ts";
 import { RevitBridge, BridgeError, type HostBridgeEvent } from "./bridge.ts";
 import { makeCallRoute, type CallRouteDispatch } from "./call-route.ts";
@@ -36,9 +38,15 @@ import { familiesAdmission } from "../../../packages/mcps/src/pea/families-admis
 import { resourceResponse, type ResourceObserver } from "@pe/runtime";
 import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
 import { documentMarks } from "./document-marks.ts";
+import { bridgeAttachments, createMachine, unavailableShare } from "./machine.ts";
+import { unreadLeg } from "./update-reader.ts";
+import { listBridgeSessions } from "./local-ops.ts";
 import { readFamily } from "./family-actions.ts";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import type { ScheduleCellsApply } from "@pe/host-contracts/generated";
+
+/** The command rule a simulated demo SDK envelope carries instead of a real resolution. */
+const SIMULATED_SDK = "simulated-demo";
 
 const unsupported = (key: string) =>
   new BridgeError(`Unsupported demo scenario: ${key}. No native execution.`, 409, {
@@ -132,6 +140,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
   await mkdir(parent, { recursive: true });
   const root = await mkdtemp(join(await assertDemoPath(parent, parent), "instance-"));
   let releaseHandler: (() => Promise<void>) | undefined;
+  let machine: ReturnType<typeof createMachine> | undefined;
   try {
     const id = `demo-${randomUUID()}`;
     const r10Path = join(root, "demo.r10");
@@ -837,7 +846,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
             return settings.composeMember(request as Parameters<typeof settings.composeMember>[0]);
           if (key === "pod.member.write") throw unsupported("direct write; use settings.write");
           if (key === "bridge.sessions.list")
-            return { sessions: sessions.map((s) => ({ ...s, ...s.state })) };
+            return Effect.runPromise(listBridgeSessions(bridge.list));
           if (key === "rhvac.list") {
             await assertDemoPath(root, (request as { dir: string }).dir);
             return { exists: true, files: [{ path: join(root, "demo.r10"), name: "demo.r10" }] };
@@ -891,7 +900,13 @@ export async function createDemoOwner(parent: string, raw: unknown) {
                 sourceRoot: hostOwnership.sourceRoot,
               },
               binary: {},
-              command: {},
+              // Names itself simulated: host tests hold real fakes to recordings, never this lane.
+              command: {
+                cwd: root,
+                commandRoot: root,
+                commandRule: SIMULATED_SDK,
+                commandManifest: null,
+              },
               nextSteps: [],
               guide: "session",
               related: [],
@@ -944,12 +959,52 @@ export async function createDemoOwner(parent: string, raw: unknown) {
     // One-shot readings (a schedule reading, scoped receipts) read this owner's own surface.
     // Subscribed now, before any event: the Readings and the push share this one holder.
     const marked = markReadings(documentMarks(bridge));
+    // The live host's Machine contract over this owner's one simulated session: no SDK census,
+    // so the session is an unclassified attachment, read the same way the real bridge is.
+    const update = {
+      plan: null,
+      receipt: null,
+      requestId: null,
+      admittedPlanId: null,
+      planLeg: unreadLeg(),
+      receiptLeg: unreadLeg(),
+      automatic: true,
+    };
+    machine = createMachine({
+      grants: { grants: () => [], subscribe: () => () => {} },
+      actions: () => journal.list(),
+      host: async () => {
+        throw Error("An isolated demo owner simulates Revit, not a host process.");
+      },
+      peers: async () => [],
+      sessions: async () => [],
+      holdings: async () => null,
+      documents: async () => ({ state: "ok", documents: [] }),
+      attachments: () => bridgeAttachments(bridge),
+      years: async () => [],
+      providers: async () => ({ providers: [], access: { guarded: true } }),
+      update: {
+        current: () => update,
+        refresh: async () => update,
+        apply: async () => update,
+        automaticPending: () => false,
+        announce: () => {},
+        setAutomatic: async () => update,
+      },
+      share: unavailableShare,
+      subscribe: bridge.subscribe,
+    });
     const hostObserve = hostResourceObserver(
       bridge,
       () => journal,
       () => captures,
       "http://demo",
       (url, init) => handle(new Request(url, init)),
+      machine,
+      (_, scope) =>
+        !retired && scope.bridgeSessionId === id && scope.openDocumentId === target.openId
+          ? Effect.succeed({ sessionId: id })
+          : Effect.fail(unsupported("production destination")),
     );
     const localScope = (value: WorkKey) =>
       workKey(value) === workKey(scope) ||
@@ -963,6 +1018,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       const targetMatches = (ref: typeof target) =>
         ref.session === id && ref.openId === target.openId;
       const allowed =
+        request.kind === "machine" ||
         request.kind === "inventory" ||
         request.kind === "world" ||
         request.kind === "host-status" ||
@@ -1010,11 +1066,15 @@ export async function createDemoOwner(parent: string, raw: unknown) {
       member: files[0]?.member,
       simulated: true,
     };
-    releaseHandler = () => web.dispose();
+    releaseHandler = () => {
+      machine?.close();
+      return web.dispose();
+    };
     async function handle(request: Request): Promise<Response> {
       if (retired) return json({ error: "Demo instance retired" }, 410);
       const url = new URL(request.url);
-      if (url.pathname === "/pe/resources") {
+      const declared = matchPeRoute(request.method, url.pathname);
+      if (declared?.id === "resources.stream") {
         const controller = new AbortController();
         streams.add(controller);
         request.signal.addEventListener(
@@ -1196,10 +1256,9 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           );
         }
       }
-      // The browser's Work writes (`/pe/route-state/<route>/<apply|command>`), fenced to this owner.
-      const write = /^\/pe\/route-state\/([^/]+)\/(apply|command)$/.exec(url.pathname);
-      if (write && request.method === "POST") {
-        const [, written, operation] = write as unknown as [string, string, "apply" | "command"];
+      // The browser's declared Work writes, fenced to this owner.
+      if (declared?.id === "work.apply" || declared?.id === "work.command") {
+        const written = declared.params.route!;
         const target = url.searchParams.get("target");
         const workId = url.searchParams.get("work");
         const key = bindWork(written, target ? address(target) : null, workId ?? undefined);
@@ -1212,7 +1271,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           expectedRevision: number;
         };
         return json(
-          operation === "apply"
+          declared.id === "work.apply"
             ? await work.apply(key, written, "human", body.patches, body.expectedRevision)
             : await work.command(
                 key,
@@ -1224,7 +1283,11 @@ export async function createDemoOwner(parent: string, raw: unknown) {
               ),
         );
       }
-      const response = await web.handler(request, Context.empty() as never);
+      // The demo's browser is its one human, as its own Work writes above already say.
+      const response = await withInvocationContext(
+        { caller: { kind: "human", via: "local" } },
+        () => web.handler(request, Context.empty() as never),
+      );
       if (response.status === 404)
         return json({ error: `Unmapped isolated request ${request.method} ${request.url}` }, 404);
       return response;
@@ -1249,7 +1312,7 @@ export async function createDemoOwner(parent: string, raw: unknown) {
           await Promise.allSettled(pending);
           for (const row of await journal.list())
             if (row.state === "running") await journal.wait(row.id);
-          await web.dispose();
+          await releaseHandler!();
           await assertDemoPath(parent, root);
           await rm(root, { recursive: true, force: true });
         })());
@@ -1270,7 +1333,7 @@ const isMemberWrite = (value: unknown) =>
   "sha256" in value &&
   !("content" in value);
 
-/** Explicit routes are more specific than the production /pe/* tenant; no second listener. */
+/** Explicit routes are more specific than the production declared route tenant; no second listener. */
 export function demoRoutes(parent = resolve(".artifacts/tmp/demos")) {
   return HttpRouter.use((router) =>
     Effect.gen(function* () {

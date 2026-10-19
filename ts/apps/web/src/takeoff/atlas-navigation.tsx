@@ -1,41 +1,36 @@
 import { Suspense } from "react";
-import { FactChip } from "#/components/lang/chip";
-import { List } from "#/components/lang/list-popup";
-import { StateDot } from "#/components/master-table/cells";
+import { FactChip } from "@pe/kit/lang/chip";
+import { List } from "@pe/kit/lang/list-popup";
+import { StateDot } from "@pe/kit/table/cells";
 import { Pane } from "#/components/lang/pane";
-import { fmtNum } from "#/components/master-table/model";
+import { fmtNum } from "@pe/kit/table/model";
 import { ROOM_STATES, STATE_META } from "#/takeoff/room-state";
 import { onPlan } from "#/takeoff/room-actions";
 import { ZoneStateBar } from "#/takeoff/zone-state-bar";
 import { ZoneThumb } from "#/takeoff/zone-plan";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
+import { ScopeKeys } from "@pe/kit/keys";
 import { levelsOf } from "#/takeoff/plan-image";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function AtlasNavigation() {
   const { world, zoneKey, zoneStates, filteredZones, selectZone, scopeShortcuts } =
     useAtlasWorkspace();
   return (
     <Suspense fallback={<div className="t-small t-upper p-2 text-ink-2">reading zones…</div>}>
-      <Pane
-        id="zones"
-        kind="navigation"
-        flush
-        title="zones"
-        meta={`${world.zones.length} declared`}
-        shortcuts={scopeShortcuts}
-      >
+      <Pane id="zones" flush title="zones" meta={`${world.zones.length} declared`}>
+        <ScopeKeys keys={scopeShortcuts} />
+
         <div className="hairline-b px-2 py-1.5">
           <div className="t-small t-upper mb-1">room states — one per room</div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             {ROOM_STATES.map((s) => (
-              <span
-                key={s}
-                title={STATE_META[s].note}
-                className="t-small face-mono inline-flex items-center gap-1 text-ink-2"
-              >
-                <StateDot tone={STATE_META[s].tone} dim={s === "unreviewed"} />
-                {STATE_META[s].label}
-              </span>
+              <TooltipHint content={STATE_META[s].note} key={s}>
+                <span className="t-small face-mono inline-flex items-center gap-1 text-ink-2">
+                  <StateDot tone={STATE_META[s].tone} dim={s === "unreviewed"} />
+                  {STATE_META[s].label}
+                </span>
+              </TooltipHint>
             ))}
           </div>
         </div>

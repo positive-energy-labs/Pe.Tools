@@ -187,6 +187,14 @@ public sealed class CreateInstallerModule(IOptions<BuildOptions> buildOptions) :
             .ShouldBeTrue("Failed to publish TS host for installer packaging.");
         runtimePublishDirectory.GetFile("web/client/index.html").Exists
             .ShouldBeTrue("Installer runtime publish should include the staged web SPA.");
+        runtimePublishDirectory.GetFile("pods/snowdon-ducts.zip").Exists
+            .ShouldBeTrue("Installer runtime publish should include the shipped example Pod (stage-web.mjs exports examples/pods).");
+        Directory.Exists(Path.Combine(builtHostDirectory, "src"))
+            .ShouldBeTrue("Installer runtime publish should include the tracked Pe.Tools source tree.");
+        runtimePublishDirectory.GetFile("src-manifest.json").Exists
+            .ShouldBeTrue("Installer runtime publish should include the source commit manifest.");
+        runtimePublishDirectory.GetFiles(file => file.Extension == ".map")
+            .ShouldBeEmpty("Browser source maps are private symbolication input (stage-web.mjs keeps them in dist/web-maps), never product assets.");
         StageUsageIndex(context, rootDirectory, builtHostDirectory);
         context.Logger.LogInformation("Finished publishing TS host runtime for installer packaging.");
     }

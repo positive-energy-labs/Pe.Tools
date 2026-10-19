@@ -1,7 +1,6 @@
-import { FactChip } from "#/components/lang/chip";
-import { StateCell } from "#/components/lang/cell";
-import { Press } from "#/components/lang/press";
-import { ActionButton } from "#/components/lang/action-button";
+import { FactChip } from "@pe/kit/lang/chip";
+import { StateCell } from "@pe/kit/lang/cell";
+import { Button } from "@pe/kit/lang/button";
 import { CounterExample, Law } from "#/design-system/exhibit";
 
 const noop = () => {};
@@ -29,12 +28,14 @@ export function ColourLaws({ owner }: { owner: (name: string) => string }) {
       >
         <StateCell value="2 hr" stage="proposed" />
         <CounterExample why="asking Pea is an agent action, not a committed write">
-          <ActionButton
-            tone="commit"
+          <Button
+            kind="commit"
             label="ask pea"
             onClick={noop}
             reason="Asks Pea to inspect this value"
-          />
+          >
+            ask pea
+          </Button>
         </CounterExample>
       </Law>
 
@@ -44,27 +45,28 @@ export function ColourLaws({ owner }: { owner: (name: string) => string }) {
         ruling="The only filled blue is the verb that writes beyond the page. Navigation uses the same role as text, never as a fill."
       >
         <div className="flex flex-wrap items-center gap-2">
-          <ActionButton
-            tone="commit"
+          <Button
+            kind="commit"
             label="apply to Revit"
             onClick={noop}
             reason="Writes 42 parameters into the model"
-          />
-          <ActionButton
-            tone="nav"
+          >
+            apply to Revit
+          </Button>
+          <Button
+            kind="nav"
             direction="out"
             label="open in RHVAC"
             onClick={noop}
             reason="Leaves Pe.Tools"
-          />
+          >
+            open in RHVAC
+          </Button>
         </div>
         <CounterExample why="opening another surface is navigation, not a write">
-          <ActionButton
-            tone="commit"
-            label="open in RHVAC"
-            onClick={noop}
-            reason="Leaves Pe.Tools"
-          />
+          <Button kind="commit" label="open in RHVAC" onClick={noop} reason="Leaves Pe.Tools">
+            open in RHVAC
+          </Button>
         </CounterExample>
       </Law>
 
@@ -73,12 +75,19 @@ export function ColourLaws({ owner }: { owner: (name: string) => string }) {
         owner={owner("selection is a fill")}
         ruling="Selection, focus, and hover use neutral fills. They never buy a meaning hue."
       >
-        <Press state="selected" aria-pressed>
+        <Button label="selected row" pressed>
           selected row
-        </Press>
+        </Button>
         {/* The pick mark: the feedback picker's target, veil plus ink outline over any content. */}
         <span className="relative w-fit">
-          <ActionButton label="picked for a note" onClick={noop} reason="Pick mark specimen" />
+          <Button
+            kind="framed"
+            label="picked for a note"
+            onClick={noop}
+            reason="Pick mark specimen"
+          >
+            picked for a note
+          </Button>
           <span className="pick-mark absolute inset-0" />
         </span>
         <CounterExample why="Pea green would claim authorship, not selection">

@@ -1,15 +1,13 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * What the drawings say about one element on hover or selection: its size, length and flows, each
  * value beside where it came from. A missing value is printed as missing, never left blank.
  */
 import { ISSUE_KINDS } from "./issues";
 import type { DuctNode, Issue, Segment } from "./encoding";
-
 const num = (value: number | null | undefined, unit: string, digits = 0) =>
   value == null ? null : `${value.toFixed(digits)} ${unit}`;
-
 type Row = [label: string, value: string | null, source: string];
-
 function Rows({ rows }: { rows: readonly Row[] }) {
   return (
     <dl className="grid grid-cols-[auto_1fr_auto] gap-x-3">
@@ -23,23 +21,23 @@ function Rows({ rows }: { rows: readonly Row[] }) {
     </dl>
   );
 }
-
 function Issues({ issues }: { issues: readonly Issue[] }) {
   if (!issues.length) return <p className="text-ink-2">no issue names it</p>;
   return (
     <ul>
       {issues.map((issue) => (
-        <li key={issue.id} title={ISSUE_KINDS[issue.kind].what}>
-          <span data-tone={ISSUE_KINDS[issue.kind].color.tone}>
-            {ISSUE_KINDS[issue.kind].label}
-          </span>{" "}
-          <span className="text-ink-2">{issue.note}</span>
-        </li>
+        <TooltipHint key={issue.id} content={ISSUE_KINDS[issue.kind].what}>
+          <li>
+            <span data-tone={ISSUE_KINDS[issue.kind].color.tone}>
+              {ISSUE_KINDS[issue.kind].label}
+            </span>{" "}
+            <span className="text-ink-2">{issue.note}</span>
+          </li>
+        </TooltipHint>
       ))}
     </ul>
   );
 }
-
 export function SegmentFactsView({
   segment,
   derivedCfm,
@@ -72,7 +70,6 @@ export function SegmentFactsView({
     </div>
   );
 }
-
 export function NodeFactsView({ node, issues }: { node: DuctNode; issues: readonly Issue[] }) {
   return (
     <div className="flex flex-col gap-2" data-facts={node.id}>

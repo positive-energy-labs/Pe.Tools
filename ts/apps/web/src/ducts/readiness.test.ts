@@ -8,7 +8,8 @@ import {
 } from "@pe/agent-contracts";
 
 import { ISSUE_KINDS } from "./issues";
-import { readiness, type DuctSnapshot } from "./readiness";
+import { readiness } from "@pe/ducts-domain/readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 const issue = (id: string, kind: DuctSnapshot["issues"][number]["kind"], elementId: number) => ({
   id,
@@ -21,6 +22,7 @@ const issue = (id: string, kind: DuctSnapshot["issues"][number]["kind"], element
 
 /** One supply group off AHU 9: an open end, an accessory with no drop, an AHU with no fan static. */
 const snapshot = {
+  coordinateEncoding: "native-double",
   document: {
     title: "t",
     readAt: "2026-09-26T00:00:00Z",
@@ -73,6 +75,7 @@ const snapshot = {
     fanStatic: "PE_M_Fan_ExternalStaticPressure",
     fanFlow: "PE_M_Fan_AirFlow",
     componentDrop: "Pressure Drop",
+    fittingCoefficient: "Pe_C",
   },
 } as DuctSnapshot;
 

@@ -1,4 +1,4 @@
-import type { ContextBreakdown, ContextItem, ContextSegment } from "./chat-state";
+import type { ContextBreakdown, ContextItem, ContextSegment } from "@pe/agent-contracts/chat-state";
 
 /** Request position of each segment the harness reports (`usage_update`): used, then free. */
 const REQUEST_RANK: Record<string, number> = {

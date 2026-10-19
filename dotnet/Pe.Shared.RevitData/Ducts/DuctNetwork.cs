@@ -20,7 +20,7 @@ public static class DuctNetwork {
     public const string CenterRadius = "centerRadius";
     /// <summary>Round elbow: CenterRadius over the connector diameter (ASHRAE CD3-x).</summary>
     public const string ROverD = "rOverD";
-    /// <summary>The connector index that faces the root in a single-root tree: the flow's way in.</summary>
+    /// <summary>Transition: physical inlet of an explicit In/Out pair. Other parts retain a root-facing connector, not physical airflow.</summary>
     public const string Inlet = "inlet";
     /// <summary>Transition: outlet area over inlet area in the flow direction (ASHRAE SD4/SR4 Ao/A1).</summary>
     public const string AoOverA1 = "aoOverA1";
@@ -34,6 +34,14 @@ public static class DuctNetwork {
     public const string MainArea = "mainArea";
     /// <summary>Takeoff: branch area over main area (ASHRAE SD5-x Ab/Ac).</summary>
     public const string AbOverAc = "abOverAc";
+
+    /// <summary>The family's own loss coefficient, read through the FittingCoefficient slot (what the Pe loss server charges).</summary>
+    public const string FamilyCoefficient = "familyCoefficient";
+
+    /// <summary>Part types with more than one downstream leg: a leg without flow is an issue there, and Revit caches a slot per leg (pressure-drop ledger, 2026-10-08).</summary>
+    public static readonly HashSet<string> JunctionPartTypes = new(StringComparer.Ordinal) {
+        "Tee", "TapAdjustable", "TapPerpendicular", "Wye", "Cross", "LateralTee", "LateralCross", "Pants", "MultiPort"
+    };
 
     public sealed record Analysis(
         IReadOnlyList<DuctNode> Nodes,
@@ -157,6 +165,13 @@ public static class DuctNetwork {
                 var (groupFlows, parent) = PassOne(ports[0].element, adj, nodeById, segById);
                 flows.AddRange(groupFlows);
                 foreach (var kv in parent) parentOf[kv.Key] = kv.Value == kv.Key ? ports[0].equipment : kv.Value;
+                var flowOf = groupFlows.ToDictionary(f => f.SegmentId, f => f.Cfm);
+                foreach (var x in ids) {
+                    if (!nodeById.TryGetValue(x, out var node) || node.Kind != DuctNodeKind.Fitting || !JunctionPartTypes.Contains(node.PartType ?? "")) continue;
+                    foreach (var c in node.Connectors)
+                        if (c.ConnectedTo is { } to && flowOf.TryGetValue(to.ElementId, out var cfm) && cfm <= 0)
+                            Add(DuctIssueKind.NoFlowLeg, x, c.Point, $"{node.PartType} leg {c.Index} carries no flow", c.Index);
+                }
             }
             issues.AddRange(groupIssues);
             groups.Add(new DuctGroup(gid, roots, classes.ToList(), systems.ToList(), terminals, ids.Count, loops,
@@ -178,19 +193,23 @@ public static class DuctNetwork {
         double[]? Point(long id) => nodeById.TryGetValue(id, out var n) ? n.Point : segById.TryGetValue(id, out var s) ? Mid(s) : null;
     }
 
-    /// <summary>Ratios a coefficient table is looked up by, from connector sizes and, when rooted, flow direction.</summary>
+    /// <summary>Ratios a coefficient table is looked up by. Transitions use explicit physical direction, never the root walk.</summary>
     private static IEnumerable<DuctFact> Geometry(DuctNode n, long? parent, Dictionary<long, DuctSegment> segments) {
         DuctFact F(string key, double value, string unit, DuctProvenance p = DuctProvenance.Geometry) =>
             new(key, Math.Round(value, 4), null, unit, p);
         var ports = n.Connectors;
         if (Fact(n, CenterRadius) is { } r && ports.FirstOrDefault()?.DiameterIn is { } d && d > 0)
             yield return F(ROverD, r / d, "");
-        var inlet = parent is { } up ? ports.FirstOrDefault(c => c.ConnectedTo?.ElementId == up) : null;
+        var inlet = n.PartType == "Transition"
+            ? TwoPortFlow(ports, c => c.Direction)?.In
+            : parent is { } up ? ports.FirstOrDefault(c => c.ConnectedTo?.ElementId == up) : null;
         if (inlet is not null) {
             yield return F(Inlet, inlet.Index, "", DuctProvenance.Derived);
-            if (n.PartType == "Transition" && ports.Count == 2 && Area(inlet) is { } a1 && a1 > 0
-                && Area(ports.First(c => c != inlet)) is { } ao)
-                yield return F(AoOverA1, ao / a1, "");
+            if (n.PartType == "Transition" && ports.Count == 2
+                && Area(inlet.Shape, inlet.DiameterIn, inlet.WidthIn, inlet.HeightIn) is { } a1 && a1 > 0
+                && ports.First(c => c != inlet) is { } outlet
+                && Area(outlet.Shape, outlet.DiameterIn, outlet.WidthIn, outlet.HeightIn) is { } ao)
+                yield return new DuctFact(AoOverA1, ao / a1, null, "", DuctProvenance.Geometry);
         }
         foreach (var c in ports) {
             if (c.ConnectedTo is not { } to || !segments.TryGetValue(to.ElementId, out var main)) continue;
@@ -204,6 +223,14 @@ public static class DuctNetwork {
             if (Area(ports.FirstOrDefault(o => o != c) ?? c) is { } ab) yield return F(AbOverAc, ab / mainArea, "");
             yield break;
         }
+    }
+
+    // Traversal toward a root does not establish physical airflow (return paths run the other way).
+    internal static (T In, T Out)? TwoPortFlow<T>(IReadOnlyList<T> ports, Func<T, string> direction) where T : class {
+        if (ports.Count != 2) return null;
+        if (direction(ports[0]) == "in" && direction(ports[1]) == "out") return (ports[0], ports[1]);
+        if (direction(ports[1]) == "in" && direction(ports[0]) == "out") return (ports[1], ports[0]);
+        return null;
     }
 
     /// <summary>Cross-section area, ft2; flat oval is a rectangle with two half-round ends (W major, H minor).</summary>

@@ -1,9 +1,9 @@
-import { RouteShell, emptyManifest } from "#/route";
+import { RouteShell, defineRoute } from "#/route";
 import { createFileRoute } from "@tanstack/react-router";
 import { FlaskConical, X } from "lucide-react";
 
-import { FactChip } from "#/components/lang/chip";
-import { ActionButton } from "#/components/lang/action-button";
+import { FactChip } from "@pe/kit/lang/chip";
+import { Button } from "@pe/kit/lang/button";
 import { Pane } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
 import { GroundedDocView } from "#/grounded-doc/GroundedDocView";
@@ -16,14 +16,15 @@ import { SAMPLE_DOC } from "#/grounded-doc/sample";
  * to highlight (and scroll) the other. The engine + view are standalone —
  * this route is just a harness around them.
  */
-/** Not cut over yet: an empty manifest is a legal manifest and the shell renders one. */
-const manifest = {
-  ...emptyManifest("doc-lab", "Doc Lab"),
+export const manifest = defineRoute({
+  key: "doc-lab",
+  name: "Doc Lab",
+  views: [{ key: "document", label: "Grounded document", draws: () => <DocLabRoute /> }],
   docs: "The grounded-document engine in isolation. Parse a PDF: markdown blocks land on the left, the original pages on the right. Hovering either side highlights (and scrolls) the other; clicking pins the link.",
-};
+});
 
 export const Route = createFileRoute("/doc-lab")({
-  component: DocLabRoute,
+  component: () => manifest.views![0]!.draws({ readings: {} }),
 });
 
 function DocLabRoute() {
@@ -57,18 +58,21 @@ function DocLabRoute() {
                 fixture · sample
               </FactChip>
             )}
-            <ActionButton
+            <Button
               label="remove"
+              kind="framed"
               icon={X}
               onClick={engine.clear}
               reason="Forget this document and return to the upload surface — the parse cache keeps the result for a re-parse"
-            />
+            >
+              remove
+            </Button>
           </div>
         ) : undefined
       }
     >
       <Surface>
-        <Pane kind="content" title="document" scroll="clip" flush>
+        <Pane title="document" scroll="clip" flush>
           <div className="flex min-h-8 shrink-0 items-center gap-3 px-4 py-1">
             {focused ? (
               <>
@@ -77,11 +81,14 @@ function DocLabRoute() {
                   {focused.id}
                 </span>
                 {engine.pinned && (
-                  <ActionButton
+                  <Button
                     label="unpin"
+                    kind="framed"
                     onClick={engine.clearPin}
                     reason="Release the pin so hover drives the focus again"
-                  />
+                  >
+                    unpin
+                  </Button>
                 )}
               </>
             ) : (
@@ -95,12 +102,15 @@ function DocLabRoute() {
             engine={engine}
             className="min-h-0 flex-1"
             emptyExtra={
-              <ActionButton
+              <Button
                 label="load the sample document"
+                kind="framed"
                 icon={FlaskConical}
                 onClick={() => engine.setDoc(SAMPLE_DOC)}
                 reason="FIXTURE — load the checked-in sample parse; no API key and no network involved"
-              />
+              >
+                load the sample document
+              </Button>
             }
           />
         </Pane>

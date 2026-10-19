@@ -19,7 +19,7 @@ const ROUTE = resolve(REPO, "ts/apps/web/src/route");
 const BUDGET = 600;
 
 /** Out of crusade-measured's scope; split owed in docs/features/design-system/LEDGER.md. */
-const LINE_BUDGET_ALLOW: Readonly<Record<string, number>> = { "spec-editor.tsx": 717 };
+const LINE_BUDGET_ALLOW: Readonly<Record<string, number>> = { "spec-editor.tsx": 631 };
 
 const linesOf = (text: string) => text.split("\n").length - (text.endsWith("\n") ? 1 : 0);
 

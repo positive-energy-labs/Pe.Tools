@@ -6,7 +6,7 @@
  * fixture stand-ins: the trace carried ids, kinds and geometry only.
  */
 import type { DuctClaim } from "@pe/agent-contracts";
-import type { DuctSnapshot } from "./readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 interface Row {
   id: number;
@@ -480,6 +480,7 @@ const length = (line: number[][]) =>
   line.slice(1).reduce((sum, p, i) => sum + Math.hypot(...p.map((v, j) => v - line[i]![j]!)), 0);
 
 const snapshot: DuctSnapshot = {
+  coordinateEncoding: "native-double",
   document: {
     title: "scene fixture (Chadds makeup-air trace)",
     readAt: "2026-10-17T00:00:00Z",
@@ -502,6 +503,7 @@ const snapshot: DuctSnapshot = {
   segments: ROWS.filter((row) => row.line).map((row) => ({
     id: row.id,
     kind: "duct",
+    curveKind: "line",
     shape: "round",
     size: '12"ø',
     diameterIn: 12,
@@ -520,6 +522,7 @@ const snapshot: DuctSnapshot = {
     fanStatic: "PE_M_Fan_ExternalStaticPressure",
     fanFlow: "PE_M_Fan_AirFlow",
     componentDrop: "Pressure Drop",
+    fittingCoefficient: "Pe_C",
   },
 };
 

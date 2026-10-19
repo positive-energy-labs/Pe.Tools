@@ -1,105 +1,202 @@
 import { z } from "zod";
 import { nativeProcessSchema } from "./action-receipts.ts";
-import { sdkSessionSelectionSchema, sdkDocumentRefSchema } from "./sdk-session.ts";
-import type { RouteStateSpec } from "./route-state.ts";
-import { trichotomyCellSchema } from "./trichotomy.ts";
-const documentSelector = z.string().trim().min(1);
-/** What open/start launches: a document into a session, or a new session. */
-export const instancesLaunchSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("open"),
-    session: sdkSessionSelectionSchema,
-    document: documentSelector,
-    missingLinks: z.enum(["allow", "refuse"]).default("refuse"),
-  }),
-  z.object({
-    kind: z.literal("start"),
-    year: z.string().regex(/^20\d{2}$/),
-    name: z.string().max(64),
-    document: documentSelector.optional(),
-    quarantine: z.boolean().default(false),
-    posture: z.enum(["foreground", "background"]).default("foreground"),
-    missingLinks: z.enum(["allow", "refuse"]).default("refuse"),
-  }),
-]);
-export type InstancesLaunch = z.infer<typeof instancesLaunchSchema>;
-/**
- * One authored cell: Pea may propose a launch, a person stages it, and open/start read `staged`
- * only. Strict, so Work in the old `{ staged }` shape fails closed rather than lose its value.
- */
-export const instancesDocumentSchema = z.strictObject({
-  launch: trichotomyCellSchema(instancesLaunchSchema).default({}),
-});
-export type InstancesDocument = z.infer<typeof instancesDocumentSchema>;
-export const instancesRouteState = {
-  route: "instances",
-  title: "Open",
-  description:
-    "Select Revit sessions and stage documents. Refresh to discover installed years, sessions and recents. Pea may propose a launch (an open or a start); a person stages it, and open/start launch exactly the staged value, never a proposal. Other lifecycle commands are human-only.",
-  schema: instancesDocumentSchema,
-  // Pea proposes; the staged launch is a person's, and it is what open/start consume.
-  agentWriteMask: [["launch", "proposal"]],
-  commands: {},
-} satisfies RouteStateSpec<typeof instancesDocumentSchema>;
+import { sdkStandardReadingSchema, holdingsReadingSchema } from "./reading.ts";
+import {
+  sdkSessionSelectionSchema,
+  sdkDocumentRefSchema,
+  type SdkSessionSelection,
+} from "./sdk-session.ts";
 
-export const instancesSessionSchema = z.strictObject({
-  selection: sdkSessionSelectionSchema,
-  process: nativeProcessSchema,
+/**
+ * A new Revit. `owner: "pea"` starts it in the background (no window brought forward) as an
+ * acquisition: Pea may stop it while every document in it is its own. `addins: "off"` quarantines
+ * third-party add-ins for that Revit.
+ */
+export const instancesStartSchema = z.strictObject({
+  year: z.string().regex(/^20\d{2}$/),
+  owner: z.enum(["you", "pea"]),
+  addins: z.enum(["on", "off"]),
 });
-const workInput = z.object({ workspaceId: z.string().min(1) });
-const sessionInput = workInput.extend({ session: instancesSessionSchema });
-/** Explicit unsaved-work policy for stop and close. Development HR restart always discards. */
-export const instancesUnsavedSchema = z.enum(["keep", "discard"]);
-const unsaved = instancesUnsavedSchema;
+export type InstancesStart = z.infer<typeof instancesStartSchema>;
+
+/** APS version identity, selected explicitly; a cloud model GUID alone is not a baseline. */
+export const cloudVersionSchema = z.strictObject({
+  projectId: z.string().regex(/^b\.[0-9a-f-]{36}$/i),
+  itemId: z.string().min(1),
+  versionId: z.string().regex(/^urn:adsk\.[^:]+:fs\.file:vf\.[^?]+\?version=\d+$/),
+});
+export type CloudVersion = z.infer<typeof cloudVersionSchema>;
+
+/**
+ * One launch: a source opened into a running session or into a new Revit. Every option is the
+ * SDK's own `doc open` flag; the press that named it is the consent (ADR 0016), so nothing is
+ * staged and nothing waits for a second approval. Whether a launch is an acquisition is derived
+ * from `into.start.owner` or the target Revit's acquisition receipts, never passed.
+ */
+export const instancesLaunchSchema = z.strictObject({
+  /** A local path, a `cld://` identity, `recent:<title>`, or an openId (with `reload`). */
+  source: z.string().trim().min(1),
+  /** Pea downloads this immutable version; it never opens the connected cloud model. */
+  cloudVersion: cloudVersionSchema.optional(),
+  /** `source` is a .rte or .rft template path: a new unsaved document is created from it. */
+  template: z.boolean().optional(),
+  into: z.union([
+    z.strictObject({ session: sdkSessionSelectionSchema }),
+    z.strictObject({ start: instancesStartSchema }),
+  ]),
+  /** Open detached from central, preserving worksets. Pea's copies of workshared models set it. */
+  detach: z.boolean().optional(),
+  /** Open a file saved by an older Revit in this newer one; nothing is saved. */
+  upgrade: z.boolean().optional(),
+  /** A missing linked file: allow (open without it, reported) or refuse the open. Default refuse. */
+  links: z.enum(["allow", "refuse"]).optional(),
+  /** `source` is an open document's openId: reload the latest central changes into it. */
+  reload: z.boolean().optional(),
+});
+export type InstancesLaunch = z.infer<typeof instancesLaunchSchema>;
+
+/** A Revit cloud identity. Every other source is a local path, a `recent:` title or an openId. */
+export const isCloudSource = (source: string) => /^(cld:\/\/|cloud:)/i.test(source);
+/**
+ * The SDK's `--unsynced` answer for one open: a cloud source open has no default and must say,
+ * and the launch keeps this machine's unsynced work; the SDK refuses the flag on any other open
+ * ("unsynced belongs to a cloud open"). A `recent:` title the SDK resolves to a cloud model
+ * refuses `doc.unsynced-required`; name its `cld://` identity instead.
+ */
+export const launchUnsynced = (
+  launch: Pick<InstancesLaunch, "source" | "template" | "reload">,
+): "keep" | undefined =>
+  !launch.template && !launch.reload && isCloudSource(launch.source) ? "keep" : undefined;
+
+const sessionInput = z.strictObject({
+  session: z.strictObject({ selection: sdkSessionSelectionSchema, process: nativeProcessSchema }),
+});
+/** Unsaved work has no default: the caller keeps or discards it, every time. */
+const unsaved = z.enum(["keep", "discard"]);
+/** Workshared ownership on the way out: all returns every borrow to central, none keeps them. */
+const release = z.enum(["none", "all"]);
+/** Where a save writes: in place, a Save As to a new file, or a synchronize with central. */
+const saveTo = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("self") }),
+  z.strictObject({
+    /**
+     * Revit's Save As: the open document becomes `out` (create-only, never over a file) and stays
+     * the same lifetime; the file it came from keeps its last save.
+     */
+    kind: z.literal("save-as"),
+    out: z.string().trim().min(1),
+    /** From a workshared model: preserve keeps a detached central, strip an independent copy. */
+    worksets: z.enum(["preserve", "strip"]).optional(),
+  }),
+  z.strictObject({ kind: z.literal("central"), comment: z.string().max(30_000).optional() }),
+]);
+
+/**
+ * `needs` is the effect: `document` touches one exact lifetime, `session` every document the
+ * session holds. The host resolves the affected lifetimes and admits each through one crossing.
+ */
 export const instancesActions = {
   "instances.start": {
-    says: "Start the authored staged session through the SDK under this action id; the receipt is the SDK envelope.",
+    says: "Start an empty Revit of one installed year. owner pea starts it in the background; addins off quarantines third-party add-ins. The receipt is the SDK envelope.",
     dirties: ["sdk"],
     needs: "nothing",
     actor: "any",
-    input: workInput,
+    input: instancesStartSchema,
   },
   "instances.open": {
-    says: "Open the authored staged document in the explicitly supplied session incarnation; refused if that document is already open there.",
+    says: "Open a source into a running session (into.session) or a new Revit (into.start). A Pea acquisition copies local bytes, or downloads an explicit immutable APS cloudVersion, into its baseline/work folder. Only the local work copy opens, detached when workshared. Pea writes only after native facts certify independence. The receipt names the acquisition and baseline.",
     dirties: ["sdk"],
     needs: "nothing",
+    actor: "any",
+    input: instancesLaunchSchema,
+  },
+  "instances.restart": {
+    says: "Restart the explicitly supplied session incarnation, discarding unsaved changes and reopening its documents.",
+    dirties: ["sdk"],
+    needs: "session",
     actor: "any",
     input: sessionInput,
   },
-  "instances.restart": {
-    says: "Restart the explicitly supplied development session, discarding unsaved changes and reopening its documents. Human-only.",
-    dirties: ["sdk"],
-    needs: "nothing",
-    actor: "human",
-    input: sessionInput.strict(),
-  },
   "instances.stop": {
-    says: "Stop the explicitly supplied session incarnation, keeping or discarding unsaved changes as the person chose. Human-only.",
+    says: "Stop the explicitly supplied session incarnation, keeping or discarding unsaved changes as the caller chose.",
     dirties: ["sdk"],
-    needs: "nothing",
-    actor: "human",
+    needs: "session",
+    actor: "any",
     input: sessionInput.extend({ force: z.boolean().default(false), unsaved }),
   },
-  "instances.close": {
-    says: "Close the explicitly supplied document lifetime by its published openId, keeping or discarding unsaved changes as the person chose. Human-only.",
+  "instances.reset": {
+    says: "Recover a stuck session incarnation: dismiss its windows, cancel its operations, close its documents keeping or discarding unsaved work, and restart it if still blocked (or always, with restart).",
+    dirties: ["sdk"],
+    needs: "session",
+    actor: "any",
+    input: sessionInput.extend({
+      unsaved,
+      release: release.optional(),
+      restart: z.boolean().default(false),
+    }),
+  },
+  "instances.dialogs": {
+    says: "Dismiss one window of the session incarnation by the handle a dialogs reading just listed.",
+    dirties: ["sdk"],
+    needs: "session",
+    actor: "any",
+    input: sessionInput.extend({ hwnd: z.string().trim().min(1) }),
+  },
+  "instances.save": {
+    says: "Save the explicitly supplied document lifetime in place, by Save As to a new file (the open document then lives at that file and the old file keeps its last save), or by synchronizing with central, optionally returning its workshared ownership. A Save As of an acquired document records the new file as that acquisition's artifact; cleanup keeps it.",
+    dirties: ["sdk"],
+    needs: "document",
+    actor: "any",
+    input: sessionInput.extend({
+      document: sdkDocumentRefSchema,
+      to: saveTo,
+      release: release.optional(),
+    }),
+  },
+  "instances.handover": {
+    says: "Hand over one acquisition by its id: save its document to the acquisition's reserved result path (create-only, never central, ownership kept), then write a diff plan against its recorded baseline that names what it could not compare. Review only: nothing merges, loads back, overwrites or syncs.",
     dirties: ["sdk"],
     needs: "nothing",
-    actor: "human",
+    actor: "any",
+    input: z.strictObject({ acquisition: z.string().min(1) }),
+  },
+  "instances.cleanup": {
+    says: "Release one acquisition by its id: close its document (keep refuses while it holds changes no handover saved; discard drops them), stop the Revit it started once nothing else is open there, and remove its temporary copies. A handover's result, diff plan and baseline are kept.",
+    dirties: ["sdk"],
+    needs: "nothing",
+    actor: "any",
+    input: z.strictObject({ acquisition: z.string().min(1), unsaved }),
+  },
+  "instances.close": {
+    says: "Close the explicitly supplied document lifetime by its published openId, keeping or discarding unsaved changes as the caller chose.",
+    dirties: ["sdk"],
+    needs: "document",
+    actor: "any",
     input: sessionInput.extend({ document: sdkDocumentRefSchema, unsaved }),
   },
 } as const;
 export type InstancesActionKey = keyof typeof instancesActions;
 
+/**
+ * The SDK session an Instances action input addresses: an incarnation's `session.selection`, or a
+ * launch's `into.session`. Null for an action that starts a new Revit.
+ */
+export function instancesSessionSelection(input: unknown): SdkSessionSelection | null {
+  const record = (value: unknown) =>
+    typeof value === "object" && value !== null ? (value as Record<string, unknown>) : undefined;
+  const selected =
+    record(record(input)?.session)?.selection ?? record(record(input)?.into)?.session;
+  return selected === undefined ? null : sdkSessionSelectionSchema.parse(selected);
+}
+
 export const instancesReading = {
-  says: "Read SDK sessions, installed years, recents or open documents without changing authored Instances Work.",
+  says: "Read SDK sessions, installed years, recents, documents, visible windows (dialogs), session-journal logs, or op receipts including work outside the host journal. Holdings requires exact session, processStartUtc and openId, returns at most 100 elements with a content-bound cursor; null/failed observations refuse. Logs and ops accept tail (1–500, default 100); the SDK owns their lineage and envelopes.",
   dirties: [],
   needs: "nothing",
   actor: "any",
   mutates: false,
-  input: z.object({
-    read: z.enum(["sessions", "doctor", "recents", "documents"]),
-    session: sdkSessionSelectionSchema.optional(),
-    year: z.string().optional(),
-    all: z.boolean().optional(),
-  }),
+  input: z.discriminatedUnion("read", [
+    sdkStandardReadingSchema.omit({ kind: true }),
+    holdingsReadingSchema.omit({ kind: true }),
+  ]),
 } as const;

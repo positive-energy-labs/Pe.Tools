@@ -11,6 +11,7 @@
  * with the member sha256 explicitly adopted as its edit basis.
  */
 import { z } from "zod";
+import { contributionKey, packageIdSchema, packageMemberPathSchema } from "./contribution.ts";
 import { type RouteStateSpec } from "./route-state.ts";
 import { trichotomyAgentMask, trichotomyCellSchema } from "./trichotomy.ts";
 
@@ -40,7 +41,10 @@ export type SettingsFieldState = z.infer<typeof settingsFieldStateSchema>;
 /* ── Ephemeral member read (pod.member.read / pod.member.compose) ─────────── */
 
 /** A pod member, everywhere: manifest `id` plus the member's pod-relative path. */
-export const podMemberSchema = z.object({ pod: z.string().min(1), path: z.string().min(1) });
+export const podMemberSchema = z.strictObject({
+  pod: packageIdSchema,
+  path: packageMemberPathSchema,
+});
 export type PodMember = z.infer<typeof podMemberSchema>;
 /** The exact member bytes an apply consumed. */
 export const podMemberSourceSchema = podMemberSchema.extend({
@@ -52,13 +56,14 @@ export type PodMemberSource = z.infer<typeof podMemberSourceSchema>;
  * composition context for `@local`; `path` names the draft in the run evidence.
  */
 export const podDraftSourceSchema = z.object({
-  pod: z.string().min(1).optional(),
-  path: z.string().min(1),
+  pod: packageIdSchema.optional(),
+  path: packageMemberPathSchema,
   content: z.string(),
 });
 export type PodDraftSource = z.infer<typeof podDraftSourceSchema>;
 /** The Work key of an authored member: derived from its address, never stored beside it. */
-export const memberWork = (member: PodMember): string => `member:${member.pod}/${member.path}`;
+export const memberWork = (member: PodMember): string =>
+  contributionKey({ kind: "member", packageId: member.pod, path: member.path });
 
 export const settingsValidationIssueSchema = z.looseObject({
   message: z.string(),

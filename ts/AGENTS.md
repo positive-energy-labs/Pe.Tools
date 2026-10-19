@@ -47,13 +47,15 @@ This is a private-product monorepo posture, not a public npm package ecosystem p
 
 Names may change, but the authority boundaries should not blur.
 
-`pea` is the user product entrypoint. It owns product policy over a MastraCode `Session` and TUI shell. It is not the semantic authority for Revit behavior, settings semantics, JSON schema generation, product layout, or Host operation contracts.
+`pea` is the user product entrypoint. It is a thin CLI over the host: `pea --prompt` runs one headless turn on a harness thread, and the lab harness (Claude Code or Codex, ADR 0015) owns the loop and inference. It is not the semantic authority for Revit behavior, settings semantics, JSON schema generation, product layout, or Host operation contracts.
 
 There is no separate dev agent surface anymore (`peco` was deleted): the SDK `pe-revit` CLI/MCP owns execution-loop and test mechanics, the `pea` MCP server owns product tools, and `pea --prompt` is the headless black-box Pea probe.
 
-`@pe/runtime` is the thin shared runtime helper package below Pea and tooling. Keep it limited to storage, memory, auth profile, tool metadata, request-context, and Harness construction helpers that still need Pe-owned policy. Do not rebuild MastraCode protocol, run-control, event-bus, model/mode, thread, or ACP surfaces here.
+`@pe/runtime` is the thin shared runtime helper package below Pea and tooling. Keep it limited to route-workspace state, resource streams, invocation scope, runtime-owner resolution, and analytics that need Pe-owned policy. Do not rebuild harness loop, model, mode, thread, or ACP surfaces here; those live in `apps/host/src/harness/`.
 
-Pea's Mastra workspace root and product home are the same directory. By default this is the directory where the Pea CLI is launched; `--workspace-root` may override it. Pea should operate inside that product workspace, while scripting tools can continue to default to the Host/Revit scripting workspace key such as `workspaces/default`.
+Package direction is `contracts <- runtime <- mcps/host/web`. Contracts and runtime must not import MCP or app adapters through package names or relative paths. Contracts must not depend on runtime. `@pe/runtime/context` owns invocation scope, caller-context transport, and its browser projection. `@pe/runtime/runtime-owner` resolves the executable runtime owner. `PeaRuntimeCapabilities` belongs to runtime. Host code must obtain these from runtime rather than MCP. The `package-direction.guard.test.ts` repo guard enforces these edges. The host may import MCP server creation and transport from `@pe/mcps/server`, and `peaProductTools` for MCP instrumentation. Its existing catalog, route registration, and skill publication imports remain adapter composition; they do not grant MCP ownership of invocation context or runtime capabilities.
+
+The harness child's cwd (the world root) is the product home (`productHomePath` in `@pe/host-contracts/product-paths`: `PE_TOOLS_PRODUCT_HOME`, else `Documents\Pe.Tools`; the Revit side reads the same variable). Pea operates inside that product workspace, while scripting tools can continue to default to the Host/Revit scripting workspace key such as `workspaces/default`.
 
 ## Authority Model
 
@@ -122,9 +124,9 @@ Avoid spreading generated import paths into unrelated runtime policy. Generated 
 
 ## Pea UI Posture
 
-The old Pe-owned local browser workbench and ACP/web protocol stack were deleted during the MastraCode 0.25 session migration. Reintroduce a browser UI only on top of a current Mastra-native session/transport instead of restoring the deleted Pe protocol adapters.
+The browser chat renders the host's harness thread SSE stream (ADR 0015). Do not restore a Pe-owned agent loop or a second protocol adapter beside ACP.
 
-Pea Cloud, WorkOS, Mastra Gateway, sponsored model access, and Gateway-backed observational memory remain product goals, but they must be lazy capabilities. Local TUI startup, thread browsing, local provider-key model access, and Revit/operator dev loops should not require cloud login; use explicit local-only/no-cloud-auth controls when cloud auth would add friction.
+Pea Cloud, WorkOS, and sponsored model access remain product goals, but they must be lazy capabilities. Host startup, thread browsing, subscription or endpoint-provider model access, and Revit/operator dev loops should not require cloud login; use explicit local-only/no-cloud-auth controls when cloud auth would add friction.
 
 ## Pea TUI dev loop
 

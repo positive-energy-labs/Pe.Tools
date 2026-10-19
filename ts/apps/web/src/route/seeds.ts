@@ -29,6 +29,19 @@ export const DEMO_PODS: readonly PodRow[] = [
     version: "0.4.0",
     folder: "Documents/Pe.Tools/Pods/mech-standards",
     entrypoints: [],
+    contributions: [
+      DEMO_SPEC_PATH,
+      DEMO_FAMILIES_SPEC_PATH,
+      DEMO_HEADER_PATH,
+      DEMO_PERF_HEAT_PATH,
+    ].map((path) => ({
+      kind: "member" as const,
+      path,
+      memberPath: path,
+      key: `member:@mech-standards/${path}`,
+      name: path,
+      description: null,
+    })),
     members: [
       { path: DEMO_SPEC_PATH, sha256: hash(2), schema: SCHEDULE_SCHEMA },
       { path: DEMO_FAMILIES_SPEC_PATH, sha256: hash(8), schema: FAMILIES_SCHEMA },
@@ -42,7 +55,17 @@ export const DEMO_PODS: readonly PodRow[] = [
     name: "Scripts",
     version: "0.1.0",
     folder: "Documents/Pe.Tools/Pods/scripts",
-    entrypoints: [{ id: "tag", sourcePath: "src/Tag.cs" }],
+    entrypoints: [{ sourcePath: "src/Tag.cs" }],
+    contributions: [
+      {
+        kind: "script",
+        path: "src/Tag.cs",
+        memberPath: "src/Tag.cs",
+        key: "script:@scripts/src/Tag.cs",
+        name: "src/Tag.cs",
+        description: null,
+      },
+    ],
     members: [{ path: "src/Tag.cs", sha256: hash(7), schema: null }],
     diagnostics: [
       {

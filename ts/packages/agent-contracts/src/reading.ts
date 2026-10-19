@@ -1,3 +1,6 @@
+import type { HeldElement, ProcessIdentity } from "@pe/host-contracts/pe-revit-contract";
+import type { MachineLeg } from "./machine.ts";
+import type { SdkSessionSelection } from "./sdk-session.ts";
 import { sdkSessionSelectionSchema } from "./sdk-session.ts";
 /**
  * Reading — anything observed from Revit, the host, or disk. One subject, one observation time,
@@ -61,13 +64,54 @@ export type Reading<T> =
 /* ── Requests: what a Reading is a reading OF ─────────────────────────────────────────────── */
 
 /** Owner addresses, not a second state model. Projection inputs participate in identity. */
-export const sdkReadingSchema = z.strictObject({
+export const sdkStandardReadingSchema = z.strictObject({
   kind: z.literal("sdk"),
-  read: z.enum(["sessions", "doctor", "recents", "documents"]),
+  read: z.enum(["sessions", "doctor", "recents", "documents", "dialogs", "logs", "ops"]),
+  tail: z.number().int().min(1).max(500).optional(),
   session: sdkSessionSelectionSchema.optional(),
   year: z.string().min(1).optional(),
   all: z.boolean().optional(),
 });
+export const holdingsReadingSchema = z.strictObject({
+  kind: z.literal("sdk"),
+  read: z.literal("holdings"),
+  section: z.enum(["elements", "worksets"]).default("elements"),
+  session: sdkSessionSelectionSchema,
+  processStartUtc: z.iso.datetime(),
+  openId: z.string().min(1),
+  limit: z.number().int().min(1).max(100).default(50),
+  cursor: z.string().max(300).optional(),
+});
+export const sdkReadingSchema = z.discriminatedUnion("read", [
+  sdkStandardReadingSchema,
+  holdingsReadingSchema,
+]);
+export type HoldingsReading = z.infer<typeof holdingsReadingSchema>;
+export type HoldingsReadingResult =
+  | { state: "refused"; code: string; detail: string }
+  | {
+      state: "ok";
+      process: ProcessIdentity;
+      session: SdkSessionSelection;
+      openId: string;
+      title: string;
+      observedAtUtc: string;
+      leg: MachineLeg;
+      source: string;
+      digest: string;
+      empty: boolean;
+      savedNotSynced: boolean | null;
+      unsaved: boolean;
+      workshared: boolean;
+      section: "elements" | "worksets";
+      total: number;
+      elementCount: number;
+      worksetCount: number;
+      offset: number;
+      rows: readonly HeldElement[] | readonly string[];
+      nextCursor: string | null;
+    };
+
 export type SdkReading = z.infer<typeof sdkReadingSchema>;
 
 export const readingRequestSchema = z.discriminatedUnion("kind", [
@@ -80,6 +124,22 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
     workKeySchema.options[3].extend({ kind: z.literal("work") }),
   ]),
   z.strictObject({ kind: z.literal("thread-head"), thread: z.string().min(1).max(200) }),
+  /** Every harness thread's summary, one snapshot per change (coalesced). */
+  z.strictObject({ kind: z.literal("threads") }),
+  /**
+   * One harness thread's events from the host log (`host-log.ts`): each `event` frame is one
+   * HarnessEvent and carries its log `id`. With no cursor, or one older than retention, the first
+   * frame is a `gap` carrying the cursor: read the thread body, then apply events by `seq`.
+   */
+  z.strictObject({ kind: z.literal("thread"), thread: z.string().min(1).max(200) }),
+  /**
+   * The host's card items (`MachineNotice`) from the host log: each `event` frame is one item and
+   * carries its log `id`, so a follower that persists the last id replays exactly what it missed.
+   * With no cursor, or one the log does not hold, the first frame is a `gap` carrying the log's
+   * current id: nothing earlier is owed, follow from there. A `snapshot` frame says whether a tray
+   * follows (`{ tray }`); `as: "tray"` marks the one follower that is the tray itself.
+   */
+  z.strictObject({ kind: z.literal("notices"), as: z.literal("tray").optional() }),
   z.strictObject({ kind: z.literal("takeoff-reading"), target: documentRefSchema }),
   /**
    * The families matrix of one document over one filter, by ENVELOPE only
@@ -164,12 +224,23 @@ export const readingFrameSchema = z.discriminatedUnion("kind", [
     changed: z.boolean().optional(),
   }),
   z.strictObject({ kind: z.literal("failure"), key: z.string(), error: z.string() }),
-  z.strictObject({ kind: z.literal("event"), key: z.string(), value: z.unknown() }),
+  /**
+   * `id` marks a host log frame: it is the SSE id, and a reconnect resumes after the last one
+   * (`?after=<id>` or `Last-Event-ID`). Log frames of every key share one lane in id order; a
+   * reader that falls behind it loses the connection, never a frame.
+   */
+  z.strictObject({
+    kind: z.literal("event"),
+    key: z.string(),
+    value: z.unknown(),
+    id: z.number().int().nonnegative().optional(),
+  }),
   // null means the connection has no history for the disconnected interval.
   z.strictObject({
     kind: z.literal("gap"),
     key: z.string(),
     dropped: z.number().int().nonnegative().nullable(),
+    id: z.number().int().nonnegative().optional(),
   }),
 ]);
 export type ReadingFrame = z.infer<typeof readingFrameSchema>;

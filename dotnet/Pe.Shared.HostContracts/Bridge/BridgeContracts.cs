@@ -6,8 +6,12 @@ using Pe.Shared.HostContracts.SettingsStorage;
 namespace Pe.Shared.HostContracts.Bridge;
 
 public static class BridgeProtocol {
-    // 24: runtime owner is required before bridge registration authorizes dispatch.
-    public const int ContractVersion = 24;
+    // 25: open ids come from the SDK bridge's sole document identity authority (SDK beta.202)
+    // and the snapshot attests it with DocumentIdentity; a beta.200 payload's own mint is refused.
+    public const int ContractVersion = 25;
+
+    /// <summary>Snapshot marker: every listed open id is the SDK bridge's id for that lifetime.</summary>
+    public const string DocumentIdentity = "sdk-open-v1";
 }
 
 [JsonConverter(typeof(StringEnumConverter))]
@@ -23,8 +27,8 @@ public enum BridgeFrameKind {
 
 /// <summary>
 ///     One open document as the bridge reads it live on every snapshot.
-///     <c>OpenId</c> is the payload tracker's id (SDK <c>TrackedDocument.OpenId</c>): the only id a route
-///     <c>?target=</c> accepts. It is not the id <c>pe-revit doc open</c> prints.
+///     <c>OpenId</c> is the SDK bridge's open-lifetime id (<c>TrackedDocument.OpenId</c>, one authority per
+///     process since SDK beta.202): the id a route <c>?target=</c> accepts and the id <c>pe-revit doc list</c> prints.
 ///     <c>Address</c> is the cloud model GUID or absolute path; null until the document is saved
 ///     (detached, new, or opened by <c>EditFamily</c>). The address follows SaveAs; <c>OpenId</c> does not change.
 /// </summary>
@@ -52,7 +56,9 @@ public sealed record BridgeStateSnapshot(
     long ActiveDocumentObservedAtUnixMs,
     string? SharedParametersFilename,
     List<BridgeDocumentSnapshot> OpenDocuments,
-    List<HostRuntimeAssemblyData> RuntimeAssemblies
+    List<HostRuntimeAssemblyData> RuntimeAssemblies,
+    // BridgeProtocol.DocumentIdentity only when every listed id was attested by the SDK authority; else null.
+    string? DocumentIdentity
 );
 
 // Vocabulary: a SESSION is one Revit process incarnation; a CONNECTION is one WS attachment to it.

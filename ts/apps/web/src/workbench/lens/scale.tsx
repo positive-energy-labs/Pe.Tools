@@ -1,11 +1,8 @@
-import { type ToolCall } from "../chat-state";
-
 /** Document px → dial px. Lower = the whole thread packs into less rail. */
 export const SCALE = 0.045;
 export const FOCAL = 0.5;
 /** A band never draws thinner than this, so a one-line turn still reads as a block. */
 export const MIN_BAND = 8;
-export const HEAD_H = 40;
 
 export interface Geom {
   key: string;
@@ -21,12 +18,6 @@ export interface Moment {
   createdAt?: Date;
   /** The turn's opening text, clipped, shown beside its band on hover. */
   preview?: string;
-}
-
-export interface TraceCell {
-  key: string;
-  call: ToolCall;
-  parentId?: string;
 }
 
 /** A band's drawn box, and the doc → rail mapping every mark on the rail shares. */

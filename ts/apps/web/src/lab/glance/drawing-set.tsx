@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import type { RevitDetailSheets } from "@pe/host-contracts/generated";
-import { EmptyState } from "#/components/lang/empty";
+import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Provenance, Section } from "#/components/lang/section";
 import { VizChip } from "#/ops/primitives";
 import { asNumber, asRecord, asRecords, asString } from "#/ops/registry";
 import type { SyntheticOp, SyntheticViewProps } from "#/lab/synthetic";
 import { SheetCanvas } from "#/ops/views/detail/schedules";
-import { Press } from "#/components/lang/press";
-import { PressContent } from "#/components/anatomy/press-content";
+import { Button } from "@pe/kit/lang/button";
+import { PressContent } from "@pe/kit/anatomy/press-content";
 
 const DETAIL_BUDGET = 10;
 
@@ -104,12 +104,11 @@ function Thumbnail({
   onSelect: () => void;
 }) {
   return (
-    <Press
-      type="button"
-      tone="neutral"
-      state={selected ? "selected" : "rest"}
+    <Button
+      label={`${sheet.sheetNumber} — ${sheet.sheetName}`}
+      pressed={selected}
       onClick={onSelect}
-      title={
+      reason={
         entry
           ? `${sheet.sheetNumber} — ${sheet.sheetName}`
           : `${sheet.sheetNumber} — ${sheet.sheetName} (not detailed: outside the ${DETAIL_BUDGET}-sheet budget)`
@@ -120,7 +119,7 @@ function Thumbnail({
         <span className="truncate">{sheet.sheetNumber}</span>
         {entry && <span className="truncate">{sheet.sheetName}</span>}
       </PressContent>
-    </Press>
+    </Button>
   );
 }
 
