@@ -110,16 +110,20 @@ export function series(snapshot: DuctSnapshot, tags: Set<string>) {
   return { snapshot: { ...snapshot, groups, issues }, findings };
 }
 
-const tolerated = new WeakMap<DuctSnapshot, Map<string, ReturnType<typeof tolerate>>>();
+const cache = new WeakMap<DuctSnapshot, Map<string, ReturnType<typeof tolerate>>>();
+/** `tolerate` under Work's staged ignore verdicts, cached per snapshot and ignore set. */
+export function tolerated(snapshot: DuctSnapshot, work: DuctsRouteDocument | null) {
+  const byIgnore = cache.get(snapshot) ?? cache.set(snapshot, new Map()).get(snapshot)!;
+  const key = ignoreKey(work);
+  return byIgnore.get(key) ?? byIgnore.set(key, tolerate(snapshot, work)).get(key)!;
+}
 const inSeries = new WeakMap<DuctSnapshot, Map<string, ReturnType<typeof series>>>();
 const last = new WeakMap<DuctSnapshot, { work: DuctsRouteDocument | null; survey: Survey }>();
 
 export function survey(snapshot: DuctSnapshot, work: DuctsRouteDocument | null): Survey {
   const hit = last.get(snapshot);
   if (hit && hit.work === work) return hit.survey;
-  const byIgnore = tolerated.get(snapshot) ?? tolerated.set(snapshot, new Map()).get(snapshot)!;
-  const key = ignoreKey(work);
-  const t = byIgnore.get(key) ?? byIgnore.set(key, tolerate(snapshot, work)).get(key)!;
+  const t = tolerated(snapshot, work);
   const staged = stagedDucts(work);
   const tags = (staged.loads.preview?.systems ?? []).flatMap((x) => (x.tag ? [x.tag] : [])).sort();
   const bySeries = inSeries.get(t.snapshot) ?? inSeries.set(t.snapshot, new Map()).get(t.snapshot)!;

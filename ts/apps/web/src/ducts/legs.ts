@@ -9,14 +9,20 @@
  * - A subject that starts or ends on a duct or fitting starts or ends at a place of kind `open`.
  * - Two consecutive ids that share no connector are a break, and the leg runs on through it. When
  *   the snapshot joins them through at most `OMISSION_HOPS` connections over elements outside the
- *   subject, the break is an `omission` carrying the skipped ids (the subject left them out);
- *   otherwise it is a `gap` (the model is not connected there). Both are facts, not errors.
+ *   subject, the break is an `omission` carrying the skipped ids (the subject left them out).
+ *   Else, when the tolerated graph (`tolerated`, Work's ignore verdicts honored, as the builder
+ *   reads it) bridges it, the break is `inferred`, carrying the proximity finding: joined by
+ *   proximity, a person rules on it. An inferred joint or tap bridges a break when it links the
+ *   two sides, each side an element or one the snapshot joins it to (an end cap closing the host
+ *   a duct lands on). Otherwise it is a `gap` (the model is not connected there). All are facts, not errors.
  * - Mark is not a concept here (the firm does not use it): a place is named by `labelOf(id)`, else
  *   `family type`, else `kind id`.
  */
 import type { DuctClaim } from "@pe/agent-contracts";
 
+import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import { snapshotById } from "@pe/ducts-domain/readiness";
+import { tolerated } from "@pe/ducts-domain/survey";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 type Node = DuctSnapshot["nodes"][number];
@@ -68,6 +74,8 @@ export interface SubjectCut {
   gaps: { after: number; before: number }[];
   /** Consecutive ids the snapshot connects only through `skipped`, in path order, none in the subject. */
   omissions: { after: number; before: number; skipped: number[] }[];
+  /** Consecutive ids only a proximity inference joins; `findingId` keys the verdict that rules on it. */
+  inferred: { after: number; before: number; findingId: string }[];
 }
 
 /** The longest chain of connections a break is searched across before it is called a gap. */
@@ -137,6 +145,7 @@ export function legsOf(
   snapshot: DuctSnapshot,
   ids: readonly number[],
   labelOf: (id: number) => string | null = () => null,
+  work: DuctsRouteDocument | null = null,
 ): SubjectCut {
   const { nodes: nodeById, segments: segmentById } = snapshotById(snapshot);
   const levelName = new Map(snapshot.levels.map((level) => [level.id, level.name]));
@@ -165,6 +174,7 @@ export function legsOf(
   const nodes: Place[] = [];
   const gaps: SubjectCut["gaps"] = [];
   const omissions: SubjectCut["omissions"] = [];
+  const inferred: SubjectCut["inferred"] = [];
   const subject = new Set(ids);
   let neighbours: Map<number, Set<number>> | null = null;
   let from: Place | null = null;
@@ -192,13 +202,24 @@ export function legsOf(
     legLevel = null;
   };
 
+  const side = (id: number) => new Set([id, ...(neighbours!.get(id) ?? [])]);
+  const bridgeOf = (after: number, before: number) => {
+    const [a, b] = [side(after), side(before)];
+    return tolerated(snapshot, work).findings.find(
+      ({ kind, elementIds: [x, y] }) =>
+        kind !== "loop-by-inference" && ((a.has(x!) && b.has(y!)) || (a.has(y!) && b.has(x!))),
+    )?.id;
+  };
+
   const elements = ids.map(elementOf);
   elements.forEach((element, i) => {
     const next = elements[i + 1];
     if (next && !reaches(element, next)) {
       neighbours ??= neighboursOf(snapshot);
       const skipped = skippedBetween(neighbours, element.id, next.id, subject);
+      const finding = skipped?.length ? undefined : bridgeOf(element.id, next.id);
       if (skipped?.length) omissions.push({ after: element.id, before: next.id, skipped });
+      else if (finding) inferred.push({ after: element.id, before: next.id, findingId: finding });
       else gaps.push({ after: element.id, before: next.id });
     }
 
@@ -227,5 +248,5 @@ export function legsOf(
     close(end);
     nodes.push(end);
   }
-  return { legs, nodes, gaps, omissions };
+  return { legs, nodes, gaps, omissions, inferred };
 }

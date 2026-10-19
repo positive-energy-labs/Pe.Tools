@@ -9,6 +9,7 @@
  * their legs; an element on a leg selects the leg.
  */
 import { useMemo, useState } from "react";
+import type { DuctsRouteDocument } from "@pe/agent-contracts";
 
 import { EmptyState } from "@pe/kit/lang/empty";
 import { FactChip } from "@pe/kit/lang/chip";
@@ -101,6 +102,8 @@ export interface Subject {
   claims: readonly Claim[];
   /** A person's verdict on one claim; the route stages it. */
   onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;
+  /** The Work whose staged ignore verdicts the cut's proximity inferences honor; null honors none. */
+  work?: DuctsRouteDocument | null;
 }
 
 export function DuctsSpatial({
@@ -174,7 +177,7 @@ function Spatial({
         ? subjectScene(
             index,
             subject.ids,
-            legsOf(index.snapshot, subject.ids, labelOf),
+            legsOf(index.snapshot, subject.ids, labelOf, subject.work ?? null),
             subject.claims,
           )
         : null,
@@ -231,6 +234,7 @@ function Spatial({
         `${sub.cut.legs.length} legs`,
         `${sub.cut.nodes.length} places`,
         count(sub.cut.gaps.length, "gap"),
+        ...(sub.cut.inferred.length ? [`${sub.cut.inferred.length} inferred`] : []),
         ...(sub.cut.omissions.length ? [count(sub.cut.omissions.length, "omission")] : []),
         `${sub.claims.length} claims`,
       ].join(" · ")

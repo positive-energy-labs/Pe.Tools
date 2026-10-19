@@ -7,6 +7,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { expect, it } from "vite-plus/test";
 
+import { ductsDocumentSchema } from "@pe/agent-contracts";
 import { labelOfNode, legsOf, OMISSION_HOPS } from "./legs";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { groupTree } from "@pe/ducts-domain/topology";
@@ -234,3 +235,62 @@ it.skipIf(!FIXTURE || !existsSync(FIXTURE))(
     ]);
   },
 );
+
+it("a break the builder bridges by proximity is inferred, not a gap, until a verdict ignores it", () => {
+  // Chadds: open duct 14122436 stops 2.63 in short of plenum 14106988's end, which end cap
+  // 14107111 closes (its face 1 in outboard); the builder taps the plenum there.
+  const rows: Row[] = [
+    { id: 14088043, k: "terminal", p: [0, 10, 0] },
+    {
+      id: 14106988,
+      k: "duct",
+      p: [0, 10, 0],
+      line: [
+        [0, 10, 0],
+        [0, 0, 0],
+      ],
+    },
+    { id: 14107111, k: "cap", p: [0, 0, 0] },
+    {
+      id: 14122436,
+      k: "duct",
+      p: [0, -0.219, 0],
+      line: [
+        [0, -0.219, 0],
+        [0, -5, 0],
+      ],
+    },
+    { id: 14199815, k: "terminal", p: [0, -5, 0] },
+  ];
+  const snapshot = makeupSnapshot(rows);
+  snapshot.groups = [
+    {
+      id: "g1",
+      rootIds: [],
+      classifications: [],
+      systemNames: [],
+      terminalCount: 2,
+      elementCount: rows.length,
+      loops: 0,
+      issueIds: [],
+    },
+  ];
+  for (const element of [...snapshot.nodes, ...snapshot.segments])
+    for (const c of element.connectors)
+      if (
+        [14107111, 14122436].includes(element.id) &&
+        [14107111, 14122436].includes(c.connectedTo?.elementId ?? 0)
+      )
+        c.connectedTo = null;
+  const ids = rows.map((row) => row.id);
+  const finding = "proximity:14122436:1|14106988";
+  const cut = legsOf(snapshot, ids);
+  expect(cut.gaps).toEqual([]);
+  expect(cut.inferred).toEqual([{ after: 14107111, before: 14122436, findingId: finding }]);
+  const work = ductsDocumentSchema.parse({
+    assumptions: { [finding]: { staged: { value: { kind: "verdict", verdict: "ignore" } } } },
+  });
+  const ruled = legsOf(snapshot, ids, undefined, work);
+  expect(ruled.inferred).toEqual([]);
+  expect(ruled.gaps).toEqual([{ after: 14107111, before: 14122436 }]);
+});

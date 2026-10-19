@@ -161,6 +161,14 @@ export interface SubjectDrawn {
   pointOf: (id: number) => number[] | null;
   /** Each gap with the model points it spans: the end of `after`, the start of `before`. */
   gaps: readonly { after: number; before: number; from: number[]; to: number[] }[];
+  /** Each break a proximity inference bridges, spanning the same points a gap would. */
+  inferred: readonly {
+    after: number;
+    before: number;
+    findingId: string;
+    from: number[];
+    to: number[];
+  }[];
   /** Each omission with one model polyline from `after` through the skipped elements to `before`. */
   omissions: readonly { after: number; before: number; skipped: number[]; line: number[][] }[];
   /** The levels the subject touches, lowest first. */
@@ -243,11 +251,13 @@ export function subjectScene(
           segment.polyline.some((p) => within(box, p)),
       ).map((level) => level.polylines)
     : [];
-  const gaps = cut.gaps.flatMap(({ after, before }) => {
-    const from = segmentById.get(after)?.polyline.at(-1) ?? nodeById.get(after)?.point;
-    const to = segmentById.get(before)?.polyline[0] ?? nodeById.get(before)?.point;
-    return from && to ? [{ after, before, from, to }] : [];
-  });
+  const span = <T extends { after: number; before: number }>(item: T) => {
+    const from = segmentById.get(item.after)?.polyline.at(-1) ?? nodeById.get(item.after)?.point;
+    const to = segmentById.get(item.before)?.polyline[0] ?? nodeById.get(item.before)?.point;
+    return from && to ? [{ ...item, from, to }] : [];
+  };
+  const gaps = cut.gaps.flatMap(span);
+  const inferred = cut.inferred.flatMap(span);
   // Each skipped segment runs from whichever end is nearer the point before it.
   const omissions = cut.omissions.map(({ after, before, skipped }) => {
     const line: number[][] = [];
@@ -276,6 +286,7 @@ export function subjectScene(
       placeOf,
       pointOf: point,
       gaps,
+      inferred,
       omissions,
       levels: index.levels.filter((level) => levels.has(level.id)),
       levelAt,

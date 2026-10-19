@@ -5,9 +5,10 @@
  * (`route.tsx`). Sizes, system names and every name but MUAS-1, FC-23 and the silencer are
  * fixture stand-ins: the trace carried ids, kinds and geometry only.
  * Every row connects to the next, as the 2026-10-19 Chadds read did, but one: the louver side ends
- * at end cap 14107111 and the MUAS-1 side starts at open duct 14122436, 0.2 ft apart, unjoined (a
- * gap). The subject leaves out 13761466, 13761629 and 13761574 between FR-1 and FC-23, as Claude's
- * did (an omission).
+ * at end cap 14107111 and the MUAS-1 side starts at open duct 14122436, stopping 1.6 in short of
+ * the cap's face (Chadds' own coordinates), unjoined; the builder joins it by proximity (inferred).
+ * The subject leaves out 13761466, 13761629 and 13761574 between FR-1 and FC-23, as Claude's did
+ * (an omission).
  */
 import type { DuctClaim } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -45,17 +46,17 @@ const ROWS: Row[] = [
     p: [479.02, 686.2, 19.23],
     line: [
       [479.02, 686.2, 19.23],
-      [479.02, 683.7, 19.23],
+      [479.02, 683.632, 19.23],
     ],
   },
-  { id: 14107111, k: "cap", p: [479.02, 683.63, 19.23] },
+  { id: 14107111, k: "cap", p: [479.02, 683.632, 19.23] },
   {
     id: 14122436,
     k: "duct",
     p: [479.02, 681.11, 19.23],
     line: [
+      [479.02, 683.413, 19.23],
       [479.02, 681.11, 19.23],
-      [479.02, 683.41, 19.23],
     ],
   },
   { id: 14199815, k: "fitting", p: [479.02, 680.48, 19.23] },
@@ -585,7 +586,7 @@ export const SCENE_CLAIMS: Record<string, DuctClaim> = {
   c3: {
     state: "unproven",
     ids: [14122436, 14107111],
-    text: "The intake is not connected: duct 14122436 ends open 0.2 ft from end cap 14107111 on the plenum 14106988 that feeds louver 14088043.",
+    text: "The intake is not connected in the model: duct 14122436 ends open 1.6 in short of end cap 14107111 on the plenum 14106988 that feeds louver 14088043; joined by proximity, it needs a ruling.",
   },
   c4: {
     state: "assumed",

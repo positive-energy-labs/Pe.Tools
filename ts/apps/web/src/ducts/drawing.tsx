@@ -557,7 +557,7 @@ function SubjectLayer({
     const point = subject.pointOf(id);
     return point ? screen(project(point)) : null;
   };
-  const { cut, claims, gaps, omissions } = subject;
+  const { cut, claims, gaps, inferred, omissions } = subject;
   const places = cut.nodes.flatMap((place) => {
     const xy = at(place.id);
     return xy ? [{ place, x: xy[0], y: xy[1] }] : [];
@@ -601,6 +601,23 @@ function SubjectLayer({
             </circle>
             <Caption x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 8} anchor="middle">
               gap
+            </Caption>
+          </g>
+        );
+      })}
+      {inferred.map((bridge) => {
+        const [x1, y1] = screen(project(bridge.from));
+        const [x2, y2] = screen(project(bridge.to));
+        return (
+          <g
+            key={`${bridge.after}-${bridge.before}`}
+            data-inferred={`${bridge.after}-${bridge.before}`}
+          >
+            <title>{`inferred: ${bridge.after} and ${bridge.before} joined by proximity, needs a ruling (${bridge.findingId})`}</title>
+            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={token("ink-2")} strokeWidth={1.5} />
+            <circle cx={(x1 + x2) / 2} cy={(y1 + y2) / 2} r={4} fill={token("ink-2")} />
+            <Caption x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 8} anchor="middle">
+              inferred
             </Caption>
           </g>
         );

@@ -137,6 +137,7 @@ export function DuctsRoute({
     return {
       ids: subjectIds,
       claims: claimsOf(cells),
+      work: demo ? null : handle.work.doc,
       onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => {
         if (demo) {
           setDemoClaims((prev) => ({ ...prev, [claim.id]: { ...prev[claim.id]!, verdict } }));
