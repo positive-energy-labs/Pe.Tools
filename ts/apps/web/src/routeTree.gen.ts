@@ -16,6 +16,7 @@ import { Route as DataTablesRouteImport } from "./routes/data-tables";
 import { Route as DesignSystemRouteImport } from "./routes/design-system";
 import { Route as DocLabRouteImport } from "./routes/doc-lab";
 import { Route as DuctLossRouteImport } from "./routes/duct-loss";
+import { Route as DuctsRouteImport } from "./routes/ducts";
 import { Route as FamiliesRouteImport } from "./routes/families";
 import { Route as FamilyRouteImport } from "./routes/family";
 import { Route as GrillesRouteImport } from "./routes/grilles";
@@ -72,6 +73,11 @@ const DocLabRoute = DocLabRouteImport.update({
 const DuctLossRoute = DuctLossRouteImport.update({
   id: "/duct-loss",
   path: "/duct-loss",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const DuctsRoute = DuctsRouteImport.update({
+  id: "/ducts",
+  path: "/ducts",
   getParentRoute: () => rootRouteImport,
 } as any);
 const FamiliesRoute = FamiliesRouteImport.update({
@@ -193,6 +199,7 @@ export interface FileRoutesByFullPath {
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
   "/duct-loss": typeof DuctLossRoute;
+  "/ducts": typeof DuctsRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
@@ -224,6 +231,7 @@ export interface FileRoutesByTo {
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
   "/duct-loss": typeof DuctLossRoute;
+  "/ducts": typeof DuctsRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
@@ -256,6 +264,7 @@ export interface FileRoutesById {
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
   "/duct-loss": typeof DuctLossRoute;
+  "/ducts": typeof DuctsRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
@@ -289,6 +298,7 @@ export interface FileRouteTypes {
     | "/design-system"
     | "/doc-lab"
     | "/duct-loss"
+    | "/ducts"
     | "/families"
     | "/family"
     | "/grilles"
@@ -320,6 +330,7 @@ export interface FileRouteTypes {
     | "/design-system"
     | "/doc-lab"
     | "/duct-loss"
+    | "/ducts"
     | "/families"
     | "/family"
     | "/grilles"
@@ -351,6 +362,7 @@ export interface FileRouteTypes {
     | "/design-system"
     | "/doc-lab"
     | "/duct-loss"
+    | "/ducts"
     | "/families"
     | "/family"
     | "/grilles"
@@ -383,6 +395,7 @@ export interface RootRouteChildren {
   DesignSystemRoute: typeof DesignSystemRoute;
   DocLabRoute: typeof DocLabRoute;
   DuctLossRoute: typeof DuctLossRoute;
+  DuctsRoute: typeof DuctsRoute;
   FamiliesRoute: typeof FamiliesRoute;
   FamilyRoute: typeof FamilyRoute;
   GrillesRoute: typeof GrillesRoute;
@@ -455,6 +468,13 @@ declare module "@tanstack/react-router" {
       path: "/duct-loss";
       fullPath: "/duct-loss";
       preLoaderRoute: typeof DuctLossRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/ducts": {
+      id: "/ducts";
+      path: "/ducts";
+      fullPath: "/ducts";
+      preLoaderRoute: typeof DuctsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/families": {
@@ -633,6 +653,7 @@ const rootRouteChildren: RootRouteChildren = {
   DesignSystemRoute: DesignSystemRoute,
   DocLabRoute: DocLabRoute,
   DuctLossRoute: DuctLossRoute,
+  DuctsRoute: DuctsRoute,
   FamiliesRoute: FamiliesRoute,
   FamilyRoute: FamilyRoute,
   GrillesRoute: GrillesRoute,
