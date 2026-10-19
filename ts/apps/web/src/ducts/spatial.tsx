@@ -15,7 +15,7 @@ import { FactChip } from "#/components/lang/chip";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 import { Switcher } from "#/components/lang/switcher";
-import { LegFacts, nameOf, PlaceFacts } from "./claims";
+import { LegFacts, nameOf, PlaceFacts, ShowInRevit } from "./claims";
 import { DuctDrawing, GlyphKey, type Scene } from "./drawing";
 import { DASH_CLASS, ENCODING_KEYS, ENCODINGS, encodingOf, type Encoding } from "./encoding";
 import { NodeFactsView, SegmentFactsView } from "./facts";
@@ -315,6 +315,13 @@ function Spatial({
           <div className="flex flex-col gap-3">
             {place ? <PlaceFacts place={place} /> : null}
             {leg ? <LegFacts leg={leg} /> : null}
+            {doc && shown != null && (place || leg) ? (
+              <ShowInRevit
+                doc={doc}
+                elementIds={place ? [shown] : leg!.ids}
+                what={place ? "place" : "leg"}
+              />
+            ) : null}
             {sub && claimPicked ? (
               <p data-picked-claim={claimPicked.id}>
                 claim <span className="face-mono">{claimPicked.id}</span> ({claimPicked.state}):{" "}
