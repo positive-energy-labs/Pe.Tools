@@ -71,7 +71,6 @@ const PAGE: DuctsPage = {
   issue: "",
   encoding: "health",
   scene: "",
-  verdicts: {},
   epoch: 0,
   evaluation: null,
 };

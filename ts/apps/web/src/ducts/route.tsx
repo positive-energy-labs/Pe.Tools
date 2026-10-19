@@ -7,13 +7,13 @@
  * provided to the verbs so `preview` and `apply` build their request from what is drawn.
  */
 import { useEffect, useMemo, useState } from "react";
-import { stagedDucts, type TrichotomyCellLike } from "@pe/agent-contracts";
+import { stagedDucts, type DuctClaim, type TrichotomyCellLike } from "@pe/agent-contracts";
 import type { Reading } from "@pe/agent-contracts";
 
 import { Surface } from "#/components/lang/surface";
 import { frozenDemo } from "#/host/demo-client";
 import { SAVED, useDuctSnapshot, useDuctTables } from "./host";
-import { SCENE_FIXTURE } from "./scene.fixture";
+import { SCENE_CLAIMS, SCENE_FIXTURE } from "./scene.fixture";
 import { RouteShell, useRoute, useRouteThread } from "#/route";
 import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
@@ -23,6 +23,8 @@ import { manifest, previewFresh, WRITTEN, type DuctsPage } from "./manifest";
 import { DuctsLosses, revitSays, StagedLosses } from "./losses-view";
 import { price } from "./pricing";
 import { readiness, type DuctSnapshot } from "./readiness";
+import { verdictPatches } from "./claims";
+import { claimsOf, type Claim } from "./legs";
 import { DuctsLedger } from "./ledger";
 import { DuctsSpatial } from "./spatial";
 import { DuctsTables } from "./tables";
@@ -68,10 +70,10 @@ export function DuctsRoute({
 }) {
   const [chosen] = useChooseTarget();
   const thread = useRouteThread();
-  // The subject scene's authored layers. TODO(wave-1 merge): read the subject and claims from
-  // Work (`subject`, `claims` cells) the way the other cells are read; until those cells exist,
-  // `?demo=scene` mounts the makeup-air fixture, snapshot included, and no host is read.
+  // `?demo=scene` mounts the makeup-air fixture, snapshot included, and no host is read; its
+  // subject and claims have the staged cells' shapes, and a verdict press stays in this page.
   const demo = useMemo(() => (frozenDemo() === "scene" ? SCENE_FIXTURE : null), []);
+  const [demoClaims, setDemoClaims] = useState<Record<string, DuctClaim>>(SCENE_CLAIMS);
   // The snapshot and tables are read below, once the target resolves; the verbs see them here.
   const [provided, setProvided] = useState<Record<"ducts" | "tables", Reading<unknown>>>({
     ducts: { state: "absent" },
@@ -94,7 +96,12 @@ export function DuctsRoute({
       ? handle.resolution.target.ref
       : null;
   const staged = useMemo(() => stagedDucts(handle.work.doc), [handle.work.doc]);
-  const read = useDuctSnapshot(demo ? null : doc, page.epoch, staged.parameters);
+  const read = useDuctSnapshot(
+    demo ? null : doc,
+    page.epoch,
+    staged.parameters,
+    staged.labelParameter,
+  );
   const snapshot = demo?.snapshot ?? read.snapshot;
   const error = demo ? null : read.error;
   const pending = demo ? false : read.pending;
@@ -107,6 +114,32 @@ export function DuctsRoute({
       tables: tables.grids ? { state: "ready", observation: tables.grids } : { state: "absent" },
     });
   }, [snapshot, tables.grids]);
+  // The subject scene is the person's staged subject, else Pea's proposal; null until one exists.
+  const subjectIds = demo
+    ? demo.subject
+    : (staged.subject ?? handle.work.doc?.subject?.proposal?.value);
+  const subject = useMemo(() => {
+    if (!subjectIds) return null;
+    const cells = demo
+      ? demoClaims
+      : Object.fromEntries(
+          Object.entries(handle.work.doc?.claims ?? {}).flatMap(([id, cell]) => {
+            const value = cell.staged?.value ?? cell.proposal?.value;
+            return value ? [[id, value] as const] : [];
+          }),
+        );
+    return {
+      ids: subjectIds,
+      claims: claimsOf(cells),
+      onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => {
+        if (demo) {
+          setDemoClaims((prev) => ({ ...prev, [claim.id]: { ...prev[claim.id]!, verdict } }));
+          return;
+        }
+        void handle.work.write(verdictPatches(handle.work.doc, claim, verdict));
+      },
+    };
+  }, [demo, demoClaims, subjectIds, handle.work.doc, handle.work.write]);
   const priced = useMemo(
     () => (snapshot && tables.grids ? price(snapshot, tables.grids, handle.work.doc) : null),
     [snapshot, tables.grids, handle.work.doc],
@@ -375,7 +408,7 @@ export function DuctsRoute({
           page={page}
           setPage={setPage}
           empty={empty}
-          subject={demo ? { ids: demo.subject, claims: demo.claims } : null}
+          subject={subject}
           doc={doc}
         />
       ) : (

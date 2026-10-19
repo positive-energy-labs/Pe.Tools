@@ -5,7 +5,7 @@
  * (`route.tsx`). Sizes, system names and every name but MUAS-1, FC-23 and the silencer are
  * fixture stand-ins: the trace carried ids, kinds and geometry only.
  */
-import type { Claim } from "./legs";
+import type { DuctClaim } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "./readiness";
 
 interface Row {
@@ -496,9 +496,8 @@ const snapshot: DuctSnapshot = {
     levelId: levelAt(row.p[2]!),
     point: row.p,
     connectors: [],
-    facts: NAMES[row.id]
-      ? [{ key: "Mark", text: NAMES[row.id], unit: "", provenance: "revit-reported" }]
-      : [],
+    facts: [],
+    label: NAMES[row.id] ?? null,
   })),
   segments: ROWS.filter((row) => row.line).map((row) => ({
     id: row.id,
@@ -526,40 +525,32 @@ const snapshot: DuctSnapshot = {
 
 export const SCENE_SUBJECT: number[] = ROWS.map((row) => row.id);
 
-export const SCENE_CLAIMS: Claim[] = [
-  {
-    id: "c1",
+export const SCENE_CLAIMS: Record<string, DuctClaim> = {
+  c1: {
     state: "assumed",
-    at: [14577391, 13760867],
+    ids: [14577391, 13760867],
     text: "The intended unit is MUAS-1 and the route ends at FC-23's return inlet.",
   },
-  {
-    id: "c2",
+  c2: {
     state: "proven",
-    at: [13819016, 13820267, 13819246],
+    ids: [13819016, 13820267, 13819246],
     text: "The run goes up into the attic and back down to the main-level return.",
   },
-  {
-    id: "c3",
+  c3: {
     state: "unproven",
-    at: [14122436],
+    ids: [14122436],
     text: "The intake is unresolved: the path ends at an open connector with no intake terminal.",
   },
-  {
-    id: "c4",
+  c4: {
     state: "assumed",
-    at: [14515917, 14343729],
+    ids: [14515917, 14343729],
     text: "This is a branched network: two takeoffs on the trunk feed ERVs 6105264 and 6953852.",
   },
-  {
-    id: "c5",
+  c5: {
     state: "unproven",
-    at: [14577391],
+    ids: [14577391],
     text: "Flow direction needs confirmation: MUAS-1's intake-side port is Out and the silencer-side port is In.",
   },
-];
-
-/** Mark where the fixture names one; the stub `legsOf` falls back to type, then kind and id. */
-export const sceneLabel = (id: number) => NAMES[id] ?? null;
+};
 
 export const SCENE_FIXTURE = { snapshot, subject: SCENE_SUBJECT, claims: SCENE_CLAIMS };

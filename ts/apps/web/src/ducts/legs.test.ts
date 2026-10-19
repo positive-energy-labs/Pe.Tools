@@ -7,7 +7,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { expect, it } from "vite-plus/test";
 
-import { legsOf } from "./legs";
+import { labelOfNode, legsOf } from "./legs";
 import type { DuctSnapshot } from "./readiness";
 import { groupTree } from "./topology";
 import trace from "./fixtures/makeup-path.json";
@@ -103,6 +103,18 @@ function makeupSnapshot(rows: Row[]): DuctSnapshot {
 
 const rows = trace as Row[];
 const ids = rows.map((row) => row.id);
+
+it("a node's label (the snapshot's DuctNode.label) names its place; an unlabelled node falls back to type", () => {
+  const snapshot = makeupSnapshot(rows);
+  snapshot.nodes.find((node) => node.id === 14577391)!.label = "AHU-7";
+  const cut = legsOf(snapshot, ids, labelOfNode(snapshot));
+  expect(cut.nodes.map((place) => place.name)).toContain("AHU-7");
+  expect(cut.legs.map((leg) => leg.name)).toContain("Damper Std → AHU-7");
+  expect(cut.legs.map((leg) => leg.name)).toContain("AHU-7 → Unit E2");
+  // With no label anywhere, nothing changes: the same cut as the unlabelled one.
+  const plain = makeupSnapshot(rows);
+  expect(legsOf(plain, ids, labelOfNode(plain))).toEqual(legsOf(plain, ids));
+});
 
 it("makeup route: 88 elements cut into 9 legs and 7 nodes at equipment, the damper and three level crossings", () => {
   const snapshot = makeupSnapshot(rows);

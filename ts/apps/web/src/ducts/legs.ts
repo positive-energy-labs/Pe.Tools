@@ -12,11 +12,28 @@
  * - Mark is not a concept here (the firm does not use it): a place is named by `labelOf(id)`, else
  *   `family type`, else `kind id`.
  */
+import type { DuctClaim } from "@pe/agent-contracts";
+
 import { snapshotById, type DuctSnapshot } from "./readiness";
 
 type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];
 type Element = Node | Segment;
+
+/** A claim as the drawing reads it: a staged `DuctClaim` cell keyed by its id, its `ids` named `at`. */
+export interface Claim {
+  id: string;
+  state: DuctClaim["state"];
+  at: number[];
+  text: string;
+  verdict?: DuctClaim["verdict"];
+  verdictBy?: string;
+  verdictAt?: string;
+}
+
+/** The claims cells in key order, as the drawing reads them. */
+export const claimsOf = (cells: Readonly<Record<string, DuctClaim>>): Claim[] =>
+  Object.entries(cells).map(([id, { ids, ...rest }]) => ({ id, at: ids, ...rest }));
 
 export interface Place {
   id: number;
@@ -55,6 +72,12 @@ const reaches = (a: Element, b: Element) =>
   a.connectors.some((c) => c.connectedTo?.elementId === b.id) ||
   b.connectors.some((c) => c.connectedTo?.elementId === a.id);
 
+/** `legsOf`'s `labelOf` for a snapshot: the node's `label`, which `ducts.snapshot` fills from the staged labelParameter. */
+export const labelOfNode = (snapshot: DuctSnapshot) => {
+  const { nodes } = snapshotById(snapshot);
+  return (id: number) => nodes.get(id)?.label ?? null;
+};
+
 export function legsOf(
   snapshot: DuctSnapshot,
   ids: readonly number[],
@@ -71,7 +94,11 @@ export function legsOf(
     const label = labelOf(element.id);
     const typed = isNode(element) ? `${element.family ?? ""} ${element.type ?? ""}`.trim() : "";
     // A bare kind cannot tell two accessories apart, so the fallback carries the id.
-    return { id: element.id, kind, name: label ?? (kind === "open" ? "open" : typed || `${kind} ${element.id}`) };
+    return {
+      id: element.id,
+      kind,
+      name: label ?? (kind === "open" ? "open" : typed || `${kind} ${element.id}`),
+    };
   };
   const levelPlace = (duct: Segment, levelId: number): Place => ({
     id: duct.id,

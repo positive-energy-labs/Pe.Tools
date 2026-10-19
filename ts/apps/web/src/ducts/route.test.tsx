@@ -374,3 +374,38 @@ test("page selection follows iso to tables and ledger, and a ledger run lights p
     expect(container.querySelector('[data-node-id="6"][data-selected]')).not.toBeNull();
   }
 }, 20000);
+
+test("a staged subject, claims and labelParameter render the subject scene; a verdict press stages the claim", async () => {
+  work = ductsRouteState.schema.parse({
+    subject: { staged: { value: [100, 1, 2, 3, 4] } },
+    claims: {
+      c1: { staged: { value: { text: "The unit is AHU-9.", ids: [100], state: "assumed" } } },
+    },
+    labelParameter: { staged: { value: "Unit Tag" } },
+  });
+  reply = async () =>
+    Response.json({
+      ...response(),
+      nodes: snapshot.nodes.map((node) => (node.id === 100 ? { ...node, label: "AHU-9" } : node)),
+    });
+  const { container } = await mount("&view=iso&scene=subject");
+  // The staged labelParameter rides the snapshot request.
+  await waitFor(() => expect(requests.at(-1)?.request).toEqual({ labelParameter: "Unit Tag" }));
+  // The claims cell is the list; the node's label is the place's name in it.
+  const row = await waitFor(() => {
+    const found = container.querySelector('[data-claim-row="c1"]');
+    expect(found).not.toBeNull();
+    return found!;
+  });
+  expect(row.textContent).toContain("The unit is AHU-9.");
+  expect(row.textContent).toContain("at AHU-9");
+  expect(container.querySelector("[data-subject]")).not.toBeNull();
+  fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "yes" }));
+  await waitFor(() => expect(work.claims.c1?.staged?.value?.verdict).toBe("yes"));
+  expect(work.claims.c1?.staged?.value).toMatchObject({
+    text: "The unit is AHU-9.",
+    ids: [100],
+    verdictBy: "person",
+  });
+  expect(Date.parse(work.claims.c1!.staged!.value!.verdictAt!)).not.toBeNaN();
+}, 20000);

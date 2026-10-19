@@ -171,7 +171,6 @@ const page = (patch: Partial<DuctsPage> = {}): DuctsPage => ({
   issue: "",
   encoding: "health",
   scene: "",
-  verdicts: {},
   epoch: 0,
   evaluation: null,
   ...patch,

@@ -1,10 +1,15 @@
 /**
  * The claims of the subject scene as a list under the drawing, and the one crossing into Revit a
  * place or a leg offers: `revit.context.show-elements` selects and zooms, and mutates nothing.
- * A verdict is the person's answer on one claim; it lands in page state for now.
- * TODO(wave-1 merge): stage the verdict into Work as `Claim` with `verdict` set.
+ * A verdict is the person's answer on one claim; `verdictPatches` stages it into the claim's Work
+ * cell, the same path the assumptions editor uses.
  */
 import { useState } from "react";
+import {
+  transitionPatches,
+  type DuctsRouteDocument,
+  type RouteStatePatch,
+} from "@pe/agent-contracts";
 
 import { FactChip } from "#/components/lang/chip";
 import { Press } from "#/components/lang/press";
@@ -21,19 +26,41 @@ export const VERDICTS: readonly { value: Verdict; word: string; says: string }[]
   { value: "not-this", word: "not this", says: "the claim is about the wrong place" },
 ];
 
+/**
+ * The patches one verdict press makes: the claim's cell staged with the verdict, who gave it and
+ * when. The web has no user identity yet, so the judge is "person" (the manifest's word for the human).
+ */
+export const verdictPatches = (
+  doc: DuctsRouteDocument | null,
+  claim: Claim,
+  verdict: Verdict,
+  now: Date = new Date(),
+): RouteStatePatch[] =>
+  transitionPatches(["claims"], claim.id, doc?.claims[claim.id] ?? {}, {
+    kind: "stage",
+    rung: {
+      value: {
+        text: claim.text,
+        ids: claim.at,
+        state: claim.state,
+        verdict,
+        verdictBy: "person",
+        verdictAt: now.toISOString(),
+      },
+    },
+  });
+
 /** A human name for a subject element: its place, else the leg it lies on, else its id. */
 export const nameOf = (subject: SubjectDrawn, id: number) =>
   subject.placeOf.get(id)?.name ?? subject.legOf.get(id)?.name ?? `element ${id}`;
 
 export function ClaimsList({
   subject,
-  verdicts,
   selected,
   onSelect,
   onVerdict,
 }: {
   subject: SubjectDrawn;
-  verdicts: Readonly<Record<string, Verdict>>;
   /** The selected claim id; "" = none. */
   selected: string;
   onSelect: (claim: Claim) => void;
@@ -53,7 +80,7 @@ export function ClaimsList({
     >
       {subject.claims.map((claim, i) => {
         const on = claim.id === selected;
-        const verdict = verdicts[claim.id] ?? claim.verdict;
+        const verdict = claim.verdict;
         const names = [...new Set(claim.at.map((id) => nameOf(subject, id)))];
         return (
           <li

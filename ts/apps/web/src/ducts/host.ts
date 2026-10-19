@@ -45,13 +45,19 @@ function useSaved(epoch: number) {
  * `ducts.snapshot` of the one document the sentence names; the request carries no group, so a new
  * subject group does not read it again. A refresh (`epoch`) does.
  * `slots` are the person's staged parameter names; an absent slot reads the op's default.
+ * `labelParameter` is the staged instance parameter whose value becomes each node's `label`; none reads no label.
  */
 export function useDuctSnapshot(
   doc: { session: string; openId: string } | null,
   epoch: number,
   slots: Partial<Record<DuctParameterKey, string>> = {},
+  labelParameter: string | null = null,
 ) {
-  const call = useHostOp("ducts.snapshot", Object.keys(slots).length ? { slots } : {}, {
+  const request = {
+    ...(Object.keys(slots).length ? { slots } : {}),
+    ...(labelParameter ? { labelParameter } : {}),
+  };
+  const call = useHostOp("ducts.snapshot", request, {
     bridgeSessionId: doc?.session,
     openDocumentId: doc?.openId,
     enabled: doc !== null && !SAVED,

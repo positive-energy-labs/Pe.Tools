@@ -8,7 +8,7 @@
  * one place set across plan, iso, the inset and the claim list: a claim selects its places and
  * their legs; an element on a leg selects the leg.
  */
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { EmptyState } from "#/components/lang/empty";
 import { FactChip } from "#/components/lang/chip";
@@ -21,11 +21,11 @@ import { DASH_CLASS, ENCODING_KEYS, ENCODINGS, encodingOf, type Encoding } from 
 import { NodeFactsView, SegmentFactsView } from "./facts";
 import { IssueLegend } from "./issues";
 import { useIso } from "./iso";
-import { legsOf, type Claim } from "./legs";
+import { labelOfNode, legsOf, type Claim } from "./legs";
 import type { DuctsPage } from "./manifest";
 import { usePlan } from "./plan";
 import type { Priced } from "./pricing";
-import { snapshotById, type DuctSnapshot, type GroupReadiness } from "./readiness";
+import { type DuctSnapshot, type GroupReadiness } from "./readiness";
 import { indexOf, subjectScene, type DuctIndex } from "./scene";
 import { READY } from "./tables";
 import { groupTree, runsOf } from "./topology";
@@ -96,6 +96,8 @@ function EncodingBand({
 export interface Subject {
   ids: readonly number[];
   claims: readonly Claim[];
+  /** A person's verdict on one claim; the route stages it. */
+  onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;
 }
 
 export function DuctsSpatial({
@@ -161,25 +163,19 @@ function Spatial({
 }) {
   const [hovered, setHovered] = useState<number | null>(null);
   const encoding = encodingOf(page.encoding);
-  // A place's name is its Mark where the snapshot carries one; the cut falls back to type and kind.
-  const markOf = useCallback(
-    (id: number) =>
-      snapshotById(index.snapshot)
-        .nodes.get(id)
-        ?.facts.find((fact) => fact.key === "Mark")?.text ?? null,
-    [index],
-  );
+  // A place's name is the node's label (the staged labelParameter's value); the cut falls back to type and kind.
+  const labelOf = useMemo(() => labelOfNode(index.snapshot), [index]);
   const subjectDrawn = useMemo(
     () =>
       page.scene === "subject" && subject
         ? subjectScene(
             index,
             subject.ids,
-            legsOf(index.snapshot, subject.ids, markOf),
+            legsOf(index.snapshot, subject.ids, labelOf),
             subject.claims,
           )
         : null,
-    [index, page.scene, subject, markOf],
+    [index, page.scene, subject, labelOf],
   );
   const plan = usePlan(index, page, subjectDrawn);
   const iso = useIso(index, page, subjectDrawn);
@@ -319,18 +315,15 @@ function Spatial({
               onDrag={view.onDrag}
               underlay={view.underlay}
             />
-            {sub ? (
+            {sub && subject ? (
               <div className="max-h-56 shrink-0 overflow-auto border-t border-line">
                 <ClaimsList
                   subject={sub}
-                  verdicts={page.verdicts}
                   selected={claimPicked?.id ?? ""}
                   onSelect={(claim) =>
                     setPage({ selected: claim.id === page.selected ? "" : claim.id, issue: "" })
                   }
-                  onVerdict={(claim, verdict) =>
-                    setPage({ verdicts: { ...page.verdicts, [claim.id]: verdict } })
-                  }
+                  onVerdict={subject.onVerdict}
                 />
               </div>
             ) : null}
