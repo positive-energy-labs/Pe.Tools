@@ -9,6 +9,11 @@
  *   in-wg and where it came from.
  * - `unitStatics` (air mover id): the external static Pe writes to a unit, in in-wg.
  * - `parameters`: which Revit parameter carries each slot; person-only, Pea cannot propose.
+ * - The scene (pressure-drop ledger, 2026-10-19): `subject`, one cell holding an ORDERED element-id
+ *   list; `claims`, keyed by claim id, a sentence pinned to element ids with the author's state and a
+ *   verdict slot; `labelParameter`, one cell naming the instance parameter whose value names
+ *   equipment for people (`ducts.snapshot` reads it into `DuctNode.label`). Pea proposes all three; a
+ *   proposed claim never carries a verdict; a staged claim with a verdict is the verdict record.
  * `ducts.apply` writes the staged rules, drops, unit statics and slots to Revit.
  */
 import { z } from "zod";
@@ -55,6 +60,29 @@ export type DuctDrop = z.infer<typeof dropSchema>;
 const unitStaticSchema = z.strictObject({ inWg: z.number().nonnegative() });
 const elementKey = z.string().regex(/^\d+$/, { error: "a drop cell key is an element id" });
 
+/** The scene's subject: element ids in walking order. The web cuts legs from it (`ducts/legs.ts`). */
+const subjectSchema = z.array(z.number().int()).min(1);
+export const DUCT_CLAIM_STATES = ["proven", "assumed", "unproven"] as const;
+export const DUCT_CLAIM_VERDICTS = ["yes", "no", "not-this"] as const;
+/**
+ * A sentence about the subject, pinned to element ids. `state` is the author's standing (what the
+ * facts prove, what was assumed, what nobody checked); `verdict` is a person's answer, and
+ * `verdictBy` / `verdictAt` say who gave it and when. The cell key is the claim id.
+ */
+export const ductClaimSchema = z
+  .strictObject({
+    text: z.string().min(1),
+    ids: z.array(z.number().int()).min(1),
+    state: z.enum(DUCT_CLAIM_STATES),
+    verdict: z.enum(DUCT_CLAIM_VERDICTS).optional(),
+    verdictBy: z.string().min(1).optional(),
+    verdictAt: z.string().optional(),
+  })
+  .refine((claim) => claim.verdict !== undefined || (!claim.verdictBy && !claim.verdictAt), {
+    error: "verdictBy and verdictAt describe a verdict; give one",
+  });
+export type DuctClaim = z.infer<typeof ductClaimSchema>;
+
 export const ductsDocumentSchema = z
   .strictObject({
     assumptions: z.record(z.string(), trichotomyCellSchema(ductAssumptionSchema)).default({}),
@@ -67,8 +95,19 @@ export const ductsDocumentSchema = z
     parameters: z
       .partialRecord(z.enum(DUCT_PARAMETER_KEYS), trichotomyCellSchema(z.string().min(1)))
       .default({}),
+    subject: trichotomyCellSchema(subjectSchema).default({}),
+    claims: z.record(z.string().min(1), trichotomyCellSchema(ductClaimSchema)).default({}),
+    /** The instance parameter whose value names equipment for people; null reads no label. */
+    labelParameter: trichotomyCellSchema(z.string().min(1).nullable()).default({}),
   })
   .superRefine((doc, ctx) => {
+    for (const [key, cell] of Object.entries(doc.claims))
+      if (cell.proposal?.value?.verdict !== undefined)
+        ctx.addIssue({
+          code: "custom",
+          path: ["claims", key, "proposal", "value", "verdict"],
+          message: "a verdict is a person's answer; a proposed claim carries none",
+        });
     for (const [key, cell] of Object.entries(doc.assumptions))
       for (const rung of ["proposal", "staged"] as const) {
         const value = cell[rung]?.value;
@@ -97,6 +136,9 @@ export function stagedDucts(doc: DuctsRouteDocument | null) {
     componentDrops: stagedOf(doc?.componentDrops ?? {}),
     unitStatics: stagedOf(doc?.unitStatics ?? {}),
     parameters: stagedOf(doc?.parameters ?? {}) as Partial<Record<DuctParameterKey, string>>,
+    subject: doc?.subject?.staged?.value ?? null,
+    claims: stagedOf<DuctClaim>(doc?.claims ?? {}),
+    labelParameter: doc?.labelParameter?.staged?.value ?? null,
   };
 }
 
@@ -177,7 +219,7 @@ export const ductsRouteState = {
   route: "ducts",
   title: "Ducts",
   description:
-    "Duct pressure-drop Work, one trichotomy cell per key. assumptions: an issue id from ducts.snapshot holds a verdict (capped, connect, ignore); flex-roughness:<flex type> (ft), fan-static:<equipment id> (in-wg) and component-drop:<family> (in-wg) hold overrides, never written to Revit. rules: a loss-rule key holds { table }, the ASHRAE table every instance of that fitting type is looked up under. terminalDrops and componentDrops: an element id holds { inWg, source }. unitStatics: an air mover's element id holds { inWg }, the external static written to it. parameters: fanStatic, fanFlow, componentDrop, terminalDrop name the Revit parameter of each slot (person only). Pea may propose rules and drops; a person stages; ducts.apply-losses writes the staged cells to Revit after ducts.preview-losses.",
+    "Duct pressure-drop Work, one trichotomy cell per key. assumptions: an issue id from ducts.snapshot holds a verdict (capped, connect, ignore); flex-roughness:<flex type> (ft), fan-static:<equipment id> (in-wg) and component-drop:<family> (in-wg) hold overrides, never written to Revit. rules: a loss-rule key holds { table }, the ASHRAE table every instance of that fitting type is looked up under. terminalDrops and componentDrops: an element id holds { inWg, source }. unitStatics: an air mover's element id holds { inWg }, the external static written to it. parameters: fanStatic, fanFlow, componentDrop, terminalDrop name the Revit parameter of each slot (person only). The scene: subject is one cell holding the ordered element ids of the run being explained; claims, keyed by claim id, hold { text, ids, state: proven | assumed | unproven } and, once a person stages one, an optional verdict (yes, no, not-this) with verdictBy and verdictAt; labelParameter is one cell naming the instance parameter whose value names equipment for people. Pea may propose rules, drops, the subject, claims (never with a verdict) and the label parameter; a person stages; ducts.apply-losses writes the staged cells to Revit after ducts.preview-losses.",
   schema: ductsDocumentSchema,
   agentWriteMask: [
     ["assumptions", "*", "proposal"],
@@ -185,6 +227,9 @@ export const ductsRouteState = {
     ["terminalDrops", "*", "proposal"],
     ["componentDrops", "*", "proposal"],
     ["unitStatics", "*", "proposal"],
+    ["subject", "proposal"],
+    ["claims", "*", "proposal"],
+    ["labelParameter", "proposal"],
   ],
   commands: {},
 } satisfies RouteStateSpec<typeof ductsDocumentSchema>;

@@ -95,6 +95,67 @@ it("ducts: a unit static is keyed by element id and holds a non-negative in-wg",
   expect(applyPatches(spec, envelope, "human", stage("40", -1), 0)).toMatchObject({ ok: false });
 });
 
+it("ducts scene: Pea proposes the subject, claims and label parameter but never stages them; a verdict is staged by a person", () => {
+  const spec = ductsRouteState as unknown as RouteStateSpec<z.ZodType>;
+  const envelope: RouteEnvelope<unknown> = { version: 1, revision: 0, doc: spec.schema.parse({}) };
+  const claim = {
+    text: "the damper is the only accessory on the run",
+    ids: [14607308],
+    state: "proven",
+  };
+  const cases = [
+    [[], "subject", [14122436, 14199815, 14199813]],
+    [["claims"], "c1", claim],
+    [[], "labelParameter", "PE_Equipment_Name"],
+    [[], "labelParameter", null],
+  ] as const;
+  for (const [path, key, value] of cases) {
+    const propose = transitionPatches(path, key, {}, { kind: "propose", rung: { value } });
+    expect(applyPatches(spec, envelope, "agent", propose, 0), key).toMatchObject({ ok: true });
+    const stage = transitionPatches(path, key, {}, { kind: "stage", rung: { value } });
+    expect(applyPatches(spec, envelope, "agent", stage, 0), key).toMatchObject({ ok: false });
+    expect(applyPatches(spec, envelope, "human", stage, 0), key).toMatchObject({ ok: true });
+  }
+  // A proposed claim carries no verdict; the staged claim with one is the verdict record.
+  const judged = {
+    ...claim,
+    verdict: "not-this",
+    verdictBy: "kaitpw",
+    verdictAt: "2026-10-19T00:00:00Z",
+  };
+  const proposeJudged = transitionPatches(
+    ["claims"],
+    "c2",
+    {},
+    { kind: "propose", rung: { value: judged } },
+  );
+  expect(applyPatches(spec, envelope, "agent", proposeJudged, 0)).toMatchObject({ ok: false });
+  const stageJudged = transitionPatches(
+    ["claims"],
+    "c2",
+    {},
+    { kind: "stage", rung: { value: judged } },
+  );
+  expect(applyPatches(spec, envelope, "human", stageJudged, 0)).toMatchObject({ ok: true });
+  // verdictBy without a verdict, an empty subject, and an unknown state refuse.
+  const orphanBy = transitionPatches(
+    ["claims"],
+    "c3",
+    {},
+    { kind: "stage", rung: { value: { ...claim, verdictBy: "kaitpw" } } },
+  );
+  expect(applyPatches(spec, envelope, "human", orphanBy, 0)).toMatchObject({ ok: false });
+  const empty = transitionPatches([], "subject", {}, { kind: "stage", rung: { value: [] } });
+  expect(applyPatches(spec, envelope, "human", empty, 0)).toMatchObject({ ok: false });
+  const guessed = transitionPatches(
+    ["claims"],
+    "c4",
+    {},
+    { kind: "stage", rung: { value: { ...claim, state: "guessed" } } },
+  );
+  expect(applyPatches(spec, envelope, "human", guessed, 0)).toMatchObject({ ok: false });
+});
+
 it("schedules: Pea proposes a grid cell through the shared contract and cannot stage it", () => {
   const envelope: RouteEnvelope<unknown> = {
     version: 1,
