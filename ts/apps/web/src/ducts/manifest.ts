@@ -56,6 +56,13 @@ const ductsPageSchema = z.object({
   issue: z.string().default(""),
   /** The spatial views' encoding, a key of `ENCODINGS` (`encoding.tsx`). */
   encoding: z.string().default("health"),
+  /** The scene the spatial views draw: "" the group scene (`sceneOf`), `subject` the subject scene (`subjectScene`). */
+  scene: z.enum(["", "subject"]).default(""),
+  /**
+   * Verdicts given on the subject's claims this page, by claim id. Page, never URL.
+   * TODO(wave-1 merge): stage into Work instead (the staged shape is `Claim` with `verdict` set).
+   */
+  verdicts: z.record(z.string(), z.enum(["yes", "no", "not-this"])).default({}),
   /** Bumped by `refresh` and `apply`; the snapshot read keys on it. */
   epoch: z.number().default(0),
   /** The last preview; `apply` is armed while it matches the Work revision and epoch. Page, never URL. */

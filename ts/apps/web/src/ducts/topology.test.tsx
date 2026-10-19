@@ -170,6 +170,8 @@ const page = (patch: Partial<DuctsPage> = {}): DuctsPage => ({
   selected: "",
   issue: "",
   encoding: "health",
+  scene: "",
+  verdicts: {},
   epoch: 0,
   evaluation: null,
   ...patch,

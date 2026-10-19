@@ -11,7 +11,9 @@ import { stagedDucts, type TrichotomyCellLike } from "@pe/agent-contracts";
 import type { Reading } from "@pe/agent-contracts";
 
 import { Surface } from "#/components/lang/surface";
+import { frozenDemo } from "#/host/demo-client";
 import { SAVED, useDuctSnapshot, useDuctTables } from "./host";
+import { SCENE_FIXTURE } from "./scene.fixture";
 import { RouteShell, useRoute, useRouteThread } from "#/route";
 import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
@@ -45,7 +47,7 @@ const fmt = (n: number | null | undefined) => (n == null ? "—" : n.toFixed(4))
 /** The URL half of the page; the rest (epoch, stage) is ephemeral. */
 export type DuctsSearch = Pick<
   DuctsPage,
-  "view" | "group" | "level" | "selected" | "issue" | "encoding"
+  "view" | "group" | "level" | "selected" | "issue" | "encoding" | "scene"
 > & {
   layers: string;
 };
@@ -66,6 +68,10 @@ export function DuctsRoute({
 }) {
   const [chosen] = useChooseTarget();
   const thread = useRouteThread();
+  // The subject scene's authored layers. TODO(wave-1 merge): read the subject and claims from
+  // Work (`subject`, `claims` cells) the way the other cells are read; until those cells exist,
+  // `?demo=scene` mounts the makeup-air fixture, snapshot included, and no host is read.
+  const demo = useMemo(() => (frozenDemo() === "scene" ? SCENE_FIXTURE : null), []);
   // The snapshot and tables are read below, once the target resolves; the verbs see them here.
   const [provided, setProvided] = useState<Record<"ducts" | "tables", Reading<unknown>>>({
     ducts: { state: "absent" },
@@ -88,7 +94,10 @@ export function DuctsRoute({
       ? handle.resolution.target.ref
       : null;
   const staged = useMemo(() => stagedDucts(handle.work.doc), [handle.work.doc]);
-  const { snapshot, error, pending } = useDuctSnapshot(doc, page.epoch, staged.parameters);
+  const read = useDuctSnapshot(demo ? null : doc, page.epoch, staged.parameters);
+  const snapshot = demo?.snapshot ?? read.snapshot;
+  const error = demo ? null : read.error;
+  const pending = demo ? false : read.pending;
   // The spatial views ink Pe's losses, so they read the tables too; the other views do not.
   const priceable = page.view === "losses" || page.view === "plan" || page.view === "iso";
   const tables = useDuctTables(priceable ? (doc?.session ?? null) : null);
@@ -113,6 +122,7 @@ export function DuctsRoute({
       page.selected !== search.selected ||
       page.issue !== search.issue ||
       page.encoding !== search.encoding ||
+      page.scene !== search.scene ||
       layers !== search.layers
     )
       setSearch({
@@ -122,9 +132,10 @@ export function DuctsRoute({
         selected: page.selected,
         issue: page.issue,
         encoding: page.encoding,
+        scene: page.scene,
         layers,
       });
-  }, [page.view, page.group, page.level, page.selected, page.issue, page.encoding, page.layers]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page.view, page.group, page.level, page.selected, page.issue, page.encoding, page.scene, page.layers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ready = useMemo(
     () => (snapshot ? readiness(snapshot, handle.work.doc) : {}),
@@ -134,8 +145,8 @@ export function DuctsRoute({
   const levels = snapshot?.levels ?? [];
   const group = groups.find((item) => item.id === page.group) ?? null;
   const level = levels.find((item) => String(item.id) === page.level) ?? null;
-  const read =
-    !doc && !SAVED
+  const readWord =
+    !doc && !SAVED && !demo
       ? "choose a document first"
       : error
         ? `ducts.snapshot failed: ${error}`
@@ -193,7 +204,7 @@ export function DuctsRoute({
                   sub: `${ready[item.id]?.level ?? ""} · ${item.elementCount} elements · ${item.systemNames.slice(0, 3).join(", ")}`,
                 }))
               : null,
-            note: read,
+            note: readWord,
             picked: (id) => id === page.group,
             pick: (id) => setPage({ group: id === page.group ? "" : id, selected: "", issue: "" }),
           },
@@ -210,7 +221,7 @@ export function DuctsRoute({
             options: snapshot
               ? levels.map((item) => ({ id: String(item.id), label: item.name }))
               : null,
-            note: read,
+            note: readWord,
             picked: (id) => id === page.level,
             pick: (id) => setPage({ level: id === page.level ? "" : id }),
           },
@@ -265,7 +276,7 @@ export function DuctsRoute({
     [handle.work.doc, handle.work.revision, handle.work.write, preview],
   );
   const empty =
-    !doc && !SAVED
+    !doc && !SAVED && !demo
       ? { says: "no document bound", exit: "choose a document in the sentence" }
       : error
         ? { says: `ducts.snapshot failed: ${error}`, exit: "refresh once the host answers" }
@@ -304,7 +315,7 @@ export function DuctsRoute({
               }}
               target={{
                 session: ladder.sessionWord,
-                document: SAVED ? "saved snapshot" : ladder.docWord,
+                document: SAVED ? "saved snapshot" : demo ? "scene fixture" : ladder.docWord,
               }}
               sentence={sentence}
               ledger={[
@@ -318,7 +329,7 @@ export function DuctsRoute({
                         ? "reading"
                         : "none",
                 ],
-                ["source", SAVED ? "saved" : "host"],
+                ["source", SAVED ? "saved" : demo ? "fixture" : "host"],
               ]}
             />
           }
@@ -355,6 +366,8 @@ export function DuctsRoute({
           page={page}
           setPage={setPage}
           empty={empty}
+          subject={demo ? { ids: demo.subject, claims: demo.claims } : null}
+          doc={doc}
         />
       ) : (
         <DuctsTables

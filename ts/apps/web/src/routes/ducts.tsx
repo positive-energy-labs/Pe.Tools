@@ -26,13 +26,15 @@ export const Route = createFileRoute("/ducts")({
     issue: text(search.issue),
     /** The spatial views' encoding key (health when absent). */
     encoding: text(search.encoding),
+    /** The scene drawn: `subject`, or absent for the group scene. */
+    scene: search.scene === "subject" ? ("subject" as const) : undefined,
   }),
   component: DuctsFileRoute,
 });
 
 function DuctsFileRoute() {
   const navigate = useNavigate({ from: "/ducts" });
-  const { view, group, level, layers, selected, issue, encoding } = Route.useSearch();
+  const { view, group, level, layers, selected, issue, encoding, scene } = Route.useSearch();
   return (
     <DuctsRoute
       search={{
@@ -43,6 +45,7 @@ function DuctsFileRoute() {
         selected: selected ?? "",
         issue: issue ?? "",
         encoding: encoding ?? "health",
+        scene: scene ?? "",
       }}
       setSearch={(next) =>
         void navigate({

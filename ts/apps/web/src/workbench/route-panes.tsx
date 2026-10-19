@@ -100,6 +100,7 @@ function HostedDucts() {
     selected: "",
     issue: "",
     encoding: "health",
+    scene: "",
   });
   return (
     <DuctsRoute search={search} setSearch={(next) => setSearch((was) => ({ ...was, ...next }))} />
