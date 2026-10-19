@@ -874,6 +874,11 @@ async function dispatch(
       if (row.kind === "route-doc") {
         if (input.expectedRevision === undefined)
           throw new Error(`Read route:${parsed.route} first and pass its expectedRevision.`);
+        // Ducts Work is keyed by document: an unbound write lands in Work no page reads (wave 3, 2026-10-19).
+        if (parsed.route === "ducts" && !workspaceId && !defaultTarget)
+          throw new Error(
+            "route:ducts.propose needs this thread's document, and none is bound: Ducts Work belongs to one document, so this proposal would land where no page reads it. Ask the person to select the open document in the composer (that binds this thread), or target_set one of your own open documents; then read route:ducts again and propose.",
+          );
         // Ducts: a raw Load Preview paste is parsed here and proposed as loads/preview.
         const loads =
           parsed.route === "ducts" && typeof payload.loadsText === "string"
