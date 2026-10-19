@@ -10,7 +10,7 @@
  * - Two consecutive ids that share no connector are a `gap`: a fact about the subject, not an error.
  *   The leg runs on through it.
  * - Mark is not a concept here (the firm does not use it): a place is named by `labelOf(id)`, else
- *   `family type`, else its kind.
+ *   `family type`, else `kind id`.
  */
 import { snapshotById, type DuctSnapshot } from "./readiness";
 
@@ -70,7 +70,8 @@ export function legsOf(
   const place = (element: Element, kind: Place["kind"]): Place => {
     const label = labelOf(element.id);
     const typed = isNode(element) ? `${element.family ?? ""} ${element.type ?? ""}`.trim() : "";
-    return { id: element.id, kind, name: (label ?? (kind === "open" ? "" : typed)) || kind };
+    // A bare kind cannot tell two accessories apart, so the fallback carries the id.
+    return { id: element.id, kind, name: label ?? (kind === "open" ? "open" : typed || `${kind} ${element.id}`) };
   };
   const levelPlace = (duct: Segment, levelId: number): Place => ({
     id: duct.id,
