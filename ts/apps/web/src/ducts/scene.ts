@@ -7,9 +7,10 @@ import type { ReactNode } from "react";
 
 import type { DuctDrawing, NodeFacts, Scene } from "./drawing";
 import type { DuctNode, Issue, Segment, SegmentFacts } from "./encoding";
+import type { Claim, Leg, Place, SubjectCut } from "./legs";
 import type { LossResult } from "./losses";
 import type { Priced } from "./pricing";
-import type { DuctSnapshot } from "./readiness";
+import { snapshotById, type DuctSnapshot } from "./readiness";
 
 type Level = DuctSnapshot["levels"][number];
 
@@ -87,13 +88,18 @@ export interface ContextLevel {
 }
 
 /**
- * The faint rest of the document, per level: every segment outside `group` of 2 ft or more, cut to
- * at most eight points (evenly along it, 0.01 ft). With no group chosen, all of it.
+ * The faint rest of the document, per level: every segment outside `group` of 2 ft or more that
+ * `keep` allows, cut to at most eight points (evenly along it, 0.01 ft). With no group chosen and
+ * no `keep`, all of it.
  */
-export function contextOf(index: DuctIndex, group: string): ContextLevel[] {
+export function contextOf(
+  index: DuctIndex,
+  group: string,
+  keep: (segment: Segment) => boolean = () => true,
+): ContextLevel[] {
   const byLevel = new Map<number | null, Pick<Segment, "polyline">[]>();
   for (const segment of index.snapshot.segments) {
-    if ((group && segment.groupId === group) || segment.lengthFt < 2) continue;
+    if ((group && segment.groupId === group) || segment.lengthFt < 2 || !keep(segment)) continue;
     const last = segment.polyline.length - 1;
     const count = Math.min(segment.polyline.length, 8);
     const polyline = Array.from({ length: count }, (_, i) =>
@@ -139,6 +145,121 @@ export function sceneOf(
     .filter((level) => keepLevel(level.levelId))
     .map((level) => level.polylines);
   return { segments, nodes, issues, context };
+}
+
+/** The subject scene's authored layers, resolved against the facts, as the drawing reads them. */
+export interface SubjectDrawn {
+  cut: SubjectCut;
+  claims: readonly Claim[];
+  /** The leg each subject element lies on. */
+  legOf: ReadonlyMap<number, Leg>;
+  /** The place at an element id (the first, where a level crossing and a node share one). */
+  placeOf: ReadonlyMap<number, Place>;
+  /** A model point for any subject id: a node's point or a segment's middle vertex; null if unknown. */
+  pointOf: (id: number) => number[] | null;
+  /** Each gap with the model points it spans: the end of `after`, the start of `before`. */
+  gaps: readonly { after: number; before: number; from: number[]; to: number[] }[];
+  /** The levels the subject touches, lowest first. */
+  levels: readonly Level[];
+  /** Each subject element's level id (null when the snapshot names none). */
+  levelAt: ReadonlyMap<number, number | null>;
+}
+
+/** Faint context stays this far (ft) around the subject's bounding box. */
+export const CONTEXT_PAD_FT = 20;
+
+const within = (box: readonly [number[], number[]], point: readonly number[]) =>
+  point[0]! >= box[0][0]! &&
+  point[0]! <= box[1][0]! &&
+  point[1]! >= box[0][1]! &&
+  point[1]! <= box[1][1]!;
+
+/**
+ * The subject scene: the ordered ids' elements from `snapshotById`, no group, with the cut and
+ * claims the drawing pins. Context is never the whole document (a 9 MB draw on Chadds): only
+ * segments on the levels the subject touches, within its bounding box padded `CONTEXT_PAD_FT`.
+ */
+export function subjectScene(
+  index: DuctIndex,
+  ids: readonly number[],
+  cut: SubjectCut,
+  claims: readonly Claim[] = [],
+): Scene {
+  const { nodes: nodeById, segments: segmentById } = snapshotById(index.snapshot);
+  const own = new Set(ids);
+  const legOf = new Map<number, Leg>();
+  for (const leg of cut.legs) for (const id of leg.ids) legOf.set(id, leg);
+  const placeOf = new Map<number, Place>();
+  for (const place of cut.nodes) if (!placeOf.has(place.id)) placeOf.set(place.id, place);
+  const facts = (id: number) => ({
+    issues: index.issuesOf.get(id) ?? [],
+    pressure: pointOf(index, id),
+    leg: legOf.get(id) ?? null,
+  });
+  const segments: SegmentFacts[] = ids.flatMap((id) => {
+    const segment = segmentById.get(id);
+    return segment
+      ? [{ segment, derivedCfm: index.flows.get(segment.id) ?? null, ...facts(id) }]
+      : [];
+  });
+  const nodes: NodeFacts[] = ids.flatMap((id) => {
+    const node = nodeById.get(id);
+    return node ? [{ node, ...facts(id) }] : [];
+  });
+  const point = (id: number): number[] | null => {
+    const node = nodeById.get(id);
+    if (node) return node.point;
+    const line = segmentById.get(id)?.polyline;
+    return line ? (line[Math.floor((line.length - 1) / 2)] ?? null) : null;
+  };
+  const points = [...segments.flatMap((f) => f.segment.polyline), ...nodes.map((f) => f.node.point)];
+  const levelAt = new Map<number, number | null>([
+    ...segments.map((f) => [f.segment.id, f.segment.levelId ?? null] as const),
+    ...nodes.map((f) => [f.node.id, f.node.levelId ?? null] as const),
+  ]);
+  const levels = new Set(levelAt.values());
+  const lo = [Infinity, Infinity];
+  const hi = [-Infinity, -Infinity];
+  for (const p of points)
+    for (let i = 0; i < 2; i++) {
+      lo[i] = Math.min(lo[i]!, p[i]!);
+      hi[i] = Math.max(hi[i]!, p[i]!);
+    }
+  const box = [
+    lo.map((v) => v - CONTEXT_PAD_FT),
+    hi.map((v) => v + CONTEXT_PAD_FT),
+  ] as const;
+  const context = points.length
+    ? contextOf(
+        index,
+        "",
+        (segment) =>
+          !own.has(segment.id) &&
+          levels.has(segment.levelId ?? null) &&
+          segment.polyline.some((p) => within(box, p)),
+      ).map((level) => level.polylines)
+    : [];
+  const gaps = cut.gaps.flatMap(({ after, before }) => {
+    const from = segmentById.get(after)?.polyline.at(-1) ?? nodeById.get(after)?.point;
+    const to = segmentById.get(before)?.polyline[0] ?? nodeById.get(before)?.point;
+    return from && to ? [{ after, before, from, to }] : [];
+  });
+  return {
+    segments,
+    nodes,
+    issues: [],
+    context,
+    subject: {
+      cut,
+      claims,
+      legOf,
+      placeOf,
+      pointOf: point,
+      gaps,
+      levels: index.levels.filter((level) => levels.has(level.id)),
+      levelAt,
+    },
+  };
 }
 
 /** What a view hands the drawing and the band. */

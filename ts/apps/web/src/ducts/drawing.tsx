@@ -21,6 +21,7 @@ import {
   type Segment,
   type SegmentFacts,
 } from "./encoding";
+import type { SubjectDrawn } from "./scene";
 
 /** Model feet [x, y, z] to drawing feet [x, y-down]. */
 export type Project = (point: readonly number[]) => Point2;
@@ -37,6 +38,8 @@ export interface Scene {
   issues: readonly Issue[];
   /** Faint context, one entry per level: the other groups' segments there. */
   context: readonly (readonly Pick<Segment, "polyline">[])[];
+  /** The subject scene's cut and claims (`subjectScene`); absent for a group scene. */
+  subject?: SubjectDrawn;
 }
 
 type View = { scale: number; tx: number; ty: number };

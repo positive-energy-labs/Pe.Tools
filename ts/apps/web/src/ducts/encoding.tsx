@@ -9,6 +9,7 @@ import type { DashRole } from "#/lib/token";
 import { token } from "#/lib/token";
 import { VERDICT_INK } from "#/components/master-table/cells";
 import { ISSUE_KINDS, type Blocks } from "./issues";
+import type { Leg } from "./legs";
 import type { DuctSnapshot } from "./readiness";
 
 export type Segment = DuctSnapshot["segments"][number];
@@ -27,6 +28,8 @@ export interface EncodingFacts {
   derivedCfm?: number | null;
   issues: readonly Issue[];
   pressure?: PressurePoint;
+  /** The subject leg the element lies on (`subjectScene`); null off every leg, absent in a group scene. */
+  leg?: Leg | null;
 }
 export interface SegmentFacts extends EncodingFacts {
   segment: Segment;
