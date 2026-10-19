@@ -8,6 +8,7 @@ import { useMemo, useRef, useState } from "react";
 
 import { FactChip } from "#/components/lang/chip";
 import { Press } from "#/components/lang/press";
+import type { Scene } from "./drawing";
 import type { Segment } from "./encoding";
 import type { DuctsPage } from "./manifest";
 import { contextOf, sceneOf, type DuctIndex, type SpatialView } from "./scene";
@@ -63,21 +64,31 @@ export const gridAngle = (segments: readonly Pick<Segment, "polyline">[]) => {
   return c === 0 && s === 0 ? 0 : (Math.atan2(s, c) * 180) / Math.PI / 4;
 };
 
-export function useIso(index: DuctIndex, page: Pick<DuctsPage, "group">): SpatialView {
+/** `subject` is the subject scene when `page.scene` names it; the pivot and grid come from its segments. */
+export function useIso(
+  index: DuctIndex,
+  page: Pick<DuctsPage, "group">,
+  subject: Scene | null = null,
+): SpatialView {
   // Turns are offsets from the group's own grid set on the diagonal, so its ducts never run
   // straight into the screen (where depth would read as a riser).
   const [turned, setTurned] = useState(0);
   const drag = useRef({ dx: 0, frame: 0 });
   const [stretch, setStretch] = useState<number>(Z_STRETCH[0]);
 
-  const scene = useMemo(() => sceneOf(index, page.group, () => true), [index, page.group]);
+  const scene = useMemo(
+    () => subject ?? sceneOf(index, page.group, () => true),
+    [index, page.group, subject],
+  );
   const { pivot, grid } = useMemo(() => {
-    const own = index.segmentsOf.get(page.group);
+    const own = subject
+      ? subject.segments.map((facts) => facts.segment)
+      : index.segmentsOf.get(page.group);
     const pool = own?.length
       ? own
       : contextOf(index, page.group).flatMap((level) => level.polylines);
     return { pivot: centre(pool), grid: gridAngle(pool) };
-  }, [index, page.group]);
+  }, [index, page.group, subject]);
   const yaw = 45 - grid + turned;
   const project = useMemo(() => isoProject(yaw, pivot, stretch), [yaw, pivot, stretch]);
 
@@ -88,7 +99,7 @@ export function useIso(index: DuctIndex, page: Pick<DuctsPage, "group">): Spatia
     project,
     scene,
     // Refit on a new subject or a vertical change; a turn keeps the zoom (the pivot holds it).
-    fitKey: `iso|${page.group}|${stretch}`,
+    fitKey: `iso|${subject ? "subject" : page.group}|${stretch}`,
     onDrag: (dx, _dy, shift) => {
       if (shift) return false;
       // Coalesced to one turn per frame, however fast the pointer reports.

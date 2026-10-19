@@ -9,6 +9,7 @@ import { useMemo } from "react";
 import { FactChip } from "#/components/lang/chip";
 import type { Bounds2 } from "#/lib/affine-frame";
 import { token } from "#/lib/token";
+import type { Scene } from "./drawing";
 import type { DuctsPage } from "./manifest";
 import { contextOf, sceneOf, type DuctIndex, type SpatialView } from "./scene";
 
@@ -55,8 +56,32 @@ function Grid({ box }: { box: Bounds2 }) {
 }
 const underlay = (box: Bounds2) => <Grid box={box} />;
 
-export function usePlan(index: DuctIndex, page: Pick<DuctsPage, "group" | "level">): SpatialView {
+/**
+ * `subject` is the subject scene when `page.scene` names it: the plan then draws every level the
+ * subject touches (a path crosses levels; cutting it to one would hide its legs) and ignores
+ * `page.level`.
+ */
+export function usePlan(
+  index: DuctIndex,
+  page: Pick<DuctsPage, "group" | "level">,
+  subject: Scene | null = null,
+): SpatialView {
   return useMemo(() => {
+    if (subject) {
+      const touched = subject.subject?.levels.map((level) => level.name).join(", ") || "no level";
+      return {
+        label: "plan",
+        project: top,
+        scene: subject,
+        fitKey: `plan|subject|${subject.segments.length}`,
+        underlay,
+        band: (
+          <FactChip title="the subject scene draws every level its path touches; the group scene draws one">
+            levels {touched}
+          </FactChip>
+        ),
+      };
+    }
     const own = index.segmentsOf.get(page.group) ?? [];
     const tally = new Map<number, number>();
     for (const segment of own)
@@ -96,5 +121,5 @@ export function usePlan(index: DuctIndex, page: Pick<DuctsPage, "group" | "level
         </>
       ),
     };
-  }, [index, page.group, page.level]);
+  }, [index, page.group, page.level, subject]);
 }

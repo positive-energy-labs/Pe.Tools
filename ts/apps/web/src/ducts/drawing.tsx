@@ -10,6 +10,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { boundsOf, type Bounds2, type Point2, type Viewport2 } from "#/lib/affine-frame";
 import { token } from "#/lib/token";
 import {
+  claimInk,
   DASH_CLASS,
   issueInk,
   nodeInk,
@@ -21,6 +22,7 @@ import {
   type Segment,
   type SegmentFacts,
 } from "./encoding";
+import type { Claim } from "./legs";
 import type { SubjectDrawn } from "./scene";
 
 /** Model feet [x, y, z] to drawing feet [x, y-down]. */
@@ -50,6 +52,11 @@ const FIT_PAD_PX = 32;
 const RISER_FT = 0.25;
 const GLYPH = 4;
 const MARK = 5;
+const PIN = 8;
+/** Two claim pins closer than this on screen are offset along x by one pin each. */
+const PIN_APART = PIN * 2;
+/** A leg shorter than this carries no label (its endpoints' names say enough). */
+const LABEL_LEG_FT = 2;
 
 const d = (segments: readonly Pick<Segment, "polyline">[], project: Project) => {
   let out = "";
@@ -146,9 +153,11 @@ export function DuctDrawing({
   critical,
   hovered,
   issue,
+  claim = "",
   onHover,
   onSelect,
   onSelectIssue,
+  onSelectClaim,
   onDrag,
   underlay,
 }: {
@@ -162,9 +171,12 @@ export function DuctDrawing({
   critical?: ReadonlySet<number>;
   hovered: number | null;
   issue: string;
+  /** The selected claim id in a subject scene; "" = none. */
+  claim?: string;
   onHover: (id: number | null) => void;
   onSelect: (id: number | null) => void;
   onSelectIssue: (issue: Issue) => void;
+  onSelectClaim?: (claim: Claim) => void;
   /** A drag the view consumes (the isometric rotates); returning false pans. */
   onDrag?: (dx: number, dy: number, shift: boolean) => boolean;
   /** Drawn first, in drawing feet, given the visible bounds. */
@@ -457,8 +469,199 @@ export function DuctDrawing({
               </g>
             );
           })}
+          {scene.subject ? (
+            <SubjectLayer
+              subject={scene.subject}
+              project={project}
+              screen={screen}
+              selected={selected}
+              claim={claim}
+              click={click}
+              onSelect={onSelect}
+              onSelectClaim={onSelectClaim}
+            />
+          ) : null}
         </svg>
       ) : null}
     </div>
+  );
+}
+
+/** A caption in screen space on a page-coloured halo, so it reads over any stroke. */
+function Caption({
+  x,
+  y,
+  children,
+  anchor = "start",
+  ink = token("ink-2"),
+}: {
+  x: number;
+  y: number;
+  children: string;
+  anchor?: "start" | "middle";
+  ink?: string;
+}) {
+  return (
+    <text
+      x={x}
+      y={y}
+      fontSize={10}
+      className="face-mono"
+      textAnchor={anchor}
+      fill={ink}
+      stroke={token("page")}
+      strokeWidth={3}
+      paintOrder="stroke"
+      pointerEvents="none"
+    >
+      {children}
+    </text>
+  );
+}
+
+/**
+ * The subject scene over the geometry: leg labels, place names, gaps, claim pins and the detail
+ * inset. Everything sits in screen space; the legs themselves are the segments, inked by the
+ * encoding like any other.
+ */
+function SubjectLayer({
+  subject,
+  project,
+  screen,
+  selected,
+  claim,
+  click,
+  onSelect,
+  onSelectClaim,
+}: {
+  subject: SubjectDrawn;
+  project: Project;
+  screen: (point: Point2) => Point2;
+  selected: ReadonlySet<number>;
+  claim: string;
+  click: (run: () => void) => (event: { stopPropagation: () => void }) => void;
+  onSelect: (id: number | null) => void;
+  onSelectClaim?: (claim: Claim) => void;
+}) {
+  const at = (id: number): Point2 | null => {
+    const point = subject.pointOf(id);
+    return point ? screen(project(point)) : null;
+  };
+  const { cut, claims, gaps } = subject;
+  const places = cut.nodes.flatMap((place) => {
+    const xy = at(place.id);
+    return xy ? [{ place, x: xy[0], y: xy[1] }] : [];
+  });
+  // Pins land on the first `at` element; a second pin on the same pixel steps right by one pin.
+  const taken: Point2[] = [];
+  const pins = claims.flatMap((item, i) => {
+    const xy = item.at[0] === undefined ? null : at(item.at[0]);
+    if (!xy) return [];
+    let [x, y] = xy;
+    while (taken.some(([tx, ty]) => Math.hypot(tx - x, ty - y) < PIN_APART)) x += PIN_APART;
+    taken.push([x, y]);
+    return [{ item, n: i + 1, x, y: y - PIN * 1.6 }];
+  });
+  return (
+    <g data-subject="">
+      {gaps.map((gap) => {
+        const [x1, y1] = screen(project(gap.from));
+        const [x2, y2] = screen(project(gap.to));
+        return (
+          <g key={`${gap.after}-${gap.before}`} data-gap={`${gap.after}-${gap.before}`}>
+            <line
+              x1={x1}
+              y1={y1}
+              x2={x2}
+              y2={y2}
+              stroke={token("ink-2")}
+              strokeWidth={1.5}
+              className="dash-void"
+            />
+            <circle
+              cx={(x1 + x2) / 2}
+              cy={(y1 + y2) / 2}
+              r={5}
+              fill={token("page")}
+              stroke={token("ink-2")}
+              strokeWidth={1.5}
+            >
+              <title>{`gap: ${gap.after} and ${gap.before} share no connector`}</title>
+            </circle>
+            <Caption x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 8} anchor="middle">
+              gap
+            </Caption>
+          </g>
+        );
+      })}
+      {cut.legs.map((leg) => {
+        if (leg.lengthFt < LABEL_LEG_FT) return null;
+        const middle = leg.ids[Math.floor(leg.ids.length / 2)];
+        const xy = middle === undefined ? null : at(middle);
+        if (!xy) return null;
+        return (
+          <g key={`${leg.name}|${leg.ids[0]}`} data-leg-label={leg.name}>
+            <Caption x={xy[0] + 6} y={xy[1] - 6}>
+              {`${leg.size ?? "?"} · ${leg.lengthFt} ft · ${leg.fittings} elb`}
+            </Caption>
+          </g>
+        );
+      })}
+      {places.map(({ place, x, y }, i) => (
+        <g
+          key={`${place.id}-${i}`}
+          data-place={place.kind}
+          data-place-id={place.id}
+          transform={`translate(${x} ${y})`}
+          style={{ cursor: "pointer" }}
+          onClick={click(() => onSelect(place.id))}
+        >
+          {place.kind === "level" || place.kind === "open" ? (
+            <circle
+              r={GLYPH * 1.5}
+              fill={token("page")}
+              stroke={selected.has(place.id) ? token("select") : token("ink-2")}
+              strokeWidth={1.5}
+              className={place.kind === "open" ? "dash-void" : undefined}
+            />
+          ) : null}
+          <Caption x={GLYPH * 2} y={GLYPH * 3.5} ink={token("ink")}>
+            {place.name}
+          </Caption>
+        </g>
+      ))}
+      {pins.map(({ item, n, x, y }) => {
+        const on = item.id === claim;
+        return (
+          <g
+            key={item.id}
+            data-claim={item.id}
+            data-claim-state={item.state}
+            data-selected={on ? "" : undefined}
+            transform={`translate(${x} ${y})`}
+            style={{ cursor: "pointer" }}
+            onClick={click(() => onSelectClaim?.(item))}
+          >
+            <title>{item.text}</title>
+            <circle
+              r={PIN}
+              fill={claimInk(item)}
+              stroke={on ? token("ink") : token("page")}
+              strokeWidth={on ? 2.5 : 1}
+            />
+            <text
+              dy="0.35em"
+              textAnchor="middle"
+              fontSize={10}
+              fontWeight={600}
+              fill={token("page")}
+              pointerEvents="none"
+            >
+              {n}
+            </text>
+          </g>
+        );
+      })}
+    </g>
   );
 }
