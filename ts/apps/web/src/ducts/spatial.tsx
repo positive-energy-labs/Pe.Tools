@@ -164,14 +164,20 @@ function Spatial({
   // A place's name is its Mark where the snapshot carries one; the cut falls back to type and kind.
   const markOf = useCallback(
     (id: number) =>
-      snapshotById(index.snapshot).nodes.get(id)?.facts.find((fact) => fact.key === "Mark")
-        ?.text ?? null,
+      snapshotById(index.snapshot)
+        .nodes.get(id)
+        ?.facts.find((fact) => fact.key === "Mark")?.text ?? null,
     [index],
   );
   const subjectDrawn = useMemo(
     () =>
       page.scene === "subject" && subject
-        ? subjectScene(index, subject.ids, legsOf(index.snapshot, subject.ids, markOf), subject.claims)
+        ? subjectScene(
+            index,
+            subject.ids,
+            legsOf(index.snapshot, subject.ids, markOf),
+            subject.claims,
+          )
         : null,
     [index, page.scene, subject, markOf],
   );
@@ -192,7 +198,11 @@ function Spatial({
     if (sub && claimPicked) {
       const ids = new Set(claimPicked.at);
       for (const leg of sub.cut.legs)
-        if (claimPicked.at.some((id) => leg.ids.includes(id) || leg.from.id === id || leg.to.id === id))
+        if (
+          claimPicked.at.some(
+            (id) => leg.ids.includes(id) || leg.from.id === id || leg.to.id === id,
+          )
+        )
           for (const id of leg.ids) ids.add(id);
       return ids;
     }
@@ -226,13 +236,7 @@ function Spatial({
       grow
       resize={{ target: "end", defaultSize: 360, minSize: 240, persist: "pe.ducts.factsWidth" }}
       start={
-        <Pane
-          kind="content"
-          title={view.label}
-          meta={meta}
-          scroll="clip"
-          flush
-        >
+        <Pane kind="content" title={view.label} meta={meta} scroll="clip" flush>
           <div className="flex size-full min-h-0 flex-col">
             <div className="flex flex-col gap-1 px-1 py-1">
               <div className="flex flex-wrap items-center gap-1">
@@ -241,10 +245,18 @@ function Spatial({
                     ariaLabel="scene"
                     value={page.scene}
                     onChange={(value) =>
-                      setPage({ scene: value === "subject" ? "subject" : "", selected: "", issue: "" })
+                      setPage({
+                        scene: value === "subject" ? "subject" : "",
+                        selected: "",
+                        issue: "",
+                      })
                     }
                     options={[
-                      { value: "", label: "group", title: "the chosen group at full weight, the rest faint" },
+                      {
+                        value: "",
+                        label: "group",
+                        title: "the chosen group at full weight, the rest faint",
+                      },
                       {
                         value: "subject",
                         label: "subject",

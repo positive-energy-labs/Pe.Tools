@@ -98,7 +98,10 @@ export const legsOf = (
   ids.forEach((id, i) => {
     const previous = i ? ids[i - 1]! : null;
     const level = levelOf(id);
-    if (previous !== null && nearest(pointsOf(snapshot, previous), pointsOf(snapshot, id)) > GAP_FT) {
+    if (
+      previous !== null &&
+      nearest(pointsOf(snapshot, previous), pointsOf(snapshot, id)) > GAP_FT
+    ) {
       gaps.push({ after: previous, before: id });
       const at: Place = { id: previous, name: "gap", kind: "open" };
       close(at);

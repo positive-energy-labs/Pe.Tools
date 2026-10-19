@@ -30,14 +30,22 @@ const node = (id: number, kind: Node["kind"], point: number[], levelId: number):
   point,
   levelId,
   connectors: [],
-  facts: kind === "equipment" ? [{ key: "Mark", text: `AHU-${id}`, unit: "", provenance: "revit-reported" }] : [],
+  facts:
+    kind === "equipment"
+      ? [{ key: "Mark", text: `AHU-${id}`, unit: "", provenance: "revit-reported" }]
+      : [],
 });
 
 const L1 = 1;
 const L2 = 2;
 const L3 = 3;
 const snapshot = {
-  document: { title: "t", readAt: "2026-10-19T00:00:00Z", elapsedMs: 0, networkBasedCalculations: false },
+  document: {
+    title: "t",
+    readAt: "2026-10-19T00:00:00Z",
+    elapsedMs: 0,
+    networkBasedCalculations: false,
+  },
   levels: [
     { id: L1, name: "Main", elevationFt: 0 },
     { id: L2, name: "Upper", elevationFt: 12.5 },
@@ -94,5 +102,7 @@ it("subjectScene resolves a gap to the model points it spans", () => {
   const index = indexOf(snapshot);
   const cut: SubjectCut = { legs: [], nodes: [], gaps: [{ after: 11, before: 3 }] };
   const scene = subjectScene(index, SUBJECT, cut, []);
-  expect(scene.subject?.gaps).toEqual([{ after: 11, before: 3, from: [10, 0, 1], to: [10, 20, 1] }]);
+  expect(scene.subject?.gaps).toEqual([
+    { after: 11, before: 3, from: [10, 0, 1], to: [10, 20, 1] },
+  ]);
 });

@@ -212,7 +212,10 @@ export function subjectScene(
     const line = segmentById.get(id)?.polyline;
     return line ? (line[Math.floor((line.length - 1) / 2)] ?? null) : null;
   };
-  const points = [...segments.flatMap((f) => f.segment.polyline), ...nodes.map((f) => f.node.point)];
+  const points = [
+    ...segments.flatMap((f) => f.segment.polyline),
+    ...nodes.map((f) => f.node.point),
+  ];
   const levelAt = new Map<number, number | null>([
     ...segments.map((f) => [f.segment.id, f.segment.levelId ?? null] as const),
     ...nodes.map((f) => [f.node.id, f.node.levelId ?? null] as const),
@@ -225,10 +228,7 @@ export function subjectScene(
       lo[i] = Math.min(lo[i]!, p[i]!);
       hi[i] = Math.max(hi[i]!, p[i]!);
     }
-  const box = [
-    lo.map((v) => v - CONTEXT_PAD_FT),
-    hi.map((v) => v + CONTEXT_PAD_FT),
-  ] as const;
+  const box = [lo.map((v) => v - CONTEXT_PAD_FT), hi.map((v) => v + CONTEXT_PAD_FT)] as const;
   const context = points.length
     ? contextOf(
         index,

@@ -135,7 +135,16 @@ export function DuctsRoute({
         scene: page.scene,
         layers,
       });
-  }, [page.view, page.group, page.level, page.selected, page.issue, page.encoding, page.scene, page.layers]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [
+    page.view,
+    page.group,
+    page.level,
+    page.selected,
+    page.issue,
+    page.encoding,
+    page.scene,
+    page.layers,
+  ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ready = useMemo(
     () => (snapshot ? readiness(snapshot, handle.work.doc) : {}),

@@ -46,7 +46,11 @@ export function ClaimsList({
       </p>
     );
   return (
-    <ol className="flex flex-col gap-1 px-1 py-1" aria-label="claims" data-claims={subject.claims.length}>
+    <ol
+      className="flex flex-col gap-1 px-1 py-1"
+      aria-label="claims"
+      data-claims={subject.claims.length}
+    >
       {subject.claims.map((claim, i) => {
         const on = claim.id === selected;
         const verdict = verdicts[claim.id] ?? claim.verdict;
@@ -57,7 +61,10 @@ export function ClaimsList({
             data-claim-row={claim.id}
             data-selected={on ? "" : undefined}
             className="flex items-start gap-2"
-            style={{ outline: on ? `2px solid ${tokenRef("select")}` : undefined, outlineOffset: 2 }}
+            style={{
+              outline: on ? `2px solid ${tokenRef("select")}` : undefined,
+              outlineOffset: 2,
+            }}
           >
             <button
               type="button"
@@ -80,7 +87,11 @@ export function ClaimsList({
                 </span>
               </span>
             </button>
-            <span className="flex shrink-0 items-center gap-1" role="group" aria-label={`verdict on claim ${i + 1}`}>
+            <span
+              className="flex shrink-0 items-center gap-1"
+              role="group"
+              aria-label={`verdict on claim ${i + 1}`}
+            >
               {VERDICTS.map((option) => (
                 <Press
                   key={option.value}
