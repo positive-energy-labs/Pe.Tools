@@ -51,8 +51,7 @@ export function EScreen({ props: routeProps }: { props: ProtoProps }) {
   // A group with an imitation Work (STAGED_WORK) draws its subject and claims; verdicts on them stay
   // local, since the route's Work holds none of those cells. Writes still go to the route's Work.
   // Never over the scene fixture: it stands in while the host reads, and holds none of these ids.
-  const stagedDoc =
-    page.group && !routeProps.fromFixture ? staged?.[page.group] : undefined;
+  const stagedDoc = page.group && !routeProps.fromFixture ? staged?.[page.group] : undefined;
   const [verdicts, setVerdicts] = useState<Record<string, Verdict>>({});
   const stagedSubject = useMemo<Subject | null>(() => {
     if (!stagedDoc) return null;
@@ -63,7 +62,10 @@ export function EScreen({ props: routeProps }: { props: ProtoProps }) {
       }),
     );
     return {
-      ids: stagedDoc.subject?.staged?.value ?? stagedDoc.subject?.proposal?.value ?? [],
+      ids:
+        stagedDoc.subject[page.group]?.staged?.value ??
+        stagedDoc.subject[page.group]?.proposal?.value ??
+        [],
       claims: claimsOf(cells).map((c) => ({ ...c, verdict: verdicts[c.id] ?? c.verdict })),
       work: stagedDoc,
       onVerdict: (claim, verdict) => setVerdicts((was) => ({ ...was, [claim.id]: verdict })),
@@ -92,7 +94,8 @@ export function EScreen({ props: routeProps }: { props: ProtoProps }) {
   );
   const ruleOf = useMemo(() => ruleOfIds(priced), [priced]);
   const tree = useMemo(
-    () => (snapshot && page.group ? (buildTree(snapshot, priced, doc, page.group)[0] ?? null) : null),
+    () =>
+      snapshot && page.group ? (buildTree(snapshot, priced, doc, page.group)[0] ?? null) : null,
     [snapshot, priced, doc, page.group],
   );
   const scope = useMemo(
@@ -134,8 +137,7 @@ export function EScreen({ props: routeProps }: { props: ProtoProps }) {
   // null = automatic: open when the inbox holds a row, collapsed when it holds none.
   const [inboxOpen, setInboxOpen] = useState<boolean | null>(null);
 
-  if (!snapshot)
-    return <p className="text-ink-2 p-4">{props.empty?.says ?? "reading ducts…"}</p>;
+  if (!snapshot) return <p className="text-ink-2 p-4">{props.empty?.says ?? "reading ducts…"}</p>;
 
   const light = (ids: readonly number[] | null) => {
     setLit(new Set(ids ?? []));
@@ -191,13 +193,21 @@ export function EScreen({ props: routeProps }: { props: ProtoProps }) {
       {tree ? (
         <>
           {reading?.quantity ? (
-            <p className="t-small text-ink-2 border-line border-b px-2 py-1" data-e-legend={reading.key}>
-              bar = {reading.label}, {reading.quantity.unit}, the largest under each row · full width
-              = the group's max{" "}
+            <p
+              className="t-small text-ink-2 border-line border-b px-2 py-1"
+              data-e-legend={reading.key}
+            >
+              bar = {reading.label}, {reading.quantity.unit}, the largest under each row · full
+              width = the group's max{" "}
               <span className="face-mono">
-                {reading.quantity.max == null ? "—" : formatQuantity(reading.quantity, reading.quantity.max)}
+                {reading.quantity.max == null
+                  ? "—"
+                  : formatQuantity(reading.quantity, reading.quantity.max)}
               </span>{" "}
-              at {reading.quantity.maxId == null ? "no element" : encoded.nameOf(reading.quantity.maxId)}
+              at{" "}
+              {reading.quantity.maxId == null
+                ? "no element"
+                : encoded.nameOf(reading.quantity.maxId)}
             </p>
           ) : (
             <BarLegend scale={scale} criticalName={critical ? grilleName(critical) : null} />
@@ -230,7 +240,12 @@ export function EScreen({ props: routeProps }: { props: ProtoProps }) {
                 onClick={() => setPage({ group: s.key, selected: "", issue: "" })}
               >
                 <span className="min-w-0 flex-1 break-words">{s.name}</span>
-                <LossBar value={s.total} scale={null} provisional={s.provisional} label="Pe fan, in-wg" />
+                <LossBar
+                  value={s.total}
+                  scale={null}
+                  provisional={s.provisional}
+                  label="Pe fan, in-wg"
+                />
               </button>
             </li>
           ))}
@@ -246,7 +261,11 @@ export function EScreen({ props: routeProps }: { props: ProtoProps }) {
         meta={wideRules ? "every system" : "this system"}
         help="A rule is a fitting type (family : type) plus a geometry condition. Its table is the one choice a person makes; Pe re-looks-up every instance under it. A fitting with a stated drop is an override under its type."
         actions={
-          <button type="button" className="cursor-pointer px-1" onClick={() => setWideRules(!wideRules)}>
+          <button
+            type="button"
+            className="cursor-pointer px-1"
+            onClick={() => setWideRules(!wideRules)}
+          >
             {wideRules ? "this system" : "all systems"}
           </button>
         }
@@ -271,7 +290,13 @@ export function EScreen({ props: routeProps }: { props: ProtoProps }) {
       axis="vertical"
       start={treePane}
       end={rulesPane}
-      resize={{ target: "end", defaultSize: 300, minSize: 120, minOtherSize: 160, persist: "proto-e-rules" }}
+      resize={{
+        target: "end",
+        defaultSize: 300,
+        minSize: 120,
+        minOtherSize: 160,
+        persist: "proto-e-rules",
+      }}
     />
   );
 

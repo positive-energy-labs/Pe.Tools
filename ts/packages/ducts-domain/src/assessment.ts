@@ -176,7 +176,7 @@ export function assessDucts(
   reason(
     "rests-on-inferred-joints",
     reached.filter((node) => next.paths[node.id]!.provisional).length,
-    "Calculated paths are provisional: they step across joints or taps inferred by proximity that are not near misses and no person has confirmed",
+    "Calculated paths are provisional: they step across anomalous joints or taps inferred by proximity (a reversed connector, a part through its host, a cross-class join) that no person has confirmed",
   );
   reason(
     "unknown-terminal-flow",

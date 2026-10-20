@@ -395,7 +395,7 @@ test("page selection follows iso to tables and ledger, and a ledger run lights p
 
 test("a staged subject, claims and labelParameter render the subject scene; a verdict press stages the claim", async () => {
   work = ductsRouteState.schema.parse({
-    subject: { staged: { value: [100, 1, 2, 3, 4] } },
+    subject: { g1: { staged: { value: [100, 1, 2, 3, 4] } } },
     claims: {
       c1: { staged: { value: { text: "The unit is AHU-9.", ids: [100], state: "assumed" } } },
     },
@@ -406,7 +406,7 @@ test("a staged subject, claims and labelParameter render the subject scene; a ve
       ...response(),
       nodes: snapshot.nodes.map((node) => (node.id === 100 ? { ...node, label: "AHU-9" } : node)),
     });
-  const { container } = await mount("&view=iso&scene=subject");
+  const { container } = await mount("&group=g1&view=iso&scene=subject");
   // The staged labelParameter rides the snapshot request.
   await waitFor(() => expect(requests.at(-1)?.request).toEqual({ labelParameter: "Unit Tag" }));
   // The claims cell is the list; the node's label is the place's name in it.

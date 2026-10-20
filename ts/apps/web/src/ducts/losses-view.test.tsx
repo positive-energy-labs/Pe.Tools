@@ -21,6 +21,7 @@ import {
 import type { DuctsApply } from "@pe/host-contracts/generated";
 
 import type { Grid, Grids } from "@pe/ducts-domain/loss-grid";
+import { bin } from "@pe/ducts-domain/bins";
 import { computeLosses } from "@pe/ducts-domain/losses";
 import { DuctsLosses, foldRefusals, StagedLosses } from "./losses-view";
 import { manifest, type DuctsPage } from "./manifest";
@@ -189,12 +190,7 @@ it("builds the ducts.apply request from the staged cells only, exactly", () => {
   expect(applyRequest(snapshot, price(snapshot, grids, doc), "", "").equipment).toEqual([]);
   doc = land(
     doc,
-    transitionPatches(
-      ["unitStatics"],
-      "1",
-      {},
-      { kind: "stage", rung: { value: { inWg: 0.1061 } } },
-    ),
+    transitionPatches(["esp"], "1", {}, { kind: "stage", rung: { value: { inWg: 0.1061 } } }),
   );
   // A proposal never reaches Revit.
   doc = land(
@@ -227,6 +223,12 @@ it("builds the ducts.apply request from the staged cells only, exactly", () => {
     terminals: [{ id: 31, inWg: 0.08, source: "catalog" }],
     components: [],
     equipment: [{ id: 1, externalStaticInWg: 0.1061 }],
+    // Every terminal in a priced group carries its resolved flow, Revit's own rung included.
+    terminalFlows: [
+      { id: 30, cfm: 300, source: "revit" },
+      { id: 31, cfm: 100, source: "revit" },
+    ],
+    equipmentFlows: [],
     store: {
       version: 1,
       rules: { "tap-std": { table: "SD5-10" } },
@@ -234,10 +236,16 @@ it("builds the ducts.apply request from the staged cells only, exactly", () => {
         "22": { table: "SD5-10", inputs: "Qb/Qc=0.25, Ab/Ac=0.25", coefficient: 1, appliedAt: at },
       },
       terminals: { "31": { inWg: 0.08, source: "catalog", appliedAt: at } },
+      terminalFlows: {
+        "30": { cfm: 300, source: "revit", appliedAt: at },
+        "31": { cfm: 100, source: "revit", appliedAt: at },
+      },
+      equipmentFlows: {},
       slots: {
         fanStatic: "PE_M_Fan_ExternalStaticPressure",
-        fanFlow: "PE_M_Fan_AirFlow",
+        fanFlow: "PE_M_Fan_AirFlowDesign",
         componentDrop: "Pressure Drop",
+        terminalDrop: "PE_M_Grd_ExternalStaticPressure",
         fittingCoefficient: "Pe_C",
         terminalFlow: "PE_M_Grd_AirFlow",
       },
@@ -260,6 +268,61 @@ it("builds the ducts.apply request from the staged cells only, exactly", () => {
   ).not.toThrow();
 });
 
+it("apply carries the resolved terminal flows and the staged unit flows, and leaves a fan-less group's terminals out", () => {
+  let doc = ductsRouteState.schema.parse({});
+  doc = land(
+    doc,
+    transitionPatches(
+      ["flows"],
+      "30",
+      {},
+      { kind: "stage", rung: { value: { cfm: 250, source: "balancing report" } } },
+    ),
+  );
+  doc = land(
+    doc,
+    transitionPatches(
+      ["equipmentFlows"],
+      "1",
+      {},
+      { kind: "stage", rung: { value: { cfm: 400, source: "submittal" } } },
+    ),
+  );
+  const at = "2026-10-04T00:00:00.000Z";
+  const request = applyRequest(snapshot, price(snapshot, grids, doc), at, "");
+  expect(request.terminalFlows).toEqual([
+    { id: 30, cfm: 250, source: "balancing report" },
+    { id: 31, cfm: 100, source: "revit" },
+  ]);
+  expect(request.equipmentFlows).toEqual([{ id: 1, cfm: 400, source: "submittal" }]);
+  expect(request.store.equipmentFlows).toEqual({
+    "1": { cfm: 400, source: "submittal", appliedAt: at },
+  });
+  // Unit 1 staged passive leaves g10 with no air mover: its terminals are not written.
+  doc = land(
+    doc,
+    transitionPatches(["roles"], "1", {}, { kind: "stage", rung: { value: { role: "passive" } } }),
+  );
+  expect(applyRequest(snapshot, price(snapshot, grids, doc), at, "").terminalFlows).toEqual([]);
+});
+
+it("a catalog link to a table that is not loaded is a blocking finding on each terminal it prices", () => {
+  const doc = land(
+    ductsRouteState.schema.parse({}),
+    transitionPatches(
+      ["catalogs"],
+      JSON.stringify(["Supply Grille", ""]),
+      {},
+      { kind: "stage", rung: { value: { table: "NOT-LOADED" } } },
+    ),
+  );
+  const found = price(snapshot, grids, doc).findings.filter(
+    (f) => f.kind === "catalog-missing-table",
+  );
+  expect(found.map((f) => f.elementIds).sort()).toEqual([[30], [31]]);
+  expect(found.every((f) => bin(f) === "blocking")).toBe(true);
+});
+
 /** Two groups: grille 30 and elbow 21 move to g20 (its own unit 100); the solve is the original's. */
 const twoGroups: DuctSnapshot = {
   ...snapshot,
@@ -274,7 +337,7 @@ const twoGroups: DuctSnapshot = {
 
 it("scopes the request to the group in the sentence, and to every group when none is named", () => {
   let doc = ductsRouteState.schema.parse({});
-  const stage = <S extends "rules" | "terminalDrops" | "unitStatics">(
+  const stage = <S extends "rules" | "terminalDrops" | "esp">(
     segment: S,
     key: string,
     value: unknown,
@@ -285,8 +348,8 @@ it("scopes the request to the group in the sentence, and to every group when non
   stage("rules", "elbow-1d-gt10", { table: "CD3-2" }); // fitting 21, g20
   stage("terminalDrops", "31", { inWg: 0.08 }); // g10
   stage("terminalDrops", "30", { inWg: 0.05 }); // g20
-  stage("unitStatics", "1", { inWg: 0.1 });
-  stage("unitStatics", "100", { inWg: 0.2 });
+  stage("esp", "1", { inWg: 0.1 });
+  stage("esp", "100", { inWg: 0.2 });
   const priced = price(snapshot, grids, doc);
   const ids = (group: string) => {
     const request = applyRequest(twoGroups, priced, "", group);
@@ -356,17 +419,12 @@ it("writes a unit only from a staged fan static, never a proposal or a side effe
   );
   doc = land(
     doc,
-    transitionPatches(
-      ["unitStatics"],
-      "1",
-      {},
-      { kind: "propose", rung: { value: { inWg: 0.3 } } },
-    ),
+    transitionPatches(["esp"], "1", {}, { kind: "propose", rung: { value: { inWg: 0.3 } } }),
   );
   expect(applyRequest(snapshot, price(snapshot, grids, doc), "", "g10").equipment).toEqual([]);
   doc = land(
     doc,
-    transitionPatches(["unitStatics"], "1", doc.unitStatics["1"] ?? {}, {
+    transitionPatches(["esp"], "1", doc.esp["1"] ?? {}, {
       kind: "stage",
       rung: { value: { inWg: 0.3 } },
     }),
@@ -423,12 +481,7 @@ it("the band names a staged fan static that lands on the unit's type, and folds 
   );
   doc = land(
     doc,
-    transitionPatches(
-      ["unitStatics"],
-      "1",
-      {},
-      { kind: "stage", rung: { value: { inWg: 0.0761 } } },
-    ),
+    transitionPatches(["esp"], "1", {}, { kind: "stage", rung: { value: { inWg: 0.0761 } } }),
   );
   const shared = "the type is shared with 2 other units (6564593, 6078870)";
   const response: DuctsApply.Res.Response = {
@@ -550,27 +603,30 @@ it("does not offer a combined fan static for unresolved equipment air circuits",
 });
 
 it("a total and a fan resting on an unconfirmed inference read provisional; a person's confirm makes them final", async () => {
-  // Grille 30 lifted 0.4 in off duct 11's end, no facing captured: joined by proximity, stretched.
+  // Grille 30 lifted 0.4 in off duct 11's end, facing the same way as the duct's end: joined by
+  // proximity, anomalous (stretched and near-miss joins are bridged and final).
   const lifted = structuredClone(snapshot);
   const end = lifted.segments.find((s) => s.id === 11)!.connectors.find((c) => c.index === 2)!;
   const grille = lifted.nodes.find((n) => n.id === 30)!;
   end.connectedTo = null;
   grille.connectors[0]!.connectedTo = null;
   grille.point = grille.connectors[0]!.point = [20, 10 + 0.4 / 12, 9];
+  end.facing = [0, 1, 0];
+  grille.connectors[0]!.facing = [0, 1, 0];
   const view = render(<Harness of={lifted} />);
   const q = (selector: string) => view.container.querySelector(selector);
-  const words = "provisional · rests on 1 inference, worst: stretched";
+  const words = "provisional · rests on 1 inference, worst: anomalous";
   expect(q('[data-terminal="30"]')!.closest("[data-key]")!.textContent).toContain(words);
-  expect(q('[data-total="30"]')?.getAttribute("data-provisional")).toBe("stretched");
-  expect(q('[data-total="30"]')?.getAttribute("data-tone")).toBe("caution");
+  expect(q('[data-total="30"]')?.getAttribute("data-provisional")).toBe("anomalous");
+  expect(q('[data-total="30"]')?.getAttribute("data-tone")).toBe("alarm");
   expect(q('[data-total="31"]')?.hasAttribute("data-provisional")).toBe(false);
-  expect(q('[data-fan="g10"]')?.getAttribute("data-provisional")).toBe("stretched");
+  expect(q('[data-fan="g10"]')?.getAttribute("data-provisional")).toBe("anomalous");
   expect(q('[data-group-head="g10"]')?.textContent).toContain(words);
-  expect(q('[data-finding="proximity:11:2|30:1"] [data-grade]')?.textContent).toBe("stretched");
+  expect(q('[data-finding="proximity:11:2|30:1"] [data-grade]')?.textContent).toBe("anomalous");
   fireEvent.click(q('[data-confirm="proximity:11:2|30:1"]')!);
   await waitFor(() => expect(q("[data-provisional]")).toBeNull());
   expect(q("[data-provisional-note]")).toBeNull();
   expect(q('[data-finding="proximity:11:2|30:1"] [data-grade]')?.textContent).toBe(
-    "stretched, confirmed",
+    "anomalous, confirmed",
   );
 });

@@ -74,12 +74,14 @@ const observed = <T>(ctx: DuctsCtx, key: DuctsReading) => {
   return reading?.state === "ready" ? (reading.observation as T) : null;
 };
 
-/** The segments `ducts.apply` writes; `assumptions` stay in Pe. */
+/** The segments `ducts.apply` writes; `assumptions`, `roles` and `loads` stay in Pe. */
 export const WRITTEN = [
   "rules",
   "terminalDrops",
   "componentDrops",
-  "unitStatics",
+  "flows",
+  "esp",
+  "equipmentFlows",
   "parameters",
 ] as const;
 const stagedCells = (doc: DuctsRouteDocument | null) =>
@@ -210,11 +212,32 @@ export const manifest = defineRoute<
       show: (value) => `${(value as { inWg: number }).inWg} in-wg`,
     },
     {
-      segment: "unitStatics",
+      segment: "flows",
       groupOf: (key) => [key],
-      nouns: ["fan static"],
-      noun: "fan statics",
+      nouns: ["terminal"],
+      noun: "terminal flows",
+      show: (value) => `${(value as { cfm: number }).cfm} cfm`,
+    },
+    {
+      segment: "esp",
+      groupOf: (key) => [key],
+      nouns: ["unit"],
+      noun: "unit ESPs",
       show: (value) => `${(value as { inWg: number }).inWg} in-wg`,
+    },
+    {
+      segment: "equipmentFlows",
+      groupOf: (key) => [key],
+      nouns: ["unit"],
+      noun: "unit flows",
+      show: (value) => `${(value as { cfm: number }).cfm} cfm`,
+    },
+    {
+      segment: "roles",
+      groupOf: (key) => [key],
+      nouns: ["unit"],
+      noun: "unit roles",
+      show: (value) => (value as { role: string }).role,
     },
     {
       segment: "parameters",

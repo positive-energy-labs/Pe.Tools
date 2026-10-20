@@ -133,7 +133,7 @@ export function DuctsRoute({
   // The subject scene is the person's staged subject, else Pea's proposal; null until one exists.
   const subjectIds = demo
     ? demo.subject
-    : (staged.subject ?? handle.work.doc?.subject?.proposal?.value);
+    : (staged.subject[page.group] ?? handle.work.doc?.subject?.[page.group]?.proposal?.value);
   const subject = useMemo(() => {
     if (!subjectIds) return null;
     const cells = demo

@@ -24,8 +24,9 @@
  * A connector faces the way the snapshot's `facing` (Revit's BasisZ) says, and a rectangular one
  * is rolled the way its `widthAxis` says; older snapshots without them fall back to geometry.
  * Inference may compute, never conclude (kaitpw 2026-10-19): every join carries a `grade` measured
- * from its geometry (`DUCT_INFERENCE_GRADES`), a path resting on one is provisional at its worst
- * grade (`losses.ts`), and only a person's staged `connect` (confirm) or `ignore` (break) rules on
+ * from its geometry (`DUCT_INFERENCE_GRADES`); near-miss and stretched joins are bridged and final (ruling 5,
+ * `bins.ts`), and a path resting on an anomalous one is provisional
+ * (`losses.ts`), and only a person's staged `connect` (confirm) or `ignore` (break) rules on
  * it; a Pea proposal never does. A terminal whose open connector sits in a duct's open end but
  * faces the wrong way (a stand-in family; Chadds grilles 10922066, 10922068 in their plenums) joins
  * that end anyway, always `anomalous`, its note naming the reversed connector and the repair.

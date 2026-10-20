@@ -448,7 +448,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
         priced.staged.catalogs,
         priced.staged.terminalDrops,
         priced.staged.componentDrops,
-        priced.staged.unitStatics,
+        priced.staged.esp,
         priced.staged.parameters,
       ].some((cells) => Object.keys(cells).length)
     )

@@ -180,7 +180,8 @@ export namespace DuctsApply {
      * coefficient parameter live (the FittingCoefficient slot, default Pe_C); AshraeTable stores Table as Revit's
      * ASHRAETableName and Revit looks the legs up itself; SpecificCoefficient freezes Coefficient (the export route,
      * never the web's). Coefficient, Table, Inputs and RuleKey are Pe's provenance and land in the store.
-     * Terminals and Components carry a drop in in-wg; Equipment the fan external static.
+     * Terminals and Components carry a drop in in-wg; Equipment the fan external static; TerminalFlows and EquipmentFlows
+     * a design flow in cfm (the TerminalFlow slot on the terminal instance, the FanFlow slot on the unit).
      *
      */
     export interface Request {
@@ -190,6 +191,8 @@ export namespace DuctsApply {
       terminals: DuctDropWrite[];
       components: DuctDropWrite[];
       equipment: DuctEquipmentWrite[];
+      terminalFlows: DuctFlowWrite[];
+      equipmentFlows: DuctFlowWrite[];
       store: DuctLossStore;
     }
     /**
@@ -228,6 +231,14 @@ export namespace DuctsApply {
       externalStaticInWg: number;
     }
     /**
+     * A design flow in cfm and where it came from (override, load preview, rooms, a person's note).
+     */
+    export interface DuctFlowWrite {
+      id: number;
+      cfm: number;
+      source?: null | string;
+    }
+    /**
      * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
      * `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
      * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
@@ -243,6 +254,12 @@ export namespace DuctsApply {
       };
       terminals?: {
         [k: string]: DuctDropRecord;
+      };
+      terminalFlows?: {
+        [k: string]: DuctFlowRecord;
+      };
+      equipmentFlows?: {
+        [k: string]: DuctFlowRecord;
       };
       slots?: null | DuctParameterSlots;
       workRevision?: number;
@@ -272,6 +289,14 @@ export namespace DuctsApply {
       source?: null | string;
       appliedAt: string;
     }
+    /**
+     * What Pe wrote on one terminal or unit: the design flow in cfm and where it came from.
+     */
+    export interface DuctFlowRecord {
+      cfm: number;
+      source?: null | string;
+      appliedAt: string;
+    }
   }
   export namespace Res {
     /**
@@ -285,7 +310,7 @@ export namespace DuctsApply {
       storeRevision: number;
     }
     /**
-     * One target's outcome. Kind: fitting, terminal, component, equipment, store. Outcome: planned (preview),
+     * One target's outcome. Kind: fitting, terminal, component, equipment, terminal-flow, equipment-flow, store. Outcome: planned (preview),
      * written, refused (Reason says why), unchanged (already holds the value). Before and After are display text.
      *
      */
@@ -708,6 +733,12 @@ export namespace DuctsSnapshot {
       terminals: {
         [k: string]: DuctDropRecord;
       };
+      terminalFlows: {
+        [k: string]: DuctFlowRecord;
+      };
+      equipmentFlows: {
+        [k: string]: DuctFlowRecord;
+      };
       slots?: null | DuctParameterSlots;
       workRevision: number;
       appliedAt?: null | string;
@@ -733,6 +764,14 @@ export namespace DuctsSnapshot {
      */
     export interface DuctDropRecord {
       inWg: number;
+      source?: null | string;
+      appliedAt: string;
+    }
+    /**
+     * What Pe wrote on one terminal or unit: the design flow in cfm and where it came from.
+     */
+    export interface DuctFlowRecord {
+      cfm: number;
       source?: null | string;
       appliedAt: string;
     }

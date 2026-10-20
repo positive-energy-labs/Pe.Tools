@@ -84,7 +84,13 @@ const snap = (segments: Segment[], order: string[] | null = ORDER): DuctSnapshot
     issues: [],
     layers: [],
     systems: [],
-    slots: { fanStatic: "", fanFlow: "", componentDrop: "", fittingCoefficient: "" },
+    slots: {
+      fanStatic: "",
+      fanFlow: "",
+      componentDrop: "",
+      fittingCoefficient: "",
+      terminalFlow: "",
+    },
     ...(order
       ? { phases: { order, views: [{ phase: "Existing", filter: "Show All", count: 12 }] } }
       : {}),

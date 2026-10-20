@@ -120,10 +120,10 @@ const fanPatches = (
   inWg: number,
 ): RouteStatePatch[] => {
   const key = String(unit);
-  const cell = doc?.unitStatics[key] ?? {};
+  const cell = doc?.esp[key] ?? {};
   return cell.staged?.value.inWg === inWg
-    ? transitionPatches(["unitStatics"], key, cell, { kind: "unstage" })
-    : transitionPatches(["unitStatics"], key, cell, { kind: "stage", rung: { value: { inWg } } });
+    ? transitionPatches(["esp"], key, cell, { kind: "unstage" })
+    : transitionPatches(["esp"], key, cell, { kind: "stage", rung: { value: { inWg } } });
 };
 /** Refusals folded per reason: the shared-type refusal names the same peers for every unit of a type. */
 export function foldRefusals(writes: readonly DuctsApply.Res.DuctWrite[]) {
@@ -576,7 +576,7 @@ function GroupHead({
   const demand = assessment.equipment.find((equipment) => equipment.id === unit);
   const sum = demand?.next ?? null;
   const proposed = demand?.requiredEspStagedInWg ?? null;
-  const stagedStatic = unit == null ? undefined : priced.staged.unitStatics[String(unit)]?.inWg;
+  const stagedStatic = unit == null ? undefined : priced.staged.esp[String(unit)]?.inWg;
   return (
     <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 py-1" data-group-head={group.id}>
       <span className="t-title">
@@ -985,7 +985,7 @@ export function StagedLosses({
   const catalogLinks = Object.entries(priced.staged.catalogs);
   const terminals = Object.keys(priced.staged.terminalDrops).length;
   const components = Object.keys(priced.staged.componentDrops).length;
-  const units = Object.keys(priced.staged.unitStatics).sort();
+  const units = Object.keys(priced.staged.esp).sort();
   const slots = Object.entries(priced.staged.parameters);
   if (
     !keys.length &&
@@ -1015,7 +1015,7 @@ export function StagedLosses({
           "catalogs",
           "terminalDrops",
           "componentDrops",
-          "unitStatics",
+          "esp",
           "parameters",
         ] as const
       ).flatMap((segment) =>
@@ -1104,7 +1104,7 @@ export function StagedLosses({
         return (
           <Fragment key={id}>
             <div data-staged-unit={id}>
-              unit {id}: fan static {priced.staged.unitStatics[id]!.inWg} in-wg
+              unit {id}: fan static {priced.staged.esp[id]!.inWg} in-wg
               {inScope ? "" : " · not this group's unit, left out"}
             </div>
             {planned && inScope ? (
@@ -1124,7 +1124,7 @@ export function StagedLosses({
       {/* One line per distinct reason, naming every id it covers; never a count with a hidden tail. */}
       {foldRefusals(
         (evaluation?.response.writes ?? []).filter(
-          (w) => w.kind !== "equipment" || String(w.id) in priced.staged.unitStatics,
+          (w) => w.kind !== "equipment" || String(w.id) in priced.staged.esp,
         ),
       ).map(({ reason, kind, ids }) => (
         <div key={`${kind}:${reason}`} data-tone="caution" data-refused={`${kind}:${ids[0] ?? ""}`}>

@@ -277,12 +277,12 @@ it("uses generic Work proposal/staging guards and refuses lossy scalar unit writ
   expect(applyPatches(ductsRouteState, env, "human", stage, 3)).toMatchObject({ ok: true });
   expect(applyPatches(ductsRouteState, env, "human", stage, 2)).toMatchObject({ ok: false });
   const doc = work(evidence(s));
-  doc.unitStatics["100"] = { staged: { value: { inWg: 0.2 } } };
+  doc.esp["100"] = { staged: { value: { inWg: 0.2 } } };
   expect(() => applyRequest(s, price(s, {}, doc), "purpose-time", "")).toThrow(
     "no admitted manufacturer scalar ESP mapping",
   );
-  delete doc.unitStatics["100"];
-  doc.unitStatics["200"] = { staged: { value: { inWg: 0.2 } } };
+  delete doc.esp["100"];
+  doc.esp["200"] = { staged: { value: { inWg: 0.2 } } };
   expect(() => applyRequest(s, price(s, {}, structuredClone(doc)), "purpose-time", "")).toThrow(
     "no admitted manufacturer scalar ESP mapping",
   );

@@ -78,6 +78,8 @@ export const ductFindingSchema = z.strictObject({
   clearer: z.enum(["route", "pea", "person"]),
   /** An inferred join's grade; null or absent on a finding that joins nothing. */
   grade: z.enum(DUCT_INFERENCE_GRADES).nullable().optional(),
+  /** The group a finding is about when it is about a whole group (`no-fan`); absent otherwise. */
+  groupId: z.string().nullable().optional(),
 });
 export type DuctFinding = z.infer<typeof ductFindingSchema>;
 const row = z.strictObject({
