@@ -1,4 +1,5 @@
 using Autodesk.Revit.UI;
+using Pe.Shared.RevitData;
 
 namespace Pe.Revit.Extensions.ProjDocument;
 
@@ -24,7 +25,9 @@ public static class UIDocumentShowExtensions {
     public static BoundingBoxXYZ? UnionBoundingBox(this Document document, IEnumerable<ElementId> ids, View view) {
         var corners = ids
             .Select(document.GetElement)
-            .Select(element => element?.get_BoundingBox(view) ?? element?.get_BoundingBox(null))
+            // Model box first: a view-dependent box makes Revit build view geometry per element, which is slow
+            // across hundreds of ducts in a large model. The view box only stands in for an element with no model box.
+            .Select(element => element?.get_BoundingBox(null) ?? element?.get_BoundingBox(view))
             .Where(box => box != null)
             .SelectMany(box => new[] {
                     box!.Min, box.Max, new XYZ(box.Min.X, box.Min.Y, box.Max.Z), new XYZ(box.Min.X, box.Max.Y, box.Min.Z),
@@ -62,5 +65,85 @@ public static class UIDocumentShowExtensions {
             .First(uiView => uiView.ViewId == target.Id)
             .ZoomAndCenterRectangle(box.Min - margin, box.Max + margin);
         return box;
+    }
+
+    /// <summary>Which view showed the elements, the name of the view the person was in when it was not that one, and whether the view was made.</summary>
+    public sealed record ShownIn(View View, string? SwitchedFrom, bool Created, bool ShowsAll);
+
+    /// <summary>
+    ///     Select <paramref name="ids" /> and zoom to them in a view that can show them. The active view stays when it
+    ///     is a model view that displays all of them; otherwise the first of the default {3D}, other 3D views, then plans
+    ///     on the elements' levels that does (<see cref="ShowViewPolicy" />). A sheet, schedule or other non-model active
+    ///     view is never zoomed: model coordinates mean nothing there (the zoom landed in empty space, 2026-10-20). When no
+    ///     3D view exists one named "Pe 3D" is made, and the result says so. Call outside a transaction.
+    /// </summary>
+    public static ShownIn ShowInBestView(this UIDocument uidoc, IReadOnlyCollection<ElementId> ids) {
+        var document = uidoc.Document;
+        var active = uidoc.ActiveView;
+        var idSet = ids.ToHashSet();
+        var levels = idSet
+            .Select(id => document.GetElement(id)?.LevelId)
+            .Where(level => level != null && level != ElementId.InvalidElementId)
+            .Select(level => level!)
+            .ToHashSet();
+
+        var views = new Dictionary<ElementId, View> { [active.Id] = active };
+        foreach (var v in new FilteredElementCollector(document).OfClass(typeof(View3D)).Cast<View3D>()
+                     .Where(v => !v.IsTemplate && !v.IsPerspective))
+            views[v.Id] = v;
+        foreach (var v in new FilteredElementCollector(document).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
+                     .Where(v => !v.IsTemplate && v.GenLevel != null && levels.Contains(v.GenLevel.Id)))
+            views[v.Id] = v;
+
+        var infos = views.Values.Select(v => new ShowViewInfo(v.Id.Value(), v.Name, RoleOf(v), v.Id == active.Id,
+            v is ViewPlan { GenLevel: { } level } && levels.Contains(level.Id)));
+        var order = ShowViewPolicy.Order(infos);
+
+        View? chosen = null;
+        foreach (var info in order) {
+            var candidate = views[info.Id.ToElementId()];
+            if (!DisplaysAll(document, candidate, idSet)) continue;
+            chosen = candidate;
+            break;
+        }
+
+        var created = false;
+        var showsAll = chosen != null;
+        if (chosen == null) {
+            // Nothing displays them all (hidden by a filter, section box, or visibility). A 3D view is still the best
+            // place to look; make one only when the document has none.
+            chosen = order.FirstOrDefault(i => i.Role == ShowViewRole.ThreeD) is { } first
+                ? views[first.Id.ToElementId()]
+                : null;
+            if (chosen == null) {
+                chosen = CreateThreeD(document);
+                created = true;
+                showsAll = DisplaysAll(document, chosen, idSet);
+            }
+        }
+
+        _ = uidoc.SelectAndZoom(ids, chosen);
+        return new ShownIn(chosen, chosen.Id == active.Id ? null : active.Name, created, showsAll);
+    }
+
+    private static ShowViewRole RoleOf(View view) => view switch {
+        View3D => ShowViewRole.ThreeD,
+        ViewPlan => ShowViewRole.Plan,
+        ViewSection => ShowViewRole.Section,
+        _ => ShowViewRole.NonModel
+    };
+
+    private static bool DisplaysAll(Document document, View view, HashSet<ElementId> ids) =>
+        new FilteredElementCollector(document, view.Id).WherePasses(new ElementIdSetFilter(ids)).ToElementIds().Count == ids.Count;
+
+    private static View3D CreateThreeD(Document document) {
+        var family = new FilteredElementCollector(document).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
+            .First(x => x.ViewFamily == ViewFamily.ThreeDimensional);
+        using var transaction = new Transaction(document, "Pe 3D view");
+        transaction.Start();
+        var view = View3D.CreateIsometric(document, family.Id);
+        view.Name = "Pe 3D";
+        transaction.Commit();
+        return view;
     }
 }

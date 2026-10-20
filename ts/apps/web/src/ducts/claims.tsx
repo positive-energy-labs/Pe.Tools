@@ -129,8 +129,7 @@ export const showElements = (doc: RevitDoc, elementIds: readonly number[]) =>
     { elementIds: [...elementIds] },
     { bridgeSessionId: doc.session, openDocumentId: doc.openId },
   ).then(
-    (answer) =>
-      `${answer.shown.length} shown in ${answer.viewName}${answer.missing.length ? `, ${answer.missing.length} missing` : ""}`,
+    (answer) => answer.note,
     (error: unknown) => (error instanceof Error ? error.message : String(error)),
   );
 
