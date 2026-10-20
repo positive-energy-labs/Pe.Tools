@@ -41,11 +41,12 @@ export function buildTree(
   snapshot: DuctSnapshot,
   priced: Priced | null,
   work: DuctsRouteDocument | null,
+  only = "",
 ): TreeNode[] {
   const nameOf = elementNamer(snapshot, null);
   const name = (id: number) => nameOf(id) ?? "element not in snapshot";
   const labelOf = labelOfNode(snapshot);
-  return snapshot.groups.map((group) => {
+  return snapshot.groups.filter((g) => !only || g.id === only).map((group) => {
     const tree = groupTree(snapshot, group.id);
     const runs = runsOf(tree);
     const solved = priced?.now.byGroup[group.id] ?? null;
@@ -195,4 +196,38 @@ export function subjectTree(
     id: ids[0] ?? null,
     children: [{ ...blank, key: "subject/r", kind: "run", name: `${first} → ${last}`, id: ids.at(-1) ?? null, children: legs }],
   };
+}
+
+/** The system list: one childless row per group (no run tree is built, so 400 groups stay cheap). */
+export function systemList(snapshot: DuctSnapshot, priced: Priced | null): TreeNode[] {
+  const nameOf = elementNamer(snapshot, null);
+  return snapshot.groups.map((group) => {
+    const solved = priced?.now.byGroup[group.id] ?? null;
+    const rootId = group.rootIds[0] ?? null;
+    return {
+      key: group.id,
+      kind: "system",
+      name:
+        group.systemNames.slice(0, 2).join(", ") ||
+        group.classifications.join(", ") ||
+        (rootId == null ? "no air mover" : (nameOf(rootId) ?? group.id)),
+      id: rootId,
+      total: solved?.fan ?? null,
+      self: null,
+      scale: null,
+      critical: null,
+      provisional: solved?.provisional ?? null,
+      terminal: null,
+      children: [],
+    };
+  });
+}
+
+/** Every element id of one group: its segments, its nodes and its roots. */
+export function groupElementIds(snapshot: DuctSnapshot, groupId: string): Set<number> {
+  const ids = new Set<number>();
+  for (const s of snapshot.segments) if (s.groupId === groupId) ids.add(s.id);
+  for (const n of snapshot.nodes) if (n.groupId === groupId) ids.add(n.id);
+  for (const g of snapshot.groups) if (g.id === groupId) for (const r of g.rootIds) ids.add(r);
+  return ids;
 }

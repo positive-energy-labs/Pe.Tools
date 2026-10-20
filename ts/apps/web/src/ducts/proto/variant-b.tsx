@@ -13,7 +13,7 @@ import { indexOf } from "../scene";
 import { DuctsSpatial } from "../spatial";
 import { EditPopover } from "./b/edit";
 import { Explorer } from "./b/explorer";
-import { buildTree, subjectTree, type TreeNode } from "./b/model";
+import { buildTree, groupElementIds, subjectTree, systemList, type TreeNode } from "./b/model";
 import { Rulings } from "./b/rulings";
 import type { ProtoProps } from "./props";
 
@@ -34,12 +34,14 @@ export function VariantB(props: ProtoProps) {
     () =>
       snapshot
         ? snapshot.groups.length
-          ? buildTree(snapshot, priced, work.doc)
+          ? page.group
+            ? buildTree(snapshot, priced, work.doc, page.group)
+            : systemList(snapshot, priced)
           : props.subject
             ? [subjectTree(snapshot, props.subject.ids, work.doc)]
             : []
         : [],
-    [snapshot, priced, work.doc, props.subject],
+    [snapshot, priced, work.doc, props.subject, page.group],
   );
   const index = useMemo(() => (snapshot ? indexOf(snapshot, priced) : null), [snapshot, priced]);
   const findings = useMemo(
@@ -50,6 +52,10 @@ export function VariantB(props: ProtoProps) {
     const n = snapshot ? elementNamer(snapshot, null) : () => null;
     return (id: number) => n(id) ?? "element not in snapshot";
   }, [snapshot]);
+  const scope = useMemo(
+    () => (snapshot && page.group ? groupElementIds(snapshot, page.group) : null),
+    [snapshot, page.group],
+  );
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [edit, setEdit] = useState<{ node: TreeNode; anchor: HTMLElement } | null>(null);
   const [inbox, setInbox] = useState(true);
@@ -57,6 +63,10 @@ export function VariantB(props: ProtoProps) {
   if (!snapshot || !index)
     return <p className="text-ink-2 p-4">{props.empty?.says ?? "reading ducts…"}</p>;
   const pick = (node: TreeNode) => {
+    if (node.kind === "system" && !page.group && snapshot.groups.length) {
+      setPage({ group: node.key, selected: "", issue: "" });
+      return;
+    }
     setSelectedKey(node.key);
     props.onSelect(node.id);
   };
@@ -69,8 +79,26 @@ export function VariantB(props: ProtoProps) {
   return (
     <div data-proto="B" className="flex size-full min-h-0">
       <div className="border-line flex w-[300px] shrink-0 flex-col border-r">
-        <Pane id="explorer" title="system" meta={pricedWord} scroll="clip" flush>
+        <Pane
+          id="explorer"
+          title={page.group ? "system" : "systems"}
+          meta={page.group ? pricedWord : `${roots.length} in the document`}
+          actions={
+            page.group ? (
+              <button
+                type="button"
+                className="cursor-pointer px-1"
+                onClick={() => setPage({ group: "", selected: "", issue: "" })}
+              >
+                all systems
+              </button>
+            ) : null
+          }
+          scroll="clip"
+          flush
+        >
           <Explorer
+            key={page.group || "systems"}
             roots={roots}
             selectedKey={selectedKey}
             onPick={pick}
@@ -112,6 +140,8 @@ export function VariantB(props: ProtoProps) {
           >
             <Rulings
               snapshot={snapshot}
+              group={page.group}
+              scope={scope}
               findings={findings}
               claims={props.claims}
               work={work}

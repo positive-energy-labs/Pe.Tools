@@ -3,6 +3,7 @@
  * grouped by kind: inferred joins (graded), snapshot issues, Pea's claims, staged rule changes.
  * Rows name their elements; hover lights, click selects.
  */
+import { useState } from "react";
 import {
   stagedDucts,
   transitionPatches,
@@ -29,6 +30,8 @@ const GRADE_TONE = { anomalous: "alarm", stretched: "caution", "near-miss": unde
 
 export function Rulings({
   snapshot,
+  group,
+  scope,
   findings,
   claims,
   work,
@@ -40,6 +43,10 @@ export function Rulings({
   onVerdict,
 }: {
   snapshot: DuctSnapshot;
+  /** The chosen group id; "" = the whole document. */
+  group: string;
+  /** The chosen group's element ids; null = no scoping. */
+  scope: ReadonlySet<number> | null;
   findings: readonly DuctFinding[];
   claims: readonly Claim[];
   work: Work;
@@ -50,12 +57,20 @@ export function Rulings({
   onSelectClaim: (claim: Claim) => void;
   onVerdict: ((claim: Claim, verdict: Verdict) => void) | null;
 }) {
-  const inferred = findings.filter(
+  const [wide, setWide] = useState(false);
+  const scoped = scope != null && !wide;
+  const inScope = (ids: readonly number[]) => !scoped || ids.some((id) => scope.has(id));
+  const allInferred = findings.filter(
     (f) => INFERRED_KINDS.has(f.kind) || f.kind === "loop-by-inference",
   );
-  const issues = snapshot.issues;
+  const inferred = allInferred.filter((f) => inScope(f.elementIds));
+  const allIssues = snapshot.issues;
+  const issues = allIssues.filter((i) =>
+    !scoped ? true : i.groupId === group || (i.elementId != null && scope.has(i.elementId)),
+  );
+  const claimsShown = claims.filter((c) => inScope(c.at));
   const staged = stagedDucts(work.doc);
-  const ruleChanges = [
+  const allChanges = [
     ...Object.entries(staged.rules).map(([key, value]) => ({
       key: `rule:${key}`,
       label: `${key} → ${JSON.stringify(value)}`,
@@ -72,6 +87,8 @@ export function Rulings({
       ids: [Number(id)],
     })),
   ];
+  // Rules carry no element; they stay. A drop or terminal change is scoped by its element.
+  const ruleChanges = allChanges.filter((c) => c.ids.length === 0 || inScope(c.ids));
   const names = (ids: readonly number[]) => [...new Set(ids.map(nameOf))].join(", ");
   const confirmed = (id: string) => {
     const v = work.doc?.assumptions[id]?.staged?.value;
@@ -151,11 +168,11 @@ export function Rulings({
           onClick={() => onSelect(issue.elementId ?? null)}
         />
       ))}
-      <RowGroupHead label="Pea claims" count={claims.length} />
-      {claims.length === 0 ? (
+      <RowGroupHead label="Pea claims" count={claimsShown.length} />
+      {claimsShown.length === 0 ? (
         <p className="text-ink-2 t-small px-2">no claim on this subject</p>
       ) : null}
-      {claims.map((claim, i) => (
+      {claimsShown.map((claim, i) => (
         <Row
           key={claim.id}
           data-key={claim.id}
@@ -209,6 +226,22 @@ export function Rulings({
           onClick={() => onSelect(change.ids[0] ?? null)}
         />
       ))}
+      {scope ? (
+        <button
+          type="button"
+          className="text-ink-2 t-small cursor-pointer px-2 py-2 text-left"
+          onClick={() => setWide(!wide)}
+        >
+          {wide
+            ? "showing the whole document · scope to this system"
+            : `${
+                allInferred.length - inferred.length +
+                (allIssues.length - issues.length) +
+                (claims.length - claimsShown.length) +
+                (allChanges.length - ruleChanges.length)
+              } more document-wide · show`}
+        </button>
+      ) : null}
     </div>
   );
 }
