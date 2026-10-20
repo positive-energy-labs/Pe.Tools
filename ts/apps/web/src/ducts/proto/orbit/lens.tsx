@@ -4,8 +4,8 @@
  * on, the runs through the selection stay at full weight and the rest drop to 20%; a hover from
  * outside the drawing (a run, a leg, an inbox row: `useHoverSet`) wins while it lasts. A selection
  * on no run (or none) falls back to the group's critical run, and with none of those the lens draws
- * nothing (counsel's choice, re-openable). Also: the selection pivot, `F` to frame, double-click to
- * select and frame, and the globe in the top-right corner.
+ * nothing (counsel's choice, re-openable). Also: the selection pivot, `F` to frame, Esc to clear,
+ * double-click to select and frame, and the globe in the top-right corner.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -44,7 +44,7 @@ function OrbitOverlay({ orbit }: { orbit: Orbit }) {
   return (
     <div
       data-orbit=""
-      className="absolute top-2 right-2 flex flex-col items-end gap-1"
+      className="absolute top-2 right-2 flex select-none flex-col items-end gap-1"
       onPointerDown={stop}
       onClick={stop}
       onDoubleClick={stop}
@@ -86,8 +86,8 @@ export function useOrbitDrawing(
     onSelect: (id: number | null) => void;
   },
 ) {
-  const latest = useRef({ orbit, selected });
-  latest.current = { orbit, selected };
+  const latest = useRef({ orbit, selected, onSelect });
+  latest.current = { orbit, selected, onSelect };
   const key = [...selected].sort((a, b) => a - b).join(",");
   const on = orbit != null;
 
@@ -106,9 +106,11 @@ export function useOrbitDrawing(
   useEffect(() => {
     if (!on) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() !== "f" || event.ctrlKey || event.metaKey || event.altKey) return;
-      if (editable(event.target)) return;
-      latest.current.orbit?.frame(latest.current.selected);
+      if (event.ctrlKey || event.metaKey || event.altKey || editable(event.target)) return;
+      // Esc clears the selection unless something nearer (a popover, a menu) consumed it first.
+      if (event.key === "Escape" && !event.defaultPrevented && latest.current.selected.size)
+        latest.current.onSelect(null);
+      if (event.key.toLowerCase() === "f") latest.current.orbit?.frame(latest.current.selected);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@pe/kit/lang/button";
+import { KeyLegend, type LegendKey } from "#/components/lang/kbd";
 import { Popover, PopoverContent } from "@pe/kit/lang/popover";
 import { token } from "@pe/kit/lib/token";
 import { INFERRED_KINDS } from "@pe/ducts-domain/proximity";
@@ -37,10 +38,20 @@ type Ruling =
 type Open =
   | { what: "element"; id: number; x: number; y: number }
   | { what: "ruling"; n: number; x: number; y: number }
-  | { what: "list"; x: number; y: number }
   | null;
 
 const PIN = 8;
+
+/** The canvas's keys: the orbit camera's gestures (`iso.tsx`, `orbit/lens.tsx`) and the tree's. */
+const CANVAS_KEYS: readonly LegendKey[] = [
+  { pointer: "drag", does: "orbit" },
+  { keys: ["Shift"], pointer: "drag", does: "pan" },
+  { pointer: "wheel", does: "zoom" },
+  { keys: ["F"], does: "frame the selection" },
+  { pointer: "double-click", does: "select and frame" },
+  { keys: ["Esc"], does: "clear the selection" },
+  { keys: ["↑", "↓", "←", "→"], does: "walk the tree in the sidebar" },
+];
 const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" : n.toFixed(d));
 
 /** Cumulative loss from the fan to each element, walked along priced paths (critical path first). */
@@ -266,7 +277,10 @@ function Canvas({
               data-ruling-kind={r.kind}
               transform={`translate(${xy[0]} ${xy[1]}) scale(${k}) translate(${slot * PIN * 2.2} ${-PIN * 2.4})`}
               style={{ cursor: "pointer" }}
-              onPointerDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+              }}
               onClick={(e) => {
                 e.stopPropagation();
                 onSelect(r.at);
@@ -357,44 +371,12 @@ function Canvas({
         </span>
       </div>
 
-      <div className="absolute right-2 top-2">
-        <Button
-          type="button"
-          kind="framed"
-          label="every ruling on this drawing"
-          data-proto-c-rulings={rulings.length}
-          onClick={(e) => setOpen({ what: "list", ...at(e) })}
-        >
-          {rulings.length} rulings
-        </Button>
-      </div>
+      {/* Lifted one control row so the proto's variant switcher pill never covers it. */}
+      <KeyLegend keys={CANVAS_KEYS} className="absolute bottom-12 left-2" />
 
       <Popover open={!!open} onOpenChange={(o) => (o ? null : setOpen(null))}>
         <PopoverContent anchor={anchor} data-proto-c-popover={open?.what ?? ""}>
-          {open?.what === "list" ? (
-            <ol className="flex flex-col gap-1">
-              {rulings.map((r) => (
-                <li key={r.n}>
-                  <button
-                    type="button"
-                    className="cursor-pointer text-left"
-                    onClick={() => {
-                      onSelect(r.at);
-                      setOpen({ what: "ruling", n: r.n, x: open.x, y: open.y });
-                    }}
-                  >
-                    <span className="face-mono">{r.n}</span> {r.kind} ·{" "}
-                    {r.kind === "claim"
-                      ? r.claim.text.slice(0, 70)
-                      : r.kind === "issue"
-                        ? ISSUE_KINDS[r.issue.kind].label
-                        : `${r.finding.kind}${r.finding.grade ? `, ${r.finding.grade}` : ""}`}
-                  </button>
-                </li>
-              ))}
-              {rulings.length === 0 ? <li className="text-ink-2">nothing to rule on in this drawing</li> : null}
-            </ol>
-          ) : openRuling ? (
+          {openRuling ? (
             <RulingBody
               r={openRuling}
               nameOfId={nameOfId}

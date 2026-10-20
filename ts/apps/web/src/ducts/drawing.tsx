@@ -23,7 +23,7 @@ import {
   type Segment,
   type SegmentFacts,
 } from "./encoding";
-import { denseRegion, Schematic } from "./inset";
+import { denseRegion, Schematic, schematicHeight } from "./inset";
 import { orbitOf } from "./proto/orbit/camera"; // proto: orbit
 import { useOrbitDrawing } from "./proto/orbit/lens"; // proto: orbit
 import type { Claim } from "./legs";
@@ -61,7 +61,7 @@ const PIN = 8;
 const PIN_APART = PIN * 2;
 /** A leg shorter than this carries no label (its endpoints' names say enough). */
 const LABEL_LEG_FT = 2;
-const INSET = { width: 300, height: 170, margin: 12 } as const;
+const INSET = { width: 360, margin: 12 } as const;
 
 const d = (segments: readonly Pick<Segment, "polyline">[], project: Project) => {
   let out = "";
@@ -303,9 +303,16 @@ export function DuctDrawing({
       ref={setHost}
       data-ducts-drawing={label}
       className="relative min-h-0 flex-1 overflow-hidden"
-      style={{ cursor: drag.current ? "grabbing" : "grab", touchAction: "none" }}
+      // A drag here pans or turns the view; it never selects the captions' text.
+      style={{
+        cursor: drag.current ? "grabbing" : "grab",
+        touchAction: "none",
+        userSelect: "none",
+        WebkitUserSelect: "none",
+      }}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
+        event.preventDefault();
         drag.current = {
           x: event.clientX,
           y: event.clientY,
@@ -751,26 +758,59 @@ function SubjectLayer({
         );
       })}
       {dense ? (
-        <g
-          data-inset-for={[...dense.ids].join(",")}
-          transform={`translate(${size.width - INSET.width - INSET.margin} ${size.height - INSET.height - INSET.margin})`}
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <Schematic
-            cut={cut}
-            ids={dense.ids}
-            levels={subject.levels}
-            levelAt={subject.levelAt}
-            selected={selected}
-            onSelect={onSelect}
-            width={INSET.width}
-            height={INSET.height}
-          />
-          <Caption x={6} y={-4}>
-            {`detail: ${dense.ids.size} places crowd within ${Math.round(dense.box.maxX - dense.box.minX)} px`}
-          </Caption>
-        </g>
+        <Inset
+          size={size}
+          subject={subject}
+          ids={dense.ids}
+          spread={Math.round(dense.box.maxX - dense.box.minX)}
+          selected={selected}
+          onSelect={onSelect}
+        />
       ) : null}
+    </g>
+  );
+}
+
+/** The detail inset in the drawing's bottom-right corner, sized to its bands at the kit's rhythm. */
+function Inset({
+  size,
+  subject,
+  ids,
+  spread,
+  selected,
+  onSelect,
+}: {
+  size: Viewport2;
+  subject: SubjectDrawn;
+  ids: ReadonlySet<number>;
+  spread: number;
+  selected: ReadonlySet<number>;
+  onSelect: (id: number | null) => void;
+}) {
+  const layout = { cut: subject.cut, ids, levels: subject.levels, levelAt: subject.levelAt };
+  const height = schematicHeight(layout);
+  return (
+    <g
+      data-inset-for={[...ids].join(",")}
+      transform={`translate(${size.width - INSET.width - INSET.margin} ${size.height - height - INSET.margin})`}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        event.preventDefault();
+      }}
+    >
+      <Schematic
+        {...layout}
+        selected={selected}
+        onSelect={onSelect}
+        width={INSET.width}
+        height={height}
+        caption={
+          <>
+            detail · <tspan className="face-mono">{ids.size}</tspan> places crowd within{" "}
+            <tspan className="face-mono">{spread}</tspan> px
+          </>
+        }
+      />
     </g>
   );
 }

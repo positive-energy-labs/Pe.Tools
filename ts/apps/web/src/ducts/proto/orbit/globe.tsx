@@ -181,9 +181,17 @@ export function Globe({ orbit }: { orbit: Orbit }) {
       role="group"
       aria-label="orbit globe"
       data-orbit-globe=""
-      style={{ cursor: "grab", touchAction: "none", overflow: "visible", userSelect: "none" }}
+      style={{
+        cursor: "grab",
+        touchAction: "none",
+        overflow: "visible",
+        userSelect: "none",
+        WebkitUserSelect: "none",
+      }}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
+        // A drag turns the globe; it never starts a text selection in the pane.
+        event.preventDefault();
         pressed.current = { x: event.clientX, y: event.clientY, moved: false };
       }}
       onPointerMove={(event) => {
