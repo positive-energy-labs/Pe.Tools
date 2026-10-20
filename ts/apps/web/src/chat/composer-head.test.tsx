@@ -6,7 +6,6 @@ import { ThreadComposer } from "./composer";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 
 const composer = vi.hoisted(() => ({
-  mount: "full",
   fileRefusal: null as string | null,
   chat: {},
 }));
@@ -19,9 +18,6 @@ vi.mock("#/workbench/provider", () => ({
     threads: [],
     draft: {},
   }),
-}));
-vi.mock("#/navigation/surface-host", () => ({
-  useSurfaceHost: () => ({ shell: { mount: composer.mount } }),
 }));
 vi.mock("./use-attachments", () => ({
   useAttachments: () => ({
@@ -73,37 +69,33 @@ test("Situation exposes and copies immutable identity separately from mutable ti
   expect(screen.getByText("New thread")).toBeTruthy();
 });
 
-test.each(["full", "compact"])(
-  "%s composer has one refusal footer and a caution Send hint",
-  (mount) => {
-    composer.mount = mount;
-    composer.chat = emptyChatState();
-    composer.fileRefusal = null;
-    const run = vi.fn(async () => null);
-    const action = { label: "Send", says: "Send message", refusal: null, run };
-    const handle = {
-      manifest: { key: "chat", actions: {} },
-      readings: { machine: { state: "absent" }, capabilities: { state: "absent" } },
-      busy: null,
-      work: { changed: false },
-      actions: { send: action, fork: { ...action, label: "Fork" } },
-      outcome: { key: "send", at: 1, refusal: { message: "Choose a provider." } },
-    } as unknown as ChatHandle;
-    const view = render(<ThreadComposer handle={handle} pickers={() => null} />);
-    const send = screen.getByRole("button", { name: "Send" });
-    expect(send.getAttribute("data-tone")).toBe("caution");
-    expect(send.getAttribute("aria-description")).toBe("Choose a provider.");
-    expect(screen.getAllByText("Choose a provider.")).toHaveLength(1);
-    expect(screen.getByRole("textbox", { name: "Message" }).nextElementSibling).toBe(
-      screen.getByRole("alert"),
-    );
-    expect(view.container.querySelector("[title]")).toBeNull();
-    expect(screen.queryByText(/^(ready|send failed)$/i)).toBeNull();
-    fireEvent.click(send);
-    expect(run).toHaveBeenCalledTimes(1);
-    composer.fileRefusal = "File exceeds 5 MB.";
-    view.rerender(<ThreadComposer handle={handle} pickers={() => null} />);
-    expect(screen.getAllByRole("alert")).toHaveLength(1);
-    expect(screen.getByRole("alert").textContent).toBe("File exceeds 5 MB.");
-  },
-);
+test("composer has one refusal footer and a caution Send hint", () => {
+  composer.chat = emptyChatState();
+  composer.fileRefusal = null;
+  const run = vi.fn(async () => null);
+  const action = { label: "Send", says: "Send message", refusal: null, run };
+  const handle = {
+    manifest: { key: "chat", actions: {} },
+    readings: { machine: { state: "absent" }, capabilities: { state: "absent" } },
+    busy: null,
+    work: { changed: false },
+    actions: { send: action, fork: { ...action, label: "Fork" } },
+    outcome: { key: "send", at: 1, refusal: { message: "Choose a provider." } },
+  } as unknown as ChatHandle;
+  const view = render(<ThreadComposer handle={handle} pickers={null} />);
+  const send = screen.getByRole("button", { name: "Send" });
+  expect(send.getAttribute("data-tone")).toBe("caution");
+  expect(send.getAttribute("aria-description")).toBe("Choose a provider.");
+  expect(screen.getAllByText("Choose a provider.")).toHaveLength(1);
+  expect(screen.getByRole("textbox", { name: "Message" }).nextElementSibling).toBe(
+    screen.getByRole("alert"),
+  );
+  expect(view.container.querySelector("[title]")).toBeNull();
+  expect(screen.queryByText(/^(ready|send failed)$/i)).toBeNull();
+  fireEvent.click(send);
+  expect(run).toHaveBeenCalledTimes(1);
+  composer.fileRefusal = "File exceeds 5 MB.";
+  view.rerender(<ThreadComposer handle={handle} pickers={null} />);
+  expect(screen.getAllByRole("alert")).toHaveLength(1);
+  expect(screen.getByRole("alert").textContent).toBe("File exceeds 5 MB.");
+});

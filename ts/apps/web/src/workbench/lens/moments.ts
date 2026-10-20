@@ -2,6 +2,31 @@ import { toolTitle } from "@pe/agent-contracts";
 import type { ChatMessage } from "@pe/agent-contracts/chat-state";
 import type { Moment } from "./scale";
 
+/** One turn on the rail: your ask and the last thing Pea said back, keyed by its bands. */
+export interface Turn {
+  turn: number;
+  first: string;
+  last: string;
+  at?: Date;
+  ask?: string;
+  answer?: string;
+}
+
+export function toTurns(moments: readonly Moment[]): Turn[] {
+  const turns: Turn[] = [];
+  for (const moment of moments) {
+    let turn = turns.at(-1);
+    if (turn?.turn !== moment.turn) {
+      turn = { turn: moment.turn, first: moment.id, last: moment.id, at: moment.createdAt };
+      turns.push(turn);
+    }
+    turn.last = moment.id;
+    if (moment.role === "user") turn.ask ??= moment.preview;
+    if (moment.role === "assistant" && moment.preview) turn.answer = moment.preview;
+  }
+  return turns;
+}
+
 export function toMoments(messages: ChatMessage[]): Moment[] {
   let turn = 0;
   return messages.map((message) => {
@@ -17,7 +42,7 @@ export function toMoments(messages: ChatMessage[]): Moment[] {
 }
 
 /** The preview's length: enough to recognise a turn, short enough to stay a glance. */
-const PREVIEW_CHARS = 140;
+const PREVIEW_CHARS = 280;
 
 function previewOf(message: ChatMessage): string | undefined {
   const text = message.parts.find((part) => part.type === "text")?.text;

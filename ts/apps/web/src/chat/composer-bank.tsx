@@ -18,8 +18,8 @@ export function ComposerBank({
   deletedThreadIds: ReadonlySet<string>;
   prompt?: string;
   handle: ChatHandle;
-  /** The provider and document pickers, open or at rest (`ComposerPickers`). */
-  pickers: (open: boolean) => ReactNode;
+  /** The provider and document pickers (`ComposerPickers`). */
+  pickers: ReactNode;
   /** The run's state beside them (`ComposerState`). */
   state: ReactNode;
   /** The box's top section: live asks and staged Work (`ComposerWork`). */

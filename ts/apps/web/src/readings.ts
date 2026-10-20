@@ -440,6 +440,37 @@ export function useReading<T = unknown>(
   return useAtomValue(atom);
 }
 
+/**
+ * The slice of a Reading a component uses. A frame that leaves the slice equal (JSON-wise) does not
+ * notify, so a poll that moved other fields re-renders nobody here.
+ */
+export function useReadingSlice<T, S>(
+  request: ReadingRequest | null,
+  select: (reading: Reading<T>) => S,
+  source: Readings = peReadings,
+): S {
+  const key = request ? readingKey(request) : null;
+  const selectRef = useRef(select);
+  selectRef.current = select;
+  const slice = useMemo(() => {
+    const atom = request ? readingAtom<T>(request, source) : (absentAtom as Atom.Atom<Reading<T>>);
+    let held: { value: S; json: string } | undefined;
+    return Atom.make((get) => {
+      const value = selectRef.current(get(atom));
+      const json = JSON.stringify(value) ?? "";
+      if (held?.json === json) return held.value;
+      held = { value, json };
+      return value;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, source]);
+  return useAtomValue(slice);
+}
+
+/** The `host-status` slice a component uses; see `useReadingSlice`. */
+export const useHostStatusSlice = <S>(select: (reading: Reading<PeInfo>) => S, enabled = true): S =>
+  useReadingSlice<PeInfo, S>(enabled ? { kind: "host-status" } : null, select);
+
 /** An Action succeeded; this subject's snapshot is reacquired from the host. */
 export const dirty = (request: ReadingRequest, source: Readings = peReadings) =>
   source.dirty(request);

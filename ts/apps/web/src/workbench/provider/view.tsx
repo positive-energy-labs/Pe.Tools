@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { resolveWorkbenchConfig } from "../config";
 import { selectRunStatus, selectTurnFailure } from "@pe/agent-contracts/chat-state";
-import { previousOf, useHostStatus } from "#/readings";
+import { previousOf, useHostStatusSlice } from "#/readings";
 import { appAtomRegistry, useRouteOwner } from "#/route/route-owner";
 import { createChatPageStore } from "../store";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
@@ -39,8 +39,16 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   );
 
   // The one `host-status` Reading; `previousOf` keeps the last good answer through a refetch.
-  const hostStatus = useHostStatus();
-  const info = previousOf(hostStatus);
+  // Only the slice below: a poll that moved other host fields must not rebuild the context.
+  const host = useHostStatusSlice((status) => {
+    const info = previousOf(status);
+    return {
+      known: info !== undefined || status.state === "failed",
+      failure: status.state === "failed" ? status.message : undefined,
+      revit: info?.capabilities.revit,
+      world: info?.world as WorkbenchContextValue["world"],
+    };
+  });
   const client = useMemo(() => harnessClient(config.origin), [config.origin]);
   const [threads, setThreads] = useState<StoredThreadSummary[]>([]);
   const rosterEpoch = useRef(0);
@@ -96,7 +104,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     () => (demo ? Atom.make(AsyncResult.success(demo)) : stream.bodyAtom),
     [demo, stream.bodyAtom],
   );
-  const loading = demo ? false : chatLoading(hostStatus, stream.pending);
+  const loading = demo ? false : chatLoading(host.known, stream.pending);
   const isRunning = selectRunStatus(chat) !== "idle";
   const turnFailure = selectTurnFailure(chat);
 
@@ -217,20 +225,10 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [attempt, client, gotoThread, refreshThreads],
   );
 
-  const patchThreadView = useCallback(
-    (partial: { turn?: number }, replace = false) =>
-      navigate({ search: (previous) => ({ ...previous, ...partial }), replace }),
-    [navigate],
-  );
-
   // A thread the host does not know is the transcript's empty state, not a fault.
   const operationError =
     error ??
-    (hostStatus.state === "failed"
-      ? hostStatus.message
-      : missingThread
-        ? undefined
-        : stream.error?.message);
+    (host.failure !== undefined ? host.failure : missingThread ? undefined : stream.error?.message);
   const context = useMemo<WorkbenchContextValue>(
     () => ({
       store,
@@ -251,8 +249,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       turn: search.turn,
       prompt: search.prompt,
       turnFailure,
-      revit: info?.capabilities.revit,
-      world: info?.world as WorkbenchContextValue["world"],
+      revit: host.revit,
+      world: host.world,
       isRunning,
       operationError,
       sendPrompt,
@@ -300,7 +298,6 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
           await refreshThreads();
         })),
       deleteThread,
-      patchThreadView,
       resolveApproval: async (requestId, optionId) =>
         onThread((id) => client.permission(id, requestId, optionId))(),
       answerQuestion: async (requestId, action, content) =>
@@ -323,14 +320,13 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       forkThread,
       draft,
       draftTarget,
-      info,
+      host,
       isRunning,
       loading,
       missingThread,
       sendRefusal,
       onThread,
       operationError,
-      patchThreadView,
       providers,
       search.prompt,
       search.turn,

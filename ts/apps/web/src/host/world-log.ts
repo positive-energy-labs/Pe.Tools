@@ -1,7 +1,7 @@
 import { useCallback, useRef } from "react";
 
 import type { SessionInventory } from "#/readings";
-import { previousOf, useHostEvents, useHostStatus } from "#/readings";
+import { previousOf, useHostEvents, useHostStatusSlice } from "#/readings";
 
 type HostEvent = {
   atMs: number;
@@ -75,7 +75,10 @@ export function useSessionEvents(
   onEvent: (event: SessionEvent) => void,
   enabled = true,
 ): void {
-  const revit = previousOf(useHostStatus(enabled))?.capabilities.revit === true;
+  const revit = useHostStatusSlice(
+    (status) => previousOf(status)?.capabilities.revit === true,
+    enabled,
+  );
   // Label enrichment and the sink only: the stream must not reopen on session-list churn.
   const latest = useRef({ sessions, onEvent });
   latest.current = { sessions, onEvent };

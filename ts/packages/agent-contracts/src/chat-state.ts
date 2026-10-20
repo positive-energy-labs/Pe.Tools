@@ -117,6 +117,8 @@ export interface ChatMessage {
   createdAt?: Date;
   /** A user turn's `@` mentions, as the prompt event recorded what Pea received. */
   mentions?: Mention[];
+  /** A user turn's document, as its prompt event named it (the label), when one was bound. */
+  target?: string;
   /** The assistant row the run is producing now; its last part is the one still moving. */
   running: boolean;
   failure?: Extract<HarnessEvent, { kind: "error" }>["failure"];
@@ -283,6 +285,7 @@ function fold(state: ChatState): Fold {
           role: "user",
           parts: [{ type: "text", text: event.text }, ...(event.attachments ?? []).map(sentPart)],
           ...(event.mentions?.length ? { mentions: event.mentions } : {}),
+          ...(event.target?.label ? { target: event.target.label } : {}),
           running: false,
           ...at(event),
         });

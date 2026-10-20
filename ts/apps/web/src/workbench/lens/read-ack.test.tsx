@@ -20,9 +20,12 @@ vi.mock("./model", () => ({
     showEmpty: false,
     cache: { changed: new Set() },
     scrollerRef: wire.scroller,
+    dialRef: { current: null },
+    thumbRef: { current: null },
     bandRefs: { current: new Map() },
+    tickRefs: { current: new Map() },
     registerMoment: () => {},
-    onBandClick: () => {},
+    goTo: () => {},
   }),
 }));
 afterEach(() => {

@@ -78,9 +78,18 @@ function usePaneSize(spec: PaneSizeSpec): PaneSizeState {
     [spec.collapse],
   );
 
+  // `spec` is a fresh object each render; only its bounds can change the clamp.
+  const sizeRef = useRef(internalSize);
+  sizeRef.current = internalSize;
+  const specRef = useRef(spec);
+  specRef.current = spec;
+  // A setter that would not change the size does not run.
+  const settle = useCallback((next: number) => {
+    if (next !== sizeRef.current) setInternalSize(next);
+  }, []);
   useEffect(() => {
-    setInternalSize((current) => clampSize(current, spec));
-  }, [spec]);
+    settle(clampSize(sizeRef.current, specRef.current));
+  }, [settle, spec.minSize, spec.maxSize, spec.minOtherSize]);
 
   const resizeTo = useCallback(
     (requested: number, containerSize: number | undefined, commit: boolean) => {
@@ -92,7 +101,7 @@ function usePaneSize(spec: PaneSizeSpec): PaneSizeState {
 
       if (collapsed) setCollapsed(false);
       const next = clampSize(requested, spec, containerSize);
-      setInternalSize(next);
+      settle(next);
       if (commit && spec.persist && typeof window !== "undefined") {
         try {
           window.localStorage.setItem(spec.persist, String(next));
@@ -101,15 +110,16 @@ function usePaneSize(spec: PaneSizeSpec): PaneSizeState {
         }
       }
     },
-    [collapsed, setCollapsed, spec],
+    [collapsed, setCollapsed, settle, spec],
   );
 
-  const specRef = useRef(spec);
-  specRef.current = spec;
-  const fit = useCallback((containerSize: number | undefined) => {
-    if (containerSize == null || containerSize <= 0) return;
-    setInternalSize((current) => clampSize(current, specRef.current, containerSize));
-  }, []);
+  const fit = useCallback(
+    (containerSize: number | undefined) => {
+      if (containerSize == null || containerSize <= 0) return;
+      settle(clampSize(sizeRef.current, specRef.current, containerSize));
+    },
+    [settle],
+  );
 
   const reset = useCallback(() => {
     setCollapsed(false);

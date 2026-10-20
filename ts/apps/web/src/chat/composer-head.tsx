@@ -1,5 +1,5 @@
 /** Chat's whole Situation, drawn in the composer: Work and live asks at the top of the box, the
- *  next turn's provider, traits and document target in its bottom row beside Send. The target binds
+ *  next turn's provider, traits and document target as marks in the lane beside Send. The target binds
  *  through the thread head (`PUT /scope/:thread`); a `?target` pin seeds a document-less thread once. */
 import { useEffect, useRef } from "react";
 import {
@@ -290,17 +290,15 @@ export function ChatCluster({
   );
 }
 
-/** The pickers as marks: provider › model › traits, then the document target. `open` adds the
- *  target/open switch (the open composer's bottom row). */
+/** The pickers as marks: provider › model › traits, then the document target, whose popup carries
+ *  the target/open switch. */
 export function ComposerPickers({
   situation,
   urlTarget,
-  open,
 }: {
   /** The URL's `?target` pin: a thread with no document takes it once (e2e finding 7). */
   urlTarget?: string;
   situation: ChatSituation;
-  open: boolean;
 }) {
   const { currentThreadId, chat } = useWorkbench();
   const isRunning = selectRunStatus(chat) !== "idle";
@@ -364,19 +362,22 @@ export function ComposerPickers({
   return (
     <section aria-label="Situation" className="contents" data-testid="composer-head">
       <HeadLadder face="icon" />
-      <ComposerOpenMode switcher={open}>
-        <Ladder
-          face="icon"
-          mark={<File className="size-3.5" data-tone={situation.bound ? "done" : undefined} />}
-          levels={levels}
-          caution={Boolean(health)}
-          disabled={targetDisabled}
-          title={
-            ladder.sessionWord
-              ? `${ladder.sessionWord} › ${ladder.docWord ?? "no document"}; pick to change`
-              : "choose a session and a document; Chat runs without one, Revit operations do not"
-          }
-        />
+      <ComposerOpenMode>
+        {(header) => (
+          <Ladder
+            face="icon"
+            header={header}
+            mark={<File data-tone={situation.bound ? "done" : undefined} />}
+            levels={levels}
+            caution={Boolean(health)}
+            disabled={targetDisabled}
+            title={
+              ladder.sessionWord
+                ? `${ladder.sessionWord} › ${ladder.docWord ?? "no document"}; pick to change`
+                : "choose a session and a document; Chat runs without one, Revit operations do not"
+            }
+          />
+        )}
       </ComposerOpenMode>
     </section>
   );

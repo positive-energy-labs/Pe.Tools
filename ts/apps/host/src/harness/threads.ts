@@ -1158,12 +1158,22 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   ) {
     clearIdle(t);
     t.running = turnId;
+    // The head as of delivery is the document this turn runs against; the record names it itself.
+    const head = readHead(t.meta.id);
     append(t, {
       kind: "prompt",
       turnId,
       text,
       ...(attachments ? { attachments } : {}),
       ...(mentions ? { mentions } : {}),
+      ...(head.defaultTarget
+        ? {
+            target: {
+              request: head.defaultTarget,
+              ...(head.displayLabel ? { label: head.displayLabel } : {}),
+            },
+          }
+        : {}),
     });
     arm(t);
     let outcome = "failed";

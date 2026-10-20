@@ -1,6 +1,6 @@
 // The thread's composer: fills the one `Composer` box with attachments, slash and `@` menus and
 // the pickers. Logic lives in the hooks and `useSend`.
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { ArrowUp, GitFork, Paperclip, Square } from "lucide-react";
 import {
   capabilityCatalogSchema,
@@ -13,13 +13,12 @@ import { isReady } from "#/workbench/provider/providers";
 import { Pane } from "#/components/lang/pane";
 import { ScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import { useWorkbench } from "#/workbench/provider";
-import { useSurfaceHost } from "#/navigation/surface-host";
 import { EMPTY_CHAT_DRAFT, type ChatDraft } from "#/workbench/prompt";
 import { selectRunStatus, selectSkillCommands } from "@pe/agent-contracts/chat-state";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
 import { SituationAction } from "#/route/situation-verbs";
-import { Composer, ComposerFrame, type ComposerHandle } from "#/components/lang/conversation";
+import { Composer, ComposerFrame } from "#/components/lang/conversation";
 import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { MentionChip } from "@pe/kit/lang/chip";
@@ -49,7 +48,7 @@ export function ThreadComposer({
   initialDraft = EMPTY_CHAT_DRAFT,
 }: {
   handle: ChatHandle;
-  pickers: (open: boolean) => ReactNode;
+  pickers: ReactNode;
   state?: ReactNode;
   work?: ReactNode;
   refusal?: string | null;
@@ -66,11 +65,8 @@ export function ThreadComposer({
   const unready = noneReady ? undefined : providers.list?.find((item) => item.id === headId);
   const repairing = unready && !isReady(unready) ? unready : undefined;
   const isRunning = selectRunStatus(chat) !== "idle";
-  const variant = useSurfaceHost().shell.mount === "compact" ? "compact" : "full";
-  const box = useRef<ComposerHandle>(null);
   const send = useSend(handle, draft, (sent) => {
     setDraft((current) => (current === sent ? EMPTY_CHAT_DRAFT : current));
-    box.current?.rest();
   });
   const files = useAttachments(draft, setDraft);
   const refusedSend = handle.outcome?.key === "send" ? handle.outcome.refusal?.message : null;
@@ -134,8 +130,6 @@ export function ThreadComposer({
       <ScopeKeys keys={shortcuts} />
       <ComposerFrame>
         <Composer
-          ref={box}
-          variant={variant}
           // Files dropped anywhere on the box attach; a file drag over it takes the recess ground.
           dragging={files.dragging}
           drop={files.dropProps}
@@ -230,17 +224,24 @@ export function ThreadComposer({
           pickers={pickers}
           refusal={files.refusal ?? refusedSend ?? refusal}
           tools={
+            state || noneReady ? (
+              <>
+                {state}
+                {noneReady ? <span data-tone="caution">no provider is ready</span> : null}
+              </>
+            ) : null
+          }
+          fork={
+            <SituationAction
+              handle={handle}
+              name="fork"
+              action={handle.actions.fork}
+              icon={GitFork}
+            />
+          }
+          attach={
             <>
-              {state}
-              {noneReady ? <span data-tone="caution">no provider is ready</span> : null}
-              <SituationAction
-                handle={handle}
-                name="fork"
-                action={handle.actions.fork}
-                icon={GitFork}
-              />
               <Button
-                kind="framed"
                 icon={Paperclip}
                 label="Attach files: images and text, 5 MB each, 10 a message"
                 onClick={files.browse}

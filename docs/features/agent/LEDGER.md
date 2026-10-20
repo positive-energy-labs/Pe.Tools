@@ -140,6 +140,8 @@ restated here.
 - 2026-08-16 — Streaming (the blinking `mg-caret` in `--r-pea`) is an agent-identity mark, not an outcome kind: nothing machine-shaped is in flight and there is no receipt. Recorded so nobody "fixes" it into an `OutcomeLine`.
 - 2026-08-16 — An owed approval renders at the tool marker where the evidence is, not in a gutter — the chat has no gutter, and putting the decision beside its evidence is R3's spirit.
 - 2026-08-16 — A dangling target pin wears the ALARM: the pin is a claim ("this chat acts against session X") and the world no longer contains X, so the claim disagrees with reality — the drift family's top rank. Counter-reading (nothing the *model* said is contradicted) would fall back to caution; one line in `TARGET_RAIL_COLOR` (`Lens.tsx`).
+- 2026-10-19 — The lens rail is one block per turn, log-scaled and capped (`lens/scale.tsx`), centred in the lane beside the transcript; a per-turn tick opens a peek card that owns the column beside the rail, so the turn shown is a function of pointer distance past the card, not of event count (kaitpw, t3 precedent). Ruled with the composer: one layout, attach/model/document left under the provider mark, Send over fork right.
+- 2026-10-19 — Perf rules, measured on `/pea` (26-turn thread, chrome-agent unthrottled, dev build; scroll long tasks 13.6 s -> 0.8 s, rail sweep 2.5 s -> 0.3 s, peek step-through 7.4 s -> 0.3 s): **the URL is input, a scroll position is session state** (`workbench/thread-view.tsx`, sessionStorage; TanStack wraps `history.replaceState`, so any URL write re-renders every route subscriber); **the transcript is a memo boundary** (`moments.tsx`, per-section content key); **a reading notifies only the slice it changed** (`useReadingSlice`); **a setter that would not change state does not run** (`pane-resize.tsx`, thread-palette woken set). Guards: `thread-view.test.tsx`, `conversation-sequences.test.tsx`, `readings-slice.test.tsx`.
 
 ### Local runtime / auth shape (promote to ADR only if adopted)
 
@@ -198,6 +200,9 @@ restated here.
 
 ## Owed
 
+- 2026-10-19, lens perf: the transcript memo compares a per-section content key because `fold()` (`agent-contracts/chat-state.ts`) rebuilds every message each update; a call whose result lands after it settled would not re-render. The rule-level fix is structural sharing in `fold()` so an unchanged message keeps its identity.
+- 2026-10-19, lens perf: scroll still drops frames (41 frames > 20 ms per 40 wheel notches, worst 567 ms, dev build); unprofiled after the router fix. Measure on a production build before tuning further.
+- 2026-10-19: the thread error (`status.detail`) renders twice, as the transcript's last line and in the composer refusal slot (`chat-shell.tsx`). Its home is unruled; options were transcript-only, a strip above the box, or the situation head.
 - 2026-10-14, ADR 0019: miner acceptance. One real gated run on a coworker machine with enough Revit receipts; finding quality and the `threads.history` read path under a real turn are unproven.
 - 2026-10-14, ADR 0019: installed lane. An MSI carrying `app/bin/host/src`, `pe_find`'s installed source sha, and one `agent_feedback` read back in PostHog are unproven.
 - 2026-10-14, ADR 0019: 03:00 with a ten-minute grace never fires on a machine asleep at that hour; the schedule wants an owner ruling once miner runs are observed.

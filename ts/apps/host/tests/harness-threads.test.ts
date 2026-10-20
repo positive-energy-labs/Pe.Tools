@@ -2108,3 +2108,26 @@ test("scheduled launches create fresh threads with persisted origin before the f
     expect(body.events.find((e) => e.kind === "prompt")?.turnId).toBe(meta.origin.runId);
   }
 });
+
+test("a prompt carries the head's target and label as of delivery; one with no target carries none", async () => {
+  const threads = host();
+  const call = caller(threads);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id;
+  await until(reader(threads), id, (b) => b.models.length > 0);
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "before" });
+  await until(reader(threads), id, (b) => b.events.some((e) => e.kind === "turn_end"));
+  const named = { kind: "named", session: "S1", address: "C:/Models/Ops.rvt" } as const;
+  const set = await call("PUT", `/pe/scope/${id}`, {
+    defaultTarget: named,
+    expectedRevision: 0,
+    displayLabel: "Ops.rvt",
+  });
+  expect(set.json).toMatchObject({ ok: true });
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "after" });
+  const body = await until(reader(threads), id, (b) => b.events.filter((e) => e.kind === "turn_end").length === 2);
+  const prompts = body.events.filter((e) => e.kind === "prompt");
+  expect(prompts.map((p) => p.text)).toEqual(["before", "after"]);
+  expect("target" in prompts[0]!).toBe(false);
+  expect(prompts[1]).toMatchObject({ target: { request: named, label: "Ops.rvt" } });
+  await threads.close();
+});

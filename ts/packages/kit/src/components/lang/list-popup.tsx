@@ -51,6 +51,8 @@ type ListProps<T> = Omit<CollectionOptions<T>, "target"> & {
   owner?: HTMLElement | null;
   /** Rows scroll inside this height; group heads stick. */
   maxHeight?: string;
+  /** A control above the crumbs and rows (the composer's target/open switch). */
+  header?: ReactNode;
   /** Verbs under the rows that are not rows (the head picker's "Clear target"); a ladder's
    * footer may differ per rung. */
   footer?: ReactNode | ((level: number) => ReactNode);
@@ -147,6 +149,7 @@ export function List<T>(props: ListProps<T>) {
       // An input-owned list never takes focus from its owner: a click picks, the caret stays.
       onMouseDown={props.owner !== undefined ? (event) => event.preventDefault() : undefined}
     >
+      {props.header ? <div className="hairline-b p-1">{props.header}</div> : null}
       {props.levels &&
       props.levels.length > 1 &&
       // A ladder whose first rung has no word (a menu) shows crumbs only once it has walked in.

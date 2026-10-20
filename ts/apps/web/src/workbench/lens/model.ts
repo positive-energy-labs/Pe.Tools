@@ -20,6 +20,9 @@ import type { ChatState } from "@pe/agent-contracts/chat-state";
 /** Within this many px of the bottom, the view counts as at the bottom and follows. */
 const FOLLOW_SLACK = 24;
 
+/** Rail px kept clear at each end of the lane once the stack fills it. */
+const RAIL_MARGIN = 16;
+
 export function useLensModel({ state }: { state: ChatState }) {
   const messages = useMemo(() => selectMessages(state), [state]);
 
@@ -42,21 +45,16 @@ export function useLensModel({ state }: { state: ChatState }) {
 
   const chatRef = useRef<HTMLDivElement>(null);
 
-  const stripRef = useRef<HTMLDivElement>(null);
+  const dialRef = useRef<HTMLDivElement>(null);
 
-  const wickRef = useRef<HTMLDivElement>(null);
-
-  const capTopRef = useRef<HTMLDivElement>(null);
-
-  const capBotRef = useRef<HTMLDivElement>(null);
-
-  const csFocalRef = useRef<HTMLDivElement>(null);
-
-  const caretRef = useRef<HTMLDivElement>(null);
+  const thumbRef = useRef<HTMLDivElement>(null);
 
   const momentRefs = useRef(new Map<string, HTMLElement>());
 
   const bandRefs = useRef(new Map<string, HTMLElement>());
+
+  /** One tick per turn, at the bottom edge of its last band. */
+  const tickRefs = useRef(new Map<number, HTMLElement>());
 
   const geomRef = useRef<Geom[]>([]);
 
@@ -79,17 +77,6 @@ export function useLensModel({ state }: { state: ChatState }) {
 
   const bumpPending = useRef(false);
 
-  useEffect(() => {
-    const frame = frameRef.current;
-    const scroller = scrollerRef.current;
-    if (!frame || !scroller) return;
-    const apply = () => frame.style.setProperty("--vp", `${scroller.clientHeight}px`);
-    apply();
-    const observer = new ResizeObserver(apply);
-    observer.observe(scroller);
-    return () => observer.disconnect();
-  }, []);
-
   // Register each rendered moment's DOM node so the scroll controller can
   // measure it (bands, fisheye). Keyed by message id — aligned with `moments`. Each
   // register/unregister schedules a re-measure so geometry tracks the async mount.
@@ -106,17 +93,13 @@ export function useLensModel({ state }: { state: ChatState }) {
     }
   }, []);
 
-  // Click a band to center its turn. No drag-to-scrub: the dial is a row of targets, and the
-  // scrub gesture only ever fought the click.
-  const onBandClick = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
+  // Center a moment's turn. No drag-to-scrub: the rail is a row of targets, and the scrub
+  // gesture only ever fought the click.
+  const goTo = useCallback(
+    (key: string) => {
       const scroller = scrollerRef.current;
-      const bandKey = (event.target as HTMLElement).closest<HTMLElement>(
-        '[data-annotation="dial-band"]',
-      )?.dataset.key;
-      if (!scroller || !bandKey) return;
-      const g = geomRef.current.find((geom) => geom.key === bandKey);
-      if (!g) return;
+      const g = geomRef.current.find((geom) => geom.key === key);
+      if (!scroller || !g) return;
       landedRef.current = true;
       setIntent({ kind: "turn", turn: g.turn });
       scroller.scrollTo({ top: g.top - FOCAL * scroller.clientHeight, behavior: "smooth" });
@@ -144,15 +127,15 @@ export function useLensModel({ state }: { state: ChatState }) {
   useLayoutEffect(() => {
     const scroller = scrollerRef.current;
     const frame = frameRef.current;
-    const strip = stripRef.current;
-    if (!scroller || !frame || !strip) return;
+    const dial = dialRef.current;
+    if (!scroller || !frame || !dial) return;
 
     const atBottom = () =>
       scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < FOLLOW_SLACK;
 
     let geom: Geom[] = [];
     // Doc y → rail y (`railLayout`): the thread fits the rail like a scrollbar; nothing slides.
-    let map: RailLayout = { bands: new Map(), at: () => 0 };
+    let map: RailLayout = { bands: new Map(), at: () => 0, height: 0 };
 
     const sync = () => {
       const s = scroller.scrollTop;
@@ -162,19 +145,12 @@ export function useLensModel({ state }: { state: ChatState }) {
         awayRef.current = away;
         setAwayFromTail(away);
       }
-      const fy = FOCAL * V;
-
-      // the reticle: the viewport's extent on the fixed map
-      const wickTop = map.at(s);
-      const wickH = map.at(s + V) - wickTop;
-      if (wickRef.current) {
-        wickRef.current.style.top = `${wickTop}px`;
-        wickRef.current.style.height = `${wickH}px`;
+      // the thumb: the viewport's extent on the fixed map
+      const thumbTop = map.at(s);
+      if (thumbRef.current) {
+        thumbRef.current.style.top = `${thumbTop}px`;
+        thumbRef.current.style.height = `${map.at(s + V) - thumbTop}px`;
       }
-      if (capTopRef.current) capTopRef.current.style.top = `${wickTop}px`;
-      if (capBotRef.current) capBotRef.current.style.top = `${wickTop + wickH}px`;
-      if (csFocalRef.current) csFocalRef.current.style.top = `${map.at(s + fy)}px`;
-      if (caretRef.current) caretRef.current.style.top = `${map.at(s + fy)}px`;
 
       // The intent is what a reload reopens: the tail while at the bottom, else the focal turn.
       // Not before the opening position has landed: a scroll before that is not the user's.
@@ -198,35 +174,50 @@ export function useLensModel({ state }: { state: ChatState }) {
       for (const g of geom) {
         const band = bandRefs.current.get(g.key);
         if (!band) continue;
-        band.classList.toggle("in-reticle", g.top + g.height > s && g.top < s + V);
+        band.classList.toggle("in-view", g.top + g.height > s && g.top < s + V);
         band.classList.toggle("focal", g.key === fk);
       }
     };
 
     const measure = () => {
-      geom = moments.flatMap((moment) => {
+      // One geom per turn, keyed by its first moment: the rail's unit is the turn, the same unit
+      // its ticks and the peek speak.
+      const byTurn = new Map<number, Geom>();
+      for (const moment of moments) {
         const el = momentRefs.current.get(moment.id);
-        return el
-          ? [
-              {
-                key: moment.id,
-                turn: moment.turn,
-                top: el.offsetTop,
-                height: el.offsetHeight,
-              },
-            ]
-          : [];
-      });
+        if (!el) continue;
+        const bottom = el.offsetTop + el.offsetHeight;
+        const g = byTurn.get(moment.turn);
+        if (g) g.height = bottom - g.top;
+        else
+          byTurn.set(moment.turn, {
+            key: moment.id,
+            turn: moment.turn,
+            top: el.offsetTop,
+            height: el.offsetHeight,
+          });
+      }
+      geom = [...byTurn.values()];
       geomRef.current = geom;
       // The dial is a scrollbar's stand-in: a thread that fits the lane has nowhere to go.
       frame.toggleAttribute("data-scrolls", scroller.scrollHeight > scroller.clientHeight + 1);
-      map = railLayout(geom, scroller.scrollHeight, scroller.clientHeight);
+      // The rail centres in the lane and stops short of the pane head and the composer.
+      const lane = dial.parentElement ?? scroller;
+      map = railLayout(geom, scroller.scrollHeight, lane.clientHeight - RAIL_MARGIN * 2);
+      dial.style.height = `${map.height}px`;
+      const bottoms = new Map<number, number>();
       for (const g of geom) {
         const band = bandRefs.current.get(g.key);
         if (!band) continue;
         const box = map.bands.get(g.key)!;
         band.style.top = `${box.top}px`;
         band.style.height = `${box.height}px`;
+        bottoms.set(g.turn, box.top + box.height);
+      }
+      for (const [turn, tick] of tickRefs.current) {
+        const bottom = bottoms.get(turn);
+        tick.hidden = bottom === undefined;
+        if (bottom !== undefined) tick.style.top = `${bottom}px`;
       }
       const metrics = {
         scrollTop: scroller.scrollTop,
@@ -268,6 +259,8 @@ export function useLensModel({ state }: { state: ChatState }) {
     const ro = new ResizeObserver(measure);
     ro.observe(scroller);
     if (chatRef.current) ro.observe(chatRef.current);
+    // The lane shrinks as the composer grows; the rail refits to what is left.
+    if (dial.parentElement) ro.observe(dial.parentElement);
     // A scroll re-draws the dial and decides follow: at the bottom (within a line) follows.
     const onScroll = () => {
       followRef.current = atBottom();
@@ -296,15 +289,12 @@ export function useLensModel({ state }: { state: ChatState }) {
     frameRef,
     scrollerRef,
     chatRef,
-    stripRef,
-    wickRef,
-    capTopRef,
-    capBotRef,
-    csFocalRef,
-    caretRef,
+    dialRef,
+    thumbRef,
     bandRefs,
+    tickRefs,
     registerMoment,
-    onBandClick,
+    goTo,
     awayFromTail,
   };
 }

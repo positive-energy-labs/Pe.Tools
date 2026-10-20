@@ -17,17 +17,37 @@ type WorldCacheState = {
   baseline: Map<string, string> | null;
 };
 
+/** Where the lens stood in a thread, for a reload in this tab. `fromUrl` is the `?turn=` it
+ *  landed under: a different deep link than that one wins over the stored position. */
+type StoredIntent = { intent: LensScrollIntent; fromUrl: number | null };
+const intentKey = (thread: string) => `pe.lens-intent.${thread}`;
+
+function storedIntent(thread: string, urlTurn: number | null): LensScrollIntent | undefined {
+  try {
+    const stored = JSON.parse(
+      sessionStorage.getItem(intentKey(thread)) ?? "null",
+    ) as StoredIntent | null;
+    return stored?.fromUrl === urlTurn ? stored.intent : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function createCurrentThreadView(deps: {
   registry: AtomRegistry.AtomRegistry;
+  thread: string;
   turn?: number;
-  patch: (partial: { turn?: number }, replace?: boolean) => Promise<void>;
 }) {
   const core = createRouteOwner("chat/thread", deps.registry);
+  const urlTurn = deps.turn ?? null;
   // The one call opened in the transcript (`tool:<id>`), or none.
   const openCallKey = core.owned("page/open-call-key", Atom.make<string | null>(null));
   const lensIntent = core.owned(
     "widget/lens-intent",
-    Atom.make<LensScrollIntent>(deps.turn ? { kind: "turn", turn: deps.turn } : { kind: "tail" }),
+    Atom.make<LensScrollIntent>(
+      storedIntent(deps.thread, urlTurn) ??
+        (deps.turn ? { kind: "turn", turn: deps.turn } : { kind: "tail" }),
+    ),
   );
   const world = core.owned<Atom.Writable<WorldState>>(
     "widget/world",
@@ -58,9 +78,13 @@ function createCurrentThreadView(deps: {
     )
       return;
     set("set-lens-intent", lensIntent, next);
+    // The URL is input; a scroll position is session state. A scroll never touches the URL: the
+    // router wraps history.replaceState too, and any URL write re-renders every route subscriber.
     if (turnTimer) clearTimeout(turnTimer);
-    if (next.kind === "tail") void deps.patch({ turn: undefined }, true);
-    else turnTimer = setTimeout(() => void deps.patch({ turn: next.turn }, true), 1000);
+    turnTimer = setTimeout(() => {
+      const stored: StoredIntent = { intent: next, fromUrl: urlTurn };
+      sessionStorage.setItem(intentKey(deps.thread), JSON.stringify(stored));
+    }, 250);
   };
   return {
     registry: deps.registry,
@@ -86,17 +110,18 @@ export function CurrentThreadViewOwner({
   threadKey,
   registry,
   turn,
-  patch,
   children,
 }: {
   /** Current selection identity. It resets transient view atoms without remounting persistent children. */
   threadKey: string;
   registry: AtomRegistry.AtomRegistry;
   turn?: number;
-  patch: (partial: { turn?: number }, replace?: boolean) => Promise<void>;
   children: ReactNode;
 }) {
-  const view = useRouteOwner(() => createCurrentThreadView({ registry, turn, patch }), threadKey);
+  const view = useRouteOwner(
+    () => createCurrentThreadView({ registry, thread: threadKey, turn }),
+    threadKey,
+  );
   return <ThreadViewContext.Provider value={view}>{children}</ThreadViewContext.Provider>;
 }
 

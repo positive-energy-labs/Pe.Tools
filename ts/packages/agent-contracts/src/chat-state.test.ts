@@ -102,6 +102,17 @@ const LOG: HarnessEvent[] = z.array(harnessEventSchema).parse([
 const state = (events: HarnessEvent[]): ChatState => ({ ...emptyChatState(), events });
 
 describe("harness event projection", () => {
+  it("names the document a user turn ran against, only when its prompt recorded one", () => {
+    const request = { kind: "named", session: "S1", address: "C:/Models/Ops.rvt" };
+    const log = z.array(harnessEventSchema).parse([
+      { seq: 1, at, kind: "prompt", turnId: "t1", text: "bare" },
+      { seq: 2, at, kind: "prompt", turnId: "t2", text: "bound", target: { request, label: "Ops.rvt" } },
+      { seq: 3, at, kind: "prompt", turnId: "t3", text: "unlabeled", target: { request } },
+    ]);
+    const users = selectMessages(state(log)).filter((message) => message.role === "user");
+    expect(users.map((message) => message.target)).toEqual([undefined, "Ops.rvt", undefined]);
+    expect("target" in users[0]!).toBe(false);
+  });
   it("folds the log into the transcript rows moments.tsx renders", () => {
     const messages = selectMessages(state(LOG));
     const shape = messages.map((message) => ({

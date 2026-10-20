@@ -52,7 +52,6 @@ export interface WorkbenchContextValue {
   openThread: (threadId: string) => void;
   renameThread: (threadId: string, title: string) => Promise<void>;
   deleteThread: (threadId: string) => Promise<boolean>;
-  patchThreadView: (partial: { turn?: number }, replace?: boolean) => Promise<void>;
   resolveApproval: (requestId: string, optionId: string) => Promise<void>;
   answerQuestion: (
     requestId: string,

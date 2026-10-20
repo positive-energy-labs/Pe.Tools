@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { callerSchema } from "./caller.ts";
 import { mentionSchema } from "./mention.ts";
-import { threadHeadReadingSchema } from "./target.ts";
+import { documentRequestSchema, threadHeadReadingSchema } from "./target.ts";
 
 /**
  * The harness-thread wire (ADR 0015: the harness drives; Pea is tools and UI).
@@ -219,6 +219,15 @@ export function attachmentRefusal(
   return `${harness} cannot read attached ${[...kinds].join(" or ")}: remove ${refused.map((a) => a.name).join(", ")} to send`;
 }
 
+/** The document a turn ran against, stamped on its `prompt` from the thread head at delivery so the
+ * record names it without the live inventory. `label` is the head's display snapshot (the document
+ * title), absent when the binder supplied none; `request` is the head's default Target verbatim. */
+export const promptTargetSchema = z.object({
+  request: documentRequestSchema,
+  label: z.string().optional(),
+});
+export type PromptTarget = z.infer<typeof promptTargetSchema>;
+
 /** Append-only per-thread record. `seq` is 1-based and dense per thread. */
 export const harnessEventSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -229,6 +238,8 @@ export const harnessEventSchema = z.discriminatedUnion("kind", [
     text: z.string(),
     attachments: z.array(promptAttachmentSchema).optional(),
     mentions: z.array(mentionSchema).optional(),
+    /** Absent when no target was bound (and on events written before this field). */
+    target: promptTargetSchema.optional(),
   }),
   /** `turnId` is null for updates the harness sends outside a turn (commands, mode, session info). */
   z.object({

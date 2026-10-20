@@ -11,7 +11,7 @@ import {
   type Reading,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
-import { changedInRevit, previousOf, useHostStatus } from "#/readings";
+import { changedInRevit, previousOf, useHostStatusSlice } from "#/readings";
 import { refuse, useRoute } from "#/route";
 import { manifestChords } from "#/route/keys";
 import { KeysNode, useScopeKeys } from "@pe/kit/keys";
@@ -227,7 +227,7 @@ export function LiveScheduleGridWorkspace({
   // are not attached to, and every Reading taken before the detach comes back marked.
   const gridChanged = changedInRevit(handle.readings.work) || changedInRevit(handle.readings.saved);
   const listChanged = changedInRevit(handle.readings.catalog);
-  const connected = previousOf(useHostStatus())?.bridgeIsConnected !== false;
+  const connected = useHostStatusSlice((status) => previousOf(status)?.bridgeIsConnected !== false);
   const freshness: ScheduleGridState["freshness"] = !connected
     ? "disconnected"
     : gridChanged

@@ -1,17 +1,16 @@
-/* The transcript and input share the content column; the timeline keeps its own rail. */
+/* The transcript and input share one cell; the rail lives in the lens's lane, over the composer. */
 .chat-column {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--map, 23px);
-  grid-template-rows: minmax(0, 1fr);
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   position: relative;
 }
 .chat-column > [data-chat-transcript] {
-  grid-area: 1 / 1 / 2 / 3;
+  grid-area: 1 / 1;
 }
 /* The composer overlaps the transcript's cell, so it sits above a focused pane (kit pane.css lifts
    one to --z-sticky); under it, a click in the transcript buried the composer until window blur. */
 .chat-column > [data-chat-composer] {
-  grid-area: 1 / 1 / 2 / 2;
+  grid-area: 1 / 1;
   align-self: end;
   min-width: 0;
   z-index: calc(var(--z-sticky) + 1);
@@ -23,6 +22,9 @@
 }
 .chat-column [data-annotation="chat"] {
   padding-bottom: calc(var(--chat-composer-height, 0px) + var(--gutter));
+}
+.chat-column [data-annotation="lane"] {
+  bottom: var(--chat-composer-height, 0px);
 }
 .chat-column .chat-tail-floater {
   bottom: calc(var(--chat-composer-height, 0px) + var(--gutter));

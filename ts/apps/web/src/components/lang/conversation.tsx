@@ -1,15 +1,7 @@
 /** The transcript turn (head, body, bubble, tool status) and the composer (frame, box). Presentation
- *  only, the box's open/rest motion included; the logic lives in workbench/ and chat/. Painted in
+ *  only; the logic lives in workbench/ and chat/. Painted in
  *  conversation.css. */
-import {
-  useImperativeHandle,
-  useRef,
-  useState,
-  type ComponentProps,
-  type KeyboardEvent,
-  type ReactNode,
-  type Ref,
-} from "react";
+import { type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
 import { Textarea } from "./textarea";
 import { ProviderMark } from "./provider-mark";
 import "@pe/kit/lang/lang.css";
@@ -23,6 +15,7 @@ export function MessageHead({
   harness,
   turn,
   at,
+  target,
 }: {
   role: "user" | "assistant";
   /** The harness that answered (a Pea turn): its mark leads the head, a rank under the name. */
@@ -30,6 +23,8 @@ export function MessageHead({
   /** The user turn's index — the same `#n` the timeline's readout and hover preview say. */
   turn?: number;
   at?: Date;
+  /** The Revit document this turn ran against, as its prompt recorded it: "on <name>" in mono. */
+  target?: string;
 }) {
   return (
     <h2 className="dl-message-head" data-role={role}>
@@ -49,6 +44,11 @@ export function MessageHead({
         ) : null}
         {turn ? <span data-slot="turn">#{turn}</span> : null}
       </span>
+      {target ? (
+        <span className="dl-message-target" title={target}>
+          on {target}
+        </span>
+      ) : null}
     </h2>
   );
 }
@@ -93,22 +93,14 @@ export function ComposerFrame({ children }: { children: ReactNode }) {
   return <div className="dl-composer-frame">{children}</div>;
 }
 
-type ComposerVariant = "full" | "compact" | "reply";
-export interface ComposerHandle {
-  /** A send was accepted: outside `full`, rest at one line and give focus back to the page. */
-  rest: () => void;
-}
-
 /**
- * The one box you write in. At rest the draft is one line, the pickers' marks stacked on its left
- * and Send on its right; open while you write, it grows to five lines over a bottom row of
- * pickers, tools and Send (conversation.css draws the motion). `full` is the page's, `compact` the
- * tray panel's, `reply` the notice card's: the draft and the Send/Stop slot alone. Enter sends
- * unless `onKey` takes the key; focus leaving the box (React focus bubbles through its portalled
- * popups) rests it, a window losing focus does not.
+ * The one box you write in: three columns. Left, `--turn-gutter` wide: attach over the pickers'
+ * marks (it sits under the transcript's provider mark). Middle: work, the draft (it grows to a cap,
+ * then scrolls), the refusal and any state chips. Right, `--side-lane`: Send/Stop over fork.
+ * `variant="reply"` is the notice card's: the draft and the Send/Stop slot alone. Enter sends
+ * unless `onKey` takes the key.
  */
 export function Composer({
-  ref,
   variant,
   areaRef,
   dragging,
@@ -117,14 +109,15 @@ export function Composer({
   work,
   refusal,
   pickers,
+  attach,
+  fork,
   tools,
   send,
   onSend,
   onKey,
   ...field
 }: Omit<ComponentProps<typeof Textarea>, "ref" | "rows" | "surface" | "size" | "onKeyDown"> & {
-  ref?: Ref<ComposerHandle>;
-  variant: ComposerVariant;
+  variant?: "reply";
   areaRef?: (area: HTMLTextAreaElement | null) => void;
   /** A file drag over the box takes the recess ground. */
   dragging?: boolean;
@@ -133,9 +126,15 @@ export function Composer({
   menus?: ReactNode;
   /** The box's top section: asks, chips, refusals. */
   work?: ReactNode;
-  /** The one refusal line, directly below the draft in every variant. */
+  /** The one refusal line, directly below the draft. */
   refusal?: string | null;
-  pickers?: (open: boolean) => ReactNode;
+  /** The marks under the attach control, in the left lane; each opens its picker. */
+  pickers?: ReactNode;
+  /** The left lane's first control. */
+  attach?: ReactNode;
+  /** Directly under Send, in the right lane. */
+  fork?: ReactNode;
+  /** State chips; a row under the draft only when present. */
   tools?: ReactNode;
   /** The one Send/Stop slot. */
   send: ReactNode;
@@ -143,29 +142,8 @@ export function Composer({
   /** True when the key belongs to an open menu, not the draft. */
   onKey?: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const form = useRef<HTMLFormElement>(null);
-  useImperativeHandle(ref, () => ({
-    rest: () => {
-      if (variant === "full") return;
-      setOpen(false);
-      const focused = document.activeElement;
-      if (focused instanceof HTMLElement && form.current?.contains(focused)) focused.blur();
-    },
-  }));
-  const timer = useRef<number>(undefined);
-  const hold = () => window.clearTimeout(timer.current);
-  const release = () => {
-    hold();
-    timer.current = window.setTimeout(() => {
-      if (!document.hasFocus()) return;
-      setOpen(false);
-      const area = form.current?.querySelector("textarea");
-      if (area) area.scrollTop = 0;
-    });
-  };
   return (
-    <form ref={form} onFocus={hold} onBlur={release} className="relative w-full">
+    <form className="relative w-full">
       {menus}
       {/* The one object you write in: work it carries, the text, its controls. */}
       <div
@@ -173,17 +151,14 @@ export function Composer({
         data-surface={dragging ? "recess" : "artifact"}
         data-drop-zone=""
         data-variant={variant}
-        data-open={open || undefined}
         {...drop}
       >
         <div data-composer-work="">{work}</div>
-        {pickers ? <div data-composer-pickers="">{pickers(open)}</div> : null}
         <Textarea
           {...field}
           ref={areaRef}
           surface="embedded"
           rows={1}
-          onFocus={() => setOpen(true)}
           onKeyDown={(event) => {
             if (event.nativeEvent.isComposing || onKey?.(event)) return;
             if (event.key === "Enter" && !event.shiftKey) {
@@ -198,8 +173,18 @@ export function Composer({
           </div>
         ) : null}
         {tools ? <div data-composer-tools="">{tools}</div> : null}
-        {/* One slot: Stop replaces Send while a turn runs, so the two never coexist. */}
-        <div data-composer-send="">{send}</div>
+        {/* Left lane: attach, then the pickers' marks. */}
+        {attach || pickers ? (
+          <div data-composer-lead="">
+            {attach}
+            {pickers}
+          </div>
+        ) : null}
+        {/* Right lane: one Send slot (Stop replaces Send while a turn runs), then fork. */}
+        <div data-composer-cluster="">
+          <div data-composer-send="">{send}</div>
+          {fork}
+        </div>
       </div>
     </form>
   );

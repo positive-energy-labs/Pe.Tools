@@ -1,7 +1,8 @@
 /**
  * The composer's document entry has two modes: `target` (the existing session › document ladder,
  * which moves the thread head) and `open` (the patch bay, over the composer, to open a document
- * into a Revit first). One `Switcher` beside the ladder picks; closing the bay returns to target.
+ * into a Revit first). One `Switcher` at the top of the ladder's popup picks; closing the bay
+ * returns to target.
  */
 import { useState } from "react";
 import { Popover } from "@base-ui/react/popover";
@@ -14,32 +15,35 @@ import { PatchBay, useBayReadings } from "#/open/bay";
 
 type Mode = "target" | "open";
 
-/** `switcher` false hides the mode words (the one-line composer); the ladder keeps its place. */
+/** Hands the ladder the switch as its popup `header`; choosing `open` swaps the ladder for the bay. */
 export function ComposerOpenMode({
-  switcher,
   children,
 }: {
-  switcher: boolean;
-  children: React.ReactNode;
+  children: (header: React.ReactNode) => React.ReactNode;
 }) {
   const [mode, setMode] = useState<Mode>("target");
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   return (
     <>
-      <span ref={setAnchor} className="contents">
-        {switcher ? (
-          <Switcher
-            ariaLabel="document mode"
-            value={mode}
-            onChange={setMode}
-            options={[
-              { value: "target", label: "target", title: "the open document this chat runs on" },
-              { value: "open", label: "open", title: "open a document into a Revit first" },
-            ]}
-          />
-        ) : null}
+      <span ref={setAnchor} className="inline-flex">
+        {mode === "target"
+          ? children(
+              <Switcher
+                ariaLabel="document mode"
+                value={mode}
+                onChange={setMode}
+                options={[
+                  {
+                    value: "target",
+                    label: "target",
+                    title: "the open document this chat runs on",
+                  },
+                  { value: "open", label: "open", title: "open a document into a Revit first" },
+                ]}
+              />,
+            )
+          : null}
       </span>
-      {mode === "target" ? children : null}
       <Popover.Root
         open={mode === "open"}
         onOpenChange={(open) => {

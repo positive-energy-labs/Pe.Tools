@@ -55,14 +55,9 @@ export function ChatShell(props: Plugin) {
 }
 
 function CurrentThreadChatSurface(props: Plugin) {
-  const { currentThreadId, turn, patchThreadView } = useWorkbench();
+  const { currentThreadId, turn } = useWorkbench();
   return (
-    <CurrentThreadViewOwner
-      threadKey={currentThreadId}
-      registry={appAtomRegistry}
-      turn={turn}
-      patch={patchThreadView}
-    >
+    <CurrentThreadViewOwner threadKey={currentThreadId} registry={appAtomRegistry} turn={turn}>
       <ChatSurface {...props} />
     </CurrentThreadViewOwner>
   );
@@ -317,9 +312,7 @@ function ChatSurface({ plugin, focus, target }: Plugin) {
           deletedThreadIds={deletedThreadIds}
           prompt={prompt}
           handle={handle}
-          pickers={(open) => (
-            <ComposerPickers situation={situation} urlTarget={target} open={open} />
-          )}
+          pickers={<ComposerPickers situation={situation} urlTarget={target} />}
           state={<ComposerState situation={situation} />}
           work={<ComposerWork situation={situation} />}
           refusal={situation.head.refusal ?? status.detail}

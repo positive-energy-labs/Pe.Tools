@@ -12,6 +12,7 @@ const wire = vi.hoisted(() => ({
   setPin: vi.fn(),
   feedback: vi.fn(),
   copy: vi.fn(),
+  renders: 0,
 }));
 vi.mock("@effect/atom-react", () => ({ useAtomValue: () => wire.pin }));
 vi.mock("./thread-view", () => ({
@@ -21,7 +22,12 @@ vi.mock("./thread-view", () => ({
   }),
 }));
 vi.mock("#/components/feedback-picker", () => ({ startFeedback: wire.feedback }));
-vi.mock("@pe/kit/lib/use-copy", () => ({ useCopy: () => ({ copied: false, copy: wire.copy }) }));
+vi.mock("@pe/kit/lib/use-copy", () => ({
+  useCopy: () => {
+    wire.renders += 1;
+    return { copied: false, copy: wire.copy };
+  },
+}));
 // The record classifier and route are separate owners; this checks that folding retains their outputs.
 vi.mock("./chat-plugins", () => ({
   proposedRecord: (title: string) =>
@@ -295,4 +301,25 @@ test("a user turn draws its sent files, and a slash prompt draws the skill as a 
   expect(bubble.textContent).toContain("Mechanical Equipment");
   fireEvent.click(screen.getByRole("button", { name: "Copy message" }));
   expect(wire.copy).toHaveBeenCalledWith("/review-schedule Mechanical Equipment");
+});
+
+test("the transcript is a memo boundary: a refolded message re-renders only when its own content changed", () => {
+  const thread = (second: string): ChatMessage[] => [
+    { id: "a", role: "assistant", parts: [{ type: "text", text: "first" }], running: false },
+    { id: "u", role: "user", parts: [{ type: "text", text: "ask" }], running: false },
+    { id: "b", role: "assistant", parts: [{ type: "text", text: second }], running: true },
+  ];
+  const register = () => {};
+  const view = (messages: ChatMessage[]) => (
+    <Moments messages={messages} register={register} harness="claude" />
+  );
+  wire.renders = 0;
+  const { rerender } = render(view(thread("str")));
+  expect(wire.renders).toBe(3);
+  // A refold hands back fresh objects with the same content: nothing re-renders.
+  rerender(view(thread("str")));
+  expect(wire.renders).toBe(3);
+  // The streaming tail grows: only its section re-renders.
+  rerender(view(thread("streaming")));
+  expect(wire.renders).toBe(4);
 });

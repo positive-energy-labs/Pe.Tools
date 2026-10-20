@@ -55,8 +55,11 @@ export function Ladder({
   mark,
   openOn,
   closeOn,
+  header,
 }: {
   levels: readonly Rung[];
+  /** A control at the top of the popup, above every rung (the composer's target/open switch). */
+  header?: ReactNode;
   face?: "word" | "control" | "icon";
   /** A glyph that stands for the first rung (the composer's provider mark): the complete ladder
    *  reads `mark second · third` instead of `first › second › third`. */
@@ -141,6 +144,7 @@ export function Ladder({
       // The trigger's face is a value or a placeholder; its name says what it chooses.
       triggerLabel={name}
       levels={rungs}
+      header={header}
       onCollection={(current) => {
         collection.current = current;
       }}

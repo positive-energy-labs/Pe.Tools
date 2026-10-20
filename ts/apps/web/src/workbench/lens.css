@@ -9,13 +9,13 @@
  *     turns separate by position (right-aligned block) and the role line; their marks are ink
  *     washes, no hue bought. Pea keeps the agent identity (--pe-pea) — asymmetry is the point:
  *     the agent is the marked case, the human is the ground.
- *   · LOCATE MARKS ARE --pe-ink (R13a): the viewport reticle, the focal caret, and the focal
- *     turn's left rule all answer "where am I" — they were blue/provenance-hued, now neutral.
+ *   · LOCATE MARKS ARE NEUTRAL (R13a): the rail's thumb and the focal band answer "where am
+ *     I" — they were blue/provenance-hued, now ink.
  *   · The dashed tool rail is gone (dashed = seam ONLY); a tool marker separates on the pea
  *     rail + the ⌗ glyph.
  *
  * What remains here is the keep-as-CSS zone — the stuff a Tailwind class genuinely can't express:
- * (1) JS-driven geometry — the map-dial and its reticle — positioned by inline styles the
+ * (1) JS-driven geometry — the rail, its ticks and thumb, the peek — positioned by inline styles the
  * rAF/scroll controller sets per frame; (2) pseudo-elements, descendant/state selectors, and
  * keyframe animations (caret blink, sheen).
  */
@@ -32,62 +32,50 @@
   }
 }
 
-/* ===== Lens view: focal planes ======================================== */
-/* --vp (the scroll aperture height) is fed in px by a ResizeObserver. The map-dial gutter uses a
-   small rAF scroll handler (it needs measured pixel heights). */
+/* ===== Lens view ======================================================= */
 [data-annotation="frame"] {
   min-height: 0;
   height: 100%; /* fill the ChatShell main row (was a grid child in apps/website) */
   position: relative;
 }
+/* Only the transcript scrolls; the rail and the composer stand outside it. */
 [data-annotation="scroller"] {
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   /* No smooth scroll behaviour here: follow snaps and the initial landing must be instant. The
      gestures that animate (band tap, turn tag) ask for it per call. */
-  /* No browser scrollbar in the chat lane — the mapdial IS the position instrument. */
+  /* No browser scrollbar in the chat lane — the rail IS the position instrument. */
   scrollbar-width: none;
 }
-/* The transcript owns column 1; its map dial occupies the fixed right rail. */
-[data-annotation="grid"] {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--map, 23px);
-  align-items: start;
-}
-/* all share row 1 — explicit grid-column alone bumps items into separate rows */
-[data-annotation="grid"] > * {
-  grid-row: 1;
-}
-[data-annotation="grid"] [data-annotation="chat"] {
-  grid-column: 1;
-}
-[data-annotation="grid"] [data-annotation="dial"] {
-  grid-column: 2;
-}
-/* ---- Map-dial: proportional minimap + viewport reticle ---------------- */
-[data-annotation="dial"] {
-  position: sticky;
-  top: 0;
-  height: var(--vp, 560px);
-  /* A bare strip, like a scrollbar: no ground, no border. Clip top/bottom/right only — the turn
-     number and its hover preview spill left over the transcript. */
-  clip-path: inset(0 0 0 -480px);
-  /* above the transcript, so the hover preview covers the chat text instead of mixing with it */
+/* The lane box spans the transcript's measure + the side lane, centred and inset like the
+   composer frame, and ends at the composer's top, so the rail shares the composer's right lane. Only the
+   rail and the peek take the pointer; the rest of the box lets it through to the transcript. */
+[data-annotation="lane"] {
+  position: absolute;
+  inset: 0;
+  max-width: calc(var(--chat-measure) + var(--side-lane));
+  margin-inline: auto;
+  pointer-events: none;
   z-index: 7;
+}
+/* ---- The rail: one block per turn, log-scaled, centred in the lane ---- */
+/* Centred in the lane, like t3's: the stack grows both ways from the middle of the pane. */
+[data-annotation="dial"] {
+  position: absolute;
+  right: var(--gutter);
+  top: 50%;
+  translate: 0 -50%;
+  width: var(--side-lane);
+  pointer-events: auto;
   touch-action: none;
   user-select: none;
+  cursor: pointer;
 }
 /* A thread that fits the lane (an empty one included) has nowhere to navigate: no rail at all.
    `data-scrolls` is set by the lens's measure on every resize of the box or its content. */
-[data-annotation="frame"]:not([data-scrolls]) [data-annotation="dial"] {
+[data-annotation="frame"]:not([data-scrolls]) [data-annotation="lane"] {
   visibility: hidden;
-}
-.chat-tail-rail {
-  position: absolute;
-  bottom: var(--space-unit);
-  right: 0;
-  z-index: 8;
 }
 .chat-tail-floater {
   position: absolute;
@@ -98,71 +86,43 @@
   background: var(--pe-page);
   --pe-on: var(--pe-page);
 }
-[data-annotation="dial-strip"] {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 100%;
-  will-change: transform;
+/* The rail reads as a scale, not a stack of chips: thin bars on one centred column, tiled top to
+   bottom (railLayout), a 2px gap of page between turns, hairline graduations, a hairline cursor. */
+[data-annotation="dial"] {
+  --bar: 4px;
+  --bar-gap: 2px;
 }
 [data-annotation="dial-band"] {
   position: absolute;
-  right: 3px;
-  width: 4px;
-  cursor: pointer;
+  left: calc(50% - var(--bar) / 2);
+  width: var(--bar);
+  box-sizing: border-box;
+  padding-bottom: var(--bar-gap);
+  background-clip: content-box;
   border-radius: 0; /* hard-square segment bars */
   opacity: 0.38;
   transition:
     opacity var(--motion-control) ease,
-    width var(--motion-control) ease,
+    transform var(--motion-control) ease,
     background var(--motion-control) ease;
 }
-/* number rides on the band, to its left, shown ONLY on the focal band (the reticle readout).
-   Machine-measured: mono, tracked, tabular. */
-[data-annotation="dial-band"] [data-annotation="dial-number"] {
-  position: absolute;
-  /* Anchored to the band's own LEFT edge, not a fixed lane inset: the focal band grows leftward,
-     and a fixed inset put the number underneath it.
-     It spills over the transcript, so it wears the page ground to stay legible. */
-  right: 100%;
-  margin-right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-family: var(--font-mono);
-  font-size-adjust: var(--mono-adjust);
-  font-weight: var(--weight-mono);
-  font-size: var(--type-small-size);
-  letter-spacing: 0.05em;
-  font-variant-numeric: tabular-nums;
-  color: var(--pe-ink-2);
-  background: var(--pe-page);
-  --pe-on: var(--pe-page);
-  white-space: nowrap;
-  text-align: right;
-  opacity: 0;
-  transition: opacity var(--motion-control) ease;
-  pointer-events: none;
-}
-/* on screen = inside the candlestick's viewport range */
-[data-annotation="dial-band"].in-reticle {
+/* on screen = inside the thumb's range */
+[data-annotation="dial-band"].in-view {
   opacity: 0.85;
-}
-/* hover EXPANDS the band, no colour change; the preview label names it */
-[data-annotation="dial"] [data-annotation="dial-band"]:hover {
-  width: 10px;
 }
 /* focal = the single band on the focal axis. Emphasis is WIDTH + full strength of the band's OWN
    provenance colour — never a hue swap. */
 [data-annotation="dial-band"].focal {
   opacity: 1;
-  width: 8px;
+  transform: scaleX(1.5); /* widens about its own centre, so the column stays straight */
 }
-/* provenance: "you" is neutral ink (no identity hue — the standing question, answered NO);
-   pea wears the agent identity. Focal = the same colour at full strength; non-focal = a wash. */
-[data-annotation="dial-band"][data-role="user"].focal {
-  background: var(--pe-ink-2);
+/* A band is a whole turn, so it carries no speaker hue: a neutral wash, full ink on the focal turn
+   (a locate mark, R13a). */
+[data-annotation="dial-band"] {
+  background-color: color-mix(in srgb, var(--pe-ink-2) 55%, transparent);
 }
-[data-annotation="dial-band"][data-role="assistant"].focal {
-  background: var(--pe-pea);
+[data-annotation="dial-band"].focal {
+  background-color: var(--pe-ink-2);
 }
 /* delta = the newest band when context changed this send — changed-this-send is the caution
    family (attention, not disagreement). */
@@ -179,82 +139,193 @@
   border: 3px solid transparent;
   border-right-color: var(--pe-caution);
 }
-/* The hover preview: turn number + first sentence, one floating label beside the hovered band. */
-[data-annotation="dial-preview"] {
+/* A turn's tick: a hairline graduation off the bar's left edge, in the gap under its turn — the
+   mark you hover to peek. It never crosses the bar; the hit strip (peek.tsx HIT) is taller than
+   the line and spans the whole rail width. */
+[data-annotation="dial-tick"] {
   position: absolute;
-  right: 17px;
-  width: max-content;
-  max-width: 440px;
-  transform: translateY(-50%);
-  padding: 3px 8px;
-  border: 0.5px solid var(--pe-line-2);
-  line-height: var(--type-small-line-height);
+  right: calc(50% + var(--bar) / 2);
+  width: 5px;
+  height: 1px;
+  translate: 0 calc(var(--bar-gap) / -2 - 0.5px); /* centred in the gap below the turn's bar */
+  background: var(--pe-line-2);
+  pointer-events: none;
+}
+[data-annotation="dial"]:hover [data-annotation="dial-tick"] {
+  background: var(--pe-ink-mute);
+}
+/* The thumb: a slide rule's cursor over the scale it measures — a hairline square frame centred
+   on the bar column, open inside so the bars stay legible, firmer while the pointer is on the
+   rail. It locates; it is not a drag target. */
+[data-annotation="thumb"] {
+  position: absolute;
+  left: calc(50% - var(--bar) / 2 - 3px);
+  width: calc(var(--bar) + 6px);
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--pe-ink-2) 70%, transparent);
+  border-radius: 0;
+  background: transparent;
+  pointer-events: none;
+  z-index: 1;
+  transition:
+    background var(--motion-control) ease,
+    border-color var(--motion-control) ease;
+}
+[data-annotation="dial"]:hover [data-annotation="thumb"] {
+  border-color: var(--pe-ink-2);
+}
+/* ---- The peek: one turn's card beside the rail, its neighbours ghosted past each edge ---- */
+/* The column is the open peek's hit area: the lane's full height beside the rail, so vertical
+   travel at any speed stays inside it. The card glides to its anchor inside it. */
+[data-annotation="peek-column"] {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: calc(var(--gutter) + var(--side-lane));
+  width: min(320px, calc(100% - var(--side-lane) - var(--gutter) * 2));
+  pointer-events: auto;
+}
+[data-annotation="peek"] {
+  position: absolute;
+  left: 0;
+  right: 0;
+  transition: top var(--peek-glide) ease-out;
+}
+[data-annotation="lane"] {
+  --peek-glide: 140ms;
+}
+/* The new card enters from the side the pointer moved toward: stepping down it rises from below,
+   stepping up it drops from above; opening it settles in place. */
+[data-annotation="peek"] > [data-annotation="peek-card"]:not([data-ghost]) {
+  animation: peek-open var(--peek-glide) ease-out;
+}
+[data-annotation="peek"][data-enter="down"] > [data-annotation="peek-card"]:not([data-ghost]) {
+  animation-name: peek-from-below;
+}
+[data-annotation="peek"][data-enter="up"] > [data-annotation="peek-card"]:not([data-ghost]) {
+  animation-name: peek-from-above;
+}
+@keyframes peek-open {
+  from {
+    opacity: 0;
+    scale: 0.98;
+  }
+}
+@keyframes peek-from-below {
+  from {
+    opacity: 0.4;
+    translate: 0 10px;
+  }
+}
+@keyframes peek-from-above {
+  from {
+    opacity: 0.4;
+    translate: 0 -10px;
+  }
+}
+/* The band being peeked answers back on the rail: full ink, widened like the focal band. */
+[data-annotation="dial-band"][data-peeked] {
+  opacity: 1;
+  background-color: var(--pe-ink);
+  transform: scaleX(1.5);
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-annotation="lane"] {
+    --peek-glide: 0ms;
+  }
+  [data-annotation="peek"] > [data-annotation="peek-card"] {
+    animation: none;
+  }
+}
+[data-annotation="peek-funnel"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+[data-annotation="peek-funnel"] polygon {
+  pointer-events: fill;
+  fill: var(--pe-veil);
+  stroke: var(--pe-line);
+  stroke-width: 0.5px;
+}
+/* One card size: the head, two lines of your ask, two of the answer. A fixed box means stepping
+   moves the card exactly as far as its tick, never by a card's worth of text. Ghosts keep the
+   head and the ask only. */
+[data-annotation="peek-card"] {
+  --peek-line: var(--type-small-line-height);
+  display: grid;
+  grid-template-rows: auto calc(var(--peek-line) * 2) calc(var(--peek-line) * 2);
+  align-content: start;
+  gap: 2px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: calc(var(--space-unit) * 2) var(--gutter);
+  border: 1px solid var(--pe-line-2);
+  border-radius: var(--radius);
   background: var(--pe-page);
   --pe-on: var(--pe-page);
+  box-shadow: var(--shadow-float);
   color: var(--pe-ink);
+  font: inherit;
   font-size: var(--type-small-size);
-  white-space: pre-wrap;
+  line-height: var(--type-small-line-height);
+  text-align: left;
+  cursor: pointer;
+}
+[data-annotation="peek-card"]:not([data-ghost]):hover {
+  border-color: var(--pe-ink-mute);
+}
+/* A ghost is the next step: the same card past the edge, opaque so the transcript never shows
+   through, its content fading into the page away from the active card. */
+[data-annotation="peek-card"][data-ghost] {
+  position: absolute;
+  left: 0;
+  grid-template-rows: auto calc(var(--peek-line) * 2);
+  box-shadow: none;
+  color: var(--pe-ink-2);
+}
+[data-annotation="peek-card"][data-ghost] [data-annotation="peek-answer"] {
+  display: none;
+}
+[data-annotation="peek-card"][data-ghost]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
   pointer-events: none;
-  z-index: 6;
 }
-/* The focal readout speaks only while the pointer is on the dial: at rest the turn heads already
-   say "#n", and a resting number crowded the pane's top-right corner. */
-[data-annotation="dial"]:hover [data-annotation="dial-band"].focal [data-annotation="dial-number"] {
-  opacity: 1;
-  color: var(--pe-ink);
+[data-annotation="peek-card"][data-ghost="above"] {
+  bottom: calc(100% + var(--space-unit));
 }
-/* provenance segment washes when NOT focal — same colours, mixed down. */
-[data-annotation="dial-band"][data-role="user"]:not(.focal) {
-  background: color-mix(in srgb, var(--pe-ink-2) 36%, transparent);
+[data-annotation="peek-card"][data-ghost="above"]::after {
+  background: linear-gradient(to top, transparent 20%, var(--pe-page));
 }
-[data-annotation="dial-band"][data-role="assistant"]:not(.focal) {
-  background: color-mix(in srgb, var(--pe-pea) 32%, transparent);
+[data-annotation="peek-card"][data-ghost="below"] {
+  top: calc(100% + var(--space-unit));
 }
-/* tool = pea acting → hollow ring in the agent identity (a solid edge; dashed is reserved
-   for seam and a tool call is not a stand-in). */
-[data-annotation="dial-band"][data-role="tool"] {
-  background: transparent;
-  box-shadow: inset 0 0 0 1.25px var(--pe-pea);
+[data-annotation="peek-card"][data-ghost="below"]::after {
+  background: linear-gradient(to bottom, transparent 20%, var(--pe-page));
 }
-[data-annotation="dial-band"][data-role="tool"].focal {
-  box-shadow: inset 0 0 0 2px var(--pe-pea); /* thicker ring, no halo */
+[data-annotation="peek-head"] {
+  font-family: var(--font-mono);
+  font-size-adjust: var(--mono-adjust);
+  font-weight: var(--weight-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--pe-ink-2);
 }
-/* memory / event lanes are taxonomy (which lane is this), so they spend the viz ladder;
-   approval = a decision owed → caution. */
-[data-annotation="dial-band"][data-role="memory"] {
-  background: var(--viz-5);
+[data-annotation="peek-ask"],
+[data-annotation="peek-answer"] {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
-[data-annotation="dial-band"][data-role="approval"] {
-  background: var(--pe-caution);
-}
-[data-annotation="dial-band"][data-role="event"] {
-  background: var(--viz-6);
-  opacity: 0.55;
+[data-annotation="peek-answer"] {
+  color: var(--pe-ink-2);
 }
 
-/* ---- viewport reticle: a hard-square box around the aperture ----
-   [data-annotation="reticle-wick"] is repositioned by the rAF controller (top = aperture top, height = aperture
-   extent in dial space). The reticle answers "where am I" — a locate mark, so it is neutral
-   ink (R13a), not blue. The caps + full-width focal line of the old candlestick are retired
-   (display:none) so the controller can keep writing their `top` harmlessly. */
-[data-annotation="reticle-focal"] {
-  display: none;
-}
-/* The viewport on the rail is a soft fill behind the bands, the way a scrollbar thumb sits in
-   its track: no box, no caret. A ruled box plus a pointer read as a stray widget hung under the
-   pane head; the focal band (wider, full strength) already says which turn is at the axis. */
-[data-annotation="reticle-wick"] {
-  position: absolute;
-  left: 4px;
-  right: 1px;
-  background: var(--fill-veil);
-  pointer-events: none;
-  z-index: -1; /* under the bands, inside the dial's own stacking context */
-}
-[data-annotation="reticle-cap"],
-[data-annotation="dial"] [data-annotation="caret"] {
-  display: none;
-}
 /* chat — near plane, the real scroll. The composer floats over the bottom; pad the tail by its
    live height (+ the pb-4 gap below it) so the last turn always clears the input box. */
 [data-annotation="chat"] {
@@ -527,9 +598,12 @@
   margin-top: 0;
   padding-top: 0;
 }
+/* The transcript's column is the composer's draft column: the same measure + side lane, with the
+   lane kept clear on the right for the rail. */
 [data-chat="surface"] [data-annotation="chat"] {
   padding: var(--gutter);
-  max-width: var(--chat-measure);
+  padding-right: calc(var(--gutter) * 2 + var(--side-lane));
+  max-width: calc(var(--chat-measure) + var(--side-lane));
 }
 [data-chat="surface"] [data-annotation="moment"] {
   padding: 0;
@@ -545,7 +619,7 @@
   font-family: var(--font-body);
 }
 [data-chat="surface"] .dl-composer-frame {
-  max-width: var(--chat-measure);
+  max-width: calc(var(--chat-measure) + var(--side-lane));
   padding: var(--space-unit) var(--gutter) var(--gutter);
 }
 [data-chat="surface"] .dl-composer-box {
@@ -581,6 +655,22 @@
   background: transparent;
   color: var(--pe-ink-mute);
   font-size: var(--type-small-size);
+}
+/* A turn's body (prose, tool rows, runs) indents by the composer's left lane; its head stays flush
+   left, so the provider mark sits in the gutter. Your bubble keeps its right edge. */
+[data-chat="surface"] [data-annotation="moment"]:not([data-role="user"]) > :not(.dl-message-body),
+[data-chat="surface"]
+  [data-annotation="moment"]:not([data-role="user"])
+  > .dl-message-body
+  > :not(.dl-message-head) {
+  margin-left: var(--turn-gutter);
+}
+/* The mark is centred in that gutter (the composer's left icons share its centre) and the name
+   follows at the body's left edge. */
+[data-chat="surface"] .dl-message-mark {
+  width: var(--turn-gutter);
+  justify-content: center;
+  margin-right: -8px;
 }
 [data-chat="surface"] [data-annotation="tool-run"] > .dl-tool-run-summary {
   gap: calc(var(--space-unit) * 1.5);
