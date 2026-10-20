@@ -113,11 +113,19 @@ export function useDocumentLadder(
     else choose(JSON.stringify({ kind: "open", ref }));
   };
   // Exactly one session holding exactly one document, and nothing bound: bind it as if picked, once.
-  // Several candidates keep asking; a binding that was lost is never replaced for the person.
+  // Several candidates keep asking. A lost binding is replaced only by the same title reopened (a
+  // Revit restart reopens the same file under a new session), or, when its session is gone and its
+  // title was never seen on this page, by the one document open anywhere; never by a different
+  // document whose title is known to differ. The sentence names what was bound.
   const onlySession = sessions.length === 1 ? sessions[0]! : null;
   const onlyDoc = onlySession?.documents?.length === 1 ? onlySession.documents[0]! : null;
+  const sameReopened =
+    !lost ||
+    (lost.title != null
+      ? onlyDoc?.title === lost.title
+      : lost.reason === "session-gone");
   const only =
-    !binding && !hosted && !bound && !lost && onlySession && onlyDoc
+    !binding && !hosted && !bound && sameReopened && onlySession && onlyDoc
       ? { session: onlySession.session, openId: onlyDoc.openId }
       : null;
   const autoBound = useRef<string | null>(null);
