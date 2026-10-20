@@ -198,7 +198,7 @@ public static class DuctSnapshots {
             Inches(curve, BuiltInParameter.RBS_CURVE_DIAMETER_PARAM),
             Inches(curve, BuiltInParameter.RBS_CURVE_WIDTH_PARAM),
             Inches(curve, BuiltInParameter.RBS_CURVE_HEIGHT_PARAM),
-            nativeCurve?.Length ?? curve.get_Parameter(BuiltInParameter.CURVE_ELEM_LENGTH)?.AsDouble() ?? 0,
+            R(nativeCurve?.Length ?? curve.get_Parameter(BuiltInParameter.CURVE_ELEM_LENGTH)?.AsDouble() ?? 0, 4),
             polyline,
             curve.ReferenceLevel?.Id.Value(),
             null,
@@ -445,7 +445,10 @@ public static class DuctSnapshots {
         ex is Autodesk.Revit.Exceptions.ApplicationException or InvalidOperationException
         || ex.GetType().Namespace?.StartsWith("Autodesk.Revit", StringComparison.Ordinal) == true;
 
-    private static double[] P(XYZ p) => [p.X, p.Y, p.Z];
-    private static double[] V(XYZ v) => [R(v.X, 6), R(v.Y, 6), R(v.Z, 6)];
+    // Chadds at full precision is 13.8 MiB of a 16 MiB bridge frame (BridgeTransportSession.MaxFrameBytes); 1e-4 ft is
+    // 0.001 in, far under every proximity tolerance, and equal inputs round equal so joints stay coincident.
+    // ponytail: rounding buys ~1.3 MiB; a model much larger than Chadds needs the snapshot paged or the frame raised.
+    private static double[] P(XYZ p) => [R(p.X, 4), R(p.Y, 4), R(p.Z, 4)];
+    private static double[] V(XYZ v) => [R(v.X, 3), R(v.Y, 3), R(v.Z, 3)];
     private static double R(double v, int digits = 3) => Math.Round(v, digits);
 }
