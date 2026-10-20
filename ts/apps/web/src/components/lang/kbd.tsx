@@ -116,7 +116,7 @@ export function KeyLegend({
           ))}
           <span className="inline-flex items-center gap-1 text-ink-2">
             <Kbd mute>?</Kbd>
-            {keys.length > lead ? `${keys.length - lead} more` : "keys"}
+            {lead && keys.length > lead ? `${keys.length - lead} more` : "keys"}
           </span>
         </div>
       )}

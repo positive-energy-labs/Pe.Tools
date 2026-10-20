@@ -21,7 +21,10 @@ import type { DuctFinding } from "@pe/agent-contracts";
 
 import { claimParts, elementNamer, VERDICTS } from "../../claims";
 import { DuctDrawing } from "../../drawing";
-import { claimInk, encodingOf, issueInk, type Issue } from "../../encoding";
+import { claimInk, issueInk, type Issue } from "../../encoding";
+import { EncodingPicker } from "../encoding/picker";
+import { ScaleLegend } from "../encoding/scale-legend";
+import type { GroupEncoding } from "../encoding/use-encoding";
 import { NodeFactsView, SegmentFactsView } from "../../facts";
 import { FindingsList, ISSUE_KINDS } from "../../issues";
 import { useIso } from "../../iso";
@@ -77,6 +80,8 @@ export interface ECanvasExtra {
   lit: ReadonlySet<number>;
   /** The group's issue ids; null = every issue on a drawn element. */
   issueScope: ReadonlySet<string> | null;
+  /** The group's encoding: the screen owns it so the tree reads the same numbers. */
+  scale: GroupEncoding;
 }
 
 export function ECanvas(props: ProtoProps & ECanvasExtra) {
@@ -107,6 +112,8 @@ function Canvas({
   fromFixture,
   lit,
   issueScope,
+  scale,
+  setPage,
 }: ProtoProps & ECanvasExtra & { snapshot: NonNullable<ProtoProps["snapshot"]> }) {
   const index = useMemo(() => indexOf(snapshot, priced), [snapshot, priced]);
   const labelOf = useMemo(() => labelOfNode(snapshot), [snapshot]);
@@ -323,7 +330,7 @@ function Canvas({
         label="isometric"
         project={iso.project}
         scene={iso.scene}
-        encoding={encodingOf(page.encoding)}
+        encoding={scale.encoding}
         fitKey={iso.fitKey}
         selected={selected}
         // The set rides `critical` (a heavy ink underlay that draws on any projection); the orbit
@@ -343,6 +350,7 @@ function Canvas({
         }}
         onDrag={iso.onDrag}
         underlay={underlay}
+        controls={<EncodingPicker value={scale.encoding.key} onPick={(key) => setPage({ encoding: key })} />}
       />
 
       <div
@@ -372,7 +380,15 @@ function Canvas({
       </div>
 
       {/* Lifted one control row so the proto's variant switcher pill never covers it. */}
-      <KeyLegend keys={CANVAS_KEYS} className="absolute bottom-12 left-2" />
+      <div className="absolute bottom-12 left-2 flex flex-col items-start gap-1">
+        <ScaleLegend
+          encoding={scale.encoding}
+          counts={scale.counts}
+          nameOf={scale.nameOf}
+          onSelect={(id) => onSelect(id)}
+        />
+        <KeyLegend keys={CANVAS_KEYS} lead={0} />
+      </div>
 
       <Popover open={!!open} onOpenChange={(o) => (o ? null : setOpen(null))}>
         <PopoverContent anchor={anchor} data-proto-c-popover={open?.what ?? ""}>

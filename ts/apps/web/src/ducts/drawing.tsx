@@ -80,6 +80,23 @@ const span = (segment: Segment, project: Project) => {
   return Math.hypot(b[0] - a[0], b[1] - a[1]);
 };
 
+/** A flow arrow under this many screen px of its segment would crowd the line; it is not drawn. */
+const ARROW_MIN_PX = 28;
+const ARROW = 4.5;
+
+/** The segment's longest projected piece: where its flow arrow sits, and which way that piece runs. */
+const longestRun = (segment: Segment, project: Project) => {
+  let best: { mid: Point2; angle: number; length: number } | null = null;
+  for (let i = 1; i < segment.polyline.length; i++) {
+    const [ax, ay] = project(segment.polyline[i - 1]!);
+    const [bx, by] = project(segment.polyline[i]!);
+    const length = Math.hypot(bx - ax, by - ay);
+    if (!best || length > best.length)
+      best = { mid: [(ax + bx) / 2, (ay + by) / 2], angle: Math.atan2(by - ay, bx - ax), length };
+  }
+  return best;
+};
+
 const fitView = (box: Bounds2, size: Viewport2): View => {
   const w = Math.max(box.maxX - box.minX, 1);
   const h = Math.max(box.maxY - box.minY, 1);
@@ -166,6 +183,7 @@ export function DuctDrawing({
   onDrag,
   underlay,
   lit, // proto: orbit
+  controls, // proto: encoding
 }: {
   label: string;
   project: Project;
@@ -189,6 +207,8 @@ export function DuctDrawing({
   underlay?: (box: Bounds2) => ReactNode;
   /** proto: orbit — a hovered set from outside the drawing; the run lens dims everything else. */
   lit?: ReadonlySet<number>;
+  /** proto: encoding — controls the canvas owns (the encoding picker), beside the run lens. */
+  controls?: ReactNode;
 }) {
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const [size, setSize] = useState<Viewport2 | null>(null);
@@ -229,25 +249,19 @@ export function DuctDrawing({
     };
   }, [host]);
 
-  // Projected once per projection: the heavy strings never rebuild on pan or zoom.
-  const drawn = useMemo(() => {
+  // Projected once per projection: the heavy strings never rebuild on pan, zoom or a new encoding.
+  const geometry = useMemo(() => {
     const segments = scene.segments.map((facts) => {
       const riser = span(facts.segment, project) < RISER_FT && facts.segment.lengthFt > 0.5;
       return {
         facts,
-        stroke: strokeOf(encoding, facts),
         d: d([facts.segment], project),
         riser: riser ? project(facts.segment.polyline[0]!) : null,
+        run: longestRun(facts.segment, project),
       };
     });
     const context = scene.context.map((level) => d(level, project));
-    const nodes = scene.nodes.map((facts) => ({
-      facts,
-      at: project(facts.node.point),
-      stroke: encoding.nodes
-        ? strokeOf(encoding, facts)
-        : { ink: nodeInk(encoding, facts.issues), dash: null },
-    }));
+    const nodes = scene.nodes.map((facts) => ({ facts, at: project(facts.node.point) }));
     const issues = scene.issues.map((item) => ({ issue: item, at: project(item.point!) }));
     const points = [
       ...scene.segments.flatMap((f) => f.segment.polyline.map(project)),
@@ -263,16 +277,34 @@ export function DuctDrawing({
       issues,
       box: contextPoints.length ? boundsOf(contextPoints) : null,
     };
-  }, [scene, project, encoding]);
+  }, [scene, project]);
+  // A new encoding only re-inks: the geometry, and so the fit, never see it.
+  const drawn = useMemo(
+    () => ({
+      ...geometry,
+      segments: geometry.segments.map((s) => ({
+        ...s,
+        stroke: strokeOf(encoding, s.facts),
+        arrow: encoding.arrow?.(s.facts) ?? null,
+      })),
+      nodes: geometry.nodes.map((n) => ({
+        ...n,
+        stroke: encoding.nodes
+          ? strokeOf(encoding, n.facts)
+          : { ink: nodeInk(encoding, n.facts.issues), dash: null },
+      })),
+    }),
+    [geometry, encoding],
+  );
 
   const fitted = useRef("");
   useEffect(() => {
-    if (!size || !drawn.box) return;
+    if (!size || !geometry.box) return;
     const key = `${fitKey}|${size.width}|${size.height}`;
     if (fitted.current === key) return;
     fitted.current = key;
-    setView(fitView(drawn.box, size));
-  }, [size, drawn.box, fitKey]);
+    setView(fitView(geometry.box, size));
+  }, [size, geometry.box, fitKey]);
   // proto: orbit — the camera rides `project`; null for every other projection.
   const orbit = useOrbitDrawing(orbitOf(project), {
     selected,
@@ -280,6 +312,7 @@ export function DuctDrawing({
     critical,
     fit: (box) => size && setView(fitView(box, size)),
     onSelect,
+    controls,
   });
 
   const screen = ([x, y]: Point2): Point2 => [x * view.scale + view.tx, y * view.scale + view.ty];
@@ -442,6 +475,32 @@ export function DuctDrawing({
                 {back ? <circle r={9} fill={back} /> : null}
                 <circle r={5} fill={token("page")} stroke={stroke.ink} strokeWidth={stroke.width} />
                 <path d="M-3.5 3.5L3.5 -3.5" stroke={stroke.ink} strokeWidth={1.5} />
+              </g>
+            );
+          })}
+          {drawn.segments.map(({ facts, stroke, run, arrow }) => {
+            // A chevron on the segment's longest piece, pointing with the air, on a page halo.
+            if (arrow == null || !run || run.length * view.scale < ARROW_MIN_PX) return null;
+            const [x, y] = screen(run.mid);
+            const deg = (run.angle * 180) / Math.PI + (arrow === 1 ? 0 : 180);
+            const chevron = `M${-ARROW} ${-ARROW}L${ARROW * 0.6} 0L${-ARROW} ${ARROW}`;
+            return (
+              <g
+                key={`a${facts.segment.id}`}
+                data-flow-arrow={arrow}
+                transform={`translate(${x} ${y}) rotate(${deg})`}
+                opacity={orbit.fade(facts.segment.id)} // proto: orbit
+                pointerEvents="none"
+              >
+                <path d={chevron} fill="none" stroke={token("page")} strokeWidth={stroke.width + 3} />
+                <path
+                  d={chevron}
+                  fill="none"
+                  stroke={stroke.ink}
+                  strokeWidth={Math.max(1.5, stroke.width * 0.75)}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </g>
             );
           })}

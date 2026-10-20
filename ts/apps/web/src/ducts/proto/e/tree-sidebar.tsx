@@ -8,6 +8,9 @@ import { useState } from "react";
 import { ListTree } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
 import { Tree } from "@pe/kit/lang/row";
+import { tokenRef } from "@pe/kit/lib/token";
+
+import { formatQuantity, type Encoding, type Quantity } from "../../encoding";
 
 import type { TreeNode } from "../b/model";
 import { MetaBar } from "./bar";
@@ -27,6 +30,62 @@ export interface TreeCtx {
   light: (ids: readonly number[] | null) => void;
   select: (id: number | null) => void;
   jumpToRule: (ruleKey: string) => void;
+  /**
+   * The drawing's encoding when it reads a quantity (size, flow, velocity, a drop, Pe's loss): each
+   * row then shows that quantity, the largest under it, against the group's max. Null keeps the
+   * fan-to-here loss.
+   */
+  reading: Encoding | null;
+}
+
+/** The largest value under a node and the element that holds it. */
+const peakOf = (q: Quantity, ids: readonly number[]) => {
+  let best: { id: number; value: number } | null = null;
+  for (const id of ids) {
+    const value = q.of.get(id);
+    if (value != null && (!best || value > best.value)) best = { id, value };
+  }
+  return best;
+};
+
+/** The bar ink of a value: its ramp step on a sequential scale, plain secondary ink otherwise. */
+const inkOf = (encoding: Encoding, q: Quantity, value: number) => {
+  if (encoding.kind !== "sequential") return tokenRef("ink-2");
+  const i = q.edges.findIndex((edge) => value < edge);
+  return encoding.bins[`b${i === -1 ? q.edges.length : i}`]?.stroke.ink ?? tokenRef("ink-2");
+};
+
+/** A row's quantity: a bar against the group's max in the value's own ramp ink, and the number. */
+function QuantityBar({ encoding, ids }: { encoding: Encoding; ids: readonly number[] }) {
+  const q = encoding.quantity!;
+  const peak = peakOf(q, ids);
+  const share = peak && q.max ? Math.min(1, peak.value / q.max) : null;
+  return (
+    <span
+      className="inline-flex items-center gap-1.5"
+      data-e-quantity={peak ? peak.value : ""}
+      data-e-peak={peak?.id ?? ""}
+      title={peak ? `${formatQuantity(q, peak.value)} ${q.unit}` : `no ${encoding.label} here`}
+    >
+      <span className="relative inline-block h-1.5 w-16" aria-hidden>
+        {share != null ? (
+          <>
+            <span className="absolute inset-0" style={{ backgroundColor: tokenRef("line") }} />
+            <span
+              className="absolute inset-y-0 left-0"
+              style={{ width: `${share * 100}%`, backgroundColor: inkOf(encoding, q, peak!.value) }}
+            />
+          </>
+        ) : null}
+      </span>
+      <span className="face-mono w-12 text-right">{peak ? formatQuantity(q, peak.value) : "—"}</span>
+      {peak && peak.id === q.maxId ? (
+        <span className="w-6 text-ink-2" title={`the group's max ${encoding.label}`}>max</span>
+      ) : (
+        <span className="w-6" />
+      )}
+    </span>
+  );
 }
 
 /** Every element id under a node, its own first: the set a hover lights. */
@@ -74,7 +133,9 @@ export function SystemTree({ ctx }: { ctx: TreeCtx }) {
           // Always a title: the kit Row wraps itself in a Tooltip only once it measures a cut
           // title, and that late wrap re-renders the row and drops the chevron's first press.
           title: label,
-          meta: (
+          meta: ctx.reading?.quantity ? (
+            <QuantityBar encoding={ctx.reading} ids={idsOf(n)} />
+          ) : (
             <MetaBar
               value={n.total}
               scale={ctx.scale}

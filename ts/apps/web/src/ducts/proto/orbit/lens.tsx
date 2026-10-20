@@ -7,7 +7,7 @@
  * nothing (counsel's choice, re-openable). Also: the selection pivot, `F` to frame, Esc to clear,
  * double-click to select and frame, and the globe in the top-right corner.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Bounds2 } from "#/lib/affine-frame";
 import { Button } from "@pe/kit/lang/button";
@@ -38,9 +38,11 @@ export function useHoverSet(): {
   return { hovered, hover };
 }
 
-function OrbitOverlay({ orbit }: { orbit: Orbit }) {
-  const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
-  const on = orbit.lens === "run";
+const stop = (event: { stopPropagation: () => void }) => event.stopPropagation();
+
+/** The canvas's top-right corner: the globe, then one row of the run lens and the caller's controls. */
+function OrbitOverlay({ orbit, controls }: { orbit: Orbit | null; controls?: ReactNode }) {
+  const on = orbit?.lens === "run";
   return (
     <div
       data-orbit=""
@@ -49,8 +51,10 @@ function OrbitOverlay({ orbit }: { orbit: Orbit }) {
       onClick={stop}
       onDoubleClick={stop}
     >
-      <Globe orbit={orbit} />
-      <Button
+      {orbit ? <Globe orbit={orbit} /> : null}
+      <div className="flex items-center gap-1">
+        {controls}
+        {orbit ? <Button
         type="button"
         kind="framed"
         pressed={on}
@@ -58,7 +62,8 @@ function OrbitOverlay({ orbit }: { orbit: Orbit }) {
         onClick={() => orbit.setLens(on ? "off" : "run")}
       >
         run lens {on ? "on" : "off"}
-      </Button>
+      </Button> : null}
+      </div>
     </div>
   );
 }
@@ -76,6 +81,7 @@ export function useOrbitDrawing(
     critical,
     fit,
     onSelect,
+    controls,
   }: {
     selected: ReadonlySet<number>;
     /** The hover set from outside the drawing; it wins over the selection's runs while non-empty. */
@@ -84,6 +90,8 @@ export function useOrbitDrawing(
     critical: ReadonlySet<number> | undefined;
     fit: (box: Bounds2) => void;
     onSelect: (id: number | null) => void;
+    /** proto: encoding — the canvas's own controls, in the overlay's row beside the run lens. */
+    controls?: ReactNode;
   },
 ) {
   const latest = useRef({ orbit, selected, onSelect });
@@ -132,7 +140,7 @@ export function useOrbitDrawing(
       lit && (element == null || !lit.has(element)) ? FADE : undefined,
     /** Whole-context fade under the run lens. */
     fadeAll: lit ? FADE : undefined,
-    overlay: orbit ? <OrbitOverlay orbit={orbit} /> : null,
+    overlay: orbit || controls ? <OrbitOverlay orbit={orbit} controls={controls} /> : null,
     onDoubleClick: orbit
       ? (event: { target: EventTarget }) => {
           const hit =

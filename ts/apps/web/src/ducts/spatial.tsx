@@ -17,8 +17,10 @@ import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 import { Switcher } from "#/components/lang/switcher";
 import { ClaimsList, elementNamer, LegFacts, nameOf, PlaceFacts, ShowInRevit } from "./claims";
-import { DuctDrawing, GlyphKey, type Scene } from "./drawing";
-import { DASH_CLASS, ENCODING_KEYS, ENCODINGS, encodingOf, type Encoding } from "./encoding";
+import { DuctDrawing, GlyphKey } from "./drawing";
+import { EncodingPicker } from "./proto/encoding/picker"; // proto: encoding
+import { ScaleLegend } from "./proto/encoding/scale-legend"; // proto: encoding
+import { useGroupEncoding } from "./proto/encoding/use-encoding"; // proto: encoding
 import { NodeFactsView, SegmentFactsView } from "./facts";
 import { IssueLegend } from "./issues";
 import { useIso } from "./iso";
@@ -34,68 +36,6 @@ import { groupTree, runsOf } from "@pe/ducts-domain/topology";
 
 /** proto: orbit — a sidebar lights a set: `const { hovered, hover } = useHoverSet()`, pass `hovered` here, call `hover(ids)` from rows. */
 export { useHoverSet, type HoverTarget } from "./proto/orbit/lens";
-
-function EncodingBand({
-  encoding,
-  encodingKey,
-  scene,
-  snapshot,
-  pick,
-}: {
-  encoding: Encoding;
-  encodingKey: string;
-  scene: Scene;
-  snapshot: DuctSnapshot;
-  pick: (key: string) => void;
-}) {
-  const counts = new Map<string, number>();
-  for (const facts of scene.segments) {
-    const bin = encoding.bin(facts);
-    counts.set(bin, (counts.get(bin) ?? 0) + 1);
-  }
-  const layer = encoding.layer ? snapshot.layers.find((l) => l.key === encoding.layer) : null;
-  return (
-    <div className="flex flex-wrap items-center gap-1" aria-label="encoding legend">
-      <Switcher
-        ariaLabel="encoding"
-        value={encodingKey}
-        onChange={pick}
-        options={ENCODING_KEYS.map((key) => ({
-          value: key,
-          label: ENCODINGS[key].label,
-          title: ENCODINGS[key].says,
-        }))}
-      />
-      {Object.entries(encoding.bins).map(([key, bin]) => (
-        <FactChip key={key} title={bin.says}>
-          <span className="flex items-center gap-1" data-bin={key}>
-            <svg aria-hidden width="18" height="10" viewBox="0 0 18 10">
-              <line
-                x1="1"
-                y1="5"
-                x2="17"
-                y2="5"
-                stroke={bin.stroke.ink}
-                strokeWidth={Math.min(bin.stroke.width, 8)}
-                className={bin.stroke.dash ? DASH_CLASS[bin.stroke.dash] : undefined}
-              />
-            </svg>
-            {bin.word} <span className="face-mono">{counts.get(key) ?? 0}</span>
-          </span>
-        </FactChip>
-      ))}
-      {layer ? (
-        <FactChip title={layer.query}>
-          {layer.title} · {layer.provenance} ·{" "}
-          <span className="face-mono">
-            {layer.coverage.have}/{layer.coverage.of}
-          </span>{" "}
-          in the document
-        </FactChip>
-      ) : null}
-    </div>
-  );
-}
 
 const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
@@ -197,7 +137,7 @@ export function Spatial({ // proto: orbit (exported for the variants)
   hovered?: ReadonlySet<number>; // proto: orbit
 }) {
   const [hovered, setHovered] = useState<number | null>(null);
-  const encoding = encodingOf(page.encoding);
+  const { encoding, counts, nameOf: nameOfEncoded } = useGroupEncoding(index.snapshot, priced, page.group, page.encoding);
   // A place's name is the node's label (the staged labelParameter's value); the cut falls back to type and kind.
   const labelOf = useMemo(() => labelOfNode(index.snapshot), [index]);
   const subjectDrawn = useMemo(
@@ -327,13 +267,15 @@ export function Spatial({ // proto: orbit (exported for the variants)
                     : "outlined: longest run (stand-in)"}
                 </FactChip>
               </div>
-              <EncodingBand
-                encoding={encoding}
-                encodingKey={page.encoding}
-                scene={view.scene}
-                snapshot={index.snapshot}
-                pick={(key) => setPage({ encoding: key })}
-              />
+              <div className="flex flex-wrap items-start gap-2" aria-label="encoding">
+                <EncodingPicker value={encoding.key} onPick={(key) => setPage({ encoding: key })} />
+                <ScaleLegend
+                  encoding={encoding}
+                  counts={counts}
+                  nameOf={nameOfEncoded}
+                  onSelect={(id) => setPage({ selected: String(id), issue: "" })}
+                />
+              </div>
             </div>
             <DuctDrawing
               label={view.label}

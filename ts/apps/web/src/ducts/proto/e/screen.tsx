@@ -22,6 +22,8 @@ import { grilleLabels } from "./labels";
 import { Inbox, inboxRows } from "./inbox";
 import { RulesTree, ruleOfIds } from "./rules-pane";
 import { SystemTree } from "./tree-sidebar";
+import { useGroupEncoding } from "../encoding/use-encoding";
+import { formatQuantity } from "../../encoding";
 
 // STAGED_WORK (fixture agent) lands at ../staged/work.ts; the glob is empty until it does.
 const STAGED = import.meta.glob<{ STAGED_WORK?: Record<string, DuctsRouteDocument> }>(
@@ -123,6 +125,9 @@ export function EScreen({ props: routeProps }: { props: ProtoProps }) {
     const n = snapshot ? elementNamer(snapshot, null) : () => null;
     return (id: number) => n(id) ?? "element not in snapshot";
   }, [snapshot]);
+  const encoded = useGroupEncoding(snapshot, priced, page.group, page.encoding);
+  // The tree reads the drawing's quantity; a categorical reading (or none) keeps Pe's fan-to-here loss.
+  const reading = encoded.encoding.quantity ? encoded.encoding : null;
   const [lit, setLit] = useState<ReadonlySet<number>>(new Set());
   const [ruleFocus, setRuleFocus] = useState<string | null>(null);
   const [wideRules, setWideRules] = useState(false);
@@ -185,7 +190,18 @@ export function EScreen({ props: routeProps }: { props: ProtoProps }) {
     >
       {tree ? (
         <>
-          <BarLegend scale={scale} criticalName={critical ? grilleName(critical) : null} />
+          {reading?.quantity ? (
+            <p className="t-small text-ink-2 border-line border-b px-2 py-1" data-e-legend={reading.key}>
+              bar = {reading.label}, {reading.quantity.unit}, the largest under each row · full width
+              = the group's max{" "}
+              <span className="face-mono">
+                {reading.quantity.max == null ? "—" : formatQuantity(reading.quantity, reading.quantity.max)}
+              </span>{" "}
+              at {reading.quantity.maxId == null ? "no element" : encoded.nameOf(reading.quantity.maxId)}
+            </p>
+          ) : (
+            <BarLegend scale={scale} criticalName={critical ? grilleName(critical) : null} />
+          )}
           <div className="flex min-h-0 flex-1 flex-col" onMouseLeave={() => light(null)}>
             <SystemTree
               key={tree.key}
@@ -199,6 +215,7 @@ export function EScreen({ props: routeProps }: { props: ProtoProps }) {
                 light,
                 select,
                 jumpToRule: setRuleFocus,
+                reading,
               }}
             />
           </div>
@@ -313,7 +330,7 @@ export function EScreen({ props: routeProps }: { props: ProtoProps }) {
         end={
           <div className="flex size-full min-h-0">
             <div className="relative min-w-0 flex-1">
-              <ECanvas {...props} lit={lit} issueScope={issueScope} />
+              <ECanvas {...props} lit={lit} issueScope={issueScope} scale={encoded} />
             </div>
             {right}
           </div>
