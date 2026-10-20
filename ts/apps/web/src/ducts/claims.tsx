@@ -15,6 +15,7 @@ import {
 
 import { FactChip } from "@pe/kit/lang/chip";
 import { Button } from "@pe/kit/lang/button";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { callHostRpc } from "#/host/client";
 import { tokenRef } from "@pe/kit/lib/token";
 import { snapshotById } from "@pe/ducts-domain/readiness";
@@ -147,33 +148,36 @@ function ClaimText({
     typeof part === "string" ? (
       <span key={i}>{part}</span>
     ) : (
-      <button
+      <TooltipHint
         key={i}
-        type="button"
-        data-claim-element={part.id}
-        aria-label={`${part.name} ${part.id}`}
-        title={`${part.name} · element ${part.id}: ${doc ? "click to select it in Revit" : "click to select it in the drawing"}`}
-        className="cursor-pointer underline decoration-dotted underline-offset-2"
-        onMouseEnter={() => onHover(part.id)}
-        onMouseLeave={() => onHover(null)}
-        onFocus={() => onHover(part.id)}
-        onBlur={() => onHover(null)}
-        onClick={() => {
-          if (!doc) return onPick(part.id);
-          onShown("selecting…");
-          void showElements(doc, [part.id]).then(onShown);
-        }}
+        content={`${part.name} · element ${part.id}: ${doc ? "click to select it in Revit" : "click to select it in the drawing"}`}
       >
-        {part.dot ? (
-          <span
-            aria-hidden
-            className="inline-block size-1.5 rounded-full align-middle"
-            style={{ backgroundColor: tokenRef("ink-2") }}
-          />
-        ) : (
-          part.name
-        )}
-      </button>
+        <button
+          type="button"
+          data-claim-element={part.id}
+          aria-label={`${part.name} ${part.id}`}
+          className="cursor-pointer underline decoration-dotted underline-offset-2"
+          onMouseEnter={() => onHover(part.id)}
+          onMouseLeave={() => onHover(null)}
+          onFocus={() => onHover(part.id)}
+          onBlur={() => onHover(null)}
+          onClick={() => {
+            if (!doc) return onPick(part.id);
+            onShown("selecting…");
+            void showElements(doc, [part.id]).then(onShown);
+          }}
+        >
+          {part.dot ? (
+            <span
+              aria-hidden
+              className="inline-block size-1.5 rounded-full align-middle"
+              style={{ backgroundColor: tokenRef("ink-2") }}
+            />
+          ) : (
+            part.name
+          )}
+        </button>
+      </TooltipHint>
     ),
   );
 }
@@ -230,16 +234,19 @@ export function ClaimsList({
               outlineOffset: 2,
             }}
           >
-            <button
-              type="button"
-              aria-label={`select claim ${i + 1}`}
-              className="face-mono mt-0.5 inline-flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[10px]"
-              style={{ backgroundColor: claimInk(claim), color: tokenRef("page") }}
-              onClick={() => onSelect(claim)}
-              title={`select claim ${i + 1}: its places and legs light up in the drawing`}
+            <TooltipHint
+              content={`select claim ${i + 1}: its places and legs light up in the drawing`}
             >
-              {i + 1}
-            </button>
+              <button
+                type="button"
+                aria-label={`select claim ${i + 1}`}
+                className="face-mono mt-0.5 inline-flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-full text-[10px]"
+                style={{ backgroundColor: claimInk(claim), color: tokenRef("page") }}
+                onClick={() => onSelect(claim)}
+              >
+                {i + 1}
+              </button>
+            </TooltipHint>
             <span className="min-w-0 flex-1">
               <ClaimText
                 parts={claimParts(claim.text, nameOfId)}
@@ -248,15 +255,18 @@ export function ClaimsList({
                 onPick={onPick}
                 onShown={setSaid}
               />{" "}
-              <button
-                type="button"
-                className="text-ink-2 face-mono t-small cursor-pointer text-left"
-                onClick={() => onSelect(claim)}
-                title={`select claim ${i + 1}: its places and legs light up in the drawing`}
+              <TooltipHint
+                content={`select claim ${i + 1}: its places and legs light up in the drawing`}
               >
-                {claim.state} · at {names.join(", ")}
-                {verdict ? ` · ${VERDICTS.find((v) => v.value === verdict)?.word}` : ""}
-              </button>
+                <button
+                  type="button"
+                  className="text-ink-2 face-mono t-small cursor-pointer text-left"
+                  onClick={() => onSelect(claim)}
+                >
+                  {claim.state} · at {names.join(", ")}
+                  {verdict ? ` · ${VERDICTS.find((v) => v.value === verdict)?.word}` : ""}
+                </button>
+              </TooltipHint>
             </span>
             <span
               className="flex shrink-0 items-center gap-1"

@@ -1661,7 +1661,8 @@ test("the survey joins a sub-tolerance gap, takes the terminal flow from the loa
     expect.objectContaining({
       kind: "joined-by-proximity",
       elementIds: [1, 2],
-      clearer: "pea",
+      clearer: "person",
+      grade: "stretched",
       assumed: expect.stringContaining("0.40 in apart; joined"),
     }),
     expect.objectContaining({
@@ -1673,7 +1674,7 @@ test("the survey joins a sub-tolerance gap, takes the terminal flow from the loa
   ]);
   expect(summary.findingCounts).toEqual({
     byKind: { "joined-by-proximity": 1, "no-fan-static": 1 },
-    byClearer: { route: 1, pea: 1, person: 0 },
+    byClearer: { route: 1, pea: 0, person: 1 },
   });
   expect(summary.completeness.reasons.map((r) => r.code)).not.toContain("unreached-terminals");
   expect(summary.completeness.reasons.map((r) => r.code)).not.toContain("unknown-terminal-flow");
@@ -1712,5 +1713,5 @@ test("the survey joins a sub-tolerance gap, takes the terminal flow from the loa
   expect(markless.findings).toContainEqual(
     expect.objectContaining({ kind: "no-mark", elementIds: [1], clearer: "person" }),
   );
-  expect(markless.findingCounts.byClearer).toEqual({ route: 1, pea: 1, person: 2 });
+  expect(markless.findingCounts.byClearer).toEqual({ route: 1, pea: 0, person: 3 });
 });
