@@ -32,6 +32,9 @@ import { indexOf, subjectScene, type DuctIndex } from "./scene";
 import { READY } from "./tables";
 import { groupTree, runsOf } from "@pe/ducts-domain/topology";
 
+/** proto: orbit — a sidebar lights a set: `const { hovered, hover } = useHoverSet()`, pass `hovered` here, call `hover(ids)` from rows. */
+export { useHoverSet, type HoverTarget } from "./proto/orbit/lens";
+
 function EncodingBand({
   encoding,
   encodingKey,
@@ -130,6 +133,7 @@ export function DuctsSpatial({
   subject = null,
   doc = null,
   orbit, // proto: orbit
+  hovered, // proto: orbit
 }: {
   snapshot: DuctSnapshot | null;
   ready: Record<string, GroupReadiness>;
@@ -144,6 +148,8 @@ export function DuctsSpatial({
   doc?: { session: string; openId: string } | null;
   /** proto: orbit — the globe camera on the isometric; absent falls back to the URL shim in `useIso`. */
   orbit?: boolean;
+  /** proto: orbit — a hovered set from a sidebar (`useHoverSet`); one id or many, empty for none. */
+  hovered?: ReadonlySet<number>;
 }) {
   const index = useMemo(() => (snapshot ? indexOf(snapshot, priced) : null), [snapshot, priced]);
   if (!index || empty)
@@ -164,6 +170,7 @@ export function DuctsSpatial({
       subject={subject}
       doc={doc}
       orbit={orbit}
+      hovered={hovered}
     />
   );
 }
@@ -177,6 +184,7 @@ export function Spatial({ // proto: orbit (exported for the variants)
   subject,
   doc,
   orbit, // proto: orbit
+  hovered: lit, // proto: orbit
 }: {
   index: DuctIndex;
   ready: Record<string, GroupReadiness>;
@@ -186,6 +194,7 @@ export function Spatial({ // proto: orbit (exported for the variants)
   subject: Subject | null;
   doc: { session: string; openId: string } | null;
   orbit?: boolean; // proto: orbit
+  hovered?: ReadonlySet<number>; // proto: orbit
 }) {
   const [hovered, setHovered] = useState<number | null>(null);
   const encoding = encodingOf(page.encoding);
@@ -348,6 +357,7 @@ export function Spatial({ // proto: orbit (exported for the variants)
               }
               onDrag={view.onDrag}
               underlay={view.underlay}
+              lit={lit} // proto: orbit
             />
             {sub && subject ? (
               <div className="max-h-56 shrink-0 overflow-auto border-t border-line">

@@ -165,6 +165,7 @@ export function DuctDrawing({
   onSelectClaim,
   onDrag,
   underlay,
+  lit, // proto: orbit
 }: {
   label: string;
   project: Project;
@@ -186,6 +187,8 @@ export function DuctDrawing({
   onDrag?: (dx: number, dy: number, shift: boolean) => boolean;
   /** Drawn first, in drawing feet, given the visible bounds. */
   underlay?: (box: Bounds2) => ReactNode;
+  /** proto: orbit — a hovered set from outside the drawing; the run lens dims everything else. */
+  lit?: ReadonlySet<number>;
 }) {
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const [size, setSize] = useState<Viewport2 | null>(null);
@@ -273,8 +276,8 @@ export function DuctDrawing({
   // proto: orbit — the camera rides `project`; null for every other projection.
   const orbit = useOrbitDrawing(orbitOf(project), {
     selected,
-    host,
-    size,
+    lit,
+    critical,
     fit: (box) => size && setView(fitView(box, size)),
     onSelect,
   });
@@ -339,7 +342,6 @@ export function DuctDrawing({
           aria-label={label}
           style={{ position: "absolute", left: 0, top: 0 }}
         >
-          {orbit.wrap(<>{/* proto: orbit */}
           <g transform={`matrix(${view.scale} 0 0 ${view.scale} ${view.tx} ${view.ty})`}>
             {underlay && visible ? underlay(visible) : null}
             {drawn.context.map((path, i) =>
@@ -505,7 +507,6 @@ export function DuctDrawing({
               onSelectClaim={onSelectClaim}
             />
           ) : null}
-          </>)}
         </svg>
       ) : null}
       {orbit.overlay /* proto: orbit */}

@@ -1,5 +1,5 @@
 /**
- * THROWAWAY (protoui round 1): the orbit camera for the isometric. Elevation is camera state in
+ * THROWAWAY (protoui round 1-2): the orbit camera for the isometric. Elevation is camera state in
  * [0, 90] beside yaw (snapping at plan 90, iso 30, elevation 0); the pivot follows the selection
  * and the drawing translates so the new pivot stays where it was on screen. The camera rides the
  * `project` function it builds (`orbitOf`): the variants hand DuctDrawing only `project`, so that
@@ -12,7 +12,8 @@ import { groupTree, runsOf } from "@pe/ducts-domain/topology";
 import type { Scene } from "../../drawing";
 import type { DuctIndex } from "../../scene";
 
-export type LensMode = "off" | "spot" | "run";
+/** The lens is one toggle: `run` on or off (round 2 killed `spot`). */
+export type LensMode = "off" | "run";
 const DEG_PER_PX = 0.4;
 const SNAPS = [90, 30, 0] as const;
 const SNAP_DEG = 3;
@@ -77,8 +78,6 @@ export const pointsOf = (scene: Scene, ids: ReadonlySet<number>) => {
 export interface Orbit {
   yaw: number;
   elev: number;
-  /** The group's plan grid in degrees; the globe's poles sit on it. */
-  grid: number;
   pivot: readonly number[];
   stretch: number;
   scene: Scene;
@@ -152,7 +151,6 @@ export function useOrbit(
   const orbit: Orbit = {
     yaw,
     elev,
-    grid: o.grid,
     pivot,
     stretch: o.stretch,
     scene: o.scene,
