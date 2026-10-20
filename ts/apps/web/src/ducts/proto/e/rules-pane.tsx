@@ -13,7 +13,7 @@ import { tableOf, unpriced, type Priced } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Tree } from "@pe/kit/lang/row";
 
-import type { LossesWork } from "../../losses-view";
+import type { LossesWork } from "../../work";
 import { Chips, DropCell, StagedRules } from "./rules";
 
 type RuleNode =

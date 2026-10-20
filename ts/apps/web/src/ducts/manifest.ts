@@ -30,11 +30,6 @@ import type { Grids } from "@pe/ducts-domain/loss-grid";
 import { applyRequest, price } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
-const DUCTS_STAGES = [
-  { key: "survey", word: "Surveying ducts" },
-  { key: "losses", word: "Pricing losses" },
-] as const;
-
 /** What Revit said the staged cells would write, and the Work and snapshot it was asked over. */
 export interface DuctsEvaluation {
   revision: number;
@@ -43,29 +38,38 @@ export interface DuctsEvaluation {
 }
 
 const ductsPageSchema = z.object({
-  stage: z.enum(["survey", "losses"]).default("survey"),
-  /** The view the body draws: "" the tables, `tree`, `ledger`, `losses`, `plan` one level, `iso` every level. */
-  view: z.string().default(""),
   /** The subject: one group id (`g<smallest element id>`); empty = the whole document. */
   group: z.string().default(""),
   /** A level id as a string; empty = every level. */
   level: z.string().default(""),
-  /** The layer keys the view draws, as `ducts.snapshot` names them. */
-  layers: z.array(z.string()).default([]),
+  /** The layer keys the picture draws, as `ducts.snapshot` names them, comma separated; empty = none. */
+  layers: z.string().default(""),
   /** The selected element id as a string; empty = none. */
   selected: z.string().default(""),
-  /** The selected issue id (it may name no element: no-root, multi-root); empty = none. */
+  /** The selected issue id (it may name no element: no-root, multi-root); empty = none. Page, never URL. */
   issue: z.string().default(""),
-  /** The spatial views' encoding, a key of `ENCODINGS` (`encoding.tsx`). */
+  /** The picture's encoding, a key of `ENCODINGS` (`encoding.tsx`). */
   encoding: z.string().default("health"),
-  /** The scene the spatial views draw: "" the group scene (`sceneOf`), `subject` the subject scene (`subjectScene`). */
-  scene: z.enum(["", "subject"]).default(""),
+  /** The camera the model picture looks through: the isometric globe, or `plan` (a preset on it). */
+  camera: z.enum(["iso", "plan"]).default("iso"),
+  /** What the picture pane draws: the `model` in space, or the `schematic` one-line. */
+  picture: z.enum(["model", "schematic"]).default("model"),
   /** Bumped by `refresh` and `apply`; the snapshot read keys on it. */
   epoch: z.number().default(0),
   /** The last preview; `apply` is armed while it matches the Work revision and epoch. Page, never URL. */
   evaluation: z.custom<DuctsEvaluation>().nullable().default(null),
 });
 export type DuctsPage = z.infer<typeof ductsPageSchema>;
+/** The Page keys the address carries; every one has a default, so a bare `/ducts` is a page. */
+export const DUCTS_URL = [
+  "group",
+  "level",
+  "selected",
+  "encoding",
+  "layers",
+  "camera",
+  "picture",
+] as const;
 export type DuctsReading = "ducts" | "tables" | "catalogs";
 type DuctsCtx = Ctx<DuctsRouteDocument, DuctsReading, DuctsPage>;
 
@@ -228,7 +232,7 @@ export const manifest = defineRoute<
   // target, subject, slots and epoch; the tables on the session.
   readings: { ducts: () => null, tables: () => null, catalogs: () => null },
   page: ductsPageSchema,
-  stages: DUCTS_STAGES,
+  url: DUCTS_URL,
   actions: {
     refresh: {
       label: "refresh",
@@ -246,7 +250,6 @@ export const manifest = defineRoute<
       does: "ducts.preview-losses",
       input: none,
       dirties: [],
-      stage: "losses",
       waitSeconds: NATIVE_APPLY_WAIT_S,
       requires: { work: true },
       count: (ctx) => stagedCells(ctx.work.doc).length || null,
@@ -272,7 +275,6 @@ export const manifest = defineRoute<
       does: "ducts.apply-losses",
       input: none,
       dirties: [],
-      stage: "losses",
       waitSeconds: NATIVE_APPLY_WAIT_S,
       requires: { work: true },
       ready: (ctx) =>

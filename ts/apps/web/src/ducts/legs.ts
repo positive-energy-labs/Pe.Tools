@@ -48,6 +48,16 @@ export interface Claim {
 export const claimsOf = (cells: Readonly<Record<string, DuctClaim>>): Claim[] =>
   Object.entries(cells).map(([id, { ids, ...rest }]) => ({ id, at: ids, ...rest }));
 
+/** The authored half of a subject scene: the ordered ids and the claims over them. */
+export interface Subject {
+  ids: readonly number[];
+  claims: readonly Claim[];
+  /** A person's verdict on one claim; the route stages it. */
+  onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;
+  /** The Work whose staged ignore verdicts the cut's proximity inferences honor; null honors none. */
+  work?: DuctsRouteDocument | null;
+}
+
 export interface Place {
   id: number;
   name: string;

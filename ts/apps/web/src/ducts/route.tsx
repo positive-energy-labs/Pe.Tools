@@ -1,10 +1,11 @@
 /**
- * /ducts — the Situation over one document's duct networks. The sentence names the document, the
- * subject group, the level and the layers; the body is the view `page.view` names (the tables by
- * default). The snapshot is one `ducts.snapshot` read keyed on the target, the staged parameter
- * slots and `page.epoch`; targeting a document reads it again with no press, choosing a group does not.
- * The losses view is the `losses` stage: it also reads `ducts.tables`, and both reads are
- * provided to the verbs so `preview` and `apply` build their request from what is drawn.
+ * /ducts: the Situation over one document's duct networks, and the one shell under it (E2): the
+ * system tree over the loss Rules, the drawing, the inbox. The sentence names the document, the
+ * subject group and the level. The page is the manifest's `url` keys, so a link lands on the same
+ * place. The snapshot is one `ducts.snapshot` read keyed on the target, the staged parameter slots
+ * and `page.epoch`; targeting a document reads it again with no press, choosing a group does not.
+ * The ASHRAE tables are always read; the snapshot, tables and catalogs are provided to the verbs so
+ * `preview` and `apply` build their request from what is drawn.
  */
 import { useEffect, useMemo, useState } from "react";
 import { stagedDucts, type DuctClaim, type TrichotomyCellLike } from "@pe/agent-contracts";
@@ -13,72 +14,28 @@ import type { Reading } from "@pe/agent-contracts";
 import { Surface } from "#/components/lang/surface";
 import { frozenDemo } from "#/host/demo-client";
 import { SAVED, useDuctSnapshot, useDuctTables, useDuctCatalogs } from "./host";
-import { SCENE_CLAIMS, SCENE_FIXTURE, SCENE_SUBJECT } from "./scene.fixture";
+import { SCENE_CLAIMS, SCENE_FIXTURE } from "./scene.fixture";
 import { RouteShell, useRoute, useRouteThread } from "#/route";
 import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
 import { Situation } from "#/route/situation";
 import { LadderPicker, useDocumentLadder } from "#/route/situation-ladder";
-import { manifest, previewFresh, WRITTEN, type DuctsPage } from "./manifest";
-import { DuctsLosses, revitSays, StagedLosses } from "./losses-view";
+import { manifest, WRITTEN } from "./manifest";
 import { price } from "@pe/ducts-domain/pricing";
 import { readiness } from "@pe/ducts-domain/readiness";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { verdictPatches } from "./claims";
 import { claimsOf, type Claim } from "./legs";
-import { DuctsLedger } from "./ledger";
 import { provisionalWords } from "./provisional";
-import { DuctsSpatial, type Subject } from "./spatial";
-import { DuctsTables } from "./tables";
-import { DuctsTree } from "./tree";
 import type { ProtoProps } from "./proto/props";
-import { PrototypeSwitcher, type VariantId } from "./proto/switcher";
-import { VariantB } from "./proto/variant-b";
-import { VariantC } from "./proto/variant-c";
-import { VariantD } from "./proto/variant-d";
-import { VariantE2 } from "./proto/variant-e2";
-
-/** The views `page.view` keys; "" is the tables. */
-const VIEWS = [
-  { id: "", label: "tables", sub: "groups, segments, issues and layers" },
-  { id: "tree", label: "tree", sub: "one-line schematic from the root to each terminal" },
-  { id: "ledger", label: "ledger", sub: "the Manual D worksheet: runs, issues and assumptions" },
-  {
-    id: "losses",
-    label: "losses",
-    sub: "per grille, what eats the pressure; stage fitting tables and drops, then write to Revit",
-  },
-  { id: "plan", label: "a plan", sub: "the network on one level" },
-  { id: "iso", label: "an isometric", sub: "the network across every level" },
-] as const;
+import { EScreen } from "./proto/e/screen";
 
 const fmt = (n: number | null | undefined) => (n == null ? "—" : n.toFixed(4));
 
-/** The URL half of the page; the rest (epoch, stage) is ephemeral. */
-export type DuctsSearch = Pick<
-  DuctsPage,
-  "view" | "group" | "level" | "selected" | "issue" | "encoding" | "scene"
-> & {
-  layers: string;
-};
+/** Revit's critical path as a word, whatever the engine flag: a system with no path reads "no path". */
+const revitSays = (inWg: number | null | undefined) => (inWg == null ? "no path" : fmt(inWg));
 
-const layerWord = (keys: readonly string[], snapshot: DuctSnapshot | null) =>
-  keys.length === 0
-    ? null
-    : keys
-        .map((key) => snapshot?.layers.find((layer) => layer.key === key)?.title ?? key)
-        .join(", ");
-
-export function DuctsRoute({
-  search,
-  setSearch,
-  variant,
-}: {
-  search: DuctsSearch;
-  setSearch: (next: Partial<DuctsSearch>) => void;
-  /** THROWAWAY protoui: `?variant=E2|B|C|D` swaps the body for a prototype. */
-  variant?: VariantId;
-}) {
+/** `url` is false in a chat pane, which does not own the address. */
+export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   const [chosen] = useChooseTarget();
   const thread = useRouteThread();
   // `?demo=scene` mounts the makeup-air fixture, snapshot included, and no host is read; its
@@ -93,16 +50,7 @@ export function DuctsRoute({
     tables: { state: "absent" },
     catalogs: { state: "absent" },
   });
-  const handle = useRoute(manifest, {
-    target: chosen,
-    thread,
-    provided,
-    page: {
-      ...search,
-      stage: search.view === "losses" ? "losses" : "survey",
-      layers: search.layers ? search.layers.split(",") : [],
-    },
-  });
+  const handle = useRoute(manifest, { target: chosen, thread, provided, url });
   const [page, setPage] = handle.page;
   const ladder = useDocumentLadder(handle);
   const doc =
@@ -119,10 +67,8 @@ export function DuctsRoute({
   const snapshot = demo?.snapshot ?? read.snapshot;
   const error = demo ? null : read.error;
   const pending = demo ? false : read.pending;
-  // The spatial views ink Pe's losses, so they read the tables too; the other views do not.
-  const priceable = page.view === "losses" || page.view === "plan" || page.view === "iso";
   const catalogs = useDuctCatalogs(page.epoch);
-  const tables = useDuctTables(priceable ? (doc?.session ?? null) : null);
+  const tables = useDuctTables(doc?.session ?? null);
   useEffect(() => {
     setProvided({
       catalogs: { state: "ready", observation: catalogs.tables },
@@ -165,40 +111,6 @@ export function DuctsRoute({
     [snapshot, tables.grids, handle.work.doc, catalogs.tables],
   );
 
-  // The URL carries the view, subject, level, layers and selection, so a link lands on the same place.
-  useEffect(() => {
-    const layers = page.layers.join(",");
-    if (
-      page.view !== search.view ||
-      page.group !== search.group ||
-      page.level !== search.level ||
-      page.selected !== search.selected ||
-      page.issue !== search.issue ||
-      page.encoding !== search.encoding ||
-      page.scene !== search.scene ||
-      layers !== search.layers
-    )
-      setSearch({
-        view: page.view,
-        group: page.group,
-        level: page.level,
-        selected: page.selected,
-        issue: page.issue,
-        encoding: page.encoding,
-        scene: page.scene,
-        layers,
-      });
-  }, [
-    page.view,
-    page.group,
-    page.level,
-    page.selected,
-    page.issue,
-    page.encoding,
-    page.scene,
-    page.layers,
-  ]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const ready = useMemo(
     () => (snapshot ? readiness(snapshot, handle.work.doc) : {}),
     [snapshot, handle.work.doc],
@@ -234,7 +146,7 @@ export function DuctsRoute({
             : group
               ? `Pe fan ${fmt(solved?.fan)} in-wg${provisionalWords(solved?.provisional ?? null)} (not in Revit until written), Revit ${revitSays(solved?.revitCritical)}`
               : `largest Pe fan ${fmt(priced.now.fan)} in-wg${provisionalWords(priced.now.provisional)} over ${snapshot.groups.length} groups`;
-  // Every written segment's cells count in the Work sentence; the losses body is the band.
+  // Every written segment's cells count in the Work sentence.
   const counted = useMemo(
     () =>
       Object.fromEntries(
@@ -290,43 +202,12 @@ export function DuctsRoute({
         ]}
         disabled={busy}
       />
-      {", as "}
-      <Ladder
-        levels={[
-          {
-            key: "view",
-            label: VIEWS.find((item) => item.id === page.view)?.label ?? page.view,
-            placeholder: "tables",
-            options: VIEWS.map((item) => ({
-              id: item.id || "tables",
-              label: item.label,
-              sub: item.sub,
-            })),
-            picked: (id) => id === (page.view || "tables"),
-            pick: (id) =>
-              setPage({
-                view: id === "tables" ? "" : id,
-                stage: id === "losses" ? "losses" : "survey",
-              }),
-          },
-        ]}
-        disabled={busy}
-      />
-      {page.view === "losses" ? (
-        <>
-          {"; "}
-          {lossesWord}.
-        </>
-      ) : (
-        <>
-          {", drawing "}
-          {layerWord(page.layers, snapshot) ?? "no layers"}.
-        </>
-      )}
+      {"; "}
+      {lossesWord}.
     </>
   );
 
-  // Stable between renders so the memoized losses blocks hold.
+  // Stable between renders so the memoized panes hold.
   const preview = page.evaluation?.response ?? null;
   const work = useMemo(
     () => ({
@@ -346,38 +227,26 @@ export function DuctsRoute({
           ? { says: "reading ducts…", exit: "wait for the snapshot" }
           : null;
 
-  // THROWAWAY protoui: the props every variant receives; the fixture stands in when no host snapshot.
   const [hovered, setHovered] = useState<number | null>(null);
-  const fromFixture = !!variant && !snapshot;
-  const protoSubject = useMemo<Subject | null>(
-    () =>
-      fromFixture
-        ? { ids: SCENE_SUBJECT, claims: claimsOf(SCENE_CLAIMS), onVerdict: () => {} }
-        : subject,
-    [fromFixture, subject],
-  );
-  const protoProps: ProtoProps | null = variant
-    ? {
-        snapshot: snapshot ?? SCENE_FIXTURE.snapshot,
-        fromFixture,
-        priced,
-        findings: catalogs.findings,
-        ready,
-        subject: protoSubject,
-        claims: protoSubject?.claims ?? [],
-        claimCells: fromFixture ? SCENE_CLAIMS : demoClaims,
-        page,
-        setPage,
-        onSelect: (id) => setPage({ selected: id == null ? "" : String(id), issue: "" }),
-        onSelectClaim: (claim) => setPage({ selected: claim.id, issue: "" }),
-        onHover: setHovered,
-        hovered,
-        work,
-        empty: fromFixture ? null : empty,
-        doc,
-        reading: { pending, error: error ?? null },
-      }
-    : null;
+  const shell: ProtoProps = {
+    snapshot,
+    priced,
+    findings: catalogs.findings,
+    ready,
+    subject,
+    claims: subject?.claims ?? [],
+    claimCells: demoClaims,
+    page,
+    setPage,
+    onSelect: (id) => setPage({ selected: id == null ? "" : String(id), issue: "" }),
+    onSelectClaim: (claim) => setPage({ selected: claim.id, issue: "" }),
+    onHover: setHovered,
+    hovered,
+    work,
+    empty,
+    doc,
+    reading: { pending, error: error ?? null },
+  };
 
   return (
     <Surface
@@ -388,7 +257,7 @@ export function DuctsRoute({
           situation={
             <Situation
               handle={handle}
-              commit={page.stage === "losses" ? "apply" : undefined}
+              commit="apply"
               work={{
                 counted,
                 draw: (_summary, line) => (
@@ -398,17 +267,6 @@ export function DuctsRoute({
                         {finding}
                       </p>
                     ))}
-                    {page.view === "losses" && snapshot && tables.grids && priced ? (
-                      <StagedLosses
-                        snapshot={snapshot}
-                        grids={tables.grids}
-                        priced={priced}
-                        evaluation={page.evaluation}
-                        fresh={previewFresh(page, handle.work.revision)}
-                        work={work}
-                        group={page.group}
-                      />
-                    ) : null}
                     {line}
                   </>
                 ),
@@ -436,61 +294,7 @@ export function DuctsRoute({
         />
       }
     >
-      {protoProps && variant ? (
-        <>
-          {variant === "E2" ? (
-            <VariantE2 {...protoProps} />
-          ) : variant === "B" ? (
-            <VariantB {...protoProps} />
-          ) : variant === "C" ? (
-            <VariantC {...protoProps} />
-          ) : (
-            <VariantD {...protoProps} />
-          )}
-          <PrototypeSwitcher variant={variant} />
-        </>
-      ) : page.view === "losses" ? (
-        <DuctsLosses
-          snapshot={snapshot}
-          grids={tables.grids}
-          priced={priced}
-          ready={ready}
-          page={page}
-          setPage={setPage}
-          empty={empty}
-          work={work}
-        />
-      ) : page.view === "tree" ? (
-        <DuctsTree snapshot={snapshot} page={page} setPage={setPage} empty={empty} />
-      ) : page.view === "ledger" ? (
-        <DuctsLedger
-          snapshot={snapshot}
-          ready={ready}
-          page={page}
-          setPage={setPage}
-          empty={empty}
-          work={{ doc: work.doc, write: work.write }}
-        />
-      ) : page.view === "plan" || page.view === "iso" ? (
-        <DuctsSpatial
-          snapshot={snapshot}
-          ready={ready}
-          priced={priced}
-          page={page}
-          setPage={setPage}
-          empty={empty}
-          subject={subject}
-          doc={doc}
-        />
-      ) : (
-        <DuctsTables
-          snapshot={snapshot}
-          ready={ready}
-          page={page}
-          setPage={setPage}
-          empty={empty}
-        />
-      )}
+      <EScreen props={shell} />
     </Surface>
   );
 }
