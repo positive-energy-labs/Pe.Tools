@@ -1,5 +1,5 @@
 /** The Situation's document ladder, its picker, and the contexts Chat hands a hosted route. */
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import {
   machineAttachments,
   type MachineAttachment,
@@ -112,6 +112,24 @@ export function useDocumentLadder(
       });
     else choose(JSON.stringify({ kind: "open", ref }));
   };
+  // Exactly one session holding exactly one document, and nothing bound: bind it as if picked, once.
+  // Several candidates keep asking; a binding that was lost is never replaced for the person.
+  const onlySession = sessions.length === 1 ? sessions[0]! : null;
+  const onlyDoc = onlySession?.documents?.length === 1 ? onlySession.documents[0]! : null;
+  const only =
+    !binding && !hosted && !bound && !lost && onlySession && onlyDoc
+      ? { session: onlySession.session, openId: onlyDoc.openId }
+      : null;
+  const autoBound = useRef<string | null>(null);
+  const [auto, setAuto] = useState(false);
+  useEffect(() => {
+    if (!only || autoBound.current === only.openId) return;
+    autoBound.current = only.openId;
+    setAuto(true);
+    onTarget?.();
+    if (head) void head.set({ kind: "open", ref: only });
+    else choose(JSON.stringify({ kind: "open", ref: only }));
+  }, [only?.session, only?.openId]);
   const sessionWord = session ? name(session) : null;
   const unloaded = (observed?.revit.sessions ?? []).filter(
     (item) =>
@@ -127,6 +145,8 @@ export function useDocumentLadder(
     /** The head's refusal of the last pick (stale head, or a Pea turn holding it). */
     refusal: binding ? null : (head?.refusal ?? null),
     hosted,
+    /** The binding was made for the person (the only session with the only document); said quietly in the sentence. */
+    autoBound: auto && bound != null,
     levels: hosted
       ? []
       : [
@@ -209,12 +229,17 @@ export function LadderPicker({
   return ladder.hosted ? (
     <span data-tone={ladder.lost ? "caution" : undefined}>{ladder.docWord ?? "no document"}</span>
   ) : (
-    <Ladder
-      levels={ladder.levels}
-      disabled={disabled}
-      caution={ladder.lost}
-      open={open}
-      onOpenChange={onOpenChange}
-    />
+    <>
+      <Ladder
+        levels={ladder.levels}
+        disabled={disabled}
+        caution={ladder.lost}
+        open={open}
+        onOpenChange={onOpenChange}
+      />
+      {ladder.autoBound ? (
+        <span className="text-muted-foreground"> (the only open document)</span>
+      ) : null}
+    </>
   );
 }

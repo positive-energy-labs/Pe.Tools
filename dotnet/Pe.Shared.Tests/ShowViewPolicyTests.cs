@@ -29,4 +29,28 @@ public sealed class ShowViewPolicyTests {
         var many = Enumerable.Range(1, 30).Select(i => V(i, $"v{i:00}", ShowViewRole.ThreeD));
         Assert.That(ShowViewPolicy.Order(many), Has.Count.EqualTo(ShowViewPolicy.MaxCandidates));
     }
+
+    [Test]
+    public void Default_3d_wins_and_user_suffixed_default_counts() {
+        var order = ShowViewPolicy.Order([V(1, "3D Mechanical", ShowViewRole.ThreeD), V(2, "{3D - kait}", ShowViewRole.ThreeD)]);
+        Assert.That(order.Select(v => v.Id), Is.EqualTo(new long[] { 2, 1 }));
+    }
+
+    [Test]
+    public void Plumbing_riser_copy_loses_to_mechanical_3d() {
+        var order = ShowViewPolicy.Order([
+            V(1, "3D Riser - Drain Waste Vent Copy 1", ShowViewRole.ThreeD), V(2, "3D Mechanical", ShowViewRole.ThreeD),
+            V(3, "Coordination", ShowViewRole.ThreeD),
+        ]);
+        Assert.That(order.Select(v => v.Id), Is.EqualTo(new long[] { 2, 3, 1 }));
+    }
+
+    [Test]
+    public void Coordination_discipline_beats_plumbing_discipline() {
+        var order = ShowViewPolicy.Order([
+            new ShowViewInfo(1, "View A", ShowViewRole.ThreeD, false, false, ShowViewDiscipline.Plumbing),
+            new ShowViewInfo(2, "View B", ShowViewRole.ThreeD, false, false, ShowViewDiscipline.Coordination),
+        ]);
+        Assert.That(order.Select(v => v.Id), Is.EqualTo(new long[] { 2, 1 }));
+    }
 }
