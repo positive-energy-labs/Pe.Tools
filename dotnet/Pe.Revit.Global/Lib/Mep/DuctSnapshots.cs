@@ -48,15 +48,18 @@ public static class DuctSnapshots {
 #else
         var network = DuctSettings.GetDuctSettings(doc).NetworkBasedCalculations;
 #endif
+        var phases = doc.Phases.Cast<Phase>().ToList();
+        var phaseNames = phases.ToDictionary(ph => ph.Id.Value(), ph => ph.Name);
         var segments = Of(BuiltInCategory.OST_DuctCurves).Concat(Of(BuiltInCategory.OST_FlexDuctCurves))
-            .OfType<MEPCurve>().Select(c => Segment(doc, c, network)).ToList();
+            .OfType<MEPCurve>().Select(c => Segment(doc, c, network) with { PhaseCreated = PhaseOf(c, true, phaseNames), PhaseDemolished = PhaseOf(c, false, phaseNames) }).ToList();
         var schemas = LossSchemas();
         var nodes = new List<DuctNode>();
-        nodes.AddRange(Of(BuiltInCategory.OST_DuctFitting).Select(e => Node(e, Fitting(e), slots, schemas, network, labelParameter)));
-        nodes.AddRange(Of(BuiltInCategory.OST_DuctAccessory).Select(e => Node(e, DuctNodeKind.Accessory, slots, schemas, network, labelParameter)));
-        nodes.AddRange(Of(BuiltInCategory.OST_DuctTerminal).Select(e => Node(e, DuctNodeKind.Terminal, slots, schemas, network, labelParameter)));
+        DuctNode Phased(DuctNode n, Element e) => n with { PhaseCreated = PhaseOf(e, true, phaseNames), PhaseDemolished = PhaseOf(e, false, phaseNames) };
+        nodes.AddRange(Of(BuiltInCategory.OST_DuctFitting).Select(e => Phased(Node(e, Fitting(e), slots, schemas, network, labelParameter), e)));
+        nodes.AddRange(Of(BuiltInCategory.OST_DuctAccessory).Select(e => Phased(Node(e, DuctNodeKind.Accessory, slots, schemas, network, labelParameter), e)));
+        nodes.AddRange(Of(BuiltInCategory.OST_DuctTerminal).Select(e => Phased(Node(e, DuctNodeKind.Terminal, slots, schemas, network, labelParameter), e)));
         nodes.AddRange(Of(BuiltInCategory.OST_MechanicalEquipment)
-            .Where(e => HvacConnectors(e).Any()).Select(e => Node(e, DuctNodeKind.Equipment, slots, schemas, network, labelParameter)));
+            .Where(e => HvacConnectors(e).Any()).Select(e => Phased(Node(e, DuctNodeKind.Equipment, slots, schemas, network, labelParameter), e)));
         var systems = new FilteredElementCollector(doc).OfClass(typeof(MechanicalSystem)).Cast<MechanicalSystem>()
             .Where(m => m.SystemType is DuctSystemType.SupplyAir or DuctSystemType.ReturnAir or DuctSystemType.ExhaustAir)
             .OrderBy(m => m.Name, StringComparer.Ordinal)
@@ -77,7 +80,29 @@ public static class DuctSnapshots {
             systems,
             slots,
             store,
-            storeError);
+            storeError,
+            new DuctPhases(phases.Select(ph => ph.Name).ToList(), PhaseViews(doc, phaseNames)));
+    }
+
+    /// <summary>The element's created (or demolished) phase name; null when it has no phases or none is set.</summary>
+    private static string? PhaseOf(Element e, bool created, IReadOnlyDictionary<long, string> names) =>
+        Try(() => e.HasPhases() ? (created ? e.CreatedPhaseId : e.DemolishedPhaseId) : null) is { } id
+        && names.TryGetValue(id.Value(), out var name)
+            ? name
+            : null;
+
+    /// <summary>Non-template floor, ceiling, structural plan and 3D views counted by the phase and phase filter they show.</summary>
+    private static IReadOnlyList<DuctPhaseViews> PhaseViews(Document doc, IReadOnlyDictionary<long, string> phases) {
+        string? PhaseName(View v, BuiltInParameter p) =>
+            v.get_Parameter(p)?.AsElementId() is { } id && id != ElementId.InvalidElementId
+                ? phases.TryGetValue(id.Value(), out var phase) ? phase : doc.GetElement(id)?.Name
+                : null;
+        return new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>()
+            .Where(v => !v.IsTemplate && v.ViewType is ViewType.FloorPlan or ViewType.CeilingPlan or ViewType.EngineeringPlan or ViewType.ThreeD)
+            .GroupBy(v => (Phase: PhaseName(v, BuiltInParameter.VIEW_PHASE), Filter: PhaseName(v, BuiltInParameter.VIEW_PHASE_FILTER)))
+            .Select(g => new DuctPhaseViews(g.Key.Phase, g.Key.Filter, g.Count()))
+            .OrderByDescending(v => v.Count).ThenBy(v => v.Phase, StringComparer.Ordinal).ThenBy(v => v.Filter, StringComparer.Ordinal)
+            .ToList();
     }
 
     internal static DuctSystem RevitSystem(MechanicalSystem m) {
@@ -343,6 +368,7 @@ public static class DuctSnapshots {
         double? diameter = shape == DuctShape.Round ? R(c.Radius * 24) : null;
         double? width = shape is DuctShape.Rectangular or DuctShape.Oval ? R(c.Width * 12) : null;
         double? height = shape is DuctShape.Rectangular or DuctShape.Oval ? R(c.Height * 12) : null;
+        var frame = Try(() => c.CoordinateSystem);
         return new DuctConnector(
             c.Id,
             c.ConnectorType == ConnectorType.Curve ? "curve" : "end",
@@ -360,7 +386,9 @@ public static class DuctSnapshots {
             }) ?? "n/a",
             Try(() => c.DuctSystemType.ToString()),
             ConnectedTo(c),
-            DuctNetwork.Area(shape, diameter, width, height) is { } area ? R(area, 5) : null);
+            DuctNetwork.Area(shape, diameter, width, height) is { } area ? R(area, 5) : null,
+            frame is null ? null : V(frame.BasisZ),
+            frame is not null && shape is DuctShape.Rectangular or DuctShape.Oval ? V(frame.BasisX) : null);
     }
 
     private static DuctRef? ConnectedTo(Connector c) {
@@ -418,5 +446,6 @@ public static class DuctSnapshots {
         || ex.GetType().Namespace?.StartsWith("Autodesk.Revit", StringComparison.Ordinal) == true;
 
     private static double[] P(XYZ p) => [p.X, p.Y, p.Z];
+    private static double[] V(XYZ v) => [R(v.X, 6), R(v.Y, 6), R(v.Z, 6)];
     private static double R(double v, int digits = 3) => Math.Round(v, digits);
 }

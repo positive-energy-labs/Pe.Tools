@@ -133,7 +133,18 @@ public sealed record DuctSnapshotData(
     IReadOnlyList<DuctSystem> Systems,
     DuctParameterSlots Slots,
     DuctLossStore? Store = null,
-    string? StoreError = null);
+    string? StoreError = null,
+    DuctPhases? Phases = null);
+
+/// <summary>
+///     The document's phases, Document.Phases in order (earliest first), and Views: how many non-template plan and 3D
+///     views show each phase (VIEW_PHASE) under each phase filter (VIEW_PHASE_FILTER), most first. A firm models what its
+///     views show; an element in a phase no view shows is often forgotten (pressure-drop ledger, 2026-10-19).
+/// </summary>
+public sealed record DuctPhases(IReadOnlyList<string> Order, IReadOnlyList<DuctPhaseViews> Views);
+
+/// <summary>Count views show Phase (null when a view has none) under Filter (null when none).</summary>
+public sealed record DuctPhaseViews(string? Phase, string? Filter, int Count);
 
 /// <summary>Physical XYZ and segment LengthFt preserve native model-foot binary64 values; other facts retain their stated units/rounding.</summary>
 [JsonConverter(typeof(StringEnumConverter))]
@@ -230,6 +241,9 @@ public sealed record DuctRef(long ElementId, int Connector);
 ///     (in, out, bidirectional); flow direction for the solver comes from the root, never from this.
 ///     FlowCfm is Revit's connector flow, read only on the legacy engine: under network-based calculations the getter can
 ///     crash Revit 2025 (pressure-drop ledger, W3).
+///     Facing is Connector.CoordinateSystem.BasisZ, the unit axis the connector faces out of its owner, and WidthAxis its
+///     BasisX on a rectangular or oval connector (the side WidthIn runs along), both model coordinates; null when Revit
+///     gives no frame and in snapshots taken before they were read.
 /// </summary>
 public sealed record DuctConnector(
     int Index,
@@ -244,11 +258,14 @@ public sealed record DuctConnector(
     string Direction,
     string? Classification,
     DuctRef? ConnectedTo,
-    double? AreaFt2 = null);
+    double? AreaFt2 = null,
+    double[]? Facing = null,
+    double[]? WidthAxis = null);
 
 /// <summary>One stated or reported value with its unit and provenance.</summary>
 public sealed record DuctFact(string Key, double? Value, string? Text, string Unit, DuctProvenance Provenance);
 
+/// <summary>PhaseCreated and PhaseDemolished name the element's phases (null when it has none, or none demolished it).</summary>
 public sealed record DuctNode(
     long Id,
     DuctNodeKind Kind,
@@ -266,7 +283,9 @@ public sealed record DuctNode(
     DuctLoss? Loss = null,
     DuctTerminalDrop? TerminalDrop = null,
     string? Label = null,
-    string? UniqueId = null);
+    string? UniqueId = null,
+    string? PhaseCreated = null,
+    string? PhaseDemolished = null);
 
 public sealed record DuctRoughness(double ValueFt, DuctProvenance Provenance);
 
@@ -286,6 +305,7 @@ public enum DuctCurveKind {
     [EnumMember(Value = "other")] Other
 }
 
+/// <summary>PhaseCreated and PhaseDemolished as on <see cref="DuctNode" />.</summary>
 public sealed record DuctSegment(
     long Id,
     DuctSegmentKind Kind,
@@ -305,7 +325,9 @@ public sealed record DuctSegment(
     DuctRoughness Roughness,
     DuctRevitValues Revit,
     IReadOnlyList<DuctConnector> Connectors,
-    string? UniqueId = null);
+    string? UniqueId = null,
+    string? PhaseCreated = null,
+    string? PhaseDemolished = null);
 
 /// <summary>Pass-1 flow: terminal design flow summed up the tree from the single root. At a tapped duct it is the upstream-end flow.</summary>
 public sealed record DuctFlow(long SegmentId, double Cfm, DuctProvenance Provenance);

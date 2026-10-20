@@ -442,6 +442,7 @@ export namespace DuctsSnapshot {
       slots: DuctParameterSlots;
       store?: null | DuctLossStore;
       storeError?: null | string;
+      phases?: null | DuctPhases;
     }
     /**
      * The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
@@ -477,6 +478,9 @@ export namespace DuctsSnapshot {
       loops: number;
       issueIds: string[];
     }
+    /**
+     * PhaseCreated and PhaseDemolished name the element's phases (null when it has none, or none demolished it).
+     */
     export interface DuctNode {
       id: number;
       kind: DuctNodeKind;
@@ -495,12 +499,17 @@ export namespace DuctsSnapshot {
       terminalDrop?: null | DuctTerminalDrop;
       label?: null | string;
       uniqueId?: null | string;
+      phaseCreated?: null | string;
+      phaseDemolished?: null | string;
     }
     /**
      * One physical HVAC connector. Kind is "end" or "curve" (a tap on a duct's side). Direction is Revit's
      * (in, out, bidirectional); flow direction for the solver comes from the root, never from this.
      * FlowCfm is Revit's connector flow, read only on the legacy engine: under network-based calculations the getter can
      * crash Revit 2025 (pressure-drop ledger, W3).
+     * Facing is Connector.CoordinateSystem.BasisZ, the unit axis the connector faces out of its owner, and WidthAxis its
+     * BasisX on a rectangular or oval connector (the side WidthIn runs along), both model coordinates; null when Revit
+     * gives no frame and in snapshots taken before they were read.
      *
      */
     export interface DuctConnector {
@@ -517,6 +526,8 @@ export namespace DuctsSnapshot {
       classification?: null | string;
       connectedTo?: null | DuctRef;
       areaFt2?: null | number;
+      facing?: number[] | null;
+      widthAxis?: number[] | null;
     }
     /**
      * What a connector touches: an element id and that element's connector index.
@@ -566,6 +577,9 @@ export namespace DuctsSnapshot {
       writable: boolean;
       catalogDropInWg?: null | number;
     }
+    /**
+     * PhaseCreated and PhaseDemolished as on DuctNode.
+     */
     export interface DuctSegment {
       id: number;
       kind: DuctSegmentKind;
@@ -586,6 +600,8 @@ export namespace DuctsSnapshot {
       revit: DuctRevitValues;
       connectors: DuctConnector[];
       uniqueId?: null | string;
+      phaseCreated?: null | string;
+      phaseDemolished?: null | string;
     }
     export interface DuctRoughness {
       valueFt: number;
@@ -716,6 +732,24 @@ export namespace DuctsSnapshot {
       inWg: number;
       source?: null | string;
       appliedAt: string;
+    }
+    /**
+     * The document's phases, Document.Phases in order (earliest first), and Views: how many non-template plan and 3D
+     * views show each phase (VIEW_PHASE) under each phase filter (VIEW_PHASE_FILTER), most first. A firm models what its
+     * views show; an element in a phase no view shows is often forgotten (pressure-drop ledger, 2026-10-19).
+     *
+     */
+    export interface DuctPhases {
+      order: string[];
+      views: DuctPhaseViews[];
+    }
+    /**
+     * Count views show Phase (null when a view has none) under Filter (null when none).
+     */
+    export interface DuctPhaseViews {
+      phase?: null | string;
+      filter?: null | string;
+      count: number;
     }
   }
 }
