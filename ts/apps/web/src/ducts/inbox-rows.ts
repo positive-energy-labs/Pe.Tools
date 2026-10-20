@@ -221,7 +221,25 @@ export function triage(input: TriageInput) {
         });
         break;
       }
-      case "open-end":
+      case "open-end": {
+        // A person's ruling answers the end: it leaves Fix for Diagnostics, where it can be taken back.
+        const ruled = verdictOf(doc, f.id);
+        if (ruled === "capped" || ruled === "ignore") {
+          diagnostics.push({
+            key: f.id,
+            group: "diagnostics",
+            kind: "open-end-ruled",
+            title: `Open end at ${names(f.elementIds) || f.id}`,
+            status: `ruled: ${ruled}`,
+            ids: f.elementIds,
+            note: "A person ruled on this open end; the ruling lives in this route and writes nothing to Revit.",
+            verbs: [
+              verdict(doc, f.id, ruled, "take back", "Take the ruling back; the end comes up under Fix again"),
+              select(f.elementIds),
+            ],
+          });
+          break;
+        }
         fix.push({
           ...item,
           title: `Open end at ${names(f.elementIds) || f.id}`,
@@ -233,6 +251,7 @@ export function triage(input: TriageInput) {
           ],
         });
         break;
+      }
       case "catalog-missing-table":
       case "catalog-out-of-range":
         fix.push({
@@ -516,6 +535,8 @@ export function checks(input: TriageInput & { claims: readonly Claim[] }): Inbox
 /** What the Write row needs from the page: staged cells, and the last preview's standing. */
 export interface WriteState {
   staged: number;
+  /** Staged rulings (verdicts, roles): route Work that Pe keeps and Revit never receives. */
+  rulings?: number;
   hasPreview: boolean;
   fresh: boolean;
   planned: number | null;
@@ -540,7 +561,9 @@ export function writeRow(left: { fix: number; set: number }, write: WriteState):
   return {
     title: write.fresh && write.planned ? `Write ${write.planned} to Revit` : "Write to Revit",
     status: !write.staged
-      ? "nothing staged"
+      ? write.rulings
+        ? `${write.rulings} ruling${write.rulings === 1 ? "" : "s"} staged · nothing to write to Revit yet: stage a flow, ESP, rule or drop`
+        : "nothing staged"
       : !write.hasPreview
         ? "not previewed"
         : !write.fresh

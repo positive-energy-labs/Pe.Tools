@@ -130,7 +130,7 @@ export function useDuctCatalogs(epoch: number) {
   });
   useEffect(() => {
     let live = true;
-    hostFetch("/ducts/catalogs")
+    hostFetch("/pe/ducts/catalogs")
       .then((r) => (r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`)))
       .then(
         (value) => {

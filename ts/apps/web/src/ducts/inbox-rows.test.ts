@@ -61,6 +61,26 @@ const base = {
 };
 const keys = (items: readonly InboxItem[]) => items.map((i) => i.key);
 
+describe("a staged verdict is a ruling, not a Revit write", () => {
+  const doc = ductsRouteState.schema.parse({
+    assumptions: { "open-end:g1:2:1": { staged: { value: { kind: "verdict", verdict: "capped" } } } },
+  });
+  it("a capped open end leaves Fix for Diagnostics with its take-back", () => {
+    const rows = inboxRows({ ...base, doc });
+    expect(keys(rows.fix)).not.toContain("open-end:g1:2:1");
+    const ruled = rows.diagnostics.find((r) => r.key === "open-end:g1:2:1")!;
+    expect(ruled.status).toBe("ruled: capped");
+    expect(ruled.verbs[0]).toMatchObject({ kind: "verdict", verdict: "capped", on: true, label: "take back" });
+  });
+  it("the Write row counts rulings apart from Revit writes", () => {
+    const rows = inboxRows({ ...base, doc, write: { ...base.write, rulings: 2 } });
+    expect(rows.write.status).toBe(
+      "2 rulings staged · nothing to write to Revit yet: stage a flow, ESP, rule or drop",
+    );
+    expect(inboxRows(base).write.status).toBe("nothing staged");
+  });
+});
+
 describe("the ducts inbox", () => {
   it("puts blocking findings under Fix, inputs under Set and bridged joins under Diagnostics", () => {
     const rows = inboxRows(base);

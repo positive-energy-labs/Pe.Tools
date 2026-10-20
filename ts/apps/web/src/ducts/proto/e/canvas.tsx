@@ -488,7 +488,8 @@ function Canvas({
             size="inset"
           />
         ) : (
-          <div className="pointer-events-none relative size-full">
+          // flex column: DuctDrawing sizes itself with flex-1 and has height 0 in a block parent
+          <div className="pointer-events-none relative flex size-full min-h-0 flex-col">
             <DuctDrawing
               label="model, small"
               project={cornerProject}

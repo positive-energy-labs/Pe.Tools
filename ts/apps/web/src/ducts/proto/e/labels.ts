@@ -6,6 +6,7 @@
  */
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
+import { typeName } from "../../claims";
 import type { TreeNode } from "../b/model";
 
 export function grilleLabels(snapshot: DuctSnapshot, runs: readonly TreeNode[]): Map<number, string> {
@@ -16,7 +17,7 @@ export function grilleLabels(snapshot: DuctSnapshot, runs: readonly TreeNode[]):
   for (const run of runs) {
     if (run.terminal == null) continue;
     const node = nodes.get(run.terminal);
-    const name = node?.label || node?.type || node?.family || "grille";
+    const name = node?.label || (node ? typeName(node) : "") || "grille";
     const level = node?.levelId != null ? levels.get(node.levelId) : undefined;
     base.set(run.terminal, level ? `${name} · ${level}` : name);
     legsOf.set(run.terminal, run.children.map((leg) => leg.name));

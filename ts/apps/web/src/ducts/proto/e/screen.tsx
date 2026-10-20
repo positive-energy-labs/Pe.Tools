@@ -24,6 +24,7 @@ import { BarLegend, LossBar } from "./bar";
 import { ECanvas } from "./canvas";
 import { grilleLabels } from "./labels";
 import { Inbox } from "./inbox";
+import { InputsPane } from "./inputs-pane";
 import { RulesTree, ruleOfIds } from "./rules-pane";
 import { SystemTree } from "./tree-sidebar";
 import { useGroupEncoding } from "../encoding/use-encoding";
@@ -93,6 +94,7 @@ export function EScreen({ props }: { props: ProtoProps }) {
             claims: props.claims,
             write: {
               staged: props.staged,
+              rulings: props.rulings,
               hasPreview: page.evaluation !== null,
               fresh: previewFresh(page, props.work.revision),
               planned: preview?.counts.planned ?? null,
@@ -100,7 +102,7 @@ export function EScreen({ props }: { props: ProtoProps }) {
             },
           })
         : null,
-    [surveyed, page, doc, nameOf, names, props.claims, props.staged, props.work.revision, preview],
+    [surveyed, page, doc, nameOf, names, props.claims, props.staged, props.rulings, props.work.revision, preview],
   );
   const toRule = inbox ? inbox.fix.length + inbox.set.length + inbox.check.length : 0;
   // A Set row's verb selects the element and focuses its cell once the tree has drawn it.
@@ -111,9 +113,10 @@ export function EScreen({ props }: { props: ProtoProps }) {
       `[data-e-cell="${cellFocus.segment}:${cellFocus.id}"] input`,
     );
     if (!input) return;
+    input.scrollIntoView?.({ block: "nearest" });
     input.focus();
     setCellFocus(null);
-  }, [cellFocus, tree]);
+  }, [cellFocus, tree, priced]);
   const encoded = useGroupEncoding(snapshot, priced, page.group, page.encoding);
   // The tree reads the drawing's quantity; a categorical reading (or none) keeps Pe's fan-to-here loss.
   const reading = encoded.encoding.quantity ? encoded.encoding : null;
@@ -214,7 +217,6 @@ export function EScreen({ props }: { props: ProtoProps }) {
                 select,
                 jumpToRule: setRuleFocus,
                 reading,
-                inputs: priced ? { snapshot, priced, work } : null,
               }}
             />
           </div>
@@ -288,11 +290,47 @@ export function EScreen({ props }: { props: ProtoProps }) {
         />
       </Pane>
     ) : null;
+  const inputsPane =
+    tree && page.group ? (
+      <Pane
+        id="e-inputs"
+        title="Inputs"
+        meta="flow · ESP · role · drop"
+        help="Each unit and grille of this system, named, with the cells you can type into. A typed value stages as an override and reprices."
+        scroll="auto"
+        flush
+      >
+        <InputsPane
+          snapshot={snapshot}
+          priced={priced}
+          work={work}
+          group={page.group}
+          nameOf={nameOf}
+          selected={selected}
+          select={select}
+          light={light}
+        />
+      </Pane>
+    ) : null;
+  const lower = !inputsPane && !rulesPane ? null : (
+    <PaneSplit
+      axis="vertical"
+      start={inputsPane}
+      end={rulesPane}
+      resize={{
+        target: "end",
+        defaultSize: 220,
+        minSize: 100,
+        minOtherSize: 100,
+        persist: "proto-e-inputs",
+      }}
+    />
+  );
   const left = (
     <PaneSplit
       axis="vertical"
       start={treePane}
-      end={rulesPane}
+      end={lower}
       resize={{
         target: "end",
         defaultSize: 300,

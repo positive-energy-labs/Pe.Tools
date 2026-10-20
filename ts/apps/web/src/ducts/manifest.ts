@@ -95,6 +95,12 @@ const stagedCells = (doc: DuctsRouteDocument | null) =>
       cell?.staged ? [{ segment, key, cell }] : [],
     ),
   );
+/** Staged rulings (assumption verdicts, unit roles): route Work that no write carries. */
+export const stagedRulings = (doc: DuctsRouteDocument | null) =>
+  (["assumptions", "roles"] as const).reduce(
+    (n, segment) => n + Object.values(doc?.[segment] ?? {}).filter((cell) => cell?.staged).length,
+    0,
+  );
 /** How many staged cells a write would carry. */
 export const stagedCount = (doc: DuctsRouteDocument | null) => stagedCells(doc).length;
 

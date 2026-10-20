@@ -1,4 +1,6 @@
 import { invocationContext, hostFetch as fetch } from "@pe/runtime/context";
+import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
+import { hostOwnership } from "./host-ownership.ts";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { Effect } from "effect";
 import { readingKey, actionStatusSchema, type ReadingFrame } from "@pe/agent-contracts";
@@ -167,7 +169,13 @@ export function hostResourceObserver(
           paths.map(async ([path, init]) => {
             const response = await read(new URL(path, origin), {
               ...init,
-              headers: { ...Object.fromEntries(new Headers(init?.headers)), ...headers },
+              // The self-read carries the browser's forwarded origin; admission refuses a browser
+              // request without its runtime owner (runtime.owner-missing), so name this host.
+              headers: {
+                ...Object.fromEntries(new Headers(init?.headers)),
+                ...headers,
+                [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName,
+              },
               signal: controller.signal,
             });
             const value: unknown = await response.json().catch(() => null);
