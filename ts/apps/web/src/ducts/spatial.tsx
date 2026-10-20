@@ -72,7 +72,6 @@ export function DuctsSpatial({
   empty,
   subject = null,
   doc = null,
-  orbit, // proto: orbit
   hovered, // proto: orbit
 }: {
   snapshot: DuctSnapshot | null;
@@ -86,8 +85,6 @@ export function DuctsSpatial({
   subject?: Subject | null;
   /** The connected document; null hides every crossing into Revit. */
   doc?: { session: string; openId: string } | null;
-  /** proto: orbit — the globe camera on the isometric; absent falls back to the URL shim in `useIso`. */
-  orbit?: boolean;
   /** proto: orbit — a hovered set from a sidebar (`useHoverSet`); one id or many, empty for none. */
   hovered?: ReadonlySet<number>;
 }) {
@@ -109,7 +106,6 @@ export function DuctsSpatial({
       setPage={setPage}
       subject={subject}
       doc={doc}
-      orbit={orbit}
       hovered={hovered}
     />
   );
@@ -123,7 +119,6 @@ export function Spatial({ // proto: orbit (exported for the variants)
   setPage,
   subject,
   doc,
-  orbit, // proto: orbit
   hovered: lit, // proto: orbit
 }: {
   index: DuctIndex;
@@ -133,7 +128,6 @@ export function Spatial({ // proto: orbit (exported for the variants)
   setPage: (next: Partial<DuctsPage>) => void;
   subject: Subject | null;
   doc: { session: string; openId: string } | null;
-  orbit?: boolean; // proto: orbit
   hovered?: ReadonlySet<number>; // proto: orbit
 }) {
   const [hovered, setHovered] = useState<number | null>(null);
@@ -153,7 +147,7 @@ export function Spatial({ // proto: orbit (exported for the variants)
     [index, page.scene, subject, labelOf],
   );
   const plan = usePlan(index, page, subjectDrawn);
-  const iso = useIso(index, page, subjectDrawn, orbit); // proto: orbit
+  const iso = useIso(index, page, subjectDrawn);
   const view = page.view === "iso" ? iso : plan;
   const sub = view.scene.subject ?? null;
   const nameOfId = useMemo(() => elementNamer(index.snapshot, sub), [index, sub]);

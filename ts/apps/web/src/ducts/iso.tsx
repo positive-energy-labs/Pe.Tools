@@ -3,24 +3,21 @@
  * horizon. Yaw turns in 90° steps from the band, or freely by dragging (shift-drag pans). The
  * projection pivots on the subject's centre, so turning never throws it off screen. Vertical is
  * true scale unless the band says otherwise; a riser is a vertical line of its own length.
+ * The camera is always the globe (`proto/orbit/camera`): free yaw and elevation, a selection pivot.
+ * `page.camera` is a preset of it, `iso` (default) or `plan`; see `cameraOf`.
  */
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { FactChip } from "@pe/kit/lang/chip";
 import { Button } from "@pe/kit/lang/button";
 import type { Scene } from "./drawing";
 import type { Segment } from "./encoding";
 import type { DuctsPage } from "./manifest";
+import { cameraOf, type CameraPreset } from "./picture";
 import { contextOf, sceneOf, type DuctIndex, type SpatialView } from "./scene";
-import { useOrbit } from "./proto/orbit/camera"; // proto: orbit
-
-/** proto: orbit — shim: the lineup's variants mount `useIso` without the flag; `?variant` or `?orbit` turns it on. */
-const orbitByUrl = () =>
-  typeof location !== "undefined" &&
-  ["variant", "orbit"].some((key) => new URLSearchParams(location.search).has(key));
+import { useOrbit } from "./proto/orbit/camera";
 
 const ELEVATION = Math.PI / 6;
-const DEG_PER_PX = 0.4;
 const Z_STRETCH = [1, 3] as const;
 
 /** The orthographic projection at `yaw` degrees about `pivot`, with vertical `stretch`. */
@@ -75,13 +72,12 @@ export function useIso(
   index: DuctIndex,
   page: Pick<DuctsPage, "group">,
   subject: Scene | null = null,
-  orbit: boolean = orbitByUrl(), // proto: orbit
 ): SpatialView {
   // Turns are offsets from the group's own grid set on the diagonal, so its ducts never run
   // straight into the screen (where depth would read as a riser).
   const [turned, setTurned] = useState(0);
-  const drag = useRef({ dx: 0, frame: 0 });
   const [stretch, setStretch] = useState<number>(Z_STRETCH[0]);
+  const preset = cameraOf(page);
 
   const scene = useMemo(
     () => subject ?? sceneOf(index, page.group, () => true),
@@ -97,9 +93,8 @@ export function useIso(
     return { pivot: centre(pool), grid: gridAngle(pool) };
   }, [index, page.group, subject]);
   const yaw = 45 - grid + turned;
-  const plain = useMemo(() => isoProject(yaw, pivot, stretch), [yaw, pivot, stretch]);
-  // proto: orbit — free elevation, a selection pivot and the globe; `project` carries it to the drawing.
-  const cam = useOrbit(orbit, {
+  // Free elevation, a selection pivot and the globe; `project` carries it to the drawing.
+  const cam = useOrbit({
     index,
     group: page.group,
     scene,
@@ -109,27 +104,29 @@ export function useIso(
     turned,
     setTurned,
   });
-  const project = cam?.project ?? plain;
 
+  // A preset glides the one camera: plan is straight down with north up, iso the grid diagonal at
+  // 30 degrees. The camera starts at iso, so only a plan (a deep link too) moves on mount.
+  const arrived = useRef<CameraPreset>("iso");
+  useEffect(() => {
+    if (arrived.current === preset) return;
+    arrived.current = preset;
+    if (preset === "plan") cam.goTo(0, 90);
+    else cam.goTo(45 - grid, 30);
+    // `cam` is rebuilt each render; the preset is the only trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preset]);
   // A step lands on the next diagonal of the group's grid, the classic iso corner.
   const turn = (by: number) => setTurned((t) => Math.round(t / 90) * 90 + by);
   return {
-    label: "isometric",
-    project,
+    label: preset === "plan" ? "plan" : "isometric",
+    project: cam.project,
     scene,
     // Refit on a new subject or a vertical change; a turn keeps the zoom (the pivot holds it).
-    fitKey: `iso|${subject ? "subject" : page.group}|${stretch}`,
-    onDrag: (dx, _dy, shift) => {
+    fitKey: `iso|${subject ? "subject" : page.group}|${stretch}|${preset}`,
+    onDrag: (dx, dy, shift) => {
       if (shift) return false;
-      if (cam) { cam.drag(dx, _dy); return true; } // proto: orbit
-      // Coalesced to one turn per frame, however fast the pointer reports.
-      drag.current.dx += dx;
-      if (!drag.current.frame)
-        drag.current.frame = requestAnimationFrame(() => {
-          const by = drag.current.dx * DEG_PER_PX;
-          drag.current = { dx: 0, frame: 0 };
-          setTurned((t) => t + by);
-        });
+      cam.drag(dx, dy);
       return true;
     },
     band: (
@@ -140,17 +137,10 @@ export function useIso(
         <Button type="button" kind="framed" label="turn 90° right" onClick={() => turn(90)}>
           90° ⟳
         </Button>
-        {cam ? ( // proto: orbit
-          <FactChip title="yaw from north; drag across to turn, up and down to tilt (snaps at 90, 30, 0), shift-drag to pan, wheel to zoom, F to frame the selection, double-click to select and frame">
-            yaw <span className="face-mono">{(((yaw % 360) + 360) % 360).toFixed(0)}°</span> ·{" "}
-            <span className="face-mono">{cam.elev.toFixed(0)}°</span> above
-          </FactChip>
-        ) : (
-        <FactChip title="yaw from north; drag to turn, shift-drag to pan, wheel to zoom">
-          yaw <span className="face-mono">{(((yaw % 360) + 360) % 360).toFixed(0)}°</span> · 30°
-          above
+        <FactChip title="yaw from north; drag across to turn, up and down to tilt (snaps at 90, 30, 0), shift-drag to pan, wheel to zoom, F to frame the selection, double-click to select and frame">
+          yaw <span className="face-mono">{(((yaw % 360) + 360) % 360).toFixed(0)}°</span> ·{" "}
+          <span className="face-mono">{cam.elev.toFixed(0)}°</span> above
         </FactChip>
-        )}
         <Button
           type="button"
           kind="framed"

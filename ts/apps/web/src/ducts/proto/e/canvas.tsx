@@ -10,7 +10,10 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import { ArrowRightLeft } from "lucide-react";
+
 import { Button } from "@pe/kit/lang/button";
+import { useScopeKeys } from "@pe/kit/keys";
 import { KeyLegend, type LegendKey } from "#/components/lang/kbd";
 import { Popover, PopoverContent } from "@pe/kit/lang/popover";
 import { token } from "@pe/kit/lib/token";
@@ -19,7 +22,7 @@ import { snapshotById } from "@pe/ducts-domain/readiness";
 import { survey } from "@pe/ducts-domain/survey";
 import type { DuctFinding } from "@pe/agent-contracts";
 
-import { claimParts, elementNamer, VERDICTS } from "../../claims";
+import { ClaimText, claimParts, elementNamer, VERDICTS } from "../../claims";
 import { DuctDrawing } from "../../drawing";
 import { claimInk, issueInk, type Issue } from "../../encoding";
 import { EncodingPicker } from "../encoding/picker";
@@ -29,8 +32,10 @@ import { NodeFactsView, SegmentFactsView } from "../../facts";
 import { FindingsList, ISSUE_KINDS } from "../../issues";
 import { useIso } from "../../iso";
 import { labelOfNode, legsOf, type Claim } from "../../legs";
+import { cameraOf, pictureKeys, pictureOf } from "../../picture";
 import { ProvisionalNote } from "../../provisional";
 import { indexOf, subjectScene } from "../../scene";
+import { Schematic } from "../../schematic";
 import type { ProtoProps } from "../props";
 
 type Ruling =
@@ -44,12 +49,16 @@ type Open =
   | null;
 
 const PIN = 8;
+/** The corner picture: the other half of the swap, small. */
+const CORNER = { width: 300, height: 176, margin: 8 } as const;
 
 /** The canvas's keys: the orbit camera's gestures (`iso.tsx`, `orbit/lens.tsx`) and the tree's. */
 const CANVAS_KEYS: readonly LegendKey[] = [
   { pointer: "drag", does: "orbit" },
   { keys: ["Shift"], pointer: "drag", does: "pan" },
   { pointer: "wheel", does: "zoom" },
+  { keys: ["S"], does: "swap the model and the schematic" },
+  { keys: ["P"], does: "plan or isometric camera" },
   { keys: ["F"], does: "frame the selection" },
   { pointer: "double-click", does: "select and frame" },
   { keys: ["Esc"], does: "clear the selection" },
@@ -110,6 +119,7 @@ function Canvas({
   onHover,
   onSelect,
   fromFixture,
+  doc,
   lit,
   issueScope,
   scale,
@@ -130,6 +140,37 @@ function Canvas({
     [index, snapshot, subject, labelOf],
   );
   const iso = useIso(index, page, drawnSubject);
+  // `page.picture` is the main picture (the other rides the corner); `page.camera` a globe preset.
+  const picture = pictureOf(page);
+  const camera = cameraOf(page);
+  const swap = () => setPage(pictureKeys({ picture: picture === "model" ? "schematic" : "model" }));
+  const turnCamera = () => setPage(pictureKeys({ camera: camera === "plan" ? "iso" : "plan" }));
+  useScopeKeys([
+    {
+      hotkey: "S",
+      label: "swap pictures",
+      says: "Swap the model and the schematic between the main picture and the corner",
+      callback: swap,
+    },
+    {
+      hotkey: "P",
+      label: "plan or isometric",
+      says: "Put the model's camera straight down (plan) or back to the isometric",
+      available: () => picture === "model",
+      callback: turnCamera,
+    },
+  ]);
+  // The corner model is the same camera without its gestures: a fresh function the camera registry never saw.
+  const cornerProject = useMemo(
+    () => (point: readonly number[]) => iso.project(point),
+    [iso.project],
+  );
+  // One hover set for both pictures: a sidebar row's set plus the element under the pointer.
+  const litAll = useMemo(() => {
+    const out = new Set(lit);
+    if (hovered != null) out.add(hovered);
+    return out;
+  }, [lit, hovered]);
   const sub = iso.scene.subject ?? null;
   const byId = useMemo(() => snapshotById(snapshot), [snapshot]);
   const nameOfId = useMemo(() => elementNamer(snapshot, sub), [snapshot, sub]);
@@ -213,6 +254,11 @@ function Canvas({
   }, [page.selected, claims, sub]);
 
   const at = (e: { clientX: number; clientY: number }) => ({ x: e.clientX, y: e.clientY });
+  /** Select, and open the element's facts where the pointer last went down: either picture's click. */
+  const pickElement = (id: number | null) => {
+    onSelect(id);
+    setOpen(id == null ? null : { what: "element", id, ...pointer.current });
+  };
 
   /** In drawing feet; `k` turns a screen px into drawing feet at the current zoom. */
   const underlay = (box: { minX: number; maxX: number }): ReactNode => {
@@ -326,8 +372,9 @@ function Canvas({
         pointer.current = at(e);
       }}
     >
+      {picture === "model" ? (
       <DuctDrawing
-        label="isometric"
+        label={iso.label}
         project={iso.project}
         scene={iso.scene}
         encoding={scale.encoding}
@@ -340,10 +387,7 @@ function Canvas({
         issue={page.issue}
         claim=""
         onHover={onHover}
-        onSelect={(id) => {
-          onSelect(id);
-          setOpen(id == null ? null : { what: "element", id, ...pointer.current });
-        }}
+        onSelect={pickElement}
         onSelectIssue={(issue) => {
           const r = rulings.find((x) => x.kind === "issue" && x.issue.id === issue.id);
           if (r) setOpen({ what: "ruling", n: r.n, ...pointer.current });
@@ -351,7 +395,19 @@ function Canvas({
         onDrag={iso.onDrag}
         underlay={underlay}
         controls={<EncodingPicker value={scale.encoding.key} onPick={(key) => setPage({ encoding: key })} />}
+        cornerLift={CORNER.height + CORNER.margin}
       />
+      ) : (
+        <Schematic
+          index={index}
+          group={page.group}
+          encoding={scale.encoding}
+          selected={selected}
+          lit={litAll}
+          onSelect={pickElement}
+          onHover={onHover}
+        />
+      )}
 
       <div
         className="absolute left-2 top-2 flex flex-col gap-0.5 t-small"
@@ -361,6 +417,30 @@ function Canvas({
         <span>
           {systemName ?? <span className="text-ink-2">no system name in the snapshot</span>}
           {fromFixture ? <span className="text-ink-2"> · fixture</span> : null}
+        </span>
+        <span className="flex items-center gap-1" data-picture-controls="">
+          <Button
+            type="button"
+            kind="framed"
+            icon={ArrowRightLeft}
+            label="swap pictures (S)"
+            reason={`${picture === "model" ? "The schematic" : "The model"} becomes the main picture, ${picture === "model" ? "the model" : "the schematic"} the corner`}
+            onClick={swap}
+          >
+            {picture === "model" ? "schematic" : "model"} large
+          </Button>
+          {picture === "model" ? (
+            <Button
+              type="button"
+              kind="framed"
+              pressed={camera === "plan"}
+              label="plan camera (P)"
+              reason="Look straight down, north up; press again for the isometric"
+              onClick={turnCamera}
+            >
+              plan
+            </Button>
+          ) : null}
         </span>
         <span>
           fan static{" "}
@@ -387,7 +467,49 @@ function Canvas({
           nameOf={scale.nameOf}
           onSelect={(id) => onSelect(id)}
         />
-        <KeyLegend keys={CANVAS_KEYS} lead={0} />
+        {picture === "model" ? <KeyLegend keys={CANVAS_KEYS} lead={0} /> : null}
+      </div>
+
+      <div
+        className="border-line absolute flex overflow-hidden border"
+        style={{
+          right: CORNER.margin,
+          bottom: CORNER.margin,
+          width: CORNER.width,
+          height: CORNER.height,
+          background: token("page"),
+        }}
+        data-picture-corner={picture === "model" ? "schematic" : "model"}
+      >
+        {picture === "model" ? (
+          <Schematic
+            index={index}
+            group={page.group}
+            encoding={scale.encoding}
+            selected={selected}
+            lit={litAll}
+            onSelect={pickElement}
+            onHover={onHover}
+            size="inset"
+          />
+        ) : (
+          <div className="pointer-events-none relative size-full">
+            <DuctDrawing
+              label="model, small"
+              project={cornerProject}
+              scene={iso.scene}
+              encoding={scale.encoding}
+              fitKey={`${iso.fitKey}|corner`}
+              selected={selected}
+              critical={litAll}
+              hovered={hovered}
+              issue=""
+              onHover={onHover}
+              onSelect={() => undefined}
+              onSelectIssue={() => undefined}
+            />
+          </div>
+        )}
       </div>
 
       <Popover open={!!open} onOpenChange={(o) => (o ? null : setOpen(null))}>
@@ -398,6 +520,9 @@ function Canvas({
               nameOfId={nameOfId}
               onVerdict={subject?.onVerdict}
               work={work}
+              doc={doc}
+              onHover={onHover}
+              onPick={onSelect}
             />
           ) : elementId != null ? (
             <div className="flex flex-col gap-2">
@@ -427,12 +552,19 @@ function RulingBody({
   nameOfId,
   onVerdict,
   work,
+  doc,
+  onHover,
+  onPick,
 }: {
   r: Ruling;
   nameOfId: (id: number) => string | null;
   onVerdict?: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;
   work: ProtoProps["work"];
+  doc: ProtoProps["doc"];
+  onHover: (id: number | null) => void;
+  onPick: (id: number) => void;
 }) {
+  const [said, setSaid] = useState<string | null>(null);
   if (r.kind === "claim")
     return (
       <div className="flex flex-col gap-2" data-ruling={r.n}>
@@ -440,9 +572,14 @@ function RulingBody({
           <span className="face-mono">{r.n}</span> Pea claim · {r.claim.state}
         </p>
         <p>
-          {claimParts(r.claim.text, nameOfId).map((part, i) =>
-            typeof part === "string" ? <span key={i}>{part}</span> : <span key={i} className="underline decoration-dotted">{part.name}</span>,
-          )}
+          <ClaimText
+            parts={claimParts(r.claim.text, nameOfId)}
+            doc={doc}
+            onHover={onHover}
+            onPick={onPick}
+            onShown={setSaid}
+          />
+          {said ? <span className="text-ink-2"> · {said}</span> : null}
         </p>
         <span className="flex gap-1" role="group" aria-label="verdict">
           {VERDICTS.map((v) => (

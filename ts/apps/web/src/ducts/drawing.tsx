@@ -184,6 +184,7 @@ export function DuctDrawing({
   underlay,
   lit, // proto: orbit
   controls, // proto: encoding
+  cornerLift = 0,
 }: {
   label: string;
   project: Project;
@@ -209,6 +210,8 @@ export function DuctDrawing({
   lit?: ReadonlySet<number>;
   /** proto: encoding — controls the canvas owns (the encoding picker), beside the run lens. */
   controls?: ReactNode;
+  /** Screen px the bottom-right corner is already taken by the canvas's picture swap; the detail inset sits above it. */
+  cornerLift?: number;
 }) {
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const [size, setSize] = useState<Viewport2 | null>(null);
@@ -564,7 +567,7 @@ export function DuctDrawing({
               subject={scene.subject}
               project={project}
               screen={screen}
-              size={size}
+              size={cornerLift ? { ...size, height: size.height - cornerLift } : size}
               selected={selected}
               hovered={hovered}
               claim={claim}

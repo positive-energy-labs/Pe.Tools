@@ -102,9 +102,8 @@ const registry = new WeakMap<object, Orbit>();
 /** The orbit camera that built `project`, or null for every other projection. */
 export const orbitOf = (project: object): Orbit | null => registry.get(project) ?? null;
 
-/** The orbit camera; null when `on` is false (the hooks still run, so the call order holds). */
+/** The globe camera: the isometric's one camera. */
 export function useOrbit(
-  on: boolean,
   o: {
     index: DuctIndex;
     group: string;
@@ -115,7 +114,7 @@ export function useOrbit(
     turned: number;
     setTurned: (next: number | ((t: number) => number)) => void;
   },
-): Orbit | null {
+): Orbit {
   const [elev, setElev] = useState(30);
   const raw = useRef(30);
   const [focus, setFocus] = useState<{ pivot: readonly number[]; offset: Point2 } | null>(null);
@@ -139,10 +138,9 @@ export function useOrbit(
     [yaw, elev, pivot, offset, o.stretch],
   );
   const runs = useMemo(
-    () => (on && o.group ? runsOf(groupTree(o.index.snapshot, o.group)).map((r) => r.path) : []),
-    [on, o.index, o.group],
+    () => (o.group ? runsOf(groupTree(o.index.snapshot, o.group)).map((r) => r.path) : []),
+    [o.index, o.group],
   );
-  if (!on) return null;
 
   const setElevation = (value: number) => {
     raw.current = clamp(value);
