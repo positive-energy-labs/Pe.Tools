@@ -3658,7 +3658,7 @@ export namespace RevitContextLens {
   }
 }
 
-/** Show elements to the person at the window: select them and zoom the active view, or the given view, to their extents. Answers which ids it showed, which were missing, and the view. Changes the selection and the zoom only, never the model. Needs the active windowed document; a headless document refuses. */
+/** Show elements to the person at the window: select them and zoom to their extents in the given view, or by default in a view that can show them (the active model view when it displays them, else the {3D} view or a plan on their level; a sheet or schedule is never zoomed). Answers which ids it showed, which were missing, and the view. Changes the selection and the zoom only, never the model. Needs the active windowed document; a headless document refuses. */
 export namespace RevitContextShowElements {
   export namespace Req {
     /**
