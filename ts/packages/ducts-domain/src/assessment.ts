@@ -175,8 +175,8 @@ export function assessDucts(
   );
   reason(
     "rests-on-inferred-joints",
-    reached.filter((node) => next.paths[node.id]!.inferred.length).length,
-    "Calculated paths step across joints or taps inferred by proximity; their totals rest on inferences a person rules on",
+    reached.filter((node) => next.paths[node.id]!.provisional).length,
+    "Calculated paths are provisional: they step across joints or taps inferred by proximity that are not near misses and no person has confirmed",
   );
   reason(
     "unknown-terminal-flow",

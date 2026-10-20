@@ -10,7 +10,9 @@
  *   what the snapshot pass-1 `flows` are; at a tap it is recomputed per leg.
  * - fan = the largest path total in a group; the critical terminal is its argmax.
  * - A path stepping across a proximity inference (`proximity.ts`) still prices; it names the
- *   finding ids its total rests on (`inferred`), so the route says what a person has not ruled on.
+ *   finding ids its total rests on that no person confirmed (`inferred`), and is `provisional`
+ *   at its worst grade unless each is a near miss (inference may compute, never conclude, kaitpw
+ *   2026-10-19). A group's fan and the document's rest on every path under them.
  * Physics in loss-physics.ts, interpolation in loss-grid.ts, rule data in loss-rules.ts.
  */
 import {
@@ -35,7 +37,8 @@ import {
   type Port,
 } from "./loss-rules.ts";
 import type { DuctSnapshot } from "./types.ts";
-import type { InferredLink } from "./proximity.ts";
+import type { DuctInferenceGrade } from "@pe/agent-contracts";
+import { worse, type InferredLink } from "./proximity.ts";
 import { groupTree, runsOf, terminalCfm, type GroupTree } from "./topology.ts";
 
 type Node = DuctSnapshot["nodes"][number];
@@ -100,9 +103,20 @@ interface PathLoss {
   groupId: string;
   total: number;
   rows: Row[];
-  /** The proximity finding ids whose inferred joint or tap the path steps across; its total rests on them. */
+  /** The proximity finding ids whose inferred joint or tap the path steps across, no person having confirmed them; its total rests on them. */
   inferred: string[];
+  provisional: Provisional;
 }
+
+/**
+ * A result resting on inferences a person has not ruled on: their worst grade, how many, and
+ * their finding ids. Null when final: every inference under it a near miss or confirmed.
+ */
+export type Provisional = null | {
+  worst: DuctInferenceGrade;
+  count: number;
+  findingIds: string[];
+};
 
 interface RuleLoss {
   /** Rule dp on the critical path. */
@@ -119,7 +133,18 @@ export interface LossResult {
   /** Largest path total over every group, in-wg; 0 with no path. See `byGroup` for per-system fans. */
   fan: number;
   critical: number | null;
-  byGroup: Record<string, { fan: number; critical: number | null; revitCritical: number | null }>;
+  /** The largest fan's standing: provisional when any path in any group is. */
+  provisional: Provisional;
+  byGroup: Record<
+    string,
+    {
+      fan: number;
+      critical: number | null;
+      revitCritical: number | null;
+      /** The fan's standing: provisional when any path in the group is. */
+      provisional: Provisional;
+    }
+  >;
   byRule: Record<string, RuleLoss>;
   errors: LossError[];
 }
@@ -280,10 +305,24 @@ export function computeLosses(
   inferred: readonly InferredLink[] = [],
 ): LossResult {
   const byPair = new Map<string, string[]>();
-  for (const { id, between } of inferred) {
+  const gradeOf = new Map<string, DuctInferenceGrade>();
+  for (const { id, between, grade, ruled } of inferred) {
+    // A person's confirmation clears the inference; the path no longer rests on it.
+    if (ruled) continue;
+    gradeOf.set(id, grade);
     const pair = [...between].sort((a, b) => a - b).join("|");
     byPair.set(pair, [...(byPair.get(pair) ?? []), id]);
   }
+  const provisionalOf = (ids: Iterable<string>): Provisional => {
+    const open = [...new Set(ids)].filter((id) => gradeOf.get(id) !== "near-miss").sort();
+    return open.length
+      ? {
+          worst: open.map((id) => gradeOf.get(id)!).reduce(worse),
+          count: open.length,
+          findingIds: open,
+        }
+      : null;
+  };
   const restsOn = (path: number[]) => [
     ...new Set(
       path.flatMap((id, k) =>
@@ -295,6 +334,7 @@ export function computeLosses(
     paths: {},
     fan: 0,
     critical: null,
+    provisional: null,
     byGroup: {},
     byRule: {},
     errors: [],
@@ -310,16 +350,25 @@ export function computeLosses(
     return e.message;
   };
 
+  const everywhere: string[] = [];
   for (const group of snapshot.groups) {
     const tree = groupTree(snapshot, group.id);
     const below = flowBelow(tree, overrides);
     let fan = 0;
     let critical: number | null = null;
+    const under: string[] = [];
     for (const run of runsOf(tree)) {
       const rows = pathRows(tree, run.path, below, grids, choices, overrides, fail, catalogs);
       const total = rows.reduce((a, r) => a + (r.dp ?? 0), 0);
-      result.paths[run.terminal] = { groupId: group.id, total, rows, inferred: restsOn(run.path) };
-
+      const rests = restsOn(run.path);
+      result.paths[run.terminal] = {
+        groupId: group.id,
+        total,
+        rows,
+        inferred: rests,
+        provisional: provisionalOf(rests),
+      };
+      under.push(...rests);
       if (critical == null || total > fan || (total === fan && run.terminal < critical)) {
         fan = total;
         critical = run.terminal;
@@ -335,13 +384,16 @@ export function computeLosses(
       critical,
       revitCritical:
         (critical == null ? null : systemFor(snapshot, critical)?.criticalPathLossInWg) ?? null,
+      provisional: provisionalOf(under),
     };
+    everywhere.push(...under);
     if (critical != null && (result.critical == null || fan > result.fan)) {
       result.fan = fan;
       result.critical = critical;
     }
   }
 
+  result.provisional = provisionalOf(everywhere);
   const ruleDp = (rows: Row[], key: string) =>
     rows.filter((r) => r.rule === key).reduce((a, r) => a + (r.dp ?? 0), 0);
   for (const rule of LOSS_RULES)
