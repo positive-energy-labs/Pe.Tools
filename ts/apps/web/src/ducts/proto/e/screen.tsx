@@ -1,15 +1,12 @@
 /**
- * THROWAWAY (protoui round 2): the one screen E1 and E2 share ("C simplicity, B layout"). LEFT a
- * resizable sidebar (the one axis the variants differ on, passed in as `sidebar`); CENTRE C's
- * full-bleed drawing with numbered ruling pins and click popovers; RIGHT the inbox of rows a person
- * has a verb on, collapsed when it holds none. Hovering a sidebar or inbox row lights its element
- * set on the drawing.
+ * THROWAWAY (protoui round 3): E2 ("C simplicity, B layout"). LEFT a resizable sidebar of two
+ * sections, the system tree over the document's loss Rules; CENTRE C's full-bleed drawing with
+ * numbered ruling pins and click popovers; RIGHT the inbox of rows a person has a verb on,
+ * collapsed when it holds none. Hovering a row anywhere lights its element set on the drawing.
  */
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { DuctsRouteDocument, RouteStatePatch } from "@pe/agent-contracts";
-import type { Priced } from "@pe/ducts-domain/pricing";
 import { survey } from "@pe/ducts-domain/survey";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 
@@ -17,50 +14,14 @@ import { elementNamer, type Verdict } from "../../claims";
 import { claimsOf } from "../../legs";
 import type { Subject } from "../../spatial";
 import type { LossesWork } from "../../losses-view";
-import { indexOf } from "../../scene";
 import { buildTree, groupElementIds, systemList, type TreeNode } from "../b/model";
 import type { ProtoProps } from "../props";
 import { BarLegend, LossBar } from "./bar";
 import { ECanvas } from "./canvas";
-import { EditPopover, type EditTarget } from "./edit";
 import { grilleLabels } from "./labels";
 import { Inbox, inboxRows } from "./inbox";
-
-export interface SidebarCtx {
-  snapshot: DuctSnapshot;
-  priced: Priced | null;
-  /** The group's tree (system → runs → legs → elements), from B's model. */
-  tree: TreeNode;
-  /** Full bar width: the critical run's total, in-wg; null unpriced. */
-  scale: number | null;
-  /** The critical run's key: the run with the largest priced total. */
-  criticalKey: string | null;
-  /** A grille's name for a run (or a grille element): label, else type, plus place; never an id. */
-  grilleName: (node: TreeNode) => string;
-  /** The element id the route has selected, or null. */
-  selected: number | null;
-  light: (ids: readonly number[] | null) => void;
-  select: (id: number | null) => void;
-  edit: (target: EditTarget) => void;
-}
-
-export interface Sidebar {
-  /** The pane title. */
-  title: string;
-  render: (ctx: SidebarCtx) => ReactNode;
-}
-
-/** Every element id under a node, its own first: the set a hover lights. */
-export const idsOf = (node: TreeNode): number[] => {
-  const out = new Set<number>();
-  const walk = (n: TreeNode) => {
-    if (n.kind === "element" && n.id != null) out.add(n.id);
-    n.children.forEach(walk);
-  };
-  if (node.id != null) out.add(node.id);
-  walk(node);
-  return [...out];
-};
+import { RulesTree, ruleOfIds } from "./rules-pane";
+import { SystemTree } from "./tree-sidebar";
 
 // STAGED_WORK (fixture agent) lands at ../staged/work.ts; the glob is empty until it does.
 const STAGED = import.meta.glob<{ STAGED_WORK?: Record<string, DuctsRouteDocument> }>(
@@ -78,15 +39,7 @@ function useStagedWork(): Record<string, DuctsRouteDocument> | null {
   return work;
 }
 
-export function EScreen({
-  props: routeProps,
-  variant,
-  sidebar,
-}: {
-  props: ProtoProps;
-  variant: string;
-  sidebar: Sidebar;
-}) {
+export function EScreen({ props: routeProps }: { props: ProtoProps }) {
   const { snapshot, priced, page, setPage } = routeProps;
   // The route reads the ASHRAE tables (and prices) only for plan/iso/losses; the drawing is iso.
   useEffect(() => {
@@ -135,7 +88,7 @@ export function EScreen({
     }),
     [doc, props.work.revision, props.work.write],
   );
-  const index = useMemo(() => (snapshot ? indexOf(snapshot, priced) : null), [snapshot, priced]);
+  const ruleOf = useMemo(() => ruleOfIds(priced), [priced]);
   const tree = useMemo(
     () => (snapshot && page.group ? (buildTree(snapshot, priced, doc, page.group)[0] ?? null) : null),
     [snapshot, priced, doc, page.group],
@@ -171,11 +124,12 @@ export function EScreen({
     return (id: number) => n(id) ?? "element not in snapshot";
   }, [snapshot]);
   const [lit, setLit] = useState<ReadonlySet<number>>(new Set());
-  const [edit, setEdit] = useState<EditTarget | null>(null);
+  const [ruleFocus, setRuleFocus] = useState<string | null>(null);
+  const [wideRules, setWideRules] = useState(false);
   // null = automatic: open when the inbox holds a row, collapsed when it holds none.
   const [inboxOpen, setInboxOpen] = useState<boolean | null>(null);
 
-  if (!snapshot || !index)
+  if (!snapshot)
     return <p className="text-ink-2 p-4">{props.empty?.says ?? "reading ducts…"}</p>;
 
   const light = (ids: readonly number[] | null) => {
@@ -207,41 +161,46 @@ export function EScreen({
       ? "fixture, not priced"
       : "not priced yet";
 
-  const left = (
+  const head = (
+    <span className="inline-flex gap-1">
+      {page.group ? (
+        <button
+          type="button"
+          className="cursor-pointer px-1"
+          onClick={() => setPage({ group: "", selected: "", issue: "" })}
+        >
+          all systems
+        </button>
+      ) : null}
+    </span>
+  );
+  const treePane = (
     <Pane
       id="e-sidebar"
-      title={tree ? sidebar.title : "systems"}
+      title={tree ? "system" : "systems"}
       meta={tree ? pricedWord : `${snapshot.groups.length} in the document`}
-      actions={
-        page.group ? (
-          <button
-            type="button"
-            className="cursor-pointer px-1"
-            onClick={() => setPage({ group: "", selected: "", issue: "" })}
-          >
-            all systems
-          </button>
-        ) : null
-      }
+      actions={head}
       scroll="auto"
       flush
     >
       {tree ? (
         <>
           <BarLegend scale={scale} criticalName={critical ? grilleName(critical) : null} />
-          <div onMouseLeave={() => light(null)}>
-            {sidebar.render({
-              snapshot,
-              priced,
-              tree,
-              scale,
-              criticalKey: critical?.key ?? null,
-              grilleName,
-              selected,
-              light,
-              select,
-              edit: setEdit,
-            })}
+          <div className="flex min-h-0 flex-1 flex-col" onMouseLeave={() => light(null)}>
+            <SystemTree
+              key={tree.key}
+              ctx={{
+                tree,
+                scale,
+                criticalKey: critical?.key ?? null,
+                grilleName,
+                selected,
+                ruleOf,
+                light,
+                select,
+                jumpToRule: setRuleFocus,
+              }}
+            />
           </div>
         </>
       ) : (
@@ -261,6 +220,42 @@ export function EScreen({
         </ol>
       )}
     </Pane>
+  );
+  const rulesPane =
+    tree && priced ? (
+      <Pane
+        id="e-rules"
+        title="Rules"
+        meta={wideRules ? "every system" : "this system"}
+        help="A rule is a fitting type (family : type) plus a geometry condition. Its table is the one choice a person makes; Pe re-looks-up every instance under it. A fitting with a stated drop is an override under its type."
+        actions={
+          <button type="button" className="cursor-pointer px-1" onClick={() => setWideRules(!wideRules)}>
+            {wideRules ? "this system" : "all systems"}
+          </button>
+        }
+        scroll="clip"
+        flush
+      >
+        <RulesTree
+          snapshot={snapshot}
+          priced={priced}
+          group={page.group}
+          wide={wideRules}
+          work={work}
+          focus={ruleFocus}
+          onFocus={setRuleFocus}
+          nameOf={nameOf}
+          light={light}
+        />
+      </Pane>
+    ) : null;
+  const left = (
+    <PaneSplit
+      axis="vertical"
+      start={treePane}
+      end={rulesPane}
+      resize={{ target: "end", defaultSize: 300, minSize: 120, minOtherSize: 160, persist: "proto-e-rules" }}
+    />
   );
 
   const right = open ? (
@@ -303,7 +298,7 @@ export function EScreen({
   );
 
   return (
-    <div data-proto={variant} className="flex size-full min-h-0">
+    <div data-proto="E2" className="flex size-full min-h-0">
       <PaneSplit
         axis="horizontal"
         resize={{
@@ -323,14 +318,6 @@ export function EScreen({
             {right}
           </div>
         }
-      />
-      <EditPopover
-        target={edit}
-        close={() => setEdit(null)}
-        index={index}
-        priced={priced}
-        group={page.group}
-        work={work}
       />
     </div>
   );

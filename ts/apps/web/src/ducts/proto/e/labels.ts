@@ -1,5 +1,5 @@
 /**
- * THROWAWAY (protoui round 2, E1/E2): a person's name for each grille a sidebar lists, never its id.
+ * THROWAWAY (protoui round 3, E2): a person's name for each grille a sidebar lists, never its id.
  * The node's label, else its type (else family), plus a short place: its level when the snapshot
  * gives one. Grilles that would read the same take the leg nearest each grille that the others'
  * runs do not share ("via <where it starts>"); any still the same take an ordinal, never an id.

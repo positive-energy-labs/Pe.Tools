@@ -1,8 +1,7 @@
-/** THROWAWAY (protoui round 2): E2, the shared E screen with the tree sidebar. */
+/** THROWAWAY (protoui round 3): E2, tree sidebar over Rules, C canvas, verb-only inbox. */
 import { EScreen } from "./e/screen";
-import { TREE_SIDEBAR } from "./e/tree-sidebar";
 import type { ProtoProps } from "./props";
 
 export function VariantE2(props: ProtoProps) {
-  return <EScreen props={props} variant="E2" sidebar={TREE_SIDEBAR} />;
+  return <EScreen props={props} />;
 }

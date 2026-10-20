@@ -3,7 +3,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 export const VARIANTS = [
-  { id: "E1", name: "Losses sidebar" },
   { id: "E2", name: "Tree sidebar" },
   { id: "B", name: "Profiler" },
   { id: "C", name: "Variant C" },

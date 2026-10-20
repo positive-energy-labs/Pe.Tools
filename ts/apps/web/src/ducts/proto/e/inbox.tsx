@@ -1,5 +1,5 @@
 /**
- * THROWAWAY (protoui round 2, E1/E2): the inbox, drawn like the Pea thread sidebar on kit `Row`s:
+ * THROWAWAY (protoui round 3, E2): the inbox, drawn like the Pea thread sidebar on kit `Row`s:
  * one row per ruling, grouped by kind under a head with its count. The trailing slot holds the
  * row's state; on hover the compact verbs take it (yes / no / not this, confirm, override, ignore,
  * select in Revit). Pressing a row opens it: the full prose and the worded verbs under it.
@@ -9,7 +9,7 @@
  * Select in Revit rides every row but never makes one; issues with no verb stay pins on the
  * drawing. Issues are scoped by the group's `issueIds`, never by element membership.
  */
-import { Fragment, useState } from "react";
+import { Fragment, useState, type CSSProperties } from "react";
 import { Ban, Check, Crosshair, EyeOff, Link, Pencil, X, type LucideIcon } from "lucide-react";
 import {
   ductOverrideKey,
@@ -328,9 +328,11 @@ export function Inbox({
     };
   };
 
-  const body = (row: InboxRow) => (
-    <div className="t-small flex flex-col gap-1.5 px-(--item-pad-x) pb-2 pl-6" data-e-inbox-body={row.key}>
-      {row.kind === "claim" ? (
+  /** The open row's child: its prose, then one line of worded verbs, both on the tree's first
+   *  child indent and under its guide line (the kit's `data-depth` rule), so it reads as the row's. */
+  const body = (row: InboxRow) => {
+    const prose =
+      row.kind === "claim" ? (
         <>
           <p>
             {claimParts(row.claim.text, nameOf).map((p, j) =>
@@ -348,49 +350,71 @@ export function Inbox({
             )}
           </p>
           <p className="text-ink-2">Pea says this is {row.claim.state}</p>
-          <span className="flex flex-wrap gap-1">
-            {VERDICTS.map((v) => (
-              <Button
-                key={v.value}
-                kind="framed"
-                label={v.word}
-                reason={v.says}
-                pressed={row.claim.verdict === v.value}
-                refusal={onVerdict ? null : "no subject: the verdict has nowhere to stage"}
-                onClick={() => onVerdict?.(row.claim, v.value)}
-              >
-                {v.word}
-              </Button>
-            ))}
-          </span>
         </>
       ) : row.kind === "join" ? (
-        <>
-          <p>{row.finding.note}</p>
-          <span>
-            <Button
-              kind="framed"
-              label="confirm this join"
-              pressed={stagedVerdict(work.doc, row.key) === "connect"}
-              onClick={() => confirmJoin(row.key)}
-            >
-              {stagedVerdict(work.doc, row.key) === "connect" ? "confirmed" : "confirm"}
-            </Button>
-          </span>
-        </>
+        <p>{row.finding.note}</p>
       ) : (
         <>
           <p>{row.issue.note}</p>
           <p className="text-ink-2">{ISSUE_KINDS[row.issue.kind].what}</p>
-          <span className="flex flex-wrap items-center gap-2">
-            {row.issue.kind in OVERRIDE ? <OverrideCell issue={row.issue} work={work} /> : null}
-            {DISMISS.has(row.issue.kind) ? <AssumptionCell issue={row.issue} work={work} /> : null}
-          </span>
         </>
-      )}
-      {row.ids.length && doc ? <ShowInRevit doc={doc} elementIds={row.ids} what="it" /> : null}
-    </div>
-  );
+      );
+    const verbs =
+      row.kind === "claim" ? (
+        VERDICTS.map((v) => (
+          <Button
+            key={v.value}
+            kind="framed"
+            label={v.word}
+            reason={v.says}
+            pressed={row.claim.verdict === v.value}
+            refusal={onVerdict ? null : "no subject: the verdict has nowhere to stage"}
+            onClick={() => onVerdict?.(row.claim, v.value)}
+          >
+            {v.word}
+          </Button>
+        ))
+      ) : row.kind === "join" ? (
+        <Button
+          kind="framed"
+          label="confirm this join"
+          pressed={stagedVerdict(work.doc, row.key) === "connect"}
+          onClick={() => confirmJoin(row.key)}
+        >
+          {stagedVerdict(work.doc, row.key) === "connect" ? "confirmed" : "confirm"}
+        </Button>
+      ) : (
+        <>
+          {row.issue.kind in OVERRIDE ? <OverrideCell issue={row.issue} work={work} /> : null}
+          {DISMISS.has(row.issue.kind) ? <AssumptionCell issue={row.issue} work={work} /> : null}
+        </>
+      );
+    return (
+      <div
+        className="dl-row items-start! py-1 select-text!"
+        data-depth={1}
+        style={{ "--depth": 1 } as CSSProperties}
+        data-e-inbox-body={row.key}
+      >
+        <span className="dl-row-twist" aria-hidden />
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          {prose}
+          <div className="flex flex-wrap items-center gap-1" data-e-inbox-verbs="">
+            {verbs}
+            {row.ids.length ? (
+              doc ? (
+                <ShowInRevit doc={doc} elementIds={row.ids} what="it" />
+              ) : (
+                <Button kind="framed" label="select it in Revit" refusal="no Revit document is connected">
+                  select in Revit
+                </Button>
+              )
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col" aria-label="inbox" onMouseLeave={() => light(null)}>
@@ -405,6 +429,9 @@ export function Inbox({
                 <Row
                   data-key={row.key}
                   active={active}
+                  depth={0}
+                  expanded={active}
+                  onToggle={() => setOpen(active ? null : row.key)}
                   title={p.label}
                   label={<span data-e-inbox={row.kind}>{p.label}</span>}
                   meta={p.meta}
