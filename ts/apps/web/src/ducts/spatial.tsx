@@ -129,6 +129,7 @@ export function DuctsSpatial({
   empty,
   subject = null,
   doc = null,
+  orbit, // proto: orbit
 }: {
   snapshot: DuctSnapshot | null;
   ready: Record<string, GroupReadiness>;
@@ -141,6 +142,8 @@ export function DuctsSpatial({
   subject?: Subject | null;
   /** The connected document; null hides every crossing into Revit. */
   doc?: { session: string; openId: string } | null;
+  /** proto: orbit — the globe camera on the isometric; absent falls back to the URL shim in `useIso`. */
+  orbit?: boolean;
 }) {
   const index = useMemo(() => (snapshot ? indexOf(snapshot, priced) : null), [snapshot, priced]);
   if (!index || empty)
@@ -160,11 +163,12 @@ export function DuctsSpatial({
       setPage={setPage}
       subject={subject}
       doc={doc}
+      orbit={orbit}
     />
   );
 }
 
-function Spatial({
+export function Spatial({ // proto: orbit (exported for the variants)
   index,
   ready,
   priced,
@@ -172,6 +176,7 @@ function Spatial({
   setPage,
   subject,
   doc,
+  orbit, // proto: orbit
 }: {
   index: DuctIndex;
   ready: Record<string, GroupReadiness>;
@@ -180,6 +185,7 @@ function Spatial({
   setPage: (next: Partial<DuctsPage>) => void;
   subject: Subject | null;
   doc: { session: string; openId: string } | null;
+  orbit?: boolean; // proto: orbit
 }) {
   const [hovered, setHovered] = useState<number | null>(null);
   const encoding = encodingOf(page.encoding);
@@ -198,7 +204,7 @@ function Spatial({
     [index, page.scene, subject, labelOf],
   );
   const plan = usePlan(index, page, subjectDrawn);
-  const iso = useIso(index, page, subjectDrawn);
+  const iso = useIso(index, page, subjectDrawn, orbit); // proto: orbit
   const view = page.view === "iso" ? iso : plan;
   const sub = view.scene.subject ?? null;
   const nameOfId = useMemo(() => elementNamer(index.snapshot, sub), [index, sub]);

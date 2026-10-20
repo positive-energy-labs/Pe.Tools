@@ -12,6 +12,12 @@ import type { Scene } from "./drawing";
 import type { Segment } from "./encoding";
 import type { DuctsPage } from "./manifest";
 import { contextOf, sceneOf, type DuctIndex, type SpatialView } from "./scene";
+import { useOrbit } from "./proto/orbit/camera"; // proto: orbit
+
+/** proto: orbit — shim: the lineup's variants mount `useIso` without the flag; `?variant` or `?orbit` turns it on. */
+const orbitByUrl = () =>
+  typeof location !== "undefined" &&
+  ["variant", "orbit"].some((key) => new URLSearchParams(location.search).has(key));
 
 const ELEVATION = Math.PI / 6;
 const DEG_PER_PX = 0.4;
@@ -69,6 +75,7 @@ export function useIso(
   index: DuctIndex,
   page: Pick<DuctsPage, "group">,
   subject: Scene | null = null,
+  orbit: boolean = orbitByUrl(), // proto: orbit
 ): SpatialView {
   // Turns are offsets from the group's own grid set on the diagonal, so its ducts never run
   // straight into the screen (where depth would read as a riser).
@@ -90,7 +97,19 @@ export function useIso(
     return { pivot: centre(pool), grid: gridAngle(pool) };
   }, [index, page.group, subject]);
   const yaw = 45 - grid + turned;
-  const project = useMemo(() => isoProject(yaw, pivot, stretch), [yaw, pivot, stretch]);
+  const plain = useMemo(() => isoProject(yaw, pivot, stretch), [yaw, pivot, stretch]);
+  // proto: orbit — free elevation, a selection pivot and the globe; `project` carries it to the drawing.
+  const cam = useOrbit(orbit, {
+    index,
+    group: page.group,
+    scene,
+    grid,
+    basePivot: pivot,
+    stretch,
+    turned,
+    setTurned,
+  });
+  const project = cam?.project ?? plain;
 
   // A step lands on the next diagonal of the group's grid, the classic iso corner.
   const turn = (by: number) => setTurned((t) => Math.round(t / 90) * 90 + by);
@@ -102,6 +121,7 @@ export function useIso(
     fitKey: `iso|${subject ? "subject" : page.group}|${stretch}`,
     onDrag: (dx, _dy, shift) => {
       if (shift) return false;
+      if (cam) { cam.drag(dx, _dy); return true; } // proto: orbit
       // Coalesced to one turn per frame, however fast the pointer reports.
       drag.current.dx += dx;
       if (!drag.current.frame)
@@ -120,10 +140,17 @@ export function useIso(
         <Button type="button" kind="framed" label="turn 90° right" onClick={() => turn(90)}>
           90° ⟳
         </Button>
+        {cam ? ( // proto: orbit
+          <FactChip title="yaw from north; drag across to turn, up and down to tilt (snaps at 90, 30, 0), shift-drag to pan, wheel to zoom, F to frame the selection, double-click to select and frame">
+            yaw <span className="face-mono">{(((yaw % 360) + 360) % 360).toFixed(0)}°</span> ·{" "}
+            <span className="face-mono">{cam.elev.toFixed(0)}°</span> above
+          </FactChip>
+        ) : (
         <FactChip title="yaw from north; drag to turn, shift-drag to pan, wheel to zoom">
           yaw <span className="face-mono">{(((yaw % 360) + 360) % 360).toFixed(0)}°</span> · 30°
           above
         </FactChip>
+        )}
         <Button
           type="button"
           kind="framed"

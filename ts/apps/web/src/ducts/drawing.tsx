@@ -24,6 +24,8 @@ import {
   type SegmentFacts,
 } from "./encoding";
 import { denseRegion, Schematic } from "./inset";
+import { orbitOf } from "./proto/orbit/camera"; // proto: orbit
+import { useOrbitDrawing } from "./proto/orbit/lens"; // proto: orbit
 import type { Claim } from "./legs";
 import type { SubjectDrawn } from "./scene";
 
@@ -268,6 +270,14 @@ export function DuctDrawing({
     fitted.current = key;
     setView(fitView(drawn.box, size));
   }, [size, drawn.box, fitKey]);
+  // proto: orbit — the camera rides `project`; null for every other projection.
+  const orbit = useOrbitDrawing(orbitOf(project), {
+    selected,
+    host,
+    size,
+    fit: (box) => size && setView(fitView(box, size)),
+    onSelect,
+  });
 
   const screen = ([x, y]: Point2): Point2 => [x * view.scale + view.tx, y * view.scale + view.ty];
   const visible: Bounds2 | null = size
@@ -319,6 +329,7 @@ export function DuctDrawing({
       onClick={() => {
         if (dragDist.current < CLICK_PX) onSelect(null);
       }}
+      onDoubleClick={orbit.onDoubleClick} // proto: orbit
     >
       {size ? (
         <svg
@@ -328,6 +339,7 @@ export function DuctDrawing({
           aria-label={label}
           style={{ position: "absolute", left: 0, top: 0 }}
         >
+          {orbit.wrap(<>{/* proto: orbit */}
           <g transform={`matrix(${view.scale} 0 0 ${view.scale} ${view.tx} ${view.ty})`}>
             {underlay && visible ? underlay(visible) : null}
             {drawn.context.map((path, i) =>
@@ -339,6 +351,7 @@ export function DuctDrawing({
                   fill="none"
                   stroke={token("ink-mute")}
                   strokeOpacity={0.35}
+                  opacity={orbit.fadeAll} // proto: orbit
                   strokeWidth={1}
                   vectorEffect="non-scaling-stroke"
                   pointerEvents="none"
@@ -355,6 +368,7 @@ export function DuctDrawing({
                   data-critical={critical?.has(id) ? "" : undefined}
                   data-selected={selected.has(id) ? "" : undefined}
                   data-hovered={id === hovered ? "" : undefined}
+                  opacity={orbit.fade(id)} // proto: orbit
                 >
                   {critical?.has(id) ? (
                     <path
@@ -410,6 +424,7 @@ export function DuctDrawing({
                 data-riser={id}
                 data-selected={selected.has(id) ? "" : undefined}
                 transform={`translate(${x} ${y})`}
+                opacity={orbit.fade(id)} // proto: orbit
                 style={{ cursor: "pointer" }}
                 onMouseEnter={() => onHover(id)}
                 onMouseLeave={() => onHover(null)}
@@ -434,6 +449,7 @@ export function DuctDrawing({
                 data-selected={selected.has(id) ? "" : undefined}
                 data-hovered={id === hovered ? "" : undefined}
                 transform={`translate(${x} ${y})`}
+                opacity={orbit.fade(id)} // proto: orbit
                 style={{ cursor: "pointer" }}
                 onMouseEnter={() => onHover(id)}
                 onMouseLeave={() => onHover(null)}
@@ -461,6 +477,7 @@ export function DuctDrawing({
                 key={item.id}
                 data-issue={item.kind}
                 transform={`translate(${x} ${y - MARK * 2.2})`}
+                opacity={orbit.fade(item.elementId)} // proto: orbit
                 style={{ cursor: "pointer" }}
                 onClick={click(() => onSelectIssue(item))}
               >
@@ -488,8 +505,10 @@ export function DuctDrawing({
               onSelectClaim={onSelectClaim}
             />
           ) : null}
+          </>)}
         </svg>
       ) : null}
+      {orbit.overlay /* proto: orbit */}
     </div>
   );
 }
