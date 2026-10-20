@@ -167,7 +167,7 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 export function createPeRoutes(options: PeRoutesOptions) {
   const work = new RouteWorkspace({ registrations: options.registrations, store: options.store });
   const analysis = options.ductsAnalysis
-    ? createDuctsAnalysis({ ...options.ductsAnalysis, readWork: (key) => work.read(key, "ducts") })
+    ? createDuctsAnalysis({ ...options.ductsAnalysis, readWork: (key) => work.readRaw(key, "ducts") })
     : null;
   const views = new RouteViewStore();
   const resources = observeResources(work, options.heads, options.observeHostResource);

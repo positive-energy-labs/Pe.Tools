@@ -3,6 +3,7 @@ import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { contextFetch as fetch } from "@pe/runtime/context";
 import {
   capabilityPrincipals,
+  DUCTS_FINDS,
   ductsAnalysisRequestSchema,
   instancesReading,
   scheduleReads,
@@ -147,7 +148,7 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
       kind: "route-command",
       title: "Analyze duct pressure drop",
       description:
-        "Calculate pressure-drop demand over a complete retained duct graph without a mounted page. Artifact-only projection apply-request builds a bounded reference to an immutable canonical staged-write candidate; download its payload, obtain approval and revalidate before the separate preview/apply doors. It does not stage Work or write Revit. Use source fresh with an exact document and selector document for the first full inventory; reuse the returned artifact for equipment, terminal, group or exact space-text projections and pagination, with no further native reads. Use projection ports for exact UID/connector evidence pins to propose in canonical Work; use projection circuits or circuit-path for staged physical fan/passive/terminal evidence and balanced-design demand; role evidence is proposed through generic ducts Work, staged only by a person. Projection components exposes staged signed KCL and optional prescribed-flow TOTAL-pressure closure with bounded hydraulic head summaries. Unknown circulation, constitutive laws or fan allocation remain unresolved; legacy circuits remain tree-limited. Legacy path totals remain separate, and physical circuit pressure is not a manufacturer scalar ESP. Totals expose incomplete inputs and native parity limits. Space text does not prove room identity. Read/calculation only; no model or Work mutation.",
+        "Calculate pressure-drop demand over a complete retained duct graph without a mounted page. Artifact-only projection apply-request builds a bounded reference to an immutable canonical staged-write candidate; download its payload, obtain approval and revalidate before the separate preview/apply doors. It does not stage Work or write Revit. Use source fresh with an exact document and selector document for the first full inventory; reuse the returned artifact for equipment, terminal, group or exact space-text projections and pagination, with no further native reads. Use projection ports for exact UID/connector evidence pins to propose in canonical Work; use projection circuits or circuit-path for staged physical fan/passive/terminal evidence and balanced-design demand; role evidence is proposed through generic ducts Work, staged only by a person. Projection components exposes staged signed KCL and optional prescribed-flow TOTAL-pressure closure with bounded hydraulic head summaries. Unknown circulation, constitutive laws or fan allocation remain unresolved; legacy circuits remain tree-limited. Legacy path totals remain separate, and physical circuit pressure is not a manufacturer scalar ESP. Totals expose incomplete inputs and native parity limits. Space text does not prove room identity. Read/calculation only; no model or Work mutation. Rows carry `tag`, the equipment tag (PE_G___TagInstance), to match a name like FC-23. If the page's saved Work is unreadable, a finding of kind unreadable-work says what to tell the person; the price still runs. Start with skill:@product/skills/calc-duct-pressure-drop.",
       finds: [
         "ducts",
         "pressure drop",
@@ -158,6 +159,7 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
         "room",
         "space",
         "critical path",
+        ...DUCTS_FINDS,
       ],
       needs: "nothing",
       mutates: false,
@@ -212,7 +214,7 @@ function routeViewRows(route: RouteViewRoute): Capability[] {
       kind: "route-command",
       title: `${spec.title} visible view`,
       description: `Read the ${spec.title} page the person has open in this thread: its settable keys (${keys.join(", ")}) with their current values, the identity of what is shown, and derived facts (${route === "families" ? "stage, rule help, the exact visible reading id and counts" : "the group ids with their system names, and the levels"}). Returns instance and revision for ${`route:${route}.set-view`}. If two panes are open, pass an instance from the ambiguity result. No Revit read.`,
-      finds: [lower, "visible", "page", ...(route === "families" ? ["archive", "rules"] : ["system", "group", "level"])],
+      finds: [lower, "visible", "page", ...(route === "families" ? ["archive", "rules"] : [...DUCTS_FINDS, "group", "level"])],
       needs: "nothing",
       mutates: false,
       principal: capabilityPrincipals(false),
@@ -225,7 +227,7 @@ function routeViewRows(route: RouteViewRoute): Capability[] {
       kind: "route-command",
       title: `Set ${spec.title} visible view`,
       description: `${spec.policy} Read route:${route}.view first, then pass its instance and revision with a nonempty subset of ${keys.join(", ")}${spec.words ? ` or ${Object.keys(spec.words.shape).join(", ")}` : ""}. The browser acknowledges the render before this returns.`,
-      finds: [lower, "filter", "visible", "page", ...(route === "ducts" ? ["system", "group", "level"] : ["rules"])],
+      finds: [lower, "filter", "visible", "page", ...(route === "ducts" ? [...DUCTS_FINDS, "group", "level"] : ["rules"])],
       needs: "nothing",
       mutates: true,
       principal: capabilityPrincipals(true),

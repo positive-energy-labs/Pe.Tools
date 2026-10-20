@@ -2,7 +2,7 @@
  * The load tool's Load Preview as pasted from Excel: tab-separated, one block per system. A block
  * opens with "System n <rooms served> <tag>" and the system's air flow, then "Ventilation",
  * "Misc. Return" and "Zone n" rows (skipped), then one row per room ("1-Golf Sim 005"), then a
- * blank row. The tag is the equipment Mark; the room number is the room's trailing token.
+ * blank row. The tag is the firm equipment tag (PE_G___TagInstance); the room number is the room's trailing token.
  * Header and instruction rows above the first system are tolerated: the CFM column is the one
  * whose header reads Air Flow (or Sys Act CFM); without a header it is the sixth column after the
  * name, the load tool's own export layout. Pure: text in, systems out.
