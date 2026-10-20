@@ -254,6 +254,47 @@ export function triage(input: TriageInput) {
           ],
         });
         break;
+      case "loop-by-inference": {
+        // The inferred join that closes the loop is the one the finding is named for.
+        const join = `proximity:${f.id.slice("loop-by-inference:".length)}`;
+        fix.push({
+          ...item,
+          title: KIND_TITLE[f.kind]!,
+          status: "blocks the path",
+          verbs: [
+            verdict(
+              doc,
+              join,
+              "ignore",
+              "break the join",
+              "Ignore: withhold the inferred join that closes this loop",
+            ),
+            select(f.elementIds),
+          ],
+        });
+        break;
+      }
+      case "multi-root": {
+        const active = f.elementIds.filter((id) => roleOf(doc, id) !== "passive");
+        fix.push({
+          ...item,
+          title: `Several roots: ${names(f.elementIds)}`,
+          status: "blocks the path",
+          verbs: [
+            ...active.map(
+              (id): RowVerb => ({
+                kind: "role",
+                id,
+                role: "passive",
+                label: `${name(id)} is passive`,
+                says: `Stage ${name(id)} as passive (it moves no design air); the other root is the fan`,
+              }),
+            ),
+            select(f.elementIds),
+          ],
+        });
+        break;
+      }
       default: {
         const grade = f.grade === "anomalous";
         fix.push({

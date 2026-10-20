@@ -68,8 +68,8 @@ export function EScreen({ props }: { props: ProtoProps }) {
   );
   const nameOf = useMemo(() => {
     const n = snapshot ? elementNamer(snapshot, null) : () => null;
-    return (id: number) => n(id) ?? "element not in snapshot";
-  }, [snapshot]);
+    return (id: number) => labels.get(id) ?? n(id) ?? "element not in snapshot";
+  }, [snapshot, labels]);
   const names = useMemo(() => (snapshot ? groupLabels(snapshot) : new Map<string, string>()), [snapshot]);
   // The survey is the priced result's, or the unpriced one while the tables are unread; the
   // manifest's apply gate reads the same rows (`triage`) over the same tolerated snapshot.

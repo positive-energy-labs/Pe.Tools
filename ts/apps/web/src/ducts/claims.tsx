@@ -80,6 +80,9 @@ export function elementNamer(snapshot: DuctSnapshot, subject: SubjectDrawn | nul
   return (id: number): string | null => {
     const node = nodes.get(id);
     if (node?.label) return node.label;
+    // A unit is named by its Mark (FC-17), never by its kind.
+    const mark = node?.facts.find((f) => f.key === "mark")?.text;
+    if (mark) return mark;
     const place = subject?.placeOf.get(id);
     if (place && ELEMENT_PLACES.has(place.kind) && !place.name.endsWith(String(id)))
       return place.name;

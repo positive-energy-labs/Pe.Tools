@@ -69,6 +69,13 @@ export function readiness(
     switch (issue.kind) {
       case "open-end":
         return verdict(issue) === "capped" || verdict(issue) === "ignore";
+      case "multi-root":
+        // All but one root staged passive leaves a single air mover.
+        return (
+          (snapshot.groups.find((g) => g.id === issue.groupId)?.rootIds ?? []).filter(
+            (id) => doc?.roles[String(id)]?.staged?.value.role !== "passive",
+          ).length <= 1
+        );
       case "no-terminal-flow":
         return verdict(issue) === "ignore";
       case "no-fan-static":

@@ -129,6 +129,30 @@ describe("the ducts inbox", () => {
     expect(keys(rows.set)).toEqual(["flows:40"]);
   });
 
+
+  it("several roots offers each root as passive; a loop offers to break its inferred join", () => {
+    const rows = inboxRows({
+      ...base,
+      findings: [
+        finding({ id: "multi-root:g1", kind: "multi-root", groupId: "g1", elementIds: [1, 2] }),
+        finding({ id: "loop-by-inference:5:0|6:0", kind: "loop-by-inference", elementIds: [5, 6] }),
+      ],
+    });
+    const roots = rows.fix.find((r) => r.kind === "multi-root")!;
+    expect(roots.ids).toEqual([1, 2]);
+    expect(roots.verbs.filter((v) => v.kind === "role")).toMatchObject([
+      { id: 1, role: "passive" },
+      { id: 2, role: "passive" },
+    ]);
+    const loop = rows.fix.find((r) => r.kind === "loop-by-inference")!;
+    expect(loop.verbs[0]).toMatchObject({
+      kind: "verdict",
+      key: "proximity:5:0|6:0",
+      verdict: "ignore",
+    });
+    for (const row of rows.fix) expect(row.ids.length).toBeGreaterThan(0);
+  });
+
   it("Check holds claims awaiting a verdict and Pea's proposals awaiting staging", () => {
     const doc = ductsRouteState.schema.parse({
       flows: { "30": { proposal: { value: { cfm: 150 } } }, "31": { staged: { value: { cfm: 90 } } } },

@@ -206,6 +206,14 @@ export function survey(
     ),
   );
   const fanless = new Set(noFan.map((f) => f.groupId));
+  const passive = new Set(
+    Object.entries(staged.roles).flatMap(([id, { role }]) => (role === "passive" ? [Number(id)] : [])),
+  );
+  const rootsOf = (groupId: string) =>
+    s.snapshot.groups.find((g) => g.id === groupId)?.rootIds ?? [];
+  // Several roots stand until a person stages all but one passive (it then moves no design air).
+  const manyRoots = (i: { kind: string; groupId: string }) =>
+    i.kind === "multi-root" && rootsOf(i.groupId).filter((id) => !passive.has(id)).length > 1;
   const findings: DuctFinding[] = [
     ...s.findings,
     ...noFan,
@@ -218,10 +226,18 @@ export function survey(
     ...flows.findings.map(flowFinding),
     ...s.snapshot.issues
       .filter((i) => !(i.kind === "no-root" && fanless.has(i.groupId)))
+      .filter((i) => i.kind !== "multi-root" || manyRoots(i))
       .map((i) => ({
         id: i.id,
         kind: i.kind,
-        elementIds: i.elementId == null ? [] : [i.elementId],
+        ...(i.kind === "multi-root" || i.kind === "no-root" ? { groupId: i.groupId } : {}),
+        // A group-level issue names the group's roots, so the person can select them.
+        elementIds:
+          i.elementId != null ? [i.elementId] : i.kind === "multi-root"
+            ? rootsOf(i.groupId)
+            : i.kind === "no-root"
+              ? s.snapshot.nodes.filter((n) => n.groupId === i.groupId && n.kind === "terminal").map((n) => n.id)
+              : [],
         // Fan static is the route's output, not an input a person owes.
         note:
           i.kind === "no-fan-static"

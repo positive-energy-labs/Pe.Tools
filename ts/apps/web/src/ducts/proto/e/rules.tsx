@@ -128,6 +128,9 @@ export function StagedRules({
   const components = Object.keys(priced.staged.componentDrops).length;
   const units = Object.keys(priced.staged.esp).length;
   const catalogs = Object.keys(priced.staged.catalogs).length;
+  const flows = Object.keys(priced.staged.flows).length;
+  const unitFlows = Object.keys(priced.staged.equipmentFlows).length;
+  const roles = Object.keys(priced.staged.roles).length;
   const fanOf = (r: Priced["now"]) => (group ? r.byGroup[group]?.fan : r.fan);
   const discard = () => {
     const doc = work.doc;
@@ -152,8 +155,21 @@ export function StagedRules({
       ),
     );
   };
-  if (!keys.length && !terminals && !components && !units && !catalogs)
-    return <p className="text-ink-2 t-small">nothing staged: no rule, drop, catalog or unit static</p>;
+  if (
+    !keys.length &&
+    !terminals &&
+    !components &&
+    !units &&
+    !catalogs &&
+    !flows &&
+    !unitFlows &&
+    !roles
+  )
+    return (
+      <p className="text-ink-2 t-small">
+        nothing staged: no rule, drop, catalog, flow, role or unit ESP
+      </p>
+    );
   return (
     <div className="flex flex-col gap-0.5 t-small" data-e-staged="">
       {keys.map((key) => {
@@ -171,13 +187,16 @@ export function StagedRules({
           </div>
         );
       })}
-      {terminals || components || units || catalogs ? (
+      {terminals || components || units || catalogs || flows || unitFlows || roles ? (
         <div>
           {[
             terminals ? `${terminals} terminal drop${terminals === 1 ? "" : "s"}` : "",
             components ? `${components} component drop${components === 1 ? "" : "s"}` : "",
             catalogs ? `${catalogs} catalog link${catalogs === 1 ? "" : "s"}` : "",
-            units ? `${units} unit static${units === 1 ? "" : "s"}` : "",
+            units ? `${units} unit ESP${units === 1 ? "" : "s"}` : "",
+            flows ? `${flows} terminal flow${flows === 1 ? "" : "s"}` : "",
+            unitFlows ? `${unitFlows} unit flow${unitFlows === 1 ? "" : "s"}` : "",
+            roles ? `${roles} unit role${roles === 1 ? "" : "s"}` : "",
           ]
             .filter(Boolean)
             .join(" · ")}
@@ -187,7 +206,7 @@ export function StagedRules({
         <span>
           fan <ValueDiff from={fmt(fanOf(priced.now))} to={fmt(fanOf(priced.next))} /> in-wg
         </span>
-        <Button label="Discard every staged rule, drop, catalog link and unit static" onClick={discard}>
+        <Button label="Discard every staged rule, drop, catalog link, flow, role and unit ESP" onClick={discard}>
           discard
         </Button>
       </div>

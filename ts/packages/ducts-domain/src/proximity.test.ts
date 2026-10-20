@@ -795,3 +795,33 @@ it("a staged connect confirms an inference on its link; a proposal does not", ()
   });
   expect(tolerate(before, proposed).links[0]!.ruled).toBe(false);
 });
+
+it("a fragment's no-root issue is dropped when its group merges into one with a fan, and multi-root is re-derived", () => {
+  const before = snap([
+    duct(1, [0, 0, 0], [10, 0, 0], "g1"),
+    duct(2, [10 + 0.4 * IN, 0, 0], [20, 0, 0], "g2"),
+  ]);
+  const [g1, g2] = before.groups;
+  g1!.rootIds = [100];
+  g2!.rootIds = [];
+  g2!.terminalCount = 1;
+  const orphan = { id: "no-root:g2", kind: "no-root" as const, groupId: "g2", note: "terminals but no equipment port" };
+  before.issues.push(orphan);
+  g2!.issueIds.push(orphan.id);
+  const merged = tolerate(before).snapshot;
+  expect(merged.issues.map((i) => i.id)).not.toContain("no-root:g2");
+  expect(merged.groups[0]!.issueIds).not.toContain("no-root:g2");
+
+  // Two fans meeting through the join: one multi-root issue, on the merged group, once.
+  const two = snap([
+    duct(1, [0, 0, 0], [10, 0, 0], "g1"),
+    duct(2, [10 + 0.4 * IN, 0, 0], [20, 0, 0], "g2"),
+  ]);
+  two.groups[0]!.rootIds = [100];
+  two.groups[1]!.rootIds = [200];
+  const after = tolerate(two).snapshot;
+  expect(after.issues.filter((i) => i.kind === "multi-root").map((i) => [i.id, i.groupId])).toEqual([
+    ["multi-root:g1", "g1"],
+  ]);
+  expect(after.groups[0]!.issueIds.filter((id) => id === "multi-root:g1")).toHaveLength(1);
+});
