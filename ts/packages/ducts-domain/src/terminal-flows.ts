@@ -1,8 +1,10 @@
 /**
- * The design flow at every air terminal (pressure-drop ledger, 2026-10-16 "terminal design flow"):
- * a staged override first; else the Load Preview system whose tag is the equipment's Mark, split
- * across the terminals of each tree rooted at that equipment by neck area (even when an area is
- * missing); else Revit's own terminal flow when positive; else nothing, and a finding says so.
+ * The design flow at every air terminal (pressure-drop ledger, 2026-10-16 "terminal design flow",
+ * ruling 5 of 2026-10-20): a staged override first; else the rooms seam (`roomFlows`); else the Load
+ * Preview system whose tag is the equipment's Mark, split across the terminals of each tree rooted
+ * at that equipment by neck area (even when an area is missing); else Revit's own terminal flow when
+ * positive; else nothing, and a finding says so. A unit's flow: a staged `equipmentFlows` cell, else
+ * Revit's `fanFlow` slot fact (`equipmentFlows`).
  * Pure on the snapshot, the staged cells and the group trees; nothing here is stored or written.
  */
 import type { DuctFlow, DuctLoadPreview } from "@pe/agent-contracts";
@@ -12,7 +14,7 @@ import type { DuctSnapshot } from "./types.ts";
 
 type Node = DuctSnapshot["nodes"][number];
 
-export type FlowSource = "override" | `load-preview:${string}` | "revit";
+export type FlowSource = "override" | `rooms:${string}` | `load-preview:${string}` | "revit";
 export interface TerminalFlow {
   cfm: number | null;
   source: FlowSource | null;
@@ -43,11 +45,16 @@ const downstream = (tree: GroupTree) => {
 
 const neckArea = (node: Node) => node.connectors.find((c) => c.areaFt2 != null)?.areaFt2 ?? null;
 
+/** A terminal's flow from the rooms route: its share of the served rooms' CFM, with where it came from. */
+export type RoomFlows = ReadonlyMap<number, { cfm: number; source: string }>;
+
 export function terminalFlows(
   snapshot: DuctSnapshot,
   loads: DuctLoadPreview | null | undefined,
   flowsStaged: Record<string, DuctFlow>,
   trees: GroupTree[],
+  // rooms seam: rooms route supplies served-room CFM split (PE_M___ServesRoom), not built
+  roomFlows?: RoomFlows,
 ): { flows: Map<number, TerminalFlow>; findings: FlowFinding[] } {
   const findings: FlowFinding[] = [];
   const nodeById = new Map(snapshot.nodes.map((n) => [n.id, n]));
@@ -99,14 +106,44 @@ export function terminalFlows(
   for (const node of snapshot.nodes.filter((n) => n.kind === "terminal")) {
     const override = flowsStaged[String(node.id)];
     const revit = terminalCfm(node);
+    const room = roomFlows?.get(node.id);
     const flow: TerminalFlow = override
       ? { cfm: override.cfm, source: "override" }
-      : (preview.get(node.id) ??
-        (revit != null && revit > 0
-          ? { cfm: revit, source: "revit" }
-          : { cfm: null, source: null, finding: "no-flow" }));
+      : room
+        ? { cfm: room.cfm, source: `rooms:${room.source}` }
+        : (preview.get(node.id) ??
+          (revit != null && revit > 0
+            ? { cfm: revit, source: "revit" }
+            : { cfm: null, source: null, finding: "no-flow" }));
     if (flow.finding) findings.push({ kind: "no-flow", terminal: node.id });
     flows.set(node.id, flow);
   }
   return { flows, findings };
+}
+
+export type EquipmentFlowSource = "override" | "revit";
+export interface EquipmentFlow {
+  cfm: number | null;
+  source: EquipmentFlowSource | null;
+}
+
+/** A unit's design flow: a staged `equipmentFlows` cell, else Revit's `fanFlow` slot fact when positive. */
+export function equipmentFlows(
+  snapshot: DuctSnapshot,
+  staged: Record<string, DuctFlow>,
+): Map<number, EquipmentFlow> {
+  return new Map(
+    snapshot.nodes
+      .filter((n) => n.kind === "equipment")
+      .map((node) => {
+        const override = staged[String(node.id)];
+        const revit = node.facts.find((f) => f.key === "fanFlow")?.value ?? null;
+        const flow: EquipmentFlow = override
+          ? { cfm: override.cfm, source: "override" }
+          : revit != null && revit > 0
+            ? { cfm: revit, source: "revit" }
+            : { cfm: null, source: null };
+        return [node.id, flow];
+      }),
+  );
 }

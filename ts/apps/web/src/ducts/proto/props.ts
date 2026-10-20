@@ -19,7 +19,9 @@ export interface ProtoProps {
   ready: ReturnType<typeof readiness>;
   /** Subject scene (ids + claims + verdict callback); null until a subject exists. */
   subject: Subject | null;
-  /** The subject's claims, flattened (same array as subject.claims; empty when none). */
+  /** Stages a person's verdict on a claim; present whether or not a subject exists. */
+  onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;
+  /** The chosen group's claims (every claim when no group is chosen). */
   claims: readonly Claim[];
   /** The claim cells keyed by id as the Work (or the `?demo=scene` fixture) holds them. */
   claimCells: Record<string, DuctClaim>;

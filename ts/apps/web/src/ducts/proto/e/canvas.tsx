@@ -512,7 +512,7 @@ function Canvas({
             <RulingBody
               r={openRuling}
               nameOfId={nameOfId}
-              onVerdict={subject?.onVerdict}
+              onVerdict={onVerdict}
               work={work}
               doc={doc}
               onHover={onHover}

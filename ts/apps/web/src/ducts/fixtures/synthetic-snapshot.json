@@ -1,11 +1,11 @@
 {
-  "coordinateEncoding": "native-double",
   "document": {
     "title": "Synthetic",
     "readAt": "2026-10-04T00:00:00+00:00",
     "elapsedMs": 1,
     "networkBasedCalculations": true
   },
+  "coordinateEncoding": "native-double",
   "levels": [
     {
       "id": 100,
@@ -555,8 +555,10 @@
   ],
   "slots": {
     "fanStatic": "PE_M_Fan_ExternalStaticPressure",
-    "fanFlow": "PE_M_Fan_AirFlow",
+    "fanFlow": "PE_M_Fan_AirFlowDesign",
     "componentDrop": "Pressure Drop",
-    "fittingCoefficient": "Pe_C", "terminalFlow": "PE_M_Grd_AirFlow"
+    "terminalDrop": "PE_M_Grd_ExternalStaticPressure",
+    "fittingCoefficient": "Pe_C",
+    "terminalFlow": "PE_M_Grd_AirFlow"
   }
 }

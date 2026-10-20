@@ -14,19 +14,51 @@ import {
 
 import { phased } from "./phases.ts";
 import { tolerate, type InferredLink } from "./proximity.ts";
-import { markOf, terminalFlows, type FlowFinding, type TerminalFlow } from "./terminal-flows.ts";
+import {
+  equipmentFlows,
+  markOf,
+  terminalFlows,
+  type EquipmentFlow,
+  type FlowFinding,
+  type RoomFlows,
+  type TerminalFlow,
+} from "./terminal-flows.ts";
 import { groupTree } from "./topology.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 export interface Survey {
   snapshot: DuctSnapshot;
   flows: Map<number, TerminalFlow>;
+  /** Every unit's design flow: staged `equipmentFlows`, else Revit's `fanFlow` fact. */
+  equipmentFlows: Map<number, EquipmentFlow>;
   findings: DuctFinding[];
   /** The element pairs only a proximity inference joins; a path stepping across one rests on it. */
   inferred: InferredLink[];
 }
 
 const PERSON = new Set(["open-end", "no-root", "multi-root", "no-terminal-flow"]);
+
+/**
+ * A group with no air mover (no root, or every root a staged passive unit) has no duct path to a
+ * fan, so it prices nothing (`losses.ts`) and says so once. It stands in for the group's `no-root`.
+ */
+function noFanFindings(snapshot: DuctSnapshot, passive: ReadonlySet<number>): DuctFinding[] {
+  return snapshot.groups
+    .filter((g) => !g.rootIds.some((id) => !passive.has(id)))
+    .map((g) => ({
+      id: `no-fan:${g.id}`,
+      kind: "no-fan",
+      elementIds: snapshot.nodes
+        .filter((n) => n.groupId === g.id && n.kind === "terminal")
+        .map((n) => n.id),
+      groupId: g.id,
+      note: g.rootIds.length
+        ? `no duct path to a fan: ${g.id} is fed only by passive ${g.rootIds.join(", ")}`
+        : `no duct path to a fan: ${g.id} has no equipment connected to it`,
+      assumed: null,
+      clearer: "person" as const,
+    }));
+}
 /** The inferences the route acts on; a near miss or a loop it only reports. */
 const ASSUMES = new Set([
   "joined-by-proximity",
@@ -149,9 +181,13 @@ export function tolerated(snapshot: DuctSnapshot, work: DuctsRouteDocument | nul
 const inSeries = new WeakMap<DuctSnapshot, Map<string, ReturnType<typeof series>>>();
 const last = new WeakMap<DuctSnapshot, { work: DuctsRouteDocument | null; survey: Survey }>();
 
-export function survey(snapshot: DuctSnapshot, work: DuctsRouteDocument | null): Survey {
+export function survey(
+  snapshot: DuctSnapshot,
+  work: DuctsRouteDocument | null,
+  roomFlows?: RoomFlows,
+): Survey {
   const hit = last.get(snapshot);
-  if (hit && hit.work === work) return hit.survey;
+  if (!roomFlows && hit && hit.work === work) return hit.survey;
   const t = tolerated(snapshot, work);
   const staged = stagedDucts(work);
   const tags = (staged.loads.preview?.systems ?? []).flatMap((x) => (x.tag ? [x.tag] : [])).sort();
@@ -160,9 +196,19 @@ export function survey(snapshot: DuctSnapshot, work: DuctsRouteDocument | null):
     bySeries.get(tags.join("|")) ??
     bySeries.set(tags.join("|"), series(t.snapshot, new Set(tags))).get(tags.join("|"))!;
   const trees = s.snapshot.groups.map((g) => groupTree(s.snapshot, g.id));
-  const flows = terminalFlows(s.snapshot, staged.loads.preview, staged.flows, trees);
+  const flows = terminalFlows(s.snapshot, staged.loads.preview, staged.flows, trees, roomFlows);
+  const noFan = noFanFindings(
+    s.snapshot,
+    new Set(
+      Object.entries(staged.roles).flatMap(([id, { role }]) =>
+        role === "passive" ? [Number(id)] : [],
+      ),
+    ),
+  );
+  const fanless = new Set(noFan.map((f) => f.groupId));
   const findings: DuctFinding[] = [
     ...s.findings,
+    ...noFan,
     // An inference is likely, never correct (kaitpw 2026-10-19): a person rules on every one.
     ...t.findings.map((f) => ({
       ...f,
@@ -170,21 +216,29 @@ export function survey(snapshot: DuctSnapshot, work: DuctsRouteDocument | null):
       clearer: "person" as const,
     })),
     ...flows.findings.map(flowFinding),
-    ...s.snapshot.issues.map((i) => ({
-      id: i.id,
-      kind: i.kind,
-      elementIds: i.elementId == null ? [] : [i.elementId],
-      // Fan static is the route's output, not an input a person owes.
-      note:
-        i.kind === "no-fan-static"
-          ? `${i.note}; computed by the route when the path prices`
-          : i.note,
-      assumed: null,
-      clearer: PERSON.has(i.kind) ? ("person" as const) : ("route" as const),
-    })),
+    ...s.snapshot.issues
+      .filter((i) => !(i.kind === "no-root" && fanless.has(i.groupId)))
+      .map((i) => ({
+        id: i.id,
+        kind: i.kind,
+        elementIds: i.elementId == null ? [] : [i.elementId],
+        // Fan static is the route's output, not an input a person owes.
+        note:
+          i.kind === "no-fan-static"
+            ? `${i.note}; computed by the route when the path prices`
+            : i.note,
+        assumed: null,
+        clearer: PERSON.has(i.kind) ? ("person" as const) : ("route" as const),
+      })),
   ];
-  const result = { snapshot: s.snapshot, flows: flows.flows, findings, inferred: t.links };
+  const result = {
+    snapshot: s.snapshot,
+    flows: flows.flows,
+    equipmentFlows: equipmentFlows(s.snapshot, staged.equipmentFlows),
+    findings,
+    inferred: t.links,
+  };
 
-  last.set(snapshot, { work, survey: result });
+  if (!roomFlows) last.set(snapshot, { work, survey: result });
   return result;
 }

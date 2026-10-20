@@ -11,8 +11,10 @@
  * - fan = the largest path total in a group; the critical terminal is its argmax.
  * - A path stepping across a proximity inference (`proximity.ts`) still prices; it names the
  *   finding ids its total rests on that no person confirmed (`inferred`), and is `provisional`
- *   at its worst grade unless each is a near miss (inference may compute, never conclude, kaitpw
- *   2026-10-19). A group's fan and the document's rest on every path under them.
+ *   only when one is `anomalous` (ruling 5, kaitpw 2026-10-20: a near miss and a stretched join are
+ *   bridged and final; see `bins.ts`). A group's fan and the document's rest on every path under them.
+ * - A group with no air mover (no root, or every root a staged `passive` unit) prices nothing:
+ *   `byGroup[id].hasAirMover` is false and survey raises the blocking `no-fan` finding.
  * Physics in loss-physics.ts, interpolation in loss-grid.ts, rule data in loss-rules.ts.
  */
 import {
@@ -97,6 +99,8 @@ export interface Overrides {
   catalogLinks?: Readonly<Record<string, { table: string }>>;
   /** A stated drop per fitting or accessory id, in-wg; replaces the rule lookup (not for taps). */
   componentDrop?: Readonly<Record<number, number>>;
+  /** A staged role per air mover id; a `passive` root is not an air mover. */
+  unitRole?: Readonly<Record<number, "fan" | "passive">>;
 }
 
 interface PathLoss {
@@ -109,8 +113,8 @@ interface PathLoss {
 }
 
 /**
- * A result resting on inferences a person has not ruled on: their worst grade, how many, and
- * their finding ids. Null when final: every inference under it a near miss or confirmed.
+ * A result resting on anomalous joins a person has not ruled on: their worst grade, how many, and
+ * their finding ids. Null when final: every inference under it bridged (near miss, stretched) or confirmed.
  */
 export type Provisional = null | {
   worst: DuctInferenceGrade;
@@ -141,6 +145,8 @@ export interface LossResult {
       fan: number;
       critical: number | null;
       revitCritical: number | null;
+      /** Whether the group has an air mover (a root that is not staged passive); without one nothing is priced. */
+      hasAirMover: boolean;
       /** The fan's standing: provisional when any path in the group is. */
       provisional: Provisional;
     }
@@ -314,7 +320,7 @@ export function computeLosses(
     byPair.set(pair, [...(byPair.get(pair) ?? []), id]);
   }
   const provisionalOf = (ids: Iterable<string>): Provisional => {
-    const open = [...new Set(ids)].filter((id) => gradeOf.get(id) !== "near-miss").sort();
+    const open = [...new Set(ids)].filter((id) => gradeOf.get(id) === "anomalous").sort();
     return open.length
       ? {
           worst: open.map((id) => gradeOf.get(id)!).reduce(worse),
@@ -357,7 +363,9 @@ export function computeLosses(
     let fan = 0;
     let critical: number | null = null;
     const under: string[] = [];
-    for (const run of runsOf(tree)) {
+    const hasAirMover = group.rootIds.some((id) => overrides.unitRole?.[id] !== "passive");
+    // No air mover: no path to price (never from the open end); survey says so as a `no-fan` finding.
+    for (const run of hasAirMover ? runsOf(tree) : []) {
       const rows = pathRows(tree, run.path, below, grids, choices, overrides, fail, catalogs);
       const total = rows.reduce((a, r) => a + (r.dp ?? 0), 0);
       const rests = restsOn(run.path);
@@ -384,6 +392,7 @@ export function computeLosses(
       critical,
       revitCritical:
         (critical == null ? null : systemFor(snapshot, critical)?.criticalPathLossInWg) ?? null,
+      hasAirMover,
       provisional: provisionalOf(under),
     };
     everywhere.push(...under);

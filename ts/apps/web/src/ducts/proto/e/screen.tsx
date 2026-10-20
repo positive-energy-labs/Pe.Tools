@@ -47,7 +47,8 @@ export function EScreen({ props }: { props: ProtoProps }) {
   );
   const ruleOf = useMemo(() => ruleOfIds(priced), [priced]);
   const tree = useMemo(
-    () => (snapshot && page.group ? (buildTree(snapshot, priced, doc, page.group)[0] ?? null) : null),
+    () =>
+      snapshot && page.group ? (buildTree(snapshot, priced, doc, page.group)[0] ?? null) : null,
     [snapshot, priced, doc, page.group],
   );
   const scope = useMemo(
@@ -89,8 +90,7 @@ export function EScreen({ props }: { props: ProtoProps }) {
   // null = automatic: open when the inbox holds a row, collapsed when it holds none.
   const [inboxOpen, setInboxOpen] = useState<boolean | null>(null);
 
-  if (!snapshot)
-    return <p className="text-ink-2 p-4">{props.empty?.says ?? "reading ducts…"}</p>;
+  if (!snapshot) return <p className="text-ink-2 p-4">{props.empty?.says ?? "reading ducts…"}</p>;
 
   const light = (ids: readonly number[] | null) => {
     setLit(new Set(ids ?? []));
@@ -143,13 +143,21 @@ export function EScreen({ props }: { props: ProtoProps }) {
       {tree ? (
         <>
           {reading?.quantity ? (
-            <p className="t-small text-ink-2 border-line border-b px-2 py-1" data-e-legend={reading.key}>
-              bar = {reading.label}, {reading.quantity.unit}, the largest under each row · full width
-              = the group's max{" "}
+            <p
+              className="t-small text-ink-2 border-line border-b px-2 py-1"
+              data-e-legend={reading.key}
+            >
+              bar = {reading.label}, {reading.quantity.unit}, the largest under each row · full
+              width = the group's max{" "}
               <span className="face-mono">
-                {reading.quantity.max == null ? "—" : formatQuantity(reading.quantity, reading.quantity.max)}
+                {reading.quantity.max == null
+                  ? "—"
+                  : formatQuantity(reading.quantity, reading.quantity.max)}
               </span>{" "}
-              at {reading.quantity.maxId == null ? "no element" : encoded.nameOf(reading.quantity.maxId)}
+              at{" "}
+              {reading.quantity.maxId == null
+                ? "no element"
+                : encoded.nameOf(reading.quantity.maxId)}
             </p>
           ) : (
             <BarLegend scale={scale} criticalName={critical ? grilleName(critical) : null} />
@@ -232,7 +240,13 @@ export function EScreen({ props }: { props: ProtoProps }) {
       axis="vertical"
       start={treePane}
       end={rulesPane}
-      resize={{ target: "end", defaultSize: 300, minSize: 120, minOtherSize: 160, persist: "proto-e-rules" }}
+      resize={{
+        target: "end",
+        defaultSize: 300,
+        minSize: 120,
+        minOtherSize: 160,
+        persist: "proto-e-rules",
+      }}
     />
   );
 
@@ -255,7 +269,7 @@ export function EScreen({ props }: { props: ProtoProps }) {
             work={inboxWork}
             doc={props.doc}
             nameOf={nameOf}
-            onVerdict={props.subject?.onVerdict ?? null}
+            onVerdict={props.onVerdict}
             light={light}
             onSelect={select}
           />

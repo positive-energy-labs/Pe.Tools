@@ -78,7 +78,10 @@ it("ducts: Pea proposes rules and drops but never stages them, and never touches
     ["rules", "tap-std", { table: "SD5-10" }],
     ["terminalDrops", "31", { inWg: 0.08, source: "catalog p. 12" }],
     ["componentDrops", "22", { inWg: 0.05 }],
-    ["unitStatics", "40", { inWg: 1.25 }],
+    ["esp", "40", { inWg: 1.25 }],
+    ["equipmentFlows", "40", { cfm: 4200, source: "submittal p. 3" }],
+    ["roles", "40", { role: "fan" }],
+    ["roles", "41", { role: "passive" }],
   ] as const;
   for (const [segment, key, value] of cases) {
     const propose = transitionPatches([segment], key, {}, { kind: "propose", rung: { value } });
@@ -108,14 +111,25 @@ it("ducts: Pea proposes rules and drops but never stages them, and never touches
   expect(applyPatches(spec, envelope, "human", badSlot, 0)).toMatchObject({ ok: false });
 });
 
-it("ducts: a unit static is keyed by element id and holds a non-negative in-wg", () => {
+it("ducts: esp, equipment flows and roles are keyed by element id and typed", () => {
   const spec = ductsRouteState as unknown as RouteStateSpec<z.ZodType>;
   const envelope: RouteEnvelope<unknown> = { version: 1, revision: 0, doc: spec.schema.parse({}) };
   const stage = (key: string, inWg: number) =>
-    transitionPatches(["unitStatics"], key, {}, { kind: "stage", rung: { value: { inWg } } });
+    transitionPatches(["esp"], key, {}, { kind: "stage", rung: { value: { inWg } } });
   expect(applyPatches(spec, envelope, "human", stage("40", 1.25), 0)).toMatchObject({ ok: true });
   expect(applyPatches(spec, envelope, "human", stage("rtu", 1.25), 0)).toMatchObject({ ok: false });
   expect(applyPatches(spec, envelope, "human", stage("40", -1), 0)).toMatchObject({ ok: false });
+  const flow = (key: string, cfm: number) =>
+    transitionPatches(["equipmentFlows"], key, {}, { kind: "stage", rung: { value: { cfm } } });
+  expect(applyPatches(spec, envelope, "human", flow("40", 900), 0)).toMatchObject({ ok: true });
+  expect(applyPatches(spec, envelope, "human", flow("40", -5), 0)).toMatchObject({ ok: false });
+  expect(applyPatches(spec, envelope, "human", flow("rtu", 900), 0)).toMatchObject({ ok: false });
+  const role = (key: string, value: string) =>
+    transitionPatches(["roles"], key, {}, { kind: "stage", rung: { value: { role: value } } });
+  expect(applyPatches(spec, envelope, "human", role("40", "fan"), 0)).toMatchObject({ ok: true });
+  expect(applyPatches(spec, envelope, "human", role("40", "damper"), 0)).toMatchObject({
+    ok: false,
+  });
 });
 
 it("ducts scene: Pea proposes the subject, claims, label parameter and working phase but never stages them; a verdict is staged by a person", () => {
@@ -127,7 +141,7 @@ it("ducts scene: Pea proposes the subject, claims, label parameter and working p
     state: "proven",
   };
   const cases = [
-    [[], "subject", [14122436, 14199815, 14199813]],
+    [["subject"], "g14122436", [14122436, 14199815, 14199813]],
     [["claims"], "c1", claim],
     [[], "labelParameter", "PE_Equipment_Name"],
     [[], "labelParameter", null],
@@ -170,7 +184,7 @@ it("ducts scene: Pea proposes the subject, claims, label parameter and working p
     { kind: "stage", rung: { value: { ...claim, verdictBy: "kaitpw" } } },
   );
   expect(applyPatches(spec, envelope, "human", orphanBy, 0)).toMatchObject({ ok: false });
-  const empty = transitionPatches([], "subject", {}, { kind: "stage", rung: { value: [] } });
+  const empty = transitionPatches(["subject"], "g1", {}, { kind: "stage", rung: { value: [] } });
   expect(applyPatches(spec, envelope, "human", empty, 0)).toMatchObject({ ok: false });
   const guessed = transitionPatches(
     ["claims"],

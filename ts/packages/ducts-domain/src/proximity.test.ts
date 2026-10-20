@@ -127,7 +127,13 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
     issues,
     layers: [],
     systems: [],
-    slots: { fanStatic: "", fanFlow: "", componentDrop: "", fittingCoefficient: "" },
+    slots: {
+      fanStatic: "",
+      fanFlow: "",
+      componentDrop: "",
+      fittingCoefficient: "",
+      terminalFlow: "",
+    },
   };
 };
 const staging = (id: string, verdict: "ignore" | "connect"): DuctsRouteDocument =>

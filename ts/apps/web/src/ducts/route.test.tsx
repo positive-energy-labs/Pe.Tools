@@ -400,7 +400,7 @@ test("the write verb is reachable from the one shell, and says why it is not arm
 
 test("a staged subject, claims and labelParameter render the subject scene; a verdict press stages the claim", async () => {
   work = ductsRouteState.schema.parse({
-    subject: { staged: { value: [100, 1, 2, 3, 4] } },
+    subject: { g1: { staged: { value: [100, 1, 2, 3, 4] } } },
     claims: {
       c1: { staged: { value: { text: "The unit is AHU-9.", ids: [100], state: "assumed" } } },
     },

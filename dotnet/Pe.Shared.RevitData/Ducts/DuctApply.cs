@@ -12,7 +12,8 @@ namespace Pe.Shared.RevitData.Ducts;
 ///     coefficient parameter live (the FittingCoefficient slot, default Pe_C); AshraeTable stores Table as Revit's
 ///     ASHRAETableName and Revit looks the legs up itself; SpecificCoefficient freezes Coefficient (the export route,
 ///     never the web's). Coefficient, Table, Inputs and RuleKey are Pe's provenance and land in the store.
-///     Terminals and Components carry a drop in in-wg; Equipment the fan external static.
+///     Terminals and Components carry a drop in in-wg; Equipment the fan external static; TerminalFlows and EquipmentFlows
+///     a design flow in cfm (the TerminalFlow slot on the terminal instance, the FanFlow slot on the unit).
 /// </summary>
 public sealed record DuctApplyRequest(
     bool PreviewOnly,
@@ -21,6 +22,8 @@ public sealed record DuctApplyRequest(
     IReadOnlyList<DuctDropWrite> Terminals,
     IReadOnlyList<DuctDropWrite> Components,
     IReadOnlyList<DuctEquipmentWrite> Equipment,
+    IReadOnlyList<DuctFlowWrite> TerminalFlows,
+    IReadOnlyList<DuctFlowWrite> EquipmentFlows,
     DuctLossStore Store);
 
 /// <summary>Table is the rule's ASHRAE table the Pe server prices the legs from when the family carries no coefficient; Coefficient is the web's number for the store and the export route.</summary>
@@ -37,6 +40,9 @@ public sealed record DuctDropWrite(long Id, double InWg, string? Source);
 
 public sealed record DuctEquipmentWrite(long Id, double ExternalStaticInWg);
 
+/// <summary>A design flow in cfm and where it came from (override, load preview, rooms, a person's note).</summary>
+public sealed record DuctFlowWrite(long Id, double Cfm, string? Source);
+
 /// <summary>StoreRevision is the store's WorkRevision after this call (unchanged on preview).</summary>
 public sealed record DuctApplyResult(
     bool PreviewOnly,
@@ -46,7 +52,7 @@ public sealed record DuctApplyResult(
     int StoreRevision);
 
 /// <summary>
-///     One target's outcome. Kind: fitting, terminal, component, equipment, store. Outcome: planned (preview),
+///     One target's outcome. Kind: fitting, terminal, component, equipment, terminal-flow, equipment-flow, store. Outcome: planned (preview),
 ///     written, refused (Reason says why), unchanged (already holds the value). Before and After are display text.
 /// </summary>
 public sealed record DuctWrite(long? Id, string Kind, string Outcome, string? Reason, string? Before, string? After);
@@ -62,6 +68,9 @@ public sealed record DuctInstanceRecord(string? Table, string? Inputs, double Co
 /// <summary>What Pe wrote on one terminal or component: the drop and where it came from (catalog, typed).</summary>
 public sealed record DuctDropRecord(double InWg, string? Source, DateTimeOffset AppliedAt);
 
+/// <summary>What Pe wrote on one terminal or unit: the design flow in cfm and where it came from.</summary>
+public sealed record DuctFlowRecord(double Cfm, string? Source, DateTimeOffset AppliedAt);
+
 /// <summary>
 ///     Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
 ///     `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
@@ -75,6 +84,8 @@ public sealed record DuctLossStore {
     public Dictionary<string, DuctRuleChoice> Rules { get; init; } = new(StringComparer.Ordinal);
     public Dictionary<long, DuctInstanceRecord> Instances { get; init; } = new();
     public Dictionary<long, DuctDropRecord> Terminals { get; init; } = new();
+    public Dictionary<long, DuctFlowRecord> TerminalFlows { get; init; } = new();
+    public Dictionary<long, DuctFlowRecord> EquipmentFlows { get; init; } = new();
     public DuctParameterSlots? Slots { get; init; }
     public int WorkRevision { get; init; }
     public DateTimeOffset? AppliedAt { get; init; }

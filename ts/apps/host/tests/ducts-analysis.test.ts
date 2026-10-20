@@ -1281,6 +1281,8 @@ test("apply-request builds a canonical immutable candidate without reacquiring",
     rules: {},
     instances: {},
     terminals: {},
+    terminalFlows: {},
+    equipmentFlows: {},
     workRevision: 3,
     customerKeep: { exact: [1, "untouched"] },
   };
@@ -1434,7 +1436,7 @@ test("apply-request cannot turn proposal-only or physical fan required head into
   f.snapshot.nodes[0]!.connectors[0]!.direction = "out";
   doc = ductsDocumentSchema.parse({
     ...candidateWork(),
-    unitStatics: { "1": { staged: { value: { inWg: 0.25 } } } },
+    esp: { "1": { staged: { value: { inWg: 0.25 } } } },
     calculation: {
       fan: {
         staged: {

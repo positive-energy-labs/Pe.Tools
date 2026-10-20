@@ -126,14 +126,14 @@ export function StagedRules({
   const keys = Object.keys(priced.staged.rules).sort();
   const terminals = Object.keys(priced.staged.terminalDrops).length;
   const components = Object.keys(priced.staged.componentDrops).length;
-  const units = Object.keys(priced.staged.unitStatics).length;
+  const units = Object.keys(priced.staged.esp).length;
   const catalogs = Object.keys(priced.staged.catalogs).length;
   const fanOf = (r: Priced["now"]) => (group ? r.byGroup[group]?.fan : r.fan);
   const discard = () => {
     const doc = work.doc;
     if (!doc) return;
     void work.write(
-      (["rules", "catalogs", "terminalDrops", "componentDrops", "unitStatics"] as const).flatMap(
+      (["rules", "catalogs", "terminalDrops", "componentDrops", "esp"] as const).flatMap(
         (segment) =>
           Object.entries(doc[segment] ?? {}).flatMap(([key, cell]) =>
             cell?.staged ? transitionPatches([segment], key, cell, { kind: "unstage" }) : [],

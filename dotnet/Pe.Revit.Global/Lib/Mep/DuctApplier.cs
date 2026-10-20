@@ -35,6 +35,7 @@ public static class DuctApplier {
         "Versioned Pe.Tools duct loss provenance (ducts.apply).");
 
     private static readonly ForgeTypeId InWg = UnitTypeId.InchesOfWater60DegreesFahrenheit;
+    private static readonly ForgeTypeId Cfm = UnitTypeId.CubicFeetPerMinute;
 
     public static (DuctLossStore? Store, string? Error) ReadStore(Document doc) {
         if (StoreText.Read(doc) is not { } json) return (null, null);
@@ -96,7 +97,10 @@ public static class DuctApplier {
                 [(PressureLossField, Finite(w.InWg) ? UnitUtils.ConvertToInternalUnits(w.InWg, InWg).ToString("R", CultureInfo.InvariantCulture) : "")], w.InWg, $"specific-loss {w.InWg:0.####} in-wg")));
         foreach (var w in request.Terminals ?? []) items.Add(Duplicate("terminal", w.Id) ?? Plan("terminal", w.Id, () => Terminal(doc, w, slots)));
         foreach (var w in request.Equipment ?? []) items.Add(Duplicate("equipment", w.Id) ?? Plan("equipment", w.Id, () => Equipment(doc, w, slots)));
-        SharedTypes(items, request.Equipment ?? []);
+        foreach (var w in request.TerminalFlows ?? []) items.Add(Duplicate("terminal-flow", w.Id) ?? Plan("terminal-flow", w.Id, () => TerminalFlow(doc, w, slots)));
+        foreach (var w in request.EquipmentFlows ?? []) items.Add(Duplicate("equipment-flow", w.Id) ?? Plan("equipment-flow", w.Id, () => EquipmentFlow(doc, w, slots)));
+        SharedTypes(items, "equipment", (request.Equipment ?? []).Select(w => (w.Id, w.ExternalStaticInWg)), "fan statics");
+        SharedTypes(items, "equipment-flow", (request.EquipmentFlows ?? []).Select(w => (w.Id, w.Cfm)), "fan flows");
 
         var (stored, storeError) = ReadStore(doc);
         var storeRevision = stored?.WorkRevision ?? 0;
@@ -332,44 +336,74 @@ public static class DuctApplier {
     }
 
     /// <summary>
-    ///     Units of one type that each fall back to the type's fan static but ask for different values would race: the
+    ///     Units of one type that each fall back to the type's parameter but ask for different values would race: the
     ///     last write wins and the rest are silently overwritten. Every write in such a set is refused, naming its peers.
     /// </summary>
-    private static void SharedTypes(List<Item> items, IReadOnlyList<DuctEquipmentWrite> asked) {
-        var value = asked.GroupBy(w => w.Id).ToDictionary(g => g.Key, g => g.First().ExternalStaticInWg);
+    private static void SharedTypes(List<Item> items, string kind, IEnumerable<(long Id, double Value)> asked, string what) {
+        var value = asked.GroupBy(w => w.Id).ToDictionary(g => g.Key, g => g.First().Value);
         var conflicts = items
-            .Where(i => i is { Kind: "equipment", Outcome: not "refused", Id: { } } && i.After?.StartsWith("type ") == true)
+            .Where(i => i.Kind == kind && i is { Outcome: not "refused", Id: { } } && i.After?.StartsWith("type ") == true)
             .GroupBy(i => ((FamilyInstance)i.Element!).Symbol.Id.Value())
             .Where(g => g.Select(i => value[i.Id!.Value]).Distinct().Count() > 1);
         foreach (var set in conflicts) {
             var peers = string.Join(", ", set.Select(i => $"{i.Id} asks {value[i.Id!.Value]:0.####}"));
             foreach (var i in set)
-                i.Refuse($"units of one type ({((FamilyInstance)i.Element!).Symbol.Name}) ask for different fan statics ({peers}); a type holds one value, so give the family an instance parameter or stage one value");
+                i.Refuse($"units of one type ({((FamilyInstance)i.Element!).Symbol.Name}) ask for different {what} ({peers}); a type holds one value, so give the family an instance parameter or stage one value");
         }
     }
 
-    private static Item Equipment(Document doc, DuctEquipmentWrite w, DuctParameterSlots slots) {
-        var e = doc.GetElement(w.Id.ToElementId());
-        if (e is null) return new Item(w.Id, "equipment", null).Refuse($"element {w.Id} is not in the document");
-        var own = e.LookupParameter(slots.FanStatic);
-        var (p, where) = own is not null ? (own, "instance") : ((e as FamilyInstance)?.Symbol?.LookupParameter(slots.FanStatic), "type");
-        var item = new Item(w.Id, "equipment", p is { HasValue: true, StorageType: StorageType.Double } ? $"{where} {Pressure(p):0.####} in-wg" : null) { Element = e };
+    private static Item Equipment(Document doc, DuctEquipmentWrite w, DuctParameterSlots slots) =>
+        FanParameter(doc, "equipment", w.Id, w.ExternalStaticInWg, slots.FanStatic, nameof(DuctParameterSlots.FanStatic), SpecTypeId.HvacPressure, InWg, "in-wg", "static");
+
+    /// <summary>The unit's design flow, written to the FanFlow slot: instance first, then type, the rules of the fan static.</summary>
+    private static Item EquipmentFlow(Document doc, DuctFlowWrite w, DuctParameterSlots slots) =>
+        FanParameter(doc, "equipment-flow", w.Id, w.Cfm, slots.FanFlow, nameof(DuctParameterSlots.FanFlow), SpecTypeId.AirFlow, Cfm, "cfm", "flow");
+
+    private static Item FanParameter(Document doc, string kind, long id, double value, string name, string slot, ForgeTypeId spec, ForgeTypeId unit, string unitText, string noun) {
+        var e = doc.GetElement(id.ToElementId());
+        if (e is null) return new Item(id, kind, null).Refuse($"element {id} is not in the document");
+        var own = e.LookupParameter(name);
+        var (p, where) = own is not null ? (own, "instance") : ((e as FamilyInstance)?.Symbol?.LookupParameter(name), "type");
+        var item = new Item(id, kind, p is { HasValue: true, StorageType: StorageType.Double } ? $"{where} {Shown(p, unit):0.####} {unitText}" : null) { Element = e };
         if (e.Category.ToBuiltInCategory() != BuiltInCategory.OST_MechanicalEquipment) return item.Refuse($"not mechanical equipment ({e.Category?.Name ?? "no category"})");
-        if (p is null) return item.Refuse($"neither the instance nor its type has '{slots.FanStatic}'");
-        if (p.StorageType != StorageType.Double || p.Definition.GetDataType() != SpecTypeId.HvacPressure)
-            return item.Refuse($"'{slots.FanStatic}' on the {where} is not an HVAC pressure parameter");
-        if (p.IsReadOnly) return item.Refuse($"'{slots.FanStatic}' on the {where} is read-only (a formula, a reporting parameter or a built-in drives it)");
-        if (!Finite(w.ExternalStaticInWg) || w.ExternalStaticInWg < 0) return item.Refuse("the static must be a finite number of 0 or more");
-        var after = $"{where} '{slots.FanStatic}' {w.ExternalStaticInWg:0.####} in-wg";
-        if (p.HasValue && Math.Abs(Pressure(p) - w.ExternalStaticInWg) < 1e-6) return item.Unchanged(after);
+        if (p is null) return item.Refuse($"neither the instance nor its type has '{name}'");
+        if (p.StorageType != StorageType.Double || p.Definition.GetDataType() != spec)
+            return item.Refuse($"'{name}' on the {where} is not {(spec == SpecTypeId.AirFlow ? "an air flow" : "an HVAC pressure")} parameter");
+        if (p.IsReadOnly) return item.Refuse($"'{name}' on the {where} is read-only (a formula, a reporting parameter or a built-in drives it)");
+        if (!Finite(value) || value < 0) return item.Refuse($"the {noun} must be a finite number of 0 or more");
+        var after = $"{where} '{name}' {value:0.####} {unitText}";
+        if (p.HasValue && Math.Abs(Shown(p, unit) - value) < 1e-6 * Math.Max(1, Math.Abs(value))) return item.Unchanged(after);
         // A preview names the instance-or-type target too: a type write moves every unit of that type.
         return item with {
             After = after,
             // Re-resolved: a Regenerate earlier in the stage can invalidate the planned Parameter wrapper.
-            Write = () => (where == "instance" ? e.LookupParameter(slots.FanStatic) : (e as FamilyInstance)?.Symbol?.LookupParameter(slots.FanStatic))
-                ?.Set(UnitUtils.ConvertToInternalUnits(w.ExternalStaticInWg, InWg)) == true
+            Write = () => (where == "instance" ? e.LookupParameter(name) : (e as FamilyInstance)?.Symbol?.LookupParameter(name))
+                ?.Set(UnitUtils.ConvertToInternalUnits(value, unit)) == true
                 ? after
-                : throw new InvalidOperationException($"Revit rejected '{slots.FanStatic}' on the {where}")
+                : throw new InvalidOperationException($"Revit rejected '{name}' ({slot} slot) on the {where}")
+        };
+    }
+
+    /// <summary>The terminal's design flow, written to the TerminalFlow slot on the instance (a terminal carries no type fallback).</summary>
+    private static Item TerminalFlow(Document doc, DuctFlowWrite w, DuctParameterSlots slots) {
+        const string kind = "terminal-flow";
+        var e = doc.GetElement(w.Id.ToElementId());
+        if (e is null) return new Item(w.Id, kind, null).Refuse($"element {w.Id} is not in the document");
+        var p = e.LookupParameter(slots.TerminalFlow);
+        var item = new Item(w.Id, kind, p is { HasValue: true, StorageType: StorageType.Double } ? $"{Shown(p, Cfm):0.####} cfm" : null) { Element = e };
+        if (e.Category.ToBuiltInCategory() != BuiltInCategory.OST_DuctTerminal) return item.Refuse($"not an air terminal ({e.Category?.Name ?? "no category"})");
+        if (p is null) return item.Refuse($"the instance has no '{slots.TerminalFlow}' (the TerminalFlow slot)");
+        if (p.StorageType != StorageType.Double || p.Definition.GetDataType() != SpecTypeId.AirFlow)
+            return item.Refuse($"'{slots.TerminalFlow}' is not an air flow parameter");
+        if (p.IsReadOnly) return item.Refuse($"'{slots.TerminalFlow}' is read-only (a formula, a reporting parameter or a built-in drives it)");
+        if (!Finite(w.Cfm) || w.Cfm < 0) return item.Refuse("the flow must be a finite number of 0 or more");
+        var after = $"'{slots.TerminalFlow}' {w.Cfm:0.####} cfm";
+        if (p.HasValue && Math.Abs(Shown(p, Cfm) - w.Cfm) < 1e-6 * Math.Max(1, Math.Abs(w.Cfm))) return item.Unchanged(after);
+        return item with {
+            After = after,
+            Write = () => e.LookupParameter(slots.TerminalFlow)?.Set(UnitUtils.ConvertToInternalUnits(w.Cfm, Cfm)) == true
+                ? after
+                : throw new InvalidOperationException($"Revit rejected '{slots.TerminalFlow}'")
         };
     }
 
@@ -386,10 +420,14 @@ public static class DuctApplier {
         }
         foreach (var w in (request.Terminals ?? []).Where(w => Lands("terminal", w.Id))) drops[w.Id] = new DuctDropRecord(w.InWg, w.Source, now);
         foreach (var w in (request.Components ?? []).Where(w => Lands("component", w.Id))) drops[w.Id] = new DuctDropRecord(w.InWg, w.Source, now);
+        var terminalFlows = new Dictionary<long, DuctFlowRecord>(asked.TerminalFlows ?? new());
+        foreach (var w in (request.TerminalFlows ?? []).Where(w => Lands("terminal-flow", w.Id))) terminalFlows[w.Id] = new DuctFlowRecord(w.Cfm, w.Source, now);
+        var equipmentFlows = new Dictionary<long, DuctFlowRecord>(asked.EquipmentFlows ?? new());
+        foreach (var w in (request.EquipmentFlows ?? []).Where(w => Lands("equipment-flow", w.Id))) equipmentFlows[w.Id] = new DuctFlowRecord(w.Cfm, w.Source, now);
         var unknown = new Dictionary<string, Newtonsoft.Json.Linq.JToken>(stored?.Unknown ?? new Dictionary<string, Newtonsoft.Json.Linq.JToken>());
         foreach (var kv in asked.Unknown ?? new Dictionary<string, Newtonsoft.Json.Linq.JToken>()) unknown[kv.Key] = kv.Value;
         return new DuctLossStore {
-            Version = DuctLossStore.CurrentVersion, Rules = rules, Instances = instances, Terminals = drops, Slots = slots, WorkRevision = revision, AppliedAt = now, Unknown = unknown
+            Version = DuctLossStore.CurrentVersion, Rules = rules, Instances = instances, Terminals = drops, TerminalFlows = terminalFlows, EquipmentFlows = equipmentFlows, Slots = slots, WorkRevision = revision, AppliedAt = now, Unknown = unknown
         };
     }
 
@@ -397,7 +435,9 @@ public static class DuctApplier {
         WorkRevision = 0,
         AppliedAt = null,
         Instances = s.Instances.ToDictionary(kv => kv.Key, kv => kv.Value with { AppliedAt = default }),
-        Terminals = s.Terminals.ToDictionary(kv => kv.Key, kv => kv.Value with { AppliedAt = default })
+        Terminals = s.Terminals.ToDictionary(kv => kv.Key, kv => kv.Value with { AppliedAt = default }),
+        TerminalFlows = s.TerminalFlows.ToDictionary(kv => kv.Key, kv => kv.Value with { AppliedAt = default }),
+        EquipmentFlows = s.EquipmentFlows.ToDictionary(kv => kv.Key, kv => kv.Value with { AppliedAt = default })
     }).ToJson();
 
     private static DuctApplyResult Result(bool preview, List<Item> items, IReadOnlyList<DuctSystem>? systems, int revision) => new(
@@ -423,6 +463,8 @@ public static class DuctApplier {
         : g == PeLossServer.Id ? "pe-server"
         : server!
         : "no server";
+
+    private static double Shown(Parameter p, ForgeTypeId unit) => Math.Round(UnitUtils.ConvertFromInternalUnits(p.AsDouble(), unit), 6) + 0.0;
 
     // + 0.0 turns -0 into 0 for display.
     private static double Pressure(Parameter? p) => p is { StorageType: StorageType.Double } ? Math.Round(UnitUtils.ConvertFromInternalUnits(p.AsDouble(), InWg), 6) + 0.0 : 0;

@@ -7,7 +7,7 @@
  * The ASHRAE tables are always read; the snapshot, tables and catalogs are provided to the verbs so
  * `preview` and `apply` build their request from what is drawn.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { stagedDucts, type DuctClaim, type TrichotomyCellLike } from "@pe/agent-contracts";
 import type { Reading } from "@pe/agent-contracts";
 
@@ -25,6 +25,7 @@ import { price } from "@pe/ducts-domain/pricing";
 import { readiness } from "@pe/ducts-domain/readiness";
 import { verdictPatches } from "./claims";
 import { claimsOf, type Claim } from "./legs";
+import { claimsForGroup } from "@pe/ducts-domain/claims";
 import { provisionalWords } from "./provisional";
 import type { ProtoProps } from "./proto/props";
 import { EScreen } from "./proto/e/screen";
@@ -79,9 +80,20 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   // The subject scene is the person's staged subject, else Pea's proposal; null until one exists.
   const subjectIds = demo
     ? demo.subject
-    : (staged.subject ?? handle.work.doc?.subject?.proposal?.value);
-  const subject = useMemo(() => {
-    if (!subjectIds) return null;
+    : (staged.subject[page.group] ?? handle.work.doc?.subject?.[page.group]?.proposal?.value);
+  const onVerdict = useCallback(
+    (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => {
+      if (demo) {
+        setDemoClaims((prev) => ({ ...prev, [claim.id]: { ...prev[claim.id]!, verdict } }));
+        return;
+      }
+      void handle.work.write(verdictPatches(handle.work.doc, claim, verdict));
+    },
+    [demo, handle.work.doc, handle.work.write],
+  );
+  // Claims live beside the subject, not inside it: a chosen group shows only the claims that name
+  // its elements (claimsForGroup), so one system's claims never ride onto another.
+  const claims = useMemo(() => {
     const cells = demo
       ? demoClaims
       : Object.fromEntries(
@@ -90,19 +102,19 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
             return value ? [[id, value] as const] : [];
           }),
         );
-    return {
-      ids: subjectIds,
-      claims: claimsOf(cells),
-      work: demo ? null : handle.work.doc,
-      onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => {
-        if (demo) {
-          setDemoClaims((prev) => ({ ...prev, [claim.id]: { ...prev[claim.id]!, verdict } }));
-          return;
-        }
-        void handle.work.write(verdictPatches(handle.work.doc, claim, verdict));
-      },
-    };
-  }, [demo, demoClaims, subjectIds, handle.work.doc, handle.work.write]);
+    if (!page.group || !snapshot) return claimsOf(cells);
+    const members = [...snapshot.nodes, ...snapshot.segments]
+      .filter((element) => element.groupId === page.group)
+      .map((element) => element.id);
+    return claimsOf(claimsForGroup(cells, members));
+  }, [demo, demoClaims, handle.work.doc, page.group, snapshot]);
+  const subject = useMemo(
+    () =>
+      subjectIds
+        ? { ids: subjectIds, claims, work: demo ? null : handle.work.doc, onVerdict }
+        : null,
+    [demo, subjectIds, claims, handle.work.doc, onVerdict],
+  );
   const priced = useMemo(
     () =>
       snapshot && tables.grids
@@ -234,7 +246,8 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     findings: catalogs.findings,
     ready,
     subject,
-    claims: subject?.claims ?? [],
+    claims,
+    onVerdict,
     claimCells: demoClaims,
     page,
     setPage,

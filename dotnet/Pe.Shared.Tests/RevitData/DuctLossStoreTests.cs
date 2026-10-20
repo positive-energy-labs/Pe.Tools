@@ -15,6 +15,8 @@ public sealed class DuctLossStoreTests {
             Rules = new() { ["Round Elbow:Standard|r/D 1.0"] = new DuctRuleChoice("CD3-1") },
             Instances = new() { [6749371] = new DuctInstanceRecord("SD4-1", "Ao/A1=0.5", 0.25, At) },
             Terminals = new() { [6119626] = new DuctDropRecord(0.05, "catalog", At) },
+            TerminalFlows = new() { [6119626] = new DuctFlowRecord(120, "load-preview:FC-17", At) },
+            EquipmentFlows = new() { [9668311] = new DuctFlowRecord(1800, "submittal p. 3", At) },
             Slots = new DuctParameterSlots(TerminalDrop: "Catalog Drop"),
             WorkRevision = 3,
             AppliedAt = At
@@ -26,10 +28,20 @@ public sealed class DuctLossStoreTests {
         Assert.That(back.Rules["Round Elbow:Standard|r/D 1.0"].Table, Is.EqualTo("CD3-1"));
         Assert.That(back.Instances[6749371], Is.EqualTo(store.Instances[6749371]));
         Assert.That(back.Terminals[6119626], Is.EqualTo(store.Terminals[6119626]));
+        Assert.That(back.TerminalFlows[6119626], Is.EqualTo(store.TerminalFlows[6119626]));
+        Assert.That(back.EquipmentFlows[9668311], Is.EqualTo(store.EquipmentFlows[9668311]));
         Assert.That(back.Slots, Is.EqualTo(store.Slots));
         Assert.That(back.WorkRevision, Is.EqualTo(3));
         Assert.That(back.AppliedAt, Is.EqualTo(At));
         Assert.That(back.ToJson(), Is.EqualTo(store.ToJson()));
+    }
+
+    [Test]
+    public void A_store_written_before_flows_reads_with_none() {
+        var back = DuctLossStore.FromJson("""{"version":1,"workRevision":2}""");
+
+        Assert.That(back.TerminalFlows, Is.Empty);
+        Assert.That(back.EquipmentFlows, Is.Empty);
     }
 
     [Test]

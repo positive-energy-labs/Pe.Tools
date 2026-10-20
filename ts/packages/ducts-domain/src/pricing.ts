@@ -3,7 +3,12 @@
  * staged on top, the two solves, and the `ducts.apply` request built from the staged cells.
  * The solver is W2's (`losses.ts`); nothing here looks a coefficient up itself.
  */
-import { stagedDucts, type DuctsApplyInput, type DuctsRouteDocument } from "@pe/agent-contracts";
+import {
+  stagedDucts,
+  type DuctFinding,
+  type DuctsApplyInput,
+  type DuctsRouteDocument,
+} from "@pe/agent-contracts";
 
 import { stagedLink, EMPTY_CATALOGS, type Catalogs } from "./catalog.ts";
 import type { Grids } from "./loss-grid.ts";
@@ -40,7 +45,28 @@ const appliedChoices = (snapshot: DuctSnapshot): Choices =>
 const byId = <V>(cells: Record<string, V>, pick: (value: V) => number) =>
   Object.fromEntries(Object.entries(cells).map(([id, value]) => [Number(id), pick(value)]));
 
-/** The solves run on the surveyed snapshot; `snapshot`, `flows` and `findings` are its survey. */
+/**
+ * The catalog findings a solve raises, one per terminal and kind: a table that is not loaded and an
+ * input outside a loaded table's range. Both block the terminal's drop (`bins.ts`); the rows keep
+ * their prose, this makes them findings the inbox can hold.
+ */
+export function catalogFindings(result: LossResult): DuctFinding[] {
+  const found = new Map<string, DuctFinding>();
+  for (const path of Object.values(result.paths))
+    for (const row of path.rows)
+      if (row.finding === "catalog-missing-table" || row.finding === "catalog-out-of-range")
+        found.set(`catalog:${row.finding}:${row.id}`, {
+          id: `catalog:${row.finding}:${row.id}`,
+          kind: row.finding,
+          elementIds: [row.id],
+          note: row.error ?? row.finding,
+          assumed: null,
+          clearer: "person",
+        });
+  return [...found.values()];
+}
+
+/** The solves run on the surveyed snapshot; `snapshot`, `flows` and `findings` are its survey (findings also carry the solve's catalog findings). */
 export interface Priced extends Survey {
   applied: Choices;
   catalogs: Catalogs;
@@ -116,32 +142,37 @@ export function price(
     catalogLinks: staged.catalogs,
     terminalPs: byId(staged.terminalDrops, (drop) => drop.inWg),
     componentDrop: byId(staged.componentDrops, (drop) => drop.inWg),
+    unitRole: Object.fromEntries(
+      Object.entries(staged.roles).map(([id, { role }]) => [Number(id), role]),
+    ),
   };
   const same =
     Object.keys(staged.catalogs).length === 0 &&
     Object.keys(staged.rules).length === 0 &&
     !hasDrops(staged) &&
     !Object.keys(overrides.terminalCfm!).length &&
+    !Object.keys(staged.roles).length &&
     !Object.keys(staged.calculation).length;
+  const next = same
+    ? now
+    : computeLosses(
+        snapshot,
+        grids,
+        choices,
+        overrides,
+        staged.calculation,
+        catalogs,
+        surveyed.inferred,
+      );
   const priced: Priced = {
     ...surveyed,
+    findings: [...surveyed.findings, ...catalogFindings(next)],
     catalogs,
     applied,
     choices,
     overrides,
     now,
-    next: same
-      ? now
-      : computeLosses(
-          snapshot,
-          grids,
-          choices,
-          overrides,
-          staged.calculation,
-          catalogs,
-          surveyed.inferred,
-        ),
-
+    next,
     staged,
   };
   entry.last = { doc, priced };
@@ -244,8 +275,10 @@ export function proposedStatic(snapshot: DuctSnapshot, result: LossResult, unit:
 /**
  * The native `ducts.apply` request (less `previewOnly`) from the staged cells only: every instance of a staged rule under
  * its chosen table (instances the table cannot price are left out, and the band says so), every
- * staged drop, the staged parameter slots, and the staged unit statics. `group` scopes the instances, drops
- * and unit to that group's nodes; empty is every group. The rules' chosen tables stay
+ * staged drop, the staged parameter slots, the staged `esp`, the resolved flow of every terminal in a
+ * priced group (a group with an air mover; every precedence rung, so Revit's own value is carried
+ * with its source) and the staged `equipmentFlows`. `group` scopes the instances, drops, flows and
+ * unit to that group's nodes; empty is every group. The rules' chosen tables stay
  * document-wide.
  */
 export function applyRequest(
@@ -307,16 +340,41 @@ export function applyRequest(
     ...new Map([...linked, ...drops(priced.staged.terminalDrops)].map((t) => [t.id, t])).values(),
   ].sort((a, b) => a.id - b.id);
   const components = drops(priced.staged.componentDrops);
+  const flowWrite = (id: number, cfm: number, source: string | null) => ({ id, cfm, source });
+  const terminalFlows = snapshot.nodes
+    .filter(
+      (node) =>
+        node.kind === "terminal" &&
+        inScope(node.id) &&
+        priced.next.byGroup[node.groupId ?? ""]?.hasAirMover,
+    )
+    .flatMap((node) => {
+      const flow = priced.flows.get(node.id);
+      if (flow?.cfm == null) return [];
+      const stated = priced.staged.flows[String(node.id)]?.source;
+      return [
+        flowWrite(
+          node.id,
+          flow.cfm,
+          flow.source === "override" ? (stated ?? "override") : flow.source,
+        ),
+      ];
+    })
+    .sort((a, b) => a.id - b.id);
+  const equipmentFlows = Object.entries(priced.staged.equipmentFlows)
+    .map(([id, flow]) => flowWrite(Number(id), flow.cfm, flow.source ?? null))
+    .filter(({ id }) => !group || id === unit)
+    .sort((a, b) => a.id - b.id);
   const calculationOwners = new Set(
     Object.values(priced.staged.calculation).flatMap((e) =>
       e.kind === "fan" || e.kind === "passive" ? [e.element.id] : [],
     ),
   );
-  if (Object.keys(priced.staged.unitStatics).some((id) => calculationOwners.has(Number(id))))
+  if (Object.keys(priced.staged.esp).some((id) => calculationOwners.has(Number(id))))
     throw Error(
-      "Physical fan circuits have no admitted manufacturer scalar ESP mapping; clear the unit static cell. Circuit evidence is calculation-only.",
+      "Physical fan circuits have no admitted manufacturer scalar ESP mapping; clear the esp cell. Circuit evidence is calculation-only.",
     );
-  const equipment = Object.entries(priced.staged.unitStatics)
+  const equipment = Object.entries(priced.staged.esp)
     .map(([id, { inWg }]) => ({ id: Number(id), externalStaticInWg: inWg }))
     .filter(({ id }) => !group || id === unit)
     .sort((a, b) => a.id - b.id);
@@ -328,6 +386,8 @@ export function applyRequest(
     terminals,
     components,
     equipment,
+    terminalFlows,
+    equipmentFlows,
     // The native op writes the store as sent: the model's store (unknown keys included) with
     // this apply over it, at the revision read, so a store that moved since refuses as stale.
     store: {
@@ -349,6 +409,18 @@ export function applyRequest(
         ...stored?.terminals,
         ...Object.fromEntries(
           terminals.map(({ id, inWg, source }) => [String(id), { inWg, source, appliedAt }]),
+        ),
+      },
+      terminalFlows: {
+        ...stored?.terminalFlows,
+        ...Object.fromEntries(
+          terminalFlows.map(({ id, cfm, source }) => [String(id), { cfm, source, appliedAt }]),
+        ),
+      },
+      equipmentFlows: {
+        ...stored?.equipmentFlows,
+        ...Object.fromEntries(
+          equipmentFlows.map(({ id, cfm, source }) => [String(id), { cfm, source, appliedAt }]),
         ),
       },
       slots: Object.fromEntries(

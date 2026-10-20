@@ -11,6 +11,7 @@ import { ductsRouteState, stagedDucts } from "@pe/agent-contracts";
 
 import { lookupGrid, toGrids, type Grid, type Grids } from "@pe/ducts-domain/loss-grid";
 import { friction, roundSection, sectionOf } from "@pe/ducts-domain/loss-physics";
+import { bin } from "@pe/ducts-domain/bins";
 import { computeLosses, fanout, systemFor } from "@pe/ducts-domain/losses";
 import { price, stagedFanout } from "@pe/ducts-domain/pricing";
 import { indexOf, lossesOf, sceneOf } from "./scene";
@@ -714,44 +715,51 @@ const verdictDoc = (rung: "staged" | "proposal") =>
     assumptions: { [JOIN]: { [rung]: { value: { kind: "verdict", verdict: "connect" } } } },
   });
 
-it("a path is provisional at its worst unconfirmed grade; a near miss is listed but final", () => {
-  // Facing back down the duct: a near miss, listed, not provisional.
+it("only an anomalous join makes a path provisional; a near miss and a stretched join are bridged and final", () => {
+  // Facing back down the duct: a near miss, listed, bridged, final.
   const near = price(lifted([0, -1, 0]), grids, null);
   expect(near.findings.find((f) => f.id === JOIN)?.grade).toBe("near-miss");
+  expect(bin(near.findings.find((f) => f.id === JOIN)!)).toBe("diagnostic");
   expect(near.next.paths[30]).toMatchObject({ inferred: [JOIN], provisional: null });
   expect(near.next.byGroup.g10!.provisional).toBeNull();
-  // No captured facing on the grille: stretched, and the group's fan and the document's rest on it.
+  // No captured facing on the grille: stretched, listed, bridged, and the fan stays final.
   const stretched = price(lifted(), grids, null);
-  const provisional = { worst: "stretched", count: 1, findingIds: [JOIN] };
-  expect(stretched.next.paths[30]!.provisional).toEqual(provisional);
-  expect(stretched.next.paths[31]!.provisional).toBeNull();
-  expect(stretched.next.byGroup.g10!.provisional).toEqual(provisional);
-  expect(stretched.next.provisional).toEqual(provisional);
-  // Facing the same way as the duct's end: one is reversed, anomalous.
-  expect(price(lifted([0, 1, 0]), grids, null).next.paths[30]!.provisional).toMatchObject({
-    worst: "anomalous",
-  });
+  expect(stretched.findings.find((f) => f.id === JOIN)?.grade).toBe("stretched");
+  expect(bin(stretched.findings.find((f) => f.id === JOIN)!)).toBe("diagnostic");
+  expect(stretched.next.paths[30]).toMatchObject({ inferred: [JOIN], provisional: null });
+  expect(stretched.next.byGroup.g10!.provisional).toBeNull();
+  expect(stretched.next.provisional).toBeNull();
+  // Facing the same way as the duct's end: one is reversed, anomalous, blocking, and the group's fan and
+  // the document's rest on it.
+  const anomalous = price(lifted([0, 1, 0]), grids, null);
+  const provisional = { worst: "anomalous", count: 1, findingIds: [JOIN] };
+  expect(bin(anomalous.findings.find((f) => f.id === JOIN)!)).toBe("blocking");
+  expect(anomalous.next.paths[30]!.provisional).toEqual(provisional);
+  expect(anomalous.next.paths[31]!.provisional).toBeNull();
+  expect(anomalous.next.byGroup.g10!.provisional).toEqual(provisional);
+  expect(anomalous.next.provisional).toEqual(provisional);
 });
 
-it("two inferences on one path: the worst grade wins and both count", () => {
+it("two inferences on one path: both are listed, only the anomalous one is provisional", () => {
   const broken = lifted([0, 1, 0]);
   // Duct 11's start lets go of fitting 21 too: a zero gap with no derivable fitting axis, stretched.
   broken.segments.find((s) => s.id === 11)!.connectors.find((c) => c.index === 1)!.connectedTo =
     null;
   broken.nodes.find((n) => n.id === 21)!.connectors.find((c) => c.index === 2)!.connectedTo = null;
-  const { provisional } = price(broken, grids, null).next.paths[30]!;
-  expect(provisional).toMatchObject({ worst: "anomalous", count: 2 });
-  expect(provisional!.findingIds).toContain(JOIN);
+  const { provisional, inferred } = price(broken, grids, null).next.paths[30]!;
+  expect(inferred).toHaveLength(2);
+  expect(provisional).toMatchObject({ worst: "anomalous", count: 1 });
+  expect(provisional!.findingIds).toEqual([JOIN]);
 });
 
-it("only a person's staged connect confirms an inference; Pea's proposed connect leaves it provisional", () => {
-  const broken = lifted();
+it("only a person's staged connect confirms an anomalous join; Pea's proposed connect leaves it provisional", () => {
+  const broken = lifted([0, 1, 0]);
   const staged = price(broken, grids, verdictDoc("staged"));
   // The leftover: a confirmed same-class join no longer counts on the path.
   expect(staged.next.paths[30]).toMatchObject({ inferred: [], provisional: null });
   expect(staged.next.byGroup.g10!.provisional).toBeNull();
   expect(price(broken, grids, verdictDoc("proposal")).next.paths[30]!.provisional).toMatchObject({
-    worst: "stretched",
+    worst: "anomalous",
     findingIds: [JOIN],
   });
 });
