@@ -1513,7 +1513,7 @@ test("apply-request never publishes a clipped candidate above the complete artif
     terminalDrops: Object.fromEntries(
       Array.from({ length: 17000 }, (_, n) => [
         String(n + 20000),
-        { staged: { value: { inWg: 0.01, source: "x".repeat(2000) } } },
+        { staged: { value: { inWg: 0.01, source: "x".repeat(8000) } } },
       ]),
     ),
   });
