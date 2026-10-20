@@ -9,7 +9,6 @@ import { afterEach, expect, it } from "vite-plus/test";
 import { applyPatches, ductsRouteState, type DuctsRouteDocument } from "@pe/agent-contracts";
 
 import { verdictPatches } from "./assumptions";
-import type { DuctsPage } from "./manifest";
 import { readiness } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { chainsOf, groupTree, runsOf } from "@pe/ducts-domain/topology";
