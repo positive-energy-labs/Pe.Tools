@@ -392,10 +392,18 @@ test("clicking a segment on the drawing selects it in the address", async () => 
   );
 }, 20000);
 
-test("the write verb is reachable from the one shell, and says why it is not armed", async () => {
-  await mount();
+test("the write verb lives in the inbox's Write group, not the head, and is refused while nothing is staged", async () => {
+  const { container } = await mount();
   const head = screen.getByRole("region", { name: "Ducts route" });
-  expect(within(head).getByRole("button", { name: /write to Revit/ })).toBeTruthy();
+  expect(within(head).queryByRole("button", { name: /write to Revit/ })).toBeNull();
+  const group = await waitFor(() => {
+    const found = container.querySelector('[data-inbox-group="write"]');
+    expect(found).not.toBeNull();
+    return found as HTMLElement;
+  });
+  const write = within(group).getByRole("button", { name: /write to Revit/ });
+  expect(write.getAttribute("aria-disabled") ?? write.hasAttribute("disabled")).toBeTruthy();
+  expect(group.textContent).toContain("nothing staged");
 });
 
 test("a staged subject, claims and labelParameter render the subject scene; a verdict press stages the claim", async () => {
@@ -415,9 +423,9 @@ test("a staged subject, claims and labelParameter render the subject scene; a ve
   await mount("");
   // The staged labelParameter rides the snapshot request.
   await waitFor(() => expect(requests.at(-1)?.request).toEqual({ labelParameter: "Unit Tag" }));
-  const inbox = await screen.findByText("Pea claims");
+  const inbox = await screen.findByText("Check");
   expect(inbox).toBeTruthy();
-  fireEvent.click(await screen.findByText(/Pea says this is|The unit is/));
+  fireEvent.click(await screen.findByText(/The unit is/));
   fireEvent.click(await screen.findByRole("button", { name: "yes" }));
   await waitFor(() => expect(work.claims.c1?.staged?.value?.verdict).toBe("yes"));
   expect(work.claims.c1?.staged?.value).toMatchObject({

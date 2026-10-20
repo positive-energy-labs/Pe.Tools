@@ -3,6 +3,7 @@ import type { DuctClaim, DuctsRouteDocument } from "@pe/agent-contracts";
 import type { price } from "@pe/ducts-domain/pricing";
 import type { readiness } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import type { ActionHandle } from "#/route/handle";
 
 import type { DuctsPage } from "../manifest";
 import type { Claim } from "../legs";
@@ -46,4 +47,8 @@ export interface ProtoProps {
   doc: { session: string; openId: string } | null;
   /** Loading state of the host reads. */
   reading: { pending: boolean; error: string | null };
+  /** The route's preview and apply as the handle arms or refuses them; the Write group draws both. */
+  actions: { preview: ActionHandle; apply: ActionHandle; busy: boolean };
+  /** How many staged cells a write would carry. */
+  staged: number;
 }

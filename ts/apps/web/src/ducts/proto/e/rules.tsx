@@ -133,7 +133,18 @@ export function StagedRules({
     const doc = work.doc;
     if (!doc) return;
     void work.write(
-      (["rules", "catalogs", "terminalDrops", "componentDrops", "esp"] as const).flatMap(
+      (
+        [
+          "rules",
+          "catalogs",
+          "terminalDrops",
+          "componentDrops",
+          "esp",
+          "flows",
+          "equipmentFlows",
+          "roles",
+        ] as const
+      ).flatMap(
         (segment) =>
           Object.entries(doc[segment] ?? {}).flatMap(([key, cell]) =>
             cell?.staged ? transitionPatches([segment], key, cell, { kind: "unstage" }) : [],
