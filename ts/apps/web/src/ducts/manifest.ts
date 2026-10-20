@@ -29,6 +29,7 @@ import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
 import { applyRequest, price } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { triage, writeBlocked } from "./inbox-rows";
 
 /** What Revit said the staged cells would write, and the Work and snapshot it was asked over. */
 export interface DuctsEvaluation {
@@ -94,6 +95,34 @@ const stagedCells = (doc: DuctsRouteDocument | null) =>
       cell?.staged ? [{ segment, key, cell }] : [],
     ),
   );
+/** How many staged cells a write would carry. */
+export const stagedCount = (doc: DuctsRouteDocument | null) => stagedCells(doc).length;
+
+/**
+ * What stands between the Work and a write, in the inbox's own terms: the Fix and Set rows of the
+ * chosen group (`triage`, the rows the Write group counts). Null when the snapshot or tables are
+ * unread: nothing can be priced then, and the write fails on its own words.
+ */
+const standing = (ctx: DuctsCtx) => {
+  const snapshot = observed<DuctSnapshot>(ctx, "ducts");
+  const grids = observed<Grids>(ctx, "tables");
+  if (!snapshot || !grids) return null;
+  const priced = price(
+    snapshot,
+    grids,
+    ctx.work.doc,
+    observed<Catalogs>(ctx, "catalogs") ?? EMPTY_CATALOGS,
+  );
+  const { fix, set } = triage({
+    snapshot: priced.snapshot,
+    group: ctx.page.group,
+    findings: priced.findings,
+    flows: priced.flows,
+    equipmentFlows: priced.equipmentFlows,
+    doc: ctx.work.doc,
+  });
+  return { fix: fix.length, set: set.length };
+};
 
 /** The request from the staged cells, the snapshot and the grids the route read; throws why not. */
 const built = (ctx: DuctsCtx) => {
@@ -271,6 +300,8 @@ export const manifest = defineRoute<
     preview: {
       label: "preview",
       does: "ducts.preview-losses",
+      // The inbox's Write group draws it.
+      visible: false,
       input: none,
       dirties: [],
       waitSeconds: NATIVE_APPLY_WAIT_S,
@@ -296,18 +327,22 @@ export const manifest = defineRoute<
           : "write to Revit";
       },
       does: "ducts.apply-losses",
+      // The inbox's Write group draws it; it arms there (Fix and Set empty, preview fresh).
+      visible: false,
       input: none,
       dirties: [],
       waitSeconds: NATIVE_APPLY_WAIT_S,
       requires: { work: true },
+      // Armed only while Fix and Set are empty and the preview matches this Work and snapshot.
       ready: (ctx) =>
         !stagedCells(ctx.work.doc).length
           ? "Nothing staged"
-          : ctx.page.evaluation === null
-            ? "Preview first"
-            : !previewFresh(ctx.page, ctx.work.revision)
-              ? "The staged Work or the snapshot changed since the preview; preview again"
-              : null,
+          : (writeBlocked(standing(ctx) ?? { fix: 0, set: 0 }) ??
+            (ctx.page.evaluation === null
+              ? "Preview first"
+              : !previewFresh(ctx.page, ctx.work.revision)
+                ? "The staged Work or the snapshot changed since the preview; preview again"
+                : null)),
       run: async (ctx) => {
         const applied = stagedCells(ctx.work.doc).filter((cell) => cell.segment !== "catalogs");
         const response = await dispatch(ctx, "ducts.apply-losses", built(ctx));

@@ -10,6 +10,7 @@ import { groupTree, runsOf } from "@pe/ducts-domain/topology";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 import { elementNamer } from "../../claims";
+import { groupLabels } from "../../inputs";
 import { labelOfNode, legsOf } from "../../legs";
 
 export type TreeKind = "system" | "run" | "leg" | "element";
@@ -45,6 +46,7 @@ export function buildTree(
   const nameOf = elementNamer(snapshot, null);
   const name = (id: number) => nameOf(id) ?? "element not in snapshot";
   const labelOf = labelOfNode(snapshot);
+  const labels = groupLabels(snapshot);
   return snapshot.groups.filter((g) => !only || g.id === only).map((group) => {
     const tree = groupTree(snapshot, group.id);
     const runs = runsOf(tree);
@@ -129,7 +131,7 @@ export function buildTree(
     return {
       key: group.id,
       kind: "system",
-      name: group.systemNames.slice(0, 2).join(", ") || group.classifications.join(", ") || rootName,
+      name: labels.get(group.id) ?? rootName,
       id: rootId,
       total: fan,
       self: null,
@@ -199,17 +201,14 @@ export function subjectTree(
 
 /** The system list: one childless row per group (no run tree is built, so 400 groups stay cheap). */
 export function systemList(snapshot: DuctSnapshot, priced: Priced | null): TreeNode[] {
-  const nameOf = elementNamer(snapshot, null);
+  const labels = groupLabels(snapshot);
   return snapshot.groups.map((group) => {
     const solved = priced?.now.byGroup[group.id] ?? null;
     const rootId = group.rootIds[0] ?? null;
     return {
       key: group.id,
       kind: "system",
-      name:
-        group.systemNames.slice(0, 2).join(", ") ||
-        group.classifications.join(", ") ||
-        (rootId == null ? "no air mover" : (nameOf(rootId) ?? group.id)),
+      name: labels.get(group.id) ?? group.id,
       id: rootId,
       total: solved?.fan ?? null,
       self: null,

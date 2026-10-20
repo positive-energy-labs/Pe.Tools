@@ -4,8 +4,9 @@
  * numbered ruling pins and click popovers; RIGHT the inbox of rows a person has a verb on,
  * collapsed when it holds none. Hovering a row anywhere lights its element set on the drawing.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { RouteStatePatch } from "@pe/agent-contracts";
+import type { DuctsApply } from "@pe/host-contracts/generated";
 import { survey } from "@pe/ducts-domain/survey";
 import { Button } from "@pe/kit/lang/button";
 import { Row } from "@pe/kit/lang/row";
@@ -13,13 +14,16 @@ import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 
 import { elementNamer } from "../../claims";
+import { inboxRows, type CellRef } from "../../inbox-rows";
+import { groupLabels } from "../../inputs";
+import { previewFresh } from "../../manifest";
 import type { LossesWork } from "../../work";
-import { buildTree, groupElementIds, systemList, type TreeNode } from "../b/model";
+import { buildTree, systemList, type TreeNode } from "../b/model";
 import type { ProtoProps } from "../props";
 import { BarLegend, LossBar } from "./bar";
 import { ECanvas } from "./canvas";
 import { grilleLabels } from "./labels";
-import { Inbox, inboxRows } from "./inbox";
+import { Inbox } from "./inbox";
 import { RulesTree, ruleOfIds } from "./rules-pane";
 import { SystemTree } from "./tree-sidebar";
 import { useGroupEncoding } from "../encoding/use-encoding";
@@ -51,27 +55,12 @@ export function EScreen({ props }: { props: ProtoProps }) {
       snapshot && page.group ? (buildTree(snapshot, priced, doc, page.group)[0] ?? null) : null,
     [snapshot, priced, doc, page.group],
   );
-  const scope = useMemo(
-    () => (snapshot && page.group ? groupElementIds(snapshot, page.group) : null),
-    [snapshot, page.group],
-  );
   const issueScope = useMemo(
     () =>
       snapshot && page.group
         ? new Set(snapshot.groups.find((g) => g.id === page.group)?.issueIds ?? [])
         : null,
     [snapshot, page.group],
-  );
-  const findings = useMemo(
-    () => priced?.findings ?? (snapshot ? survey(snapshot, doc).findings : []),
-    [priced, snapshot, doc],
-  );
-  const rows = useMemo(
-    () =>
-      snapshot
-        ? inboxRows({ snapshot, group: page.group, scope, findings, claims: props.claims })
-        : [],
-    [snapshot, page.group, scope, findings, props.claims],
   );
   const labels = useMemo(
     () => (snapshot && tree ? grilleLabels(snapshot, tree.children) : new Map<number, string>()),
@@ -81,6 +70,50 @@ export function EScreen({ props }: { props: ProtoProps }) {
     const n = snapshot ? elementNamer(snapshot, null) : () => null;
     return (id: number) => n(id) ?? "element not in snapshot";
   }, [snapshot]);
+  const names = useMemo(() => (snapshot ? groupLabels(snapshot) : new Map<string, string>()), [snapshot]);
+  // The survey is the priced result's, or the unpriced one while the tables are unread; the
+  // manifest's apply gate reads the same rows (`triage`) over the same tolerated snapshot.
+  const surveyed = useMemo(
+    () => priced ?? (snapshot ? survey(snapshot, doc) : null),
+    [priced, snapshot, doc],
+  );
+  const preview = props.work.preview as DuctsApply.Res.Response | null;
+  const inbox = useMemo(
+    () =>
+      surveyed
+        ? inboxRows({
+            snapshot: surveyed.snapshot,
+            group: page.group,
+            findings: surveyed.findings,
+            flows: surveyed.flows,
+            equipmentFlows: surveyed.equipmentFlows,
+            doc,
+            nameOf,
+            groupLabel: (id) => names.get(id) ?? id,
+            claims: props.claims,
+            write: {
+              staged: props.staged,
+              hasPreview: page.evaluation !== null,
+              fresh: previewFresh(page, props.work.revision),
+              planned: preview?.counts.planned ?? null,
+              refused: preview?.counts.refused ?? null,
+            },
+          })
+        : null,
+    [surveyed, page, doc, nameOf, names, props.claims, props.staged, props.work.revision, preview],
+  );
+  const toRule = inbox ? inbox.fix.length + inbox.set.length + inbox.check.length : 0;
+  // A Set row's verb selects the element and focuses its cell once the tree has drawn it.
+  const [cellFocus, setCellFocus] = useState<CellRef | null>(null);
+  useEffect(() => {
+    if (!cellFocus) return;
+    const input = document.querySelector<HTMLElement>(
+      `[data-e-cell="${cellFocus.segment}:${cellFocus.id}"] input`,
+    );
+    if (!input) return;
+    input.focus();
+    setCellFocus(null);
+  }, [cellFocus, tree]);
   const encoded = useGroupEncoding(snapshot, priced, page.group, page.encoding);
   // The tree reads the drawing's quantity; a categorical reading (or none) keeps Pe's fan-to-here loss.
   const reading = encoded.encoding.quantity ? encoded.encoding : null;
@@ -106,7 +139,12 @@ export function EScreen({ props }: { props: ProtoProps }) {
     ) ?? null;
   const scale = critical?.total ?? null;
   const selected = page.selected && /^\d+$/.test(page.selected) ? Number(page.selected) : null;
-  const open = inboxOpen ?? rows.length > 0;
+  const open = inboxOpen ?? (toRule > 0 || props.staged > 0);
+  const focusCell = (cell: CellRef) => {
+    const group = snapshot.nodes.find((n) => n.id === cell.id)?.groupId ?? page.group;
+    setPage({ group, selected: String(cell.id), issue: "" });
+    setCellFocus(cell);
+  };
   // The group's own fan (B's header read the document-wide one); unsolved says so.
   const groupFan = tree ? priced?.now.byGroup[tree.key]?.fan : undefined;
   const grilleName = (n: TreeNode) => {
@@ -176,6 +214,7 @@ export function EScreen({ props }: { props: ProtoProps }) {
                 select,
                 jumpToRule: setRuleFocus,
                 reading,
+                inputs: priced ? { snapshot, priced, work } : null,
               }}
             />
           </div>
@@ -184,14 +223,28 @@ export function EScreen({ props }: { props: ProtoProps }) {
         <div role="list" aria-label="systems">
           {systemList(snapshot, priced).map((s) => {
             const open = () => setPage({ group: s.key, selected: "", issue: "" });
+            // A group with no air mover prices nothing: its row says it needs a fix (its Fix row).
+            const fanless = priced?.now.byGroup[s.key]?.hasAirMover === false;
             return (
               <Row
                 key={s.key}
                 role="listitem"
                 tabIndex={0}
                 label={s.name}
+                title={`${s.name} (${s.key})`}
                 meta={
-                  <LossBar value={s.total} scale={null} provisional={s.provisional} label="Pe fan, in-wg" />
+                  fanless ? (
+                    <span data-tone="alarm" data-e-fanless={s.key}>
+                      needs a fix: no fan
+                    </span>
+                  ) : (
+                    <LossBar
+                      value={s.total}
+                      scale={null}
+                      provisional={s.provisional}
+                      label="fan static Pe computes, in-wg"
+                    />
+                  )
                 }
                 onClick={open}
                 onKeyDown={(event) => {
@@ -255,7 +308,7 @@ export function EScreen({ props }: { props: ProtoProps }) {
       <Pane
         id="e-inbox"
         title="Inbox"
-        meta={`${rows.length} to rule on`}
+        meta={`${toRule} to rule on`}
         actions={
           <Button label="hide the inbox" onClick={() => setInboxOpen(false)}>
             hide
@@ -263,28 +316,28 @@ export function EScreen({ props }: { props: ProtoProps }) {
         }
         flush
       >
-        {rows.length ? (
+        {inbox ? (
           <Inbox
-            rows={rows}
+            groups={inbox}
             work={inboxWork}
             doc={props.doc}
             nameOf={nameOf}
             onVerdict={props.onVerdict}
             light={light}
             onSelect={select}
+            onFocusCell={focusCell}
+            write={{ ...props.actions, row: inbox.write }}
           />
-        ) : (
-          <p className="text-ink-2 t-small px-2 py-1">nothing here has a verb for a person</p>
-        )}
+        ) : null}
       </Pane>
     </div>
   ) : (
     <div
-      data-e-inbox-rail={rows.length}
+      data-e-inbox-rail={toRule}
       className="border-line flex shrink-0 justify-center border-l py-1 [writing-mode:vertical-rl]"
     >
       <Button label="show the inbox" onClick={() => setInboxOpen(true)}>
-        Inbox · {rows.length}
+        Inbox · {toRule}
       </Button>
     </div>
   );

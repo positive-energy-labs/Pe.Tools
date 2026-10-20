@@ -258,6 +258,9 @@ export type TreeRowParts = Omit<RowState, "cursor"> & {
   lead?: ReactNode;
   label: ReactNode;
   aside?: ReactNode;
+  /** A second line (inputs the row holds); with it the row is `lines` 2. */
+  sub?: ReactNode;
+  lines?: 1 | 2 | 3;
   meta?: ReactNode;
   actions?: ReactNode;
   title?: string;
@@ -335,6 +338,8 @@ export function Tree<N>(props: TreeProps<N>) {
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    // A field inside a row owns its keys: the tree's cursor keys never reach into typing.
+    if ((event.target as HTMLElement).closest?.("input, textarea, [contenteditable]")) return;
     const at = rows.findIndex((row) => row.key === cursor);
     const here = rows[at];
     switch (event.key) {

@@ -12,7 +12,9 @@ import { ruleByKey } from "@pe/ducts-domain/loss-rules";
 import { tableOf, unpriced, type Priced } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Tree } from "@pe/kit/lang/row";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
+import { fanOutWords, ruleFanOut } from "../../inputs";
 import type { LossesWork } from "../../work";
 import { Chips, DropCell, StagedRules } from "./rules";
 
@@ -95,6 +97,19 @@ export function RulesTree({
     return [...rules, ...loose];
   }, [priced, ruleOf, groupOf, group, wide]);
 
+  // What staging each rule's table would move, known before anything is staged: the grilles
+  // downstream of its instances and the systems they sit in, document-wide whatever `wide` says.
+  const fanOuts = useMemo(() => {
+    const trees = new Map();
+    return new Map(
+      roots.flatMap((n) =>
+        n.kind === "rule"
+          ? [[n.ruleKey, ruleFanOut(snapshot, ruleOf, n.ruleKey, trees)] as const]
+          : [],
+      ),
+    );
+  }, [roots, snapshot, ruleOf]);
+
   // A jump focuses the rule's row: scroll it into view once it is drawn.
   useEffect(() => {
     if (!focus) return;
@@ -134,6 +149,11 @@ export function RulesTree({
                     ×{n.count}
                   </span>
                   {missing ? <span data-tone="caution" title="instances with no value under this table">{missing} unpriced</span> : null}
+                  <TooltipHint content="What staging another table for this rule would re-price, in every system">
+                    <span className="text-ink-2" data-e-fanout={n.ruleKey}>
+                      {fanOutWords(fanOuts.get(n.ruleKey) ?? { grilles: 0, systems: 0 })}
+                    </span>
+                  </TooltipHint>
                 </span>
               ),
               onMouseEnter: () => light(idsUnder(n.ruleKey)),
