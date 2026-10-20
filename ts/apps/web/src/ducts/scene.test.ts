@@ -75,7 +75,7 @@ const snapshot = {
   issues: [],
   layers: [],
   systems: [],
-  slots: { fanStatic: "a", fanFlow: "b", componentDrop: "c", fittingCoefficient: "d" },
+  slots: { fanStatic: "a", fanFlow: "b", componentDrop: "c", fittingCoefficient: "d", terminalFlow: "e" },
 } as DuctSnapshot;
 
 const SUBJECT = [1, 11, 2, 12, 3];

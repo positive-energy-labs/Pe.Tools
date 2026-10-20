@@ -14,7 +14,7 @@ import {
 } from "#/components/work/band";
 import { StateCell } from "@pe/kit/lang/cell";
 import { Tag } from "@pe/kit/lang/chip";
-import { Kbd } from "#/components/lang/kbd";
+import { Kbd, KeyLegend, type LegendKey } from "#/components/lang/kbd";
 import { Button } from "@pe/kit/lang/button";
 import { Verdict } from "@pe/kit/lang/verdict";
 import { ARMING_SPECIMEN } from "#/design-system/specimens-data";
@@ -23,6 +23,15 @@ import { RecipeGrid, SpecimenFrame, type GridVariantProps } from "./recipe-grid"
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const noop = () => {};
+
+/** A drawing's keys: pointer gestures as words, keys as `Kbd`. */
+const LEGEND_SPECIMEN: readonly LegendKey[] = [
+  { pointer: "drag", does: "orbit" },
+  { keys: ["Shift"], pointer: "drag", does: "pan" },
+  { pointer: "wheel", does: "zoom" },
+  { keys: ["F"], does: "frame the selection" },
+  { keys: ["Esc"], does: "clear the selection" },
+];
 
 /** Open, contested and Pea-agreed staged: the three verb sets the reviewer draws. */
 const REVIEW_SPECIMEN: Record<string, TrichotomyCellLike> = {
@@ -42,6 +51,12 @@ export function LangWorkflowSpecimens() {
         <div className="flex items-center gap-2">
           <Kbd>⌘K</Kbd>
           <Kbd mute>Esc</Kbd>
+        </div>
+      </SpecimenFrame>
+      <SpecimenFrame name="KeyLegend" importPath="#/components/lang/kbd">
+        <div className="flex items-end gap-6">
+          <KeyLegend keys={LEGEND_SPECIMEN} bind={false} />
+          <KeyLegend keys={LEGEND_SPECIMEN} bind={false} defaultOpen />
         </div>
       </SpecimenFrame>
       <SpecimenFrame name="Verdict" importPath="@pe/kit/lang/verdict">

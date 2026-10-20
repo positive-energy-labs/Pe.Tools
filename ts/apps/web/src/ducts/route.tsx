@@ -13,7 +13,7 @@ import type { Reading } from "@pe/agent-contracts";
 import { Surface } from "#/components/lang/surface";
 import { frozenDemo } from "#/host/demo-client";
 import { SAVED, useDuctSnapshot, useDuctTables, useDuctCatalogs } from "./host";
-import { SCENE_CLAIMS, SCENE_FIXTURE } from "./scene.fixture";
+import { SCENE_CLAIMS, SCENE_FIXTURE, SCENE_SUBJECT } from "./scene.fixture";
 import { RouteShell, useRoute, useRouteThread } from "#/route";
 import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
@@ -28,9 +28,15 @@ import { verdictPatches } from "./claims";
 import { claimsOf, type Claim } from "./legs";
 import { DuctsLedger } from "./ledger";
 import { provisionalWords } from "./provisional";
-import { DuctsSpatial } from "./spatial";
+import { DuctsSpatial, type Subject } from "./spatial";
 import { DuctsTables } from "./tables";
 import { DuctsTree } from "./tree";
+import type { ProtoProps } from "./proto/props";
+import { PrototypeSwitcher, type VariantId } from "./proto/switcher";
+import { VariantB } from "./proto/variant-b";
+import { VariantC } from "./proto/variant-c";
+import { VariantD } from "./proto/variant-d";
+import { VariantE2 } from "./proto/variant-e2";
 
 /** The views `page.view` keys; "" is the tables. */
 const VIEWS = [
@@ -66,9 +72,12 @@ const layerWord = (keys: readonly string[], snapshot: DuctSnapshot | null) =>
 export function DuctsRoute({
   search,
   setSearch,
+  variant,
 }: {
   search: DuctsSearch;
   setSearch: (next: Partial<DuctsSearch>) => void;
+  /** THROWAWAY protoui: `?variant=E2|B|C|D` swaps the body for a prototype. */
+  variant?: VariantId;
 }) {
   const [chosen] = useChooseTarget();
   const thread = useRouteThread();
@@ -337,6 +346,39 @@ export function DuctsRoute({
           ? { says: "reading ducts…", exit: "wait for the snapshot" }
           : null;
 
+  // THROWAWAY protoui: the props every variant receives; the fixture stands in when no host snapshot.
+  const [hovered, setHovered] = useState<number | null>(null);
+  const fromFixture = !!variant && !snapshot;
+  const protoSubject = useMemo<Subject | null>(
+    () =>
+      fromFixture
+        ? { ids: SCENE_SUBJECT, claims: claimsOf(SCENE_CLAIMS), onVerdict: () => {} }
+        : subject,
+    [fromFixture, subject],
+  );
+  const protoProps: ProtoProps | null = variant
+    ? {
+        snapshot: snapshot ?? SCENE_FIXTURE.snapshot,
+        fromFixture,
+        priced,
+        findings: catalogs.findings,
+        ready,
+        subject: protoSubject,
+        claims: protoSubject?.claims ?? [],
+        claimCells: fromFixture ? SCENE_CLAIMS : demoClaims,
+        page,
+        setPage,
+        onSelect: (id) => setPage({ selected: id == null ? "" : String(id), issue: "" }),
+        onSelectClaim: (claim) => setPage({ selected: claim.id, issue: "" }),
+        onHover: setHovered,
+        hovered,
+        work,
+        empty: fromFixture ? null : empty,
+        doc,
+        reading: { pending, error: error ?? null },
+      }
+    : null;
+
   return (
     <Surface
       head={
@@ -394,7 +436,20 @@ export function DuctsRoute({
         />
       }
     >
-      {page.view === "losses" ? (
+      {protoProps && variant ? (
+        <>
+          {variant === "E2" ? (
+            <VariantE2 {...protoProps} />
+          ) : variant === "B" ? (
+            <VariantB {...protoProps} />
+          ) : variant === "C" ? (
+            <VariantC {...protoProps} />
+          ) : (
+            <VariantD {...protoProps} />
+          )}
+          <PrototypeSwitcher variant={variant} />
+        </>
+      ) : page.view === "losses" ? (
         <DuctsLosses
           snapshot={snapshot}
           grids={tables.grids}

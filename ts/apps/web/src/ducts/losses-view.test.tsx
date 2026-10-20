@@ -239,6 +239,7 @@ it("builds the ducts.apply request from the staged cells only, exactly", () => {
         fanFlow: "PE_M_Fan_AirFlow",
         componentDrop: "Pressure Drop",
         fittingCoefficient: "Pe_C",
+        terminalFlow: "PE_M_Grd_AirFlow",
       },
       workRevision: 0,
       appliedAt: at,

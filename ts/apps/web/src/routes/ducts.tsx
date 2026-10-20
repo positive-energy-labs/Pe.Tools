@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { routeSearch } from "#/route/route-owner";
 import { DuctsRoute } from "#/ducts/route";
+import { asVariant } from "#/ducts/proto/switcher";
 
 // The router parses a numeric-looking value (`selected=8081605`, `level=5765339`) as a number.
 const text = (value: unknown) =>
@@ -27,6 +28,8 @@ export const Route = createFileRoute("/ducts")({
     /** The spatial views' encoding key (health when absent). */
     encoding: text(search.encoding),
     /** The scene drawn: `subject`, or absent for the group scene. */
+    /** THROWAWAY protoui: B | C | D swaps the body for a prototype. */
+    variant: asVariant(search.variant),
     scene: search.scene === "subject" ? ("subject" as const) : undefined,
   }),
   component: DuctsFileRoute,
@@ -34,9 +37,10 @@ export const Route = createFileRoute("/ducts")({
 
 function DuctsFileRoute() {
   const navigate = useNavigate({ from: "/ducts" });
-  const { view, group, level, layers, selected, issue, encoding, scene } = Route.useSearch();
+  const { view, group, level, layers, selected, issue, encoding, scene, variant } = Route.useSearch();
   return (
     <DuctsRoute
+      variant={variant}
       search={{
         view: view ?? "",
         group: group ?? "",

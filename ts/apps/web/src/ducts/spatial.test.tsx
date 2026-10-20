@@ -12,10 +12,10 @@ import { ductsRouteState } from "@pe/agent-contracts";
 
 import { VERDICT_INK } from "@pe/kit/table/cells";
 import {
-  ENCODINGS,
+  encodingFor,
   ENCODING_KEYS,
+  quantileEdges,
   strokeOf,
-  type Encoding,
   type Issue,
   type Segment,
 } from "./encoding";
@@ -145,6 +145,7 @@ const slice = {
     fanFlow: "PE_M_Fan_AirFlow",
     componentDrop: "Pressure Drop",
     fittingCoefficient: "Pe_C",
+    terminalFlow: "PE_M_Grd_AirFlow",
   },
   layers: [
     {
@@ -175,17 +176,18 @@ const page = (patch: Partial<DuctsPage>): DuctsPage => ({
   ...patch,
 });
 
+const spatial = (snapshot: DuctSnapshot, patch: Partial<DuctsPage>) => (
+  <DuctsSpatial
+    snapshot={snapshot}
+    ready={readiness(snapshot, EMPTY_WORK)}
+    priced={null}
+    page={page(patch)}
+    setPage={() => {}}
+    empty={null}
+  />
+);
 const draw = (snapshot: DuctSnapshot, patch: Partial<DuctsPage>) =>
-  render(
-    <DuctsSpatial
-      snapshot={snapshot}
-      ready={readiness(snapshot, EMPTY_WORK)}
-      priced={null}
-      page={page(patch)}
-      setPage={() => {}}
-      empty={null}
-    />,
-  ).container;
+  render(spatial(snapshot, patch)).container;
 
 const kindsDrawn = (root: Element) =>
   new Set([...root.querySelectorAll("[data-issue]")].map((el) => el.getAttribute("data-issue")));
@@ -227,16 +229,47 @@ it("health inks every ISSUE_KINDS entry in its class's tone, and every encoding 
     issues: [{ ...issues[0]!, kind }],
   });
   for (const kind of KINDS)
-    expect(strokeOf(ENCODINGS.health, facts(kind)).ink).toBe(
+    expect(strokeOf(encodingFor("health"), facts(kind)).ink).toBe(
       VERDICT_INK[ISSUE_KINDS[kind].color.tone],
     );
   for (const key of ENCODING_KEYS)
     for (const s of slice.segments) {
-      const encoding: Encoding = ENCODINGS[key];
+      const encoding = encodingFor(key, {
+        segments: slice.segments.map((segment) => ({ segment, derivedCfm: null, issues: [] })),
+        nodes: [],
+      });
       const bin = encoding.bin({ segment: s, derivedCfm: null, issues: [] });
       expect(encoding.bins[bin], `${key} bin ${bin}`).toBeDefined();
     }
-  expect(ENCODINGS["revit-pressure-drop"].bin(facts("stub"))).toBe("missing");
+  expect(encodingFor("revit-pressure-drop").bin(facts("stub"))).toBe("missing");
+});
+
+it("a quantity's breaks are equal-count over the group, its top is the group's max, and it names the max element", () => {
+  expect(quantileEdges([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 5)).toEqual([3, 5, 7, 9]);
+  expect(quantileEdges([4, 4, 4, 4], 5)).toEqual([]);
+  const velocities = [300, 600, 900, 1200, 2400];
+  const encoding = encodingFor("velocity", {
+    segments: velocities.map((v, i) => ({
+      segment: { ...slice.segments[0]!, id: 900 + i, revit: { velocityFpm: v } },
+      derivedCfm: null,
+      issues: [],
+    })),
+    nodes: [],
+  });
+  expect(encoding.quantity).toMatchObject({ max: 2400, maxId: 904, min: 300, unit: "fpm" });
+  const seg = (v: number) => ({ segment: { ...slice.segments[0]!, revit: { velocityFpm: v } }, issues: [] });
+  // The top bin holds the max; a lower value lands lower.
+  expect(encoding.bin(seg(2400))).toBe(`b${encoding.quantity!.edges.length}`);
+  expect(encoding.bin(seg(300))).toBe("b0");
+});
+
+it("a new encoding recolours the drawing and never moves its camera", () => {
+  const view = render(spatial(slice, { view: "iso", encoding: "health" }));
+  const matrix = () =>
+    view.container.querySelector('g[transform^="matrix"]')!.getAttribute("transform");
+  const before = matrix();
+  view.rerender(spatial(slice, { view: "iso", encoding: "size" }));
+  expect(matrix()).toBe(before);
 });
 
 it("the isometric turns the group's own grid onto the diagonal", () => {

@@ -76,6 +76,7 @@ const snapshot = {
     fanFlow: "PE_M_Fan_AirFlow",
     componentDrop: "Pressure Drop",
     fittingCoefficient: "Pe_C",
+    terminalFlow: "PE_M_Grd_AirFlow",
   },
 } as DuctSnapshot;
 
