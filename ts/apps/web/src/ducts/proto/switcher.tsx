@@ -3,6 +3,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 export const VARIANTS = [
+  { id: "E1", name: "Losses sidebar" },
+  { id: "E2", name: "Tree sidebar" },
   { id: "B", name: "Profiler" },
   { id: "C", name: "Variant C" },
   { id: "D", name: "Variant D" },
@@ -47,7 +49,7 @@ export function PrototypeSwitcher({ variant }: { variant: VariantId }) {
         bottom: 16,
         left: "50%",
         transform: "translateX(-50%)",
-        width: 280,
+        width: 320,
         zIndex: 99999,
         display: "flex",
         alignItems: "center",

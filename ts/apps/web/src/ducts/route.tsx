@@ -36,6 +36,8 @@ import { PrototypeSwitcher, type VariantId } from "./proto/switcher";
 import { VariantB } from "./proto/variant-b";
 import { VariantC } from "./proto/variant-c";
 import { VariantD } from "./proto/variant-d";
+import { VariantE1 } from "./proto/variant-e1";
+import { VariantE2 } from "./proto/variant-e2";
 
 /** The views `page.view` keys; "" is the tables. */
 const VIEWS = [
@@ -75,7 +77,7 @@ export function DuctsRoute({
 }: {
   search: DuctsSearch;
   setSearch: (next: Partial<DuctsSearch>) => void;
-  /** THROWAWAY protoui: `?variant=B|C|D` swaps the body for a prototype. */
+  /** THROWAWAY protoui: `?variant=E1|E2|B|C|D` swaps the body for a prototype. */
   variant?: VariantId;
 }) {
   const [chosen] = useChooseTarget();
@@ -437,7 +439,11 @@ export function DuctsRoute({
     >
       {protoProps && variant ? (
         <>
-          {variant === "B" ? (
+          {variant === "E1" ? (
+            <VariantE1 {...protoProps} />
+          ) : variant === "E2" ? (
+            <VariantE2 {...protoProps} />
+          ) : variant === "B" ? (
             <VariantB {...protoProps} />
           ) : variant === "C" ? (
             <VariantC {...protoProps} />
