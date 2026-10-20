@@ -48,7 +48,7 @@ function titles(source: string, file: string): string[] {
           "DialogHeader",
           "TooltipTrigger",
           "PopoverTrigger",
-        ].includes(tag) || tag.endsWith('.Trigger');
+        ].includes(tag) || tag.endsWith(".Trigger");
       if ((/^[a-z]/.test(tag) && tag !== "iframe") || forwardsNative) {
         for (const attr of node.attributes.properties) {
           if (ts.isJsxSpreadAttribute(attr))
