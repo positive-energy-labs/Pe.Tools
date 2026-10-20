@@ -7,6 +7,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { DuctsRouteDocument, RouteStatePatch } from "@pe/agent-contracts";
 import { survey } from "@pe/ducts-domain/survey";
+import { Button } from "@pe/kit/lang/button";
+import { Row } from "@pe/kit/lang/row";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 
@@ -169,13 +171,12 @@ export function EScreen({ props: routeProps }: { props: ProtoProps }) {
   const head = (
     <span className="inline-flex gap-1">
       {page.group ? (
-        <button
-          type="button"
-          className="cursor-pointer px-1"
+        <Button
+          label="show every system"
           onClick={() => setPage({ group: "", selected: "", issue: "" })}
         >
           all systems
-        </button>
+        </Button>
       ) : null}
     </span>
   );
@@ -221,20 +222,26 @@ export function EScreen({ props: routeProps }: { props: ProtoProps }) {
           </div>
         </>
       ) : (
-        <ol>
-          {systemList(snapshot, priced).map((s) => (
-            <li key={s.key}>
-              <button
-                type="button"
-                className="flex w-full cursor-pointer items-center gap-2 px-2 py-1 text-left hover:bg-(--pe-recess)"
-                onClick={() => setPage({ group: s.key, selected: "", issue: "" })}
-              >
-                <span className="min-w-0 flex-1 break-words">{s.name}</span>
-                <LossBar value={s.total} scale={null} provisional={s.provisional} label="Pe fan, in-wg" />
-              </button>
-            </li>
-          ))}
-        </ol>
+        <div role="list" aria-label="systems">
+          {systemList(snapshot, priced).map((s) => {
+            const open = () => setPage({ group: s.key, selected: "", issue: "" });
+            return (
+              <Row
+                key={s.key}
+                role="listitem"
+                tabIndex={0}
+                label={s.name}
+                meta={
+                  <LossBar value={s.total} scale={null} provisional={s.provisional} label="Pe fan, in-wg" />
+                }
+                onClick={open}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") open();
+                }}
+              />
+            );
+          })}
+        </div>
       )}
     </Pane>
   );
@@ -246,9 +253,12 @@ export function EScreen({ props: routeProps }: { props: ProtoProps }) {
         meta={wideRules ? "every system" : "this system"}
         help="A rule is a fitting type (family : type) plus a geometry condition. Its table is the one choice a person makes; Pe re-looks-up every instance under it. A fitting with a stated drop is an override under its type."
         actions={
-          <button type="button" className="cursor-pointer px-1" onClick={() => setWideRules(!wideRules)}>
+          <Button
+            label={wideRules ? "rules of this system only" : "rules of every system"}
+            onClick={() => setWideRules(!wideRules)}
+          >
             {wideRules ? "this system" : "all systems"}
-          </button>
+          </Button>
         }
         scroll="clip"
         flush
@@ -282,9 +292,9 @@ export function EScreen({ props: routeProps }: { props: ProtoProps }) {
         title="Inbox"
         meta={`${rows.length} to rule on`}
         actions={
-          <button type="button" className="cursor-pointer px-1" onClick={() => setInboxOpen(false)}>
+          <Button label="hide the inbox" onClick={() => setInboxOpen(false)}>
             hide
-          </button>
+          </Button>
         }
         flush
       >
@@ -304,14 +314,14 @@ export function EScreen({ props: routeProps }: { props: ProtoProps }) {
       </Pane>
     </div>
   ) : (
-    <button
-      type="button"
+    <div
       data-e-inbox-rail={rows.length}
-      className="border-line text-ink-2 cursor-pointer border-l px-1 [writing-mode:vertical-rl]"
-      onClick={() => setInboxOpen(true)}
+      className="border-line flex shrink-0 justify-center border-l py-1 [writing-mode:vertical-rl]"
     >
-      Inbox · {rows.length}
-    </button>
+      <Button label="show the inbox" onClick={() => setInboxOpen(true)}>
+        Inbox · {rows.length}
+      </Button>
+    </div>
   );
 
   return (

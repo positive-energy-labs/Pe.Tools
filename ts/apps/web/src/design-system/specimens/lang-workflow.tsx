@@ -16,6 +16,8 @@ import { StateCell } from "@pe/kit/lang/cell";
 import { Tag } from "@pe/kit/lang/chip";
 import { Kbd, KeyLegend, type LegendKey } from "#/components/lang/kbd";
 import { Button } from "@pe/kit/lang/button";
+import { Legend } from "@pe/kit/lang/legend";
+import { tokenRef } from "@pe/kit/lib/token";
 import { Verdict } from "@pe/kit/lang/verdict";
 import { ARMING_SPECIMEN } from "#/design-system/specimens-data";
 
@@ -57,6 +59,36 @@ export function LangWorkflowSpecimens() {
         <div className="flex items-end gap-6">
           <KeyLegend keys={LEGEND_SPECIMEN} bind={false} />
           <KeyLegend keys={LEGEND_SPECIMEN} bind={false} defaultOpen />
+        </div>
+      </SpecimenFrame>
+      <SpecimenFrame name="Legend" importPath="@pe/kit/lang/legend">
+        <div className="flex items-start gap-6">
+          <Legend
+            label="Velocity"
+            unit="fpm"
+            ramp={{
+              steps: [
+                { key: "a", ink: tokenRef("ink-mute") },
+                { key: "b", ink: tokenRef("caution") },
+                { key: "c", ink: tokenRef("alarm") },
+              ],
+              breaks: ["0", "800", "1,400", "2,100"],
+            }}
+            foot={<span className="text-ink-2">max 2,100 fpm</span>}
+          />
+          <Legend
+            label="Health"
+            rows={[
+              { key: "ok", stroke: { ink: tokenRef("ink"), width: 2 }, word: "clean", count: 41 },
+              {
+                key: "open",
+                stroke: { ink: tokenRef("alarm"), width: 2, className: "dash-void" },
+                word: "open end",
+                count: 3,
+              },
+            ]}
+            missing={{ key: "missing", stroke: { ink: tokenRef("ink-mute"), width: 1 }, word: "no value", count: 2 }}
+          />
         </div>
       </SpecimenFrame>
       <SpecimenFrame name="Verdict" importPath="@pe/kit/lang/verdict">

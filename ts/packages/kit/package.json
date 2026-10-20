@@ -23,6 +23,7 @@
     "./lang/search-control": "./src/components/lang/search-control.tsx",
     "./lang/key-hint": "./src/components/lang/key-hint.tsx",
     "./lang/lang.css": "./src/components/lang/lang.css",
+    "./lang/legend": "./src/components/lang/legend.tsx",
     "./lang/list-popup": "./src/components/lang/list-popup.tsx",
     "./lang/pane-tabs": "./src/components/lang/pane-tabs.tsx",
     "./lang/pane.css": "./src/components/lang/pane.css",
