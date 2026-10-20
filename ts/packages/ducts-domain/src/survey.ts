@@ -1,12 +1,18 @@
 /**
  * What the route runs before any tree or loss (pressure-drop ledger, 2026-10-16): the snapshot
- * tolerated (`proximity.ts`), every terminal's design flow resolved (`terminal-flows.ts`), and
+ * read in Work's working phase (`phases.ts`) and tolerated (`proximity.ts`), every terminal's design flow resolved (`terminal-flows.ts`), and
  * the findings of both beside the snapshot's own issues, each naming who clears it. Cached per
  * snapshot for the last Work, so `price` and `assessDucts` share one survey; the tolerated
  * snapshot is cached per proximity verdict set, so a staged number re-solves only `next`.
  */
-import { stagedDucts, type DuctFinding, type DuctsRouteDocument } from "@pe/agent-contracts";
+import {
+  stagedDucts,
+  workingPhaseOf,
+  type DuctFinding,
+  type DuctsRouteDocument,
+} from "@pe/agent-contracts";
 
+import { phased } from "./phases.ts";
 import { tolerate, type InferredLink } from "./proximity.ts";
 import { markOf, terminalFlows, type FlowFinding, type TerminalFlow } from "./terminal-flows.ts";
 import { groupTree } from "./topology.ts";
@@ -22,7 +28,12 @@ export interface Survey {
 
 const PERSON = new Set(["open-end", "no-root", "multi-root", "no-terminal-flow"]);
 /** The inferences the route acts on; a near miss or a loop it only reports. */
-const ASSUMES = new Set(["joined-by-proximity", "tap-by-proximity", "inline-by-inference"]);
+const ASSUMES = new Set([
+  "joined-by-proximity",
+  "tap-by-proximity",
+  "inline-by-inference",
+  "out-of-phase",
+]);
 
 const flowFinding = (f: FlowFinding): DuctFinding => {
   switch (f.kind) {
@@ -74,7 +85,7 @@ const flowFinding = (f: FlowFinding): DuctFinding => {
   }
 };
 
-/** The staged verdicts proximity reads (ignore withholds, connect joins across classifications). */
+/** The staged verdicts proximity reads (ignore withholds, connect joins across classifications) and the working phase. */
 const verdictKey = (work: DuctsRouteDocument | null) =>
   Object.entries(work?.assumptions ?? {})
     .flatMap(([key, cell]) => {
@@ -82,6 +93,7 @@ const verdictKey = (work: DuctsRouteDocument | null) =>
       return key.startsWith("proximity:") && v?.kind === "verdict" ? [`${key}=${v.verdict}`] : [];
     })
     .sort()
+    .concat(`phase=${workingPhaseOf(work) ?? ""}`)
     .join("|");
 
 /**
@@ -117,11 +129,22 @@ export function series(snapshot: DuctSnapshot, tags: Set<string>) {
 }
 
 const cache = new WeakMap<DuctSnapshot, Map<string, ReturnType<typeof tolerate>>>();
-/** `tolerate` under Work's staged proximity verdicts, cached per snapshot and verdict set. */
+/**
+ * `tolerate` over the snapshot in Work's working phase, under Work's staged proximity verdicts,
+ * the `out-of-phase` findings first; cached per snapshot, verdict set and phase.
+ */
 export function tolerated(snapshot: DuctSnapshot, work: DuctsRouteDocument | null) {
   const byVerdicts = cache.get(snapshot) ?? cache.set(snapshot, new Map()).get(snapshot)!;
   const key = verdictKey(work);
-  return byVerdicts.get(key) ?? byVerdicts.set(key, tolerate(snapshot, work)).get(key)!;
+  const hit = byVerdicts.get(key);
+  if (hit) return hit;
+  const inPhase = phased(snapshot, work);
+  const t = tolerate(inPhase.snapshot, work);
+  const result = inPhase.findings.length
+    ? { ...t, findings: [...inPhase.findings, ...t.findings] }
+    : t;
+  byVerdicts.set(key, result);
+  return result;
 }
 const inSeries = new WeakMap<DuctSnapshot, Map<string, ReturnType<typeof series>>>();
 const last = new WeakMap<DuctSnapshot, { work: DuctsRouteDocument | null; survey: Survey }>();

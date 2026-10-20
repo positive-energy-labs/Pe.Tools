@@ -94,7 +94,7 @@ it("ducts: a unit static is keyed by element id and holds a non-negative in-wg",
   expect(applyPatches(spec, envelope, "human", stage("40", -1), 0)).toMatchObject({ ok: false });
 });
 
-it("ducts scene: Pea proposes the subject, claims and label parameter but never stages them; a verdict is staged by a person", () => {
+it("ducts scene: Pea proposes the subject, claims, label parameter and working phase but never stages them; a verdict is staged by a person", () => {
   const spec = ductsRouteState as unknown as RouteStateSpec<z.ZodType>;
   const envelope: RouteEnvelope<unknown> = { version: 1, revision: 0, doc: spec.schema.parse({}) };
   const claim = {
@@ -107,6 +107,8 @@ it("ducts scene: Pea proposes the subject, claims and label parameter but never 
     [["claims"], "c1", claim],
     [[], "labelParameter", "PE_Equipment_Name"],
     [[], "labelParameter", null],
+    [[], "workingPhase", "Existing"],
+    [[], "workingPhase", null],
   ] as const;
   for (const [path, key, value] of cases) {
     const propose = transitionPatches(path, key, {}, { kind: "propose", rung: { value } });

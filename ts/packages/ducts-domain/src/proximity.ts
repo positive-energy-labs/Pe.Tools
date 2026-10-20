@@ -62,12 +62,16 @@ export interface InferredInline {
   /** The node's port keys, the one facing the segment's first polyline point first. */
   ports: [string, string];
 }
-/** The finding kinds a person rules on as inferred: a joint, tap or inline part made, or one refused across classifications. */
+/**
+ * The finding kinds a person rules on as inferred: a joint, tap or inline part made, one refused
+ * across classifications, or an element left out of the working phase (`phases.ts`).
+ */
 export const INFERRED_KINDS = new Set([
   "joined-by-proximity",
   "tap-by-proximity",
   "inline-by-inference",
   "near-miss-across-classifications",
+  "out-of-phase",
 ]);
 export interface ProximityFinding {
   id: string;
@@ -76,7 +80,8 @@ export interface ProximityFinding {
     | InferredTap["kind"]
     | InferredInline["kind"]
     | "loop-by-inference"
-    | "near-miss-across-classifications";
+    | "near-miss-across-classifications"
+    | "out-of-phase";
   elementIds: number[];
   note: string;
 }
