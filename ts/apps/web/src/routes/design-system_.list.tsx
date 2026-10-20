@@ -5,6 +5,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { FactChip } from "@pe/kit/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { ThemeToggle } from "@pe/kit/lang/theme-toggle";
+import { Tree } from "@pe/kit/lang/row";
 import {
   FieldOptionsPanel,
   FreeTextPanel,
@@ -52,6 +53,63 @@ const FIELD_OPTION_STATES: FieldOptionState[] = [
     dependencies: [{ key: "CategoryName", scope: "sibling", value: "Ducts" }],
   },
 ];
+
+/** A supply system's call tree: system, run, leg, element. Specimen data. */
+interface SpecNode {
+  key: string;
+  name: string;
+  loss?: string;
+  children?: SpecNode[];
+}
+const SYSTEM_TREE: SpecNode[] = [
+  {
+    key: "sa19",
+    name: "SA 19 · supply air, level 2 east wing",
+    loss: "1.84",
+    children: [
+      {
+        key: "sa19/r1",
+        name: "run 1 · AHU-2 to VAV-2-14 (critical, longest developed length)",
+        loss: "1.84",
+        children: [
+          { key: "sa19/r1/a", name: "leg A · 24×16 main", loss: "0.62" },
+          {
+            key: "sa19/r1/b",
+            name: "leg B · 18×12 branch",
+            loss: "0.71",
+            children: [
+              { key: "sa19/r1/b/e1", name: "elbow 90° radius 1.5", loss: "0.09" },
+              { key: "sa19/r1/b/e2", name: "tee branch, converging flow", loss: "0.21" },
+            ],
+          },
+          { key: "sa19/r1/c", name: "leg C · 10ø flex to diffuser", loss: "0.51" },
+        ],
+      },
+      {
+        key: "sa19/r2",
+        name: "run 2 · AHU-2 to VAV-2-09",
+        loss: "1.41",
+        children: [{ key: "sa19/r2/a", name: "leg A · 24×16 main", loss: "0.62" }],
+      },
+    ],
+  },
+  { key: "ra04", name: "RA 04 · return air", loss: "0.77", children: [] },
+];
+
+function TreePanel({ say }: { say: (text: string) => void }) {
+  return (
+    <Tree
+      aria-label="system call tree"
+      roots={SYSTEM_TREE}
+      keyOf={(n) => n.key}
+      childrenOf={(n) => n.children ?? []}
+      defaultOpen={["sa19", "sa19/r1", "sa19/r1/b"]}
+      empty="no systems in this document"
+      onPick={(n) => say(`pick “${n.name}”`)}
+      row={(n) => ({ label: n.name, meta: n.loss })}
+    />
+  );
+}
 
 function ListRoute() {
   const [said, say] = useState<string | null>(null);
@@ -106,6 +164,9 @@ function ListRoute() {
           </Panel>
           <Panel title="free text" kind="ListInput · suggestions">
             <FreeTextPanel say={say} />
+          </Panel>
+          <Panel title="tree" kind="Tree · depth · guides · cut hint">
+            <TreePanel say={say} />
           </Panel>
           <Panel title="table" kind="Row as tr · cell list · multi">
             <TablePanel say={say} />
