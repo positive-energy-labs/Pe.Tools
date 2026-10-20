@@ -73,7 +73,7 @@ public static class UIDocumentShowExtensions {
     /// <summary>
     ///     Select <paramref name="ids" /> and zoom to them in a view that can show them. The active view stays when it
     ///     is a model view that displays all of them; otherwise the first of the default {3D}, other 3D views, then plans
-    ///     on the elements' levels that does (<see cref="ShowViewPolicy" />). A sheet, schedule or other non-model active
+    ///     on the elements' levels that does (3D views ranked mechanical-first, never a template) (<see cref="ShowViewPolicy" />). A sheet, schedule or other non-model active
     ///     view is never zoomed: model coordinates mean nothing there (the zoom landed in empty space, 2026-10-20). When no
     ///     3D view exists one named "Pe 3D" is made, and the result says so. Call outside a transaction.
     /// </summary>
@@ -96,7 +96,7 @@ public static class UIDocumentShowExtensions {
             views[v.Id] = v;
 
         var infos = views.Values.Select(v => new ShowViewInfo(v.Id.Value(), v.Name, RoleOf(v), v.Id == active.Id,
-            v is ViewPlan { GenLevel: { } level } && levels.Contains(level.Id)));
+            v is ViewPlan { GenLevel: { } level } && levels.Contains(level.Id), DisciplineOf(v)));
         var order = ShowViewPolicy.Order(infos);
 
         View? chosen = null;
@@ -125,6 +125,15 @@ public static class UIDocumentShowExtensions {
         _ = uidoc.SelectAndZoom(ids, chosen);
         return new ShownIn(chosen, chosen.Id == active.Id ? null : active.Name, created, showsAll);
     }
+
+    private static ShowViewDiscipline DisciplineOf(View view) =>
+        view.get_Parameter(BuiltInParameter.VIEW_DISCIPLINE)?.AsInteger() switch {
+            (int)ViewDiscipline.Mechanical => ShowViewDiscipline.Mechanical,
+            (int)ViewDiscipline.Coordination => ShowViewDiscipline.Coordination,
+            (int)ViewDiscipline.Plumbing => ShowViewDiscipline.Plumbing,
+            (int)ViewDiscipline.Electrical => ShowViewDiscipline.Electrical,
+            _ => ShowViewDiscipline.Other
+        };
 
     private static ShowViewRole RoleOf(View view) => view switch {
         View3D => ShowViewRole.ThreeD,
