@@ -620,3 +620,25 @@ it.each(physicalTransitions.nodes)(
     }
   },
 );
+
+it("a path stepping across an inferred joint still prices and names the inference it rests on", () => {
+  const whole = synthetic as unknown as DuctSnapshot;
+  // Duct 11 stops 0.4 in short of grille 30, unjoined: proximity joins it (kaitpw 2026-10-19).
+  const broken = structuredClone(whole);
+  const end = broken.segments.find((s) => s.id === 11)!.connectors.find((c) => c.index === 2)!;
+  const grille = broken.nodes.find((n) => n.id === 30)!;
+  end.connectedTo = null;
+  grille.connectors[0]!.connectedTo = null;
+  grille.point = grille.connectors[0]!.point = [20, 10 + 0.4 / 12, 9];
+  const before = price(whole, grids, null).next.paths;
+  const after = price(broken, grids, null);
+  const id = "proximity:11:2|30:1";
+  expect(after.findings.find((f) => f.id === id)).toMatchObject({
+    kind: "joined-by-proximity",
+    clearer: "person",
+  });
+  expect(after.next.paths[30]!.inferred).toEqual([id]);
+  expect(after.next.paths[30]!.total).toBeCloseTo(before[30]!.total, 9);
+  expect(after.next.paths[31]!.inferred).toEqual([]);
+  expect(before[30]!.inferred).toEqual([]);
+});

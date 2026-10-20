@@ -76,6 +76,10 @@ const STATUS = {
   "open-end": ["open end", "an open end on this path is not answered (capped or ignored)"],
   refuses: ["drop refused", "the connector is not Specific Loss; Revit refuses a terminal drop"],
   "no-drop": ["no drop", "no terminal drop is known; stage one from the catalog"],
+  inferred: [
+    "inferred",
+    "the total rests on joints or taps inferred by proximity; a person rules on each in the findings",
+  ],
 } as const;
 type Status = keyof typeof STATUS;
 function terminalStatus(
@@ -91,6 +95,7 @@ function terminalStatus(
   if (node.terminalDrop && !node.terminalDrop.writable) out.push("refuses");
   const terminal = priced.next.paths[node.id]?.rows.find((row) => row.kind === "terminal");
   if (terminal?.error || !dropKnown) out.push("no-drop");
+  if (priced.next.paths[node.id]?.inferred.length) out.push("inferred");
   return out;
 }
 /** Stage a rule's table; staging the table already staged takes it back. */
@@ -680,6 +685,7 @@ function Bars({
         );
         const opened = selected === String(id);
         const flow = assessment.flows.get(id);
+        const inferred = priced.next.paths[id]?.inferred ?? [];
         return (
           <Fragment key={id}>
             <ListRow
@@ -722,9 +728,18 @@ function Bars({
                     aria-label="status"
                   >
                     {statuses.map((status) => (
-                      <TooltipHint key={status} content={STATUS[status][1]}>
+                      <TooltipHint
+                        key={status}
+                        content={
+                          status === "inferred"
+                            ? `rests on ${inferred.length} inferred join${inferred.length === 1 ? "" : "s"} (${inferred.join(", ")}); a person rules on each in the findings`
+                            : STATUS[status][1]
+                        }
+                      >
                         <span data-tone="caution" data-status={status}>
-                          {STATUS[status][0]}
+                          {status === "inferred"
+                            ? `${inferred.length} inferred`
+                            : STATUS[status][0]}
                         </span>
                       </TooltipHint>
                     ))}

@@ -9,6 +9,8 @@
  * - Flow at any element is the sum of the terminal design flows below it in the tree, which is
  *   what the snapshot pass-1 `flows` are; at a tap it is recomputed per leg.
  * - fan = the largest path total in a group; the critical terminal is its argmax.
+ * - A path stepping across a proximity inference (`proximity.ts`) still prices; it names the
+ *   finding ids its total rests on (`inferred`), so the route says what a person has not ruled on.
  * Physics in loss-physics.ts, interpolation in loss-grid.ts, rule data in loss-rules.ts.
  */
 import {
@@ -33,6 +35,7 @@ import {
   type Port,
 } from "./loss-rules.ts";
 import type { DuctSnapshot } from "./types.ts";
+import type { InferredLink } from "./proximity.ts";
 import { groupTree, runsOf, terminalCfm, type GroupTree } from "./topology.ts";
 
 type Node = DuctSnapshot["nodes"][number];
@@ -97,6 +100,8 @@ interface PathLoss {
   groupId: string;
   total: number;
   rows: Row[];
+  /** The proximity finding ids whose inferred joint or tap the path steps across; its total rests on them. */
+  inferred: string[];
 }
 
 interface RuleLoss {
@@ -272,7 +277,20 @@ export function computeLosses(
   overrides: Overrides = {},
   evidence: Readonly<Record<string, DuctCalculation>> = {},
   catalogs: Catalogs = EMPTY_CATALOGS,
+  inferred: readonly InferredLink[] = [],
 ): LossResult {
+  const byPair = new Map<string, string[]>();
+  for (const { id, between } of inferred) {
+    const pair = [...between].sort((a, b) => a - b).join("|");
+    byPair.set(pair, [...(byPair.get(pair) ?? []), id]);
+  }
+  const restsOn = (path: number[]) => [
+    ...new Set(
+      path.flatMap((id, k) =>
+        k ? (byPair.get([path[k - 1]!, id].sort((a, b) => a - b).join("|")) ?? []) : [],
+      ),
+    ),
+  ];
   const result = {
     paths: {},
     fan: 0,
@@ -300,7 +318,8 @@ export function computeLosses(
     for (const run of runsOf(tree)) {
       const rows = pathRows(tree, run.path, below, grids, choices, overrides, fail, catalogs);
       const total = rows.reduce((a, r) => a + (r.dp ?? 0), 0);
-      result.paths[run.terminal] = { groupId: group.id, total, rows };
+      result.paths[run.terminal] = { groupId: group.id, total, rows, inferred: restsOn(run.path) };
+
       if (critical == null || total > fan || (total === fan && run.terminal < critical)) {
         fan = total;
         critical = run.terminal;

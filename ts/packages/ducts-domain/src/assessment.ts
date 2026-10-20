@@ -174,7 +174,13 @@ export function assessDucts(
     "Calculated paths contain unpriced rows or lack stated terminal catalog losses; totals include known arithmetic contributions only",
   );
   reason(
+    "rests-on-inferred-joints",
+    reached.filter((node) => next.paths[node.id]!.inferred.length).length,
+    "Calculated paths step across joints or taps inferred by proximity; their totals rest on inferences a person rules on",
+  );
+  reason(
     "unknown-terminal-flow",
+
     selectedTerminals.filter((node) => flows.get(node.id)?.cfm == null).length,
     "Terminal design flow is unknown: no override, load preview share or positive Revit flow",
   );

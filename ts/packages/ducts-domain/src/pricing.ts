@@ -67,7 +67,12 @@ interface Solved {
 
 const solved = new WeakMap<DuctSnapshot, WeakMap<Grids, WeakMap<Catalogs, Solved>>>();
 
-function solvedFor(snapshot: DuctSnapshot, grids: Grids, catalogs: Catalogs): Solved {
+function solvedFor(
+  snapshot: DuctSnapshot,
+  grids: Grids,
+  catalogs: Catalogs,
+  inferred: Survey["inferred"] = [],
+): Solved {
   const byGrids = solved.get(snapshot) ?? solved.set(snapshot, new WeakMap()).get(snapshot)!;
   const byCatalogs = byGrids.get(grids) ?? byGrids.set(grids, new WeakMap()).get(grids)!;
   let entry = byCatalogs.get(catalogs);
@@ -75,7 +80,8 @@ function solvedFor(snapshot: DuctSnapshot, grids: Grids, catalogs: Catalogs): So
     const applied = appliedChoices(snapshot);
     entry = {
       applied,
-      now: computeLosses(snapshot, grids, applied, {}, {}, catalogs),
+      // The tolerated snapshot is its survey's, so its inferred links are fixed with it.
+      now: computeLosses(snapshot, grids, applied, {}, {}, catalogs, inferred),
       last: null,
       fanouts: new Map(),
     };
@@ -93,7 +99,7 @@ export function price(
 ): Priced {
   const surveyed = survey(raw, doc);
   const { snapshot } = surveyed;
-  const entry = solvedFor(snapshot, grids, catalogs);
+  const entry = solvedFor(snapshot, grids, catalogs, surveyed.inferred);
   if (entry.last?.doc === doc) return entry.last.priced;
   const staged = stagedDucts(doc);
   const { applied, now } = entry;
@@ -126,7 +132,16 @@ export function price(
     now,
     next: same
       ? now
-      : computeLosses(snapshot, grids, choices, overrides, staged.calculation, catalogs),
+      : computeLosses(
+          snapshot,
+          grids,
+          choices,
+          overrides,
+          staged.calculation,
+          catalogs,
+          surveyed.inferred,
+        ),
+
     staged,
   };
   entry.last = { doc, priced };
