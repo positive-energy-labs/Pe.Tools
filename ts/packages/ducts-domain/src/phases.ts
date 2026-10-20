@@ -106,6 +106,7 @@ export function phased(
           ...[...new Set([...t.connects, ...t.meets, ...t.inside])].sort((a, b) => a - b),
         ],
         note: `${nameOf(e)} is ${when}, so it does not exist in working phase ${phase}; left out of the network, though it ${how.length > 1 ? `${how.slice(0, -1).join(", ")} and ${how.at(-1)}` : how[0]}`,
+        grade: null,
       };
     });
 

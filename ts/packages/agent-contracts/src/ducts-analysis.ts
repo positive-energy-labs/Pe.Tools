@@ -59,6 +59,15 @@ export const ductsAnalysisRequestSchema = z
 export type DuctsAnalysisRequest = z.infer<typeof ductsAnalysisRequestSchema>;
 
 const reason = z.strictObject({ code: z.string(), count: z.number().int(), message: z.string() });
+/**
+ * How far an inferred join stands from the evidence (pressure-drop ledger, 2026-10-19: inference
+ * may compute, never conclude), measured, never guessed: `near-miss` (a sub-inch, opposed, centred
+ * open-to-open join of one classification), `stretched` (any other join the rule accepts), and
+ * `anomalous` (a join made against the evidence: a reversed connector, a part placed inside a host,
+ * classes a person joined anyway). Worst last.
+ */
+export const DUCT_INFERENCE_GRADES = ["near-miss", "stretched", "anomalous"] as const;
+export type DuctInferenceGrade = (typeof DUCT_INFERENCE_GRADES)[number];
 /** One thing the survey found: what the route assumed about it, if anything, and who clears it. */
 export const ductFindingSchema = z.strictObject({
   id: z.string(),
@@ -67,6 +76,8 @@ export const ductFindingSchema = z.strictObject({
   note: z.string(),
   assumed: z.string().nullable(),
   clearer: z.enum(["route", "pea", "person"]),
+  /** An inferred join's grade; null or absent on a finding that joins nothing. */
+  grade: z.enum(DUCT_INFERENCE_GRADES).nullable().optional(),
 });
 export type DuctFinding = z.infer<typeof ductFindingSchema>;
 const row = z.strictObject({

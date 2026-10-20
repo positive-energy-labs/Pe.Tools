@@ -141,6 +141,7 @@ it("an element not in the working phase leaves the network and warns, naming its
       kind: "out-of-phase",
       elementIds: [3, 2, 4],
       note: "duct 3 is created in Future, so it does not exist in working phase Existing; left out of the network, though it connects to 2, meets 4 by proximity and sits inside 4",
+      grade: null,
     },
   ]);
   // In Future it exists: nothing is left out.
@@ -162,6 +163,7 @@ it("a demolished element, and one only proximity would join, warn too; one touch
       kind: "out-of-phase",
       elementIds: [2, 1],
       note: "duct 2 is demolished in New Construction, so it does not exist in working phase New Construction; left out of the network, though it meets 1 by proximity",
+      grade: null,
     },
   ]);
 });

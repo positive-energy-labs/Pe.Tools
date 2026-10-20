@@ -23,8 +23,14 @@
  * `tolerate` splices it into the duct where it sits, so its loss prices, and it is a warning too.
  * A connector faces the way the snapshot's `facing` (Revit's BasisZ) says, and a rectangular one
  * is rolled the way its `widthAxis` says; older snapshots without them fall back to geometry.
+ * Inference may compute, never conclude (kaitpw 2026-10-19): every join carries a `grade` measured
+ * from its geometry (`DUCT_INFERENCE_GRADES`), a path resting on one is provisional at its worst
+ * grade (`losses.ts`), and only a person's staged `connect` (confirm) or `ignore` (break) rules on
+ * it; a Pea proposal never does. A terminal whose open connector sits in a duct's open end but
+ * faces the wrong way (a stand-in family; Chadds grilles 10922066, 10922068 in their plenums) joins
+ * that end anyway, always `anomalous`, its note naming the reversed connector and the repair.
  */
-import type { DuctsRouteDocument } from "@pe/agent-contracts";
+import type { DuctInferenceGrade, DuctsRouteDocument } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "./types.ts";
 
 type Node = DuctSnapshot["nodes"][number];
@@ -39,6 +45,7 @@ export interface InferredJoint {
   b: string;
   kind: "joined-by-proximity";
   gapIn: number;
+  grade: DuctInferenceGrade;
 }
 export interface InferredTap {
   /** The finding id that rules on it. */
@@ -51,6 +58,7 @@ export interface InferredTap {
   at: number;
   /** Where the tap sits on the segment's centerline, ft. */
   point: number[];
+  grade: DuctInferenceGrade;
 }
 /** An accessory or fitting spliced inline on the duct whose body holds both its open ports. */
 export interface InferredInline {
@@ -61,6 +69,7 @@ export interface InferredInline {
   kind: "inline-by-inference";
   /** The node's port keys, the one facing the segment's first polyline point first. */
   ports: [string, string];
+  grade: DuctInferenceGrade;
 }
 /**
  * The finding kinds a person rules on as inferred: a joint, tap or inline part made, one refused
@@ -84,6 +93,8 @@ export interface ProximityFinding {
     | "out-of-phase";
   elementIds: number[];
   note: string;
+  /** A join's grade; null on a finding that joins nothing (a refused near miss, a loop, out of phase). */
+  grade: DuctInferenceGrade | null;
 }
 export interface Inference {
   joints: InferredJoint[];
@@ -127,6 +138,21 @@ const AXIS_COS = 0.7;
 const ACROSS_COS = Math.sqrt(1 - AXIS_COS ** 2);
 /** The least |cos| between an inline part's port axes and its host duct's run (about 18 degrees). */
 const ALONG_COS = 0.95;
+/**
+ * Grade bounds (pressure-drop ledger, 2026-10-19). An open-to-open join is a `near-miss` within
+ * `NEAR_MISS_GAP_IN`, its connectors facing each other (cos below `-NEAR_MISS_OPPOSED_COS`) and
+ * centred within `NEAR_MISS_CENTRED_IN` of each other's axis; a part's (not a duct's) port deeper
+ * than `THROUGH_IN` inside a duct's body is placed through it, `anomalous`.
+ * ponytail: tuned on Chadds 2026-10-19 (grille 8747668 on duct 8750451 sits 2.0 in off-centre and
+ * must read stretched); move to ruled per-document values if more models disagree.
+ */
+export const NEAR_MISS_GAP_IN = 1;
+export const NEAR_MISS_CENTRED_IN = 0.5;
+export const NEAR_MISS_OPPOSED_COS = 0.9;
+export const THROUGH_IN = 1;
+const RANK: Record<DuctInferenceGrade, number> = { "near-miss": 0, stretched: 1, anomalous: 2 };
+/** The worse of two grades. */
+export const worse = (a: DuctInferenceGrade, b: DuctInferenceGrade) => (RANK[b] > RANK[a] ? b : a);
 
 /**
  * A cross-section on an axis `u`, ft, from a segment's or a connector's size. A rectangle whose
@@ -194,6 +220,8 @@ interface Port {
   index: number;
   point: number[];
   axis: number[] | null;
+  /** Whether `axis` is the snapshot's captured `facing`, not derived from geometry. */
+  captured: boolean;
   /** Its air classification; null when it states none. */
   cls: string | null;
 }
@@ -367,8 +395,11 @@ function land(face: Face, p: number[], axis: number[]): { d: number; onto: Onto 
   return within ? { d, onto: face.onto } : null;
 }
 
-/** The staged verdict on a finding id, if any: `ignore` withholds it, `connect` joins it across classifications. */
-const verdictOf = (work: DuctsRouteDocument | null, id: string) => {
+/**
+ * The staged verdict on a finding id, if any: `ignore` withholds it, `connect` confirms it (and
+ * joins it across classifications). Staged only: a proposal is Pea's and never rules.
+ */
+export const verdictOf = (work: DuctsRouteDocument | null, id: string) => {
   const value = work?.assumptions[id]?.staged?.value;
   return value?.kind === "verdict" ? value.verdict : null;
 };
@@ -430,10 +461,43 @@ export function inferJoints(
         index: c.index,
         point: c.point,
         axis: axisOf(e, c),
+        captured: c.facing?.length === 3 && unit(c.facing) != null,
         cls: classOf(c.classification),
       })),
   );
   const { find, union } = components(elements, equipment);
+  const byId = new Map(elements.map((e) => [e.id, e]));
+  /** A person's name for an element: family and type (or size) and kind, its id, its system. */
+  const named = (id: number) => {
+    const e = byId.get(id)!;
+    const what =
+      "polyline" in e
+        ? `${e.size.replaceAll('"', "")} ${e.kind} ${id}`
+        : `${[e.family, e.type, e.kind].filter(Boolean).join(" ")} ${id}`;
+    return e.systemName ? `${what} (${e.systemName})` : what;
+  };
+  /**
+   * An open-to-open join's grade: `anomalous` across classes (a person's connect) or with both
+   * captured facings pointing one way (one connector reversed); `near-miss` when sub-inch, of one
+   * classification, opposed and centred; else `stretched`.
+   */
+  const gradeJoint = (p: Port, q: Port, crossing: boolean): DuctInferenceGrade => {
+    if (crossing || (p.captured && q.captured && dot(p.axis!, q.axis!) >= AXIS_COS))
+      return "anomalous";
+    if (!p.axis || !q.axis || p.cls !== q.cls) return "stretched";
+    const r = sub(q.point, p.point);
+    const lateral = Math.hypot(...add(r, p.axis, -dot(r, p.axis))) * 12;
+    return dist(p.point, q.point) * 12 <= NEAR_MISS_GAP_IN &&
+      dot(p.axis, q.axis) < -NEAR_MISS_OPPOSED_COS &&
+      lateral <= NEAR_MISS_CENTRED_IN
+      ? "near-miss"
+      : "stretched";
+  };
+  /** An anomalous join's sentence: what is wrong, and its repair. */
+  const anomaly = (crossing: boolean, a: number, b: number) =>
+    crossing
+      ? `${named(a)} and ${named(b)} are joined across air classifications by a person's connect verdict. Fix: put both on one system in Revit.`
+      : `${named(a)} and ${named(b)} are joined though their connectors face the same way, so one is reversed. Fix: flip the reversed connector (Family Foundry migration) or replace the family.`;
   const joints: InferredJoint[] = [],
     taps: InferredTap[] = [],
     inline: InferredInline[] = [],
@@ -443,10 +507,8 @@ export function inferJoints(
   const across = (id: string, elementIds: number[], note: string) => {
     if (warned.has(id)) return;
     warned.add(id);
-    findings.push({ id, kind: "near-miss-across-classifications", elementIds, note });
+    findings.push({ id, kind: "near-miss-across-classifications", elementIds, note, grade: null });
   };
-  const anyway = (crossing: boolean) =>
-    crossing ? "; joined across classifications by a staged connect verdict" : "";
   const closes = (id: string, a: number, b: number) => {
     if (!equipment.has(a) && !equipment.has(b) && find(a) === find(b))
       findings.push({
@@ -454,6 +516,7 @@ export function inferJoints(
         kind: "loop-by-inference",
         elementIds: [a, b],
         note: `inferring ${id} closes a loop: ${a} and ${b} were already connected another way`,
+        grade: null,
       });
     union(a, b);
   };
@@ -482,12 +545,20 @@ export function inferJoints(
     used.add(p.k).add(q.k);
     const at = (dot(sub(p.point, host.a), host.u) + dot(sub(q.point, host.a), host.u)) / 2;
     const ports: [string, string] = dot(p.axis, host.u) < 0 ? [p.k, q.k] : [q.k, p.k];
-    inline.push({ id, node: n.id, segment: host.owner, kind: "inline-by-inference", ports });
+    inline.push({
+      id,
+      node: n.id,
+      segment: host.owner,
+      kind: "inline-by-inference",
+      ports,
+      grade: "stretched",
+    });
     findings.push({
       id,
       kind: "inline-by-inference",
       elementIds: [n.id, host.owner],
       note: `${n.kind} ${n.id}${n.family ? ` (${n.family})` : ""} lies inside duct ${host.owner}, ${at.toFixed(2)} ft along it and aligned with it, with neither end connected; counted inline on it`,
+      grade: "stretched",
     });
     closes(id, n.id, host.owner);
   }
@@ -516,12 +587,14 @@ export function inferJoints(
       continue;
     }
     used.add(a.k).add(b.k);
-    joints.push({ id, a: a.k, b: b.k, kind: "joined-by-proximity", gapIn });
+    const grade = gradeJoint(a, b, crossing);
+    joints.push({ id, a: a.k, b: b.k, kind: "joined-by-proximity", gapIn, grade });
     findings.push({
       id,
       kind: "joined-by-proximity",
       elementIds: [a.id, b.id],
-      note: `${what}; joined${anyway(crossing)}`,
+      note: grade === "anomalous" ? anomaly(crossing, a.id, b.id) : `${what}; joined`,
+      grade,
     });
     closes(id, a.id, b.id);
   }
@@ -571,27 +644,104 @@ export function inferJoints(
       used.add(p.k);
       if ("port" in onto) {
         used.add(onto.port.k);
-        joints.push({ id, a: p.k, b: onto.port.k, kind: "joined-by-proximity", gapIn });
+        const grade = gradeJoint(p, onto.port, crossing);
+        joints.push({ id, a: p.k, b: onto.port.k, kind: "joined-by-proximity", gapIn, grade });
         findings.push({
           id,
           kind: "joined-by-proximity",
           elementIds: [p.id, onto.port.id],
-          note: `${lands}; joined${anyway(crossing)}`,
+          note: grade === "anomalous" ? anomaly(crossing, p.id, onto.port.id) : `${lands}; joined`,
+          grade,
         });
         closes(id, p.id, onto.port.id);
         break;
       }
       const { segment, at, point } = onto;
-      taps.push({ id, a: p.k, segment: segment.id, kind: "tap-by-proximity", gapIn, at, point });
+      // A part's port deep in a duct's body was placed through it, not at its end.
+      const through = !("polyline" in byId.get(p.id)!) && -gapIn > THROUGH_IN;
+      const grade: DuctInferenceGrade = crossing || through ? "anomalous" : "stretched";
+      taps.push({
+        id,
+        a: p.k,
+        segment: segment.id,
+        kind: "tap-by-proximity",
+        gapIn,
+        at,
+        point,
+        grade,
+      });
       findings.push({
         id,
         kind: "tap-by-proximity",
         elementIds: [p.id, segment.id],
-        note: `${lands}; tapped${anyway(crossing)}`,
+        note: crossing
+          ? anomaly(true, p.id, segment.id)
+          : through
+            ? `${named(p.id)}'s connector sits ${(-gapIn).toFixed(2)} in inside ${named(segment.id)}, ${at.toFixed(2)} ft along it, not at its end; tapped there. Fix: move the part to the duct's end or face, or replace the family.`
+            : `${lands}; tapped`,
+        grade,
       });
       closes(id, p.id, segment.id);
       break;
     }
+  }
+  // (c) A terminal whose open connector lies in a duct's body or within `FACE_TOL_IN` of its open
+  // end, facing along the duct either way, joins that end even facing the wrong way (Chadds
+  // grilles 10922066, 10922068 inside their 72x3 plenums): always `anomalous`.
+  const ends = open.filter((q) => q.axis && "polyline" in byId.get(q.id)!);
+  for (const p of open) {
+    const e = byId.get(p.id)!;
+    if (used.has(p.k) || !p.axis || "polyline" in e || e.kind !== "terminal") continue;
+    const best = ends
+      .flatMap((q) => {
+        if (used.has(q.k) || Math.abs(dot(p.axis!, q.axis!)) < ALONG_COS) return [];
+        const s = byId.get(q.id) as Segment;
+        const c = s.connectors.find((x) => x.index === q.index)!;
+        const section = sectionOf(c, q.axis!, c.widthAxis ?? null);
+        const v = sub(p.point, q.point);
+        const plane = dot(v, q.axis!);
+        const r = add(v, q.axis!, -plane);
+        const within =
+          section &&
+          ("inner" in section
+            ? Math.hypot(...r) <= section.outer
+            : Math.abs(dot(r, section.x)) <= section.w && Math.abs(dot(r, section.y)) <= section.h);
+        const inside = sidesOf([s]).some((side) => (depth(side, p.point)?.d ?? 1) <= 0);
+        return within && (Math.abs(plane) <= faceTol || inside) ? [{ q, s, plane }] : [];
+      })
+      .sort((x, y) => dist(p.point, x.q.point) - dist(p.point, y.q.point))[0];
+    if (!best) continue;
+    const { q, s, plane } = best;
+    const id = `proximity:${[p, q]
+      .sort((x, y) => x.id - y.id || x.index - y.index)
+      .map((x) => x.k)
+      .join("|")}`;
+    const verdict = verdictOf(work, id);
+    if (verdict === "ignore") continue;
+    const crossing = differ(p.cls, q.cls);
+    const where =
+      plane < -faceTol
+        ? `sits inside ${named(s.id)}, ${(-plane * 12).toFixed(2)} in from its open end, not at its end`
+        : `sits at the open end of ${named(s.id)}, ${Math.abs(plane * 12).toFixed(2)} in ${plane < 0 ? "inside" : "beyond"} it`;
+    if (crossing && verdict !== "connect") {
+      across(
+        id,
+        [p.id, s.id],
+        `${named(p.id)} ${where}, but ${p.k} is ${p.cls} and ${q.k} is ${q.cls}; not joined`,
+      );
+      continue;
+    }
+    used.add(p.k).add(q.k);
+    const gapIn = plane * 12;
+    joints.push({ id, a: p.k, b: q.k, kind: "joined-by-proximity", gapIn, grade: "anomalous" });
+    findings.push({
+      id,
+      kind: "joined-by-proximity",
+      elementIds: [p.id, s.id],
+      note: `${named(p.id)}'s connector ${p.k} faces ${dot(p.axis, q.axis!) > 0 ? "away from" : "into"} its duct and it ${where}; treated as ${s.systemName ?? `duct ${s.id}`}'s terminal. Fix: replace the stand-in family or flip its connector (Family Foundry migration).`,
+      grade: "anomalous",
+    });
+    closes(id, p.id, s.id);
   }
   return { joints, taps, inline, findings };
 }
@@ -604,6 +754,9 @@ export function inferJoints(
 export interface InferredLink {
   id: string;
   between: readonly [number, number];
+  grade: DuctInferenceGrade;
+  /** A person staged `connect` on it: confirmed, so it no longer makes a path provisional. */
+  ruled: boolean;
 }
 
 /**
@@ -620,18 +773,18 @@ export function tolerate(
   tolIn = 1,
 ): Inference & { snapshot: DuctSnapshot; links: InferredLink[] } {
   const inference = inferJoints(snapshot, tolIn, work);
+  const link = (x: { id: string; grade: DuctInferenceGrade }, between: readonly [number, number]) => ({
+    id: x.id,
+    between,
+    grade: x.grade,
+    ruled: verdictOf(work, x.id) === "connect",
+  });
   const links: InferredLink[] = [
-    ...inference.joints.map((j) => ({
-      id: j.id,
-      between: [parse(j.a).elementId, parse(j.b).elementId] as const,
-    })),
-    ...inference.taps.map((t, i) => ({
-      id: t.id,
-      between: [-(i + 1), parse(t.a).elementId] as const,
-    })),
+    ...inference.joints.map((j) => link(j, [parse(j.a).elementId, parse(j.b).elementId])),
+    ...inference.taps.map((t, i) => link(t, [-(i + 1), parse(t.a).elementId])),
     ...inference.inline.flatMap((x, i) => [
-      { id: x.id, between: [x.segment, x.node] as const },
-      { id: x.id, between: [x.node, -(inference.taps.length + i + 1)] as const },
+      link(x, [x.segment, x.node]),
+      link(x, [x.node, -(inference.taps.length + i + 1)]),
     ]),
   ];
   if (!inference.joints.length && !inference.taps.length && !inference.inline.length)

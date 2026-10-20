@@ -156,6 +156,7 @@ it("a 0.4 in gap joins the two open ends and merges their groups", () => {
       b: "2:1",
       kind: "joined-by-proximity",
       gapIn: expect.closeTo(0.4, 6),
+      grade: "near-miss",
     },
   ]);
   expect(taps).toEqual([]);
@@ -198,6 +199,7 @@ it("a branch end 0.3 in off a main's side becomes a virtual tap on the main", ()
       gapIn: expect.closeTo(0.3, 6),
       at: expect.closeTo(10, 6),
       point: [10, 0, 0],
+      grade: "stretched",
     },
   ]);
   const tap = snapshot.nodes[0]!;
@@ -254,6 +256,8 @@ it("an inferred joint that closes a ring is also a loop-by-inference finding", (
       b: "4:2",
       kind: "joined-by-proximity",
       gapIn: expect.closeTo(0.4, 6),
+      // The ends meet square, not facing: accepted, not a near miss.
+      grade: "stretched",
     },
   ]);
   expect(findings.map((f) => [f.id, f.kind])).toEqual([
@@ -283,6 +287,7 @@ it("a duct landing off-center on a plenum's side taps it where it lands", () => 
       gapIn: expect.closeTo(0.5, 6),
       at: expect.closeTo(3, 6),
       point: [3, 0, 0],
+      grade: "stretched",
     },
   ]);
   expect(findings[0]!.note).toContain("lands on the side of duct 1");
@@ -313,6 +318,7 @@ it("a duct stopping 1.6 in short of an end cap's face taps the capped duct at it
       gapIn: expect.closeTo(1.6, 6),
       at: expect.closeTo(10, 6),
       point: [0, 0, 0],
+      grade: "stretched",
     },
   ]);
   expect(snapshot.groups.map((g) => g.id)).toEqual(["g1"]);
@@ -373,6 +379,8 @@ it("a duct rising into a grille's mouth 2 in off its centre joins the grille (Ch
       b: "2:1",
       kind: "joined-by-proximity",
       gapIn: expect.closeTo(0, 6),
+      // 2.0 in off the mouth's centre: accepted, not a near miss.
+      grade: "stretched",
     },
   ]);
   // The grille is read first, so it is the one landing; the rule is symmetric.
@@ -414,12 +422,16 @@ it("open ends of different classifications 0.4 in apart warn and stay open; a co
       kind: "near-miss-across-classifications",
       elementIds: [1, 2],
       note: "open ends 1:2 and 2:1 are 0.40 in apart, but 1:2 is SupplyAir and 2:1 is ReturnAir; not joined",
+      grade: null,
     },
   ]);
   const joined = tolerate(before, staging(id, "connect"));
   expect(joined.joints.map((j) => j.id)).toEqual([id]);
-  expect(joined.findings[0]).toMatchObject({ id, kind: "joined-by-proximity" });
-  expect(joined.findings[0]!.note).toContain("across classifications by a staged connect verdict");
+  // Joined against the evidence by a person: anomalous, its note naming the repair.
+  expect(joined.findings[0]).toMatchObject({ id, kind: "joined-by-proximity", grade: "anomalous" });
+  expect(joined.findings[0]!.note).toBe(
+    "6ø duct 1 (SA 1) and 6ø duct 2 (RA 1) are joined across air classifications by a person's connect verdict. Fix: put both on one system in Revit.",
+  );
   // An ignore verdict on the warning silences it.
   expect(inferJoints(before, 1, ignoring(id)).findings).toEqual([]);
 });
@@ -500,6 +512,7 @@ it("a grille whose connector is its insertion point lands by its captured facing
       gapIn: expect.closeTo(0.5, 6),
       at: expect.closeTo(10, 6),
       point: [10, 0, 0],
+      grade: "stretched",
     },
   ]);
   expect(findings.map((f) => f.kind)).toEqual(["tap-by-proximity"]);
@@ -565,7 +578,14 @@ it("a damper inside a duct's body, aligned with it, neither end connected, is in
     const id = "proximity:9|1";
     expect([taps, joints]).toEqual([[], []]);
     expect(inline).toEqual([
-      { id, node: 9, segment: 1, kind: "inline-by-inference", ports: ["9:2", "9:1"] },
+      {
+        id,
+        node: 9,
+        segment: 1,
+        kind: "inline-by-inference",
+        ports: ["9:2", "9:1"],
+        grade: "stretched",
+      },
     ]);
     expect(findings).toEqual([
       {
@@ -573,11 +593,12 @@ it("a damper inside a duct's body, aligned with it, neither end connected, is in
         kind: "inline-by-inference",
         elementIds: [9, 1],
         note: "accessory 9 (Damper_Volume_Round) lies inside duct 1, 4.00 ft along it and aligned with it, with neither end connected; counted inline on it",
+        grade: "stretched",
       },
     ]);
     expect(links).toEqual([
-      { id, between: [1, 9] },
-      { id, between: [9, -1] },
+      { id, between: [1, 9], grade: "stretched", ruled: false },
+      { id, between: [9, -1], grade: "stretched", ruled: false },
     ]);
     // The host is cut where the damper sits; its far half is virtual segment -1, carrying the
     // host's far end (still joined to duct 3) and the rest of its length.
@@ -630,4 +651,139 @@ it("an inline part is a person-ruled warning an ignore verdict withholds; a conn
   expect(inferJoints(snap([host()], [across])).inline).toEqual([]);
   // Outside the body: no host.
   expect(inferJoints(snap([host()], [damper(9, [4, 1, 0])])).inline).toEqual([]);
+});
+
+// ---- grades (pressure-drop ledger, 2026-10-19: inference may compute, never conclude) --------
+
+/** Duct 1 along +x ending at x 10; duct 2 starting `gapIn` past it, `lateralIn` off its axis, turned `deg`. */
+const pair = (gapIn: number, lateralIn = 0, deg = 0) => {
+  const start = [10 + gapIn * IN, lateralIn * IN, 0];
+  const r = (deg * Math.PI) / 180;
+  return [
+    duct(1, [0, 0, 0], [10, 0, 0], "g1"),
+    duct(2, start, [start[0]! + 10 * Math.cos(r), start[1]! + 10 * Math.sin(r), 0], "g2"),
+  ];
+};
+const gradeOf = (segments: Segment[], nodes: Node[] = []) =>
+  inferJoints(snap(segments, nodes)).findings.map((f) => [f.kind, f.grade]);
+
+it("an open-to-open join is a near miss only sub-inch, of one classification, opposed and centred", () => {
+  expect(gradeOf(pair(0.9))).toEqual([["joined-by-proximity", "near-miss"]]);
+  // Centred within NEAR_MISS_CENTRED_IN (0.5 in) of the axis, and not.
+  expect(gradeOf(pair(0.3, 0.4))).toEqual([["joined-by-proximity", "near-miss"]]);
+  expect(gradeOf(pair(0.3, 0.6))).toEqual([["joined-by-proximity", "stretched"]]);
+  // Opposed: cos below -0.9 at 20 degrees, not at 30.
+  expect(gradeOf(pair(0.3, 0, 20))).toEqual([["joined-by-proximity", "near-miss"]]);
+  expect(gradeOf(pair(0.3, 0, 30))).toEqual([["joined-by-proximity", "stretched"]]);
+  // One side states no classification: not the same one.
+  const [a, b] = pair(0.3);
+  b!.connectors = b!.connectors.map((c) => ({ ...c, classification: null }));
+  expect(gradeOf([a!, b!])).toEqual([["joined-by-proximity", "stretched"]]);
+  // Past 1 in, a mouth landing within FACE_TOL_IN joins but is stretched.
+  const riser = rect(2, [0, 0, 12 + 1.5 * IN], [0, 0, 14], 16, 8, "g2");
+  riser.connectors[0]!.facing = [0, 0, -1];
+  const up = grille(9, [0, 0, 12]);
+  up.connectors[0]!.facing = [0, 0, 1];
+  expect(gradeOf([riser], [up])).toEqual([["joined-by-proximity", "stretched"]]);
+});
+
+it("captured facings pointing one way join anomalous, the note naming the reversed connector", () => {
+  const [a, b] = pair(0.3);
+  a!.connectors[1]!.facing = [1, 0, 0];
+  b!.connectors[0]!.facing = [1, 0, 0];
+  const { findings } = inferJoints(snap([a!, b!]));
+  expect(findings).toMatchObject([{ kind: "joined-by-proximity", grade: "anomalous" }]);
+  expect(findings[0]!.note).toBe(
+    "6ø duct 1 (SA 1) and 6ø duct 2 (SA 1) are joined though their connectors face the same way, so one is reversed. Fix: flip the reversed connector (Family Foundry migration) or replace the family.",
+  );
+});
+
+/** A takeoff whose open port sits `deepIn` inside the plenum's +y side, facing into it. */
+const takeoff = (id: number, deepIn: number): Node => ({
+  id,
+  kind: "fitting",
+  category: "Duct Fittings",
+  family: "Rectangular Takeoff",
+  type: "Standard",
+  partType: "TapAdjustable",
+  levelId: 1,
+  point: [3, (15 - deepIn) * IN, 0],
+  groupId: `g${id}`,
+  systemName: "SA 70",
+  classification: "Supply Air",
+  connectors: [
+    { ...conn(1, [3, (15 - deepIn) * IN, 0]), facing: [0, -1, 0] },
+    { ...conn(2, [3, (15 - deepIn + 6) * IN, 0]), facing: [0, 1, 0] },
+  ],
+  facts: [],
+  uniqueId: null,
+});
+
+it("a part's port deeper than THROUGH_IN in a duct's body is placed through it: anomalous; a duct end there is stretched", () => {
+  expect(gradeOf([plenum()], [takeoff(9, 0.5)])).toEqual([["tap-by-proximity", "stretched"]]);
+  const { findings } = inferJoints(snap([plenum()], [takeoff(9, 1.5)]));
+  expect(findings).toMatchObject([{ kind: "tap-by-proximity", grade: "anomalous" }]);
+  expect(findings[0]!.note).toBe(
+    "Rectangular Takeoff Standard fitting 9 (SA 70)'s connector sits 1.50 in inside 30x30 duct 1 (SA 1), 3.00 ft along it, not at its end; tapped there. Fix: move the part to the duct's end or face, or replace the family.",
+  );
+  // A duct end 15 in inside a body is a real join kind (Chadds 7266368 on 14342882): stretched.
+  expect(gradeOf([plenum(), duct(2, [4, 0, 0], [4, 5, 0], "g2")])).toEqual([
+    ["tap-by-proximity", "stretched"],
+  ]);
+  // An inline part is stretched.
+  expect(gradeOf([duct(1, [0, 0, 0], [10, 0, 0])], [damper(9, [4, 0, 0])])).toEqual([
+    ["inline-by-inference", "stretched"],
+  ]);
+});
+
+/** Chadds 8911461: a vertical 72x3 plenum, its top capped, its open bottom facing down. */
+const slotPlenum = () => {
+  const s = rect(1, [0, 0, 0], [0, 0, 1.349], 72, 3, "g1");
+  s.connectors = s.connectors.map((c) => ({
+    ...c,
+    facing: [0, 0, c.index === 1 ? -1 : 1],
+    widthAxis: [1, 0, 0],
+  }));
+  return s;
+};
+const slot = (z: number, facing = [0, 0, -1]) => {
+  const g = linear(9, [0.03, 0, z], facing);
+  g.connectors[0]!.widthAxis = [1, 0, 0];
+  return g;
+};
+
+it("a terminal facing the wrong way in a duct's open end joins it anyway, always anomalous (Chadds 10922066)", () => {
+  const plenum = slotPlenum();
+  const ends = [cap(8, plenum, 2)];
+  const { joints, findings } = inferJoints(snap([plenum], [...ends, slot(4.75 * IN)]));
+  expect(joints).toMatchObject([
+    { id: "proximity:1:1|9:1", a: "9:1", b: "1:1", grade: "anomalous" },
+  ]);
+  expect(findings[0]!.note).toBe(
+    "Price LBP15A Supply 16 X 8 terminal 9 (SA 19)'s connector 9:1 faces away from its duct and it sits inside 72x3 duct 1 (SA 1), 4.75 in from its open end, not at its end; treated as SA 1's terminal. Fix: replace the stand-in family or flip its connector (Family Foundry migration).",
+  );
+  // Within FACE_TOL_IN beyond the open end, facing away: joined, anomalous.
+  const beyond = inferJoints(snap([slotPlenum()], [slot(-1 * IN)]));
+  expect(beyond.findings).toMatchObject([{ id: "proximity:1:1|9:1", grade: "anomalous" }]);
+  expect(beyond.findings[0]!.note).toContain("sits at the open end of 72x3 duct 1 (SA 1), 1.00 in beyond it");
+  // Past FACE_TOL_IN outside the duct, or facing across it from beyond its end: nothing joins.
+  expect(inferJoints(snap([slotPlenum()], [slot(-3 * IN)])).joints).toEqual([]);
+  expect(inferJoints(snap([slotPlenum()], [slot(-1 * IN, [1, 0, 0])])).joints).toEqual([]);
+  // A staged ignore breaks it.
+  expect(
+    inferJoints(snap([slotPlenum()], [slot(-1 * IN)]), 1, ignoring("proximity:1:1|9:1")).joints,
+  ).toEqual([]);
+});
+
+it("a staged connect confirms an inference on its link; a proposal does not", () => {
+  const before = snap(pair(0.3, 0.6));
+  const id = "proximity:1:2|2:1";
+  expect(tolerate(before).links).toEqual([
+    { id, between: [1, 2], grade: "stretched", ruled: false },
+  ]);
+  expect(tolerate(before, staging(id, "connect")).links[0]!.ruled).toBe(true);
+  const proposed = ductsDocumentSchema.parse({
+    assumptions: { [id]: { proposal: { value: { kind: "verdict", verdict: "connect" } } } },
+  });
+  expect(tolerate(before, proposed).links[0]!.ruled).toBe(false);
 });
