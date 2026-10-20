@@ -3,6 +3,7 @@
  * that hides a hazard. Which group is open is the caller's state.
  */
 import type { ReactNode } from "react";
+import { ChevronRight } from "lucide-react";
 
 export interface AccordionGroup {
   readonly key: string;
@@ -36,7 +37,10 @@ export function Accordion({
               className="veil flex h-(--control-h) w-full cursor-pointer items-center gap-1.5 border-0 bg-transparent px-0.5 text-left"
               onClick={() => onOpen(expanded ? null : group.key)}
             >
-              <span className="w-2.5 shrink-0 face-mono text-ink-2">{expanded ? "▾" : "▸"}</span>
+              <ChevronRight
+                aria-hidden
+                className={`size-[1em] shrink-0 text-ink-2 transition-transform ${expanded ? "rotate-90" : ""}`}
+              />
               <span className="font-semibold text-ink">{group.label}</span>
               <span className="ml-auto min-w-0 truncate text-ink-2" data-tone={group.tone}>
                 {group.state}

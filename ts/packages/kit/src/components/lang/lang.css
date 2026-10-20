@@ -41,8 +41,9 @@
 /* The one selection paint: a fill, never a hue, re-grounding what sits on it (`--pe-on`). */
 :where(
   [aria-selected="true"],
-  /* A text field that owns an open list is where you type, not a picked thing: it keeps its ground. */
-  [aria-expanded="true"]:not(textarea, input),
+  /* A text field that owns an open list is where you type, not a picked thing: it keeps its ground.
+     An open tree node is a disclosure, not a pick: its chevron says so. */
+  [aria-expanded="true"]:not(textarea, input, [role="treeitem"]),
   [aria-pressed="true"],
   [data-selected],
   [data-highlighted],
@@ -273,6 +274,47 @@ tr.dl-row[data-active]::before {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
+}
+/* TREE (row.tsx `Tree`): one indent step per level, and the classic guide: each ancestor's column
+   carries a hairline through the chevron's centre, so an open node's line runs down the full
+   span of its descendants. One rule on `--depth` (set by Row from `depth`); no call site indents. */
+.dl-row[data-depth] {
+  --tree-step: calc(var(--item-h) * 2 / 3);
+  padding-left: calc(var(--item-mark-pad-x) + var(--depth) * var(--tree-step));
+}
+.dl-row[data-depth]::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: var(--item-mark-pad-x);
+  width: calc(var(--depth) * var(--tree-step));
+  background: repeating-linear-gradient(
+    to right,
+    transparent 0 calc(var(--tree-step) / 2 - 0.5px),
+    var(--pe-line) 0 calc(var(--tree-step) / 2 + 0.5px),
+    transparent 0 var(--tree-step)
+  );
+  pointer-events: none;
+}
+.dl-row-twist {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: var(--tree-step);
+  align-self: stretch;
+  color: var(--pe-ink-2);
+}
+.dl-row-twist:has(svg) {
+  cursor: pointer;
+}
+.dl-row-twist > svg {
+  width: 1em;
+  height: 1em;
+  transition: transform var(--motion-control);
+}
+.dl-row[aria-expanded="true"] > .dl-row-twist > svg {
+  transform: rotate(90deg);
 }
 .dl-row-label {
   display: flex;
