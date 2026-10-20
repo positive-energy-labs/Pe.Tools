@@ -389,7 +389,8 @@ export namespace DuctsSnapshot {
   export namespace Req {
     /**
      * Optional: which parameters carry the designer-stated values (absent reads the defaults), and LabelParameter, the
-     * instance parameter whose string value names equipment for people (absent reads no label).
+     * instance parameter whose string value names equipment for people (absent reads the firm tag, PE_G___TagInstance:
+     * PE's alternative to the built-in Mark, never the Mark itself).
      *
      */
     export interface Request {

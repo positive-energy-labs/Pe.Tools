@@ -370,6 +370,45 @@ test("the declared host route reads canonical Work and unreadable Work refuses b
   expect(writes).toBe(0);
 });
 
+test("saved Work in an old shape degrades: the price runs, readable cells are kept, the broken ones are named in a finding", async () => {
+  const f = fixture();
+  f.sources.readWork = async () => ({
+    revision: 4,
+    doc: {
+      // The pre-8b46f3ad subject: one cell, not a record by group id.
+      subject: { g1: { staged: { value: "old shape" } } },
+      flows: { "2": { staged: { value: { cfm: 150, source: "fixture" } } } },
+      unitStatics: { "1": { staged: { value: { inWg: 0.5 } } } },
+    },
+  });
+  const result = ductsAnalysisResponseSchema.parse(
+    await f.api.read(read({ kind: "fresh", target: f.target })),
+  );
+  expect(result.rows.length).toBeGreaterThan(0);
+  const finding = result.findings.find((item) => item.kind === "unreadable-work");
+  expect(finding).toMatchObject({ clearer: "person", elementIds: [] });
+  expect(finding?.note).toContain("press Start fresh");
+  expect(finding?.note).toContain("subject.g1");
+  expect(finding?.note).toContain("unitStatics");
+  expect(finding?.note).not.toContain("flows");
+  expect(result.findingCounts.byKind["unreadable-work"]).toBe(1);
+  // An unreadable envelope degrades the same way.
+  f.sources.readWork = async () => ({ revision: 0, doc: null });
+  const whole = await f.api.read(read({ kind: "fresh", target: f.target }));
+  expect(whole.findings.find((item) => item.kind === "unreadable-work")?.note).toContain(
+    "(whole document)",
+  );
+});
+
+test("an equipment row exposes its tag so a name like FC-23 can be matched", async () => {
+  const f = fixture();
+  f.snapshot.nodes[0]!.label = "FC-23";
+  const result = ductsAnalysisResponseSchema.parse(
+    await f.api.read(read({ kind: "fresh", target: f.target })),
+  );
+  expect(result.rows.find((row) => row.id === 1)?.tag).toBe("FC-23");
+});
+
 test("physical circuits and path pages retain staged evidence and never acquire again historically", async () => {
   const f = fixture();
   for (const node of f.snapshot.nodes) node.uniqueId = `purpose-${node.id}`;

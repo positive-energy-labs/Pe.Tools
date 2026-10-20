@@ -47,7 +47,7 @@ function useSaved(epoch: number) {
  * `ducts.snapshot` of the one document the sentence names; the request carries no group, so a new
  * subject group does not read it again. A refresh (`epoch`) does.
  * `slots` are the person's staged parameter names; an absent slot reads the op's default.
- * `labelParameter` is the staged instance parameter whose value becomes each node's `label`; none reads no label.
+ * `labelParameter` is the staged instance parameter whose value becomes each node's `label`; none reads the firm tag PE_G___TagInstance.
  */
 export function useDuctSnapshot(
   doc: { session: string; openId: string } | null,

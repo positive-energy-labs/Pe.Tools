@@ -16,6 +16,8 @@ import {
   ductsApplyInputSchema,
   ductsApplyRequestProducerSchema,
   stagedDucts,
+  salvageDuctsWork,
+  type DuctFinding,
   type DuctPortPin,
   type DuctComponentWitness,
   type DocumentRef,
@@ -66,6 +68,8 @@ type EffectiveInputs = {
   work: DuctsRouteDocument | null;
   catalogs?: Catalogs;
   catalogFindings?: string[];
+  /** Saved Work segments/cells this version could not read and priced without (see salvageDuctsWork). */
+  workDropped?: string[];
 };
 const solve = ({
   snapshot: raw,
@@ -315,7 +319,9 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       target,
     );
     const owned = await sources.readWork(key);
-    const work = owned ? ductsDocumentSchema.parse(owned.doc) : null;
+    const salvaged = owned ? salvageDuctsWork(owned.doc) : null;
+    const work = salvaged?.doc ?? null;
+    const workDropped = salvaged?.dropped ?? [];
     const acquisition: Artifact["acquisition"] = [];
     async function read(key: "ducts.snapshot" | "ducts.tables", request: unknown) {
       const response = await sources.call(key, request, target);
@@ -339,11 +345,12 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       });
       return JSON.parse(bodyUtf8) as unknown;
     }
-    const slots = stagedDucts(work).parameters;
-    const snapshot = (await read(
-      "ducts.snapshot",
-      Object.keys(slots).length ? { slots } : {},
-    )) as DuctSnapshot;
+    const staged = stagedDucts(work);
+    const slots = staged.parameters;
+    const snapshot = (await read("ducts.snapshot", {
+      ...(Object.keys(slots).length ? { slots } : {}),
+      ...(staged.labelParameter ? { labelParameter: staged.labelParameter } : {}),
+    })) as DuctSnapshot;
     const tables = await read("ducts.tables", { ids: [...TABLE_IDS] });
     const catalogs = await (sources.catalogs ?? readDuctCatalogs)();
     const inputJson = JSON.stringify({
@@ -352,6 +359,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       work,
       catalogs: catalogs.tables,
       catalogFindings: catalogs.findings,
+      ...(workDropped.length ? { workDropped } : {}),
     } satisfies EffectiveInputs);
     if (Buffer.byteLength(inputJson) > MAX_BYTES)
       throw Error("Full analysis inputs exceed the byte budget; graph was not clipped");
@@ -408,6 +416,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       artifact.work.kind !== "canonical" ||
       artifact.work.revision === null ||
       !input.work ||
+      input.workDropped?.length ||
       artifact.freshness.state !== "fresh"
     )
       throw Error(
@@ -573,6 +582,16 @@ const countBy = <T>(items: T[], key: (item: T) => string) =>
     return acc;
   }, {});
 
+/** What Pea tells the person when saved Work could not be read in full; the price ran without it. */
+const unreadableWorkFinding = (dropped: string[]): DuctFinding => ({
+  id: "work:unreadable",
+  kind: "unreadable-work",
+  elementIds: [],
+  note: `The Ducts page's saved work is in an old format (could not read: ${dropped.join(", ")}). Tell the person: open /ducts and press Start fresh, or ask me to propose the values again.`,
+  assumed: "Priced from Revit facts alone; the unreadable saved values were not applied.",
+  clearer: "person",
+});
+
 function project(
   artifact: Artifact,
   input: EffectiveInputs,
@@ -590,10 +609,15 @@ function project(
     freshness: artifact.freshness,
   });
   const { snapshot, flows, groups, selectedTerminals, reached, equipment } = assessment;
+  const findings = [
+    ...(input.workDropped?.length ? [unreadableWorkFinding(input.workDropped)] : []),
+    ...assessment.findings,
+  ];
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
   const baseRow = (node: DuctSnapshot["nodes"][number] | undefined, elementId: number) => ({
     id: elementId,
     label: node ? label(node) : String(elementId),
+    tag: node?.label ?? null,
     groupIds: groups
       .filter((group) => group.rootIds.includes(elementId) || group.id === node?.groupId)
       .map((group) => group.id),
@@ -910,11 +934,11 @@ function project(
     rows: pageRows,
     findings:
       request.projection === "summary"
-        ? assessment.findings.toSorted((a, b) => CLEARER_RANK[a.clearer] - CLEARER_RANK[b.clearer])
+        ? findings.toSorted((a, b) => CLEARER_RANK[a.clearer] - CLEARER_RANK[b.clearer])
         : [],
     findingCounts: {
-      byKind: countBy(assessment.findings, (f) => f.kind),
-      byClearer: { route: 0, pea: 0, person: 0, ...countBy(assessment.findings, (f) => f.clearer) },
+      byKind: countBy(findings, (f) => f.kind),
+      byClearer: { route: 0, pea: 0, person: 0, ...countBy(findings, (f) => f.clearer) },
     },
     page: {
       total: rows.length,

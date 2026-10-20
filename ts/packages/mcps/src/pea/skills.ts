@@ -323,6 +323,25 @@ Report what you proposed (route, count, and one line of what changes) and what t
 `,
   },
   {
+    name: "calc-duct-pressure-drop",
+    content: String.raw`---
+name: calc-duct-pressure-drop
+description: Calculate duct pressure drop, static pressure or ESP for a system, and say which runs are ready. Use when the user asks about pdrop, pressure drop, static pressure, ESP, how bad a system is, or whether a duct run is ready, e.g. SA 19 or FC-23.
+---
+
+# Calculate Duct Pressure Drop
+
+The Ducts route computes this. Never rebuild it with pod or C# scripts; they will not match the page the person reads.
+
+1. A system name (SA 19) can span several duct networks. Groups are the connected pieces; one is priced per fan network; a group with no fan is a Fix row.
+2. pe_read route:ducts.view for the group ids and system names. If the person named a system, pe_do route:ducts.set-view to put their /ducts page on that system, only the one they named.
+3. pe_read route:ducts.analysis (source fresh, selector document, projection summary). Walk the inbox in order Fix, Set, Check, Write. A finding of kind unreadable-work means the saved Work is in an old format; the price still ran without it; tell the person to open /ducts and press Start fresh, or offer to propose the values again.
+4. Match equipment by its tag: each row's tag is the firm tag parameter PE_G___TagInstance (not the built-in Mark), so "FC-23" is a row tag.
+5. Propose into Work with route:ducts.propose (see skill:@product/skills/propose-changes): flows, esp, equipmentFlows, roles, catalogs, and verdicts with evidence in the note. Never stage, never press apply.
+6. Send the person to the Ducts page for rulings and for writing, and say which verb to press. Report in the route's words: group, finding, and required ESP now versus staged.
+`,
+  },
+  {
     name: "place-mep-ducts",
     content: String.raw`---
 name: place-mep-ducts

@@ -86,6 +86,8 @@ const row = z.strictObject({
   kind: z.enum(["equipment", "terminal", "path", "circuit", "port", "component", "flow"]),
   id: z.number().int(),
   label: z.string(),
+  /** The element's equipment tag (the label parameter's value, `PE_G___TagInstance` by default); match a name like "FC-23" here, not on `label` (family / type). */
+  tag: z.string().nullable(),
   groupIds: z.array(z.string()),
   requiredEspNowInWg: z.number().nullable(),
   requiredEspStagedInWg: z.number().nullable(),

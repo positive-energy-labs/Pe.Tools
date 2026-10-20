@@ -78,9 +78,12 @@ public enum DuctIssueKind {
 
 /// <summary>
 ///     Optional: which parameters carry the designer-stated values (absent reads the defaults), and LabelParameter, the
-///     instance parameter whose string value names equipment for people (absent reads no label).
+///     instance parameter whose string value names equipment for people (absent reads the firm tag, PE_G___TagInstance:
+///     PE's alternative to the built-in Mark, never the Mark itself).
 /// </summary>
-public sealed record DuctSnapshotRequest(DuctParameterSlots? Slots = null, string? LabelParameter = null);
+public sealed record DuctSnapshotRequest(
+    DuctParameterSlots? Slots = null,
+    string? LabelParameter = "PE_G___TagInstance"); // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later)
 
 /// <summary>
 ///     Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
