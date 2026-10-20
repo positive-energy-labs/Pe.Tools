@@ -26,9 +26,10 @@ import {
   bindWork,
   documentRefSchema,
   documentRows,
-  familiesViewAckSchema,
-  familiesViewCommandSchema,
-  familiesViewSchema,
+  routeViewAckSchema,
+  routeViewSetSchema,
+  routeViewSchema,
+  routeViews,
   readingKey,
   recentRows,
   START_FRESH,
@@ -436,33 +437,35 @@ export function createPeRoutes(options: PeRoutesOptions) {
       });
     }
 
-    if (parts[0] === "route-view" && parts[1] === "families") {
-      const [, , instance] = parts;
+    // One channel for every route that opts into `routeViews`; the route is a path segment.
+    if (parts[0] === "route-view" && parts[1] && parts[1] in routeViews) {
+      const route = parts[1];
+      const instance = parts[2];
       if (method === "PUT" && !instance) {
-        const parsed = familiesViewSchema.safeParse(await body());
-        return parsed.success
+        const parsed = routeViewSchema.safeParse(await body());
+        return parsed.success && parsed.data.route === route
           ? json(views.publish(parsed.data))
-          : json({ error: "invalid Families view" }, 400);
+          : json({ error: `invalid ${route} view` }, 400);
       }
       if (method === "GET" && !instance) {
         const thread = url.searchParams.get("thread");
         if (!thread) return json({ error: "thread required" }, 400);
-        const result = views.select(thread, url.searchParams.get("instance") ?? undefined);
+        const result = views.select(thread, route, url.searchParams.get("instance") ?? undefined);
         return result && !("ok" in result)
           ? json(result)
           : json(result ?? { ok: false, error: "view unavailable" }, 409);
       }
-      if (method === "POST" && instance === "set-query") {
-        const parsed = familiesViewCommandSchema.safeParse(await body());
+      if (method === "POST" && instance === "set") {
+        const parsed = routeViewSetSchema.safeParse(await body());
         if (!parsed.success)
-          return json({ ok: false, error: "invalid Families query command" }, 400);
-        const { thread, instance: target, revision, query } = parsed.data;
-        const result = await views.setQuery(thread, target, revision, query);
+          return json({ ok: false, error: `invalid ${route} view command` }, 400);
+        const { thread, instance: target, revision, patch } = parsed.data;
+        const result = await views.set(thread, route, target, revision, patch);
         return json(result, (result as { ok: boolean }).ok ? 200 : 409);
       }
       if (method === "POST" && instance === "ack") {
-        const parsed = familiesViewAckSchema.safeParse(await body());
-        if (!parsed.success) return json({ ok: false, error: "invalid Families view ack" }, 400);
+        const parsed = routeViewAckSchema.safeParse(await body());
+        if (!parsed.success) return json({ ok: false, error: `invalid ${route} view ack` }, 400);
         const result = views.ack(parsed.data);
         return json(result, result.ok ? 200 : 409);
       }

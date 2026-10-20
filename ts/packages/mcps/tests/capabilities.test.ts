@@ -736,7 +736,7 @@ test("pe_find maps every kind and ranks and filters visible rows", async () => {
   const view = (await find({ query: "visible families rules" })).matches;
   expect(view.map((row) => row.key)).toContain("route:families.view");
   expect(
-    catalog().capabilities.find((row) => row.key === "route:families.set-query")?.mutates,
+    catalog().capabilities.find((row) => row.key === "route:families.set-view")?.mutates,
   ).toBe(true);
   expect((await find({ query: "loaded families" })).matches[0]?.key).toBe(
     "op:revit.catalog.loaded-families",
@@ -964,13 +964,17 @@ test("Families view Pea doors require a mounted pane and return an exact retaine
       return Response.json({
         instance,
         revision: 2,
-        stage: "archived",
-        query: "blank",
-        readingId: "r1",
-        document: { session: "s", openId: "o" },
-        work: { binding: "host", route: "families", target: null },
-        counts: { families: 2, types: 3, parameters: 4 },
-        ruleHelp: [{ insert: "blank", label: "blank", hint: "empty values" }],
+        page: { query: "blank" },
+        context: {
+          stage: "archived",
+          readingId: "r1",
+          document: { session: "s", openId: "o" },
+          work: { binding: "host", route: "families", target: null },
+        },
+        facts: {
+          counts: { families: 2, types: 3, parameters: 4 },
+          ruleHelp: [{ insert: "blank", label: "blank", hint: "empty values" }],
+        },
       });
     }
     if (url.pathname === "/families/readings") {
@@ -984,17 +988,17 @@ test("Families view Pea doors require a mounted pane and return an exact retaine
         },
       });
     }
-    if (url.pathname === "/pe/route-view/families/set-query") {
+    if (url.pathname === "/pe/route-view/families/set") {
       expect(JSON.parse(String(init?.body))).toMatchObject({
         thread: turn.thread,
         instance,
         revision: 2,
-        query: "filled",
+        patch: { query: "filled" },
       });
       return Response.json(
         stale
           ? { ok: false, error: "view changed" }
-          : { ok: true, query: "filled", counts: { families: 1, types: 2, parameters: 3 } },
+          : { ok: true, page: { query: "filled" }, facts: {} },
         { status: stale ? 409 : 200 },
       );
     }
@@ -1006,18 +1010,18 @@ test("Families view Pea doors require a mounted pane and return an exact retaine
   mounted = true;
   const view = (await run(peRead, { key: "route:families.view", timeoutSeconds: 30 })) as {
     result: {
-      document: { openId: string };
+      context: { document: { openId: string } };
       reading: { artifact: { url: string }; apsParametersCache: { artifact: { url: string } } };
     };
   };
-  expect(view.result.document.openId).toBe("o");
+  expect(view.result.context.document.openId).toBe("o");
   expect(view.result.reading.artifact.url).toBe(
     "http://127.0.0.1:9/families/readings?id=r1&format=artifact",
   );
   expect(view.result.reading.apsParametersCache.artifact.url).toContain("http://127.0.0.1:9/");
   expect(
     await run(peDo, {
-      key: "route:families.set-query",
+      key: "route:families.set-view",
       input: { instance, revision: 2, query: "filled" },
       timeoutSeconds: 30,
     }),
@@ -1025,11 +1029,55 @@ test("Families view Pea doors require a mounted pane and return an exact retaine
   stale = true;
   expect(
     await run(peDo, {
-      key: "route:families.set-query",
+      key: "route:families.set-view",
       input: { instance, revision: 2, query: "filled" },
       timeoutSeconds: 30,
     }),
   ).toMatchObject({ ok: false });
+});
+
+test("Ducts set-view resolves a named system against the lease's facts and refuses the rest", async () => {
+  fakeRuntimeHost("http://127.0.0.1:9");
+  const instance = "00000000-0000-4000-8000-000000000002";
+  const bodies: unknown[] = [];
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+    if (url.pathname === "/pe/route-view/ducts")
+      return Response.json({
+        instance,
+        revision: 3,
+        page: { group: "", level: "", selected: "" },
+        context: {},
+        facts: {
+          groups: [
+            { id: "g1", systemNames: ["Supply 1"] },
+            { id: "g2", systemNames: ["Return 1", "Supply 10"] },
+          ],
+          levels: [{ id: "5", name: "L1" }],
+        },
+      });
+    if (url.pathname === "/pe/route-view/ducts/set") {
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json({ ok: true, page: {}, facts: {} });
+    }
+    throw Error(`unexpected ${url.pathname}`);
+  });
+  const set = (input: Record<string, unknown>) =>
+    run(peDo, {
+      key: "route:ducts.set-view",
+      input: { instance, revision: 3, ...input },
+      timeoutSeconds: 30,
+    });
+  expect(await set({ system: "supply 1", level: "5" })).toMatchObject({ ok: true });
+  expect(bodies[0]).toMatchObject({ revision: 3, patch: { group: "g1", level: "5" } });
+  expect(await set({ system: "nonesuch" })).toMatchObject({ ok: false });
+  expect(await set({ system: "supply" })).toMatchObject({ ok: false });
+  expect(await set({ group: "gX" })).toMatchObject({ ok: false });
+  expect(bodies).toHaveLength(1);
+  const row = catalog().capabilities.find((entry) => entry.key === "route:ducts.set-view");
+  expect(row?.mutates).toBe(true);
+  expect(row?.description).toContain("only when the person named it");
 });
 
 test("pe_find reads native capabilities under an exact-open turn Target", async () => {

@@ -15,6 +15,9 @@ import {
   semanticActions,
   familyReads,
   familiesRouteState,
+  routeViews,
+  type RouteViewRoute,
+  type RouteViewSpec,
   familyCatalogRequest,
   workKeySchema,
   type FamilyReadKey,
@@ -750,25 +753,53 @@ async function dispatch(
           result,
         };
       }
-      if (row.key === "route:families.view" || row.key === "route:families.set-query") {
+      const view = /^route:([a-z-]+)\.(view|set-view)$/.exec(row.key);
+      if (view && view[1] && view[1] in routeViews) {
+        // One channel for every route in `routeViews`: read the leased view, or patch its Page keys.
+        const route = view[1] as RouteViewRoute;
         if (!viewThread) throw Error("This MCP server has no thread (no harness context).");
-        const query = new URLSearchParams({ thread: viewThread });
-        if (row.key === "route:families.view" && typeof payload.instance === "string")
-          query.set("instance", payload.instance);
         const client = createPeClient(base(), fetch);
-        const response = row.key.endsWith(".view")
-          ? await client.response("view.get", { query: Object.fromEntries(query) })
-          : await client.response("view.query", {
-              body: peRoutes["view.query"].body.parse({ ...payload, thread: viewThread }),
-            });
+        const read = (instance: unknown) =>
+          client.response("view.get", {
+            params: { route },
+            query: {
+              thread: viewThread,
+              ...(typeof instance === "string" ? { instance } : {}),
+            },
+          });
+        let response: Response;
+        if (view[2] === "view") response = await read(payload.instance);
+        else {
+          const { instance, revision, ...rest } = payload;
+          const spec: RouteViewSpec = routeViews[route];
+          let patch = rest as Record<string, string>;
+          let refused: string | null = null;
+          if (spec.resolve) {
+            // The view's own facts say which ids exist; a name resolves against them or not at all.
+            const lease = (await (await read(instance)).json()) as {
+              facts?: Record<string, unknown>;
+            };
+            const resolved = spec.resolve(rest, lease.facts ?? {});
+            if (resolved.ok) patch = resolved.patch;
+            else refused = resolved.error;
+          }
+          response = refused
+            ? Response.json({ ok: false, error: refused }, { status: 409 })
+            : await client.response("view.set", {
+                params: { route },
+                body: peRoutes["view.set"].body.parse({
+                  thread: viewThread,
+                  instance,
+                  revision,
+                  patch,
+                }),
+              });
+        }
         const result = (await response.json()) as Record<string, unknown>;
-        if (
-          row.key === "route:families.view" &&
-          response.ok &&
-          typeof result.readingId === "string"
-        ) {
+        const context = (result.context ?? {}) as Record<string, unknown>;
+        if (route === "families" && response.ok && typeof context.readingId === "string") {
           const reference = await fetch(
-            `${base()}/families/readings?id=${encodeURIComponent(result.readingId)}&format=reference`,
+            `${base()}/families/readings?id=${encodeURIComponent(context.readingId)}&format=reference`,
           );
           if (reference.ok) {
             const reading = (await reference.json()) as Record<string, unknown>;
@@ -789,8 +820,8 @@ async function dispatch(
           } else
             result.readingError = `Retained reading reference unavailable (${reference.status})`;
         }
-        const observed = result.document as { session?: unknown } | undefined;
-        const work = result.work as { binding?: unknown; target?: unknown } | undefined;
+        const observed = context.document as { session?: unknown } | undefined;
+        const work = context.work as { binding?: unknown; target?: unknown } | undefined;
         return {
           ok: response.ok,
           target: {
