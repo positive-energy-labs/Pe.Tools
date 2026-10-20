@@ -115,6 +115,7 @@ function fixture() {
       fanFlow: "FanFlow",
       componentDrop: "Pressure Drop",
       fittingCoefficient: "Pe_C",
+      terminalFlow: "PE_M_Grd_AirFlow",
     },
     issues: [
       {

@@ -194,7 +194,7 @@ export namespace DuctsApply {
     }
     /**
      * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
-     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop,
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
      * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
      * live (the configurable door, kaitpw 2026-10-08).
      *
@@ -205,6 +205,7 @@ export namespace DuctsApply {
       componentDrop?: string;
       terminalDrop?: null | string;
       fittingCoefficient?: string;
+      terminalFlow?: string;
     }
     /**
      * Table is the rule's ASHRAE table the Pe server prices the legs from when the family carries no coefficient; Coefficient is the web's number for the store and the export route.
@@ -372,7 +373,7 @@ export namespace DuctsSnapshot {
     }
     /**
      * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
-     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop,
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
      * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
      * live (the configurable door, kaitpw 2026-10-08).
      *
@@ -383,6 +384,7 @@ export namespace DuctsSnapshot {
       componentDrop?: string;
       terminalDrop?: null | string;
       fittingCoefficient?: string;
+      terminalFlow?: string;
     }
   }
   export namespace Res {
@@ -676,7 +678,7 @@ export namespace DuctsSnapshot {
     }
     /**
      * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
-     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop,
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
      * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
      * live (the configurable door, kaitpw 2026-10-08).
      *
@@ -687,6 +689,7 @@ export namespace DuctsSnapshot {
       componentDrop: string;
       terminalDrop?: null | string;
       fittingCoefficient: string;
+      terminalFlow: string;
     }
     /**
      * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter

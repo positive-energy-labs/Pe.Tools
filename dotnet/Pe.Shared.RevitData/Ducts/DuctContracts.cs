@@ -84,16 +84,17 @@ public sealed record DuctSnapshotRequest(DuctParameterSlots? Slots = null, strin
 
 /// <summary>
 ///     Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
-///     equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop,
+///     equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
 ///     FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
 ///     live (the configurable door, kaitpw 2026-10-08).
 /// </summary>
 public sealed record DuctParameterSlots(
-    string FanStatic = "PE_M_Fan_ExternalStaticPressure",
-    string FanFlow = "PE_M_Fan_AirFlow",
+    string FanStatic = "PE_M_Fan_ExternalStaticPressure", // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later)
+    string FanFlow = "PE_M_Fan_AirFlowDesign", // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later)
     string ComponentDrop = "Pressure Drop",
-    string? TerminalDrop = null,
-    string FittingCoefficient = DuctParameterSlots.DefaultFittingCoefficient) {
+    string? TerminalDrop = "PE_M_Grd_ExternalStaticPressure", // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later)
+    string FittingCoefficient = DuctParameterSlots.DefaultFittingCoefficient,
+    string TerminalFlow = "PE_M_Grd_AirFlow") { // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later)
     public const string DefaultFittingCoefficient = "Pe_C";
     private static readonly DuctParameterSlots Defaults = new();
 
@@ -105,15 +106,17 @@ public sealed record DuctParameterSlots(
             string.IsNullOrWhiteSpace(this.FanFlow) ? under.FanFlow : this.FanFlow,
             string.IsNullOrWhiteSpace(this.ComponentDrop) ? under.ComponentDrop : this.ComponentDrop,
             string.IsNullOrWhiteSpace(this.TerminalDrop) ? under.TerminalDrop : this.TerminalDrop,
-            string.IsNullOrWhiteSpace(this.FittingCoefficient) ? under.FittingCoefficient : this.FittingCoefficient);
+            string.IsNullOrWhiteSpace(this.FittingCoefficient) ? under.FittingCoefficient : this.FittingCoefficient,
+            string.IsNullOrWhiteSpace(this.TerminalFlow) ? under.TerminalFlow : this.TerminalFlow);
 
     /// <summary>A partial slots object from the wire deserializes missing names as null, not the defaults; this restores them.</summary>
     public DuctParameterSlots WithDefaults() => new(
         string.IsNullOrWhiteSpace(this.FanStatic) ? Defaults.FanStatic : this.FanStatic,
         string.IsNullOrWhiteSpace(this.FanFlow) ? Defaults.FanFlow : this.FanFlow,
         string.IsNullOrWhiteSpace(this.ComponentDrop) ? Defaults.ComponentDrop : this.ComponentDrop,
-        string.IsNullOrWhiteSpace(this.TerminalDrop) ? null : this.TerminalDrop,
-        string.IsNullOrWhiteSpace(this.FittingCoefficient) ? Defaults.FittingCoefficient : this.FittingCoefficient);
+        string.IsNullOrWhiteSpace(this.TerminalDrop) ? Defaults.TerminalDrop : this.TerminalDrop,
+        string.IsNullOrWhiteSpace(this.FittingCoefficient) ? Defaults.FittingCoefficient : this.FittingCoefficient,
+        string.IsNullOrWhiteSpace(this.TerminalFlow) ? Defaults.TerminalFlow : this.TerminalFlow);
 }
 
 /// <summary>
