@@ -158,6 +158,7 @@ description: Write and run a C# Revit script when code is the clearest way to in
 - Default to ReadOnly. Use WriteTransaction only for an explicit, user-authorized mutation. Use NoTransaction only for APIs that reject an open transaction.
 - ReadOnly needs an exact target, not a grant. WriteTransaction and NoTransaction on the user's document need the grant; ask once: select the open document in the composer; that selection is the rw grant and renews with each message. Any script refuses while another open document in that Revit lacks Pea's acquisition or the grant; name those documents to the user.
 - Treat compiler and runtime diagnostics as steering; fix the first one before rerunning.
+- Scope every collector to the categories or classes you need. When you must read parameters across many elements, iterate element.ReadableParameters(), never element.Parameters: some models carry hidden built-in parameters whose StorageType read kills Revit outright, and no catch or rollback survives it.
 - Keep terminal output compact; write artifacts for broad evidence. Return structured results for anything a later step reads.
 
 Building or fixing a family from a cut sheet follows build-revit-family.

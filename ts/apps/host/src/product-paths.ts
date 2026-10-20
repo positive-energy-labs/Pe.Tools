@@ -29,6 +29,9 @@ export const productHarnessThreadsPath = () => productStatePath("harness-threads
 /** Route Work documents (`pe-routes.ts`): one JSON file per route and Work key. */
 export const productRouteWorkPath = () => productStatePath("route-work");
 
+/** Immutable headless Ducts calculations, including their complete effective inputs. */
+export const productDuctsAnalysesPath = () => productStatePath("ducts", "analyses");
+
 /**
  * Pea's work folder: the copies she opens so a user's own file is never her scratch. Machine
  * state, not Documents: Documents is OneDrive-synced, and a model copy must not upload.

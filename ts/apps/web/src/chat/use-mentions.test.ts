@@ -1,3 +1,4 @@
+import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { expect, test } from "vite-plus/test";
 import { capabilityCatalogSchema, documentRows } from "@pe/agent-contracts";
 
@@ -159,4 +160,34 @@ test("open documents come from the live inventory, not the catalog's own rows", 
       "ope",
     ).map((row) => row.kind),
   ).not.toContain("document");
+});
+
+test("live mentions use the same bounded discovery projection as Pea", () => {
+  const machine = machineFixture([{ session: "s1", documents: null }]);
+  Object.assign(machine.revit.sessions![0]!, {
+    holdings: [
+      {
+        openId: "o1",
+        title: "Fixture",
+        holdings: {
+          elements: Array.from({ length: 53139 }, (_, id) => ({
+            id,
+            category: "fixture",
+            name: "HELD_SENTINEL",
+            changedSinceSync: null,
+            requesters: [],
+          })),
+          empty: false,
+          savedNotSynced: null,
+          unsaved: false,
+          worksets: [],
+          workshared: true,
+        },
+      },
+    ],
+  });
+  const projected = liveCatalog(seedCatalog, machine);
+  expect(JSON.stringify(projected).includes("HELD_SENTINEL")).toBe(false);
+  expect(JSON.stringify(projected.machine).length).toBeLessThan(65536);
+  expect(projected.machine.revit.sessions![0]!.holdings![0]!.holdings.elementCount).toBe(53139);
 });

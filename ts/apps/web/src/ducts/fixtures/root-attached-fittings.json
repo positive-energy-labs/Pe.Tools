@@ -1,0 +1,332 @@
+{
+  "provenance": "Regression excerpts from retained Chadds snapshot cb808a82d7c48f25a487fb80de72185c8c557c2e757e29f863b7adba1d6e669c. Root equipment and fitting connector geometry are retained; tests synthesize only the downstream terminal and group. This is not a complete Chadds solve.",
+  "cases": [
+    {
+      "fitting": {
+        "id": 12398836,
+        "kind": "fitting",
+        "category": "Duct Fittings",
+        "family": "Rectangular to Round Transition - Angle",
+        "type": "45 Degree",
+        "partType": "Transition",
+        "levelId": 1311741,
+        "point": [325.486, 616.732, -7.451],
+        "groupId": "g9185727",
+        "systemName": "RA 59",
+        "classification": "Return Air",
+        "connectors": [
+          {
+            "index": 0,
+            "kind": "end",
+            "point": [325.486, 616.732, -7.451],
+            "shape": "rectangular",
+            "size": "12x12",
+            "widthIn": 12,
+            "heightIn": 12,
+            "direction": "in",
+            "classification": "ReturnAir",
+            "connectedTo": {
+              "elementId": 11599307,
+              "connector": 1
+            },
+            "areaFt2": 1
+          },
+          {
+            "index": 1,
+            "kind": "end",
+            "point": [325.343, 616.874, -7.451],
+            "shape": "round",
+            "size": "10\"\u00c3\u00b8",
+            "diameterIn": 10,
+            "direction": "out",
+            "classification": "ReturnAir",
+            "connectedTo": {
+              "elementId": 10205336,
+              "connector": 2
+            },
+            "areaFt2": 0.54542
+          }
+        ],
+        "facts": [],
+        "loss": {
+          "method": "ashrae-table",
+          "serverId": "8baf7d75-8b9b-46d0-b8ce-3ad1c19e6b19",
+          "fields": {}
+        }
+      },
+      "equipment": {
+        "id": 10205336,
+        "kind": "equipment",
+        "category": "Mechanical Equipment",
+        "family": "Wine Guardian DS050 Indoor Unit",
+        "type": "DS050",
+        "levelId": 7288514,
+        "point": [324.252, 617.965, -8.271],
+        "systemName": "SA 92,RA 59",
+        "classification": "Supply Air,Return Air,Other,Sanitary",
+        "connectors": [
+          {
+            "index": 2,
+            "kind": "end",
+            "point": [325.343, 616.874, -7.451],
+            "shape": "round",
+            "size": "10\"\u00c3\u00b8",
+            "diameterIn": 10,
+            "direction": "in",
+            "classification": "ReturnAir",
+            "connectedTo": {
+              "elementId": 12398836,
+              "connector": 1
+            },
+            "areaFt2": 0.54542
+          },
+          {
+            "index": 1,
+            "kind": "end",
+            "point": [324.252, 617.965, -6.133],
+            "shape": "round",
+            "size": "10\"\u00c3\u00b8",
+            "diameterIn": 10,
+            "direction": "out",
+            "classification": "SupplyAir",
+            "connectedTo": {
+              "elementId": 12398824,
+              "connector": 1
+            },
+            "areaFt2": 0.54542
+          }
+        ],
+        "facts": [
+          {
+            "key": "fanFlow",
+            "value": 410,
+            "unit": "cfm",
+            "provenance": "designer-stated"
+          }
+        ]
+      },
+      "rootEquipmentPort": 2,
+      "inletIndex": 1,
+      "outletIndex": 0,
+      "inletAreaFt2": 0.545415391248228,
+      "outletAreaFt2": 1.0,
+      "ratio": 1.8334649444186342
+    },
+    {
+      "fitting": {
+        "id": 6497557,
+        "kind": "fitting",
+        "category": "Duct Fittings",
+        "family": "Rectangular Transition - Angle",
+        "type": "45 Degree",
+        "partType": "Transition",
+        "levelId": 5765339,
+        "point": [307.512, 590.045, 25.602],
+        "groupId": "g6497546",
+        "systemName": "RA 39",
+        "classification": "Return Air",
+        "connectors": [
+          {
+            "index": 2,
+            "kind": "end",
+            "point": [307.614, 589.942, 25.602],
+            "shape": "rectangular",
+            "size": "20x21.2",
+            "widthIn": 20,
+            "heightIn": 21.188,
+            "flowCfm": 309,
+            "direction": "bidirectional",
+            "classification": "ReturnAir",
+            "connectedTo": {
+              "elementId": 6497546,
+              "connector": 0
+            },
+            "areaFt2": 2.94278
+          },
+          {
+            "index": 1,
+            "kind": "end",
+            "point": [307.512, 590.045, 25.602],
+            "shape": "rectangular",
+            "size": "21.2x19.8",
+            "widthIn": 21.188,
+            "heightIn": 19.75,
+            "flowCfm": 309,
+            "direction": "bidirectional",
+            "classification": "ReturnAir",
+            "connectedTo": {
+              "elementId": 6497307,
+              "connector": 5
+            },
+            "areaFt2": 2.90599
+          }
+        ],
+        "facts": [],
+        "loss": {
+          "method": "ashrae-table",
+          "serverId": "8baf7d75-8b9b-46d0-b8ce-3ad1c19e6b19",
+          "table": "ER4-2",
+          "fields": {
+            "ASHRAETableName": "ER4-2"
+          }
+        }
+      },
+      "equipment": {
+        "id": 6497307,
+        "kind": "equipment",
+        "category": "Mechanical Equipment",
+        "family": "Aprilaire 2000 Series MERV16 Filter Chassis",
+        "type": "20x25 - model 2216 - up to 1000 cfm",
+        "levelId": 5765339,
+        "point": [307.512, 590.045, 25.602],
+        "systemName": "RA 39",
+        "classification": "Return Air,Power",
+        "connectors": [
+          {
+            "index": 4,
+            "kind": "end",
+            "point": [307.114, 590.442, 25.602],
+            "shape": "rectangular",
+            "size": "21.2x19.8",
+            "widthIn": 21.188,
+            "heightIn": 19.75,
+            "direction": "bidirectional",
+            "classification": "ReturnAir",
+            "areaFt2": 2.90599
+          },
+          {
+            "index": 5,
+            "kind": "end",
+            "point": [307.512, 590.045, 25.602],
+            "shape": "rectangular",
+            "size": "21.2x19.8",
+            "widthIn": 21.188,
+            "heightIn": 19.75,
+            "flowCfm": 309,
+            "direction": "bidirectional",
+            "classification": "ReturnAir",
+            "connectedTo": {
+              "elementId": 6497557,
+              "connector": 1
+            },
+            "areaFt2": 2.90599
+          }
+        ],
+        "facts": []
+      },
+      "rootEquipmentPort": 5,
+      "inletIndex": 1,
+      "outletIndex": 2,
+      "inletAreaFt2": 2.9059930555555553,
+      "outletAreaFt2": 2.9427777777777777,
+      "ratio": 1.0126582278481013
+    },
+    {
+      "fitting": {
+        "id": 10220093,
+        "kind": "fitting",
+        "category": "Duct Fittings",
+        "family": "Rectangular Transition - Angle",
+        "type": "45 Degree",
+        "partType": "Transition",
+        "levelId": 1311741,
+        "point": [381.069, 654.158, -6.909],
+        "groupId": "g6064399",
+        "systemName": "SA 10",
+        "classification": "Supply Air",
+        "connectors": [
+          {
+            "index": 2,
+            "kind": "end",
+            "point": [381.069, 654.158, -6.305],
+            "shape": "rectangular",
+            "size": "12x12",
+            "widthIn": 12,
+            "heightIn": 12,
+            "direction": "out",
+            "classification": "SupplyAir",
+            "connectedTo": {
+              "elementId": 12182309,
+              "connector": 0
+            },
+            "areaFt2": 1
+          },
+          {
+            "index": 1,
+            "kind": "end",
+            "point": [381.069, 654.158, -6.909],
+            "shape": "rectangular",
+            "size": "16x18",
+            "widthIn": 16,
+            "heightIn": 18,
+            "direction": "in",
+            "classification": "SupplyAir",
+            "connectedTo": {
+              "elementId": 6064216,
+              "connector": 1
+            },
+            "areaFt2": 2
+          }
+        ],
+        "facts": [],
+        "loss": {
+          "method": "ashrae-table",
+          "serverId": "8baf7d75-8b9b-46d0-b8ce-3ad1c19e6b19",
+          "fields": {}
+        }
+      },
+      "equipment": {
+        "id": 6064216,
+        "kind": "equipment",
+        "category": "Mechanical Equipment",
+        "family": "SunTherm M Series Vertical Air Handler",
+        "type": "Mortex MSVT18",
+        "levelId": 1311741,
+        "point": [380.833, 654.394, -10.491],
+        "systemName": "SA 10,RA 9,H/CHWS 43,H/CHWR 48",
+        "classification": "Supply Air,Communication,Return Air,Hydronic Supply,Hydronic Return",
+        "connectors": [
+          {
+            "index": 1,
+            "kind": "end",
+            "point": [381.069, 654.158, -6.909],
+            "shape": "rectangular",
+            "size": "16x18",
+            "widthIn": 16,
+            "heightIn": 18,
+            "direction": "out",
+            "classification": "SupplyAir",
+            "connectedTo": {
+              "elementId": 10220093,
+              "connector": 1
+            },
+            "areaFt2": 2
+          },
+          {
+            "index": 3,
+            "kind": "end",
+            "point": [381.069, 654.158, -10.458],
+            "shape": "rectangular",
+            "size": "17.5x21",
+            "widthIn": 17.5,
+            "heightIn": 21,
+            "direction": "in",
+            "classification": "ReturnAir",
+            "connectedTo": {
+              "elementId": 12186032,
+              "connector": 1
+            },
+            "areaFt2": 2.55208
+          }
+        ],
+        "facts": []
+      },
+      "rootEquipmentPort": 1,
+      "inletIndex": 1,
+      "outletIndex": 2,
+      "inletAreaFt2": 2.0,
+      "outletAreaFt2": 1.0,
+      "ratio": 0.5
+    }
+  ]
+}

@@ -66,7 +66,9 @@ import {
   type TargetInventory,
   type DocumentRef,
   type ThreadHead,
+  transitionPatches,
 } from "@pe/agent-contracts";
+import { parseLoadPreview } from "@pe/ducts-domain/load-preview";
 import { HostRpcCaller, type ResolvedTarget } from "../shared/host-rpc-caller.ts";
 import type { RevitCatalogLoadedFamilies } from "@pe/host-contracts/generated";
 import { coerceJsonObject } from "../shared/coerce.ts";
@@ -135,9 +137,8 @@ const targetQuery = (target: Target): string => {
 };
 
 /**
- * The route Work a Target keys: its document's Address, as the browser resolves it. Work keys by
- * Address, so an exact `open` Target is resolved through the live inventory; dropping it read the
- * Target-less Work instead of the Chat's (E2E-J1). A closed document refuses rather than fall back.
+ * Resolve route Work like the browser: Address when saved, exact open lifetime when unsaved.
+ * Carry the lifetime beside an Address for Save As migration; a closed lifetime refuses (E2E-J1).
  */
 async function routeWorkScope(target: Target): Promise<{ query: string; target: ResolvedTarget }> {
   if (target?.kind !== "open") return { query: targetQuery(target), target: namedTarget(target) };
@@ -147,13 +148,15 @@ async function routeWorkScope(target: Target): Promise<{ query: string; target: 
   const document = sessions
     .find((session) => session.sessionId === target.ref.session)
     ?.openDocuments?.find((doc) => doc.openId === target.ref.openId);
-  const address = addressSchema.safeParse(document?.address).data;
-  if (!address)
+  if (!document)
     throw Error(
-      "The Chat's document is no longer open, so its route Work has no Address to read; ask the person to pick the document again.",
+      "The Chat's document is no longer open in its session; ask the person to pick an open document again.",
     );
+  const address = addressSchema.safeParse(document.address).data ?? null;
+  const query = new URLSearchParams({ open: `${target.ref.session}/${target.ref.openId}` });
+  if (address) query.set("target", address);
   return {
-    query: new URLSearchParams({ target: address }).toString(),
+    query: query.toString(),
     target: { session: target.ref.session, document: address },
   };
 }
@@ -165,7 +168,11 @@ export const peFind = createTool({
   inputSchema: z.object({
     query: z.string().optional().describe("Keywords describing what you need."),
     kind: capabilityKindSchema.optional(),
-    needs: capabilityNeedsSchema.optional(),
+    needs: capabilityNeedsSchema
+      .optional()
+      .describe(
+        "document includes project-document and family-document capabilities. Other needs match exactly. This filters requirements, not current availability.",
+      ),
     mutates: z.boolean().optional(),
     limit: z.number().int().min(1).max(50).default(8),
   }),
@@ -729,6 +736,20 @@ async function dispatch(
           result: await response.json(),
         };
       }
+      if (row.key === "route:ducts.analysis") {
+        const response = await createPeClient(base(), fetch).response("ducts.analysis", {
+          body: peRoutes["ducts.analysis"].body.parse(payload),
+        });
+        const result = await response.json();
+        if (response.ok) result.artifact.url = new URL(result.artifact.url, base()).toString();
+        return {
+          ok: response.ok,
+          target: response.ok
+            ? { session: result.target.session, document: result.target.openId }
+            : { session: null, document: null },
+          result,
+        };
+      }
       if (row.key === "route:families.view" || row.key === "route:families.set-query") {
         if (!viewThread) throw Error("This MCP server has no thread (no harness context).");
         const query = new URLSearchParams({ thread: viewThread });
@@ -853,13 +874,31 @@ async function dispatch(
       if (row.kind === "route-doc") {
         if (input.expectedRevision === undefined)
           throw new Error(`Read route:${parsed.route} first and pass its expectedRevision.`);
+        // Ducts Work is keyed by document: an unbound write lands in Work no page reads (wave 3, 2026-10-19).
+        if (parsed.route === "ducts" && !workspaceId && !defaultTarget)
+          throw new Error(
+            "route:ducts.propose needs this thread's document, and none is bound: Ducts Work belongs to one document, so this proposal would land where no page reads it. Ask the person to select the open document in the composer (that binds this thread), or target_set one of your own open documents; then read route:ducts again and propose.",
+          );
+        // Ducts: a raw Load Preview paste is parsed here and proposed as loads/preview.
+        const loads =
+          parsed.route === "ducts" && typeof payload.loadsText === "string"
+            ? transitionPatches(
+                ["loads"],
+                "preview",
+                {},
+                {
+                  kind: "propose",
+                  rung: { value: { systems: parseLoadPreview(payload.loadsText).systems } },
+                },
+              )
+            : [];
         return routeWrite(
           parsed.route,
           "apply",
           defaultTarget,
           input.expectedRevision,
           {
-            patches: payload.patches,
+            patches: [...(Array.isArray(payload.patches) ? payload.patches : []), ...loads],
           },
           workspaceId,
         );

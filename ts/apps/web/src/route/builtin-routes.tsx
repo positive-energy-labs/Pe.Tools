@@ -4,6 +4,8 @@ import { manifest as families } from "#/families/manifest";
 import { familyManifest } from "#/family/manifest";
 import { openManifest } from "#/open/manifest";
 import { manifest as parameterLinks } from "#/parameter-links/manifest";
+import { manifest as ducts } from "#/ducts/manifest";
+import type { DuctsSearch } from "#/ducts/route";
 import { manifest as rooms } from "#/rooms/manifest";
 import { schedulesManifest } from "#/route/schedules/manifest";
 import { manifest as pods } from "#/routes/pods";
@@ -25,6 +27,7 @@ const ParameterLinksRouteContent = named(
 );
 const TakeoffsPane = named(() => import("#/takeoff/pane"), "TakeoffsPane");
 const OpenPage = named(() => import("#/open/route"), "OpenPage");
+const DuctsRoute = named(() => import("#/ducts/route"), "DuctsRoute");
 const RoomsRoute = named(() => import("#/rooms/route"), "RoomsRoute");
 
 export const publicRoutes = createRouteRegistry();
@@ -53,6 +56,27 @@ publicRoutes.register({
   hosted: ({ thread }) => <LiveScheduleGridWorkspace framed url={false} thread={thread} />,
 });
 publicRoutes.register({ manifest: rooms, hosted: () => <HostedRooms /> });
+
+publicRoutes.register({ manifest: ducts, hosted: () => <HostedDucts /> });
+
+function HostedDucts() {
+  const [search, setSearch] = useState<DuctsSearch>({
+    view: "",
+    group: "",
+    level: "",
+    layers: "",
+    selected: "",
+    issue: "",
+    encoding: "health",
+    scene: "",
+  });
+  return (
+    <DuctsRoute
+      search={search}
+      setSearch={(next) => setSearch((previous) => ({ ...previous, ...next }))}
+    />
+  );
+}
 
 function HostedRooms() {
   const [layers, setLayers] = useState("");

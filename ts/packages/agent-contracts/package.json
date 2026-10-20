@@ -23,6 +23,10 @@
     "./pe-api": {
       "types": "./src/pe-api.ts",
       "import": "./src/pe-api.ts"
+    },
+    "./product-map": {
+      "types": "./src/product-map.ts",
+      "import": "./src/product-map.ts"
     }
   },
   "publishConfig": {

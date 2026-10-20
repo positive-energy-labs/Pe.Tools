@@ -59,6 +59,11 @@ const browserContexts = new Map<
   { caller: Extract<Caller, { kind: "human" }>; transport: string }
 >();
 const transportKey = (principal: RequestPrincipal) => JSON.stringify(principal);
+const browserCookiePair = (headers: Readonly<Record<string, string | undefined>>) =>
+  headers.cookie
+    ?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${BROWSER_CONTEXT_COOKIE}=`));
 
 /** Mint on a verified SPA navigation; headers on a later API request cannot create a human. */
 export function mintBrowserContext(principal: RequestPrincipal): string {
@@ -164,13 +169,26 @@ export function callerOf(
     const page = slug ? pageKeyOf(decodeURIComponent(slug)) : null;
     return page ? { caller: { kind: "page", page } } : anonymous;
   }
-  const cookie = headers.cookie
-    ?.split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(`${BROWSER_CONTEXT_COOKIE}=`))
-    ?.slice(BROWSER_CONTEXT_COOKIE.length + 1);
+  const cookie = browserCookiePair(headers)?.slice(BROWSER_CONTEXT_COOKIE.length + 1);
   const minted = cookie ? browserContexts.get(cookie) : undefined;
   return minted?.transport === transportKey(principal) ? { caller: minted.caller } : anonymous;
+}
+
+/** Replay only this host's validated browser credential and its identity markers on a nested hop. */
+export function browserContextHeaders(
+  principal: RequestPrincipal,
+  headers: Readonly<Record<string, string | undefined>>,
+): Record<string, string> {
+  if (headers.origin === undefined && headers["sec-fetch-site"] === undefined) return {};
+  const admitted = callerOf(principal, headers);
+  if ("refusal" in admitted) return {};
+  const selected: Record<string, string> = {};
+  for (const key of ["origin", "referer", "sec-fetch-site"])
+    if (headers[key] !== undefined) selected[key] = headers[key];
+  // A Page keeps its Referer identity, never the human's browser credential.
+  const cookie = admitted.caller.kind === "human" ? browserCookiePair(headers) : undefined;
+  if (cookie) selected.cookie = cookie;
+  return selected;
 }
 
 export type RoutePermission =

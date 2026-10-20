@@ -184,6 +184,14 @@ export const podListResponseSchema = Schema.Struct({
   unreadable: Schema.Array(Schema.Struct({ folder: Schema.String, message: Schema.String })),
 });
 export type PodList = Schema.Schema.Type<typeof podListResponseSchema>;
+export const podListRequestSchema = Schema.Union([
+  Schema.Struct({ projection: Schema.optional(Schema.Literals(["full"])) }),
+  Schema.Struct({ projection: Schema.Literals(["identity"]), folder: Schema.String }),
+]);
+const podListIdentityResponseSchema = Schema.Struct({
+  projection: Schema.Literals(["identity"]),
+  identity: Schema.Struct({ id: Schema.String, folder: Schema.String }),
+});
 
 /**
  * One pod's frozen execution input, read once from its admitted package. The native palette reads
@@ -855,7 +863,8 @@ export const tsOnlyOperationSchemas = {
     response: rhvacListDataSchema,
   },
   "pod.list": {
-    response: podListResponseSchema,
+    request: podListRequestSchema,
+    response: Schema.Union([podListResponseSchema, podListIdentityResponseSchema]),
   },
   "pod.capture": {
     request: podCaptureRequestSchema,

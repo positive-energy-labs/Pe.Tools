@@ -16,11 +16,9 @@ namespace Build.Modules;
 [DependsOn<CleanProjectModule>(Optional = true)]
 public sealed class CreateBundleModule(IOptions<BuildOptions> buildOptions) : Module {
     protected override async Task ExecuteModuleAsync(IModuleContext context, CancellationToken cancellationToken) {
-        var versioningResult = await context.GetModule<ResolveVersioningModule>();
         var matrixResult = await context.GetModule<ResolveBuildMatrixModule>();
         var layoutResult = await context.GetModule<ResolveBuildLayoutModule>();
         var signingResult = await context.GetModule<ResolvePackageSigningModule>();
-        var versioning = versioningResult.ValueOrDefault!;
         var matrix = matrixResult.ValueOrDefault!;
         var layout = layoutResult.ValueOrDefault!;
         var signing = signingResult.ValueOrDefault!;
@@ -65,8 +63,6 @@ public sealed class CreateBundleModule(IOptions<BuildOptions> buildOptions) : Mo
                 ("PePublishStagingRoot", publishStagingRoot),
                 ("PeBundleStagingDir", bundleStagingDir),
                 ("PeBundleZipPath", bundleZipPath),
-                ("VersionPrefix", versioning.VersionPrefix),
-                ("VersionSuffix", versioning.VersionSuffix!),
                 .. signing.BuildProperties
             ],
             cancellationToken

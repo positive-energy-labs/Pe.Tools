@@ -864,7 +864,21 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         elicitation: { form: {} },
       },
     });
-    const request = { cwd: options.worldRoot, mcpServers: [options.mcpServer(context)] };
+    // The user's own Claude settings (plugins, hooks, skills) stay out of Pea; the product home's
+    // project settings stay in. Codex's counterpart is the project config in the world root.
+    const request = {
+      cwd: options.worldRoot,
+      mcpServers: [options.mcpServer(context)],
+      // Claude Code truncates MCP server instructions; the whole kernel rides the system prompt.
+      ...(harness === "claude"
+        ? {
+            _meta: {
+              systemPrompt: { append: await options.developerInstructions?.() },
+              claudeCode: { options: { settingSources: ["project", "local"] } },
+            },
+          }
+        : {}),
+    };
     // No session verb restores the user's model or traits (drive 2026-10-01: a sonnet thread came
     // back opus), so both are re-applied below.
     const wantModel = t.meta.modelId;

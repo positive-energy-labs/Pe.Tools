@@ -167,6 +167,640 @@ export namespace DocumentTemporaryStatus {
   }
 }
 
+/** Write duct losses into Revit so they travel with the model. Each fitting names a method: pe-server points it at the Pe loss server, which charges the family's own coefficient parameter live (the fittingCoefficient slot, default Pe_C) when the family carries one and otherwise prices each leg live from the write's ASHRAE table and the connectors' flows (taps, transitions, unstamped elbows); specific-coefficient freezes a number (export only). Revit's own ASHRAE-table route is never written. Also Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the fanStatic slot, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. previewOnly plans every write and refusal without a transaction. A real apply commits Not Defined on every targeted fitting, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after. */
+export namespace DuctsApply {
+  export namespace Req {
+    /**
+     * How Revit is told a fitting's loss (pressure-drop ledger, 2026-10-12): the Pe server live, or a frozen number for export.
+     */
+    export type DuctFittingMethod = "pe-server" | "specific-coefficient";
+
+    /**
+     * A fitting write names its Method: PeServer points the fitting at the Pe loss server, which reads the family's
+     * coefficient parameter live (the FittingCoefficient slot, default Pe_C); AshraeTable stores Table as Revit's
+     * ASHRAETableName and Revit looks the legs up itself; SpecificCoefficient freezes Coefficient (the export route,
+     * never the web's). Coefficient, Table, Inputs and RuleKey are Pe's provenance and land in the store.
+     * Terminals and Components carry a drop in in-wg; Equipment the fan external static.
+     *
+     */
+    export interface Request {
+      previewOnly: boolean;
+      slots?: null | DuctParameterSlots;
+      fittings: DuctFittingWrite[];
+      terminals: DuctDropWrite[];
+      components: DuctDropWrite[];
+      equipment: DuctEquipmentWrite[];
+      store: DuctLossStore;
+    }
+    /**
+     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop,
+     * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
+     * live (the configurable door, kaitpw 2026-10-08).
+     *
+     */
+    export interface DuctParameterSlots {
+      fanStatic?: string;
+      fanFlow?: string;
+      componentDrop?: string;
+      terminalDrop?: null | string;
+      fittingCoefficient?: string;
+    }
+    /**
+     * Table is the rule's ASHRAE table the Pe server prices the legs from when the family carries no coefficient; Coefficient is the web's number for the store and the export route.
+     */
+    export interface DuctFittingWrite {
+      id: number;
+      method: DuctFittingMethod;
+      coefficient: number;
+      table?: null | string;
+      inputs?: null | string;
+      ruleKey?: null | string;
+    }
+    export interface DuctDropWrite {
+      id: number;
+      inWg: number;
+      source?: null | string;
+    }
+    export interface DuctEquipmentWrite {
+      id: number;
+      externalStaticInWg: number;
+    }
+    /**
+     * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
+     * `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
+     * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
+     *
+     */
+    export interface DuctLossStore {
+      version?: number;
+      rules?: {
+        [k: string]: DuctRuleChoice;
+      };
+      instances?: {
+        [k: string]: DuctInstanceRecord;
+      };
+      terminals?: {
+        [k: string]: DuctDropRecord;
+      };
+      slots?: null | DuctParameterSlots;
+      workRevision?: number;
+      appliedAt?: null | string;
+      [k: string]: unknown;
+    }
+    /**
+     * A rule's chosen ASHRAE table (rule key is family:type plus a geometry condition, owned by the web).
+     */
+    export interface DuctRuleChoice {
+      table?: null | string;
+    }
+    /**
+     * What Pe wrote on one fitting: the table and lookup inputs behind the coefficient.
+     */
+    export interface DuctInstanceRecord {
+      table?: null | string;
+      inputs?: null | string;
+      coefficient: number;
+      appliedAt: string;
+    }
+    /**
+     * What Pe wrote on one terminal or component: the drop and where it came from (catalog, typed).
+     */
+    export interface DuctDropRecord {
+      inWg: number;
+      source?: null | string;
+      appliedAt: string;
+    }
+  }
+  export namespace Res {
+    /**
+     * StoreRevision is the store's WorkRevision after this call (unchanged on preview).
+     */
+    export interface Response {
+      previewOnly: boolean;
+      writes: DuctWrite[];
+      counts: DuctApplyCounts;
+      systemsAfter?: DuctSystem[] | null;
+      storeRevision: number;
+    }
+    /**
+     * One target's outcome. Kind: fitting, terminal, component, equipment, store. Outcome: planned (preview),
+     * written, refused (Reason says why), unchanged (already holds the value). Before and After are display text.
+     *
+     */
+    export interface DuctWrite {
+      id?: number | null;
+      kind: string;
+      outcome: string;
+      reason?: null | string;
+      before?: null | string;
+      after?: null | string;
+    }
+    export interface DuctApplyCounts {
+      planned: number;
+      written: number;
+      refused: number;
+      unchanged: number;
+    }
+    /**
+     * One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.
+     * CriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.
+     *
+     */
+    export interface DuctSystem {
+      id: number;
+      name: string;
+      classification: string;
+      isWellConnected?: boolean | null;
+      baseEquipmentId?: number | null;
+      baseEquipmentConnector?: number | null;
+      criticalPathLossInWg?: null | number;
+      criticalPath: number[];
+      sections: DuctSection[];
+    }
+    /**
+     * One MEPSection: Revit's run of elements carrying one flow.
+     */
+    export interface DuctSection {
+      number: number;
+      flowCfm?: null | number;
+      totalPressureLossInWg?: null | number;
+      elementIds: number[];
+    }
+  }
+}
+
+/** Build the Family Foundry patch that gives a duct fitting family its own loss coefficient: an embedded lookup table (PeElbowC, dense over r/D, angle and diameter from Revit's shipped ASHRAE CD3 grids) and an instance number parameter (default Pe_C) with a rounding size_lookup formula, plus the run policy that lets Revit disconnect a fitting it cannot keep joined on reload. Hand the patch to families.plan then families.apply; ducts.apply with method pe-server then charges it live. Read-only; needs no document. */
+export namespace DuctsFamilyPatch {
+  export namespace Req {
+    export type DuctFamilyKind = "round-elbow";
+
+    /**
+     * Family is the loaded family name to select; Parameter is the coefficient parameter the formula fills (the FittingCoefficient slot).
+     */
+    export interface Request {
+      family: string;
+      kind?: DuctFamilyKind;
+      parameter?: string;
+    }
+  }
+  export namespace Res {
+    /**
+     * Patch is the FamilyPatch JSON as `families.plan` reads it; Rows counts the table; Sources names the ASHRAE grids behind it.
+     */
+    export interface Response {
+      patch: unknown;
+      table: string;
+      rows: number;
+      sources: string[];
+      formula: string;
+    }
+  }
+}
+
+/** Read every duct network in the project: ducts, flex, fittings, accessories, terminals and HVAC equipment with their connectors, grouped by topology with equipment cut out, plus pass-1 terminal flow, fitting geometry ratios, fitting and accessory loss methods, terminal drops, Revit's supply/return/exhaust systems with critical path and sections, issues and the query behind each layer. Slots name the fan static, fan flow, component drop and terminal catalog drop parameters; labelParameter names the instance parameter whose value names equipment for people (each node's label). Read-only. */
+export namespace DuctsSnapshot {
+  export namespace Req {
+    /**
+     * Optional: which parameters carry the designer-stated values (absent reads the defaults), and LabelParameter, the
+     * instance parameter whose string value names equipment for people (absent reads no label).
+     *
+     */
+    export interface Request {
+      slots?: null | DuctParameterSlots;
+      labelParameter?: null | string;
+    }
+    /**
+     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop,
+     * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
+     * live (the configurable door, kaitpw 2026-10-08).
+     *
+     */
+    export interface DuctParameterSlots {
+      fanStatic?: string;
+      fanFlow?: string;
+      componentDrop?: string;
+      terminalDrop?: null | string;
+      fittingCoefficient?: string;
+    }
+  }
+  export namespace Res {
+    /**
+     * Physical XYZ and segment LengthFt preserve native model-foot binary64 values; other facts retain their stated units/rounding.
+     */
+    export type DuctCoordinateEncoding = "native-double";
+    export type DuctNodeKind = "equipment" | "terminal" | "fitting" | "accessory" | "cap";
+    export type DuctShape = "round" | "rectangular" | "oval" | "other";
+    /**
+     * Where a value came from. The route prints it beside the value.
+     */
+    export type DuctProvenance = "geometry" | "revit-reported" | "revit-default" | "designer-stated" | "derived";
+    export type DuctLossMethod =
+      | "not-defined"
+      | "ashrae-table"
+      | "specific-coefficient"
+      | "specific-loss"
+      | "pe-server"
+      | "other";
+    export type DuctSegmentKind = "duct" | "flex";
+    /**
+     * The native path form; samples alone do not certify nonlinear curve arclength stations.
+     */
+    export type DuctCurveKind = "line" | "arc" | "flex-polyline" | "other";
+    export type DuctIssueKind =
+      | "open-end"
+      | "loop"
+      | "stub"
+      | "mixed-classification"
+      | "implausible-size"
+      | "default-flex-roughness"
+      | "no-fan-static"
+      | "no-component-drop"
+      | "no-terminal-flow"
+      | "no-root"
+      | "multi-root"
+      | "high-velocity"
+      | "no-flow-leg";
+
+    /**
+     * Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
+     * the blob is unreadable or another version (fail-closed: ducts.apply refuses to overwrite it).
+     *
+     */
+    export interface Response {
+      document: DuctDocument;
+      coordinateEncoding: DuctCoordinateEncoding;
+      levels: DuctLevel[];
+      groups: DuctGroup[];
+      nodes: DuctNode[];
+      segments: DuctSegment[];
+      flows: DuctFlow[];
+      issues: DuctIssue[];
+      layers: DuctLayer[];
+      systems: DuctSystem[];
+      slots: DuctParameterSlots;
+      store?: null | DuctLossStore;
+      storeError?: null | string;
+      phases?: null | DuctPhases;
+    }
+    /**
+     * The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
+     * read only: the snapshot guards an access violation on it, and apply never sets it (pressure-drop ledger).
+     *
+     */
+    export interface DuctDocument {
+      title: string;
+      readAt: string;
+      elapsedMs: number;
+      networkBasedCalculations: boolean;
+    }
+    /**
+     * A level; ElevationFt is Level.ProjectElevation (geometry frame), never Level.Elevation.
+     */
+    export interface DuctLevel {
+      id: number;
+      name: string;
+      elevationFt: number;
+    }
+    /**
+     * A connected duct network with equipment cut out: the unit a solver runs on. Id is "g" plus the smallest
+     * element id in it, stable while that element exists. RootIds are the equipment it hangs off.
+     *
+     */
+    export interface DuctGroup {
+      id: string;
+      rootIds: number[];
+      classifications: string[];
+      systemNames: string[];
+      terminalCount: number;
+      elementCount: number;
+      loops: number;
+      issueIds: string[];
+    }
+    /**
+     * PhaseCreated and PhaseDemolished name the element's phases (null when it has none, or none demolished it).
+     */
+    export interface DuctNode {
+      id: number;
+      kind: DuctNodeKind;
+      category: string;
+      family?: null | string;
+      type?: null | string;
+      partType?: null | string;
+      levelId?: number | null;
+      point: number[];
+      groupId?: null | string;
+      systemName?: null | string;
+      classification?: null | string;
+      connectors: DuctConnector[];
+      facts: DuctFact[];
+      loss?: null | DuctLoss;
+      terminalDrop?: null | DuctTerminalDrop;
+      label?: null | string;
+      uniqueId?: null | string;
+      phaseCreated?: null | string;
+      phaseDemolished?: null | string;
+    }
+    /**
+     * One physical HVAC connector. Kind is "end" or "curve" (a tap on a duct's side). Direction is Revit's
+     * (in, out, bidirectional); flow direction for the solver comes from the root, never from this.
+     * FlowCfm is Revit's connector flow, read only on the legacy engine: under network-based calculations the getter can
+     * crash Revit 2025 (pressure-drop ledger, W3).
+     * Facing is Connector.CoordinateSystem.BasisZ, the unit axis the connector faces out of its owner, and WidthAxis its
+     * BasisX on a rectangular or oval connector (the side WidthIn runs along), both model coordinates; null when Revit
+     * gives no frame and in snapshots taken before they were read.
+     *
+     */
+    export interface DuctConnector {
+      index: number;
+      kind: string;
+      point: number[];
+      shape: DuctShape;
+      size: string;
+      diameterIn?: null | number;
+      widthIn?: null | number;
+      heightIn?: null | number;
+      flowCfm?: null | number;
+      direction: string;
+      classification?: null | string;
+      connectedTo?: null | DuctRef;
+      areaFt2?: null | number;
+      facing?: number[] | null;
+      widthAxis?: number[] | null;
+    }
+    /**
+     * What a connector touches: an element id and that element's connector index.
+     */
+    export interface DuctRef {
+      elementId: number;
+      connector: number;
+    }
+    /**
+     * One stated or reported value with its unit and provenance.
+     */
+    export interface DuctFact {
+      key: string;
+      value?: null | number;
+      text?: null | string;
+      unit: string;
+      provenance: DuctProvenance;
+    }
+    /**
+     * A fitting's or accessory's loss state: the server in RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM and the string
+     * fields of that server's entity on the instance, verbatim in Fields. Table, Coefficient and SpecificLossInWg are
+     * read from them. RevitPressureDropInWg is the element's own RBS_DUCT_PRESSURE_DROP (RBS_PRESSURE_DROP is empty under a stored ASHRAE table).
+     *
+     */
+    export interface DuctLoss {
+      method: DuctLossMethod;
+      serverId?: null | string;
+      table?: null | string;
+      coefficient?: null | number;
+      specificLossInWg?: null | number;
+      revitPressureDropInWg?: null | number;
+      fields: {
+        [k: string]: string;
+      };
+    }
+    /**
+     * A terminal's drop. AssignedPressureDropInWg is the first HVAC connector's AssignedPressureDrop; ConnectorLossMethod
+     * its AssignedDuctLossMethod (NotDefined, Coefficient, SpecificLoss). Writable is true only for SpecificLoss, and
+     * is necessary, not sufficient: Revit refuses the connector setter on a family's Specific Loss connector too (W3), so
+     * ducts.apply writes the instance parameter the family binds to it, named by the TerminalDrop slot.
+     * CatalogDropInWg is the TerminalDrop slot, if one is named.
+     *
+     */
+    export interface DuctTerminalDrop {
+      assignedPressureDropInWg?: null | number;
+      connectorLossMethod?: null | string;
+      writable: boolean;
+      catalogDropInWg?: null | number;
+    }
+    /**
+     * PhaseCreated and PhaseDemolished as on DuctNode.
+     */
+    export interface DuctSegment {
+      id: number;
+      kind: DuctSegmentKind;
+      curveKind: DuctCurveKind;
+      type?: null | string;
+      shape: DuctShape;
+      size: string;
+      diameterIn?: null | number;
+      widthIn?: null | number;
+      heightIn?: null | number;
+      lengthFt: number;
+      polyline: number[][];
+      levelId?: number | null;
+      groupId?: null | string;
+      systemName?: null | string;
+      classification?: null | string;
+      roughness: DuctRoughness;
+      revit: DuctRevitValues;
+      connectors: DuctConnector[];
+      uniqueId?: null | string;
+      phaseCreated?: null | string;
+      phaseDemolished?: null | string;
+    }
+    export interface DuctRoughness {
+      valueFt: number;
+      provenance: DuctProvenance;
+    }
+    /**
+     * What Revit reports on the segment. Partial in most models; a check, never an input.
+     */
+    export interface DuctRevitValues {
+      flowCfm?: null | number;
+      velocityFpm?: null | number;
+      frictionInWgPer100Ft?: null | number;
+      pressureDropInWg?: null | number;
+    }
+    /**
+     * Pass-1 flow: terminal design flow summed up the tree from the single root. At a tapped duct it is the upstream-end flow.
+     */
+    export interface DuctFlow {
+      segmentId: number;
+      cfm: number;
+      provenance: DuctProvenance;
+    }
+    /**
+     * Id is "kind:elementId" (open ends add ":connector"); an assumption verdict keys on it.
+     */
+    export interface DuctIssue {
+      id: string;
+      kind: DuctIssueKind;
+      elementId?: number | null;
+      point?: number[] | null;
+      groupId: string;
+      note: string;
+    }
+    /**
+     * One real query, printed verbatim in Query, and how much of the model it answered.
+     */
+    export interface DuctLayer {
+      key: string;
+      title: string;
+      query: string;
+      coverage: DuctCoverage;
+      provenance: DuctProvenance;
+    }
+    export interface DuctCoverage {
+      have: number;
+      of: number;
+    }
+    /**
+     * One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.
+     * CriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.
+     *
+     */
+    export interface DuctSystem {
+      id: number;
+      name: string;
+      classification: string;
+      isWellConnected?: boolean | null;
+      baseEquipmentId?: number | null;
+      baseEquipmentConnector?: number | null;
+      criticalPathLossInWg?: null | number;
+      criticalPath: number[];
+      sections: DuctSection[];
+    }
+    /**
+     * One MEPSection: Revit's run of elements carrying one flow.
+     */
+    export interface DuctSection {
+      number: number;
+      flowCfm?: null | number;
+      totalPressureLossInWg?: null | number;
+      elementIds: number[];
+    }
+    /**
+     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) on terminals as a catalog drop,
+     * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
+     * live (the configurable door, kaitpw 2026-10-08).
+     *
+     */
+    export interface DuctParameterSlots {
+      fanStatic: string;
+      fanFlow: string;
+      componentDrop: string;
+      terminalDrop?: null | string;
+      fittingCoefficient: string;
+    }
+    /**
+     * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
+     * `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
+     * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
+     *
+     */
+    export interface DuctLossStore {
+      version: number;
+      rules: {
+        [k: string]: DuctRuleChoice;
+      };
+      instances: {
+        [k: string]: DuctInstanceRecord;
+      };
+      terminals: {
+        [k: string]: DuctDropRecord;
+      };
+      slots?: null | DuctParameterSlots;
+      workRevision: number;
+      appliedAt?: null | string;
+      [k: string]: unknown;
+    }
+    /**
+     * A rule's chosen ASHRAE table (rule key is family:type plus a geometry condition, owned by the web).
+     */
+    export interface DuctRuleChoice {
+      table?: null | string;
+    }
+    /**
+     * What Pe wrote on one fitting: the table and lookup inputs behind the coefficient.
+     */
+    export interface DuctInstanceRecord {
+      table?: null | string;
+      inputs?: null | string;
+      coefficient: number;
+      appliedAt: string;
+    }
+    /**
+     * What Pe wrote on one terminal or component: the drop and where it came from (catalog, typed).
+     */
+    export interface DuctDropRecord {
+      inWg: number;
+      source?: null | string;
+      appliedAt: string;
+    }
+    /**
+     * The document's phases, Document.Phases in order (earliest first), and Views: how many non-template plan and 3D
+     * views show each phase (VIEW_PHASE) under each phase filter (VIEW_PHASE_FILTER), most first. A firm models what its
+     * views show; an element in a phase no view shows is often forgotten (pressure-drop ledger, 2026-10-19).
+     *
+     */
+    export interface DuctPhases {
+      order: string[];
+      views: DuctPhaseViews[];
+    }
+    /**
+     * Count views show Phase (null when a view has none) under Filter (null when none).
+     */
+    export interface DuctPhaseViews {
+      phase?: null | string;
+      filter?: null | string;
+      count: number;
+    }
+  }
+}
+
+/** Read ASHRAE duct fitting coefficient grids (Co, Cb, Cs) by table id from the .tbl files Revit installs, verbatim: axes, labels and values for a web lookup. Read-only; needs no document. */
+export namespace DuctsTables {
+  export namespace Req {
+    /**
+     * The table ids to read, as ASHRAE names them ("CD3-2", "SD5-9"); case does not matter.
+     */
+    export interface Request {
+      ids: string[];
+    }
+  }
+  export namespace Res {
+    /**
+     * Tables keyed by upper-case id, then by result key (Co, Cb, Cs; a block printed twice gets "#2").
+     * A table Revit ships as "No table" has no results. Missing names ids with no file in Folder. Unsupported maps
+     * an id to why it was not parsed: three-axis tables (a second Y such as Re or As/Ac) and fixed-width rows whose
+     * numbers run together; a wrong grid is worse than none.
+     *
+     */
+    export interface Response {
+      folder: string;
+      tables: {
+        [k: string]: {
+          [k: string]: AshraeGrid;
+        };
+      };
+      missing: string[];
+      unsupported: {
+        [k: string]: string;
+      };
+    }
+    /**
+     * One coefficient grid; the wire shape the web's loss-grid.ts reads. With Y present, Grid is number[][]: one row
+     * per Y, one column per X. With Y absent, Grid is number[] over X; a constant ("Co= 0.12") is one value with X
+     * empty. Grid is typed object because the wire is a union; Rows and Values build it.
+     *
+     */
+    export interface AshraeGrid {
+      title: string;
+      xLabel: string;
+      x: number[];
+      yLabel?: null | string;
+      y?: number[] | null;
+      grid: unknown;
+    }
+  }
+}
+
 /** Reconcile explicit loaded families to a saved spec or supplied draft, refusing plan drift per family and any family reloaded since the plan (its name now resolves to another id), and write the run receipt beside its operation output. */
 export namespace FamiliesApply {
   export namespace Req {
@@ -6298,6 +6932,10 @@ export interface HostOps {
   "data-table.apply": { request: DataTableApply.Req.Request; response: DataTableApply.Res.Response };
   "document.temporary.release": { request: DocumentTemporaryRelease.Req.Request; response: DocumentTemporaryRelease.Res.Response };
   "document.temporary.status": { request: DocumentTemporaryStatus.Req.Request; response: DocumentTemporaryStatus.Res.Response };
+  "ducts.apply": { request: DuctsApply.Req.Request; response: DuctsApply.Res.Response };
+  "ducts.family-patch": { request: DuctsFamilyPatch.Req.Request; response: DuctsFamilyPatch.Res.Response };
+  "ducts.snapshot": { request: DuctsSnapshot.Req.Request; response: DuctsSnapshot.Res.Response };
+  "ducts.tables": { request: DuctsTables.Req.Request; response: DuctsTables.Res.Response };
   "families.apply": { request: FamiliesApply.Req.Request; response: FamiliesApply.Res.Response };
   "families.capture": { request: FamiliesCapture.Req.Request; response: FamiliesCapture.Res.Response };
   "families.plan": { request: FamiliesPlan.Req.Request; response: FamiliesPlan.Res.Response };
@@ -6376,6 +7014,10 @@ export const hostOpKeys = [
   "data-table.apply",
   "document.temporary.release",
   "document.temporary.status",
+  "ducts.apply",
+  "ducts.family-patch",
+  "ducts.snapshot",
+  "ducts.tables",
   "families.apply",
   "families.capture",
   "families.plan",

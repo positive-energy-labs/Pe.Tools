@@ -1,3 +1,4 @@
+import type { Machine, MachineSession } from "./machine.ts";
 /**
  * Mention — a stable pointer the user puts in a prompt with `@`. It never retargets the thread; it
  * carries a capability row's key plus a timestamped snapshot of the facts Pea needs, so the first
@@ -9,7 +10,6 @@ import {
   capabilityKindSchema,
   capabilityPrincipals,
   type Capability,
-  type CapabilityCatalog,
   type CapabilityRecent,
 } from "./capability.ts";
 import { contributionKindSchema, parseContributionKey } from "./contribution.ts";
@@ -48,8 +48,17 @@ export function parseDocumentKey(key: string): { session: string; openId: string
   return slash <= 0 ? null : { session: rest.slice(0, slash), openId: rest.slice(slash + 1) };
 }
 
+type MentionMachine = {
+  readonly revit: {
+    readonly sessions:
+      | readonly Pick<MachineSession, "row" | "attachment" | "documents" | "documentsLeg">[]
+      | null;
+    readonly unclassifiedAttachments: Machine["revit"]["unclassifiedAttachments"];
+  };
+  readonly legs: Machine["legs"];
+};
 /** Product lifetimes only; SDK openIds remain in Machine's separate document evidence. */
-export const machineAttachments = (machine: CapabilityCatalog["machine"]) => [
+export const machineAttachments = (machine: MentionMachine) => [
   ...(machine.revit.sessions ?? []).flatMap((session) =>
     session.attachment ? [session.attachment] : [],
   ),
@@ -57,7 +66,7 @@ export const machineAttachments = (machine: CapabilityCatalog["machine"]) => [
 ];
 
 /** Open documents of every answering session as capability rows, so one search finds them. */
-export function documentRows(catalog: Pick<CapabilityCatalog, "machine">): Capability[] {
+export function documentRows(catalog: { machine: MentionMachine }): Capability[] {
   // A session with no id has no key to point through; `doc:/<openId>` would not parse back.
   return machineAttachments(catalog.machine).flatMap(({ session: sessionId, documents }) =>
     (documents ?? []).map((document) => ({
@@ -101,7 +110,7 @@ export function recentSegments(recent: Pick<CapabilityRecent, "path" | "isCloud"
 const sameDocument = (value: string) =>
   value.replace(/\//g, "\\").replace(/[{}]/g, "").toLowerCase();
 
-const inventoryKnown = (machine: CapabilityCatalog["machine"]) =>
+const inventoryKnown = (machine: MentionMachine) =>
   machine.revit.sessions !== null &&
   !!machine.legs.sessions?.observedAtUtc &&
   !!machine.legs.attachments?.observedAtUtc &&
@@ -117,7 +126,10 @@ const inventoryKnown = (machine: CapabilityCatalog["machine"]) =>
  * `doc:` row wins. One row per key (a file in several years' lists keeps its most recent entry).
  * They rank below every open document: the SDK's rank 1 (most recent) is -1 here.
  */
-export function recentRows(catalog: Pick<CapabilityCatalog, "recents" | "machine">): Capability[] {
+export function recentRows(catalog: {
+  machine: MentionMachine;
+  recents?: CapabilityRecent[];
+}): Capability[] {
   const open = new Set([
     ...machineAttachments(catalog.machine)
       .flatMap((session) => session.documents ?? [])
@@ -166,7 +178,7 @@ export function recentRows(catalog: Pick<CapabilityCatalog, "recents" | "machine
 /** Build the mention for a row, snapshotting the facts a first hop needs. Pure. */
 export function mentionOf(
   row: Capability,
-  catalog: Pick<CapabilityCatalog, "at" | "machine" | "recents">,
+  catalog: { at: string; machine: MentionMachine; recents?: CapabilityRecent[] },
 ): Mention {
   if (row.kind === "recent") {
     const recent = catalog.recents?.find((entry) => recentKey(entry) === row.key);

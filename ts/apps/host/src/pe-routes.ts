@@ -5,6 +5,12 @@ import { normalizePeError } from "@pe/host-contracts/pe-api";
 import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
 import { peRoutes, peRouteUrl, servePeRoute, matchPeRoute } from "@pe/agent-contracts/pe-api";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
+import { resolveSdkSession } from "./sdk-session.ts";
+import {
+  createDuctsAnalysis,
+  ductsNativeRead,
+  type DuctsAnalysisSources,
+} from "./ducts-analysis.ts";
 import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
 import type { MachineShareAdapter } from "./machine.ts";
 import { Deferred, Effect, Layer, Option, Stream } from "effect";
@@ -68,7 +74,11 @@ import { createProviders } from "./harness/providers.ts";
 import { peaMcpServer } from "./harness/adapter.ts";
 import { createHarnessThreads } from "./harness/threads.ts";
 import { hostOwnership } from "./host-ownership.ts";
-import { productHarnessThreadsPath, productRouteWorkPath } from "./product-paths.ts";
+import {
+  productDuctsAnalysesPath,
+  productHarnessThreadsPath,
+  productRouteWorkPath,
+} from "./product-paths.ts";
 import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
 import {
   createMachine,
@@ -140,6 +150,7 @@ export interface PeRoutesOptions {
   reportContext?: (thread: string) => AgentReportContext | null;
   /** The host log `log.read` pages; the host's own when absent. */
   log?: HostLog;
+  ductsAnalysis?: Omit<DuctsAnalysisSources, "readWork">;
 }
 
 const feedbackSchema = peRoutes["feedback.submit"].body;
@@ -154,6 +165,9 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 /** The route-document, Reading, capability and Families-view surface, host-owned. */
 export function createPeRoutes(options: PeRoutesOptions) {
   const work = new RouteWorkspace({ registrations: options.registrations, store: options.store });
+  const analysis = options.ductsAnalysis
+    ? createDuctsAnalysis({ ...options.ductsAnalysis, readWork: (key) => work.read(key, "ducts") })
+    : null;
   const views = new RouteViewStore();
   const resources = observeResources(work, options.heads, options.observeHostResource);
   const observeBase = options.markReadings ? options.markReadings(resources) : resources;
@@ -208,6 +222,28 @@ export function createPeRoutes(options: PeRoutesOptions) {
     const method = request.method;
     const declared = matchPeRoute(method, url.pathname);
     if (!declared || declared.route.owner !== "pe") return json({ error: "Unknown Pe route" }, 404);
+    if (declared.id === "ducts.analysis" || declared.id === "ducts.analysis-artifact") {
+      if (!analysis) return json({ error: "Ducts analysis is unavailable" }, 503);
+      try {
+        return declared.id === "ducts.analysis"
+          ? json(await analysis.read(peRoutes["ducts.analysis"].body.parse(await request.json())))
+          : await analysis.artifact(declared.params.id!);
+      } catch (error) {
+        const problem = error as { message?: unknown; statusCode?: unknown };
+        const status =
+          typeof problem?.statusCode === "number" &&
+          problem.statusCode >= 400 &&
+          problem.statusCode <= 599
+            ? problem.statusCode
+            : error instanceof z.ZodError
+              ? 400
+              : 409;
+        return json(
+          { error: typeof problem?.message === "string" ? problem.message : message(error) },
+          status,
+        );
+      }
+    }
     if (declared.id === "features.get") return json(hostDescriptor(resolveHostVersion()));
     if (declared.id === "machine.bootstrap") {
       const receipt = await alignBootstrap(await request.json(), caller, hostActionJournal());
@@ -906,6 +942,36 @@ export function makeHostPeRoutes(
   );
   const routes = createPeRoutes({
     registrations,
+    ductsAnalysis: {
+      root: productDuctsAnalysesPath(),
+      producer: { version: resolveHostVersion(), ...hostOwnership },
+      marks: documentMarks(bridge),
+      resolve: async (target) => {
+        if (!bridge) throw Error("No Revit bridge is available");
+        const session = await resolveSdkSession(bridge, {
+          bridgeSessionId: target.session,
+          openDocumentId: target.openId,
+        });
+        const document = session.state?.openDocuments.find((doc) => doc.openId === target.openId);
+        if (!document || document.isFamilyDocument)
+          throw Error("Ducts analysis requires the exact open project document");
+        return {
+          target,
+          address: document.address ?? null,
+          title: document.title,
+          process: { pid: session.processId, startUtcUnixMs: session.processStartUtcUnixMs },
+          provenance: {
+            sdk: session.resolved,
+            lane: session.lane,
+            sourceRoot: session.sourceRoot,
+            installedRoot: session.installedRoot,
+            buildStamp: session.buildStamp,
+            sdkSessionId: session.sdkSessionId,
+          },
+        };
+      },
+      call: ductsNativeRead(hostBaseUrl),
+    },
     store: fileRouteDocumentStore(productRouteWorkPath()),
     heads: threads.heads,
     navigation: {

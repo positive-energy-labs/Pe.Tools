@@ -4,11 +4,13 @@ export * from "./route-view.ts";
 export * from "./route-doc.ts";
 export * from "./reading.ts";
 export * from "./machine.ts";
+export * from "./discovery-machine.ts";
 export * from "./trichotomy.ts";
 export * from "./family.ts";
 export * from "./grounded-doc.ts";
 export * from "./families.ts";
 export * from "./takeoffs.ts";
+export * from "./ducts.ts";
 export * from "./rooms.ts";
 export * from "./parameter-links.ts";
 export * from "./settings.ts";
@@ -47,3 +49,4 @@ export * from "./plugin.ts";
 export * from "./plugin-runtime.ts";
 
 export * from "./thread-export.ts";
+export * from "./ducts-analysis.ts";

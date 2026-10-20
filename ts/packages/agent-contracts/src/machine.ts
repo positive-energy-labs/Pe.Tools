@@ -1,3 +1,4 @@
+import type { DiscoveryMachine } from "./discovery-machine.ts";
 import type {
   DocumentInfo,
   DocumentHoldings,
@@ -159,7 +160,7 @@ export interface MachineShare {
 export type MachineProvider = Provider;
 
 /** Resolver view of the host's evidence; an unread or failed leg never proves absence. */
-export function machineInventory(machine: Machine | undefined): TargetInventory {
+export function machineInventory(machine: Machine | DiscoveryMachine | undefined): TargetInventory {
   if (!machine || machine.revit.sessions === null) return { kind: "checking" };
   for (const key of ["sessions", "attachments"]) {
     const leg = machine.legs[key];

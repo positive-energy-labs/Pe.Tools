@@ -529,13 +529,42 @@ public sealed class PodTests {
             id = JObject.Parse(File.ReadAllText(Path.Combine(folder, "pod.json"))).Value<string>("id"),
             folder = Path.GetFileName(folder), directory = folder
         }).ToList();
-        if (key == "pod.list") return JObject.FromObject(new { pods = rows });
+        if (key == "pod.list") {
+            var input = JObject.FromObject(request);
+            if (input.Value<string>("projection") != "identity") return JObject.FromObject(new { pods = rows });
+            var selected = rows.Single(row => row.folder == input.Value<string>("folder"));
+            if (rows.Count(row => row.id == selected.id) != 1) throw new InvalidDataException("Duplicate Pod identity");
+            return JObject.FromObject(new { projection = "identity", identity = new { selected.id, selected.folder } });
+        }
         if (key != "pod.capture") throw new InvalidOperationException($"Unexpected native admission call: {key}");
         var id = JObject.FromObject(request).Value<string>("pod");
         var matches = rows.Where(item => item.id == id).ToList();
         if (matches.Count != 1) throw new InvalidDataException($"Pod id '{id}' is claimed by folders {string.Join(", ", matches.Select(item => item.folder))}.");
         var row = matches[0];
         return JObject.FromObject(new { row.id, row.folder, row.directory, contributions = Array.Empty<object>(), memberBundle = Bundle(row.directory) });
+    }
+
+    [Test]
+    public void Output_identity_uses_the_explicit_host_projection_and_checks_its_folder() {
+        var folder = this.WritePod("Renamed", "stable-id");
+        Assert.That(this._service.ResolveId(folder), Is.EqualTo("stable-id"));
+        var wrong = new ScriptPodPreparationService(this._pods, (key, request) => {
+            var input = JObject.FromObject(request);
+            Assert.That(key, Is.EqualTo("pod.list"));
+            Assert.That(input.Value<string>("projection"), Is.EqualTo("identity"));
+            Assert.That(input.Value<string>("folder"), Is.EqualTo("Renamed"));
+            return JObject.FromObject(new { projection = "identity", identity = new { id = "stable-id", folder = "Other" } });
+        });
+        Assert.Throws<InvalidDataException>(() => wrong.ResolveId(folder));
+    }
+
+    [Test]
+    public void Admission_dependency_timeout_is_not_script_cancellation() {
+        var folder = this.WritePod("Default", "default");
+        var service = new ScriptPodPreparationService(this._pods, (_, _) => throw new OperationCanceledException("HTTP deadline"));
+        var error = Assert.Throws<InvalidDataException>(() => service.ResolveId(folder));
+        Assert.That(error!.Message, Does.Contain("Host admission 'pod.list'").And.Contain("10s dependency deadline"));
+        Assert.That(error.InnerException, Is.TypeOf<OperationCanceledException>());
     }
 
     [Test]

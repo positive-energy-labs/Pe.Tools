@@ -1,3 +1,4 @@
+import { readHoldings } from "./holdings-reading.ts";
 import { Effect, Option } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
@@ -5,6 +6,7 @@ import {
   canonicalRouteInput,
   type SdkSessionSelection,
   type SdkReading,
+  type Machine,
 } from "@pe/agent-contracts";
 import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
 import { join } from "node:path";
@@ -35,7 +37,8 @@ import { runHostChild } from "./host-child.ts";
  * envelope was ever produced) and is reported as a plain 504, not as a hand-made `unresponsive`
  * result that would look like an SDK verdict without being one.
  *
- * /instances/readings and the shared Reading owner relay SDK reads. Lifecycle mutations are
+ * Holdings pages derive from canonical SDK-probed Machine; they are not SDK envelopes.
+ * /instances/readings and the shared Reading owner relay other SDK reads. Lifecycle mutations are
  * host-admitted Instances actions (instances-actions.ts).
  */
 
@@ -135,6 +138,8 @@ export const runPeRevitCli: SessionCliRunner = (args) =>
 /** The read-only SDK verb a Reading names. Dialogs lists windows; dismissal is an Instances action. */
 export function sdkReadingArgs(request: SdkReading): string[] {
   switch (request.read) {
+    case "holdings":
+      throw Error("Holdings are read from canonical Machine.");
     case "sessions":
       return sessionStatusArgs(request.session, request.all);
     case "doctor":
@@ -156,12 +161,16 @@ export function sdkReadingArgs(request: SdkReading): string[] {
 const sdkReads = new OwnerReads();
 export function observeSdkReading(
   request: SdkReading,
+  readMachine: () => Machine,
   accept: (value: OwnerValue<unknown>) => void,
   subscribe: (notify: () => void) => () => void = () => () => {},
 ) {
   return sdkReads.observe(
     canonicalRouteInput(request),
     async () => {
+      if (request.read === "holdings") {
+        return readHoldings(readMachine(), request);
+      }
       const args = sdkReadingArgs(request);
       const result = await Effect.runPromise(
         executeSessionCli(args, runPeRevitCli, STATUS_TIMEOUT_MS, {
@@ -184,36 +193,58 @@ export function observeSdkReading(
   );
 }
 
-export const instancesReadingsRoute = HttpRouter.add("GET", "/instances/readings", (req) =>
-  Effect.tryPromise(async () => {
-    const { sdkReadingSchema } = await import("@pe/agent-contracts");
-    const query = new URL(req.url, "http://host").searchParams;
-    if ([...query.keys()].some((key) => !["read", "session", "year", "all", "tail"].includes(key)))
-      throw Error("Unknown SDK reading field; session accepts an id-or-pid object");
-    const request = sdkReadingSchema.parse({
-      kind: "sdk",
-      read: query.get("read"),
-      ...(query.has("tail") ? { tail: Number(query.get("tail")) } : {}),
-      ...(query.has("session") ? { session: JSON.parse(query.get("session")!) } : {}),
-      ...(query.has("year") ? { year: query.get("year") } : {}),
-      ...(query.has("all") ? { all: query.get("all") === "true" } : {}),
-    });
-    const value = await new Promise<unknown>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        release();
-        reject(Error("SDK reading timed out"));
-      }, STATUS_TIMEOUT_MS + 1000);
-      const release = observeSdkReading(request, (result) => {
-        clearTimeout(timer);
-        release();
-        if ("error" in result) reject(Error(result.error));
-        else resolve(result.value);
+export const instancesReadingsRoute = (readMachine: () => Machine) =>
+  HttpRouter.add("GET", "/instances/readings", (req) =>
+    Effect.tryPromise(async () => {
+      const { sdkReadingSchema } = await import("@pe/agent-contracts");
+      const query = new URL(req.url, "http://host").searchParams;
+      if (
+        [...query.keys()].some(
+          (key) =>
+            ![
+              "read",
+              "session",
+              "year",
+              "all",
+              "tail",
+              "processStartUtc",
+              "openId",
+              "limit",
+              "cursor",
+              "section",
+            ].includes(key),
+        )
+      )
+        throw Error("Unknown SDK reading field; session accepts an id-or-pid object");
+      const request = sdkReadingSchema.parse({
+        kind: "sdk",
+        read: query.get("read"),
+        ...(query.has("section") ? { section: query.get("section") } : {}),
+        ...(query.has("processStartUtc") ? { processStartUtc: query.get("processStartUtc") } : {}),
+        ...(query.has("openId") ? { openId: query.get("openId") } : {}),
+        ...(query.has("limit") ? { limit: Number(query.get("limit")) } : {}),
+        ...(query.has("cursor") ? { cursor: query.get("cursor") } : {}),
+        ...(query.has("tail") ? { tail: Number(query.get("tail")) } : {}),
+        ...(query.has("session") ? { session: JSON.parse(query.get("session")!) } : {}),
+        ...(query.has("year") ? { year: query.get("year") } : {}),
+        ...(query.has("all") ? { all: query.get("all") === "true" } : {}),
       });
-    });
-    return Response.jsonUnsafe(value);
-  }).pipe(
-    Effect.catch((error) =>
-      Effect.succeed(Response.jsonUnsafe({ error: String(error) }, { status: 503 })),
+      const value = await new Promise<unknown>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          release();
+          reject(Error("SDK reading timed out"));
+        }, STATUS_TIMEOUT_MS + 1000);
+        const release = observeSdkReading(request, readMachine, (result) => {
+          clearTimeout(timer);
+          release();
+          if ("error" in result) reject(Error(result.error));
+          else resolve(result.value);
+        });
+      });
+      return Response.jsonUnsafe(value);
+    }).pipe(
+      Effect.catch((error) =>
+        Effect.succeed(Response.jsonUnsafe({ error: String(error) }, { status: 503 })),
+      ),
     ),
-  ),
-);
+  );

@@ -44,6 +44,7 @@ describe("fixture census", () => {
       "/bind",
       "/captures",
       "/data-tables",
+      "/ducts",
       "/ops",
       "/parameter-links",
       "/rooms",
@@ -61,7 +62,7 @@ describe("fixture census", () => {
       canonicalReviewUrl: `/tool/${encodeURIComponent("route:@snowdon-circuits/routes/voltage-drop/index.js")}`,
       fixtureKind: "live-route",
     });
-    expect(census.missingCanonicalFixtures).toBe(7);
+    expect(census.missingCanonicalFixtures).toBe(8);
   });
 
   it("uses real manifest seed names for every demo review URL", () => {

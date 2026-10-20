@@ -403,3 +403,55 @@ test("a Page written after the catalog snapshot is addressable at once, by any c
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+test("HTTP catalog limits never transport canonical per-element holdings", async () => {
+  const machine = machineFixture([{ session: "s1", documents: null }]);
+  Object.assign(machine.revit.sessions![0]!, {
+    holdings: [
+      {
+        openId: "o1",
+        title: "Fixture",
+        holdings: {
+          elements: Array.from({ length: 53139 }, (_, id) => ({
+            id,
+            category: "fixture",
+            name: "HELD_SENTINEL",
+            changedSinceSync: null,
+            requesters: [],
+          })),
+          empty: false,
+          savedNotSynced: null,
+          unsaved: false,
+          worksets: [],
+          workshared: true,
+        },
+      },
+    ],
+  });
+  vi.stubGlobal("fetch", async () => Response.json({ operations: [], result: { recents: [] } }));
+  try {
+    const source = createCapabilityCatalogSource({
+      hostBaseUrl: "http://fixture",
+      registrations: [],
+      machine: async () => machine,
+    });
+    const routes = createPeRoutes({
+      registrations: [],
+      heads: { observe: () => () => {} },
+      store: { getState: async () => null, setState: async () => {} },
+      capabilityCatalog: source,
+    });
+    for (const query of ["", "?query=fixture&limit=10"]) {
+      const response = await routes.fetch(new Request(`http://fixture/pe/capabilities${query}`));
+      expect(response.status).toBe(200);
+      const text = await response.text();
+      expect(text.includes("HELD_SENTINEL")).toBe(false);
+      expect(JSON.stringify(JSON.parse(text).machine).length).toBeLessThan(65536);
+      expect(JSON.parse(text).machine.revit.sessions[0].holdings[0].holdings.elementCount).toBe(
+        53139,
+      );
+    }
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});

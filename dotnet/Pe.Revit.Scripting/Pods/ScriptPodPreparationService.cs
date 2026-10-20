@@ -1,5 +1,6 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Pe.Bcl.Compat;
 using Pe.Shared.HostContracts.Transport;
 using Pe.Shared.Scripting.Execution;
 using Pe.Revit.Scripting.Storage;
@@ -77,9 +78,16 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null, Func<st
     public string PodsRoot { get; } = podsRoot ?? RevitScriptingStorageLocations.GetDefaultBasePath();
 
     // These two reads are host-local; neither may enter the Revit bridge while native code awaits it.
-    private JObject ReadAdmission(string key, object request) => admission is null
-        ? TsHostCallClient.Call<JObject>(key, request, TimeSpan.FromSeconds(10))
-        : admission(key, request);
+    private JObject ReadAdmission(string key, object request) {
+        try {
+            return admission is null
+                ? TsHostCallClient.Call<JObject>(key, request, TimeSpan.FromSeconds(10))
+                : admission(key, request);
+        } catch (OperationCanceledException exception) {
+            // This dependency owns only its HTTP deadline, never the script's cancellation token.
+            throw new InvalidDataException($"Host admission '{key}' exceeded its 10s dependency deadline.", exception);
+        }
+    }
 
     public PodCaptureResult Capture(string podId) {
         try {
@@ -158,9 +166,13 @@ public sealed class ScriptPodPreparationService(string? podsRoot = null, Func<st
 
     /// <summary>Resolve a local output folder through the same admitted host inventory.</summary>
     public string ResolveId(string folder) {
-        var rows = this.ReadAdmission("pod.list", new { })["pods"] ?? new JArray();
-        var matches = rows.Where(row => string.Equals(FullPath(this.PodsRoot, row.Value<string>("folder")!), Path.GetFullPath(folder), StringComparison.OrdinalIgnoreCase)).ToList();
-        if (matches.Count != 1 || matches[0].Value<string>("id") is not { } id || rows.Count(row => row.Value<string>("id") == id) != 1)
+        var relative = BclCompat.GetRelativePath(this.PodsRoot, folder).Replace('\\', '/');
+        _ = FullPath(this.PodsRoot, relative);
+        var response = this.ReadAdmission("pod.list", new { projection = "identity", folder = relative });
+        var identity = response["identity"];
+        if (response.Value<string>("projection") != "identity" || identity?.Value<string>("id") is not { } id
+            || identity.Value<string>("folder") is not { } selected
+            || !string.Equals(FullPath(this.PodsRoot, selected), Path.GetFullPath(folder), StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException($"No unique admitted pod owns output folder '{folder}'.");
         return id;
     }

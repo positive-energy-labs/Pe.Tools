@@ -3,7 +3,7 @@ import { peClientScript } from "@pe/agent-contracts/pe-api";
 // @vitest-environment jsdom
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { machineInventory, type Machine } from "@pe/agent-contracts";
+import { machineInventory, discoveryMachine, type DiscoveryMachine } from "@pe/agent-contracts";
 import { SessionCard, SessionRow } from "#/components/lang/session";
 import { custodyOf, phaseOf, PHASE_TONE, executionRefusal, pidOf } from "#/machine/session";
 import { BAY_YOURS_25, CHECKOUT_HOT, MACHINE_SEEDS } from "./seeds";
@@ -161,10 +161,10 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
       }),
     ),
   );
-  const map = (await peFind.execute({ limit: 8 }, undefined)) as { machine: Machine };
+  const map = (await peFind.execute({ limit: 8 }, undefined)) as { machine: DiscoveryMachine };
   expect(map, JSON.stringify(map)).not.toHaveProperty("isError");
-  expect(map.machine).toEqual(machine);
-  for (const [index, session] of map.machine.revit.sessions!.entries()) {
+  expect(map.machine).toEqual(discoveryMachine(machine));
+  for (const [index, session] of machine.revit.sessions!.entries()) {
     const phase = phaseOf(session.row);
     const facts = {
       year: session.row.year,
@@ -205,7 +205,9 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
   expect(map.machine.revit.sessions![2]!.attachment).toBeNull();
   expect(map.machine.revit.sessions![3]!.documents![0]!.persistence).toBeNull();
   expect(screen.getByText("persistence unknown")).toBeTruthy();
-  expect(map.machine.revit.sessions![3]!.holdings).toEqual(knownHoldings);
+  expect(map.machine.revit.sessions![3]!.holdings).toEqual(
+    discoveryMachine(machine).revit.sessions![3]!.holdings,
+  );
   expect(map.machine.revit.sessions![4]!.holdings).toBeNull();
   expect(map.machine.revit.sessions![4]!.documents).toBeNull();
   expect(

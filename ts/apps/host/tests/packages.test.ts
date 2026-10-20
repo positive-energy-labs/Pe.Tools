@@ -10,6 +10,7 @@ import {
   kindOfMember,
   listPackages,
   readPackage,
+  resolvePackageIdentity,
 } from "../src/packages.ts";
 
 let root: string;
@@ -101,6 +102,31 @@ test("directory links cannot admit files outside the package", async () => {
   );
   await expect(capturePackage(pod)).rejects.toThrow(/links/);
 });
+
+test("output identity keeps selected admission bounds and folder link refusal", async () => {
+  await expect(resolvePackageIdentity("Original", root)).resolves.toEqual({
+    id: "mixed",
+    folder: "Original",
+  });
+  await put("Original", "assets/large.bin", "");
+  const large = await open(join(root, "Original/assets/large.bin"), "r+");
+  await large.truncate(64 * 1024 * 1024 + 1);
+  await large.close();
+  await expect(resolvePackageIdentity("Original", root)).rejects.toThrow(/assets\/large.bin/);
+  await symlink(join(root, "Original"), join(root, "Alias"), "junction");
+  await expect(resolvePackageIdentity("Alias", root)).rejects.toThrow(/links/);
+  await put("Broken", "pod.json", "{");
+  await expect(resolvePackageIdentity("Broken", root)).rejects.toThrow();
+});
+
+test.skipIf(process.platform === "win32")(
+  "output identity refuses real case-colliding selected members",
+  async () => {
+    await put("Original", "assets/Case.json", "{}");
+    await put("Original", "assets/case.json", "{}");
+    await expect(resolvePackageIdentity("Original", root)).rejects.toThrow(/Case-colliding/);
+  },
+);
 
 test("canonical skill directories use the same bounded admission without a Pod manifest", async () => {
   await put("Skills", "inspect/SKILL.md", "Inspect");

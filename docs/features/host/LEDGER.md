@@ -209,6 +209,7 @@ design-system ledger, not restated here.
 - 2026-08-16 — (/settings) Hand-rolled busy/error state per command: replaced by `useVerb`, which serializes open/re-read/validate/save.
 
 ## Owed
+- 2026-10-14: the Windows `guard-relaunch.test.ts` fixture left `C:\Users\kaitp\AppData\Local\Temp\pe-relaunch-7X7Ug6` after `rmSync` returned EPERM. The isolated test passed; automatic approval review rejected explicit folder cleanup as blocked by policy. Remove this test-owned residue when permitted.
 - Tray UX note round 3: mixed-DPI second-monitor acceptance and Revit-focused acceptance remain unproven. The isolated WebView2 run proves simultaneous windows and unchanged foreground HWND; it uses controlled notice and device-environment fixtures, not installed-host behavior.
 - Tray UX merge gate: repo guards inherited two failures at c25f8737: harness/install.ts product-environment paths and scaffold count 94 above 93. Fix in the owning campaign; note wave does not raise the ceiling or change installer storage policy.
 

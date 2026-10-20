@@ -16,10 +16,12 @@ import { Route as DataTablesRouteImport } from "./routes/data-tables";
 import { Route as DesignSystemRouteImport } from "./routes/design-system";
 import { Route as DocLabRouteImport } from "./routes/doc-lab";
 import { Route as DuctLossRouteImport } from "./routes/duct-loss";
+import { Route as DuctsRouteImport } from "./routes/ducts";
 import { Route as FamiliesRouteImport } from "./routes/families";
 import { Route as FamilyRouteImport } from "./routes/family";
 import { Route as GrillesRouteImport } from "./routes/grilles";
 import { Route as LabRouteImport } from "./routes/lab";
+import { Route as MapRouteImport } from "./routes/map";
 import { Route as OpenRouteImport } from "./routes/open";
 import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as ParamTablesRouteImport } from "./routes/param-tables";
@@ -77,6 +79,11 @@ const DuctLossRoute = DuctLossRouteImport.update({
   path: "/duct-loss",
   getParentRoute: () => rootRouteImport,
 } as any);
+const DuctsRoute = DuctsRouteImport.update({
+  id: "/ducts",
+  path: "/ducts",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const FamiliesRoute = FamiliesRouteImport.update({
   id: "/families",
   path: "/families",
@@ -95,6 +102,11 @@ const GrillesRoute = GrillesRouteImport.update({
 const LabRoute = LabRouteImport.update({
   id: "/lab",
   path: "/lab",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const MapRoute = MapRouteImport.update({
+  id: "/map",
+  path: "/map",
   getParentRoute: () => rootRouteImport,
 } as any);
 const OpenRoute = OpenRouteImport.update({
@@ -213,10 +225,12 @@ export interface FileRoutesByFullPath {
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
   "/duct-loss": typeof DuctLossRoute;
+  "/ducts": typeof DuctsRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
   "/lab": typeof LabRoute;
+  "/map": typeof MapRoute;
   "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
@@ -247,10 +261,12 @@ export interface FileRoutesByTo {
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
   "/duct-loss": typeof DuctLossRoute;
+  "/ducts": typeof DuctsRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
   "/lab": typeof LabRoute;
+  "/map": typeof MapRoute;
   "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
@@ -282,10 +298,12 @@ export interface FileRoutesById {
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
   "/duct-loss": typeof DuctLossRoute;
+  "/ducts": typeof DuctsRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
   "/lab": typeof LabRoute;
+  "/map": typeof MapRoute;
   "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
@@ -318,10 +336,12 @@ export interface FileRouteTypes {
     | "/design-system"
     | "/doc-lab"
     | "/duct-loss"
+    | "/ducts"
     | "/families"
     | "/family"
     | "/grilles"
     | "/lab"
+    | "/map"
     | "/open"
     | "/ops"
     | "/param-tables"
@@ -352,10 +372,12 @@ export interface FileRouteTypes {
     | "/design-system"
     | "/doc-lab"
     | "/duct-loss"
+    | "/ducts"
     | "/families"
     | "/family"
     | "/grilles"
     | "/lab"
+    | "/map"
     | "/open"
     | "/ops"
     | "/param-tables"
@@ -386,10 +408,12 @@ export interface FileRouteTypes {
     | "/design-system"
     | "/doc-lab"
     | "/duct-loss"
+    | "/ducts"
     | "/families"
     | "/family"
     | "/grilles"
     | "/lab"
+    | "/map"
     | "/open"
     | "/ops"
     | "/param-tables"
@@ -421,10 +445,12 @@ export interface RootRouteChildren {
   DesignSystemRoute: typeof DesignSystemRoute;
   DocLabRoute: typeof DocLabRoute;
   DuctLossRoute: typeof DuctLossRoute;
+  DuctsRoute: typeof DuctsRoute;
   FamiliesRoute: typeof FamiliesRoute;
   FamilyRoute: typeof FamilyRoute;
   GrillesRoute: typeof GrillesRoute;
   LabRoute: typeof LabRoute;
+  MapRoute: typeof MapRoute;
   OpenRoute: typeof OpenRoute;
   OpsRoute: typeof OpsRoute;
   ParamTablesRoute: typeof ParamTablesRoute;
@@ -498,6 +524,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DuctLossRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/ducts": {
+      id: "/ducts";
+      path: "/ducts";
+      fullPath: "/ducts";
+      preLoaderRoute: typeof DuctsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/families": {
       id: "/families";
       path: "/families";
@@ -524,6 +557,13 @@ declare module "@tanstack/react-router" {
       path: "/lab";
       fullPath: "/lab";
       preLoaderRoute: typeof LabRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/map": {
+      id: "/map";
+      path: "/map";
+      fullPath: "/map";
+      preLoaderRoute: typeof MapRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/open": {
@@ -695,10 +735,12 @@ const rootRouteChildren: RootRouteChildren = {
   DesignSystemRoute: DesignSystemRoute,
   DocLabRoute: DocLabRoute,
   DuctLossRoute: DuctLossRoute,
+  DuctsRoute: DuctsRoute,
   FamiliesRoute: FamiliesRoute,
   FamilyRoute: FamilyRoute,
   GrillesRoute: GrillesRoute,
   LabRoute: LabRoute,
+  MapRoute: MapRoute,
   OpenRoute: OpenRoute,
   OpsRoute: OpsRoute,
   ParamTablesRoute: ParamTablesRoute,

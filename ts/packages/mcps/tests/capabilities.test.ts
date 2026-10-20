@@ -1304,6 +1304,43 @@ test("an exact-open turn Target reads and writes route Work under its document's
   }
 });
 
+test("route:ducts.propose refuses a thread with no bound document and writes the bound document's Work", async () => {
+  // Wave 3 (2026-10-19): an unbound propose wrote the Target-less `ducts/target:` Work, and the
+  // document-bound page read the document's record, so the person saw a blank scene.
+  fakeRuntimeHost("http://127.0.0.1:9");
+  const writes: URL[] = [];
+  vi.stubGlobal("fetch", async (input: string | URL | Request) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+    if (!url.pathname.includes("/route-state/")) throw Error(`unexpected ${url.pathname}`);
+    writes.push(url);
+    return Response.json({ route: "ducts", revision: 3, doc: {}, ok: true });
+  });
+  const proposal = {
+    key: "route:ducts.propose",
+    input: { patches: [{ path: ["subject", "proposal"], value: { value: [1, 2] } }] },
+    expectedRevision: 2,
+    timeoutSeconds: 30,
+  };
+  try {
+    const unbound = (await run(peDo, proposal, { ...turn, defaultTarget: null })) as {
+      isError?: boolean;
+      content?: string;
+    };
+    expect(unbound.isError).toBe(true);
+    expect(unbound.content).toContain("none is bound");
+    expect(unbound.content).toContain("select the open document in the composer");
+    expect(writes).toHaveLength(0);
+
+    const bound = (await run(peDo, proposal)) as { ok: boolean; target: unknown };
+    expect(bound.ok).toBe(true);
+    expect(writes.map((url) => url.searchParams.get("target"))).toEqual(["C:\\Models\\A.rvt"]);
+  } finally {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  }
+});
+
 test("an explicit document detour leaves the next call on the thread head default", async () => {
   fakeRuntimeHost("http://127.0.0.1:9");
   const targets: string[][] = [];
@@ -1760,4 +1797,47 @@ test("settled thread history is discoverable and pe_read uses its bounded host r
     result: { items: [{ id: "settled-thread" }], hasMore: false },
   });
   expect(calls).toEqual(["/pe/capabilities", "/pe/thread-history"]);
+});
+
+test("headless Ducts analysis is discoverable and pe_read needs no mounted thread view", async () => {
+  fakeRuntimeHost("http://127.0.0.1:9");
+  expect(catalog().capabilities.find((row) => row.key === "route:ducts.analysis")).toMatchObject({
+    needs: "nothing",
+    mutates: false,
+  });
+  const input = {
+    source: { kind: "artifact", id: "a".repeat(64) },
+    selector: { kind: "document" },
+  };
+  const calls: string[] = [];
+  vi.stubGlobal("fetch", async (url: string | URL | Request, init?: RequestInit) => {
+    const path = new URL(url instanceof Request ? url.url : String(url)).pathname;
+    calls.push(path);
+    if (path === "/pe/capabilities") return Response.json(catalog());
+    if (path === "/pe/ducts/analysis") {
+      expect(typeof init?.body).toBe("string");
+      expect(JSON.parse(init?.body as string)).toMatchObject(input);
+      return Response.json({
+        target: { session: "retained-session", openId: "retained-open" },
+        artifact: { url: "/pe/ducts/analyses/retained/artifact" },
+      });
+    }
+    throw Error(`Unexpected analysis request ${path}`);
+  });
+  expect(
+    await run(peRead, { key: "route:ducts.analysis", input, timeoutSeconds: 30 }),
+  ).toMatchObject({
+    ok: true,
+    target: { session: "retained-session", document: "retained-open" },
+    result: { artifact: { url: "http://127.0.0.1:9/pe/ducts/analyses/retained/artifact" } },
+  });
+  expect(calls).toEqual(["/pe/capabilities", "/pe/ducts/analysis"]);
+});
+
+test("Ducts discovery exposes artifact-only canonical apply-request without another tool", () => {
+  const rows = catalog().capabilities.filter((row) => row.key === "route:ducts.analysis");
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({ needs: "nothing", mutates: false });
+  expect(rows[0]!.description).toContain("does not stage Work or write Revit");
+  expect(JSON.stringify(rows[0]!.input)).toContain("apply-request");
 });

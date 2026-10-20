@@ -48,7 +48,7 @@ test("matching SDK process cannot authorize a foreign bridge owner", async () =>
 });
 
 test.each([undefined, { id: "4242" }, { pid: 4242 }])(
-  "SDK owns the ladder for %j; digits never become pid",
+  "SDK owns the ladder for %j (one owned attachment selects its pid); digits never become pid",
   async (selection) => {
     const calls: readonly string[][] = [];
     const read = async (args: readonly string[]) => {
@@ -69,7 +69,7 @@ test.each([undefined, { id: "4242" }, { pid: 4242 }])(
           ? "id" in selection
             ? ["--id", selection.id]
             : ["--pid", String(selection.pid)]
-          : []),
+          : ["--pid", String(socket.processId)]),
         "--json",
       ],
     ]);

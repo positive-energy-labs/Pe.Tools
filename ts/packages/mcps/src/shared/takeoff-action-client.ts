@@ -240,9 +240,13 @@ export async function submitAction(
     inFlight().delete(admission.id);
   }
 }
+export class ActionResultError extends Error {
+  constructor(readonly action: ActionReceipt | DetachedAction) {
+    super(`${action.id}: ${action.state}: ${"error" in action ? action.error : "outcome pending"}`);
+  }
+}
 export function actionResult(row: ActionReceipt | DetachedAction): unknown {
-  if (row.state !== "succeeded")
-    throw Error(`${row.id}: ${row.state}: ${"error" in row ? row.error : "outcome pending"}`);
+  if (row.state !== "succeeded") throw new ActionResultError(row);
   return row.result;
 }
 

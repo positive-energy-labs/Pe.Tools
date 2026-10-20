@@ -193,6 +193,7 @@ export async function capturePackage(
 
 export async function captureDirectory(
   directory: string,
+  manifestOnly = false,
 ): Promise<{ members: PackageMember[]; diagnostics: MemberIssue[] }> {
   const members: PackageMember[] = [];
   const diagnostics: MemberIssue[] = [];
@@ -208,6 +209,7 @@ export async function captureDirectory(
       a.name.localeCompare(b.name),
     )) {
       const path = relative ? `${relative}/${entry.name}` : entry.name;
+      if (manifestOnly && path !== "pod.json") continue;
       try {
         if (!isPackageMember(path)) continue;
         if (names.has(path.toLowerCase())) throw Error("Case-colliding package path");
@@ -274,6 +276,53 @@ export async function captureDirectory(
   };
   await walk("");
   return { members, diagnostics };
+}
+
+/** Fresh global identity claims, followed by full admission of only the selected folder. */
+export async function resolvePackageIdentity(folder: string, podsRoot = productPodsRootPath()) {
+  if (packageMemberPathSchema.parse(folder).includes("/"))
+    throw Error("An output folder must name one immediate Pod directory");
+  const claims: { id: string; folder: string; manifestSha256: string }[] = [];
+  const entries = await readdir(podsRoot, { withFileTypes: true });
+  if (entries.filter((entry) => entry.name.toLowerCase() === folder.toLowerCase()).length !== 1)
+    throw Error("No unique output Pod folder");
+  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+    if (entry.isSymbolicLink()) {
+      if (entry.name.toLowerCase() === folder.toLowerCase())
+        throw Error("Pod folders cannot be links");
+      continue;
+    }
+    try {
+      const captured = await captureDirectory(join(podsRoot, entry.name), true);
+      const manifest = captured.members.find((member) => member.path === "pod.json");
+      if (!manifest || captured.diagnostics.some((issue) => issue.severity === "error"))
+        throw Error("Pod has no admitted pod.json");
+      const value = JSON.parse(
+        Buffer.from(manifest.bytes)
+          .toString("utf8")
+          .replace(/^\uFEFF/, ""),
+      );
+      claims.push({
+        id: packageIdSchema.parse(value?.id),
+        folder: entry.name,
+        manifestSha256: manifest.sha256,
+      });
+    } catch (error) {
+      if (entry.name.toLowerCase() === folder.toLowerCase()) throw error;
+    }
+  }
+  const selected = claims.find((claim) => claim.folder.toLowerCase() === folder.toLowerCase());
+  if (!selected || claims.filter((claim) => claim.id === selected.id).length !== 1)
+    throw Error("No unique admitted Pod owns this output folder; duplicate manifest identity");
+  const pod = await readFolder(join(podsRoot, selected.folder), selected.folder);
+  if (
+    pod.id !== selected.id ||
+    pod.members.find((member) => member.path === "pod.json")?.sha256 !== selected.manifestSha256
+  )
+    throw Error("Pod manifest changed during identity admission");
+  await capturePackage(pod, podsRoot);
+  return { id: pod.id, folder: pod.folder };
 }
 
 async function readFolder(directory: string, folder: string): Promise<AdmittedPackage> {

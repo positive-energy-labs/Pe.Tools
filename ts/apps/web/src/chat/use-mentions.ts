@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import {
   machineAttachments,
+  discoveryMachine,
+  type DiscoveryMachine,
   type Machine,
   documentRows,
   findCapabilities,
@@ -115,11 +117,14 @@ export function mentionQuery(text: string, caret: number): { start: number; quer
 /** The catalog the `@` menu reads: every other row as the catalog read it, the open documents
  * from the live inventory (a closed document is no target, and a catalog may be old), and the
  * recent ones less whatever the inventory says is open now. */
-export function liveCatalog(catalog: CapabilityCatalog, machine: Machine): CapabilityCatalog {
+export function liveCatalog(
+  catalog: CapabilityCatalog,
+  machine: Machine | DiscoveryMachine,
+): CapabilityCatalog {
   const live = {
     ...catalog,
     at: machine.observedAtUtc,
-    machine,
+    machine: discoveryMachine(machine),
   };
   return {
     ...live,

@@ -153,6 +153,8 @@ export function definePeApi<
     | "capabilityCatalogSchema"
     | "navigationSnapshotSchema"
     | "routeStatePatchSchema"
+    | "ductsAnalysisRequestSchema"
+    | "ductsAnalysisResponseSchema"
     | "familiesViewSchema"
     | "familiesViewCommandSchema"
     | "familiesViewAckSchema"
@@ -715,6 +717,25 @@ export function definePeApi<
       "human",
       "pe",
       "human",
+    ),
+    "ducts.analysis": route(
+      "POST",
+      "/pe/ducts/analysis",
+      schemas.ductsAnalysisRequestSchema as S["ductsAnalysisRequestSchema"],
+      schemas.ductsAnalysisResponseSchema as S["ductsAnalysisResponseSchema"],
+      "read",
+      "pe",
+      "read",
+    ),
+    "ducts.analysis-artifact": route(
+      "GET",
+      "/pe/ducts/analyses/:id/artifact",
+      none,
+      z.unknown(),
+      "read",
+      "pe",
+      "read",
+      "asset",
     ),
     "view.get": route("GET", "/pe/route-view/families", none, object, "read", "pe", "read"),
     "view.publish": route(

@@ -40,7 +40,7 @@ public static class Kernel
     public static List<CurveLoop> ToLoops(List<double[]> outer, IEnumerable<List<double[]>> holes, double z = 0) =>
         Rings(outer, holes).Select(r => ToLoop(r, z)).ToList();
 
-    private static CurveLoop ToLoop(List<double[]> ring, double z)
+    public static CurveLoop ToLoop(List<double[]> ring, double z)
     {
         var cl = new CurveLoop();
         for (int i = 0; i < ring.Count; i++)

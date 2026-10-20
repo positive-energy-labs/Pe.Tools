@@ -28,8 +28,14 @@ const config = defineConfig(({ mode, command }) => {
     if (rootEnv[key] && !process.env[key]) process.env[key] = rootEnv[key];
   }
 
+  // Dev-only reading source for /ducts: a saved `ducts.snapshot` (`src/ducts/route.tsx`).
+  const ductsFixture = mode === "development" ? process.env.PE_DUCTS_FIXTURE : undefined;
+
   return {
     define: {
+      "import.meta.env.VITE_DUCTS_FIXTURE": JSON.stringify(
+        ductsFixture ? `/@fs/${ductsFixture.replaceAll("\\", "/")}` : "",
+      ),
       __PE_WEB_RECEIPT_BUILD__: receiptBuildDefines(command === "build" ? "release" : "dev")
         .__PE_WEB_RECEIPT_BUILD__,
       "import.meta.env.PE_RUNTIME_SERVICE": JSON.stringify(
@@ -72,7 +78,11 @@ const config = defineConfig(({ mode, command }) => {
       allowedHosts: ["127.0.0.1"],
       cors: false,
       fs: {
-        allow: [searchForWorkspaceRoot(import.meta.dirname), familyFixturesDir],
+        allow: [
+          searchForWorkspaceRoot(import.meta.dirname),
+          familyFixturesDir,
+          ...(ductsFixture ? [dirname(ductsFixture)] : []),
+        ],
       },
       proxy: process.env.PE_TOOLS_HOST_BASE_URL
         ? devHostProxy(process.env.PE_TOOLS_HOST_BASE_URL)

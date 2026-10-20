@@ -54,7 +54,14 @@ export async function resolveSdkSession(
   const held = attachments[0];
   if (held && (!held.connected || !held.processId || !held.processStartUtcUnixMs))
     throw refuse("The exact bridge attachment is no longer available");
-  const argv = docListArgv(selection ?? (held ? { pid: held.processId } : {}));
+  // ponytail: one owned attachment → its pid; the SDK's unscoped ladder (cwd-project) costs ~40 s against a 30 s budget. Owed: SDK ladder speed.
+  const owned = held
+    ? []
+    : (await Effect.runPromise(bridge.list)).filter(
+        (s) => s.connected && s.processId && !runtimeOwnerRejection(hostOwnership, s),
+      );
+  const only = held ?? (owned.length === 1 ? owned[0] : undefined);
+  const argv = docListArgv(selection ?? (only ? { pid: only.processId } : {}));
   const key = JSON.stringify(argv);
   let cache = resolutions.get(bridge);
   if (!cache) resolutions.set(bridge, (cache = new Map()));

@@ -45,7 +45,8 @@ import {
 } from "@pe/agent-contracts";
 import { z } from "zod";
 import { admitTakeoffAction, recoverTakeoffAction, fileVersion } from "./takeoff-actions.ts";
-import { takeoffActions } from "@pe/agent-contracts";
+import { admitDuctsAction, recoverDuctsAction } from "./ducts-actions.ts";
+import { ductsActions, takeoffActions } from "@pe/agent-contracts";
 import { Effect, Layer, Schema } from "effect";
 import {
   addressSchema,
@@ -84,6 +85,7 @@ import {
 import {
   composeMember,
   listPods,
+  resolvePodIdentity,
   listRuns,
   readMember,
   saveMember,
@@ -191,16 +193,19 @@ export function makeCallRoute(
                 actionDeps,
                 resume,
               )
-            : admitGatewayAction(
-                input,
-                crossing,
-                owner(),
-                bridge,
-                composition?.local ??
-                  ((key, input) => executeGatewayLocal(key, input, bridge, actionDeps.launchShell)),
-                actionDeps.sdk,
-                resume,
-              );
+            : input.kind === "workflow" && Object.hasOwn(ductsActions, input.key)
+              ? admitDuctsAction(input, crossing, owner(), bridge, actionDeps, resume)
+              : admitGatewayAction(
+                  input,
+                  crossing,
+                  owner(),
+                  bridge,
+                  composition?.local ??
+                    ((key, input) =>
+                      executeGatewayLocal(key, input, bridge, actionDeps.launchShell)),
+                  actionDeps.sdk,
+                  resume,
+                );
   };
   const callDoor = peRoutes["operation.call"];
   const post = HttpRouter.add(callDoor.method, callDoor.path, (req) => {
@@ -416,6 +421,7 @@ export function makeCallRoute(
       // what was touched rather than the selector that was typed. Headers, not a payload wrapper.
       // A TS-only op touched no Revit, so it stamps nothing rather than the latest session.
       const headers = result.target ? resolvedTargetHeaders(result.target) : {};
+      if (!op.tsOnly && key !== CANCEL_OPERATION_KEY) headers["x-pe-native-request-id"] = requestId;
       if (captureId) headers["x-pe-takeoff-capture-id"] = captureId;
       if (kept)
         Object.assign(headers, { "x-pe-capture-id": kept.id, "x-pe-capture-url": kept.url });
@@ -776,7 +782,9 @@ export function makeCallRoute(
                       ? recoverFamilyAction(body.id, owner(), actionDeps)
                       : original?.kind === "workflow" && Object.hasOwn(takeoffActions, original.key)
                         ? recoverTakeoffAction(body.id, owner(), actionDeps)
-                        : recoverGatewayAction(body.id, owner(), actionDeps.sdk, bridge)),
+                        : original?.kind === "workflow" && Object.hasOwn(ductsActions, original.key)
+                          ? recoverDuctsAction(body.id, owner(), actionDeps)
+                          : recoverGatewayAction(body.id, owner(), actionDeps.sdk, bridge)),
               );
             }
             // A control added to actionControls gets a route before it gets a handler.
@@ -1017,8 +1025,12 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
       return yield* tailLogs(yield* decodeRequest(key, request));
     case "host.shell.open":
       return yield* openShellPath(yield* decodeRequest(key, request));
-    case "pod.list":
-      return yield* listPods();
+    case "pod.list": {
+      const input = yield* decodeRequest(key, request);
+      return input.projection === "identity"
+        ? yield* resolvePodIdentity(input.folder)
+        : yield* listPods();
+    }
     case "pod.capture": {
       const { pod } = yield* decodeRequest(key, request);
       return yield* Effect.tryPromise({

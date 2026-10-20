@@ -70,8 +70,6 @@ export async function publishPeaSkills(
   const canonicalRoot = join(home, "Skills");
   const personal = new Map<string, SkillFile[]>();
   const notices: string[] = [];
-  /** Paths of same-named skills without the product's receipt: the product never writes over them. */
-  const held = new Set<string>();
   /** Folders per root whose bytes equal the product's receipt: the only ones the product may delete. */
   const proven = roots.map(() => new Set<string>());
   for (const name of await directories(canonicalRoot))
@@ -99,15 +97,8 @@ export async function publishPeaSkills(
         );
         continue;
       }
-      const shipped = bundled.find((s) => s.name === name);
-      if (shipped && signature(files) === signature(shipped.files)) continue;
-      if (shipped) {
-        held.add(join(root, name.toLowerCase()));
-        notices.push(
-          `Skill '${name}' at ${join(root, name)} has no product receipt, so the product's '${name}' is not published there; rename or delete that folder to receive it.`,
-        );
-        continue;
-      }
+      // ponytail: product skills overwrite same-named folders outright (kaitpw 2026-10-17); owed: user edits that survive product updates.
+      if (bundled.some((s) => s.name === name)) continue;
       const previous = personal.get(name);
       if (previous && signature(previous) !== signature(files))
         throw Error(`Conflicting personal skill copies: ${name}`);
@@ -134,7 +125,6 @@ export async function publishPeaSkills(
     await mkdir(root, { recursive: true });
     const receipt: Record<string, string> = {};
     for (const [name, skill] of destinations) {
-      if (held.has(join(root, name))) continue;
       await rm(join(root, name), { recursive: true, force: true });
       await writeFiles(join(root, name), skill.files);
       receipt[name] = signature(skill.files);

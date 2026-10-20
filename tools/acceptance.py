@@ -1,18 +1,18 @@
-"""Native acceptance harness: one isolated copied home, one controlled Revit on model copies.
+"""Native acceptance harness: dev or installed runtime, one controlled Revit on model copies.
 
-    python tools/acceptance.py setup <run> [--web] [--foreground] [--model PATH[=NAME]]...
+    python tools/acceptance.py setup <run> [--installed] [--web] [--foreground] [--detach] [--model PATH[=NAME]]...
     python tools/acceptance.py sdk <run> <name> <pe-revit args...>      envelope -> ev/<name>.json
     python tools/acceptance.py call <run> <who> <METHOD> <path> [body.json] [--out NAME]
     python tools/acceptance.py census <run> [label]
     python tools/acceptance.py teardown <run>
 
 Everything lives under <checkout>/.artifacts/accept/<run>/ (run.json is the custody record).
-The owner's product home and machine-local root are only read, before and after, never written.
+Dev copies the product home. Installed uses the actual MSI and product home; its writes are censused.
 `who` is cli (this host's human/cli context), anon, or ctx:<token>. Teardown stops only the
 session ids and host this run recorded; anything else it finds is printed as residue.
 """
 
-import json, os, re, shutil, subprocess, sys, time, urllib.error, urllib.request
+import hashlib, json, os, re, shutil, subprocess, sys, time, urllib.error, urllib.request
 from pathlib import Path
 
 CHECKOUT = Path(__file__).resolve().parents[1]
@@ -73,15 +73,27 @@ def owner_diff(state: dict) -> dict:
 
 
 def env(state: dict) -> dict:
-    return dict(os.environ, PE_TOOLS_PRODUCT_HOME=state["home"])
+    result = dict(os.environ)
+    if state.get("lane") == "installed":
+        for key in ("PE_TOOLS_PRODUCT_HOME", "PE_TOOLS_SOURCE_ROOT", "PE_TOOLS_HOST_SERVICE_NAME",
+                    "PE_TOOLS_FRONTEND_BASE_URL", "PE_TOOLS_HOST_BASE_URL", "PE_TOOLS_HOST_EXECUTABLE_PATH"):
+            result.pop(key, None)
+        result["PE_LANE"] = "installed"
+    else:
+        result["PE_TOOLS_PRODUCT_HOME"] = state["home"]
+    return result
 
 
 def sdk(run: str, name: str, args: list[str]) -> dict:
     state = load(run)
     out = run_dir(run) / "ev"
+    installed = state.get("lane") == "installed"
+    command = ([state["installation"]["sdk"], "--installed"] if installed
+               else ["dotnet", "tool", "run", "pe-revit", "--"])
     result = subprocess.run(
-        ["dotnet", "tool", "run", "pe-revit", "--", *args, "--json"],
-        cwd=CHECKOUT, env=env(state), capture_output=True,
+        [*command, *args, "--json"],
+        cwd=state["installation"]["root"] if installed else CHECKOUT,
+        env=env(state), capture_output=True,
     )
     (out / f"{name}.json").write_bytes(result.stdout)
     (out / f"{name}.stderr").write_bytes(result.stderr)
@@ -90,13 +102,30 @@ def sdk(run: str, name: str, args: list[str]) -> dict:
     except json.JSONDecodeError:
         log(run, f"sdk {name}: exit {result.returncode}, no envelope (see ev/{name}.stderr)")
         return {}
+    if installed and result.returncode == 0:
+        context = envelope.get("command") or {}
+        if (context.get("commandRule") != "installed-executable"
+                or not same_path(context.get("commandRoot"), state["installation"]["root"])
+                or (envelope.get("binary") or {}).get("origin") != "installed-global"):
+            raise RuntimeError(f"SDK {name} did not answer from the installed resolver; see its saved envelope")
     codes = [d.get("code") for d in envelope.get("diagnostics") or []]
     log(run, f"sdk {name}: exit {result.returncode} state={(envelope.get('result') or {}).get('state')} {codes}")
     return envelope
 
 
 def service(state: dict) -> dict | None:
-    folder = Path(state["home"]) / ".local-state" / "state" / "service"
+    installed = state.get("lane") == "installed"
+    folder = (Path(state["installation"]["root"]) if installed
+              else Path(state["home"]) / ".local-state") / "state" / "service"
+    if installed:
+        file = folder / "host.json"
+        if not file.exists():
+            return None
+        data = json.loads(file.read_text(encoding="utf8"))
+        if (data.get("lane") != "installed" or data.get("sourceRoot")
+                or not same_path(data.get("executablePath"), state["installation"]["host"])):
+            raise RuntimeError(f"Installed service ownership mismatch: {file}")
+        return dict(data, file=str(file))
     for file in folder.glob("host-source-*.json"):
         data = json.loads(file.read_text(encoding="utf8"))
         if "port" in data and Path(data.get("sourceRoot") or "/").resolve() == CHECKOUT:
@@ -104,10 +133,97 @@ def service(state: dict) -> dict | None:
     return None
 
 
+def same_path(left: str | None, right: str) -> bool:
+    return bool(left) and os.path.normcase(os.path.abspath(left)) == os.path.normcase(os.path.abspath(right))
+
+
+def installed_identity() -> dict:
+    manifest = LOCAL / "product.payloads.json"
+    data = json.loads(manifest.read_text(encoding="utf8"))
+    if data.get("product") != "Pe.Tools" or data.get("vendor") != "Positive Energy":
+        raise RuntimeError(f"Unexpected installed manifest: {manifest}")
+    payloads = data["payloads"]
+    cli = next(p for p in payloads if p["type"] == "Cli" and p["name"] == "pe-revit")
+    host = next(p for p in payloads if p["type"] == "VersionedApp" and p["name"] == "host")
+    pea = next(p for p in payloads if p["type"] == "VersionedApp" and p["name"] == "pea")
+    paths = {"manifest": manifest, "sdk": LOCAL / "shims" / (cli["name"] + ".exe"),
+             "host": LOCAL / "bin" / host["name"] / host["entry"],
+             "pea": LOCAL / "bin" / pea["name"] / pea["entry"]}
+    for path in paths.values():
+        if not path.is_file() or not path.resolve().is_relative_to(LOCAL.resolve()):
+            raise RuntimeError(f"Missing or noncanonical installed payload: {path}")
+    return {"root": str(LOCAL), "version": data.get("version"),
+            **{name: str(path) for name, path in paths.items()},
+            "sha256": {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in paths.items()}}
+
+
+def sdk_ok(envelope: dict) -> bool:
+    return envelope.get("exitCode") == 0
+
+
+def setup_installed(run: str, state: dict, args: list[str]) -> None:
+    # Installed ownership binds content and machine-local state to the canonical MSI root.
+    # PE_TOOLS_PRODUCT_HOME would move that root and is deliberately absent in this lane.
+    log(run, f"installed {state['installation']['version']}: actual home {state['home']}; writes will be recorded")
+    before = sdk(run, "sessions-before", ["session", "list", "--all"])
+    if not sdk_ok(before):
+        sys.exit("Installed SDK census failed; no session was started")
+    session = f"acc-{run}"
+    prior = before.get("result") or {}
+    if prior.get("processReadErrors"):
+        sys.exit("Installed process census is incomplete; no session was started")
+    if any(row.get("id", "").lower() == session.lower()
+           for row in [*prior.get("sessions", []), *prior.get("unreadableReceipts", [])]):
+        sys.exit(f"Session {session} already exists; choose a new run name")
+    window = [] if "--foreground" in args else ["--background"]
+    start = ["session", "start", "--installed", "--id", session, "--year", "2025", *window]
+    plan = sdk(run, "session-start-plan", [*start, "--plan"])
+    result = plan.get("result") or {}
+    if (not sdk_ok(plan) or result.get("phase") != "planned"
+            or (result.get("shape") or {}).get("payload") != "installed"):
+        sys.exit("Installed session plan did not establish installed payload; no session was started")
+    state["sessions"].append(session)
+    save(run, state)  # Retain custody even if startup times out after acquiring the session.
+    started = sdk(run, "session-start", start)
+    if not sdk_ok(started):
+        sys.exit("Installed start failed; inspect session-start receipt and run census/teardown")
+    resolved = started.get("resolved") or {}
+    if resolved.get("payload") != "installed" or not same_path(resolved.get("installedRoot"), state["installation"]["root"]):
+        sys.exit("SDK start identity differs from installed root; inspect receipt before further work")
+    deadline = time.time() + 60
+    svc = service(state)
+    while not svc and time.time() < deadline:
+        time.sleep(1)
+        svc = service(state)
+    if not svc:
+        sys.exit("Installed payload did not bootstrap canonical host; inspect session and dialogs")
+    old_pids = {p["ProcessId"] for p in state["processesBefore"]}
+    state["host"] = {"pid": svc["pid"], "port": svc["port"], "service": svc["file"],
+                     "instanceId": svc.get("instanceId"), "owned": svc["pid"] not in old_pids}
+    state["web"] = f"http://127.0.0.1:{svc['port']}"
+    save(run, state)
+    status = http(state, "anon", "GET", "/host/status")
+    (run_dir(run) / "ev" / "host-status.json").write_text(json.dumps(status, indent=2), encoding="utf8")
+    body = status.get("body") or {}
+    if (status.get("status") != 200 or not isinstance(body, dict) or body.get("lane") != "installed"
+            or body.get("sourceRoot") or body.get("serviceName") != "host"
+            or body.get("processId") != svc["pid"]
+            or not same_path(body.get("installedRoot"), state["installation"]["root"])
+            or not same_path(body.get("executablePath"), state["installation"]["host"])):
+        sys.exit("Installed host status identity mismatch; no model opened")
+    for i, doc in enumerate(state["docs"]):
+        opened = sdk(run, f"doc-open-{i}", ["doc", "open", doc, "--id", session, "--links", "allow",
+                                           *(["--detach"] if state.get("detach") else []),
+                                           *(["--window", "headless"] if window else [])])
+        if not sdk_ok(opened):
+            sys.exit(f"Opening model copy {i} failed; inspect its receipt before continuing")
+    census(run, "setup")
+
+
 def http(state: dict, who: str, method: str, path: str, body: bytes | None = None) -> dict:
     svc = service(state)
     if not svc:
-        return {"status": None, "body": "no service file for this checkout"}
+        return {"status": None, "body": "no service file for this run lane"}
     headers = {"content-type": "application/json", "accept": "application/json"}
     if who == "cli":
         headers["x-pe-context"] = Path(svc["file"]).with_suffix(".context").read_text().strip()
@@ -129,15 +245,20 @@ def http(state: dict, who: str, method: str, path: str, body: bytes | None = Non
 
 
 def setup(run: str, args: list[str]) -> None:
+    installed = "--installed" in args
+    if installed and "--web" in args:
+        sys.exit("--web is a checkout frontend option; installed serves its packaged frontend")
+    installation = installed_identity() if installed else None
     root = run_dir(run)
     if root.exists():
         sys.exit(f"{root} exists; pick a new run name or tear it down and delete it")
     (root / "ev").mkdir(parents=True)
     (root / "docs").mkdir()
     owner = owner_home()
-    home = root / "home" / "Pe.Tools"
-    home.mkdir(parents=True)
-    for name in COPIED:
+    home = owner if installed else root / "home" / "Pe.Tools"
+    if not installed:
+        home.mkdir(parents=True)
+    for name in ([] if installed else COPIED):
         source = owner / name
         if source.is_dir():
             shutil.copytree(source, home / name, symlinks=True)
@@ -145,21 +266,42 @@ def setup(run: str, args: list[str]) -> None:
             shutil.copy2(source, home / name)
     models = [a.split("=", 1) for a in value_list(args, "--model")] or [[str(SAMPLE), "A.rvt"]]
     docs = []
+    model_copies = []
     for model in models:
         target = root / "docs" / (model[1] if len(model) > 1 else Path(model[0]).name)
-        shutil.copy2(model[0], target)
+        if installed and (not target.resolve().is_relative_to((root / "docs").resolve()) or target.exists()):
+            sys.exit(f"Model destination must be a fresh file under {root / 'docs'}: {target}")
+        source = Path(model[0]).resolve()
+        source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+        shutil.copy2(source, target)
+        target_hash = hashlib.sha256(target.read_bytes()).hexdigest()
+        if source_hash != target_hash:
+            sys.exit(f"Model copy bytes differ from source: {source} -> {target}")
+        model_copies.append({"source": str(source), "copy": str(target),
+                             "sourceSha256": source_hash, "copySha256": target_hash})
         docs.append(str(target))
     roots = [str(owner), str(LOCAL)]
     before = root / "owner-before.json"
     before.write_text(json.dumps(owner_files(roots)), encoding="utf8")
     state = {
         "run": run, "checkout": str(CHECKOUT), "home": str(home), "docs": docs,
+        "lane": "installed" if installed else "dev", "installation": installation,
+        "productHomeIsolated": not installed, "detach": "--detach" in args, "modelCopies": model_copies,
         "ownerRoots": roots, "ownerBefore": str(before), "sessions": [], "host": None,
         "web": "--web" in args,
         "commit": git("rev-parse", "HEAD"), "revitBefore": revit_pids(),
     }
+    if installed:
+        state["processesBefore"] = processes()
+        prior = service(state)
+        state["serviceBefore"] = prior
+        state["unrelatedServicesBefore"] = owner_files([str(LOCAL / "state" / "service")])
     save(run, state)
     log(run, f"setup {run} at {state['commit']}: home {home}, docs {docs}, Revit before {state['revitBefore']}")
+
+    if installed:
+        setup_installed(run, state, args)
+        return
 
     host_log = open(root / "host.log", "ab")
     script = "attach" if state["web"] else "start"
@@ -191,6 +333,7 @@ def setup(run: str, args: list[str]) -> None:
     for i, doc in enumerate(docs):
         # Copied models keep their link paths; a link that did not travel stays unloaded.
         sdk(run, f"doc-open-{i}", ["doc", "open", doc, "--id", session, "--links", "allow",
+                                   *(["--detach"] if state.get("detach") else []),
                                    *(["--window", "headless"] if window else [])])
     census(run, "setup")
 
@@ -204,6 +347,17 @@ def census(run: str, label: str = "census") -> None:
     diff = owner_diff(state)
     (run_dir(run) / "ev" / f"{label}-owner-diff.json").write_text(json.dumps(diff, indent=2), encoding="utf8")
     svc = service(state)
+    if state.get("lane") == "installed":
+        before = state["unrelatedServicesBefore"]
+        after = owner_files([str(LOCAL / "state" / "service")])
+        own_service = str(LOCAL / "state" / "service" / "host")
+        foreign = {p: {"before": before.get(p), "after": after.get(p)}
+                   for p in set(before) | set(after)
+                   if not (p == own_service or p.startswith(own_service + "."))
+                   and before.get(p) != after.get(p)}
+        observation = {"missingPriorRevit": sorted(set(state["revitBefore"]) - set(revit_pids())),
+                       "unrelatedServiceChanges": foreign, "productHomeIsolated": False}
+        (run_dir(run) / "ev" / f"{label}-custody.json").write_text(json.dumps(observation, indent=2), encoding="utf8")
     log(run, f"{label}: owner +{len(diff['added'])} -{len(diff['removed'])} ~{len(diff['changed'])}; "
              f"host {'pid ' + str(svc['pid']) if svc else 'absent'}; Revit {revit_pids()}")
 
@@ -211,9 +365,15 @@ def census(run: str, label: str = "census") -> None:
 def teardown(run: str) -> None:
     state = load(run)
     for session in state["sessions"]:
-        sdk(run, f"teardown-stop-{session}", ["session", "stop", "--id", session, "--unsaved", "discard"])
+        stopped = sdk(run, f"teardown-stop-{session}", ["session", "stop", "--id", session, "--unsaved",
+                                                      "keep" if state.get("lane") == "installed" else "discard"])
+        if state.get("lane") == "installed" and not sdk_ok(stopped):
+            census(run, "teardown-refused")
+            sys.exit("Owned installed session did not stop; host preserved; inspect receipt")
     svc = service(state)
-    if svc and state["host"] and svc["pid"] == state["host"]["pid"]:
+    if (svc and state["host"] and state["host"].get("owned", True)
+            and svc["pid"] == state["host"]["pid"]
+            and (not state["host"].get("instanceId") or svc.get("instanceId") == state["host"]["instanceId"])):
         result = http(state, "service", "POST", "/admin/shutdown", b"{}")
         log(run, f"host shutdown {result['status']}")
         deadline = time.time() + 30
