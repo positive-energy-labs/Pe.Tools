@@ -110,6 +110,7 @@ function Canvas({
   page,
   subject,
   claims,
+  onVerdict,
   work,
   hovered,
   onHover,
