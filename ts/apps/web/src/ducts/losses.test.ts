@@ -290,6 +290,33 @@ it("solves a synthetic network end to end", () => {
   expect(r.byRule["tap-std"]!.instances).toBe(1);
 });
 
+it("a terminal whose connector loss method is NotDefined has no drop: unpriced, not a zero drop", () => {
+  const undefinedDrop = {
+    ...snapshot,
+    nodes: snapshot.nodes.map((n) =>
+      n.id === 8
+        ? {
+            ...n,
+            terminalDrop: {
+              assignedPressureDropInWg: 0,
+              connectorLossMethod: "NotDefined",
+              writable: false,
+            },
+          }
+        : n,
+    ),
+  } as unknown as DuctSnapshot;
+  const r = computeLosses(undefinedDrop, grids);
+  expect(r.paths[8]!.rows.at(-1)).toMatchObject({
+    kind: "terminal",
+    dp: null,
+    finding: "catalog-missing-link",
+  });
+  expect(r.errors.some((e) => e.id === 8)).toBe(true);
+  // A stated SpecificLoss drop still prices, as before.
+  expect(computeLosses(snapshot, grids).paths[8]!.rows.at(-1)!.dp).toBeCloseTo(0.08, 9);
+});
+
 it("honours overrides and reports a missing table", () => {
   const r = computeLosses(
     snapshot,
@@ -360,12 +387,14 @@ it("runs the whole pipeline over W1's synthetic snapshot", () => {
   // Expected from the same grids and handcalc.py arithmetic, computed independently:
   //  T30  duct 10 (12 in, 10 ft, 400 cfm) 0.0035563 + tap straight SD5-9 Cs(.75, 1) .125 x Pv(300 cfm)
   //       0.0011366 + duct 10 (10 ft, 300 cfm) 0.0021239 + elbow CD3-21 D=12 .29 x Pv 0.0026370
-  //       + duct 11 (10 ft, 300 cfm) 0.0021239 + terminal assigned 0                  = 0.0115778
+  //       + duct 11 (10 ft, 300 cfm) 0.0021239 + terminal NotDefined (no drop) = 0.0115778
   //  T31  duct 10 0.0035563 + tap branch SD5-9 Cb(.25, abOverAc .25) 1.38 x Pv(100 cfm in 6 in)
   //       0.0223083 + duct 12 (6 in, 7.5 ft, 100 cfm) 0.0063438 + terminal 0.05       = 0.0822084
   const snap = synthetic as unknown as DuctSnapshot;
   const r = computeLosses(snap, grids);
-  expect(r.errors).toEqual([]);
+  // T30's grille holds a NotDefined connector drop (0): no drop is stated, so it is unpriced (the total is unchanged).
+  expect(r.errors.map((e) => e.id)).toEqual([30]);
+  expect(r.paths[30]!.rows.at(-1)).toMatchObject({ kind: "terminal", dp: null });
   expect(r.paths[30]!.total).toBeCloseTo(0.01157782, 7);
   expect(r.paths[31]!.total).toBeCloseTo(0.08220842, 7);
   expect(r.critical).toBe(31);

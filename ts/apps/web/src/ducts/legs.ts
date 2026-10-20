@@ -177,7 +177,10 @@ export function legsOf(
   };
   const place = (element: Element, kind: Place["kind"]): Place => {
     const label = labelOf(element.id);
-    const typed = isNode(element) ? `${element.family ?? ""} ${element.type ?? ""}`.trim() : "";
+    // A Revit-internal family name (`Damper_Volume_Round`) is not a person's word; its type is.
+    const typed = isNode(element)
+      ? `${element.family?.includes("_") && element.type ? "" : (element.family ?? "")} ${element.type ?? ""}`.trim()
+      : "";
     // A bare kind cannot tell two accessories apart, so the fallback carries the id.
     return {
       id: element.id,

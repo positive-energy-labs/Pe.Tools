@@ -285,6 +285,11 @@ export interface TreeProps<N> {
   /** Nothing in scope says so; a tree is never a blank. */
   empty: ReactNode;
   maxHeight?: string;
+  /**
+   * A sticky header over the rows, naming what the label and the meta slot hold. `meta` must be
+   * laid out with the same widths as the rows' meta so the columns line up.
+   */
+  columns?: { label: ReactNode; meta?: ReactNode };
 }
 
 interface Flat<N> {
@@ -385,6 +390,14 @@ export function Tree<N>(props: TreeProps<N>) {
       style={{ maxHeight: props.maxHeight }}
       onKeyDown={onKeyDown}
     >
+      {props.columns ? (
+        <div className="dl-row-colhead" role="presentation" data-tree-columns="">
+          <span className="dl-row-colhead-label">{props.columns.label}</span>
+          {props.columns.meta != null ? (
+            <span className="dl-row-colhead-meta">{props.columns.meta}</span>
+          ) : null}
+        </div>
+      ) : null}
       {rows.length === 0 ? (
         <div className="dl-row" role="status" data-pending="">
           <span className="dl-row-label">{props.empty}</span>

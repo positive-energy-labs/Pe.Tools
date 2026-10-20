@@ -69,8 +69,11 @@ const KIND_WORD: Record<DuctSnapshot["nodes"][number]["kind"], string> = {
   cap: "end cap",
 };
 /** A unit or grille with no label or mark reads by what it is: its family and type ('Price LBP15A Supply 16 X 8'). */
-export const typeName = (node: { family?: string | null; type?: string | null }) =>
-  [...new Set([node.family, node.type].map((v) => v?.trim()).filter(Boolean))].join(" ");
+export const typeName = (node: { family?: string | null; type?: string | null }) => {
+  // A Revit-internal family name (`Damper_Volume_Round`) is not a person's word; its type is.
+  const family = node.family?.includes("_") && node.type?.trim() ? null : node.family;
+  return [...new Set([family, node.type].map((v) => v?.trim()).filter(Boolean))].join(" ");
+};
 const ELEMENT_PLACES = new Set<Place["kind"]>(["equipment", "accessory", "terminal", "cap"]);
 
 /**
@@ -89,7 +92,7 @@ export function elementNamer(snapshot: DuctSnapshot, subject: SubjectDrawn | nul
     const place = subject?.placeOf.get(id);
     if (place && ELEMENT_PLACES.has(place.kind) && !place.name.endsWith(String(id)))
       return place.name;
-    if (node && (node.kind === "equipment" || node.kind === "terminal")) {
+    if (node && (node.kind === "equipment" || node.kind === "terminal" || node.kind === "accessory")) {
       const typed = typeName(node);
       if (typed) return typed;
     }

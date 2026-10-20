@@ -5,7 +5,7 @@
  */
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import type { Priced } from "@pe/ducts-domain/pricing";
-import type { Provisional } from "@pe/ducts-domain/losses";
+import type { Provisional, Row } from "@pe/ducts-domain/losses";
 import { groupTree, runsOf } from "@pe/ducts-domain/topology";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
@@ -25,17 +25,56 @@ export interface TreeNode {
   total: number | null;
   /** This node's own loss, in-wg; null unpriced. */
   self: number | null;
+  /** Why `self` is null on a priced path: the word the row shows (`no drop`, `unpriced`) and the reason. */
+  unpriced: { word: string; why: string } | null;
   /** Bar scale: the group's fan. */
   scale: number | null;
   critical: "pe" | "longest" | null;
   provisional: Provisional;
+  /** A run's level (where its grille is), else null. */
+  level: string | null;
   /** The run's terminal this node lies on (for the loss rows in the edit popover). */
   terminal: number | null;
   children: TreeNode[];
 }
 
-const sum = (values: (number | null)[]) =>
-  values.some((v) => v == null) ? null : values.reduce<number>((a, b) => a + (b ?? 0), 0);
+/** The known parts of a stretch added up; null only when none is known (a stretch is never a guess). */
+const sumKnown = (values: (number | null)[]) => {
+  const known = values.filter((v): v is number => v != null);
+  return known.length ? known.reduce((a, b) => a + b, 0) : null;
+};
+
+/**
+ * A path's rows dealt to the path's own elements. A row names the element it prices, but the loss a
+ * path pays passing a tap (`tap-straight`, on the tap fitting or a synthetic id) names an element off
+ * the path: it is charged to the main-line element whose rows it follows, so the stretches add up to
+ * the run's total and no part of it is lost between rows and tree.
+ */
+export function rowsByElement(path: readonly number[], rows: readonly Row[]): Map<number, Row[]> {
+  const on = new Set(path);
+  const out = new Map<number, Row[]>(path.map((id) => [id, []]));
+  let owner = path[0];
+  for (const row of rows) {
+    if (on.has(row.id)) owner = row.id;
+    if (owner != null) out.get(owner)!.push(row);
+  }
+  return out;
+}
+
+/** An element's own loss from its rows: null when it has rows and none is priced. */
+const selfOfRows = (rows: readonly Row[]) =>
+  rows.length && rows.every((r) => r.dp == null)
+    ? null
+    : rows.reduce((a, r) => a + (r.dp ?? 0), 0);
+
+const unpricedOf = (rows: readonly Row[]): TreeNode["unpriced"] => {
+  const bad = rows.find((r) => r.dp == null);
+  if (!bad) return null;
+  return {
+    word: bad.kind === "terminal" ? "no drop" : "unpriced",
+    why: bad.error ?? bad.desc,
+  };
+};
 
 export function buildTree(
   snapshot: DuctSnapshot,
@@ -58,15 +97,12 @@ export function buildTree(
     const rootName = rootId == null ? "no air mover" : name(rootId);
     const runNodes = runs.map((run): TreeNode => {
       const path = priced?.now.paths[run.terminal] ?? null;
-      const selfOf = (id: number) =>
-        path
-          ? path.rows.filter((r) => r.id === id).reduce((a, r) => a + (r.dp ?? 0), 0)
-          : null;
+      const owned = path ? rowsByElement(run.path, path.rows) : null;
+      const selfOf = (id: number) => (owned ? selfOfRows(owned.get(id) ?? []) : null);
       const running = new Map<number, number | null>();
       let acc = 0;
       for (const id of run.path) {
-        const s = selfOf(id);
-        acc += s ?? 0;
+        acc += selfOf(id) ?? 0;
         running.set(id, path ? acc : null);
       }
       const cut = legsOf(snapshot, run.path, labelOf, work);
@@ -85,6 +121,8 @@ export function buildTree(
             id,
             total: running.get(id) ?? null,
             self: selfOf(id),
+            unpriced: owned ? unpricedOf(owned.get(id) ?? []) : null,
+            level: null,
             scale: fan,
             critical: null,
             provisional: null,
@@ -96,10 +134,13 @@ export function buildTree(
         return {
           key: `${runKey}/l${i}`,
           kind: "leg",
-          name: leg.name,
+          // The path's first element is the one the air mover feeds: that stretch starts at the unit.
+          name: i === 0 && leg.from.kind === "open" ? `${rootName} → ${leg.to.name}` : leg.name,
           id: leg.ids[0] ?? leg.to.id,
           total: last == null ? null : (running.get(last) ?? null),
-          self: sum(elements.map((e) => e.self)),
+          self: path ? sumKnown(elements.map((e) => e.self)) : null,
+          unpriced: null,
+          level: null,
           scale: fan,
           critical: null,
           provisional: null,
@@ -107,13 +148,16 @@ export function buildTree(
           children: elements,
         };
       });
+      const runLevel = [...cut.legs].reverse().find((l) => l.levelId != null)?.levelId;
       return {
         key: runKey,
         kind: "run",
         name: `${rootName} → ${name(run.terminal)}`,
+        level: snapshot.levels.find((l) => l.id === runLevel)?.name ?? null,
         id: run.terminal,
         total: path?.total ?? null,
         self: null,
+        unpriced: null,
         scale: fan,
         critical:
           peCritical != null
@@ -135,6 +179,8 @@ export function buildTree(
       id: rootId,
       total: fan,
       self: null,
+      unpriced: null,
+      level: null,
       scale: fan,
       critical: null,
       provisional: solved?.provisional ?? null,
@@ -172,7 +218,7 @@ export function subjectTree(
   const nameOf = elementNamer(snapshot, null);
   const name = (id: number) => nameOf(id) ?? "element not in snapshot";
   const cut = legsOf(snapshot, ids, labelOfNode(snapshot), work);
-  const blank = { total: null, self: null, scale: null, critical: null, provisional: null, terminal: null };
+  const blank = { total: null, self: null, unpriced: null, level: null, scale: null, critical: null, provisional: null, terminal: null };
   const legs = cut.legs.map(
     (leg, i): TreeNode => ({
       ...blank,
@@ -212,6 +258,8 @@ export function systemList(snapshot: DuctSnapshot, priced: Priced | null): TreeN
       id: rootId,
       total: solved?.fan ?? null,
       self: null,
+      unpriced: null,
+      level: null,
       scale: null,
       critical: null,
       provisional: solved?.provisional ?? null,

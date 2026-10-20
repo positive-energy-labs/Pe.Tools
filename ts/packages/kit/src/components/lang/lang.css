@@ -435,6 +435,37 @@ tr.dl-row[data-active]::before {
   font-weight: var(--weight-strong);
   color: var(--pe-ink-2);
 }
+/* A Tree's column header: sticky, the rows' own padding and gap, a hairline under it. Its meta cell
+   is a flex-shrink-0 mono block like .dl-row-meta, so the caller's column widths line up. */
+.dl-row-colhead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--item-h);
+  padding: 0 var(--item-mark-pad-x);
+  background: var(--pe-on);
+  border-bottom: 1px solid var(--pe-line);
+  font-size: var(--type-small-size);
+  color: var(--pe-ink-2);
+  user-select: none;
+}
+.dl-row-colhead-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dl-row-colhead-meta {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size-adjust: var(--mono-adjust);
+  font-weight: var(--weight-mono);
+  white-space: nowrap;
+}
 .dl-row-head > :first-child::first-letter {
   text-transform: uppercase;
 }
