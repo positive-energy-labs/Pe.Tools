@@ -765,7 +765,9 @@ it("a terminal facing the wrong way in a duct's open end joins it anyway, always
   // Within FACE_TOL_IN beyond the open end, facing away: joined, anomalous.
   const beyond = inferJoints(snap([slotPlenum()], [slot(-1 * IN)]));
   expect(beyond.findings).toMatchObject([{ id: "proximity:1:1|9:1", grade: "anomalous" }]);
-  expect(beyond.findings[0]!.note).toContain("sits at the open end of 72x3 duct 1 (SA 1), 1.00 in beyond it");
+  expect(beyond.findings[0]!.note).toContain(
+    "sits at the open end of 72x3 duct 1 (SA 1), 1.00 in beyond it",
+  );
   // Past FACE_TOL_IN outside the duct, or facing across it from beyond its end: nothing joins.
   expect(inferJoints(snap([slotPlenum()], [slot(-3 * IN)])).joints).toEqual([]);
   expect(inferJoints(snap([slotPlenum()], [slot(-1 * IN, [1, 0, 0])])).joints).toEqual([]);

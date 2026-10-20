@@ -2132,7 +2132,11 @@ test("a prompt carries the head's target and label as of delivery; one with no t
   });
   expect(set.json).toMatchObject({ ok: true });
   await call("POST", `/pe/threads/${id}/prompt`, { text: "after" });
-  const body = await until(reader(threads), id, (b) => b.events.filter((e) => e.kind === "turn_end").length === 2);
+  const body = await until(
+    reader(threads),
+    id,
+    (b) => b.events.filter((e) => e.kind === "turn_end").length === 2,
+  );
   const prompts = body.events.filter((e) => e.kind === "prompt");
   expect(prompts.map((p) => p.text)).toEqual(["before", "after"]);
   expect("target" in prompts[0]!).toBe(false);

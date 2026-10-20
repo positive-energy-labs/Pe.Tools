@@ -196,9 +196,7 @@ export function FindingsList({
                       </span>
                     ) : null}{" "}
                     <span className="face-mono">{f.elementIds.join(" ")}</span> {f.note}
-                    {f.assumed ? (
-                      <span className="text-ink-2"> · assumed: {f.assumed}</span>
-                    ) : null}
+                    {f.assumed ? <span className="text-ink-2"> · assumed: {f.assumed}</span> : null}
                     {f.grade && work ? (
                       <>
                         {" "}

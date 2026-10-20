@@ -14,7 +14,7 @@ test("only an enforced host relaunches, once; a still-enforced child continues g
   const run = (trust: "enforced" | "audit" | "off" | null) =>
     relaunchOutOfGuard({
       trust,
-      exe: "C:\Pe\Pe.Host.exe",
+      exe: "C:PePe.Host.exe",
       marker,
       log: (l) => log.push(l),
       launch: (e) => launches.push(e),
@@ -23,7 +23,7 @@ test("only an enforced host relaunches, once; a still-enforced child continues g
     expect([run("off"), run("audit"), run(null)]).toEqual([false, false, false]);
     expect(launches).toEqual([]);
     expect(run("enforced")).toBe(true);
-    expect(launches).toEqual(["C:\Pe\Pe.Host.exe"]);
+    expect(launches).toEqual(["C:PePe.Host.exe"]);
     expect(run("enforced")).toBe(false);
     expect(launches).toHaveLength(1);
     expect(log.at(-1)).toContain("continuing guarded");

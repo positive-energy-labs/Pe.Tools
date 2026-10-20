@@ -296,7 +296,13 @@ const CLAIM_TONE: Record<Claim["state"], keyof typeof VERDICT_INK> = {
 export const claimInk = (claim: Pick<Claim, "state">) => VERDICT_INK[CLAIM_TONE[claim.state]];
 
 /** An inferred break's ink by its grade (`provisional.tsx` tones); a near miss or a confirmed one is plain ink. */
-export const inferredInk = ({ grade, confirmed }: { grade: DuctInferenceGrade; confirmed: boolean }) =>
+export const inferredInk = ({
+  grade,
+  confirmed,
+}: {
+  grade: DuctInferenceGrade;
+  confirmed: boolean;
+}) =>
   confirmed || grade === "near-miss"
     ? token("ink-2")
     : VERDICT_INK[grade === "anomalous" ? "alarm" : "caution"];

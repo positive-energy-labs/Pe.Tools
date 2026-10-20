@@ -49,9 +49,9 @@ export function DuctsDocs() {
     <div className="flex flex-col gap-3 [&>p]:max-w-[80ch] [&>ul]:max-w-[80ch] [&>ol]:max-w-[80ch]">
       <p>
         Pe reads every duct network in the document, prices each grille's path from the fan, and
-        lists each gap with who answers it: the route, Pea, or you. You stage what you know,
-        preview what Revit would accept, and apply. Apply writes the coefficients, drops and fan
-        static into Revit, next to Revit's own critical path.
+        lists each gap with who answers it: the route, Pea, or you. You stage what you know, preview
+        what Revit would accept, and apply. Apply writes the coefficients, drops and fan static into
+        Revit, next to Revit's own critical path.
       </p>
 
       <h3>Why not Revit's own pressure drop</h3>
@@ -70,8 +70,8 @@ export function DuctsDocs() {
           Revit measures an elbow's angle from the two ducts connected to it in the project, with
           almost no tolerance. So two elbows of the same 90-degree family can differ: on Chadds one
           meets its ducts at exactly 90 and gets a table, the other at 90.0013 and gets none. 87 of
-          1,235 round elbows on Chadds can never get a table and always charge 0. Editing the
-          family does not help; the ducts would have to be redrawn. Tested 2026-10-05.
+          1,235 round elbows on Chadds can never get a table and always charge 0. Editing the family
+          does not help; the ducts would have to be redrawn. Tested 2026-10-05.
         </li>
         <li>
           When Chadds opens, every fitting reads 0 and Revit's critical paths are out of date until
@@ -96,8 +96,8 @@ export function DuctsDocs() {
       <h3>What has to work before pressure drop is automatic</h3>
       <p>
         On Chadds supply system SA 19, every part prices except the grille drop. Fan coil FC-17
-        needs 0.081 in. w.g. and FC-35 needs 0.152 in. w.g. To run this without a person, every
-        step below needs its data, and today most of it is spread across files or missing.
+        needs 0.081 in. w.g. and FC-35 needs 0.152 in. w.g. To run this without a person, every step
+        below needs its data, and today most of it is spread across files or missing.
       </p>
       <Mermaid chart={chainChart()} />
       <p>

@@ -30,7 +30,9 @@ test("rectangular mitered elbows and transitions find their ASHRAE rule", () => 
   expect(match(facts("Rectangular Elbow - Mitered - Double Thickness Vanes", "Elbow"))).toBe(
     "elbow-mitered-vaned",
   );
-  expect(match(facts("Rectangular Transition - Angle", "Transition", rect(45, 8)))).toBe("trx-rect");
+  expect(match(facts("Rectangular Transition - Angle", "Transition", rect(45, 8)))).toBe(
+    "trx-rect",
+  );
 
   // CR3-6 rows at H/W 1.00 and 1.50: 90 deg reads 1.18 and 1.13.
   const cr36 = {
@@ -44,6 +46,11 @@ test("rectangular mitered elbows and transitions find their ASHRAE rule", () => 
       [1.18, 1.13],
     ],
   };
-  const input = LOSS_RULES.find((r) => r.key === "elbow-mitered")!.input(plain, { q: 1200 }, "CR3-6", "C");
+  const input = LOSS_RULES.find((r) => r.key === "elbow-mitered")!.input(
+    plain,
+    { q: 1200 },
+    "CR3-6",
+    "C",
+  );
   expect(lookupGrid(cr36, input.x, input.y).value).toBeCloseTo(1.18 - (19.25 / 18 - 1) * 0.1, 4);
 });

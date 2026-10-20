@@ -106,7 +106,14 @@ describe("harness event projection", () => {
     const request = { kind: "named", session: "S1", address: "C:/Models/Ops.rvt" };
     const log = z.array(harnessEventSchema).parse([
       { seq: 1, at, kind: "prompt", turnId: "t1", text: "bare" },
-      { seq: 2, at, kind: "prompt", turnId: "t2", text: "bound", target: { request, label: "Ops.rvt" } },
+      {
+        seq: 2,
+        at,
+        kind: "prompt",
+        turnId: "t2",
+        text: "bound",
+        target: { request, label: "Ops.rvt" },
+      },
       { seq: 3, at, kind: "prompt", turnId: "t3", text: "unlabeled", target: { request } },
     ]);
     const users = selectMessages(state(log)).filter((message) => message.role === "user");

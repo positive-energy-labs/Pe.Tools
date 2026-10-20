@@ -18,6 +18,7 @@ export function transitionGeometry(node: DuctSnapshot["nodes"][number]) {
     inlet: pair ? ports.find((c) => c.direction === "in") : undefined,
     outlet: pair ? ports.find((c) => c.direction === "out") : undefined,
     angleDeg,
-    error: angleDeg == null ? "transition has no valid measured included angle in degrees" : undefined,
+    error:
+      angleDeg == null ? "transition has no valid measured included angle in degrees" : undefined,
   };
 }

@@ -773,7 +773,10 @@ export function tolerate(
   tolIn = 1,
 ): Inference & { snapshot: DuctSnapshot; links: InferredLink[] } {
   const inference = inferJoints(snapshot, tolIn, work);
-  const link = (x: { id: string; grade: DuctInferenceGrade }, between: readonly [number, number]) => ({
+  const link = (
+    x: { id: string; grade: DuctInferenceGrade },
+    between: readonly [number, number],
+  ) => ({
     id: x.id,
     between,
     grade: x.grade,

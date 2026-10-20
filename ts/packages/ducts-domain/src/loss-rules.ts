@@ -77,7 +77,16 @@ export interface LossRule {
 const ELBOWS = ["CD3-2", "CD3-21", "CD3-9", "CD3-1", "CD3-11", "CD3-10"] as const;
 const TAPS = ["SD5-9", "SD5-10", "SD5-11", "SD5-12", "SD5-13", "SD5-1", "SD5-2"] as const;
 const TRANSITIONS = ["SR4-3", "SR4-1", "SR4-2", "SD4-2", "SD4-1"] as const;
-const VANED = ["CR3-14", "CR3-15", "CR3-16", "CR3-9", "CR3-10", "CR3-11", "CR3-12", "CR3-13"] as const;
+const VANED = [
+  "CR3-14",
+  "CR3-15",
+  "CR3-16",
+  "CR3-9",
+  "CR3-10",
+  "CR3-11",
+  "CR3-12",
+  "CR3-13",
+] as const;
 
 const near = (a: number | null, b: number) => a != null && Math.abs(a - b) < 1e-3;
 const elbow = (f: FittingFacts) => f.partType === "Elbow" && f.inlet.shape === "round";
@@ -209,7 +218,11 @@ export const LOSS_RULES: readonly LossRule[] = [
     when: (f) => mitered(f) && !vaned(f),
     // ponytail: H/W reads Revit's Width as the side in the plane of the turn (its rectangular elbow
     // families bend across Width); a connector frame would settle it per instance.
-    input: (f) => ({ res: "Co", x: (f.inlet.heightIn ?? NaN) / (f.inlet.widthIn ?? NaN), y: f.angleDeg ?? NaN }),
+    input: (f) => ({
+      res: "Co",
+      x: (f.inlet.heightIn ?? NaN) / (f.inlet.widthIn ?? NaN),
+      y: f.angleDeg ?? NaN,
+    }),
     basisOf: inletBasis,
   },
   {

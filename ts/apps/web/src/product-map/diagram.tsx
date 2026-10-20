@@ -69,8 +69,7 @@ export const pathChart = (link: MapLink) =>
     ...link.parts
       .filter(
         (p) =>
-          link.path.includes(p.id) ||
-          link.relations.some((r) => r.from === p.id || r.to === p.id),
+          link.path.includes(p.id) || link.relations.some((r) => r.from === p.id || r.to === p.id),
       )
       .map((p) => node(p.id, p.label, p.status)),
     `  ${link.path.map(key).join(" --> ")}`,

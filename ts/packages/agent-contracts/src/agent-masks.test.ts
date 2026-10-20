@@ -55,7 +55,12 @@ it("ducts: Pea proposes a ruling on an inference finding but only a person stage
   const key = "proximity:8911461:0|10922066:1";
   for (const verdict of ["connect", "ignore"]) {
     const value = { kind: "verdict", verdict };
-    const propose = transitionPatches(["assumptions"], key, {}, { kind: "propose", rung: { value } });
+    const propose = transitionPatches(
+      ["assumptions"],
+      key,
+      {},
+      { kind: "propose", rung: { value } },
+    );
     expect(applyPatches(spec, envelope, "agent", propose, 0)).toMatchObject({ ok: true });
     const stage = transitionPatches(["assumptions"], key, {}, { kind: "stage", rung: { value } });
     expect(applyPatches(spec, envelope, "agent", stage, 0)).toMatchObject({
