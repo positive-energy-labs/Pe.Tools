@@ -47,6 +47,25 @@ it("ducts: Pea proposes an assumption, cannot stage it, and a key holding the wr
   expect(applyPatches(spec, envelope, "human", wrong, 0)).toMatchObject({ ok: false });
 });
 
+it("ducts: Pea proposes a ruling on an inference finding but only a person stages it", () => {
+  // Inference may compute, never conclude (pressure-drop ledger, 2026-10-19): a proposal never
+  // promotes a provisional result; only the person's staged verdict does.
+  const spec = ductsRouteState as unknown as RouteStateSpec<z.ZodType>;
+  const envelope: RouteEnvelope<unknown> = { version: 1, revision: 0, doc: spec.schema.parse({}) };
+  const key = "proximity:8911461:0|10922066:1";
+  for (const verdict of ["connect", "ignore"]) {
+    const value = { kind: "verdict", verdict };
+    const propose = transitionPatches(["assumptions"], key, {}, { kind: "propose", rung: { value } });
+    expect(applyPatches(spec, envelope, "agent", propose, 0)).toMatchObject({ ok: true });
+    const stage = transitionPatches(["assumptions"], key, {}, { kind: "stage", rung: { value } });
+    expect(applyPatches(spec, envelope, "agent", stage, 0)).toMatchObject({
+      ok: false,
+      kind: "refused",
+    });
+    expect(applyPatches(spec, envelope, "human", stage, 0)).toMatchObject({ ok: true });
+  }
+});
+
 it("ducts: Pea proposes rules and drops but never stages them, and never touches parameter slots", () => {
   const spec = ductsRouteState as unknown as RouteStateSpec<z.ZodType>;
   const envelope: RouteEnvelope<unknown> = { version: 1, revision: 0, doc: spec.schema.parse({}) };
