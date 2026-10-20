@@ -11,7 +11,13 @@
  * cross-section, closed at an end an end cap closes, and each open connector is a face its size
  * wide; an open connector whose point is near a face, whose axis points into it, and whose point
  * lies within the face's outline, lands there. Centering is not required and any number of
- * connectors may land on one face.
+ * connectors may land on one face. A duct end anywhere inside a duct's body, pointing across it,
+ * taps it at its nearest point along it, however deep (kaitpw 2026-10-19: Chadds 7266368 on
+ * 14342882 is a real join); the body is part of the solid, not only its surface.
+ * An inference is never correct, only likely (kaitpw 2026-10-19): every joint and tap is a
+ * warning a person rules on. Ends whose air classifications differ (supply, return, exhaust)
+ * never join silently: the would-be join is a `near-miss-across-classifications` warning, and a
+ * staged `connect` verdict on its id joins it anyway.
  */
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "./types.ts";
@@ -22,12 +28,16 @@ type Element = Node | Segment;
 type Group = DuctSnapshot["groups"][number];
 
 export interface InferredJoint {
+  /** The finding id that rules on it. */
+  id: string;
   a: string;
   b: string;
   kind: "joined-by-proximity";
   gapIn: number;
 }
 export interface InferredTap {
+  /** The finding id that rules on it. */
+  id: string;
   a: string;
   segment: number;
   kind: "tap-by-proximity";
@@ -37,9 +47,19 @@ export interface InferredTap {
   /** Where the tap sits on the segment's centerline, ft. */
   point: number[];
 }
+/** The finding kinds a person rules on as inferred: a joint or tap made, or one refused across classifications. */
+export const INFERRED_KINDS = new Set([
+  "joined-by-proximity",
+  "tap-by-proximity",
+  "near-miss-across-classifications",
+]);
 export interface ProximityFinding {
   id: string;
-  kind: InferredJoint["kind"] | InferredTap["kind"] | "loop-by-inference";
+  kind:
+    | InferredJoint["kind"]
+    | InferredTap["kind"]
+    | "loop-by-inference"
+    | "near-miss-across-classifications";
   elementIds: number[];
   note: string;
 }
@@ -62,6 +82,14 @@ const unit = (p: number[]) => {
   const n = Math.hypot(...p);
   return n < 1e-9 ? null : p.map((v) => v / n);
 };
+/** An air classification as connectors spell it (`SupplyAir`); null when none or undefined. */
+const classOf = (v: string | null | undefined) => {
+  const c = v?.replace(/\s+/g, "");
+  return c && !c.startsWith("Undefined") ? c : null;
+};
+const segmentClass = (s: Segment) =>
+  s.connectors.map((c) => classOf(c.classification)).find((c) => c != null) ??
+  classOf(s.classification);
 
 /**
  * ponytail: tuned by one case (Chadds 14122436 short of cap 14107111, 1.6 in of air to the cap
@@ -72,6 +100,8 @@ export const FACE_TOL_IN = 2;
 export const CAP_THICKNESS_IN = 1;
 /** The least cosine between a landing connector's outward axis and the face's inward normal. */
 const AXIS_COS = 0.7;
+/** The most |cos| between an end's axis and a duct's run for the end, inside it, to point across it. */
+const ACROSS_COS = Math.sqrt(1 - AXIS_COS ** 2);
 
 /**
  * A cross-section on an axis `u`, ft, from a segment's or a connector's size. A rectangle whose
@@ -130,6 +160,8 @@ interface Port {
   index: number;
   point: number[];
   axis: number[] | null;
+  /** Its air classification; null when it states none. */
+  cls: string | null;
 }
 /** Where a landing joins: a tap on a segment's centerline, or the open port whose face it is. */
 type Onto = { segment: Segment; at: number; point: number[] } | { port: Port };
@@ -142,6 +174,7 @@ type Face =
   | {
       label: "side";
       owner: number;
+      cls: string | null;
       segment: Segment;
       a: number[];
       u: number[];
@@ -152,6 +185,7 @@ type Face =
   | {
       label: "capped end" | "connector face";
       owner: number;
+      cls: string | null;
       origin: number[];
       normal: number[];
       section: Section;
@@ -173,7 +207,17 @@ function facesOf(snapshot: DuctSnapshot, open: readonly Port[]): Face[] {
         u = unit(sub(s.polyline[i]!, a)),
         section = u && sectionOf(s, u);
       if (u && section)
-        faces.push({ label: "side", owner: s.id, segment: s, a, u, len, run, section });
+        faces.push({
+          label: "side",
+          owner: s.id,
+          cls: segmentClass(s),
+          segment: s,
+          a,
+          u,
+          len,
+          run,
+          section,
+        });
       run += len;
     }
   }
@@ -192,6 +236,7 @@ function facesOf(snapshot: DuctSnapshot, open: readonly Port[]): Face[] {
       faces.push({
         label: "capped end",
         owner: s.id,
+        cls: segmentClass(s),
         origin: add(e, normal, CAP_THICKNESS_IN / 12),
         normal,
         section,
@@ -208,6 +253,7 @@ function facesOf(snapshot: DuctSnapshot, open: readonly Port[]): Face[] {
       faces.push({
         label: "connector face",
         owner: port.id,
+        cls: port.cls,
         origin: port.point,
         normal: port.axis,
         section,
@@ -220,6 +266,9 @@ function facesOf(snapshot: DuctSnapshot, open: readonly Port[]): Face[] {
 /**
  * How `p` (outward `axis`) lands on `face`: the signed distance out of it, ft (negative is
  * inside), and where it joins; null when it points away or lies outside the face's outline.
+ * Inside a duct's body an end lands however deep, so one on the centerline taps too, when it
+ * points across the run or along it away from the run's nearer end (an overlap coming in through
+ * that end); outside or on the surface its axis must point into the face.
  */
 function land(face: Face, p: number[], axis: number[]): { d: number; onto: Onto } | null {
   const { section } = face;
@@ -227,12 +276,11 @@ function land(face: Face, p: number[], axis: number[]): { d: number; onto: Onto 
     const t = dot(sub(p, face.a), face.u);
     if (t < 0 || t > face.len) return null;
     const r = add(sub(p, face.a), face.u, -t);
-    let d: number, normal: number[];
+    let d: number, normal: number[] | null;
     if ("inner" in section) {
       const n = Math.hypot(...r);
-      if (n < 1e-9) return null;
       d = n > section.outer ? n - section.outer : n < section.inner ? n - section.inner : 0;
-      normal = r.map((v) => -v / n);
+      normal = d < 0 ? null : r.map((v) => -v / n);
     } else {
       const [x, y] = [dot(r, section.x), dot(r, section.y)];
       const [dx, dy] = [Math.abs(x) - section.w, Math.abs(y) - section.h];
@@ -241,8 +289,13 @@ function land(face: Face, p: number[], axis: number[]): { d: number; onto: Onto 
         dx >= dy
           ? [dx, section.x.map((v) => -Math.sign(x) * v)]
           : [dy, section.y.map((v) => -Math.sign(y) * v)];
+      if (d < 0) normal = null;
     }
-    if (dot(axis, normal) <= AXIS_COS) return null;
+    const along = dot(axis, face.u);
+    const outward =
+      Math.abs(along) >= ACROSS_COS && Math.sign(along) !== (t < face.len / 2 ? 1 : -1);
+    if (normal ? dot(axis, normal) <= AXIS_COS : outward) return null;
+
     return { d, onto: { segment: face.segment, at: face.run + t, point: add(face.a, face.u, t) } };
   }
   if (dot(axis, face.normal) >= -AXIS_COS) return null;
@@ -256,10 +309,12 @@ function land(face: Face, p: number[], axis: number[]): { d: number; onto: Onto 
   return within ? { d, onto: face.onto } : null;
 }
 
-const ignored = (work: DuctsRouteDocument | null, id: string) => {
+/** The staged verdict on a finding id, if any: `ignore` withholds it, `connect` joins it across classifications. */
+const verdictOf = (work: DuctsRouteDocument | null, id: string) => {
   const value = work?.assumptions[id]?.staged?.value;
-  return value?.kind === "verdict" && value.verdict === "ignore";
+  return value?.kind === "verdict" ? value.verdict : null;
 };
+const differ = (a: string | null, b: string | null) => a != null && b != null && a !== b;
 
 /** Union-find over the reciprocal joints; equipment is an attachment, never a path, as in `groupTree`. */
 function components(elements: Element[], equipment: ReadonlySet<number>) {
@@ -291,11 +346,14 @@ function components(elements: Element[], equipment: ReadonlySet<number>) {
 /**
  * Joints and taps the model implies. (a) Two open connectors within `tolIn` inches join, nearest
  * pair first, each port once; shape compatibility is not required. (b) An open connector left
- * over that lands on a face within `FACE_TOL_IN`, nearest face first, joins what owns it: a duct's
- * side or an end a cap closes (the cap counted as the duct's) is tapped where it lands; an open
- * connector's mouth (terminal, equipment, duct, fitting) is joined, off-centre or not, and several
- * ends may land on one face. Each inference is a finding; one that joins two elements already in
- * one component is also a `loop-by-inference`.
+ * over that lands on a face within `FACE_TOL_IN` (or anywhere inside a duct's body), nearest face
+ * first, joins what owns it: a duct's side or an end a cap closes (the cap counted as the duct's)
+ * is tapped where it lands; an open connector's mouth (terminal, equipment, duct, fitting) is
+ * joined, off-centre or not, and several ends may land on one face. Either way, ends whose
+ * classifications differ do not join without a staged `connect` verdict: each such near miss is a
+ * `near-miss-across-classifications` finding, and (b) goes on to the next face whose classes agree.
+ * Each inference is a finding; one that joins two elements already in one component is also a
+ * `loop-by-inference`.
  */
 export function inferJoints(
   snapshot: DuctSnapshot,
@@ -314,6 +372,7 @@ export function inferJoints(
         index: c.index,
         point: c.point,
         axis: axisOf(e, c),
+        cls: classOf(c.classification),
       })),
   );
   const { find, union } = components(elements, equipment);
@@ -321,6 +380,14 @@ export function inferJoints(
     taps: InferredTap[] = [],
     findings: ProximityFinding[] = [];
   const used = new Set<string>();
+  const warned = new Set<string>();
+  const across = (id: string, elementIds: number[], note: string) => {
+    if (warned.has(id)) return;
+    warned.add(id);
+    findings.push({ id, kind: "near-miss-across-classifications", elementIds, note });
+  };
+  const anyway = (crossing: boolean) =>
+    crossing ? "; joined across classifications by a staged connect verdict" : "";
   const closes = (id: string, a: number, b: number) => {
     if (!equipment.has(a) && !equipment.has(b) && find(a) === find(b))
       findings.push({
@@ -342,15 +409,26 @@ export function inferJoints(
   for (const { a, b, d } of pairs) {
     if (used.has(a.k) || used.has(b.k)) continue;
     const id = `proximity:${a.k}|${b.k}`;
-    if (ignored(work, id)) continue;
-    used.add(a.k).add(b.k);
+    const verdict = verdictOf(work, id);
+    if (verdict === "ignore") continue;
     const gapIn = d * 12;
-    joints.push({ a: a.k, b: b.k, kind: "joined-by-proximity", gapIn });
+    const what = `open ends ${a.k} and ${b.k} are ${gapIn.toFixed(2)} in apart`;
+    const crossing = differ(a.cls, b.cls);
+    if (crossing && verdict !== "connect") {
+      across(
+        id,
+        [a.id, b.id],
+        `${what}, but ${a.k} is ${a.cls} and ${b.k} is ${b.cls}; not joined`,
+      );
+      continue;
+    }
+    used.add(a.k).add(b.k);
+    joints.push({ id, a: a.k, b: b.k, kind: "joined-by-proximity", gapIn });
     findings.push({
       id,
       kind: "joined-by-proximity",
       elementIds: [a.id, b.id],
-      note: `open ends ${a.k} and ${b.k} are ${gapIn.toFixed(2)} in apart; joined`,
+      note: `${what}; joined${anyway(crossing)}`,
     });
     closes(id, a.id, b.id);
   }
@@ -358,52 +436,82 @@ export function inferJoints(
   const faceTol = FACE_TOL_IN / 12;
   for (const p of open) {
     if (used.has(p.k) || !p.axis) continue;
-    let best: { d: number; onto: Onto; face: Face["label"] } | null = null;
-    for (const face of faces) {
-      if (face.owner === p.id) continue;
-      const hit = land(face, p.point, p.axis);
-      if (hit && Math.abs(hit.d) <= faceTol && (!best || Math.abs(hit.d) < Math.abs(best.d)))
-        best = { ...hit, face: face.label };
-    }
-    if (!best) continue;
-    const gapIn = best.d * 12;
-    const how = `${Math.abs(gapIn).toFixed(2)} in ${gapIn < 0 ? "into" : "short of"} its face`;
-    if ("port" in best.onto) {
-      const q = best.onto.port;
-      const id = `proximity:${[p, q]
-        .sort((x, y) => x.id - y.id || x.index - y.index)
-        .map((x) => x.k)
-        .join("|")}`;
-      if (ignored(work, id)) continue;
-      used.add(p.k).add(q.k);
-      joints.push({ a: p.k, b: q.k, kind: "joined-by-proximity", gapIn });
+    const hits = faces
+      .flatMap((face) => {
+        const hit = face.owner === p.id ? null : land(face, p.point, p.axis!);
+        const near = hit && (face.label === "side" ? hit.d <= faceTol : Math.abs(hit.d) <= faceTol);
+        return near ? [{ ...hit, face }] : [];
+      })
+      .sort((x, y) => Math.abs(x.d) - Math.abs(y.d));
+    for (const { d, onto, face } of hits) {
+      const gapIn = d * 12;
+      const how = `${Math.abs(gapIn).toFixed(2)} in ${gapIn < 0 ? "into" : "short of"} its face`;
+      const q = "port" in onto ? onto.port : null;
+      const id = q
+        ? `proximity:${[p, q]
+            .sort((x, y) => x.id - y.id || x.index - y.index)
+            .map((x) => x.k)
+            .join("|")}`
+        : `proximity:${p.k}|${face.owner}`;
+      const verdict = verdictOf(work, id);
+      const crossing = differ(p.cls, face.cls);
+      // An ignored join withholds this end; an ignored near miss only silences its warning.
+      if (verdict === "ignore") {
+        if (crossing) continue;
+        break;
+      }
+      const lands =
+        "port" in onto
+          ? `open end ${p.k} lands on open connector ${onto.port.k}'s face, ${how}, ${dist(p.point, onto.port.point) * 12 > 0.005 ? `${(dist(p.point, onto.port.point) * 12).toFixed(2)} in from its centre` : "centred"}`
+          : `open end ${p.k} lands on the ${face.label} of duct ${face.owner}, ${how}, ${onto.at.toFixed(2)} ft along it`;
+      if (crossing && verdict !== "connect") {
+        across(
+          id,
+          [p.id, face.owner],
+          `${lands}, but ${p.k} is ${p.cls} and ${face.owner} is ${face.cls}; not joined`,
+        );
+        continue;
+      }
+      used.add(p.k);
+      if ("port" in onto) {
+        used.add(onto.port.k);
+        joints.push({ id, a: p.k, b: onto.port.k, kind: "joined-by-proximity", gapIn });
+        findings.push({
+          id,
+          kind: "joined-by-proximity",
+          elementIds: [p.id, onto.port.id],
+          note: `${lands}; joined${anyway(crossing)}`,
+        });
+        closes(id, p.id, onto.port.id);
+        break;
+      }
+      const { segment, at, point } = onto;
+      taps.push({ id, a: p.k, segment: segment.id, kind: "tap-by-proximity", gapIn, at, point });
       findings.push({
         id,
-        kind: "joined-by-proximity",
-        elementIds: [p.id, q.id],
-        note: `open end ${p.k} lands on open connector ${q.k}'s face, ${how}, ${dist(p.point, q.point) * 12 > 0.005 ? `${(dist(p.point, q.point) * 12).toFixed(2)} in from its centre` : "centred"}; joined`,
+        kind: "tap-by-proximity",
+        elementIds: [p.id, segment.id],
+        note: `${lands}; tapped${anyway(crossing)}`,
       });
-      closes(id, p.id, q.id);
-      continue;
+      closes(id, p.id, segment.id);
+      break;
     }
-    const { segment, at, point } = best.onto;
-    const id = `proximity:${p.k}|${segment.id}`;
-    if (ignored(work, id)) continue;
-    used.add(p.k);
-    taps.push({ a: p.k, segment: segment.id, kind: "tap-by-proximity", gapIn, at, point });
-    findings.push({
-      id,
-      kind: "tap-by-proximity",
-      elementIds: [p.id, segment.id],
-      note: `open end ${p.k} lands on the ${best.face} of duct ${segment.id}, ${how}, ${at.toFixed(2)} ft along it; tapped`,
-    });
-    closes(id, p.id, segment.id);
   }
   return { joints, taps, findings };
 }
 
 /**
+ * Two element ids in the tolerated snapshot only inference `id` joins: a joint's two elements, or
+ * a tap's virtual fitting and its branch. A path stepping between them rests on that inference.
+ */
+export interface InferredLink {
+  id: string;
+  between: readonly [number, number];
+}
+
+/**
  * The snapshot with every inference applied as a real joint: reciprocal `connectedTo` links, one
+
  * virtual `Tap` fitting (negative id) hung off a new `curve` connector per inferred tap, the
  * consumed `open-end` issues dropped, and the groups it bridged merged into one (the one with
  * equipment, else the lower id). The input is never mutated.
@@ -412,9 +520,19 @@ export function tolerate(
   snapshot: DuctSnapshot,
   work: DuctsRouteDocument | null = null,
   tolIn = 1,
-): Inference & { snapshot: DuctSnapshot } {
+): Inference & { snapshot: DuctSnapshot; links: InferredLink[] } {
   const inference = inferJoints(snapshot, tolIn, work);
-  if (!inference.joints.length && !inference.taps.length) return { snapshot, ...inference };
+  const links: InferredLink[] = [
+    ...inference.joints.map((j) => ({
+      id: j.id,
+      between: [parse(j.a).elementId, parse(j.b).elementId] as const,
+    })),
+    ...inference.taps.map((t, i) => ({
+      id: t.id,
+      between: [-(i + 1), parse(t.a).elementId] as const,
+    })),
+  ];
+  if (!inference.joints.length && !inference.taps.length) return { snapshot, links, ...inference };
   const nodes = snapshot.nodes.map((n) => ({
     ...n,
     connectors: n.connectors.map((c) => ({ ...c })),
@@ -544,6 +662,7 @@ export function tolerate(
   });
   return {
     ...inference,
+    links,
     snapshot: {
       ...snapshot,
       groups: merged,

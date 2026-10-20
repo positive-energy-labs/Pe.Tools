@@ -3,11 +3,11 @@
  * tolerated (`proximity.ts`), every terminal's design flow resolved (`terminal-flows.ts`), and
  * the findings of both beside the snapshot's own issues, each naming who clears it. Cached per
  * snapshot for the last Work, so `price` and `assessDucts` share one survey; the tolerated
- * snapshot is cached per ignore set, so a staged number re-solves only `next`.
+ * snapshot is cached per proximity verdict set, so a staged number re-solves only `next`.
  */
 import { stagedDucts, type DuctFinding, type DuctsRouteDocument } from "@pe/agent-contracts";
 
-import { tolerate } from "./proximity.ts";
+import { tolerate, type InferredLink } from "./proximity.ts";
 import { markOf, terminalFlows, type FlowFinding, type TerminalFlow } from "./terminal-flows.ts";
 import { groupTree } from "./topology.ts";
 import type { DuctSnapshot } from "./types.ts";
@@ -16,6 +16,8 @@ export interface Survey {
   snapshot: DuctSnapshot;
   flows: Map<number, TerminalFlow>;
   findings: DuctFinding[];
+  /** The element pairs only a proximity inference joins; a path stepping across one rests on it. */
+  inferred: InferredLink[];
 }
 
 const PERSON = new Set(["open-end", "no-root", "multi-root", "no-terminal-flow"]);
@@ -70,13 +72,13 @@ const flowFinding = (f: FlowFinding): DuctFinding => {
   }
 };
 
-const ignoreKey = (work: DuctsRouteDocument | null) =>
+/** The staged verdicts proximity reads (ignore withholds, connect joins across classifications). */
+const verdictKey = (work: DuctsRouteDocument | null) =>
   Object.entries(work?.assumptions ?? {})
-    .filter(([key, cell]) => {
+    .flatMap(([key, cell]) => {
       const v = cell.staged?.value;
-      return key.startsWith("proximity:") && v?.kind === "verdict" && v.verdict === "ignore";
+      return key.startsWith("proximity:") && v?.kind === "verdict" ? [`${key}=${v.verdict}`] : [];
     })
-    .map(([key]) => key)
     .sort()
     .join("|");
 
@@ -106,16 +108,18 @@ export function series(snapshot: DuctSnapshot, tags: Set<string>) {
     return { ...g, rootIds: owners };
   });
   if (!dropped.size) return { snapshot, findings };
-  const issues = snapshot.issues.filter((i) => !(i.kind === "multi-root" && dropped.has(i.groupId)));
+  const issues = snapshot.issues.filter(
+    (i) => !(i.kind === "multi-root" && dropped.has(i.groupId)),
+  );
   return { snapshot: { ...snapshot, groups, issues }, findings };
 }
 
 const cache = new WeakMap<DuctSnapshot, Map<string, ReturnType<typeof tolerate>>>();
-/** `tolerate` under Work's staged ignore verdicts, cached per snapshot and ignore set. */
+/** `tolerate` under Work's staged proximity verdicts, cached per snapshot and verdict set. */
 export function tolerated(snapshot: DuctSnapshot, work: DuctsRouteDocument | null) {
-  const byIgnore = cache.get(snapshot) ?? cache.set(snapshot, new Map()).get(snapshot)!;
-  const key = ignoreKey(work);
-  return byIgnore.get(key) ?? byIgnore.set(key, tolerate(snapshot, work)).get(key)!;
+  const byVerdicts = cache.get(snapshot) ?? cache.set(snapshot, new Map()).get(snapshot)!;
+  const key = verdictKey(work);
+  return byVerdicts.get(key) ?? byVerdicts.set(key, tolerate(snapshot, work)).get(key)!;
 }
 const inSeries = new WeakMap<DuctSnapshot, Map<string, ReturnType<typeof series>>>();
 const last = new WeakMap<DuctSnapshot, { work: DuctsRouteDocument | null; survey: Survey }>();
@@ -134,10 +138,11 @@ export function survey(snapshot: DuctSnapshot, work: DuctsRouteDocument | null):
   const flows = terminalFlows(s.snapshot, staged.loads.preview, staged.flows, trees);
   const findings: DuctFinding[] = [
     ...s.findings,
+    // An inference is likely, never correct (kaitpw 2026-10-19): a person rules on every one.
     ...t.findings.map((f) => ({
       ...f,
-      assumed: f.kind === "loop-by-inference" ? null : f.note,
-      clearer: f.kind === "loop-by-inference" ? ("person" as const) : ("pea" as const),
+      assumed: f.kind === "joined-by-proximity" || f.kind === "tap-by-proximity" ? f.note : null,
+      clearer: "person" as const,
     })),
     ...flows.findings.map(flowFinding),
     ...s.snapshot.issues.map((i) => ({
@@ -153,7 +158,8 @@ export function survey(snapshot: DuctSnapshot, work: DuctsRouteDocument | null):
       clearer: PERSON.has(i.kind) ? ("person" as const) : ("route" as const),
     })),
   ];
-  const result = { snapshot: s.snapshot, flows: flows.flows, findings };
+  const result = { snapshot: s.snapshot, flows: flows.flows, findings, inferred: t.links };
+
   last.set(snapshot, { work, survey: result });
   return result;
 }

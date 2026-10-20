@@ -2,12 +2,15 @@
  * Proximity inference, deterministic: a small gap joins, a wide one does not, a branch end landing
  * on a duct's face (a side, off-center or shared, or an end a cap closes) taps it, one alongside
  * does not, a staged ignore verdict withholds the inference, and an inference that closes a ring
- * is also a loop finding. Points are model feet; the tolerance is inches.
+ * is also a loop finding. Ends of different air classifications never join without a staged
+ * connect verdict, an end anywhere inside a duct's body taps it, and every inference is a finding
+ * a person clears (kaitpw 2026-10-19). Points are model feet; the tolerance is inches.
  */
 import { expect, it } from "vite-plus/test";
 import { ductsDocumentSchema, type DuctsRouteDocument } from "@pe/agent-contracts";
 
 import { CAP_THICKNESS_IN, inferJoints, tolerate } from "./proximity.ts";
+import { survey } from "./survey.ts";
 import { groupTree } from "./topology.ts";
 import type { DuctSnapshot } from "./types.ts";
 
@@ -127,10 +130,18 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
     slots: { fanStatic: "", fanFlow: "", componentDrop: "", fittingCoefficient: "" },
   };
 };
-const ignoring = (id: string): DuctsRouteDocument =>
+const staging = (id: string, verdict: "ignore" | "connect"): DuctsRouteDocument =>
   ductsDocumentSchema.parse({
-    assumptions: { [id]: { staged: { value: { kind: "verdict", verdict: "ignore" } } } },
+    assumptions: { [id]: { staged: { value: { kind: "verdict", verdict } } } },
   });
+const ignoring = (id: string) => staging(id, "ignore");
+/** `s` carried as return air, its ports too. */
+const returnAir = <T extends Segment>(s: T): T => ({
+  ...s,
+  classification: "Return Air",
+  systemName: "RA 1",
+  connectors: s.connectors.map((c) => ({ ...c, classification: "ReturnAir" })),
+});
 
 it("a 0.4 in gap joins the two open ends and merges their groups", () => {
   const before = snap([
@@ -139,7 +150,13 @@ it("a 0.4 in gap joins the two open ends and merges their groups", () => {
   ]);
   const { joints, taps, findings, snapshot } = tolerate(before);
   expect(joints).toEqual([
-    { a: "1:2", b: "2:1", kind: "joined-by-proximity", gapIn: expect.closeTo(0.4, 6) },
+    {
+      id: "proximity:1:2|2:1",
+      a: "1:2",
+      b: "2:1",
+      kind: "joined-by-proximity",
+      gapIn: expect.closeTo(0.4, 6),
+    },
   ]);
   expect(taps).toEqual([]);
   expect(findings.map((f) => f.id)).toEqual(["proximity:1:2|2:1"]);
@@ -174,6 +191,7 @@ it("a branch end 0.3 in off a main's side becomes a virtual tap on the main", ()
   expect(joints).toEqual([]);
   expect(taps).toEqual([
     {
+      id: "proximity:2:1|1",
       a: "2:1",
       segment: 1,
       kind: "tap-by-proximity",
@@ -230,7 +248,13 @@ it("an inferred joint that closes a ring is also a loop-by-inference finding", (
   link(d3, 2, d4, 1);
   const { joints, findings, snapshot } = tolerate(snap([d1, d2, d3, d4]));
   expect(joints).toEqual([
-    { a: "1:1", b: "4:2", kind: "joined-by-proximity", gapIn: expect.closeTo(0.4, 6) },
+    {
+      id: "proximity:1:1|4:2",
+      a: "1:1",
+      b: "4:2",
+      kind: "joined-by-proximity",
+      gapIn: expect.closeTo(0.4, 6),
+    },
   ]);
   expect(findings.map((f) => [f.id, f.kind])).toEqual([
     ["proximity:1:1|4:2", "joined-by-proximity"],
@@ -252,6 +276,7 @@ it("a duct landing off-center on a plenum's side taps it where it lands", () => 
   const { taps, findings } = inferJoints(snap([plenum(), onSide(2, 3, 8 * IN, 0.5)]));
   expect(taps).toEqual([
     {
+      id: "proximity:2:1|1",
       a: "2:1",
       segment: 1,
       kind: "tap-by-proximity",
@@ -281,6 +306,7 @@ it("a duct stopping 1.6 in short of an end cap's face taps the capped duct at it
   const { taps, snapshot } = tolerate(before);
   expect(taps).toEqual([
     {
+      id: "proximity:2:2|1",
       a: "2:2",
       segment: 1,
       kind: "tap-by-proximity",
@@ -341,7 +367,13 @@ it("a duct rising into a grille's mouth 2 in off its centre joins the grille (Ch
   const before = snap([riser], [grille(9, [2 * IN, 0, 12])]);
   const { joints, findings, snapshot } = tolerate(before);
   expect(joints).toEqual([
-    { a: "9:1", b: "2:1", kind: "joined-by-proximity", gapIn: expect.closeTo(0, 6) },
+    {
+      id: "proximity:2:1|9:1",
+      a: "9:1",
+      b: "2:1",
+      kind: "joined-by-proximity",
+      gapIn: expect.closeTo(0, 6),
+    },
   ]);
   // The grille is read first, so it is the one landing; the rule is symmetric.
   expect(findings[0]!.id).toBe("proximity:2:1|9:1");
@@ -365,4 +397,84 @@ it("two ducts landing on one connector's face both join it, each to its own copy
     [2, { elementId: 3, connector: 1 }],
   ]);
   expect(snapshot.segments[1]!.connectors[0]!.connectedTo).toEqual({ elementId: 9, connector: 2 });
+});
+
+it("open ends of different classifications 0.4 in apart warn and stay open; a connect verdict joins them", () => {
+  const before = snap([
+    duct(1, [0, 0, 0], [10, 0, 0], "g1"),
+    returnAir(duct(2, [10 + 0.4 * IN, 0, 0], [20, 0, 0], "g2")),
+  ]);
+  const id = "proximity:1:2|2:1";
+  const out = tolerate(before);
+  expect(out.joints).toEqual([]);
+  expect(out.snapshot).toBe(before);
+  expect(out.findings).toEqual([
+    {
+      id,
+      kind: "near-miss-across-classifications",
+      elementIds: [1, 2],
+      note: "open ends 1:2 and 2:1 are 0.40 in apart, but 1:2 is SupplyAir and 2:1 is ReturnAir; not joined",
+    },
+  ]);
+  const joined = tolerate(before, staging(id, "connect"));
+  expect(joined.joints.map((j) => j.id)).toEqual([id]);
+  expect(joined.findings[0]).toMatchObject({ id, kind: "joined-by-proximity" });
+  expect(joined.findings[0]!.note).toContain("across classifications by a staged connect verdict");
+  // An ignore verdict on the warning silences it.
+  expect(inferJoints(before, 1, ignoring(id)).findings).toEqual([]);
+});
+
+it("a supply branch landing on a return duct's side warns instead of tapping it", () => {
+  // Chadds 6894422:1 on 7243161: a supply end on a return main is a near miss, not a tap.
+  const out = inferJoints(snap([returnAir(plenum()), onSide(2, 3, 0, 0.5)]));
+  expect(out.taps).toEqual([]);
+  expect(out.findings.map((f) => [f.id, f.kind])).toEqual([
+    ["proximity:2:1|1", "near-miss-across-classifications"],
+  ]);
+  expect(out.findings[0]!.note).toContain("2:1 is SupplyAir and 1 is ReturnAir; not joined");
+  const anyway = inferJoints(
+    snap([returnAir(plenum()), onSide(2, 3, 0, 0.5)]),
+    1,
+    staging("proximity:2:1|1", "connect"),
+  );
+  expect(anyway.taps.map((t) => t.id)).toEqual(["proximity:2:1|1"]);
+});
+
+it("an end deep inside a duct's body, pointing across it, taps it at its nearest point", () => {
+  // Chadds 7266368:1 sits 3.3 in inside 14342882 (a real join, kaitpw checked in Revit); this
+  // one sits on the plenum's centerline, 15 in past its face.
+  const deep = duct(2, [4, 0, 0], [4, 5, 0], "g2");
+  const { taps, findings } = tolerate(snap([plenum(), deep]));
+  expect(taps).toMatchObject([
+    {
+      id: "proximity:2:1|1",
+      a: "2:1",
+      segment: 1,
+      gapIn: expect.closeTo(-15, 6),
+      point: [4, 0, 0],
+    },
+  ]);
+  expect(findings[0]!.note).toContain("15.00 in into its face");
+  // An overlap coming in through the plenum's (capped) start end and pointing deeper taps too ...
+  const capped = plenum();
+  const ends = [cap(9, capped, 1)];
+  const overlap = duct(3, [-2, 0, 0], [1, 0, 0], "g3");
+  expect(inferJoints(snap([capped, overlap], ends)).taps.map((t) => t.a)).toEqual(["3:2"]);
+  // ... one pointing back out through the nearer end does not.
+  const out = duct(3, [3, 0, 0], [1, 0, 0], "g3");
+  expect(inferJoints(snap([capped, out], ends)).taps.map((t) => t.a)).not.toContain("3:2");
+});
+
+it("every inference is a finding a person clears; a near miss assumes nothing", () => {
+  const before = snap([
+    plenum(),
+    onSide(2, 3, 0, 0.5),
+    returnAir(duct(3, [20, 0, 0], [30, 0, 0], "g3")),
+    duct(4, [30 + 0.4 * IN, 0, 0], [40, 0, 0], "g4"),
+  ]);
+  const findings = survey(before, null).findings.filter((f) => f.id.startsWith("proximity:"));
+  expect(findings.map((f) => [f.kind, f.clearer, f.assumed != null])).toEqual([
+    ["near-miss-across-classifications", "person", false],
+    ["tap-by-proximity", "person", true],
+  ]);
 });

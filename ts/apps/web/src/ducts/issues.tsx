@@ -8,6 +8,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  */
 import type { DuctFinding } from "@pe/agent-contracts";
 import { ISSUE_BLOCKS, type Blocks, type IssueKind } from "@pe/ducts-domain/issues";
+import { INFERRED_KINDS } from "@pe/ducts-domain/proximity";
 import type { VerdictTone } from "@pe/kit/table/model";
 export interface IssueKindInfo {
   /** One to three words. */
@@ -106,21 +107,44 @@ const BLOCKS_WORD: Record<Blocks, string> = {
   budgetable: "blocks the budget",
   none: "advisory",
 };
-const CLEARERS: DuctFinding["clearer"][] = ["person", "pea", "route"];
+/**
+ * Who clears a finding, with proximity inferences their own warning tier first: a join the model
+ * implies is never taken as correct (kaitpw 2026-10-19), so a person rules on each.
+ */
+const TIERS: { key: string; label: string; holds: (f: DuctFinding) => boolean }[] = [
+  {
+    key: "inferred",
+    label: "person rules · inferred",
+    holds: (f) => INFERRED_KINDS.has(f.kind) || f.kind === "loop-by-inference",
+  },
+  ...(["person", "pea", "route"] as const).map((clearer) => ({
+    key: clearer,
+    label: `${clearer} clears`,
+    holds: (f: DuctFinding) => f.clearer === clearer,
+  })),
+];
+const tierOf = (f: DuctFinding) => TIERS.find((t) => t.holds(f))!.key;
 /** The survey's findings, grouped by who clears them; what the route assumed is spelled out. */
 export function FindingsList({ findings }: { findings: readonly DuctFinding[] }) {
   if (!findings.length) return null;
   return (
     <dl className="grid grid-cols-[auto_1fr] gap-x-3 t-small" data-findings="">
-      {CLEARERS.filter((c) => findings.some((f) => f.clearer === c)).map((clearer) => (
-        <div key={clearer} className="contents">
-          <dt className="t-upper text-ink-2">{clearer} clears</dt>
+      {TIERS.filter((t) => findings.some((f) => tierOf(f) === t.key)).map((tier) => (
+        <div key={tier.key} className="contents" data-tier={tier.key}>
+          <dt
+            className={tier.key === "inferred" ? "t-upper" : "t-upper text-ink-2"}
+            data-tone={tier.key === "inferred" ? "caution" : undefined}
+          >
+            {tier.label}
+          </dt>
           <dd>
             {findings
-              .filter((f) => f.clearer === clearer)
+              .filter((f) => tierOf(f) === tier.key)
               .map((f) => (
                 <div key={f.id} data-finding={f.id}>
-                  <span data-tone={f.assumed ? "caution" : "alarm"}>{f.kind}</span>{" "}
+                  <span data-tone={f.assumed || tier.key === "inferred" ? "caution" : "alarm"}>
+                    {f.kind}
+                  </span>{" "}
                   <span className="face-mono">{f.elementIds.join(" ")}</span> {f.note}
                   {f.assumed ? <span className="text-ink-2"> · assumed: {f.assumed}</span> : null}
                 </div>

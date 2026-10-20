@@ -10,7 +10,7 @@
  * - Two consecutive ids that share no connector are a break, and the leg runs on through it. When
  *   the snapshot joins them through at most `OMISSION_HOPS` connections over elements outside the
  *   subject, the break is an `omission` carrying the skipped ids (the subject left them out).
- *   Else, when the tolerated graph (`tolerated`, Work's ignore verdicts honored, as the builder
+ *   Else, when the tolerated graph (`tolerated`, Work's proximity verdicts honored, as the builder
  *   reads it) bridges it, the break is `inferred`, carrying the proximity finding: joined by
  *   proximity, a person rules on it. An inferred joint or tap bridges a break when it links the
  *   two sides, each side an element or one the snapshot joins it to (an end cap closing the host
@@ -24,6 +24,9 @@ import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import { tolerated } from "@pe/ducts-domain/survey";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+
+/** The proximity findings that join; a near miss across classifications joins nothing and stays a gap. */
+const BRIDGES = new Set(["joined-by-proximity", "tap-by-proximity"]);
 
 type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];
@@ -207,7 +210,7 @@ export function legsOf(
     const [a, b] = [side(after), side(before)];
     return tolerated(snapshot, work).findings.find(
       ({ kind, elementIds: [x, y] }) =>
-        kind !== "loop-by-inference" && ((a.has(x!) && b.has(y!)) || (a.has(y!) && b.has(x!))),
+        BRIDGES.has(kind) && ((a.has(x!) && b.has(y!)) || (a.has(y!) && b.has(x!))),
     )?.id;
   };
 
