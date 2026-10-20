@@ -359,6 +359,29 @@ test("native receipt source identity is retained, deduped, and never replaced wi
   }
 });
 
+test("thread recovery receipts wait until their snapshot owner has initialized", async () => {
+  const f = fixture();
+  try {
+    const event: HarnessEvent = {
+      kind: "error",
+      seq: 1,
+      at: "2026-10-19T23:00:00.000Z",
+      turnId: "recovering-turn",
+      message: "host restarted during this turn",
+    };
+    let ready = false;
+    const adapter = createThreadReceiptAdapter(f.exporter, () => {
+      if (!ready) throw new ReferenceError("Thread owner is still initializing");
+      return [{ id: "recovering-thread", title: "Recovered", events: [event] }];
+    });
+    expect(() => adapter.accept("recovering-thread", "Recovered", event)).not.toThrow();
+    ready = true;
+    await expect.poll(async () => (await f.journal.read({ kinds: ["turn"] })).length).toBe(1);
+  } finally {
+    await f.close();
+  }
+});
+
 test("thread and update adapters keep opaque joins and honest endings, with notice reply custody local", async () => {
   const f = fixture();
   try {

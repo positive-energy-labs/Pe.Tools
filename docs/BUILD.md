@@ -81,7 +81,7 @@ That does not make `BUILD.md` a tool manual. The durable decision is: **when the
 
 - **Windows dotnet state can be poisoned.** Missing core Windows environment variables can break NuGet/MSBuild restore with errors such as `Value cannot be null. (Parameter 'path1')`. The build tool detects this and points to `tools/dotnet-sandbox-safe.ps1`; recovery notes live in that script's comment header.
 - **Revit process startup is expensive.** A cold start is 90-300s. Avoid touching a session unless its UI/document state is the subject of proof.
-- **HR sessions are disposable development state.** A cold HR restart discards unsaved edits and reopens all recoverable open documents, including documents opened outside the CLI. Use a plain or installed session for work that must survive. A restart can cost minutes; attached proof should be deliberate and evidence-based.
+- **HR sessions are disposable development state.** A cold HR restart discards unsaved edits and reopens all recoverable open documents, including documents opened outside the CLI. Use a snapshot or installed session for work that must survive. A restart can cost minutes; attached proof should be deliberate and evidence-based.
 - **Hot reload is useful but not proof by itself.** Treat an applied delta as a step toward a behavior/log/script/test proof, not as the final freshness claim. `buildStamp` is provenance only; loaded-path identity and a restart are the freshness facts.
 - **Terminal isolated outputs do not feed a session's loaded assemblies.** The safe compile lane writes `.artifacts/...`; a dev-lane session runs a byte copy of the package-local interactive build, and the installed lane runs neither.
 - **Installed and dev roots are separate.** Do not validate installed behavior against dev host/runtime roots.
@@ -191,7 +191,7 @@ Omitting `--project` does not grant installed authority. The checkout CLI can in
 
 Every session pe-revit starts is `controlled`. `session list` also reports observed Revit processes and diagnostic rows. A row's presence, custody or bridge readiness does not authorize execution: the SDK's `execution` verdict does. A normally opened installed Revit can be adopted by a targeted mutation when the SDK independently proves its successfully loaded payload belongs to the same installation. Missing, foreign or conflicting loaded owners refuse execution. Pe.Tools relays that verdict and does not infer eligibility from diagnostic rows.
 
-HR applies only to checkout HR sessions. A cold restart discards unsaved edits by default, takes a fresh document checkpoint, and reopens recoverable documents without restoring views. Never-saved documents are dropped. Plain/snapshot and installed sessions refuse HR. Other lifecycle and document actions retain the SDK's unsaved policy and receipt rules.
+HR applies only to checkout HR sessions. A cold restart discards unsaved edits by default, takes a fresh document checkpoint, and reopens recoverable documents without restoring views. Never-saved documents are dropped. Snapshot and installed sessions refuse HR. Other lifecycle and document actions retain the SDK's unsaved policy and receipt rules.
 
 ## Packaging and release decisions
 

@@ -32,6 +32,7 @@ import { Route as SettingsRouteImport } from "./routes/settings";
 import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
 import { Route as DesignSystemBandRouteImport } from "./routes/design-system_.band";
+import { Route as DesignSystemControlSurfaceRouteImport } from "./routes/design-system_.control-surface";
 import { Route as DesignSystemListRouteImport } from "./routes/design-system_.list";
 import { Route as DesignSystemPopoversRouteImport } from "./routes/design-system_.popovers";
 import { Route as DesignSystemRevitRouteImport } from "./routes/design-system_.revit";
@@ -156,6 +157,12 @@ const DesignSystemBandRoute = DesignSystemBandRouteImport.update({
   path: "/design-system/band",
   getParentRoute: () => rootRouteImport,
 } as any);
+const DesignSystemControlSurfaceRoute =
+  DesignSystemControlSurfaceRouteImport.update({
+    id: "/design-system_/control-surface",
+    path: "/design-system/control-surface",
+    getParentRoute: () => rootRouteImport,
+  } as any);
 const DesignSystemListRoute = DesignSystemListRouteImport.update({
   id: "/design-system_/list",
   path: "/design-system/list",
@@ -222,6 +229,7 @@ export interface FileRoutesByFullPath {
   "/takeoffs": typeof TakeoffsRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
+  "/design-system/control-surface": typeof DesignSystemControlSurfaceRoute;
   "/design-system/list": typeof DesignSystemListRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
   "/design-system/revit": typeof DesignSystemRevitRoute;
@@ -255,6 +263,7 @@ export interface FileRoutesByTo {
   "/takeoffs": typeof TakeoffsRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
+  "/design-system/control-surface": typeof DesignSystemControlSurfaceRoute;
   "/design-system/list": typeof DesignSystemListRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
   "/design-system/revit": typeof DesignSystemRevitRoute;
@@ -289,6 +298,7 @@ export interface FileRoutesById {
   "/takeoffs": typeof TakeoffsRoute;
   "/design-system_/arming": typeof DesignSystemArmingRoute;
   "/design-system_/band": typeof DesignSystemBandRoute;
+  "/design-system_/control-surface": typeof DesignSystemControlSurfaceRoute;
   "/design-system_/list": typeof DesignSystemListRoute;
   "/design-system_/popovers": typeof DesignSystemPopoversRoute;
   "/design-system_/revit": typeof DesignSystemRevitRoute;
@@ -324,6 +334,7 @@ export interface FileRouteTypes {
     | "/takeoffs"
     | "/design-system/arming"
     | "/design-system/band"
+    | "/design-system/control-surface"
     | "/design-system/list"
     | "/design-system/popovers"
     | "/design-system/revit"
@@ -357,6 +368,7 @@ export interface FileRouteTypes {
     | "/takeoffs"
     | "/design-system/arming"
     | "/design-system/band"
+    | "/design-system/control-surface"
     | "/design-system/list"
     | "/design-system/popovers"
     | "/design-system/revit"
@@ -390,6 +402,7 @@ export interface FileRouteTypes {
     | "/takeoffs"
     | "/design-system_/arming"
     | "/design-system_/band"
+    | "/design-system_/control-surface"
     | "/design-system_/list"
     | "/design-system_/popovers"
     | "/design-system_/revit"
@@ -424,6 +437,7 @@ export interface RootRouteChildren {
   TakeoffsRoute: typeof TakeoffsRoute;
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
   DesignSystemBandRoute: typeof DesignSystemBandRoute;
+  DesignSystemControlSurfaceRoute: typeof DesignSystemControlSurfaceRoute;
   DesignSystemListRoute: typeof DesignSystemListRoute;
   DesignSystemPopoversRoute: typeof DesignSystemPopoversRoute;
   DesignSystemRevitRoute: typeof DesignSystemRevitRoute;
@@ -596,6 +610,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DesignSystemBandRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/design-system_/control-surface": {
+      id: "/design-system_/control-surface";
+      path: "/design-system/control-surface";
+      fullPath: "/design-system/control-surface";
+      preLoaderRoute: typeof DesignSystemControlSurfaceRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/design-system_/list": {
       id: "/design-system_/list";
       path: "/design-system/list";
@@ -690,6 +711,7 @@ const rootRouteChildren: RootRouteChildren = {
   TakeoffsRoute: TakeoffsRoute,
   DesignSystemArmingRoute: DesignSystemArmingRoute,
   DesignSystemBandRoute: DesignSystemBandRoute,
+  DesignSystemControlSurfaceRoute: DesignSystemControlSurfaceRoute,
   DesignSystemListRoute: DesignSystemListRoute,
   DesignSystemPopoversRoute: DesignSystemPopoversRoute,
   DesignSystemRevitRoute: DesignSystemRevitRoute,

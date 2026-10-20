@@ -39,6 +39,7 @@ This file indexes the unique homes of surface rules. The long rationale is in gi
 
 - `.agents/skills/lens.house/SKILL.md` law 10 holds kit-first authoring.
 - Component prop types, `design-guard.test.ts`, recipe-grid tests, and swatch specimens hold primitive capability, keyboard behavior, and variant coverage.
+- Kit `ActionDefinition` and `actionScopeKeys` connect control activation, scoped bindings, and Tutorial. `KeyHint`, `PopupFrame`, and `SearchControl` own shortcut, picker, and search presentation; [normalization](../features/design-system/NORMALIZATION.md) indexes these contracts.
 - `state/route-store.ts` and product manifests hold the route-visible model.
 
 ## 7 · Route anatomy

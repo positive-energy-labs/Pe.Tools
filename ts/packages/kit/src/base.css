@@ -58,6 +58,7 @@
   --font-body: "Open Sans", "Segoe UI", system-ui, sans-serif;
   --font-display: "Spectral", Georgia, "Times New Roman", serif;
   --font-mono: "Cascadia Code", Consolas, monospace;
+  --case-upper: uppercase;
   /* Chrome wears regular and strong only; medium and bold are for prose. */
   --weight-regular: 400;
   --weight-medium: 500;
@@ -98,6 +99,8 @@
   --shadow-float:
     inset 0 1px 0 var(--pe-lift), 0 0 0 1px var(--pe-lift), 0 8px 24px var(--pe-shade);
   --shadow-modal: 0 4px 24px color-mix(in srgb, var(--pe-scrim) 50%, transparent);
+  /* A field sunk into its surface: where typing goes. */
+  --shadow-well: inset 0 1px 2px var(--pe-shade);
   --z-raised: 10;
   --z-sticky: 20;
   --z-popup: 40;

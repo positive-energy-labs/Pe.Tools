@@ -14,7 +14,7 @@ Owns ordinary non-Revit tests for shared contracts, host boundaries, APS boundar
 dotnet test dotnet/Pe.Shared.Tests/Pe.Shared.Tests.csproj
 ```
 
-Deterministic proof with contact none. A passing run proves ordinary package behavior only; it does not prove loaded Revit runtime freshness.
+Deterministic proof; no Revit. A passing run proves ordinary package behavior only; it does not prove loaded Revit runtime freshness.
 
 ## Living Memory
 

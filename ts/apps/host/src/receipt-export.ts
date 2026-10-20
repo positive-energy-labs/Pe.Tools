@@ -923,25 +923,29 @@ export function createThreadReceiptAdapter(
       ].includes(event.kind)
     )
       return;
-    // A turn's end carries its span and tool count, read from the thread now, never its words.
-    const ended = event.kind === "turn_end" || event.kind === "error" ? event : undefined;
-    const events = ended?.turnId ? (snapshot().find((t) => t.id === id)?.events ?? []) : [];
-    const prompt = events.find((e) => e.kind === "prompt" && e.turnId === ended?.turnId);
-    const span =
-      ended && prompt
-        ? {
-            durationMs: elapsed(prompt.at, ended.at),
-            toolCount: events.filter(
-              (e) =>
-                e.kind === "update" &&
-                e.turnId === ended.turnId &&
-                e.update.sessionUpdate === "tool_call",
-            ).length,
-          }
-        : {};
     const failure = event.kind === "error" ? event.failure?.kind : undefined;
     tail = tail
       .then(async () => {
+        // A turn's end carries its span and tool count, read after the thread owner has initialized, never its words.
+        const ended = event.kind === "turn_end" || event.kind === "error" ? event : undefined;
+        const events = ended?.turnId
+          ? (snapshot()
+              .find((t) => t.id === id)
+              ?.events.filter((e) => e.seq <= ended.seq) ?? [])
+          : [];
+        const prompt = events.find((e) => e.kind === "prompt" && e.turnId === ended?.turnId);
+        const span =
+          ended && prompt
+            ? {
+                durationMs: elapsed(prompt.at, ended.at),
+                toolCount: events.filter(
+                  (e) =>
+                    e.kind === "update" &&
+                    e.turnId === ended.turnId &&
+                    e.update.sessionUpdate === "tool_call",
+                ).length,
+              }
+            : {};
         const threadId = await threadJoin(id);
         const turnId =
           "turnId" in event && event.turnId
