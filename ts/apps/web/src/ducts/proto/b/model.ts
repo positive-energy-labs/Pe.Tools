@@ -1,8 +1,7 @@
 /**
- * THROWAWAY (protoui round 1, variant B): the profiler tree. system → runs (fan to terminal) →
- * legs (`legsOf` over the run's path) → elements. Loss comes only from `priced.now.paths`: an
- * element's self is the sum of its rows' dp on that path, its total the running sum from the fan.
- * With no priced result every number is null (never a stand-in figure).
+ * The profiler tree E2 reads: system -> runs (fan to terminal) -> legs (`legsOf` over the run's path) -> elements.
+ * Loss comes only from `priced.now.paths`: an element's self is the sum of its rows' dp on that path, its
+ * total the running sum from the fan. With no priced result every number is null (never a stand-in figure).
  */
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import type { Priced } from "@pe/ducts-domain/pricing";

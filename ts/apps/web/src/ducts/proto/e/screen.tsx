@@ -4,16 +4,14 @@
  * numbered ruling pins and click popovers; RIGHT the inbox of rows a person has a verb on,
  * collapsed when it holds none. Hovering a row anywhere lights its element set on the drawing.
  */
-import { useEffect, useMemo, useState } from "react";
-import type { DuctsRouteDocument, RouteStatePatch } from "@pe/agent-contracts";
+import { useMemo, useState } from "react";
+import type { RouteStatePatch } from "@pe/agent-contracts";
 import { survey } from "@pe/ducts-domain/survey";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 
-import { elementNamer, type Verdict } from "../../claims";
-import { claimsOf } from "../../legs";
-import type { Subject } from "../../spatial";
-import type { LossesWork } from "../../losses-view";
+import { elementNamer } from "../../claims";
+import type { LossesWork } from "../../work";
 import { buildTree, groupElementIds, systemList, type TreeNode } from "../b/model";
 import type { ProtoProps } from "../props";
 import { BarLegend, LossBar } from "./bar";
@@ -25,54 +23,9 @@ import { SystemTree } from "./tree-sidebar";
 import { useGroupEncoding } from "../encoding/use-encoding";
 import { formatQuantity } from "../../encoding";
 
-// STAGED_WORK (fixture agent) lands at ../staged/work.ts; the glob is empty until it does.
-const STAGED = import.meta.glob<{ STAGED_WORK?: Record<string, DuctsRouteDocument> }>(
-  "../staged/work.ts",
-);
-function useStagedWork(): Record<string, DuctsRouteDocument> | null {
-  const [work, setWork] = useState<Record<string, DuctsRouteDocument> | null>(null);
-  useEffect(() => {
-    const load = Object.values(STAGED)[0];
-    if (load)
-      void load()
-        .then((m) => setWork(m.STAGED_WORK ?? null))
-        .catch(() => setWork(null));
-  }, []);
-  return work;
-}
-
-export function EScreen({ props: routeProps }: { props: ProtoProps }) {
-  const { snapshot, priced, page, setPage } = routeProps;
-  // The route reads the ASHRAE tables (and prices) only for plan/iso/losses; the drawing is iso.
-  useEffect(() => {
-    if (page.view !== "iso") setPage({ view: "iso" });
-  }, [page.view, setPage]);
-  const staged = useStagedWork();
-  // A group with an imitation Work (STAGED_WORK) draws its subject and claims; verdicts on them stay
-  // local, since the route's Work holds none of those cells. Writes still go to the route's Work.
-  // Never over the scene fixture: it stands in while the host reads, and holds none of these ids.
-  const stagedDoc =
-    page.group && !routeProps.fromFixture ? staged?.[page.group] : undefined;
-  const [verdicts, setVerdicts] = useState<Record<string, Verdict>>({});
-  const stagedSubject = useMemo<Subject | null>(() => {
-    if (!stagedDoc) return null;
-    const cells = Object.fromEntries(
-      Object.entries(stagedDoc.claims ?? {}).flatMap(([id, cell]) => {
-        const value = cell.staged?.value ?? cell.proposal?.value;
-        return value ? [[id, value] as const] : [];
-      }),
-    );
-    return {
-      ids: stagedDoc.subject?.staged?.value ?? stagedDoc.subject?.proposal?.value ?? [],
-      claims: claimsOf(cells).map((c) => ({ ...c, verdict: verdicts[c.id] ?? c.verdict })),
-      work: stagedDoc,
-      onVerdict: (claim, verdict) => setVerdicts((was) => ({ ...was, [claim.id]: verdict })),
-    };
-  }, [stagedDoc, verdicts]);
-  const props: ProtoProps = stagedSubject
-    ? { ...routeProps, subject: stagedSubject, claims: stagedSubject.claims }
-    : routeProps;
-  const doc = stagedDoc ?? props.work.doc;
+export function EScreen({ props }: { props: ProtoProps }) {
+  const { snapshot, priced, page, setPage } = props;
+  const doc = props.work.doc;
   const work = useMemo<LossesWork>(
     () => ({
       doc,
@@ -162,9 +115,7 @@ export function EScreen({ props: routeProps }: { props: ProtoProps }) {
     ? groupFan == null
       ? "this system is not priced"
       : `fan ${groupFan.toFixed(3)} in-wg`
-    : props.fromFixture
-      ? "fixture, not priced"
-      : "not priced yet";
+    : "not priced yet";
 
   const head = (
     <span className="inline-flex gap-1">

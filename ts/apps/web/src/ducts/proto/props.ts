@@ -1,7 +1,4 @@
-/**
- * THROWAWAY (protoui round 1): the one props object every ducts variant receives. It carries
- * everything the current views are handed by `route.tsx`; the data layer is not touched.
- */
+/** The one props object `route.tsx` hands the shell: the reads, the page, the Work and the selection callbacks. */
 import type { DuctClaim, DuctsRouteDocument } from "@pe/agent-contracts";
 import type { price } from "@pe/ducts-domain/pricing";
 import type { readiness } from "@pe/ducts-domain/readiness";
@@ -9,13 +6,11 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 import type { DuctsPage } from "../manifest";
 import type { Claim } from "../legs";
-import type { Subject } from "../spatial";
+import type { Subject } from "../legs";
 
 export interface ProtoProps {
-  /** Null only while reading or with no document; the fixture stands in under `?variant=`. */
+  /** Null only while reading or with no document. */
   snapshot: DuctSnapshot | null;
-  /** True when the snapshot is `scene.fixture.ts`, not a host read. */
-  fromFixture: boolean;
   /** Pe's priced losses (now/next); null until the ASHRAE tables are read. */
   priced: ReturnType<typeof price> | null;
   /** Catalog findings (prose), as route.tsx draws them above the body. */
@@ -26,9 +21,9 @@ export interface ProtoProps {
   subject: Subject | null;
   /** The subject's claims, flattened (same array as subject.claims; empty when none). */
   claims: readonly Claim[];
-  /** The claim cells keyed by id as the fixture/Work holds them. */
+  /** The claim cells keyed by id as the Work (or the `?demo=scene` fixture) holds them. */
   claimCells: Record<string, DuctClaim>;
-  /** Route page state (selected, issue, group, level, layers, encoding, scene, view, ...). */
+  /** Route page state (selected, issue, group, level, layers, encoding, camera, picture, ...). */
   page: DuctsPage;
   setPage: (next: Partial<DuctsPage>) => void;
   /** Selection / hover callbacks over element ids and claims. */

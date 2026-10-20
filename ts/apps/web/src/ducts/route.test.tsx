@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** Deterministic route proof: fixture transport, real route/page owner, head and the views that need no tables. */
+/** Deterministic route proof: fixture transport, real route/page owner, head and the one shell. No ASHRAE tables are served, so nothing is priced. */
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import {
@@ -250,7 +250,7 @@ afterEach(() => {
 });
 
 async function mount(
-  search = "&group=g1&view=iso",
+  search = "&group=g1",
   hosted = false,
   target = "slice",
   thread = "fixture",
@@ -279,58 +279,71 @@ async function mount(
   return { ...rendered, router };
 }
 
-async function view(label: string) {
-  fireEvent.click(screen.getByRole("button", { name: "Choose view" }));
-  fireEvent.click(await screen.findByRole("option", { name: new RegExp(`^${label}`) }));
+async function pickGroup(id: string) {
+  fireEvent.click(screen.getByRole("button", { name: "Choose group" }));
+  fireEvent.click(await screen.findByRole("option", { name: new RegExp(`^${id}`) }));
   await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
 }
 
-test("the route sentence, refresh and every view mount from the same snapshot", async () => {
+test("the route sentence, refresh and the one shell mount from the same snapshot", async () => {
   const { container, router } = await mount();
   const head = screen.getByRole("region", { name: "Ducts route" });
-  expect(head.textContent).toContain("Surveying ducts");
   expect(head.textContent).toContain("g1 (Supply Air)");
-  expect(head.textContent).toContain("an isometric");
   expect(within(head).getByRole("button", { name: /^refresh/ })).toBeTruthy();
-  for (const [label, selector] of [
-    ["tables", 'table[aria-label="duct segments"]'],
-    ["tree", "[data-vertex]"],
-    ["ledger", 'table[aria-label="duct runs"]'],
-    ["a plan", '[data-ducts-drawing="plan"]'],
-    ["an isometric", '[data-ducts-drawing="isometric"]'],
-  ]) {
-    await view(label!);
-    await waitFor(() => expect(container.querySelector(selector!)).not.toBeNull());
-  }
+  expect(within(head).queryByRole("button", { name: "Choose view" })).toBeNull();
+  await waitFor(() => expect(container.querySelector('[data-proto="E2"]')).not.toBeNull());
+  await waitFor(() =>
+    expect(container.querySelector('[data-ducts-drawing="isometric"]')).not.toBeNull(),
+  );
   expect(router.state.location.search.group).toBe("g1");
 }, 20000);
 
+test("the address carries group, level, selected, encoding, layers, camera and picture, each with a default", async () => {
+  const bare = await mount("");
+  expect(bare.router.state.location.search).toMatchObject({
+    group: "",
+    level: "",
+    selected: "",
+    encoding: "health",
+    layers: "",
+    camera: "iso",
+    picture: "model",
+  });
+  bare.unmount();
+  const given = await mount("&group=g1&level=30&selected=3&encoding=flow&layers=a,b&camera=plan&picture=schematic");
+  expect(given.router.state.location.search).toMatchObject({
+    group: "g1",
+    level: "30",
+    selected: "3",
+    encoding: "flow",
+    layers: "a,b",
+    camera: "plan",
+    picture: "schematic",
+  });
+  const search = given.router.state.location.search as Record<string, unknown>;
+  expect(search).not.toHaveProperty("view");
+  expect(search).not.toHaveProperty("stage");
+  expect(search).not.toHaveProperty("variant");
+});
+
 test("the read names the document only; a group pick or clear does not read again, refresh does", async () => {
-  const { container, router } = await mount("&view=iso");
+  const { router } = await mount("");
   expect(requests.at(-1)?.request).toEqual({});
-  expect(container.querySelector("[data-segment]")).toBeNull();
-  expect(container.querySelector("[data-context]")).not.toBeNull();
-  await view("ledger");
-  expect(screen.getByLabelText("duct groups ledger").textContent).toContain("no root");
   const count = requests.length;
-  const g1 = () =>
-    within(screen.getByLabelText("duct groups ledger")).getByText("g1").closest("tr")!;
-  fireEvent.click(g1());
+  await pickGroup("g1");
   await waitFor(() => expect(router.state.location.search.group).toBe("g1"));
-  await waitFor(() => expect(screen.getByLabelText("duct runs").textContent).toContain("4"));
-  fireEvent.click(g1());
+  await pickGroup("g1");
   await waitFor(() => expect(router.state.location.search.group ?? "").toBe(""));
   expect(requests.length).toBe(count);
   fireEvent.click(screen.getByRole("button", { name: /^refresh/ }));
   await waitFor(() => expect(requests.length).toBe(count + 1));
 });
 
-test("the hosted sentence names its document and the ledger stacks its panes", async () => {
-  const { container } = await mount("&view=ledger", true);
+test("the hosted sentence names its document", async () => {
+  await mount("&group=g1", true);
   expect(screen.getByRole("region", { name: "Ducts route" }).textContent).toContain(
     "on Duct route slice",
   );
-  expect(container.querySelectorAll('[data-axis="horizontal"]')).toHaveLength(0);
 });
 
 test("an exact document lifetime change fences a pending read, including returning to the first document", async () => {
@@ -343,7 +356,7 @@ test("an exact document lifetime change fences a pending read, including returni
   const target = encodeURIComponent(
     JSON.stringify({ kind: "open", ref: { session: "slice", openId: "doc" } }),
   );
-  await mount("&group=g1&view=ledger", false, target, "");
+  await mount("&group=g1", false, target, "");
   let release: (value: Response) => void = () => {};
   reply = () =>
     new Promise((resolve) => {
@@ -367,31 +380,23 @@ test("an exact document lifetime change fences a pending read, including returni
   expect(screen.getByRole("region", { name: "Ducts route" }).textContent).not.toContain("999999");
 });
 
-test("page selection follows iso to tables and ledger, and a ledger run lights plan and iso", async () => {
+test("clicking a segment on the drawing selects it in the address", async () => {
   const { container, router } = await mount();
   await waitFor(() =>
     expect(container.querySelector('[data-segment="3"] path:last-child')).not.toBeNull(),
   );
   fireEvent.click(container.querySelector('[data-segment="3"] path:last-child')!);
   await waitFor(() => expect(router.state.location.search.selected).toBe("3"));
-  await view("tables");
-  expect(
-    screen.getByLabelText("duct segments").querySelector("[data-active]")?.textContent,
-  ).toContain("3");
-  await view("ledger");
-  const runs = screen.getByLabelText("duct runs");
-  expect(runs.querySelector("[data-active]")?.textContent).toContain("4");
-  fireEvent.click(within(runs).getByText("6").closest("tr")!);
-  await waitFor(() => expect(router.state.location.search.selected).toBe("6"));
-  for (const label of ["a plan", "an isometric"]) {
-    await view(label);
-    const lit = [...container.querySelectorAll("[data-segment][data-selected]")].map((el) =>
-      el.getAttribute("data-segment"),
-    );
-    expect(lit).toEqual(["1", "5"]);
-    expect(container.querySelector('[data-node-id="6"][data-selected]')).not.toBeNull();
-  }
+  await waitFor(() =>
+    expect(container.querySelector('[data-segment="3"][data-selected]')).not.toBeNull(),
+  );
 }, 20000);
+
+test("the write verb is reachable from the one shell, and says why it is not armed", async () => {
+  await mount();
+  const head = screen.getByRole("region", { name: "Ducts route" });
+  expect(within(head).getByRole("button", { name: /write to Revit/ })).toBeTruthy();
+});
 
 test("a staged subject, claims and labelParameter render the subject scene; a verdict press stages the claim", async () => {
   work = ductsRouteState.schema.parse({
@@ -406,19 +411,14 @@ test("a staged subject, claims and labelParameter render the subject scene; a ve
       ...response(),
       nodes: snapshot.nodes.map((node) => (node.id === 100 ? { ...node, label: "AHU-9" } : node)),
     });
-  const { container } = await mount("&view=iso&scene=subject");
+  // No group chosen: the inbox holds every claim, and a row opens on a press.
+  await mount("");
   // The staged labelParameter rides the snapshot request.
   await waitFor(() => expect(requests.at(-1)?.request).toEqual({ labelParameter: "Unit Tag" }));
-  // The claims cell is the list; the node's label is the place's name in it.
-  const row = await waitFor(() => {
-    const found = container.querySelector('[data-claim-row="c1"]');
-    expect(found).not.toBeNull();
-    return found!;
-  });
-  expect(row.textContent).toContain("The unit is AHU-9.");
-  expect(row.textContent).toContain("at AHU-9");
-  expect(container.querySelector("[data-subject]")).not.toBeNull();
-  fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "yes" }));
+  const inbox = await screen.findByText("Pea claims");
+  expect(inbox).toBeTruthy();
+  fireEvent.click(await screen.findByText(/Pea says this is|The unit is/));
+  fireEvent.click(await screen.findByRole("button", { name: "yes" }));
   await waitFor(() => expect(work.claims.c1?.staged?.value?.verdict).toBe("yes"));
   expect(work.claims.c1?.staged?.value).toMatchObject({
     text: "The unit is AHU-9.",

@@ -1,67 +1,16 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { routeSearch } from "#/route/route-owner";
+import { urlPage } from "#/route";
 import { DuctsRoute } from "#/ducts/route";
-import { asVariant } from "#/ducts/proto/switcher";
+import { manifest } from "#/ducts/manifest";
 
-// The router parses a numeric-looking value (`selected=8081605`, `level=5765339`) as a number.
-const text = (value: unknown) =>
-  typeof value === "number"
-    ? String(value)
-    : typeof value === "string" && value
-      ? value
-      : undefined;
+const url = urlPage(manifest)!;
 
 export const Route = createFileRoute("/ducts")({
   validateSearch: (search: Record<string, unknown>) => ({
     ...routeSearch(search),
-    view: text(search.view),
-    /** The subject group id (`g<element id>`). */
-    group: text(search.group),
-    /** A level element id. */
-    level: text(search.level),
-    /** Layer keys, comma separated (`topology,pass1-flow`); absent = none. */
-    layers: text(search.layers),
-    /** The selected element id. */
-    selected: text(search.selected),
-    /** The selected issue id. */
-    issue: text(search.issue),
-    /** The spatial views' encoding key (health when absent). */
-    encoding: text(search.encoding),
-    /** The scene drawn: `subject`, or absent for the group scene. */
-    /** THROWAWAY protoui: B | C | D swaps the body for a prototype. */
-    variant: asVariant(search.variant),
-    scene: search.scene === "subject" ? ("subject" as const) : undefined,
+    ...url.read(search),
   }),
-  component: DuctsFileRoute,
+  search: { middlewares: [...url.middlewares] },
+  component: DuctsRoute,
 });
-
-function DuctsFileRoute() {
-  const navigate = useNavigate({ from: "/ducts" });
-  const { view, group, level, layers, selected, issue, encoding, scene, variant } = Route.useSearch();
-  return (
-    <DuctsRoute
-      variant={variant}
-      search={{
-        view: view ?? "",
-        group: group ?? "",
-        level: level ?? "",
-        layers: layers ?? "",
-        selected: selected ?? "",
-        issue: issue ?? "",
-        encoding: encoding ?? "health",
-        scene: scene ?? "",
-      }}
-      setSearch={(next) =>
-        void navigate({
-          search: (previous) => ({
-            ...previous,
-            ...Object.fromEntries(
-              Object.entries(next).map(([key, value]) => [key, value || undefined]),
-            ),
-          }),
-          replace: true,
-        })
-      }
-    />
-  );
-}

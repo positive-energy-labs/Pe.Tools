@@ -11,7 +11,7 @@ import { Switcher } from "#/components/lang/switcher";
 import { ValueDiff } from "#/components/lang/value-diff";
 import { LOSS_RULES, ruleByKey } from "@pe/ducts-domain/loss-rules";
 import { tableOf, type Priced } from "@pe/ducts-domain/pricing";
-import type { LossesWork } from "../../losses-view";
+import type { LossesWork } from "../../work";
 // proto: copied from losses-view.tsx
 const fmt = (n: number | null | undefined) => (n == null ? "" : n.toFixed(4));
 /** Stage a rule's table; staging the table already staged takes it back. */

@@ -1,14 +1,13 @@
 // @vitest-environment jsdom
 /**
  * /ducts topology, deterministic: the tree builder on a hand-built network (root, leaves,
- * collapse, longest run), staging an open-end answer lifts readiness, and both topology views
- * render over the same small slice.
+ * collapse, longest run), staging an open-end answer lifts readiness, and the tree view
+ * renders over the same small slice.
  */
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, expect, it } from "vite-plus/test";
 import { applyPatches, ductsRouteState, type DuctsRouteDocument } from "@pe/agent-contracts";
 
-import { DuctsLedger } from "./ledger";
 import { verdictPatches } from "./assumptions";
 import type { DuctsPage } from "./manifest";
 import { readiness } from "@pe/ducts-domain/readiness";
@@ -167,15 +166,14 @@ const snapshot = {
 } as DuctSnapshot;
 
 const page = (patch: Partial<DuctsPage> = {}): DuctsPage => ({
-  stage: "survey",
-  view: "",
   group: "g1",
   level: "",
-  layers: [],
+  layers: "",
   selected: "",
   issue: "",
   encoding: "health",
-  scene: "",
+  camera: "iso",
+  picture: "model",
   epoch: 0,
   evaluation: null,
   ...patch,
@@ -261,25 +259,4 @@ it("the tree view draws the root, both terminals with design cfm, the open end a
   expect(text).toContain("open end");
   expect(text).toContain("longest developed length, 30.0 ft");
   expect(view.container.querySelectorAll("[data-vertex]").length).toBe(4);
-});
-
-it("the ledger lists the runs longest first, and its issue row offers the open-end answers", () => {
-  const doc = ductsRouteState.schema.parse({});
-  const view = render(
-    <DuctsLedger
-      snapshot={snapshot}
-      ready={readiness(snapshot, doc)}
-      page={page({ view: "ledger" })}
-      setPage={() => {}}
-      empty={null}
-      work={{ doc, write: async () => null }}
-    />,
-  );
-  const text = view.container.textContent ?? "";
-  expect(text).toContain("4 · longest");
-  expect(text).toContain("1 Elbow · 1 Tee");
-  expect(text).toContain("30.0 ft straight");
-  expect(text).not.toContain("failed to load");
-  for (const word of ["capped", "connect", "ignore", "unset"])
-    expect(view.getByRole("group", { name: `assumption for ${OPEN}` }).textContent).toContain(word);
 });

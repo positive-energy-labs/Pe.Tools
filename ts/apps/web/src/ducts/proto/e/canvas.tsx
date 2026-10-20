@@ -85,11 +85,7 @@ export interface ECanvasExtra {
 }
 
 export function ECanvas(props: ProtoProps & ECanvasExtra) {
-  const { snapshot, priced, page, setPage, subject, work } = props;
-  // The route only reads ASHRAE tables (and prices) when `page.view` is plan/iso/losses.
-  useEffect(() => {
-    if (page.view !== "iso") setPage({ view: "iso" });
-  }, [page.view, setPage]);
+  const { snapshot, priced, subject, work } = props;
   if (!snapshot)
     return (
       <p className="p-3 text-ink-2">
@@ -109,7 +105,6 @@ function Canvas({
   hovered,
   onHover,
   onSelect,
-  fromFixture,
   lit,
   issueScope,
   scale,
@@ -360,7 +355,6 @@ function Canvas({
       >
         <span>
           {systemName ?? <span className="text-ink-2">no system name in the snapshot</span>}
-          {fromFixture ? <span className="text-ink-2"> · fixture</span> : null}
         </span>
         <span>
           fan static{" "}
