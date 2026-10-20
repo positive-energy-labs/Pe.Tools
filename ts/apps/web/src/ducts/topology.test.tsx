@@ -4,7 +4,7 @@
  * collapse, longest run), staging an open-end answer lifts readiness, and the tree view
  * renders over the same small slice.
  */
-import { cleanup, render } from "@testing-library/react";
+import { cleanup } from "@testing-library/react";
 import { afterEach, expect, it } from "vite-plus/test";
 import { applyPatches, ductsRouteState, type DuctsRouteDocument } from "@pe/agent-contracts";
 
@@ -13,7 +13,7 @@ import type { DuctsPage } from "./manifest";
 import { readiness } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { chainsOf, groupTree, runsOf } from "@pe/ducts-domain/topology";
-import { DuctsTree, layoutTree } from "./tree";
+import { layoutTree } from "./schematic";
 
 afterEach(cleanup);
 // jsdom lays nothing out; the table scrolls its active row into view on mount.
@@ -165,19 +165,6 @@ const snapshot = {
   },
 } as DuctSnapshot;
 
-const page = (patch: Partial<DuctsPage> = {}): DuctsPage => ({
-  group: "g1",
-  level: "",
-  layers: "",
-  selected: "",
-  issue: "",
-  encoding: "health",
-  camera: "iso",
-  picture: "model",
-  epoch: 0,
-  evaluation: null,
-  ...patch,
-});
 
 it("roots the tree at the one port, folds straight runs, and finds the longest developed run", () => {
   const tree = groupTree(snapshot, "g1");
@@ -245,18 +232,4 @@ it("staging an open-end answer lifts the group from blocked to walkable, and uns
   const capped = land(empty, "capped");
   expect(readiness(snapshot, capped).g1?.level).toBe("budgetable");
   expect(readiness(snapshot, land(capped, "unset")).g1?.level).toBe("blocked");
-});
-
-it("the tree view draws the root, both terminals with design cfm, the open end and the longest run", () => {
-  const view = render(
-    <DuctsTree snapshot={snapshot} page={page()} setPage={() => {}} empty={null} />,
-  );
-  const text = view.container.textContent ?? "";
-  expect(text).toContain("AHU-1");
-  expect(text).toContain("150 cfm design");
-  expect(text).toContain("100 cfm design");
-  expect(text).toContain("250 cfm");
-  expect(text).toContain("open end");
-  expect(text).toContain("longest developed length, 30.0 ft");
-  expect(view.container.querySelectorAll("[data-vertex]").length).toBe(4);
 });

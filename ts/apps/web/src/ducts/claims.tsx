@@ -120,7 +120,7 @@ export function claimParts(text: string, nameOf: (id: number) => string | null):
 }
 
 /** `revit.context.show-elements`: select and zoom to the ids; resolves to what Revit answered. */
-const showElements = (doc: RevitDoc, elementIds: readonly number[]) =>
+export const showElements = (doc: RevitDoc, elementIds: readonly number[]) =>
   callHostRpc(
     "revit.context.show-elements",
     { elementIds: [...elementIds] },
@@ -131,53 +131,64 @@ const showElements = (doc: RevitDoc, elementIds: readonly number[]) =>
     (error: unknown) => (error instanceof Error ? error.message : String(error)),
   );
 
-function ClaimText({
-  parts,
-  doc,
-  onHover,
-  onPick,
-  onShown,
-}: {
-  parts: readonly ClaimPart[];
+type ClaimHandlers = {
   doc: RevitDoc | null;
   onHover: (id: number | null) => void;
   onPick: (id: number) => void;
   onShown: (word: string) => void;
-}) {
+};
+
+/** One resolved id in a claim's text: a button that lights its element on hover and selects it on click. */
+export function ClaimElement({
+  part,
+  doc,
+  onHover,
+  onPick,
+  onShown,
+}: { part: Exclude<ClaimPart, string> } & ClaimHandlers) {
+  return (
+    <TooltipHint
+      content={`${part.name} · element ${part.id}: ${doc ? "click to select it in Revit" : "click to select it in the drawing"}`}
+    >
+      <button
+        type="button"
+        data-claim-element={part.id}
+        aria-label={`${part.name} ${part.id}`}
+        className="cursor-pointer underline decoration-dotted underline-offset-2"
+        onMouseEnter={() => onHover(part.id)}
+        onMouseLeave={() => onHover(null)}
+        onFocus={() => onHover(part.id)}
+        onBlur={() => onHover(null)}
+        onClick={() => {
+          if (!doc) return onPick(part.id);
+          onShown("selecting…");
+          void showElements(doc, [part.id]).then(onShown);
+        }}
+      >
+        {part.dot ? (
+          <span
+            aria-hidden
+            className="inline-block size-1.5 rounded-full align-middle"
+            style={{ backgroundColor: tokenRef("ink-2") }}
+          />
+        ) : (
+          part.name
+        )}
+      </button>
+    </TooltipHint>
+  );
+}
+
+/** A claim's prose with every resolved id as a `ClaimElement`. */
+export function ClaimText({
+  parts,
+  ...handlers
+}: { parts: readonly ClaimPart[] } & ClaimHandlers) {
   return parts.map((part, i) =>
     typeof part === "string" ? (
       <span key={i}>{part}</span>
     ) : (
-      <TooltipHint
-        key={i}
-        content={`${part.name} · element ${part.id}: ${doc ? "click to select it in Revit" : "click to select it in the drawing"}`}
-      >
-        <button
-          type="button"
-          data-claim-element={part.id}
-          aria-label={`${part.name} ${part.id}`}
-          className="cursor-pointer underline decoration-dotted underline-offset-2"
-          onMouseEnter={() => onHover(part.id)}
-          onMouseLeave={() => onHover(null)}
-          onFocus={() => onHover(part.id)}
-          onBlur={() => onHover(null)}
-          onClick={() => {
-            if (!doc) return onPick(part.id);
-            onShown("selecting…");
-            void showElements(doc, [part.id]).then(onShown);
-          }}
-        >
-          {part.dot ? (
-            <span
-              aria-hidden
-              className="inline-block size-1.5 rounded-full align-middle"
-              style={{ backgroundColor: tokenRef("ink-2") }}
-            />
-          ) : (
-            part.name
-          )}
-        </button>
-      </TooltipHint>
+      <ClaimElement key={i} part={part} {...handlers} />
     ),
   );
 }

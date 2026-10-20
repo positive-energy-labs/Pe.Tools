@@ -28,7 +28,7 @@ import { reviewTransitions, type CellWire } from "#/components/work/band";
 import { callHostRpc } from "#/host/client";
 
 import { AssumptionCell, verdictPatches as issueVerdictPatches } from "../../assumptions";
-import { claimParts, ShowInRevit, VERDICTS, type Verdict } from "../../claims";
+import { ClaimElement, claimParts, ShowInRevit, VERDICTS, type Verdict } from "../../claims";
 import { ISSUE_KINDS } from "../../issues";
 import type { Claim } from "../../legs";
 
@@ -343,9 +343,7 @@ export function Inbox({
                   ·
                 </span>
               ) : (
-                <span key={j} className="underline decoration-dotted">
-                  {p.name}
-                </span>
+                <ClaimElement key={j} part={p} doc={doc} onHover={(id) => light(id == null ? null : [id])} onPick={onSelect} onShown={() => undefined} />
               ),
             )}
           </p>
