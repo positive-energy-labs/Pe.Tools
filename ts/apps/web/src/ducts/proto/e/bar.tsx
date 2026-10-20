@@ -63,11 +63,39 @@ export function BarLegend({
         "bars: not priced yet (the ASHRAE tables are not read), so no row draws a bar"
       ) : (
         <>
-          bar = loss from the fan, in-wg · full width = the critical run ◆ {criticalName ?? "—"}{" "}
+          bar = loss from the fan to the row's far end, in-wg · full width = the critical run ◆ {criticalName ?? "—"}{" "}
           <span className="face-mono">{fmt(scale)}</span>
         </>
       )}
     </p>
+  );
+}
+
+/** The loss columns' precision: a short duct really loses ~0.0001 in-wg, and 3 places would read it as 0. */
+const LOSS_PLACES = 4;
+
+/** The loss columns' widths, one recipe for the header and every row so they align. */
+const COL = { bar: "w-16", total: "w-14", own: "w-16", mark: "w-1.5" } as const;
+
+/** The header over `MetaBar`'s columns: the Tree's `columns.meta`. */
+export function MetaHeader() {
+  return (
+    <span className="inline-flex items-center gap-1.5" data-e-columns="">
+      <span className={COL.bar} aria-hidden />
+      <span
+        className={`${COL.total} text-right`}
+        title="loss from the fan to this row's far end, in-wg"
+      >
+        to here
+      </span>
+      <span
+        className={`${COL.own} border-line border-l pl-1.5 text-right`}
+        title="this row's own loss, in-wg"
+      >
+        own
+      </span>
+      <span className={COL.mark} aria-hidden />
+    </span>
   );
 }
 
@@ -77,17 +105,20 @@ export function MetaBar({
   scale,
   provisional = null,
   self,
+  unpriced = null,
 }: {
   value: number | null;
   scale: number | null;
   provisional?: Provisional;
   /** This row's own loss, drawn after the total when given; "" holds the column empty. */
   self?: number | null | "";
+  /** A priced path that could not price this row: its word stands where the number would, never 0. */
+  unpriced?: { word: string; why: string } | null;
 }) {
   const share = value != null && scale ? Math.min(1, value / scale) : null;
   return (
     <span className="inline-flex items-center gap-1.5" data-e-bar={share ?? ""}>
-      <span className="relative inline-block h-1.5 w-16" aria-hidden>
+      <span className={`relative inline-block h-1.5 ${COL.bar}`} aria-hidden>
         {share != null ? (
           <>
             <span className="absolute inset-0" style={{ backgroundColor: tokenRef("line") }} />
@@ -98,11 +129,23 @@ export function MetaBar({
           </>
         ) : null}
       </span>
-      <span className="w-10 text-right">{fmt(value)}</span>
+      <span className={`${COL.total} text-right`}>{fmt(value, LOSS_PLACES)}</span>
       {self !== undefined ? (
-        <span className="text-ink-2 w-12 text-right">{self === "" ? "" : self == null ? "—" : `+${fmt(self)}`}</span>
+        <span
+          className={`text-ink-2 border-line border-l pl-1.5 ${COL.own} text-right`}
+          data-e-own={unpriced ? "unpriced" : ""}
+          title={unpriced?.why}
+        >
+          {unpriced
+            ? unpriced.word
+            : self === ""
+              ? ""
+              : self == null
+                ? "—"
+                : `+${fmt(self, LOSS_PLACES)}`}
+        </span>
       ) : null}
-      <span className="w-1.5" data-tone={provisional ? "caution" : undefined}>
+      <span className={COL.mark} data-tone={provisional ? "caution" : undefined}>
         {provisional ? "~" : ""}
       </span>
     </span>

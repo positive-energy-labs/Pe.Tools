@@ -571,7 +571,11 @@ function pathRows(
     }
     const loss = catalogLoss(node, cfm, catalogs, overrides.catalogLinks);
     // No catalog link: the drop the model holds (named catalog parameter, then assigned connector loss).
-    const held = node.terminalDrop?.catalogDropInWg ?? node.terminalDrop?.assignedPressureDropInWg;
+    // A connector whose loss method is NotDefined holds a 0 that states nothing: it is no drop, not a zero drop.
+    const assigned = node.terminalDrop?.connectorLossMethod?.endsWith("NotDefined")
+      ? null
+      : node.terminalDrop?.assignedPressureDropInWg;
+    const held = node.terminalDrop?.catalogDropInWg ?? assigned;
     if (loss.dp === null && loss.finding === "catalog-missing-link" && held != null) {
       rows.push({
         id: node.id,

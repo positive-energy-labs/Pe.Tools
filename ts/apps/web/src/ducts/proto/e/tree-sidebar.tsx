@@ -13,7 +13,7 @@ import { tokenRef } from "@pe/kit/lib/token";
 import { formatQuantity, type Encoding, type Quantity } from "../../encoding";
 
 import type { TreeNode } from "../b/model";
-import { MetaBar } from "./bar";
+import { MetaBar, MetaHeader } from "./bar";
 
 export interface TreeCtx {
   tree: TreeNode;
@@ -106,7 +106,9 @@ export function SystemTree({ ctx }: { ctx: TreeCtx }) {
   const [open, setOpen] = useState<ReadonlySet<string>>(
     () => new Set([ctx.tree.key, ...(crit ? [crit.key] : [])]),
   );
-  const runName = (n: TreeNode) => `${n.name.split(" → ")[0]} → ${ctx.grilleName(n)}`;
+  // A run is the path from the unit to one grille: "FC-17 → Price LBP15A Supply 12 X 6, Level 2".
+  const runName = (n: TreeNode) =>
+    `${n.name.split(" → ")[0]} → ${ctx.grilleName(n)}${n.level ? `, ${n.level}` : ""}`;
   return (
     <Tree<TreeNode>
       aria-label="system tree"
@@ -117,6 +119,14 @@ export function SystemTree({ ctx }: { ctx: TreeCtx }) {
       onOpenChange={setOpen}
       onPick={(n) => ctx.select(n.kind === "run" ? n.terminal : n.id)}
       empty="no run in this system"
+      columns={{
+        label: (
+          <span title="run = the path from the unit to one grille · stretch = the part between two places · part = one duct, fitting or accessory">
+            run · stretch · part
+          </span>
+        ),
+        meta: ctx.reading?.quantity ? undefined : <MetaHeader />,
+      }}
       row={(n) => {
         const label =
           n.kind === "run" ? runName(n) : n.kind === "element" ? ctx.grilleName(n) : n.name;
@@ -129,7 +139,21 @@ export function SystemTree({ ctx }: { ctx: TreeCtx }) {
               {stand ? "◇" : "◆"}
             </span>
           ) : undefined,
-          label: <span className={n.kind === "system" ? "font-medium" : undefined}>{label}</span>,
+          // Kinds read apart by weight and ink: run (a path to one grille) strong, stretch plain, part quiet.
+          label: (
+            <span
+              className={
+                n.kind === "system" || n.kind === "run"
+                  ? "font-medium"
+                  : n.kind === "element"
+                    ? "text-ink-2"
+                    : undefined
+              }
+              data-e-kind={n.kind}
+            >
+              {label}
+            </span>
+          ),
           // Always a title: the kit Row wraps itself in a Tooltip only once it measures a cut
           // title, and that late wrap re-renders the row and drops the chevron's first press.
           title: label,
@@ -141,6 +165,7 @@ export function SystemTree({ ctx }: { ctx: TreeCtx }) {
               scale={ctx.scale}
               provisional={n.provisional}
               self={n.kind === "leg" || n.kind === "element" ? n.self : ""}
+              unpriced={n.unpriced}
             />
           ),
           actions: ruleKey ? (
