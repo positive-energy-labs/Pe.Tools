@@ -84,12 +84,10 @@
 .dl-tool-status[data-state="working"] {
   font-style: italic;
 }
-/* Composer: the transcript's `--chat-measure` plus the side lane, so the control cluster sits under
-   the lens rail's lane at the transcript's right edge and the box's text column sits under the
-   words it answers. */
+/* Composer: the transcript's `--chat-measure`, so the box sits under the words it answers. */
 .dl-composer-frame {
   width: 100%;
-  max-width: calc(var(--chat-measure, 750px) + var(--side-lane));
+  max-width: var(--chat-measure, 750px);
   margin-inline: auto;
   padding: 0 20px var(--gutter);
   font-family: var(--font-body);
@@ -110,47 +108,34 @@
   border-color: var(--pe-line-2);
   outline-color: color-mix(in srgb, var(--pe-line-2) 22%, transparent);
 }
-/* The box: three columns. Left, `--turn-gutter`: attach, then the pickers' marks, centred under the
-   transcript's provider mark. Middle: work, the draft, the refusal and the state chips (a row only
-   when present). Right, `--side-lane`: Send over fork. Both side clusters centre vertically in the
-   box, so they stay balanced as the middle grows. The empty box is as tall as the tallest
-   cluster; the draft grows with its content (`--composer-lines`, then it scrolls). */
+/* The box: work, the draft (it grows to `--composer-lines`, then scrolls), the refusal and the
+   state chips stack full width; every control sits on one bottom row: attach and the pickers'
+   marks on the left, fork then Send on the right. */
 .dl-composer-box {
   --composer-pad: calc(var(--gutter) / 2);
   --composer-mark: 18px;
   --composer-glyph: 15px;
   --composer-lines: 7;
   display: grid;
-  grid-template-columns: var(--turn-gutter) minmax(0, 1fr) var(--side-lane);
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   grid-template-areas:
-    "lead work side"
-    "lead text side"
-    "lead refusal side"
-    "lead tools side";
-  /* The lanes carry their own insets, so their columns are exactly the gutter and the lane. */
-  padding: var(--composer-pad) 0;
-}
-.dl-composer-box[data-variant="reply"] {
-  grid-template-columns: minmax(0, 1fr) var(--side-lane);
-  grid-template-areas:
-    "work side"
-    "text side"
-    "refusal side"
-    "tools side";
-  padding-left: var(--composer-pad);
+    "work work work"
+    "text text text"
+    "refusal refusal refusal"
+    "tools tools tools"
+    "lead . side";
+  padding: var(--composer-pad) calc(var(--gutter) * 1.5);
+  row-gap: var(--composer-pad);
 }
 .dl-composer-box > [data-composer-refusal] {
   grid-area: refusal;
 }
-/* Asks and attachments line up with the draft: the box's padding is their inset. */
 .dl-composer-box > [data-composer-work] {
   grid-area: work;
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: var(--composer-pad);
-  padding-bottom: var(--composer-pad);
 }
 .dl-composer-box > [data-composer-work] > * {
   padding-inline: 0;
@@ -163,12 +148,9 @@
   grid-area: text;
   inline-size: 100%;
   field-sizing: content;
-  align-self: stretch;
   min-block-size: var(--type-prose-line-height);
-  max-block-size: calc(
-    var(--type-prose-line-height) * var(--composer-lines) + var(--composer-pad) * 2
-  );
-  padding: 0 var(--composer-pad) 0 0;
+  max-block-size: calc(var(--type-prose-line-height) * var(--composer-lines));
+  padding: 0;
   overflow-y: auto;
 }
 .dl-composer-box > [data-composer-tools] {
@@ -186,22 +168,16 @@
 .dl-composer-box > [data-composer-cluster],
 .dl-composer-box > [data-composer-lead] {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  align-self: center;
   gap: var(--composer-pad);
 }
-.dl-composer-box > [data-composer-cluster] {
-  grid-area: side;
-  padding-inline: var(--gutter);
-}
-/* The lane is control + one gutter wide, so the controls centre in it, the same x as the provider
-   mark that leads a turn head. */
 .dl-composer-box > [data-composer-lead] {
   grid-area: lead;
 }
-/* Every left-lane control is a mark, not a framed button: one square, one glyph size, one centre
-   line, so attach, model and document read as a single column. */
+.dl-composer-box > [data-composer-cluster] {
+  grid-area: side;
+}
+/* Every left control is a mark, not a framed button: one square, one glyph size, one centre line. */
 .dl-composer-box > [data-composer-lead] .dl-button {
   inline-size: var(--composer-mark);
   block-size: var(--composer-mark);

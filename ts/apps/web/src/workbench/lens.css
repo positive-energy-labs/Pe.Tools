@@ -48,14 +48,12 @@
   /* No browser scrollbar in the chat lane — the rail IS the position instrument. */
   scrollbar-width: none;
 }
-/* The lane box spans the transcript's measure + the side lane, centred and inset like the
-   composer frame, and ends at the composer's top, so the rail shares the composer's right lane. Only the
-   rail and the peek take the pointer; the rest of the box lets it through to the transcript. */
+/* The lane box spans the whole pane and ends at the composer's top, so the rail sits at the pane's
+   right edge. Only the rail and the peek take the pointer; the rest of the box lets it through to
+   the transcript. */
 [data-annotation="lane"] {
   position: absolute;
   inset: 0;
-  max-width: calc(var(--chat-measure) + var(--side-lane));
-  margin-inline: auto;
   pointer-events: none;
   z-index: 7;
 }
@@ -63,7 +61,7 @@
 /* Centred in the lane, like t3's: the stack grows both ways from the middle of the pane. */
 [data-annotation="dial"] {
   position: absolute;
-  right: var(--gutter);
+  right: 0;
   top: 50%;
   translate: 0 -50%;
   width: var(--side-lane);
@@ -181,8 +179,8 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  right: calc(var(--gutter) + var(--side-lane));
-  width: min(320px, calc(100% - var(--side-lane) - var(--gutter) * 2));
+  right: var(--side-lane);
+  width: min(320px, calc(100% - var(--side-lane) - var(--gutter)));
   pointer-events: auto;
 }
 [data-annotation="peek"] {
@@ -322,8 +320,9 @@
   -webkit-line-clamp: 2;
   overflow: hidden;
 }
+/* Pea's half of the turn wears Pea's ink, the same green as its name in the transcript. */
 [data-annotation="peek-answer"] {
-  color: var(--pe-ink-2);
+  color: var(--pe-pea-ink);
 }
 
 /* chat — near plane, the real scroll. The composer floats over the bottom; pad the tail by its
@@ -598,12 +597,14 @@
   margin-top: 0;
   padding-top: 0;
 }
-/* The transcript's column is the composer's draft column: the same measure + side lane, with the
-   lane kept clear on the right for the rail. */
+/* The transcript's column is the composer's: the same measure and inset. The scroller keeps the
+   rail's lane clear on the right, so a narrow pane never puts words under the rail. */
+[data-chat="surface"] [data-annotation="scroller"] {
+  padding-right: var(--side-lane);
+}
 [data-chat="surface"] [data-annotation="chat"] {
   padding: var(--gutter);
-  padding-right: calc(var(--gutter) * 2 + var(--side-lane));
-  max-width: calc(var(--chat-measure) + var(--side-lane));
+  max-width: var(--chat-measure);
 }
 [data-chat="surface"] [data-annotation="moment"] {
   padding: 0;
@@ -618,9 +619,10 @@
 [data-chat="surface"] [data-slot="pane-title"][data-heading="name"] {
   font-family: var(--font-body);
 }
+/* The composer takes the transcript's column: the rail's lane stays clear on its right too. */
 [data-chat="surface"] .dl-composer-frame {
   max-width: calc(var(--chat-measure) + var(--side-lane));
-  padding: var(--space-unit) var(--gutter) var(--gutter);
+  padding: var(--space-unit) calc(var(--gutter) + var(--side-lane)) var(--gutter) var(--gutter);
 }
 [data-chat="surface"] .dl-composer-box {
   border-color: var(--pe-line-2);
@@ -655,22 +657,6 @@
   background: transparent;
   color: var(--pe-ink-mute);
   font-size: var(--type-small-size);
-}
-/* A turn's body (prose, tool rows, runs) indents by the composer's left lane; its head stays flush
-   left, so the provider mark sits in the gutter. Your bubble keeps its right edge. */
-[data-chat="surface"] [data-annotation="moment"]:not([data-role="user"]) > :not(.dl-message-body),
-[data-chat="surface"]
-  [data-annotation="moment"]:not([data-role="user"])
-  > .dl-message-body
-  > :not(.dl-message-head) {
-  margin-left: var(--turn-gutter);
-}
-/* The mark is centred in that gutter (the composer's left icons share its centre) and the name
-   follows at the body's left edge. */
-[data-chat="surface"] .dl-message-mark {
-  width: var(--turn-gutter);
-  justify-content: center;
-  margin-right: -8px;
 }
 [data-chat="surface"] [data-annotation="tool-run"] > .dl-tool-run-summary {
   gap: calc(var(--space-unit) * 1.5);

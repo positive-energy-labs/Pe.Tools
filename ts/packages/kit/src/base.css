@@ -53,12 +53,8 @@
   --item-mark-pad-x: 12px;
   --control-pad-x: 6px;
   --chat-measure: 944px;
-  /* The chat's right lane: the composer's control cluster above, the lens rail beside the
-     transcript. One width, so the draft and the transcript share a centre. */
+  /* The chat's right lane, kept clear beside the transcript and the composer for the lens rail. */
   --side-lane: calc(var(--control-h) + var(--gutter) * 2);
-  /* The chat's left lane: the turn head's provider mark above, the composer's attach/model/document
-     column below. A turn's body indents past it; its head does not. */
-  --turn-gutter: calc(var(--control-h) + var(--gutter));
   --font-body: "Open Sans", "Segoe UI", system-ui, sans-serif;
   --font-display: "Spectral", Georgia, "Times New Roman", serif;
   --font-mono: "Cascadia Code", Consolas, monospace;

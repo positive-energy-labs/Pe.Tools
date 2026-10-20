@@ -94,10 +94,9 @@ export function ComposerFrame({ children }: { children: ReactNode }) {
 }
 
 /**
- * The one box you write in: three columns. Left, `--turn-gutter` wide: attach over the pickers'
- * marks (it sits under the transcript's provider mark). Middle: work, the draft (it grows to a cap,
- * then scrolls), the refusal and any state chips. Right, `--side-lane`: Send/Stop over fork.
- * `variant="reply"` is the notice card's: the draft and the Send/Stop slot alone. Enter sends
+ * The one box you write in: work, the draft (it grows to a cap, then scrolls), the refusal and any
+ * state chips, then one bottom row of controls: attach and the pickers' marks left, fork and
+ * Send/Stop right. `variant="reply"` is the notice card's: the draft and the Send/Stop slot alone. Enter sends
  * unless `onKey` takes the key.
  */
 export function Composer({
@@ -128,11 +127,11 @@ export function Composer({
   work?: ReactNode;
   /** The one refusal line, directly below the draft. */
   refusal?: string | null;
-  /** The marks under the attach control, in the left lane; each opens its picker. */
+  /** The marks after the attach control, bottom left; each opens its picker. */
   pickers?: ReactNode;
-  /** The left lane's first control. */
+  /** The bottom row's first control. */
   attach?: ReactNode;
-  /** Directly under Send, in the right lane. */
+  /** Just left of Send, bottom right. */
   fork?: ReactNode;
   /** State chips; a row under the draft only when present. */
   tools?: ReactNode;
@@ -173,17 +172,17 @@ export function Composer({
           </div>
         ) : null}
         {tools ? <div data-composer-tools="">{tools}</div> : null}
-        {/* Left lane: attach, then the pickers' marks. */}
+        {/* Bottom left: attach, then the pickers' marks. */}
         {attach || pickers ? (
           <div data-composer-lead="">
             {attach}
             {pickers}
           </div>
         ) : null}
-        {/* Right lane: one Send slot (Stop replaces Send while a turn runs), then fork. */}
+        {/* Bottom right: fork, then the one Send slot (Stop replaces Send while a turn runs). */}
         <div data-composer-cluster="">
-          <div data-composer-send="">{send}</div>
           {fork}
+          <div data-composer-send="">{send}</div>
         </div>
       </div>
     </form>
