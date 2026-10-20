@@ -1,15 +1,15 @@
 /**
  * The /ducts inbox in loop order, derived and never stored (modelled on `rooms/cards.ts`):
  * - Fix: what blocks a path to the fan (`bins.ts` `blocking`): no duct path to a fan, anomalous
- *   joins, open ends, loops, no or several roots, a catalog table missing or out of range, and any
- *   join a person has objected to.
+ *   joins, open ends, loops, no or several roots, a catalog table missing or out of range.
  * - Set: an input a person owes: a terminal with no flow, a fan with no design flow, flex left on
  *   the rigid roughness. Each Set row deep-links to the cell on the tree row that holds it.
  * - Check: Pea's claims for this group awaiting a verdict, and Pea's proposals awaiting staging.
  * - Write: one row, armed only while Fix and Set are empty and the preview is fresh.
  * - Diagnostics: bridged joins (near miss, stretched); final, collapsed, and the only rows that may
  *   stand without a verb a person owes. "Object" stages the proximity `ignore` verdict, which
- *   withholds the join and so demotes it to a Fix row.
+ *   withholds the join; the objection is a ruling, so it stays here with its take-back, and only
+ *   what the break causes (an open end, a lost path) comes up under Fix.
  * A row exists only with a way to act on it: a verb, a deep link or select in Revit.
  */
 import type { DuctFinding, DuctsRouteDocument } from "@pe/agent-contracts";
@@ -317,16 +317,16 @@ export function triage(input: TriageInput) {
     }
   }
 
-  // A join a person objected to is withheld, so its finding is gone; the objection stays a Fix
-  // row so it can be taken back.
+  // A join a person objected to is withheld, so its finding is gone. The objection is a person's
+  // ruling, not a blocker: it sits in Diagnostics so it can be taken back, and never holds Write.
   for (const [key, cell] of Object.entries(doc?.assumptions ?? {})) {
     if (!key.startsWith("proximity:") || cell.staged?.value?.kind !== "verdict") continue;
     if (cell.staged.value.verdict !== "ignore") continue;
     const ids = proximityIds(key);
     if (scope && !ids.some((id) => scope.has(id))) continue;
-    fix.push({
+    diagnostics.push({
       key,
-      group: "fix",
+      group: "diagnostics",
       kind: "objection",
       title: `Join objected: ${names(ids)}`,
       status: "withheld",

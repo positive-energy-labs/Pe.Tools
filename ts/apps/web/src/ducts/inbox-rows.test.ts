@@ -95,7 +95,7 @@ describe("the ducts inbox", () => {
     expect(catalog.verbs[0]).toMatchObject({ kind: "focus", cell: { segment: "terminalDrops", id: 31 } });
   });
 
-  it("an objection stages the proximity ignore verdict and comes back as a Fix row", () => {
+  it("an objection stages the proximity ignore verdict and stays in Diagnostics with its take-back, never in Fix", () => {
     const object = inboxRows(base).diagnostics[0]!.verbs[0]!;
     expect(object).toMatchObject({ kind: "verdict", verdict: "ignore", label: "object", on: false });
     const doc = ductsRouteState.schema.parse({
@@ -108,8 +108,8 @@ describe("the ducts inbox", () => {
       doc,
       findings: findings.filter((f) => f.id !== "proximity:5:0|6:0"),
     });
-    expect(keys(after.fix)).toContain("proximity:5:0|6:0");
-    expect(after.fix.find((r) => r.key === "proximity:5:0|6:0")).toMatchObject({
+    expect(keys(after.fix)).not.toContain("proximity:5:0|6:0");
+    expect(after.diagnostics.find((r) => r.key === "proximity:5:0|6:0")).toMatchObject({
       kind: "objection",
       ids: [5, 6],
     });
