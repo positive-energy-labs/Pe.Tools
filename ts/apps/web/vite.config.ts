@@ -44,6 +44,18 @@ const config = defineConfig(({ mode, command }) => {
     },
     plugins: [
       devIcons(),
+      // proto: with a saved ducts fixture and no host, answer the shell's one
+      // required host call so /ducts opens in a plain browser. Throwaway.
+      ductsFixture && {
+        name: "proto-fixture-environment",
+        configureServer(server: { middlewares: { use: (fn: (req: { url?: string }, res: { setHeader: (k: string, v: string) => void; end: (b: string) => void }, next: () => void) => void) => void } }) {
+          server.middlewares.use((req, res, next) => {
+            if (!req.url?.startsWith("/pe/environment")) return next();
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ environmentId: "00000000-0000-4000-8000-000000000001", paired: true, local: true }));
+          });
+        },
+      },
       checkoutIngress(),
       tanstackStart({
         router: {
