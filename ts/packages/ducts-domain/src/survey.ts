@@ -21,6 +21,8 @@ export interface Survey {
 }
 
 const PERSON = new Set(["open-end", "no-root", "multi-root", "no-terminal-flow"]);
+/** The inferences the route acts on; a near miss or a loop it only reports. */
+const ASSUMES = new Set(["joined-by-proximity", "tap-by-proximity", "inline-by-inference"]);
 
 const flowFinding = (f: FlowFinding): DuctFinding => {
   switch (f.kind) {
@@ -141,7 +143,7 @@ export function survey(snapshot: DuctSnapshot, work: DuctsRouteDocument | null):
     // An inference is likely, never correct (kaitpw 2026-10-19): a person rules on every one.
     ...t.findings.map((f) => ({
       ...f,
-      assumed: f.kind === "joined-by-proximity" || f.kind === "tap-by-proximity" ? f.note : null,
+      assumed: ASSUMES.has(f.kind) ? f.note : null,
       clearer: "person" as const,
     })),
     ...flows.findings.map(flowFinding),

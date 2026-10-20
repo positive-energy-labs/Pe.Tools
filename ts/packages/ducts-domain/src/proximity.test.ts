@@ -178,7 +178,7 @@ it("a 0.4 in gap joins the two open ends and merges their groups", () => {
 
 it("a 2.5 in gap stays open: past the 1 in end-to-end rule and past FACE_TOL_IN of either mouth", () => {
   const before = snap([duct(1, [0, 0, 0], [10, 0, 0]), duct(2, [10 + 2.5 * IN, 0, 0], [20, 0, 0])]);
-  expect(inferJoints(before)).toEqual({ joints: [], taps: [], findings: [] });
+  expect(inferJoints(before)).toEqual({ joints: [], taps: [], inline: [], findings: [] });
   expect(tolerate(before).snapshot).toBe(before);
 });
 
@@ -477,4 +477,157 @@ it("every inference is a finding a person clears; a near miss assumes nothing", 
     ["near-miss-across-classifications", "person", false],
     ["tap-by-proximity", "person", true],
   ]);
+});
+
+/** An 81x3.5 linear grille (Chadds 10922066): its one connector sits at its insertion point. */
+const linear = (id: number, at: number[], facing?: number[]): Node => {
+  const g = grille(id, at);
+  const port = { ...g.connectors[0]!, size: "81x3.5", widthIn: 81, heightIn: 3.5 };
+  return { ...g, point: at, connectors: [facing ? { ...port, facing } : port] };
+};
+
+it("a grille whose connector is its insertion point lands by its captured facing, and only by it", () => {
+  // Duct 1 (6 in round) runs along x; the grille's mouth sits 0.5 in under it, facing up.
+  const at = [10, 0, -3.5 * IN];
+  const main = duct(1, [0, 0, 0], [20, 0, 0], "g1");
+  const { taps, findings } = inferJoints(snap([main], [linear(9, at, [0, 0, 1])]));
+  expect(taps).toEqual([
+    {
+      id: "proximity:9:1|1",
+      a: "9:1",
+      segment: 1,
+      kind: "tap-by-proximity",
+      gapIn: expect.closeTo(0.5, 6),
+      at: expect.closeTo(10, 6),
+      point: [10, 0, 0],
+    },
+  ]);
+  expect(findings.map((f) => f.kind)).toEqual(["tap-by-proximity"]);
+  // An older snapshot carries no facing: the axis cannot be derived from the point, nothing lands.
+  expect(inferJoints(snap([main], [linear(9, at)]))).toEqual({
+    joints: [],
+    taps: [],
+    inline: [],
+    findings: [],
+  });
+});
+
+it("a captured width axis rolls a rectangular duct's faces; without one a vertical rect is a band", () => {
+  // A vertical 24x4 riser; a branch ends 0.5 in off a face, 10 in off centre along the width.
+  const riser = (widthAxis?: number[]) => {
+    const r = rect(1, [0, 0, 0], [0, 0, 10], 24, 4);
+    return { ...r, connectors: r.connectors.map((c) => (widthAxis ? { ...c, widthAxis } : c)) };
+  };
+  const branch = duct(2, [10 * IN, 2.5 * IN, 5], [10 * IN, 5, 5], "g2");
+  const tapsOf = (s: Segment) => inferJoints(snap([s, branch])).taps;
+  // Width along x: the branch faces the 24 in side and lands 0.5 in short of it.
+  expect(tapsOf(riser([1, 0, 0]))).toMatchObject([
+    { a: "2:1", segment: 1, gapIn: expect.closeTo(0.5, 6), at: expect.closeTo(5, 6) },
+  ]);
+  // Width along y: the side it faces is the 4 in one, 8 in away; no landing.
+  expect(tapsOf(riser([0, 1, 0]))).toEqual([]);
+  // ponytail fallback: no roll, a vertical rect is the round-equivalent band, and this end misses it.
+  expect(tapsOf(riser())).toEqual([]);
+});
+
+/** A two-port 6 in round damper centred at `at` along x, its ports 0.06 in apart and both open (Chadds 13568060). */
+const damper = (id: number, at: number[], facing = false): Node => {
+  const half = 0.03 * IN;
+  const port = (index: number, dx: number) => ({
+    ...conn(index, [at[0]! + dx, at[1]!, at[2]!]),
+    ...(facing ? { facing: [Math.sign(dx), 0, 0] } : {}),
+  });
+  return {
+    id,
+    kind: "accessory",
+    category: "Duct Accessories",
+    family: "Damper_Volume_Round",
+    type: "Round Volume Damper",
+    partType: null,
+    levelId: 1,
+    point: at,
+    groupId: `g${id}`,
+    systemName: "SA 1",
+    classification: "Supply Air",
+    connectors: [port(1, half), port(2, -half)],
+    facts: [],
+    uniqueId: null,
+  };
+};
+
+it("a damper inside a duct's body, aligned with it, neither end connected, is inline on it", () => {
+  const host = duct(1, [0, 0, 0], [10, 0, 0], "g1");
+  const next = duct(3, [10, 0, 0], [20, 0, 0], "g1");
+  link(host, 2, next, 1);
+  for (const facing of [false, true]) {
+    const before = snap([host, next], [damper(9, [4, 0, 0], facing)]);
+    const { inline, taps, joints, findings, links, snapshot } = tolerate(before);
+    const id = "proximity:9|1";
+    expect([taps, joints]).toEqual([[], []]);
+    expect(inline).toEqual([
+      { id, node: 9, segment: 1, kind: "inline-by-inference", ports: ["9:2", "9:1"] },
+    ]);
+    expect(findings).toEqual([
+      {
+        id,
+        kind: "inline-by-inference",
+        elementIds: [9, 1],
+        note: "accessory 9 (Damper_Volume_Round) lies inside duct 1, 4.00 ft along it and aligned with it, with neither end connected; counted inline on it",
+      },
+    ]);
+    expect(links).toEqual([
+      { id, between: [1, 9] },
+      { id, between: [9, -1] },
+    ]);
+    // The host is cut where the damper sits; its far half is virtual segment -1, carrying the
+    // host's far end (still joined to duct 3) and the rest of its length.
+    const [cut, far] = [
+      snapshot.segments.find((s) => s.id === 1)!,
+      snapshot.segments.find((s) => s.id === -1)!,
+    ];
+    expect(cut.lengthFt + far.lengthFt).toBeCloseTo(10 - 0.06 * IN, 9);
+    expect(cut.polyline.at(-1)![0]).toBeCloseTo(4 - 0.03 * IN, 9);
+    expect(far.connectors.map((c) => [c.index, c.connectedTo])).toEqual([
+      [2, { elementId: 3, connector: 1 }],
+      [3, { elementId: 9, connector: 1 }],
+    ]);
+    expect(snapshot.segments.find((s) => s.id === 3)!.connectors[0]!.connectedTo).toEqual({
+      elementId: -1,
+      connector: 2,
+    });
+    expect(snapshot.nodes[0]!.connectors.map((c) => c.connectedTo)).toEqual([
+      { elementId: -1, connector: 3 },
+      { elementId: 1, connector: 3 },
+    ]);
+    expect(snapshot.groups.map((g) => [g.id, g.elementCount])).toEqual([["g1", 4]]);
+    expect(snapshot.issues.map((i) => i.id)).toEqual(["open-end:g1:1:1", "open-end:g1:3:2"]);
+    const tree = groupTree(snapshot, "g1");
+    expect([...tree.parts.keys()].sort((a, b) => a - b)).toEqual([-1, 1, 3, 9]);
+    expect(before.segments[0]!.connectors).toHaveLength(2);
+  }
+});
+
+it("an inline part is a person-ruled warning an ignore verdict withholds; a connected or misaligned one is not inline", () => {
+  const host = () => duct(1, [0, 0, 0], [10, 0, 0], "g1");
+  const findings = survey(snap([host()], [damper(9, [4, 0, 0])]), null).findings;
+  expect(findings.find((f) => f.id === "proximity:9|1")).toMatchObject({
+    kind: "inline-by-inference",
+    clearer: "person",
+    assumed: expect.stringContaining("neither end connected"),
+  });
+  expect(
+    inferJoints(snap([host()], [damper(9, [4, 0, 0])]), 1, ignoring("proximity:9|1")).inline,
+  ).toEqual([]);
+  // One end connected: the rule needs both open.
+  const joined = damper(9, [4, 0, 0]);
+  const other = duct(2, [4, 5, 0], [4, 10, 0], "g9");
+  joined.connectors[0]!.connectedTo = { elementId: 2, connector: 1 };
+  other.connectors[0]!.connectedTo = { elementId: 9, connector: 1 };
+  expect(inferJoints(snap([host(), other], [joined])).inline).toEqual([]);
+  // Across the run, not along it.
+  const across = damper(9, [4, 0, 0], true);
+  across.connectors = across.connectors.map((c, i) => ({ ...c, facing: [0, i ? -1 : 1, 0] }));
+  expect(inferJoints(snap([host()], [across])).inline).toEqual([]);
+  // Outside the body: no host.
+  expect(inferJoints(snap([host()], [damper(9, [4, 1, 0])])).inline).toEqual([]);
 });

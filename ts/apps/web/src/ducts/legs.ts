@@ -26,7 +26,7 @@ import { tolerated } from "@pe/ducts-domain/survey";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 /** The proximity findings that join; a near miss across classifications joins nothing and stays a gap. */
-const BRIDGES = new Set(["joined-by-proximity", "tap-by-proximity"]);
+const BRIDGES = new Set(["joined-by-proximity", "tap-by-proximity", "inline-by-inference"]);
 
 type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];

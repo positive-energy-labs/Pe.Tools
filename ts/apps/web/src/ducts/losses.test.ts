@@ -642,3 +642,54 @@ it("a path stepping across an inferred joint still prices and names the inferenc
   expect(after.next.paths[31]!.inferred).toEqual([]);
   expect(before[30]!.inferred).toEqual([]);
 });
+
+it("a damper inline by inference prices in its host's path and names the inference it rests on", () => {
+  const whole = synthetic as unknown as DuctSnapshot;
+  // Damper 40 lies inside duct 11, 5 ft along it, both ends open (Chadds 13568060 in 11275610).
+  const port = (index: number, dy: number) => ({
+    ...whole.segments.find((s) => s.id === 11)!.connectors[0]!,
+    index,
+    point: [20, 5 + dy, 9],
+    connectedTo: null,
+  });
+  const damped = structuredClone(whole);
+  damped.nodes.push({
+    id: 40,
+    kind: "accessory",
+    category: "Duct Accessories",
+    family: "Damper_Volume_Round",
+    type: "12 in",
+    partType: null,
+    levelId: null,
+    point: [20, 5, 9],
+    groupId: "g40",
+    systemName: "SA 1",
+    classification: "Supply Air",
+    connectors: [port(1, 0.0025), port(2, -0.0025)],
+    facts: [],
+    uniqueId: null,
+  });
+  damped.groups.push({
+    ...damped.groups[0]!,
+    id: "g40",
+    rootIds: [],
+    terminalCount: 0,
+    elementCount: 1,
+  });
+  const doc = ductsRouteState.schema.parse({
+    componentDrops: { "40": { staged: { value: { inWg: 0.1, source: "test" } } } },
+  });
+  const before = price(whole, grids, null).next.paths[30]!;
+  const after = price(damped, grids, doc);
+  const id = "proximity:40|11";
+  expect(after.findings.find((f) => f.id === id)).toMatchObject({
+    kind: "inline-by-inference",
+    clearer: "person",
+  });
+  const path = after.next.paths[30]!;
+  expect(path.inferred).toEqual([id]);
+  expect(path.rows.find((r) => r.id === 40)).toMatchObject({ kind: "fitting", dp: 0.1 });
+  // The duct is cut, not lengthened: the total is the old one plus the damper's stated drop.
+  expect(path.total).toBeCloseTo(before.total + 0.1, 4);
+  expect(after.next.paths[31]!.inferred).toEqual([]);
+});
