@@ -313,7 +313,7 @@ export const manifest = entityRoute<
   FamiliesRouteDocument,
   FamiliesReadingKey,
   FamiliesPage,
-  "read" | "save-draft" | "set-query"
+  "read" | "save-draft"
 >(familiesSpec, {
   work: familiesRouteState,
   cells: [
@@ -378,19 +378,6 @@ export const manifest = entityRoute<
   } as never,
   page: familiesPageSchema as never,
   actions: {
-    "set-query": {
-      label: "set table query",
-      says: "Set the Families pivot's query (rules and free words) without reading or changing Revit.",
-      needs: "host",
-      actor: "any",
-      visible: false,
-      input: z.object({ query: z.string() }) as never,
-      dirties: [],
-      ready: () => null,
-      run: async (ctx, input: { query: string }) => {
-        ctx.setPage({ query: input.query });
-      },
-    },
     read: {
       label: "read families",
       says: "Read the drafted families from this exact document; category and family picks alone do not read the matrix.",

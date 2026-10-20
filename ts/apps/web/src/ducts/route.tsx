@@ -29,6 +29,7 @@ import { claimsForGroup } from "@pe/ducts-domain/claims";
 import { provisionalWords } from "./provisional";
 import type { ProtoProps } from "./proto/props";
 import { EScreen } from "./proto/e/screen";
+import { useDuctsViewBridge } from "./view-bridge";
 
 const fmt = (n: number | null | undefined) => (n == null ? "—" : n.toFixed(4));
 
@@ -129,6 +130,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   );
   const groups = snapshot?.groups ?? [];
   const levels = snapshot?.levels ?? [];
+  useDuctsViewBridge({ thread, surface: url ? "route" : "chat", page, setPage, snapshot, document: doc });
   const group = groups.find((item) => item.id === page.group) ?? null;
   const level = levels.find((item) => String(item.id) === page.level) ?? null;
   const readWord =

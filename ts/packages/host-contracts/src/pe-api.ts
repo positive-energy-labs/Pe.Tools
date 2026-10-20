@@ -155,9 +155,9 @@ export function definePeApi<
     | "routeStatePatchSchema"
     | "ductsAnalysisRequestSchema"
     | "ductsAnalysisResponseSchema"
-    | "familiesViewSchema"
-    | "familiesViewCommandSchema"
-    | "familiesViewAckSchema"
+    | "routeViewSchema"
+    | "routeViewSetSchema"
+    | "routeViewAckSchema"
     | "pageChoiceSchema"
     | "diagnosticBodySchema"
     | "actionAdmissionSchema"
@@ -194,10 +194,10 @@ export function definePeApi<
   const navigationSnapshotSchema =
     schemas.navigationSnapshotSchema as S["navigationSnapshotSchema"];
   const routeStatePatchSchema = schemas.routeStatePatchSchema as S["routeStatePatchSchema"];
-  const familiesViewSchema = schemas.familiesViewSchema as S["familiesViewSchema"];
-  const familiesViewCommandSchema =
-    schemas.familiesViewCommandSchema as S["familiesViewCommandSchema"];
-  const familiesViewAckSchema = schemas.familiesViewAckSchema as S["familiesViewAckSchema"];
+  const routeViewSchema = schemas.routeViewSchema as S["routeViewSchema"];
+  const routeViewSetSchema =
+    schemas.routeViewSetSchema as S["routeViewSetSchema"];
+  const routeViewAckSchema = schemas.routeViewAckSchema as S["routeViewAckSchema"];
   const pageChoiceSchema = schemas.pageChoiceSchema as S["pageChoiceSchema"];
   const feedbackSchema = z.strictObject({
     comment: z.string().trim().min(1).max(8000),
@@ -737,20 +737,20 @@ export function definePeApi<
       "read",
       "asset",
     ),
-    "view.get": route("GET", "/pe/route-view/families", none, object, "read", "pe", "read"),
+    "view.get": route("GET", "/pe/route-view/:route", none, object, "read", "pe", "read"),
     "view.publish": route(
       "PUT",
-      "/pe/route-view/families",
-      familiesViewSchema,
+      "/pe/route-view/:route",
+      routeViewSchema,
       object,
       "caller",
       "pe",
       "caller",
     ),
-    "view.query": route(
+    "view.set": route(
       "POST",
-      "/pe/route-view/families/set-query",
-      familiesViewCommandSchema,
+      "/pe/route-view/:route/set",
+      routeViewSetSchema,
       object,
       "caller",
       "pe",
@@ -758,8 +758,8 @@ export function definePeApi<
     ),
     "view.ack": route(
       "POST",
-      "/pe/route-view/families/ack",
-      familiesViewAckSchema,
+      "/pe/route-view/:route/ack",
+      routeViewAckSchema,
       object,
       "caller",
       "pe",
@@ -767,7 +767,7 @@ export function definePeApi<
     ),
     "view.remove": route(
       "DELETE",
-      "/pe/route-view/families/:instance",
+      "/pe/route-view/:route/:instance",
       none,
       ok,
       "caller",

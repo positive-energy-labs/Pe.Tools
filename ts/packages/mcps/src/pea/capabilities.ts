@@ -11,6 +11,10 @@ import {
   familyReads,
   actionBasesSchema,
   settingsRouteState,
+  routeViews,
+  routeViewRoutes,
+  type RouteViewRoute,
+  type RouteViewSpec,
 } from "@pe/agent-contracts";
 /** One discovery projection and ranker: native availability is contextual; installed content
  * comes from one admitted snapshot, independent of the native catalog. Session/document readings
@@ -162,40 +166,7 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
       source: "host Ducts analysis",
       rank: 2,
     },
-    {
-      key: "route:families.view",
-      kind: "route-command",
-      title: "Families visible view",
-      description:
-        "Read the currently mounted Families pane in this thread: its stage, rule line, exact visible reading id, and visible counts. If two panes are open, pass an instance from the ambiguity result. No Revit read.",
-      finds: ["families", "visible", "archive", "rules"],
-      needs: "nothing",
-      mutates: false,
-      principal: capabilityPrincipals(false),
-      input: z.toJSONSchema(z.object({ instance: z.uuid().optional() })) as Record<string, unknown>,
-      source: "browser Page",
-      rank: 2,
-    },
-    {
-      key: "route:families.set-query",
-      kind: "route-command",
-      title: "Set Families visible query",
-      description:
-        "Change the query line in one mounted Families view. Read route:families.view first, then pass its instance and revision. The browser acknowledges the rendered query and counts. No Work or Revit read.",
-      finds: ["families", "filter", "rules", "visible"],
-      needs: "nothing",
-      mutates: true,
-      principal: capabilityPrincipals(true),
-      input: z.toJSONSchema(
-        z.object({
-          instance: z.uuid(),
-          revision: z.number().int().nonnegative(),
-          query: z.string().max(4096),
-        }),
-      ) as Record<string, unknown>,
-      source: "browser Page",
-      rank: 2,
-    },
+    ...routeViewRoutes.flatMap(routeViewRows),
     ...sources.packages.flatMap(packageRows),
     ...sources.skills.map(skillRow),
     ...(sources.pages ?? []),
@@ -228,6 +199,48 @@ function opRow(op: OpsCatalogEntry): Capability {
     source: "catalog",
     rank: visibilityRank[op.visibility ?? "DefaultVisible"] ?? 0,
   };
+}
+
+/** A route that opts into `routeViews` gets one read and one set, both over the person's open page. */
+function routeViewRows(route: RouteViewRoute): Capability[] {
+  const spec: RouteViewSpec = routeViews[route];
+  const keys = Object.keys(spec.set.shape);
+  const lower = spec.title.toLowerCase();
+  return [
+    {
+      key: `route:${route}.view`,
+      kind: "route-command",
+      title: `${spec.title} visible view`,
+      description: `Read the ${spec.title} page the person has open in this thread: its settable keys (${keys.join(", ")}) with their current values, the identity of what is shown, and derived facts (${route === "families" ? "stage, rule help, the exact visible reading id and counts" : "the group ids with their system names, and the levels"}). Returns instance and revision for ${`route:${route}.set-view`}. If two panes are open, pass an instance from the ambiguity result. No Revit read.`,
+      finds: [lower, "visible", "page", ...(route === "families" ? ["archive", "rules"] : ["system", "group", "level"])],
+      needs: "nothing",
+      mutates: false,
+      principal: capabilityPrincipals(false),
+      input: z.toJSONSchema(z.object({ instance: z.uuid().optional() })) as Record<string, unknown>,
+      source: "browser Page",
+      rank: 2,
+    },
+    {
+      key: `route:${route}.set-view`,
+      kind: "route-command",
+      title: `Set ${spec.title} visible view`,
+      description: `${spec.policy} Read route:${route}.view first, then pass its instance and revision with a nonempty subset of ${keys.join(", ")}${spec.words ? ` or ${Object.keys(spec.words.shape).join(", ")}` : ""}. The browser acknowledges the render before this returns.`,
+      finds: [lower, "filter", "visible", "page", ...(route === "ducts" ? ["system", "group", "level"] : ["rules"])],
+      needs: "nothing",
+      mutates: true,
+      principal: capabilityPrincipals(true),
+      input: z.toJSONSchema(
+        z.object({
+          instance: z.uuid(),
+          revision: z.number().int().nonnegative(),
+          ...spec.set.partial().shape,
+          ...spec.words?.partial().shape,
+        }),
+      ) as Record<string, unknown>,
+      source: "browser Page",
+      rank: 2,
+    },
+  ];
 }
 
 function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
