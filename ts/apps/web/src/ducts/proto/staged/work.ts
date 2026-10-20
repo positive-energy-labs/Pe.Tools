@@ -7,10 +7,10 @@
  * order, connector directions and the two gaps were read from the snapshot by script; `work.test.ts`
  * holds every id to it.
  *
- * - `g8745870` (SA 19, FC-17 side): FC-17 9668311 to terminal 8745870, the longest of the group's
+ * - `g8745870` (SA 19, FC-17 side): 9668311 to terminal 8745870, the longest of the group's
  *   five terminal walks by duct length. SA 19 also names g8747301 (FC-35, DH-30) and g8747668.
  * - `g14122436` (MUAS-1 to FC-23, across FA 50 / FA 43 / FA 44 / FA 27 / FA 20 / RA 37 / RA 114):
- *   louver 14088043 through MUAS-1 14577391 to FC-23 13760867, the walk Pea traced on 2026-10-17
+ *   louver 14088043 through 14577391 to FC-23 13760867, the walk Pea traced on 2026-10-17
  *   with the three elements between FR-1 and FC-23 put back. Keyed by MUAS-1's supply-side group.
  */
 import { type DuctClaim, type DuctsRouteDocument, ductsDocumentSchema } from "@pe/agent-contracts";
@@ -55,7 +55,7 @@ export const STAGED_WORK: Record<string, DuctsRouteDocument> = {
     unit: {
       state: "assumed",
       ids: [9668311, 9668310],
-      text: "SA 19 here is FC-17's supply: the group has two roots, FC-17 9668311 and dehumidifier DH-21 9668310, and I took FC-17 as the fan. SA 19 also names FC-35's network in another group.",
+      text: "SA 19 here is FC-17's supply: the group has two roots, 9668311 and dehumidifier 9668310, and I took FC-17 as the fan. SA 19 also names FC-35's network in another group.",
     },
     shape: {
       state: "proven",
@@ -70,7 +70,7 @@ export const STAGED_WORK: Record<string, DuctsRouteDocument> = {
     branch: {
       state: "unproven",
       ids: [9668310, 13511627, 9668577],
-      text: "DH-21 9668310 discharges into FC-17's supply at duct 9668577 through 13511627, upstream of every terminal. Is the dehumidifier meant to share this trunk, or is that a modelling shortcut?",
+      text: "9668310 discharges into FC-17's supply at duct 9668577 through 13511627, upstream of every terminal. Is the dehumidifier meant to share this trunk, or is that a modelling shortcut?",
     },
     direction: {
       state: "assumed",
@@ -92,17 +92,17 @@ export const STAGED_WORK: Record<string, DuctsRouteDocument> = {
     backwards: {
       state: "unproven",
       ids: [14577391, 14605353, 14605319],
-      text: "MUAS-1 14577391 looks placed backwards: walking from the louver, the route enters its Out port through 14605353 and leaves its In port through 14605319.",
+      text: "14577391 looks placed backwards: walking from the louver, the route enters its Out port through 14605353 and leaves its In port through 14605319.",
     },
     taps: {
       state: "unproven",
       ids: [14515917, 14343729, 6105264, 6953852],
-      text: "Two taps leave the trunk: 14515917 toward RV-15 6105264 and 14343729 toward RV-7 6953852. Are those takeoffs intended, so this is a branched network, not one run?",
+      text: "Two taps leave the trunk: 14515917 toward 6105264 and 14343729 toward 6953852. Are those takeoffs intended, so this is a branched network, not one run?",
     },
     stop: {
       state: "unproven",
       ids: [13926753, 13760945, 13760866, 13760867],
-      text: "Supply takeoff 13926753 taps into return duct 13760945. Should the route stop at that takeoff, or continue through FR-1 13760866 to FC-23's return inlet as drawn?",
+      text: "Supply takeoff 13926753 taps into return duct 13760945. Should the route stop at that takeoff, or continue through 13760866 to FC-23's return inlet as drawn?",
     },
     north: {
       state: "unproven",

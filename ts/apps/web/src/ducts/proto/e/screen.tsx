@@ -23,6 +23,7 @@ import type { ProtoProps } from "../props";
 import { BarLegend, LossBar } from "./bar";
 import { ECanvas } from "./canvas";
 import { EditPopover, type EditTarget } from "./edit";
+import { grilleLabels } from "./labels";
 import { Inbox, inboxRows } from "./inbox";
 
 export interface SidebarCtx {
@@ -34,6 +35,8 @@ export interface SidebarCtx {
   scale: number | null;
   /** The critical run's key: the run with the largest priced total. */
   criticalKey: string | null;
+  /** A grille's name for a run (or a grille element): label, else type, plus place; never an id. */
+  grilleName: (node: TreeNode) => string;
   /** The element id the route has selected, or null. */
   selected: number | null;
   light: (ids: readonly number[] | null) => void;
@@ -159,6 +162,10 @@ export function EScreen({
         : [],
     [snapshot, page.group, scope, findings, props.claims],
   );
+  const labels = useMemo(
+    () => (snapshot && tree ? grilleLabels(snapshot, tree.children) : new Map<number, string>()),
+    [snapshot, tree],
+  );
   const nameOf = useMemo(() => {
     const n = snapshot ? elementNamer(snapshot, null) : () => null;
     return (id: number) => n(id) ?? "element not in snapshot";
@@ -186,8 +193,16 @@ export function EScreen({
   const scale = critical?.total ?? null;
   const selected = page.selected && /^\d+$/.test(page.selected) ? Number(page.selected) : null;
   const open = inboxOpen ?? rows.length > 0;
+  // The group's own fan (B's header read the document-wide one); unsolved says so.
+  const groupFan = tree ? priced?.now.byGroup[tree.key]?.fan : undefined;
+  const grilleName = (n: TreeNode) => {
+    const id = n.kind === "run" ? n.terminal : n.id;
+    return (id != null ? labels.get(id) : undefined) ?? n.name;
+  };
   const pricedWord = priced
-    ? `fan ${tree ? (priced.now.byGroup[tree.key]?.fan ?? 0).toFixed(3) : "—"} in-wg`
+    ? groupFan == null
+      ? "this system is not priced"
+      : `fan ${groupFan.toFixed(3)} in-wg`
     : props.fromFixture
       ? "fixture, not priced"
       : "not priced yet";
@@ -213,7 +228,7 @@ export function EScreen({
     >
       {tree ? (
         <>
-          <BarLegend scale={scale} criticalName={critical?.id != null ? `${nameOf(critical.id)} ${critical.id}` : null} />
+          <BarLegend scale={scale} criticalName={critical ? grilleName(critical) : null} />
           <div onMouseLeave={() => light(null)}>
             {sidebar.render({
               snapshot,
@@ -221,6 +236,7 @@ export function EScreen({
               tree,
               scale,
               criticalKey: critical?.key ?? null,
+              grilleName,
               selected,
               light,
               select,
