@@ -70,7 +70,8 @@ type RowProps = RowState & {
         lines?: 1 | 2 | 3;
         /** Target and time above a navigation item's title; three lines reserve one item height each. */
         eyebrow?: ReactNode;
-        /** The row's state (an activity, an age, a mark): the trailing slot of the first line. */
+        /** A short fact (count, type, state, shortcut, time): the trailing slot of the first line.
+         * Explanatory prose belongs in the list's optional description, never repeated here. */
         meta?: ReactNode;
         /** Row verbs (usually one menu): they take the meta slot in place on hover, keyboard
          *  focus or an open menu; without hover, a tap on the slot opens them. Never the pick. */

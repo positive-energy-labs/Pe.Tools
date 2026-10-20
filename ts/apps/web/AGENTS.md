@@ -49,3 +49,12 @@ Call sites declare state; the language CSS owns what state looks like. Concretel
 New vocabulary lands as: the CSS role in `components/lang/lang.css` or `design-lang.css`, its
 registration in the guard's `AUTHORING`/loader lists, a guard that fails when it is misused,
 and a ledger line — one commit.
+
+`role-titlebar` identifies an artifact's scope title. `role-colhead` identifies its column controls.
+Their type values live in kit `base.css`; the table-controls specimen compares provisional role
+variables before a typography verdict. Product call sites must not override those variables.
+
+Keys, menus, Tutorial, pickers, and search follow the shared contracts in
+[`docs/features/design-system/NORMALIZATION.md`](../../../docs/features/design-system/NORMALIZATION.md).
+An action with multiple input paths has one kit `ActionDefinition`; its visible shortcuts are projections.
+Use `PopupFrame` and collection levels for pickers, and `SearchControl` for search presentation.

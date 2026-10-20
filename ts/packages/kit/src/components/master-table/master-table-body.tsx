@@ -10,24 +10,21 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { createPortal } from "react-dom";
 import type { ReactTable, RowData } from "@tanstack/react-table";
 
 import { CellHost } from "../lang/cell";
 import { Row } from "../lang/row";
 import { CellNavigationProvider, type CellMove } from "./cell-navigation";
 import type { ResolvedColumn } from "./master-table-columns";
-import {
-  CELL_EDITOR,
-  editCell,
-  isInteractive,
-  isTypingKey,
-  keyDirection,
-} from "./master-table-state";
+import { CELL_EDITOR, editCell, isInteractive, isTypingKey } from "./master-table-state";
 import type { MasterTableFeatures } from "./tanstack-adapter";
-import { useScopeKeys } from "../../keys";
+import { actionScopeKeys, useScopeKeys } from "../../keys";
 import { token } from "../../lib/token";
 import { cn } from "../../lib/utils";
 import { TooltipHint } from "../lang/tooltip";
+import { CellContextMenu } from "./cell-context-menu";
+import { cellCopyText, createTableActions } from "./table-actions";
 
 type Table<Row extends RowData> = ReactTable<MasterTableFeatures, Row, unknown>;
 type VisibleRow<Row extends RowData> = ReturnType<Table<Row>["getRowModel"]>["rows"][number];
@@ -151,6 +148,15 @@ export function MasterTableBody<Row extends RowData>({
     targets: { row: Row; column: string }[];
   } | null>(null);
   const draftFinished = useRef(false);
+  const [context, setContext] = useState<{
+    row: Row;
+    column: ResolvedColumn<Row>;
+    cell: HTMLTableCellElement;
+  } | null>(null);
+  const [focusedCell, setFocusedCell] = useState<HTMLTableCellElement | null>(null);
+  const focusedCellRef = useRef<HTMLTableCellElement | null>(null);
+  const [tbody, setTbody] = useState<HTMLTableSectionElement | null>(null);
+  const [copyFailed, setCopyFailed] = useState<HTMLTableCellElement | null>(null);
   const finishDraft = (commit: boolean) => {
     if (!draft || draftFinished.current) return;
     draftFinished.current = true;
@@ -192,6 +198,52 @@ export function MasterTableBody<Row extends RowData>({
     },
     [],
   );
+  const openContext = useCallback(
+    (cell: HTMLTableCellElement) => {
+      const row = visibleRows.find((item) => item.id === cell.parentElement?.dataset.key);
+      const column = columnByKey.get(cell.dataset.columnKey ?? "");
+      if (!row || !column) return false;
+      setContext({ row: row.original, column, cell });
+      return true;
+    },
+    [columnByKey, visibleRows],
+  );
+  const copyCell = useCallback(
+    (cell: HTMLTableCellElement) => {
+      const row = visibleRows.find((item) => item.id === cell.parentElement?.dataset.key);
+      const column = columnByKey.get(cell.dataset.columnKey ?? "");
+      const fallback =
+        (row && column ? cellEdit?.read(row.original, column.key) : undefined) ??
+        cell.innerText ??
+        cell.textContent ??
+        "";
+      const value = cellCopyText(cell, fallback);
+      setCopyFailed(null);
+      try {
+        const clipboard = navigator.clipboard;
+        if (!clipboard?.writeText) throw new Error("Clipboard unavailable");
+        void clipboard.writeText(value).catch(() => setCopyFailed(cell));
+        return true;
+      } catch {
+        setCopyFailed(cell);
+        return true;
+      }
+    },
+    [cellEdit, columnByKey, visibleRows],
+  );
+  const actions = createTableActions({
+    getCell: () => {
+      const cell = focusedCell;
+      return cell?.isConnected && focusedCellRef.current === cell && document.activeElement === cell
+        ? cell
+        : null;
+    },
+    moveFrom,
+    edit: (cell) => editCell(cell),
+    copy: copyCell,
+    openContext,
+  });
+  useScopeKeys(actionScopeKeys(actions), tbody);
   const handleGridKey = useCallback(
     (event: KeyboardEvent<HTMLTableCellElement>) => {
       if (cellEdit && isTypingKey(event) && table.getSelectedCellCount() > 1) {
@@ -209,21 +261,40 @@ export function MasterTableBody<Row extends RowData>({
         event.preventDefault();
         return;
       }
-      if ((event.key === "Enter" || event.key === "F2") && editCell(event.currentTarget))
-        return event.preventDefault();
       if (isTypingKey(event) && editCell(event.currentTarget, event.key))
         return event.preventDefault();
-      const direction = keyDirection(event.key, event.shiftKey);
-      if (!direction) return;
-      const tab = event.key === "Tab";
-      const moved = moveFrom(event.currentTarget, direction, tab);
-      if (!tab || moved) event.preventDefault();
     },
-    [cellEdit, moveFrom, table, visibleRows],
+    [cellEdit, table, visibleRows],
   );
 
   return (
-    <tbody>
+    <tbody
+      ref={setTbody}
+      onFocusCapture={(event) => {
+        const cell = (event.target as HTMLElement).closest<HTMLTableCellElement>(
+          "[data-master-cell]",
+        );
+        if (cell) {
+          focusedCellRef.current = cell;
+          setFocusedCell(cell);
+        }
+      }}
+      onContextMenu={(event) => {
+        const target = event.target as HTMLElement;
+        const editor = target.closest("input,textarea,select,[contenteditable=true]");
+        if (editor?.contains(document.activeElement)) return;
+        const cell = target.closest<HTMLTableCellElement>("[data-master-cell]");
+        if (!cell) return;
+        event.preventDefault();
+        openContext(cell);
+      }}
+    >
+      {copyFailed?.isConnected &&
+        createPortal(<Row role="status" label="Clipboard access failed" />, copyFailed)}
+      {createPortal(
+        <CellContextMenu target={context} moveFrom={moveFrom} copy={copyCell} />,
+        document.body,
+      )}
       {visibleRows.map((tableRow, rowIndex) => {
         const key = tableRow.id;
         const cells = [
@@ -263,6 +334,7 @@ export function MasterTableBody<Row extends RowData>({
                     <td
                       ref={hostOf(cell.id)}
                       data-cell-id={cell.id}
+                      data-column-key={column.key}
                       role="gridcell"
                       tabIndex={
                         selection & 1 || (isEntryCell && table.getFocusedCell() === undefined)
@@ -272,6 +344,8 @@ export function MasterTableBody<Row extends RowData>({
                       aria-selected={Boolean(selection & 2)}
                       data-master-cell=""
                       onFocus={(event) => {
+                        focusedCellRef.current = event.currentTarget;
+                        setFocusedCell(event.currentTarget);
                         if (event.target === event.currentTarget && !selectingEditor.current)
                           table.setFocusedCell(tableRow.id, cell.column.id);
                       }}
@@ -335,6 +409,7 @@ export function MasterTableBody<Row extends RowData>({
                           editCell(event.currentTarget);
                       }}
                       onMouseEnter={cell.getSelectionExtendHandler()}
+                      data-lock={column.lock ? "" : undefined}
                       style={column.lock ? { left: gutter ? gutterWidth : 0 } : undefined}
                       className={cn(
                         // The row rule is drawn INSIDE the cell: a border on a td adds to the row box and put

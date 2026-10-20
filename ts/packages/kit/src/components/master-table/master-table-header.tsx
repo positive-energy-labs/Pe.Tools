@@ -1,15 +1,12 @@
-import { useContext, type ReactNode } from "react";
-import { ListFilter } from "lucide-react";
+import { useContext } from "react";
 import type { ReactTable, RowData } from "@tanstack/react-table";
 
-import { Button } from "../lang/button";
 import type { ResolvedColumn } from "./master-table-columns";
 import type { Column } from "./model";
 import type { MasterTableFeatures } from "./tanstack-adapter";
 import { cn } from "../../lib/utils";
-import { PressContent } from "../anatomy/press-content";
-import { ConditionTarget } from "./query";
-import { opSaid, readQuery } from "./view";
+import { ColumnMenu, ColumnQuery } from "./query-workbench";
+import { SortMark } from "./sort-mark";
 import { TooltipHint } from "../lang/tooltip";
 
 type Table<Row extends RowData> = ReactTable<MasterTableFeatures, Row, unknown>;
@@ -17,7 +14,6 @@ type Table<Row extends RowData> = ReactTable<MasterTableFeatures, Row, unknown>;
 export function MasterTableHeader<Row extends RowData>({
   table,
   columnByKey,
-  query,
   stickyTop,
   sortCount,
   gutter,
@@ -26,7 +22,6 @@ export function MasterTableHeader<Row extends RowData>({
 }: {
   table: Table<Row>;
   columnByKey: ReadonlyMap<string, ResolvedColumn<Row>>;
-  query: string;
   stickyTop: (rowIndex: number) => number;
   sortCount: number;
   gutter: boolean;
@@ -34,8 +29,6 @@ export function MasterTableHeader<Row extends RowData>({
   theadRef: React.RefObject<HTMLTableSectionElement | null>;
 }) {
   const headerGroups = table.getHeaderGroups();
-  const editCondition = useContext(ConditionTarget);
-  const clauses = readQuery(query);
   return (
     <thead ref={theadRef}>
       {headerGroups.map((headerGroup, rowIndex) => (
@@ -45,7 +38,7 @@ export function MasterTableHeader<Row extends RowData>({
               <th
                 rowSpan={headerGroups.length}
                 style={{ top: 0, width: gutterWidth, minWidth: gutterWidth }}
-                className="sticky left-0 z-sticky border-b border-line p-0 on-recess"
+                className="sticky left-0 z-[calc(var(--z-sticky)+1)] border-b border-line p-0 on-recess"
               />
             </TooltipHint>
           )}
@@ -63,29 +56,14 @@ export function MasterTableHeader<Row extends RowData>({
                 rank={header.column.getSortIndex()}
                 sortCount={sortCount}
                 onSort={(additive) => header.column.toggleSorting(undefined, additive)}
-              >
-                {column.condition && editCondition && (
-                  <ConditionPress
-                    said={clauses.flatMap((clause) =>
-                      clause.kind === "field" &&
-                      clause.label.toLowerCase() === column.label.toLowerCase()
-                        ? [
-                            `${clause.not ? "not " : ""}${opSaid(column.condition!.kind, clause.op, clause.value)}`,
-                          ]
-                        : [],
-                    )}
-                    column={column}
-                    onClick={() => editCondition(column.label)}
-                  />
-                )}
-              </LeafHeader>
+              />
             ) : (
               <th
                 key={header.id}
                 colSpan={header.colSpan}
                 rowSpan={header.rowSpan}
                 style={{ top: stickyTop(rowIndex) }}
-                className="t-small t-upper sticky z-sticky whitespace-nowrap border-b border-l border-line px-(--item-pad-x) py-px text-left on-recess first:border-l-0"
+                className="role-colhead sticky z-sticky whitespace-nowrap h-(--item-h) shadow-[inset_0_-1px_0_var(--pe-line)] border-l border-line px-(--item-pad-x) py-0 text-left on-recess first:border-l-0"
               >
                 <table.FlexRender header={header} />
               </th>
@@ -106,7 +84,6 @@ function LeafHeader<Row>({
   rank,
   sortCount,
   onSort,
-  children,
 }: {
   column: Column<Row>;
   rowSpan: number;
@@ -116,76 +93,51 @@ function LeafHeader<Row>({
   rank: number;
   sortCount: number;
   onSort: (additive: boolean) => void;
-  children?: ReactNode;
 }) {
+  const menu = useContext(ColumnQuery) !== null && column.condition !== undefined;
+  const heading = column.header ?? column.label;
   return (
     <TooltipHint content={column.title}>
       <th
         data-column-key={column.key}
+        data-lock={column.lock ? "" : undefined}
         rowSpan={rowSpan}
-        style={{ top: stickyTop, left: column.lock ? lockLeft : undefined }}
+        style={{
+          top: stickyTop,
+          left: column.lock ? lockLeft : undefined,
+          zIndex: column.lock ? "calc(var(--z-sticky) + 1)" : undefined,
+        }}
         className={cn(
-          "sticky z-sticky align-top whitespace-nowrap border-b border-l border-line px-(--item-pad-x) py-1 font-normal on-recess first:border-l-0",
+          "sticky z-sticky h-(--item-h) whitespace-nowrap shadow-[inset_0_-1px_0_var(--pe-line)] border-l border-line p-0 align-middle font-normal on-recess first:border-l-0",
           column.right ? "text-right" : "text-left",
           column.width,
-          column.lock && "z-sticky",
           column.headerClassName,
         )}
       >
-        {column.sort ? (
-          <Button
+        {menu ? (
+          <ColumnMenu
+            label={column.label}
+            heading={heading}
+            direction={direction}
+            rank={rank}
+            sortCount={sortCount}
+            right={column.right}
+          />
+        ) : column.sort ? (
+          <button
             type="button"
+            data-colhead-trigger=""
+            className={cn("dl-button w-full", column.right ? "justify-end" : "justify-start")}
+            aria-label={`sort ${column.label}`}
             onClick={(event) => onSort(event.shiftKey)}
-            label={`sort ${column.label}`}
-            reason="Sort by this column. Clicking again flips the direction; shift-click appends it as a tie-breaker behind the sorts already applied, numbered in the header."
           >
-            <PressContent geometry="block">
-              <span className="t-small t-upper">{column.header ?? column.label}</span>
-              {direction && (
-                <span className="ml-1 text-ink">
-                  {direction === "asc" ? "↑" : "↓"}
-                  {sortCount > 1 && <span className="opacity-60">{rank + 1}</span>}
-                </span>
-              )}
-            </PressContent>
-          </Button>
+            <span className="role-colhead min-w-0 truncate">{heading}</span>
+            {direction && <SortMark direction={direction} rank={rank} count={sortCount} />}
+          </button>
         ) : (
-          <span className="t-small t-upper block">{column.header ?? column.label}</span>
+          <span className="role-colhead block truncate px-(--item-pad-x)">{heading}</span>
         )}
-        {children}
       </th>
     </TooltipHint>
-  );
-}
-
-/** The column's way into the query box; pressed, it says what narrows the column right now. */
-function ConditionPress<Row>({
-  said,
-  column,
-  onClick,
-}: {
-  said: readonly string[];
-  column: Column<Row>;
-  onClick: () => void;
-}) {
-  return (
-    <div className="mt-0.5 flex normal-case">
-      <Button
-        type="button"
-        pressed={said.length > 0}
-        label={`filter ${column.label}`}
-        reason={
-          said.length
-            ? `Narrowed by ${said.join(" and ")}. Click to add another condition on this column; edit or remove one from its chip in the query box.`
-            : "Filter this column: opens the query box on it, with its operators and values."
-        }
-        onClick={onClick}
-      >
-        <PressContent geometry="block">
-          <ListFilter aria-hidden className="size-3 shrink-0" />
-          {said.length > 0 && <span className="face-mono truncate">{said.join(" · ")}</span>}
-        </PressContent>
-      </Button>
-    </div>
   );
 }

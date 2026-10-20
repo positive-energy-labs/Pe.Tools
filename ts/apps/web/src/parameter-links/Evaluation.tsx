@@ -71,7 +71,7 @@ function WritesTable({ writes }: { writes: Write[] }) {
       rowKey={writeKey}
       state={state}
       onStateChange={setState}
-      searchPlaceholder="search targets"
+      search
     >
       <Table
         rows={writes}

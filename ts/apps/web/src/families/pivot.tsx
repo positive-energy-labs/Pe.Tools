@@ -21,6 +21,7 @@ import { useFamiliesWorkspace } from "#/families/workspace-context";
 import type { FamilySnapshotRecord } from "#/host/loaded-families-view";
 import { ChatFocus } from "#/route/situation-ladder";
 import type { ParameterMetadataRecord } from "./parameter-metadata";
+import { FAMILIES_FILTERS } from "./query-filters";
 
 export const filledValue = (value: string | undefined) =>
   value !== undefined && value.trim() !== "";
@@ -185,6 +186,7 @@ function familiesVocabulary(
   return {
     fields: [...PARAMETER_FIELDS, ...FAMILY_FIELDS],
     rules: RULES,
+    filters: FAMILIES_FILTERS,
     count: (query) => applyFamiliesQuery(query, rows, families).shownRows.length,
     values: (label, query) => {
       const scope = applyFamiliesQuery(query, rows, families);
@@ -198,6 +200,11 @@ function familiesVocabulary(
 
 /** What Pea reads of the query language: the rule words, then one line per field. */
 export const FAMILIES_QUERY_HELP = [
+  ...FAMILIES_FILTERS.map((filter) => ({
+    insert: filter.clause,
+    label: filter.label,
+    hint: `${filter.default ? "default · " : ""}${filter.description}`,
+  })),
   ...RULES.map((rule) => ({ insert: rule.word, label: rule.word, hint: rule.label })),
   ...[...PARAMETER_FIELDS, ...FAMILY_FIELDS].map((field) => ({
     insert: `${field.label}${field.kind === "number" ? ">=" : "~"}`,
@@ -327,11 +334,12 @@ export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: Rea
         <TableFrame
           label="parameters × family types"
           rows={filtered.shownRows}
+          rowCount={{ shown: mappedRows.length, total: pivotRows.length }}
           columns={identityColumns}
           rowKey={rowKey}
           state={tableState}
           onStateChange={store.actions.setTable}
-          summary={`${mappedRows.length} parameters × ${filtered.shownFamilies.length} families · ${types.length} types`}
+          summary={`${filtered.shownFamilies.length} families · ${types.length} types`}
           query={vocabulary}
           chips={scopeChips}
           actions={

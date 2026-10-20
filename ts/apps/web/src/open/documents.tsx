@@ -201,7 +201,7 @@ export function ModelTable({
       rowKey={(row) => row.key}
       state={state}
       onStateChange={onStateChange}
-      searchPlaceholder="filter by name or path, or paste one; then → a Revit"
+      search
       command={command}
       actions={actions}
       filters={

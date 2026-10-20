@@ -270,7 +270,7 @@ export function ScheduleGridWorkspace({
                 rowKey={(row) => String(row.rowNumber)}
                 state={tableState}
                 onStateChange={setTableState}
-                searchPlaceholder="search any field, or type a column name"
+                search
                 actions={facts}
               >
                 <Table

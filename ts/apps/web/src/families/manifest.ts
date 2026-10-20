@@ -15,6 +15,7 @@ import {
   type PodDraftSource,
 } from "@pe/agent-contracts";
 import { filterWords } from "./scope-band";
+import { DEFAULT_FAMILIES_QUERY } from "./query-filters";
 
 import { FF_SPEC_SCHEMA, ffPlanRow } from "#/host/familyfoundry";
 import { FAMILY_MODEL_SCHEMA } from "#/family/manifest";
@@ -46,7 +47,7 @@ import type { Inspectable } from "#/route/inspect";
 import { familiesGroupOf, stagedDrafts } from "./staged";
 
 /** The families view opens on parameters that hold a value somewhere in the shown types. */
-export const DEFAULT_FAMILIES_QUERY = "!empty !absent";
+export { DEFAULT_FAMILIES_QUERY } from "./query-filters";
 
 export interface FamiliesPage {
   /** The next read's scope. Picker changes never issue a matrix read. */

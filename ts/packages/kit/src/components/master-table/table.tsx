@@ -62,7 +62,7 @@ function useTableSelection(selection: TableSelection | undefined, shown: readonl
       callback: () => selection?.onChange(new Set()),
       label: "clear selection",
       says: "drop the selected table rows",
-      options: { enabled: (selection?.selected.size ?? 0) > 0 },
+      available: () => (selection?.selected.size ?? 0) > 0,
     },
   ]);
   if (!selection) return null;
@@ -207,6 +207,10 @@ export function Table<Row extends RowData>({
       <div
         className={maxHeight ? "overflow-auto" : "min-h-0 flex-1 overflow-auto"}
         style={maxHeight ? { maxHeight } : undefined}
+        // Scrolled sideways, the locked column floats over the rows and casts its shade.
+        onScroll={({ currentTarget }) =>
+          currentTarget.toggleAttribute("data-scrolled-x", currentTarget.scrollLeft > 0)
+        }
       >
         <table
           role="grid"
@@ -223,7 +227,6 @@ export function Table<Row extends RowData>({
           <MasterTableHeader
             table={table}
             columnByKey={columnByKey}
-            query={state.query}
             stickyTop={(rowIndex) => rowTops[rowIndex] ?? 0}
             sortCount={table.state.sorting.length}
             gutter={Boolean(gutter)}

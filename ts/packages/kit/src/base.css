@@ -442,6 +442,36 @@
   letter-spacing: -0.01em;
   line-height: var(--type-display-line-height);
 }
+/* Table type roles: a titlebar name and a column name. Face, size, case and tracking are
+   semantic variables a specimen may override; production sets none and gets the defaults. */
+[data-pe] .role-titlebar {
+  font-family: var(--role-titlebar-face, var(--font-body));
+  font-size: var(--role-titlebar-size, var(--type-title-size));
+  font-weight: var(--weight-strong);
+  letter-spacing: normal;
+  line-height: var(--role-titlebar-line, var(--type-title-line-height));
+  color: var(--pe-ink);
+}
+[data-pe] .role-colhead {
+  font-family: var(--font-body);
+  font-size: var(--type-small-size);
+  /* regular in ink-2: the head labels its column and never outweighs the rows (round 12) */
+  font-weight: var(--weight-regular);
+  color: var(--pe-ink-2);
+}
+/* A column head's trigger: a plain label at rest, the control frame only when touched. The border
+   is reserved transparent and the padding fixed, so the label never moves; the pad less the
+   border puts the label on the body cells' inset. */
+[data-pe] .dl-button[data-colhead-trigger] {
+  height: var(--item-h);
+  padding: 0 calc(var(--item-pad-x) - 1px);
+  border-color: transparent;
+  background-color: transparent;
+}
+[data-pe] .dl-button[data-colhead-trigger]:is(:hover, :focus-visible, [data-popup-open]) {
+  border-color: var(--pe-line-2);
+  background-color: color-mix(in srgb, var(--pe-line) 20%, transparent);
+}
 [data-pe] .face-mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -456,7 +486,7 @@
   font-size-adjust: var(--sans-adjust);
   font-weight: var(--weight-strong);
   letter-spacing: var(--track-upper);
-  text-transform: uppercase;
+  text-transform: var(--case-upper);
 }
 
 /* Sentence case for lowercase data words; only the first letter is set, so the DOM text stays. */

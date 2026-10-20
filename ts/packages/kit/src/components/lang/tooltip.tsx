@@ -12,6 +12,21 @@ import { floatingSurface, type FloatingPosition } from "./popover";
 
 const Description = createContext<{ id: string; open: boolean } | null>(null);
 
+// After a press, a hint waits for the pointer to move: content that lands under a still pointer
+// (a list that shrank after a pick) never pops its hint unasked. A layout-only mousemove carries
+// no movement, so it does not count.
+let still = false;
+if (typeof window !== "undefined") {
+  window.addEventListener("pointerdown", () => (still = true), true);
+  window.addEventListener(
+    "pointermove",
+    (event) => {
+      if (event.movementX || event.movementY) still = false;
+    },
+    true,
+  );
+}
+
 /** A short hint composed onto its existing element, without adding layout or a native title. */
 export function TooltipHint({
   content,
@@ -52,6 +67,7 @@ export function Tooltip({
         {...props}
         open={open}
         onOpenChange={(next, event) => {
+          if (next && still && event.reason === "trigger-hover") event.cancel();
           onOpenChange?.(next, event);
           if (!event.isCanceled) setOpen(next);
         }}

@@ -9,8 +9,24 @@ export type FloatingPosition = Pick<
 >;
 
 export const Popover = Primitive.Root;
-export function PopoverTrigger(props: Primitive.Trigger.Props) {
-  return <Primitive.Trigger className="dl-button" {...props} />;
+export function PopoverTrigger({
+  className,
+  kind,
+  ...props
+}: Primitive.Trigger.Props & { kind?: "quiet" | "framed" }) {
+  return (
+    <Primitive.Trigger
+      data-kind={kind}
+      className={(state) =>
+        cn(
+          "dl-button",
+          kind === "framed" && "dl-control",
+          typeof className === "function" ? className(state) : className,
+        )
+      }
+      {...props}
+    />
+  );
 }
 export const PopoverClose = Primitive.Close;
 export const PopoverTitle = Primitive.Title;

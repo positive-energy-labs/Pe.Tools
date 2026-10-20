@@ -84,7 +84,7 @@ export function AtlasTable() {
                   )}
                 </>
               }
-              searchPlaceholder="room / type / zone…"
+              search
               chips={chips}
               modes={
                 <Button

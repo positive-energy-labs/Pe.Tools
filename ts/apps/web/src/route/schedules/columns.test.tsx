@@ -199,15 +199,13 @@ test("millwork in Model AND Count > 1, through the query box, the header, and it
   fireEvent.change(box, { target: { value: "Model~millwork" } });
   pick("millwork");
   expect(chip("Model contains millwork")).toBeTruthy();
-  // The header's filter press opens the same draft. Offered values count the rows in scope:
-  // with the millwork chip applied, Count offers only 1 and 2 (ruling 26).
-  fireEvent.click(screen.getByRole("button", { name: "filter Count" }));
-  expect(box.value).toBe("Count");
-  fireEvent.keyDown(box, { key: "Enter" });
-  expect(box.value).toBe("Count=");
-  const offered = within(screen.getByRole("listbox"));
-  expect(offered.getByText("2")).toBeTruthy();
-  expect(offered.queryByText("4")).toBeNull();
+  // The column head's menu walks the same grammar. Offered values count the rows in scope:
+  // with the millwork chip applied, Count = offers only 1 and 2 (ruling 26).
+  fireEvent.click(screen.getByRole("button", { name: "Count: filter and sort" }));
+  fireEvent.click(screen.getByRole("option", { name: "=" }));
+  expect(screen.getByRole("option", { name: /^2/ })).toBeTruthy();
+  expect(screen.queryByRole("option", { name: /^4/ })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Count: filter and sort" }));
   // The operator is text: ">=" typed key by key waits for its number.
   fireEvent.change(box, { target: { value: "Count>" } });
   fireEvent.change(box, { target: { value: "Count>=" } });
@@ -215,17 +213,14 @@ test("millwork in Model AND Count > 1, through the query box, the header, and it
   fireEvent.change(box, { target: { value: "Count>=2" } });
   pick("2");
   expect(shown()).toBe(1);
-  expect(screen.getByText("1 of 4 rows")).toBeTruthy();
-  expect(screen.getByRole("button", { name: "filter Count" }).getAttribute("aria-pressed")).toBe(
-    "true",
-  );
+  expect(box.placeholder).toBe("search 1 of 4 rows");
 
   // A chip edits in place as its text; Backspace on an empty box takes the last chip back.
   fireEvent.click(screen.getByRole("button", { name: "Count ≥ 2" }));
   expect(box.value).toBe("Count>=2");
   fireEvent.change(box, { target: { value: "Count>=1" } });
   pick("1");
-  expect(screen.getByText("2 of 4 rows")).toBeTruthy();
+  expect(box.placeholder).toBe("search 2 of 4 rows");
   fireEvent.keyDown(box, { key: "Backspace" });
   expect(box.value).toBe("Count>=1");
   expect(chip("Count ≥ 1")).toBeNull();

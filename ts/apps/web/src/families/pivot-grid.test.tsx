@@ -4,6 +4,8 @@ import { expect, test, vi } from "vite-plus/test";
 
 import { TypeGrid, identityWidth } from "#/families/pivot-grid";
 import { applyFamiliesQuery, buildPivot, type PivotRow } from "#/families/pivot";
+import { DEFAULT_FAMILIES_QUERY, FAMILIES_FILTERS } from "#/families/query-filters";
+import { restoreQueryFilters, setQueryFilter } from "@pe/kit/table/query-filters";
 import type { ParamColumn, TypeRow } from "#/families/matrix-columns";
 import type { FamilySnapshotRecord } from "#/host/loaded-families-view";
 
@@ -40,6 +42,32 @@ const family = (name: string, typeNames: string[]) =>
     categoryName: "Air Terminals",
     placedInstanceCount: 1,
   }) as FamilySnapshotRecord;
+
+test("Families defaults are removable query clauses over actual parameter values and scopes", () => {
+  const { pivotRows, pivotFamilies } = buildPivot(
+    [
+      type(
+        "A",
+        "one",
+        { blank: " ", zero: "0", no: "No" },
+        { blank: "Family", zero: "Family", no: "Family" },
+      ),
+    ],
+    [param("blank"), param("zero"), param("no"), param("missing")],
+    [family("A", ["one"])],
+  );
+  const names = (query: string) =>
+    applyFamiliesQuery(query, pivotRows, pivotFamilies).shownRows.map((row) => row.key);
+  expect(DEFAULT_FAMILIES_QUERY).toBe("!empty !absent");
+  expect(names(DEFAULT_FAMILIES_QUERY)).toEqual(["zero", "no"]);
+  expect(names(setQueryFilter(DEFAULT_FAMILIES_QUERY, FAMILIES_FILTERS[0]!, false))).toEqual([
+    "blank",
+    "zero",
+    "no",
+  ]);
+  expect(names("")).toEqual(["blank", "zero", "no", "missing"]);
+  expect(names(restoreQueryFilters("", FAMILIES_FILTERS))).toEqual(["zero", "no"]);
+});
 
 test("!empty and numeric clauses count only shown types; whitespace is empty but 0 and No are filled", () => {
   const types = [

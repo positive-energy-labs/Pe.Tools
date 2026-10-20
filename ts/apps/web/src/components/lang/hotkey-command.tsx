@@ -1,7 +1,14 @@
 import type { LucideIcon } from "lucide-react";
 import { Button, type ButtonProps } from "@pe/kit/lang/button";
 import { Kbd } from "./kbd";
-import { chordLabel, useScopeKeys, type Chord } from "@pe/kit/keys";
+import {
+  actionScopeKeys,
+  invokeAction,
+  chordLabel,
+  useScopeKeys,
+  type ActionDefinition,
+  type Chord,
+} from "@pe/kit/keys";
 import "./hotkey-command.css";
 
 type Props = Omit<ButtonProps, "children" | "onClick" | "icon" | "kind" | "direction"> & {
@@ -116,25 +123,25 @@ function Face({
     </span>
   );
 }
-function Bound(props: Props) {
-  useScopeKeys([
-    {
-      hotkey: props.hotkey,
-      callback: props.invoke,
-      label: props.label,
-      refusal: props.busy ? "This command is busy" : props.refusal,
-      options: { ignoreInputs: false },
-    },
-  ]);
+function Bound({ action, ...props }: Props & { action: ActionDefinition }) {
+  useScopeKeys(actionScopeKeys([action]));
   return <Face {...props} />;
 }
 /** One admitted callback for both click and chord; bind=false keeps a caller-owned registration. */
 export function HotkeyCommand({ bind = true, invoke, refusal, busy, ...props }: Props) {
+  const action: ActionDefinition = {
+    id: `command.${props.label}`,
+    label: props.label,
+    bindings: [props.hotkey],
+    refusal: busy ? "This command is busy" : refusal,
+    invoke,
+    options: { ignoreInputs: false },
+  };
   const run = () => {
-    if (refusal == null && !busy) invoke();
+    invokeAction(action);
   };
   return bind ? (
-    <Bound {...props} busy={busy} refusal={refusal} invoke={run} />
+    <Bound {...props} action={action} busy={busy} refusal={refusal} invoke={run} />
   ) : (
     <Face {...props} busy={busy} refusal={refusal} invoke={run} />
   );

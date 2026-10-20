@@ -214,7 +214,7 @@ export function useScheduleGridColumns(
         right: true,
         width: "w-12",
         lock: true,
-        sort: (row) => row.rowNumber,
+        // No sort: row-number order is the schedule's own order, which clearing every sort restores.
         cell: (row) => (
           <TooltipHint
             content={`row ${row.rowNumber} · ${row.kind}${row.subjectIds.length > 0 ? ` · elements [${row.subjectIds.join(",")}]` : ""}`}

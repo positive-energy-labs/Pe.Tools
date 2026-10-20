@@ -50,7 +50,13 @@ export function ComposerOpenMode({
           if (!open) setMode("target");
         }}
       >
-        <PopupFrame anchor={anchor} side="top" align="start" label="open a document" wide>
+        <PopupFrame
+          anchor={anchor}
+          side="top"
+          align="start"
+          label="open a document"
+          purpose="workbench"
+        >
           {mode === "open" ? <ComposerBay /> : null}
         </PopupFrame>
       </Popover.Root>

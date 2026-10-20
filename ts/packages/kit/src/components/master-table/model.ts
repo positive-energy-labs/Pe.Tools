@@ -115,12 +115,31 @@ interface SortKey {
 
 /** What the query box can name: fields (a `kind` filters, a `sort` key sorts), rule words, and
  * the rows a query keeps. `TableFrame` derives it from the columns unless a route supplies it. */
+export interface QueryFilter {
+  /** One canonical query clause. The query remains the only enabled-state authority. */
+  clause: string;
+  label: string;
+  description: string;
+  /** Included when the caller creates its initial query; never applied invisibly by the UI. */
+  default?: boolean;
+}
+
 export interface QueryVocabulary {
-  fields: readonly { label: string; kind?: "text" | "number"; sort?: string }[];
+  fields: readonly {
+    label: string;
+    kind?: "text" | "number";
+    sort?: string;
+    /** The field's values are declared (`options`): pickers skip the operator rung, `is` implied. */
+    enumerated?: boolean;
+    /** What the column means; shown beside the field in the pickers. */
+    title?: string;
+  }[];
   rules: readonly { word: string; label: string }[];
+  /** Named domain conditions, including recommended starting filters. */
+  filters?: readonly QueryFilter[];
   count: (query: string) => number;
   /** A field's distinct values with their counts over the rows `query` keeps (ruling 26). */
-  values: (label: string, query: string) => { value: string; count: number }[];
+  values: (label: string, query: string) => { value: string; label?: string; count: number }[];
 }
 
 /** The query box's second vocabulary, after an arrow (`→` or `->`): a command the caller owns.

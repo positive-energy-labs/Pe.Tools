@@ -182,7 +182,9 @@ describe("design guard â€” current token authority", () => {
     expect(base).not.toMatch(/--type-(navigation|conversation|composer)-/);
     expect(blockOf(base, ".t-upper {")).toMatch(/letter-spacing:\s*var\(--track-upper\)/);
     expect(base).toMatch(/:root\s*\{[^}]*--track-upper:\s*0\.06em;/);
-    expect(blockOf(base, ".t-upper {")).toMatch(/text-transform:\s*uppercase/);
+    // Case is a role variable since the table-controls typography round (2026-10-19).
+    expect(blockOf(base, ".t-upper {")).toMatch(/text-transform:\s*var\(--case-upper\)/);
+    expect(base).toMatch(/:root\s*\{[^}]*--case-upper:\s*uppercase;/);
   });
 
   it("keeps data-tone above the layered zero-specificity mark inks", () => {
@@ -211,6 +213,26 @@ describe("design guard â€” current token authority", () => {
       );
     }
     expect(base, "base.css t-title weight").toContain("font-weight: var(--weight-strong);");
+  });
+
+  it("keeps table typography roles in the foundation and proposals in the specimen", () => {
+    const base = FILES.find((f) => f.rel === "base.css")?.text ?? "";
+    expect(base).toContain("[data-pe] .role-titlebar");
+    expect(base).toContain("[data-pe] .role-colhead");
+    for (const file of FILES) {
+      if (file.rel === "base.css" || file.rel === "prototypes/table-controls/lineup.tsx") continue;
+      expect(file.text, file.rel).not.toMatch(/--role-(?:titlebar|colhead)-[a-z]+["']?\s*:/);
+    }
+  });
+
+  it("keeps table search inside the shared search primitive", () => {
+    const query = FILES.find((f) => f.rel === "components/master-table/query.tsx")?.text ?? "";
+    expect(query).toContain("<SearchControl");
+    expect(query).not.toMatch(/className=["'][^"']*dl-search/);
+    const picker =
+      FILES.find((f) => f.rel === "components/master-table/query-workbench.tsx")?.text ?? "";
+    expect(picker).toContain("<PopupFrame");
+    expect(picker).not.toMatch(/<PopoverContent|<HoverCardContent/);
   });
 
   it("projects the shared spacing unit through Tailwind", () => {
@@ -982,7 +1004,7 @@ const TRUE_UNREGISTERED = REMAINDER.filter(
  *  Ruled 2026-08-30: the `{}` allowlist stripped ~1,100 `t-*`/`face-*` sites and left product
  *  text at browser defaults. Meaning hues, fills, and colored strokes stay component-only. */
 const AUTHORING =
-  /^(?:hairline-(?:(?:[tblrxy])(?:-2|-faint)?|rows)|boundary-[tl]|t-(?:small|prose|title|head|display|upper)|face-(?:mono|display)|text-(?:ink|ink-2|ink-mute)|(?:(?:flex|grid)(?:-.+)?|inline-(?:flex|grid|block)|block|hidden|(?:shrink|grow)(?:-.+)?|basis-.+|gap(?:-[xy])?-.+|space-[xy]-.+|[pm][xytrblse]?-.+|[wh]-.+|size-.+|(?:min|max)-[wh]-.+|(?:absolute|relative|fixed|sticky)|(?:inset|top|right|bottom|left)(?:-[xy])?-.+|(?:translate|rotate|scale|origin)(?:-[xy])?-.+|overflow(?:-[xy])?(?:-.+)?|truncate|text-(?:left|center|right|justify|start|end|ellipsis)|whitespace-.+|break-(?:words|all|normal|keep)|items-.+|justify-.+|self-.+|content-.+|place-(?:items|content|self)-.+|align-.+|col-.+|row-.+|object-.+|aspect-.+|table-(?:auto|fixed)|border-collapse|resize(?:-[xy])?|pointer-events-.+|cursor-.+|select-none|list-none|\[writing-mode:.+\]|transition-transform|duration-.+|(?:group|peer)(?:\/.+)?|z-.+))$/;
+  /^(?:hairline-(?:(?:[tblrxy])(?:-2|-faint)?|rows)|boundary-[tl]|role-(?:titlebar|colhead)|t-(?:small|prose|title|head|display|upper)|face-(?:mono|display)|text-(?:ink|ink-2|ink-mute)|(?:(?:flex|grid)(?:-.+)?|inline-(?:flex|grid|block)|block|hidden|(?:shrink|grow)(?:-.+)?|basis-.+|gap(?:-[xy])?-.+|space-[xy]-.+|[pm][xytrblse]?-.+|[wh]-.+|size-.+|(?:min|max)-[wh]-.+|(?:absolute|relative|fixed|sticky)|(?:inset|top|right|bottom|left)(?:-[xy])?-.+|(?:translate|rotate|scale|origin)(?:-[xy])?-.+|overflow(?:-[xy])?(?:-.+)?|truncate|text-(?:left|center|right|justify|start|end|ellipsis)|whitespace-.+|break-(?:words|all|normal|keep)|items-.+|justify-.+|self-.+|content-.+|place-(?:items|content|self)-.+|align-.+|col-.+|row-.+|object-.+|aspect-.+|table-(?:auto|fixed)|border-collapse|resize(?:-[xy])?|pointer-events-.+|cursor-.+|select-none|list-none|\[writing-mode:.+\]|transition-transform|duration-.+|(?:group|peer)(?:\/.+)?|z-.+))$/;
 const COLOR_ROLE =
   "(?:page|artifact|recess|select|document|scrim|ink|ink-2|ink-mute|line|line-2|pea|pea-ink|alarm|caution|done|commit|on-commit|nav|on|viz-[1-6])(?:/[\\d.]+)?";
 const MEANING_FILL_STROKE = new RegExp(

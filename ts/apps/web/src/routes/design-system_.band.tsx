@@ -105,7 +105,7 @@ function BandRoute() {
               <div className="h-[26rem]">
                 <TableFrame
                   {...view}
-                  searchPlaceholder="search families, types, values…"
+                  search
                   actions={
                     <Button
                       kind="framed"
