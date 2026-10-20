@@ -51,4 +51,6 @@ export interface ProtoProps {
   actions: { preview: ActionHandle; apply: ActionHandle; busy: boolean };
   /** How many staged cells a write would carry. */
   staged: number;
+  /** How many rulings (verdicts, roles) are staged: Work that writes nothing to Revit. */
+  rulings: number;
 }

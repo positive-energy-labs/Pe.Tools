@@ -48,8 +48,9 @@ export async function readDuctCatalogs(root = productCatalogsRootPath()): Promis
   return { tables, findings };
 }
 
+/** Under /pe so the dev proxy carries it; a bare /ducts/* belongs to the web route (404 in Vite). */
 export const ductCatalogsRoute = HttpRouter.add(
   "GET",
-  "/ducts/catalogs",
+  "/pe/ducts/catalogs",
   HttpEffect.fromWebHandler(async () => Response.json(await readDuctCatalogs())),
 );

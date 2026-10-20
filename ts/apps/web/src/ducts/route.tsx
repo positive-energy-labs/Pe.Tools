@@ -20,7 +20,7 @@ import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
 import { Situation } from "#/route/situation";
 import { LadderPicker, useDocumentLadder } from "#/route/situation-ladder";
-import { manifest, stagedCount, WRITTEN } from "./manifest";
+import { manifest, stagedCount, stagedRulings, WRITTEN } from "./manifest";
 import { price } from "@pe/ducts-domain/pricing";
 import { readiness } from "@pe/ducts-domain/readiness";
 import { verdictPatches } from "./claims";
@@ -263,6 +263,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     reading: { pending, error: error ?? null },
     actions: { preview: handle.actions.preview, apply: handle.actions.apply, busy },
     staged: stagedCount(handle.work.doc),
+    rulings: stagedRulings(handle.work.doc),
   };
 
   return (

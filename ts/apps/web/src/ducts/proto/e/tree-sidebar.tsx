@@ -4,7 +4,7 @@
  * An element a rule prices carries one verb: jump to its type's rule in the Rules section. There is
  * no per-row rule editor: a rule is global (family:type plus condition), never one fitting's.
  */
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { ListTree } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
 import { Tree } from "@pe/kit/lang/row";
@@ -14,7 +14,6 @@ import { formatQuantity, type Encoding, type Quantity } from "../../encoding";
 
 import type { TreeNode } from "../b/model";
 import { MetaBar } from "./bar";
-import { EquipmentCells, TerminalCells, type InputsCtx } from "./input-cells";
 
 export interface TreeCtx {
   tree: TreeNode;
@@ -37,11 +36,6 @@ export interface TreeCtx {
    * fan-to-here loss.
    */
   reading: Encoding | null;
-  /**
-   * The inputs the rows hold: an air mover's flow, role and ESP, a terminal's flow and drop, each a
-   * Work cell on its row. Null until the snapshot is priced.
-   */
-  inputs: InputsCtx | null;
 }
 
 /** The largest value under a node and the element that holds it. */
@@ -112,10 +106,6 @@ export function SystemTree({ ctx }: { ctx: TreeCtx }) {
   const [open, setOpen] = useState<ReadonlySet<string>>(
     () => new Set([ctx.tree.key, ...(crit ? [crit.key] : [])]),
   );
-  const equipment = useMemo(
-    () => new Set(ctx.inputs?.snapshot.nodes.filter((x) => x.kind === "equipment").map((x) => x.id)),
-    [ctx.inputs?.snapshot],
-  );
   const runName = (n: TreeNode) => `${n.name.split(" → ")[0]} → ${ctx.grilleName(n)}`;
   return (
     <Tree<TreeNode>
@@ -133,14 +123,7 @@ export function SystemTree({ ctx }: { ctx: TreeCtx }) {
         const critical = n.kind === "run" && (n.key === ctx.criticalKey || n.critical != null);
         const stand = n.critical === "longest" && n.key !== ctx.criticalKey;
         const ruleKey = n.kind === "element" && n.id != null ? ctx.ruleOf.get(n.id) : undefined;
-        const cells =
-          ctx.inputs && n.kind === "run" && n.terminal != null ? (
-            <TerminalCells ctx={ctx.inputs} id={n.terminal} />
-          ) : ctx.inputs && n.kind === "system" && n.id != null && equipment.has(n.id) ? (
-            <EquipmentCells ctx={ctx.inputs} id={n.id} />
-          ) : undefined;
         return {
-          ...(cells ? { lines: 2 as const, sub: cells } : {}),
           lead: critical ? (
             <span title={stand ? "longest developed run: stand-in until priced" : "critical run"}>
               {stand ? "◇" : "◆"}
