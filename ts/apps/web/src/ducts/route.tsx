@@ -27,6 +27,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { verdictPatches } from "./claims";
 import { claimsOf, type Claim } from "./legs";
 import { DuctsLedger } from "./ledger";
+import { provisionalWords } from "./provisional";
 import { DuctsSpatial } from "./spatial";
 import { DuctsTables } from "./tables";
 import { DuctsTree } from "./tree";
@@ -222,8 +223,8 @@ export function DuctsRoute({
           : group && group.rootIds.length === 0
             ? "no air mover; priced from the open end"
             : group
-              ? `Pe fan ${fmt(solved?.fan)} in-wg (not in Revit until written), Revit ${revitSays(solved?.revitCritical)}`
-              : `largest Pe fan ${fmt(priced.now.fan)} in-wg over ${snapshot.groups.length} groups`;
+              ? `Pe fan ${fmt(solved?.fan)} in-wg${provisionalWords(solved?.provisional ?? null)} (not in Revit until written), Revit ${revitSays(solved?.revitCritical)}`
+              : `largest Pe fan ${fmt(priced.now.fan)} in-wg${provisionalWords(priced.now.provisional)} over ${snapshot.groups.length} groups`;
   // Every written segment's cells count in the Work sentence; the losses body is the band.
   const counted = useMemo(
     () =>

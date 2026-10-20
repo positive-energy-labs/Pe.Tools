@@ -47,6 +47,7 @@ import type { Grids } from "@pe/ducts-domain/loss-grid";
 import { snapshotById, type GroupReadiness } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { FindingsList } from "./issues";
+import { ProvisionalNote, provisionalTone } from "./provisional";
 type Node = DuctSnapshot["nodes"][number];
 type Group = DuctSnapshot["groups"][number];
 type Assessment = ReturnType<typeof assessDucts>;
@@ -76,9 +77,9 @@ const STATUS = {
   "open-end": ["open end", "an open end on this path is not answered (capped or ignored)"],
   refuses: ["drop refused", "the connector is not Specific Loss; Revit refuses a terminal drop"],
   "no-drop": ["no drop", "no terminal drop is known; stage one from the catalog"],
-  inferred: [
-    "inferred",
-    "the total rests on joints or taps inferred by proximity; a person rules on each in the findings",
+  "near-miss": [
+    "near miss",
+    "the path steps across sub-inch, centred, facing joins inferred by proximity; final, still listed in the findings",
   ],
 } as const;
 type Status = keyof typeof STATUS;
@@ -95,7 +96,9 @@ function terminalStatus(
   if (node.terminalDrop && !node.terminalDrop.writable) out.push("refuses");
   const terminal = priced.next.paths[node.id]?.rows.find((row) => row.kind === "terminal");
   if (terminal?.error || !dropKnown) out.push("no-drop");
-  if (priced.next.paths[node.id]?.inferred.length) out.push("inferred");
+  // A provisional path says so beside its total; one resting only on near misses is final but listed.
+  const path = priced.next.paths[node.id];
+  if (path?.inferred.length && !path.provisional) out.push("near-miss");
   return out;
 }
 /** Stage a rule's table; staging the table already staged takes it back. */
@@ -582,7 +585,7 @@ function GroupHead({
       <span className="inline-flex items-baseline gap-1">
         <span className="t-small t-upper text-ink-2">fan static</span>
         <span className="t-small text-ink-2">Pe</span>
-        <b className="face-mono" data-fan={group.id}>
+        <b className="face-mono" data-fan={group.id} {...provisionalTone(now?.provisional ?? null)}>
           {fmt(demand?.calculationRole ? null : now?.fan)}
         </b>
         {!demand?.calculationRole && next && now && Math.abs(next.fan - now.fan) > 1e-9 ? (
@@ -590,7 +593,9 @@ function GroupHead({
             <ValueDiff from="" to={fmt(next.fan)} />
           </span>
         ) : null}
-        <span className="t-small text-ink-2">in-wg · Revit</span>
+        <span className="t-small text-ink-2">in-wg</span>
+        <ProvisionalNote provisional={now?.provisional ?? null} of={`${group.id}'s fan`} />
+        <span className="t-small text-ink-2">· Revit</span>
         <span className="face-mono" data-revit={group.id}>
           {revitSays(revit?.criticalPathLossInWg)}
         </span>
@@ -685,7 +690,7 @@ function Bars({
         );
         const opened = selected === String(id);
         const flow = assessment.flows.get(id);
-        const inferred = priced.next.paths[id]?.inferred ?? [];
+        const provisional = path.provisional;
         return (
           <Fragment key={id}>
             <ListRow
@@ -728,18 +733,13 @@ function Bars({
                     aria-label="status"
                   >
                     {statuses.map((status) => (
-                      <TooltipHint
-                        key={status}
-                        content={
-                          status === "inferred"
-                            ? `rests on ${inferred.length} inferred join${inferred.length === 1 ? "" : "s"} (${inferred.join(", ")}); a person rules on each in the findings`
-                            : STATUS[status][1]
-                        }
-                      >
-                        <span data-tone="caution" data-status={status}>
-                          {status === "inferred"
-                            ? `${inferred.length} inferred`
-                            : STATUS[status][0]}
+                      <TooltipHint key={status} content={STATUS[status][1]}>
+                        <span
+                          data-tone={status === "near-miss" ? undefined : "caution"}
+                          className={status === "near-miss" ? "text-ink-2" : undefined}
+                          data-status={status}
+                        >
+                          {STATUS[status][0]}
                         </span>
                       </TooltipHint>
                     ))}
@@ -747,11 +747,13 @@ function Bars({
                 </span>
               }
               meta={
-                <span className="flex gap-2">
+                <span className="flex items-baseline gap-2">
+                  <ProvisionalNote provisional={provisional} of={`grille ${id}'s total`} />
                   <span
                     className="w-36 text-right"
                     data-total={id}
                     data-tone={moved ? "caution" : undefined}
+                    {...provisionalTone(provisional)}
                   >
                     {moved ? <ValueDiff from={fmt(path.total)} to={fmt(next)} /> : fmt(path.total)}
                   </span>
@@ -925,7 +927,7 @@ export function DuctsLosses({
             : "no load preview"}
         </span>
       </div>
-      <FindingsList findings={assessment.findings} />
+      <FindingsList findings={assessment.findings} work={work} />
       <div className="flex flex-wrap items-baseline gap-3 t-small text-ink-2">
         {PARTS.map((part) => (
           <PartChip key={part} part={part} />

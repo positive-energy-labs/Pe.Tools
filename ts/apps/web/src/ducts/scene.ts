@@ -162,13 +162,7 @@ export interface SubjectDrawn {
   /** Each gap with the model points it spans: the end of `after`, the start of `before`. */
   gaps: readonly { after: number; before: number; from: number[]; to: number[] }[];
   /** Each break a proximity inference bridges, spanning the same points a gap would. */
-  inferred: readonly {
-    after: number;
-    before: number;
-    findingId: string;
-    from: number[];
-    to: number[];
-  }[];
+  inferred: readonly (SubjectCut["inferred"][number] & { from: number[]; to: number[] })[];
   /** Each omission with one model polyline from `after` through the skipped elements to `before`. */
   omissions: readonly { after: number; before: number; skipped: number[]; line: number[][] }[];
   /** The levels the subject touches, lowest first. */

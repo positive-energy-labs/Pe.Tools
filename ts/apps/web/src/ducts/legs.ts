@@ -18,10 +18,11 @@
  * - Mark is not a concept here (the firm does not use it): a place is named by `labelOf(id)`, else
  *   `family type`, else `kind id`.
  */
-import type { DuctClaim } from "@pe/agent-contracts";
+import type { DuctClaim, DuctInferenceGrade } from "@pe/agent-contracts";
 
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import { snapshotById } from "@pe/ducts-domain/readiness";
+import { verdictOf } from "@pe/ducts-domain/proximity";
 import { tolerated } from "@pe/ducts-domain/survey";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
@@ -78,7 +79,14 @@ export interface SubjectCut {
   /** Consecutive ids the snapshot connects only through `skipped`, in path order, none in the subject. */
   omissions: { after: number; before: number; skipped: number[] }[];
   /** Consecutive ids only a proximity inference joins; `findingId` keys the verdict that rules on it. */
-  inferred: { after: number; before: number; findingId: string }[];
+  /** Each with its finding's grade, and whether a person's staged connect confirmed it. */
+  inferred: {
+    after: number;
+    before: number;
+    findingId: string;
+    grade: DuctInferenceGrade;
+    confirmed: boolean;
+  }[];
 }
 
 /** The longest chain of connections a break is searched across before it is called a gap. */
@@ -211,7 +219,7 @@ export function legsOf(
     return tolerated(snapshot, work).findings.find(
       ({ kind, elementIds: [x, y] }) =>
         BRIDGES.has(kind) && ((a.has(x!) && b.has(y!)) || (a.has(y!) && b.has(x!))),
-    )?.id;
+    );
   };
 
   const elements = ids.map(elementOf);
@@ -222,7 +230,14 @@ export function legsOf(
       const skipped = skippedBetween(neighbours, element.id, next.id, subject);
       const finding = skipped?.length ? undefined : bridgeOf(element.id, next.id);
       if (skipped?.length) omissions.push({ after: element.id, before: next.id, skipped });
-      else if (finding) inferred.push({ after: element.id, before: next.id, findingId: finding });
+      else if (finding)
+        inferred.push({
+          after: element.id,
+          before: next.id,
+          findingId: finding.id,
+          grade: finding.grade ?? "stretched",
+          confirmed: verdictOf(work, finding.id) === "connect",
+        });
       else gaps.push({ after: element.id, before: next.id });
     }
 

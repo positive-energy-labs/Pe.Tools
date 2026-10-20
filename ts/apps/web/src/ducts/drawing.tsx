@@ -12,6 +12,7 @@ import { token } from "@pe/kit/lib/token";
 import {
   claimInk,
   DASH_CLASS,
+  inferredInk,
   issueInk,
   nodeInk,
   strokeOf,
@@ -613,11 +614,11 @@ function SubjectLayer({
             key={`${bridge.after}-${bridge.before}`}
             data-inferred={`${bridge.after}-${bridge.before}`}
           >
-            <title>{`inferred: ${bridge.after} and ${bridge.before} joined by proximity, needs a ruling (${bridge.findingId})`}</title>
-            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={token("ink-2")} strokeWidth={1.5} />
-            <circle cx={(x1 + x2) / 2} cy={(y1 + y2) / 2} r={4} fill={token("ink-2")} />
+            <title>{`inferred, ${bridge.grade}${bridge.confirmed ? ", confirmed" : ""}: ${bridge.after} and ${bridge.before} joined by proximity${bridge.confirmed ? "" : ", needs a ruling"} (${bridge.findingId})`}</title>
+            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={inferredInk(bridge)} strokeWidth={1.5} />
+            <circle cx={(x1 + x2) / 2} cy={(y1 + y2) / 2} r={4} fill={inferredInk(bridge)} />
             <Caption x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 8} anchor="middle">
-              inferred
+              {bridge.confirmed ? "confirmed" : bridge.grade === "near-miss" ? "near miss" : bridge.grade}
             </Caption>
           </g>
         );

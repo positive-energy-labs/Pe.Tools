@@ -96,7 +96,13 @@ it("the scene fixture draws the unjoined intake as inferred and one omission bet
   const cut = legsOf(snapshot, subject);
   expect(cut.gaps).toEqual([]);
   expect(cut.inferred).toEqual([
-    { after: 14107111, before: 14122436, findingId: "proximity:14122436:1|14106988" },
+    {
+      after: 14107111,
+      before: 14122436,
+      findingId: "proximity:14122436:1|14106988",
+      grade: "stretched",
+      confirmed: false,
+    },
   ]);
   expect(cut.omissions).toEqual([
     { after: 13760866, before: 13760867, skipped: [13761466, 13761629, 13761574] },
@@ -105,7 +111,7 @@ it("the scene fixture draws the unjoined intake as inferred and one omission bet
   expect(container.querySelector('[data-inferred="14107111-14122436"]')).not.toBeNull();
   expect(container.querySelector('[data-gap="14107111-14122436"]')).toBeNull();
   expect(container.querySelector('[data-omission="13760866-13760867"]')).not.toBeNull();
-  expect(container.textContent).toContain("0 gaps · 1 inferred · 1 omission");
+  expect(container.textContent).toContain("0 gaps · 1 inferred: 1 stretched · 1 omission");
 });
 
 it("hovering a resolved id lights its element and sends nothing; a click selects it in Revit", () => {

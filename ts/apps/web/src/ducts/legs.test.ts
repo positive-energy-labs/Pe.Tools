@@ -286,11 +286,21 @@ it("a break the builder bridges by proximity is inferred, not a gap, until a ver
   const finding = "proximity:14122436:1|14106988";
   const cut = legsOf(snapshot, ids);
   expect(cut.gaps).toEqual([]);
-  expect(cut.inferred).toEqual([{ after: 14107111, before: 14122436, findingId: finding }]);
+  // A tap on a capped end is accepted but not a near miss: stretched, until a person confirms it.
+  expect(cut.inferred).toEqual([
+    { after: 14107111, before: 14122436, findingId: finding, grade: "stretched", confirmed: false },
+  ]);
   const work = ductsDocumentSchema.parse({
     assumptions: { [finding]: { staged: { value: { kind: "verdict", verdict: "ignore" } } } },
   });
   const ruled = legsOf(snapshot, ids, undefined, work);
   expect(ruled.inferred).toEqual([]);
   expect(ruled.gaps).toEqual([{ after: 14107111, before: 14122436 }]);
+  // A person's staged connect confirms it; the break stays drawn, ruled.
+  const confirmed = ductsDocumentSchema.parse({
+    assumptions: { [finding]: { staged: { value: { kind: "verdict", verdict: "connect" } } } },
+  });
+  expect(legsOf(snapshot, ids, undefined, confirmed).inferred).toMatchObject([
+    { findingId: finding, confirmed: true },
+  ]);
 });

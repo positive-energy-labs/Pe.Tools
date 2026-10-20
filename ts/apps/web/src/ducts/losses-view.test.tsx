@@ -88,10 +88,10 @@ function land(doc: DuctsRouteDocument, patches: RouteStatePatch[]) {
 }
 
 /** The view and the band over one in-memory Work, as the route wires them. */
-function Harness() {
+function Harness({ of = snapshot }: { of?: DuctSnapshot }) {
   const [page, setPageState] = useState(PAGE);
   const [doc, setDoc] = useState<DuctsRouteDocument>(() => ductsRouteState.schema.parse({}));
-  const priced = price(snapshot, grids, doc);
+  const priced = price(of, grids, doc);
   const work = {
     doc,
     revision: 0,
@@ -104,7 +104,7 @@ function Harness() {
   return (
     <>
       <StagedLosses
-        snapshot={snapshot}
+        snapshot={of}
         grids={grids}
         priced={priced}
         evaluation={null}
@@ -113,7 +113,7 @@ function Harness() {
         group=""
       />
       <DuctsLosses
-        snapshot={snapshot}
+        snapshot={of}
         grids={grids}
         priced={priced}
         ready={{}}
@@ -546,4 +546,30 @@ it("does not offer a combined fan static for unresolved equipment air circuits",
   const unit = view.container.querySelector('[data-unit="1"]')!;
   expect(unit.textContent).toContain("Pe proposes\u2014");
   expect(within(unit as HTMLElement).queryByText("stage")).toBeNull();
+});
+
+it("a total and a fan resting on an unconfirmed inference read provisional; a person's confirm makes them final", async () => {
+  // Grille 30 lifted 0.4 in off duct 11's end, no facing captured: joined by proximity, stretched.
+  const lifted = structuredClone(snapshot);
+  const end = lifted.segments.find((s) => s.id === 11)!.connectors.find((c) => c.index === 2)!;
+  const grille = lifted.nodes.find((n) => n.id === 30)!;
+  end.connectedTo = null;
+  grille.connectors[0]!.connectedTo = null;
+  grille.point = grille.connectors[0]!.point = [20, 10 + 0.4 / 12, 9];
+  const view = render(<Harness of={lifted} />);
+  const q = (selector: string) => view.container.querySelector(selector);
+  const words = "provisional · rests on 1 inference, worst: stretched";
+  expect(q('[data-terminal="30"]')!.closest("[data-key]")!.textContent).toContain(words);
+  expect(q('[data-total="30"]')?.getAttribute("data-provisional")).toBe("stretched");
+  expect(q('[data-total="30"]')?.getAttribute("data-tone")).toBe("caution");
+  expect(q('[data-total="31"]')?.hasAttribute("data-provisional")).toBe(false);
+  expect(q('[data-fan="g10"]')?.getAttribute("data-provisional")).toBe("stretched");
+  expect(q('[data-group-head="g10"]')?.textContent).toContain(words);
+  expect(q('[data-finding="proximity:11:2|30:1"] [data-grade]')?.textContent).toBe("stretched");
+  fireEvent.click(q('[data-confirm="proximity:11:2|30:1"]')!);
+  await waitFor(() => expect(q("[data-provisional]")).toBeNull());
+  expect(q("[data-provisional-note]")).toBeNull();
+  expect(q('[data-finding="proximity:11:2|30:1"] [data-grade]')?.textContent).toBe(
+    "stretched, confirmed",
+  );
 });

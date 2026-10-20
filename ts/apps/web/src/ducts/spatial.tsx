@@ -22,7 +22,7 @@ import { DASH_CLASS, ENCODING_KEYS, ENCODINGS, encodingOf, type Encoding } from 
 import { NodeFactsView, SegmentFactsView } from "./facts";
 import { IssueLegend } from "./issues";
 import { useIso } from "./iso";
-import { labelOfNode, legsOf, type Claim } from "./legs";
+import { labelOfNode, legsOf, type Claim, type SubjectCut } from "./legs";
 import type { DuctsPage } from "./manifest";
 import { usePlan } from "./plan";
 import type { Priced } from "@pe/ducts-domain/pricing";
@@ -106,6 +106,20 @@ export interface Subject {
   work?: DuctsRouteDocument | null;
 }
 
+/** "3 inferred: 1 anomalous, 1 stretched, 1 confirmed": the breaks a person has not ruled on by grade, worst first. */
+const inferredMeta = (breaks: SubjectCut["inferred"]) => {
+  const by = (pick: (b: SubjectCut["inferred"][number]) => boolean) => breaks.filter(pick).length;
+  const parts = [
+    [by((b) => !b.confirmed && b.grade === "anomalous"), "anomalous"],
+    [by((b) => !b.confirmed && b.grade === "stretched"), "stretched"],
+    [by((b) => !b.confirmed && b.grade === "near-miss"), "near miss"],
+    [by((b) => b.confirmed), "confirmed"],
+  ] as const;
+  return `${breaks.length} inferred: ${parts
+    .filter(([n]) => n)
+    .map(([n, word]) => `${n} ${word}`)
+    .join(", ")}`;
+};
 export function DuctsSpatial({
   snapshot,
   ready,
@@ -234,7 +248,7 @@ function Spatial({
         `${sub.cut.legs.length} legs`,
         `${sub.cut.nodes.length} places`,
         count(sub.cut.gaps.length, "gap"),
-        ...(sub.cut.inferred.length ? [`${sub.cut.inferred.length} inferred`] : []),
+        ...(sub.cut.inferred.length ? [inferredMeta(sub.cut.inferred)] : []),
         ...(sub.cut.omissions.length ? [count(sub.cut.omissions.length, "omission")] : []),
         `${sub.claims.length} claims`,
       ].join(" · ")
