@@ -5307,7 +5307,7 @@ export namespace RevitDetailSheets {
   }
 }
 
-/** Export bounded real host and linked MEP and architectural triangles from the resident Space world as a compact binary artifact in host internal feet. Host elementIds derive a context crop; bounds optionally set an explicit crop. Returns element identities, source freshness and omitted-element count. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
+/** Export bounded real host and linked MEP and architectural triangles as a compact binary artifact in host internal feet. Bounded capture needs no whole-world preparation and reuses a prepared fresh world when available. Host elementIds derive a context crop; bounds optionally set an explicit crop. Returns element identities, source freshness and omitted-element count. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
 export namespace RevitDetailSpaceScene {
   export namespace Req {
     export interface Request {

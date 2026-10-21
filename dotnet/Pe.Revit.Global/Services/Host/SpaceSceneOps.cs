@@ -11,7 +11,7 @@ using ProjectDocument = Pe.Revit.Operations.ProjectDocument;
 namespace Pe.Revit.Global.Services.Host;
 
 internal static class SpaceSceneOps {
-    [Op("revit.detail.space-scene", Does = "Export bounded real host and linked MEP and architectural triangles from the resident Space world as a compact binary artifact in host internal feet. Host elementIds derive a context crop; bounds optionally set an explicit crop. Returns element identities, source freshness and omitted-element count. No document mutation. Browser orbit, visibility and cuts need no further native calls.", Title = "Export Space Scene", Finds = ["space", "3d", "mesh", "viewer", "context", "section"], Cost = OpCost.Expensive, Example = "{ \"elementIds\": [], \"maxTriangles\": 1500000 }")]
+    [Op("revit.detail.space-scene", Does = "Export bounded real host and linked MEP and architectural triangles as a compact binary artifact in host internal feet. Bounded capture needs no whole-world preparation and reuses a prepared fresh world when available. Host elementIds derive a context crop; bounds optionally set an explicit crop. Returns element identities, source freshness and omitted-element count. No document mutation. Browser orbit, visibility and cuts need no further native calls.", Title = "Export Space Scene", Finds = ["space", "3d", "mesh", "viewer", "context", "section"], Cost = OpCost.Expensive, Example = "{ \"elementIds\": [], \"maxTriangles\": 1500000 }")]
     private static SceneArtifact Export(SceneRequest request, ProjectDocument document) {
         var root = ProductRuntimeLayout.ForCurrentUser().Cache.ResolveModuleCachePath("space-scenes");
         Directory.CreateDirectory(root);

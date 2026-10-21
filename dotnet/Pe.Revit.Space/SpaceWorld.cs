@@ -45,6 +45,19 @@ public static class SpaceWorld {
         return world;
     }
 
+    // A scene snapshot does not populate the query world or need its triangle BVH.
+    internal static World PrepareScene(Document document, IReadOnlyCollection<long> ids, ref Aabb? crop, double padding) {
+        if (crop is null && ids.Count == 0) return Prepare(document);
+        var resident = Resident(document);
+        if (resident.Prepared) {
+            resident.ResolveSceneCrop(ids, ref crop, padding);
+            return resident;
+        }
+        var world = new World(document.GetDocumentKey());
+        world.BuildScope(document, ids, ref crop, padding, resident.CurrentEpoch);
+        return world;
+    }
+
     /// <summary>The world for this host document, created empty if it does not exist yet.</summary>
     public static World Resident(Document document) {
         lock (Sync) {
@@ -75,6 +88,12 @@ public sealed class World {
     public DateTime BuiltUtc { get; private set; }
 
     internal IReadOnlyList<Partition> Partitions => this._partitions;
+    internal bool Prepared {
+        get {
+            lock (this._sync) return this.BuiltUtc != default && !this._partitions.Any(p => p.Dirty)
+                && this._added.Count + this._modified.Count + this._deleted.Count == 0;
+        }
+    }
 
     /// <summary>Mints one epoch per tracker event and queues the ids. No geometry work here.</summary>
     internal void Enqueue(Autodesk.Revit.DB.Events.DocumentChangedEventArgs e) {
@@ -116,6 +135,40 @@ public sealed class World {
             foreach (var p in this._partitions) p.Build(this.CurrentEpoch);
             this.BuiltUtc = DateTime.UtcNow;
         }
+    }
+
+    internal void BuildScope(Document host, IReadOnlyCollection<long> ids, ref Aabb? crop, double padding, long epoch) {
+        this.CurrentEpoch = epoch;
+        this._partitions.Add(new Partition(0, host, SourceKind.Host, null, Transform.Identity));
+        var source = 1;
+        foreach (var link in new FilteredElementCollector(host).OfClass(typeof(RevitLinkInstance)).Cast<RevitLinkInstance>()) {
+            var linked = link.GetLinkDocument();
+            if (linked is null) continue;
+            var kind = linked.Title.IndexOf(".ifc", StringComparison.OrdinalIgnoreCase) >= 0 ? SourceKind.IfcLink : SourceKind.RevitLink;
+            this._partitions.Add(new Partition(source++, linked, kind, link.Id.Value(), link.GetTotalTransform()));
+        }
+        if (ids.Count > 0) {
+            var focus = this._partitions[0];
+            focus.BuildElements(ids.Select(id => host.GetElement(id.ToElementId())).OfType<Element>(), epoch);
+            this.ResolveSceneCrop(ids, ref crop, padding);
+        }
+        foreach (var partition in this._partitions) partition.BuildRegion(crop.Value, epoch);
+        this.BuiltUtc = DateTime.UtcNow;
+    }
+
+    internal void ResolveSceneCrop(IReadOnlyCollection<long> ids, ref Aabb? crop, double padding) {
+        if (ids.Count == 0) return;
+        var wanted = new HashSet<long>(ids);
+        var focus = this._partitions[0].Prims.Where(row => row.Kind is PrimKind.Solid or PrimKind.Mesh)
+            .Where(row => wanted.Contains(row.ElementId)).ToList();
+        if (ids.Except(focus.Select(row => row.ElementId)).Any())
+            throw new ArgumentException("Some elementIds have no host mesh. Pass mesh-bearing host ids.");
+        if (crop is not null) return;
+        var bounds = Aabb.Empty;
+        foreach (var row in focus)
+            bounds = bounds.Include(new Vector3((float)row.Box.MinX, (float)row.Box.MinY, (float)row.Box.MinZ))
+                .Include(new Vector3((float)row.Box.MaxX, (float)row.Box.MaxY, (float)row.Box.MaxZ));
+        crop = bounds.Expand(padding);
     }
 
     /// <summary>

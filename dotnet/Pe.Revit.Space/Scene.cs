@@ -17,7 +17,7 @@ public sealed record SceneMetadata(string Format, Stamp Stamp, Aabb Bounds, int 
     IReadOnlyList<SceneSource> Sources);
 public sealed record SceneArtifact(SceneMetadata Scene, string Id, string Url, long Bytes);
 
-/// <summary>Bounded real triangles from the resident world. Coordinates remain host internal feet.</summary>
+/// <summary>Bounded real triangles. Coordinates remain host internal feet.</summary>
 public static class Scene {
     public static SceneMetadata Write(Document document, SceneRequest request, Stream vertices) {
         if (request.MaxTriangles is < 1 or > 3000000)
@@ -29,17 +29,11 @@ public static class Scene {
             || b.MinX >= b.MaxX || b.MinY >= b.MaxY || b.MinZ >= b.MaxZ))
             throw new ArgumentException("bounds must be finite ordered host-internal-ft bounds.");
 
-        var world = SpaceWorld.Prepare(document);
         var ids = new HashSet<long>(request.ElementIds ?? []);
+        var crop = request.Bounds;
+        var world = SpaceWorld.PrepareScene(document, ids, ref crop, request.ContextPaddingFt);
         var rows = world.Partitions.SelectMany(p => p.Prims.Select((row, i) => (Partition: p, Row: row, Index: i)))
             .Where(x => x.Row.Kind is PrimKind.Solid or PrimKind.Mesh).ToList();
-        // Explicit ids address the host; linked elements retain document and link identity in their handles.
-        var focus = rows.Where(x => x.Partition.Kind == SourceKind.Host && ids.Contains(x.Row.ElementId)).ToList();
-        if (ids.Count > 0 && ids.Except(focus.Select(x => x.Row.ElementId)).Any())
-            throw new ArgumentException("Some elementIds have no resident host mesh. Pass mesh-bearing host ids.");
-        var crop = request.Bounds;
-        if (crop is null && ids.Count > 0)
-            crop = focus.Aggregate(Aabb.Empty, (box, x) => Union(box, x.Row.Box)).Expand(request.ContextPaddingFt);
         var candidates = rows.Where(x => crop is null || x.Row.Box.Overlaps(crop.Value))
             .OrderByDescending(x => x.Partition.Kind == SourceKind.Host && ids.Contains(x.Row.ElementId)).ToList();
         var elements = new List<SceneElement>();
