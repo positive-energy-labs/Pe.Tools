@@ -82,7 +82,7 @@ export function SpaceRoute({
     loading.current?.abort();
     const abort = new AbortController();
     loading.current = abort;
-    let loaded = cache.current.get(id);
+    let loaded: SceneData | undefined = cache.current.get(id);
     spaceMark("cache", { id, hit: !!loaded });
     if (!loaded) {
       try {
@@ -102,7 +102,7 @@ export function SpaceRoute({
         spaceMark("body", { id, bytes: buffer.byteLength });
         const decoded = decodeScene(buffer);
         spaceMark("decode", { id });
-        loaded = cache.current.put(id, decoded);
+        loaded = decoded;
       } catch (e) {
         if (abort.signal.aborted || generation !== loadGeneration.current) return;
         throw e;
@@ -120,6 +120,7 @@ export function SpaceRoute({
       }
     }
     if (restored) cutPolygons(restored.cuts, loaded.metadata.bounds);
+    if (!cache.current.entries.has(id)) loaded = cache.current.put(id, loaded);
     setData(loaded);
     loadedId.current = id;
     // LRU order must not move mounted canvases: React StrictMode reconnects effects on moves.

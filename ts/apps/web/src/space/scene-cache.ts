@@ -51,12 +51,21 @@ export class SceneCache {
     if (bytes > this.maxBytes)
       throw Error("Scene exceeds the resident geometry budget. Narrow the scope.");
     const stamp = data.metadata.stamp;
+    // FOOTGUN: scoped captures have different builtUtc at the same epoch. Invalidate by revision.
     for (const [key, entry] of this.entries) {
       const previous = entry.metadata.stamp;
+      const sourceChanged = previous.sources.some((before) =>
+        stamp.sources.some(
+          (after) =>
+            before.documentKey === after.documentKey &&
+            before.linkInstanceId === after.linkInstanceId &&
+            (before.builtAtEpoch !== after.builtAtEpoch || before.dirty !== after.dirty),
+        ),
+      );
       // New document epochs and rebuilt source partitions invalidate every old scope of that document.
       if (
         previous.hostDocumentKey === stamp.hostDocumentKey &&
-        (previous.epoch !== stamp.epoch || previous.builtUtc !== stamp.builtUtc)
+        (previous.epoch !== stamp.epoch || sourceChanged)
       )
         this.entries.delete(key);
     }

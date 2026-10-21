@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vite-plus/test";
 import { SceneCache, type SceneData } from "./scene-cache";
 
-const scene = (epoch = 1, document = "a", builtUtc = "now"): SceneData => ({
+const scene = (epoch = 1, document = "a", builtUtc = "now", sourceEpoch = epoch): SceneData => ({
   positions: new Float32Array(9),
   metadata: {
-    stamp: { epoch, hostDocumentKey: document, builtUtc },
+    stamp: {
+      epoch,
+      hostDocumentKey: document,
+      builtUtc,
+      sources: [
+        { documentKey: document, linkInstanceId: null, builtAtEpoch: sourceEpoch, dirty: false },
+      ],
+    },
     elements: [],
   } as unknown as SceneData["metadata"],
 });
@@ -35,7 +42,9 @@ describe("resident Space scopes", () => {
     cache.put("other", scene(1, "b"));
     cache.put("new-epoch", scene(2));
     expect([...cache.entries.keys()]).toEqual(["other", "new-epoch"]);
-    cache.put("rebuilt", scene(2, "a", "later"));
+    cache.put("recaptured", scene(2, "a", "later"));
+    expect([...cache.entries.keys()]).toEqual(["other", "new-epoch", "recaptured"]);
+    cache.put("rebuilt", scene(2, "a", "later", 3));
     expect([...cache.entries.keys()]).toEqual(["other", "rebuilt"]);
   });
 });
