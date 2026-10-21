@@ -99,12 +99,6 @@ public sealed record DuctParameterSlots(
     string FittingCoefficient = DuctParameterSlots.DefaultFittingCoefficient,
     string TerminalFlow = "PE_M_Grd_AirFlow") { // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later)
     public const string DefaultFittingCoefficient = "Pe_C";
-
-    /// <summary>
-    ///     The TerminalFlow slot value that reads the terminal's connector flow (the built-in RBS_DUCT_FLOW_PARAM, which
-    ///     Revit reports from the family's connector) instead of a named parameter. Read only: apply refuses to write it.
-    /// </summary>
-    public const string ConnectorFlow = "@connector";
     private static readonly DuctParameterSlots Defaults = new();
 
     /// <summary>Each name this leaves blank (a partial wire object) comes from <paramref name="under" />.</summary>
@@ -152,10 +146,10 @@ public sealed record DuctSnapshotData(
 
 /// <summary>
 ///     One parameter a terminal's design airflow could be read from (pressure-drop ledger, 2026-10-20: the airflow read
-///     slot is a walk step). Slot is the TerminalFlow slot value that reads it: a parameter name, or
-///     <see cref="DuctParameterSlots.ConnectorFlow" /> for the connector flow. Where is instance, type or connector;
-///     Shared is true for a shared parameter. Have counts terminals with a nonzero value, Of every terminal; Groups the
-///     same per group that holds terminals.
+///     slot is a walk step). Slot is the parameter name, the TerminalFlow slot value that reads it; Where is instance or
+///     type; Shared is true for a shared parameter. A terminal's built-in `Flow` (RBS_DUCT_FLOW_PARAM, the connector's
+///     flow) is the instance candidate `Flow`. Have counts terminals with a nonzero value, Of every terminal; Groups the
+///     same per group, for groups where any terminal has one.
 /// </summary>
 public sealed record DuctAirflowCandidate(
     string Slot,

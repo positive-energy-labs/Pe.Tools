@@ -390,7 +390,7 @@ export const ductsAnalysisResponseSchema = z.strictObject({
   /**
    * The airflow read slot (a walk step, pressure-drop ledger 2026-10-20): the TerminalFlow slot the
    * snapshot read, and every air flow parameter the terminals carry with how many of them hold a
-   * nonzero value, best first. `@connector` is the connector flow. Pea proposes a slot as a claim;
+   * nonzero value, best first (the built-in `Flow` is the connector's). Pea proposes a slot as a claim;
    * a person picks it on the page.
    */
   airflow: z.strictObject({

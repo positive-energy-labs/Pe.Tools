@@ -87,8 +87,9 @@ public static class DuctSnapshots {
     }
 
     /// <summary>
-    ///     Every air flow parameter the terminals carry, instance and type, plus the connector flow, with how many
-    ///     terminals hold a nonzero value in each: the picker for the TerminalFlow slot (pressure-drop ledger, 2026-10-20).
+    ///     Every air flow parameter the terminals carry, instance and type (the built-in `Flow`, the connector's flow,
+    ///     among them), with how many terminals hold a nonzero value in each: the picker for the TerminalFlow slot
+    ///     (pressure-drop ledger, 2026-10-20).
     /// </summary>
     private static IReadOnlyList<DuctAirflowCandidate> AirflowCandidates(IReadOnlyList<Element> terminals, IReadOnlyDictionary<long, string?> groupOf) {
         var seen = new Dictionary<(string Slot, string Where), (bool Shared, HashSet<long> Have)>();
@@ -99,8 +100,7 @@ public static class DuctSnapshots {
                 seen[(slot, where)] = entry;
             }
             foreach (var p in AirFlows(e))
-                if (IsConnectorFlow(p)) Add(DuctParameterSlots.ConnectorFlow, "connector", false, Converted(p, UnitTypeId.CubicFeetPerMinute) > 0);
-                else Add(p.Definition.Name, "instance", p.IsShared, Converted(p, UnitTypeId.CubicFeetPerMinute) > 0);
+                Add(p.Definition.Name, "instance", p.IsShared, Converted(p, UnitTypeId.CubicFeetPerMinute) > 0);
             if ((e as FamilyInstance)?.Symbol is { } symbol)
                 foreach (var p in AirFlows(symbol))
                     Add(p.Definition.Name, "type", p.IsShared, Converted(p, UnitTypeId.CubicFeetPerMinute) > 0);
@@ -121,17 +121,12 @@ public static class DuctSnapshots {
     private static bool IsAirFlow(Parameter p) =>
         p.StorageType == StorageType.Double && Try(() => p.Definition.GetDataType()) is { } spec && spec == SpecTypeId.AirFlow;
 
-    private static bool IsConnectorFlow(Parameter p) =>
-        p.Definition is InternalDefinition { BuiltInParameter: BuiltInParameter.RBS_DUCT_FLOW_PARAM };
-
     /// <summary>
-    ///     A terminal's design airflow from the TerminalFlow slot and the slot that supplied it: the connector flow for
-    ///     <see cref="DuctParameterSlots.ConnectorFlow" />, else the air flow parameter of that name on the instance (a
-    ///     family's own `Flow` can sit beside the built-in one: the first nonzero wins), else on its type.
+    ///     A terminal's design airflow from the TerminalFlow slot and the slot that supplied it: the air flow parameter of
+    ///     that name on the instance (the built-in `Flow` is the connector's; a family parameter of the same name can sit
+    ///     beside it, so the first nonzero wins), else on its type.
     /// </summary>
     private static (double? Cfm, string? From) TerminalFlow(Element e, string slot) {
-        if (slot == DuctParameterSlots.ConnectorFlow)
-            return Converted(e, BuiltInParameter.RBS_DUCT_FLOW_PARAM, UnitTypeId.CubicFeetPerMinute) is { } connector ? (connector, slot) : (null, null);
         double? First(Element owner) => owner.GetParameters(slot).Where(IsAirFlow)
             .Select(p => Converted(p, UnitTypeId.CubicFeetPerMinute)).FirstOrDefault(v => v is not null);
         if (First(e) is { } own) return (own, slot);
@@ -368,9 +363,7 @@ public static class DuctSnapshots {
                 $"MEPCurveType.Roughness of each DuctType and FlexDuctType; {RevitDefaultRoughnessFt} ft is the Revit default",
                 new(segs.Count(s => s.Roughness.Provenance != DuctProvenance.RevitDefault), segs.Count), DuctProvenance.RevitDefault),
             new("terminal-flow", "Terminal design flow",
-                slots.TerminalFlow == DuctParameterSlots.ConnectorFlow
-                    ? "OST_DuctTerminal instances: RBS_DUCT_FLOW_PARAM, the connector flow (CubicFeetPerMinute)"
-                    : $"OST_DuctTerminal instances: GetParameters(\"{slots.TerminalFlow}\") of the AirFlow spec, the first nonzero (CubicFeetPerMinute), else on its FamilySymbol",
+                $"OST_DuctTerminal instances: GetParameters(\"{slots.TerminalFlow}\") of the AirFlow spec, the first nonzero (CubicFeetPerMinute), else on its FamilySymbol",
                 new(terminals.Count(t => DuctNetwork.Fact(t, DuctNetwork.TerminalFlow) > 0), terminals.Count), DuctProvenance.DesignerStated),
             new("pass1-flow", "Derived flow (pass 1)",
                 "DuctNetwork.PassOne: terminal design flow summed up the tree from the one equipment port of each loop-free group",

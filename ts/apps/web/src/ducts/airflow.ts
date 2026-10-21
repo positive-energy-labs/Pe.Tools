@@ -13,12 +13,8 @@ import {
 } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
-/** The slot value that reads the connector flow (C# `DuctParameterSlots.ConnectorFlow`). */
-export const CONNECTOR_FLOW = "@connector";
-
 /** A slot in a person's words. */
-export const slotWord = (slot: string | null | undefined) =>
-  slot == null ? "no parameter" : slot === CONNECTOR_FLOW ? "connector flow" : slot;
+export const slotWord = (slot: string | null | undefined) => slot ?? "no parameter";
 
 export interface AirflowOption {
   slot: string;
@@ -41,7 +37,7 @@ export function airflowOptions(
   ).length;
   const options = (snapshot.airflowCandidates ?? []).map((c) => {
     const have = group ? (c.groups.find((g) => g.groupId === group)?.have ?? 0) : c.have;
-    const where = c.where === "connector" ? "" : ` · ${c.where}${c.shared ? ", shared" : ""}`;
+    const where = ` · ${c.where}${c.shared ? ", shared" : ""}`;
     return { slot: c.slot, label: `${slotWord(c.slot)}${where}`, have, of: group ? inGroup : c.of };
   });
   // A slot can name a parameter no terminal carries (the firm default on a foreign model).

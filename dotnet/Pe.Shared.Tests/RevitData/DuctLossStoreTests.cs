@@ -60,13 +60,13 @@ public sealed class DuctLossStoreTests {
     }
 
     [Test]
-    public void The_connector_flow_slot_round_trips() {
+    public void A_chosen_airflow_slot_round_trips() {
         var store = new DuctLossStore {
             Version = DuctLossStore.CurrentVersion,
-            Slots = new DuctParameterSlots(TerminalFlow: DuctParameterSlots.ConnectorFlow)
+            Slots = new DuctParameterSlots(TerminalFlow: "Actual Supply Air Flow")
         };
 
-        Assert.That(DuctLossStore.FromJson(store.ToJson()).Slots!.TerminalFlow, Is.EqualTo("@connector"));
+        Assert.That(DuctLossStore.FromJson(store.ToJson()).Slots!.TerminalFlow, Is.EqualTo("Actual Supply Air Flow"));
     }
 
     [Test]

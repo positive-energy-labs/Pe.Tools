@@ -854,10 +854,10 @@ export namespace DuctsSnapshot {
     }
     /**
      * One parameter a terminal's design airflow could be read from (pressure-drop ledger, 2026-10-20: the airflow read
-     * slot is a walk step). Slot is the TerminalFlow slot value that reads it: a parameter name, or
-     * ConnectorFlow for the connector flow. Where is instance, type or connector;
-     * Shared is true for a shared parameter. Have counts terminals with a nonzero value, Of every terminal; Groups the
-     * same per group that holds terminals.
+     * slot is a walk step). Slot is the parameter name, the TerminalFlow slot value that reads it; Where is instance or
+     * type; Shared is true for a shared parameter. A terminal's built-in `Flow` (RBS_DUCT_FLOW_PARAM, the connector's
+     * flow) is the instance candidate `Flow`. Have counts terminals with a nonzero value, Of every terminal; Groups the
+     * same per group, for groups where any terminal has one.
      *
      */
     export interface DuctAirflowCandidate {

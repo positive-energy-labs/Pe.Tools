@@ -437,9 +437,7 @@ public static class DuctApplier {
         const string kind = "terminal-flow";
         var e = doc.GetElement(w.Id.ToElementId());
         if (e is null) return new Item(w.Id, kind, null).Refuse($"element {w.Id} is not in the document");
-        if (slots.TerminalFlow == DuctParameterSlots.ConnectorFlow)
-            return new Item(w.Id, kind, null) { Element = e }.Refuse("the airflow is read from the connector flow, which Revit reports; name a writable parameter as the TerminalFlow slot to write one");
-        // A family's own `Flow` can sit beside the built-in one of the same name: write the writable air flow one.
+        // A family parameter can share the built-in `Flow`'s name: write the writable air flow one.
         var named = e.GetParameters(slots.TerminalFlow);
         var p = named.FirstOrDefault(x => !x.IsReadOnly && IsAirFlow(x)) ?? named.FirstOrDefault();
         var item = new Item(w.Id, kind, p is { HasValue: true, StorageType: StorageType.Double } ? $"{Shown(p, Cfm):0.####} cfm" : null) { Element = e };
