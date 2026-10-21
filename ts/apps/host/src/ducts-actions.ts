@@ -1,6 +1,6 @@
 /**
  * /ducts verbs on the host: `ducts.preview-losses` and `ducts.apply-losses` are one native op, `ducts.apply`,
- * sent with `previewOnly` true or false. The web builds the whole write list from the person's
+ * and `ducts.preview-heal` and `ducts.apply-heal` are `ducts.heal`, each sent with `previewOnly` true or false. The web builds the whole write list from the person's
  * staged cells and Pe's own lookup; the host admits it against the exact document lifetime and
  * process incarnation, journals the native step, and never reads or rewrites the Work.
  */
@@ -10,7 +10,10 @@ import {
   ductsActions,
   nativeProcessSchema,
   type DuctsActionKey,
+  type DuctsHealInput,
 } from "@pe/agent-contracts";
+import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { z } from "zod";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
 import { resolveSdkSession } from "./sdk-session.ts";
@@ -22,6 +25,31 @@ import {
 } from "./native-receipts.ts";
 
 const preparedDuctsSchema = z.strictObject({ process: nativeProcessSchema });
+
+/** Each verb's native op and whether it only previews. */
+const NATIVE: Record<DuctsActionKey, { op: "ducts.apply" | "ducts.heal"; previewOnly: boolean }> = {
+  "ducts.preview-losses": { op: "ducts.apply", previewOnly: true },
+  "ducts.apply-losses": { op: "ducts.apply", previewOnly: false },
+  "ducts.preview-heal": { op: "ducts.heal", previewOnly: true },
+  "ducts.apply-heal": { op: "ducts.heal", previewOnly: false },
+};
+
+/**
+ * A heal group sent without items is planned here from a fresh snapshot with the route's own
+ * classifier (`heal.ts`), so an agent can name a group; groups with items pass through untouched.
+ */
+export async function planned(input: DuctsHealInput, read: () => Promise<DuctSnapshot>) {
+  if (input.groups.every((g) => g.items)) return input;
+  const plan = healPlan(await read());
+  return {
+    groups: input.groups.map((g) => {
+      if (g.items) return g;
+      const found = plan.groups.find((p) => p.group === g.group);
+      if (!found) throw refused(`Group ${g.group} has nothing to heal (or no such group in the snapshot)`);
+      return healRequestGroup(found);
+    }),
+  };
+}
 const refused = (message: string) => new BridgeError(message, 409, { notDispatched: true });
 
 export async function admitDuctsAction(
@@ -77,13 +105,24 @@ export async function admitDuctsAction(
     },
     async (execution) => {
       const { process } = preparedDuctsSchema.parse(execution.prepared);
-      const input = { ...admission.input, previewOnly: key === "ducts.preview-losses" };
-      const value = await execution.step("native", "ducts.apply", input, async (requestId) => {
+      const native = NATIVE[key];
+      const input = {
+        ...(native.op === "ducts.heal"
+          ? await planned(admission.input as DuctsHealInput, async () => {
+              await current(process);
+              const read = await Effect.runPromise(
+                Effect.result(bridge.invoke("ducts.snapshot", {}, target.session, target.openId)),
+              );
+              if (read._tag === "Failure") throw read.failure;
+              return read.success.value as DuctSnapshot;
+            })
+          : admission.input),
+        previewOnly: native.previewOnly,
+      };
+      const value = await execution.step("native", native.op, input, async (requestId) => {
         await current(process);
         const outcome = await Effect.runPromise(
-          Effect.result(
-            bridge.invoke("ducts.apply", input, target.session, target.openId, requestId),
-          ),
+          Effect.result(bridge.invoke(native.op, input, target.session, target.openId, requestId)),
         );
         if (outcome._tag === "Failure") throw outcome.failure;
         return outcome.success.value;

@@ -3,7 +3,7 @@ import { instancesActions, instancesReading } from "./instances.ts";
 import { scheduleActions, scheduleReads } from "./schedule-actions.ts";
 import { familyActions, familyReads } from "./family-actions.ts";
 import { stagedRoomEditSchema } from "./takeoffs.ts";
-import { ductsApplyInputSchema } from "./ducts.ts";
+import { ductsApplyInputSchema, ductsHealInputSchema } from "./ducts.ts";
 import { nativeProcessSchema } from "./action-receipts.ts";
 import { z } from "zod";
 import { executionTargetSchema } from "./target.ts";
@@ -147,6 +147,20 @@ export const ductsActions = {
     needs: "project-document",
     actor: "any",
     input: ductsApplyInputSchema,
+    dirties: ["snapshot"],
+  },
+  "ducts.preview-heal": {
+    says: "Preview healing duct groups in Revit: cap dangling open ends, connect coincident same-size ends, close same-size gaps of at most 3 in; runs every repair and Pe's post-check, then rolls all of it back. Name a group without items to preview everything the Ducts route would heal there; show the person the per-item outcome before any apply.",
+    needs: "project-document",
+    actor: "any",
+    input: ductsHealInputSchema,
+    dirties: [],
+  },
+  "ducts.apply-heal": {
+    says: "Heal duct groups in Revit, one transaction per group, with exactly the items a preview showed and a person approved; an item failing Pe's post-check is refused and rolled back. Revit gives rebuilt elements new ids: read the duct snapshot again after.",
+    needs: "project-document",
+    actor: "any",
+    input: ductsHealInputSchema,
     dirties: ["snapshot"],
   },
 } as const satisfies Record<string, ActionDefinition>;
