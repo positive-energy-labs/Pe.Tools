@@ -1,16 +1,27 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useScopeKeys } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
+import { ListPopup } from "@pe/kit/lang/list-popup";
 import { RouteShell, defineRoute } from "#/route";
 import { captureScene } from "./host";
 import { spaceViewSchema } from "@pe/agent-contracts/space-view";
 import { hostFetch } from "#/host/runtime";
-import { SpaceCanvas } from "./canvas";
+import { SpaceCanvas, type CutMenu } from "./canvas";
 import {
+  AXES,
+  AXIS_LABEL,
+  cutPolygons,
   decodeScene,
-  cutPolygon,
+  deleteNode,
   elementKey,
+  emptyCut,
+  frameRect,
   initialView,
+  insertNode,
+  seedCut,
+  type Axis,
+  type Cut,
   type Metadata,
   type ViewState,
 } from "./state";
@@ -19,7 +30,7 @@ const manifest = defineRoute({
   key: "space",
   name: "Space",
   views: [{ key: "3d", label: "3D", draws: () => <SpaceRoute /> }],
-  docs: "Real resident Space triangles in host internal feet. Capture once, then orbit, select, hide, isolate and cut locally. Draw a straight cut with two plan points. A bent cut is an editable plan polyline: finish it open to extend its ends to the scope edge and keep its left side, or click its first point to close a polygon and keep the inside. Drag its square handles to edit, offset it in feet, and Reverse side to keep the other side. Import/export JSON shares the exact view state with an agent.",
+  docs: "Real resident Space triangles in host internal feet. Capture once, then orbit, select, hide, isolate and cut locally. Three cuts, one per axis (Top, North, East), each a polyline extruded through the scene; the view keeps their intersection. Click a corner floater to edit that axis orthographically; Esc returns to the saved 3D camera. Drag node or edge grips in 3D or the editor: an edge folds along its neighbours and collapses to their corner when pushed past it; a node dropped on its neighbour merges. Right click an edge to add a node, a node to delete it. Open cuts keep two nodes and extend to the scope edge keeping their left side; closed cuts keep three and keep their inside. Import/export JSON shares the exact view state with an agent.",
 });
 type SceneData = { metadata: Metadata; positions: Float32Array };
 
@@ -34,17 +45,20 @@ export function SpaceRoute({
   const [ids, setIds] = useState(initialIds ?? "");
   const [busy, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [drawing, setDrawing] = useState<"straight" | "bent" | null>(null);
-  const [axis, setAxis] = useState<0 | 1 | 2>(2);
+  // Transient: which axis editor holds the main picture, which axis the cut controls act on.
+  const [editing, setEditing] = useState<Axis | null>(null);
+  const [axis, setAxis] = useState<Axis>("top");
+  const [menu, setMenu] = useState<CutMenu | null>(null);
+  const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
   const [editor, setEditor] = useState(false);
   const [json, setJson] = useState("");
   const loadGeneration = useRef(0);
   const change = useCallback(
     (patch: Partial<ViewState>) => {
       if (!view || !data) return false;
-      if (patch.polyline || patch.closed !== undefined || patch.offset !== undefined) {
+      if (patch.cuts) {
         try {
-          cutPolygon({ ...view, ...patch }, data.metadata.bounds);
+          cutPolygons(patch.cuts, data.metadata.bounds);
         } catch (e) {
           setError(String(e));
           return false;
@@ -77,10 +91,10 @@ export function SpaceRoute({
         // A corrupt or unavailable local cache must not prevent opening the durable scene.
       }
     }
-    if (restored) cutPolygon(restored, loaded.metadata.bounds);
+    if (restored) cutPolygons(restored.cuts, loaded.metadata.bounds);
     setData(loaded);
     setView(restored ?? initialView(loaded.metadata, id));
-    setDrawing(null);
+    setEditing(null);
     setError(null);
     const url = new URL(window.location.href);
     url.searchParams.set("scene", id);
@@ -120,46 +134,51 @@ export function SpaceRoute({
       setError(String(e));
     }
   };
-  const plan = () => {
-    if (!view || !data) return;
-    const b = data.metadata.bounds,
-      distance = Math.max(b.maxX - b.minX, b.maxY - b.minY, 1) * 1.7;
-    change({ camera: [view.target[0], view.target[1] - 0.0001, view.target[2] + distance] });
+  const setCut = (target: Axis, next: Cut | null) => {
+    if (!view) return false;
+    setAxis(target);
+    return change({ cuts: { ...view.cuts, [target]: next ?? emptyCut } });
   };
-  const draw = (mode: "straight" | "bent") => {
-    plan();
-    change({ polyline: [], plane: null, keepInside: true, closed: false, offset: 0 });
-    setDrawing(mode);
+  const edit = (target: Axis | null) => {
+    setMenu(null);
+    setEditing(target);
+    if (target) setAxis(target);
   };
-  const addPoint = (p: [number, number]) => {
-    if (!view || view.polyline.length >= 56) return;
-    if (drawing === "bent" && view.polyline.length >= 3 && p === view.polyline[0]) {
-      if (change({ closed: true })) setDrawing(null);
-      return;
-    }
-    const previous = view.polyline.at(-1);
-    if (previous && Math.hypot(previous[0] - p[0], previous[1] - p[1]) < 0.001) return;
-    const points = [...view.polyline, p];
-    if (drawing === "straight" && points.length === 2) {
-      const a = points[0]!,
-        b = points[1]!,
-        length = Math.hypot(b[0] - a[0], b[1] - a[1]);
-      if (length < 0.001) return;
-      const nx = -(b[1] - a[1]) / length,
-        ny = (b[0] - a[0]) / length;
-      change({ plane: [nx, ny, 0, -nx * a[0] - ny * a[1]], polyline: [] });
-      setDrawing(null);
-    } else change({ polyline: points });
+  useScopeKeys([
+    {
+      hotkey: "Escape",
+      label: "return to 3D",
+      says: "Leave the axis editor and return to the saved 3D camera",
+      available: () => editing !== null && menu === null,
+      callback: () => edit(null),
+    },
+  ]);
+  const active = view?.cuts[axis];
+  const menuCut = menu && view?.cuts[menu.axis];
+  type MenuAction = {
+    key: string;
+    label: string;
+    refusal: string | null;
+    run: () => Cut | null | string;
   };
+  const menuActions: MenuAction[] = [];
+  if (menu && menuCut && menu.kind === "edge")
+    menuActions.push({
+      key: "add",
+      label: "Add node",
+      refusal: null,
+      run: () => insertNode(menuCut, menu.index, menu.point),
+    });
+  if (menu && menuCut && menu.kind === "node") {
+    const result = deleteNode(menuCut, menu.index);
+    menuActions.push({
+      key: "delete",
+      label: result === null ? "Delete node (clears the cut)" : "Delete node",
+      refusal: typeof result === "string" ? result : null,
+      run: () => result,
+    });
+  }
   const selected = data?.metadata.elements.find((e) => elementKey(e) === view?.selected);
-  const bounds = data?.metadata.bounds;
-  const min = bounds ? [bounds.minX, bounds.minY, bounds.minZ][axis]! : 0;
-  const max = bounds ? [bounds.maxX, bounds.maxY, bounds.maxZ][axis]! : 1;
-  const setPlane = (value: number) => {
-    const p: [number, number, number, number] = [0, 0, 0, value];
-    p[axis] = -1;
-    change({ plane: p });
-  };
   return (
     <RouteShell manifest={manifest}>
       <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
@@ -188,9 +207,6 @@ export function SpaceRoute({
                 }}
               >
                 Fit
-              </Button>
-              <Button label="Plan view" onClick={plan}>
-                Plan
               </Button>
               <Button
                 label="Hide selected"
@@ -239,142 +255,80 @@ export function SpaceRoute({
             {error}
           </p>
         )}
-        {view && (
+        {view && active && (
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              label="Draw straight cut"
-              pressed={drawing === "straight"}
-              onClick={() => draw("straight")}
-            >
-              Straight cut
-            </Button>
-            <Button label="Draw bent cut" pressed={drawing === "bent"} onClick={() => draw("bent")}>
-              Bent cut
-            </Button>
-            {drawing === "bent" && (
+            {AXES.map((a) => (
+              <Button
+                key={a}
+                label={`${AXIS_LABEL[a]} cut controls`}
+                pressed={axis === a}
+                onClick={() => setAxis(a)}
+              >
+                {AXIS_LABEL[a]}
+              </Button>
+            ))}
+            {active.polyline.length === 0 ? (
               <>
                 <Button
-                  label="Undo last point"
-                  refusal={view.polyline.length === 0 ? "No points placed" : null}
-                  onClick={() => change({ polyline: view.polyline.slice(0, -1) })}
+                  label={`Add a ${AXIS_LABEL[axis]} section line`}
+                  onClick={() =>
+                    setCut(axis, seedCut(frameRect(axis, data!.metadata.bounds), "line"))
+                  }
                 >
-                  Undo point
+                  Add line
                 </Button>
                 <Button
-                  label="Finish open cut"
-                  refusal={view.polyline.length < 2 ? "Place at least two points" : null}
-                  onClick={() => setDrawing(null)}
+                  label={`Add a ${AXIS_LABEL[axis]} box`}
+                  onClick={() =>
+                    setCut(axis, seedCut(frameRect(axis, data!.metadata.bounds), "box"))
+                  }
                 >
-                  Finish open
+                  Add box
                 </Button>
               </>
-            )}
-            {drawing === "straight" && (
-              <Button label="Cancel straight cut" onClick={() => setDrawing(null)}>
-                Cancel
-              </Button>
-            )}
-            {drawing !== "straight" && view.polyline.length >= 2 && (
+            ) : (
               <>
                 <Button
-                  label={view.closed ? "Reopen polygon" : "Close polygon"}
+                  label={active.closed ? "Reopen polygon" : "Close polygon"}
                   refusal={
-                    !view.closed && view.polyline.length < 3 ? "Place at least three points" : null
+                    !active.closed && active.polyline.length < 3 ? "Add a third node first" : null
                   }
-                  onClick={() => {
-                    if (change({ closed: !view.closed })) setDrawing(null);
-                  }}
+                  onClick={() => setCut(axis, { ...active, closed: !active.closed })}
                 >
-                  {view.closed ? "Reopen" : "Close polygon"}
+                  {active.closed ? "Reopen" : "Close polygon"}
                 </Button>
-                {!drawing && (
-                  <Button
-                    label="Add points to the cut end"
-                    refusal={view.polyline.length >= 56 ? "56 points maximum" : null}
-                    onClick={() => {
-                      if (change({ closed: false })) setDrawing("bent");
-                    }}
-                  >
-                    Add points
-                  </Button>
-                )}
                 <span>Offset ft</span>
                 <div className="w-20">
                   <Input
                     type="number"
                     aria-label="Cut offset in feet, toward the left of the drawing direction"
                     step={0.5}
-                    value={view.offset}
+                    value={active.offset}
                     onChange={(e) => {
                       const offset = Number(e.target.value);
-                      if (e.target.value !== "" && Number.isFinite(offset)) change({ offset });
+                      if (e.target.value !== "" && Number.isFinite(offset))
+                        setCut(axis, { ...active, offset });
                     }}
                   />
                 </div>
+                <Button
+                  label="Reverse retained side"
+                  onClick={() => setCut(axis, { ...active, keepInside: !active.keepInside })}
+                >
+                  Reverse side
+                </Button>
+                <Button
+                  label={`Clear the ${AXIS_LABEL[axis]} cut`}
+                  onClick={() => setCut(axis, null)}
+                >
+                  Clear
+                </Button>
               </>
             )}
-            <Button
-              label="Reverse retained side"
-              onClick={() =>
-                change({
-                  plane: view.plane
-                    ? (view.plane.map((n) => -n) as NonNullable<ViewState["plane"]>)
-                    : null,
-                  keepInside: !view.keepInside,
-                })
-              }
-            >
-              Reverse side
-            </Button>
-            <Button
-              label="Clear cuts"
-              onClick={() => {
-                change({ plane: null, polyline: [], closed: false, offset: 0 });
-                setDrawing(null);
-              }}
-            >
-              Clear cuts
-            </Button>
-            {([0, 1, 2] as const).map((a) => (
-              <Button
-                key={a}
-                label={`Cut ${["X", "Y", "Z"][a]}`}
-                pressed={axis === a}
-                onClick={() => {
-                  setAxis(a);
-                  const b = data!.metadata.bounds;
-                  const p: [number, number, number, number] = [
-                    0,
-                    0,
-                    0,
-                    [b.maxX, b.maxY, b.maxZ][a]!,
-                  ];
-                  p[a] = -1;
-                  change({ plane: p });
-                }}
-              >
-                {["X", "Y", "Z"][a]}
-              </Button>
-            ))}
-            <div className="w-48">
-              <Input
-                type="range"
-                aria-label="Section plane position in feet"
-                min={min}
-                max={max}
-                step={(max - min) / 1000}
-                value={view.plane?.[axis] === -1 ? view.plane[3] : max}
-                onChange={(e) => setPlane(Number(e.target.value))}
-              />
-            </div>
             <span>
-              {drawing === "straight"
-                ? "Click two points; the left side is kept."
-                : drawing === "bent"
-                  ? `Click to add points (${view.polyline.length}/56). Click the first point to close a polygon, or Finish open to extend both ends to the scope edge. A red line crosses itself and is not applied.`
-                  : view.polyline.length >= 2
-                    ? `Drag square handles to edit the ${view.closed ? "polygon" : "open cut"}${view.offset ? "; the blue line is the cut shifted by the offset" : ""}. ${view.closed ? (view.keepInside ? "Inside" : "Outside") : view.keepInside ? "The left side" : "The right side"} is kept.`
-                    : "Left drag orbit · right drag pan · wheel zoom · click select."}
+              {active.polyline.length === 0
+                ? `No ${AXIS_LABEL[axis]} cut: nothing is clipped on this axis. Add a line or box, then drag it.`
+                : `${active.closed ? (active.keepInside ? "Inside" : "Outside") : active.keepInside ? "Left side" : "Right side"} kept. Drag grips: an edge folds along its neighbours and collapses to their corner when pushed past it; drop a node on a neighbour to merge. Open keeps 2 nodes (removing the last edge clears the cut), closed keeps 3.`}
             </span>
           </div>
         )}
@@ -393,9 +347,9 @@ export function SpaceRoute({
                   try {
                     const imported = spaceViewSchema.parse(JSON.parse(json));
                     if (view?.scene === imported.scene) {
-                      cutPolygon(imported, data!.metadata.bounds);
+                      cutPolygons(imported.cuts, data!.metadata.bounds);
                       setView(imported);
-                      setDrawing(null);
+                      setEditing(null);
                       setError(null);
                     } else {
                       startTransition(async () => {
@@ -429,11 +383,45 @@ export function SpaceRoute({
                 metadata={data.metadata}
                 positions={data.positions}
                 state={view}
-                drawing={drawing}
-                onDraw={addPoint}
+                editing={editing}
+                onEdit={edit}
+                onCut={setCut}
                 onChange={change}
+                onMenu={setMenu}
                 onError={setError}
               />
+              {menu && (
+                <div
+                  ref={setAnchor}
+                  className="pointer-events-none absolute size-px"
+                  style={{ left: menu.x, top: menu.y }}
+                />
+              )}
+              {menu && anchor && (
+                <ListPopup<MenuAction>
+                  anchor="caret"
+                  purpose="menu"
+                  caret={anchor}
+                  open
+                  onOpenChange={(next) => {
+                    if (!next) setMenu(null);
+                  }}
+                  aria-label={`${AXIS_LABEL[menu.axis]} cut ${menu.kind} actions`}
+                  items={menuActions}
+                  keyOf={(item) => item.key}
+                  labelOf={(item) => item.label}
+                  filter="none"
+                  select="single"
+                  empty="no actions"
+                  row={(item) => ({ label: item.label, refusal: item.refusal })}
+                  onPick={(item) => {
+                    const result = item.run();
+                    setMenu(null);
+                    if (typeof result === "string") setError(result);
+                    else setCut(menu.axis, result);
+                  }}
+                />
+              )}
             </div>
             <div className="flex flex-wrap gap-x-4 hairline-t pt-1">
               <span>
