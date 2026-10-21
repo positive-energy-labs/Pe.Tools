@@ -220,6 +220,7 @@ export function SpaceCanvas(props: Props) {
     batch.sortObjects = false;
     scene.add(batch);
     const instances: { id: number; key: string; color: THREE.Color }[] = [];
+    spaceMark("geometry-start", { id: sceneId });
     for (const element of props.metadata.elements) {
       const geometry = new THREE.BufferGeometry();
       const vertices = props.positions.slice(
