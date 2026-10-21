@@ -20,7 +20,10 @@ import { previewFresh } from "../../manifest";
 import type { LossesWork } from "../../work";
 import { buildTree, systemList, type TreeNode } from "../b/model";
 import type { ProtoProps } from "../props";
-import { BarLegend, LossBar } from "./bar";
+import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
+import { BarLegend, fmtFt, LossBar } from "./bar";
+import { DesignFrictionSettings } from "./design-friction";
+import { RunDetail, runOf } from "./run-detail";
 import { ECanvas } from "./canvas";
 import { grilleLabels } from "./labels";
 import { Inbox } from "./inbox";
@@ -154,14 +157,20 @@ export function EScreen({ props }: { props: ProtoProps }) {
     const id = n.kind === "run" ? n.terminal : n.id;
     return (id != null ? labels.get(id) : undefined) ?? n.name;
   };
+  // The path header: the critical path's total effective length in feet, and the ESP in in-wg.
+  const designRate = priced?.staged.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
+  const groupTel = tree ? priced?.now.byGroup[tree.key]?.criticalTel : undefined;
   const pricedWord = priced
     ? groupFan == null
       ? "this system is not priced"
-      : `fan ${groupFan.toFixed(3)} in-wg`
+      : `TEL ${fmtFt(groupTel)} ft · ESP ${groupFan.toFixed(3)} in-wg`
     : "not priced yet";
+  const runDetail =
+    priced && page.group && selected != null ? runOf(priced, page.group, selected) : null;
 
   const head = (
     <span className="inline-flex gap-1">
+      <DesignFrictionSettings work={work} rate={designRate} />
       {page.group ? (
         <Button
           label="show every system"
@@ -217,9 +226,13 @@ export function EScreen({ props }: { props: ProtoProps }) {
                 select,
                 jumpToRule: setRuleFocus,
                 reading,
+                designRate,
               }}
             />
           </div>
+          {runDetail ? (
+            <RunDetail run={runDetail} designRate={designRate} nameOf={nameOf} light={light} />
+          ) : null}
         </>
       ) : (
         <div role="list" aria-label="systems">

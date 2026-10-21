@@ -25,6 +25,12 @@ export interface TreeNode {
   total: number | null;
   /** This node's own loss, in-wg; null unpriced. */
   self: number | null;
+  /** Effective length from the fan to the far end of this node, ft (`equivalent-length.ts`); null unpriced. */
+  ft: number | null;
+  /** This node's own effective length, ft: its straight length plus its fittings and terminal as equivalent feet. */
+  selfFt: number | null;
+  /** A duct element's own actual friction rate, in-wg per 100 ft on this path; null on any other node. */
+  rate: number | null;
   /** Why `self` is null on a priced path: the word the row shows (`no drop`, `unpriced`) and the reason. */
   unpriced: { word: string; why: string } | null;
   /** Bar scale: the group's fan. */
@@ -67,6 +73,18 @@ const selfOfRows = (rows: readonly Row[]) =>
     ? null
     : rows.reduce((a, r) => a + (r.dp ?? 0), 0);
 
+/** An element's own effective length from its rows, ft: null when it has rows and none has feet. */
+const selfFtOfRows = (rows: readonly Row[]) =>
+  rows.length && rows.every((r) => r.eqFt == null) ? null : rows.reduce((a, r) => a + (r.eqFt ?? 0), 0);
+
+/** A duct's actual friction rate on a path from its friction rows, in-wg per 100 ft; null for a part with none. */
+const rateOfRows = (rows: readonly Row[]) => {
+  const run = rows.filter((r) => r.kind === "friction" && r.lengthFt != null);
+  const length = run.reduce((a, r) => a + r.lengthFt!, 0);
+  const dp = run.reduce((a, r) => a + (r.dp ?? 0), 0);
+  return length > 1e-9 && dp > 0 ? (dp / length) * 100 : null;
+};
+
 const unpricedOf = (rows: readonly Row[]): TreeNode["unpriced"] => {
   const bad = rows.find((r) => r.dp == null);
   if (!bad) return null;
@@ -99,11 +117,16 @@ export function buildTree(
       const path = priced?.now.paths[run.terminal] ?? null;
       const owned = path ? rowsByElement(run.path, path.rows) : null;
       const selfOf = (id: number) => (owned ? selfOfRows(owned.get(id) ?? []) : null);
+      const selfFtOf = (id: number) => (owned ? selfFtOfRows(owned.get(id) ?? []) : null);
       const running = new Map<number, number | null>();
+      const runningFt = new Map<number, number | null>();
       let acc = 0;
+      let accFt = 0;
       for (const id of run.path) {
         acc += selfOf(id) ?? 0;
+        accFt += selfFtOf(id) ?? 0;
         running.set(id, path ? acc : null);
+        runningFt.set(id, path ? accFt : null);
       }
       const cut = legsOf(snapshot, run.path, labelOf, work);
       const runKey = `${group.id}/r${run.terminal}`;
@@ -121,6 +144,9 @@ export function buildTree(
             id,
             total: running.get(id) ?? null,
             self: selfOf(id),
+            ft: runningFt.get(id) ?? null,
+            selfFt: selfFtOf(id),
+            rate: owned ? rateOfRows(owned.get(id) ?? []) : null,
             unpriced: owned ? unpricedOf(owned.get(id) ?? []) : null,
             level: null,
             scale: fan,
@@ -139,6 +165,9 @@ export function buildTree(
           id: leg.ids[0] ?? leg.to.id,
           total: last == null ? null : (running.get(last) ?? null),
           self: path ? sumKnown(elements.map((e) => e.self)) : null,
+          ft: last == null ? null : (runningFt.get(last) ?? null),
+          selfFt: path ? sumKnown(elements.map((e) => e.selfFt)) : null,
+          rate: null,
           unpriced: null,
           level: null,
           scale: fan,
@@ -157,6 +186,9 @@ export function buildTree(
         id: run.terminal,
         total: path?.total ?? null,
         self: null,
+        ft: path?.tel ?? null,
+        selfFt: null,
+        rate: null,
         unpriced: null,
         scale: fan,
         critical:
@@ -179,6 +211,9 @@ export function buildTree(
       id: rootId,
       total: fan,
       self: null,
+      ft: solved?.criticalTel ?? null,
+      selfFt: null,
+      rate: null,
       unpriced: null,
       level: null,
       scale: fan,
@@ -218,7 +253,7 @@ export function subjectTree(
   const nameOf = elementNamer(snapshot, null);
   const name = (id: number) => nameOf(id) ?? "element not in snapshot";
   const cut = legsOf(snapshot, ids, labelOfNode(snapshot), work);
-  const blank = { total: null, self: null, unpriced: null, level: null, scale: null, critical: null, provisional: null, terminal: null };
+  const blank = { total: null, self: null, ft: null, selfFt: null, rate: null, unpriced: null, level: null, scale: null, critical: null, provisional: null, terminal: null };
   const legs = cut.legs.map(
     (leg, i): TreeNode => ({
       ...blank,
@@ -258,6 +293,9 @@ export function systemList(snapshot: DuctSnapshot, priced: Priced | null): TreeN
       id: rootId,
       total: solved?.fan ?? null,
       self: null,
+      ft: solved?.criticalTel ?? null,
+      selfFt: null,
+      rate: null,
       unpriced: null,
       level: null,
       scale: null,

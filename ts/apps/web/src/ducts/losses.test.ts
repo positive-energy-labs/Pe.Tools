@@ -440,6 +440,36 @@ it("prices under the table a person staged in the Work document", () => {
   expect(tap.inputs).toMatchObject({ res: "Cb", xLabel: "Qb/Qc", yLabel: "Ab/Ac", y: 0.25 });
 });
 
+it("reads every priced row in feet at its duct's own rate, and a path's tel is the feet added up", () => {
+  const r = computeLosses(snapshot, grids);
+  for (const path of Object.values(r.paths)) {
+    const ducts = path.rows.filter((x) => x.kind === "friction");
+    // A duct row is its own length at its own rate; any other row is dp over the preceding duct's rate.
+    for (const d of ducts) {
+      expect(d.eqFt).toBeCloseTo(d.lengthFt!, 9);
+      expect(d.rate).toBeCloseTo((d.dp! / d.lengthFt!) * 100, 9);
+    }
+    const terminal = path.rows.at(-1)!;
+    const feeding = [...ducts].reverse().find((d) => path.rows.indexOf(d) < path.rows.length - 1)!;
+    expect(terminal.eqFt).toBeCloseTo((terminal.dp! / feeding.rate!) * 100, 9);
+    expect(path.tel).toBeCloseTo(path.rows.reduce((a, x) => a + (x.eqFt ?? 0), 0), 9);
+    expect(path.tel).toBeGreaterThan(ducts.reduce((a, d) => a + d.lengthFt!, 0));
+  }
+  expect(r.byGroup[r.paths[8]!.groupId]!.criticalTel).toBe(r.paths[8]!.tel);
+});
+
+it("the design friction rate in Work reaches the solve and moves only a part with no duct to read", () => {
+  const snap = structuredClone(synthetic) as unknown as DuctSnapshot;
+  const doc = ductsRouteState.schema.parse({ designFriction: { staged: { value: 0.1 } } });
+  expect(stagedDucts(doc).designFriction).toBe(0.1);
+  const priced = price(snap, grids, doc);
+  expect(priced.overrides.designFrictionRate).toBe(0.1);
+  // Every path here has ducts, so the rate changes no foot.
+  const plain = price(snap, grids, null).now;
+  const terminal = Number(Object.keys(plain.paths)[0]);
+  expect(priced.now.paths[terminal]!.tel).toBeCloseTo(plain.paths[terminal]!.tel, 9);
+});
+
 it("prices once per snapshot: a Work change reuses the applied solve and answers as a fresh solve would", () => {
   const snap = structuredClone(synthetic) as unknown as DuctSnapshot;
   const key = "elbow-1d-gt10";

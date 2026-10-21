@@ -36,6 +36,8 @@ export interface TreeCtx {
    * fan-to-here loss.
    */
   reading: Encoding | null;
+  /** The design friction rate, in-wg per 100 ft: a duct whose own rate exceeds it wears a quiet mark. */
+  designRate: number;
 }
 
 /** The largest value under a node and the element that holds it. */
@@ -131,12 +133,21 @@ export function SystemTree({ ctx }: { ctx: TreeCtx }) {
         const label =
           n.kind === "run" ? runName(n) : n.kind === "element" ? ctx.grilleName(n) : n.name;
         const critical = n.kind === "run" && (n.key === ctx.criticalKey || n.critical != null);
+        const over = n.rate != null && n.rate > ctx.designRate;
         const stand = n.critical === "longest" && n.key !== ctx.criticalKey;
         const ruleKey = n.kind === "element" && n.id != null ? ctx.ruleOf.get(n.id) : undefined;
         return {
           lead: critical ? (
             <span title={stand ? "longest developed run: stand-in until priced" : "critical run"}>
               {stand ? "◇" : "◆"}
+            </span>
+          ) : over ? (
+            <span
+              className="text-ink-2"
+              data-e-over={n.id ?? ""}
+              title={`friction ${n.rate!.toFixed(3)} in-wg per 100 ft is over the design rate ${ctx.designRate} (a diagnostic, not a blocker)`}
+            >
+              ▴
             </span>
           ) : undefined,
           // Kinds read apart by weight and ink: run (a path to one grille) strong, stretch plain, part quiet.
@@ -162,6 +173,8 @@ export function SystemTree({ ctx }: { ctx: TreeCtx }) {
           ) : (
             <MetaBar
               value={n.total}
+              ft={n.ft}
+              selfFt={n.kind === "leg" || n.kind === "element" ? n.selfFt : undefined}
               scale={ctx.scale}
               provisional={n.provisional}
               self={n.kind === "leg" || n.kind === "element" ? n.self : ""}

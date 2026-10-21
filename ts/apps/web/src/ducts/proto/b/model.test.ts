@@ -61,3 +61,34 @@ it("a run's stretches add up to its total, and the unpriced grille is no drop, n
   expect(runNode.children[0]!.name.startsWith("open")).toBe(false);
   expect(runNode.children[0]!.name.split(" → ")[0]).toBe(runNode.name.split(" → ")[0]);
 });
+
+it("a run reads in effective feet: stretches add up to its tel, and a duct carries its own rate", () => {
+  const group = snapshot.groups[0]!;
+  const run = runsOf(groupTree(snapshot, group.id))[0]!;
+  const rows = run.path.map((id): Row => ({ ...row(id, 0.002), lengthFt: 20, rate: 0.01, eqFt: 20 }));
+  const tel = rows.reduce((a, r) => a + (r.eqFt ?? 0), 0);
+  const priced = {
+    now: {
+      byGroup: {},
+      paths: {
+        [run.terminal]: {
+          groupId: group.id,
+          total: 0.002 * rows.length,
+          tel,
+          rows,
+          inferred: [],
+          provisional: null,
+        },
+      },
+    },
+  } as unknown as Priced;
+  const runNode = buildTree(snapshot, priced, null, group.id)[0]!.children.find(
+    (r) => r.terminal === run.terminal,
+  )!;
+  expect(runNode.ft).toBe(tel);
+  expect(runNode.children.at(-1)!.ft).toBeCloseTo(tel, 9);
+  expect(runNode.children.reduce((a, leg) => a + (leg.selfFt ?? 0), 0)).toBeCloseTo(tel, 9);
+  const element = runNode.children[0]!.children[0]!;
+  expect(element.selfFt).toBe(20);
+  expect(element.rate).toBeCloseTo((0.002 / 20) * 100, 9);
+});
