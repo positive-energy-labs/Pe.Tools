@@ -344,7 +344,12 @@ tr.dl-row[data-active]::before {
   align-items: center;
   gap: 6px;
 }
-/* Under a column header the trailing slot is a table: its columns stay whole and the title yields. */
+/* Under a column header the trailing slot is a table: its columns stay whole and the title yields.
+   The tree is a size container, so a caller drops its secondary columns by the tree's width
+   (`@max-[…]:hidden`) rather than leaving the title nothing. */
+[role="tree"][data-columns] {
+  container-type: inline-size;
+}
 [role="tree"][data-columns] :is(.dl-row-line, .dl-row-colhead) {
   grid-template-columns: minmax(0, 1fr) max-content;
 }

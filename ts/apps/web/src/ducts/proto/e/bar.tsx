@@ -83,8 +83,17 @@ export function BarLegend({
 /** The loss columns' precision: a short duct really loses ~0.0001 in-wg, and 3 places would read it as 0. */
 const LOSS_PLACES = 4;
 
-/** The loss columns' widths, one recipe for the header and every row so they align. */
-const COL = { bar: "w-10", ft: "w-12", wg: "w-12", mark: "w-1.5" } as const;
+/**
+ * The loss columns' widths, one recipe for the header and every row so they align. A narrow tree
+ * (the kit Tree is the container) drops the small in-wg columns, then the bar, so the names keep
+ * room; the in-wg rides the feet cell's hint.
+ */
+const COL = {
+  bar: "w-10 @max-[360px]:hidden",
+  ft: "w-12",
+  wg: "w-12 @max-[460px]:hidden",
+  mark: "w-1.5",
+} as const;
 
 /**
  * The header over `MetaBar`'s columns: the Tree's `columns.meta`. Feet are the primary unit (ACCA
@@ -155,7 +164,7 @@ export function MetaBar({
           </>
         ) : null}
       </span>
-      <span className={`${COL.ft} text-right`} data-e-ft={ft ?? ""}>
+      <span className={`${COL.ft} text-right`} data-e-ft={ft ?? ""} title={`${fmt(value, LOSS_PLACES)} in-wg to here`}>
         {fmtFt(ft)}
       </span>
       <span className={`${COL.wg} text-ink-2 t-small`} title="loss to here, in-wg">
@@ -166,7 +175,7 @@ export function MetaBar({
           <span
             className={`border-line border-l pl-1.5 ${COL.ft} text-right`}
             data-e-own={unpriced ? "unpriced" : ""}
-            title={unpriced?.why}
+            title={unpriced?.why ?? (typeof self === "number" ? `+${fmt(self, LOSS_PLACES)} in-wg own` : undefined)}
           >
             {own}
           </span>
