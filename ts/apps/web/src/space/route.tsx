@@ -43,7 +43,6 @@ export function SpaceRoute({
   const [data, setData] = useState<SceneData | null>(null);
   const cache = useRef(new SceneCache());
   const [scenes, setScenes] = useState<ResidentScene[]>([]);
-  const [artifactId, setArtifactId] = useState(sceneId ?? "");
   const loading = useRef<AbortController | null>(null);
   const [view, setView] = useState<ViewState | null>(null);
   const [ids, setIds] = useState(initialIds ?? "");
@@ -132,7 +131,6 @@ export function SpaceRoute({
         ? previous
         : next;
     });
-    setArtifactId(id);
     spaceMark("resident", { id, count: cache.current.entries.size, bytes: cache.current.bytes });
     setView(restored ?? initialView(loaded.metadata, id));
     setEditing(null);
@@ -249,17 +247,6 @@ export function SpaceRoute({
           </div>
           <Button label="Capture scene" busy={busy} onClick={() => startTransition(capture)}>
             Capture scene
-          </Button>
-          <div className="w-64">
-            <Input
-              aria-label="Saved scene artifact id"
-              value={artifactId}
-              onChange={(e) => setArtifactId(e.target.value)}
-              placeholder="Saved scene SHA-256"
-            />
-          </div>
-          <Button label="Open saved scene" onClick={() => open(artifactId.trim())}>
-            Open saved scene
           </Button>
           {view && (
             <>
