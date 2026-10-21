@@ -110,6 +110,24 @@ internal sealed class RevitDataRequestService {
         }
     }
 
+    [Op("ducts.heal", Does = "Heal duct geometry so the model itself is whole: cap a dangling open end with its duct type's Caps routing rule, connect coincident same-size ends, and close a same-size gap of at most 3 in with a union (two ducts) or by extending the duct (duct to part). Each item names connector keys elementId:connectorIndex from ducts.snapshot; the op refuses size changes, cross-class or cross-system joins, equipment, and longer gaps (a person's, in Revit). Every item must pass Pe's own post-check (connected, sizes equal, origins within 1/16 in, no system split or merged) or it is refused and rolled back alone. previewOnly runs everything and rolls it back; a real heal commits one transaction per group. Returns per-item outcomes with created and replaced element ids (Revit gives new ids to what it rebuilds; read ducts.snapshot again) and the touched systems' Revit critical path before and after.", Title = "Heal Duct Geometry", Finds = ["ducts", "heal", "cap", "open-end", "connect", "union", "repair", "mutation"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"previewOnly\": true, \"groups\": [{ \"group\": \"g12345\", \"items\": [{ \"key\": \"cap:12345:1\", \"kind\": \"cap\", \"end\": \"12345:1\" }, { \"key\": \"join:12350:0|12351:1\", \"kind\": \"join\", \"end\": \"12350:0\", \"other\": \"12351:1\" }] }] }")]
+    private static DuctHealResult HealDuctsCore(DuctHealRequest request, ProjectDocument activeDocument) {
+        var document = activeDocument.Value;
+        if (document.IsReadOnly)
+            throw BridgeOperationExceptions.Conflict(
+                "The active project document is read-only.",
+                [BridgeOperationExceptions.Issue("$", "DuctsDocumentReadOnly", "The active project document is read-only.",
+                    "Open a writable project document and retry.")]);
+        try {
+            return Lib.Mep.DuctHealer.Heal(document, request);
+        } catch (BridgeOperationException) {
+            throw;
+        } catch (Exception ex) {
+            Serilog.Log.Error(ex, "ducts.heal failed outside an item");
+            throw BridgeOperationExceptions.Unexpected("DuctsHealException", ex, "Run ducts.heal with previewOnly=true and read each refusal, then retry.");
+        }
+    }
+
     [Op("ducts.family-patch", Does = "Build the Family Foundry patch that gives a duct fitting family its own loss coefficient: an embedded lookup table (PeElbowC, dense over r/D, angle and diameter from Revit's shipped ASHRAE CD3 grids) and an instance number parameter (default Pe_C) with a rounding size_lookup formula, plus the run policy that lets Revit disconnect a fitting it cannot keep joined on reload. Hand the patch to families.plan then families.apply; ducts.apply with method pe-server then charges it live. Read-only; needs no document.", Title = "Build Duct Family Patch", Finds = ["ducts", "family", "patch", "lookup-table", "coefficient", "family-foundry", "elbow"], Actor = OpActor.Any, Cost = OpCost.Cheap, Example = "{ \"family\": \"Round Elbow\", \"kind\": \"round-elbow\", \"parameter\": \"Pe_C\" }")]
     private static DuctFamilyPatchData GetDuctFamilyPatchCore(DuctFamilyPatchRequest request) {
         try {
