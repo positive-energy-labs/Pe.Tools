@@ -34,6 +34,7 @@ import { useIso } from "../../iso";
 import { labelOfNode, legsOf, type Claim } from "../../legs";
 import { cameraOf, pictureKeys, pictureOf } from "../../picture";
 import { ProvisionalNote } from "../../provisional";
+import { fmtFt } from "./bar";
 import { indexOf, subjectScene } from "../../scene";
 import { Schematic } from "../../schematic";
 import type { ProtoProps } from "../props";
@@ -66,18 +67,17 @@ const CANVAS_KEYS: readonly LegendKey[] = [
 ];
 const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" : n.toFixed(d));
 
-/** Cumulative loss from the fan to each element, walked along priced paths (critical path first). */
+/**
+ * Cumulative effective length from the fan to each element, in equivalent feet (`equivalent-length.ts`),
+ * walked along priced paths: an element on several paths keeps its longest.
+ */
 function cumulativeOf(priced: ProtoProps["priced"]): Map<number, number> {
   const out = new Map<number, number>();
   if (!priced) return out;
-  const r = priced.now;
-  const order = Object.entries(r.paths).sort(([a], [b]) =>
-    Number(a) === r.critical ? -1 : Number(b) === r.critical ? 1 : 0,
-  );
-  for (const [, path] of order) {
+  for (const path of Object.values(priced.now.paths)) {
     let run = 0;
     for (const row of path.rows) {
-      run += row.dp ?? 0;
+      run += row.eqFt ?? 0;
       if (!out.has(row.id) || out.get(row.id)! < run) out.set(row.id, run);
     }
   }
@@ -268,18 +268,18 @@ function Canvas({
           const text =
             end == null
               ? `${leg.name} · unpriced`
-              : `Σ ${fmt(cumulative.get(end))} in-wg`;
+              : `Σ ${fmtFt(cumulative.get(end))} eq ft`;
           return [{ key: `${leg.name}|${leg.ids[0]}`, xy: iso.project(p), text, priced: end != null }];
         })
       : // A group scene has no legs: each terminal carries its path total.
         iso.scene.nodes.flatMap((f) => {
           if (f.node.kind !== "terminal") return [];
-          const total = priced?.now.paths[f.node.id]?.total;
+          const total = priced?.now.paths[f.node.id]?.tel;
           return [
             {
               key: String(f.node.id),
               xy: iso.project(f.node.point),
-              text: total == null ? "unpriced" : `Σ ${fmt(total)} in-wg`,
+              text: total == null ? "unpriced" : `Σ ${fmtFt(total)} eq ft`,
               priced: total != null,
             },
           ];
@@ -446,7 +446,7 @@ function Canvas({
           critical run{" "}
           {criticalPath ? (
             <>
-              <span className="face-mono">{fmt(criticalPath.total, 4)} in-wg</span> to {criticalName}
+              <span className="face-mono">{fmtFt(criticalPath.tel)} eq ft</span> to {criticalName}
             </>
           ) : (
             <span className="text-ink-2">unpriced</span>
@@ -531,7 +531,7 @@ function Canvas({
               )}
               <p data-pe-loss={elementId}>
                 Pe loss <span className="face-mono">{fmt(index.loss.get(elementId), 4)}</span> in-wg ·
-                from fan <span className="face-mono">{fmt(cumulative.get(elementId), 4)}</span> in-wg
+                from fan <span className="face-mono">{fmtFt(cumulative.get(elementId))}</span> eq ft
                 {priced ? null : <span className="text-ink-2"> (unpriced: no ASHRAE tables read)</span>}
               </p>
               {sub?.legOf.get(elementId) ? <p>on leg {sub.legOf.get(elementId)!.name}</p> : null}

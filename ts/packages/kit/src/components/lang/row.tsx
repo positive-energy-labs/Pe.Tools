@@ -164,8 +164,8 @@ export function Row(props: RowProps) {
   return <ListRow {...props} shared={shared} />;
 }
 
-/** The div row. A title the row cuts short is its own hint: measured on pointer entry, the full
- *  text rides the row's one Tooltip unless a refusal or a caller's hint already holds it. */
+/** The div row. A title or fact the row cuts short is its own hint: measured on pointer entry, the
+ *  full text rides the row's one Tooltip unless a refusal or a caller's hint already holds it. */
 function ListRow({
   shared,
   ...props
@@ -185,8 +185,13 @@ function ListRow({
         aria-expanded={tree ? props.expanded : undefined}
         style={tree ? ({ "--depth": props.depth } as CSSProperties) : undefined}
         onPointerEnter={(event) => {
-          const title = event.currentTarget.querySelector<HTMLElement>(".dl-row-title");
-          setCut(title && title.scrollWidth > title.clientWidth ? title.textContent : null);
+          const cutText = (selector: string) => {
+            const el = event.currentTarget.querySelector<HTMLElement>(selector);
+            return el && el.scrollWidth > el.clientWidth ? el.textContent : null;
+          };
+          const title = cutText(".dl-row-title");
+          const fact = cutText(".dl-row-fact");
+          setCut(title || fact ? [title, fact].filter(Boolean).join(" · ") : null);
         }}
       >
         {tree ? (
@@ -386,6 +391,7 @@ export function Tree<N>(props: TreeProps<N>) {
       aria-label={props["aria-label"]}
       aria-activedescendant={cursor ? rowId(cursor) : undefined}
       tabIndex={0}
+      data-columns={props.columns ? "" : undefined}
       className="min-h-0 flex-1 overflow-y-auto outline-none"
       style={{ maxHeight: props.maxHeight }}
       onKeyDown={onKeyDown}
