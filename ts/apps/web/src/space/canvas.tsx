@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { Button } from "@pe/kit/lang/button";
+import { spaceMark, spaceTiming } from "./performance";
 import {
   AXES,
   AXIS_LABEL,
@@ -103,6 +104,9 @@ export function SpaceCanvas(props: Props) {
   latest.current = props;
   const update = useRef<(() => void) | null>(null);
   useEffect(() => {
+    const sceneId = props.state.scene;
+    const measuring = spaceTiming();
+    spaceMark("build-start", { id: sceneId });
     const mount = host.current!;
     let renderer: THREE.WebGLRenderer;
     try {
@@ -233,6 +237,7 @@ export function SpaceCanvas(props: Props) {
       scene.add(mesh);
       meshes.push(mesh);
     }
+    spaceMark("geometry", { id: sceneId, meshes: meshes.length });
     // Per axis: its bounds frame (always shown, so an empty axis stays reachable), its cut, and
     // the cut's offset shift. All float on the frame's +w face, above the scene.
     const overlay = <T extends THREE.Line | THREE.Points | THREE.Mesh>(object: T) => {
@@ -352,6 +357,11 @@ export function SpaceCanvas(props: Props) {
     const render = () => {
       frame ||= requestAnimationFrame(() => {
         frame = 0;
+        const started = performance.now();
+        if (measuring) {
+          renderer.info.autoReset = false;
+          renderer.info.reset();
+        }
         const editing = latest.current.editing;
         renderer.setScissorTest(false);
         renderer.setViewport(0, 0, size.width, size.height);
@@ -384,6 +394,26 @@ export function SpaceCanvas(props: Props) {
           blit.material.map = targets[axis].texture;
           renderer.render(blitScene, blitCamera);
         });
+        if (measuring) {
+          const info = renderer.info;
+          const gl = renderer.getContext() as WebGL2RenderingContext;
+          spaceMark("submitted", { id: sceneId, cpuMs: performance.now() - started,
+            calls: info.render.calls, triangles: info.render.triangles,
+            geometries: info.memory.geometries, textures: info.memory.textures });
+          const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+          gl.flush();
+          const complete = () => {
+            if (!fence || gl.isContextLost()) return;
+            const status = gl.clientWaitSync(fence, 0, 0);
+            if (status === gl.TIMEOUT_EXPIRED) {
+              requestAnimationFrame(complete);
+              return;
+            }
+            gl.deleteSync(fence);
+            spaceMark("gpu-complete", { id: sceneId, status });
+          };
+          requestAnimationFrame(complete);
+        }
       });
     };
     const upload = () => {

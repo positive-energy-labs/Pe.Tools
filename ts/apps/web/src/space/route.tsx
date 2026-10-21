@@ -8,6 +8,7 @@ import { captureScene } from "./host";
 import { spaceViewSchema } from "@pe/agent-contracts/space-view";
 import { hostFetch } from "#/host/runtime";
 import { SpaceCanvas, type CutMenu } from "./canvas";
+import { spaceMark } from "./performance";
 import {
   AXES,
   AXIS_LABEL,
@@ -73,13 +74,18 @@ export function SpaceRoute({
   const load = useCallback(async (id: string, imported?: ViewState) => {
     if (!/^[a-f0-9]{64}$/.test(id)) throw Error("Scene id must be a SHA-256 artifact id");
     const generation = ++loadGeneration.current;
+    spaceMark("selection", { id, generation });
     // The durable artifact is already cached on disk; large Chrome cache writes can fail independently.
     const response = await hostFetch(`/pe/space/scenes/${id}/artifact`, { cache: "no-store" });
+    spaceMark("headers", { id });
     if (!response.ok)
       throw Error(
         `Scene artifact unavailable (${response.status}). Capture it from its document again.`,
       );
-    const loaded = decodeScene(await response.arrayBuffer());
+    const buffer = await response.arrayBuffer();
+    spaceMark("body", { id, bytes: buffer.byteLength });
+    const loaded = decodeScene(buffer);
+    spaceMark("decode", { id });
     if (generation !== loadGeneration.current) return;
     let restored = imported;
     if (!restored) {
