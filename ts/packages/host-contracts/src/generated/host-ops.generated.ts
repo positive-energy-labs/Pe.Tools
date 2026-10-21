@@ -5307,7 +5307,7 @@ export namespace RevitDetailSheets {
   }
 }
 
-/** Export bounded real host and linked MEP and architectural triangles from the resident Space world as a compact binary artifact in host internal feet. Host elementIds derive a context crop; bounds optionally set an explicit crop. Returns element identities, source freshness and omitted-element count. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
+/** Export real triangles in host internal feet. Set focusOnly with host elementIds for the first usable exact-membership mesh without preparing the whole world. Request context separately with focusOnly false; contextPaddingFt derives its crop, or bounds sets it explicitly. Metadata phase distinguishes focus/context, unavailableElements identifies requested ids without meshes, and omittedElements counts context excluded by the triangle budget. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
 export namespace RevitDetailSpaceScene {
   export namespace Req {
     export interface Request {
@@ -5315,6 +5315,7 @@ export namespace RevitDetailSpaceScene {
       contextPaddingFt?: number;
       maxTriangles?: number;
       bounds?: null | Aabb;
+      focusOnly?: boolean;
     }
     /**
      * Axis-aligned bounds in host internal feet.
@@ -5362,6 +5363,8 @@ export namespace RevitDetailSpaceScene {
       requestedElementIds: number[];
       omittedElements: number;
       sources: SceneSource[];
+      phase: string;
+      unavailableElements: SceneUnavailableElement[];
     }
     /**
      * Provenance and freshness. Every answer embeds one; it is not optional.
@@ -5449,6 +5452,12 @@ export namespace RevitDetailSpaceScene {
       documentKey: string;
       linkInstanceId?: number | null;
       sourceToHost: number[];
+    }
+    export interface SceneUnavailableElement {
+      elementId: number;
+      uniqueId?: null | string;
+      category?: null | string;
+      reason: string;
     }
   }
 }
