@@ -243,7 +243,9 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
 
   const [hovered, setHovered] = useState<number | null>(null);
   const shell: ProtoProps = {
-    snapshot,
+    // The surveyed topology (bridged joins, phase filter) is the one priced; drawing the raw one
+    // left the fan-setting run out of the tree (g8745870: header 0.186, tree critical 0.109).
+    snapshot: priced?.snapshot ?? snapshot,
     priced,
     findings: catalogs.findings,
     ready,
