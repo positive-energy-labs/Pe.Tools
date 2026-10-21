@@ -25,6 +25,7 @@ import {
 } from "./terminal-flows.ts";
 import { withStoredRulings } from "./rulings.ts";
 import { groupTree } from "./topology.ts";
+import { passiveOf, unitRoles, type UnitRole } from "./unit-roles.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 export interface Survey {
@@ -32,15 +33,18 @@ export interface Survey {
   flows: Map<number, TerminalFlow>;
   /** Every unit's design flow: staged `equipmentFlows`, else Revit's `fanFlow` fact. */
   equipmentFlows: Map<number, EquipmentFlow>;
+  /** Every root unit's role: ruled, staged, else proposed from its design flow (`unit-roles.ts`). */
+  roles: Map<number, UnitRole>;
   findings: DuctFinding[];
   /** The element pairs only a proximity inference joins; a path stepping across one rests on it. */
   inferred: InferredLink[];
 }
 
 const PERSON = new Set(["open-end", "no-root", "multi-root", "no-terminal-flow"]);
+const RULED = new Set(["ruled", "staged"]);
 
 /**
- * A group with no air mover (no root, or every root a staged passive unit) has no duct path to a
+ * A group with no air mover (no root, or every root a passive unit) has no duct path to a
  * fan, so it prices nothing (`losses.ts`) and says so once. It stands in for the group's `no-root`.
  */
 function noFanFindings(snapshot: DuctSnapshot, passive: ReadonlySet<number>): DuctFinding[] {
@@ -200,23 +204,21 @@ export function survey(
     bySeries.set(tags.join("|"), series(t.snapshot, new Set(tags))).get(tags.join("|"))!;
   const trees = s.snapshot.groups.map((g) => groupTree(s.snapshot, g.id));
   const flows = terminalFlows(s.snapshot, staged.loads.preview, staged.flows, trees, roomFlows);
-  const noFan = noFanFindings(
-    s.snapshot,
-    new Set(
-      Object.entries(staged.roles).flatMap(([id, { role }]) =>
-        role === "passive" ? [Number(id)] : [],
-      ),
-    ),
-  );
+  const units = equipmentFlows(s.snapshot, staged.equipmentFlows);
+  const roles = unitRoles(s.snapshot, units, staged.roles);
+  const passive = passiveOf(roles);
+  const noFan = noFanFindings(s.snapshot, passive);
   const fanless = new Set(noFan.map((f) => f.groupId));
-  const passive = new Set(
-    Object.entries(staged.roles).flatMap(([id, { role }]) => (role === "passive" ? [Number(id)] : [])),
-  );
   const rootsOf = (groupId: string) =>
     s.snapshot.groups.find((g) => g.id === groupId)?.rootIds ?? [];
-  // Several roots stand until a person stages all but one passive (it then moves no design air).
-  const manyRoots = (i: { kind: string; groupId: string }) =>
-    i.kind === "multi-root" && rootsOf(i.groupId).filter((id) => !passive.has(id)).length > 1;
+  // Several roots stand while more than one is a fan and any of those fans is only proposed (or
+  // defaulted): once a person rules every fan, the group is a confirmed multi-fan network and
+  // prices per fan (`fan-sections.ts`).
+  const manyRoots = (i: { kind: string; groupId: string }) => {
+    if (i.kind !== "multi-root") return false;
+    const fans = rootsOf(i.groupId).filter((id) => !passive.has(id));
+    return fans.length > 1 && fans.some((id) => !RULED.has(roles.get(id)?.why ?? "default"));
+  };
   const findings: DuctFinding[] = [
     ...s.findings,
     ...noFan,
@@ -253,7 +255,8 @@ export function survey(
   const result = {
     snapshot: s.snapshot,
     flows: flows.flows,
-    equipmentFlows: equipmentFlows(s.snapshot, staged.equipmentFlows),
+    equipmentFlows: units,
+    roles,
     findings,
     inferred: t.links,
   };

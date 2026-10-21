@@ -26,7 +26,9 @@ import {
 } from "./losses.ts";
 import { storeRulings, withStoredRulings } from "./rulings.ts";
 import { survey, type Survey } from "./survey.ts";
+import { equipmentFlows, type EquipmentFlow } from "./terminal-flows.ts";
 import type { DuctSnapshot } from "./types.ts";
+import { unitRoles, type UnitRole } from "./unit-roles.ts";
 
 type Node = DuctSnapshot["nodes"][number];
 type Group = DuctSnapshot["groups"][number];
@@ -43,6 +45,24 @@ const appliedChoices = (snapshot: DuctSnapshot): Choices =>
       rule.table ? [[key, rule.table.toUpperCase()]] : [],
     ),
   );
+
+/** The unit overrides every solve reads: each root's role and each stated design flow. */
+const unitOverrides = (
+  roles: ReadonlyMap<number, UnitRole>,
+  flows: ReadonlyMap<number, EquipmentFlow>,
+): Pick<Overrides, "unitRole" | "unitCfm"> => ({
+  unitRole: Object.fromEntries([...roles].map(([id, r]) => [id, r.role])),
+  unitCfm: Object.fromEntries(
+    [...flows].flatMap(([id, f]) => (f.cfm != null && f.cfm > 0 ? [[id, f.cfm]] : [])),
+  ),
+});
+
+/** The units as Revit holds them: stored rulings over roles proposed from Revit's own flows. */
+const appliedUnits = (raw: DuctSnapshot) => {
+  const flows = equipmentFlows(raw, {});
+  const roles = unitRoles(raw, flows, stagedDucts(withStoredRulings(null, raw.store)).roles);
+  return unitOverrides(roles, flows);
+};
 
 const byId = <V>(cells: Record<string, V>, pick: (value: V) => number) =>
   Object.fromEntries(Object.entries(cells).map(([id, value]) => [Number(id), pick(value)]));
@@ -102,6 +122,7 @@ function solvedFor(
   grids: Grids,
   catalogs: Catalogs,
   inferred: Survey["inferred"] = [],
+  units: Overrides = {},
 ): Solved {
   const byGrids = solved.get(snapshot) ?? solved.set(snapshot, new WeakMap()).get(snapshot)!;
   const byCatalogs = byGrids.get(grids) ?? byGrids.set(grids, new WeakMap()).get(grids)!;
@@ -111,7 +132,7 @@ function solvedFor(
     entry = {
       applied,
       // The tolerated snapshot is its survey's, so its inferred links are fixed with it.
-      now: computeLosses(snapshot, grids, applied, {}, {}, catalogs, inferred),
+      now: computeLosses(snapshot, grids, applied, units, {}, catalogs, inferred),
       rate: DEFAULT_DESIGN_FRICTION_RATE,
       last: null,
       fanouts: new Map(),
@@ -130,7 +151,8 @@ export function price(
 ): Priced {
   const surveyed = survey(raw, doc);
   const { snapshot } = surveyed;
-  const entry = solvedFor(snapshot, grids, catalogs, surveyed.inferred);
+  const units = appliedUnits(raw);
+  const entry = solvedFor(snapshot, grids, catalogs, surveyed.inferred, units);
   if (entry.last?.doc === doc) return entry.last.priced;
   // The model's stored rulings under Work's pending ones (`rulings.ts`), as the survey read them.
   const staged = stagedDucts(withStoredRulings(doc, raw.store));
@@ -140,7 +162,7 @@ export function price(
       snapshot,
       grids,
       entry.applied,
-      { designFrictionRate: rate },
+      { ...units, designFrictionRate: rate },
       {},
       catalogs,
       surveyed.inferred,
@@ -161,9 +183,7 @@ export function price(
     catalogLinks: staged.catalogs,
     terminalPs: byId(staged.terminalDrops, (drop) => drop.inWg),
     componentDrop: byId(staged.componentDrops, (drop) => drop.inWg),
-    unitRole: Object.fromEntries(
-      Object.entries(staged.roles).map(([id, { role }]) => [Number(id), role]),
-    ),
+    ...unitOverrides(surveyed.roles, surveyed.equipmentFlows),
     designFrictionRate: rate,
   };
   const same =
@@ -172,6 +192,7 @@ export function price(
     !hasDrops(staged) &&
     !Object.keys(overrides.terminalCfm!).length &&
     !Object.keys(staged.roles).length &&
+    !Object.keys(staged.equipmentFlows).length &&
     !Object.keys(staged.calculation).length;
   const next = same
     ? now
@@ -264,12 +285,18 @@ const inputsOf = ({ inputs }: Row) => {
 
 const round4 = (n: number) => Math.round(n * 1e4) / 1e4;
 
-/** The air mover a group's fan static is written to: its one root, else its critical system's base. */
+/**
+ * The air mover a group's fan static is written to: its one root, else its largest fan when the
+ * solve split it per fan, else its critical system's base.
+ */
 export function unitOf(snapshot: DuctSnapshot, result: LossResult, group: Group): number | null {
   const critical = result.byGroup[group.id]?.critical;
+  const lead = result.byGroup[group.id]?.fans[0]?.unit;
   return group.rootIds.length === 1
     ? group.rootIds[0]!
-    : critical == null
+    : lead != null
+      ? lead
+      : critical == null
       ? null
       : (systemFor(snapshot, critical)?.baseEquipmentId ?? null);
 }
@@ -284,9 +311,18 @@ export function proposedStatic(snapshot: DuctSnapshot, result: LossResult, unit:
   const byKind = new Map<string, number>();
   for (const group of snapshot.groups) {
     const solved = result.byGroup[group.id];
-    if (!solved || solved.critical == null || unitOf(snapshot, result, group) !== unit) continue;
+    // A fan of a multi-fan group delivers its own section's ESP (`fan-sections.ts`).
+    const own = solved?.fans.find((f) => f.unit === unit);
+    const fan = own
+      ? own.critical == null && !own.stretch.length
+        ? null
+        : own.esp
+      : solved?.critical != null && unitOf(snapshot, result, group) === unit
+        ? solved.fan
+        : null;
+    if (fan == null) continue;
     const kind = group.classifications.join(",");
-    byKind.set(kind, Math.max(byKind.get(kind) ?? 0, solved.fan));
+    byKind.set(kind, Math.max(byKind.get(kind) ?? 0, fan));
   }
   const parts = [...byKind].map(([kind, fan]) => ({ kind, fan }));
   return parts.length ? { total: round4(parts.reduce((a, b) => a + b.fan, 0)), parts } : null;

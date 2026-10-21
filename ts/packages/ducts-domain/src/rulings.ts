@@ -1,6 +1,7 @@
 /**
  * The rulings that remain after healing (pressure-drop ledger, 2026-10-20): an `ignore` verdict
- * (leave an open end out, object to an inferred join, keep a default) and a unit's `passive` role.
+ * (leave an open end out, object to an inferred join, keep a default) and a unit's role, `fan` or
+ * `passive` (a ruling over the role proposed from its design flow, `unit-roles.ts`).
  * They persist in the model's `_PE_DuctLosses` store (v2 `verdicts`, `roles`), so two people on
  * one model see the same network; Work holds only pending deltas over them. A staged value is a
  * delta, and a staged `{ delete: true }` on an assumption takes a stored verdict back.
@@ -21,7 +22,7 @@ import type { DuctSnapshot } from "./types.ts";
 type Store = DuctSnapshot["store"];
 export type RulingSegment = "assumptions" | "roles";
 
-/** One change a write makes to the store's rulings; null is no ruling (an unruled end, a fan). */
+/** One change a write makes to the store's rulings; null is no ruling (an unruled end, a proposed role). */
 export interface RulingDelta {
   segment: RulingSegment;
   key: string;
@@ -31,6 +32,10 @@ export interface RulingDelta {
 
 /** The verdicts the store keeps: `ignore` only. Any other staged verdict stays Work's. */
 export const STORED_VERDICTS = ["ignore"] as const;
+/** The roles the store keeps: both, since a role is proposed and a ruling may confirm either. */
+const isRole = (role: string | undefined | null): role is "fan" | "passive" =>
+  role === "fan" || role === "passive";
+const roleOf = (role: string | undefined | null) => (isRole(role) ? role : null);
 const keeps = (verdict: string | undefined | null) =>
   (STORED_VERDICTS as readonly string[]).includes(verdict ?? "");
 
@@ -69,8 +74,8 @@ export function withStoredRulings(
       };
   const rolesOut = { ...base.roles };
   for (const [id, { role }] of roles)
-    if (role === "passive" && !base.roles[id]?.staged)
-      rolesOut[id] = { ...base.roles[id], staged: { value: { role: "passive" } } };
+    if (isRole(role) && !base.roles[id]?.staged)
+      rolesOut[id] = { ...base.roles[id], staged: { value: { role } } };
   const effective = { ...base, assumptions, roles: rolesOut } as DuctsRouteDocument;
   byStore.set(store ?? NO_STORE, effective);
   return effective;
@@ -95,8 +100,8 @@ export function pendingRulings(doc: DuctsRouteDocument | null, store: Store): Ru
   }
   for (const [key, cell] of Object.entries(doc?.roles ?? {})) {
     if (!cell.staged) continue;
-    const from = storedRuling(store, "roles", key) === "passive" ? "passive" : null;
-    const to = cell.staged.value.role === "passive" ? "passive" : null;
+    const from = roleOf(storedRuling(store, "roles", key));
+    const to = roleOf(cell.staged.value.role);
     if (to !== from) out.push({ segment: "roles", key, from, to });
   }
   return out.sort((a, b) => a.segment.localeCompare(b.segment) || a.key.localeCompare(b.key));
@@ -104,7 +109,7 @@ export function pendingRulings(doc: DuctsRouteDocument | null, store: Store): Ru
 
 /**
  * The store's whole ruling set after a write, from the staged cells of the Work as read
- * (`withStoredRulings`): every `ignore` verdict and `passive` role, stamped `at` unless the store
+ * (`withStoredRulings`): every `ignore` verdict and every role, stamped `at` unless the store
  * already holds that same ruling, which keeps its own time.
  */
 export function storeRulings(
@@ -135,7 +140,7 @@ export function storeRulings(
   );
   const roles = Object.fromEntries(
     Object.entries(staged.roles).flatMap(([id, { role }]) =>
-      role === "passive"
+      isRole(role)
         ? [
             [
               id,
@@ -153,8 +158,9 @@ export function storeRulings(
 
 /**
  * The rung a person's choice stages on a ruling cell, against the store: choosing what the store
- * holds clears the delta (`null`); taking a stored ruling back stages a delete on an assumption
- * (a role's take-back is `fan`); `unstage` clears a pending ruling the store never held.
+ * holds clears the delta (`null`); taking a stored ruling back stages a delete on an assumption;
+ * a role is always a choice (`fan` or `passive`), so ruling the proposed one keeps it as a ruling;
+ * `unstage` clears a pending ruling the store never held.
  */
 export function rulingRung(
   store: Store,
@@ -163,12 +169,10 @@ export function rulingRung(
   choice: string | null,
 ): { value: unknown } | { delete: true } | "unstage" {
   const stored = storedRuling(store, segment, key);
-  const held = segment === "roles" ? (stored === "passive" ? "passive" : null) : stored;
-  const want = segment === "roles" && choice === "fan" ? null : choice;
-  if (want === held) return "unstage";
-  if (want === null)
-    return segment === "assumptions" ? { delete: true } : { value: { role: "fan" } };
+  const held = segment === "roles" ? roleOf(stored) : stored;
+  if (choice === held) return "unstage";
+  if (choice === null) return segment === "assumptions" ? { delete: true } : "unstage";
   return segment === "assumptions"
-    ? { value: { kind: "verdict", verdict: want } }
-    : { value: { role: want } };
+    ? { value: { kind: "verdict", verdict: choice } }
+    : { value: { role: choice } };
 }

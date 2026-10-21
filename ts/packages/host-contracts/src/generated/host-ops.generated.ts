@@ -586,7 +586,8 @@ export namespace DuctsSnapshot {
     /**
      * Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
      * the blob is unreadable or another version (fail-closed: ducts.apply refuses to overwrite it).
-     * AirflowCandidates are the air flow parameters the terminals carry, the picker for the TerminalFlow slot.
+     * AirflowCandidates are the air flow parameters the terminals carry, the picker for the TerminalFlow slot;
+     * FanFlowCandidates the same over HVAC equipment, the picker for the FanFlow slot (coverage per group the unit roots).
      *
      */
     export interface Response {
@@ -605,6 +606,7 @@ export namespace DuctsSnapshot {
       storeError?: null | string;
       phases?: null | DuctPhases;
       airflowCandidates?: DuctAirflowCandidate[] | null;
+      fanFlowCandidates?: DuctAirflowCandidate[] | null;
     }
     /**
      * The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
@@ -642,7 +644,8 @@ export namespace DuctsSnapshot {
     }
     /**
      * PhaseCreated and PhaseDemolished name the element's phases (null when it has none, or none demolished it).
-     * FlowParameter, on a terminal, is the TerminalFlow slot that supplied its terminalFlow fact; null when none did.
+     * FlowParameter, on a terminal, is the TerminalFlow slot that supplied its terminalFlow fact; on equipment, the
+     * FanFlow slot that supplied its fanFlow fact; null when none did.
      *
      */
     export interface DuctNode {

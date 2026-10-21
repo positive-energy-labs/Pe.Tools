@@ -11,6 +11,7 @@ import { ductOverrideKey, type DuctAssumption, type DuctsRouteDocument } from "@
 
 import { ISSUE_BLOCKS } from "./issues.ts";
 import { withStoredRulings } from "./rulings.ts";
+import { survey } from "./survey.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 type DuctIssue = DuctSnapshot["issues"][number];
@@ -56,6 +57,9 @@ export function readiness(
 ): Record<string, GroupReadiness> {
   const doc = withStoredRulings(work, snapshot.store);
   const { issues, nodes, segments } = snapshotById(snapshot);
+  let surveyed: Set<string> | null = null;
+  const standing = () =>
+    (surveyed ??= new Set(survey(snapshot, work).findings.map((f) => f.id)));
   const verdict = (issue: DuctIssue) => {
     const value = staged(doc, issue.id);
     return value?.kind === "verdict" ? value.verdict : null;
@@ -72,12 +76,8 @@ export function readiness(
       case "open-end":
         return verdict(issue) === "capped" || verdict(issue) === "ignore";
       case "multi-root":
-        // All but one root staged passive leaves a single air mover.
-        return (
-          (snapshot.groups.find((g) => g.id === issue.groupId)?.rootIds ?? []).filter(
-            (id) => doc?.roles[String(id)]?.staged?.value.role !== "passive",
-          ).length <= 1
-        );
+        // The survey's verdict: one fan left, or every fan ruled (`unit-roles.ts`).
+        return !standing().has(issue.id);
       case "no-terminal-flow":
         return verdict(issue) === "ignore";
       case "no-fan-static":

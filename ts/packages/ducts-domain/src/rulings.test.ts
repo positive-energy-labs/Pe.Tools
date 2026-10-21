@@ -42,7 +42,7 @@ it("reads no store as the Work itself", () => {
   expect(withStoredRulings(null, undefined)).toBeNull();
 });
 
-it("takes a stored verdict back with a staged delete, and a stored passive with fan", () => {
+it("takes a stored verdict back with a staged delete, and a stored passive is ruled fan", () => {
   const work = doc({
     assumptions: { "open-end:101:1": { staged: { delete: true } } },
     roles: { "900": { staged: { value: { role: "fan" } } } },
@@ -53,9 +53,12 @@ it("takes a stored verdict back with a staged delete, and a stored passive with 
   expect(staged.roles).toEqual({ "900": { role: "fan" } });
   expect(pendingRulings(work, store)).toEqual([
     { segment: "assumptions", key: "open-end:101:1", from: "ignore", to: null },
-    { segment: "roles", key: "900", from: "passive", to: null },
+    { segment: "roles", key: "900", from: "passive", to: "fan" },
   ]);
-  expect(storeRulings(staged, store, "later")).toEqual({ verdicts: {}, roles: {} });
+  expect(storeRulings(staged, store, "later")).toEqual({
+    verdicts: {},
+    roles: { "900": { role: "fan", ruledAt: "later" } },
+  });
 });
 
 it("writes the stored rulings with their own time and new ones with the write's", () => {
@@ -85,6 +88,7 @@ it("stages a choice against the store: the stored value clears, a take-back dele
   expect(rulingRung(store, "assumptions", "open-end:202:1", null)).toBe("unstage");
   expect(rulingRung(store, "roles", "900", "passive")).toBe("unstage");
   expect(rulingRung(store, "roles", "900", "fan")).toEqual({ value: { role: "fan" } });
-  expect(rulingRung(store, "roles", "901", "fan")).toBe("unstage");
+  expect(rulingRung(store, "roles", "901", "fan")).toEqual({ value: { role: "fan" } });
+  expect(rulingRung(store, "roles", "901", null)).toBe("unstage");
   expect(rulingRung(null, "roles", "901", "passive")).toEqual({ value: { role: "passive" } });
 });
