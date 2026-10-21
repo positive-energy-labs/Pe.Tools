@@ -128,12 +128,13 @@ it("groups of one system name are told apart by their root units", () => {
   const labels = groupLabels(snapshot);
   expect(labels.get("g10")).toBe("SA 19 · FC-17");
   expect(labels.get("g12")).toBe("SA 19 · FC-18");
-  // Two groups that would read alike take their id.
+  // Two groups that would read alike are numbered, never told apart by an id.
   const twins = {
     ...snapshot,
     groups: [group("ga", [], ["SA 1"]), group("gb", [], ["SA 1"])],
   } as unknown as DuctSnapshot;
-  expect(groupLabels(twins).get("ga")).toBe("SA 1 · no air mover · ga");
+  expect(groupLabels(twins).get("ga")).toBe("SA 1 · no air mover");
+  expect(groupLabels(twins).get("gb")).toBe("SA 1 · no air mover 2");
 });
 
 it("flow sources read as the rung's word", () => {

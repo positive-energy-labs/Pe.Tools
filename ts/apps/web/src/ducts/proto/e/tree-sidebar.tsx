@@ -16,7 +16,8 @@ import type { TreeNode } from "../b/model";
 import { MetaBar, MetaHeader } from "./bar";
 
 export interface TreeCtx {
-  tree: TreeNode;
+  /** One section per group the system is in, each named by the system and its units. */
+  trees: readonly TreeNode[];
   /** Full bar width: the critical run's total, in-wg; null unpriced. */
   scale: number | null;
   /** The critical run's key: the run with the largest priced total. */
@@ -82,7 +83,7 @@ function QuantityBar({ encoding, ids }: { encoding: Encoding; ids: readonly numb
       </span>
       <span className="face-mono w-12 text-right">{peak ? formatQuantity(q, peak.value) : "—"}</span>
       {peak && peak.id === q.maxId ? (
-        <span className="w-6 text-ink-2" title={`the group's max ${encoding.label}`}>max</span>
+        <span className="w-6 text-ink-2" title={`the system's max ${encoding.label}`}>max</span>
       ) : (
         <span className="w-6" />
       )}
@@ -103,10 +104,13 @@ export const idsOf = (node: TreeNode): number[] => {
 };
 
 export function SystemTree({ ctx }: { ctx: TreeCtx }) {
-  const crit = ctx.tree.children.find((r) => r.key === ctx.criticalKey) ?? ctx.tree.children[0];
+  // Every section opens; the critical run opens under the section that holds it (else the first's).
+  const crit =
+    ctx.trees.flatMap((t) => t.children).find((r) => r.key === ctx.criticalKey) ??
+    ctx.trees[0]?.children[0];
   // Controlled: the kit Tree's own state is fine too; kept here so a jump could open a run later.
   const [open, setOpen] = useState<ReadonlySet<string>>(
-    () => new Set([ctx.tree.key, ...(crit ? [crit.key] : [])]),
+    () => new Set([...ctx.trees.map((t) => t.key), ...(crit ? [crit.key] : [])]),
   );
   // A run is the path from the unit to one grille: "FC-17 → Price LBP15A Supply 12 X 6, Level 2".
   const runName = (n: TreeNode) =>
@@ -114,7 +118,7 @@ export function SystemTree({ ctx }: { ctx: TreeCtx }) {
   return (
     <Tree<TreeNode>
       aria-label="system tree"
-      roots={[ctx.tree]}
+      roots={ctx.trees}
       keyOf={(n) => n.key}
       childrenOf={(n) => n.children}
       open={open}

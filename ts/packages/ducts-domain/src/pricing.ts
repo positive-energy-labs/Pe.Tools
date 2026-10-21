@@ -342,18 +342,19 @@ export function proposedStatic(snapshot: DuctSnapshot, result: LossResult, unit:
  * its chosen table (instances the table cannot price are left out, and the band says so), every
  * staged drop, the staged parameter slots, the staged `esp`, the resolved flow of every terminal in a
  * priced group (a group with an air mover; every precedence rung, so Revit's own value is carried
- * with its source) and the staged `equipmentFlows`. `group` scopes the instances, drops, flows and
- * unit to that group's nodes; empty is every group. The rules' chosen tables stay
- * document-wide.
+ * with its source) and the staged `equipmentFlows`. `groups` scopes the instances, drops, flows and
+ * units to those groups (a system's: every group it is in, `system-scope.ts`); empty is every
+ * group. The rules' chosen tables stay document-wide.
  */
 export function applyRequest(
   snapshot: DuctSnapshot,
   priced: Priced,
   appliedAt: string,
-  group: string,
+  groups: readonly string[],
 ): DuctsApplyInput {
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
-  const inScope = (id: number) => !group || nodes.get(id)?.groupId === group;
+  const scoped = new Set(groups);
+  const inScope = (id: number) => !scoped.size || scoped.has(nodes.get(id)?.groupId ?? "");
   const fittings = Object.keys(priced.staged.rules)
     .sort()
     .flatMap((ruleKey) =>
@@ -423,11 +424,11 @@ export function applyRequest(
       ];
     })
     .sort((a, b) => a.id - b.id);
-  const roots = new Set(snapshot.groups.find((g) => g.id === group)?.rootIds ?? []);
+  const roots = new Set(snapshot.groups.filter((g) => scoped.has(g.id)).flatMap((g) => g.rootIds));
   const equipmentFlows = Object.entries(priced.staged.equipmentFlows)
     .map(([id, flow]) => flowWrite(Number(id), flow.cfm, flow.source ?? null))
     // Any unit rooted in the group, not the baseline's one pick (it is blind to a staged passive role).
-    .filter(({ id }) => !group || roots.has(id))
+    .filter(({ id }) => !scoped.size || roots.has(id))
     .sort((a, b) => a.id - b.id);
   const calculationOwners = new Set(
     Object.values(priced.staged.calculation).flatMap((e) =>
@@ -441,7 +442,7 @@ export function applyRequest(
   const equipment = Object.entries(priced.staged.esp)
     .map(([id, { inWg }]) => ({ id: Number(id), externalStaticInWg: inWg }))
     // Any unit rooted in the group, not the baseline's one pick (it is blind to a staged passive role).
-    .filter(({ id }) => !group || roots.has(id))
+    .filter(({ id }) => !scoped.size || roots.has(id))
     .sort((a, b) => a.id - b.id);
   const slots = priced.staged.parameters;
   const stored = snapshot.store;

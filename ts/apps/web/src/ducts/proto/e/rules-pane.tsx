@@ -40,7 +40,7 @@ export function ruleOfIds(priced: Priced | null): Map<number, string> {
 export function RulesTree({
   snapshot,
   priced,
-  group,
+  groups,
   wide,
   work,
   focus,
@@ -50,8 +50,8 @@ export function RulesTree({
 }: {
   snapshot: DuctSnapshot;
   priced: Priced;
-  /** The system in the sentence; `wide` widens to every system. */
-  group: string;
+  /** The groups of the system in the sentence (stable, `systemScope`); `wide` widens to every system. */
+  groups: readonly string[];
   wide: boolean;
   work: LossesWork;
   /** The rule key the tree last jumped to; it is the cursor and scrolls into view. */
@@ -67,7 +67,8 @@ export function RulesTree({
   }, [snapshot]);
   const ruleOf = useMemo(() => ruleOfIds(priced), [priced]);
   const roots = useMemo(() => {
-    const inScope = (id: number) => wide || groupOf.get(id) === group;
+    const own = new Set(groups);
+    const inScope = (id: number) => wide || own.has(groupOf.get(id) ?? "");
     const ids = new Map<string, Set<number>>();
     for (const [id, key] of ruleOf)
       if (inScope(id)) (ids.get(key) ?? ids.set(key, new Set()).get(key)!).add(id);
@@ -95,7 +96,7 @@ export function RulesTree({
       .filter((id) => !ruleOf.has(id))
       .map((id): RuleNode => ({ kind: "override", key: `o${id}`, id, ruleKey: null, children: [] }));
     return [...rules, ...loose];
-  }, [priced, ruleOf, groupOf, group, wide]);
+  }, [priced, ruleOf, groupOf, groups, wide]);
 
   // What staging each rule's table would move, known before anything is staged: the grilles
   // downstream of its instances and the systems they sit in, document-wide whatever `wide` says.
@@ -119,7 +120,9 @@ export function RulesTree({
   }, [focus]);
 
   const idsUnder = (ruleKey: string) =>
-    [...ruleOf].filter(([id, k]) => k === ruleKey && (wide || groupOf.get(id) === group)).map(([id]) => id);
+    [...ruleOf]
+      .filter(([id, k]) => k === ruleKey && (wide || groups.includes(groupOf.get(id) ?? "")))
+      .map(([id]) => id);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-e-rules="" onMouseLeave={() => light(null)}>
@@ -186,7 +189,7 @@ export function RulesTree({
         }}
       />
       <div className="border-line border-t px-2 py-1">
-        <StagedRules priced={priced} group={wide ? "" : group} work={work} />
+        <StagedRules priced={priced} groups={wide ? [] : groups} work={work} />
       </div>
     </div>
   );

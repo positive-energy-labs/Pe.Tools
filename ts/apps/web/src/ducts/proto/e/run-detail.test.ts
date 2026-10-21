@@ -41,7 +41,7 @@ const priced = {
 } as unknown as Priced;
 
 it("reads a duct and the fittings it feeds in feet and in-wg, stated drops as additional SP loss", () => {
-  const run = runOf(priced, "g1", 2)!;
+  const run = runOf(priced, ["g1"], 2)!;
   expect(run.ductId).toBe(1);
   expect(run.lengthFt).toBe(100);
   expect(run.rate).toBeCloseTo(0.013, 9);
@@ -53,8 +53,8 @@ it("reads a duct and the fittings it feeds in feet and in-wg, stated drops as ad
 });
 
 it("a terminal belongs to the duct feeding it, at that duct's rate", () => {
-  const run = runOf(priced, "g1", 5)!;
+  const run = runOf(priced, ["g1"], 5)!;
   expect(run.ductId).toBe(4);
   expect(run.parts[0]!.eqFt).toBeCloseTo(1034.48, 2);
-  expect(runOf(priced, "g1", 99)).toBeNull();
+  expect(runOf(priced, ["g1"], 99)).toBeNull();
 });

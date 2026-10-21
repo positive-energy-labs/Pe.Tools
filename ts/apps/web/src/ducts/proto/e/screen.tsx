@@ -4,11 +4,12 @@
  * numbered ruling pins and click popovers; RIGHT the inbox of rows a person has a verb on,
  * collapsed when it holds none. Hovering a row anywhere lights its element set on the drawing.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RouteStatePatch } from "@pe/agent-contracts";
 import type { DuctsApply } from "@pe/host-contracts/generated";
 import { survey } from "@pe/ducts-domain/survey";
 import { healPlan } from "@pe/ducts-domain/heal";
+import { sectionNames, systemOfGroup, systemScope } from "@pe/ducts-domain/system-scope";
 import { Button } from "@pe/kit/lang/button";
 import { Row } from "@pe/kit/lang/row";
 import { Pane } from "#/components/lang/pane";
@@ -18,7 +19,7 @@ import { airflowOptions } from "../../airflow";
 import { elementNamer } from "../../claims";
 import { healRunView, inboxRows, type CellRef } from "../../inbox-rows";
 import { groupLabels } from "../../inputs";
-import { previewFresh } from "../../manifest";
+import { previewFresh, scopeOf } from "../../manifest";
 import type { LossesWork } from "../../work";
 import { reviewLines } from "../../write-review";
 import { buildTree, systemList, type TreeNode } from "../b/model";
@@ -37,7 +38,25 @@ import { SystemTree } from "./tree-sidebar";
 import { useGroupEncoding } from "../encoding/use-encoding";
 import { formatQuantity } from "../../encoding";
 
+const NO_GROUPS: readonly string[] = [];
+
+/**
+ * The read snapshot is priced once the tables are in (2-3 s on a large model): until then the
+ * screen says so instead of holding the first paint.
+ */
 export function EScreen({ props }: { props: ProtoProps }) {
+  if (!props.snapshot)
+    return <p className="text-ink-2 p-4">{props.empty?.says ?? "reading ducts…"}</p>;
+  if (props.pricing)
+    return (
+      <p className="text-ink-2 p-4" data-e-pricing>
+        pricing…
+      </p>
+    );
+  return <EScreenBody props={props} />;
+}
+
+function EScreenBody({ props }: { props: ProtoProps }) {
   const { snapshot, priced, page, setPage } = props;
   const doc = props.work.doc;
   const work = useMemo<LossesWork>(
@@ -62,28 +81,63 @@ export function EScreen({ props }: { props: ProtoProps }) {
   // The tree draws the topology that was priced (bridged joins, phase filter); the raw one left the
   // fan-setting run out (g8745870: header 0.186, tree critical 0.109). Healing still plans on raw.
   const drawn = priced?.snapshot ?? snapshot;
-  const tree = useMemo(
-    () => (drawn && page.group ? (buildTree(drawn, priced, doc, page.group)[0] ?? null) : null),
-    [drawn, priced, doc, page.group],
+  // The subject is a Revit system: every group it is in, over the snapshot that was priced.
+  const scope = useMemo(() => (drawn ? scopeOf(drawn, page) : null), [drawn, page.system]);
+  const groups = scope?.groups ?? NO_GROUPS;
+  // The drawing indexes the raw snapshot: a group the survey merged away is drawn by its raw id too.
+  const drawGroups = useMemo(() => {
+    if (!snapshot || !page.system) return groups;
+    const raw = systemScope(snapshot, page.system).groups;
+    return raw.every((g) => groups.includes(g)) ? groups : [...new Set([...groups, ...raw])];
+  }, [snapshot, page.system, groups]);
+  const systems = useMemo(() => (drawn ? systemList(drawn, priced) : []), [drawn, priced]);
+  // Each group the system is in is its own section, named by the system and its units; a group
+  // that carries other systems says so, and shows whole.
+  const sections = useMemo(
+    () => (drawn && scope ? sectionNames(drawn, scope.name) : new Map<string, string>()),
+    [drawn, scope],
+  );
+  const sectionOf = useCallback(
+    (g: string) => {
+      const others = scope?.shared.get(g);
+      const name = sections.get(g) ?? scope?.name ?? "";
+      return others?.length ? `${name} · shared with ${others.join(", ")}` : name;
+    },
+    [sections, scope],
+  );
+  const trees = useMemo(
+    () => (drawn && scope ? buildTree(drawn, priced, doc, groups, sectionOf) : []),
+    [drawn, priced, doc, scope, groups, sectionOf],
   );
   const issueScope = useMemo(
     () =>
-      snapshot && page.group
-        ? new Set(snapshot.groups.find((g) => g.id === page.group)?.issueIds ?? [])
+      drawn && scope
+        ? new Set(drawn.groups.filter((g) => groups.includes(g.id)).flatMap((g) => g.issueIds))
         : null,
-    [snapshot, page.group],
+    [drawn, scope, groups],
   );
   const labels = useMemo(
-    () => (drawn && tree ? grilleLabels(drawn, tree.children) : new Map<number, string>()),
-    [drawn, tree],
+    () =>
+      drawn && trees.length
+        ? grilleLabels(
+            drawn,
+            trees.flatMap((t) => t.children),
+          )
+        : new Map<number, string>(),
+    [drawn, trees],
   );
   const nameOf = useMemo(() => {
     const n = snapshot ? elementNamer(snapshot, null) : () => null;
     return (id: number) => labels.get(id) ?? n(id) ?? "element not in snapshot";
   }, [snapshot, labels]);
+  // A row names a group the way the system reads it, else by its systems and units; never its id.
   const names = useMemo(
-    () => (snapshot ? groupLabels(snapshot) : new Map<string, string>()),
-    [snapshot],
+    () => (drawn ? groupLabels(drawn) : new Map<string, string>()),
+    [drawn],
+  );
+  const groupLabel = useCallback(
+    (g: string) => (sections.has(g) ? sectionOf(g) : (names.get(g) ?? "a duct network")),
+    [sections, sectionOf, names],
   );
   // The survey is the priced result's, or the unpriced one while the tables are unread; the
   // manifest's apply gate reads the same rows (`triage`) over the same tolerated snapshot.
@@ -106,29 +160,23 @@ export function EScreen({ props }: { props: ProtoProps }) {
         : null,
     [page.heal, page.epoch, surveyed, priced],
   );
-  // Revit renumbers what a heal rebuilt: a subject group that is gone follows the healed group.
-  useEffect(() => {
-    if (!snapshot || !healRun || healRun.mode !== "apply" || page.group !== page.heal?.group)
-      return;
-    if (healRun.group !== page.group && !snapshot.groups.some((g) => g.id === page.group))
-      setPage({ group: healRun.group });
-  }, [snapshot, healRun, page.group, page.heal, setPage]);
+  // The subject is a system name, so a heal that renumbers its groups leaves the page where it was.
   const inbox = useMemo(
     () =>
       surveyed
         ? inboxRows({
             snapshot: surveyed.snapshot,
-            group: page.group,
+            scope,
             findings: surveyed.findings,
             flows: surveyed.flows,
             equipmentFlows: surveyed.equipmentFlows,
             doc,
             nameOf,
-            groupLabel: (id) => names.get(id) ?? id,
+            groupLabel,
             heal,
             healRun,
-            airflow: snapshot ? airflowOptions(snapshot, page.group) : undefined,
-            unitAirflow: snapshot ? airflowOptions(snapshot, page.group, "unit") : undefined,
+            airflow: airflowOptions(surveyed.snapshot, scope),
+            unitAirflow: airflowOptions(surveyed.snapshot, scope, "unit"),
             roles: surveyed.roles,
             claims: props.claims,
             write: {
@@ -142,11 +190,11 @@ export function EScreen({ props }: { props: ProtoProps }) {
         : null,
     [
       surveyed,
-      snapshot,
+      scope,
       page,
       doc,
       nameOf,
-      names,
+      groupLabel,
       heal,
       healRun,
       props.claims,
@@ -172,8 +220,8 @@ export function EScreen({ props }: { props: ProtoProps }) {
     input.scrollIntoView?.({ block: "nearest" });
     input.focus();
     setCellFocus(null);
-  }, [cellFocus, tree, priced]);
-  const encoded = useGroupEncoding(snapshot, priced, page.group, page.encoding);
+  }, [cellFocus, trees, priced]);
+  const encoded = useGroupEncoding(snapshot, priced, drawGroups, page.encoding);
   // The tree reads the drawing's quantity; a categorical reading (or none) keeps Pe's fan-to-here loss.
   const reading = encoded.encoding.quantity ? encoded.encoding : null;
   const [lit, setLit] = useState<ReadonlySet<number>>(new Set());
@@ -183,51 +231,69 @@ export function EScreen({ props }: { props: ProtoProps }) {
   const [inboxOpen, setInboxOpen] = useState<boolean | null>(null);
 
   if (!snapshot) return <p className="text-ink-2 p-4">{props.empty?.says ?? "reading ducts…"}</p>;
+  const tree = trees.length ? trees : null;
 
   const light = (ids: readonly number[] | null) => {
     setLit(new Set(ids ?? []));
     props.onHover(ids?.[0] ?? null);
   };
   const select = (id: number | null) => props.onSelect(id);
-  // The critical run is the largest priced total (B's model marks Pe's only when the group solve
-  // names one; a provisional solve can leave it unnamed, so the largest total stands in).
+  // The critical run is the largest priced total over every section (B's model marks Pe's only
+  // when the group solve names one; a provisional solve can leave it unnamed, so the largest total
+  // stands in). Only the runs that price the system count: a shared group's other runs never lead.
   const critical =
-    tree?.children.reduce<TreeNode | null>(
-      (best, r) => (r.total != null && (best?.total == null || r.total > best.total) ? r : best),
-      null,
-    ) ?? null;
+    tree
+      ?.flatMap((t) => t.children)
+      .filter((r) => r.terminal == null || !scope || scope.terminals.has(r.terminal))
+      .reduce<TreeNode | null>(
+        (best, r) => (r.total != null && (best?.total == null || r.total > best.total) ? r : best),
+        null,
+      ) ?? null;
   const scale = critical?.total ?? null;
   const selected = page.selected && /^\d+$/.test(page.selected) ? Number(page.selected) : null;
   const open = inboxOpen ?? (toRule > 0 || props.staged > 0);
+  // A cell outside the system (a Set row on the whole document) moves the page to its system.
   const focusCell = (cell: CellRef) => {
-    const group = snapshot.nodes.find((n) => n.id === cell.id)?.groupId ?? page.group;
-    setPage({ group, selected: String(cell.id), issue: "" });
+    const into =
+      scope && (scope.members.has(cell.id) || scope.units.has(cell.id))
+        ? page.system
+        : (() => {
+            const node = snapshot.nodes.find((n) => n.id === cell.id);
+            const g = node?.groupId ?? snapshot.groups.find((x) => x.rootIds.includes(cell.id))?.id;
+            return g ? systemOfGroup(drawn ?? snapshot, g) : page.system;
+          })();
+    setPage({ system: into, selected: String(cell.id), issue: "" });
     setCellFocus(cell);
   };
-  // The group's own fan (B's header read the document-wide one); unsolved says so.
-  const groupFan = tree ? priced?.now.byGroup[tree.key]?.fan : undefined;
+  // The section whose run leads the system: its fan and TEL head the pane.
+  const leadGroup =
+    tree?.find((t) => critical && t.children.includes(critical))?.key ??
+    groups.find((g) => scope?.pricing.has(g)) ??
+    groups[0] ??
+    "";
+  const groupFan = leadGroup ? priced?.now.byGroup[leadGroup]?.fan : undefined;
   const grilleName = (n: TreeNode) => {
     const id = n.kind === "run" ? n.terminal : n.id;
     return (id != null ? labels.get(id) : undefined) ?? n.name;
   };
   // The path header: the critical path's total effective length in feet, and the ESP in in-wg.
   const designRate = priced?.staged.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
-  const groupTel = tree ? priced?.now.byGroup[tree.key]?.criticalTel : undefined;
+  const groupTel = leadGroup ? priced?.now.byGroup[leadGroup]?.criticalTel : undefined;
   const pricedWord = priced
-    ? groupFan == null
+    ? groupFan == null || critical?.total == null
       ? "this system is not priced"
-      : `TEL ${fmtFt(groupTel)} ft · ESP ${groupFan.toFixed(3)} in-wg`
-    : "not priced yet";
+      : `TEL ${fmtFt(critical.ft ?? groupTel)} ft · ESP ${critical.total.toFixed(3)} in-wg`
+    : "pricing…";
   const runDetail =
-    priced && page.group && selected != null ? runOf(priced, page.group, selected) : null;
+    priced && scope && selected != null ? runOf(priced, groups, selected) : null;
 
   const head = (
     <span className="inline-flex gap-1">
       <DesignFrictionSettings work={work} rate={designRate} />
-      {page.group ? (
+      {page.system ? (
         <Button
           label="show every system"
-          onClick={() => setPage({ group: "", selected: "", issue: "" })}
+          onClick={() => setPage({ system: "", selected: "", issue: "" })}
         >
           all systems
         </Button>
@@ -237,8 +303,8 @@ export function EScreen({ props }: { props: ProtoProps }) {
   const treePane = (
     <Pane
       id="e-sidebar"
-      title={tree ? "system" : "systems"}
-      meta={tree ? pricedWord : `${snapshot.groups.length} in the document`}
+      title={tree && scope ? scope.name : "systems"}
+      meta={tree ? pricedWord : `${systems.length} in the document`}
       actions={head}
       scroll="auto"
       flush
@@ -251,7 +317,7 @@ export function EScreen({ props }: { props: ProtoProps }) {
               data-e-legend={reading.key}
             >
               bar = {reading.label}, {reading.quantity.unit}, the largest under each row · full
-              width = the group's max{" "}
+              width = the system's max{" "}
               <span className="face-mono">
                 {reading.quantity.max == null
                   ? "—"
@@ -265,21 +331,30 @@ export function EScreen({ props }: { props: ProtoProps }) {
           ) : (
             <>
               <BarLegend scale={scale} criticalName={critical ? grilleName(critical) : null} />
-              <SplitStrip split={critical?.split ?? tree.split} scale={scale} light={light} />
+              <SplitStrip
+                split={critical?.split ?? tree[0]!.split}
+                scale={scale}
+                light={light}
+              />
             </>
           )}
-          {/* A multi-fan system: one section per fan, as staged (`next`), each with its TEL and ESP. */}
-          <FanSections
-            fans={priced?.next.byGroup[tree.key]?.fans ?? []}
-            nameOf={nameOf}
-            light={light}
-            select={select}
-          />
+          {/* A multi-fan group: one row per fan, as staged (`next`), each with its TEL and ESP;
+              each group the system is in carries its own, under its section's name. */}
+          {tree.map((t) => (
+            <FanSections
+              key={t.key}
+              title={tree.length > 1 ? t.name : null}
+              fans={priced?.next.byGroup[t.key]?.fans ?? []}
+              nameOf={nameOf}
+              light={light}
+              select={select}
+            />
+          ))}
           <div className="flex min-h-0 flex-1 flex-col" onMouseLeave={() => light(null)}>
             <SystemTree
-              key={tree.key}
+              key={scope?.name}
               ctx={{
-                tree,
+                trees: tree,
                 scale,
                 criticalKey: critical?.key ?? null,
                 grilleName,
@@ -299,17 +374,19 @@ export function EScreen({ props }: { props: ProtoProps }) {
         </>
       ) : (
         <div role="list" aria-label="systems">
-          {systemList(snapshot, priced).map((s) => {
-            const open = () => setPage({ group: s.key, selected: "", issue: "" });
-            // A group with no air mover prices nothing: its row says it needs a fix (its Fix row).
-            const fanless = priced?.now.byGroup[s.key]?.hasAirMover === false;
+          {systems.map((s) => {
+            const open = () => setPage({ system: s.key, selected: "", issue: "" });
+            // A system none of whose groups has an air mover prices nothing: its row says it needs a fix.
+            const fanless = s.fanless;
             return (
               <Row
                 key={s.key}
                 role="listitem"
                 tabIndex={0}
+                lines={2}
                 label={s.name}
-                title={`${s.name} (${s.key})`}
+                sub={s.sub}
+                title={`${s.name} · ${s.sub}`}
                 meta={
                   fanless ? (
                     <span data-tone="alarm" data-e-fanless={s.key}>
@@ -354,9 +431,9 @@ export function EScreen({ props }: { props: ProtoProps }) {
         flush
       >
         <RulesTree
-          snapshot={snapshot}
+          snapshot={drawn ?? snapshot}
           priced={priced}
-          group={page.group}
+          groups={groups}
           wide={wideRules}
           work={work}
           focus={ruleFocus}
@@ -367,7 +444,7 @@ export function EScreen({ props }: { props: ProtoProps }) {
       </Pane>
     ) : null;
   const inputsPane =
-    tree && page.group ? (
+    tree && scope ? (
       <Pane
         id="e-inputs"
         title="Inputs"
@@ -377,10 +454,10 @@ export function EScreen({ props }: { props: ProtoProps }) {
         flush
       >
         <InputsPane
-          snapshot={snapshot}
+          snapshot={drawn ?? snapshot}
           priced={priced}
           work={work}
-          group={page.group}
+          scope={scope}
           nameOf={nameOf}
           selected={selected}
           select={select}
@@ -478,7 +555,14 @@ export function EScreen({ props }: { props: ProtoProps }) {
         end={
           <div className="flex size-full min-h-0">
             <div className="relative min-w-0 flex-1">
-              <ECanvas {...props} lit={lit} issueScope={issueScope} scale={encoded} />
+              <ECanvas
+                {...props}
+                lit={lit}
+                issueScope={issueScope}
+                scale={encoded}
+                groups={drawGroups}
+                lead={leadGroup}
+              />
             </div>
             {right}
           </div>

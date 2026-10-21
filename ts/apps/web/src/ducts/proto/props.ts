@@ -14,19 +14,21 @@ export interface ProtoProps {
   snapshot: DuctSnapshot | null;
   /** Pe's priced losses (now/next); null until the ASHRAE tables are read. */
   priced: ReturnType<typeof price> | null;
+  /** The snapshot and tables are in and the price is still being computed (a few seconds). */
+  pricing: boolean;
   /** Catalog findings (prose), as route.tsx draws them above the body. */
   findings: readonly string[];
-  /** Per-group readiness. */
+  /** Per-group readiness (internal keys). */
   ready: ReturnType<typeof readiness>;
   /** Subject scene (ids + claims + verdict callback); null until a subject exists. */
   subject: Subject | null;
   /** Stages a person's verdict on a claim; present whether or not a subject exists. */
   onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;
-  /** The chosen group's claims (every claim when no group is chosen). */
+  /** The chosen system's claims (every claim when no system is chosen). */
   claims: readonly Claim[];
   /** The claim cells keyed by id as the Work (or the `?demo=scene` fixture) holds them. */
   claimCells: Record<string, DuctClaim>;
-  /** Route page state (selected, issue, group, level, layers, encoding, camera, picture, ...). */
+  /** Route page state (selected, issue, system, level, layers, encoding, camera, picture, ...). */
   page: DuctsPage;
   setPage: (next: Partial<DuctsPage>) => void;
   /** Selection / hover callbacks over element ids and claims. */

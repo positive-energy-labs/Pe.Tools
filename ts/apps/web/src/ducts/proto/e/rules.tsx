@@ -116,11 +116,12 @@ export function Chips({ ruleKey, priced, work }: { ruleKey: string; priced: Pric
  */
 export function StagedRules({
   priced,
-  group,
+  groups,
   work,
 }: {
   priced: Priced;
-  group: string;
+  /** The system's groups; empty is the document (its largest fan). */
+  groups: readonly string[];
   work: LossesWork;
 }) {
   const keys = Object.keys(priced.staged.rules).sort();
@@ -131,7 +132,11 @@ export function StagedRules({
   const flows = Object.keys(priced.staged.flows).length;
   const unitFlows = Object.keys(priced.staged.equipmentFlows).length;
   const roles = Object.keys(priced.staged.roles).length;
-  const fanOf = (r: Priced["now"]) => (group ? r.byGroup[group]?.fan : r.fan);
+  const fanOf = (r: Priced["now"]) => {
+    if (!groups.length) return r.fan;
+    const fans = groups.flatMap((g) => r.byGroup[g]?.fan ?? []);
+    return fans.length ? Math.max(...fans) : undefined;
+  };
   const discard = () => {
     const doc = work.doc;
     if (!doc) return;

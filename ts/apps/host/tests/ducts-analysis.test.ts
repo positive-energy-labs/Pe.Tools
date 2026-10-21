@@ -1361,7 +1361,7 @@ test("apply-request builds a canonical immutable candidate without reacquiring",
       input.snapshot,
       price(input.snapshot, toGrids(input.tables), input.work),
       plan.createdAt,
-      "",
+      [],
     ),
   );
   expect(plan.payload).toEqual(expected);
@@ -1567,7 +1567,7 @@ test("apply-request uses canonical staged fitting lookup and names unpriced inst
       await (await f.api.artifact(candidate.applyRequest!.artifact.id)).json(),
     );
     const expected = ductsApplyInputSchema.parse(
-      applyRequest(f.snapshot, price(f.snapshot, toGrids(tables), doc), plan.createdAt, ""),
+      applyRequest(f.snapshot, price(f.snapshot, toGrids(tables), doc), plan.createdAt, []),
     );
     expect(plan.payload).toEqual(expected);
     expect(plan.payload.fittings).toHaveLength(missing ? 0 : 1);

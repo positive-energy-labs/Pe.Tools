@@ -85,6 +85,7 @@ const snapshot: DuctSnapshot = {
     point: [id === 100 ? 0 : id, 0, 0],
     levelId: 30,
     groupId: id === 100 ? null : "g1",
+    systemName: id === 100 ? null : "SA",
     connectors: connectors(id),
     facts: [],
   })),
@@ -102,6 +103,7 @@ const snapshot: DuctSnapshot = {
     ],
     levelId: 30,
     groupId: "g1",
+    systemName: "SA",
     roughness: { valueFt: 0.0003, provenance: "revit-default" },
     revit: {},
     connectors: connectors(id),
@@ -118,7 +120,9 @@ const snapshot: DuctSnapshot = {
     },
   ],
   layers: [],
-  systems: [],
+  systems: [
+    { id: 900, name: "SA", classification: "Supply Air", criticalPath: [], sections: [] },
+  ],
   slots: {
     fanStatic: "PE_M_Fan_ExternalStaticPressure",
     fanFlow: "PE_M_Fan_AirFlow",
@@ -250,7 +254,7 @@ afterEach(() => {
 });
 
 async function mount(
-  search = "&group=g1",
+  search = "&system=SA",
   hosted = false,
   target = "slice",
   thread = "fixture",
@@ -279,8 +283,8 @@ async function mount(
   return { ...rendered, router };
 }
 
-async function pickGroup(id: string) {
-  fireEvent.click(screen.getByRole("button", { name: "Choose group" }));
+async function pickSystem(id: string) {
+  fireEvent.click(screen.getByRole("button", { name: "Choose system" }));
   fireEvent.click(await screen.findByRole("option", { name: new RegExp(`^${id}`) }));
   await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
 }
@@ -288,20 +292,21 @@ async function pickGroup(id: string) {
 test("the route sentence, refresh and the one shell mount from the same snapshot", async () => {
   const { container, router } = await mount();
   const head = screen.getByRole("region", { name: "Ducts route" });
-  expect(head.textContent).toContain("g1 (Supply Air)");
+  expect(head.textContent).toContain("SA (Supply Air)");
+  expect(head.textContent).not.toContain("g1");
   expect(within(head).getByRole("button", { name: /^refresh/ })).toBeTruthy();
   expect(within(head).queryByRole("button", { name: "Choose view" })).toBeNull();
   await waitFor(() => expect(container.querySelector('[data-proto="E2"]')).not.toBeNull());
   await waitFor(() =>
     expect(container.querySelector('[data-ducts-drawing="isometric"]')).not.toBeNull(),
   );
-  expect(router.state.location.search.group).toBe("g1");
+  expect(router.state.location.search.system).toBe("SA");
 }, 20000);
 
-test("the address carries group, level, selected, encoding, layers, camera and picture, each with a default", async () => {
+test("the address carries system, level, selected, encoding, layers, camera and picture, each with a default", async () => {
   const bare = await mount("");
   expect(bare.router.state.location.search).toMatchObject({
-    group: "",
+    system: "",
     level: "",
     selected: "",
     encoding: "health",
@@ -310,9 +315,9 @@ test("the address carries group, level, selected, encoding, layers, camera and p
     picture: "model",
   });
   bare.unmount();
-  const given = await mount("&group=g1&level=30&selected=3&encoding=flow&layers=a,b&camera=plan&picture=schematic");
+  const given = await mount("&system=SA&level=30&selected=3&encoding=flow&layers=a,b&camera=plan&picture=schematic");
   expect(given.router.state.location.search).toMatchObject({
-    group: "g1",
+    system: "SA",
     level: "30",
     selected: "3",
     encoding: "flow",
@@ -326,21 +331,21 @@ test("the address carries group, level, selected, encoding, layers, camera and p
   expect(search).not.toHaveProperty("variant");
 });
 
-test("the read names the document only; a group pick or clear does not read again, refresh does", async () => {
+test("the read names the document only; a system pick or clear does not read again, refresh does", async () => {
   const { router } = await mount("");
   expect(requests.at(-1)?.request).toEqual({});
   const count = requests.length;
-  await pickGroup("g1");
-  await waitFor(() => expect(router.state.location.search.group).toBe("g1"));
-  await pickGroup("g1");
-  await waitFor(() => expect(router.state.location.search.group ?? "").toBe(""));
+  await pickSystem("SA");
+  await waitFor(() => expect(router.state.location.search.system).toBe("SA"));
+  await pickSystem("SA");
+  await waitFor(() => expect(router.state.location.search.system ?? "").toBe(""));
   expect(requests.length).toBe(count);
   fireEvent.click(screen.getByRole("button", { name: /^refresh/ }));
   await waitFor(() => expect(requests.length).toBe(count + 1));
 });
 
 test("the hosted sentence names its document", async () => {
-  await mount("&group=g1", true);
+  await mount("&system=SA", true);
   expect(screen.getByRole("region", { name: "Ducts route" }).textContent).toContain(
     "on Duct route slice",
   );
@@ -356,7 +361,7 @@ test("an exact document lifetime change fences a pending read, including returni
   const target = encodeURIComponent(
     JSON.stringify({ kind: "open", ref: { session: "slice", openId: "doc" } }),
   );
-  await mount("&group=g1", false, target, "");
+  await mount("&system=SA", false, target, "");
   let release: (value: Response) => void = () => {};
   reply = () =>
     new Promise((resolve) => {

@@ -25,17 +25,21 @@ export interface GroupEncoding {
 export function useGroupEncoding(
   snapshot: DuctSnapshot | null,
   priced: Priced | null,
-  group: string,
+  /** The system's groups (stable per snapshot and system, `systemScope`). */
+  groups: readonly string[],
   key: string,
 ): GroupEncoding {
   const facts = useMemo(
     () =>
-      snapshot ? sceneOf(indexOf(snapshot, priced), group, () => true) : { segments: [], nodes: [] },
-    [snapshot, priced, group],
+      snapshot ? sceneOf(indexOf(snapshot, priced), groups, () => true) : { segments: [], nodes: [] },
+    [snapshot, priced, groups],
   );
   const directions = useMemo(
-    () => (snapshot && key === "flow" ? flowDirections(snapshot, group) : undefined),
-    [snapshot, group, key],
+    () =>
+      snapshot && key === "flow"
+        ? new Map(groups.flatMap((g) => [...flowDirections(snapshot, g)]))
+        : undefined,
+    [snapshot, groups, key],
   );
   const nameOf = useMemo(() => {
     if (!snapshot) return () => null;

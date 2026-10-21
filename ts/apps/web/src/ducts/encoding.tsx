@@ -228,7 +228,7 @@ const SEQUENTIAL: Record<"velocity" | "revit-pressure-drop" | "pressure-drop", Q
   velocity: {
     role: "viz-1",
     label: "velocity (Revit)",
-    says: "Velocity as Revit reports it (RBS_VELOCITY): five equal-count steps of one hue, darkest at the group's max",
+    says: "Velocity as Revit reports it (RBS_VELOCITY): five equal-count steps of one hue, darkest at the system's max",
     layer: "revit-flow",
     unit: "fpm",
     digits: 0,
@@ -238,7 +238,7 @@ const SEQUENTIAL: Record<"velocity" | "revit-pressure-drop" | "pressure-drop", Q
   "revit-pressure-drop": {
     role: "viz-5",
     label: "pressure drop (Revit)",
-    says: "Pressure drop as Revit reports it, friction only: five equal-count steps of one hue, darkest at the group's max",
+    says: "Pressure drop as Revit reports it, friction only: five equal-count steps of one hue, darkest at the system's max",
     layer: "revit-pressure",
     unit: "in-wg",
     digits: 3,
@@ -248,7 +248,7 @@ const SEQUENTIAL: Record<"velocity" | "revit-pressure-drop" | "pressure-drop", Q
   "pressure-drop": {
     role: "viz-5",
     label: "loss (Pe)",
-    says: "Pe's priced loss per element as Revit holds it now (friction intervals add; a fitting or terminal shows its largest leg): five equal-count steps, darkest at the group's max",
+    says: "Pe's priced loss per element as Revit holds it now (friction intervals add; a fitting or terminal shows its largest leg): five equal-count steps, darkest at the system's max",
     layer: null,
     unit: "in-wg",
     digits: 3,

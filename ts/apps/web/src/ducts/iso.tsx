@@ -67,10 +67,11 @@ export const gridAngle = (segments: readonly Pick<Segment, "polyline">[]) => {
   return c === 0 && s === 0 ? 0 : (Math.atan2(s, c) * 180) / Math.PI / 4;
 };
 
-/** `subject` is the subject scene when `page.scene` names it; the pivot and grid come from its segments. */
+/** `groups` are the system's (stable, `systemScope`); `subject` is the subject scene when one is staged: the pivot and grid come from its segments. */
 export function useIso(
   index: DuctIndex,
-  page: Pick<DuctsPage, "group">,
+  page: Pick<DuctsPage, "camera">,
+  groups: readonly string[],
   subject: Scene | null = null,
 ): SpatialView {
   // Turns are offsets from the group's own grid set on the diagonal, so its ducts never run
@@ -80,23 +81,23 @@ export function useIso(
   const preset = cameraOf(page);
 
   const scene = useMemo(
-    () => subject ?? sceneOf(index, page.group, () => true),
-    [index, page.group, subject],
+    () => subject ?? sceneOf(index, groups, () => true),
+    [index, groups, subject],
   );
   const { pivot, grid } = useMemo(() => {
     const own = subject
       ? subject.segments.map((facts) => facts.segment)
-      : index.segmentsOf.get(page.group);
+      : groups.flatMap((g) => index.segmentsOf.get(g) ?? []);
     const pool = own?.length
       ? own
-      : contextOf(index, page.group).flatMap((level) => level.polylines);
+      : contextOf(index, groups).flatMap((level) => level.polylines);
     return { pivot: centre(pool), grid: gridAngle(pool) };
-  }, [index, page.group, subject]);
+  }, [index, groups, subject]);
   const yaw = 45 - grid + turned;
   // Free elevation, a selection pivot and the globe; `project` carries it to the drawing.
   const cam = useOrbit({
     index,
-    group: page.group,
+    groups,
     scene,
     grid,
     basePivot: pivot,
@@ -123,7 +124,7 @@ export function useIso(
     project: cam.project,
     scene,
     // Refit on a new subject or a vertical change; a turn keeps the zoom (the pivot holds it).
-    fitKey: `iso|${subject ? "subject" : page.group}|${stretch}|${preset}`,
+    fitKey: `iso|${subject ? "subject" : groups.join(",")}|${stretch}|${preset}`,
     onDrag: (dx, dy, shift) => {
       if (shift) return false;
       cam.drag(dx, dy);

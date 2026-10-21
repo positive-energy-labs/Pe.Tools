@@ -90,18 +90,19 @@ export interface ContextLevel {
 }
 
 /**
- * The faint rest of the document, per level: every segment outside `group` of 2 ft or more that
+ * The faint rest of the document, per level: every segment outside `groups` of 2 ft or more that
  * `keep` allows, cut to at most eight points (evenly along it, 0.01 ft). With no group chosen and
  * no `keep`, all of it.
  */
 export function contextOf(
   index: DuctIndex,
-  group: string,
+  groups: readonly string[],
   keep: (segment: Segment) => boolean = () => true,
 ): ContextLevel[] {
   const byLevel = new Map<number | null, Pick<Segment, "polyline">[]>();
+  const drawn = new Set(groups);
   for (const segment of index.snapshot.segments) {
-    if ((group && segment.groupId === group) || segment.lengthFt < 2 || !keep(segment)) continue;
+    if (drawn.has(segment.groupId ?? "") || segment.lengthFt < 2 || !keep(segment)) continue;
     const last = segment.polyline.length - 1;
     const count = Math.min(segment.polyline.length, 8);
     const polyline = Array.from({ length: count }, (_, i) =>
@@ -117,13 +118,14 @@ export function contextOf(
 const pointOf = (index: DuctIndex, id: number) =>
   index.loss.has(id) ? { drop: index.loss.get(id)! } : undefined;
 
-/** The subject's elements, filtered by `keep`, with every fact the encodings read. */
+/** The groups' elements (a system's: every group it is in), filtered by `keep`, with every fact the encodings read. */
 export function sceneOf(
   index: DuctIndex,
-  group: string,
+  groups: readonly string[],
   keepLevel: (levelId: number | null) => boolean,
 ): Scene {
-  const segments: SegmentFacts[] = (index.segmentsOf.get(group) ?? [])
+  const segments: SegmentFacts[] = groups
+    .flatMap((group) => index.segmentsOf.get(group) ?? [])
     .filter((segment) => keepLevel(segment.levelId ?? null))
     .map((segment) => ({
       segment,
@@ -131,19 +133,27 @@ export function sceneOf(
       issues: index.issuesOf.get(segment.id) ?? [],
       pressure: pointOf(index, segment.id),
     }));
-  const nodes: NodeFacts[] = (index.nodesOf.get(group) ?? [])
+  // A unit roots every group its ports reach: drawn once.
+  const nodes: NodeFacts[] = [
+    ...new Map(
+      groups.flatMap((group) => index.nodesOf.get(group) ?? []).map((node) => [node.id, node]),
+    ).values(),
+  ]
     .filter((node) => keepLevel(node.levelId ?? null))
     .map((node) => ({
       node,
       issues: index.issuesOf.get(node.id) ?? [],
       pressure: pointOf(index, node.id),
     }));
-  const issues = group
-    ? index.snapshot.issues.filter(
-        (issue) => issue.groupId === group && issue.point && keepLevel(index.levelOf(issue)),
-      )
-    : [];
-  const context = contextOf(index, group)
+  const drawn = new Set(groups);
+  const issues = index.snapshot.issues.filter(
+    (issue) =>
+      issue.groupId != null &&
+      drawn.has(issue.groupId) &&
+      issue.point &&
+      keepLevel(index.levelOf(issue)),
+  );
+  const context = contextOf(index, groups)
     .filter((level) => keepLevel(level.levelId))
     .map((level) => level.polylines);
   return { segments, nodes, issues, context };
@@ -238,7 +248,7 @@ export function subjectScene(
   const context = points.length
     ? contextOf(
         index,
-        "",
+        [],
         (segment) =>
           !own.has(segment.id) &&
           levels.has(segment.levelId ?? null) &&

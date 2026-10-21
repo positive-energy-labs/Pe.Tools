@@ -285,12 +285,12 @@ it("uses generic Work proposal/staging guards and refuses lossy scalar unit writ
   expect(applyPatches(ductsRouteState, env, "human", stage, 2)).toMatchObject({ ok: false });
   const doc = work(evidence(s));
   doc.esp["100"] = { staged: { value: { inWg: 0.2 } } };
-  expect(() => applyRequest(s, price(s, {}, doc), "purpose-time", "")).toThrow(
+  expect(() => applyRequest(s, price(s, {}, doc), "purpose-time", [])).toThrow(
     "no admitted manufacturer scalar ESP mapping",
   );
   delete doc.esp["100"];
   doc.esp["200"] = { staged: { value: { inWg: 0.2 } } };
-  expect(() => applyRequest(s, price(s, {}, structuredClone(doc)), "purpose-time", "")).toThrow(
+  expect(() => applyRequest(s, price(s, {}, structuredClone(doc)), "purpose-time", [])).toThrow(
     "no admitted manufacturer scalar ESP mapping",
   );
 });
@@ -300,12 +300,12 @@ it("writes a staged unit flow for any unit rooted in the group, not only the bas
   const doc = work(evidence(s));
   doc.equipmentFlows["200"] = { staged: { value: { cfm: 825 } } };
   doc.equipmentFlows["100"] = { staged: { value: { cfm: 400 } } };
-  const ids = applyRequest(s, price(s, {}, doc), "purpose-time", "upstream").equipmentFlows.map(
+  const ids = applyRequest(s, price(s, {}, doc), "purpose-time", ["upstream"]).equipmentFlows.map(
     (f) => f.id,
   );
   expect(ids).toEqual([100, 200]);
   expect(
-    applyRequest(s, price(s, {}, doc), "purpose-time", "downstream").equipmentFlows.map((f) => f.id),
+    applyRequest(s, price(s, {}, doc), "purpose-time", ["downstream"]).equipmentFlows.map((f) => f.id),
   ).toEqual([200]);
 });
 
@@ -791,8 +791,8 @@ it("never treats a KCL-compatible sourced equal split as KVL/pressure certificat
   ]);
   expect(p.next.design.circuits[0]!.status).toBe("partial");
   expect(p.next.design.circuits[0]!.requiredExternalTotalPressureInWg).toBeNull();
-  expect(JSON.stringify(applyRequest(s, p, "purpose-time", ""))).not.toContain("componentWitness");
-  expect(JSON.stringify(applyRequest(s, p, "purpose-time", ""))).not.toContain("signedCfm");
+  expect(JSON.stringify(applyRequest(s, p, "purpose-time", []))).not.toContain("componentWitness");
+  expect(JSON.stringify(applyRequest(s, p, "purpose-time", []))).not.toContain("signedCfm");
 });
 it("does not allow independently derived inlet/outlet demands to leak mass through one fan", () => {
   const { s, e } = sharedFlowFixture(),

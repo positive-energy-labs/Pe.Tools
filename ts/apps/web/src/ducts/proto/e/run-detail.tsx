@@ -36,15 +36,16 @@ export interface RunData {
 }
 
 /**
- * The run the selected element belongs to: the path of its group that carries it (the critical one
- * first), the duct at or before it on that path, and the parts after that duct up to the next duct.
+ * The run the selected element belongs to: the path of the system's groups that carries it (a
+ * critical one first), the duct at or before it on that path, and the parts after that duct up to
+ * the next duct.
  */
-export function runOf(priced: Priced, group: string, selected: number): RunData | null {
-  const critical = priced.now.byGroup[group]?.critical;
+export function runOf(priced: Priced, groups: readonly string[], selected: number): RunData | null {
+  const critical = new Set(groups.map((g) => priced.now.byGroup[g]?.critical));
   const terminals = Object.keys(priced.now.paths)
     .map(Number)
-    .filter((t) => priced.now.paths[t]!.groupId === group)
-    .sort((a, b) => (a === critical ? -1 : b === critical ? 1 : a - b));
+    .filter((t) => groups.includes(priced.now.paths[t]!.groupId))
+    .sort((a, b) => Number(critical.has(b)) - Number(critical.has(a)) || a - b);
   for (const terminal of terminals) {
     const rows = priced.now.paths[terminal]!.rows;
     const at = rows.findIndex((r) => r.id === selected);

@@ -511,7 +511,7 @@ it("the scene carries Pe's loss per element, counting the rows paths share once"
   // An element no priced path crosses has no loss, not zero.
   expect(losses.has(1)).toBe(false);
 
-  const scene = sceneOf(indexOf(snap, priced), "g10", () => true);
+  const scene = sceneOf(indexOf(snap, priced), ["g10"], () => true);
   const duct = scene.segments.find((facts) => facts.segment.id === 10)!;
   expect(duct.pressure?.drop).toBeCloseTo(losses.get(10)!, 9);
   expect(scene.nodes.find((facts) => facts.node.id === 22)?.pressure?.drop).toBeCloseTo(
@@ -519,8 +519,8 @@ it("the scene carries Pe's loss per element, counting the rows paths share once"
     6,
   );
   // Unpriced (no tables read yet) the scene draws without loss, and the other groups stay context.
-  expect(sceneOf(indexOf(snap), "g10", () => true).segments.every((f) => !f.pressure)).toBe(true);
-  expect(sceneOf(indexOf(snap, priced), "", () => true).context.flat()).toHaveLength(3);
+  expect(sceneOf(indexOf(snap), ["g10"], () => true).segments.every((f) => !f.pressure)).toBe(true);
+  expect(sceneOf(indexOf(snap, priced), [], () => true).context.flat()).toHaveLength(3);
 });
 
 it.each(rootAttached.cases)(
