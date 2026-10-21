@@ -48,7 +48,14 @@ export interface ProtoProps {
   /** Loading state of the host reads. */
   reading: { pending: boolean; error: string | null };
   /** The route's preview and apply as the handle arms or refuses them; the Write group draws both. */
-  actions: { preview: ActionHandle; apply: ActionHandle; busy: boolean };
+  actions: {
+    preview: ActionHandle;
+    apply: ActionHandle;
+    /** A group's heal preview and heal; the Heal row runs them with its group. */
+    healPreview: ActionHandle;
+    heal: ActionHandle;
+    busy: boolean;
+  };
   /** How many staged cells a write would carry. */
   staged: number;
   /** How many rulings (verdicts, roles) are staged: Work that writes nothing to Revit. */

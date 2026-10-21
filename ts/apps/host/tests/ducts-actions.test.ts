@@ -12,8 +12,10 @@ import { join } from "node:path";
 import { Context, Effect, Layer, Queue } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { expect, test } from "vite-plus/test";
-import type { DuctsApplyInput } from "@pe/agent-contracts";
+import type { DuctsActionKey, DuctsApplyInput } from "@pe/agent-contracts";
 import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
+import { planned } from "../src/ducts-actions.ts";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { ActionJournal } from "../src/action-journal.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
@@ -103,14 +105,15 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>) =>
       );
     const intent = (
       id: string,
-      key: "ducts.preview-losses" | "ducts.apply-losses",
+      key: DuctsActionKey,
       openId = target.openId,
+      payload: unknown = input,
     ) => ({
       id,
       key,
       kind: "workflow" as const,
       destination: { kind: "document" as const, ref: { ...target, openId } },
-      input,
+      input: payload,
       bases: {},
     });
     try {
@@ -130,8 +133,9 @@ type Harness = {
   answer: (requestId: string, value: unknown) => Effect.Effect<boolean>;
   intent: (
     id: string,
-    key: "ducts.preview-losses" | "ducts.apply-losses",
+    key: DuctsActionKey,
     openId?: string,
+    payload?: unknown,
   ) => Record<string, unknown> & { id: string };
 };
 
@@ -185,3 +189,112 @@ test("a request for another document lifetime, or with a caller's previewOnly, n
       expect(yield* Queue.size(outgoing)).toBe(0);
     }),
   ));
+
+const heal = {
+  groups: [
+    {
+      group: "g10",
+      items: [
+        { key: "cap:10:0", kind: "cap", end: "10:0" },
+        { key: "join:10:1|11:0", kind: "join", end: "10:1", other: "11:0" },
+      ],
+    },
+  ],
+};
+const healed = (outcome: string) => ({
+  previewOnly: outcome === "planned",
+  groups: [{ group: "g10", outcome, reason: null, items: [], systemsBefore: [], systemsAfter: [] }],
+  counts: {
+    planned: outcome === "planned" ? 2 : 0,
+    healed: outcome === "healed" ? 2 : 0,
+    refused: 0,
+  },
+});
+
+test("heal preview and apply send the route's items to ducts.heal, differing only in previewOnly", () =>
+  lane(({ owner, outgoing, post, answer, intent }) =>
+    Effect.gen(function* () {
+      for (const [id, key, outcome] of [
+        ["heal-preview-1", "ducts.preview-heal", "planned"],
+        ["heal-apply-1", "ducts.apply-heal", "healed"],
+      ] as const) {
+        expect((yield* post(intent(id, key, undefined, heal))).status).toBe(202);
+        const frame = yield* Queue.take(outgoing);
+        expect(frame.request?.operationKey).toBe("ducts.heal");
+        expect(JSON.parse(frame.request!.payloadJson)).toEqual({
+          ...heal,
+          previewOnly: key === "ducts.preview-heal",
+        });
+        yield* answer(frame.request!.requestId, healed(outcome));
+        const row = (yield* Effect.promise(() => owner.wait(id))) as {
+          state: string;
+          result: { value: unknown };
+        };
+        expect(row.state).toBe("succeeded");
+        expect(row.result.value).toEqual(healed(outcome));
+      }
+    }),
+  ));
+
+test("a heal group named without items is planned by the route's classifier; one with items passes untouched", async () => {
+  const end = (index: number, point: number[]) => ({
+    index,
+    kind: "end",
+    point,
+    shape: "round",
+    size: '6"',
+    diameterIn: 6,
+    direction: "bidirectional",
+    classification: "SupplyAir",
+    connectedTo: null,
+  });
+  const snapshot = {
+    nodes: [],
+    segments: [
+      {
+        id: 10,
+        kind: "duct",
+        polyline: [
+          [0, 0, 0],
+          [10, 0, 0],
+        ],
+        groupId: "g10",
+        systemName: "SA 1",
+        classification: "Supply Air",
+        connectors: [end(0, [0, 0, 0]), end(1, [10, 0, 0])],
+      },
+    ],
+    groups: [
+      {
+        id: "g10",
+        rootIds: [],
+        classifications: [],
+        systemNames: ["SA 1"],
+        terminalCount: 0,
+        elementCount: 1,
+        loops: 0,
+        issueIds: [],
+      },
+    ],
+    issues: [],
+  } as unknown as DuctSnapshot;
+  let reads = 0;
+  const read = async () => {
+    reads++;
+    return snapshot;
+  };
+  expect(await planned(heal as never, read)).toBe(heal);
+  expect(reads).toBe(0);
+  expect(await planned({ groups: [{ group: "g10" }] }, read)).toEqual({
+    groups: [
+      {
+        group: "g10",
+        items: [
+          { key: "cap:10:0", kind: "cap", end: "10:0" },
+          { key: "cap:10:1", kind: "cap", end: "10:1" },
+        ],
+      },
+    ],
+  });
+  await expect(planned({ groups: [{ group: "g99" }] }, read)).rejects.toThrow(/nothing to heal/);
+});

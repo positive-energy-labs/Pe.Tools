@@ -24,18 +24,33 @@ import {
   readAction,
   runSemanticAction,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import type { DuctsApply } from "@pe/host-contracts/generated";
+import type { DuctsApply, DuctsHeal } from "@pe/host-contracts/generated";
 import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
 import { applyRequest, price } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { triage, writeBlocked } from "./inbox-rows";
+import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
+import { survey } from "@pe/ducts-domain/survey";
+import { holding, triage, writeBlocked } from "./inbox-rows";
 
 /** What Revit said the staged cells would write, and the Work and snapshot it was asked over. */
 export interface DuctsEvaluation {
   revision: number;
   epoch: number;
   response: DuctsApply.Res.Response;
+}
+
+/**
+ * The last `ducts.heal` run: its group, preview or apply, the snapshot epoch it ran over, Revit's
+ * answer, and Pe's ESP of the group before it with the roots and elements to find the group by
+ * after Revit renumbers what it rebuilt.
+ */
+export interface DuctsHealRun {
+  group: string;
+  mode: "preview" | "apply";
+  epoch: number;
+  response: DuctsHeal.Res.Response;
+  before: { esp: number | null; roots: number[]; ids: number[] };
 }
 
 const ductsPageSchema = z.object({
@@ -59,6 +74,8 @@ const ductsPageSchema = z.object({
   epoch: z.number().default(0),
   /** The last preview; `apply` is armed while it matches the Work revision and epoch. Page, never URL. */
   evaluation: z.custom<DuctsEvaluation>().nullable().default(null),
+  /** The last heal preview or apply; the Heal row reads it. Page, never URL. */
+  heal: z.custom<DuctsHealRun>().nullable().default(null),
 });
 export type DuctsPage = z.infer<typeof ductsPageSchema>;
 /** The Page keys the address carries; every one has a default, so a bare `/ducts` is a page. */
@@ -127,7 +144,7 @@ const standing = (ctx: DuctsCtx) => {
     equipmentFlows: priced.equipmentFlows,
     doc: ctx.work.doc,
   });
-  return { fix: fix.length, set: set.length };
+  return { fix: holding(fix), set: set.length };
 };
 
 /** The request from the staged cells, the snapshot and the grids the route read; throws why not. */
@@ -148,11 +165,11 @@ const built = (ctx: DuctsCtx) => {
   return applyRequest(snapshot, priced, new Date().toISOString(), ctx.page.group);
 };
 
-const dispatch = async (
+const dispatch = async <T = DuctsApply.Res.Response>(
   ctx: DuctsCtx,
-  key: "ducts.preview-losses" | "ducts.apply-losses",
+  key: "ducts.preview-losses" | "ducts.apply-losses" | "ducts.preview-heal" | "ducts.apply-heal",
   input: Record<string, unknown>,
-) => {
+): Promise<T> => {
   if (ctx.target.kind !== "document") throw Error("An open document is required");
   // An apply on a large model runs about 45 s (the commits recalculate it). A
   // receipt that comes back detached or running is read again until it settles; the verb's
@@ -164,8 +181,44 @@ const dispatch = async (
   }
   // The host answers `{ value, target }` (ducts-actions.ts); the value is the native op's answer.
   const answer = actionResult(row) as { value?: unknown };
-  return (answer.value ?? answer) as DuctsApply.Res.Response;
+  return (answer.value ?? answer) as T;
 };
+
+/** The group's heal plan over the raw snapshot the route read; throws why there is none. */
+const healOf = (ctx: DuctsCtx, group: string | undefined) => {
+  const snapshot = observed<DuctSnapshot>(ctx, "ducts");
+  if (!snapshot) throw Error("The duct snapshot is not read yet");
+  if (!group) throw Error("Name the group to heal");
+  const found = healPlan(snapshot, ctx.work.doc).groups.find((g) => g.group === group);
+  if (!found) throw Error(`Nothing in ${group} heals in Revit`);
+  return { snapshot, found };
+};
+
+/** Pe's ESP of a group now (the largest path total with the staged cells), with what finds it again. */
+const espBefore = (ctx: DuctsCtx, snapshot: DuctSnapshot, group: string) => {
+  const grids = observed<Grids>(ctx, "tables");
+  const surveyed = grids
+    ? price(snapshot, grids, ctx.work.doc, observed<Catalogs>(ctx, "catalogs") ?? EMPTY_CATALOGS)
+    : survey(snapshot, ctx.work.doc);
+  const g = surveyed.snapshot.groups.find((x) => x.id === group);
+  const ids = [...surveyed.snapshot.nodes, ...surveyed.snapshot.segments]
+    .filter((e) => e.groupId === group && e.id > 0)
+    .map((e) => e.id);
+  const esp = grids
+    ? ((surveyed as ReturnType<typeof price>).next.byGroup[group]?.fan ?? null)
+    : null;
+  return { esp, roots: g?.rootIds ?? [], ids };
+};
+
+const healWords = (response: DuctsHeal.Res.Response) =>
+  Object.entries(response.counts)
+    .filter(([, n]) => n)
+    .map(([outcome, n]) => `${n} ${outcome}`)
+    .join(" · ") || "nothing to heal";
+
+const healInput = z.object({ group: z.string() }) as unknown as z.ZodType<never>;
+/** The group a heal verb names; undefined when the handle asks for the verb at large. */
+const groupOf = (input: unknown) => (input as { group?: string } | undefined)?.group;
 
 const outcomeWords = (response: DuctsApply.Res.Response) =>
   Object.entries(response.counts)
@@ -193,7 +246,7 @@ export const manifest = defineRoute<
   DuctsRouteDocument,
   DuctsReading,
   DuctsPage,
-  "refresh" | "preview" | "apply"
+  "refresh" | "preview" | "apply" | "heal-preview" | "heal"
 >({
   key: "ducts",
   name: "Ducts",
@@ -362,5 +415,76 @@ export const manifest = defineRoute<
         return refusal;
       },
     },
+    // Healing makes the model whole (pressure-drop ledger 2026-10-20): the Heal row of a group
+    // previews its caps and joins in Revit, rolled back, then heals what passed in one transaction.
+    "heal-preview": {
+      label: "preview heal",
+      does: "ducts.preview-heal",
+      // The inbox's Heal row draws it.
+      visible: false,
+      input: healInput,
+      dirties: [],
+      waitSeconds: NATIVE_APPLY_WAIT_S,
+      // Without an input this answers for the verb at large; the Heal row asks with its group.
+      ready: (ctx, input) => (groupOf(input) ? why(() => healOf(ctx, groupOf(input))) : null),
+      run: async (ctx, input) => {
+        const group = groupOf(input)!;
+        const { snapshot, found } = healOf(ctx, group);
+        const response = await dispatch<DuctsHeal.Res.Response>(ctx, "ducts.preview-heal", {
+          groups: [healRequestGroup(found)],
+        });
+        ctx.setPage({
+          heal: {
+            group,
+            mode: "preview",
+            epoch: ctx.page.epoch,
+            response,
+            before: espBefore(ctx, snapshot, group),
+          },
+        });
+        ctx.note("heal preview", `${group}: ${healWords(response)}`, response.counts.refused > 0);
+      },
+    },
+    heal: {
+      label: "heal",
+      does: "ducts.apply-heal",
+      visible: false,
+      input: healInput,
+      dirties: [],
+      waitSeconds: NATIVE_APPLY_WAIT_S,
+      // Armed only by a preview of this group over this snapshot: what heals is what the person saw pass.
+      ready: (ctx, input) => {
+        const run = ctx.page.heal;
+        const group = groupOf(input);
+        if (!group) return null;
+        if (run?.mode !== "preview" || run.group !== group) return "Preview the heal first";
+        if (run.epoch !== ctx.page.epoch)
+          return "The snapshot changed since the preview; preview again";
+        return passedOf(run).size ? null : "Nothing passed the preview";
+      },
+      run: async (ctx, input) => {
+        const run = ctx.page.heal!;
+        const group = groupOf(input)!;
+        const { found } = healOf(ctx, group);
+        const response = await dispatch<DuctsHeal.Res.Response>(ctx, "ducts.apply-heal", {
+          groups: [healRequestGroup(found, passedOf(run))],
+        });
+        ctx.note("heal", `${group}: ${healWords(response)}`, response.counts.refused > 0);
+        // Revit renumbers what it rebuilt: read the snapshot again, and keep the before for the row.
+        ctx.setPage({
+          heal: { ...run, mode: "apply", response },
+          epoch: ctx.page.epoch + 1,
+          evaluation: null,
+        });
+      },
+    },
   },
 });
+
+/** The item keys a heal preview passed. */
+export const passedOf = (run: DuctsHealRun) =>
+  new Set(
+    run.response.groups.flatMap((g) =>
+      g.items.filter((i) => i.outcome === "planned").map((i) => i.key),
+    ),
+  );

@@ -8,13 +8,14 @@ import { useEffect, useMemo, useState } from "react";
 import type { RouteStatePatch } from "@pe/agent-contracts";
 import type { DuctsApply } from "@pe/host-contracts/generated";
 import { survey } from "@pe/ducts-domain/survey";
+import { healPlan } from "@pe/ducts-domain/heal";
 import { Button } from "@pe/kit/lang/button";
 import { Row } from "@pe/kit/lang/row";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 
 import { elementNamer } from "../../claims";
-import { inboxRows, type CellRef } from "../../inbox-rows";
+import { healRunView, inboxRows, type CellRef } from "../../inbox-rows";
 import { groupLabels } from "../../inputs";
 import { previewFresh } from "../../manifest";
 import type { LossesWork } from "../../work";
@@ -74,7 +75,10 @@ export function EScreen({ props }: { props: ProtoProps }) {
     const n = snapshot ? elementNamer(snapshot, null) : () => null;
     return (id: number) => labels.get(id) ?? n(id) ?? "element not in snapshot";
   }, [snapshot, labels]);
-  const names = useMemo(() => (snapshot ? groupLabels(snapshot) : new Map<string, string>()), [snapshot]);
+  const names = useMemo(
+    () => (snapshot ? groupLabels(snapshot) : new Map<string, string>()),
+    [snapshot],
+  );
   // The survey is the priced result's, or the unpriced one while the tables are unread; the
   // manifest's apply gate reads the same rows (`triage`) over the same tolerated snapshot.
   const surveyed = useMemo(
@@ -82,6 +86,27 @@ export function EScreen({ props }: { props: ProtoProps }) {
     [priced, snapshot, doc],
   );
   const preview = props.work.preview as DuctsApply.Res.Response | null;
+  // What heals in Revit is planned over the raw snapshot (the tolerated one has bridged it already).
+  const heal = useMemo(() => (snapshot ? healPlan(snapshot, doc) : null), [snapshot, doc]);
+  const healRun = useMemo(
+    () =>
+      page.heal && surveyed
+        ? healRunView(
+            page.heal,
+            surveyed.snapshot,
+            page.epoch,
+            (g) => priced?.next.byGroup[g]?.fan ?? null,
+          )
+        : null,
+    [page.heal, page.epoch, surveyed, priced],
+  );
+  // Revit renumbers what a heal rebuilt: a subject group that is gone follows the healed group.
+  useEffect(() => {
+    if (!snapshot || !healRun || healRun.mode !== "apply" || page.group !== page.heal?.group)
+      return;
+    if (healRun.group !== page.group && !snapshot.groups.some((g) => g.id === page.group))
+      setPage({ group: healRun.group });
+  }, [snapshot, healRun, page.group, page.heal, setPage]);
   const inbox = useMemo(
     () =>
       surveyed
@@ -94,6 +119,8 @@ export function EScreen({ props }: { props: ProtoProps }) {
             doc,
             nameOf,
             groupLabel: (id) => names.get(id) ?? id,
+            heal,
+            healRun,
             claims: props.claims,
             write: {
               staged: props.staged,
@@ -105,7 +132,20 @@ export function EScreen({ props }: { props: ProtoProps }) {
             },
           })
         : null,
-    [surveyed, page, doc, nameOf, names, props.claims, props.staged, props.rulings, props.work.revision, preview],
+    [
+      surveyed,
+      page,
+      doc,
+      nameOf,
+      names,
+      heal,
+      healRun,
+      props.claims,
+      props.staged,
+      props.rulings,
+      props.work.revision,
+      preview,
+    ],
   );
   const toRule = inbox ? inbox.fix.length + inbox.set.length + inbox.check.length : 0;
   // A Set row's verb selects the element and focuses its cell once the tree has drawn it.
@@ -325,20 +365,21 @@ export function EScreen({ props }: { props: ProtoProps }) {
         />
       </Pane>
     ) : null;
-  const lower = !inputsPane && !rulesPane ? null : (
-    <PaneSplit
-      axis="vertical"
-      start={inputsPane}
-      end={rulesPane}
-      resize={{
-        target: "end",
-        defaultSize: 220,
-        minSize: 100,
-        minOtherSize: 100,
-        persist: "proto-e-inputs",
-      }}
-    />
-  );
+  const lower =
+    !inputsPane && !rulesPane ? null : (
+      <PaneSplit
+        axis="vertical"
+        start={inputsPane}
+        end={rulesPane}
+        resize={{
+          target: "end",
+          defaultSize: 220,
+          minSize: 100,
+          minOtherSize: 100,
+          persist: "proto-e-inputs",
+        }}
+      />
+    );
   const left = (
     <PaneSplit
       axis="vertical"
@@ -378,6 +419,11 @@ export function EScreen({ props }: { props: ProtoProps }) {
             onSelect={select}
             onFocusCell={focusCell}
             write={{ ...props.actions, row: inbox.write }}
+            heal={{
+              preview: props.actions.healPreview,
+              apply: props.actions.heal,
+              busy: props.actions.busy,
+            }}
           />
         ) : null}
       </Pane>

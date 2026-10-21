@@ -333,12 +333,12 @@ description: Calculate duct pressure drop, static pressure or ESP for a system, 
 
 The Ducts route computes this. Never rebuild it with pod or C# scripts; they will not match the page the person reads.
 
-1. A system name (SA 19) can span several duct networks. Groups are the connected pieces; one is priced per fan network; a group with no fan is a Fix row.
-2. pe_read route:ducts.view for the group ids and system names. If the person named a system, pe_do route:ducts.set-view to put their /ducts page on that system, only the one they named.
+1. A system name (SA 19) can span several duct networks. Groups are the connected pieces; one is priced per fan network; a group with no fan is a Fix row. pe_read route:ducts.view for the group ids and system names. If the person named a system, pe_do route:ducts.set-view to put their /ducts page on that system, only the one they named.
+2. Heal the model. Open ends and near joins are fixed in Revit, not ruled on: caps on dangling ends, coincident same-size ends connected, same-size gaps of at most 3 in closed. pe_do workflow:ducts.preview-heal with the group ids ({ groups: [{ group }] }; the host plans each group's items with the route's own classifier). It runs every repair and Pe's own check in Revit and rolls it all back. Show the person each group's items and outcomes (planned or refused, and why) and ask before healing. Only on their yes, pe_do workflow:ducts.apply-heal with exactly the items the preview returned as planned. Revit gives rebuilt elements new ids, so read again before the next step. Transitions, takeoffs, long gaps and anything joining two systems are the person's, in Revit: name them, never script them. The /ducts Fix group shows the same as one Heal row per group with preview and heal.
 3. pe_read route:ducts.analysis (source fresh, selector document, projection summary). Walk the inbox in order Fix, Set, Check, Write. A finding of kind unreadable-work means the saved Work is in an old format; the price still ran without it; tell the person to open /ducts and press Start fresh, or offer to propose the values again.
 4. Match equipment by its tag: each row's tag is the firm tag parameter PE_G___TagInstance (not the built-in Mark), so "FC-23" is a row tag.
-5. Propose into Work with route:ducts.propose (see skill:@product/skills/propose-changes): flows, esp, equipmentFlows, roles, catalogs, and verdicts with evidence in the note. Never stage, never press apply.
-6. Send the person to the Ducts page for rulings and for writing, and say which verb to press. Report in the route's words: group, finding, and required ESP now versus staged.
+5. Propose into Work with route:ducts.propose (see skill:@product/skills/propose-changes): flows, esp, equipmentFlows, roles, catalogs, and rulings with evidence in the note. Never stage, never press the loss write.
+6. Send the person to the Ducts page for rulings and for writing, and say which verb to press. Report in the route's words: group, finding, and required ESP now versus staged; after a heal, the group's ESP before and after.
 `,
   },
   {

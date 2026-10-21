@@ -1,7 +1,10 @@
 /**
  * The /ducts inbox in loop order, derived and never stored (modelled on `rooms/cards.ts`):
- * - Fix: what blocks a path to the fan (`bins.ts` `blocking`): no duct path to a fan, anomalous
- *   joins, open ends, loops, no or several roots, a catalog table missing or out of range.
+ * - Fix: one Heal row per group first: the caps and joins `ducts.heal` makes real in Revit
+ *   (ducts-domain `heal.ts`), with preview and apply; the open ends and joins it covers make no row
+ *   of their own. Then what blocks a path to the fan (`bins.ts` `blocking`): no duct path to a
+ *   fan, anomalous joins, open ends a person must fix in Revit (the note says why), loops, no or
+ *   several roots. A Heal row blocks Write only when it covers a blocking finding.
  * - Set: an input a person owes: a terminal with no flow, a fan with no design flow, flex left on
  *   the rigid roughness. Each Set row deep-links to the cell on the tree row that holds it.
  * - Check: Pea's claims for this group awaiting a verdict, and Pea's proposals awaiting staging.
@@ -14,10 +17,12 @@
  */
 import type { DuctFinding, DuctsRouteDocument } from "@pe/agent-contracts";
 import { bin } from "@pe/ducts-domain/bins";
+import type { HealGroup, HealItem, HealPlan } from "@pe/ducts-domain/heal";
 import { ruleByKey } from "@pe/ducts-domain/loss-rules";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 import type { Claim } from "./legs";
+import type { DuctsHealRun } from "./manifest";
 
 export const INBOX_ORDER = ["fix", "set", "check", "write", "diagnostics"] as const;
 export type InboxGroup = (typeof INBOX_ORDER)[number];
@@ -53,6 +58,15 @@ export type RowVerb =
       on: boolean;
     }
   | { kind: "role"; id: number; role: "fan" | "passive"; label: string; says: string }
+  /** Preview or apply the group's heal in Revit; `refusal` says why apply is not armed. */
+  | {
+      kind: "heal";
+      group: string;
+      mode: "preview" | "apply";
+      label: string;
+      says: string;
+      refusal: string | null;
+    }
   /** Select the element on the drawing and focus the cell that holds the input. */
   | { kind: "focus"; cell: CellRef; label: string; says: string }
   | { kind: "claim"; claim: Claim }
@@ -78,6 +92,27 @@ export interface InboxItem {
   /** Prose for the open row. */
   note: string | null;
   verbs: readonly RowVerb[];
+  /** False on a Fix row that stands in no path (a Heal row covering only bridged joins, a heal result): it does not hold Write. */
+  blocks?: false;
+}
+
+/** The last heal run as the inbox shows it, mapped onto the current snapshot's group. */
+export interface HealRunView {
+  group: string;
+  mode: "preview" | "apply";
+  /** The preview still describes this snapshot: apply arms only then. */
+  fresh: boolean;
+  planned: number;
+  healed: number;
+  refused: number;
+  /** Item key to the op's reason, for each refused item. */
+  refusals: ReadonlyMap<string, string>;
+  /** Item keys the preview passed: what apply sends. */
+  passed: readonly string[];
+  /** The elements the run made or touched, for select in Revit. */
+  ids: readonly number[];
+  /** Pe's ESP (largest path total) of the group before and after the apply, in-wg. */
+  esp: { before: number | null; after: number | null } | null;
 }
 
 export interface TriageInput {
@@ -90,6 +125,122 @@ export interface TriageInput {
   doc: DuctsRouteDocument | null;
   nameOf?: (id: number) => string;
   groupLabel?: (id: string) => string;
+  /** What heals in Revit (ducts-domain `healPlan` over the raw snapshot); absent, nothing heals. */
+  heal?: HealPlan | null;
+  healRun?: HealRunView | null;
+}
+
+/**
+ * The page's last heal run over the snapshot now. After an apply Revit has renumbered what it
+ * rebuilt and the group id may be new: the group is found again by a root the run measured from,
+ * else by an element it held; the ESP after is that group's (`espNow`).
+ */
+export function healRunView(
+  run: DuctsHealRun,
+  snapshot: Pick<DuctSnapshot, "groups" | "nodes" | "segments">,
+  epoch: number,
+  espNow: (group: string) => number | null,
+): HealRunView {
+  const holder = new Map(
+    [...snapshot.nodes, ...snapshot.segments].map((e) => [e.id, e.groupId ?? null]),
+  );
+  const group =
+    run.mode === "preview"
+      ? run.group
+      : (snapshot.groups.find((g) => run.before.roots.some((r) => g.rootIds.includes(r)))?.id ??
+        run.before.ids.map((id) => holder.get(id)).find((g): g is string => g != null) ??
+        run.group);
+  const items = run.response.groups.flatMap((g) => g.items);
+  return {
+    group,
+    mode: run.mode,
+    fresh: run.epoch === epoch,
+    planned: run.response.counts.planned,
+    healed: run.response.counts.healed,
+    refused: run.response.counts.refused,
+    refusals: new Map(
+      items.filter((i) => i.outcome === "refused").map((i) => [i.key, i.reason ?? "refused"]),
+    ),
+    passed: items.filter((i) => i.outcome === "planned").map((i) => i.key),
+    ids: run.mode === "apply" ? [...new Set(items.flatMap((i) => i.created))] : [],
+    esp: run.mode === "apply" ? { before: run.before.esp, after: espNow(group) } : null,
+  };
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const inWg = (v: number | null) => (v == null ? "no path" : v.toFixed(3));
+
+/** A heal run's standing in words: what the preview passed, or what the apply healed and its ESP. */
+export function healRunWords(run: HealRunView) {
+  if (run.mode === "preview")
+    return `previewed: ${run.planned} pass · ${run.refused} refused${run.fresh ? "" : " · out of date"}`;
+  const esp = run.esp ? ` · ESP ${inWg(run.esp.before)} → ${inWg(run.esp.after)} in-wg` : "";
+  return `healed ${run.healed}${run.refused ? ` · ${run.refused} refused` : ""}${esp}`;
+}
+
+const HEAL_NOTE =
+  "Preview runs each repair and Pe's own check in Revit and rolls it all back; heal commits the group in one transaction, and an item that fails the check is refused and rolled back.";
+
+/** One group's Heal row: its caps and joins, preview and heal, and the last run's standing. */
+function healRow(
+  g: HealGroup,
+  run: HealRunView | null,
+  blocks: boolean,
+  name: (id: number) => string,
+  label: (id: string) => string,
+): InboxItem {
+  const caps = g.items.filter((i) => i.kind === "cap").length;
+  const joins = g.items.length - caps;
+  const counts = [caps ? plural(caps, "cap") : "", joins ? plural(joins, "join") : ""]
+    .filter(Boolean)
+    .join(" · ");
+  const line = (i: HealItem) => {
+    const [a, b] = i.ids.map(name);
+    if (i.kind === "cap") return `cap ${a} (end ${i.end.split(":")[1]})`;
+    return `${i.how} ${a} to ${b}${i.gapIn > 0 ? `, ${i.gapIn.toFixed(2)} in` : ""}`;
+  };
+  const refused = run ? g.items.filter((i) => run.refusals.has(i.key)) : [];
+  const apply =
+    !run || run.mode !== "preview"
+      ? "Preview the heal first"
+      : !run.fresh
+        ? "The snapshot changed since the preview; preview again"
+        : !run.passed.length
+          ? "Nothing passed the preview"
+          : null;
+  return {
+    key: `heal:${g.group}`,
+    group: "fix",
+    kind: "heal",
+    title: `Heal ${label(g.group)}: ${counts}`,
+    status: run ? healRunWords(run) : "not previewed",
+    ...(blocks ? { tone: "alarm" as const } : { blocks: false as const }),
+    ids: [...new Set([...g.items.flatMap((i) => i.ids), ...(run?.ids ?? [])])],
+    note: [
+      `${g.items.map(line).join("; ")}.`,
+      ...refused.map((i) => `Refused ${line(i)}: ${run!.refusals.get(i.key)}.`),
+      HEAL_NOTE,
+    ].join(" "),
+    verbs: [
+      {
+        kind: "heal",
+        group: g.group,
+        mode: "preview",
+        label: "preview",
+        says: `Preview healing ${counts} in Revit, rolled back`,
+        refusal: null,
+      },
+      {
+        kind: "heal",
+        group: g.group,
+        mode: "apply",
+        label: run?.mode === "preview" && run.fresh ? `heal ${run.passed.length}` : "heal",
+        says: "Heal the items the preview passed, in one transaction",
+        refusal: apply,
+      },
+      select(g.items.flatMap((i) => i.ids)),
+    ],
+  };
 }
 
 const verdictOf = (doc: DuctsRouteDocument | null, key: string) => {
@@ -152,12 +303,51 @@ export function triage(input: TriageInput) {
   const diagnostics: InboxItem[] = [];
   const names = (ids: readonly number[]) => [...new Set(ids.map(name))].join(", ");
 
+  const heal = input.heal ?? null;
+  const run = input.healRun ?? null;
+  // Heal rows lead Fix: what Pe can make real in Revit comes before what a person must.
+  const blocking = new Set(findings.filter((f) => bin(f) === "blocking").map((f) => f.id));
+  const healGroups = (heal?.groups ?? []).filter((g) => !group || g.group === group);
+  for (const g of healGroups)
+    fix.push(
+      healRow(
+        g,
+        run?.group === g.group ? run : null,
+        g.items.some((i) => i.covers.some((c) => blocking.has(c))),
+        name,
+        label,
+      ),
+    );
+  // An apply that healed its whole group leaves no Heal row to carry its result, so it keeps its own.
+  if (
+    run?.mode === "apply" &&
+    (!group || run.group === group) &&
+    !healGroups.some((g) => g.group === run.group)
+  )
+    fix.push({
+      key: `heal:${run.group}`,
+      group: "fix",
+      kind: "heal",
+      title: `Healed ${label(run.group)}`,
+      status: healRunWords(run),
+      blocks: false,
+      ids: run.ids,
+      note: [...run.refusals].map(([key, why]) => `Refused ${key}: ${why}.`).join(" ") || null,
+      verbs: [select(run.ids)],
+    });
+  /** A person's repair: what heal cannot do and why, then where to do it. */
+  const inRevit = (f: DuctFinding) =>
+    heal?.hard.get(f.id) ?? "Fix it in Revit; its own tools enforce the rules its API does not.";
+
   for (const f of findings) {
     if (!inScope(f) || f.kind === "no-flow" || f.kind === "no-terminal-flow") continue;
+    if (heal?.covered.has(f.id)) continue;
     const base = { key: f.id, ids: f.elementIds, note: f.note };
     if (f.grade && f.grade !== "anomalous") {
+      // Bridged, so it prices; Revit still has no join here, and the note says whose repair it is.
       diagnostics.push({
         ...base,
+        note: heal?.hard.has(f.id) ? `${f.note}. ${heal.hard.get(f.id)}` : f.note,
         group: "diagnostics",
         kind: "join",
         title: names(f.elementIds) || f.id,
@@ -258,20 +448,27 @@ export function triage(input: TriageInput) {
             ids: f.elementIds,
             note: "A person ruled on this open end; the ruling lives in this route and writes nothing to Revit.",
             verbs: [
-              verdict(doc, f.id, ruled, "take back", "Take the ruling back; the end comes up under Fix again"),
+              verdict(
+                doc,
+                f.id,
+                ruled,
+                "take back",
+                "Take the ruling back; the end comes up under Fix again",
+              ),
               select(f.elementIds),
             ],
           });
           break;
         }
+        // Caps and small joins heal in the Heal row; an end left here is a person's, in Revit.
         fix.push({
           ...item,
           title: `Open end at ${names(f.elementIds) || f.id}`,
-          status: verdictOf(doc, f.id) ?? "open",
+          status: "fix in Revit",
+          note: inRevit(f),
           verbs: [
-            verdict(doc, f.id, "capped", "capped", "Capped: this end carries no flow"),
-            verdict(doc, f.id, "ignore", "ignore", "Ignore: leave this end out of the walk"),
             select(f.elementIds),
+            verdict(doc, f.id, "ignore", "ignore", "Ignore: leave this end out of the walk"),
           ],
         });
         break;
@@ -319,20 +516,20 @@ export function triage(input: TriageInput) {
       }
       default: {
         const grade = f.grade === "anomalous";
+        // An anomalous join is a person's repair in Revit (reversed connector, cross-class): no
+        // verdict keeps it; breaking it is the one ruling, and the note says what to fix.
         fix.push({
           ...item,
           title: grade
             ? `Anomalous join at ${names(f.elementIds)}`
             : (KIND_TITLE[f.kind] ?? f.kind),
-          status: grade ? "anomalous" : "blocks the path",
+          status: grade ? "fix in Revit" : "blocks the path",
+          ...(grade ? { note: `${f.note} ${heal?.hard.get(f.id) ?? ""}`.trim() } : {}),
           verbs: [
-            ...(grade
-              ? [
-                  verdict(doc, f.id, "connect", "keep the join", "Connect: keep this join as drawn"),
-                  verdict(doc, f.id, "ignore", "break the join", "Ignore: withhold this join"),
-                ]
-              : []),
             select(f.elementIds),
+            ...(grade
+              ? [verdict(doc, f.id, "ignore", "break the join", "Ignore: withhold this join")]
+              : []),
           ],
         });
       }
@@ -356,7 +553,13 @@ export function triage(input: TriageInput) {
       ids,
       note: "A person withheld this inferred join; the path breaks here.",
       verbs: [
-        verdict(doc, key, "ignore", "withdraw", "Take the objection back; the join is bridged again"),
+        verdict(
+          doc,
+          key,
+          "ignore",
+          "withdraw",
+          "Take the objection back; the join is bridged again",
+        ),
         select(ids),
       ],
     });
@@ -467,8 +670,9 @@ export function checks(input: TriageInput & { claims: readonly Claim[] }): Inbox
       note: `Pea says this is ${claim.state}`,
       verbs: [{ kind: "claim", claim }, select(claim.at)],
     }));
-  const awaiting = (cells: Record<string, { proposal?: { value?: unknown }; staged?: unknown }> | undefined) =>
-    Object.entries(cells ?? {}).filter(([, cell]) => cell.proposal && !cell.staged);
+  const awaiting = (
+    cells: Record<string, { proposal?: { value?: unknown }; staged?: unknown }> | undefined,
+  ) => Object.entries(cells ?? {}).filter(([, cell]) => cell.proposal && !cell.staged);
   const segments = doc as unknown as Record<
     string,
     Record<string, { proposal?: { value?: unknown }; staged?: unknown }> | undefined
@@ -492,7 +696,14 @@ export function checks(input: TriageInput & { claims: readonly Claim[] }): Inbox
           label: "accept",
           says: "Stage Pea's proposal",
         },
-        { kind: "stage", segment, key, move: "deny", label: "reject", says: "Clear Pea's proposal" },
+        {
+          kind: "stage",
+          segment,
+          key,
+          move: "deny",
+          label: "reject",
+          says: "Clear Pea's proposal",
+        },
         ...(FOCUSABLE.has(segment) && ids[0] != null
           ? [
               {
@@ -576,6 +787,9 @@ export function writeRow(left: { fix: number; set: number }, write: WriteState):
   };
 }
 
+/** The Fix rows that hold Write: every one but a Heal row standing in no path. */
+export const holding = (fix: readonly InboxItem[]) => fix.filter((i) => i.blocks !== false).length;
+
 /** The whole inbox: its groups in `INBOX_ORDER`, and the Write row. */
 export function inboxRows(input: TriageInput & { claims: readonly Claim[]; write: WriteState }) {
   const { fix, set, diagnostics } = triage(input);
@@ -583,7 +797,7 @@ export function inboxRows(input: TriageInput & { claims: readonly Claim[]; write
     fix,
     set,
     check: checks(input),
-    write: writeRow({ fix: fix.length, set: set.length }, input.write),
+    write: writeRow({ fix: holding(fix), set: set.length }, input.write),
     diagnostics,
   };
 }

@@ -384,6 +384,110 @@ export namespace DuctsFamilyPatch {
   }
 }
 
+/** Heal duct geometry so the model itself is whole: cap a dangling open end with its duct type's Caps routing rule, connect coincident same-size ends, and close a same-size gap of at most 3 in with a union (two ducts) or by extending the duct (duct to part). Each item names connector keys elementId:connectorIndex from ducts.snapshot; the op refuses size changes, cross-class or cross-system joins, equipment, and longer gaps (a person's, in Revit). Every item must pass Pe's own post-check (connected, sizes equal, origins within 1/16 in, no system split or merged) or it is refused and rolled back alone. previewOnly runs everything and rolls it back; a real heal commits one transaction per group. Returns per-item outcomes with created and replaced element ids (Revit gives new ids to what it rebuilds; read ducts.snapshot again) and the touched systems' Revit critical path before and after. */
+export namespace DuctsHeal {
+  export namespace Req {
+    export type DuctHealKind = "cap" | "join";
+
+    /**
+     * Groups are the approved systems; each group is one transaction on apply.
+     */
+    export interface Request {
+      previewOnly: boolean;
+      groups: DuctHealGroup[];
+    }
+    /**
+     * Group is the route's group id (`g<lowest element id>`), a label only: the items name the geometry.
+     */
+    export interface DuctHealGroup {
+      group: string;
+      items: DuctHealItem[];
+    }
+    /**
+     * One repair. End and Other are connector keys `elementId:connectorIndex` as `ducts.snapshot` names them.
+     * A cap closes End with the Caps routing rule of its duct type. A join meets End and Other: coincident ends
+     * are connected, a small gap between two ducts gets a union fitting, a small gap from a duct to a part
+     * extends the duct; the op picks which from the geometry and refuses anything outside its limits.
+     *
+     */
+    export interface DuctHealItem {
+      key: string;
+      kind: DuctHealKind;
+      end: string;
+      other?: null | string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      previewOnly: boolean;
+      groups: DuctHealGroupOutcome[];
+      counts: DuctHealCounts;
+    }
+    /**
+     * One group's run. Outcome: planned (preview), healed, refused (Reason says why: the group's transaction
+     * failed and rolled back), empty (nothing healed). SystemsBefore and SystemsAfter are Revit's touched systems
+     * with their critical path, read before the first item and after the last (inside the rolled-back run on
+     * preview).
+     *
+     */
+    export interface DuctHealGroupOutcome {
+      group: string;
+      outcome: string;
+      reason?: null | string;
+      items: DuctHealOutcome[];
+      systemsBefore: DuctSystem[];
+      systemsAfter: DuctSystem[];
+    }
+    /**
+     * One item. How: cap, connect, union, extend (null when refused before choosing). Outcome: planned (preview),
+     * healed, refused. Created: new element ids (the cap, the union); Replaced: ids Revit deleted while healing (a
+     * duct it split or rebuilt), each replaced by an id in Created. Check is the post-check's words.
+     * On preview the ids are those of the rolled-back run and do not exist.
+     *
+     */
+    export interface DuctHealOutcome {
+      key: string;
+      kind: string;
+      how?: null | string;
+      outcome: string;
+      reason?: null | string;
+      created: number[];
+      replaced: number[];
+      check?: null | string;
+    }
+    /**
+     * One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.
+     * CriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.
+     *
+     */
+    export interface DuctSystem {
+      id: number;
+      name: string;
+      classification: string;
+      isWellConnected?: boolean | null;
+      baseEquipmentId?: number | null;
+      baseEquipmentConnector?: number | null;
+      criticalPathLossInWg?: null | number;
+      criticalPath: number[];
+      sections: DuctSection[];
+    }
+    /**
+     * One MEPSection: Revit's run of elements carrying one flow.
+     */
+    export interface DuctSection {
+      number: number;
+      flowCfm?: null | number;
+      totalPressureLossInWg?: null | number;
+      elementIds: number[];
+    }
+    export interface DuctHealCounts {
+      planned: number;
+      healed: number;
+      refused: number;
+    }
+  }
+}
+
 /** Read every duct network in the project: ducts, flex, fittings, accessories, terminals and HVAC equipment with their connectors, grouped by topology with equipment cut out, plus pass-1 terminal flow, fitting geometry ratios, fitting and accessory loss methods, terminal drops, Revit's supply/return/exhaust systems with critical path and sections, issues and the query behind each layer. Slots name the fan static, fan flow, component drop and terminal catalog drop parameters; labelParameter names the instance parameter whose value names equipment for people (each node's label). Read-only. */
 export namespace DuctsSnapshot {
   export namespace Req {
@@ -6977,6 +7081,7 @@ export interface HostOps {
   "document.temporary.status": { request: DocumentTemporaryStatus.Req.Request; response: DocumentTemporaryStatus.Res.Response };
   "ducts.apply": { request: DuctsApply.Req.Request; response: DuctsApply.Res.Response };
   "ducts.family-patch": { request: DuctsFamilyPatch.Req.Request; response: DuctsFamilyPatch.Res.Response };
+  "ducts.heal": { request: DuctsHeal.Req.Request; response: DuctsHeal.Res.Response };
   "ducts.snapshot": { request: DuctsSnapshot.Req.Request; response: DuctsSnapshot.Res.Response };
   "ducts.tables": { request: DuctsTables.Req.Request; response: DuctsTables.Res.Response };
   "families.apply": { request: FamiliesApply.Req.Request; response: FamiliesApply.Res.Response };
@@ -7059,6 +7164,7 @@ export const hostOpKeys = [
   "document.temporary.status",
   "ducts.apply",
   "ducts.family-patch",
+  "ducts.heal",
   "ducts.snapshot",
   "ducts.tables",
   "families.apply",

@@ -603,6 +603,35 @@ export const ductsApplyInputSchema = z.strictObject({
 });
 export type DuctsApplyInput = z.infer<typeof ductsApplyInputSchema>;
 
+/**
+ * What `ducts.preview-heal` and `ducts.apply-heal` send; the host adds `previewOnly` and calls the
+ * native `ducts.heal` (`DuctsHeal.Req.Request`). Each group is one transaction on apply. A group's
+ * items are the route's Heal row (ducts-domain `heal.ts`), keys `elementId:connectorIndex`; a group
+ * sent without items is planned by the host from a fresh snapshot with the same classifier, so an
+ * agent names the group and reads the plan back from the preview.
+ */
+const connectorKey = z.string().regex(/^\d+:\d+$/);
+export const ductsHealInputSchema = z.strictObject({
+  groups: z
+    .array(
+      z.strictObject({
+        group: z.string().min(1),
+        items: z
+          .array(
+            z.strictObject({
+              key: z.string().min(1),
+              kind: z.enum(["cap", "join"]),
+              end: connectorKey,
+              other: connectorKey.optional(),
+            }),
+          )
+          .optional(),
+      }),
+    )
+    .min(1),
+});
+export type DuctsHealInput = z.infer<typeof ductsHealInputSchema>;
+
 /** What a person says when they want the Ducts page: the whole route family answers to these words. */
 export const DUCTS_FINDS = [
   "duct",
