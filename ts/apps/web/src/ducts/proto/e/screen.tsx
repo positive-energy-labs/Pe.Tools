@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RouteStatePatch } from "@pe/agent-contracts";
 import type { DuctsApply } from "@pe/host-contracts/generated";
 import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
-import { fansOwedBase, type FanAssignment } from "@pe/ducts-domain/fan-assignment";
+import { fansOwedBase, type OwedBase } from "@pe/ducts-domain/fan-assignment";
 import { healPlan } from "@pe/ducts-domain/heal";
 import { sectionNames, systemOfGroup, systemScope } from "@pe/ducts-domain/system-scope";
 import { Button } from "@pe/kit/lang/button";
@@ -215,15 +215,28 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   const owedBase = useMemo(
     () =>
       snapshot && surveyed
-        ? fansOwedBase(snapshot, surveyed.roles)
-        : new Map<number, FanAssignment[]>(),
-    [snapshot, surveyed],
+        ? fansOwedBase(
+            snapshot,
+            surveyed.roles,
+            (g) => priced?.next.byGroup[g]?.fans[0]?.unit ?? null,
+          )
+        : (new Map() as OwedBase),
+    [snapshot, surveyed, priced],
   );
   const fanVerbsOf = (id: number) => {
     // Only the open system is offered: the system comes from the page, the unit from the row.
     const verbs = (owedBase.get(id) ?? [])
       .filter((a) => !scope || a.system === scope.name)
       .flatMap((a) => fanVerbs(a, nameOf, { run: page.fan, epoch: page.epoch }));
+    const split = [...(owedBase.split ?? [])].find(
+      ([system, units]) => (!scope || system === scope.name) && units.includes(id),
+    );
+    if (!verbs.length && split)
+      return (
+        <span className="t-small text-ink-2" data-e-fan-split={split[0]}>
+          {`${split[0]} spans separate networks with their own fans (${split[1].map((u) => nameOf(u)).join(", ")}); Revit gives a system one fan, so split ${split[0]} in Revit first`}
+        </span>
+      );
     if (!verbs.length) return null;
     const outcome = verbs.find((v) => v.outcome)?.outcome ?? null;
     return (

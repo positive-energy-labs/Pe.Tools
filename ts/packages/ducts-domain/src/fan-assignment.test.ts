@@ -91,6 +91,28 @@ describe("fansOwedBase", () => {
     expect([...fansOwedBase(after, now).keys()]).toEqual([]);
   });
 
+  it("offers a system once: to its network's lead fan, or to none when its fans sit in separate networks", () => {
+    const s = snapshot([system(19, "SA 19", "SupplyAir")]);
+    const roles = unitRoles(s, new Map(), {});
+    const lead = fansOwedBase(s, roles, () => 17);
+    expect([...lead.keys()]).toEqual([17]);
+    // Two networks carry SA 19, each rooted at its own fan: split the system in Revit first.
+    const twoNets = {
+      ...s,
+      groups: s.groups.flatMap((g) =>
+        g.rootIds.includes(17) && g.rootIds.includes(18)
+          ? [
+              { ...g, id: "gA", rootIds: [17] },
+              { ...g, id: "gB", rootIds: [18] },
+            ]
+          : [g],
+      ),
+    };
+    const none = fansOwedBase(twoNets, roles, () => null);
+    expect(none.get(17)?.some((a) => a.system === "SA 19") ?? false).toBe(false);
+    expect(none.split?.get("SA 19")).toEqual([17, 18]);
+  });
+
   it("leaves a passive unit out", () => {
     const s = snapshot([system(19, "SA 19", "SupplyAir")]);
     expect(fansOwedBase(s, new Map([[18, { role: "passive" as const }]]))).toEqual(new Map());
