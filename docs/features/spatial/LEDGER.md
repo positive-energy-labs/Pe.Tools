@@ -99,6 +99,9 @@ One metric substrate under every Pe.* helper that reads or writes Revit geometry
 
 ## Owed
 
+- Promote the scoped viewer into `/ducts` only with its actual system/group membership and existing navigation contracts; the [performance spike](viewer-performance.md) proves focus-first feasibility, not full-context latency or a strict return bound. Resolve cold query queue blocking and snapshot invalidation before claiming current model state.
+- Archive or retire delegated evidence checkouts `t3-8c2d7e27` and `t3-dc762ef0` after performance review; all of their runtimes are stopped, but primary spike reports still reference raw receipts and traces there.
+
 - Space viewer verification: focused compile, cut/state and artifact HTTP checks pass; full `pnpm verify` is blocked by 56 formatting failures unchanged from HEAD and unrelated committed checks. Evidence: `.artifacts/space-viewer/implementation-report.json` and `format-baseline-comparison.json`.
 - Review runtime retained intentionally for the user: `feat/space-viewer` worktree, its isolated host/frontend recorded in `.artifacts/accept/space-wt-20261021/run.json`, and Chrome instance `pe.tools-01` on port 9222. The exact saved scene and view reload after stopping `space-wt-25` and restarting the host (`.artifacts/space-viewer/offline-reload-proof.json`). Retire these owned resources after review. Main and its user-owned Revit session remain separate.
 
