@@ -4,6 +4,7 @@ import { bin } from "./bins.ts";
 import { fanSections } from "./fan-sections.ts";
 import { passThrough } from "./pass-through.ts";
 import { computeLosses } from "./losses.ts";
+import { price } from "./pricing.ts";
 import { survey } from "./survey.ts";
 import { equipmentFlows } from "./terminal-flows.ts";
 import { groupTree } from "./topology.ts";
@@ -175,6 +176,39 @@ describe("several fans", () => {
     expect(sv.equipmentFlows.get(1)).toEqual({ cfm: 300, source: "derived", grilles: 1 });
     expect(split.note).toBe(
       "priced per fan: FC-30 300 cfm (sum of 1 grille) owns the trunk; DH-16 100 cfm owns its port to the first junction; FR-1 flow unknown owns its port to the first junction",
+    );
+  });
+
+  it("derives a flowless fan's flow from this group's grilles, never another group's (SA 19, DH-21)", () => {
+    // DH-16 also roots return group g20 through its second port: grille 33 (900 cfm) is its there.
+    const base = snapshot({});
+    const s = {
+      ...base,
+      groups: [
+        ...base.groups,
+        { ...base.groups[0]!, id: "g20", rootIds: [2], terminalCount: 1, issueIds: [] },
+      ],
+      nodes: [
+        ...base.nodes.map((n) => (n.id === 2 ? { ...n, connectors: [port(1, 15, 2), { ...port(2, 20), classification: "ReturnAir" }] } : n)),
+        node(33, "terminal", "g20", [port(1, 20, 2)], [fact("flow", 900)]),
+      ],
+      segments: [...base.segments, { ...duct(20, [2, 33]), groupId: "g20" }],
+    } as unknown as DuctSnapshot;
+    const priced = price(s, {}, null);
+    // The per-unit reading is the largest over its groups; g10 is priced from g10's own grilles.
+    expect(priced.equipmentFlows.get(2)).toEqual({ cfm: 900, source: "derived", grilles: 1 });
+    for (const solve of [priced.now, priced.next]) {
+      const { fans, fan } = solve.byGroup.g10!;
+      expect(fans.map((f) => [f.unit, f.cfm])).toEqual([
+        [1, 300],
+        [2, 200],
+        [3, null],
+      ]);
+      // The header's fan is the trunk fan's own number, the one its row shows.
+      expect(fans[0]).toMatchObject({ esp: fan, junction: null });
+    }
+    expect(priced.findings.find((f) => f.id === "multi-fan:g10")!.note).toBe(
+      "priced per fan: FC-30 300 cfm (sum of 1 grille) owns the trunk; DH-16 200 cfm (sum of 1 grille) owns its port to the first junction; FR-1 flow unknown owns its port to the first junction",
     );
   });
 });

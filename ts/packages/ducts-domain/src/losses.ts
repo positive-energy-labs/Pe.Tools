@@ -15,7 +15,8 @@
  *   bridged and final; see `bins.ts`). A group's fan and the document's rest on every path under them.
  * - A group with no air mover (no root, or every root a `passive` unit) prices nothing:
  *   `byGroup[id].hasAirMover` is false and survey raises the blocking `no-fan` finding.
- * - A group several units root is walked from its largest fan's port (`unitCfm`); with several
+ * - A group several units root is walked from its largest fan's port (`unitCfm`, else the flow a
+ *   fan serves in this group, `groupFans`); with several
  *   fans each prices its own section (`fan-sections.ts`) into `byGroup[id].fans`, and the group's
  *   `fan` and `critical` are the largest fan's.
  * Physics in loss-physics.ts, interpolation in loss-grid.ts, rule data in loss-rules.ts.
@@ -49,7 +50,7 @@ import {
 } from "./loss-rules.ts";
 import type { DuctSnapshot } from "./types.ts";
 import type { DuctInferenceGrade } from "@pe/agent-contracts";
-import { byFlow, fanSections, stretchOf, type FanSection } from "./fan-sections.ts";
+import { byFlow, fanSections, groupFans, stretchOf, type FanSection } from "./fan-sections.ts";
 import { worse, type InferredLink } from "./proximity.ts";
 import { groupTree, pathTo, runsOf, terminalCfm, type GroupTree } from "./topology.ts";
 
@@ -399,11 +400,17 @@ export function computeLosses(
   };
 
   const everywhere: string[] = [];
+  let nodes: Map<number, Node> | null = null;
+  const nodeById = () => (nodes ??= new Map(snapshot.nodes.map((n) => [n.id, n])));
   for (const group of snapshot.groups) {
+    // A fan states no flow: it reads the sum of the grilles it serves in this group, never another's.
     const fans = byFlow(
-      group.rootIds
-        .filter((id) => overrides.unitRole?.[id] !== "passive")
-        .map((unit) => ({ unit, cfm: overrides.unitCfm?.[unit] ?? null })),
+      groupFans(
+        () => groupTree(snapshot, group.id),
+        group.rootIds.filter((id) => overrides.unitRole?.[id] !== "passive"),
+        (unit) => overrides.unitCfm?.[unit],
+        (t) => overrides.terminalCfm?.[t] ?? terminalCfm(nodeById().get(t)) ?? 0,
+      ).map(({ unit, cfm }) => ({ unit, cfm })),
     );
     // Several units: walk from the largest fan's port, never from a passive unit's.
     const lead = group.rootIds.length > 1 ? fans[0]?.unit : undefined;

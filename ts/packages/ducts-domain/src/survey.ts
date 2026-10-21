@@ -12,7 +12,7 @@ import {
   type DuctsRouteDocument,
 } from "@pe/agent-contracts";
 
-import { byFlow, servedBy } from "./fan-sections.ts";
+import { byFlow, groupFans } from "./fan-sections.ts";
 import { passThrough } from "./pass-through.ts";
 import { phased } from "./phases.ts";
 import { tolerate, type InferredLink } from "./proximity.ts";
@@ -220,53 +220,45 @@ export function survey(
   const noFan = noFanFindings(m, passive);
   const fanless = new Set(noFan.map((f) => f.groupId));
   const rootsOf = (groupId: string) => m.groups.find((g) => g.id === groupId)?.rootIds ?? [];
-  // A fan that states no flow takes the sum of the terminal flows it serves (nearest port wins),
-  // shown as derived and never written; the largest of its groups' sums is its design flow.
-  const derived = new Map(units);
-  for (const g of m.groups) {
-    const fans = g.rootIds.filter((id) => !passive.has(id));
-    if (!fans.some((id) => units.get(id)?.cfm == null)) continue;
-    const served = servedBy(groupTree(m, g.id), fans);
-    for (const id of fans) {
-      if (units.get(id)?.cfm != null) continue;
-      const ts = served.get(id) ?? [];
-      const cfm = ts.reduce((a, t) => a + (flows.flows.get(t)?.cfm ?? 0), 0);
-      if (cfm > 0 && cfm > (derived.get(id)?.cfm ?? 0))
-        derived.set(id, { cfm, source: "derived", grilles: ts.length });
-    }
-  }
-  const flowWord = (id: number) => {
-    const f = derived.get(id);
-    return f?.cfm == null
-      ? "flow unknown"
-      : `${f.cfm} cfm${f.source === "derived" ? ` (sum of ${f.grilles} grille${f.grilles === 1 ? "" : "s"})` : ""}`;
-  };
+  // A fan that states no flow takes the sum of the terminal flows it serves in each group (nearest
+  // port wins, `groupFans`), shown as derived and never written. The solve prices each group from
+  // that group's own sum; this per-unit reading is the largest over the groups it roots.
   const nodeOf = new Map(m.nodes.map((n) => [n.id, n]));
   const nameOf = (id: number) => markOf(nodeOf.get(id)) ?? String(id);
-  // Several fans price per fan (`fan-sections.ts`) and never block: a Diagnostics line names the
-  // split; a fan whose flow is unknown is the unit flow Set row's, not a Fix.
-  const multiFan: DuctFinding[] = m.groups.flatMap((g) => {
-    const fans = byFlow(
-      g.rootIds
-        .filter((id) => !passive.has(id))
-        .map((unit) => ({ unit, cfm: derived.get(unit)?.cfm ?? null })),
+  const derived = new Map(units);
+  const multiFan: DuctFinding[] = [];
+  for (const g of m.groups) {
+    const roots = g.rootIds.filter((id) => !passive.has(id));
+    if (!roots.length) continue;
+    const fans = groupFans(
+      () => groupTree(m, g.id),
+      roots,
+      (id) => units.get(id)?.cfm,
+      (t) => flows.flows.get(t)?.cfm ?? 0,
     );
-    if (fans.length < 2) return [];
-    return [
-      {
-        id: `multi-fan:${g.id}`,
-        kind: "multi-fan",
-        groupId: g.id,
-        elementIds: fans.map((f) => f.unit),
-        note: `priced per fan: ${nameOf(fans[0]!.unit)} ${flowWord(fans[0]!.unit)} owns the trunk; ${fans
-          .slice(1)
-          .map((f) => `${nameOf(f.unit)} ${flowWord(f.unit)} owns its port to the first junction`)
-          .join("; ")}`,
-        assumed: null,
-        clearer: "person" as const,
-      },
-    ];
-  });
+    for (const f of fans)
+      if (f.served && f.cfm! > (derived.get(f.unit)?.cfm ?? 0))
+        derived.set(f.unit, { cfm: f.cfm, source: "derived", grilles: f.served.length });
+    // Several fans price per fan (`fan-sections.ts`) and never block: a Diagnostics line names the
+    // split in this group's own flows; a fan whose flow is unknown is the unit flow Set row's, not a Fix.
+    if (fans.length < 2) continue;
+    const word = (f: (typeof fans)[number]) =>
+      f.cfm == null
+        ? "flow unknown"
+        : `${f.cfm} cfm${f.served ? ` (sum of ${f.served.length} grille${f.served.length === 1 ? "" : "s"})` : ""}`;
+    const [lead, ...rest] = byFlow(fans);
+    multiFan.push({
+      id: `multi-fan:${g.id}`,
+      kind: "multi-fan",
+      groupId: g.id,
+      elementIds: [lead!, ...rest].map((f) => f.unit),
+      note: `priced per fan: ${nameOf(lead!.unit)} ${word(lead!)} owns the trunk; ${rest
+        .map((f) => `${nameOf(f.unit)} ${word(f)} owns its port to the first junction`)
+        .join("; ")}`,
+      assumed: null,
+      clearer: "person" as const,
+    });
+  }
   const findings: DuctFinding[] = [
     ...s.findings,
     ...noFan,

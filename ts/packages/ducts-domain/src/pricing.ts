@@ -46,31 +46,28 @@ const appliedChoices = (snapshot: DuctSnapshot): Choices =>
     ),
   );
 
-/** The unit overrides every solve reads: each root's role and each stated design flow. */
+/**
+ * The unit overrides every solve reads: each root's role and each stated design flow. A derived
+ * flow is never passed: the solve derives it per group from the grilles that group's fan serves
+ * (`groupFans`), where the survey's per-unit reading is the largest over every group it roots.
+ */
 const unitOverrides = (
   roles: ReadonlyMap<number, UnitRole>,
   flows: ReadonlyMap<number, EquipmentFlow>,
 ): Pick<Overrides, "unitRole" | "unitCfm"> => ({
   unitRole: Object.fromEntries([...roles].map(([id, r]) => [id, r.role])),
   unitCfm: Object.fromEntries(
-    [...flows].flatMap(([id, f]) => (f.cfm != null && f.cfm > 0 ? [[id, f.cfm]] : [])),
+    [...flows].flatMap(([id, f]) =>
+      f.cfm != null && f.cfm > 0 && f.source !== "derived" ? [[id, f.cfm]] : [],
+    ),
   ),
 });
 
-/**
- * The units as Revit holds them: stored rulings over roles proposed from Revit's own state, each
- * unit's stated flow, else the flow the survey derived from the terminals it serves.
- */
-const appliedUnits = (raw: DuctSnapshot, surveyed: Survey) => {
+/** The units as Revit holds them: stored rulings over roles proposed from Revit's own state, and each unit's stated flow. */
+const appliedUnits = (raw: DuctSnapshot) => {
   const stated = equipmentFlows(raw, {});
-  const flows = new Map(
-    [...stated].map(([id, f]) => {
-      const derived = surveyed.equipmentFlows.get(id);
-      return [id, f.cfm == null && derived?.source === "derived" ? derived : f] as const;
-    }),
-  );
   const roles = unitRoles(raw, stated, stagedDucts(withStoredRulings(null, raw.store)).roles);
-  return unitOverrides(roles, flows);
+  return unitOverrides(roles, stated);
 };
 
 const byId = <V>(cells: Record<string, V>, pick: (value: V) => number) =>
@@ -160,7 +157,7 @@ export function price(
 ): Priced {
   const surveyed = survey(raw, doc);
   const { snapshot } = surveyed;
-  const units = appliedUnits(raw, surveyed);
+  const units = appliedUnits(raw);
   const entry = solvedFor(snapshot, grids, catalogs, surveyed.inferred, units);
   if (entry.last?.doc === doc) return entry.last.priced;
   // The model's stored rulings under Work's pending ones (`rulings.ts`), as the survey read them.

@@ -5,6 +5,7 @@
  * The rule, deterministic and topological:
  * 1. Fans are the group's roots that are not passive (`unit-roles.ts`), ordered by design flow,
  *    largest first, then by element id. Passive units own nothing; they price as inline parts.
+ *    A fan that states no flow reads the sum of the grilles it serves in this group (`groupFans`).
  * 2. The tree is rooted at the largest fan's port. It owns the shared trunk: everything no smaller
  *    fan claims.
  * 3. Each smaller fan, largest first, claims its port element and everything beyond it (away from
@@ -39,7 +40,7 @@ export interface FanSection extends Fan {
 export const BRANCH_CHILDREN = 2;
 
 /** The fans, largest design flow first, then lowest id. */
-export const byFlow = (fans: readonly Fan[]) =>
+export const byFlow = <F extends Fan>(fans: readonly F[]): F[] =>
   [...fans].sort((a, b) => (b.cfm ?? -1) - (a.cfm ?? -1) || a.unit - b.unit);
 
 const portOf = (tree: GroupTree, unit: number) =>
@@ -120,6 +121,30 @@ export function servedBy(tree: GroupTree, units: readonly number[]): Map<number,
     if (u != null) out.get(u)!.push(t);
   }
   return out;
+}
+
+/**
+ * A group's fans with their design flows: the stated one, else the sum of the terminal flows the
+ * fan serves in this group (`servedBy`), `served` naming them; a fan serving none states none.
+ * Never another group's sum: a unit rooting a supply and a return group derives each from that
+ * group's own grilles (SA 19, Chadds: DH-21 read 768 cfm from RA 38's return grilles, outranked
+ * FC-17 and took its trunk).
+ */
+export function groupFans(
+  tree: () => GroupTree,
+  units: readonly number[],
+  stated: (unit: number) => number | null | undefined,
+  terminalCfm: (terminal: number) => number,
+): (Fan & { served: number[] | null })[] {
+  const known = units.map((unit) => ({ unit, cfm: stated(unit) ?? null }));
+  if (known.every((f) => f.cfm != null)) return known.map((f) => ({ ...f, served: null }));
+  const served = servedBy(tree(), units);
+  return known.map((f) => {
+    if (f.cfm != null) return { ...f, served: null };
+    const ts = served.get(f.unit) ?? [];
+    const cfm = ts.reduce((a, t) => a + terminalCfm(t), 0);
+    return cfm > 0 ? { unit: f.unit, cfm, served: ts } : { unit: f.unit, cfm: null, served: null };
+  });
 }
 
 /** A smaller fan's own stretch, port first, toward its junction (the order its air runs). */
