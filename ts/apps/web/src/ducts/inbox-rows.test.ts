@@ -471,6 +471,12 @@ describe("healing replaces the capped and connect verdicts", () => {
       esp: { before: 0.3123, after: 0.4051 },
       ids: [77],
     });
+    // A unit sits in every group its ports reach: a run whose group is still there never moves.
+    const shared = {
+      ...snapshot,
+      groups: [{ ...snapshot.groups[1]!, id: "g0", rootIds: snapshot.groups[0]!.rootIds }, ...snapshot.groups],
+    };
+    expect(healRunView({ ...run, mode: "apply" }, shared, 5, () => null).group).toBe(run.group);
     const result = inboxRows({ ...base, snapshot: after, healRun: applied }).fix.find(
       (r) => r.key === "heal:g9",
     )!;

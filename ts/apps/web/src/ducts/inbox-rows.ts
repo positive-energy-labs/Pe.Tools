@@ -150,10 +150,12 @@ export function healRunView(
   const holder = new Map(
     [...snapshot.nodes, ...snapshot.segments].map((e) => [e.id, e.groupId ?? null]),
   );
+  // A unit sits in every group its ports reach (supply and return sides), so a root names the
+  // group only when the run's own id is gone and every root it measured from is there.
   const group =
-    run.mode === "preview"
+    run.mode === "preview" || snapshot.groups.some((g) => g.id === run.group)
       ? run.group
-      : (snapshot.groups.find((g) => run.before.roots.some((r) => g.rootIds.includes(r)))?.id ??
+      : (snapshot.groups.find((g) => run.before.roots.every((r) => g.rootIds.includes(r)))?.id ??
         run.before.ids.map((id) => holder.get(id)).find((g): g is string => g != null) ??
         run.group);
   const items = run.response.groups.flatMap((g) => g.items);
