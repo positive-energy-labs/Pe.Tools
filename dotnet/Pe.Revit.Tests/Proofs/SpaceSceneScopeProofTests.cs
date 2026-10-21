@@ -27,6 +27,15 @@ public sealed class SpaceSceneScopeProofTests {
             Assert.That(scoped.Stamp.Fresh, Is.True);
             Assert.That(scoped.Triangles, Is.EqualTo(24));
 
+            using var focusBytes = new MemoryStream();
+            var focusScene = Scene.Write(doc, new SceneRequest([focus.Id.Value(), long.MaxValue], FocusOnly: true), focusBytes);
+            Assert.That(focusScene.Phase, Is.EqualTo("focus"));
+            Assert.That(focusScene.Elements.Single().Handle.ElementId, Is.EqualTo(focus.Id.Value()));
+            Assert.That(focusScene.Triangles, Is.EqualTo(12));
+            Assert.That(focusScene.RequestedElementIds, Does.Contain(long.MaxValue));
+            Assert.That(focusScene.UnavailableElements.Single().ElementId, Is.EqualTo(long.MaxValue));
+            Assert.That(SpaceWorld.Resident(doc).BuiltUtc, Is.EqualTo(default(DateTime)));
+
             SpaceWorld.Prepare(doc);
             using var worldBytes = new MemoryStream();
             var fromWorld = Scene.Write(doc, request, worldBytes);

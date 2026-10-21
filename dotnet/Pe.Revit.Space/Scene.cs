@@ -7,14 +7,16 @@ public sealed record SceneRequest(
     IReadOnlyList<long>? ElementIds = null,
     double ContextPaddingFt = 15,
     int MaxTriangles = 1500000,
-    Aabb? Bounds = null
+    Aabb? Bounds = null,
+    bool FocusOnly = false
 );
 
 public sealed record SceneElement(Handle Handle, int FirstVertex, int VertexCount, Aabb Bounds, bool Focus);
 public sealed record SceneSource(string DocumentKey, long? LinkInstanceId, IReadOnlyList<double> SourceToHost);
+public sealed record SceneUnavailableElement(long ElementId, string? UniqueId, string? Category, string Reason);
 public sealed record SceneMetadata(string Format, Stamp Stamp, Aabb Bounds, int Triangles,
     IReadOnlyList<SceneElement> Elements, IReadOnlyList<long> RequestedElementIds, int OmittedElements,
-    IReadOnlyList<SceneSource> Sources);
+    IReadOnlyList<SceneSource> Sources, string Phase, IReadOnlyList<SceneUnavailableElement> UnavailableElements);
 public sealed record SceneArtifact(SceneMetadata Scene, string Id, string Url, long Bytes);
 
 /// <summary>Bounded real triangles. Coordinates remain host internal feet.</summary>
@@ -30,10 +32,19 @@ public static class Scene {
             throw new ArgumentException("bounds must be finite ordered host-internal-ft bounds.");
 
         var ids = new HashSet<long>(request.ElementIds ?? []);
+        if (request.FocusOnly && (ids.Count == 0 || request.Bounds is not null))
+            throw new ArgumentException("focusOnly requires elementIds and cannot specify bounds.");
         var crop = request.Bounds;
-        var world = SpaceWorld.PrepareScene(document, ids, ref crop, request.ContextPaddingFt);
+        var world = SpaceWorld.PrepareScene(document, ids, ref crop, request.ContextPaddingFt, request.FocusOnly);
         var rows = world.Partitions.SelectMany(p => p.Prims.Select((row, i) => (Partition: p, Row: row, Index: i)))
             .Where(x => x.Row.Kind is PrimKind.Solid or PrimKind.Mesh).ToList();
+        var available = new HashSet<long>(world.SceneFocusMeshIds
+            ?? rows.Where(x => x.Partition.Kind == SourceKind.Host).Select(x => x.Row.ElementId).ToArray());
+        var unavailable = ids.Where(id => !available.Contains(id)).Select(id => {
+            var element = document.GetElement(id.ToElementId());
+            return new SceneUnavailableElement(id, element?.UniqueId, element?.Category?.Name,
+                element is null ? "Element is absent from this document." : "No visible Medium-detail mesh was produced.");
+        }).ToList();
         var candidates = rows.Where(x => crop is null || x.Row.Box.Overlaps(crop.Value))
             .OrderByDescending(x => x.Partition.Kind == SourceKind.Host && ids.Contains(x.Row.ElementId)).ToList();
         var elements = new List<SceneElement>();
@@ -80,7 +91,7 @@ public static class Scene {
                     t.BasisZ.X, t.BasisZ.Y, t.BasisZ.Z, 0,
                     t.Origin.X, t.Origin.Y, t.Origin.Z, 1
                 });
-            }).ToList());
+            }).ToList(), request.FocusOnly ? "focus" : "context", unavailable);
     }
 
     private static Aabb Box(Tri t) => new(

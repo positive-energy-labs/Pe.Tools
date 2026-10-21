@@ -46,15 +46,15 @@ public static class SpaceWorld {
     }
 
     // A scene snapshot does not populate the query world or need its triangle BVH.
-    internal static World PrepareScene(Document document, IReadOnlyCollection<long> ids, ref Aabb? crop, double padding) {
+    internal static World PrepareScene(Document document, IReadOnlyCollection<long> ids, ref Aabb? crop, double padding, bool focusOnly) {
         if (crop is null && ids.Count == 0) return Prepare(document);
         var resident = Resident(document);
-        if (resident.Prepared) {
+        if (!focusOnly && resident.Prepared) {
             resident.ResolveSceneCrop(ids, ref crop, padding);
             return resident;
         }
         var world = new World(document.GetDocumentKey());
-        world.BuildScope(document, ids, ref crop, padding, resident.CurrentEpoch);
+        world.BuildScope(document, ids, ref crop, padding, resident.CurrentEpoch, focusOnly);
         return world;
     }
 
@@ -88,6 +88,7 @@ public sealed class World {
     public DateTime BuiltUtc { get; private set; }
 
     internal IReadOnlyList<Partition> Partitions => this._partitions;
+    internal IReadOnlyCollection<long>? SceneFocusMeshIds { get; private set; }
     internal bool Prepared {
         get {
             lock (this._sync) return this.BuiltUtc != default && !this._partitions.Any(p => p.Dirty)
@@ -137,9 +138,14 @@ public sealed class World {
         }
     }
 
-    internal void BuildScope(Document host, IReadOnlyCollection<long> ids, ref Aabb? crop, double padding, long epoch) {
+    internal void BuildScope(Document host, IReadOnlyCollection<long> ids, ref Aabb? crop, double padding, long epoch, bool focusOnly) {
         this.CurrentEpoch = epoch;
         this._partitions.Add(new Partition(0, host, SourceKind.Host, null, Transform.Identity));
+        if (focusOnly) {
+            this._partitions[0].BuildElements(ids.Select(id => host.GetElement(id.ToElementId())).OfType<Element>(), epoch);
+            this.BuiltUtc = DateTime.UtcNow;
+            return;
+        }
         var source = 1;
         foreach (var link in new FilteredElementCollector(host).OfClass(typeof(RevitLinkInstance)).Cast<RevitLinkInstance>()) {
             var linked = link.GetLinkDocument();
@@ -150,9 +156,11 @@ public sealed class World {
         if (ids.Count > 0) {
             var focus = this._partitions[0];
             focus.BuildElements(ids.Select(id => host.GetElement(id.ToElementId())).OfType<Element>(), epoch);
+            this.SceneFocusMeshIds = focus.Prims.Select(row => row.ElementId).ToArray();
             this.ResolveSceneCrop(ids, ref crop, padding);
         }
-        foreach (var partition in this._partitions) partition.BuildRegion(crop.Value, epoch);
+        if (crop is not { } region) throw new ArgumentException("A contextual scene requires mesh-bearing ids or bounds.");
+        foreach (var partition in this._partitions) partition.BuildRegion(region, epoch);
         this.BuiltUtc = DateTime.UtcNow;
     }
 
@@ -161,8 +169,8 @@ public sealed class World {
         var wanted = new HashSet<long>(ids);
         var focus = this._partitions[0].Prims.Where(row => row.Kind is PrimKind.Solid or PrimKind.Mesh)
             .Where(row => wanted.Contains(row.ElementId)).ToList();
-        if (ids.Except(focus.Select(row => row.ElementId)).Any())
-            throw new ArgumentException("Some elementIds have no host mesh. Pass mesh-bearing host ids.");
+        if (focus.Count == 0 && crop is null)
+            throw new ArgumentException("None of the requested elementIds produced a visible host mesh.");
         if (crop is not null) return;
         var bounds = Aabb.Empty;
         foreach (var row in focus)
