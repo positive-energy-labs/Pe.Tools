@@ -29,6 +29,7 @@ const snapshot = {
 const priced = {
   flows: new Map([[30, { cfm: null, source: null }]]),
   equipmentFlows: new Map([[1, { cfm: null, source: null }]]),
+  fanFlows: new Map(),
   roles: new Map(),
   staged: { terminalDrops: {}, esp: {}, roles: {} },
   next: { paths: {}, byGroup: {}, design: { graph: { parts: [] } } },

@@ -3,6 +3,7 @@ import { ductsRouteState, type DuctFinding } from "@pe/agent-contracts";
 
 import type { HealPlan } from "@pe/ducts-domain/heal";
 import type { SystemScope } from "@pe/ducts-domain/system-scope";
+import { unitFlowsIn } from "@pe/ducts-domain/survey";
 
 import {
   healRunView,
@@ -639,5 +640,21 @@ describe("healing replaces the capped and connect verdicts", () => {
       status: "healed 1 · ESP 0.312 → 0.405 in-wg",
       blocks: false,
     });
+  });
+});
+
+describe("a unit's flow in the open system", () => {
+  // DH-21 (SA 19, Chadds) reads 768 cfm from another system's grilles and serves none of g1's.
+  const surveyed = {
+    equipmentFlows: new Map([[1, { cfm: 768, source: "derived" as const, grilles: 2 }]]),
+    fanFlows: new Map([["g1", new Map([[1, { cfm: null, source: null }]])]]),
+  };
+  it("asks for a design flow when the system's own groups give it none, as its fan row says no cfm", () => {
+    const rows = inboxRows({ ...base, equipmentFlows: unitFlowsIn(surveyed, ["g1"]) });
+    expect(keys(rows.set)).toContain("equipmentFlows:1");
+  });
+  it("reads the document-wide flow only with no system open", () => {
+    const rows = inboxRows({ ...base, equipmentFlows: unitFlowsIn(surveyed, null) });
+    expect(keys(rows.set)).not.toContain("equipmentFlows:1");
   });
 });

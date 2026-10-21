@@ -41,13 +41,13 @@ export interface RunData {
  * the next duct.
  */
 export function runOf(priced: Priced, groups: readonly string[], selected: number): RunData | null {
-  const critical = new Set(groups.map((g) => priced.now.byGroup[g]?.critical));
-  const terminals = Object.keys(priced.now.paths)
+  const critical = new Set(groups.map((g) => priced.next.byGroup[g]?.critical));
+  const terminals = Object.keys(priced.next.paths)
     .map(Number)
-    .filter((t) => groups.includes(priced.now.paths[t]!.groupId))
+    .filter((t) => groups.includes(priced.next.paths[t]!.groupId))
     .sort((a, b) => Number(critical.has(b)) - Number(critical.has(a)) || a - b);
   for (const terminal of terminals) {
-    const rows = priced.now.paths[terminal]!.rows;
+    const rows = priced.next.paths[terminal]!.rows;
     const at = rows.findIndex((r) => r.id === selected);
     if (at < 0) continue;
     let anchor = at;

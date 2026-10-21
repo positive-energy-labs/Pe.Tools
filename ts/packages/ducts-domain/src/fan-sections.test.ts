@@ -3,9 +3,9 @@ import { describe, expect, it } from "vite-plus/test";
 import { bin } from "./bins.ts";
 import { fanSections } from "./fan-sections.ts";
 import { passThrough } from "./pass-through.ts";
-import { computeLosses } from "./losses.ts";
+import { computeLosses, worstRun } from "./losses.ts";
 import { price } from "./pricing.ts";
-import { survey } from "./survey.ts";
+import { survey, unitFlowIn, unitFlowsIn } from "./survey.ts";
 import { equipmentFlows } from "./terminal-flows.ts";
 import { groupTree } from "./topology.ts";
 import type { DuctSnapshot } from "./types.ts";
@@ -210,6 +210,19 @@ describe("several fans", () => {
     expect(priced.findings.find((f) => f.id === "multi-fan:g10")!.note).toBe(
       "priced per fan: FC-30 300 cfm (sum of 1 grille) owns the trunk; DH-16 200 cfm (sum of 1 grille) owns its port to the first junction; FR-1 flow unknown owns its port to the first junction",
     );
+    // A system reads a unit's flow from its own groups (the Inputs row, the Set row): g10's 200,
+    // g20's 900, and none for a fan that serves no grille there, the same "no cfm" its fan row says.
+    expect(unitFlowIn(priced, 2, ["g10"])).toEqual({ cfm: 200, source: "derived", grilles: 1 });
+    expect(unitFlowIn(priced, 2, ["g20"])).toEqual({ cfm: 900, source: "derived", grilles: 1 });
+    expect(unitFlowIn(priced, 3, ["g10"])).toEqual({ cfm: null, source: null });
+    expect(priced.next.byGroup.g10!.fans.find((f) => f.unit === 3)!.cfm).toBeNull();
+    expect(unitFlowsIn(priced, ["g10"]).get(2)?.cfm).toBe(200);
+  });
+
+  it("reads a stated flow as is in every system", () => {
+    const priced = price(snapshot(), {}, null);
+    expect(unitFlowIn(priced, 1, ["g10"])).toEqual({ cfm: 800, source: "revit" });
+    expect(unitFlowIn(priced, 1, [])).toEqual({ cfm: 800, source: "revit" });
   });
 });
 
@@ -247,6 +260,46 @@ describe("fanSections", () => {
     const stretchDp = small!.stretch.reduce((a, r) => a + (r.dp ?? 0), 0);
     expect(small!.esp).toBeCloseTo(stretchDp + tailDp, 9);
     expect(result.paths[31]!.rows.find((r) => r.id === 13)!.desc).toContain("at 200 cfm");
+  });
+
+  it("heads the group with the worst fan, whose run across its junction is a path a tree can draw", () => {
+    // DH-16 pushes 700 cfm down a 200 ft stretch: it needs more static than the trunk fan.
+    const base = snapshot();
+    const s = {
+      ...base,
+      segments: base.segments.map((x) => (x.id === 15 ? { ...x, lengthFt: 200 } : x)),
+    } as DuctSnapshot;
+    const result = computeLosses(s, {}, {}, {
+      unitRole: { 1: "fan", 2: "fan", 3: "passive" },
+      unitCfm: { 1: 800, 2: 700 },
+    });
+    const solved = result.byGroup.g10!;
+    const [big, small] = solved.fans;
+    expect(small!.esp).toBeGreaterThan(big!.esp);
+    expect(solved).toMatchObject({
+      fan: small!.esp,
+      critical: small!.critical,
+      criticalTel: small!.tel,
+      criticalFan: 2,
+    });
+    expect(result.fan).toBe(small!.esp);
+    // Its run: its port's duct, then the trunk from the junction to the grille, rows to match.
+    expect(small).toMatchObject({ viaJunction: true, critical: 31, path: [15, 51, 14, 31] });
+    expect(small!.rows.reduce((a, r) => a + (r.dp ?? 0), 0)).toBeCloseTo(small!.esp, 9);
+    expect(big!.path.at(-1)).toBe(big!.critical);
+    expect(result.paths[30]!.path).toEqual([10, 50, 11, 30]);
+    // The system header reads the same run.
+    expect(worstRun(result, ["g10"], new Set([30, 31]))).toMatchObject({
+      total: small!.esp,
+      terminal: 31,
+      unit: 2,
+    });
+    // A tie stays with the larger fan.
+    const even = computeLosses(snapshot(), {}, {}, {
+      unitRole: { 1: "fan", 2: "fan", 3: "passive" },
+      unitCfm: { 1: 800, 2: 100 },
+    }).byGroup.g10!;
+    expect(even.criticalFan).toBe(even.fans.reduce((a, f) => (f.esp > a.esp ? f : a)).unit);
   });
 
   it("walks a group from its one fan when the other units are passive", () => {

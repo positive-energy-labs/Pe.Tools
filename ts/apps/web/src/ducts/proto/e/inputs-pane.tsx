@@ -47,7 +47,7 @@ export function inputRowsOf(snapshot: DuctSnapshot, scope: InputsScope) {
 export function InputsPane(props: InputsPaneProps) {
   const { snapshot, priced, work, scope, nameOf, selected, select, light } = props;
   const { units, terminals } = inputRowsOf(snapshot, scope);
-  const ctx: InputsCtx | null = priced ? { snapshot, priced, work } : null;
+  const ctx: InputsCtx | null = priced ? { snapshot, priced, work, groups: scope.groups } : null;
   if (!units.length && !terminals.length)
     return <p className="t-small text-ink-2 p-2">no unit or grille in this system</p>;
   if (!ctx)

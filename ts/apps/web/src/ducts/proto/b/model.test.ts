@@ -39,7 +39,7 @@ it("a run's stretches add up to its total, and the unpriced grille is no drop, n
   ];
   const total = rows.reduce((a, r) => a + (r.dp ?? 0), 0);
   const priced = {
-    now: {
+    next: {
       byGroup: {},
       paths: { [run.terminal]: { groupId: group.id, total, rows, inferred: [], provisional: null } },
     },
@@ -68,7 +68,7 @@ it("a run reads in effective feet: stretches add up to its tel, and a duct carri
   const rows = run.path.map((id): Row => ({ ...row(id, 0.002), lengthFt: 20, rate: 0.01, eqFt: 20 }));
   const tel = rows.reduce((a, r) => a + (r.eqFt ?? 0), 0);
   const priced = {
-    now: {
+    next: {
       byGroup: {},
       paths: {
         [run.terminal]: {
@@ -108,4 +108,58 @@ it("splits a run into unit end, ducts and fittings, and grille, and the parts ad
   expect(split.duct.dp).toBeCloseTo(0.08);
   // An unpriced grille is counted, never priced at 0.
   expect(split.terminal).toEqual({ dp: 0.08, ids: [4, 5], unpriced: 1 });
+});
+
+it("reads the staged solve, and draws the worst fan's run across its junction as the critical row", () => {
+  const group = snapshot.groups[0]!;
+  const run = runsOf(groupTree(snapshot, group.id))[0]!;
+  const rows = run.path.map((id) => row(id, 0.01));
+  const total = 0.01 * rows.length;
+  const path = { groupId: group.id, total, tel: 10, path: run.path, rows, inferred: [], provisional: null };
+  // A smaller fan (unit -2) whose run reaches the same grille through its junction needs more static.
+  const viaRows = [row(run.path[0]!, 0.2), ...rows];
+  const fan = (over: object) => ({
+    unit: group.rootIds[0]!,
+    cfm: 800,
+    port: run.path[0],
+    junction: null,
+    owned: [],
+    esp: total,
+    critical: run.terminal,
+    tel: 10,
+    stretch: [],
+    viaJunction: false,
+    path: run.path,
+    rows,
+    ...over,
+  });
+  const small = fan({ unit: -2, cfm: 100, esp: total + 0.2, tel: 30, viaJunction: true, rows: viaRows });
+  const priced = {
+    // `now` is the model before staging: the tree never reads it.
+    now: { byGroup: {}, paths: { [run.terminal]: { ...path, total: 9 } } },
+    next: {
+      byGroup: {
+        [group.id]: {
+          fan: total + 0.2,
+          critical: run.terminal,
+          criticalTel: 30,
+          criticalFan: -2,
+          fans: [fan({}), small],
+        },
+      },
+      paths: { [run.terminal]: path },
+    },
+  } as unknown as Priced;
+  const node = buildTree(snapshot, priced, null, [group.id])[0]!;
+  expect(node.total).toBeCloseTo(total + 0.2, 9);
+  const own = node.children.find((r) => r.key === `${group.id}/r${run.terminal}`)!;
+  expect(own.total).toBeCloseTo(total, 9);
+  expect(own.critical).toBeNull();
+  const via = node.children.find((r) => r.key === `${group.id}/f-2/r${run.terminal}`)!;
+  expect(via).toMatchObject({ critical: "pe", ft: 30, terminal: run.terminal });
+  expect(via.total).toBeCloseTo(total + 0.2, 9);
+  // Drawn: its stretches add up to its total, and it leads the system's runs.
+  expect(via.children.reduce((a, leg) => a + (leg.self ?? 0), 0)).toBeCloseTo(total + 0.2, 9);
+  expect(node.children[0]).toBe(via);
+  expect(node.split).toBe(via.split);
 });

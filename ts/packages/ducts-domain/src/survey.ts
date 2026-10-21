@@ -35,6 +35,12 @@ export interface Survey {
   flows: Map<number, TerminalFlow>;
   /** Every unit's design flow: staged `equipmentFlows`, else Revit's `fanFlow` fact, else (a fan) the sum of the terminal flows it serves, `derived`. */
   equipmentFlows: Map<number, EquipmentFlow>;
+  /**
+   * Each group's fans with the flow the solve prices them at there (`groupFans`): stated, else the
+   * sum of the grilles the fan serves in that group (`derived`), else none. Read a unit's flow for a
+   * system through `unitFlowIn`, never `equipmentFlows`' largest-over-every-group reading.
+   */
+  fanFlows: Map<string, Map<number, EquipmentFlow>>;
   /** Every root unit's role: ruled, staged, else proposed from its design flow (`unit-roles.ts`). */
   roles: Map<number, UnitRole>;
   findings: DuctFinding[];
@@ -226,6 +232,7 @@ export function survey(
   const nodeOf = new Map(m.nodes.map((n) => [n.id, n]));
   const nameOf = (id: number) => markOf(nodeOf.get(id)) ?? String(id);
   const derived = new Map(units);
+  const fanFlows = new Map<string, Map<number, EquipmentFlow>>();
   const multiFan: DuctFinding[] = [];
   for (const g of m.groups) {
     const roots = g.rootIds.filter((id) => !passive.has(id));
@@ -235,6 +242,17 @@ export function survey(
       roots,
       (id) => units.get(id)?.cfm,
       (t) => flows.flows.get(t)?.cfm ?? 0,
+    );
+    fanFlows.set(
+      g.id,
+      new Map(
+        fans.map((f) => [
+          f.unit,
+          f.served
+            ? { cfm: f.cfm, source: "derived", grilles: f.served.length }
+            : (units.get(f.unit) ?? { cfm: null, source: null }),
+        ]),
+      ),
     );
     for (const f of fans)
       if (f.served && f.cfm! > (derived.get(f.unit)?.cfm ?? 0))
@@ -299,6 +317,7 @@ export function survey(
     snapshot: m,
     flows: flows.flows,
     equipmentFlows: derived,
+    fanFlows,
     roles,
     findings,
     inferred: t.links,
@@ -307,3 +326,36 @@ export function survey(
   if (!roomFlows) last.set(snapshot, { work, survey: result });
   return result;
 }
+
+/**
+ * A unit's design flow as one system reads it: a stated flow as is; a derived one is the sum of the
+ * grilles it serves in `groups` alone, the flow those groups are priced at (SA 19, Chadds: DH-21
+ * serves no SA 19 grille, so it reads no flow there, never RA 38's 768 cfm). With no `groups`, the
+ * whole document's reading. A fan serving none of them states none: the unit flow Set row's.
+ */
+export function unitFlowIn(
+  surveyed: Pick<Survey, "equipmentFlows" | "fanFlows">,
+  unit: number,
+  groups: readonly string[] | null,
+): EquipmentFlow {
+  const flow = surveyed.equipmentFlows.get(unit) ?? { cfm: null, source: null };
+  if (!groups || (flow.cfm != null && flow.source !== "derived")) return flow;
+  const there = groups.flatMap((g) => {
+    const f = surveyed.fanFlows.get(g)?.get(unit);
+    return f?.source === "derived" && f.cfm != null ? [f] : [];
+  });
+  return there.length
+    ? {
+        cfm: there.reduce((a, f) => a + f.cfm!, 0),
+        source: "derived",
+        grilles: there.reduce((a, f) => a + (f.grilles ?? 0), 0),
+      }
+    : { cfm: null, source: null };
+}
+
+/** Every unit's flow as one system reads it (`unitFlowIn`); the Set rows and the Inputs pane read the same. */
+export const unitFlowsIn = (
+  surveyed: Pick<Survey, "equipmentFlows" | "fanFlows">,
+  groups: readonly string[] | null,
+): Map<number, EquipmentFlow> =>
+  new Map([...surveyed.equipmentFlows.keys()].map((id) => [id, unitFlowIn(surveyed, id, groups)]));

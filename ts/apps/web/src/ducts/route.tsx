@@ -24,6 +24,7 @@ import { LadderPicker, useDocumentLadder } from "#/route/situation-ladder";
 import { manifest, pendingCount, WRITTEN } from "./manifest";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { price } from "@pe/ducts-domain/pricing";
+import { worstRun } from "@pe/ducts-domain/losses";
 import { systemScope, systemsOf } from "@pe/ducts-domain/system-scope";
 import { readiness } from "@pe/ducts-domain/readiness";
 import { verdictPatches } from "./claims";
@@ -174,16 +175,14 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
           ? "reading ducts…"
           : "this document has no duct networks";
   const busy = handle.busy !== null;
-  // The system's fan static: its worst run, over the runs that price its terminals in every group
-  // it is in (a shared group's other runs are other systems'); Revit's own critical path beside it.
+  // The system's fan static: its worst fan's, over the runs that price its terminals in every group
+  // it is in (a shared group's other runs are other systems'), as staged (`next`, the solve the
+  // sidebar reads); Revit's own critical path beside it.
   const solved = useMemo(() => {
     if (!system || !priced) return null;
     const scope = systemScope(priced.snapshot, system.name);
-    const paths = [...scope.terminals].flatMap((t) => priced.now.paths[t] ?? []);
-    const worst = paths.reduce<(typeof paths)[number] | null>(
-      (a, b) => (a == null || b.total > a.total ? b : a),
-      null,
-    );
+    const paths = [...scope.terminals].flatMap((t) => priced.next.paths[t] ?? []);
+    const worst = worstRun(priced.next, scope.groups, scope.terminals);
     return {
       fan: worst?.total ?? null,
       provisional: paths.find((p) => p.provisional)?.provisional ?? null,
@@ -210,7 +209,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
               ? "no air mover; priced from the open end"
               : solved
                 ? `Pe fan ${fmt(solved.fan)} in-wg${provisionalWords(solved.provisional)} (not in Revit until written), Revit ${revitSays(solved.revitCritical)}`
-                : `largest Pe fan ${fmt(priced.now.fan)} in-wg${provisionalWords(priced.now.provisional)} over ${systems.length} systems`;
+                : `largest Pe fan ${fmt(priced.next.fan)} in-wg${provisionalWords(priced.next.provisional)} over ${systems.length} systems`;
   // Every written segment's cells count in the Work sentence.
   const counted = useMemo(
     () =>

@@ -74,7 +74,7 @@ const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" : n.toFi
 function cumulativeOf(priced: ProtoProps["priced"]): Map<number, number> {
   const out = new Map<number, number>();
   if (!priced) return out;
-  for (const path of Object.values(priced.now.paths)) {
+  for (const path of Object.values(priced.next.paths)) {
     let run = 0;
     for (const row of path.rows) {
       run += row.eqFt ?? 0;
@@ -244,8 +244,8 @@ function Canvas({
     (firstId == null
       ? ""
       : (byId.segments.get(firstId)?.groupId ?? byId.nodes.get(firstId)?.groupId ?? ""));
-  const solved = groupId ? priced?.now.byGroup[groupId] : null;
-  const criticalPath = solved?.critical != null ? priced?.now.paths[solved.critical] : null;
+  // The worst fan's critical run (`byGroup.criticalFan`), as staged: its TEL may cross a junction.
+  const solved = groupId ? priced?.next.byGroup[groupId] : null;
   const criticalName = solved?.critical != null ? nameOfId(solved.critical) : null;
 
   const selected = useMemo(() => {
@@ -280,7 +280,7 @@ function Canvas({
       : // A group scene has no legs: each terminal carries its path total.
         iso.scene.nodes.flatMap((f) => {
           if (f.node.kind !== "terminal") return [];
-          const total = priced?.now.paths[f.node.id]?.tel;
+          const total = priced?.next.paths[f.node.id]?.tel;
           return [
             {
               key: String(f.node.id),
@@ -450,9 +450,9 @@ function Canvas({
         </span>
         <span>
           critical run{" "}
-          {criticalPath ? (
+          {solved?.critical != null ? (
             <>
-              <span className="face-mono">{fmtFt(criticalPath.tel)} eq ft</span> to {criticalName}
+              <span className="face-mono">{fmtFt(solved.criticalTel)} eq ft</span> to {criticalName}
             </>
           ) : (
             <span className="text-ink-2">unpriced</span>

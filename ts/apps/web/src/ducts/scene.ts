@@ -80,7 +80,7 @@ export function indexOf(snapshot: DuctSnapshot, priced: Priced | null = null): D
     const own = id == null ? null : (segmentLevel.get(id) ?? nodeById.get(id)?.levelId ?? null);
     return own ?? (issue.point ? (levelAt(issue.point[2]!)?.id ?? null) : null);
   };
-  const loss = priced ? lossesOf(priced.now) : new Map<number, number>();
+  const loss = priced ? lossesOf(priced.next) : new Map<number, number>();
   return { snapshot, levels, flows, issuesOf, segmentsOf, nodesOf, levelAt, levelOf, loss };
 }
 

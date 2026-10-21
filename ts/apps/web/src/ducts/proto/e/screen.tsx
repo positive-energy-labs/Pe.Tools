@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RouteStatePatch } from "@pe/agent-contracts";
 import type { DuctsApply } from "@pe/host-contracts/generated";
-import { survey } from "@pe/ducts-domain/survey";
+import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
 import { fansOwedBase, type FanAssignment } from "@pe/ducts-domain/fan-assignment";
 import { healPlan } from "@pe/ducts-domain/heal";
 import { sectionNames, systemOfGroup, systemScope } from "@pe/ducts-domain/system-scope";
@@ -170,7 +170,8 @@ function EScreenBody({ props }: { props: ProtoProps }) {
             scope,
             findings: surveyed.findings,
             flows: surveyed.flows,
-            equipmentFlows: surveyed.equipmentFlows,
+            // A unit's flow as this system's groups price it, the flow its Inputs row and fan row show.
+            equipmentFlows: unitFlowsIn(surveyed, scope?.groups ?? null),
             doc,
             nameOf,
             groupLabel,
@@ -277,9 +278,11 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     props.onHover(ids?.[0] ?? null);
   };
   const select = (id: number | null) => props.onSelect(id);
-  // The critical run is the largest priced total over every section (B's model marks Pe's only
-  // when the group solve names one; a provisional solve can leave it unnamed, so the largest total
-  // stands in). Only the runs that price the system count: a shared group's other runs never lead.
+  // The critical run is the largest priced total over every section: the worst fan's run (B's
+  // model marks Pe's only when the group solve names one; a provisional solve can leave it
+  // unnamed, so the largest total stands in). Only the runs that price the system count: a shared
+  // group's other runs never lead. Header, tree and fan rows read one solve, `next`: the model
+  // plus the staged cells, what the person is looking at while staging.
   const critical =
     tree
       ?.flatMap((t) => t.children)
@@ -310,14 +313,14 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     groups.find((g) => scope?.pricing.has(g)) ??
     groups[0] ??
     "";
-  const groupFan = leadGroup ? priced?.now.byGroup[leadGroup]?.fan : undefined;
+  const groupFan = leadGroup ? priced?.next.byGroup[leadGroup]?.fan : undefined;
   const grilleName = (n: TreeNode) => {
     const id = n.kind === "run" ? n.terminal : n.id;
     return (id != null ? labels.get(id) : undefined) ?? n.name;
   };
   // The path header: the critical path's total effective length in feet, and the ESP in in-wg.
   const designRate = priced?.staged.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
-  const groupTel = leadGroup ? priced?.now.byGroup[leadGroup]?.criticalTel : undefined;
+  const groupTel = leadGroup ? priced?.next.byGroup[leadGroup]?.criticalTel : undefined;
   const pricedWord = priced
     ? groupFan == null || critical?.total == null
       ? "this system is not priced"

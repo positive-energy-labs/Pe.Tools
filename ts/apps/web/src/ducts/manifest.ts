@@ -32,7 +32,7 @@ import { pendingRulings, withStoredRulings } from "@pe/ducts-domain/rulings";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { fanCandidates } from "@pe/ducts-domain/fan-assignment";
 import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
-import { survey } from "@pe/ducts-domain/survey";
+import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
 import { systemScope } from "@pe/ducts-domain/system-scope";
 import { airflowOptions } from "./airflow";
 import { groupLabels } from "./inputs";
@@ -168,7 +168,7 @@ const standing = (ctx: DuctsCtx) => {
     scope,
     findings: priced.findings,
     flows: priced.flows,
-    equipmentFlows: priced.equipmentFlows,
+    equipmentFlows: unitFlowsIn(priced, scope?.groups ?? null),
     doc: withStoredRulings(ctx.work.doc, snapshot.store),
     airflow: airflowOptions(priced.snapshot, scope),
     unitAirflow: airflowOptions(priced.snapshot, scope, "unit"),

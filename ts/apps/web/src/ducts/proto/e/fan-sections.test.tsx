@@ -18,6 +18,8 @@ const fan = (over: Partial<FanResult>): FanResult => ({
   tel: 591.8,
   stretch: [],
   viaJunction: false,
+  path: [],
+  rows: [],
   ...over,
 });
 

@@ -18,7 +18,9 @@
  * - A group several units root is walked from its largest fan's port (`unitCfm`, else the flow a
  *   fan serves in this group, `groupFans`); with several
  *   fans each prices its own section (`fan-sections.ts`) into `byGroup[id].fans`, and the group's
- *   `fan` and `critical` are the largest fan's.
+ *   `fan`, `critical` and `criticalTel` are the worst fan's: the one that needs the most static
+ *   (`criticalFan`; a tie stays with the larger fan). Its critical run may be a smaller fan's
+ *   stretch then the trunk past the junction, so each fan carries its run's `path` and `rows`.
  * Physics in loss-physics.ts, interpolation in loss-grid.ts, rule data in loss-rules.ts.
  */
 import {
@@ -131,6 +133,8 @@ interface PathLoss {
   total: number;
   /** Total effective length, ft: the straight duct plus every fitting and terminal as equivalent feet. */
   tel: number;
+  /** The run's element ids from the fan's port to the terminal, in the order its air runs. */
+  path: number[];
   rows: Row[];
   /** The proximity finding ids whose inferred joint or tap the path steps across, no person having confirmed them; its total rests on them. */
   inferred: string[];
@@ -167,10 +171,14 @@ export interface LossResult {
   byGroup: Record<
     string,
     {
+      /** The worst fan's ESP, in-wg: the most static any fan of the group must deliver. */
       fan: number;
+      /** The terminal the worst fan's critical run ends at. */
       critical: number | null;
-      /** The critical path's total effective length, ft; null with no critical path. */
+      /** The critical run's total effective length, ft; null with no critical path. */
       criticalTel: number | null;
+      /** The worst fan's unit (the group's lone fan when one roots it); null with no air mover. */
+      criticalFan: number | null;
       revitCritical: number | null;
       /** Whether the group has an air mover (a root that is not staged passive); without one nothing is priced. */
       hasAirMover: boolean;
@@ -196,6 +204,10 @@ export interface FanResult extends FanSection {
   stretch: Row[];
   /** Whether its worst run reaches the terminal through the junction, across a larger fan's section. */
   viaJunction: boolean;
+  /** Its worst run's element ids from its port to `critical`, in the order its air runs; empty with none. */
+  path: number[];
+  /** Its worst run's rows: for a run through the junction, its stretch then the larger section's tail. */
+  rows: Row[];
 }
 
 const LEG_KIND = { C: "fitting", Cb: "tap-branch", Cs: "tap-straight" } as const;
@@ -400,6 +412,7 @@ export function computeLosses(
   };
 
   const everywhere: string[] = [];
+  let criticalRows: Row[] = [];
   let nodes: Map<number, Node> | null = null;
   const nodeById = () => (nodes ??= new Map(snapshot.nodes.map((n) => [n.id, n])));
   for (const group of snapshot.groups) {
@@ -435,6 +448,7 @@ export function computeLosses(
         groupId: group.id,
         total,
         tel: telOf(rows),
+        path: run.path,
         rows,
         inferred: rests,
         provisional: provisionalOf(rests),
@@ -452,8 +466,17 @@ export function computeLosses(
     }
     const fanResults = sections.map((section, k): FanResult => {
       if (k === 0) {
-        const tel = critical == null ? null : (result.paths[critical]?.tel ?? null);
-        return { ...section, esp: fan, critical, tel, stretch: [], viaJunction: false };
+        const own = critical == null ? null : result.paths[critical]!;
+        return {
+          ...section,
+          esp: fan,
+          critical,
+          tel: own?.tel ?? null,
+          stretch: [],
+          viaJunction: false,
+          path: own?.path ?? [],
+          rows: own?.rows ?? [],
+        };
       }
       const own = groupTree(snapshot, group.id, section.unit);
       const stretch = stretchOf(tree, section);
@@ -462,10 +485,11 @@ export function computeLosses(
       const price = (path: number[]) =>
         pathRows(own, path, ownBelow, grids, choices, overrides, fail, catalogs);
       const stretchRows = stretch.length ? price(stretch) : [];
-      let best: { total: number; terminal: number; tel: number; via: boolean } | null = null;
-      const consider = (total: number, terminal: number, tel: number, via: boolean) => {
-        if (!best || total > best.total || (total === best.total && terminal < best.terminal))
-          best = { total, terminal, tel, via };
+      type Best = { total: number; terminal: number; tel: number; via: boolean; path: number[]; rows: Row[] };
+      let best: Best | null = null;
+      const consider = (run: Best) => {
+        if (!best || run.total > best.total || (run.total === best.total && run.terminal < best.terminal))
+          best = run;
       };
       // Its own runs: terminals past its port.
       for (const t of section.owned.filter((id) => tree.parts.get(id)?.node?.kind === "terminal")) {
@@ -479,11 +503,12 @@ export function computeLosses(
           groupId: group.id,
           total,
           tel: telOf(rows),
+          path,
           rows,
           inferred: rests,
           provisional: provisionalOf(rests),
         };
-        consider(total, t, telOf(rows), false);
+        consider({ total, terminal: t, tel: telOf(rows), via: false, path, rows });
       }
       // Through the junction: its stretch, then the larger section's run from the junction on.
       const stretchDp = stretchRows.reduce((a, r) => a + (r.dp ?? 0), 0);
@@ -495,14 +520,16 @@ export function computeLosses(
         const from = rows.findIndex((r) => onward.has(r.id));
         if (from < 0) continue;
         const tail = rows.slice(from);
-        consider(
-          stretchDp + tail.reduce((a, r) => a + (r.dp ?? 0), 0),
-          t,
-          telOf(stretchRows) + telOf(tail),
-          true,
-        );
+        consider({
+          total: stretchDp + tail.reduce((a, r) => a + (r.dp ?? 0), 0),
+          terminal: t,
+          tel: telOf(stretchRows) + telOf(tail),
+          via: true,
+          path: [...stretch, ...path.slice(at)],
+          rows: [...stretchRows, ...tail],
+        });
       }
-      const worst = best as { total: number; terminal: number; tel: number; via: boolean } | null;
+      const worst = best as Best | null;
       return {
         ...section,
         esp: worst?.total ?? stretchDp,
@@ -510,22 +537,43 @@ export function computeLosses(
         tel: worst?.tel ?? (stretch.length ? telOf(stretchRows) : null),
         stretch: stretchRows,
         viaJunction: worst?.via ?? false,
+        path: worst?.path ?? [],
+        rows: worst?.rows ?? [],
       };
     });
+    // The group reads its worst fan: the most static any fan must deliver; a tie stays with the larger.
+    const worstFan = fanResults
+      .filter((f) => f.critical != null)
+      .reduce<FanResult | null>((a, f) => (a == null || f.esp > a.esp ? f : a), null);
+    const groupFan = worstFan?.esp ?? fan;
+    const groupCritical = worstFan ? worstFan.critical : critical;
+    const groupRows = worstFan
+      ? worstFan.rows
+      : critical == null
+        ? []
+        : result.paths[critical]!.rows;
     result.byGroup[group.id] = {
       fans: fanResults,
-      fan,
-      critical,
-      criticalTel: critical == null ? null : (result.paths[critical]?.tel ?? null),
+      fan: groupFan,
+      critical: groupCritical,
+      criticalTel: worstFan
+        ? worstFan.tel
+        : critical == null
+          ? null
+          : (result.paths[critical]?.tel ?? null),
+      criticalFan: worstFan?.unit ?? (hasAirMover ? (fans[0]?.unit ?? null) : null),
       revitCritical:
-        (critical == null ? null : systemFor(snapshot, critical)?.criticalPathLossInWg) ?? null,
+        (groupCritical == null
+          ? null
+          : systemFor(snapshot, groupCritical)?.criticalPathLossInWg) ?? null,
       hasAirMover,
       provisional: provisionalOf(under),
     };
     everywhere.push(...under);
-    if (critical != null && (result.critical == null || fan > result.fan)) {
-      result.fan = fan;
-      result.critical = critical;
+    if (groupCritical != null && (result.critical == null || groupFan > result.fan)) {
+      result.fan = groupFan;
+      result.critical = groupCritical;
+      criticalRows = groupRows;
     }
   }
 
@@ -534,7 +582,7 @@ export function computeLosses(
     rows.filter((r) => r.rule === key).reduce((a, r) => a + (r.dp ?? 0), 0);
   for (const rule of LOSS_RULES)
     result.byRule[rule.key] = {
-      critical: result.critical == null ? 0 : ruleDp(result.paths[result.critical]!.rows, rule.key),
+      critical: ruleDp(criticalRows, rule.key),
       per: Object.fromEntries(
         Object.entries(result.paths).map(([t, p]) => [t, ruleDp(p.rows, rule.key)]),
       ),
@@ -835,6 +883,33 @@ function pathRows(
     fitting(node, prev, next, { q: below.get(node.id) ?? 0 }, "C");
   });
   return withEquivalentLength(rows, overrides.designFrictionRate ?? DEFAULT_DESIGN_FRICTION_RATE);
+}
+
+/**
+ * The run that needs the most static among one system's (`groups`, ending at one of `terminals`):
+ * each terminal's own path, and each smaller fan's worst run across its junction. Null with none.
+ */
+export function worstRun(
+  result: LossResult,
+  groups: readonly string[],
+  terminals: ReadonlySet<number>,
+): { total: number; tel: number | null; terminal: number; unit: number | null } | null {
+  const runs = groups.flatMap((g) => {
+    const solved = result.byGroup[g];
+    const own = [...terminals].flatMap((t) => {
+      const p = result.paths[t];
+      if (p?.groupId !== g) return [];
+      const unit = solved?.fans.slice(1).find((f) => f.owned.includes(t))?.unit ?? solved?.fans[0]?.unit;
+      return [{ total: p.total, tel: p.tel, terminal: t, unit: unit ?? solved?.criticalFan ?? null }];
+    });
+    const via = (solved?.fans ?? []).flatMap((f) =>
+      f.viaJunction && f.critical != null && terminals.has(f.critical)
+        ? [{ total: f.esp, tel: f.tel, terminal: f.critical, unit: f.unit }]
+        : [],
+    );
+    return [...own, ...via];
+  });
+  return runs.reduce<(typeof runs)[number] | null>((a, b) => (a == null || b.total > a.total ? b : a), null);
 }
 
 export interface Fanout {

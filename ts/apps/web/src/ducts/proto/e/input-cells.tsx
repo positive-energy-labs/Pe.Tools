@@ -199,6 +199,8 @@ export interface InputsCtx {
   snapshot: DuctSnapshot;
   priced: Priced | null;
   work: LossesWork;
+  /** The open system's groups: a unit's flow is the one they price it at (`unitFlowIn`); null, the document's. */
+  groups?: readonly string[] | null;
 }
 
 /** A terminal row's flow and drop cells. */
@@ -229,7 +231,7 @@ export function TerminalCells({ ctx, id }: { ctx: InputsCtx; id: number }) {
 /** An air mover row's flow, role and ESP cells. */
 export function EquipmentCells({ ctx, id }: { ctx: InputsCtx; id: number }) {
   if (!ctx.priced) return null;
-  const inputs = equipmentInputs(ctx.snapshot, ctx.priced, id);
+  const inputs = equipmentInputs(ctx.snapshot, ctx.priced, id, ctx.groups ?? null);
   return (
     <span className="inline-flex items-baseline gap-3">
       <InputCell

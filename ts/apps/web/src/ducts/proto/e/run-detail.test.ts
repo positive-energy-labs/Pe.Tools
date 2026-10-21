@@ -34,7 +34,7 @@ const priced = {
   snapshot: {
     segments: [{ id: 1, size: "12 round", roughness: { valueFt: 0.0003, provenance: "revit-default" } }],
   },
-  now: {
+  next: {
     byGroup: { g1: { critical: 5 } },
     paths: { 5: { groupId: "g1", total: 0.17, tel: 0, rows, inferred: [], provisional: null } },
   },

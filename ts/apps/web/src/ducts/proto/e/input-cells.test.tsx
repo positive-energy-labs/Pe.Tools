@@ -59,3 +59,30 @@ test("Pea's proposal shows as the proposed value and names itself", () => {
   expect(container.querySelector('[data-e-cell="esp:1"]')).not.toBeNull();
   expect(screen.queryByText("override")).toBeNull();
 });
+
+test("a unit's flow is the one the open system's groups price it at, never another system's sum", () => {
+  const scoped = {
+    ...priced,
+    equipmentFlows: new Map([[1, { cfm: 768, source: "derived", grilles: 2 }]]),
+    fanFlows: new Map<string, Map<number, object>>([
+      ["g1", new Map([[1, { cfm: null, source: null }]])],
+      ["g2", new Map([[1, { cfm: 300, source: "derived", grilles: 1 }]])],
+    ]),
+  } as unknown as Priced;
+  const work = { doc: ductsRouteState.schema.parse({}), revision: 3, write: vi.fn() } as unknown as LossesWork;
+  const value = (groups: string[] | null) => {
+    const { container, unmount } = render(
+      <EquipmentCells ctx={{ snapshot, priced: scoped, work, groups }} id={1} />,
+    );
+    const cell = container.querySelector('[data-e-cell="equipmentFlows:1"]')!;
+    const out = [
+      (cell.querySelector("input") as HTMLInputElement).value,
+      cell.querySelector("[data-e-source]")?.textContent ?? "",
+    ];
+    unmount();
+    return out;
+  };
+  expect(value(["g1"])[0]).toBe("");
+  expect(value(["g2"])).toEqual(["300", expect.stringContaining("sum of 1 grille")]);
+  expect(value(null)).toEqual(["768", expect.stringContaining("sum of 2 grilles")]);
+});

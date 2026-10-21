@@ -1,11 +1,15 @@
 /**
  * The profiler tree E2 reads: system -> runs (fan to terminal) -> legs (`legsOf` over the run's path) -> elements.
- * Loss comes only from `priced.now.paths`: an element's self is the sum of its rows' dp on that path, its
- * total the running sum from the fan. With no priced result every number is null (never a stand-in figure).
+ * Loss comes only from `priced.next` (the model plus the staged cells, what the person is looking at):
+ * an element's self is the sum of its rows' dp on that path, its total the running sum from the fan.
+ * Each run is drawn on the path it was priced on, from the fan whose section holds it; a smaller
+ * fan whose worst run crosses its junction gets that run drawn too, so the critical ◆ (the worst
+ * fan's run, `byGroup.criticalFan`) is always a row a person can see. With no priced result every
+ * number is null (never a stand-in figure).
  */
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import type { Priced } from "@pe/ducts-domain/pricing";
-import type { Provisional, Row } from "@pe/ducts-domain/losses";
+import type { FanResult, Provisional, Row } from "@pe/ducts-domain/losses";
 import { systemsOf } from "@pe/ducts-domain/system-scope";
 import { groupTree, runsOf } from "@pe/ducts-domain/topology";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -147,16 +151,29 @@ export function buildTree(
   const byId = new Map(snapshot.groups.map((g) => [g.id, g]));
   const groups = only.length ? only.flatMap((id) => byId.get(id) ?? []) : snapshot.groups;
   return groups.map((group) => {
-    const tree = groupTree(snapshot, group.id);
-    const runs = runsOf(tree);
-    const solved = priced?.now.byGroup[group.id] ?? null;
+    const solved = priced?.next.byGroup[group.id] ?? null;
+    // Walked from the fan the solve walked it from: the largest, when several root it.
+    const tree = groupTree(snapshot, group.id, group.rootIds.length > 1 ? solved?.fans[0]?.unit : undefined);
     const peCritical = solved?.critical ?? null;
     const longest = tree.longest.at(-1) ?? null;
     const fan = solved?.fan ?? null;
     const rootId = tree.root?.equipment ?? tree.root?.element ?? null;
     const rootName = rootId == null ? "no air mover" : name(rootId);
-    const runNodes = runs.map((run): TreeNode => {
-      const path = priced?.now.paths[run.terminal] ?? null;
+    const fans = solved?.fans ?? [];
+    // The worst fan's run crosses its junction: that run is its own row, and it holds the ◆.
+    const viaCritical = fans.find((f) => f.unit === solved?.criticalFan && f.viaJunction) ?? null;
+    const viaRuns = fans.filter((f) => f.viaJunction && f.critical != null);
+    const ownerOf = (terminal: number) =>
+      fans.slice(1).find((f) => f.owned.includes(terminal))?.unit ?? rootId;
+    type RunLoss = { total: number; tel: number | null; rows: Row[]; provisional: Provisional };
+    const runNode = (
+      run: { terminal: number; path: number[] },
+      from: number | null,
+      path: RunLoss | null,
+      runKey: string,
+      critical: TreeNode["critical"],
+    ): TreeNode => {
+      const fromName = from == null ? rootName : name(from);
       const owned = path ? rowsByElement(run.path, path.rows) : null;
       const selfOf = (id: number) => (owned ? selfOfRows(owned.get(id) ?? []) : null);
       const selfFtOf = (id: number) => (owned ? selfFtOfRows(owned.get(id) ?? []) : null);
@@ -171,7 +188,6 @@ export function buildTree(
         runningFt.set(id, path ? accFt : null);
       }
       const cut = legsOf(snapshot, run.path, labelOf, work);
-      const runKey = `${group.id}/r${run.terminal}`;
       const legs = cut.legs.map((leg, i): TreeNode => {
         const members = [
           ...(i === 0 && leg.from.kind !== "open" && leg.from.kind !== "level" ? [leg.from.id] : []),
@@ -204,7 +220,7 @@ export function buildTree(
           key: `${runKey}/l${i}`,
           kind: "leg",
           // The path's first element is the one the air mover feeds: that stretch starts at the unit.
-          name: i === 0 && leg.from.kind === "open" ? `${rootName} → ${leg.to.name}` : leg.name,
+          name: i === 0 && leg.from.kind === "open" ? `${fromName} → ${leg.to.name}` : leg.name,
           id: leg.ids[0] ?? leg.to.id,
           total: last == null ? null : (running.get(last) ?? null),
           self: path ? sumKnown(elements.map((e) => e.self)) : null,
@@ -225,7 +241,7 @@ export function buildTree(
       return {
         key: runKey,
         kind: "run",
-        name: `${rootName} → ${name(run.terminal)}`,
+        name: `${fromName} → ${name(run.terminal)}`,
         level: snapshot.levels.find((l) => l.id === runLevel)?.name ?? null,
         id: run.terminal,
         total: path?.total ?? null,
@@ -236,19 +252,40 @@ export function buildTree(
         unpriced: null,
         split: path ? splitOf(path.rows, equipment) : null,
         scale: fan,
-        critical:
+        critical,
+        provisional: path?.provisional ?? null,
+        terminal: run.terminal,
+        children: legs,
+      };
+    };
+    const runNodes = [
+      ...runsOf(tree).map((run) => {
+        const path = priced?.next.paths[run.terminal] ?? null;
+        return runNode(
+          // A smaller fan's own run is priced from its port: drawn on that path.
+          { terminal: run.terminal, path: path?.path ?? run.path },
+          ownerOf(run.terminal),
+          path,
+          `${group.id}/r${run.terminal}`,
           peCritical != null
-            ? run.terminal === peCritical
+            ? run.terminal === peCritical && !viaCritical
               ? "pe"
               : null
             : run.terminal === longest
               ? "longest"
               : null,
-        provisional: path?.provisional ?? null,
-        terminal: run.terminal,
-        children: legs,
-      };
-    });
+        );
+      }),
+      ...viaRuns.map((f: FanResult) =>
+        runNode(
+          { terminal: f.critical!, path: f.path },
+          f.unit,
+          { total: f.esp, tel: f.tel, rows: f.rows, provisional: priced?.next.paths[f.critical!]?.provisional ?? null },
+          `${group.id}/f${f.unit}/r${f.critical}`,
+          f === viaCritical ? "pe" : null,
+        ),
+      ),
+    ];
     return {
       key: group.id,
       kind: "system",
@@ -260,7 +297,7 @@ export function buildTree(
       selfFt: null,
       rate: null,
       unpriced: null,
-      split: runNodes.find((r) => r.terminal === peCritical)?.split ?? null,
+      split: runNodes.find((r) => r.critical === "pe")?.split ?? null,
       level: null,
       scale: fan,
       critical: null,
@@ -336,7 +373,7 @@ export function systemList(
   priced: Priced | null,
 ): (TreeNode & { fanless: boolean; sub: string })[] {
   return systemsOf(snapshot).map((system) => {
-    const solved = system.groups.flatMap((g) => priced?.now.byGroup[g] ?? []);
+    const solved = system.groups.flatMap((g) => priced?.next.byGroup[g] ?? []);
     const totals = solved.filter((s) => s.critical != null).map((s) => s.fan);
     const first = snapshot.groups.find((g) => g.id === system.groups[0]);
     return {

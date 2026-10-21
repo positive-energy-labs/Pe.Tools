@@ -7,6 +7,7 @@ import type { FlowSource } from "@pe/ducts-domain/terminal-flows";
 import { slotWord } from "./airflow";
 import { markOf } from "@pe/ducts-domain/terminal-flows";
 import { proposedStatic, type Priced } from "@pe/ducts-domain/pricing";
+import { unitFlowIn } from "@pe/ducts-domain/survey";
 import { groupTree, type GroupTree } from "@pe/ducts-domain/topology";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
@@ -81,13 +82,18 @@ function unitRoleInput(
   return { value: r.role, word, reason: r.reason };
 }
 
-/** A unit's resolved flow, external static (staged, else the fan Pe computes) and role (ruled, staged, else proposed). */
+/**
+ * A unit's resolved flow, external static (staged, else the fan Pe computes) and role (ruled,
+ * staged, else proposed). The flow is the one `groups` (the open system's) price it at
+ * (`unitFlowIn`): a derived flow sums the grilles it serves there, never another system's.
+ */
 export function equipmentInputs(
   snapshot: DuctSnapshot,
   priced: Priced,
   id: number,
+  groups: readonly string[] | null = null,
 ): EquipmentInputs {
-  const flow = priced.equipmentFlows.get(id);
+  const flow = unitFlowIn(priced, id, groups);
   const esp = priced.staged.esp[String(id)];
   const role = priced.staged.roles[String(id)];
   const computed = esp ? null : proposedStatic(snapshot, priced.next, id);
