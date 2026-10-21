@@ -19,7 +19,7 @@ const manifest = defineRoute({
   key: "space",
   name: "Space",
   views: [{ key: "3d", label: "3D", draws: () => <SpaceRoute /> }],
-  docs: "Real resident Space triangles in host internal feet. Capture once, then orbit, select, hide, isolate and cut locally. Draw a straight cut with two plan points; a bent cut extends an open plan polyline to the outer boundary and retains its left side. Import/export JSON shares the exact view state with an agent.",
+  docs: "Real resident Space triangles in host internal feet. Capture once, then orbit, select, hide, isolate and cut locally. Draw a straight cut with two plan points. A bent cut is an editable plan polyline: finish it open to extend its ends to the scope edge and keep its left side, or click its first point to close a polygon and keep the inside. Drag its square handles to edit, offset it in feet, and Reverse side to keep the other side. Import/export JSON shares the exact view state with an agent.",
 });
 type SceneData = { metadata: Metadata; positions: Float32Array };
 
@@ -41,18 +41,20 @@ export function SpaceRoute({
   const loadGeneration = useRef(0);
   const change = useCallback(
     (patch: Partial<ViewState>) => {
-      if (patch.polyline && data) {
+      if (!view || !data) return false;
+      if (patch.polyline || patch.closed !== undefined || patch.offset !== undefined) {
         try {
-          cutPolygon(patch.polyline, data.metadata.bounds);
+          cutPolygon({ ...view, ...patch }, data.metadata.bounds);
         } catch (e) {
           setError(String(e));
-          return;
+          return false;
         }
       }
       setError(null);
       setView((v) => v && { ...v, ...patch });
+      return true;
     },
-    [data],
+    [data, view],
   );
   const load = useCallback(async (id: string, imported?: ViewState) => {
     if (!/^[a-f0-9]{64}$/.test(id)) throw Error("Scene id must be a SHA-256 artifact id");
@@ -75,7 +77,7 @@ export function SpaceRoute({
         // A corrupt or unavailable local cache must not prevent opening the durable scene.
       }
     }
-    if (restored) cutPolygon(restored.polyline, loaded.metadata.bounds);
+    if (restored) cutPolygon(restored, loaded.metadata.bounds);
     setData(loaded);
     setView(restored ?? initialView(loaded.metadata, id));
     setDrawing(null);
@@ -126,11 +128,15 @@ export function SpaceRoute({
   };
   const draw = (mode: "straight" | "bent") => {
     plan();
-    change({ polyline: [], plane: null, keepInside: true });
+    change({ polyline: [], plane: null, keepInside: true, closed: false, offset: 0 });
     setDrawing(mode);
   };
   const addPoint = (p: [number, number]) => {
     if (!view || view.polyline.length >= 56) return;
+    if (drawing === "bent" && view.polyline.length >= 3 && p === view.polyline[0]) {
+      if (change({ closed: true })) setDrawing(null);
+      return;
+    }
     const previous = view.polyline.at(-1);
     if (previous && Math.hypot(previous[0] - p[0], previous[1] - p[1]) < 0.001) return;
     const points = [...view.polyline, p];
@@ -245,18 +251,67 @@ export function SpaceRoute({
             <Button label="Draw bent cut" pressed={drawing === "bent"} onClick={() => draw("bent")}>
               Bent cut
             </Button>
-            {drawing && (
-              <Button
-                label="Finish cut"
-                refusal={
-                  drawing === "bent" && view.polyline.length < 2
-                    ? "Place at least two points"
-                    : null
-                }
-                onClick={() => setDrawing(null)}
-              >
-                Finish
+            {drawing === "bent" && (
+              <>
+                <Button
+                  label="Undo last point"
+                  refusal={view.polyline.length === 0 ? "No points placed" : null}
+                  onClick={() => change({ polyline: view.polyline.slice(0, -1) })}
+                >
+                  Undo point
+                </Button>
+                <Button
+                  label="Finish open cut"
+                  refusal={view.polyline.length < 2 ? "Place at least two points" : null}
+                  onClick={() => setDrawing(null)}
+                >
+                  Finish open
+                </Button>
+              </>
+            )}
+            {drawing === "straight" && (
+              <Button label="Cancel straight cut" onClick={() => setDrawing(null)}>
+                Cancel
               </Button>
+            )}
+            {drawing !== "straight" && view.polyline.length >= 2 && (
+              <>
+                <Button
+                  label={view.closed ? "Reopen polygon" : "Close polygon"}
+                  refusal={
+                    !view.closed && view.polyline.length < 3 ? "Place at least three points" : null
+                  }
+                  onClick={() => {
+                    if (change({ closed: !view.closed })) setDrawing(null);
+                  }}
+                >
+                  {view.closed ? "Reopen" : "Close polygon"}
+                </Button>
+                {!drawing && (
+                  <Button
+                    label="Add points to the cut end"
+                    refusal={view.polyline.length >= 56 ? "56 points maximum" : null}
+                    onClick={() => {
+                      if (change({ closed: false })) setDrawing("bent");
+                    }}
+                  >
+                    Add points
+                  </Button>
+                )}
+                <span>Offset ft</span>
+                <div className="w-20">
+                  <Input
+                    type="number"
+                    aria-label="Cut offset in feet, toward the left of the drawing direction"
+                    step={0.5}
+                    value={view.offset}
+                    onChange={(e) => {
+                      const offset = Number(e.target.value);
+                      if (e.target.value !== "" && Number.isFinite(offset)) change({ offset });
+                    }}
+                  />
+                </div>
+              </>
             )}
             <Button
               label="Reverse retained side"
@@ -274,7 +329,7 @@ export function SpaceRoute({
             <Button
               label="Clear cuts"
               onClick={() => {
-                change({ plane: null, polyline: [] });
+                change({ plane: null, polyline: [], closed: false, offset: 0 });
                 setDrawing(null);
               }}
             >
@@ -313,9 +368,13 @@ export function SpaceRoute({
               />
             </div>
             <span>
-              {drawing
-                ? `${drawing === "straight" ? "Click two points; retain left side" : `Click polyline vertices (${view.polyline.length}/56), then Finish; retain left side`}.`
-                : "Left drag orbit · right drag pan · wheel zoom · click select. Plan: drag bend vertices."}
+              {drawing === "straight"
+                ? "Click two points; the left side is kept."
+                : drawing === "bent"
+                  ? `Click to add points (${view.polyline.length}/56). Click the first point to close a polygon, or Finish open to extend both ends to the scope edge. A red line crosses itself and is not applied.`
+                  : view.polyline.length >= 2
+                    ? `Drag square handles to edit the ${view.closed ? "polygon" : "open cut"}${view.offset ? "; the blue line is the cut shifted by the offset" : ""}. ${view.closed ? (view.keepInside ? "Inside" : "Outside") : view.keepInside ? "The left side" : "The right side"} is kept.`
+                    : "Left drag orbit · right drag pan · wheel zoom · click select."}
             </span>
           </div>
         )}
@@ -334,7 +393,7 @@ export function SpaceRoute({
                   try {
                     const imported = spaceViewSchema.parse(JSON.parse(json));
                     if (view?.scene === imported.scene) {
-                      cutPolygon(imported.polyline, data!.metadata.bounds);
+                      cutPolygon(imported, data!.metadata.bounds);
                       setView(imported);
                       setDrawing(null);
                       setError(null);

@@ -1,14 +1,22 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { cutPolygon, elementKey, retained, type Metadata, type ViewState } from "./state";
+import {
+  cutPolygon,
+  elementKey,
+  offsetCut,
+  retained,
+  type Metadata,
+  type ViewState,
+} from "./state";
 
 type Props = {
   metadata: Metadata;
   positions: Float32Array;
   state: ViewState;
   drawing: "straight" | "bent" | null;
-  onChange: (change: Partial<ViewState>) => void;
+  /** False when the patch is rejected (an invalid cut); the route then shows why. */
+  onChange: (change: Partial<ViewState>) => boolean;
   onDraw: (point: [number, number]) => void;
   onError: (message: string) => void;
 };
@@ -54,7 +62,7 @@ export function SpaceCanvas(props: Props) {
     renderer.setClearColor(0x202427);
     renderer.domElement.setAttribute(
       "aria-label",
-      "Space 3D mesh. Left drag orbit, right drag pan, wheel zoom. Click an element to select.",
+      "Space 3D mesh. Left drag orbit, right drag pan, wheel zoom. Click an element to select; drag square cut handles to edit the cut.",
     );
     renderer.domElement.tabIndex = 0;
     renderer.domElement.className = "block size-full";
@@ -119,27 +127,119 @@ export function SpaceCanvas(props: Props) {
       scene.add(mesh);
       meshes.push(mesh);
     }
-    const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false });
-    const line = new THREE.Line(new THREE.BufferGeometry(), lineMaterial);
-    line.renderOrder = 10;
-    scene.add(line);
-    let syncing = false;
+    // The drawn cut, its offset shift, and square vertex handles float just above the scene.
+    const cutLine = new THREE.Line(
+      new THREE.BufferGeometry(),
+      new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false }),
+    );
+    const offsetLine = new THREE.Line(
+      new THREE.BufferGeometry(),
+      new THREE.LineBasicMaterial({ color: 0x8fd3ff, depthTest: false }),
+    );
+    const handles = new THREE.Points(
+      new THREE.BufferGeometry(),
+      new THREE.PointsMaterial({
+        size: 9,
+        sizeAttenuation: false,
+        vertexColors: true,
+        depthTest: false,
+      }),
+    );
+    for (const overlay of [cutLine, offsetLine, handles]) {
+      overlay.renderOrder = 10;
+      scene.add(overlay);
+    }
     let dragged: number | null = null;
+    let draft: [number, number][] | null = null;
+    let hover: [number, number] | null = null;
+    let hot: number | null = null;
     let polygon: [number, number][] = [];
+    let shown: ViewState | null = null;
+    const published = new WeakSet<object>();
+    let frame = 0;
     const drawingZ = props.metadata.bounds.maxZ - origin.z + 0.1;
-    const render = () => renderer.render(scene, camera);
+    // OrbitControls fires per pointer move; coalesce those and every state change into one frame.
+    const render = () => {
+      frame ||= requestAnimationFrame(() => {
+        frame = 0;
+        renderer.render(scene, camera);
+      });
+    };
+    const local = (points: [number, number][], closed: boolean) => {
+      const v = points.map((p) => new THREE.Vector3(p[0] - origin.x, p[1] - origin.y, drawingZ));
+      return closed && v.length > 2 ? [...v, v[0]!] : v;
+    };
+    const setGeometry = (object: THREE.Line | THREE.Points, points: THREE.Vector3[]) => {
+      object.geometry.dispose();
+      object.geometry = new THREE.BufferGeometry().setFromPoints(points);
+      object.visible = points.length > 0;
+    };
+    // Draft (drag) and hover (rubberband) previews clip live; only a valid committed cut reaches state.
+    const drawCut = () => {
+      const s = latest.current.state,
+        drawing = latest.current.drawing;
+      const points = draft ?? s.polyline;
+      const closing = drawing === "bent" && points.length >= 3 && hover === points[0];
+      const cut = {
+        polyline: drawing && hover && !closing ? [...points, hover] : points,
+        closed: closing || (s.closed && !drawing),
+        offset: s.offset,
+      };
+      let valid = true;
+      try {
+        polygon = cutPolygon(cut, props.metadata.bounds);
+        uniforms.spacePolygonCount.value = polygon.length;
+        polygon.forEach((v, i) =>
+          uniforms.spacePolygon.value[i]!.set(v[0] - origin.x, v[1] - origin.y),
+        );
+      } catch {
+        valid = false;
+      }
+      uniforms.spaceKeepInside.value = s.keepInside;
+      cutLine.material.color.setHex(valid ? 0xffffff : 0xff5c5c);
+      setGeometry(cutLine, cut.polyline.length > 1 ? local(cut.polyline, cut.closed) : []);
+      setGeometry(
+        offsetLine,
+        valid && cut.offset !== 0 && cut.polyline.length > 1
+          ? local(offsetCut(cut), cut.closed)
+          : [],
+      );
+      setGeometry(handles, local(points, false));
+      handles.geometry.setAttribute(
+        "color",
+        new THREE.Float32BufferAttribute(
+          points.flatMap((_, i) => (i === (dragged ?? hot) ? [1, 0.82, 0.4] : [1, 1, 1])),
+          3,
+        ),
+      );
+      render();
+    };
     const sync = () => {
-      syncing = true;
-      const s = latest.current.state;
-      camera.position.fromArray(s.camera).sub(origin);
-      controls.target.fromArray(s.target).sub(origin);
-      controls.update();
-      const hidden = new Set(s.hidden),
-        isolated = s.isolated && new Set(s.isolated);
-      for (const mesh of meshes) {
-        const key = mesh.userData.key as string;
-        mesh.visible = !hidden.has(key) && (!isolated || isolated.has(key));
-        mesh.material.emissive.setHex(s.selected === key ? 0x666666 : 0x000000);
+      const s = latest.current.state,
+        was = shown;
+      shown = s;
+      // The camera is applied only when it changed outside this canvas. Any pose this canvas
+      // published is already behind the camera; re-applying it fights the gesture that followed.
+      if (
+        (s.camera !== was?.camera || s.target !== was?.target) &&
+        !(published.has(s.camera) && published.has(s.target))
+      ) {
+        camera.position.fromArray(s.camera).sub(origin);
+        controls.target.fromArray(s.target).sub(origin);
+        controls.update();
+      }
+      if (
+        s.hidden !== was?.hidden ||
+        s.isolated !== was?.isolated ||
+        s.selected !== was?.selected
+      ) {
+        const hidden = new Set(s.hidden),
+          isolated = s.isolated && new Set(s.isolated);
+        for (const mesh of meshes) {
+          const key = mesh.userData.key as string;
+          mesh.visible = !hidden.has(key) && (!isolated || isolated.has(key));
+          mesh.material.emissive.setHex(s.selected === key ? 0x666666 : 0x000000);
+        }
       }
       const p = s.plane;
       uniforms.spacePlaneOn.value = p !== null;
@@ -150,31 +250,26 @@ export function SpaceCanvas(props: Props) {
           p[2],
           p[3] + p[0] * origin.x + p[1] * origin.y + p[2] * origin.z,
         );
-      polygon = cutPolygon(s.polyline, props.metadata.bounds);
-      uniforms.spacePolygonCount.value = polygon.length;
-      uniforms.spaceKeepInside.value = s.keepInside;
-      polygon.forEach((v, i) =>
-        uniforms.spacePolygon.value[i]!.set(v[0] - origin.x, v[1] - origin.y),
-      );
-      line.geometry.dispose();
-      line.geometry = new THREE.BufferGeometry().setFromPoints(
-        s.polyline.map((p) => new THREE.Vector3(p[0] - origin.x, p[1] - origin.y, drawingZ)),
-      );
-      line.visible = s.polyline.length > 1;
+      if (!latest.current.drawing) hover = null;
+      if (dragged === null) draft = null;
       controls.enabled = latest.current.drawing === null && dragged === null;
-      syncing = false;
-      render();
+      drawCut();
     };
     update.current = sync;
-    const changed = () => {
-      render();
-      if (!syncing)
-        latest.current.onChange({
-          camera: camera.position.clone().add(origin).toArray() as ViewState["camera"],
-          target: controls.target.clone().add(origin).toArray() as ViewState["target"],
-        });
+    // OrbitControls owns the gesture; the durable pose is published once it ends.
+    const publish = () => {
+      const pose: [ViewState["camera"], ViewState["target"]] = [
+        camera.position.clone().add(origin).toArray() as ViewState["camera"],
+        controls.target.clone().add(origin).toArray() as ViewState["target"],
+      ];
+      const s = latest.current.state;
+      if (pose[0].every((v, i) => v === s.camera[i]) && pose[1].every((v, i) => v === s.target[i]))
+        return;
+      published.add(pose[0]).add(pose[1]);
+      latest.current.onChange({ camera: pose[0], target: pose[1] });
     };
-    controls.addEventListener("change", changed);
+    controls.addEventListener("change", render);
+    controls.addEventListener("end", publish);
     const resize = new ResizeObserver(() => {
       const width = mount.clientWidth,
         height = mount.clientHeight;
@@ -204,41 +299,62 @@ export function SpaceCanvas(props: Props) {
       );
       return hit ? [hit.x + origin.x, hit.y + origin.y] : null;
     };
-    const pointerDown = (event: PointerEvent) => {
-      down = [event.clientX, event.clientY];
-      if (
-        event.button !== 0 ||
-        latest.current.drawing ||
-        Math.abs(camera.position.clone().sub(controls.target).normalize().z) < 0.99
-      )
-        return;
+    const handleAt = (event: PointerEvent): number | null => {
       const r = renderer.domElement.getBoundingClientRect();
+      let best: number | null = null,
+        distance = 10;
       latest.current.state.polyline.forEach((p, i) => {
         const screen = new THREE.Vector3(p[0] - origin.x, p[1] - origin.y, drawingZ).project(
           camera,
         );
-        if (
-          Math.hypot(
-            ((screen.x + 1) * r.width) / 2 + r.left - event.clientX,
-            ((1 - screen.y) * r.height) / 2 + r.top - event.clientY,
-          ) < 14
-        )
-          dragged = i;
+        const d = Math.hypot(
+          ((screen.x + 1) * r.width) / 2 + r.left - event.clientX,
+          ((1 - screen.y) * r.height) / 2 + r.top - event.clientY,
+        );
+        if (screen.z < 1 && d < distance) [best, distance] = [i, d];
       });
-      if (dragged !== null) {
-        controls.enabled = false;
-        renderer.domElement.setPointerCapture(event.pointerId);
-        event.stopImmediatePropagation();
-      }
+      return best;
+    };
+    // While drawing a bent cut, the first handle snaps the next point onto it to close the polygon.
+    const drawPoint = (event: PointerEvent): [number, number] | null => {
+      const points = latest.current.state.polyline;
+      return latest.current.drawing === "bent" && points.length >= 3 && handleAt(event) === 0
+        ? points[0]!
+        : planPoint(event);
+    };
+    const pointerDown = (event: PointerEvent) => {
+      down = [event.clientX, event.clientY];
+      if (event.button !== 0 || latest.current.drawing) return;
+      dragged = handleAt(event);
+      if (dragged === null) return;
+      draft = [...latest.current.state.polyline];
+      controls.enabled = false;
+      renderer.domElement.setPointerCapture(event.pointerId);
+      event.stopImmediatePropagation();
+      drawCut();
     };
     const pointerMove = (event: PointerEvent) => {
-      if (dragged === null) return;
-      const p = planPoint(event);
-      if (p)
-        latest.current.onChange({
-          polyline: latest.current.state.polyline.map((v, i) => (i === dragged ? p : v)),
-        });
-      event.stopImmediatePropagation();
+      if (dragged !== null && draft) {
+        const p = planPoint(event);
+        if (p) draft[dragged] = p;
+        event.stopImmediatePropagation();
+        drawCut();
+      } else if (latest.current.drawing) {
+        hover = drawPoint(event);
+        hot = hover === latest.current.state.polyline[0] ? 0 : null;
+        drawCut();
+      } else if (event.buttons === 0) {
+        const next = handleAt(event);
+        renderer.domElement.style.cursor = next === null ? "" : "grab";
+        if (next !== hot) {
+          hot = next;
+          drawCut();
+        }
+      }
+    };
+    const pointerLeave = () => {
+      hover = null;
+      drawCut();
     };
     const pointerUp = (event: PointerEvent) => {
       if (dragged !== null) {
@@ -246,12 +362,17 @@ export function SpaceCanvas(props: Props) {
         controls.enabled = latest.current.drawing === null;
         renderer.domElement.releasePointerCapture(event.pointerId);
         event.stopImmediatePropagation();
+        // An accepted draft stays drawn until the state carrying it syncs; a rejected one snaps back.
+        if (!latest.current.onChange({ polyline: draft! })) {
+          draft = null;
+          drawCut();
+        }
         return;
       }
       if (event.button !== 0 || Math.hypot(event.clientX - down[0]!, event.clientY - down[1]!) > 5)
         return;
       if (latest.current.drawing) {
-        const p = planPoint(event);
+        const p = drawPoint(event);
         if (p) latest.current.onDraw(p);
         return;
       }
@@ -270,20 +391,25 @@ export function SpaceCanvas(props: Props) {
     renderer.domElement.addEventListener("pointerdown", pointerDown, true);
     renderer.domElement.addEventListener("pointermove", pointerMove, true);
     renderer.domElement.addEventListener("pointerup", pointerUp, true);
+    renderer.domElement.addEventListener("pointerleave", pointerLeave);
     sync();
     return () => {
       update.current = null;
+      cancelAnimationFrame(frame);
       resize.disconnect();
       controls.dispose();
       renderer.domElement.removeEventListener("pointerdown", pointerDown, true);
       renderer.domElement.removeEventListener("pointermove", pointerMove, true);
       renderer.domElement.removeEventListener("pointerup", pointerUp, true);
+      renderer.domElement.removeEventListener("pointerleave", pointerLeave);
       for (const mesh of meshes) {
         mesh.geometry.dispose();
         mesh.material.dispose();
       }
-      line.geometry.dispose();
-      lineMaterial.dispose();
+      for (const overlay of [cutLine, offsetLine, handles]) {
+        overlay.geometry.dispose();
+        overlay.material.dispose();
+      }
       renderer.dispose();
       renderer.domElement.remove();
     };

@@ -13,10 +13,68 @@ export const elementKey = (element: Element) =>
 
 type Point = [number, number];
 
-/** Extend the open cut's end tangents to an enclosing rectangle, then follow its perimeter.
- * The boundary closure lies outside all scene geometry, never across a snaking cut. */
-export function cutPolygon(points: Point[], bounds: Metadata["bounds"]): Point[] {
-  if (points.length < 2) return [];
+export type Cut = Pick<ViewState, "polyline" | "closed" | "offset">;
+
+/** Shift a cut parallel by `offset` along the left normal of its drawing direction, mitring each bend. */
+export function offsetCut({ polyline: points, closed, offset }: Cut): Point[] {
+  if (offset === 0 || points.length < 2) return points;
+  const n = points.length;
+  const normal = (a: Point, b: Point): Point => {
+    const l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (l < 0.000001) throw Error("Cut points must be distinct");
+    return [-(b[1] - a[1]) / l, (b[0] - a[0]) / l];
+  };
+  const shifted = points.map((p, i): Point => {
+    const prev = closed || i > 0 ? points[(i - 1 + n) % n]! : null;
+    const next = closed || i < n - 1 ? points[(i + 1) % n]! : null;
+    const a = prev ? normal(prev, p) : null,
+      b = next ? normal(p, next) : null;
+    const [nx, ny] = a && b ? [a[0] + b[0], a[1] + b[1]] : (a ?? b)!;
+    const scale = a && b ? 1 + a[0] * b[0] + a[1] * b[1] : 1;
+    if (scale < 0.02) throw Error("Cut bend is too sharp to offset. Open the bend first.");
+    return [p[0] + (offset * nx) / scale, p[1] + (offset * ny) / scale];
+  });
+  // An offset past a segment's length turns that segment around: the shape inverts without crossing.
+  for (let i = 0; i < (closed ? n : n - 1); i++) {
+    const a = points[i]!,
+      b = points[(i + 1) % n]!,
+      c = shifted[i]!,
+      d = shifted[(i + 1) % n]!;
+    if ((b[0] - a[0]) * (d[0] - c[0]) + (b[1] - a[1]) * (d[1] - c[1]) <= 0)
+      throw Error("Offset is longer than a cut segment allows. Reduce the offset.");
+  }
+  return shifted;
+}
+
+/** The plan polygon whose even-odd interior is retained (CPU picking and the GPU shader both read it).
+ * A closed cut is its own polygon. An open cut extends its end tangents to an enclosing rectangle,
+ * then follows its perimeter, so the closure lies outside all scene geometry, never across a snaking cut. */
+export function cutPolygon(cut: Cut, bounds: Metadata["bounds"]): Point[] {
+  if (cut.polyline.length < 2) return [];
+  const points = offsetCut(cut);
+  const polygon = cut.closed ? points : openPolygon(points, bounds);
+  const cross = (a: Point, b: Point, c: Point) =>
+    (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  // A crossing path has no single retained side, including when an end extension crosses a bend.
+  for (let i = 0; i < polygon.length; i++) {
+    const a = polygon[i]!,
+      b = polygon[(i + 1) % polygon.length]!;
+    for (let j = i + 2; j < polygon.length; j++) {
+      if (i === 0 && j === polygon.length - 1) continue;
+      const c = polygon[j]!,
+        d = polygon[(j + 1) % polygon.length]!;
+      if (cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0)
+        throw Error(
+          cut.closed
+            ? "Cut polygon crosses itself. Drag a vertex to untangle it."
+            : "Cut crosses itself or its end extensions. Move a bend or change the end direction.",
+        );
+    }
+  }
+  return polygon;
+}
+
+function openPolygon(points: Point[], bounds: Metadata["bounds"]): Point[] {
   const xs = points.map((p) => p[0]),
     ys = points.map((p) => p[1]);
   const margin = Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY, 1);
@@ -57,24 +115,7 @@ export function cutPolygon(points: Point[], bounds: Metadata["bounds"]): Point[]
   const boundary = [...corners, ...corners.map((c) => ({ ...c, at: c.at + perimeter }))]
     .filter((c) => c.at > end.at && c.at < finish)
     .map((c) => c.point);
-  const polygon = [start.point, ...points, end.point, ...boundary];
-  const cross = (a: Point, b: Point, c: Point) =>
-    (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-  // A crossing path has no single retained side, including when an end extension crosses a bend.
-  for (let i = 0; i < polygon.length; i++) {
-    const a = polygon[i]!,
-      b = polygon[(i + 1) % polygon.length]!;
-    for (let j = i + 2; j < polygon.length; j++) {
-      if (i === 0 && j === polygon.length - 1) continue;
-      const c = polygon[j]!,
-        d = polygon[(j + 1) % polygon.length]!;
-      if (cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0)
-        throw Error(
-          "Cut crosses itself or its end extensions. Move a bend or change the end direction.",
-        );
-    }
-  }
-  return polygon;
+  return [start.point, ...points, end.point, ...boundary];
 }
 
 export function insidePolygon(x: number, y: number, points: number[][]): boolean {
@@ -157,5 +198,7 @@ export function initialView(metadata: Metadata, scene: string): ViewState {
     plane: null,
     polyline: [],
     keepInside: true,
+    closed: false,
+    offset: 0,
   };
 }
