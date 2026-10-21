@@ -7,6 +7,8 @@
 import type { Provisional } from "@pe/ducts-domain/losses";
 import { tokenRef } from "@pe/kit/lib/token";
 
+import type { Split, SplitPart } from "../b/model";
+
 export const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" : n.toFixed(d));
 
 /** Equivalent feet as an engineer reads them: whole feet, one place under ten. */
@@ -73,10 +75,102 @@ export function BarLegend({
         <>
           eq ft = effective length from the fan to the row's far end, each fitting as equivalent feet
           at its duct's own friction rate (small number: in-wg) · bar = in-wg, full width = the
-          critical run ◆ {criticalName ?? "—"} <span className="face-mono">{fmt(scale)}</span>
+          critical run ◆ {criticalName ?? "—"} <span className="face-mono">{fmt(scale)}</span>; a run's
+          bar splits into unit end, ducts &amp; fittings, and grille
         </>
       )}
     </p>
+  );
+}
+
+/** The three parts of a run, in bar order (air order: the unit, the ducts, the grille), each its own ink. */
+const PARTS = [
+  { key: "unit", word: "unit end", says: "passive devices in series with the fan (coil, dehu)", ink: "viz-1" },
+  { key: "duct", word: "ducts & fittings", says: "straight duct and every fitting between the unit and the grille", ink: "ink-2" },
+  { key: "terminal", word: "grille", says: "the terminal's own drop", ink: "viz-5" },
+] as const;
+
+type Light = (ids: readonly number[] | null) => void;
+
+/**
+ * A run's loss as three abutting segments against `scale` (the fan): each segment's width is its
+ * in-wg share, and hovering one lights the elements that pay it; leaving gives the row's set back.
+ */
+function SplitFill({ split, scale, light, back }: { split: Split; scale: number; light?: Light; back?: readonly number[] }) {
+  let at = 0;
+  return (
+    <>
+      {PARTS.map(({ key, word, ink }) => {
+        const part: SplitPart = split[key];
+        const left = at;
+        at += part.dp / scale;
+        // Unknown is drawn, never blank: a dashed stub past any known share. Ducts skip it: an unpriced
+        // fitting already says so on its own row, and its stub would sit on the grille's.
+        const stub = part.unpriced > 0 && key !== "duct" ? (
+          <span
+            key={`${key}?`}
+            className="absolute -inset-y-px w-1.5 border border-dashed"
+            data-e-split={`${key}-unpriced`}
+            title={`${word}: ${part.unpriced} with no drop, so this part is unknown (not zero)`}
+            style={{ left: `min(${at * 100}%, calc(100% - 6px))`, borderColor: tokenRef(ink) }}
+            onMouseEnter={light ? () => light(part.ids) : undefined}
+            onMouseLeave={light ? () => light(back ?? null) : undefined}
+          />
+        ) : null;
+        if (part.dp <= 0) return stub;
+        return [stub, (
+          <span
+            key={key}
+            className="absolute inset-y-0"
+            data-e-split={key}
+            title={`${word} ${fmt(part.dp, LOSS_PLACES)} in-wg (${Math.round((part.dp / scale) * 100)}% of the fan)`}
+            style={{ left: `${left * 100}%`, width: `${Math.min(1 - left, part.dp / scale) * 100}%`, backgroundColor: tokenRef(ink) }}
+            onMouseEnter={light ? () => light(part.ids) : undefined}
+            onMouseLeave={light ? () => light(back ?? null) : undefined}
+          />
+        )];
+      })}
+    </>
+  );
+}
+
+/**
+ * The critical run's split, wide, under the path header: where the fan's static goes, unit end to
+ * grille, with each part's in-wg and share. Hovering a part lights its elements everywhere.
+ */
+export function SplitStrip({ split, scale, light }: { split: Split | null; scale: number | null; light: Light }) {
+  if (!split || !scale) return null;
+  return (
+    <div className="border-line flex flex-col gap-1 border-b px-2 py-1.5 t-small" data-e-split-strip="">
+      <span className="relative block h-2.5" style={{ backgroundColor: tokenRef("line") }}>
+        <SplitFill split={split} scale={scale} light={light} />
+      </span>
+      <span className="flex flex-wrap gap-x-3 text-ink-2">
+        {PARTS.filter(({ key }) => split[key].dp > 0 || split[key].unpriced > 0).map(({ key, word, says, ink }) => (
+          <span
+            key={key}
+            className="inline-flex items-center gap-1"
+            title={says}
+            onMouseEnter={() => light(split[key].ids)}
+            onMouseLeave={() => light(null)}
+          >
+            <span className="inline-block size-2" style={{ backgroundColor: tokenRef(ink) }} aria-hidden />
+            {word}{" "}
+            {split[key].dp > 0 ? (
+              <>
+                <span className="face-mono text-ink">{fmt(split[key].dp, 3)}</span>
+                <span className="face-mono">{Math.round((split[key].dp / scale) * 100)}%</span>
+              </>
+            ) : null}
+            {split[key].unpriced > 0 ? (
+              <span data-tone="caution">
+                {split[key].dp > 0 ? `+ ${split[key].unpriced} unpriced` : "no drop: unknown"}
+              </span>
+            ) : null}
+          </span>
+        ))}
+      </span>
+    </div>
   );
 }
 
@@ -89,7 +183,7 @@ const LOSS_PLACES = 4;
  * room; the in-wg rides the feet cell's hint.
  */
 const COL = {
-  bar: "w-10 @max-[360px]:hidden",
+  bar: "w-10 @max-[300px]:hidden",
   ft: "w-12",
   wg: "w-12 @max-[460px]:hidden",
   mark: "w-1.5",
@@ -135,6 +229,9 @@ export function MetaBar({
   self,
   selfFt,
   unpriced = null,
+  split = null,
+  light,
+  rowIds,
 }: {
   /** The loss to here, in-wg. */
   value: number | null;
@@ -148,6 +245,11 @@ export function MetaBar({
   selfFt?: number | null;
   /** A priced path that could not price this row: its word stands where the number would, never 0. */
   unpriced?: { word: string; why: string } | null;
+  /** A whole run's three parts (run and system rows): the fill splits, and a part's hover lights it. */
+  split?: Split | null;
+  light?: Light;
+  /** The row's own set, lit again when the pointer leaves a part. */
+  rowIds?: readonly number[];
 }) {
   const share = value != null && scale ? Math.min(1, value / scale) : null;
   const own = unpriced ? unpriced.word : self === "" ? "" : selfFt == null ? "—" : `+${fmtFt(selfFt)}`;
@@ -157,10 +259,14 @@ export function MetaBar({
         {share != null ? (
           <>
             <span className="absolute inset-0" style={{ backgroundColor: tokenRef("line") }} />
-            <span
-              className="absolute inset-y-0 left-0"
-              style={{ width: `${share * 100}%`, backgroundColor: tokenRef("ink-2") }}
-            />
+            {split && scale ? (
+              <SplitFill split={split} scale={scale} light={light} back={rowIds} />
+            ) : (
+              <span
+                className="absolute inset-y-0 left-0"
+                style={{ width: `${share * 100}%`, backgroundColor: tokenRef("ink-2") }}
+              />
+            )}
           </>
         ) : null}
       </span>

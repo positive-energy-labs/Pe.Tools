@@ -24,7 +24,7 @@ import { reviewLines } from "../../write-review";
 import { buildTree, systemList, type TreeNode } from "../b/model";
 import type { ProtoProps } from "../props";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
-import { BarLegend, fmtFt, LossBar } from "./bar";
+import { BarLegend, fmtFt, LossBar, SplitStrip } from "./bar";
 import { DesignFrictionSettings } from "./design-friction";
 import { RunDetail, runOf } from "./run-detail";
 import { ECanvas } from "./canvas";
@@ -260,7 +260,10 @@ export function EScreen({ props }: { props: ProtoProps }) {
                 : encoded.nameOf(reading.quantity.maxId)}
             </p>
           ) : (
-            <BarLegend scale={scale} criticalName={critical ? grilleName(critical) : null} />
+            <>
+              <BarLegend scale={scale} criticalName={critical ? grilleName(critical) : null} />
+              <SplitStrip split={critical?.split ?? tree.split} scale={scale} light={light} />
+            </>
           )}
           <div className="flex min-h-0 flex-1 flex-col" onMouseLeave={() => light(null)}>
             <SystemTree

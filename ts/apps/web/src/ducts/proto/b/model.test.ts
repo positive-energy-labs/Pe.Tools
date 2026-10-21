@@ -11,7 +11,7 @@ import { groupTree, runsOf } from "@pe/ducts-domain/topology";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 import synthetic from "../../fixtures/synthetic-snapshot.json";
-import { buildTree, rowsByElement } from "./model";
+import { buildTree, rowsByElement, splitOf } from "./model";
 
 const snapshot = synthetic as unknown as DuctSnapshot;
 const row = (id: number, dp: number | null, kind: Row["kind"] = "friction"): Row => ({
@@ -91,4 +91,21 @@ it("a run reads in effective feet: stretches add up to its tel, and a duct carri
   const element = runNode.children[0]!.children[0]!;
   expect(element.selfFt).toBe(20);
   expect(element.rate).toBeCloseTo((0.002 / 20) * 100, 9);
+});
+
+it("splits a run into unit end, ducts and fittings, and grille, and the parts add to the run", () => {
+  const rows = [
+    { id: 1, kind: "fitting", dp: 0.1, desc: "passive coil" },
+    { id: 2, kind: "friction", dp: 0.05, desc: "duct" },
+    { id: 3, kind: "fitting", dp: 0.02, desc: "elbow" },
+    { id: 2, kind: "friction", dp: 0.01, desc: "duct again" },
+    { id: 4, kind: "terminal", dp: 0.08, desc: "grille" },
+    { id: 5, kind: "terminal", dp: null, desc: "grille, no drop" },
+  ] as Row[];
+  const split = splitOf(rows, new Set([1]));
+  expect(split.unit).toEqual({ dp: 0.1, ids: [1], unpriced: 0 });
+  expect(split.duct.ids).toEqual([2, 3]);
+  expect(split.duct.dp).toBeCloseTo(0.08);
+  // An unpriced grille is counted, never priced at 0.
+  expect(split.terminal).toEqual({ dp: 0.08, ids: [4, 5], unpriced: 1 });
 });

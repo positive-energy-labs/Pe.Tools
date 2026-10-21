@@ -179,6 +179,9 @@ export function SystemTree({ ctx }: { ctx: TreeCtx }) {
               provisional={n.provisional}
               self={n.kind === "leg" || n.kind === "element" ? n.self : ""}
               unpriced={n.unpriced}
+              split={n.split}
+              light={ctx.light}
+              rowIds={idsOf(n)}
             />
           ),
           actions: ruleKey ? (

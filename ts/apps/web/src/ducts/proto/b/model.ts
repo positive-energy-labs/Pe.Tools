@@ -15,6 +15,37 @@ import { labelOfNode, legsOf } from "../../legs";
 
 export type TreeKind = "system" | "run" | "leg" | "element";
 
+/** One end of a run's loss: its in-wg and the elements that pay it (the set a hover lights). */
+export interface SplitPart {
+  dp: number;
+  ids: number[];
+  /** Rows in this part with no drop (a grille with no catalog link): the part is unknown, never 0. */
+  unpriced: number;
+}
+/**
+ * A whole run's loss in three: the unit end (passive devices in series with the fan: a coil, a
+ * dehu), the ducts and fittings between, and the terminal's drop. The fan is not a part: it is the
+ * whole, the largest run's total.
+ */
+export interface Split {
+  unit: SplitPart;
+  duct: SplitPart;
+  terminal: SplitPart;
+}
+
+/** A path's rows dealt to the three parts by what each row prices. */
+export function splitOf(rows: readonly Row[], equipment: ReadonlySet<number>): Split {
+  const part = (): SplitPart => ({ dp: 0, ids: [], unpriced: 0 });
+  const split: Split = { unit: part(), duct: part(), terminal: part() };
+  for (const row of rows) {
+    const to = row.kind === "terminal" ? split.terminal : equipment.has(row.id) ? split.unit : split.duct;
+    if (row.dp == null || row.error) to.unpriced++;
+    to.dp += row.dp ?? 0;
+    if (!to.ids.includes(row.id)) to.ids.push(row.id);
+  }
+  return split;
+}
+
 export interface TreeNode {
   key: string;
   kind: TreeKind;
@@ -33,6 +64,8 @@ export interface TreeNode {
   rate: number | null;
   /** Why `self` is null on a priced path: the word the row shows (`no drop`, `unpriced`) and the reason. */
   unpriced: { word: string; why: string } | null;
+  /** A run's loss in three parts (the system row carries its critical run's); null elsewhere or unpriced. */
+  split: Split | null;
   /** Bar scale: the group's fan. */
   scale: number | null;
   critical: "pe" | "longest" | null;
@@ -104,6 +137,7 @@ export function buildTree(
   const name = (id: number) => nameOf(id) ?? "element not in snapshot";
   const labelOf = labelOfNode(snapshot);
   const labels = groupLabels(snapshot);
+  const equipment = new Set(snapshot.nodes.filter((n) => n.kind === "equipment").map((n) => n.id));
   return snapshot.groups.filter((g) => !only || g.id === only).map((group) => {
     const tree = groupTree(snapshot, group.id);
     const runs = runsOf(tree);
@@ -148,6 +182,7 @@ export function buildTree(
             selfFt: selfFtOf(id),
             rate: owned ? rateOfRows(owned.get(id) ?? []) : null,
             unpriced: owned ? unpricedOf(owned.get(id) ?? []) : null,
+            split: null,
             level: null,
             scale: fan,
             critical: null,
@@ -169,6 +204,7 @@ export function buildTree(
           selfFt: path ? sumKnown(elements.map((e) => e.selfFt)) : null,
           rate: null,
           unpriced: null,
+          split: null,
           level: null,
           scale: fan,
           critical: null,
@@ -190,6 +226,7 @@ export function buildTree(
         selfFt: null,
         rate: null,
         unpriced: null,
+        split: path ? splitOf(path.rows, equipment) : null,
         scale: fan,
         critical:
           peCritical != null
@@ -215,6 +252,7 @@ export function buildTree(
       selfFt: null,
       rate: null,
       unpriced: null,
+      split: runNodes.find((r) => r.terminal === peCritical)?.split ?? null,
       level: null,
       scale: fan,
       critical: null,
@@ -253,7 +291,7 @@ export function subjectTree(
   const nameOf = elementNamer(snapshot, null);
   const name = (id: number) => nameOf(id) ?? "element not in snapshot";
   const cut = legsOf(snapshot, ids, labelOfNode(snapshot), work);
-  const blank = { total: null, self: null, ft: null, selfFt: null, rate: null, unpriced: null, level: null, scale: null, critical: null, provisional: null, terminal: null };
+  const blank = { total: null, self: null, ft: null, selfFt: null, rate: null, unpriced: null, split: null, level: null, scale: null, critical: null, provisional: null, terminal: null };
   const legs = cut.legs.map(
     (leg, i): TreeNode => ({
       ...blank,
@@ -297,6 +335,7 @@ export function systemList(snapshot: DuctSnapshot, priced: Priced | null): TreeN
       selfFt: null,
       rate: null,
       unpriced: null,
+      split: null,
       level: null,
       scale: null,
       critical: null,
