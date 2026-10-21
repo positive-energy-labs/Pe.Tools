@@ -5,7 +5,12 @@
  * (`host.ts`) and provided to the verbs. Readiness and losses are derived (`readiness.ts`,
  * `pricing.ts`), never stored. `preview` asks Revit what the staged cells would write; `apply`
  * sends the same request for real, armed only while the preview matches the Work revision and the
- * snapshot it was built on.
+ * snapshot it was built on. Rulings, slots and flows write any time; the ESP number waits for a
+ * clean calc (no Fix or Set row standing) and is left out of the request until then.
+ *
+ * Every verb that writes to Revit shows in the Situation as well as the page (kaitpw, 2026-10-21):
+ * the head runs a verb bare, and the heal and fan verbs then act on the chosen system (its Heal
+ * row, its offered fan), refused in words when there is nothing to act on.
  */
 import { z } from "zod";
 import {
@@ -30,13 +35,14 @@ import type { Grids } from "@pe/ducts-domain/loss-grid";
 import { applyRequest, price } from "@pe/ducts-domain/pricing";
 import { pendingRulings, withStoredRulings } from "@pe/ducts-domain/rulings";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { fanCandidates } from "@pe/ducts-domain/fan-assignment";
+import { fanCandidates, fansOwedBase } from "@pe/ducts-domain/fan-assignment";
 import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
 import { systemScope } from "@pe/ducts-domain/system-scope";
 import { airflowOptions } from "./airflow";
+import { elementNamer } from "./claims";
 import { groupLabels } from "./inputs";
-import { fanRefusal, fanWords, holding, triage, writeBlocked } from "./inbox-rows";
+import { espWaits, fanRefusal, fanWords, holding, triage } from "./inbox-rows";
 
 /** What Revit said the staged cells would write, and the Work and snapshot it was asked over. */
 export interface DuctsEvaluation {
@@ -82,6 +88,11 @@ const ductsPageSchema = z.object({
   selected: z.string().default(""),
   /** The selected issue id (it may name no element: no-root, multi-root); empty = none. Page, never URL. */
   issue: z.string().default(""),
+  /**
+   * The Diagnostics kind picked in its key (`diagnosticKind`): it narrows the Diagnostics rows and
+   * the picture's finding annotations; empty = none, and the picture annotates Fix rows only. Page, never URL.
+   */
+  diagnostic: z.string().default(""),
   /** The picture's encoding, a key of `ENCODINGS` (`encoding.tsx`). */
   encoding: z.string().default("health"),
   /** The camera the model picture looks through: the isometric globe, or `plan` (a preset on it). */
@@ -147,9 +158,9 @@ export const scopeOf = (snapshot: DuctSnapshot, page: Pick<DuctsPage, "system">)
   page.system ? systemScope(snapshot, page.system) : null;
 
 /**
- * What stands between the Work and a write, in the inbox's own terms: the Fix and Set rows of the
- * chosen system (`triage`, the rows the Write group counts). Null when the snapshot or tables are
- * unread: nothing can be priced then, and the write fails on its own words.
+ * What stands between the calc and the ESP write, in the inbox's own terms: the Fix and Set rows of
+ * the chosen system (`triage`, the rows the Write group counts). Null when the snapshot or tables
+ * are unread: nothing can be priced then, and the write fails on its own words.
  */
 const standing = (ctx: DuctsCtx) => {
   const snapshot = observed<DuctSnapshot>(ctx, "ducts");
@@ -175,6 +186,20 @@ const standing = (ctx: DuctsCtx) => {
     roles: priced.roles,
   });
   return { fix: holding(fix), set: set.length };
+};
+
+/** Staged ESP cells: the one write that waits for a clean calc. */
+export const stagedEsp = (doc: DuctsRouteDocument | null) =>
+  Object.values(doc?.esp ?? {}).filter((cell) => cell?.staged).length;
+
+/** Why the ESP waits (Fix or Set rows stand), or null when none is staged or it writes now. */
+const espHeld = (ctx: DuctsCtx) =>
+  stagedEsp(ctx.work.doc) ? espWaits(standing(ctx) ?? { fix: 0, set: 0 }) : null;
+
+/** The request preview and apply send: `built`, with the ESP left out while it waits. */
+const requestOf = (ctx: DuctsCtx) => {
+  const request = built(ctx);
+  return espHeld(ctx) ? { ...request, equipment: [] } : request;
 };
 
 /** The request from the staged cells, the snapshot and the grids the route read; throws why not. */
@@ -260,20 +285,114 @@ const healWords = (response: DuctsHeal.Res.Response) =>
     .map(([outcome, n]) => `${n} ${outcome}`)
     .join(" · ") || "nothing to heal";
 
-const healInput = z.object({ group: z.string() }) as unknown as z.ZodType<never>;
-/** The group a heal verb names; undefined when the handle asks for the verb at large. */
+// The group and the pair are optional: the head runs a verb bare, and it acts on the selection.
+const healInput = z.object({ group: z.string().optional() }) as unknown as z.ZodType<never>;
+/** The group a heal verb names; undefined when it is run bare (the head). */
 const groupOf = (input: unknown) => (input as { group?: string } | undefined)?.group;
 
+/** The element the page selected, by id; null when none (or an issue id). */
+const selectedId = (page: DuctsPage) => {
+  const id = Number(page.selected);
+  return page.selected && Number.isInteger(id) ? id : null;
+};
+
+/**
+ * The group a heal verb acts on: the one it names (a Heal row), else the chosen system's Heal row,
+ * as the inbox lists them (`triage`). With several, the selected element's network, else the one
+ * previewed; otherwise refused, with where to choose.
+ */
+const healTarget = (ctx: DuctsCtx, input: unknown): string => {
+  const named = groupOf(input);
+  if (named) return named;
+  const snapshot = observed<DuctSnapshot>(ctx, "ducts");
+  if (!snapshot) throw Error("The duct snapshot is not read yet");
+  const scope = ctx.page.system ? systemScope(snapshot, ctx.page.system) : null;
+  const where = ctx.page.system || "this document";
+  const groups = healPlan(snapshot, ctx.work.doc)
+    .groups.filter(
+      (g) =>
+        !scope ||
+        scope.groups.includes(g.group) ||
+        g.items.some((i) => i.ids.some((id) => scope.members.has(id))),
+    )
+    .map((g) => g.group);
+  if (!groups.length) throw Error(`Nothing in ${where} heals in Revit`);
+  if (groups.length === 1) return groups[0]!;
+  const selected = selectedId(ctx.page);
+  const holder = [...snapshot.nodes, ...snapshot.segments].find((e) => e.id === selected)?.groupId;
+  const run = ctx.page.heal;
+  const pick =
+    groups.find((g) => g === holder) ??
+    groups.find((g) => run?.mode === "preview" && g === run.group);
+  if (pick) return pick;
+  throw Error(
+    `${groups.length} networks in ${where} heal in Revit; select an element in one, or use its Heal row in the inbox`,
+  );
+};
+
 const fanInput = z.object({
-  unitId: z.number(),
-  systemId: z.number(),
+  unitId: z.number().optional(),
+  systemId: z.number().optional(),
 }) as unknown as z.ZodType<never>;
-/** The unit and system a fan verb names; undefined when the handle asks for the verb at large. */
+/** The unit and system a fan verb names; undefined when it is run bare (the head). */
 const pairOf = (input: unknown) => {
   const p = input as { unitId?: number; systemId?: number } | undefined;
   return p?.unitId != null && p.systemId != null
     ? { unitId: p.unitId, systemId: p.systemId }
     : undefined;
+};
+
+/**
+ * The fan the chosen system is offered, as the page offers it (`fansOwedBase` with the lead fan):
+ * with several, the selected unit, else the one previewed; otherwise refused, with why.
+ */
+const offeredFan = (ctx: DuctsCtx) => {
+  const snapshot = observed<DuctSnapshot>(ctx, "ducts");
+  if (!snapshot) throw Error("The duct snapshot is not read yet");
+  const system = ctx.page.system;
+  if (!system) throw Error("Choose a system to make its fan");
+  const grids = observed<Grids>(ctx, "tables");
+  const priced = grids
+    ? price(snapshot, grids, ctx.work.doc, observed<Catalogs>(ctx, "catalogs") ?? EMPTY_CATALOGS)
+    : null;
+  const owed = fansOwedBase(
+    snapshot,
+    (priced ?? survey(snapshot, ctx.work.doc)).roles,
+    (g) => priced?.next.byGroup[g]?.fans[0]?.unit ?? null,
+  );
+  const name = elementNamer(snapshot, null);
+  const split = owed.split?.get(system);
+  if (split)
+    throw Error(
+      `${system} spans separate networks with their own fans (${split.map((u) => name(u) ?? u).join(", ")}); Revit gives a system one fan, so split ${system} in Revit first`,
+    );
+  const offers = [...owed.values()].flat().filter((a) => a.system === system);
+  if (!offers.length)
+    throw Error(
+      `No unit is offered as the fan of ${system}: it has its base equipment, or none of its units is a fan`,
+    );
+  if (offers.length === 1) return { ...offers[0]!, unit: name(offers[0]!.unitId) };
+  const selected = selectedId(ctx.page);
+  const run = ctx.page.fan;
+  const pick =
+    offers.find((a) => a.unitId === selected) ??
+    offers.find((a) => a.unitId === run?.unitId && a.systemId === run.systemId);
+  if (pick) return { ...pick, unit: name(pick.unitId) };
+  throw Error(`${offers.length} units could be the fan of ${system}; select one`);
+};
+/** The pair a fan verb acts on: the one it names, else the chosen system's offered fan. */
+const fanTarget = (ctx: DuctsCtx, input: unknown) => {
+  const named = pairOf(input);
+  if (named) return named;
+  const { unitId, systemId } = offeredFan(ctx);
+  return { unitId, systemId };
+};
+/** The page's words for the offered fan (`fanVerbs`), so the head's button reads as the row's. */
+const fanLabel = (ctx: DuctsCtx, preview: boolean) => {
+  const offered = attempt(() => offeredFan(ctx));
+  if ("no" in offered) return preview ? "preview fan" : "make the fan";
+  const words = `make ${offered.ok.unit ?? offered.ok.unitId} the fan of ${offered.ok.system}`;
+  return preview ? `preview: ${words}` : words;
 };
 /** The pair as a candidate over the snapshot the route read; throws why it is not offered. */
 const fanOf = (ctx: DuctsCtx, pair: { unitId: number; systemId: number }) => {
@@ -299,13 +418,17 @@ export const previewFresh = (page: DuctsPage, revision: number | null) =>
   page.evaluation.revision === revision &&
   page.evaluation.epoch === page.epoch;
 
-const why = (run: () => unknown) => {
+/** Run it: its value, or the sentence it threw. */
+const attempt = <T>(run: () => T): { ok: T } | { no: string } => {
   try {
-    run();
-    return null;
+    return { ok: run() };
   } catch (error) {
-    return error instanceof Error ? error.message : String(error);
+    return { no: error instanceof Error ? error.message : String(error) };
   }
+};
+const why = (run: () => unknown) => {
+  const tried = attempt(run);
+  return "no" in tried ? tried.no : null;
 };
 const none = z.void() as unknown as z.ZodType<never>;
 
@@ -428,17 +551,14 @@ export const manifest = defineRoute<
     preview: {
       label: "preview",
       does: "ducts.preview-losses",
-      // The inbox's Write group draws it.
-      visible: false,
       input: none,
       dirties: [],
       waitSeconds: NATIVE_APPLY_WAIT_S,
       requires: { work: true },
       count: (ctx) => pendingOf(ctx) || null,
-      ready: (ctx) => (pendingOf(ctx) ? why(() => built(ctx)) : "Nothing staged"),
+      ready: (ctx) => (pendingOf(ctx) ? why(() => requestOf(ctx)) : "Nothing staged"),
       run: async (ctx) => {
-        const request = built(ctx);
-        const response = await dispatch(ctx, "ducts.preview-losses", request);
+        const response = await dispatch(ctx, "ducts.preview-losses", requestOf(ctx));
         ctx.setPage({
           evaluation: { revision: ctx.work.revision!, epoch: ctx.page.epoch, response },
         });
@@ -455,29 +575,34 @@ export const manifest = defineRoute<
           : "write to Revit";
       },
       does: "ducts.apply-losses",
-      // The inbox's Write group draws it; it arms there (Fix and Set empty, preview fresh).
-      visible: false,
       input: none,
       dirties: [],
       waitSeconds: NATIVE_APPLY_WAIT_S,
       requires: { work: true },
-      // Armed only while Fix and Set are empty and the preview matches this Work and snapshot.
-      ready: (ctx) =>
-        !pendingOf(ctx)
-          ? "Nothing staged"
-          : (writeBlocked(standing(ctx) ?? { fix: 0, set: 0 }) ??
-            (ctx.page.evaluation === null
-              ? "Preview first"
-              : !previewFresh(ctx.page, ctx.work.revision)
-                ? "The staged Work or the snapshot changed since the preview; preview again"
-                : null)),
+      // Armed while something is staged and the preview matches this Work and snapshot. Fix and Set
+      // rows hold back only the ESP (`requestOf`); a write of nothing but held ESP is refused.
+      ready: (ctx) => {
+        const pending = pendingOf(ctx);
+        if (!pending) return "Nothing staged";
+        const held = espHeld(ctx);
+        if (held && pending === stagedEsp(ctx.work.doc)) return `Only the ESP is staged: ${held}`;
+        return ctx.page.evaluation === null
+          ? "Preview first"
+          : !previewFresh(ctx.page, ctx.work.revision)
+            ? "The staged Work or the snapshot changed since the preview; preview again"
+            : null;
+      },
       run: async (ctx) => {
-        const applied = stagedCells(ctx.work.doc).filter((cell) => cell.segment !== "catalogs");
+        const held = espHeld(ctx) !== null;
+        // A held ESP stays staged: it was not in the request.
+        const applied = stagedCells(ctx.work.doc).filter(
+          (cell) => cell.segment !== "catalogs" && !(held && cell.segment === "esp"),
+        );
         const rulings = pendingRulings(
           ctx.work.doc,
           observed<DuctSnapshot>(ctx, "ducts")?.store,
         ).map(({ segment, key }) => ({ segment, key, cell: ctx.work.doc![segment][key]! }));
-        const response = await dispatch(ctx, "ducts.apply-losses", built(ctx));
+        const response = await dispatch(ctx, "ducts.apply-losses", requestOf(ctx));
         ctx.note("apply", outcomeWords(response), response.counts.refused > 0);
         // The staged cells are in Revit now and the rulings in its store; the snapshot is their home.
         const patches: RouteStatePatch[] = [...applied, ...rulings].flatMap(
@@ -490,18 +615,16 @@ export const manifest = defineRoute<
     },
     // Healing makes the model whole (pressure-drop ledger 2026-10-20): the Heal row of a group
     // previews its caps and joins in Revit, rolled back, then heals what passed in one transaction.
+    // Run bare (the head), both act on the chosen system's Heal row (`healTarget`).
     "heal-preview": {
       label: "preview heal",
       does: "ducts.preview-heal",
-      // The inbox's Heal row draws it.
-      visible: false,
       input: healInput,
       dirties: [],
       waitSeconds: NATIVE_APPLY_WAIT_S,
-      // Without an input this answers for the verb at large; the Heal row asks with its group.
-      ready: (ctx, input) => (groupOf(input) ? why(() => healOf(ctx, groupOf(input))) : null),
+      ready: (ctx, input) => why(() => healOf(ctx, healTarget(ctx, input))),
       run: async (ctx, input) => {
-        const group = groupOf(input)!;
+        const group = healTarget(ctx, input);
         const { snapshot, found } = healOf(ctx, group);
         const response = await dispatch<DuctsHeal.Res.Response>(ctx, "ducts.preview-heal", {
           groups: [healRequestGroup(found)],
@@ -524,16 +647,27 @@ export const manifest = defineRoute<
     },
     heal: {
       label: "heal",
+      // The Heal row's word: how many a fresh preview of this group passed.
+      labelNow: (ctx) => {
+        const run = ctx.page.heal;
+        const target = attempt(() => healTarget(ctx, undefined));
+        return "ok" in target &&
+          run?.mode === "preview" &&
+          run.group === target.ok &&
+          run.epoch === ctx.page.epoch
+          ? `heal ${passedOf(run).size}`
+          : "heal";
+      },
       does: "ducts.apply-heal",
-      visible: false,
       input: healInput,
       dirties: [],
       waitSeconds: NATIVE_APPLY_WAIT_S,
       // Armed only by a preview of this group over this snapshot: what heals is what the person saw pass.
       ready: (ctx, input) => {
+        const target = attempt(() => healTarget(ctx, input));
+        if ("no" in target) return target.no;
+        const group = target.ok;
         const run = ctx.page.heal;
-        const group = groupOf(input);
-        if (!group) return null;
         if (run?.mode !== "preview" || run.group !== group) return "Preview the heal first";
         if (run.epoch !== ctx.page.epoch)
           return "The snapshot changed since the preview; preview again";
@@ -541,7 +675,7 @@ export const manifest = defineRoute<
       },
       run: async (ctx, input) => {
         const run = ctx.page.heal!;
-        const group = groupOf(input)!;
+        const group = healTarget(ctx, input);
         const { snapshot, found } = healOf(ctx, group);
         const response = await dispatch<DuctsHeal.Res.Response>(ctx, "ducts.apply-heal", {
           groups: [healRequestGroup(found, passedOf(run))],
@@ -562,20 +696,17 @@ export const manifest = defineRoute<
     // Revit's Duct Systems > Select Equipment (pressure-drop ledger 2026-10-21): make a unit the
     // base equipment of a system, the first rung of the fan proposal. Preview runs Pe's guards, the
     // write and its read back in Revit and rolls it back; apply is armed by that preview only.
+    // Run bare (the head), both act on the chosen system's offered fan (`offeredFan`).
     "fan-preview": {
       label: "preview fan",
+      labelNow: (ctx) => fanLabel(ctx, true),
       does: "ducts.preview-assign-fan",
-      // The Inputs pane and the no-fan row draw it.
-      visible: false,
       input: fanInput,
       dirties: [],
       waitSeconds: NATIVE_APPLY_WAIT_S,
-      ready: (ctx, input) => {
-        const pair = pairOf(input);
-        return pair ? why(() => fanOf(ctx, pair)) : null;
-      },
+      ready: (ctx, input) => why(() => fanOf(ctx, fanTarget(ctx, input))),
       run: async (ctx, input) => {
-        const pair = pairOf(input)!;
+        const pair = fanTarget(ctx, input);
         const found = fanOf(ctx, pair);
         const response = await dispatch<DuctsAssignFan.Res.Response>(
           ctx,
@@ -592,15 +723,18 @@ export const manifest = defineRoute<
     },
     fan: {
       label: "make the fan",
+      labelNow: (ctx) => fanLabel(ctx, false),
       does: "ducts.apply-assign-fan",
-      visible: false,
       input: fanInput,
       dirties: [],
       waitSeconds: NATIVE_APPLY_WAIT_S,
       // Armed only by a passing preview of this pair over this snapshot.
-      ready: (ctx, input) => fanRefusal(ctx.page, pairOf(input)),
+      ready: (ctx, input) => {
+        const target = attempt(() => fanTarget(ctx, input));
+        return "no" in target ? target.no : fanRefusal(ctx.page, target.ok);
+      },
       run: async (ctx, input) => {
-        const pair = pairOf(input)!;
+        const pair = fanTarget(ctx, input);
         const response = await dispatch<DuctsAssignFan.Res.Response>(
           ctx,
           "ducts.apply-assign-fan",

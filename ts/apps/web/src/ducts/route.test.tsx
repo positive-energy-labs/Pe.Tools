@@ -120,9 +120,7 @@ const snapshot: DuctSnapshot = {
     },
   ],
   layers: [],
-  systems: [
-    { id: 900, name: "SA", classification: "Supply Air", criticalPath: [], sections: [] },
-  ],
+  systems: [{ id: 900, name: "SA", classification: "Supply Air", criticalPath: [], sections: [] }],
   slots: {
     fanStatic: "PE_M_Fan_ExternalStaticPressure",
     fanFlow: "PE_M_Fan_AirFlow",
@@ -253,12 +251,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function mount(
-  search = "&system=SA",
-  hosted = false,
-  target = "slice",
-  thread = "fixture",
-) {
+async function mount(search = "&system=SA", hosted = false, target = "slice", thread = "fixture") {
   const root = createRootRoute();
   const route = createRoute({
     getParentRoute: () => root,
@@ -315,7 +308,9 @@ test("the address carries system, level, selected, encoding, layers, camera and 
     picture: "model",
   });
   bare.unmount();
-  const given = await mount("&system=SA&level=30&selected=3&encoding=flow&layers=a,b&camera=plan&picture=schematic");
+  const given = await mount(
+    "&system=SA&level=30&selected=3&encoding=flow&layers=a,b&camera=plan&picture=schematic",
+  );
   expect(given.router.state.location.search).toMatchObject({
     system: "SA",
     level: "30",
@@ -397,10 +392,24 @@ test("clicking a segment on the drawing selects it in the address", async () => 
   );
 }, 20000);
 
-test("the write verb lives in the inbox's Write group, not the head, and is refused while nothing is staged", async () => {
+test("every verb that writes to Revit shows in the head too, refused there in words while it has nothing to act on", async () => {
   const { container } = await mount();
   const head = screen.getByRole("region", { name: "Ducts route" });
-  expect(within(head).queryByRole("button", { name: /write to Revit/ })).toBeNull();
+  for (const name of [
+    "preview",
+    "write to Revit",
+    "preview heal",
+    "heal",
+    "preview fan",
+    "make the fan",
+  ]) {
+    const button = within(head).getByRole("button", { name });
+    expect(button.getAttribute("aria-disabled")).toBe("true");
+  }
+  // The board says each refusal: nothing staged, and on the chosen system nothing heals or is offered.
+  expect(head.textContent).toContain("Nothing staged");
+  expect(head.textContent).toContain("Nothing in SA heals in Revit");
+  expect(head.textContent).toContain("No unit is offered as the fan of SA");
   const group = await waitFor(() => {
     const found = container.querySelector('[data-inbox-group="write"]');
     expect(found).not.toBeNull();
@@ -409,6 +418,12 @@ test("the write verb lives in the inbox's Write group, not the head, and is refu
   const write = within(group).getByRole("button", { name: /write to Revit/ });
   expect(write.getAttribute("aria-disabled") ?? write.hasAttribute("disabled")).toBeTruthy();
   expect(group.textContent).toContain("nothing staged");
+});
+
+test("with no system chosen the head's fan verbs ask for one", async () => {
+  await mount("");
+  const head = screen.getByRole("region", { name: "Ducts route" });
+  expect(head.textContent).toContain("Choose a system to make its fan");
 });
 
 test("a staged subject, claims and labelParameter render the subject scene; a verdict press stages the claim", async () => {

@@ -19,12 +19,12 @@ const item = (over: Partial<InboxItem> & Pick<InboxItem, "key" | "group">): Inbo
   verbs: [],
   ...over,
 });
-const handle = (refusal: string | null): ActionHandle =>
-  ({ label: "x", refusal, count: null, run: vi.fn(async () => null) }) as unknown as ActionHandle;
+const handle = (refusal: string | null, label = "x"): ActionHandle =>
+  ({ label, refusal, count: null, run: vi.fn(async () => null) }) as unknown as ActionHandle;
 
 function mount(
   over: {
-    blocked?: string | null;
+    held?: string | null;
     apply?: string | null;
     onFocusCell?: (c: CellRef) => void;
     healRefusal?: string | null;
@@ -33,9 +33,11 @@ function mount(
     diagnostics?: InboxItem[];
     store?: Parameters<typeof Inbox>[0]["work"]["store"];
     fanRefusal?: string | null;
+    selected?: number | null;
+    diagnostic?: { kind: string; pick: (kind: string) => void };
   } = {},
 ) {
-  const apply = handle(over.apply ?? null);
+  const apply = handle(over.apply ?? null, "write 3 to Revit");
   const heal = { preview: handle(null), apply: handle(null), busy: false };
   const fan = { preview: handle(null), apply: handle(null), busy: false };
   const pair = { unitId: 17, systemId: 19 };
@@ -54,7 +56,7 @@ function mount(
             kind: "heal",
             group: "g1",
             mode: "preview",
-            label: "preview",
+            label: "preview heal",
             says: "Preview healing",
             refusal: null,
           },
@@ -129,18 +131,20 @@ function mount(
       onSelect={() => {}}
       onFocusCell={over.onFocusCell ?? (() => {})}
       write={{
-        preview: handle(null),
+        preview: handle(null, "preview"),
         apply,
         busy: false,
         row: {
           title: "Write to Revit",
           status: "preview out of date",
-          blocked: over.blocked ?? null,
+          held: over.held ?? null,
         },
         review: over.review ?? [],
       }}
       heal={heal}
       fan={fan}
+      selected={over.selected ?? null}
+      diagnostic={over.diagnostic ?? { kind: "", pick: () => {} }}
     />,
   );
   return { ...utils, apply, heal, fan, write };
@@ -150,7 +154,7 @@ test("a Heal row previews with its group, and heals only once a preview armed it
   const first = mount();
   fireEvent.click(screen.getByText("Heal SA 1: 2 caps"));
   const detail = first.container.querySelector('[data-inbox-detail="heal:g1"]') as HTMLElement;
-  fireEvent.click(within(detail).getByRole("button", { name: "preview" }));
+  fireEvent.click(within(detail).getByRole("button", { name: "preview heal" }));
   expect(first.heal.preview.run).toHaveBeenCalledWith({ group: "g1" });
   const refused = within(detail).getByRole("button", { name: "heal" });
   expect(refused.getAttribute("aria-disabled")).toBe("true");
@@ -204,21 +208,22 @@ test("a Set row's verb deep-links to its cell on the tree", () => {
   expect(onFocusCell).toHaveBeenCalledWith({ segment: "flows", id: 30 });
 });
 
-test("the Write row's apply is refused with what remains, and armed when nothing does", () => {
-  const blocked = mount({ blocked: "1 to fix and 1 to set before writing" });
+test("the Write row's apply wears the handle's word and refusal, the same button the head draws", () => {
+  const refusedMount = mount({ apply: "Preview first" });
   const refused = within(
-    blocked.container.querySelector('[data-inbox-group="write"]') as HTMLElement,
-  ).getByRole("button", { name: /write to Revit/ });
+    refusedMount.container.querySelector('[data-inbox-group="write"]') as HTMLElement,
+  ).getByRole("button", { name: "write 3 to Revit" });
   expect(refused.getAttribute("aria-disabled")).toBe("true");
   fireEvent.click(refused);
-  expect(blocked.apply.run).not.toHaveBeenCalled();
+  expect(refusedMount.apply.run).not.toHaveBeenCalled();
   cleanup();
-  const armed = mount();
-  const write = within(
-    armed.container.querySelector('[data-inbox-group="write"]') as HTMLElement,
-  ).getByRole("button", { name: /write to Revit/ });
-  fireEvent.click(write);
+  // Fix and Set rows standing hold back only the ESP: apply stays armed and the row says what waits.
+  const held = "1 staged ESP left out of this write: 1 to fix before the ESP writes";
+  const armed = mount({ held });
+  const group = armed.container.querySelector('[data-inbox-group="write"]') as HTMLElement;
+  fireEvent.click(within(group).getByRole("button", { name: "write 3 to Revit" }));
   expect(armed.apply.run).toHaveBeenCalledTimes(1);
+  expect(armed.container.querySelector("[data-inbox-write-held]")?.textContent).toBe(held);
 });
 
 test("the Write group lists every planned change, old to new, and each refusal", () => {
@@ -334,4 +339,48 @@ test("taking back a stored ignore stages a delete over it", () => {
   expect(write).toHaveBeenCalledWith([
     { path: ["assumptions", "open-end:2:1", "staged"], value: { delete: true } },
   ]);
+});
+
+test("the selected element opens every row that names it, Diagnostics included", () => {
+  const { container } = mount({
+    selected: 30,
+    diagnostics: [
+      item({ key: "d1", group: "diagnostics", kind: "join", status: "near-miss", ids: [30] }),
+      item({ key: "d2", group: "diagnostics", kind: "loop", ids: [99] }),
+    ],
+  });
+  const lit = [...container.querySelectorAll("[data-selected]")].map((r) =>
+    r.getAttribute("data-key"),
+  );
+  expect(lit).toEqual(["flows:30", "d1"]);
+  expect(container.querySelector('[data-inbox-detail="d1"]')).toBeTruthy();
+  expect(container.querySelector('[data-inbox-detail="flows:30"]')).toBeTruthy();
+  expect(container.querySelector('[data-key="d2"]')).toBeTruthy();
+});
+
+test("the Diagnostics key: a chip per kind with its count; a picked chip narrows the rows", () => {
+  const pick = vi.fn();
+  const diagnostics = [
+    item({ key: "d1", group: "diagnostics", kind: "join", status: "near-miss" }),
+    item({ key: "d2", group: "diagnostics", kind: "join", status: "stretched" }),
+    item({ key: "d3", group: "diagnostics", kind: "join", status: "stretched" }),
+    item({ key: "d4", group: "diagnostics", kind: "loop", status: "priced as a tree" }),
+  ];
+  const { container } = mount({ diagnostics, diagnostic: { kind: "", pick } });
+  const legend = container.querySelector('[data-inbox-legend="diagnostics"]') as HTMLElement;
+  expect(
+    within(legend)
+      .getAllByRole("button")
+      .map((b) => b.textContent),
+  ).toEqual(["near-miss 1", "stretched 2", "loop 1"]);
+  fireEvent.click(within(legend).getByRole("button", { name: "stretched 2" }));
+  expect(pick).toHaveBeenCalledWith("stretched");
+  cleanup();
+  const narrowed = mount({ diagnostics, diagnostic: { kind: "stretched", pick } }).container;
+  fireEvent.click(narrowed.querySelector('[data-inbox-group="diagnostics"] [role="button"]')!);
+  expect(
+    [...narrowed.querySelectorAll('[data-inbox-group="diagnostics"] [data-key]')].map((r) =>
+      r.getAttribute("data-key"),
+    ),
+  ).toEqual(["d2", "d3"]);
 });
