@@ -1,58 +1,58 @@
 /**
  * Every unit's role, `fan` or `passive`, with why (pressure-drop ledger, 2026-10-21, multi-fan
  * spike). A ruling wins: a role the model's store holds (`ruled`) or one Work stages (`staged`).
- * Without one the role is proposed from the unit's design flow (`equipmentFlows`: staged, else the
- * FanFlow slot), automatically and never staged:
- * - a unit that states a design flow is proposed `fan`;
- * - a unit that states none is proposed `passive` when a unit it shares a group with states one
- *   (Chadds RA 8: the filter chassis FR-1 beside air handler FC-33);
- * - a unit that states none beside units that state none is left a `fan` (`default`): with no
- *   flow anywhere in its groups there is nothing to tell a fan from inline gear, and calling every
- *   unit passive would leave each such group with no air mover.
+ * Without one the role is proposed, automatically and never staged, from Revit's own state first
+ * (Pe manages Revit state):
+ * 1. a unit that is the base equipment of a Revit system its own groups carry is a `fan`
+ *    ("base equipment of SA 19");
+ * 2. else a unit that states a design flow (`equipmentFlows`: staged, else the FanFlow slot) is a
+ *    `fan` ("airflow in <slot>");
+ * 3. else it is `passive` ("no airflow, not base equipment"): inline gear such as a filter chassis
+ *    or a silencer, which then passes air through (`pass-through.ts`).
  * A multi-root finding stands only while more than one root of the group is a fan after this.
  */
 import type { DuctUnitRole } from "@pe/agent-contracts";
 
-import { markOf, type EquipmentFlow } from "./terminal-flows.ts";
+import type { EquipmentFlow } from "./terminal-flows.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 type Role = DuctUnitRole["role"];
-export type UnitRoleWhy = "ruled" | "staged" | "proposed" | "default";
+export type UnitRoleWhy = "ruled" | "staged" | "proposed";
 
 export interface UnitRole {
   role: Role;
   why: UnitRoleWhy;
-  /** The proposal or the default in a person's words; a ruling names who ruled. */
+  /** The proposal's ground in a person's words; a ruling names who ruled. */
   reason: string;
 }
 
 /** A design flow at or below this is no flow, cfm. */
 export const NO_FLOW_CFM = 0;
 
-const flowOf = (flows: ReadonlyMap<number, EquipmentFlow>, id: number) => {
-  const cfm = flows.get(id)?.cfm ?? null;
-  return cfm != null && cfm > NO_FLOW_CFM ? cfm : null;
-};
-
 /**
  * The role of every unit that roots a group. `staged` is Work's roles as every reader sees them
  * (`withStoredRulings`: the store's rulings under Work's own), `store` tells a ruling from a pending one.
  */
 export function unitRoles(
-  snapshot: Pick<DuctSnapshot, "groups" | "nodes" | "store">,
+  snapshot: Pick<DuctSnapshot, "groups" | "nodes" | "store" | "slots"> &
+    Partial<Pick<DuctSnapshot, "systems">>,
   flows: ReadonlyMap<number, EquipmentFlow>,
   staged: Readonly<Record<string, { role: Role }>>,
 ): Map<number, UnitRole> {
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
-  const name = (id: number) => markOf(nodes.get(id)) ?? nodes.get(id)?.family ?? String(id);
-  const beside = new Map<number, Set<number>>();
+  // The system names each unit's own groups carry: a base-equipment claim counts only there.
+  const served = new Map<number, Set<string>>();
   for (const g of snapshot.groups)
     for (const id of g.rootIds) {
-      const set = beside.get(id) ?? beside.set(id, new Set()).get(id)!;
-      for (const other of g.rootIds) if (other !== id) set.add(other);
+      const set = served.get(id) ?? served.set(id, new Set()).get(id)!;
+      for (const name of g.systemNames) set.add(name);
     }
+  const baseOf = new Map<number, string[]>();
+  for (const sys of snapshot.systems ?? [])
+    if (sys.baseEquipmentId != null && served.get(sys.baseEquipmentId)?.has(sys.name))
+      baseOf.set(sys.baseEquipmentId, [...(baseOf.get(sys.baseEquipmentId) ?? []), sys.name]);
   const out = new Map<number, UnitRole>();
-  for (const [id, others] of [...beside].sort(([a], [b]) => a - b)) {
+  for (const id of [...served.keys()].sort((a, b) => a - b)) {
     const ruling = staged[String(id)]?.role;
     if (ruling) {
       const stored = snapshot.store?.roles?.[String(id)]?.role;
@@ -64,29 +64,21 @@ export function unitRoles(
       );
       continue;
     }
-    const own = flowOf(flows, id);
-    if (own != null) {
-      out.set(id, { role: "fan", why: "proposed", reason: `states a design flow of ${own} cfm` });
+    const base = baseOf.get(id);
+    if (base?.length) {
+      out.set(id, { role: "fan", why: "proposed", reason: `base equipment of ${base.sort().join(", ")}` });
       continue;
     }
-    const fan = [...others]
-      .map((other) => ({ other, cfm: flowOf(flows, other) }))
-      .filter((x) => x.cfm != null)
-      .sort((a, b) => b.cfm! - a.cfm! || a.other - b.other)[0];
-    out.set(
-      id,
-      fan
-        ? {
-            role: "passive",
-            why: "proposed",
-            reason: `states no design flow; ${name(fan.other)} beside it states ${fan.cfm} cfm`,
-          }
-        : {
-            role: "fan",
-            why: "default",
-            reason: "no unit in its groups states a design flow",
-          },
-    );
+    const flow = flows.get(id);
+    if (flow?.cfm != null && flow.cfm > NO_FLOW_CFM) {
+      const slot =
+        flow.source === "override"
+          ? "a staged unit flow"
+          : (nodes.get(id)?.flowParameter ?? snapshot.slots?.fanFlow ?? "the FanFlow slot");
+      out.set(id, { role: "fan", why: "proposed", reason: `airflow in ${slot} (${flow.cfm} cfm)` });
+      continue;
+    }
+    out.set(id, { role: "passive", why: "proposed", reason: "no airflow, not base equipment" });
   }
   return out;
 }

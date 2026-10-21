@@ -125,23 +125,20 @@ const doc = (roles: Record<string, "fan" | "passive">) =>
   });
 
 describe("unitRoles", () => {
-  it("proposes fan from a stated flow and passive beside one, and leaves a flowless group alone", () => {
-    const s = snapshot();
-    const roles = unitRoles(s, equipmentFlows(s, {}), {});
-    expect(Object.fromEntries(roles)).toEqual({
-      1: { role: "fan", why: "proposed", reason: "states a design flow of 800 cfm" },
-      2: { role: "fan", why: "proposed", reason: "states a design flow of 100 cfm" },
-      3: {
-        role: "passive",
-        why: "proposed",
-        reason: "states no design flow; FC-30 beside it states 800 cfm",
-      },
-    });
-    const none = snapshot({});
-    expect(unitRoles(none, equipmentFlows(none, {}), {}).get(3)).toEqual({
-      role: "fan",
-      why: "default",
-      reason: "no unit in its groups states a design flow",
+  it("proposes fan from Revit's base equipment first, then from a stated flow, else passive", () => {
+    const s = {
+      ...snapshot({ dh: 100 }),
+      slots: { fanFlow: "PE_M_Fan_AirFlow" },
+      systems: [
+        { name: "SA", baseEquipmentId: 1 },
+        // A system the unit's own groups do not carry names it base equipment for nothing here.
+        { name: "RA 9", baseEquipmentId: 3 },
+      ],
+    } as unknown as DuctSnapshot;
+    expect(Object.fromEntries(unitRoles(s, equipmentFlows(s, {}), {}))).toEqual({
+      1: { role: "fan", why: "proposed", reason: "base equipment of SA" },
+      2: { role: "fan", why: "proposed", reason: "airflow in PE_M_Fan_AirFlow (100 cfm)" },
+      3: { role: "passive", why: "proposed", reason: "no airflow, not base equipment" },
     });
   });
 

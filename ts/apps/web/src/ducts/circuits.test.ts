@@ -86,7 +86,11 @@ function fixture() {
       elapsedMs: 0,
     },
     levels: [],
-    groups: [group("upstream", [100, 200], 0), group("downstream", [200], 1)],
+    // Both units are base equipment of a system they serve: proposed fans, never passed through.
+    groups: [
+      { ...group("upstream", [100, 200], 0), systemNames: ["SA up"] },
+      { ...group("downstream", [200], 1), systemNames: ["SA down"] },
+    ],
     nodes: [
       eq(100, [port(0, 10, 0)]),
       eq(200, [port(1, 10, 1), port(2, 20, 0)]),
@@ -98,7 +102,10 @@ function fixture() {
     ],
     flows: [],
     issues: [],
-    systems: [],
+    systems: [
+      { name: "SA up", baseEquipmentId: 100, sections: [] },
+      { name: "SA down", baseEquipmentId: 200, sections: [] },
+    ],
   } as unknown as DuctSnapshot;
 }
 function pin(
@@ -1916,7 +1923,8 @@ function openPhysicalFanPurpose(flow: number | null = 300) {
   s.nodes[1]!.facts =
     flow === null ? [] : [{ key: "flow", value: flow, unit: "cfm", provenance: "designer-stated" }];
   s.segments = [];
-  s.groups = [group("downstream", [100], 1)];
+  // The ERV is the base equipment of the system it serves: a proposed fan.
+  s.groups = [{ ...group("downstream", [100], 1), systemNames: ["SA up"] }];
   const inlet = ductPortPinSchema.parse({
     index: 3,
     point: [0, 0, -1],
