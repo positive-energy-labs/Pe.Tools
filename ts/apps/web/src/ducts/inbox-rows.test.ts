@@ -88,11 +88,14 @@ describe("the ducts inbox", () => {
       "open-end:g1:2:1",
       "no-fan:g2",
       "proximity:9:0|10:0",
-      "catalog:catalog-missing-table:31",
     ]);
     // Terminal 30 has no flow; 40 sits in a group with no fan, so only its Fix row stands.
     expect(keys(rows.set)).toEqual(["flows:30", "equipmentFlows:1"]);
-    expect(keys(rows.diagnostics)).toEqual(["proximity:5:0|6:0", "proximity:7:0|8:0"]);
+    expect(keys(rows.diagnostics)).toEqual([
+      "proximity:5:0|6:0",
+      "proximity:7:0|8:0",
+      "catalog:catalog-missing-table:31",
+    ]);
     // The advisory stub and the no-flow finding (a Set row now) make no row of their own.
     expect(keys([...rows.fix, ...rows.set, ...rows.diagnostics])).not.toContain("stub:g1:3");
   });
@@ -102,7 +105,7 @@ describe("the ducts inbox", () => {
     expect(keys(g2.fix)).toEqual(["no-fan:g2"]);
     expect(g2.set).toEqual([]);
     const g1 = inboxRows({ ...base, group: "g1" });
-    expect(keys(g1.fix)).toEqual(["open-end:g1:2:1", "catalog:catalog-missing-table:31"]);
+    expect(keys(g1.fix)).toEqual(["open-end:g1:2:1"]);
     expect(keys(g1.set)).toEqual(["flows:30", "equipmentFlows:1"]);
   });
 
@@ -111,7 +114,7 @@ describe("the ducts inbox", () => {
     for (const row of [...rows.fix, ...rows.set, ...rows.check]) expect(row.verbs.length).toBeGreaterThan(0);
     const flow = rows.set[0]!.verbs.find((v) => v.kind === "focus");
     expect(flow).toMatchObject({ kind: "focus", cell: { segment: "flows", id: 30 } });
-    const catalog = rows.fix.find((r) => r.kind === "catalog-missing-table")!;
+    const catalog = rows.diagnostics.find((r) => r.kind === "catalog-missing-table")!;
     expect(catalog.verbs[0]).toMatchObject({ kind: "focus", cell: { segment: "terminalDrops", id: 31 } });
   });
 
@@ -195,7 +198,7 @@ describe("the ducts inbox", () => {
   });
 
   it("the Write row says what stands in the way, then what the preview holds", () => {
-    expect(inboxRows(base).write.blocked).toBe("4 to fix and 2 to set before writing");
+    expect(inboxRows(base).write.blocked).toBe("3 to fix and 2 to set before writing");
     expect(writeBlocked({ fix: 0, set: 1 })).toBe("1 to set before writing");
     expect(writeBlocked({ fix: 0, set: 0 })).toBeNull();
     const write = { staged: 3, hasPreview: true, fresh: true, planned: 3, refused: 0 };

@@ -6,7 +6,8 @@
  * - `blocking`: the builder could not bridge it, so no fan-to-terminal path prices past it:
  *   an anomalous join (reversed connector, part through its host, cross-class), no root or several,
  *   an open end with no face in tolerance, an unresolved loop, no air mover (`no-fan`), a missing
- *   terminal flow, a catalog table that is not loaded, a catalog input out of the table's range.
+ *   terminal flow. A terminal with no drop (no catalog table, input out of range) is diagnostic:
+ *   terminals are priceable but never required (kaitpw 2026-10-20).
  * Pure on `{ kind, grade }`, so it classifies a survey finding and a snapshot issue alike.
  */
 import type { DuctInferenceGrade } from "@pe/agent-contracts";
@@ -23,8 +24,6 @@ export const BLOCKING_KINDS: ReadonlySet<string> = new Set([
   "no-fan",
   "no-terminal-flow",
   "no-flow",
-  "catalog-missing-table",
-  "catalog-out-of-range",
 ]);
 
 export function bin(item: { kind: string; grade?: DuctInferenceGrade | null }): DuctBin {

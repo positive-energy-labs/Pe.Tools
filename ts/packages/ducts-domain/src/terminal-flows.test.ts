@@ -288,10 +288,11 @@ describe("bin", () => {
       "no-fan",
       "no-terminal-flow",
       "no-flow",
-      "catalog-missing-table",
-      "catalog-out-of-range",
     ])
       expect(bin({ kind }), kind).toBe("blocking");
+    // A terminal is priceable, never required.
+    expect(bin({ kind: "catalog-missing-table" })).toBe("diagnostic");
+    expect(bin({ kind: "catalog-out-of-range" })).toBe("diagnostic");
     expect(bin({ kind: "no-fan-static" })).toBe("diagnostic");
     expect(bin({ kind: "series-by-inference" })).toBe("diagnostic");
   });

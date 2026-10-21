@@ -195,6 +195,30 @@ export function triage(input: TriageInput) {
       });
       continue;
     }
+    if (f.kind === "catalog-missing-table" || f.kind === "catalog-out-of-range") {
+      // A terminal is priceable, never required: with no drop it prices as zero and holds nothing.
+      diagnostics.push({
+        ...base,
+        group: "diagnostics",
+        kind: f.kind,
+        title: `Terminal not priced at ${names(f.elementIds)}`,
+        status: "no drop",
+        verbs: [
+          ...(f.elementIds[0] == null
+            ? []
+            : [
+                {
+                  kind: "focus",
+                  cell: { segment: "terminalDrops", id: f.elementIds[0] },
+                  label: "state the drop",
+                  says: "State this terminal's drop",
+                } satisfies RowVerb,
+              ]),
+          select(f.elementIds),
+        ],
+      });
+      continue;
+    }
     if (bin(f) !== "blocking") continue;
     const item = { ...base, group: "fix" as const, kind: f.kind, tone: "alarm" as const };
     switch (f.kind) {
@@ -252,27 +276,6 @@ export function triage(input: TriageInput) {
         });
         break;
       }
-      case "catalog-missing-table":
-      case "catalog-out-of-range":
-        fix.push({
-          ...item,
-          title: `${f.kind === "catalog-missing-table" ? "Catalog table not loaded" : "Out of catalog range"} at ${names(f.elementIds)}`,
-          status: "no drop",
-          verbs: [
-            ...(f.elementIds[0] == null
-              ? []
-              : [
-                  {
-                    kind: "focus",
-                    cell: { segment: "terminalDrops", id: f.elementIds[0] },
-                    label: "state the drop",
-                    says: "State this terminal's drop yourself in place of the catalog",
-                  } satisfies RowVerb,
-                ]),
-            select(f.elementIds),
-          ],
-        });
-        break;
       case "loop-by-inference": {
         // The inferred join that closes the loop is the one the finding is named for.
         const join = `proximity:${f.id.slice("loop-by-inference:".length)}`;
