@@ -128,6 +128,24 @@ internal sealed class RevitDataRequestService {
         }
     }
 
+    [Op("ducts.assign-fan", Does = "Make a unit the base equipment of a duct system (Revit's Duct Systems > Select Equipment), keeping the system's id, name, type and parameters. Refuses a system that already has base equipment (a swap drops the old base from the members and Revit does not restore it), anything that is not mechanical equipment, and a unit with no port of the system's air classification that is a member of the system or joined to its ducts (Revit itself checks neither). Reads back that the base equipment is the unit and the name, type and classification are unchanged, else refuses and rolls back. previewOnly runs the write and the read back and rolls them back. Returns the outcome and the system before and after (read ducts.snapshot again: systems[].baseEquipmentId).", Title = "Assign Duct System Fan", Finds = ["ducts", "fan", "base-equipment", "system", "select-equipment", "unit", "mutation"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"previewOnly\": true, \"systemId\": 6103113, \"unitId\": 9668311 }")]
+    private static DuctAssignFanResult AssignDuctFanCore(DuctAssignFanRequest request, ProjectDocument activeDocument) {
+        var document = activeDocument.Value;
+        if (document.IsReadOnly)
+            throw BridgeOperationExceptions.Conflict(
+                "The active project document is read-only.",
+                [BridgeOperationExceptions.Issue("$", "DuctsDocumentReadOnly", "The active project document is read-only.",
+                    "Open a writable project document and retry.")]);
+        try {
+            return Lib.Mep.DuctFanAssigner.Assign(document, request);
+        } catch (BridgeOperationException) {
+            throw;
+        } catch (Exception ex) {
+            Serilog.Log.Error(ex, "ducts.assign-fan failed outside its guards");
+            throw BridgeOperationExceptions.Unexpected("DuctsAssignFanException", ex, "Run ducts.assign-fan with previewOnly=true and read its refusal, then retry.");
+        }
+    }
+
     [Op("ducts.family-patch", Does = "Build the Family Foundry patch that gives a duct fitting family its own loss coefficient: an embedded lookup table (PeElbowC, dense over r/D, angle and diameter from Revit's shipped ASHRAE CD3 grids) and an instance number parameter (default Pe_C) with a rounding size_lookup formula, plus the run policy that lets Revit disconnect a fitting it cannot keep joined on reload. Hand the patch to families.plan then families.apply; ducts.apply with method pe-server then charges it live. Read-only; needs no document.", Title = "Build Duct Family Patch", Finds = ["ducts", "family", "patch", "lookup-table", "coefficient", "family-foundry", "elbow"], Actor = OpActor.Any, Cost = OpCost.Cheap, Example = "{ \"family\": \"Round Elbow\", \"kind\": \"round-elbow\", \"parameter\": \"Pe_C\" }")]
     private static DuctFamilyPatchData GetDuctFamilyPatchCore(DuctFamilyPatchRequest request) {
         try {

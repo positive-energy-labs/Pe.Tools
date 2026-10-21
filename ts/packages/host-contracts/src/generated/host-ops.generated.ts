@@ -384,6 +384,64 @@ export namespace DuctsApply {
   }
 }
 
+/** Make a unit the base equipment of a duct system (Revit's Duct Systems > Select Equipment), keeping the system's id, name, type and parameters. Refuses a system that already has base equipment (a swap drops the old base from the members and Revit does not restore it), anything that is not mechanical equipment, and a unit with no port of the system's air classification that is a member of the system or joined to its ducts (Revit itself checks neither). Reads back that the base equipment is the unit and the name, type and classification are unchanged, else refuses and rolls back. previewOnly runs the write and the read back and rolls them back. Returns the outcome and the system before and after (read ducts.snapshot again: systems[].baseEquipmentId). */
+export namespace DuctsAssignFan {
+  export namespace Req {
+    /**
+     * SystemId is the MechanicalSystem; UnitId the mechanical equipment to make its base equipment.
+     */
+    export interface Request {
+      previewOnly: boolean;
+      systemId: number;
+      unitId: number;
+    }
+  }
+  export namespace Res {
+    /**
+     * Outcome: planned (preview), assigned, refused (Reason says why; nothing changed). Connector is the
+     * unit's connector index made the base. Check is the read back's words. Before and After are the system as
+     * Revit reports it (After inside the rolled-back run on preview; null when refused).
+     *
+     */
+    export interface Response {
+      previewOnly: boolean;
+      systemId: number;
+      unitId: number;
+      outcome: string;
+      reason?: null | string;
+      connector?: number | null;
+      check?: null | string;
+      before?: null | DuctSystem;
+      after?: null | DuctSystem;
+    }
+    /**
+     * One supply, return or exhaust MechanicalSystem as Revit reports it: the check beside Pe's own solve.
+     * CriticalPath is GetCriticalPathSectionNumbers(); empty when Revit found none.
+     *
+     */
+    export interface DuctSystem {
+      id: number;
+      name: string;
+      classification: string;
+      isWellConnected?: boolean | null;
+      baseEquipmentId?: number | null;
+      baseEquipmentConnector?: number | null;
+      criticalPathLossInWg?: null | number;
+      criticalPath: number[];
+      sections: DuctSection[];
+    }
+    /**
+     * One MEPSection: Revit's run of elements carrying one flow.
+     */
+    export interface DuctSection {
+      number: number;
+      flowCfm?: null | number;
+      totalPressureLossInWg?: null | number;
+      elementIds: number[];
+    }
+  }
+}
+
 /** Build the Family Foundry patch that gives a duct fitting family its own loss coefficient: an embedded lookup table (PeElbowC, dense over r/D, angle and diameter from Revit's shipped ASHRAE CD3 grids) and an instance number parameter (default Pe_C) with a rounding size_lookup formula, plus the run policy that lets Revit disconnect a fitting it cannot keep joined on reload. Hand the patch to families.plan then families.apply; ducts.apply with method pe-server then charges it live. Read-only; needs no document. */
 export namespace DuctsFamilyPatch {
   export namespace Req {
@@ -7162,6 +7220,7 @@ export interface HostOps {
   "document.temporary.release": { request: DocumentTemporaryRelease.Req.Request; response: DocumentTemporaryRelease.Res.Response };
   "document.temporary.status": { request: DocumentTemporaryStatus.Req.Request; response: DocumentTemporaryStatus.Res.Response };
   "ducts.apply": { request: DuctsApply.Req.Request; response: DuctsApply.Res.Response };
+  "ducts.assign-fan": { request: DuctsAssignFan.Req.Request; response: DuctsAssignFan.Res.Response };
   "ducts.family-patch": { request: DuctsFamilyPatch.Req.Request; response: DuctsFamilyPatch.Res.Response };
   "ducts.heal": { request: DuctsHeal.Req.Request; response: DuctsHeal.Res.Response };
   "ducts.snapshot": { request: DuctsSnapshot.Req.Request; response: DuctsSnapshot.Res.Response };
@@ -7245,6 +7304,7 @@ export const hostOpKeys = [
   "document.temporary.release",
   "document.temporary.status",
   "ducts.apply",
+  "ducts.assign-fan",
   "ducts.family-patch",
   "ducts.heal",
   "ducts.snapshot",
