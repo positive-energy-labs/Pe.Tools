@@ -56,8 +56,6 @@ export interface ProtoProps {
     heal: ActionHandle;
     busy: boolean;
   };
-  /** How many staged cells a write would carry. */
+  /** How many changes a write would carry: staged cells and pending rulings. */
   staged: number;
-  /** How many rulings (verdicts, roles) are staged: Work that writes nothing to Revit. */
-  rulings: number;
 }

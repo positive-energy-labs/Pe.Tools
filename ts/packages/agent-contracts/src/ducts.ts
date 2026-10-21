@@ -2,18 +2,22 @@
  * /ducts Work, every segment a family of trichotomy cells (Pea proposes, a person stages):
  * - `assumptions`, keyed by what the assumption is about: an issue id from the snapshot
  *   (`open-end:g123:456:1`) holds a verdict; `flex-roughness:<flex type>`,
- *   `fan-static:<equipment id>`, `component-drop:<family>` hold overrides. Never written to Revit.
+ *   `fan-static:<equipment id>`, `component-drop:<family>` hold overrides. An `ignore` verdict is a
+ *   ruling the model keeps (`_PE_DuctLosses` v2 `verdicts`, ducts-domain `rulings.ts`): Work holds
+ *   only the pending delta over the stored one, and a staged `{ delete: true }` takes it back.
  * - `rules`: loss-rule key (the web's `LOSS_RULES`) -> the ASHRAE table every instance of the rule
  *   is re-looked-up under. A person edits a type's table, never a raw coefficient.
  * - `terminalDrops` (terminal id) and `componentDrops` (fitting or accessory id): a stated drop in
  *   in-wg and where it came from.
  * - `esp` (air mover id): the external static Pe writes to a unit, in in-wg.
  * - `equipmentFlows` (air mover id): a stated design flow in cfm for the unit, written to its FanFlow slot.
- *   `roles` (air mover id): whether the unit is a `fan` or a `passive` part (never written to Revit).
+ *   `roles` (air mover id): whether the unit is a `fan` or a `passive` part; a `passive` ruling is
+ *   kept in the model's store (v2 `roles`) and Work holds only the pending delta.
  * - `loads`, one cell keyed `preview`: the load tool's Load Preview as parsed (systems, each tagged
  *   by the equipment tag in its name, with its rooms). `flows` (terminal id): a stated design flow
  *   in cfm that overrides the preview split. Neither is written to Revit.
- * - `parameters`: which Revit parameter carries each slot; person-only, Pea cannot propose.
+ * - `parameters`: which Revit parameter carries each slot; person-only, Pea cannot propose (it
+ *   proposes an airflow slot through a claim). A terminal's built-in `Flow` is its connector's flow.
  * - The scene (pressure-drop ledger, 2026-10-19): `subject`, keyed by group id, each cell an ORDERED
  *   element-id list (a claim shows only on the groups that hold its ids, `claimsForGroup`); `claims`, keyed by claim id, a sentence pinned to element ids with the author's state and a
  *   verdict slot; `labelParameter`, one cell naming the instance parameter whose value names
@@ -22,7 +26,7 @@
  * - `workingPhase` (kaitpw 2026-10-19), one cell naming the phase the firm's views show (a name in
  *   the snapshot's `phases.order`); Pea proposes it from the snapshot's view census, a person
  *   stages it, and the route leaves out every element that does not exist in it (`phases.ts`).
- * `ducts.apply` writes the staged rules, drops, flows, esp and slots to Revit.
+ * `ducts.apply` writes the staged rules, drops, flows, esp, slots and rulings to Revit.
  */
 import { z } from "zod";
 
@@ -340,7 +344,10 @@ export const ductsDocumentSchema = z
     calculation: z
       .record(z.string().min(1), trichotomyCellSchema(ductCalculationSchema))
       .default({}),
-    assumptions: z.record(z.string(), trichotomyCellSchema(ductAssumptionSchema)).default({}),
+    /** Deletable: a staged delete takes back the verdict the model's store holds at that key. */
+    assumptions: z
+      .record(z.string(), trichotomyCellSchema(ductAssumptionSchema, { deletable: true }))
+      .default({}),
     rules: z
       .record(z.string(), trichotomyCellSchema(z.strictObject({ table: z.string().min(1) })))
       .default({}),
@@ -462,6 +469,7 @@ export function stagedDucts(doc: DuctsRouteDocument | null) {
   return {
     calculation: stagedOf(doc?.calculation ?? {}),
     rules: stagedOf(doc?.rules ?? {}),
+    assumptions: stagedOf<DuctAssumption>(doc?.assumptions ?? {}),
     catalogs: stagedOf(doc?.catalogs ?? {}),
     terminalDrops: stagedOf(doc?.terminalDrops ?? {}),
     componentDrops: stagedOf(doc?.componentDrops ?? {}),
@@ -514,7 +522,10 @@ const slotsSchema = z.strictObject({
   terminalDrop: optionalText,
   /** The fitting family's own coefficient parameter the Pe loss server reads (default Pe_C). */
   fittingCoefficient: z.string().min(1).optional(),
-  /** The terminal's design CFM parameter apply writes (default PE_M_Grd_AirFlow). */
+  /**
+   * The terminal's design CFM parameter the snapshot reads and apply writes (default
+   * PE_M_Grd_AirFlow); the built-in `Flow` is the connector's own flow.
+   */
   terminalFlow: z.string().min(1).optional(),
 });
 /**
@@ -546,13 +557,13 @@ export const ductsApplyInputSchema = z.strictObject({
   /** Staged unit design flow, written to the FanFlow slot (instance first, then type). */
   equipmentFlows: z.array(writeFlow),
   /**
-   * The whole provenance store after this apply (`DuctLossStore` v1): the model's store, its
+   * The whole provenance store after this apply (`DuctLossStore` v2): the model's store, its
    * unknown keys passed through, with this apply's rules, instances and drops over it, since the
    * native op writes it as sent. `workRevision` is the model store's revision as read; an older
    * one refuses as stale.
    */
   store: z.looseObject({
-    /** 1; the native op refuses any other store version. */
+    /** 2; the native op reads v1 and v2 and writes v2. */
     version: z.number().int().optional(),
     rules: z.record(z.string(), z.strictObject({ table: optionalText })).optional(),
     instances: z
@@ -595,6 +606,14 @@ export const ductsApplyInputSchema = z.strictObject({
           appliedAt: z.string(),
         }),
       )
+      .optional(),
+    /** The rulings after this apply: `ignore` verdicts by issue or finding id (`rulings.ts`). */
+    verdicts: z
+      .record(z.string(), z.strictObject({ verdict: z.string().min(1), ruledAt: z.string() }))
+      .optional(),
+    /** `passive` units by element id. */
+    roles: z
+      .record(z.string(), z.strictObject({ role: z.string().min(1), ruledAt: z.string() }))
       .optional(),
     slots: slotsSchema.nullable().optional(),
     workRevision: z.number().int().nonnegative().optional(),
@@ -653,7 +672,7 @@ export const ductsRouteState = {
   route: "ducts",
   title: "Ducts",
   description:
-    "calculation: staged-only physical fan/passive/terminal port witnesses, balanced-design scenario, and component-flow design with one complete componentWitness plus sourced signed joint constraints (positive owner to reciprocal partner); flow conservation is not pressure certification; required hydraulics:null or staged prescribed-flow TOTAL closure with complete port-flow-vector point laws, physical versus gauge anchors and explicit fan allocations; no automatic balancing or nonlinear circulation; source strings remain declared premises; element UniqueId and exact connected/open physical port pins must match a new snapshot. Historical snapshots without UniqueId cannot certify circuits. Evidence is calculation-only, never native apply. Pea proposes; a person stages. Duct pressure-drop Work, one trichotomy cell per key. assumptions: an issue id from ducts.snapshot holds a verdict (capped, connect, ignore), and a proximity:<...> finding id holds ignore (break that inferred join) or connect (confirm it, or join a near miss across air classifications anyway); a near-miss or stretched join is bridged by the route and final (a diagnostic, no verdict owed); only an anomalous join (reversed connector, part through its host, cross-class) leaves a result provisional until a person stages a verdict, and a proposed verdict never makes it final, so propose a ruling only with the evidence for it in the note; flex-roughness:<flex type> (ft), fan-static:<equipment id> (in-wg) and component-drop:<family> (in-wg) hold overrides, never written to Revit. rules: a loss-rule key holds { table }, the ASHRAE table every instance of that fitting type is looked up under. terminalDrops and componentDrops: an element id holds { inWg, source }. esp: an air mover's element id holds { inWg }, the external static written to it (FanStatic slot). equipmentFlows: an air mover's element id holds { cfm, source }, the unit's design flow written to its FanFlow slot; it beats Revit's fanFlow fact. roles: an air mover's element id holds { role: fan | passive }; a passive part adds a loss and moves no air, a fan is what a group needs to price (a group with no fan reads no duct path to a fan). parameters: fanStatic, fanFlow, componentDrop, terminalDrop, fittingCoefficient, terminalFlow name the Revit parameter of each slot (person only); fittingCoefficient is the family parameter the Pe loss server reads (default Pe_C). loads: the one key preview holds the load tool's Load Preview as parsed ({ systems: [{ name, tag, cfm, rooms }] }, tag = the equipment tag in the system name, the value of the firm tag parameter PE_G___TagInstance, never the built-in Mark); flows: a terminal id holds { cfm, source }, a design flow that beats every other source (precedence: staged flow, then the rooms split when the rooms route supplies one, then the load preview split, then Revit's own flow); apply writes the resolved terminal flow to the terminal's TerminalFlow slot. catalogs: JSON.stringify([family, type]) (type \"\" = every type of the family) holds { table }, the manufacturer catalog table id; staged links beat the family TYPE Pe_Catalog parameter and stay in Work. The scene: subject is keyed by group id (the id from ducts.snapshot groups, g<lowest element id>), each cell holding the ordered element ids of that group's whole system as intended, end to end (outdoor intake or terminal through every element to the last equipment), including elements past a break; list every element in order, short stubs and transitions too, and never stop at the last connected element: the route draws breaks and omissions, so leave nothing out to avoid a gap. claims, keyed by claim id, hold { text, ids, state: proven | assumed | unproven } (a claim shows on the groups that hold its ids) (write element names in text; ids are fine, the route names them) and, once a person stages one, an optional verdict (yes, no, not-this) with verdictBy and verdictAt; labelParameter is one cell naming the instance parameter whose value names equipment for people; absent it reads PE_G___TagInstance, the firm equipment tag (type counterpart PE_G___TagType), not the built-in Mark, and ducts.analysis rows expose it as `tag` (match a name like FC-23 there). designFriction is one person-only cell: the design friction rate in in-wg per 100 ft (default 0.08) each run is read against; the route reads lengths as equivalent feet at each duct's own rate (Manual D / RHVAC), never written to Revit. workingPhase is one cell naming the phase the network is read in: propose the phase (a name in ducts.snapshot phases.order) that the snapshot's phases.views census shows in most views; the route leaves out every element that does not exist in it and warns out-of-phase where one touches the network. Pea may propose rules, catalogs, drops, esp, equipmentFlows, roles, loads, flows, the subject, claims (never with a verdict), the label parameter and the working phase; a person stages; ducts.apply-losses writes the staged cells to Revit after ducts.preview-losses.",
+    "calculation: staged-only physical fan/passive/terminal port witnesses, balanced-design scenario, and component-flow design with one complete componentWitness plus sourced signed joint constraints (positive owner to reciprocal partner); flow conservation is not pressure certification; required hydraulics:null or staged prescribed-flow TOTAL closure with complete port-flow-vector point laws, physical versus gauge anchors and explicit fan allocations; no automatic balancing or nonlinear circulation; source strings remain declared premises; element UniqueId and exact connected/open physical port pins must match a new snapshot. Historical snapshots without UniqueId cannot certify circuits. Evidence is calculation-only, never native apply. Pea proposes; a person stages. Duct pressure-drop Work, one trichotomy cell per key. assumptions: an issue id from ducts.snapshot holds a verdict (capped, connect, ignore), and a proximity:<...> finding id holds ignore (break that inferred join) or connect (confirm it, or join a near miss across air classifications anyway); a near-miss or stretched join is bridged by the route and final (a diagnostic, no verdict owed); only an anomalous join (reversed connector, part through its host, cross-class) leaves a result provisional until a person stages a verdict, and a proposed verdict never makes it final, so propose a ruling only with the evidence for it in the note; flex-roughness:<flex type> (ft), fan-static:<equipment id> (in-wg) and component-drop:<family> (in-wg) hold overrides, never written to Revit. An ignore verdict (an open end left out, an inferred join objected to) and a passive role are rulings the model keeps in its _PE_DuctLosses store once written: ducts.snapshot store.verdicts and store.roles are the standing rulings, Work holds only pending changes over them, and a person takes a stored verdict back by staging a delete. rules: a loss-rule key holds { table }, the ASHRAE table every instance of that fitting type is looked up under. terminalDrops and componentDrops: an element id holds { inWg, source }. esp: an air mover's element id holds { inWg }, the external static written to it (FanStatic slot). equipmentFlows: an air mover's element id holds { cfm, source }, the unit's design flow written to its FanFlow slot; it beats Revit's fanFlow fact. roles: an air mover's element id holds { role: fan | passive }; a passive part adds a loss and moves no air, a fan is what a group needs to price (a group with no fan reads no duct path to a fan). parameters: fanStatic, fanFlow, componentDrop, terminalDrop, fittingCoefficient, terminalFlow name the Revit parameter of each slot (person only); fittingCoefficient is the family parameter the Pe loss server reads (default Pe_C). terminalFlow is the airflow read slot, a walk step: ducts.snapshot airflowCandidates lists every air flow parameter the terminals carry (slot, instance or type, shared, have of N terminals, per group) and each terminal node's flowParameter names the slot that supplied its terminalFlow fact; the built-in Flow is the connector's own flow. Pea cannot stage it: propose the candidate with the best coverage in the chosen group as a claim (state assumed, ids = the terminals it covers) and the person picks it in the Set group's Airflow from row. loads: the one key preview holds the load tool's Load Preview as parsed ({ systems: [{ name, tag, cfm, rooms }] }, tag = the equipment tag in the system name, the value of the firm tag parameter PE_G___TagInstance, never the built-in Mark); flows: a terminal id holds { cfm, source }, a design flow that beats every other source (precedence: staged flow, then the rooms split when the rooms route supplies one, then the load preview split, then Revit's own flow); apply writes the resolved terminal flow to the terminal's TerminalFlow slot. catalogs: JSON.stringify([family, type]) (type \"\" = every type of the family) holds { table }, the manufacturer catalog table id; staged links beat the family TYPE Pe_Catalog parameter and stay in Work. The scene: subject is keyed by group id (the id from ducts.snapshot groups, g<lowest element id>), each cell holding the ordered element ids of that group's whole system as intended, end to end (outdoor intake or terminal through every element to the last equipment), including elements past a break; list every element in order, short stubs and transitions too, and never stop at the last connected element: the route draws breaks and omissions, so leave nothing out to avoid a gap. claims, keyed by claim id, hold { text, ids, state: proven | assumed | unproven } (a claim shows on the groups that hold its ids) (write element names in text; ids are fine, the route names them) and, once a person stages one, an optional verdict (yes, no, not-this) with verdictBy and verdictAt; labelParameter is one cell naming the instance parameter whose value names equipment for people; absent it reads PE_G___TagInstance, the firm equipment tag (type counterpart PE_G___TagType), not the built-in Mark, and ducts.analysis rows expose it as `tag` (match a name like FC-23 there). designFriction is one person-only cell: the design friction rate in in-wg per 100 ft (default 0.08) each run is read against; the route reads lengths as equivalent feet at each duct's own rate (Manual D / RHVAC), never written to Revit. workingPhase is one cell naming the phase the network is read in: propose the phase (a name in ducts.snapshot phases.order) that the snapshot's phases.views census shows in most views; the route leaves out every element that does not exist in it and warns out-of-phase where one touches the network. Pea may propose rules, catalogs, drops, esp, equipmentFlows, roles, loads, flows, the subject, claims (never with a verdict), the label parameter and the working phase; a person stages; ducts.apply-losses writes the staged cells to Revit after ducts.preview-losses.",
   schema: ductsDocumentSchema,
   finds: DUCTS_FINDS,
   agentWriteMask: [

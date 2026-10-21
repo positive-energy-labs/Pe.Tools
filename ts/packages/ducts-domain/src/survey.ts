@@ -23,6 +23,7 @@ import {
   type RoomFlows,
   type TerminalFlow,
 } from "./terminal-flows.ts";
+import { withStoredRulings } from "./rulings.ts";
 import { groupTree } from "./topology.ts";
 import type { DuctSnapshot } from "./types.ts";
 
@@ -186,6 +187,8 @@ export function survey(
   work: DuctsRouteDocument | null,
   roomFlows?: RoomFlows,
 ): Survey {
+  // The model's stored rulings are the base under Work's pending ones (`rulings.ts`).
+  work = withStoredRulings(work, snapshot.store);
   const hit = last.get(snapshot);
   if (!roomFlows && hit && hit.work === work) return hit.survey;
   const t = tolerated(snapshot, work);

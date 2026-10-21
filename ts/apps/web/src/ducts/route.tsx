@@ -20,7 +20,8 @@ import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
 import { Situation } from "#/route/situation";
 import { LadderPicker, useDocumentLadder } from "#/route/situation-ladder";
-import { manifest, stagedCount, stagedRulings, WRITTEN } from "./manifest";
+import { manifest, pendingCount, WRITTEN } from "./manifest";
+import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { price } from "@pe/ducts-domain/pricing";
 import { readiness } from "@pe/ducts-domain/readiness";
 import { verdictPatches } from "./claims";
@@ -122,6 +123,11 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
         ? price(snapshot, tables.grids, handle.work.doc, catalogs.tables)
         : null,
     [snapshot, tables.grids, handle.work.doc, catalogs.tables],
+  );
+  // The Work every pane reads: the model's stored rulings under the person's pending ones.
+  const seen = useMemo(
+    () => withStoredRulings(handle.work.doc, snapshot?.store),
+    [handle.work.doc, snapshot],
   );
 
   const ready = useMemo(
@@ -232,12 +238,12 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   const preview = page.evaluation?.response ?? null;
   const work = useMemo(
     () => ({
-      doc: handle.work.doc,
+      doc: seen,
       revision: handle.work.revision,
       write: handle.work.write,
       preview,
     }),
-    [handle.work.doc, handle.work.revision, handle.work.write, preview],
+    [seen, handle.work.revision, handle.work.write, preview],
   );
   const empty =
     !doc && !SAVED && !demo
@@ -277,8 +283,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
       heal: handle.actions.heal,
       busy,
     },
-    staged: stagedCount(handle.work.doc),
-    rulings: stagedRulings(handle.work.doc),
+    staged: pendingCount(handle.work.doc, snapshot?.store),
   };
 
   return (

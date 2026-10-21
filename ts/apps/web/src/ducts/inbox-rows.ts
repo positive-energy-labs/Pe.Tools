@@ -5,8 +5,9 @@
  *   of their own. Then what blocks a path to the fan (`bins.ts` `blocking`): no duct path to a
  *   fan, anomalous joins, open ends a person must fix in Revit (the note says why), loops, no or
  *   several roots. A Heal row blocks Write only when it covers a blocking finding.
- * - Set: an input a person owes: a terminal with no flow, a fan with no design flow, flex left on
- *   the rigid roughness. Each Set row deep-links to the cell on the tree row that holds it.
+ * - Set: an input a person owes: first, while any terminal has no flow, which parameter the airflow
+ *   is read from (`airflow.ts`); then a terminal with no flow, a fan with no design flow, flex left
+ *   on the rigid roughness. Each Set row deep-links to the cell on the tree row that holds it.
  * - Check: Pea's claims for this group awaiting a verdict, and Pea's proposals awaiting staging.
  * - Write: one row, armed only while Fix and Set are empty and the preview is fresh.
  * - Diagnostics: bridged joins (near miss, stretched); final, collapsed, and the only rows that may
@@ -21,6 +22,7 @@ import type { HealGroup, HealItem, HealPlan } from "@pe/ducts-domain/heal";
 import { ruleByKey } from "@pe/ducts-domain/loss-rules";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
+import { slotWord, type AirflowOption } from "./airflow";
 import type { Claim } from "./legs";
 import type { DuctsHealRun } from "./manifest";
 
@@ -70,6 +72,8 @@ export type RowVerb =
   /** Select the element on the drawing and focus the cell that holds the input. */
   | { kind: "focus"; cell: CellRef; label: string; says: string }
   | { kind: "claim"; claim: Claim }
+  /** Choose the parameter every terminal's airflow is read from: one press per candidate. */
+  | { kind: "airflow"; current: string; options: readonly AirflowOption[] }
   | {
       kind: "stage";
       segment: string;
@@ -128,6 +132,8 @@ export interface TriageInput {
   /** What heals in Revit (ducts-domain `healPlan` over the raw snapshot); absent, nothing heals. */
   heal?: HealPlan | null;
   healRun?: HealRunView | null;
+  /** The airflow read slot and its candidates in this scope (`airflowOptions`). */
+  airflow?: { current: string; options: readonly AirflowOption[] };
 }
 
 /**
@@ -565,9 +571,11 @@ export function triage(input: TriageInput) {
     });
   }
 
+  const flowless: number[] = [];
   for (const n of snapshot.nodes) {
     if (n.kind !== "terminal" || !n.groupId || (group && n.groupId !== group)) continue;
     if (fanless.has(n.groupId) || flows.get(n.id)?.cfm != null) continue;
+    flowless.push(n.id);
     set.push({
       key: `flows:${n.id}`,
       group: "set",
@@ -585,6 +593,23 @@ export function triage(input: TriageInput) {
         },
         select([n.id]),
       ],
+    });
+  }
+  // The airflow source is the critical step: while a terminal has no flow, the first Set row asks
+  // which parameter holds them, with each candidate's coverage, before any one terminal's row.
+  if (flowless.length && input.airflow) {
+    const { current, options } = input.airflow;
+    const at = options.find((o) => o.slot === current);
+    set.unshift({
+      key: "airflow",
+      group: "set",
+      kind: "airflow",
+      title: `Airflow from ${slotWord(current)}`,
+      status: `${at?.have ?? 0} of ${at?.of ?? flowless.length} terminals read`,
+      tone: "caution",
+      ids: flowless,
+      note: `${flowless.length} terminal${flowless.length === 1 ? "" : "s"} read no airflow from ${slotWord(current)}. Pick the parameter this project keeps design airflow in; each choice says how many terminals hold a value.`,
+      verbs: [{ kind: "airflow", current, options }, select(flowless)],
     });
   }
   const units = new Set<number>();
@@ -746,11 +771,10 @@ export function checks(input: TriageInput & { claims: readonly Claim[] }): Inbox
   return items;
 }
 
-/** What the Write row needs from the page: staged cells, and the last preview's standing. */
+/** What the Write row needs from the page: pending changes, and the last preview's standing. */
 export interface WriteState {
+  /** Staged cells and pending rulings: a ruling is a write to the model's store. */
   staged: number;
-  /** Staged rulings (verdicts, roles): route Work that Pe keeps and Revit never receives. */
-  rulings?: number;
   hasPreview: boolean;
   fresh: boolean;
   planned: number | null;
@@ -775,9 +799,7 @@ export function writeRow(left: { fix: number; set: number }, write: WriteState):
   return {
     title: write.fresh && write.planned ? `Write ${write.planned} to Revit` : "Write to Revit",
     status: !write.staged
-      ? write.rulings
-        ? `${write.rulings} ruling${write.rulings === 1 ? "" : "s"} staged · nothing to write to Revit yet: stage a flow, ESP, rule or drop`
-        : "nothing staged"
+      ? "nothing staged"
       : !write.hasPreview
         ? "not previewed"
         : !write.fresh

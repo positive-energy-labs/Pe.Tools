@@ -4,6 +4,7 @@
  * came from, a group's name from its system and root units, and a rule's fan-out before staging.
  */
 import type { FlowSource } from "@pe/ducts-domain/terminal-flows";
+import { slotWord } from "./airflow";
 import { markOf } from "@pe/ducts-domain/terminal-flows";
 import { proposedStatic, type Priced } from "@pe/ducts-domain/pricing";
 import { groupTree, type GroupTree } from "@pe/ducts-domain/topology";
@@ -33,13 +34,24 @@ export interface TerminalInputs {
   drop: Resolved<number>;
 }
 
-/** A terminal's resolved flow (precedence in `terminalFlows`) and drop (staged, else the priced row's). */
-export function terminalInputs(priced: Priced, id: number): TerminalInputs {
+/**
+ * A terminal's resolved flow (precedence in `terminalFlows`) and drop (staged, else the priced
+ * row's). A flow read from Revit names the parameter it came from (the airflow slot, `airflow.ts`).
+ */
+export function terminalInputs(
+  priced: Priced,
+  id: number,
+  from: string | null = null,
+): TerminalInputs {
   const flow = priced.flows.get(id);
   const staged = priced.staged.terminalDrops[String(id)];
   const row = priced.next.paths[id]?.rows.find((r) => r.id === id && r.kind === "terminal");
   return {
-    flow: { value: flow?.cfm ?? null, word: flowSourceWord(flow?.source ?? null) },
+    flow: {
+      value: flow?.cfm ?? null,
+      word:
+        flow?.source === "revit" && from ? slotWord(from) : flowSourceWord(flow?.source ?? null),
+    },
     drop: staged
       ? { value: staged.inWg, word: "override" }
       : row?.dp != null
@@ -91,7 +103,9 @@ export function groupLabels(snapshot: DuctSnapshot): Map<string, string> {
   });
   const seen = new Map<string, number>();
   for (const [, label] of base) seen.set(label, (seen.get(label) ?? 0) + 1);
-  return new Map(base.map(([id, label]) => [id, seen.get(label)! > 1 ? `${label} · ${id}` : label]));
+  return new Map(
+    base.map(([id, label]) => [id, seen.get(label)! > 1 ? `${label} · ${id}` : label]),
+  );
 }
 
 /**

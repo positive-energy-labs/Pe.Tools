@@ -48,6 +48,8 @@ public static class DuctApplier {
 
     /// <summary>One planned target. Write runs inside the stage's transaction and returns the After text.</summary>
     private sealed record Item(long? Id, string Kind, string? Before) {
+        /// <summary>A store entry's key: the slot name, or the verdict's issue or finding id.</summary>
+        public string? Key { get; init; }
         public string Outcome { get; set; } = "planned";
         public string? Reason { get; set; }
         public string? After { get; set; }
@@ -104,6 +106,8 @@ public static class DuctApplier {
 
         var (stored, storeError) = ReadStore(doc);
         var storeRevision = stored?.WorkRevision ?? 0;
+        // The store entries this write changes, one line each, so a preview reviews every change (they land with the store).
+        items.AddRange(StoreEntries(stored, request.Store, slots));
         var store = new Item(null, "store", stored is null ? storeError is null ? "absent" : "unreadable" : $"revision {storeRevision}");
         if (storeError is not null) store.Refuse($"the model's {StoreText.Name} is unreadable ({storeError}); refusing to overwrite it");
         else if (request.Store.WorkRevision < storeRevision)
@@ -153,6 +157,48 @@ public static class DuctApplier {
             .ToList();
         return Result(false, items, systems, store.Outcome == "written" ? next.WorkRevision : storeRevision);
     }
+
+    /// <summary>
+    ///     The slots and rulings this write changes against the model's store: a slot whose name moves, a verdict or a
+    ///     role added, changed or taken back. Each writes nothing itself; the store item carries them.
+    /// </summary>
+    private static IEnumerable<Item> StoreEntries(DuctLossStore? stored, DuctLossStore asked, DuctParameterSlots slots) {
+        Item Entry(long? id, string kind, string? key, string before, string after) =>
+            new(id, kind, before) { Key = key, After = after, Write = () => after };
+        var had = (stored?.Slots ?? new DuctParameterSlots()).WithDefaults();
+        var names = new[] {
+            ("fanStatic", had.FanStatic, slots.FanStatic),
+            ("fanFlow", had.FanFlow, slots.FanFlow),
+            ("componentDrop", had.ComponentDrop, slots.ComponentDrop),
+            ("terminalDrop", had.TerminalDrop, slots.TerminalDrop),
+            ("fittingCoefficient", had.FittingCoefficient, slots.FittingCoefficient),
+            ("terminalFlow", had.TerminalFlow, slots.TerminalFlow)
+        };
+        foreach (var (name, before, after) in names)
+            if (!string.Equals(before, after, StringComparison.Ordinal))
+                yield return Entry(null, "slot", name, before ?? "none", after ?? "none");
+        var verdicts = stored?.Verdicts ?? new Dictionary<string, DuctVerdictRecord>();
+        var askedVerdicts = asked.Verdicts ?? new Dictionary<string, DuctVerdictRecord>();
+        foreach (var key in verdicts.Keys.Union(askedVerdicts.Keys).OrderBy(k => k, StringComparer.Ordinal)) {
+            var before = verdicts.TryGetValue(key, out var b) ? b.Verdict : "none";
+            var after = askedVerdicts.TryGetValue(key, out var a) ? a.Verdict : "none";
+            if (before != after) yield return Entry(FirstId(key), "verdict", key, before, after);
+        }
+        var roles = stored?.Roles ?? new Dictionary<long, DuctRoleRecord>();
+        var askedRoles = asked.Roles ?? new Dictionary<long, DuctRoleRecord>();
+        foreach (var id in roles.Keys.Union(askedRoles.Keys).OrderBy(k => k)) {
+            var before = roles.TryGetValue(id, out var b) ? b.Role : "none";
+            var after = askedRoles.TryGetValue(id, out var a) ? a.Role : "none";
+            if (before != after) yield return Entry(id, "role", null, before, after);
+        }
+    }
+
+    /// <summary>The first element id an issue or finding id names: `open-end:123:1` is 123, `proximity:12:0|34:1` is 12.</summary>
+    private static long? FirstId(string key) =>
+        key.Split(':', '|').Skip(1).FirstOrDefault(part => part.Length > 0 && part.All(char.IsDigit)) is { } id
+        && long.TryParse(id, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+            ? value
+            : null;
 
     /// <summary>Runs the stages in one group; returns the failed stage's name, or null when all committed.</summary>
     private static string? Execute(Document doc, List<Item> items) {
@@ -311,6 +357,8 @@ public static class DuctApplier {
             return item.Refuse($"the instance has no writable number parameter '{named}' (the TerminalDrop slot)");
         var value = UnitUtils.ConvertToInternalUnits(w.InWg, InWg);
         return item with {
+            // What a preview shows; the write replaces it with what the connector reads after.
+            After = bound is null ? $"connector {w.InWg:0.#####} in-wg" : $"'{bound.Definition.Name}' {w.InWg:0.#####} in-wg",
             Write = () => {
                 if (bound is null) {
                     try {
@@ -389,7 +437,9 @@ public static class DuctApplier {
         const string kind = "terminal-flow";
         var e = doc.GetElement(w.Id.ToElementId());
         if (e is null) return new Item(w.Id, kind, null).Refuse($"element {w.Id} is not in the document");
-        var p = e.LookupParameter(slots.TerminalFlow);
+        // A family parameter can share the built-in `Flow`'s name: write the writable air flow one.
+        var named = e.GetParameters(slots.TerminalFlow);
+        var p = named.FirstOrDefault(x => !x.IsReadOnly && IsAirFlow(x)) ?? named.FirstOrDefault();
         var item = new Item(w.Id, kind, p is { HasValue: true, StorageType: StorageType.Double } ? $"{Shown(p, Cfm):0.####} cfm" : null) { Element = e };
         if (e.Category.ToBuiltInCategory() != BuiltInCategory.OST_DuctTerminal) return item.Refuse($"not an air terminal ({e.Category?.Name ?? "no category"})");
         if (p is null) return item.Refuse($"the instance has no '{slots.TerminalFlow}' (the TerminalFlow slot)");
@@ -401,11 +451,15 @@ public static class DuctApplier {
         if (p.HasValue && Math.Abs(Shown(p, Cfm) - w.Cfm) < 1e-6 * Math.Max(1, Math.Abs(w.Cfm))) return item.Unchanged(after);
         return item with {
             After = after,
-            Write = () => e.LookupParameter(slots.TerminalFlow)?.Set(UnitUtils.ConvertToInternalUnits(w.Cfm, Cfm)) == true
+            Write = () => e.GetParameters(slots.TerminalFlow).FirstOrDefault(x => !x.IsReadOnly && IsAirFlow(x))
+                ?.Set(UnitUtils.ConvertToInternalUnits(w.Cfm, Cfm)) == true
                 ? after
                 : throw new InvalidOperationException($"Revit rejected '{slots.TerminalFlow}'")
         };
     }
+
+    private static bool IsAirFlow(Parameter p) =>
+        p.StorageType == StorageType.Double && Try(() => p.Definition.GetDataType()) is { } spec && spec == SpecTypeId.AirFlow;
 
     private static DuctLossStore Compose(DuctApplyRequest request, DuctLossStore? stored, List<Item> items, DateTimeOffset now,
         DuctParameterSlots slots, int revision) {
@@ -427,7 +481,11 @@ public static class DuctApplier {
         var unknown = new Dictionary<string, Newtonsoft.Json.Linq.JToken>(stored?.Unknown ?? new Dictionary<string, Newtonsoft.Json.Linq.JToken>());
         foreach (var kv in asked.Unknown ?? new Dictionary<string, Newtonsoft.Json.Linq.JToken>()) unknown[kv.Key] = kv.Value;
         return new DuctLossStore {
-            Version = DuctLossStore.CurrentVersion, Rules = rules, Instances = instances, Terminals = drops, TerminalFlows = terminalFlows, EquipmentFlows = equipmentFlows, Slots = slots, WorkRevision = revision, AppliedAt = now, Unknown = unknown
+            Version = DuctLossStore.CurrentVersion, Rules = rules, Instances = instances, Terminals = drops, TerminalFlows = terminalFlows, EquipmentFlows = equipmentFlows,
+            // The rulings as sent: the web composes the model's rulings with the person's pending deltas (`StoreEntries` names each change).
+            Verdicts = new Dictionary<string, DuctVerdictRecord>(asked.Verdicts ?? new(), StringComparer.Ordinal),
+            Roles = new Dictionary<long, DuctRoleRecord>(asked.Roles ?? new()),
+            Slots = slots, WorkRevision = revision, AppliedAt = now, Unknown = unknown
         };
     }
 
@@ -437,12 +495,14 @@ public static class DuctApplier {
         Instances = s.Instances.ToDictionary(kv => kv.Key, kv => kv.Value with { AppliedAt = default }),
         Terminals = s.Terminals.ToDictionary(kv => kv.Key, kv => kv.Value with { AppliedAt = default }),
         TerminalFlows = s.TerminalFlows.ToDictionary(kv => kv.Key, kv => kv.Value with { AppliedAt = default }),
-        EquipmentFlows = s.EquipmentFlows.ToDictionary(kv => kv.Key, kv => kv.Value with { AppliedAt = default })
+        EquipmentFlows = s.EquipmentFlows.ToDictionary(kv => kv.Key, kv => kv.Value with { AppliedAt = default }),
+        Verdicts = s.Verdicts.ToDictionary(kv => kv.Key, kv => kv.Value with { RuledAt = default }, StringComparer.Ordinal),
+        Roles = s.Roles.ToDictionary(kv => kv.Key, kv => kv.Value with { RuledAt = default })
     }).ToJson();
 
     private static DuctApplyResult Result(bool preview, List<Item> items, IReadOnlyList<DuctSystem>? systems, int revision) => new(
         preview,
-        items.Select(i => new DuctWrite(i.Id, i.Kind, i.Outcome, i.Reason, i.Before, i.Outcome == "refused" ? null : i.After)).ToList(),
+        items.Select(i => new DuctWrite(i.Id, i.Kind, i.Outcome, i.Reason, i.Before, i.Outcome == "refused" ? null : i.After, i.Key)).ToList(),
         new DuctApplyCounts(
             items.Count(i => i.Outcome == "planned"),
             items.Count(i => i.Outcome == "written"),

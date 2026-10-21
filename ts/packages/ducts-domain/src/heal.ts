@@ -15,6 +15,7 @@
  */
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import { tolerate, verdictOf } from "./proximity.ts";
+import { withStoredRulings } from "./rulings.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 /** An open end with no same-class open end this close is dangling and takes a cap (ruling 2026-10-20). */
@@ -124,7 +125,9 @@ export function healPlan(snapshot: DuctSnapshot, work: DuctsRouteDocument | null
   return plan;
 }
 
-function build(snapshot: DuctSnapshot, work: DuctsRouteDocument | null): HealPlan {
+function build(snapshot: DuctSnapshot, raw: DuctsRouteDocument | null): HealPlan {
+  // A stored ruling (an end left out) holds like a staged one (`rulings.ts`).
+  const work = withStoredRulings(raw, snapshot.store);
   const tolerated = tolerate(snapshot, work);
   const groupOf = new Map(
     [...tolerated.snapshot.nodes, ...tolerated.snapshot.segments].map((e) => [

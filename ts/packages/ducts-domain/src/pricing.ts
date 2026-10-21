@@ -24,6 +24,7 @@ import {
   type Overrides,
   type Row,
 } from "./losses.ts";
+import { storeRulings, withStoredRulings } from "./rulings.ts";
 import { survey, type Survey } from "./survey.ts";
 import type { DuctSnapshot } from "./types.ts";
 
@@ -131,7 +132,8 @@ export function price(
   const { snapshot } = surveyed;
   const entry = solvedFor(snapshot, grids, catalogs, surveyed.inferred);
   if (entry.last?.doc === doc) return entry.last.priced;
-  const staged = stagedDucts(doc);
+  // The model's stored rulings under Work's pending ones (`rulings.ts`), as the survey read them.
+  const staged = stagedDucts(withStoredRulings(doc, raw.store));
   const rate = staged.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
   if (entry.rate !== rate) {
     entry.now = computeLosses(
@@ -410,7 +412,7 @@ export function applyRequest(
     // this apply over it, at the revision read, so a store that moved since refuses as stale.
     store: {
       ...stored,
-      version: 1,
+      version: 2,
       rules: Object.fromEntries(
         Object.entries(priced.choices).map(([key, table]) => [key, { table: table.toUpperCase() }]),
       ),
@@ -444,6 +446,8 @@ export function applyRequest(
       slots: Object.fromEntries(
         Object.entries({ ...snapshot.slots, ...slots }).filter(([, name]) => !!name),
       ),
+      // Document-wide: the stored rulings Work leaves standing and its pending ones (`rulings.ts`).
+      ...storeRulings(priced.staged, stored, appliedAt),
       workRevision: stored?.workRevision ?? 0,
       appliedAt,
     },
