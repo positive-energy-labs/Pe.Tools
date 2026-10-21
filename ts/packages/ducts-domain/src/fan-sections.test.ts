@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { ductsDocumentSchema } from "@pe/agent-contracts";
 
 import { fanSections } from "./fan-sections.ts";
+import { passThrough } from "./pass-through.ts";
 import { computeLosses } from "./losses.ts";
 import { survey } from "./survey.ts";
 import { equipmentFlows } from "./terminal-flows.ts";
@@ -146,7 +147,7 @@ describe("unitRoles", () => {
 
   it("lets a ruling beat the proposal and tells a stored one from a staged one", () => {
     const s = { ...snapshot(), store: { roles: { "1": { role: "passive", ruledAt: "t" } } } };
-    const roles = unitRoles(s as DuctSnapshot, equipmentFlows(s as DuctSnapshot, {}), {
+    const roles = unitRoles(s as unknown as DuctSnapshot, equipmentFlows(s as unknown as DuctSnapshot, {}), {
       "1": { role: "passive" },
       "3": { role: "fan" },
     });
@@ -211,5 +212,45 @@ describe("fanSections", () => {
     });
     expect(result.byGroup.g10!.fans).toEqual([]);
     expect(result.paths[31]!.rows[0]!.id).toBe(10);
+  });
+});
+
+describe("passThrough", () => {
+  /** Filter 3 also feeds duct 17 (its own group g17) to grille 32; its third port is open. */
+  const split = () => {
+    const s = snapshot();
+    const filter = s.nodes.find((n) => n.id === 3)!;
+    filter.connectors = [port(1, 16, 2), port(2, 17), port(3, null)];
+    const g17 = { ...s.groups[0]!, id: "g17", rootIds: [3], terminalCount: 1, elementCount: 2, issueIds: [] };
+    const d17 = { ...duct(17, [3, 32]), groupId: "g17" } as Segment;
+    return {
+      ...s,
+      groups: [...s.groups, g17],
+      nodes: [...s.nodes, node(32, "terminal", "g17", [port(1, 17, 2)], [fact("flow", 150)])],
+      segments: [...s.segments, d17],
+    } as DuctSnapshot;
+  };
+
+  it("merges the groups a passive unit's ports reach and prices through it under the fan", () => {
+    const p = passThrough(split(), new Set([3]));
+    expect([...p.merged]).toEqual([["g10", ["g10", "g17"]]]);
+    expect(p.snapshot.groups.map((g) => [g.id, g.rootIds])).toEqual([["g10", [1, 2]]]);
+    expect(p.snapshot.nodes.find((n) => n.id === 3)!.groupId).toBe("g10");
+    expect(p.findings).toMatchObject([{ id: "open-end:passive:3:3", kind: "open-end", groupId: "g10" }]);
+    const result = computeLosses(p.snapshot, {}, {}, {
+      unitRole: { 1: "fan", 2: "fan", 3: "passive" },
+      unitCfm: { 1: 800, 2: 100 },
+    });
+    // Grille 32 sits past the filter: its run starts at the air handler's duct and crosses duct 16.
+    const ids = [...new Set(result.paths[32]!.rows.map((r) => r.id))];
+    expect(ids[0]).toBe(10);
+    expect(ids).toEqual(expect.arrayContaining([16, 17, 32]));
+  });
+
+  it("surveys the merged network: the fan's grilles past the filter, the open port a person's fix", () => {
+    const sv = survey(split(), null);
+    expect(sv.roles.get(3)).toMatchObject({ role: "passive", why: "proposed" });
+    expect(sv.snapshot.groups.map((g) => g.id)).toEqual(["g10"]);
+    expect(sv.findings.map((f) => f.id)).toContain("open-end:passive:3:3");
   });
 });

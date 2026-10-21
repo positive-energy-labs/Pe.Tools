@@ -12,6 +12,7 @@ import {
   type DuctsRouteDocument,
 } from "@pe/agent-contracts";
 
+import { passThrough } from "./pass-through.ts";
 import { phased } from "./phases.ts";
 import { tolerate, type InferredLink } from "./proximity.ts";
 import {
@@ -57,9 +58,12 @@ function noFanFindings(snapshot: DuctSnapshot, passive: ReadonlySet<number>): Du
         .filter((n) => n.groupId === g.id && n.kind === "terminal")
         .map((n) => n.id),
       groupId: g.id,
-      note: g.rootIds.length
-        ? `no duct path to a fan: ${g.id} is fed only by passive ${g.rootIds.join(", ")}`
-        : `no duct path to a fan: ${g.id} has no equipment connected to it`,
+      note: ((inline) =>
+        g.rootIds.length || inline.length
+          ? `no duct path to a fan: ${g.id} is fed only by passive ${[...g.rootIds, ...inline].join(", ")}`
+          : `no duct path to a fan: ${g.id} has no equipment connected to it`)(
+        snapshot.nodes.filter((n) => n.groupId === g.id && n.kind === "equipment").map((n) => n.id),
+      ),
       assumed: null,
       clearer: "person" as const,
     }));
@@ -184,6 +188,7 @@ export function tolerated(snapshot: DuctSnapshot, work: DuctsRouteDocument | nul
   return result;
 }
 const inSeries = new WeakMap<DuctSnapshot, Map<string, ReturnType<typeof series>>>();
+const inline = new WeakMap<DuctSnapshot, Map<string, ReturnType<typeof passThrough>>>();
 const last = new WeakMap<DuctSnapshot, { work: DuctsRouteDocument | null; survey: Survey }>();
 
 export function survey(
@@ -202,15 +207,19 @@ export function survey(
   const s =
     bySeries.get(tags.join("|")) ??
     bySeries.set(tags.join("|"), series(t.snapshot, new Set(tags))).get(tags.join("|"))!;
-  const trees = s.snapshot.groups.map((g) => groupTree(s.snapshot, g.id));
-  const flows = terminalFlows(s.snapshot, staged.loads.preview, staged.flows, trees, roomFlows);
+  // Roles are proposed on the groups as Revit cuts them; then a passive unit passes air through.
   const units = equipmentFlows(s.snapshot, staged.equipmentFlows);
   const roles = unitRoles(s.snapshot, units, staged.roles);
   const passive = passiveOf(roles);
-  const noFan = noFanFindings(s.snapshot, passive);
+  const key = [...passive].join(",");
+  const byPassive = inline.get(s.snapshot) ?? inline.set(s.snapshot, new Map()).get(s.snapshot)!;
+  const p = byPassive.get(key) ?? byPassive.set(key, passThrough(s.snapshot, passive)).get(key)!;
+  const m = p.snapshot;
+  const trees = m.groups.map((g) => groupTree(m, g.id));
+  const flows = terminalFlows(m, staged.loads.preview, staged.flows, trees, roomFlows);
+  const noFan = noFanFindings(m, passive);
   const fanless = new Set(noFan.map((f) => f.groupId));
-  const rootsOf = (groupId: string) =>
-    s.snapshot.groups.find((g) => g.id === groupId)?.rootIds ?? [];
+  const rootsOf = (groupId: string) => m.groups.find((g) => g.id === groupId)?.rootIds ?? [];
   // Several roots stand while more than one is a fan and any of those fans is only proposed (or
   // defaulted): once a person rules every fan, the group is a confirmed multi-fan network and
   // prices per fan (`fan-sections.ts`).
@@ -222,6 +231,7 @@ export function survey(
   const findings: DuctFinding[] = [
     ...s.findings,
     ...noFan,
+    ...p.findings,
     // An inference is likely, never correct (kaitpw 2026-10-19): a person rules on every one.
     ...t.findings.map((f) => ({
       ...f,
@@ -229,7 +239,7 @@ export function survey(
       clearer: "person" as const,
     })),
     ...flows.findings.map(flowFinding),
-    ...s.snapshot.issues
+    ...m.issues
       .filter((i) => !(i.kind === "no-root" && fanless.has(i.groupId)))
       .filter((i) => i.kind !== "multi-root" || manyRoots(i))
       .map((i) => ({
@@ -241,7 +251,7 @@ export function survey(
           i.elementId != null ? [i.elementId] : i.kind === "multi-root"
             ? rootsOf(i.groupId)
             : i.kind === "no-root"
-              ? s.snapshot.nodes.filter((n) => n.groupId === i.groupId && n.kind === "terminal").map((n) => n.id)
+              ? m.nodes.filter((n) => n.groupId === i.groupId && n.kind === "terminal").map((n) => n.id)
               : [],
         // Fan static is the route's output, not an input a person owes.
         note:
@@ -253,7 +263,7 @@ export function survey(
       })),
   ];
   const result = {
-    snapshot: s.snapshot,
+    snapshot: m,
     flows: flows.flows,
     equipmentFlows: units,
     roles,

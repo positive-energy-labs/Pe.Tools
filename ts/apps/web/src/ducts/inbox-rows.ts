@@ -22,7 +22,7 @@ import type { HealGroup, HealItem, HealPlan } from "@pe/ducts-domain/heal";
 import { ruleByKey } from "@pe/ducts-domain/loss-rules";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
-import { slotWord, type AirflowOption } from "./airflow";
+import { slotWord, type AirflowOf, type AirflowOption } from "./airflow";
 import type { Claim } from "./legs";
 import type { DuctsHealRun } from "./manifest";
 
@@ -72,8 +72,8 @@ export type RowVerb =
   /** Select the element on the drawing and focus the cell that holds the input. */
   | { kind: "focus"; cell: CellRef; label: string; says: string }
   | { kind: "claim"; claim: Claim }
-  /** Choose the parameter every terminal's airflow is read from: one press per candidate. */
-  | { kind: "airflow"; current: string; options: readonly AirflowOption[] }
+  /** Choose the parameter every terminal's (or unit's) airflow is read from: one press per candidate. */
+  | { kind: "airflow"; of?: AirflowOf; current: string; options: readonly AirflowOption[] }
   | {
       kind: "stage";
       segment: string;
@@ -134,6 +134,10 @@ export interface TriageInput {
   healRun?: HealRunView | null;
   /** The airflow read slot and its candidates in this scope (`airflowOptions`). */
   airflow?: { current: string; options: readonly AirflowOption[] };
+  /** The unit airflow read slot (FanFlow) and its candidates in this scope. */
+  unitAirflow?: { current: string; options: readonly AirflowOption[] };
+  /** Every root unit's role with why: ruled, staged, proposed from its flow, or the default (survey). */
+  roles?: ReadonlyMap<number, { role: "fan" | "passive"; why: string; reason: string }>;
 }
 
 /**
@@ -285,6 +289,9 @@ export const proximityIds = (key: string) =>
 /** Fix, Set, Check and Diagnostics, each in its own order. */
 export function triage(input: TriageInput) {
   const { snapshot, group, findings, flows, equipmentFlows, doc } = input;
+  // The role a unit plays now: the survey's (ruled, staged, else proposed), else Work's staged one.
+  const roleNow = (id: number) => input.roles?.get(id)?.role ?? roleOf(doc, id);
+  const ruled = (id: number) => ["ruled", "staged"].includes(input.roles?.get(id)?.why ?? "");
   const name = input.nameOf ?? String;
   const label = input.groupLabel ?? ((id: string) => id);
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
@@ -435,7 +442,7 @@ export function triage(input: TriageInput) {
     switch (f.kind) {
       case "no-fan": {
         const roots = (snapshot.groups.find((g) => g.id === f.groupId)?.rootIds ?? []).filter(
-          (id) => roleOf(doc, id) === "passive",
+          (id) => roleNow(id) === "passive",
         );
         fix.push({
           ...item,
@@ -515,12 +522,29 @@ export function triage(input: TriageInput) {
         break;
       }
       case "multi-root": {
-        const active = f.elementIds.filter((id) => roleOf(doc, id) !== "passive");
+        // Two or more fans after the proposal: a person confirms each fan (the group then prices
+        // per fan) or rules the inline gear passive.
+        const active = f.elementIds.filter((id) => roleNow(id) !== "passive");
+        const why = f.elementIds
+          .map((id) => `${name(id)}: ${roleNow(id) ?? "fan"}, ${input.roles?.get(id)?.reason ?? "staged"}`)
+          .join("; ");
         fix.push({
           ...item,
-          title: `Several roots: ${names(f.elementIds)}`,
+          title: `Several fans: ${names(active)}`,
           status: "blocks the path",
+          note: `${why}. Confirm each fan to price the group per fan, or rule a unit passive.`,
           verbs: [
+            ...active
+              .filter((id) => !ruled(id))
+              .map(
+                (id): RowVerb => ({
+                  kind: "role",
+                  id,
+                  role: "fan",
+                  label: `${name(id)} is a fan`,
+                  says: `Rule ${name(id)} a fan; once every fan is ruled the group prices per fan`,
+                }),
+              ),
             ...active.map(
               (id): RowVerb => ({
                 kind: "role",
@@ -628,13 +652,16 @@ export function triage(input: TriageInput) {
     });
   }
   const units = new Set<number>();
+  const unitFlowless: number[] = [];
+  const firstUnitRow = set.length;
   for (const g of groupsOf) {
     if (fanless.has(g.id)) continue;
     for (const id of g.rootIds) {
-      if (units.has(id) || nodes.get(id)?.kind !== "equipment" || roleOf(doc, id) === "passive")
+      if (units.has(id) || nodes.get(id)?.kind !== "equipment" || roleNow(id) === "passive")
         continue;
       units.add(id);
       if (equipmentFlows.get(id)?.cfm != null) continue;
+      unitFlowless.push(id);
       set.push({
         key: `equipmentFlows:${id}`,
         group: "set",
@@ -654,6 +681,24 @@ export function triage(input: TriageInput) {
         ],
       });
     }
+  }
+
+  // The unit airflow source leads the unit rows the way the terminal one leads the grilles': a
+  // unit's flow proposes its role (`unit-roles.ts`), so which parameter holds it comes first.
+  if (unitFlowless.length && input.unitAirflow) {
+    const { current, options } = input.unitAirflow;
+    const at = options.find((o) => o.slot === current);
+    set.splice(firstUnitRow, 0, {
+      key: "unit-airflow",
+      group: "set",
+      kind: "unit-airflow",
+      title: `Unit airflow from ${slotWord(current)}`,
+      status: `${at?.have ?? 0} of ${at?.of ?? unitFlowless.length} units read`,
+      tone: "caution",
+      ids: unitFlowless,
+      note: `${unitFlowless.length} unit${unitFlowless.length === 1 ? "" : "s"} read no design flow from ${slotWord(current)}. Pick the parameter this project keeps unit airflow in; a unit with a flow is proposed a fan, one without beside it passive.`,
+      verbs: [{ kind: "airflow", of: "unit", current, options }, select(unitFlowless)],
+    });
   }
 
   return { fix, set, diagnostics };

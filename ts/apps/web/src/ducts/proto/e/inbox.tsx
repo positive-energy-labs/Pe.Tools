@@ -167,8 +167,8 @@ export function Inbox({
                 `a${i}${o.slot}`,
                 Pencil,
                 `${o.label} · ${o.have}/${o.of}`,
-                `Read every terminal's airflow from ${o.label}: ${o.have} of ${o.of} terminals hold a value`,
-                () => void work.write(airflowPatches(work.doc, o.slot)),
+                `Read every ${verb.of ?? "terminal"}'s airflow from ${o.label}: ${o.have} of ${o.of} ${verb.of ?? "terminal"}s hold a value`,
+                () => void work.write(airflowPatches(work.doc, o.slot, verb.of)),
                 { pressed: o.slot === verb.current },
               ),
             )

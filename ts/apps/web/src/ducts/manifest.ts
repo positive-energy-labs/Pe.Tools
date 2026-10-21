@@ -147,6 +147,8 @@ const standing = (ctx: DuctsCtx) => {
     equipmentFlows: priced.equipmentFlows,
     doc: withStoredRulings(ctx.work.doc, snapshot.store),
     airflow: airflowOptions(snapshot, ctx.page.group),
+    unitAirflow: airflowOptions(snapshot, ctx.page.group, "unit"),
+    roles: priced.roles,
   });
   return { fix: holding(fix), set: set.length };
 };
