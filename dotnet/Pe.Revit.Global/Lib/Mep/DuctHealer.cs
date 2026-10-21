@@ -93,6 +93,10 @@ public static class DuctHealer {
     }
 
     private static DuctHealOutcome Item(Document doc, DuctHealItem item, bool preview) {
+        // Revit creates in the active view's phase; a fitting in another phase than the run it heals is
+        // filtered out of the working phase and the end reads open again (Chadds: cap in Future on a New
+        // Construction duct). Read before the heal: a union may replace the owner.
+        var phase = Try(() => Find(doc, item.End))?.Owner.CreatedPhaseId;
         using var sub = new SubTransaction(doc);
         _ = sub.Start();
         try {
@@ -102,6 +106,9 @@ public static class DuctHealer {
                 DuctHealKind.Join => throw new Refused("a join names two ends"),
                 _ => throw new Refused($"unknown kind {item.Kind}")
             };
+            if (phase is not null)
+                foreach (var made in done.Created.Select(id => doc.GetElement(id.ToElementId())).OfType<Element>())
+                    if (made.CreatedPhaseId != phase) made.CreatedPhaseId = phase;
             _ = sub.Commit();
             return new DuctHealOutcome(item.Key, Word(item.Kind), done.How, preview ? "planned" : "healed", null, done.Created, done.Replaced, done.Check);
         } catch (Refused r) {

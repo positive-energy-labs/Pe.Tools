@@ -40,6 +40,8 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
     /** Move the thread's target; the head refuses when stale or while a turn holds it. */
     readonly set: ReturnType<typeof useThreadScope>["set"];
     readonly refusal: string | null;
+    /** The head has been read once; a set before that is refused. */
+    readonly hydrated: boolean;
   } | null;
   readonly work: {
     readonly key: WorkKey;

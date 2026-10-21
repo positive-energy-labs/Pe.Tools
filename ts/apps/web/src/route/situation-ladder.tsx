@@ -130,14 +130,20 @@ export function useDocumentLadder(
       : null;
   const autoBound = useRef<string | null>(null);
   const [auto, setAuto] = useState(false);
+  // A fresh thread's head reads after the inventory; a set before it hydrates is refused, so wait
+  // for it, and release the latch when the set is refused so the next render tries again.
+  const headReady = !head || head.hydrated;
   useEffect(() => {
-    if (!only || autoBound.current === only.openId) return;
+    if (!only || !headReady || autoBound.current === only.openId) return;
     autoBound.current = only.openId;
     setAuto(true);
     onTarget?.();
-    if (head) void head.set({ kind: "open", ref: only });
+    if (head)
+      void head.set({ kind: "open", ref: only }).then((ok) => {
+        if (!ok) autoBound.current = null;
+      });
     else choose(JSON.stringify({ kind: "open", ref: only }));
-  }, [only?.session, only?.openId]);
+  }, [only?.session, only?.openId, headReady]);
   const sessionWord = session ? name(session) : null;
   const unloaded = (observed?.revit.sessions ?? []).filter(
     (item) =>

@@ -58,10 +58,12 @@ export function EScreen({ props }: { props: ProtoProps }) {
     [doc, props.work.revision, props.work.write, snapshot],
   );
   const ruleOf = useMemo(() => ruleOfIds(priced), [priced]);
+  // The tree draws the topology that was priced (bridged joins, phase filter); the raw one left the
+  // fan-setting run out (g8745870: header 0.186, tree critical 0.109). Healing still plans on raw.
+  const drawn = priced?.snapshot ?? snapshot;
   const tree = useMemo(
-    () =>
-      snapshot && page.group ? (buildTree(snapshot, priced, doc, page.group)[0] ?? null) : null,
-    [snapshot, priced, doc, page.group],
+    () => (drawn && page.group ? (buildTree(drawn, priced, doc, page.group)[0] ?? null) : null),
+    [drawn, priced, doc, page.group],
   );
   const issueScope = useMemo(
     () =>
@@ -71,8 +73,8 @@ export function EScreen({ props }: { props: ProtoProps }) {
     [snapshot, page.group],
   );
   const labels = useMemo(
-    () => (snapshot && tree ? grilleLabels(snapshot, tree.children) : new Map<number, string>()),
-    [snapshot, tree],
+    () => (drawn && tree ? grilleLabels(drawn, tree.children) : new Map<number, string>()),
+    [drawn, tree],
   );
   const nameOf = useMemo(() => {
     const n = snapshot ? elementNamer(snapshot, null) : () => null;
