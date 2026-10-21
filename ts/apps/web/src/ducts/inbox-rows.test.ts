@@ -249,6 +249,25 @@ describe("the ducts inbox", () => {
     expect(keys(rows.set)).toEqual(["flows:40"]);
   });
 
+  it("several fans priced per fan is a Diagnostics line, never a Fix", () => {
+    const rows = inboxRows({
+      ...base,
+      findings: [
+        finding({
+          id: "multi-fan:g1",
+          kind: "multi-fan",
+          groupId: "g1",
+          elementIds: [1, 2],
+          note: "priced per fan: FC-30 601 cfm (sum of 9 grilles) owns the trunk",
+        }),
+      ],
+    });
+    expect(rows.fix.map((r) => r.kind)).not.toContain("multi-fan");
+    const split = rows.diagnostics.find((r) => r.kind === "multi-fan")!;
+    expect(split).toMatchObject({ status: "priced per fan", ids: [1, 2] });
+    expect(split.note).toContain("owns the trunk");
+  });
+
   it("several fans offers to rule each proposed fan, or each as passive; a loop offers to break its inferred join", () => {
     const rows = inboxRows({
       ...base,

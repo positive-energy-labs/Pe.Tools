@@ -92,7 +92,14 @@ export function equipmentInputs(
   const role = priced.staged.roles[String(id)];
   const computed = esp ? null : proposedStatic(snapshot, priced.next, id);
   return {
-    flow: { value: flow?.cfm ?? null, word: flowSourceWord(flow?.source ?? null) },
+    flow: {
+      value: flow?.cfm ?? null,
+      // A derived flow is the route's reading, never written unless a person stages it.
+      word:
+        flow?.source === "derived"
+          ? `sum of ${flow.grilles} grille${flow.grilles === 1 ? "" : "s"}`
+          : flowSourceWord(flow?.source ?? null),
+    },
     esp: esp
       ? { value: esp.inWg, word: "override" }
       : computed

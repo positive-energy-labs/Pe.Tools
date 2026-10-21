@@ -7,8 +7,11 @@
  *    ("base equipment of SA 19");
  * 2. else a unit that states a design flow (`equipmentFlows`: staged, else the FanFlow slot) is a
  *    `fan` ("airflow in <slot>");
- * 3. else it is `passive` ("no airflow, not base equipment"): inline gear such as a filter chassis
- *    or a silencer, which then passes air through (`pass-through.ts`).
+ * 3. else `passive` when PASSIVE_MIN_PORTS or more duct ports all carry one classification: a
+ *    through-flow device (filter chassis, silencer; "air passes straight through (all ports Return
+ *    Air)"), which then passes air through (`pass-through.ts`);
+ * 4. else a `fan` ("mixed port classes: moves air"): air handlers, dehumidifiers, ERVs, and a
+ *    one-port unit. Passive needs a positive signal, so a model with no airflow data still prices.
  * A multi-root finding stands only while more than one root of the group is a fan after this.
  */
 import type { DuctUnitRole } from "@pe/agent-contracts";
@@ -25,6 +28,12 @@ export interface UnitRole {
   /** The proposal's ground in a person's words; a ruling names who ruled. */
   reason: string;
 }
+
+/** A through-flow device has an inlet and an outlet at least. */
+export const PASSIVE_MIN_PORTS = 2;
+
+/** "ReturnAir" as a person says it: "Return Air". */
+const classWord = (c: string) => c.replace(/([a-z])([A-Z])/g, "$1 $2");
 
 /** A design flow at or below this is no flow, cfm. */
 export const NO_FLOW_CFM = 0;
@@ -78,9 +87,60 @@ export function unitRoles(
       out.set(id, { role: "fan", why: "proposed", reason: `airflow in ${slot} (${flow.cfm} cfm)` });
       continue;
     }
-    out.set(id, { role: "passive", why: "proposed", reason: "no airflow, not base equipment" });
+    const classes = [
+      ...new Set((nodes.get(id)?.connectors ?? []).map((c) => c.classification ?? "unclassified")),
+    ];
+    const ports = nodes.get(id)?.connectors.length ?? 0;
+    out.set(
+      id,
+      ports >= PASSIVE_MIN_PORTS && classes.length === 1
+        ? {
+            role: "passive",
+            why: "proposed",
+            reason: `air passes straight through (all ports ${classWord(classes[0]!)})`,
+          }
+        : {
+            role: "fan",
+            why: "proposed",
+            reason: ports < PASSIVE_MIN_PORTS ? "one port: moves air" : "mixed port classes: moves air",
+          },
+    );
   }
+  keepTheOnlyMover(snapshot.groups, out);
   return out;
+}
+
+/**
+ * A through-flow unit proposed passive stays a fan when nothing else moves air in the network its
+ * ports join (an inline fan has one class on both ports, like a filter): proposing it passive would
+ * leave that network with no fan, and a proposal never makes the route price less than before.
+ */
+function keepTheOnlyMover(groups: DuctSnapshot["groups"], out: Map<number, UnitRole>) {
+  const proposedPassive = (id: number) =>
+    out.get(id)?.role === "passive" && out.get(id)?.why === "proposed";
+  const up = new Map<string, string>();
+  const find = (g: string): string => {
+    const p = up.get(g) ?? g;
+    if (p === g) return g;
+    const r = find(p);
+    up.set(g, r);
+    return r;
+  };
+  const groupsOf = new Map<number, string[]>();
+  for (const g of groups)
+    for (const id of g.rootIds) groupsOf.set(id, [...(groupsOf.get(id) ?? []), g.id]);
+  for (const [id, gs] of groupsOf)
+    if (proposedPassive(id)) for (const g of gs.slice(1)) up.set(find(g), find(gs[0]!));
+  const moves = new Set<string>();
+  for (const g of groups)
+    if (g.rootIds.some((id) => out.get(id)?.role === "fan")) moves.add(find(g.id));
+  for (const [id, gs] of groupsOf)
+    if (proposedPassive(id) && !moves.has(find(gs[0]!)))
+      out.set(id, {
+        role: "fan",
+        why: "proposed",
+        reason: `${out.get(id)!.reason.replace("air passes straight through", "one class on every port")}, but nothing else moves air in its network`,
+      });
 }
 
 /** The units whose role is `passive`. */

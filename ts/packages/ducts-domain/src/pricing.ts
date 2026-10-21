@@ -57,10 +57,19 @@ const unitOverrides = (
   ),
 });
 
-/** The units as Revit holds them: stored rulings over roles proposed from Revit's own flows. */
-const appliedUnits = (raw: DuctSnapshot) => {
-  const flows = equipmentFlows(raw, {});
-  const roles = unitRoles(raw, flows, stagedDucts(withStoredRulings(null, raw.store)).roles);
+/**
+ * The units as Revit holds them: stored rulings over roles proposed from Revit's own state, each
+ * unit's stated flow, else the flow the survey derived from the terminals it serves.
+ */
+const appliedUnits = (raw: DuctSnapshot, surveyed: Survey) => {
+  const stated = equipmentFlows(raw, {});
+  const flows = new Map(
+    [...stated].map(([id, f]) => {
+      const derived = surveyed.equipmentFlows.get(id);
+      return [id, f.cfm == null && derived?.source === "derived" ? derived : f] as const;
+    }),
+  );
+  const roles = unitRoles(raw, stated, stagedDucts(withStoredRulings(null, raw.store)).roles);
   return unitOverrides(roles, flows);
 };
 
@@ -151,7 +160,7 @@ export function price(
 ): Priced {
   const surveyed = survey(raw, doc);
   const { snapshot } = surveyed;
-  const units = appliedUnits(raw);
+  const units = appliedUnits(raw, surveyed);
   const entry = solvedFor(snapshot, grids, catalogs, surveyed.inferred, units);
   if (entry.last?.doc === doc) return entry.last.priced;
   // The model's stored rulings under Work's pending ones (`rulings.ts`), as the survey read them.

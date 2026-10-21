@@ -413,6 +413,29 @@ export function triage(input: TriageInput) {
       });
       continue;
     }
+    if (f.kind === "multi-fan") {
+      // Several fans price per fan (ducts-domain `fan-sections.ts`); the split is named, never held.
+      diagnostics.push({
+        ...base,
+        group: "diagnostics",
+        kind: f.kind,
+        title: `Several fans: ${names(f.elementIds)}`,
+        status: "priced per fan",
+        verbs: [
+          ...f.elementIds.map(
+            (id): RowVerb => ({
+              kind: "role",
+              id,
+              role: "passive",
+              label: `${name(id)} is passive`,
+              says: `Rule ${name(id)} passive (it moves no design air); it then passes air through`,
+            }),
+          ),
+          select(f.elementIds),
+        ],
+      });
+      continue;
+    }
     if (f.kind === "catalog-missing-table" || f.kind === "catalog-out-of-range") {
       // A terminal is priceable, never required: with no drop it prices as zero and holds nothing.
       diagnostics.push({

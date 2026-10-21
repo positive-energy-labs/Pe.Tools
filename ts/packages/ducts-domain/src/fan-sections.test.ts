@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { ductsDocumentSchema } from "@pe/agent-contracts";
-
+import { bin } from "./bins.ts";
 import { fanSections } from "./fan-sections.ts";
 import { passThrough } from "./pass-through.ts";
 import { computeLosses } from "./losses.ts";
@@ -117,18 +116,19 @@ const snapshot = (flows: { ahu?: number; dh?: number } = { ahu: 800, dh: 100 }) 
     slots: {},
   }) as unknown as DuctSnapshot;
 
-const doc = (roles: Record<string, "fan" | "passive">) =>
-  ductsDocumentSchema.parse({
-    roles: Object.fromEntries(
-      Object.entries(roles).map(([id, role]) => [id, { staged: { value: { role } } }]),
-    ),
-  });
-
 describe("unitRoles", () => {
-  it("proposes fan from Revit's base equipment first, then from a stated flow, else passive", () => {
+  it("proposes fan from base equipment, then a stated flow; passive only for a through-flow device", () => {
+    const base = snapshot({});
     const s = {
-      ...snapshot({ dh: 100 }),
+      ...base,
       slots: { fanFlow: "PE_M_Fan_AirFlow" },
+      nodes: base.nodes.map((n) =>
+        n.id === 2
+          ? { ...n, facts: [...n.facts.filter((f) => f.key !== "fanFlow"), fact("fanFlow", 100)] }
+          : n.id === 3
+            ? { ...n, connectors: [port(1, 16, 2), port(2, null)] }
+            : n,
+      ),
       systems: [
         { name: "SA", baseEquipmentId: 1 },
         // A system the unit's own groups do not carry names it base equipment for nothing here.
@@ -138,8 +138,18 @@ describe("unitRoles", () => {
     expect(Object.fromEntries(unitRoles(s, equipmentFlows(s, {}), {}))).toEqual({
       1: { role: "fan", why: "proposed", reason: "base equipment of SA" },
       2: { role: "fan", why: "proposed", reason: "airflow in PE_M_Fan_AirFlow (100 cfm)" },
-      3: { role: "passive", why: "proposed", reason: "no airflow, not base equipment" },
+      3: { role: "passive", why: "proposed", reason: "air passes straight through (all ports Supply Air)" },
     });
+    // No flow, no base equipment: mixed port classes move air; one port moves air.
+    const mixed = {
+      ...base,
+      nodes: base.nodes.map((n) =>
+        n.id === 3 ? { ...n, connectors: [port(1, 16, 2), { ...port(2, null), classification: "ReturnAir" }] } : n,
+      ),
+    } as unknown as DuctSnapshot;
+    const roles = unitRoles(mixed, equipmentFlows(mixed, {}), {});
+    expect(roles.get(3)).toEqual({ role: "fan", why: "proposed", reason: "mixed port classes: moves air" });
+    expect(roles.get(1)).toEqual({ role: "fan", why: "proposed", reason: "one port: moves air" });
   });
 
   it("lets a ruling beat the proposal and tells a stored one from a staged one", () => {
@@ -153,15 +163,19 @@ describe("unitRoles", () => {
   });
 });
 
-describe("multi-root under the proposal", () => {
-  it("stands while two fans are only proposed, and clears once a person rules them", () => {
-    const s = snapshot();
-    expect(survey(s, null).findings.map((f) => f.id)).toContain("multi-root:g10");
-    expect(survey(s, doc({ "1": "fan", "2": "fan" })).findings.map((f) => f.id)).not.toContain(
-      "multi-root:g10",
+describe("several fans", () => {
+  it("never block: a Diagnostics line names the split, and a flowless fan takes the flow it serves", () => {
+    const s = snapshot({ dh: 100 });
+    const sv = survey(s, null);
+    const ids = sv.findings.map((f) => f.id);
+    expect(ids).not.toContain("multi-root:g10");
+    const split = sv.findings.find((f) => f.id === "multi-fan:g10")!;
+    expect(bin(split)).toBe("diagnostic");
+    // FC-30 states nothing: it serves grille 30 (300 cfm), nearer its port than DH-16's (31 is DH-16's).
+    expect(sv.equipmentFlows.get(1)).toEqual({ cfm: 300, source: "derived", grilles: 1 });
+    expect(split.note).toBe(
+      "priced per fan: FC-30 300 cfm (sum of 1 grille) owns the trunk; DH-16 100 cfm owns its port to the first junction; FR-1 flow unknown owns its port to the first junction",
     );
-    const one = snapshot({ ahu: 800 });
-    expect(survey(one, null).findings.map((f) => f.id)).not.toContain("multi-root:g10");
   });
 });
 

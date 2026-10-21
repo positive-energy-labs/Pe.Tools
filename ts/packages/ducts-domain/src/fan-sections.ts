@@ -90,6 +90,38 @@ export function fanSections(tree: GroupTree, fans: readonly Fan[]): FanSection[]
   ];
 }
 
+/**
+ * The terminals each fan serves, to derive a flow for a fan that states none: every terminal goes
+ * to the fan whose port is fewest hops away (ties to the lower unit id). Pure on the tree.
+ */
+export function servedBy(tree: GroupTree, units: readonly number[]): Map<number, number[]> {
+  const owner = new Map<number, number>();
+  const queue: number[] = [];
+  for (const unit of [...units].sort((a, b) => a - b)) {
+    const port = portOf(tree, unit);
+    if (port != null && !owner.has(port)) {
+      owner.set(port, unit);
+      queue.push(port);
+    }
+  }
+  for (let head = 0; head < queue.length; head++) {
+    const x = queue[head]!;
+    const near = [...(tree.children.get(x) ?? []), tree.parent.get(x)].filter(
+      (y): y is number => y != null && !owner.has(y),
+    );
+    for (const y of near) {
+      owner.set(y, owner.get(x)!);
+      queue.push(y);
+    }
+  }
+  const out = new Map<number, number[]>(units.map((u) => [u, []]));
+  for (const t of tree.terminals) {
+    const u = owner.get(t);
+    if (u != null) out.get(u)!.push(t);
+  }
+  return out;
+}
+
 /** A smaller fan's own stretch, port first, toward its junction (the order its air runs). */
 export const stretchOf = (tree: GroupTree, section: FanSection): number[] => {
   if (section.port == null || section.junction == null) return [];

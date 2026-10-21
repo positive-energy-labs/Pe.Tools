@@ -121,10 +121,13 @@ export function terminalFlows(
   return { flows, findings };
 }
 
-export type EquipmentFlowSource = "override" | "revit";
+/** `derived`: no stated flow, so the sum of the terminal flows its section serves (`derivedUnitFlows`); never written. */
+export type EquipmentFlowSource = "override" | "revit" | "derived";
 export interface EquipmentFlow {
   cfm: number | null;
   source: EquipmentFlowSource | null;
+  /** A derived flow's terminal count. */
+  grilles?: number;
 }
 
 /** A unit's design flow: a staged `equipmentFlows` cell, else Revit's `fanFlow` slot fact when positive. */
