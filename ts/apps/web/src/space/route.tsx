@@ -7,7 +7,9 @@ import { RouteShell, defineRoute } from "#/route";
 import { captureScene } from "./host";
 import { spaceViewSchema } from "@pe/agent-contracts/space-view";
 import { hostFetch } from "#/host/runtime";
-import { SpaceCanvas, type CutMenu } from "./canvas";
+import { type CutMenu } from "./canvas";
+import { SpaceViewer } from "./viewer";
+import { SceneCache, type SceneData, type ResidentScene } from "./scene-cache";
 import { spaceMark } from "./performance";
 import {
   AXES,
@@ -23,7 +25,6 @@ import {
   seedCut,
   type Axis,
   type Cut,
-  type Metadata,
   type ViewState,
 } from "./state";
 
@@ -33,8 +34,6 @@ const manifest = defineRoute({
   views: [{ key: "3d", label: "3D", draws: () => <SpaceRoute /> }],
   docs: "Real resident Space triangles in host internal feet. Capture once, then orbit, select, hide, isolate and cut locally. Three cuts, one per axis (Top, North, East), each a polyline extruded through the scene; the view keeps their intersection. Click a corner floater to edit that axis orthographically; Esc returns to the saved 3D camera. Drag node or edge grips in 3D or the editor: an edge folds along its neighbours and collapses to their corner when pushed past it; a node dropped on its neighbour merges. Right click an edge to add a node, a node to delete it. Open cuts keep two nodes and extend to the scope edge keeping their left side; closed cuts keep three and keep their inside. Import/export JSON shares the exact view state with an agent.",
 });
-type SceneData = { metadata: Metadata; positions: Float32Array };
-
 export function SpaceRoute({
   scene: sceneId,
   session,
@@ -42,6 +41,10 @@ export function SpaceRoute({
   ids: initialIds,
 }: { scene?: string; session?: string; doc?: string; ids?: string } = {}) {
   const [data, setData] = useState<SceneData | null>(null);
+  const cache = useRef(new SceneCache());
+  const [scenes, setScenes] = useState<ResidentScene[]>([]);
+  const [artifactId, setArtifactId] = useState(sceneId ?? "");
+  const loading = useRef<AbortController | null>(null);
   const [view, setView] = useState<ViewState | null>(null);
   const [ids, setIds] = useState(initialIds ?? "");
   const [busy, startTransition] = useTransition();
@@ -54,6 +57,7 @@ export function SpaceRoute({
   const [editor, setEditor] = useState(false);
   const [json, setJson] = useState("");
   const loadGeneration = useRef(0);
+  const loadedId = useRef<string | null>(null);
   const change = useCallback(
     (patch: Partial<ViewState>) => {
       if (!view || !data) return false;
@@ -75,17 +79,35 @@ export function SpaceRoute({
     if (!/^[a-f0-9]{64}$/.test(id)) throw Error("Scene id must be a SHA-256 artifact id");
     const generation = ++loadGeneration.current;
     spaceMark("selection", { id, generation });
-    // The durable artifact is already cached on disk; large Chrome cache writes can fail independently.
-    const response = await hostFetch(`/pe/space/scenes/${id}/artifact`, { cache: "no-store" });
-    spaceMark("headers", { id });
-    if (!response.ok)
-      throw Error(
-        `Scene artifact unavailable (${response.status}). Capture it from its document again.`,
-      );
-    const buffer = await response.arrayBuffer();
-    spaceMark("body", { id, bytes: buffer.byteLength });
-    const loaded = decodeScene(buffer);
-    spaceMark("decode", { id });
+    loading.current?.abort();
+    const abort = new AbortController();
+    loading.current = abort;
+    let loaded = cache.current.get(id);
+    spaceMark("cache", { id, hit: !!loaded });
+    if (!loaded) {
+      try {
+        // Disk artifacts are durable. Browser HTTP cache and mounted GPU scopes are separate layers.
+        const response = await hostFetch(`/pe/space/scenes/${id}/artifact`, {
+          cache: "no-store",
+          signal: abort.signal,
+        });
+        if (generation !== loadGeneration.current) return;
+        spaceMark("headers", { id });
+        if (!response.ok)
+          throw Error(
+            `Scene artifact unavailable (${response.status}). Capture it from its document again.`,
+          );
+        const buffer = await response.arrayBuffer();
+        if (generation !== loadGeneration.current) return;
+        spaceMark("body", { id, bytes: buffer.byteLength });
+        const decoded = decodeScene(buffer);
+        spaceMark("decode", { id });
+        loaded = cache.current.put(id, decoded);
+      } catch (e) {
+        if (abort.signal.aborted || generation !== loadGeneration.current) return;
+        throw e;
+      }
+    }
     if (generation !== loadGeneration.current) return;
     let restored = imported;
     if (!restored) {
@@ -99,8 +121,21 @@ export function SpaceRoute({
     }
     if (restored) cutPolygons(restored.cuts, loaded.metadata.bounds);
     setData(loaded);
+    loadedId.current = id;
+    // LRU order must not move mounted canvases: React StrictMode reconnects effects on moves.
+    setScenes((previous) => {
+      const next = previous.filter((entry) => cache.current.entries.get(entry.id) === entry);
+      for (const entry of cache.current.entries.values())
+        if (!next.includes(entry)) next.push(entry);
+      return next.length === previous.length && next.every((entry, i) => entry === previous[i])
+        ? previous
+        : next;
+    });
+    setArtifactId(id);
+    spaceMark("resident", { id, count: cache.current.entries.size, bytes: cache.current.bytes });
     setView(restored ?? initialView(loaded.metadata, id));
     setEditing(null);
+    setMenu(null);
     setError(null);
     const url = new URL(window.location.href);
     url.searchParams.set("scene", id);
@@ -118,7 +153,7 @@ export function SpaceRoute({
     }
   }, [view]);
   useEffect(() => {
-    if (sceneId) {
+    if (sceneId && loadedId.current !== sceneId) {
       startTransition(async () => {
         try {
           await load(sceneId);
@@ -129,6 +164,7 @@ export function SpaceRoute({
     }
     return () => {
       loadGeneration.current++;
+      loading.current?.abort();
     };
   }, [sceneId, load]);
   const capture = async () => {
@@ -200,6 +236,28 @@ export function SpaceRoute({
           </div>
           <Button label="Capture scene" busy={busy} onClick={() => startTransition(capture)}>
             Capture scene
+          </Button>
+          <div className="w-64">
+            <Input
+              aria-label="Saved scene artifact id"
+              value={artifactId}
+              onChange={(e) => setArtifactId(e.target.value)}
+              placeholder="Saved scene SHA-256"
+            />
+          </div>
+          <Button
+            label="Open saved scene"
+            onClick={() =>
+              startTransition(async () => {
+                try {
+                  await load(artifactId.trim());
+                } catch (e) {
+                  setError(String(e));
+                }
+              })
+            }
+          >
+            Open saved scene
           </Button>
           {view && (
             <>
@@ -385,9 +443,8 @@ export function SpaceRoute({
         {data && view ? (
           <>
             <div className="relative min-h-64 flex-1" data-surface="recess">
-              <SpaceCanvas
-                metadata={data.metadata}
-                positions={data.positions}
+              <SpaceViewer
+                scenes={scenes}
                 state={view}
                 editing={editing}
                 onEdit={edit}
