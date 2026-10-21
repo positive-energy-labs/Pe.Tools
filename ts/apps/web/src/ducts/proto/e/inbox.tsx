@@ -296,7 +296,7 @@ export function Inbox({
           )}
           <div className="flex flex-wrap items-center gap-1" data-inbox-verbs="">
             {verbsOf(item, true)}
-            {item.ids.length && doc ? (
+            {item.ids.length && doc && !item.verbs.some((v) => v.kind === "select") ? (
               <ShowInRevit doc={doc} elementIds={item.ids} what="it" />
             ) : null}
           </div>

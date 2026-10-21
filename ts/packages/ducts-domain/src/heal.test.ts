@@ -128,6 +128,21 @@ it("caps a dangling duct end, and only that end", () => {
   expect(plan.covered.has("open-end:g10:10:0")).toBe(true);
 });
 
+it("never pairs two ends Revit already connects through a bend; each is a cap", () => {
+  // A 1 in stub (20) and a riser (21) joined by an elbow, all one Revit group: their loose ends
+  // are 28 in apart, which once read as a gap to close.
+  const g = { groupId: "g20" };
+  const s = snap([
+    duct(20, [0, 0, 0], [0, 0, IN], g),
+    duct(21, [0, 0, 0.5], [0, 0, 0.5 + 29 * IN], g),
+  ]);
+  s.segments[0]!.connectors[1]!.connectedTo = { elementId: 30, connectorIndex: 1 } as never;
+  s.segments[1]!.connectors[0]!.connectedTo = { elementId: 30, connectorIndex: 2 } as never;
+  const plan = items(s);
+  expect(plan.filter((i) => i.kind === "join")).toEqual([]);
+  expect(plan.filter((i) => i.kind === "cap").map((i) => i.end).sort()).toEqual(["20:0", "21:1"]);
+});
+
 it("connects coincident same-size ends, covering the inferred join and both open ends", () => {
   const s = snap([duct(10, [0, 0, 0], [10, 0, 0]), duct(11, [10, 0, 0], [20, 0, 0])]);
   const join = items(s).find((i) => i.kind === "join")!;

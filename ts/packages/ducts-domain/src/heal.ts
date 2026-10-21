@@ -165,8 +165,12 @@ function build(snapshot: DuctSnapshot, raw: DuctsRouteDocument | null): HealPlan
   );
   const ruled = (x: End) => x.issue != null && verdictOf(work, x.issue) === "ignore";
   const live = ends.filter((x) => !ruled(x));
+  // Two ends Revit already connects through the network (a stub and a riser around a bend) never
+  // face each other: joining them closes a loop. Each is its own dangling end.
   const matches = (x: End, y: End) =>
-    x.e.id !== y.e.id && (x.cls == null || y.cls == null || x.cls === y.cls);
+    x.e.id !== y.e.id &&
+    (x.e.groupId == null || x.e.groupId !== y.e.groupId) &&
+    (x.cls == null || y.cls == null || x.cls === y.cls);
   const nearest = (x: End) => {
     let best: { y: End; d: number } | null = null;
     for (const y of live) {
