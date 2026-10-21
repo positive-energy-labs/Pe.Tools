@@ -11,6 +11,7 @@ import {
 } from "@pe/agent-contracts";
 
 import { stagedLink, EMPTY_CATALOGS, type Catalogs } from "./catalog.ts";
+import { DEFAULT_DESIGN_FRICTION_RATE } from "./equivalent-length.ts";
 import type { Grids } from "./loss-grid.ts";
 import { LOSS_RULES, ruleByKey } from "./loss-rules.ts";
 import {
@@ -87,6 +88,8 @@ export interface Priced extends Survey {
 interface Solved {
   applied: Choices;
   now: LossResult;
+  /** The design friction rate `now` was read at (it only moves a part with no duct on its path). */
+  rate: number;
   last: { doc: DuctsRouteDocument | null; priced: Priced } | null;
   fanouts: Map<string, Fanout>;
 }
@@ -108,6 +111,7 @@ function solvedFor(
       applied,
       // The tolerated snapshot is its survey's, so its inferred links are fixed with it.
       now: computeLosses(snapshot, grids, applied, {}, {}, catalogs, inferred),
+      rate: DEFAULT_DESIGN_FRICTION_RATE,
       last: null,
       fanouts: new Map(),
     };
@@ -128,6 +132,19 @@ export function price(
   const entry = solvedFor(snapshot, grids, catalogs, surveyed.inferred);
   if (entry.last?.doc === doc) return entry.last.priced;
   const staged = stagedDucts(doc);
+  const rate = staged.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
+  if (entry.rate !== rate) {
+    entry.now = computeLosses(
+      snapshot,
+      grids,
+      entry.applied,
+      { designFrictionRate: rate },
+      {},
+      catalogs,
+      surveyed.inferred,
+    );
+    entry.rate = rate;
+  }
   const { applied, now } = entry;
   const choices = {
     ...applied,
@@ -145,6 +162,7 @@ export function price(
     unitRole: Object.fromEntries(
       Object.entries(staged.roles).map(([id, { role }]) => [Number(id), role]),
     ),
+    designFrictionRate: rate,
   };
   const same =
     Object.keys(staged.catalogs).length === 0 &&

@@ -26,6 +26,12 @@ import {
 } from "./catalog.ts";
 import type { DuctCalculation } from "@pe/agent-contracts";
 import { designCircuits, type CircuitResult } from "./circuits.ts";
+import {
+  DEFAULT_DESIGN_FRICTION_RATE,
+  rateOf,
+  telOf,
+  withEquivalentLength,
+} from "./equivalent-length.ts";
 import { transitionGeometry } from "./geometry.ts";
 import { GridError, lookupGrid, type Grids } from "./loss-grid.ts";
 import { friction, sectionOf } from "./loss-physics.ts";
@@ -69,6 +75,14 @@ export interface Row {
   pv?: number;
   fpm?: number;
   dp: number | null;
+  /** Friction rows: the straight length this row prices, ft. */
+  lengthFt?: number;
+  /** Friction rows: the duct's roughness, ft. */
+  roughnessFt?: number;
+  /** Friction rows: this duct's own actual friction rate, in-wg per 100 ft (dp / lengthFt x 100). */
+  rate?: number;
+  /** Effective length in feet at the rate of the duct this row sits on (`equivalent-length.ts`); null where unpriced. */
+  eqFt?: number | null;
   source?: CatalogTable["source"];
   finding?: CatalogFinding;
   staticInWg?: number | null;
@@ -101,11 +115,15 @@ export interface Overrides {
   componentDrop?: Readonly<Record<number, number>>;
   /** A staged role per air mover id; a `passive` root is not an air mover. */
   unitRole?: Readonly<Record<number, "fan" | "passive">>;
+  /** The design friction rate, in-wg per 100 ft: the rate a part with no duct on its path is read at. */
+  designFrictionRate?: number;
 }
 
 interface PathLoss {
   groupId: string;
   total: number;
+  /** Total effective length, ft: the straight duct plus every fitting and terminal as equivalent feet. */
+  tel: number;
   rows: Row[];
   /** The proximity finding ids whose inferred joint or tap the path steps across, no person having confirmed them; its total rests on them. */
   inferred: string[];
@@ -144,6 +162,8 @@ export interface LossResult {
     {
       fan: number;
       critical: number | null;
+      /** The critical path's total effective length, ft; null with no critical path. */
+      criticalTel: number | null;
       revitCritical: number | null;
       /** Whether the group has an air mover (a root that is not staged passive); without one nothing is priced. */
       hasAirMover: boolean;
@@ -372,6 +392,7 @@ export function computeLosses(
       result.paths[run.terminal] = {
         groupId: group.id,
         total,
+        tel: telOf(rows),
         rows,
         inferred: rests,
         provisional: provisionalOf(rests),
@@ -390,6 +411,7 @@ export function computeLosses(
     result.byGroup[group.id] = {
       fan,
       critical,
+      criticalTel: critical == null ? null : (result.paths[critical]?.tel ?? null),
       revitCritical:
         (critical == null ? null : systemFor(snapshot, critical)?.criticalPathLossInWg) ?? null,
       hasAirMover,
@@ -615,6 +637,9 @@ function pathRows(
         pv: f.pv,
         fpm: f.fpm,
         dp: f.dp,
+        lengthFt: seg,
+        roughnessFt: duct.roughness.valueFt,
+        ...(rateOf(f.dp, seg) == null ? {} : { rate: rateOf(f.dp, seg)! }),
         desc: `${label} ${duct.size}, ${seg.toFixed(3)} ft at ${Math.round(cfm)} cfm, f ${f.f.toFixed(5)}`,
       });
     };
@@ -704,7 +729,7 @@ function pathRows(
     }
     fitting(node, prev, next, { q: below.get(node.id) ?? 0 }, "C");
   });
-  return rows;
+  return withEquivalentLength(rows, overrides.designFrictionRate ?? DEFAULT_DESIGN_FRICTION_RATE);
 }
 
 export interface Fanout {
