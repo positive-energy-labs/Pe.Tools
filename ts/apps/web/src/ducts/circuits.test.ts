@@ -288,6 +288,20 @@ it("uses generic Work proposal/staging guards and refuses lossy scalar unit writ
   );
 });
 
+it("writes a staged unit flow for any unit rooted in the group, not only the baseline's pick", () => {
+  const s = fixture();
+  const doc = work(evidence(s));
+  doc.equipmentFlows["200"] = { staged: { value: { cfm: 825 } } };
+  doc.equipmentFlows["100"] = { staged: { value: { cfm: 400 } } };
+  const ids = applyRequest(s, price(s, {}, doc), "purpose-time", "upstream").equipmentFlows.map(
+    (f) => f.id,
+  );
+  expect(ids).toEqual([100, 200]);
+  expect(
+    applyRequest(s, price(s, {}, doc), "purpose-time", "downstream").equipmentFlows.map((f) => f.id),
+  ).toEqual([200]);
+});
+
 it("pairs two independent ERV fans by exact ports instead of classifications", () => {
   const s = fixture();
   s.nodes = [

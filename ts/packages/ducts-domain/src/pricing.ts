@@ -309,9 +309,6 @@ export function applyRequest(
 ): DuctsApplyInput {
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
   const inScope = (id: number) => !group || nodes.get(id)?.groupId === group;
-  const unit = group
-    ? snapshot.groups.filter((g) => g.id === group).map((g) => unitOf(snapshot, priced.now, g))[0]
-    : undefined;
   const fittings = Object.keys(priced.staged.rules)
     .sort()
     .flatMap((ruleKey) =>
@@ -381,9 +378,11 @@ export function applyRequest(
       ];
     })
     .sort((a, b) => a.id - b.id);
+  const roots = new Set(snapshot.groups.find((g) => g.id === group)?.rootIds ?? []);
   const equipmentFlows = Object.entries(priced.staged.equipmentFlows)
     .map(([id, flow]) => flowWrite(Number(id), flow.cfm, flow.source ?? null))
-    .filter(({ id }) => !group || id === unit)
+    // Any unit rooted in the group, not the baseline's one pick (it is blind to a staged passive role).
+    .filter(({ id }) => !group || roots.has(id))
     .sort((a, b) => a.id - b.id);
   const calculationOwners = new Set(
     Object.values(priced.staged.calculation).flatMap((e) =>
@@ -396,7 +395,8 @@ export function applyRequest(
     );
   const equipment = Object.entries(priced.staged.esp)
     .map(([id, { inWg }]) => ({ id: Number(id), externalStaticInWg: inWg }))
-    .filter(({ id }) => !group || id === unit)
+    // Any unit rooted in the group, not the baseline's one pick (it is blind to a staged passive role).
+    .filter(({ id }) => !group || roots.has(id))
     .sort((a, b) => a.id - b.id);
   const slots = priced.staged.parameters;
   const stored = snapshot.store;
