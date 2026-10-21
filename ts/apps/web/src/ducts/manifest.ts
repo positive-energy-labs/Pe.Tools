@@ -33,7 +33,9 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { fanCandidates } from "@pe/ducts-domain/fan-assignment";
 import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { survey } from "@pe/ducts-domain/survey";
+import { systemScope } from "@pe/ducts-domain/system-scope";
 import { airflowOptions } from "./airflow";
+import { groupLabels } from "./inputs";
 import { fanRefusal, fanWords, holding, triage, writeBlocked } from "./inbox-rows";
 
 /** What Revit said the staged cells would write, and the Work and snapshot it was asked over. */
@@ -69,8 +71,9 @@ export interface DuctsFanRun {
 }
 
 const ductsPageSchema = z.object({
-  /** The subject: one group id (`g<smallest element id>`); empty = the whole document. */
-  group: z.string().default(""),
+  /** The subject: a Revit system name (`SA 19`; `no system` for the groups none claims), read across
+   * every group it is in (`system-scope.ts`); empty = the whole document. */
+  system: z.string().default(""),
   /** A level id as a string; empty = every level. */
   level: z.string().default(""),
   /** The layer keys the picture draws, as `ducts.snapshot` names them, comma separated; empty = none. */
@@ -97,7 +100,7 @@ const ductsPageSchema = z.object({
 export type DuctsPage = z.infer<typeof ductsPageSchema>;
 /** The Page keys the address carries; every one has a default, so a bare `/ducts` is a page. */
 export const DUCTS_URL = [
-  "group",
+  "system",
   "level",
   "selected",
   "encoding",
@@ -139,9 +142,13 @@ export const pendingCount = (doc: DuctsRouteDocument | null, store: Store) =>
 const pendingOf = (ctx: DuctsCtx) =>
   pendingCount(ctx.work.doc, observed<DuctSnapshot>(ctx, "ducts")?.store);
 
+/** The chosen system over a snapshot (`system-scope.ts`); null is the whole document. */
+export const scopeOf = (snapshot: DuctSnapshot, page: Pick<DuctsPage, "system">) =>
+  page.system ? systemScope(snapshot, page.system) : null;
+
 /**
  * What stands between the Work and a write, in the inbox's own terms: the Fix and Set rows of the
- * chosen group (`triage`, the rows the Write group counts). Null when the snapshot or tables are
+ * chosen system (`triage`, the rows the Write group counts). Null when the snapshot or tables are
  * unread: nothing can be priced then, and the write fails on its own words.
  */
 const standing = (ctx: DuctsCtx) => {
@@ -154,15 +161,17 @@ const standing = (ctx: DuctsCtx) => {
     ctx.work.doc,
     observed<Catalogs>(ctx, "catalogs") ?? EMPTY_CATALOGS,
   );
+  // The survey may merge or bridge groups: the scope is read over the snapshot that was priced.
+  const scope = scopeOf(priced.snapshot, ctx.page);
   const { fix, set } = triage({
     snapshot: priced.snapshot,
-    group: ctx.page.group,
+    scope,
     findings: priced.findings,
     flows: priced.flows,
     equipmentFlows: priced.equipmentFlows,
     doc: withStoredRulings(ctx.work.doc, snapshot.store),
-    airflow: airflowOptions(snapshot, ctx.page.group),
-    unitAirflow: airflowOptions(snapshot, ctx.page.group, "unit"),
+    airflow: airflowOptions(priced.snapshot, scope),
+    unitAirflow: airflowOptions(priced.snapshot, scope, "unit"),
     roles: priced.roles,
   });
   return { fix: holding(fix), set: set.length };
@@ -183,7 +192,11 @@ const built = (ctx: DuctsCtx) => {
     ctx.work.doc,
     observed<Catalogs>(ctx, "catalogs") ?? EMPTY_CATALOGS,
   );
-  return applyRequest(snapshot, priced, new Date().toISOString(), ctx.page.group);
+  // Write scope is the system: every group it is in, as the raw snapshot numbers them.
+  const groups = ctx.page.system ? systemScope(snapshot, ctx.page.system).groups : [];
+  if (ctx.page.system && !groups.length)
+    throw Error(`No duct network in this snapshot carries ${ctx.page.system}`);
+  return applyRequest(snapshot, priced, new Date().toISOString(), groups);
 };
 
 const dispatch = async <T = DuctsApply.Res.Response>(
@@ -211,13 +224,17 @@ const dispatch = async <T = DuctsApply.Res.Response>(
   return (answer.value ?? answer) as T;
 };
 
+/** A duct network in a person's words: its systems and units (`groupLabels`), never its group id. */
+const networkWord = (snapshot: DuctSnapshot, group: string) =>
+  groupLabels(snapshot).get(group) ?? "the duct network";
+
 /** The group's heal plan over the raw snapshot the route read; throws why there is none. */
 const healOf = (ctx: DuctsCtx, group: string | undefined) => {
   const snapshot = observed<DuctSnapshot>(ctx, "ducts");
   if (!snapshot) throw Error("The duct snapshot is not read yet");
-  if (!group) throw Error("Name the group to heal");
+  if (!group) throw Error("Name the duct network to heal");
   const found = healPlan(snapshot, ctx.work.doc).groups.find((g) => g.group === group);
-  if (!found) throw Error(`Nothing in ${group} heals in Revit`);
+  if (!found) throw Error(`Nothing in ${networkWord(snapshot, group)} heals in Revit`);
   return { snapshot, found };
 };
 
@@ -498,7 +515,11 @@ export const manifest = defineRoute<
             before: espBefore(ctx, snapshot, group),
           },
         });
-        ctx.note("heal preview", `${group}: ${healWords(response)}`, response.counts.refused > 0);
+        ctx.note(
+          "heal preview",
+          `${networkWord(snapshot, group)}: ${healWords(response)}`,
+          response.counts.refused > 0,
+        );
       },
     },
     heal: {
@@ -521,11 +542,15 @@ export const manifest = defineRoute<
       run: async (ctx, input) => {
         const run = ctx.page.heal!;
         const group = groupOf(input)!;
-        const { found } = healOf(ctx, group);
+        const { snapshot, found } = healOf(ctx, group);
         const response = await dispatch<DuctsHeal.Res.Response>(ctx, "ducts.apply-heal", {
           groups: [healRequestGroup(found, passedOf(run))],
         });
-        ctx.note("heal", `${group}: ${healWords(response)}`, response.counts.refused > 0);
+        ctx.note(
+          "heal",
+          `${networkWord(snapshot, group)}: ${healWords(response)}`,
+          response.counts.refused > 0,
+        );
         // Revit renumbers what it rebuilt: read the snapshot again, and keep the before for the row.
         ctx.setPage({
           heal: { ...run, mode: "apply", response },

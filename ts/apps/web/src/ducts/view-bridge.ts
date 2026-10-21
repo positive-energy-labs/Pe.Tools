@@ -1,14 +1,12 @@
 import { useMemo } from "react";
+import { systemsOf } from "@pe/ducts-domain/system-scope";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { useRouteViewBridge } from "#/route/view-bridge";
-
-type Snapshot = {
-  groups: readonly { id: string; systemNames: readonly string[] }[];
-  levels: readonly { id: number | string; name: string }[];
-};
 
 /**
  * What the Ducts page tells Pea it shows: the subject keys it may set (`routeViews.ducts`), and the
- * group and level ids the page can take, so a person's system name resolves to a group id.
+ * system names and levels the page can take, so a person's word resolves to a system the page
+ * knows. The subject is a Revit system; group ids never reach Pea.
  */
 export function useDuctsViewBridge({
   thread,
@@ -20,16 +18,18 @@ export function useDuctsViewBridge({
 }: {
   thread?: string;
   surface: "chat" | "route";
-  page: { group: string; level: string; selected: string };
-  setPage: (patch: { group?: string; level?: string; selected?: string; issue?: string }) => void;
-  snapshot: Snapshot | null;
+  page: { system: string; level: string; selected: string };
+  setPage: (patch: { system?: string; level?: string; selected?: string; issue?: string }) => void;
+  snapshot: DuctSnapshot | null;
   document: unknown;
 }) {
   const facts = useMemo(
     () => ({
-      groups: (snapshot?.groups ?? []).slice(0, 500).map((group) => ({
-        id: group.id,
-        systemNames: group.systemNames.slice(0, 8),
+      systems: (snapshot ? systemsOf(snapshot) : []).slice(0, 800).map((system) => ({
+        name: system.name,
+        classification: system.classification,
+        units: system.units.slice(0, 8),
+        networks: system.groups.length,
       })),
       levels: (snapshot?.levels ?? []).map((level) => ({ id: String(level.id), name: level.name })),
     }),
@@ -40,13 +40,13 @@ export function useDuctsViewBridge({
     thread,
     surface,
     visible: true,
-    page: { group: page.group, level: page.level, selected: page.selected },
-    // Choosing a group by hand clears the selection and issue; Pea's patch does the same.
+    page: { system: page.system, level: page.level, selected: page.selected },
+    // Choosing a system by hand clears the selection and issue; Pea's patch does the same.
     apply: (patch) =>
       setPage({
         ...patch,
-        ...("group" in patch && !("selected" in patch) ? { selected: "" } : {}),
-        ...("group" in patch || "selected" in patch ? { issue: "" } : {}),
+        ...("system" in patch && !("selected" in patch) ? { selected: "" } : {}),
+        ...("system" in patch || "selected" in patch ? { issue: "" } : {}),
       }),
     context: { document },
     facts,

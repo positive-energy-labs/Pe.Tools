@@ -111,7 +111,8 @@ export function equipmentInputs(
 
 /**
  * Group names that tell groups apart: the system names and the root units' marks (else their
- * family), and the group id appended only where two groups would otherwise read alike.
+ * family); where two groups would otherwise read alike the later ones are numbered, never named
+ * by a group id.
  */
 export function groupLabels(snapshot: DuctSnapshot): Map<string, string> {
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
@@ -124,9 +125,12 @@ export function groupLabels(snapshot: DuctSnapshot): Map<string, string> {
     return [group.id, parts.join(" · ")] as const;
   });
   const seen = new Map<string, number>();
-  for (const [, label] of base) seen.set(label, (seen.get(label) ?? 0) + 1);
   return new Map(
-    base.map(([id, label]) => [id, seen.get(label)! > 1 ? `${label} · ${id}` : label]),
+    base.map(([id, label]) => {
+      const n = (seen.get(label) ?? 0) + 1;
+      seen.set(label, n);
+      return [id, n > 1 ? `${label} ${n}` : label];
+    }),
   );
 }
 

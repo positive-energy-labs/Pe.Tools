@@ -139,7 +139,7 @@ export function Schematic({
   const facts = useMemo(() => {
     const out = new Map<number, EncodingFacts>();
     if (!group) return out;
-    const scene = sceneOf(index, group, () => true);
+    const scene = sceneOf(index, [group], () => true);
     for (const f of scene.segments) out.set(f.segment.id, f);
     return out;
   }, [index, group]);
@@ -158,7 +158,7 @@ export function Schematic({
   if (!tree || !layout)
     return (
       <p className="text-ink-2 t-small p-3" data-schematic="empty">
-        {group ? "this group has no tree to draw" : "choose a system to see its schematic"}
+        {group ? "this network has no tree to draw" : "choose a system to see its schematic"}
       </p>
     );
 
@@ -170,7 +170,7 @@ export function Schematic({
   const svg = (
     <svg
       role="img"
-      aria-label={`duct tree of ${tree.groupId}`}
+      aria-label="duct tree"
       data-schematic={size}
       width={inset ? "100%" : layout.width}
       height={inset ? "100%" : layout.height}

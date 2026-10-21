@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { ductsRouteState, type DuctFinding } from "@pe/agent-contracts";
 
 import type { HealPlan } from "@pe/ducts-domain/heal";
+import type { SystemScope } from "@pe/ducts-domain/system-scope";
 
 import {
   healRunView,
@@ -82,7 +83,7 @@ const findings = [
 ];
 const base = {
   snapshot,
-  group: "",
+  scope: null as SystemScope | null,
   findings,
   flows: new Map<number, { cfm: number | null }>([
     [30, { cfm: null }],
@@ -95,6 +96,21 @@ const base = {
   write: { staged: 0, hasPreview: false, fresh: false, planned: null, refused: null },
 };
 const keys = (items: readonly InboxItem[]) => items.map((i) => i.key);
+/** A system's scope as `systemScope` reads it, stated by hand: every group it is in prices it. */
+const system = (
+  name: string,
+  groups: string[],
+  ids: { terminals?: number[]; units?: number[]; prices?: number[]; members?: number[] },
+): SystemScope => ({
+  name,
+  groups,
+  pricing: new Set(groups),
+  shared: new Map(),
+  terminals: new Set(ids.terminals),
+  units: new Set(ids.units),
+  prices: new Set(ids.prices),
+  members: new Set(ids.members),
+});
 
 describe("a staged verdict is a ruling, not a Revit write", () => {
   const doc = ductsRouteState.schema.parse({
@@ -188,13 +204,46 @@ describe("the ducts inbox", () => {
     expect(keys([...rows.fix, ...rows.set, ...rows.diagnostics])).not.toContain("stub:g1:3");
   });
 
-  it("scopes to the chosen group, no-fan by its group id", () => {
-    const g2 = inboxRows({ ...base, group: "g2" });
-    expect(keys(g2.fix)).toEqual(["no-fan:g2"]);
-    expect(g2.set).toEqual([]);
-    const g1 = inboxRows({ ...base, group: "g1" });
-    expect(keys(g1.fix)).toEqual(["open-end:g1:2:1"]);
-    expect(keys(g1.set)).toEqual(["flows:30", "equipmentFlows:1"]);
+  it("scopes to the chosen system's groups, no-fan by its group id", () => {
+    const sa2 = inboxRows({
+      ...base,
+      scope: system("SA 2", ["g2"], { terminals: [40], prices: [40], members: [40] }),
+    });
+    expect(keys(sa2.fix)).toEqual(["no-fan:g2"]);
+    expect(sa2.set).toEqual([]);
+    const sa1 = inboxRows({
+      ...base,
+      scope: system("SA 1", ["g1"], {
+        terminals: [30, 31],
+        units: [1],
+        prices: [1, 2, 30, 31],
+        members: [1, 2, 30, 31],
+      }),
+    });
+    expect(keys(sa1.fix)).toEqual(["open-end:g1:2:1"]);
+    expect(keys(sa1.set)).toEqual(["flows:30", "equipmentFlows:1"]);
+  });
+
+  it("in a shared group only the runs that price the system block; the rest is Diagnostics", () => {
+    // g1 also carries RA 1: its grille 31 and the open end at 2 are on RA 1's runs, not SA 1's.
+    const rows = inboxRows({
+      ...base,
+      flows: new Map([...base.flows, [31, { cfm: null }]]),
+      scope: system("SA 1", ["g1"], {
+        terminals: [30],
+        units: [1],
+        prices: [1, 30],
+        members: [1, 2, 30, 31],
+      }),
+    });
+    expect(keys(rows.fix)).toEqual([]);
+    expect(keys(rows.set)).toEqual(["flows:30", "equipmentFlows:1"]);
+    const open = rows.diagnostics.find((r) => r.key === "open-end:g1:2:1")!;
+    expect(open.status).toBe("fix in Revit · not on SA 1's runs");
+    expect(open.tone).toBeUndefined();
+    const others = rows.diagnostics.find((r) => r.key === "flows:other-systems")!;
+    expect(others.ids).toEqual([31]);
+    expect(rows.write.blocked).toBe("2 to set before writing");
   });
 
   it("every row outside Diagnostics has a verb; Set rows deep-link to their cell", () => {

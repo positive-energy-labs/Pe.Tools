@@ -1047,13 +1047,10 @@ test("Ducts set-view resolves a named system against the lease's facts and refus
       return Response.json({
         instance,
         revision: 3,
-        page: { group: "", level: "", selected: "" },
+        page: { system: "", level: "", selected: "" },
         context: {},
         facts: {
-          groups: [
-            { id: "g1", systemNames: ["Supply 1"] },
-            { id: "g2", systemNames: ["Return 1", "Supply 10"] },
-          ],
+          systems: [{ name: "Supply 1" }, { name: "Return 1" }, { name: "Supply 10" }],
           levels: [{ id: "5", name: "L1" }],
         },
       });
@@ -1070,11 +1067,13 @@ test("Ducts set-view resolves a named system against the lease's facts and refus
       timeoutSeconds: 30,
     });
   expect(await set({ system: "supply 1", level: "5" })).toMatchObject({ ok: true });
-  expect(bodies[0]).toMatchObject({ revision: 3, patch: { group: "g1", level: "5" } });
+  expect(bodies[0]).toMatchObject({ revision: 3, patch: { system: "Supply 1", level: "5" } });
+  expect(await set({ system: "return" })).toMatchObject({ ok: true });
+  expect(bodies[1]).toMatchObject({ patch: { system: "Return 1" } });
   expect(await set({ system: "nonesuch" })).toMatchObject({ ok: false });
   expect(await set({ system: "supply" })).toMatchObject({ ok: false });
-  expect(await set({ group: "gX" })).toMatchObject({ ok: false });
-  expect(bodies).toHaveLength(1);
+  expect(await set({ group: "g1" })).toMatchObject({ ok: false });
+  expect(bodies).toHaveLength(2);
   const row = catalog().capabilities.find((entry) => entry.key === "route:ducts.set-view");
   expect(row?.mutates).toBe(true);
   expect(row?.description).toContain("only when the person named it");

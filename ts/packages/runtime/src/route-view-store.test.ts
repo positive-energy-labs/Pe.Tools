@@ -22,9 +22,9 @@ const ducts = (instance: string): RouteView => ({
   thread: "t",
   instance,
   surface: "route",
-  page: { group: "", level: "", selected: "" },
+  page: { system: "", level: "", selected: "" },
   context: { document: { session: "s", openId: "o" } },
-  facts: { groups: [{ id: "g1", systemNames: ["Supply 1"] }] },
+  facts: { systems: [{ name: "Supply 1" }] },
 });
 const id1 = "00000000-0000-4000-8000-000000000001";
 const id2 = "00000000-0000-4000-8000-000000000002";
@@ -70,14 +70,14 @@ describe("mounted route view custody", () => {
     store.subscribe((intent) => {
       commandId = intent.commandId;
     });
-    const result = store.set("t", "ducts", id1, lease.revision, { group: "g1" });
-    store.publish({ ...ducts(id1), page: { group: "g1", level: "", selected: "" } });
+    const result = store.set("t", "ducts", id1, lease.revision, { system: "Supply 1" });
+    store.publish({ ...ducts(id1), page: { system: "Supply 1", level: "", selected: "" } });
     expect(
       store.ack({
         instance: id1,
         commandId,
         revision: lease.revision,
-        page: { group: "g1", level: "", selected: "" },
+        page: { system: "Supply 1", level: "", selected: "" },
         facts: lease.facts,
       }).ok,
     ).toBe(true);

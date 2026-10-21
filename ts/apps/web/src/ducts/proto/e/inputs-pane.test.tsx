@@ -47,7 +47,7 @@ test("every unit and grille of the system has a named row carrying its cells, an
       snapshot={snapshot}
       priced={priced}
       work={work}
-      group="g1"
+      scope={{ groups: ["g1"], terminals: new Set([30]), units: new Set([1]) }}
       nameOf={(id) => names[id]!}
       selected={null}
       select={() => undefined}

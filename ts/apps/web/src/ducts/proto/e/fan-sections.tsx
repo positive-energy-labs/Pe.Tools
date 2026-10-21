@@ -10,11 +10,14 @@ import { Row } from "@pe/kit/lang/row";
 import { fmtFt } from "./bar";
 
 export function FanSections({
+  title = null,
   fans,
   nameOf,
   light,
   select,
 }: {
+  /** The section these fans root, when the system has several ("SA 19 · FC-17"). */
+  title?: string | null;
   fans: readonly FanResult[];
   nameOf: (id: number) => string;
   light: (ids: readonly number[] | null) => void;
@@ -24,11 +27,12 @@ export function FanSections({
   return (
     <div
       role="list"
-      aria-label="fan sections"
+      aria-label={title ? `fan sections of ${title}` : "fan sections"}
       className="border-line border-b"
       data-e-fans
       onMouseLeave={() => light(null)}
     >
+      {title ? <p className="t-small text-ink-2 px-2 pt-1">{title}</p> : null}
       {fans.map((f, k) => {
         const where =
           k === 0

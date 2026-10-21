@@ -6,6 +6,7 @@
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import type { Priced } from "@pe/ducts-domain/pricing";
 import type { Provisional, Row } from "@pe/ducts-domain/losses";
+import { systemsOf } from "@pe/ducts-domain/system-scope";
 import { groupTree, runsOf } from "@pe/ducts-domain/topology";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
@@ -127,18 +128,25 @@ const unpricedOf = (rows: readonly Row[]): TreeNode["unpriced"] => {
   };
 };
 
+/**
+ * One section per group in `only` (every group when empty), in that order. `sectionName` names a
+ * section the way the system reads it ("SA 19 · FC-17 · shared with RA 1"); else its group label.
+ */
 export function buildTree(
   snapshot: DuctSnapshot,
   priced: Priced | null,
   work: DuctsRouteDocument | null,
-  only = "",
+  only: readonly string[] = [],
+  sectionName?: (group: string) => string,
 ): TreeNode[] {
   const nameOf = elementNamer(snapshot, null);
   const name = (id: number) => nameOf(id) ?? "element not in snapshot";
   const labelOf = labelOfNode(snapshot);
   const labels = groupLabels(snapshot);
   const equipment = new Set(snapshot.nodes.filter((n) => n.kind === "equipment").map((n) => n.id));
-  return snapshot.groups.filter((g) => !only || g.id === only).map((group) => {
+  const byId = new Map(snapshot.groups.map((g) => [g.id, g]));
+  const groups = only.length ? only.flatMap((id) => byId.get(id) ?? []) : snapshot.groups;
+  return groups.map((group) => {
     const tree = groupTree(snapshot, group.id);
     const runs = runsOf(tree);
     const solved = priced?.now.byGroup[group.id] ?? null;
@@ -244,7 +252,7 @@ export function buildTree(
     return {
       key: group.id,
       kind: "system",
-      name: labels.get(group.id) ?? rootName,
+      name: sectionName?.(group.id) ?? labels.get(group.id) ?? rootName,
       id: rootId,
       total: fan,
       self: null,
@@ -318,20 +326,35 @@ export function subjectTree(
   };
 }
 
-/** The system list: one childless row per group (no run tree is built, so 400 groups stay cheap). */
-export function systemList(snapshot: DuctSnapshot, priced: Priced | null): TreeNode[] {
-  const labels = groupLabels(snapshot);
-  return snapshot.groups.map((group) => {
-    const solved = priced?.now.byGroup[group.id] ?? null;
-    const rootId = group.rootIds[0] ?? null;
+/**
+ * The system list: one childless row per Revit system (no run tree is built, so 350 systems stay
+ * cheap), keyed by its name. Its total is the largest fan over the groups it is in; `fanless` when
+ * none of them has an air mover.
+ */
+export function systemList(
+  snapshot: DuctSnapshot,
+  priced: Priced | null,
+): (TreeNode & { fanless: boolean; sub: string })[] {
+  return systemsOf(snapshot).map((system) => {
+    const solved = system.groups.flatMap((g) => priced?.now.byGroup[g] ?? []);
+    const totals = solved.filter((s) => s.critical != null).map((s) => s.fan);
+    const first = snapshot.groups.find((g) => g.id === system.groups[0]);
     return {
-      key: group.id,
+      key: system.name,
       kind: "system",
-      name: labels.get(group.id) ?? group.id,
-      id: rootId,
-      total: solved?.fan ?? null,
+      name: system.name,
+      sub: [
+        system.classification,
+        system.units.join(", ") || "no fan",
+        system.groups.length > 1 ? `${system.groups.length} networks` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      fanless: !!priced && solved.length > 0 && solved.every((s) => !s.hasAirMover),
+      id: first?.rootIds[0] ?? null,
+      total: totals.length ? Math.max(...totals) : null,
       self: null,
-      ft: solved?.criticalTel ?? null,
+      ft: null,
       selfFt: null,
       rate: null,
       unpriced: null,
@@ -339,7 +362,7 @@ export function systemList(snapshot: DuctSnapshot, priced: Priced | null): TreeN
       level: null,
       scale: null,
       critical: null,
-      provisional: solved?.provisional ?? null,
+      provisional: solved.find((s) => s.provisional)?.provisional ?? null,
       terminal: null,
       children: [],
     };

@@ -15,12 +15,17 @@
  *   withholds the join; the objection is a ruling, so it stays here with its take-back, and only
  *   what the break causes (an open end, a lost path) comes up under Fix.
  * A row exists only with a way to act on it: a verb, a deep link or select in Revit.
+ *
+ * The scope is a Revit system (`system-scope.ts`): rows come from every group the system is in, but
+ * only what prices the system (its runs, its own elements, its units) is Fix or Set. The rest of a
+ * shared group is another system's: its rows stand in Diagnostics and never hold Write.
  */
 import type { DuctFinding, DuctsRouteDocument } from "@pe/agent-contracts";
 import { bin } from "@pe/ducts-domain/bins";
 import { fanCandidates, type FanAssignment } from "@pe/ducts-domain/fan-assignment";
 import type { HealGroup, HealItem, HealPlan } from "@pe/ducts-domain/heal";
 import { ruleByKey } from "@pe/ducts-domain/loss-rules";
+import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 import { slotWord, type AirflowOf, type AirflowOption } from "./airflow";
@@ -137,8 +142,8 @@ export interface HealRunView {
 export interface TriageInput {
   snapshot: Pick<DuctSnapshot, "groups" | "nodes" | "segments"> &
     Partial<Pick<DuctSnapshot, "systems">>;
-  /** The chosen group; empty is every group. */
-  group: string;
+  /** The chosen system (`systemScope`); null is the whole document. */
+  scope: SystemScope | null;
   findings: readonly DuctFinding[];
   flows: ReadonlyMap<number, { cfm: number | null }>;
   equipmentFlows: ReadonlyMap<number, { cfm: number | null }>;
@@ -346,30 +351,37 @@ export const proximityIds = (key: string) =>
 
 /** Fix, Set, Check and Diagnostics, each in its own order. */
 export function triage(input: TriageInput) {
-  const { snapshot, group, findings, flows, equipmentFlows, doc } = input;
+  const { snapshot, scope, findings, flows, equipmentFlows, doc } = input;
   // The role a unit plays now: the survey's (ruled, staged, else proposed), else Work's staged one.
   const roleNow = (id: number) => input.roles?.get(id)?.role ?? roleOf(doc, id);
   const ruled = (id: number) => ["ruled", "staged"].includes(input.roles?.get(id)?.why ?? "");
   const name = input.nameOf ?? String;
   const label = input.groupLabel ?? ((id: string) => id);
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
-  const scope = group
-    ? new Set([
-        ...snapshot.nodes.filter((n) => n.groupId === group).map((n) => n.id),
-        ...snapshot.segments.filter((s) => s.groupId === group).map((s) => s.id),
-        ...(snapshot.groups.find((g) => g.id === group)?.rootIds ?? []),
-      ])
-    : null;
-  const owned = group ? new Set(snapshot.groups.find((g) => g.id === group)?.issueIds ?? []) : null;
+  const inGroups = new Set(scope?.groups ?? []);
+  const owner = new Map(
+    snapshot.groups.flatMap((g) =>
+      inGroups.has(g.id) ? g.issueIds.map((i) => [i, g.id] as const) : [],
+    ),
+  );
+  /** Shown: the finding sits in a group the system is in. */
   const inScope = (f: DuctFinding) =>
     !scope ||
     (f.groupId != null
-      ? f.groupId === group
-      : owned!.has(f.id) || f.elementIds.some((id) => scope.has(id)));
+      ? inGroups.has(f.groupId)
+      : owner.has(f.id) || f.elementIds.some((id) => scope.members.has(id)));
+  /** Blocks: the finding stands on a run that prices the system (else another system's, in Diagnostics). */
+  const pricesSystem = (f: DuctFinding) =>
+    !scope ||
+    (f.groupId != null
+      ? scope.pricing.has(f.groupId)
+      : f.elementIds.length
+        ? f.elementIds.some((id) => scope.prices.has(id))
+        : scope.pricing.has(owner.get(f.id) ?? ""));
   const fanless = new Set(
     findings.flatMap((f) => (f.kind === "no-fan" && f.groupId ? [f.groupId] : [])),
   );
-  const groupsOf = snapshot.groups.filter((g) => !group || g.id === group);
+  const groupsOf = snapshot.groups.filter((g) => !scope || scope.pricing.has(g.id));
 
   const fix: InboxItem[] = [];
   const set: InboxItem[] = [];
@@ -379,8 +391,16 @@ export function triage(input: TriageInput) {
   const heal = input.heal ?? null;
   const run = input.healRun ?? null;
   // Heal rows lead Fix: what Pe can make real in Revit comes before what a person must.
-  const blocking = new Set(findings.filter((f) => bin(f) === "blocking").map((f) => f.id));
-  const healGroups = (heal?.groups ?? []).filter((g) => !group || g.group === group);
+  const blocking = new Set(
+    findings.filter((f) => bin(f) === "blocking" && pricesSystem(f)).map((f) => f.id),
+  );
+  // The plan numbers the raw snapshot's groups; a survey that merged them still finds them by member.
+  const healGroups = (heal?.groups ?? []).filter(
+    (g) =>
+      !scope ||
+      inGroups.has(g.group) ||
+      g.items.some((i) => i.ids.some((id) => scope.members.has(id))),
+  );
   for (const g of healGroups)
     fix.push(
       healRow(
@@ -394,7 +414,7 @@ export function triage(input: TriageInput) {
   // An apply that healed its whole group leaves no Heal row to carry its result, so it keeps its own.
   if (
     run?.mode === "apply" &&
-    (!group || run.group === group) &&
+    (!scope || inGroups.has(run.group)) &&
     !healGroups.some((g) => g.group === run.group)
   )
     fix.push({
@@ -416,6 +436,15 @@ export function triage(input: TriageInput) {
     if (!inScope(f) || f.kind === "no-flow" || f.kind === "no-terminal-flow") continue;
     if (heal?.covered.has(f.id)) continue;
     const base = { key: f.id, ids: f.elementIds, note: f.note };
+    // A Fix or Set row off the system's runs is another system's in a shared group: Diagnostics.
+    const off = !pricesSystem(f);
+    const offRow = ({ tone: _tone, ...item }: InboxItem): InboxItem => ({
+      ...item,
+      group: "diagnostics",
+      status: `${item.status} · not on ${scope!.name}'s runs`,
+    });
+    const toFix = (item: InboxItem) => (off ? diagnostics : fix).push(off ? offRow(item) : item);
+    const toSet = (item: InboxItem) => (off ? diagnostics : set).push(off ? offRow(item) : item);
     if (f.grade && f.grade !== "anomalous") {
       // Bridged, so it prices; Revit still has no join here, and the note says whose repair it is.
       diagnostics.push({
@@ -439,7 +468,7 @@ export function triage(input: TriageInput) {
       continue;
     }
     if (f.kind === "default-flex-roughness") {
-      set.push({
+      toSet({
         ...base,
         group: "set",
         kind: f.kind,
@@ -525,9 +554,14 @@ export function triage(input: TriageInput) {
         const all = snapshot.groups.find((g) => g.id === f.groupId)?.rootIds ?? [];
         const roots = all.filter((id) => roleNow(id) === "passive");
         // One unit on the network: naming it the system's base equipment in Revit proposes it fan.
+        // Scoped to a system, only that system is offered; the unit and its group come from the row.
         const based =
-          all.length === 1 ? fanCandidates(snapshot, all[0]!, f.groupId!) : ([] as FanAssignment[]);
-        fix.push({
+          all.length === 1
+            ? fanCandidates(snapshot, all[0]!, f.groupId!).filter(
+                (c) => !scope || c.system === scope.name,
+              )
+            : ([] as FanAssignment[]);
+        toFix({
           ...item,
           title: "No duct path to a fan",
           status: label(f.groupId!),
@@ -573,7 +607,7 @@ export function triage(input: TriageInput) {
           break;
         }
         // Caps and small joins heal in the Heal row; an end left here is a person's, in Revit.
-        fix.push({
+        toFix({
           ...item,
           title: `Open end at ${names(f.elementIds) || f.id}`,
           status: "fix in Revit",
@@ -588,7 +622,7 @@ export function triage(input: TriageInput) {
       case "loop-by-inference": {
         // The inferred join that closes the loop is the one the finding is named for.
         const join = `proximity:${f.id.slice("loop-by-inference:".length)}`;
-        fix.push({
+        toFix({
           ...item,
           title: KIND_TITLE[f.kind]!,
           status: "blocks the path",
@@ -615,7 +649,7 @@ export function triage(input: TriageInput) {
               `${name(id)}: ${roleNow(id) ?? "fan"}, ${input.roles?.get(id)?.reason ?? "staged"}`,
           )
           .join("; ");
-        fix.push({
+        toFix({
           ...item,
           title: `Several fans: ${names(active)}`,
           status: "blocks the path",
@@ -650,7 +684,7 @@ export function triage(input: TriageInput) {
         const grade = f.grade === "anomalous";
         // An anomalous join is a person's repair in Revit (reversed connector, cross-class): no
         // verdict keeps it; breaking it is the one ruling, and the note says what to fix.
-        fix.push({
+        toFix({
           ...item,
           title: grade
             ? `Anomalous join at ${names(f.elementIds)}`
@@ -674,7 +708,7 @@ export function triage(input: TriageInput) {
     if (!key.startsWith("proximity:") || cell.staged?.value?.kind !== "verdict") continue;
     if (cell.staged.value.verdict !== "ignore") continue;
     const ids = proximityIds(key);
-    if (scope && !ids.some((id) => scope.has(id))) continue;
+    if (scope && !ids.some((id) => scope.members.has(id))) continue;
     diagnostics.push({
       key,
       group: "diagnostics",
@@ -698,9 +732,14 @@ export function triage(input: TriageInput) {
   }
 
   const flowless: number[] = [];
+  const othersFlowless: number[] = [];
   for (const n of snapshot.nodes) {
-    if (n.kind !== "terminal" || !n.groupId || (group && n.groupId !== group)) continue;
+    if (n.kind !== "terminal" || !n.groupId || (scope && !inGroups.has(n.groupId))) continue;
     if (fanless.has(n.groupId) || flows.get(n.id)?.cfm != null) continue;
+    if (scope && !scope.terminals.has(n.id)) {
+      othersFlowless.push(n.id);
+      continue;
+    }
     flowless.push(n.id);
     set.push({
       key: `flows:${n.id}`,
@@ -738,12 +777,25 @@ export function triage(input: TriageInput) {
       verbs: [{ kind: "airflow", current, options }, select(flowless)],
     });
   }
+  // Another system's grilles in a shared group: named, never held.
+  if (othersFlowless.length)
+    diagnostics.push({
+      key: "flows:other-systems",
+      group: "diagnostics",
+      kind: "terminal-flow",
+      title: `${plural(othersFlowless.length, "grille")} of the shared systems with no flow`,
+      status: `not on ${scope!.name}'s runs`,
+      ids: othersFlowless,
+      note: "These terminals belong to another system in a group this one shares; pick that system to set them.",
+      verbs: [select(othersFlowless)],
+    });
   const units = new Set<number>();
   const unitFlowless: number[] = [];
   const firstUnitRow = set.length;
   for (const g of groupsOf) {
     if (fanless.has(g.id)) continue;
     for (const id of g.rootIds) {
+      if (scope && !scope.units.has(id)) continue;
       if (units.has(id) || nodes.get(id)?.kind !== "equipment" || roleNow(id) === "passive")
         continue;
       units.add(id);
@@ -821,14 +873,8 @@ const valueWord = (segment: string, value: unknown) => {
 
 /** Pea's claims awaiting a verdict, then its proposals awaiting staging. */
 export function checks(input: TriageInput & { claims: readonly Claim[] }): InboxItem[] {
-  const { snapshot, group, findings, doc, claims } = input;
+  const { scope, findings, doc, claims } = input;
   const name = input.nameOf ?? String;
-  const scope = group
-    ? new Set([
-        ...snapshot.nodes.filter((n) => n.groupId === group).map((n) => n.id),
-        ...snapshot.segments.filter((s) => s.groupId === group).map((s) => s.id),
-      ])
-    : null;
   const items: InboxItem[] = claims
     .filter((claim) => !claim.verdict)
     .map((claim) => ({
@@ -892,7 +938,7 @@ export function checks(input: TriageInput & { claims: readonly Claim[] }): Inbox
   for (const segment of Object.keys(ELEMENT_WORD))
     for (const [key, cell] of awaiting(segments?.[segment])) {
       const id = Number(key);
-      if (scope && !scope.has(id)) continue;
+      if (scope && !scope.members.has(id)) continue;
       proposal(segment, key, `${ELEMENT_WORD[segment]} · ${name(id)}`, cell.proposal!.value, [id]);
     }
   for (const [key, cell] of awaiting(segments?.rules)) {

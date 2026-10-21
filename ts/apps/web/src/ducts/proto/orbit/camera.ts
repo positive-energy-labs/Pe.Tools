@@ -106,7 +106,7 @@ export const orbitOf = (project: object): Orbit | null => registry.get(project) 
 export function useOrbit(
   o: {
     index: DuctIndex;
-    group: string;
+    groups: readonly string[];
     scene: Scene;
     grid: number;
     basePivot: readonly number[];
@@ -138,8 +138,8 @@ export function useOrbit(
     [yaw, elev, pivot, offset, o.stretch],
   );
   const runs = useMemo(
-    () => (o.group ? runsOf(groupTree(o.index.snapshot, o.group)).map((r) => r.path) : []),
-    [o.index, o.group],
+    () => o.groups.flatMap((g) => runsOf(groupTree(o.index.snapshot, g)).map((r) => r.path)),
+    [o.index, o.groups],
   );
 
   const setElevation = (value: number) => {

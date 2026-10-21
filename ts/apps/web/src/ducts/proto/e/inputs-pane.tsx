@@ -8,6 +8,7 @@
  * proposes its role, so the picker sits where the role is read.
  */
 import type { Priced } from "@pe/ducts-domain/pricing";
+import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
 import { Row } from "@pe/kit/lang/row";
@@ -22,7 +23,8 @@ export interface InputsPaneProps {
   snapshot: DuctSnapshot;
   priced: Priced | null;
   work: LossesWork;
-  group: string;
+  /** The open system: its grilles, and the units on its runs, across every group it is in. */
+  scope: InputsScope;
   nameOf: (id: number) => string;
   selected: number | null;
   select: (id: number | null) => void;
@@ -31,19 +33,20 @@ export interface InputsPaneProps {
   fanVerbs?: (id: number) => ReactNode;
 }
 
+type InputsScope = Pick<SystemScope, "groups" | "terminals" | "units">;
+
 /** The unit ids and terminal ids of one system, in snapshot order. */
-export function inputRowsOf(snapshot: DuctSnapshot, group: string) {
-  const roots = new Set(snapshot.groups.find((g) => g.id === group)?.rootIds ?? []);
-  const units = snapshot.nodes.filter(
-    (n) => n.kind === "equipment" && (n.groupId === group || roots.has(n.id)),
+export function inputRowsOf(snapshot: DuctSnapshot, scope: InputsScope) {
+  const units = snapshot.nodes.filter((n) => n.kind === "equipment" && scope.units.has(n.id));
+  const terminals = snapshot.nodes.filter(
+    (n) => n.kind === "terminal" && scope.terminals.has(n.id),
   );
-  const terminals = snapshot.nodes.filter((n) => n.kind === "terminal" && n.groupId === group);
   return { units: units.map((n) => n.id), terminals: terminals.map((n) => n.id) };
 }
 
 export function InputsPane(props: InputsPaneProps) {
-  const { snapshot, priced, work, group, nameOf, selected, select, light } = props;
-  const { units, terminals } = inputRowsOf(snapshot, group);
+  const { snapshot, priced, work, scope, nameOf, selected, select, light } = props;
+  const { units, terminals } = inputRowsOf(snapshot, scope);
   const ctx: InputsCtx | null = priced ? { snapshot, priced, work } : null;
   if (!units.length && !terminals.length)
     return <p className="t-small text-ink-2 p-2">no unit or grille in this system</p>;
@@ -71,7 +74,7 @@ export function InputsPane(props: InputsPaneProps) {
   return (
     <div role="list" aria-label="inputs" data-e-inputs>
       {units.length ? (
-        <AirflowSlot snapshot={snapshot} work={work} group={group} of="unit" />
+        <AirflowSlot snapshot={snapshot} work={work} scope={scope} of="unit" />
       ) : null}
       {units.map((id) =>
         row(
@@ -84,7 +87,7 @@ export function InputsPane(props: InputsPaneProps) {
         ),
       )}
       {terminals.length ? (
-        <AirflowSlot snapshot={snapshot} work={work} group={group} of="terminal" />
+        <AirflowSlot snapshot={snapshot} work={work} scope={scope} of="terminal" />
       ) : null}
       {terminals.map((id) => row(id, <TerminalCells ctx={ctx} id={id} />, "grille"))}
     </div>
@@ -95,15 +98,15 @@ export function InputsPane(props: InputsPaneProps) {
 function AirflowSlot({
   snapshot,
   work,
-  group,
+  scope,
   of,
 }: {
   snapshot: DuctSnapshot;
   work: LossesWork;
-  group: string;
+  scope: InputsScope;
   of: AirflowOf;
 }) {
-  const { current, options } = airflowOptions(snapshot, group, of);
+  const { current, options } = airflowOptions(snapshot, scope, of);
   const at = options.find((o) => o.slot === current);
   const noun = of === "unit" ? "units" : "grilles";
   return (

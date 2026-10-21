@@ -87,7 +87,11 @@ function cumulativeOf(priced: ProtoProps["priced"]): Map<number, number> {
 export interface ECanvasExtra {
   /** The element set a sidebar row lights; empty lights nothing. */
   lit: ReadonlySet<number>;
-  /** The group's issue ids; null = every issue on a drawn element. */
+  /** The system's groups (stable, `systemScope`); the drawing draws every one. */
+  groups: readonly string[];
+  /** The group whose fan the header reads: the system's largest; the schematic draws it. */
+  lead: string;
+  /** The system's issue ids; null = every issue on a drawn element. */
   issueScope: ReadonlySet<string> | null;
   /** The group's encoding: the screen owns it so the tree reads the same numbers. */
   scale: GroupEncoding;
@@ -118,6 +122,8 @@ function Canvas({
   doc,
   lit,
   issueScope,
+  groups,
+  lead,
   scale,
   setPage,
 }: ProtoProps & ECanvasExtra & { snapshot: NonNullable<ProtoProps["snapshot"]> }) {
@@ -135,7 +141,7 @@ function Canvas({
         : null,
     [index, snapshot, subject, labelOf],
   );
-  const iso = useIso(index, page, drawnSubject);
+  const iso = useIso(index, page, groups, drawnSubject);
   // `page.picture` is the main picture (the other rides the corner); `page.camera` a globe preset.
   const picture = pictureOf(page);
   const camera = cameraOf(page);
@@ -227,14 +233,14 @@ function Canvas({
   // Header facts: a system name (never a group id), Pe fan static, critical run total.
   const firstId = subject?.ids[0] ?? iso.scene.segments[0]?.segment.id ?? null;
   const systemName =
-    (page.group ? snapshot.groups.find((g) => g.id === page.group)?.systemNames[0] : null) ??
+    (page.system || null) ??
     (firstId == null
       ? null
       : (byId.segments.get(firstId)?.systemName ?? byId.nodes.get(firstId)?.systemName)) ??
     iso.scene.segments.find((f) => f.segment.systemName)?.segment.systemName ??
     null;
   const groupId =
-    page.group ||
+    lead ||
     (firstId == null
       ? ""
       : (byId.segments.get(firstId)?.groupId ?? byId.nodes.get(firstId)?.groupId ?? ""));
@@ -396,7 +402,7 @@ function Canvas({
       ) : (
         <Schematic
           index={index}
-          group={page.group}
+          group={lead}
           encoding={scale.encoding}
           selected={selected}
           lit={litAll}
@@ -479,7 +485,7 @@ function Canvas({
         {picture === "model" ? (
           <Schematic
             index={index}
-            group={page.group}
+            group={lead}
             encoding={scale.encoding}
             selected={selected}
             lit={litAll}

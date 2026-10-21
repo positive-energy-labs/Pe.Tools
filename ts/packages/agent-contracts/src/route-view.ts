@@ -22,40 +22,46 @@ export type RouteViewSpec = {
 };
 
 type DuctsFacts = {
-  groups?: { id: string; systemNames: string[] }[];
+  systems?: { name: string }[];
   levels?: { id: string; name: string }[];
 };
 
-/** `system` is a person's word for a group; the lease's facts say which group ids carry it. */
+/**
+ * `system` is the page's subject, a Revit system name: the person's word resolves to the one
+ * system the lease's facts name exactly (any case), else the one whose name holds it. A system
+ * spans every duct network it is in; the page shows them all.
+ */
 function resolveDucts(input: Record<string, unknown>, facts: Record<string, unknown>) {
-  const { system, ...rest } = input;
-  const patch = { ...rest } as Record<string, string>;
-  const { groups = [], levels = [] } = facts as DuctsFacts;
-  if (typeof system === "string" && system.trim()) {
-    const word = system.trim().toLowerCase();
-    const exact = groups.filter((group) =>
-      group.systemNames.some((name) => name.toLowerCase() === word),
-    );
-    const near = groups.filter((group) =>
-      group.systemNames.some((name) => name.toLowerCase().includes(word)),
-    );
+  const patch = { ...input } as Record<string, string>;
+  const { systems = [], levels = [] } = facts as DuctsFacts;
+  const stray = Object.keys(patch).filter((key) => !["system", "level", "selected"].includes(key));
+  if (stray.length)
+    return {
+      ok: false as const,
+      error: `the Ducts page takes system, level and selected, not ${stray.join(", ")}; name the system`,
+    };
+  if (patch.system?.trim()) {
+    const word = patch.system.trim().toLowerCase();
+    const exact = systems.filter((system) => system.name.toLowerCase() === word);
+    const near = systems.filter((system) => system.name.toLowerCase().includes(word));
     const found = exact.length ? exact : near;
     if (found.length !== 1)
       return {
         ok: false as const,
         error: found.length
-          ? `system '${system}' names ${found.length} groups (${found.map((group) => group.id).join(", ")}); pass one group id`
-          : `no group carries a system named '${system}'; read route:ducts.view for the group ids`,
+          ? `'${patch.system}' names ${found.length} systems (${found
+              .slice(0, 12)
+              .map((system) => system.name)
+              .join(", ")}); name one`
+          : `no system named '${patch.system}' on this page; read route:ducts.view for the system names`,
       };
-    patch.group = found[0]!.id;
+    patch.system = found[0]!.name;
   }
-  if (patch.group && !groups.some((group) => group.id === patch.group))
-    return { ok: false as const, error: `unknown group '${patch.group}'` };
   if (patch.level && !levels.some((level) => level.id === patch.level))
     return { ok: false as const, error: `unknown level '${patch.level}'` };
   return Object.keys(patch).length
     ? { ok: true as const, patch }
-    : { ok: false as const, error: "name a system, group, level or selected element" };
+    : { ok: false as const, error: "name a system, level or selected element" };
 }
 
 export const routeViews = {
@@ -68,13 +74,12 @@ export const routeViews = {
   ducts: {
     title: "Ducts",
     policy:
-      "Move the Ducts page's subject in the person's open browser: group (a system's group id), level and selected element id; an empty string clears the key. Set the system only when the person named it, and never pick a system they did not name. Pass system as the person's word and the group is resolved from the view's facts; otherwise pass the group id read from route:ducts.view. No Work or Revit read.",
+      "Move the Ducts page's subject in the person's open browser: system (a Revit system name such as SA 19, as the person said it; it resolves against the view's system names), level and selected element id; an empty string clears the key. The page shows every duct network the system is in. Set the system only when the person named it, and never pick a system they did not name. No Work or Revit read.",
     set: z.strictObject({
-      group: z.string().max(200),
+      system: z.string().max(200),
       level: z.string().max(200),
       selected: z.string().max(200),
     }),
-    words: z.strictObject({ system: z.string().max(200) }),
     resolve: resolveDucts,
   },
 } satisfies Record<string, RouteViewSpec>;

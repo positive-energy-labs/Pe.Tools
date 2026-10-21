@@ -1,9 +1,10 @@
 /**
  * /ducts: the Situation over one document's duct networks, and the one shell under it (E2): the
  * system tree over the loss Rules, the drawing, the inbox. The sentence names the document, the
- * subject group and the level. The page is the manifest's `url` keys, so a link lands on the same
+ * subject system (a Revit system name, read across every group it is in) and the level. The page
+ * is the manifest's `url` keys, so a link lands on the same
  * place. The snapshot is one `ducts.snapshot` read keyed on the target, the staged parameter slots
- * and `page.epoch`; targeting a document reads it again with no press, choosing a group does not.
+ * and `page.epoch`; targeting a document reads it again with no press, choosing a system does not.
  * The ASHRAE tables are always read; the snapshot, tables and catalogs are provided to the verbs so
  * `preview` and `apply` build their request from what is drawn.
  */
@@ -23,6 +24,7 @@ import { LadderPicker, useDocumentLadder } from "#/route/situation-ladder";
 import { manifest, pendingCount, WRITTEN } from "./manifest";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { price } from "@pe/ducts-domain/pricing";
+import { systemScope, systemsOf } from "@pe/ducts-domain/system-scope";
 import { readiness } from "@pe/ducts-domain/readiness";
 import { verdictPatches } from "./claims";
 import { claimsOf, type Claim } from "./legs";
@@ -79,10 +81,18 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
       tables: tables.grids ? { state: "ready", observation: tables.grids } : { state: "absent" },
     });
   }, [snapshot, tables.grids, catalogs.tables]);
-  // The subject scene is the person's staged subject, else Pea's proposal; null until one exists.
+  // The system's groups (Work's subject cells and claims key on group ids, never shown).
+  const systemGroups = useMemo(
+    () => (snapshot && page.system ? systemScope(snapshot, page.system).groups : []),
+    [snapshot, page.system],
+  );
+  // The subject scene is the person's staged subject, else Pea's proposal, of the system's first
+  // group that has one; null until one exists.
   const subjectIds = demo
     ? demo.subject
-    : (staged.subject[page.group] ?? handle.work.doc?.subject?.[page.group]?.proposal?.value);
+    : systemGroups
+        .map((g) => staged.subject[g] ?? handle.work.doc?.subject?.[g]?.proposal?.value)
+        .find((ids) => ids != null);
   const onVerdict = useCallback(
     (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => {
       if (demo) {
@@ -93,8 +103,8 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     },
     [demo, handle.work.doc, handle.work.write],
   );
-  // Claims live beside the subject, not inside it: a chosen group shows only the claims that name
-  // its elements (claimsForGroup), so one system's claims never ride onto another.
+  // Claims live beside the subject, not inside it: a chosen system shows only the claims that name
+  // its groups' elements (claimsForGroup), so one system's claims never ride onto another.
   const claims = useMemo(() => {
     const cells = demo
       ? demoClaims
@@ -104,12 +114,10 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
             return value ? [[id, value] as const] : [];
           }),
         );
-    if (!page.group || !snapshot) return claimsOf(cells);
-    const members = [...snapshot.nodes, ...snapshot.segments]
-      .filter((element) => element.groupId === page.group)
-      .map((element) => element.id);
+    if (!page.system || !snapshot) return claimsOf(cells);
+    const members = [...systemScope(snapshot, page.system).members];
     return claimsOf(claimsForGroup(cells, members));
-  }, [demo, demoClaims, handle.work.doc, page.group, snapshot]);
+  }, [demo, demoClaims, handle.work.doc, page.system, snapshot]);
   const subject = useMemo(
     () =>
       subjectIds
@@ -117,13 +125,23 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
         : null,
     [demo, subjectIds, claims, handle.work.doc, onVerdict],
   );
+  // Pricing a large model takes a few seconds: a snapshot is first priced only after a paint that
+  // says "pricing…"; a Work change on a priced snapshot reprices in place (the cache keeps the
+  // snapshot's solve, so only `next` is redone).
+  const [painted, setPainted] = useState<object | null>(null);
+  useEffect(() => {
+    if (!snapshot || !tables.grids || painted === snapshot) return;
+    const timer = setTimeout(() => setPainted(snapshot), 0);
+    return () => clearTimeout(timer);
+  }, [snapshot, tables.grids, painted]);
   const priced = useMemo(
     () =>
-      snapshot && tables.grids
+      snapshot && tables.grids && painted === snapshot
         ? price(snapshot, tables.grids, handle.work.doc, catalogs.tables)
         : null,
-    [snapshot, tables.grids, handle.work.doc, catalogs.tables],
+    [snapshot, tables.grids, painted, handle.work.doc, catalogs.tables],
   );
+  const pricing = !!snapshot && !!tables.grids && !priced;
   // The Work every pane reads: the model's stored rulings under the person's pending ones.
   const seen = useMemo(
     () => withStoredRulings(handle.work.doc, snapshot?.store),
@@ -144,7 +162,8 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     snapshot,
     document: doc,
   });
-  const group = groups.find((item) => item.id === page.group) ?? null;
+  const systems = useMemo(() => (snapshot ? systemsOf(snapshot) : []), [snapshot]);
+  const system = systems.find((item) => item.name === page.system) ?? null;
   const level = levels.find((item) => String(item.id) === page.level) ?? null;
   const readWord =
     !doc && !SAVED && !demo
@@ -155,7 +174,24 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
           ? "reading ducts…"
           : "this document has no duct networks";
   const busy = handle.busy !== null;
-  const solved = group ? priced?.now.byGroup[group.id] : null;
+  // The system's fan static: its worst run, over the runs that price its terminals in every group
+  // it is in (a shared group's other runs are other systems'); Revit's own critical path beside it.
+  const solved = useMemo(() => {
+    if (!system || !priced) return null;
+    const scope = systemScope(priced.snapshot, system.name);
+    const paths = [...scope.terminals].flatMap((t) => priced.now.paths[t] ?? []);
+    const worst = paths.reduce<(typeof paths)[number] | null>(
+      (a, b) => (a == null || b.total > a.total ? b : a),
+      null,
+    );
+    return {
+      fan: worst?.total ?? null,
+      provisional: paths.find((p) => p.provisional)?.provisional ?? null,
+      fanless: groups.filter((g) => scope.pricing.has(g.id)).every((g) => !g.rootIds.length),
+      revitCritical:
+        snapshot?.systems.find((s) => s.name === system.name)?.criticalPathLossInWg ?? null,
+    };
+  }, [system, priced, groups, snapshot]);
   // With the network engine on, ducts.snapshot takes about 30 s on a large model: say so.
   const reading = snapshot?.document.networkBasedCalculations
     ? "reading ducts.snapshot (about 30 s with network-based calculations on)"
@@ -166,13 +202,15 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
       ? `${reading}; the bars show the last read`
       : tables.error
         ? `ducts.tables failed: ${tables.error}`
-        : !priced
+        : !tables.grids
           ? "reading the ASHRAE tables"
-          : group && group.rootIds.length === 0
-            ? "no air mover; priced from the open end"
-            : group
-              ? `Pe fan ${fmt(solved?.fan)} in-wg${provisionalWords(solved?.provisional ?? null)} (not in Revit until written), Revit ${revitSays(solved?.revitCritical)}`
-              : `largest Pe fan ${fmt(priced.now.fan)} in-wg${provisionalWords(priced.now.provisional)} over ${snapshot.groups.length} groups`;
+          : !priced
+            ? "pricing…"
+            : solved?.fanless
+              ? "no air mover; priced from the open end"
+              : solved
+                ? `Pe fan ${fmt(solved.fan)} in-wg${provisionalWords(solved.provisional)} (not in Revit until written), Revit ${revitSays(solved.revitCritical)}`
+                : `largest Pe fan ${fmt(priced.now.fan)} in-wg${provisionalWords(priced.now.provisional)} over ${systems.length} systems`;
   // Every written segment's cells count in the Work sentence.
   const counted = useMemo(
     () =>
@@ -193,21 +231,32 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
       <Ladder
         levels={[
           {
-            key: "group",
-            label: group
-              ? `${group.id} (${group.classifications.join(", ") || "unclassified"})`
+            key: "system",
+            label: system
+              ? system.classification
+                ? `${system.name} (${system.classification})`
+                : system.name
               : null,
-            placeholder: "every group",
+            placeholder: "every system",
+            // A system by its name, classification and the tags of the units rooting it; never a group id.
             options: snapshot
-              ? groups.map((item) => ({
-                  id: item.id,
-                  label: item.id,
-                  sub: `${ready[item.id]?.level ?? ""} · ${item.elementCount} elements · ${item.systemNames.slice(0, 3).join(", ")}`,
+              ? systems.map((item) => ({
+                  id: item.name,
+                  label: item.name,
+                  sub: [
+                    item.classification,
+                    item.units.join(", ") || "no fan",
+                    `${item.terminals} terminal${item.terminals === 1 ? "" : "s"}`,
+                    item.groups.length > 1 ? `${item.groups.length} networks` : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" · "),
                 }))
               : null,
             note: readWord,
-            picked: (id) => id === page.group,
-            pick: (id) => setPage({ group: id === page.group ? "" : id, selected: "", issue: "" }),
+            picked: (id) => id === page.system,
+            pick: (id) =>
+              setPage({ system: id === page.system ? "" : id, selected: "", issue: "" }),
           },
         ]}
         disabled={busy}
@@ -258,6 +307,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   const shell: ProtoProps = {
     snapshot,
     priced,
+    pricing,
     findings: catalogs.findings,
     ready,
     subject,

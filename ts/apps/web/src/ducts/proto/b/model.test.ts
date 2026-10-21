@@ -44,7 +44,7 @@ it("a run's stretches add up to its total, and the unpriced grille is no drop, n
       paths: { [run.terminal]: { groupId: group.id, total, rows, inferred: [], provisional: null } },
     },
   } as unknown as Priced;
-  const node = buildTree(snapshot, priced, null, group.id)[0]!;
+  const node = buildTree(snapshot, priced, null, [group.id])[0]!;
   const runNode = node.children.find((r) => r.terminal === run.terminal)!;
 
   const last = runNode.children.at(-1)!;
@@ -82,7 +82,7 @@ it("a run reads in effective feet: stretches add up to its tel, and a duct carri
       },
     },
   } as unknown as Priced;
-  const runNode = buildTree(snapshot, priced, null, group.id)[0]!.children.find(
+  const runNode = buildTree(snapshot, priced, null, [group.id])[0]!.children.find(
     (r) => r.terminal === run.terminal,
   )!;
   expect(runNode.ft).toBe(tel);

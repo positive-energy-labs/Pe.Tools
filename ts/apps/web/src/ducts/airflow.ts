@@ -5,13 +5,14 @@
  * parameter the terminals carry (`airflowCandidates`) with its coverage; the choice stages the
  * person-owned `parameters.terminalFlow` slot, the snapshot re-reads under it, and a write keeps
  * it in the model's store. A unit's design flow is the same step over equipment (2026-10-21):
- * `fanFlowCandidates`, the `parameters.fanFlow` slot, coverage counted over the group's roots.
+ * `fanFlowCandidates`, the `parameters.fanFlow` slot, coverage counted over the system's units.
  */
 import {
   transitionPatches,
   type DuctsRouteDocument,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
+import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 /** A slot in a person's words. */
@@ -36,38 +37,55 @@ const DEFAULT_SLOT: Record<AirflowOf, string> = {
 };
 const NOUN: Record<AirflowOf, string> = { terminal: "terminal", unit: "unit" };
 
-/** The current slot and every candidate with its coverage in the group (the document when none). */
+/**
+ * The current slot and every candidate with its coverage over the chosen system (the document when
+ * none): its terminals, or the units on its runs, across every group it is in (`system-scope.ts`).
+ * The snapshot counts coverage per group; a group the system shares counts the other systems'
+ * terminals too, so `have` is capped at the system's own count. The slot read now is counted
+ * exactly: the members whose stated flow (`flow`, or a unit's `fanFlow`) it supplied.
+ */
 export function airflowOptions(
-  snapshot: Pick<DuctSnapshot, "slots" | "airflowCandidates" | "fanFlowCandidates" | "nodes"> &
-    Partial<Pick<DuctSnapshot, "groups">>,
-  group: string,
+  snapshot: Pick<DuctSnapshot, "slots" | "airflowCandidates" | "fanFlowCandidates" | "nodes">,
+  scope: Pick<SystemScope, "groups" | "terminals" | "units"> | null,
   of: AirflowOf = "terminal",
 ): { current: string; options: AirflowOption[] } {
   // A snapshot read before the slot was reported (or a test's partial one) reads the default.
   const current =
     (of === "unit" ? snapshot.slots?.fanFlow : snapshot.slots?.terminalFlow) ?? DEFAULT_SLOT[of];
-  const roots = new Set(
-    (snapshot.groups ?? []).filter((g) => !group || g.id === group).flatMap((g) => g.rootIds),
-  );
-  const inGroup =
-    of === "unit"
-      ? roots.size
-      : snapshot.nodes.filter((n) => n.kind === "terminal" && (!group || n.groupId === group))
-          .length;
+  const kind = of === "unit" ? "equipment" : "terminal";
+  const members =
+    (scope ? (of === "unit" ? scope.units : scope.terminals) : null) ??
+    new Set(snapshot.nodes.filter((n) => n.kind === kind).map((n) => n.id));
+  const inScope = members.size;
+  const groups = new Set(scope?.groups ?? []);
+  const key = of === "unit" ? "fanFlow" : "flow";
+  const read = snapshot.nodes.filter(
+    (n) =>
+      members.has(n.id) &&
+      (n.flowParameter ?? current) === current &&
+      (n.facts.find((f) => f.key === key)?.value ?? 0) > 0,
+  ).length;
   const candidates =
     (of === "unit" ? snapshot.fanFlowCandidates : snapshot.airflowCandidates) ?? [];
   const options = candidates.map((c) => {
-    const have = group ? (c.groups.find((g) => g.groupId === group)?.have ?? 0) : c.have;
+    const have = !scope
+      ? c.have
+      : c.slot === current
+        ? read
+        : Math.min(
+            inScope,
+            c.groups.filter((g) => groups.has(g.groupId)).reduce((a, g) => a + g.have, 0),
+          );
     const where = ` · ${c.where}${c.shared ? ", shared" : ""}`;
-    return { slot: c.slot, label: `${slotWord(c.slot)}${where}`, have, of: group ? inGroup : c.of };
+    return { slot: c.slot, label: `${slotWord(c.slot)}${where}`, have, of: scope ? inScope : c.of };
   });
   // A slot can name a parameter no terminal carries (the firm default on a foreign model).
   if (!options.some((o) => o.slot === current))
     options.push({
       slot: current,
-      label: `${slotWord(current)} · on no ${NOUN[of]}`,
-      have: 0,
-      of: inGroup,
+      label: `${slotWord(current)} · ${read ? "read now" : `on no ${NOUN[of]}`}`,
+      have: read,
+      of: inScope,
     });
   // The same parameter as instance and type reads as one slot; keep the better-covered entry.
   const best = new Map<string, AirflowOption>();
