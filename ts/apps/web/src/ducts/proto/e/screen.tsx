@@ -283,7 +283,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     ? groupFan == null || critical?.total == null
       ? "this system is not priced"
       : `TEL ${fmtFt(critical.ft ?? groupTel)} ft · ESP ${critical.total.toFixed(3)} in-wg`
-    : "pricing…";
+    : "not priced yet";
   const runDetail =
     priced && scope && selected != null ? runOf(priced, groups, selected) : null;
 
