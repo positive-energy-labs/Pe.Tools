@@ -148,6 +148,17 @@ describe("the airflow read slot", () => {
 });
 
 describe("the ducts inbox", () => {
+  it("a loop modelled in Revit is a diagnostic priced as a tree, never a Fix row", () => {
+    const rows = inboxRows({
+      ...base,
+      findings: [finding({ id: "loop:g1:2", kind: "loop", groupId: "g1", elementIds: [2] })],
+    });
+    expect(rows.fix.map((r) => r.key)).not.toContain("loop:g1:2");
+    expect(rows.diagnostics.find((r) => r.key === "loop:g1:2")).toMatchObject({
+      status: "priced as a tree",
+    });
+  });
+
   it("puts blocking findings under Fix, inputs under Set and bridged joins under Diagnostics", () => {
     const rows = inboxRows(base);
     expect(keys(rows.fix)).toEqual(["open-end:g1:2:1", "no-fan:g2", "proximity:9:0|10:0"]);

@@ -284,12 +284,14 @@ describe("bin", () => {
       "no-root",
       "multi-root",
       "open-end",
-      "loop",
       "no-fan",
       "no-terminal-flow",
       "no-flow",
     ])
       expect(bin({ kind }), kind).toBe("blocking");
+    // A loop modelled in Revit is usually intended; an inferred one still blocks.
+    expect(bin({ kind: "loop" })).toBe("diagnostic");
+    expect(bin({ kind: "loop-by-inference" })).toBe("blocking");
     // A terminal is priceable, never required.
     expect(bin({ kind: "catalog-missing-table" })).toBe("diagnostic");
     expect(bin({ kind: "catalog-out-of-range" })).toBe("diagnostic");

@@ -393,6 +393,19 @@ export function triage(input: TriageInput) {
       });
       continue;
     }
+    if (f.kind === "loop") {
+      // A loop someone modelled is usually intended; it never holds Write, but the price is a tree's.
+      diagnostics.push({
+        ...base,
+        group: "diagnostics",
+        kind: f.kind,
+        title: `Loop at ${names(f.elementIds) || f.id}`,
+        status: "priced as a tree",
+        note: "Priced as a tree cut where the walk reaches this joint a second time; the air is not split between the loop's two paths, so the paths through it may read high or low.",
+        verbs: [select(f.elementIds)],
+      });
+      continue;
+    }
     if (f.kind === "catalog-missing-table" || f.kind === "catalog-out-of-range") {
       // A terminal is priceable, never required: with no drop it prices as zero and holds nothing.
       diagnostics.push({
