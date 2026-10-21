@@ -347,31 +347,35 @@ export function Inbox({
     status: (
       <span className="inline-flex items-center gap-1" data-inbox-write="">
         <span>{write.row.status}</span>
+        {/* The handle's own words, so the button reads as the Situation's does. */}
         <Button
           kind="framed"
-          label="preview"
+          label={write.preview.label}
           reason="Ask Revit what the staged cells would write"
           refusal={write.preview.refusal}
           busy={write.busy}
           onClick={() => void write.preview.run()}
         >
-          preview
+          {write.preview.label}
         </Button>
         <Button
           kind="commit"
-          label="write to Revit"
+          label={write.apply.label}
           reason="Write the staged cells to Revit"
-          refusal={write.row.blocked ?? write.apply.refusal}
+          refusal={write.apply.refusal}
           busy={write.busy}
           onClick={() => void write.apply.run()}
         >
-          write
+          {write.apply.label}
         </Button>
       </span>
     ),
     detail:
-      write.row.blocked || write.apply.refusal ? (
-        <p data-inbox-write-says="">{write.row.blocked ?? write.apply.refusal}</p>
+      write.apply.refusal || write.row.held ? (
+        <>
+          {write.apply.refusal ? <p data-inbox-write-says="">{write.apply.refusal}</p> : null}
+          {write.row.held ? <p data-inbox-write-held="">{write.row.held}</p> : null}
+        </>
       ) : undefined,
   };
 
@@ -424,7 +428,9 @@ export function Inbox({
       write.row,
       write.review,
       write.preview.refusal,
+      write.preview.label,
       write.apply.refusal,
+      write.apply.label,
       write.busy,
       heal.busy,
       fan.busy,

@@ -18,7 +18,7 @@
  *
  * The scope is a Revit system (`system-scope.ts`): rows come from every group the system is in, but
  * only what prices the system (its runs, its own elements, its units) is Fix or Set. The rest of a
- * shared group is another system's: its rows stand in Diagnostics and never hold Write.
+ * shared group is another system's: its rows stand in Diagnostics and never hold the ESP.
  */
 import type { DuctFinding, DuctsRouteDocument } from "@pe/agent-contracts";
 import { bin } from "@pe/ducts-domain/bins";
@@ -116,7 +116,7 @@ export interface InboxItem {
   /** Prose for the open row. */
   note: string | null;
   verbs: readonly RowVerb[];
-  /** False on a Fix row that stands in no path (a Heal row covering only bridged joins, a heal result): it does not hold Write. */
+  /** False on a Fix row that stands in no path (a Heal row covering only bridged joins, a heal result): it does not hold the ESP. */
   blocks?: false;
 }
 
@@ -301,7 +301,7 @@ function healRow(
         kind: "heal",
         group: g.group,
         mode: "preview",
-        label: "preview",
+        label: "preview heal",
         says: `Preview healing ${counts} in Revit, rolled back`,
         refusal: null,
       },
@@ -488,7 +488,7 @@ export function triage(input: TriageInput) {
       continue;
     }
     if (f.kind === "loop") {
-      // A loop someone modelled is usually intended; it never holds Write, but the price is a tree's.
+      // A loop someone modelled is usually intended; it never holds the ESP, but the price is a tree's.
       diagnostics.push({
         ...base,
         group: "diagnostics",
@@ -703,7 +703,7 @@ export function triage(input: TriageInput) {
   }
 
   // A join a person objected to is withheld, so its finding is gone. The objection is a person's
-  // ruling, not a blocker: it sits in Diagnostics so it can be taken back, and never holds Write.
+  // ruling, not a blocker: it sits in Diagnostics so it can be taken back, and never holds the ESP.
   for (const [key, cell] of Object.entries(doc?.assumptions ?? {})) {
     if (!key.startsWith("proximity:") || cell.staged?.value?.kind !== "verdict") continue;
     if (cell.staged.value.verdict !== "ignore") continue;
@@ -972,37 +972,45 @@ export interface WriteState {
   fresh: boolean;
   planned: number | null;
   refused: number | null;
+  /** Staged ESP cells: the one write that waits for a clean calc. */
+  esp: number;
 }
 
-/** The refusal sentence while Fix or Set rows remain; null when nothing stands in the way. */
-export function writeBlocked(left: { fix: number; set: number }): string | null {
+/**
+ * Why the ESP number waits while Fix or Set rows remain (the calc it comes from is not clean);
+ * null when none remain. Rulings, slots and flows write any time (kaitpw, 2026-10-21).
+ */
+export function espWaits(left: { fix: number; set: number }): string | null {
   if (!left.fix && !left.set) return null;
   const parts = [left.fix ? `${left.fix} to fix` : "", left.set ? `${left.set} to set` : ""];
-  return `${parts.filter(Boolean).join(" and ")} before writing`;
+  return `${parts.filter(Boolean).join(" and ")} before the ESP writes`;
 }
 
 export interface WriteRow {
   title: string;
   status: string;
-  /** Why apply is not armed for Fix or Set; null when they are empty. The preview's own refusal is the action's. */
-  blocked: string | null;
+  /** The staged ESP this write leaves out, and why; null when none is staged or nothing holds it. Apply's own refusal is the action's. */
+  held: string | null;
 }
 
 export function writeRow(left: { fix: number; set: number }, write: WriteState): WriteRow {
+  const waits = write.esp ? espWaits(left) : null;
   return {
     title: write.fresh && write.planned ? `Write ${write.planned} to Revit` : "Write to Revit",
-    status: !write.staged
-      ? "nothing staged"
-      : !write.hasPreview
-        ? "not previewed"
-        : !write.fresh
-          ? "preview out of date"
-          : `${write.planned ?? 0} planned · ${write.refused ?? 0} refused`,
-    blocked: writeBlocked(left),
+    status: `${
+      !write.staged
+        ? "nothing staged"
+        : !write.hasPreview
+          ? "not previewed"
+          : !write.fresh
+            ? "preview out of date"
+            : `${write.planned ?? 0} planned · ${write.refused ?? 0} refused`
+    }${waits ? " · ESP held" : ""}`,
+    held: waits ? `${plural(write.esp, "staged ESP")} left out of this write: ${waits}` : null,
   };
 }
 
-/** The Fix rows that hold Write: every one but a Heal row standing in no path. */
+/** The Fix rows that hold the ESP back: every one but a Heal row standing in no path. */
 export const holding = (fix: readonly InboxItem[]) => fix.filter((i) => i.blocks !== false).length;
 
 /** The whole inbox: its groups in `INBOX_ORDER`, and the Write row. */

@@ -19,12 +19,12 @@ const item = (over: Partial<InboxItem> & Pick<InboxItem, "key" | "group">): Inbo
   verbs: [],
   ...over,
 });
-const handle = (refusal: string | null): ActionHandle =>
-  ({ label: "x", refusal, count: null, run: vi.fn(async () => null) }) as unknown as ActionHandle;
+const handle = (refusal: string | null, label = "x"): ActionHandle =>
+  ({ label, refusal, count: null, run: vi.fn(async () => null) }) as unknown as ActionHandle;
 
 function mount(
   over: {
-    blocked?: string | null;
+    held?: string | null;
     apply?: string | null;
     onFocusCell?: (c: CellRef) => void;
     healRefusal?: string | null;
@@ -35,7 +35,7 @@ function mount(
     fanRefusal?: string | null;
   } = {},
 ) {
-  const apply = handle(over.apply ?? null);
+  const apply = handle(over.apply ?? null, "write 3 to Revit");
   const heal = { preview: handle(null), apply: handle(null), busy: false };
   const fan = { preview: handle(null), apply: handle(null), busy: false };
   const pair = { unitId: 17, systemId: 19 };
@@ -54,7 +54,7 @@ function mount(
             kind: "heal",
             group: "g1",
             mode: "preview",
-            label: "preview",
+            label: "preview heal",
             says: "Preview healing",
             refusal: null,
           },
@@ -129,13 +129,13 @@ function mount(
       onSelect={() => {}}
       onFocusCell={over.onFocusCell ?? (() => {})}
       write={{
-        preview: handle(null),
+        preview: handle(null, "preview"),
         apply,
         busy: false,
         row: {
           title: "Write to Revit",
           status: "preview out of date",
-          blocked: over.blocked ?? null,
+          held: over.held ?? null,
         },
         review: over.review ?? [],
       }}
@@ -150,7 +150,7 @@ test("a Heal row previews with its group, and heals only once a preview armed it
   const first = mount();
   fireEvent.click(screen.getByText("Heal SA 1: 2 caps"));
   const detail = first.container.querySelector('[data-inbox-detail="heal:g1"]') as HTMLElement;
-  fireEvent.click(within(detail).getByRole("button", { name: "preview" }));
+  fireEvent.click(within(detail).getByRole("button", { name: "preview heal" }));
   expect(first.heal.preview.run).toHaveBeenCalledWith({ group: "g1" });
   const refused = within(detail).getByRole("button", { name: "heal" });
   expect(refused.getAttribute("aria-disabled")).toBe("true");
@@ -204,21 +204,22 @@ test("a Set row's verb deep-links to its cell on the tree", () => {
   expect(onFocusCell).toHaveBeenCalledWith({ segment: "flows", id: 30 });
 });
 
-test("the Write row's apply is refused with what remains, and armed when nothing does", () => {
-  const blocked = mount({ blocked: "1 to fix and 1 to set before writing" });
+test("the Write row's apply wears the handle's word and refusal, the same button the head draws", () => {
+  const refusedMount = mount({ apply: "Preview first" });
   const refused = within(
-    blocked.container.querySelector('[data-inbox-group="write"]') as HTMLElement,
-  ).getByRole("button", { name: /write to Revit/ });
+    refusedMount.container.querySelector('[data-inbox-group="write"]') as HTMLElement,
+  ).getByRole("button", { name: "write 3 to Revit" });
   expect(refused.getAttribute("aria-disabled")).toBe("true");
   fireEvent.click(refused);
-  expect(blocked.apply.run).not.toHaveBeenCalled();
+  expect(refusedMount.apply.run).not.toHaveBeenCalled();
   cleanup();
-  const armed = mount();
-  const write = within(
-    armed.container.querySelector('[data-inbox-group="write"]') as HTMLElement,
-  ).getByRole("button", { name: /write to Revit/ });
-  fireEvent.click(write);
+  // Fix and Set rows standing hold back only the ESP: apply stays armed and the row says what waits.
+  const held = "1 staged ESP left out of this write: 1 to fix before the ESP writes";
+  const armed = mount({ held });
+  const group = armed.container.querySelector('[data-inbox-group="write"]') as HTMLElement;
+  fireEvent.click(within(group).getByRole("button", { name: "write 3 to Revit" }));
   expect(armed.apply.run).toHaveBeenCalledTimes(1);
+  expect(armed.container.querySelector("[data-inbox-write-held]")?.textContent).toBe(held);
 });
 
 test("the Write group lists every planned change, old to new, and each refusal", () => {

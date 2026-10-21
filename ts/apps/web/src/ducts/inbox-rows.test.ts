@@ -9,7 +9,7 @@ import {
   healRunView,
   inboxRows,
   proximityIds,
-  writeBlocked,
+  espWaits,
   type InboxItem,
   type TriageInput,
 } from "./inbox-rows";
@@ -94,7 +94,7 @@ const base = {
   equipmentFlows: new Map<number, { cfm: number | null }>([[1, { cfm: null }]]),
   doc: null,
   claims: [] as Claim[],
-  write: { staged: 0, hasPreview: false, fresh: false, planned: null, refused: null },
+  write: { staged: 0, hasPreview: false, fresh: false, planned: null, refused: null, esp: 0 },
 };
 const keys = (items: readonly InboxItem[]) => items.map((i) => i.key);
 /** A system's scope as `systemScope` reads it, stated by hand: every group it is in prices it. */
@@ -230,6 +230,7 @@ describe("the ducts inbox", () => {
     const rows = inboxRows({
       ...base,
       flows: new Map([...base.flows, [31, { cfm: null }]]),
+      write: { ...base.write, esp: 1 },
       scope: system("SA 1", ["g1"], {
         terminals: [30],
         units: [1],
@@ -244,7 +245,9 @@ describe("the ducts inbox", () => {
     expect(open.tone).toBeUndefined();
     const others = rows.diagnostics.find((r) => r.key === "flows:other-systems")!;
     expect(others.ids).toEqual([31]);
-    expect(rows.write.blocked).toBe("2 to set before writing");
+    expect(rows.write.held).toBe(
+      "1 staged ESP left out of this write: 2 to set before the ESP writes",
+    );
   });
 
   it("every row outside Diagnostics has a verb; Set rows deep-link to their cell", () => {
@@ -422,11 +425,21 @@ describe("the ducts inbox", () => {
     ]);
   });
 
-  it("the Write row says what stands in the way, then what the preview holds", () => {
-    expect(inboxRows(base).write.blocked).toBe("3 to fix and 2 to set before writing");
-    expect(writeBlocked({ fix: 0, set: 1 })).toBe("1 to set before writing");
-    expect(writeBlocked({ fix: 0, set: 0 })).toBeNull();
-    const write = { staged: 3, hasPreview: true, fresh: true, planned: 3, refused: 0 };
+  it("Fix and Set rows hold back only the staged ESP; the rest of the write stands", () => {
+    // Nothing staged holds nothing back: Fix and Set never stand between a ruling and the write.
+    expect(inboxRows(base).write.held).toBeNull();
+    const fresh = { staged: 3, hasPreview: true, fresh: true, planned: 2, refused: 0 };
+    expect(inboxRows({ ...base, write: { ...fresh, esp: 1 } }).write).toEqual({
+      title: "Write 2 to Revit",
+      status: "2 planned · 0 refused · ESP held",
+      held: "1 staged ESP left out of this write: 3 to fix and 2 to set before the ESP writes",
+    });
+    expect(espWaits({ fix: 0, set: 1 })).toBe("1 to set before the ESP writes");
+    expect(espWaits({ fix: 0, set: 0 })).toBeNull();
+  });
+
+  it("the Write row says what the preview holds", () => {
+    const write = { staged: 3, hasPreview: true, fresh: true, planned: 3, refused: 0, esp: 0 };
     const clear = inboxRows({
       ...base,
       findings: [],
@@ -441,7 +454,7 @@ describe("the ducts inbox", () => {
     expect(clear.write).toEqual({
       title: "Write 3 to Revit",
       status: "3 planned · 0 refused",
-      blocked: null,
+      held: null,
     });
     expect(inboxRows({ ...base, write: { ...write, fresh: false } }).write.status).toBe(
       "preview out of date",
@@ -539,16 +552,18 @@ describe("healing replaces the capped and connect verdicts", () => {
     ).toEqual(["select", "ignore"]);
   });
 
-  it("a Heal row covering only bridged joins does not hold Write", () => {
+  it("a Heal row covering only bridged joins does not hold the ESP", () => {
     const joinsOnly: HealPlan = {
       ...heal,
       groups: [{ group: "g1", items: [heal.groups[0]!.items[1]!] }],
       covered: new Set(["proximity:5:0|6:0"]),
     };
-    const rows = inboxRows({ ...base, heal: joinsOnly });
+    const rows = inboxRows({ ...base, heal: joinsOnly, write: { ...base.write, esp: 1 } });
     expect(rows.fix[0]).toMatchObject({ key: "heal:g1", blocks: false });
     // open-end, no-fan, anomalous: the Heal row is not counted.
-    expect(rows.write.blocked).toBe("3 to fix and 2 to set before writing");
+    expect(rows.write.held).toBe(
+      "1 staged ESP left out of this write: 3 to fix and 2 to set before the ESP writes",
+    );
   });
 
   it("a preview arms heal with what passed; an apply shows the group's ESP before and after, found again by its root", () => {

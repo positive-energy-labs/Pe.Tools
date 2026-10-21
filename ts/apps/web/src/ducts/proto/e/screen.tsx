@@ -20,7 +20,7 @@ import { airflowOptions } from "../../airflow";
 import { elementNamer } from "../../claims";
 import { fanVerbs, healRunView, inboxRows, type CellRef } from "../../inbox-rows";
 import { groupLabels } from "../../inputs";
-import { previewFresh, scopeOf } from "../../manifest";
+import { previewFresh, scopeOf, stagedEsp } from "../../manifest";
 import type { LossesWork } from "../../work";
 import { reviewLines } from "../../write-review";
 import { buildTree, systemList, type TreeNode } from "../b/model";
@@ -132,10 +132,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     return (id: number) => labels.get(id) ?? n(id) ?? "element not in snapshot";
   }, [snapshot, labels]);
   // A row names a group the way the system reads it, else by its systems and units; never its id.
-  const names = useMemo(
-    () => (drawn ? groupLabels(drawn) : new Map<string, string>()),
-    [drawn],
-  );
+  const names = useMemo(() => (drawn ? groupLabels(drawn) : new Map<string, string>()), [drawn]);
   const groupLabel = useCallback(
     (g: string) => (sections.has(g) ? sectionOf(g) : (names.get(g) ?? "a duct network")),
     [sections, sectionOf, names],
@@ -188,6 +185,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
               fresh: previewFresh(page, props.work.revision),
               planned: preview?.counts.planned ?? null,
               refused: preview?.counts.refused ?? null,
+              esp: stagedEsp(doc),
             },
           })
         : null,
@@ -339,8 +337,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       ? "this system is not priced"
       : `TEL ${fmtFt(critical.ft ?? groupTel)} ft · ESP ${critical.total.toFixed(3)} in-wg`
     : "not priced yet";
-  const runDetail =
-    priced && scope && selected != null ? runOf(priced, groups, selected) : null;
+  const runDetail = priced && scope && selected != null ? runOf(priced, groups, selected) : null;
 
   const head = (
     <span className="inline-flex gap-1">
@@ -386,11 +383,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           ) : (
             <>
               <BarLegend scale={scale} criticalName={critical ? grilleName(critical) : null} />
-              <SplitStrip
-                split={critical?.split ?? tree[0]!.split}
-                scale={scale}
-                light={light}
-              />
+              <SplitStrip split={critical?.split ?? tree[0]!.split} scale={scale} light={light} />
             </>
           )}
           {/* A multi-fan group: one row per fan, as staged (`next`), each with its TEL and ESP;
