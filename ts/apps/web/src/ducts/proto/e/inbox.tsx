@@ -351,7 +351,9 @@ export function Inbox({
         data-tone={line.outcome === "refused" ? "alarm" : undefined}
         data-outcome={line.outcome}
       >
-        {line.outcome === "refused" ? "refused" : `${line.from} → ${line.to}`}
+        {line.outcome === "refused"
+          ? `refused: ${line.reason ?? "no reason given"}`
+          : `${line.from} → ${line.to}`}
       </span>
     ),
     detail: (

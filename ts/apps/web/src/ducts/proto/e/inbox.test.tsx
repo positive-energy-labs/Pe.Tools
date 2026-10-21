@@ -185,7 +185,7 @@ test("the Write group lists every planned change, old to new, and each refusal",
   expect(within(group).getByText("Grille 30 · airflow")).toBeTruthy();
   expect(within(group).getByText("none → 'Flow' 234 cfm")).toBeTruthy();
   expect(within(group).getByText("PE_M_Grd_AirFlow → Flow")).toBeTruthy();
-  expect(within(group).getByText("refused")).toBeTruthy();
+  expect(within(group).getByText("refused: neither the instance nor its type has 'X'")).toBeTruthy();
 });
 
 test("the airflow row's open choice stages the terminalFlow slot", () => {
