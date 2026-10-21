@@ -45,7 +45,8 @@ export async function planned(input: DuctsHealInput, read: () => Promise<DuctSna
     groups: input.groups.map((g) => {
       if (g.items) return g;
       const found = plan.groups.find((p) => p.group === g.group);
-      if (!found) throw refused(`Group ${g.group} has nothing to heal (or no such group in the snapshot)`);
+      if (!found)
+        throw refused(`Group ${g.group} has nothing to heal (or no such group in the snapshot)`);
       return healRequestGroup(found);
     }),
   };

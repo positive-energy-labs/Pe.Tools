@@ -87,15 +87,20 @@ const axisOf = (e: Element, c: Connector) => {
   if (c.facing?.length === 3) return unit(c.facing);
   if (!straightDuct(e)) return null;
   const s = e as DuctSnapshot["segments"][number];
-  const far = dist(s.polyline[0]!, c.point) < dist(s.polyline[1]!, c.point) ? s.polyline[1]! : s.polyline[0]!;
+  const far =
+    dist(s.polyline[0]!, c.point) < dist(s.polyline[1]!, c.point) ? s.polyline[1]! : s.polyline[0]!;
   return unit(sub(c.point, far));
 };
 const dims = (c: Connector) =>
-  c.shape === "round" ? [c.diameterIn ?? NaN, c.diameterIn ?? NaN] : [c.widthIn ?? NaN, c.heightIn ?? NaN];
+  c.shape === "round"
+    ? [c.diameterIn ?? NaN, c.diameterIn ?? NaN]
+    : [c.widthIn ?? NaN, c.heightIn ?? NaN];
 const sameSize = (a: Connector, b: Connector) =>
   a.shape === b.shape && dims(a).every((v, i) => Math.abs(v - dims(b)[i]!) <= SIZE_TOL_IN);
 const sizeWord = (c: Connector) =>
-  c.shape === "round" ? `${c.diameterIn ?? "?"} in round` : `${c.widthIn ?? "?"}x${c.heightIn ?? "?"} in`;
+  c.shape === "round"
+    ? `${c.diameterIn ?? "?"} in round`
+    : `${c.widthIn ?? "?"}x${c.heightIn ?? "?"} in`;
 /** The proximity finding id for two ends, as `inferJoints` names it. */
 export const proximityId = (a: string, b: string) =>
   `proximity:${[a, b]
@@ -122,11 +127,16 @@ export function healPlan(snapshot: DuctSnapshot, work: DuctsRouteDocument | null
 function build(snapshot: DuctSnapshot, work: DuctsRouteDocument | null): HealPlan {
   const tolerated = tolerate(snapshot, work);
   const groupOf = new Map(
-    [...tolerated.snapshot.nodes, ...tolerated.snapshot.segments].map((e) => [e.id, e.groupId ?? null]),
+    [...tolerated.snapshot.nodes, ...tolerated.snapshot.segments].map((e) => [
+      e.id,
+      e.groupId ?? null,
+    ]),
   );
   const issueOf = new Map(
     snapshot.issues.flatMap((i) =>
-      i.kind === "open-end" && i.elementId != null ? [[`${i.elementId}:${i.id.split(":").at(-1)}`, i.id]] : [],
+      i.kind === "open-end" && i.elementId != null
+        ? [[`${i.elementId}:${i.id.split(":").at(-1)}`, i.id]]
+        : [],
     ),
   );
   const tapped = new Set([
@@ -152,7 +162,8 @@ function build(snapshot: DuctSnapshot, work: DuctsRouteDocument | null): HealPla
   );
   const ruled = (x: End) => x.issue != null && verdictOf(work, x.issue) === "ignore";
   const live = ends.filter((x) => !ruled(x));
-  const matches = (x: End, y: End) => x.e.id !== y.e.id && (x.cls == null || y.cls == null || x.cls === y.cls);
+  const matches = (x: End, y: End) =>
+    x.e.id !== y.e.id && (x.cls == null || y.cls == null || x.cls === y.cls);
   const nearest = (x: End) => {
     let best: { y: End; d: number } | null = null;
     for (const y of live) {
@@ -209,27 +220,38 @@ function build(snapshot: DuctSnapshot, work: DuctsRouteDocument | null): HealPla
       done.add(x.k).add(y.k);
     };
     if (back?.y !== x || tapped.has(y.k)) {
-      say(x, `${named(x)} has open ends near it (the nearest is ${named(y)}, ${near.d.toFixed(1)} in away): not a clean pair`);
+      say(
+        x,
+        `${named(x)} has open ends near it (the nearest is ${named(y)}, ${near.d.toFixed(1)} in away): not a clean pair`,
+      );
       continue;
     }
     const gap = near.d;
     if (!sameSize(x.c, y.c)) {
-      why(`${named(x)} (${sizeWord(x.c)}) and ${named(y)} (${sizeWord(y.c)}) differ in size: a transition`);
+      why(
+        `${named(x)} (${sizeWord(x.c)}) and ${named(y)} (${sizeWord(y.c)}) differ in size: a transition`,
+      );
       continue;
     }
     if ((x.e.systemName ?? null) !== (y.e.systemName ?? null)) {
-      why(`${named(x)} is on ${x.e.systemName ?? "no system"} and ${named(y)} on ${y.e.systemName ?? "no system"}: joining them merges systems`);
+      why(
+        `${named(x)} is on ${x.e.systemName ?? "no system"} and ${named(y)} on ${y.e.systemName ?? "no system"}: joining them merges systems`,
+      );
       continue;
     }
     if (gap > HEAL_JOIN_GAP_IN) {
-      why(`${named(x)} and ${named(y)} are ${gap.toFixed(1)} in apart, past the ${HEAL_JOIN_GAP_IN} in heal limit`);
+      why(
+        `${named(x)} and ${named(y)} are ${gap.toFixed(1)} in apart, past the ${HEAL_JOIN_GAP_IN} in heal limit`,
+      );
       continue;
     }
     let how: HealHow = "connect";
     if (gap > HEAL_COINCIDENT_IN) {
       const r = sub(y.c.point, x.c.point);
       const lateral =
-        x.axis && y.axis ? Math.hypot(...r.map((v, k) => v - x.axis![k]! * dot(r, x.axis!))) * 12 : Infinity;
+        x.axis && y.axis
+          ? Math.hypot(...r.map((v, k) => v - x.axis![k]! * dot(r, x.axis!))) * 12
+          : Infinity;
       const facing = x.axis && y.axis && dot(x.axis, y.axis) <= -OPPOSED_COS && dot(r, x.axis) > 0;
       const rolled =
         x.c.shape === "rectangular" &&
@@ -247,7 +269,9 @@ function build(snapshot: DuctSnapshot, work: DuctsRouteDocument | null): HealPla
       if (straightDuct(x.e) && straightDuct(y.e)) how = "union";
       else if (straightDuct(x.e) || straightDuct(y.e)) how = "extend";
       else {
-        why(`${named(x)} and ${named(y)} are ${gap.toFixed(2)} in apart with no straight duct to extend`);
+        why(
+          `${named(x)} and ${named(y)} are ${gap.toFixed(2)} in apart with no straight duct to extend`,
+        );
         continue;
       }
     }
@@ -269,11 +293,15 @@ function build(snapshot: DuctSnapshot, work: DuctsRouteDocument | null): HealPla
   const byGroup = new Map<string, HealItem[]>();
   for (const item of items) {
     for (const c of item.covers) covered.add(c);
-    for (const g of new Set(item.ids.map((id) => groupOf.get(id)).filter((g): g is string => g != null)))
+    for (const g of new Set(
+      item.ids.map((id) => groupOf.get(id)).filter((g): g is string => g != null),
+    ))
       byGroup.set(g, [...(byGroup.get(g) ?? []), item]);
   }
   return {
-    groups: [...byGroup].map(([group, list]) => ({ group, items: list })).sort((p, q) => p.group.localeCompare(q.group)),
+    groups: [...byGroup]
+      .map(([group, list]) => ({ group, items: list }))
+      .sort((p, q) => p.group.localeCompare(q.group)),
     covered,
     hard,
   };

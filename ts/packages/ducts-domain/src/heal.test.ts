@@ -27,7 +27,13 @@ const conn = (index: number, point: number[], facing?: number[], d = 6): Connect
   connectedTo: null,
   ...(facing ? { facing } : {}),
 });
-const duct = (id: number, a: number[], b: number[], over: Partial<Segment> = {}, d = 6): Segment => ({
+const duct = (
+  id: number,
+  a: number[],
+  b: number[],
+  over: Partial<Segment> = {},
+  d = 6,
+): Segment => ({
   id,
   kind: "duct",
   curveKind: "line",
@@ -79,7 +85,12 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
   );
   return {
     coordinateEncoding: "native-double",
-    document: { title: "t", readAt: "2026-10-20T00:00:00Z", elapsedMs: 1, networkBasedCalculations: true },
+    document: {
+      title: "t",
+      readAt: "2026-10-20T00:00:00Z",
+      elapsedMs: 1,
+      networkBasedCalculations: true,
+    },
     levels: [],
     groups: elements.map((e) => ({
       id: e.groupId!,
@@ -97,7 +108,13 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
     issues,
     layers: [],
     systems: [],
-    slots: { fanStatic: "", fanFlow: "", componentDrop: "", fittingCoefficient: "", terminalFlow: "" },
+    slots: {
+      fanStatic: "",
+      fanFlow: "",
+      componentDrop: "",
+      fittingCoefficient: "",
+      terminalFlow: "",
+    },
   } as DuctSnapshot;
 };
 const items = (s: DuctSnapshot) => healPlan(s).groups.flatMap((g) => g.items);
@@ -115,35 +132,63 @@ it("connects coincident same-size ends, covering the inferred join and both open
   const s = snap([duct(10, [0, 0, 0], [10, 0, 0]), duct(11, [10, 0, 0], [20, 0, 0])]);
   const join = items(s).find((i) => i.kind === "join")!;
   expect(join).toMatchObject({ how: "connect", end: "10:1", other: "11:0", gapIn: 0 });
-  expect(join.covers).toEqual([proximityId("11:0", "10:1"), "open-end:g10:10:1", "open-end:g11:11:0"]);
+  expect(join.covers).toEqual([
+    proximityId("11:0", "10:1"),
+    "open-end:g10:10:1",
+    "open-end:g11:11:0",
+  ]);
   // Groups are the page's: the inferred join already bridged g11 into g10.
   expect(healPlan(s).groups.map((g) => g.group)).toEqual(["g10"]);
   // Ends past the route's bridging tolerance stay in their own groups; a join between them is listed under both.
-  const apart = snap([duct(10, [0, 0, 0], [10, 0, 0]), duct(11, [10 + 2.5 * IN, 0, 0], [20, 0, 0])]);
+  const apart = snap([
+    duct(10, [0, 0, 0], [10, 0, 0]),
+    duct(11, [10 + 2.5 * IN, 0, 0], [20, 0, 0]),
+  ]);
   const union = items(apart).find((i) => i.kind === "join")!;
-  expect(healPlan(apart).groups.filter((g) => g.items.includes(union)).map((g) => g.group)).toEqual(["g10", "g11"]);
+  expect(
+    healPlan(apart)
+      .groups.filter((g) => g.items.includes(union))
+      .map((g) => g.group),
+  ).toEqual(["g10", "g11"]);
 });
 
 it("bridges a 2 in collinear gap between two ducts with a union, and from a duct to a fitting by extending the duct", () => {
   const s = snap([duct(10, [0, 0, 0], [10, 0, 0]), duct(11, [10 + 2 * IN, 0, 0], [20, 0, 0])]);
   expect(items(s).find((i) => i.kind === "join")).toMatchObject({ how: "union" });
-  const elbow = node(30, "fitting", [conn(0, [10 + 2 * IN, 0, 0], [-1, 0, 0]), { ...conn(1, [11, 1, 0], [0, 1, 0]), connectedTo: { elementId: 99, connector: 0 } }]);
+  const elbow = node(30, "fitting", [
+    conn(0, [10 + 2 * IN, 0, 0], [-1, 0, 0]),
+    { ...conn(1, [11, 1, 0], [0, 1, 0]), connectedTo: { elementId: 99, connector: 0 } },
+  ]);
   const t = snap([duct(10, [0, 0, 0], [10, 0, 0])], [elbow]);
-  expect(items(t).find((i) => i.kind === "join")).toMatchObject({ how: "extend", end: "10:1", other: "30:0" });
+  expect(items(t).find((i) => i.kind === "join")).toMatchObject({
+    how: "extend",
+    end: "10:1",
+    other: "30:0",
+  });
 });
 
 it("leaves size changes, two systems, long or skewed gaps and terminals to a person, with the reason", () => {
   const sized = snap([duct(10, [0, 0, 0], [10, 0, 0]), duct(11, [10, 0, 0], [20, 0, 0], {}, 8)]);
   expect(items(sized).some((i) => i.kind === "join")).toBe(false);
-  expect(healPlan(sized).hard.get("open-end:g10:10:1")).toMatch(/differ in size: a transition\. Fix it in Revit/);
+  expect(healPlan(sized).hard.get("open-end:g10:10:1")).toMatch(
+    /differ in size: a transition\. Fix it in Revit/,
+  );
 
-  const systems = snap([duct(10, [0, 0, 0], [10, 0, 0]), duct(11, [10, 0, 0], [20, 0, 0], { systemName: "SA 2" })]);
+  const systems = snap([
+    duct(10, [0, 0, 0], [10, 0, 0]),
+    duct(11, [10, 0, 0], [20, 0, 0], { systemName: "SA 2" }),
+  ]);
   expect(healPlan(systems).hard.get(proximityId("10:1", "11:0"))).toMatch(/merges systems/);
 
   const far = snap([duct(10, [0, 0, 0], [10, 0, 0]), duct(11, [10 + 6 * IN, 0, 0], [20, 0, 0])]);
-  expect(healPlan(far).hard.get("open-end:g11:11:0")).toMatch(new RegExp(`past the ${HEAL_JOIN_GAP_IN} in heal limit`));
+  expect(healPlan(far).hard.get("open-end:g11:11:0")).toMatch(
+    new RegExp(`past the ${HEAL_JOIN_GAP_IN} in heal limit`),
+  );
 
-  const skew = snap([duct(10, [0, 0, 0], [10, 0, 0]), duct(11, [10 + 2 * IN, 1 * IN, 0], [20, 1 * IN, 0])]);
+  const skew = snap([
+    duct(10, [0, 0, 0], [10, 0, 0]),
+    duct(11, [10 + 2 * IN, 1 * IN, 0], [20, 1 * IN, 0]),
+  ]);
   expect(healPlan(skew).hard.get("open-end:g10:10:1")).toMatch(/not on one axis/);
 
   const grille = node(40, "terminal", [conn(0, [30, 0, 0], [0, 0, -1])]);
@@ -156,7 +201,9 @@ it("caps a dangling fitting end, never one a person ignored", () => {
   const tee = node(50, "fitting", [conn(0, [0, 0, 0], [-1, 0, 0])]);
   expect(items(snap([], [tee]))).toMatchObject([{ kind: "cap", end: "50:0" }]);
   const work = ductsDocumentSchema.parse({
-    assumptions: { "open-end:g50:50:0": { staged: { value: { kind: "verdict", verdict: "ignore" } } } },
+    assumptions: {
+      "open-end:g50:50:0": { staged: { value: { kind: "verdict", verdict: "ignore" } } },
+    },
   });
   expect(healPlan(snap([], [tee]), work).groups).toEqual([]);
 });

@@ -1,11 +1,27 @@
 import { describe, expect, it } from "vite-plus/test";
 import { ductsRouteState, type DuctFinding } from "@pe/agent-contracts";
 
-import { inboxRows, proximityIds, writeBlocked, type InboxItem, type TriageInput } from "./inbox-rows";
+import type { HealPlan } from "@pe/ducts-domain/heal";
+
+import {
+  healRunView,
+  inboxRows,
+  proximityIds,
+  writeBlocked,
+  type InboxItem,
+  type TriageInput,
+} from "./inbox-rows";
+import type { DuctsHealRun } from "./manifest";
 import type { Claim } from "./legs";
 
 const node = (id: number, kind: string, groupId: string | null) =>
-  ({ id, kind, groupId, facts: [], connectors: [] }) as unknown as TriageInput["snapshot"]["nodes"][number];
+  ({
+    id,
+    kind,
+    groupId,
+    facts: [],
+    connectors: [],
+  }) as unknown as TriageInput["snapshot"]["nodes"][number];
 const group = (id: string, rootIds: number[], issueIds: string[] = []) =>
   ({
     id,
@@ -38,10 +54,29 @@ const finding = (f: Partial<DuctFinding> & Pick<DuctFinding, "id" | "kind">): Du
 const findings = [
   finding({ id: "open-end:g1:2:1", kind: "open-end", elementIds: [2] }),
   finding({ id: "no-fan:g2", kind: "no-fan", groupId: "g2", elementIds: [40] }),
-  finding({ id: "proximity:5:0|6:0", kind: "joined-by-proximity", elementIds: [5, 6], grade: "near-miss" }),
-  finding({ id: "proximity:7:0|8:0", kind: "joined-by-proximity", elementIds: [7, 8], grade: "stretched" }),
-  finding({ id: "proximity:9:0|10:0", kind: "joined-by-proximity", elementIds: [9, 10], grade: "anomalous" }),
-  finding({ id: "catalog:catalog-missing-table:31", kind: "catalog-missing-table", elementIds: [31] }),
+  finding({
+    id: "proximity:5:0|6:0",
+    kind: "joined-by-proximity",
+    elementIds: [5, 6],
+    grade: "near-miss",
+  }),
+  finding({
+    id: "proximity:7:0|8:0",
+    kind: "joined-by-proximity",
+    elementIds: [7, 8],
+    grade: "stretched",
+  }),
+  finding({
+    id: "proximity:9:0|10:0",
+    kind: "joined-by-proximity",
+    elementIds: [9, 10],
+    grade: "anomalous",
+  }),
+  finding({
+    id: "catalog:catalog-missing-table:31",
+    kind: "catalog-missing-table",
+    elementIds: [31],
+  }),
   finding({ id: "flow:no-flow:30", kind: "no-flow", elementIds: [30], clearer: "pea" }),
   finding({ id: "stub:g1:3", kind: "stub", elementIds: [3] }),
 ];
@@ -63,14 +98,21 @@ const keys = (items: readonly InboxItem[]) => items.map((i) => i.key);
 
 describe("a staged verdict is a ruling, not a Revit write", () => {
   const doc = ductsRouteState.schema.parse({
-    assumptions: { "open-end:g1:2:1": { staged: { value: { kind: "verdict", verdict: "capped" } } } },
+    assumptions: {
+      "open-end:g1:2:1": { staged: { value: { kind: "verdict", verdict: "capped" } } },
+    },
   });
   it("a capped open end leaves Fix for Diagnostics with its take-back", () => {
     const rows = inboxRows({ ...base, doc });
     expect(keys(rows.fix)).not.toContain("open-end:g1:2:1");
     const ruled = rows.diagnostics.find((r) => r.key === "open-end:g1:2:1")!;
     expect(ruled.status).toBe("ruled: capped");
-    expect(ruled.verbs[0]).toMatchObject({ kind: "verdict", verdict: "capped", on: true, label: "take back" });
+    expect(ruled.verbs[0]).toMatchObject({
+      kind: "verdict",
+      verdict: "capped",
+      on: true,
+      label: "take back",
+    });
   });
   it("the Write row counts rulings apart from Revit writes", () => {
     const rows = inboxRows({ ...base, doc, write: { ...base.write, rulings: 2 } });
@@ -84,11 +126,7 @@ describe("a staged verdict is a ruling, not a Revit write", () => {
 describe("the ducts inbox", () => {
   it("puts blocking findings under Fix, inputs under Set and bridged joins under Diagnostics", () => {
     const rows = inboxRows(base);
-    expect(keys(rows.fix)).toEqual([
-      "open-end:g1:2:1",
-      "no-fan:g2",
-      "proximity:9:0|10:0",
-    ]);
+    expect(keys(rows.fix)).toEqual(["open-end:g1:2:1", "no-fan:g2", "proximity:9:0|10:0"]);
     // Terminal 30 has no flow; 40 sits in a group with no fan, so only its Fix row stands.
     expect(keys(rows.set)).toEqual(["flows:30", "equipmentFlows:1"]);
     expect(keys(rows.diagnostics)).toEqual([
@@ -111,16 +149,25 @@ describe("the ducts inbox", () => {
 
   it("every row outside Diagnostics has a verb; Set rows deep-link to their cell", () => {
     const rows = inboxRows(base);
-    for (const row of [...rows.fix, ...rows.set, ...rows.check]) expect(row.verbs.length).toBeGreaterThan(0);
+    for (const row of [...rows.fix, ...rows.set, ...rows.check])
+      expect(row.verbs.length).toBeGreaterThan(0);
     const flow = rows.set[0]!.verbs.find((v) => v.kind === "focus");
     expect(flow).toMatchObject({ kind: "focus", cell: { segment: "flows", id: 30 } });
     const catalog = rows.diagnostics.find((r) => r.kind === "catalog-missing-table")!;
-    expect(catalog.verbs[0]).toMatchObject({ kind: "focus", cell: { segment: "terminalDrops", id: 31 } });
+    expect(catalog.verbs[0]).toMatchObject({
+      kind: "focus",
+      cell: { segment: "terminalDrops", id: 31 },
+    });
   });
 
   it("an objection stages the proximity ignore verdict and stays in Diagnostics with its take-back, never in Fix", () => {
     const object = inboxRows(base).diagnostics[0]!.verbs[0]!;
-    expect(object).toMatchObject({ kind: "verdict", verdict: "ignore", label: "object", on: false });
+    expect(object).toMatchObject({
+      kind: "verdict",
+      verdict: "ignore",
+      label: "object",
+      on: false,
+    });
     const doc = ductsRouteState.schema.parse({
       assumptions: {
         "proximity:5:0|6:0": { staged: { value: { kind: "verdict", verdict: "ignore" } } },
@@ -152,7 +199,6 @@ describe("the ducts inbox", () => {
     expect(keys(rows.set)).toEqual(["flows:40"]);
   });
 
-
   it("several roots offers each root as passive; a loop offers to break its inferred join", () => {
     const rows = inboxRows({
       ...base,
@@ -178,7 +224,10 @@ describe("the ducts inbox", () => {
 
   it("Check holds claims awaiting a verdict and Pea's proposals awaiting staging", () => {
     const doc = ductsRouteState.schema.parse({
-      flows: { "30": { proposal: { value: { cfm: 150 } } }, "31": { staged: { value: { cfm: 90 } } } },
+      flows: {
+        "30": { proposal: { value: { cfm: 150 } } },
+        "31": { staged: { value: { cfm: 90 } } },
+      },
       rules: { "elbow:x": { proposal: { value: { table: "ED5-1" } } } },
     });
     const claims: Claim[] = [
@@ -202,7 +251,17 @@ describe("the ducts inbox", () => {
     expect(writeBlocked({ fix: 0, set: 1 })).toBe("1 to set before writing");
     expect(writeBlocked({ fix: 0, set: 0 })).toBeNull();
     const write = { staged: 3, hasPreview: true, fresh: true, planned: 3, refused: 0 };
-    const clear = inboxRows({ ...base, findings: [], flows: new Map([[30, { cfm: 1 }], [31, { cfm: 1 }], [40, { cfm: 1 }]]), equipmentFlows: new Map([[1, { cfm: 1 }]]), write });
+    const clear = inboxRows({
+      ...base,
+      findings: [],
+      flows: new Map([
+        [30, { cfm: 1 }],
+        [31, { cfm: 1 }],
+        [40, { cfm: 1 }],
+      ]),
+      equipmentFlows: new Map([[1, { cfm: 1 }]]),
+      write,
+    });
     expect(clear.write).toEqual({
       title: "Write 3 to Revit",
       status: "3 planned · 0 refused",
@@ -216,5 +275,185 @@ describe("the ducts inbox", () => {
   it("proximityIds reads the element ids out of an assumption key", () => {
     expect(proximityIds("proximity:12:0|34:1")).toEqual([12, 34]);
     expect(proximityIds("proximity:12:0|99")).toEqual([12, 99]);
+  });
+});
+
+describe("healing replaces the capped and connect verdicts", () => {
+  // g1's open end 2:1 caps; the near-miss 5|6 is a coincident join; 7|8 and the anomalous 9|10 are a person's.
+  const heal: HealPlan = {
+    groups: [
+      {
+        group: "g1",
+        items: [
+          {
+            key: "cap:2:1",
+            kind: "cap",
+            how: "cap",
+            end: "2:1",
+            gapIn: 0,
+            ids: [2],
+            covers: ["open-end:g1:2:1"],
+          },
+          {
+            key: "join:5:0|6:0",
+            kind: "join",
+            how: "connect",
+            end: "5:0",
+            other: "6:0",
+            gapIn: 0,
+            ids: [5, 6],
+            covers: ["proximity:5:0|6:0"],
+          },
+        ],
+      },
+    ],
+    covered: new Set(["open-end:g1:2:1", "proximity:5:0|6:0"]),
+    hard: new Map([
+      [
+        "proximity:7:0|8:0",
+        "duct 7 and duct 8 differ in size: a transition. Fix it in Revit; its own tools enforce the rules its API does not.",
+      ],
+    ]),
+  };
+
+  it("one Heal row per group leads Fix, listing its caps and joins; what it covers makes no row of its own", () => {
+    const rows = inboxRows({
+      ...base,
+      heal,
+      nameOf: (id) => `duct ${id}`,
+      groupLabel: () => "SA 1",
+    });
+    expect(keys(rows.fix)).toEqual(["heal:g1", "no-fan:g2", "proximity:9:0|10:0"]);
+    const row = rows.fix[0]!;
+    expect(row).toMatchObject({
+      kind: "heal",
+      title: "Heal SA 1: 1 cap · 1 join",
+      status: "not previewed",
+      tone: "alarm",
+    });
+    expect(row.note).toMatch(/^cap duct 2 \(end 1\); connect duct 5 to duct 6\./);
+    expect(row.verbs.map((v) => (v.kind === "heal" ? v.mode : v.kind))).toEqual([
+      "preview",
+      "apply",
+      "select",
+    ]);
+    expect(row.verbs[1]).toMatchObject({ refusal: "Preview the heal first" });
+    expect(keys(rows.diagnostics)).not.toContain("proximity:5:0|6:0");
+    // A bridged join heal cannot make is still a diagnostic, its note saying whose repair it is.
+    expect(rows.diagnostics.find((r) => r.key === "proximity:7:0|8:0")!.note).toMatch(
+      /a transition\. Fix it in Revit/,
+    );
+  });
+
+  it("no row offers capped or connect: an open end left over and an anomalous join are fixed in Revit", () => {
+    const rows = inboxRows(base);
+    const verbs = [...rows.fix, ...rows.diagnostics].flatMap((r) => r.verbs);
+    expect(
+      verbs.some(
+        (v) => v.kind === "verdict" && (v.verdict === "capped" || v.verdict === "connect"),
+      ),
+    ).toBe(false);
+    const end = rows.fix.find((r) => r.key === "open-end:g1:2:1")!;
+    expect(end.status).toBe("fix in Revit");
+    expect(end.verbs.map((v) => v.kind)).toEqual(["select", "verdict"]);
+    expect(
+      rows.fix
+        .find((r) => r.key === "proximity:9:0|10:0")!
+        .verbs.map((v) => (v.kind === "verdict" ? v.verdict : v.kind)),
+    ).toEqual(["select", "ignore"]);
+  });
+
+  it("a Heal row covering only bridged joins does not hold Write", () => {
+    const joinsOnly: HealPlan = {
+      ...heal,
+      groups: [{ group: "g1", items: [heal.groups[0]!.items[1]!] }],
+      covered: new Set(["proximity:5:0|6:0"]),
+    };
+    const rows = inboxRows({ ...base, heal: joinsOnly });
+    expect(rows.fix[0]).toMatchObject({ key: "heal:g1", blocks: false });
+    // open-end, no-fan, anomalous: the Heal row is not counted.
+    expect(rows.write.blocked).toBe("3 to fix and 2 to set before writing");
+  });
+
+  it("a preview arms heal with what passed; an apply shows the group's ESP before and after, found again by its root", () => {
+    const run: DuctsHealRun = {
+      group: "g1",
+      mode: "preview",
+      epoch: 4,
+      before: { esp: 0.3123, roots: [1], ids: [2, 5, 6] },
+      response: {
+        previewOnly: true,
+        counts: { planned: 1, healed: 0, refused: 1 },
+        groups: [
+          {
+            group: "g1",
+            outcome: "planned",
+            items: [
+              {
+                key: "cap:2:1",
+                kind: "cap",
+                how: "cap",
+                outcome: "planned",
+                created: [77],
+                replaced: [],
+              },
+              {
+                key: "join:5:0|6:0",
+                kind: "join",
+                how: "connect",
+                outcome: "refused",
+                reason: "post-check failed: the joint is 0.2 in open",
+                created: [],
+                replaced: [],
+              },
+            ],
+            systemsBefore: [],
+            systemsAfter: [],
+          },
+        ],
+      },
+    };
+    const previewed = healRunView(run, snapshot, 4, () => null);
+    expect(previewed).toMatchObject({ fresh: true, passed: ["cap:2:1"], esp: null });
+    const row = inboxRows({ ...base, heal, healRun: previewed }).fix[0]!;
+    expect(row.status).toBe("previewed: 1 pass · 1 refused");
+    expect(row.verbs[1]).toMatchObject({ label: "heal 1", refusal: null });
+    expect(row.note).toMatch(
+      /Refused connect 5 to 6: post-check failed: the joint is 0\.2 in open\./,
+    );
+    expect(healRunView(run, snapshot, 5, () => null).fresh).toBe(false);
+
+    // Revit renumbered the group: g1 is now g9, still holding root 1.
+    const after = {
+      ...snapshot,
+      groups: [{ ...snapshot.groups[0]!, id: "g9" }, snapshot.groups[1]!],
+    };
+    const applied = healRunView(
+      {
+        ...run,
+        mode: "apply",
+        response: {
+          ...run.response,
+          previewOnly: false,
+          counts: { planned: 0, healed: 1, refused: 0 },
+        },
+      },
+      after,
+      5,
+      (g) => (g === "g9" ? 0.4051 : null),
+    );
+    expect(applied).toMatchObject({
+      group: "g9",
+      esp: { before: 0.3123, after: 0.4051 },
+      ids: [77],
+    });
+    const result = inboxRows({ ...base, snapshot: after, healRun: applied }).fix.find(
+      (r) => r.key === "heal:g9",
+    )!;
+    expect(result).toMatchObject({
+      title: "Healed g9",
+      status: "healed 1 · ESP 0.312 → 0.405 in-wg",
+      blocks: false,
+    });
   });
 });

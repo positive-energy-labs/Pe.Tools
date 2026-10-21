@@ -204,7 +204,11 @@ const heal = {
 const healed = (outcome: string) => ({
   previewOnly: outcome === "planned",
   groups: [{ group: "g10", outcome, reason: null, items: [], systemsBefore: [], systemsAfter: [] }],
-  counts: { planned: outcome === "planned" ? 2 : 0, healed: outcome === "healed" ? 2 : 0, refused: 0 },
+  counts: {
+    planned: outcome === "planned" ? 2 : 0,
+    healed: outcome === "healed" ? 2 : 0,
+    refused: 0,
+  },
 });
 
 test("heal preview and apply send the route's items to ducts.heal, differing only in previewOnly", () =>

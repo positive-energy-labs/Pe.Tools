@@ -6,7 +6,19 @@
  * the element and focuses the cell on its tree row.
  */
 import { useMemo, type ReactNode } from "react";
-import { Ban, Check, Crosshair, EyeOff, Fan, Link, Pencil, X, type LucideIcon } from "lucide-react";
+import {
+  Ban,
+  Check,
+  Crosshair,
+  Eye,
+  EyeOff,
+  Fan,
+  Link,
+  Pencil,
+  Wrench,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import {
   transitionPatches,
   type DuctsRouteDocument,
@@ -19,7 +31,14 @@ import { reviewTransitions, type CellWire } from "#/components/work/band";
 import type { ActionHandle } from "#/route/handle";
 
 import { verdictPatches } from "../../assumptions";
-import { ClaimElement, claimParts, ShowInRevit, showElements, VERDICTS, type Verdict } from "../../claims";
+import {
+  ClaimElement,
+  claimParts,
+  ShowInRevit,
+  showElements,
+  VERDICTS,
+  type Verdict,
+} from "../../claims";
 import {
   INBOX_LABELS,
   INBOX_ORDER,
@@ -46,6 +65,13 @@ export interface WriteVerbs {
   row: WriteRow;
 }
 
+/** A Heal row's verbs: the route's heal preview and heal, run with the row's group. */
+export interface HealVerbs {
+  preview: ActionHandle;
+  apply: ActionHandle;
+  busy: boolean;
+}
+
 const VERDICT_ICON: Record<"capped" | "connect" | "ignore", LucideIcon> = {
   capped: Ban,
   connect: Link,
@@ -62,6 +88,7 @@ export function Inbox({
   onSelect,
   onFocusCell,
   write,
+  heal,
 }: {
   groups: Record<Exclude<InboxGroup, "write">, readonly InboxItem[]>;
   work: InboxWork;
@@ -73,6 +100,7 @@ export function Inbox({
   /** Select the element and focus its cell on the tree. */
   onFocusCell: (cell: CellRef) => void;
   write: WriteVerbs;
+  heal: HealVerbs;
 }) {
   const cellOf = (segment: string, key: string) =>
     (work.doc as unknown as Record<string, Record<string, object> | undefined> | null)?.[segment]?.[
@@ -87,15 +115,18 @@ export function Inbox({
       label: string,
       says: string,
       run: () => void,
-      extra: { pressed?: boolean; refusal?: string | null } = {},
+      extra: { pressed?: boolean; refusal?: string | null; busy?: boolean; commit?: boolean } = {},
     ) => (
       <Button
         key={key}
-        {...(worded ? { kind: "framed" as const } : { icon })}
+        {...(worded
+          ? { kind: extra.commit ? ("commit" as const) : ("framed" as const) }
+          : { icon })}
         label={worded ? label : says}
         reason={worded ? says : undefined}
         pressed={extra.pressed}
         refusal={extra.refusal}
+        busy={extra.busy}
         onClick={run}
       >
         {worded ? label : undefined}
@@ -128,6 +159,21 @@ export function Inbox({
         );
       case "focus":
         return make(`f${i}`, Pencil, verb.label, verb.says, () => onFocusCell(verb.cell));
+      case "heal": {
+        const handle = verb.mode === "preview" ? heal.preview : heal.apply;
+        return make(
+          `h${i}${verb.mode}`,
+          verb.mode === "preview" ? Eye : Wrench,
+          verb.label,
+          verb.says,
+          () => void handle.run({ group: verb.group }),
+          {
+            refusal: verb.refusal ?? handle.refusal,
+            busy: heal.busy,
+            commit: verb.mode === "apply",
+          },
+        );
+      }
       case "claim":
         return VERDICTS.map((v, j) =>
           make(
@@ -167,7 +213,13 @@ export function Inbox({
           "select in Revit",
           "select in Revit",
           () => doc && void showElements(doc, verb.ids),
-          { refusal: !doc ? "no Revit document is connected" : !verb.ids.length ? "no element to select" : null },
+          {
+            refusal: !doc
+              ? "no Revit document is connected"
+              : !verb.ids.length
+                ? "no element to select"
+                : null,
+          },
         );
     }
   };
@@ -219,10 +271,18 @@ export function Inbox({
       onClick: () => onSelect(item.ids[0] ?? null),
       detail: (
         <>
-          {claim?.kind === "claim" ? claimProse(claim.claim) : item.note ? <p>{item.note}</p> : <p>{item.title}</p>}
+          {claim?.kind === "claim" ? (
+            claimProse(claim.claim)
+          ) : item.note ? (
+            <p>{item.note}</p>
+          ) : (
+            <p>{item.title}</p>
+          )}
           <div className="flex flex-wrap items-center gap-1" data-inbox-verbs="">
             {verbsOf(item, true)}
-            {item.ids.length && doc ? <ShowInRevit doc={doc} elementIds={item.ids} what="it" /> : null}
+            {item.ids.length && doc ? (
+              <ShowInRevit doc={doc} elementIds={item.ids} what="it" />
+            ) : null}
           </div>
         </>
       ),
@@ -279,7 +339,18 @@ export function Inbox({
         },
       }) satisfies Record<InboxGroup, unknown>,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- spec closes over props that change with them
-    [groups, work.doc, work.revision, doc, write.row, write.preview.refusal, write.apply.refusal, write.busy, onVerdict],
+    [
+      groups,
+      work.doc,
+      work.revision,
+      doc,
+      write.row,
+      write.preview.refusal,
+      write.apply.refusal,
+      write.busy,
+      heal.busy,
+      onVerdict,
+    ],
   );
   return (
     <KitInbox

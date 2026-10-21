@@ -130,7 +130,14 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   );
   const groups = snapshot?.groups ?? [];
   const levels = snapshot?.levels ?? [];
-  useDuctsViewBridge({ thread, surface: url ? "route" : "chat", page, setPage, snapshot, document: doc });
+  useDuctsViewBridge({
+    thread,
+    surface: url ? "route" : "chat",
+    page,
+    setPage,
+    snapshot,
+    document: doc,
+  });
   const group = groups.find((item) => item.id === page.group) ?? null;
   const level = levels.find((item) => String(item.id) === page.level) ?? null;
   const readWord =
@@ -261,7 +268,13 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     empty,
     doc,
     reading: { pending, error: error ?? null },
-    actions: { preview: handle.actions.preview, apply: handle.actions.apply, busy },
+    actions: {
+      preview: handle.actions.preview,
+      apply: handle.actions.apply,
+      healPreview: handle.actions["heal-preview"],
+      heal: handle.actions.heal,
+      busy,
+    },
     staged: stagedCount(handle.work.doc),
     rulings: stagedRulings(handle.work.doc),
   };
