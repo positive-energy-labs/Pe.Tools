@@ -1,6 +1,14 @@
 import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
 
-export type Metadata = RevitDetailSpaceScene.Res.Response["scene"];
+export type Metadata = RevitDetailSpaceScene.Res.Response["scene"] & {
+  phase?: "focus" | "context";
+  unavailableElements?: {
+    elementId: number;
+    uniqueId: string | null;
+    category: string | null;
+    reason: string;
+  }[];
+};
 export type Element = Metadata["elements"][number];
 export type { SpaceViewState as ViewState } from "@pe/agent-contracts/space-view";
 import type { SpaceViewState as ViewState } from "@pe/agent-contracts/space-view";

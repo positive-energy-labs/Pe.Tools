@@ -178,13 +178,24 @@ export function SpaceRoute({
       loading.current?.abort();
     };
   }, [sceneId, load]);
-  const capture = async () => {
+  const capture = async (focusOnly = true) => {
     setError(null);
+    const generation = ++loadGeneration.current;
+    loading.current?.abort();
+    const abort = new AbortController();
+    loading.current = abort;
     try {
-      const artifact = await captureScene(ids, { bridgeSessionId: session, openDocumentId: doc });
+      spaceMark("capture-request", { ids, focusOnly });
+      const artifact = await captureScene(
+        ids,
+        { bridgeSessionId: session, openDocumentId: doc, signal: abort.signal },
+        focusOnly,
+      );
+      if (generation !== loadGeneration.current || abort.signal.aborted) return;
+      spaceMark("capture-response", { id: artifact.id, focusOnly });
       await load(artifact.id);
     } catch (e) {
-      setError(String(e));
+      if (!abort.signal.aborted && generation === loadGeneration.current) setError(String(e));
     }
   };
   const setCut = (target: Axis, next: Cut | null) => {
@@ -242,12 +253,25 @@ export function SpaceRoute({
               aria-label="Host MEP element ids"
               value={ids}
               onChange={(e) => setIds(e.target.value)}
-              placeholder="Comma separated; empty = whole model"
+              placeholder="Comma separated host element ids"
             />
           </div>
-          <Button label="Capture scene" busy={busy} onClick={() => startTransition(capture)}>
+          <Button
+            label="Capture scene"
+            busy={busy}
+            onClick={() => startTransition(() => capture())}
+          >
             Capture scene
           </Button>
+          {data?.metadata.phase === "focus" && (
+            <Button
+              label="Capture surrounding context"
+              busy={busy}
+              onClick={() => startTransition(() => capture(false))}
+            >
+              Load surrounding context
+            </Button>
+          )}
           {view && (
             <>
               <Button
@@ -306,6 +330,17 @@ export function SpaceRoute({
         {error && (
           <p role="alert" data-tone="alarm">
             {error}
+          </p>
+        )}
+        {data?.metadata.phase === "focus" && (
+          <p>Selected elements only. Surrounding context has not been loaded.</p>
+        )}
+        {!!data?.metadata.unavailableElements?.length && (
+          <p data-tone="caution">
+            {data.metadata.unavailableElements.length} requested elements have no available mesh:{" "}
+            {data.metadata.unavailableElements
+              .map((element) => `${element.elementId} (${element.reason})`)
+              .join(", ")}
           </p>
         )}
         {view && active && (
@@ -476,8 +511,8 @@ export function SpaceRoute({
                 {data.metadata.omittedElements} omitted at budget
               </span>
               <span>
-                Captured {data.metadata.stamp.builtUtc} · epoch {data.metadata.stamp.epoch} ·{" "}
-                {data.metadata.stamp.fresh ? "fresh at capture" : "stale at capture"} · host
+                Snapshot captured {data.metadata.stamp.builtUtc} · epoch {data.metadata.stamp.epoch}{" "}
+                · {data.metadata.stamp.fresh ? "fresh at capture" : "stale at capture"} · host
                 internal ft
               </span>
               <a href={`?scene=${view.scene}`}>Saved scene</a>
