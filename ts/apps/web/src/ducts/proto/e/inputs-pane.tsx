@@ -4,13 +4,15 @@
  * person types into; a Set row's "enter a flow" lands on one of them. Above the grilles, the
  * airflow read slot: which parameter every grille's flow is read from, reassignable here at any
  * time (each candidate with its coverage in this system), the same choice as the inbox's Set row.
+ * Above the units, the same step for a unit's design flow (the FanFlow slot): a unit's flow
+ * proposes its role, so the picker sits where the role is read.
  */
 import type { Priced } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
 import { Row } from "@pe/kit/lang/row";
 
-import { airflowOptions, airflowPatches, slotWord } from "../../airflow";
+import { airflowOptions, airflowPatches, slotWord, type AirflowOf } from "../../airflow";
 
 import { EquipmentCells, TerminalCells, type InputsCtx } from "./input-cells";
 import type { LossesWork } from "../../work";
@@ -65,32 +67,46 @@ export function InputsPane(props: InputsPaneProps) {
   );
   return (
     <div role="list" aria-label="inputs" data-e-inputs>
+      {units.length ? (
+        <AirflowSlot snapshot={snapshot} work={work} group={group} of="unit" />
+      ) : null}
       {units.map((id) => row(id, <EquipmentCells ctx={ctx} id={id} />, "unit"))}
-      {terminals.length ? <AirflowSlot snapshot={snapshot} work={work} group={group} /> : null}
+      {terminals.length ? (
+        <AirflowSlot snapshot={snapshot} work={work} group={group} of="terminal" />
+      ) : null}
       {terminals.map((id) => row(id, <TerminalCells ctx={ctx} id={id} />, "grille"))}
     </div>
   );
 }
 
-/** The airflow read slot: the parameter grilles read their flow from, and every candidate's coverage. */
+/** The airflow read slot: the parameter grilles (or units) read their flow from, and every candidate's coverage. */
 function AirflowSlot({
   snapshot,
   work,
   group,
+  of,
 }: {
   snapshot: DuctSnapshot;
   work: LossesWork;
   group: string;
+  of: AirflowOf;
 }) {
-  const { current, options } = airflowOptions(snapshot, group);
+  const { current, options } = airflowOptions(snapshot, group, of);
   const at = options.find((o) => o.slot === current);
+  const noun = of === "unit" ? "units" : "grilles";
   return (
-    <div role="listitem" className="border-line border-b px-2 py-1" data-e-airflow={current}>
+    <div
+      role="listitem"
+      className="border-line border-b px-2 py-1"
+      data-e-airflow={of === "unit" ? undefined : current}
+      data-e-unit-airflow={of === "unit" ? current : undefined}
+    >
       <p className="t-small">
-        Airflow from <span className="face-mono">{slotWord(current)}</span>
+        {of === "unit" ? "Unit airflow from " : "Airflow from "}
+        <span className="face-mono">{slotWord(current)}</span>
         <span className="text-ink-2">
           {" "}
-          · {at?.have ?? 0} of {at?.of ?? 0} grilles read
+          · {at?.have ?? 0} of {at?.of ?? 0} {noun} read
         </span>
       </p>
       <div className="flex flex-wrap gap-1 pt-1">
@@ -99,9 +115,9 @@ function AirflowSlot({
             key={o.slot}
             kind="framed"
             label={`${o.label} · ${o.have}/${o.of}`}
-            reason={`Read every grille's airflow from ${o.label}: ${o.have} of ${o.of} grilles in this system hold a value`}
+            reason={`Read every ${of === "unit" ? "unit" : "grille"}'s airflow from ${o.label}: ${o.have} of ${o.of} ${noun} in this system hold a value`}
             pressed={o.slot === current}
-            onClick={() => void work.write(airflowPatches(work.doc, o.slot) as never)}
+            onClick={() => void work.write(airflowPatches(work.doc, o.slot, of) as never)}
           >
             {o.label} · {o.have}/{o.of}
           </Button>

@@ -145,6 +145,21 @@ describe("the airflow read slot", () => {
     ]);
     expect(keys(inboxRows({ ...base, flows, airflow }).set)).toEqual(["equipmentFlows:1"]);
   });
+  it("asks for the unit airflow slot ahead of the units with no flow, never for a passive one", () => {
+    const unitAirflow = {
+      current: "PE_M_Fan_AirFlowDesign",
+      options: [{ slot: "Airflow", label: "Airflow · type", have: 1, of: 1 }],
+    };
+    const rows = inboxRows({ ...base, airflow, unitAirflow });
+    expect(keys(rows.set)).toEqual(["airflow", "flows:30", "unit-airflow", "equipmentFlows:1"]);
+    expect(rows.set[2]!.verbs[0]).toMatchObject({ kind: "airflow", of: "unit" });
+    const passive = inboxRows({
+      ...base,
+      unitAirflow,
+      roles: new Map([[1, { role: "passive", why: "proposed", reason: "states no design flow" }]]),
+    });
+    expect(keys(passive.set)).not.toContain("unit-airflow");
+  });
 });
 
 describe("the ducts inbox", () => {
@@ -234,9 +249,32 @@ describe("the ducts inbox", () => {
     expect(keys(rows.set)).toEqual(["flows:40"]);
   });
 
-  it("several roots offers each root as passive; a loop offers to break its inferred join", () => {
+  it("several fans priced per fan is a Diagnostics line, never a Fix", () => {
     const rows = inboxRows({
       ...base,
+      findings: [
+        finding({
+          id: "multi-fan:g1",
+          kind: "multi-fan",
+          groupId: "g1",
+          elementIds: [1, 2],
+          note: "priced per fan: FC-30 601 cfm (sum of 9 grilles) owns the trunk",
+        }),
+      ],
+    });
+    expect(rows.fix.map((r) => r.kind)).not.toContain("multi-fan");
+    const split = rows.diagnostics.find((r) => r.kind === "multi-fan")!;
+    expect(split).toMatchObject({ status: "priced per fan", ids: [1, 2] });
+    expect(split.note).toContain("owns the trunk");
+  });
+
+  it("several fans offers to rule each proposed fan, or each as passive; a loop offers to break its inferred join", () => {
+    const rows = inboxRows({
+      ...base,
+      roles: new Map([
+        [1, { role: "fan", why: "proposed", reason: "states a design flow of 800 cfm" }],
+        [2, { role: "fan", why: "ruled", reason: "ruled in the model" }],
+      ]),
       findings: [
         finding({ id: "multi-root:g1", kind: "multi-root", groupId: "g1", elementIds: [1, 2] }),
         finding({ id: "loop-by-inference:5:0|6:0", kind: "loop-by-inference", elementIds: [5, 6] }),
@@ -245,9 +283,11 @@ describe("the ducts inbox", () => {
     const roots = rows.fix.find((r) => r.kind === "multi-root")!;
     expect(roots.ids).toEqual([1, 2]);
     expect(roots.verbs.filter((v) => v.kind === "role")).toMatchObject([
+      { id: 1, role: "fan" },
       { id: 1, role: "passive" },
       { id: 2, role: "passive" },
     ]);
+    expect(roots.note).toContain("states a design flow of 800 cfm");
     const loop = rows.fix.find((r) => r.kind === "loop-by-inference")!;
     expect(loop.verbs[0]).toMatchObject({
       kind: "verdict",

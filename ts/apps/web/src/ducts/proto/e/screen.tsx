@@ -26,6 +26,7 @@ import type { ProtoProps } from "../props";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { BarLegend, fmtFt, LossBar, SplitStrip } from "./bar";
 import { DesignFrictionSettings } from "./design-friction";
+import { FanSections } from "./fan-sections";
 import { RunDetail, runOf } from "./run-detail";
 import { ECanvas } from "./canvas";
 import { grilleLabels } from "./labels";
@@ -127,6 +128,8 @@ export function EScreen({ props }: { props: ProtoProps }) {
             heal,
             healRun,
             airflow: snapshot ? airflowOptions(snapshot, page.group) : undefined,
+            unitAirflow: snapshot ? airflowOptions(snapshot, page.group, "unit") : undefined,
+            roles: surveyed.roles,
             claims: props.claims,
             write: {
               staged: props.staged,
@@ -265,6 +268,13 @@ export function EScreen({ props }: { props: ProtoProps }) {
               <SplitStrip split={critical?.split ?? tree.split} scale={scale} light={light} />
             </>
           )}
+          {/* A multi-fan system: one section per fan, as staged (`next`), each with its TEL and ESP. */}
+          <FanSections
+            fans={priced?.next.byGroup[tree.key]?.fans ?? []}
+            nameOf={nameOf}
+            light={light}
+            select={select}
+          />
           <div className="flex min-h-0 flex-1 flex-col" onMouseLeave={() => light(null)}>
             <SystemTree
               key={tree.key}

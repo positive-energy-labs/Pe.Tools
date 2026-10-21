@@ -63,10 +63,25 @@ export function terminalInputs(
 export interface EquipmentInputs {
   flow: Resolved<number>;
   esp: Resolved<number>;
-  role: Resolved<"fan" | "passive">;
+  role: Resolved<"fan" | "passive"> & { reason?: string };
 }
 
-/** A unit's resolved flow, external static (staged, else the fan Pe computes) and role (fan unless staged passive). */
+/**
+ * A unit's role as the cell says it: `ruled` (the model's store), `override` (staged), `proposed`
+ * from its design flow with the reason (`unit-roles.ts`), else the `default` fan.
+ */
+function unitRoleInput(
+  priced: Priced,
+  id: number,
+  staged: { role: "fan" | "passive" } | undefined,
+): Resolved<"fan" | "passive"> & { reason?: string } {
+  const r = priced.roles.get(id);
+  if (!r) return staged ? { value: staged.role, word: "override" } : { value: "fan", word: "default" };
+  const word = r.why === "staged" ? "override" : r.why;
+  return { value: r.role, word, reason: r.reason };
+}
+
+/** A unit's resolved flow, external static (staged, else the fan Pe computes) and role (ruled, staged, else proposed). */
 export function equipmentInputs(
   snapshot: DuctSnapshot,
   priced: Priced,
@@ -77,13 +92,20 @@ export function equipmentInputs(
   const role = priced.staged.roles[String(id)];
   const computed = esp ? null : proposedStatic(snapshot, priced.next, id);
   return {
-    flow: { value: flow?.cfm ?? null, word: flowSourceWord(flow?.source ?? null) },
+    flow: {
+      value: flow?.cfm ?? null,
+      // A derived flow is the route's reading, never written unless a person stages it.
+      word:
+        flow?.source === "derived"
+          ? `sum of ${flow.grilles} grille${flow.grilles === 1 ? "" : "s"}`
+          : flowSourceWord(flow?.source ?? null),
+    },
     esp: esp
       ? { value: esp.inWg, word: "override" }
       : computed
         ? { value: computed.total, word: "Pe" }
         : { value: null, word: null },
-    role: role ? { value: role.role, word: "override" } : { value: "fan", word: "default" },
+    role: unitRoleInput(priced, id, role),
   };
 }
 

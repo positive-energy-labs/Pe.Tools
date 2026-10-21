@@ -13,8 +13,11 @@
  *   finding ids its total rests on that no person confirmed (`inferred`), and is `provisional`
  *   only when one is `anomalous` (ruling 5, kaitpw 2026-10-20: a near miss and a stretched join are
  *   bridged and final; see `bins.ts`). A group's fan and the document's rest on every path under them.
- * - A group with no air mover (no root, or every root a staged `passive` unit) prices nothing:
+ * - A group with no air mover (no root, or every root a `passive` unit) prices nothing:
  *   `byGroup[id].hasAirMover` is false and survey raises the blocking `no-fan` finding.
+ * - A group several units root is walked from its largest fan's port (`unitCfm`); with several
+ *   fans each prices its own section (`fan-sections.ts`) into `byGroup[id].fans`, and the group's
+ *   `fan` and `critical` are the largest fan's.
  * Physics in loss-physics.ts, interpolation in loss-grid.ts, rule data in loss-rules.ts.
  */
 import {
@@ -46,8 +49,9 @@ import {
 } from "./loss-rules.ts";
 import type { DuctSnapshot } from "./types.ts";
 import type { DuctInferenceGrade } from "@pe/agent-contracts";
+import { byFlow, fanSections, stretchOf, type FanSection } from "./fan-sections.ts";
 import { worse, type InferredLink } from "./proximity.ts";
-import { groupTree, runsOf, terminalCfm, type GroupTree } from "./topology.ts";
+import { groupTree, pathTo, runsOf, terminalCfm, type GroupTree } from "./topology.ts";
 
 type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];
@@ -113,8 +117,10 @@ export interface Overrides {
   catalogLinks?: Readonly<Record<string, { table: string }>>;
   /** A stated drop per fitting or accessory id, in-wg; replaces the rule lookup (not for taps). */
   componentDrop?: Readonly<Record<number, number>>;
-  /** A staged role per air mover id; a `passive` root is not an air mover. */
+  /** The role per air mover id (`unit-roles.ts`); a `passive` root is not an air mover. */
   unitRole?: Readonly<Record<number, "fan" | "passive">>;
+  /** Design flow per air mover id, cfm (`equipmentFlows`): orders a group's fans, largest first. */
+  unitCfm?: Readonly<Record<number, number>>;
   /** The design friction rate, in-wg per 100 ft: the rate a part with no duct on its path is read at. */
   designFrictionRate?: number;
 }
@@ -169,10 +175,26 @@ export interface LossResult {
       hasAirMover: boolean;
       /** The fan's standing: provisional when any path in the group is. */
       provisional: Provisional;
+      /** One entry per fan when several fans root the group, largest design flow first; else empty. */
+      fans: FanResult[];
     }
   >;
   byRule: Record<string, RuleLoss>;
   errors: LossError[];
+}
+
+/** One fan's section of a multi-fan group and what it prices to (`fan-sections.ts`). */
+export interface FanResult extends FanSection {
+  /** Its worst run's total, in-wg: the external static it must deliver. */
+  esp: number;
+  /** The terminal its worst run ends at; null with none. */
+  critical: number | null;
+  /** Its worst run's total effective length, ft. */
+  tel: number | null;
+  /** Its own stretch to the junction, priced at its design flow (empty for the largest fan). */
+  stretch: Row[];
+  /** Whether its worst run reaches the terminal through the junction, across a larger fan's section. */
+  viaJunction: boolean;
 }
 
 const LEG_KIND = { C: "fitting", Cb: "tap-branch", Cs: "tap-straight" } as const;
@@ -378,14 +400,27 @@ export function computeLosses(
 
   const everywhere: string[] = [];
   for (const group of snapshot.groups) {
-    const tree = groupTree(snapshot, group.id);
+    const fans = byFlow(
+      group.rootIds
+        .filter((id) => overrides.unitRole?.[id] !== "passive")
+        .map((unit) => ({ unit, cfm: overrides.unitCfm?.[unit] ?? null })),
+    );
+    // Several units: walk from the largest fan's port, never from a passive unit's.
+    const lead = group.rootIds.length > 1 ? fans[0]?.unit : undefined;
+    const tree = groupTree(snapshot, group.id, lead);
     const below = flowBelow(tree, overrides);
+    const sections = fans.length > 1 ? fanSections(tree, fans) : [];
+    const others = new Set(sections.slice(1).flatMap((s) => s.owned));
+    const runPaths = new Map<number, number[]>();
     let fan = 0;
     let critical: number | null = null;
     const under: string[] = [];
-    const hasAirMover = group.rootIds.some((id) => overrides.unitRole?.[id] !== "passive");
+    const hasAirMover = fans.length > 0;
     // No air mover: no path to price (never from the open end); survey says so as a `no-fan` finding.
     for (const run of hasAirMover ? runsOf(tree) : []) {
+      // A terminal a smaller fan's section holds is priced from that fan (below).
+      if (others.has(run.terminal)) continue;
+      runPaths.set(run.terminal, run.path);
       const rows = pathRows(tree, run.path, below, grids, choices, overrides, fail, catalogs);
       const total = rows.reduce((a, r) => a + (r.dp ?? 0), 0);
       const rests = restsOn(run.path);
@@ -408,7 +443,70 @@ export function computeLosses(
           priced.get(r.rule)!.add(r.id);
         }
     }
+    const fanResults = sections.map((section, k): FanResult => {
+      if (k === 0) {
+        const tel = critical == null ? null : (result.paths[critical]?.tel ?? null);
+        return { ...section, esp: fan, critical, tel, stretch: [], viaJunction: false };
+      }
+      const own = groupTree(snapshot, group.id, section.unit);
+      const stretch = stretchOf(tree, section);
+      const ownBelow = flowBelow(own, overrides);
+      for (const id of stretch) ownBelow.set(id, section.cfm ?? 0);
+      const price = (path: number[]) =>
+        pathRows(own, path, ownBelow, grids, choices, overrides, fail, catalogs);
+      const stretchRows = stretch.length ? price(stretch) : [];
+      let best: { total: number; terminal: number; tel: number; via: boolean } | null = null;
+      const consider = (total: number, terminal: number, tel: number, via: boolean) => {
+        if (!best || total > best.total || (total === best.total && terminal < best.terminal))
+          best = { total, terminal, tel, via };
+      };
+      // Its own runs: terminals past its port.
+      for (const t of section.owned.filter((id) => tree.parts.get(id)?.node?.kind === "terminal")) {
+        if (own.root == null || pathTo(own.parent, t)[0] !== own.root.element) continue;
+        const path = pathTo(own.parent, t);
+        const rows = price(path);
+        const total = rows.reduce((a, r) => a + (r.dp ?? 0), 0);
+        const rests = restsOn(path);
+        under.push(...rests);
+        result.paths[t] = {
+          groupId: group.id,
+          total,
+          tel: telOf(rows),
+          rows,
+          inferred: rests,
+          provisional: provisionalOf(rests),
+        };
+        consider(total, t, telOf(rows), false);
+      }
+      // Through the junction: its stretch, then the larger section's run from the junction on.
+      const stretchDp = stretchRows.reduce((a, r) => a + (r.dp ?? 0), 0);
+      for (const [t, path] of runPaths) {
+        const at = section.junction == null ? -1 : path.indexOf(section.junction);
+        if (at < 0) continue;
+        const onward = new Set(path.slice(at));
+        const rows = result.paths[t]!.rows;
+        const from = rows.findIndex((r) => onward.has(r.id));
+        if (from < 0) continue;
+        const tail = rows.slice(from);
+        consider(
+          stretchDp + tail.reduce((a, r) => a + (r.dp ?? 0), 0),
+          t,
+          telOf(stretchRows) + telOf(tail),
+          true,
+        );
+      }
+      const worst = best as { total: number; terminal: number; tel: number; via: boolean } | null;
+      return {
+        ...section,
+        esp: worst?.total ?? stretchDp,
+        critical: worst?.terminal ?? null,
+        tel: worst?.tel ?? (stretch.length ? telOf(stretchRows) : null),
+        stretch: stretchRows,
+        viaJunction: worst?.via ?? false,
+      };
+    });
     result.byGroup[group.id] = {
+      fans: fanResults,
       fan,
       critical,
       criticalTel: critical == null ? null : (result.paths[critical]?.tel ?? null),

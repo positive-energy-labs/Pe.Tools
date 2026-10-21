@@ -133,8 +133,9 @@ function InputCell({
 }
 
 /**
- * A unit's role: `fan` unless a person rules `passive`; typing either word stages it. A `passive`
- * the model's store holds reads as "ruled"; typing `fan` takes it back (`rulingPatches`).
+ * A unit's role: proposed from its design flow (`unit-roles.ts`, the reason beside it) until a
+ * person rules `fan` or `passive`; typing either word stages it, and a ruling the model's store
+ * holds reads as "ruled" (`rulingPatches`).
  */
 function RoleCell({
   id,
@@ -144,7 +145,7 @@ function RoleCell({
 }: {
   id: number;
   work: LossesWork;
-  resolved: Resolved<"fan" | "passive">;
+  resolved: Resolved<"fan" | "passive"> & { reason?: string };
   store: DuctSnapshot["store"];
 }) {
   const key = String(id);
@@ -185,8 +186,9 @@ function RoleCell({
         }}
         transitions={reviewTransitions(wire, key, cell)}
       />
-      <span className="t-small text-ink-2" data-e-source={word ?? ""}>
+      <span className="t-small text-ink-2" data-e-source={word ?? ""} title={resolved.reason}>
         role{word ? ` · ${word}` : ""}
+        {!cell.staged && !cell.proposal && resolved.reason ? ` (${resolved.reason})` : ""}
       </span>
     </span>
   );

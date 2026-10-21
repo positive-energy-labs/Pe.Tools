@@ -58,8 +58,8 @@ public static class DuctSnapshots {
         nodes.AddRange(Of(BuiltInCategory.OST_DuctFitting).Select(e => Phased(Node(e, Fitting(e), slots, schemas, network, labelParameter), e)));
         nodes.AddRange(Of(BuiltInCategory.OST_DuctAccessory).Select(e => Phased(Node(e, DuctNodeKind.Accessory, slots, schemas, network, labelParameter), e)));
         nodes.AddRange(Of(BuiltInCategory.OST_DuctTerminal).Select(e => Phased(Node(e, DuctNodeKind.Terminal, slots, schemas, network, labelParameter), e)));
-        nodes.AddRange(Of(BuiltInCategory.OST_MechanicalEquipment)
-            .Where(e => HvacConnectors(e).Any()).Select(e => Phased(Node(e, DuctNodeKind.Equipment, slots, schemas, network, labelParameter), e)));
+        var equipment = Of(BuiltInCategory.OST_MechanicalEquipment).Where(e => HvacConnectors(e).Any()).ToList();
+        nodes.AddRange(equipment.Select(e => Phased(Node(e, DuctNodeKind.Equipment, slots, schemas, network, labelParameter), e)));
         var systems = new FilteredElementCollector(doc).OfClass(typeof(MechanicalSystem)).Cast<MechanicalSystem>()
             .Where(m => m.SystemType is DuctSystemType.SupplyAir or DuctSystemType.ReturnAir or DuctSystemType.ExhaustAir)
             .OrderBy(m => m.Name, StringComparer.Ordinal)
@@ -67,7 +67,11 @@ public static class DuctSnapshots {
             .ToList();
 
         var analysis = DuctNetwork.Analyze(nodes, segments);
-        var groupOf = analysis.Nodes.Where(n => n.Kind == DuctNodeKind.Terminal).ToDictionary(n => n.Id, n => n.GroupId);
+        var groupsOf = analysis.Nodes.Where(n => n.Kind == DuctNodeKind.Terminal && n.GroupId is not null)
+            .ToDictionary(n => n.Id, n => (IReadOnlyList<string>)[n.GroupId!]);
+        // A unit belongs to every group it roots (one port per group, a supply and a return side).
+        var rootedBy = analysis.Groups.SelectMany(g => g.RootIds.Select(id => (id, g.Id)))
+            .GroupBy(x => x.id).ToDictionary(x => x.Key, x => (IReadOnlyList<string>)x.Select(y => y.Id).ToList());
         return new DuctSnapshotData(
             new DuctDocument(doc.Title, readAt, clock.ElapsedMilliseconds, network),
             DuctCoordinateEncoding.NativeDouble,
@@ -83,15 +87,17 @@ public static class DuctSnapshots {
             store,
             storeError,
             new DuctPhases(phases.Select(ph => ph.Name).ToList(), PhaseViews(doc, phaseNames)),
-            AirflowCandidates(Of(BuiltInCategory.OST_DuctTerminal), groupOf));
+            AirflowCandidates(Of(BuiltInCategory.OST_DuctTerminal), groupsOf),
+            AirflowCandidates(equipment, rootedBy));
     }
 
     /// <summary>
-    ///     Every air flow parameter the terminals carry, instance and type (the built-in `Flow`, the connector's flow,
-    ///     among them), with how many terminals hold a nonzero value in each: the picker for the TerminalFlow slot
-    ///     (pressure-drop ledger, 2026-10-20).
+    ///     Every air flow parameter the elements carry, instance and type (on a terminal the built-in `Flow`, the
+    ///     connector's flow, among them), with how many hold a nonzero value in each: the picker for the TerminalFlow slot
+    ///     over terminals and the FanFlow slot over equipment (pressure-drop ledger, 2026-10-20 and 2026-10-21). Coverage
+    ///     per group counts an element in every group `groupsOf` names (a unit in each group it roots).
     /// </summary>
-    private static IReadOnlyList<DuctAirflowCandidate> AirflowCandidates(IReadOnlyList<Element> terminals, IReadOnlyDictionary<long, string?> groupOf) {
+    private static IReadOnlyList<DuctAirflowCandidate> AirflowCandidates(IReadOnlyList<Element> terminals, IReadOnlyDictionary<long, IReadOnlyList<string>> groupsOf) {
         var seen = new Dictionary<(string Slot, string Where), (bool Shared, HashSet<long> Have)>();
         foreach (var e in terminals) {
             void Add(string slot, string where, bool shared, bool has) {
@@ -105,8 +111,9 @@ public static class DuctSnapshots {
                 foreach (var p in AirFlows(symbol))
                     Add(p.Definition.Name, "type", p.IsShared, Converted(p, UnitTypeId.CubicFeetPerMinute) > 0);
         }
-        var byGroup = terminals.GroupBy(t => groupOf.TryGetValue(t.Id.Value(), out var g) ? g : null)
-            .Where(g => g.Key is not null).ToList();
+        var byGroup = terminals
+            .SelectMany(t => (groupsOf.TryGetValue(t.Id.Value(), out var gs) ? gs : []).Select(g => (Group: g, Element: t)))
+            .GroupBy(x => (string?)x.Group, x => x.Element).ToList();
         return seen
             .Select(kv => new DuctAirflowCandidate(kv.Key.Slot, kv.Key.Where, kv.Value.Shared, kv.Value.Have.Count, terminals.Count,
                 byGroup.Select(g => new DuctGroupCoverage(g.Key!, g.Count(t => kv.Value.Have.Contains(t.Id.Value())), g.Count()))
@@ -122,11 +129,11 @@ public static class DuctSnapshots {
         p.StorageType == StorageType.Double && Try(() => p.Definition.GetDataType()) is { } spec && spec == SpecTypeId.AirFlow;
 
     /// <summary>
-    ///     A terminal's design airflow from the TerminalFlow slot and the slot that supplied it: the air flow parameter of
-    ///     that name on the instance (the built-in `Flow` is the connector's; a family parameter of the same name can sit
-    ///     beside it, so the first nonzero wins), else on its type.
+    ///     A design airflow from a slot (TerminalFlow on a terminal, FanFlow on a unit) and the slot that supplied it: the
+    ///     air flow parameter of that name on the instance (a terminal's built-in `Flow` is the connector's; a family
+    ///     parameter of the same name can sit beside it, so the first nonzero wins), else on its type.
     /// </summary>
-    private static (double? Cfm, string? From) TerminalFlow(Element e, string slot) {
+    private static (double? Cfm, string? From) SlotFlow(Element e, string slot) {
         double? First(Element owner) => owner.GetParameters(slot).Where(IsAirFlow)
             .Select(p => Converted(p, UnitTypeId.CubicFeetPerMinute)).FirstOrDefault(v => v is not null);
         if (First(e) is { } own) return (own, slot);
@@ -272,7 +279,7 @@ public static class DuctSnapshots {
         string? flowParameter = null;
         switch (kind) {
             case DuctNodeKind.Terminal:
-                var (cfm, from) = TerminalFlow(e, slots.TerminalFlow);
+                var (cfm, from) = SlotFlow(e, slots.TerminalFlow);
                 flowParameter = from;
                 facts.Add(Fact(DuctNetwork.TerminalFlow, cfm, "cfm", DuctProvenance.DesignerStated));
                 if (fi?.Symbol.LookupParameter("Pe_Catalog")?.AsString() is { Length: > 0 } catalog)
@@ -284,7 +291,9 @@ public static class DuctSnapshots {
                 break;
             case DuctNodeKind.Equipment:
                 facts.Add(Fact(DuctNetwork.ExternalStatic, Converted(Named(e, slots.FanStatic), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
-                facts.Add(Fact("fanFlow", Converted(Named(e, slots.FanFlow), UnitTypeId.CubicFeetPerMinute), "cfm", DuctProvenance.DesignerStated));
+                var (fanCfm, fanFrom) = SlotFlow(e, slots.FanFlow);
+                flowParameter = fanFrom;
+                facts.Add(Fact("fanFlow", fanCfm, "cfm", DuctProvenance.DesignerStated));
                 // The equipment tag: joins a load-tool system ("System 1 Golf Sim FC-4") to this unit.
                 // The firm's tag lives in the shared instance parameter PE_G___TagInstance (Chadds: FC-17 on a unit whose Mark
                 // and Type Mark are both blank); Mark, then Type Mark, are the fallbacks for other libraries.
@@ -369,7 +378,7 @@ public static class DuctSnapshots {
                 "DuctNetwork.PassOne: terminal design flow summed up the tree from the one equipment port of each loop-free group",
                 new(a.Flows.Count, segs.Count), DuctProvenance.Derived),
             new("fan-static", "Fan external static",
-                $"OST_MechanicalEquipment with HVAC connectors: LookupParameter(\"{slots.FanStatic}\") (InchesOfWater60DegreesFahrenheit) and LookupParameter(\"{slots.FanFlow}\") on the instance, else on its FamilySymbol",
+                $"OST_MechanicalEquipment with HVAC connectors: LookupParameter(\"{slots.FanStatic}\") (InchesOfWater60DegreesFahrenheit) on the instance, else on its FamilySymbol; GetParameters(\"{slots.FanFlow}\") of the AirFlow spec, the first nonzero (CubicFeetPerMinute), else on its FamilySymbol",
                 new(equipment.Count(e => DuctNetwork.Fact(e, DuctNetwork.ExternalStatic) > 0), equipment.Count), DuctProvenance.DesignerStated),
             new("component-drop", "Component pressure drop",
                 $"OST_DuctAccessory instances: LookupParameter(\"{slots.ComponentDrop}\") (InchesOfWater60DegreesFahrenheit) on the instance, else on its FamilySymbol",

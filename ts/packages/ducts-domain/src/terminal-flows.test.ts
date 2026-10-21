@@ -253,6 +253,13 @@ describe("equipmentFlows", () => {
 describe("a group with no air mover", () => {
   it("prices nothing and raises one blocking no-fan finding; a staged passive root is no fan", () => {
     const s = snapshot(0.7854);
+    // Units 1 and 2 are the base equipment of the systems their groups carry: proposed fans.
+    s.groups[0]!.systemNames = ["SA 1"];
+    s.groups[1]!.systemNames = ["SA 2"];
+    s.systems = [
+      { name: "SA 1", baseEquipmentId: 1, sections: [] },
+      { name: "SA 2", baseEquipmentId: 2, sections: [] },
+    ] as unknown as DuctSnapshot["systems"];
     const work = ductsDocumentSchema.parse({});
     const found = survey(s, work).findings.filter((f) => f.kind === "no-fan");
     expect(found.map((f) => f.groupId)).toEqual(["g40"]);

@@ -104,15 +104,20 @@ function groupIndex(snapshot: DuctSnapshot): GroupIndex {
   return index;
 }
 
-/** Pure on the snapshot, so built once per (snapshot, group) and shared: callers read, never write. */
-export function groupTree(snapshot: DuctSnapshot, groupId: string): GroupTree {
+/**
+ * Pure on the snapshot, so built once per (snapshot, group, rooting) and shared: callers read, never
+ * write. `rootAt` names a unit: the tree is rooted at its lowest port into the group (a fan's own
+ * section, `fan-sections.ts`); a unit with no port in the group falls back to the rule below.
+ */
+export function groupTree(snapshot: DuctSnapshot, groupId: string, rootAt?: number): GroupTree {
   const by = groupIndex(snapshot);
-  let tree = by.trees.get(groupId);
-  if (!tree) by.trees.set(groupId, (tree = buildTree(by, groupId)));
+  const key = rootAt == null ? groupId : `${groupId}@${rootAt}`;
+  let tree = by.trees.get(key);
+  if (!tree) by.trees.set(key, (tree = buildTree(by, groupId, rootAt)));
   return tree;
 }
 
-function buildTree(by: GroupIndex, groupId: string): GroupTree {
+function buildTree(by: GroupIndex, groupId: string, rootAt?: number): GroupTree {
   const group = by.groups.get(groupId);
   const parts = new Map<number, Part>();
   for (const node of by.nodes.get(groupId) ?? [])
@@ -156,7 +161,14 @@ function buildTree(by: GroupIndex, groupId: string): GroupTree {
   const terminalIds = [...parts.values()]
     .filter((p) => p.node?.kind === "terminal")
     .map((p) => p.id);
-  const { root, rootWord, rooted } = chooseRoot(allPorts, parts, adjacent, terminalIds);
+  const own = allPorts.find((p) => p.equipment === rootAt);
+  const { root, rootWord, rooted } = own
+    ? {
+        root: own,
+        rootWord: `rooted at equipment ${own.equipment} port ${own.port}, the fan whose section this is`,
+        rooted: "port" as const,
+      }
+    : chooseRoot(allPorts, parts, adjacent, terminalIds);
   const extraRoots = allPorts.filter((p) => p !== root);
 
   // Breadth-first from the root element; a second reach of a visited element closes a loop.
@@ -234,7 +246,7 @@ function buildTree(by: GroupIndex, groupId: string): GroupTree {
 }
 
 /** Root to `id`, inclusive. */
-const pathTo = (parent: ReadonlyMap<number, number | null>, id: number) => {
+export const pathTo = (parent: ReadonlyMap<number, number | null>, id: number) => {
   const path = [id];
   for (let up = parent.get(id); up != null; up = parent.get(up)) path.unshift(up);
   return path;

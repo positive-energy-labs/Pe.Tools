@@ -14,6 +14,7 @@ const snapshot = { groups: [], nodes: [], segments: [] } as unknown as DuctSnaps
 const priced = {
   flows: new Map([[30, { cfm: 120, source: "revit" }]]),
   equipmentFlows: new Map([[1, { cfm: null, source: null }]]),
+  roles: new Map(),
   staged: { terminalDrops: {}, esp: {}, roles: {} },
   next: { paths: {}, byGroup: {}, design: { graph: { parts: [] } } },
 } as unknown as Priced;

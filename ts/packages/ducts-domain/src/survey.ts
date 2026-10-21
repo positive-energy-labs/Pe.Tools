@@ -12,6 +12,8 @@ import {
   type DuctsRouteDocument,
 } from "@pe/agent-contracts";
 
+import { byFlow, servedBy } from "./fan-sections.ts";
+import { passThrough } from "./pass-through.ts";
 import { phased } from "./phases.ts";
 import { tolerate, type InferredLink } from "./proximity.ts";
 import {
@@ -25,13 +27,16 @@ import {
 } from "./terminal-flows.ts";
 import { withStoredRulings } from "./rulings.ts";
 import { groupTree } from "./topology.ts";
+import { passiveOf, unitRoles, type UnitRole } from "./unit-roles.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 export interface Survey {
   snapshot: DuctSnapshot;
   flows: Map<number, TerminalFlow>;
-  /** Every unit's design flow: staged `equipmentFlows`, else Revit's `fanFlow` fact. */
+  /** Every unit's design flow: staged `equipmentFlows`, else Revit's `fanFlow` fact, else (a fan) the sum of the terminal flows it serves, `derived`. */
   equipmentFlows: Map<number, EquipmentFlow>;
+  /** Every root unit's role: ruled, staged, else proposed from its design flow (`unit-roles.ts`). */
+  roles: Map<number, UnitRole>;
   findings: DuctFinding[];
   /** The element pairs only a proximity inference joins; a path stepping across one rests on it. */
   inferred: InferredLink[];
@@ -40,7 +45,7 @@ export interface Survey {
 const PERSON = new Set(["open-end", "no-root", "multi-root", "no-terminal-flow"]);
 
 /**
- * A group with no air mover (no root, or every root a staged passive unit) has no duct path to a
+ * A group with no air mover (no root, or every root a passive unit) has no duct path to a
  * fan, so it prices nothing (`losses.ts`) and says so once. It stands in for the group's `no-root`.
  */
 function noFanFindings(snapshot: DuctSnapshot, passive: ReadonlySet<number>): DuctFinding[] {
@@ -53,9 +58,12 @@ function noFanFindings(snapshot: DuctSnapshot, passive: ReadonlySet<number>): Du
         .filter((n) => n.groupId === g.id && n.kind === "terminal")
         .map((n) => n.id),
       groupId: g.id,
-      note: g.rootIds.length
-        ? `no duct path to a fan: ${g.id} is fed only by passive ${g.rootIds.join(", ")}`
-        : `no duct path to a fan: ${g.id} has no equipment connected to it`,
+      note: ((inline) =>
+        g.rootIds.length || inline.length
+          ? `no duct path to a fan: ${g.id} is fed only by passive ${[...g.rootIds, ...inline].join(", ")}`
+          : `no duct path to a fan: ${g.id} has no equipment connected to it`)(
+        snapshot.nodes.filter((n) => n.groupId === g.id && n.kind === "equipment").map((n) => n.id),
+      ),
       assumed: null,
       clearer: "person" as const,
     }));
@@ -180,6 +188,7 @@ export function tolerated(snapshot: DuctSnapshot, work: DuctsRouteDocument | nul
   return result;
 }
 const inSeries = new WeakMap<DuctSnapshot, Map<string, ReturnType<typeof series>>>();
+const inline = new WeakMap<DuctSnapshot, Map<string, ReturnType<typeof passThrough>>>();
 const last = new WeakMap<DuctSnapshot, { work: DuctsRouteDocument | null; survey: Survey }>();
 
 export function survey(
@@ -198,28 +207,71 @@ export function survey(
   const s =
     bySeries.get(tags.join("|")) ??
     bySeries.set(tags.join("|"), series(t.snapshot, new Set(tags))).get(tags.join("|"))!;
-  const trees = s.snapshot.groups.map((g) => groupTree(s.snapshot, g.id));
-  const flows = terminalFlows(s.snapshot, staged.loads.preview, staged.flows, trees, roomFlows);
-  const noFan = noFanFindings(
-    s.snapshot,
-    new Set(
-      Object.entries(staged.roles).flatMap(([id, { role }]) =>
-        role === "passive" ? [Number(id)] : [],
-      ),
-    ),
-  );
+  // Roles are proposed on the groups as Revit cuts them; then a passive unit passes air through.
+  const units = equipmentFlows(s.snapshot, staged.equipmentFlows);
+  const roles = unitRoles(s.snapshot, units, staged.roles);
+  const passive = passiveOf(roles);
+  const key = [...passive].join(",");
+  const byPassive = inline.get(s.snapshot) ?? inline.set(s.snapshot, new Map()).get(s.snapshot)!;
+  const p = byPassive.get(key) ?? byPassive.set(key, passThrough(s.snapshot, passive)).get(key)!;
+  const m = p.snapshot;
+  const trees = m.groups.map((g) => groupTree(m, g.id));
+  const flows = terminalFlows(m, staged.loads.preview, staged.flows, trees, roomFlows);
+  const noFan = noFanFindings(m, passive);
   const fanless = new Set(noFan.map((f) => f.groupId));
-  const passive = new Set(
-    Object.entries(staged.roles).flatMap(([id, { role }]) => (role === "passive" ? [Number(id)] : [])),
-  );
-  const rootsOf = (groupId: string) =>
-    s.snapshot.groups.find((g) => g.id === groupId)?.rootIds ?? [];
-  // Several roots stand until a person stages all but one passive (it then moves no design air).
-  const manyRoots = (i: { kind: string; groupId: string }) =>
-    i.kind === "multi-root" && rootsOf(i.groupId).filter((id) => !passive.has(id)).length > 1;
+  const rootsOf = (groupId: string) => m.groups.find((g) => g.id === groupId)?.rootIds ?? [];
+  // A fan that states no flow takes the sum of the terminal flows it serves (nearest port wins),
+  // shown as derived and never written; the largest of its groups' sums is its design flow.
+  const derived = new Map(units);
+  for (const g of m.groups) {
+    const fans = g.rootIds.filter((id) => !passive.has(id));
+    if (!fans.some((id) => units.get(id)?.cfm == null)) continue;
+    const served = servedBy(groupTree(m, g.id), fans);
+    for (const id of fans) {
+      if (units.get(id)?.cfm != null) continue;
+      const ts = served.get(id) ?? [];
+      const cfm = ts.reduce((a, t) => a + (flows.flows.get(t)?.cfm ?? 0), 0);
+      if (cfm > 0 && cfm > (derived.get(id)?.cfm ?? 0))
+        derived.set(id, { cfm, source: "derived", grilles: ts.length });
+    }
+  }
+  const flowWord = (id: number) => {
+    const f = derived.get(id);
+    return f?.cfm == null
+      ? "flow unknown"
+      : `${f.cfm} cfm${f.source === "derived" ? ` (sum of ${f.grilles} grille${f.grilles === 1 ? "" : "s"})` : ""}`;
+  };
+  const nodeOf = new Map(m.nodes.map((n) => [n.id, n]));
+  const nameOf = (id: number) => markOf(nodeOf.get(id)) ?? String(id);
+  // Several fans price per fan (`fan-sections.ts`) and never block: a Diagnostics line names the
+  // split; a fan whose flow is unknown is the unit flow Set row's, not a Fix.
+  const multiFan: DuctFinding[] = m.groups.flatMap((g) => {
+    const fans = byFlow(
+      g.rootIds
+        .filter((id) => !passive.has(id))
+        .map((unit) => ({ unit, cfm: derived.get(unit)?.cfm ?? null })),
+    );
+    if (fans.length < 2) return [];
+    return [
+      {
+        id: `multi-fan:${g.id}`,
+        kind: "multi-fan",
+        groupId: g.id,
+        elementIds: fans.map((f) => f.unit),
+        note: `priced per fan: ${nameOf(fans[0]!.unit)} ${flowWord(fans[0]!.unit)} owns the trunk; ${fans
+          .slice(1)
+          .map((f) => `${nameOf(f.unit)} ${flowWord(f.unit)} owns its port to the first junction`)
+          .join("; ")}`,
+        assumed: null,
+        clearer: "person" as const,
+      },
+    ];
+  });
   const findings: DuctFinding[] = [
     ...s.findings,
     ...noFan,
+    ...p.findings,
+    ...multiFan,
     // An inference is likely, never correct (kaitpw 2026-10-19): a person rules on every one.
     ...t.findings.map((f) => ({
       ...f,
@@ -227,9 +279,10 @@ export function survey(
       clearer: "person" as const,
     })),
     ...flows.findings.map(flowFinding),
-    ...s.snapshot.issues
+    ...m.issues
       .filter((i) => !(i.kind === "no-root" && fanless.has(i.groupId)))
-      .filter((i) => i.kind !== "multi-root" || manyRoots(i))
+      // Several roots price per fan (`multiFan`); the raw issue is not a blocker.
+      .filter((i) => i.kind !== "multi-root")
       .map((i) => ({
         id: i.id,
         kind: i.kind,
@@ -239,7 +292,7 @@ export function survey(
           i.elementId != null ? [i.elementId] : i.kind === "multi-root"
             ? rootsOf(i.groupId)
             : i.kind === "no-root"
-              ? s.snapshot.nodes.filter((n) => n.groupId === i.groupId && n.kind === "terminal").map((n) => n.id)
+              ? m.nodes.filter((n) => n.groupId === i.groupId && n.kind === "terminal").map((n) => n.id)
               : [],
         // Fan static is the route's output, not an input a person owes.
         note:
@@ -251,9 +304,10 @@ export function survey(
       })),
   ];
   const result = {
-    snapshot: s.snapshot,
+    snapshot: m,
     flows: flows.flows,
-    equipmentFlows: equipmentFlows(s.snapshot, staged.equipmentFlows),
+    equipmentFlows: derived,
+    roles,
     findings,
     inferred: t.links,
   };

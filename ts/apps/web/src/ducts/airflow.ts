@@ -4,7 +4,8 @@
  * person's choice in the walk, never a hidden setting. `ducts.snapshot` lists every air flow
  * parameter the terminals carry (`airflowCandidates`) with its coverage; the choice stages the
  * person-owned `parameters.terminalFlow` slot, the snapshot re-reads under it, and a write keeps
- * it in the model's store.
+ * it in the model's store. A unit's design flow is the same step over equipment (2026-10-21):
+ * `fanFlowCandidates`, the `parameters.fanFlow` slot, coverage counted over the group's roots.
  */
 import {
   transitionPatches,
@@ -25,17 +26,37 @@ export interface AirflowOption {
   of: number;
 }
 
+/** Which elements a slot reads: terminals (`terminalFlow`) or units (`fanFlow`). */
+export type AirflowOf = "terminal" | "unit";
+
+// firm-default: the snapshot reports the slots it read; these are only for a snapshot that predates them.
+const DEFAULT_SLOT: Record<AirflowOf, string> = {
+  terminal: "PE_M_Grd_AirFlow",
+  unit: "PE_M_Fan_AirFlowDesign",
+};
+const NOUN: Record<AirflowOf, string> = { terminal: "terminal", unit: "unit" };
+
 /** The current slot and every candidate with its coverage in the group (the document when none). */
 export function airflowOptions(
-  snapshot: Pick<DuctSnapshot, "slots" | "airflowCandidates" | "nodes">,
+  snapshot: Pick<DuctSnapshot, "slots" | "airflowCandidates" | "fanFlowCandidates" | "nodes"> &
+    Partial<Pick<DuctSnapshot, "groups">>,
   group: string,
+  of: AirflowOf = "terminal",
 ): { current: string; options: AirflowOption[] } {
   // A snapshot read before the slot was reported (or a test's partial one) reads the default.
-  const current = snapshot.slots?.terminalFlow ?? "PE_M_Grd_AirFlow";
-  const inGroup = snapshot.nodes.filter(
-    (n) => n.kind === "terminal" && (!group || n.groupId === group),
-  ).length;
-  const options = (snapshot.airflowCandidates ?? []).map((c) => {
+  const current =
+    (of === "unit" ? snapshot.slots?.fanFlow : snapshot.slots?.terminalFlow) ?? DEFAULT_SLOT[of];
+  const roots = new Set(
+    (snapshot.groups ?? []).filter((g) => !group || g.id === group).flatMap((g) => g.rootIds),
+  );
+  const inGroup =
+    of === "unit"
+      ? roots.size
+      : snapshot.nodes.filter((n) => n.kind === "terminal" && (!group || n.groupId === group))
+          .length;
+  const candidates =
+    (of === "unit" ? snapshot.fanFlowCandidates : snapshot.airflowCandidates) ?? [];
+  const options = candidates.map((c) => {
     const have = group ? (c.groups.find((g) => g.groupId === group)?.have ?? 0) : c.have;
     const where = ` · ${c.where}${c.shared ? ", shared" : ""}`;
     return { slot: c.slot, label: `${slotWord(c.slot)}${where}`, have, of: group ? inGroup : c.of };
@@ -44,7 +65,7 @@ export function airflowOptions(
   if (!options.some((o) => o.slot === current))
     options.push({
       slot: current,
-      label: `${slotWord(current)} · on no terminal`,
+      label: `${slotWord(current)} · on no ${NOUN[of]}`,
       have: 0,
       of: inGroup,
     });
@@ -57,9 +78,15 @@ export function airflowOptions(
   };
 }
 
-/** The patches choosing a slot makes: stage it on the person-owned `parameters.terminalFlow` cell. */
-export const airflowPatches = (doc: DuctsRouteDocument | null, slot: string): RouteStatePatch[] =>
-  transitionPatches(["parameters"], "terminalFlow", doc?.parameters?.terminalFlow ?? {}, {
+/** The patches choosing a slot makes: stage it on the person-owned `parameters.terminalFlow` (or `fanFlow`) cell. */
+export const airflowPatches = (
+  doc: DuctsRouteDocument | null,
+  slot: string,
+  of: AirflowOf = "terminal",
+): RouteStatePatch[] => {
+  const key = of === "unit" ? "fanFlow" : "terminalFlow";
+  return transitionPatches(["parameters"], key, doc?.parameters?.[key] ?? {}, {
     kind: "stage",
     rung: { value: slot },
   });
+};
