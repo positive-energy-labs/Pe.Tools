@@ -27,7 +27,8 @@
     "./product-map": {
       "types": "./src/product-map.ts",
       "import": "./src/product-map.ts"
-    }
+    },
+    "./space-view": "./src/space-view.ts"
   },
   "publishConfig": {
     "access": "public"

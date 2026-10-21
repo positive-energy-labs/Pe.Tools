@@ -5307,6 +5307,152 @@ export namespace RevitDetailSheets {
   }
 }
 
+/** Export bounded real host and linked MEP and architectural triangles from the resident Space world as a compact binary artifact in host internal feet. Host elementIds derive a context crop; bounds optionally set an explicit crop. Returns element identities, source freshness and omitted-element count. No document mutation. Browser orbit, visibility and cuts need no further native calls. */
+export namespace RevitDetailSpaceScene {
+  export namespace Req {
+    export interface Request {
+      elementIds?: number[] | null;
+      contextPaddingFt?: number;
+      maxTriangles?: number;
+      bounds?: null | Aabb;
+    }
+    /**
+     * Axis-aligned bounds in host internal feet.
+     */
+    export interface Aabb {
+      minX: number;
+      minY: number;
+      minZ: number;
+      maxX: number;
+      maxY: number;
+      maxZ: number;
+    }
+  }
+  export namespace Res {
+    /**
+     * Which document a partition reads. One partition per source.
+     */
+    export type SourceKind = "Host" | "RevitLink" | "IfcLink";
+    /**
+     * What a triangle came from. Curve2D is a DWG 2D layer raised into a vertical
+     * ribbon; it is never an obstructor unless a filter names it.
+     *
+     */
+    export type PrimKind = "Solid" | "Mesh" | "Curve2D";
+    /**
+     * Architectural height authority, independent of collision geometry. None means never a height.
+     * ByGeometry is an element with no category role (an IFC proxy slab or roof is a nameless Generic
+     * Model) whose triangles answer for it, per HeightRoles.
+     *
+     */
+    export type HeightRole = "None" | "Floor" | "Overhead" | "ByGeometry";
+
+    export interface Response {
+      scene: SceneMetadata;
+      id: string;
+      url: string;
+      bytes: number;
+    }
+    export interface SceneMetadata {
+      format: string;
+      stamp: Stamp;
+      bounds: Aabb;
+      triangles: number;
+      elements: SceneElement[];
+      requestedElementIds: number[];
+      omittedElements: number;
+      sources: SceneSource[];
+    }
+    /**
+     * Provenance and freshness. Every answer embeds one; it is not optional.
+     */
+    export interface Stamp {
+      hostDocumentKey: string;
+      epoch: number;
+      frame: string;
+      builtUtc: string;
+      sources: SourceRow[];
+      fresh: boolean;
+      resolved: Resolved;
+    }
+    /**
+     * One row per partition. Carried inside every Stamp.
+     */
+    export interface SourceRow {
+      source: number;
+      documentKey: string;
+      linkInstanceId?: number | null;
+      kind: SourceKind;
+      builtAtEpoch: number;
+      dirty: boolean;
+      elements: number;
+      triangles: number;
+      skipped: number;
+    }
+    /**
+     * The options a verb actually ran with, after defaults were applied. Never null and never a
+     * silence: a caller who passed no filter reads back Kinds: [Solid, Mesh] and the sources
+     * and categories spelled out. This is the gate that was in force, not the outcome; what the
+     * verb then had to touch is Searched.
+     *
+     */
+    export interface Resolved {
+      sources: SourceKind[];
+      categories: string[];
+      kinds: PrimKind[];
+      layers: string[];
+      excludedElementIds: number[];
+    }
+    /**
+     * Axis-aligned bounds in host internal feet.
+     */
+    export interface Aabb {
+      minX: number;
+      minY: number;
+      minZ: number;
+      maxX: number;
+      maxY: number;
+      maxZ: number;
+    }
+    export interface SceneElement {
+      handle: Handle;
+      firstVertex: number;
+      vertexCount: number;
+      bounds: Aabb;
+      focus: boolean;
+    }
+    /**
+     * The address of one element. Enough for the host to select it.
+     */
+    export interface Handle {
+      documentKey: string;
+      elementId: number;
+      uniqueId: string;
+      linkInstanceId?: number | null;
+      category: string;
+      kind: PrimKind;
+      layer?: null | string;
+      extrusion?: null | Extrusion;
+      heightRole: HeightRole;
+    }
+    /**
+     * How far a 2D DWG layer was raised and why. A ribbon is an assumption wearing geometry, so the
+     * assumption travels on the row and into the Handle. Heights are per polyline, so one row holds
+     * the tallest band it emitted and the distinct reasons behind all of them.
+     *
+     */
+    export interface Extrusion {
+      maxHeightFt: number;
+      reasons: string[];
+    }
+    export interface SceneSource {
+      documentKey: string;
+      linkInstanceId?: number | null;
+      sourceToHost: number[];
+    }
+  }
+}
+
 /** One bounded 'what is on the user's screen' packet: active-view identity, observed view state, visible category composition (counts, generous bounds), and the verbatim trust strip (confidenceWarnings, apiLimitations, notInspected). observedAtUtc stamps freshness. Escalate to visible-summary for element handles or view-rendering-state for multi-view comparison. */
 export namespace RevitGlanceAttention {
   export namespace Req {
@@ -7269,6 +7415,7 @@ export interface HostOps {
   "revit.detail.parameter-links": { request: RevitDetailParameterLinks.Req.Request; response: RevitDetailParameterLinks.Res.Response };
   "revit.detail.schedules": { request: RevitDetailSchedules.Req.Request; response: RevitDetailSchedules.Res.Response };
   "revit.detail.sheets": { request: RevitDetailSheets.Req.Request; response: RevitDetailSheets.Res.Response };
+  "revit.detail.space-scene": { request: RevitDetailSpaceScene.Req.Request; response: RevitDetailSpaceScene.Res.Response };
   "revit.glance.attention": { request: RevitGlanceAttention.Req.Request; response: RevitGlanceAttention.Res.Response };
   "revit.glance.model": { request: RevitGlanceModel.Req.Request; response: RevitGlanceModel.Res.Response };
   "revit.matrix.loaded-families": { request: RevitMatrixLoadedFamilies.Req.Request; response: RevitMatrixLoadedFamilies.Res.Response };
@@ -7353,6 +7500,7 @@ export const hostOpKeys = [
   "revit.detail.parameter-links",
   "revit.detail.schedules",
   "revit.detail.sheets",
+  "revit.detail.space-scene",
   "revit.glance.attention",
   "revit.glance.model",
   "revit.matrix.loaded-families",

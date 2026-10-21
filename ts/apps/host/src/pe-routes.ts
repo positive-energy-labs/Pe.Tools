@@ -120,6 +120,8 @@ import {
   type PageDescriptor,
 } from "./page-libraries.ts";
 import { join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { createPackageLifecycle, bindPackageLifecycle } from "./package-lifecycle.ts";
 import { createPluginsHandler } from "./plugins-handler.ts";
 import { createPodRoutes } from "./pod-routes.ts";
@@ -167,7 +169,10 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 export function createPeRoutes(options: PeRoutesOptions) {
   const work = new RouteWorkspace({ registrations: options.registrations, store: options.store });
   const analysis = options.ductsAnalysis
-    ? createDuctsAnalysis({ ...options.ductsAnalysis, readWork: (key) => work.readRaw(key, "ducts") })
+    ? createDuctsAnalysis({
+        ...options.ductsAnalysis,
+        readWork: (key) => work.readRaw(key, "ducts"),
+      })
     : null;
   const views = new RouteViewStore();
   const resources = observeResources(work, options.heads, options.observeHostResource);
@@ -223,6 +228,26 @@ export function createPeRoutes(options: PeRoutesOptions) {
     const method = request.method;
     const declared = matchPeRoute(method, url.pathname);
     if (!declared || declared.route.owner !== "pe") return json({ error: "Unknown Pe route" }, 404);
+    if (declared.id === "space.scene-artifact") {
+      const id = declared.params.id!;
+      if (!/^[a-f0-9]{64}$/.test(id)) return json({ error: "Invalid scene id" }, 400);
+      try {
+        const bytes = await readFile(join(productRoot(), "cache", "space-scenes", `${id}.bin`));
+        if (createHash("sha256").update(bytes).digest("hex") !== id)
+          return json({ error: "Scene artifact integrity failed" }, 409);
+        return new Response(bytes, {
+          headers: {
+            "content-type": "application/octet-stream",
+            "cache-control": "private, max-age=31536000, immutable",
+          },
+        });
+      } catch {
+        return json(
+          { error: "Scene artifact unavailable; capture it again from its document" },
+          404,
+        );
+      }
+    }
     if (declared.id === "ducts.analysis" || declared.id === "ducts.analysis-artifact") {
       if (!analysis) return json({ error: "Ducts analysis is unavailable" }, 503);
       try {

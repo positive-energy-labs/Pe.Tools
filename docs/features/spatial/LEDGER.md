@@ -4,6 +4,10 @@ One metric substrate under every Pe.* helper that reads or writes Revit geometry
 
 ## Decided
 
+- 2026-10-21, user verdict: the minimal viewer keeps MEP and surrounding geometry in real 3D positions. A bent section is an open line drawn in plan, extruded vertically, with a reversible retained side. It does not unfold the route. [View contract](../../../ts/packages/agent-contracts/src/space-view.ts), [viewer](../../../ts/apps/web/src/space/route.tsx).
+- 2026-10-21, [scene capture](../../../dotnet/Pe.Revit.Space/Scene.cs) clips real resident triangles to the requested context once and writes a binary artifact. The browser performs navigation, picking, visibility and sections locally. Cuts expose triangle surfaces without generating solid caps. Host feet, source transforms, element identities and capture freshness travel with the artifact.
+- 2026-10-21, PROVEN[session dev controlled + browser, space-wt-25 build 81b9ff1a5c0e and Chrome /space on the Chadds R25 saved copy, e539efe1 + feature worktree, 2026-10-21]: capture reduced from 49,486,008 to 10,327,820 bytes after exact crop; 259,195 triangles, 1,726 elements, zero budget omissions. Four focus ducts retain byte-identical coordinates. Picking, hide/isolate, orbit/pan/zoom, straight and bent cuts, bend dragging, reverse side and saved-state reload pass; clipping also governs picking. Continuous slicing measured p95 frame interval 16.9 ms, max 20.5 ms, with zero native calls. Evidence: `.artifacts/space-viewer/browser-proof.json`, `clipped-picking-proof.json`, `geometry-proof.json`. This saved Chadds copy has no RVT links, so this run does not certify multi-model alignment.
+
 - 2026-09-05, "a lying world is worse than disparate languages". A false CLEAR is the first failure to remove; one language across helpers is the second goal, not a substitute for the first.
 - 2026-09-05, the first proof task is the duct battery on project-a (P1 to P5 from `docs/features/mep-placement/LEDGER.md`), not filled regions, because ducts have a measured baseline and higher value.
 - 2026-09-05, success is scored three ways on that battery: false CLEAR count is zero, tool calls per finished run are below the July 2026 count, every HIT carries a handle the user can select in Revit.
@@ -77,6 +81,8 @@ One metric substrate under every Pe.* helper that reads or writes Revit geometry
 
 ## Tried & rejected
 
+- 2026-10-21, element-box-only context selection retained entire imported meshes and framed most of the building around four ducts; replaced with triangle-box clipping. Chromium failed an immutable 49 MB cached fetch with `ERR_CACHE_WRITE_FAILURE`; a no-store fetch of the same bytes succeeded, so scene loading relies on the durable disk artifact rather than browser disk cache.
+
 - 2026-09-05, WriteTransaction probes on `MEP_ArchitectA_ProjectA_R25_detached_20260811.rvt`; the file is still workshared and raises a modal "Central Model is inaccessible" dialog that blocks Revit until a human closes it. Use `ProjectA_Clone_Aug_11` (cloud) or a `doc clone --out` copy for any write probe.
 
 - 2026-09-04, export to IFC and query through IfcOpenShell (w-ifc); Revit's exporter drops `ImportInstance` and point clouds, re-export takes minutes per commit, IfcOpenShell tree crashes on a second file (issue #6062). Paper verdict, primary sources cited in `priorart.md`.
@@ -84,6 +90,9 @@ One metric substrate under every Pe.* helper that reads or writes Revit geometry
 - 2026-09-04, a dense distance field as the world (w-voxel); a 0.5 ft cell cannot certify a 2 in clearance, and sparse storage failed on the spike because most bricks sit near a surface. Kept as a route cache policy only.
 
 ## Owed
+
+- Space viewer verification: focused compile, cut/state and artifact HTTP checks pass; full `pnpm verify` is blocked by 56 formatting failures unchanged from HEAD and unrelated committed checks. Evidence: `.artifacts/space-viewer/implementation-report.json` and `format-baseline-comparison.json`.
+- Review runtime retained intentionally for the user: `feat/space-viewer` worktree, its isolated host/frontend recorded in `.artifacts/accept/space-wt-20261021/run.json`, and Chrome instance `pe.tools-01` on port 9222. The exact saved scene and view reload after stopping `space-wt-25` and restarting the host (`.artifacts/space-viewer/offline-reload-proof.json`). Retire these owned resources after review. Main and its user-owned Revit session remain separate.
 
 - Probe 4 leftovers: link reload on a scratch session with one local-disk `.rvt` link (cloud links raise dialogs); connected-duct move fan-out under the ReadOnly guard; undo and redo id sets; `ElementId` reuse after delete plus undo; whether `DocShadow`'s 512-id oversized-delta clear is right for a soup whose rebuild costs 133 s.
 - `vp exec` fails with `'node' is not recognized` inside a Herdr agent shell while `corepack pnpm exec jiti` works; the pea shim is unusable for delegated agents until the vp toolchain resolves node from that shell.
