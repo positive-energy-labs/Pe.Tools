@@ -26,6 +26,56 @@ import {
 } from "./native-receipts.ts";
 
 const refused = (message: string) => new BridgeError(message, 409, { notDispatched: true });
+type CatalogEntry = { fingerprint: string; rows: Promise<unknown[]> };
+const catalogs = new WeakMap<object, Map<string, CatalogEntry>>();
+
+/** Registry bindings precede bridge registration. Retain metadata, never a native response/receipt. */
+async function operationRows(bridge: RevitBridge["Service"], target: SdkSession) {
+  const read = async () => {
+    const result = await Effect.runPromise(
+      Effect.result(bridge.invoke("host.ops.catalog", {}, target.sessionId, null)),
+    );
+    if (result._tag === "Failure") throw result.failure;
+    const rows = (result.success.value as { operations?: unknown[] })?.operations;
+    if (!Array.isArray(rows)) throw refused("Operation catalog unavailable");
+    return rows;
+  };
+  // An adapter without lifecycle observations cannot safely retain authorization metadata.
+  if (typeof bridge.subscribe !== "function") return read();
+  let held = catalogs.get(bridge);
+  if (!held) {
+    held = new Map();
+    catalogs.set(bridge, held);
+    const entries = held;
+    bridge.subscribe((event) => {
+      if (event.kind === "connected" || event.kind === "disconnected")
+        entries.delete(event.sessionId);
+    });
+  }
+  const fingerprint = JSON.stringify([
+    target.processId,
+    target.processStartUtcUnixMs,
+    target.buildStamp,
+    target.state?.runtimeAssemblies,
+  ]);
+  const previous = held.get(target.sessionId);
+  if (previous?.fingerprint === fingerprint) return previous.rows;
+  const entries = held;
+  const entry: CatalogEntry = { fingerprint, rows: Promise.resolve([]) };
+  entries.set(target.sessionId, entry);
+  entry.rows = read().then(
+    (rows) => {
+      if (entries.get(target.sessionId) !== entry)
+        throw refused("Bridge attachment changed while reading operation catalog");
+      return rows;
+    },
+    (error) => {
+      if (entries.get(target.sessionId) === entry) entries.delete(target.sessionId);
+      throw error;
+    },
+  );
+  return entry.rows;
+}
 /** One rule for /call and /actions: a declared human-only op refuses every other caller. */
 export function requireEligibleCaller(
   definition: { key: string; actor?: "human" | "agent" | "any" },
@@ -47,18 +97,20 @@ export async function operationDefinition(
   const local = tsOnlyOperationCatalog.find((row) => row.key === key);
   if (local) return local;
   if (!target) throw refused("An SDK-resolved attachment is required");
-  const result = await Effect.runPromise(
-    Effect.result(bridge.invoke("host.ops.catalog", {}, target.sessionId, null)),
-  );
-  if (result._tag === "Failure") throw result.failure;
-  const rows = (result.success.value as { operations?: unknown[] })?.operations;
+  const rows = await operationRows(bridge, target);
   const raw = rows?.find(
     (row) => row && typeof row === "object" && "key" in row && row.key === key,
   );
   if (!raw) throw refused(`Catalog metadata unavailable for '${key}'`);
-  const definition = Schema.decodeUnknownSync(hostOperationDefinitionSchema)(raw);
-  if (definition.intent !== "Read" && definition.intent !== "Mutate")
-    throw refused(`Unknown operation intent for '${key}'`);
+  let definition;
+  try {
+    definition = Schema.decodeUnknownSync(hostOperationDefinitionSchema)(raw);
+    if (definition.intent !== "Read" && definition.intent !== "Mutate")
+      throw refused(`Unknown operation intent for '${key}'`);
+  } catch (error) {
+    catalogs.get(bridge)?.delete(target.sessionId);
+    throw error;
+  }
   return {
     ...definition,
     actor: (raw as { actor?: "human" | "agent" | "any" }).actor,

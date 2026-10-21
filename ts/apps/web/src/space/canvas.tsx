@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { Button } from "@pe/kit/lang/button";
+import { spaceMark, spaceTiming } from "./performance";
 import {
   AXES,
   AXIS_LABEL,
@@ -41,6 +42,8 @@ type Props = {
   metadata: Metadata;
   positions: Float32Array;
   state: ViewState;
+  /** Retained scopes sleep without drawing, resizing, or rebuilding their GPU resources. */
+  active?: boolean;
   /** The axis whose orthographic editor holds the main picture; null is the 3D view. */
   editing: Axis | null;
   onEdit: (axis: Axis | null) => void;
@@ -103,6 +106,9 @@ export function SpaceCanvas(props: Props) {
   latest.current = props;
   const update = useRef<(() => void) | null>(null);
   useEffect(() => {
+    const sceneId = props.state.scene;
+    const measuring = spaceTiming();
+    spaceMark("build-start", { id: sceneId });
     const mount = host.current!;
     let renderer: THREE.WebGLRenderer;
     try {
@@ -191,7 +197,30 @@ export function SpaceCanvas(props: Props) {
       spaceCount: { value: [0, 0, 0] },
       spaceKeep: { value: [1, 1, 1] },
     };
-    const meshes: THREE.Mesh<THREE.BufferGeometry, THREE.MeshLambertMaterial>[] = [];
+    const material = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+    material.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, uniforms);
+      shader.vertexShader = `varying vec3 vSpacePosition;\n${shader.vertexShader}`.replace(
+        "#include <project_vertex>",
+        "#include <project_vertex>\nvSpacePosition = (modelMatrix * vec4(transformed, 1.0)).xyz;",
+      );
+      shader.fragmentShader = `${clipping}\n${shader.fragmentShader}`.replace(
+        "#include <clipping_planes_fragment>",
+        "#include <clipping_planes_fragment>\nspaceClip();",
+      );
+    };
+    material.customProgramCacheKey = () => "space-axes-batch-v2";
+    const batch = new THREE.BatchedMesh(
+      props.metadata.elements.length,
+      props.positions.length / 3,
+      0,
+      material,
+    );
+    // Opaque geometry needs no per-frame depth sort. Per-element visibility and picking stay native.
+    batch.sortObjects = false;
+    scene.add(batch);
+    const instances: { id: number; key: string; color: THREE.Color }[] = [];
+    spaceMark("geometry-start", { id: sceneId });
     for (const element of props.metadata.elements) {
       const geometry = new THREE.BufferGeometry();
       const vertices = props.positions.slice(
@@ -212,27 +241,17 @@ export function SpaceCanvas(props: Props) {
         /duct|pipe|conduit|tray|mechanical|plumbing|sprinkler|terminal|electrical/i.test(
           element.handle.category,
         );
-      const material = new THREE.MeshLambertMaterial({
-        color: mep ? 0xb5c9d2 : 0x747c81,
-        side: THREE.DoubleSide,
-      });
-      material.onBeforeCompile = (shader) => {
-        Object.assign(shader.uniforms, uniforms);
-        shader.vertexShader = `varying vec3 vSpacePosition;\n${shader.vertexShader}`.replace(
-          "#include <project_vertex>",
-          "#include <project_vertex>\nvSpacePosition = (modelMatrix * vec4(transformed, 1.0)).xyz;",
-        );
-        shader.fragmentShader = `${clipping}\n${shader.fragmentShader}`.replace(
-          "#include <clipping_planes_fragment>",
-          "#include <clipping_planes_fragment>\nspaceClip();",
-        );
-      };
-      material.customProgramCacheKey = () => "space-axes-v2";
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.userData.key = elementKey(element);
-      scene.add(mesh);
-      meshes.push(mesh);
+      const id = batch.addInstance(batch.addGeometry(geometry));
+      const color = new THREE.Color(mep ? 0xb5c9d2 : 0x747c81);
+      batch.setColorAt(id, color);
+      instances.push({ id, key: elementKey(element), color });
+      geometry.dispose();
     }
+    spaceMark("geometry", {
+      id: sceneId,
+      meshes: instances.length,
+      multiDraw: renderer.extensions.has("WEBGL_multi_draw"),
+    });
     // Per axis: its bounds frame (always shown, so an empty axis stays reachable), its cut, and
     // the cut's offset shift. All float on the frame's +w face, above the scene.
     const overlay = <T extends THREE.Line | THREE.Points | THREE.Mesh>(object: T) => {
@@ -350,8 +369,15 @@ export function SpaceCanvas(props: Props) {
     };
     // OrbitControls fires per pointer move; coalesce those and every state change into one frame.
     const render = () => {
+      if (latest.current.active === false) return;
       frame ||= requestAnimationFrame(() => {
         frame = 0;
+        if (latest.current.active === false) return;
+        const started = performance.now();
+        if (measuring) {
+          renderer.info.autoReset = false;
+          renderer.info.reset();
+        }
         const editing = latest.current.editing;
         renderer.setScissorTest(false);
         renderer.setViewport(0, 0, size.width, size.height);
@@ -384,6 +410,34 @@ export function SpaceCanvas(props: Props) {
           blit.material.map = targets[axis].texture;
           renderer.render(blitScene, blitCamera);
         });
+        if (measuring) {
+          const info = renderer.info;
+          const gl = renderer.getContext() as WebGL2RenderingContext;
+          spaceMark("submitted", {
+            id: sceneId,
+            cpuMs: performance.now() - started,
+            calls: info.render.calls,
+            triangles: info.render.triangles,
+            geometries: info.memory.geometries,
+            textures: info.memory.textures,
+          });
+          const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+          gl.flush();
+          const complete = () => {
+            if (!fence || gl.isContextLost()) return;
+            const status = gl.clientWaitSync(fence, 0, 0);
+            if (status === gl.TIMEOUT_EXPIRED) {
+              requestAnimationFrame(complete);
+              return;
+            }
+            gl.deleteSync(fence);
+            spaceMark(status === gl.WAIT_FAILED ? "gpu-failed" : "gpu-complete", {
+              id: sceneId,
+              status,
+            });
+          };
+          requestAnimationFrame(complete);
+        }
       });
     };
     const upload = () => {
@@ -491,6 +545,8 @@ export function SpaceCanvas(props: Props) {
       render();
     };
     const resize = () => {
+      if (latest.current.active === false || mount.clientWidth === 0 || mount.clientHeight === 0)
+        return;
       size = { width: mount.clientWidth, height: mount.clientHeight };
       renderer.setSize(size.width, size.height, false);
       perspective.aspect = size.width / Math.max(size.height, 1);
@@ -505,6 +561,8 @@ export function SpaceCanvas(props: Props) {
       render();
     };
     const sync = () => {
+      if (latest.current.active === false) return;
+      if (size.width !== mount.clientWidth || size.height !== mount.clientHeight) resize();
       const s = latest.current.state,
         was = shown,
         editing = latest.current.editing;
@@ -527,10 +585,10 @@ export function SpaceCanvas(props: Props) {
       ) {
         const hidden = new Set(s.hidden),
           isolated = s.isolated && new Set(s.isolated);
-        for (const mesh of meshes) {
-          const key = mesh.userData.key as string;
-          mesh.visible = !hidden.has(key) && (!isolated || isolated.has(key));
-          mesh.material.emissive.setHex(s.selected === key ? 0x666666 : 0x000000);
+        for (const instance of instances) {
+          const { id, key, color } = instance;
+          batch.setVisibleAt(id, !hidden.has(key) && (!isolated || isolated.has(key)));
+          batch.setColorAt(id, s.selected === key ? color.clone().multiplyScalar(1.6) : color);
         }
       }
       if (editing !== shownEditing) {
@@ -733,14 +791,14 @@ export function SpaceCanvas(props: Props) {
         return;
       pointer(event);
       const hits = ray
-        .intersectObjects(meshes.filter((mesh) => mesh.visible))
+        .intersectObject(batch)
         .filter(
           (h) =>
             h.object.visible &&
             retained(h.point.clone().add(origin).toArray(), latest.current.state.cuts, polygons),
         );
       latest.current.onChange({
-        selected: (hits[0]?.object.userData.key as string | undefined) ?? null,
+        selected: instances[hits[0]?.batchId ?? -1]?.key ?? null,
       });
     };
     // A cancelled or stolen pointer abandons the draft; the controls never stay disabled.
@@ -785,6 +843,7 @@ export function SpaceCanvas(props: Props) {
     resize();
     sync();
     return () => {
+      spaceMark("dispose", { id: sceneId });
       update.current = null;
       cancelAnimationFrame(frame);
       observer.disconnect();
@@ -800,6 +859,9 @@ export function SpaceCanvas(props: Props) {
       canvas.removeEventListener("lostpointercapture", pointerCancel);
       canvas.removeEventListener("contextmenu", contextMenu);
       canvas.removeEventListener("pointerleave", pointerLeave);
+      batch.dispose();
+      scene.remove(batch);
+      material.dispose();
       scene.traverse((object) => {
         if (
           object instanceof THREE.Mesh ||
@@ -813,12 +875,13 @@ export function SpaceCanvas(props: Props) {
       blit.geometry.dispose();
       blit.material.dispose();
       renderer.dispose();
+      renderer.forceContextLoss();
       canvas.remove();
     };
   }, [props.metadata, props.positions]);
   useEffect(() => {
     update.current?.();
-  }, [props.state, props.editing]);
+  }, [props.state, props.editing, props.active]);
   return (
     <div ref={host} className="absolute inset-0 min-h-0 overflow-hidden">
       {AXES.map((axis, k) => {
