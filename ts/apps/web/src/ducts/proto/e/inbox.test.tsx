@@ -33,6 +33,8 @@ function mount(
     diagnostics?: InboxItem[];
     store?: Parameters<typeof Inbox>[0]["work"]["store"];
     fanRefusal?: string | null;
+    selected?: number | null;
+    diagnostic?: { kind: string; pick: (kind: string) => void };
   } = {},
 ) {
   const apply = handle(over.apply ?? null, "write 3 to Revit");
@@ -141,6 +143,8 @@ function mount(
       }}
       heal={heal}
       fan={fan}
+      selected={over.selected ?? null}
+      diagnostic={over.diagnostic ?? { kind: "", pick: () => {} }}
     />,
   );
   return { ...utils, apply, heal, fan, write };
@@ -335,4 +339,48 @@ test("taking back a stored ignore stages a delete over it", () => {
   expect(write).toHaveBeenCalledWith([
     { path: ["assumptions", "open-end:2:1", "staged"], value: { delete: true } },
   ]);
+});
+
+test("the selected element opens every row that names it, Diagnostics included", () => {
+  const { container } = mount({
+    selected: 30,
+    diagnostics: [
+      item({ key: "d1", group: "diagnostics", kind: "join", status: "near-miss", ids: [30] }),
+      item({ key: "d2", group: "diagnostics", kind: "loop", ids: [99] }),
+    ],
+  });
+  const lit = [...container.querySelectorAll("[data-selected]")].map((r) =>
+    r.getAttribute("data-key"),
+  );
+  expect(lit).toEqual(["flows:30", "d1"]);
+  expect(container.querySelector('[data-inbox-detail="d1"]')).toBeTruthy();
+  expect(container.querySelector('[data-inbox-detail="flows:30"]')).toBeTruthy();
+  expect(container.querySelector('[data-key="d2"]')).toBeTruthy();
+});
+
+test("the Diagnostics key: a chip per kind with its count; a picked chip narrows the rows", () => {
+  const pick = vi.fn();
+  const diagnostics = [
+    item({ key: "d1", group: "diagnostics", kind: "join", status: "near-miss" }),
+    item({ key: "d2", group: "diagnostics", kind: "join", status: "stretched" }),
+    item({ key: "d3", group: "diagnostics", kind: "join", status: "stretched" }),
+    item({ key: "d4", group: "diagnostics", kind: "loop", status: "priced as a tree" }),
+  ];
+  const { container } = mount({ diagnostics, diagnostic: { kind: "", pick } });
+  const legend = container.querySelector('[data-inbox-legend="diagnostics"]') as HTMLElement;
+  expect(
+    within(legend)
+      .getAllByRole("button")
+      .map((b) => b.textContent),
+  ).toEqual(["near-miss 1", "stretched 2", "loop 1"]);
+  fireEvent.click(within(legend).getByRole("button", { name: "stretched 2" }));
+  expect(pick).toHaveBeenCalledWith("stretched");
+  cleanup();
+  const narrowed = mount({ diagnostics, diagnostic: { kind: "stretched", pick } }).container;
+  fireEvent.click(narrowed.querySelector('[data-inbox-group="diagnostics"] [role="button"]')!);
+  expect(
+    [...narrowed.querySelectorAll('[data-inbox-group="diagnostics"] [data-key]')].map((r) =>
+      r.getAttribute("data-key"),
+    ),
+  ).toEqual(["d2", "d3"]);
 });

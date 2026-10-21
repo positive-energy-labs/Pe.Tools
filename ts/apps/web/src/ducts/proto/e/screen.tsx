@@ -17,8 +17,15 @@ import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 
 import { airflowOptions } from "../../airflow";
-import { elementNamer } from "../../claims";
-import { fanVerbs, healRunView, inboxRows, type CellRef } from "../../inbox-rows";
+import { elementNamer, ShowInRevit } from "../../claims";
+import {
+  annotatedFindings,
+  fanVerbs,
+  healRunView,
+  inboxRows,
+  type CellRef,
+} from "../../inbox-rows";
+import { navigate } from "../../navigate";
 import { groupLabels } from "../../inputs";
 import { previewFresh, scopeOf, stagedEsp } from "../../manifest";
 import type { LossesWork } from "../../work";
@@ -35,7 +42,7 @@ import { grilleLabels } from "./labels";
 import { FanButton, Inbox, type FanVerbs } from "./inbox";
 import { InputsPane } from "./inputs-pane";
 import { RulesTree, ruleOfIds } from "./rules-pane";
-import { SystemTree } from "./tree-sidebar";
+import { GoTo, SystemTree } from "./tree-sidebar";
 import { useGroupEncoding } from "../encoding/use-encoding";
 import { formatQuantity } from "../../encoding";
 
@@ -280,6 +287,15 @@ function EScreenBody({ props }: { props: ProtoProps }) {
   const [wideRules, setWideRules] = useState(false);
   // null = automatic: open when the inbox holds a row, collapsed when it holds none.
   const [inboxOpen, setInboxOpen] = useState<boolean | null>(null);
+  // The picture annotates the Fix rows' findings, or the Diagnostics kind picked in its key.
+  const annotated = useMemo(
+    () => (inbox ? annotatedFindings(inbox, heal, page.diagnostic) : new Set<string>()),
+    [inbox, heal, page.diagnostic],
+  );
+  const diagnostic = useMemo(
+    () => ({ kind: page.diagnostic, pick: (kind: string) => setPage({ diagnostic: kind }) }),
+    [page.diagnostic, setPage],
+  );
 
   if (!snapshot) return <p className="text-ink-2 p-4">{props.empty?.says ?? "reading ducts…"}</p>;
   const tree = trees.length ? trees : null;
@@ -338,6 +354,23 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       : `TEL ${fmtFt(critical.ft ?? groupTel)} ft · ESP ${critical.total.toFixed(3)} in-wg`
     : "not priced yet";
   const runDetail = priced && scope && selected != null ? runOf(priced, groups, selected) : null;
+  // Go to an element, a unit or a system in the snapshot already read: the page moves, the read stays.
+  const go = (query: string) => {
+    const to = navigate(drawn ?? snapshot, query, labels);
+    if (to.system !== null) setPage({ system: to.system, selected: to.selected, issue: "" });
+    return to.says;
+  };
+  // The selected element, wherever it was picked from, can be shown in Revit.
+  const shown =
+    selected != null && props.doc ? (
+      <div
+        className="border-line t-small flex items-center gap-1 border-t px-2 py-1"
+        data-e-selected={selected}
+      >
+        <span className="min-w-0 flex-1 truncate">{nameOf(selected)}</span>
+        <ShowInRevit doc={props.doc} elementIds={[selected]} what="it" />
+      </div>
+    ) : null;
 
   const head = (
     <span className="inline-flex gap-1">
@@ -361,6 +394,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
       scroll="auto"
       flush
     >
+      <GoTo go={go} />
       {tree ? (
         <>
           {reading?.quantity ? (
@@ -458,6 +492,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
           })}
         </div>
       )}
+      {shown}
     </Pane>
   );
   const rulesPane =
@@ -574,6 +609,8 @@ function EScreenBody({ props }: { props: ProtoProps }) {
               busy: props.actions.busy,
             }}
             fan={fanHandles}
+            selected={selected}
+            diagnostic={diagnostic}
           />
         ) : null}
       </Pane>
@@ -609,6 +646,7 @@ function EScreenBody({ props }: { props: ProtoProps }) {
                 {...props}
                 lit={lit}
                 issueScope={issueScope}
+                annotated={annotated}
                 scale={encoded}
                 groups={drawGroups}
                 lead={leadGroup}

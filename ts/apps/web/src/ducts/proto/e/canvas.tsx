@@ -93,6 +93,8 @@ export interface ECanvasExtra {
   lead: string;
   /** The system's issue ids; null = every issue on a drawn element. */
   issueScope: ReadonlySet<string> | null;
+  /** The finding (and issue) ids the picture annotates (`annotatedFindings`): the Fix rows', or a picked Diagnostics kind's. */
+  annotated: ReadonlySet<string>;
   /** The group's encoding: the screen owns it so the tree reads the same numbers. */
   scale: GroupEncoding;
 }
@@ -122,6 +124,7 @@ function Canvas({
   doc,
   lit,
   issueScope,
+  annotated,
   groups,
   lead,
   scale,
@@ -211,7 +214,10 @@ function Canvas({
     for (const claim of claims)
       if (claim.at[0] != null) out.push({ kind: "claim", n: 0, at: claim.at[0], claim });
     const findings = (priced?.findings ?? survey(snapshot, work.doc).findings).filter(
-      (f) => INFERRED_KINDS.has(f.kind) && f.elementIds.some((id) => drawn.has(id)),
+      (f) =>
+        INFERRED_KINDS.has(f.kind) &&
+        annotated.has(f.id) &&
+        f.elementIds.some((id) => drawn.has(id)),
     );
     for (const finding of findings)
       out.push({
@@ -224,11 +230,12 @@ function Canvas({
       if (
         issue.elementId != null &&
         drawn.has(issue.elementId) &&
+        annotated.has(issue.id) &&
         (!issueScope || issueScope.has(issue.id))
       )
         out.push({ kind: "issue", n: 0, at: issue.elementId, issue });
     return out.map((r, i) => ({ ...r, n: i + 1 }));
-  }, [claims, priced, snapshot, work.doc, drawn, issueScope]);
+  }, [claims, priced, snapshot, work.doc, drawn, issueScope, annotated]);
 
   // Header facts: a system name (never a group id), Pe fan static, critical run total.
   const firstId = subject?.ids[0] ?? iso.scene.segments[0]?.segment.id ?? null;
@@ -249,7 +256,8 @@ function Canvas({
   const criticalName = solved?.critical != null ? nameOfId(solved.critical) : null;
 
   const selected = useMemo(() => {
-    const id = page.selected && !claims.some((c) => c.id === page.selected) ? Number(page.selected) : null;
+    const id =
+      page.selected && !claims.some((c) => c.id === page.selected) ? Number(page.selected) : null;
     if (id == null) return new Set<number>();
     const leg = sub?.legOf.get(id);
     return new Set(leg ? [id, ...leg.ids] : [id]);
@@ -272,10 +280,10 @@ function Canvas({
           if (!p) return [];
           const end = [...leg.ids, leg.to.id].reverse().find((id) => cumulative.has(id));
           const text =
-            end == null
-              ? `${leg.name} · unpriced`
-              : `Σ ${fmtFt(cumulative.get(end))} eq ft`;
-          return [{ key: `${leg.name}|${leg.ids[0]}`, xy: iso.project(p), text, priced: end != null }];
+            end == null ? `${leg.name} · unpriced` : `Σ ${fmtFt(cumulative.get(end))} eq ft`;
+          return [
+            { key: `${leg.name}|${leg.ids[0]}`, xy: iso.project(p), text, priced: end != null },
+          ];
         })
       : // A group scene has no legs: each terminal carries its path total.
         iso.scene.nodes.flatMap((f) => {
@@ -345,9 +353,23 @@ function Canvas({
               {r.kind === "claim" ? (
                 <circle r={PIN} fill={ink} stroke={token("page")} />
               ) : (
-                <rect x={-PIN} y={-PIN} width={PIN * 2} height={PIN * 2} fill={ink} stroke={token("page")} />
+                <rect
+                  x={-PIN}
+                  y={-PIN}
+                  width={PIN * 2}
+                  height={PIN * 2}
+                  fill={ink}
+                  stroke={token("page")}
+                />
               )}
-              <text dy="0.35em" textAnchor="middle" fontSize={10} fontWeight={600} fill={token("page")} pointerEvents="none">
+              <text
+                dy="0.35em"
+                textAnchor="middle"
+                fontSize={10}
+                fontWeight={600}
+                fill={token("page")}
+                pointerEvents="none"
+              >
                 {r.n}
               </text>
             </g>
@@ -359,10 +381,14 @@ function Canvas({
 
   const openRuling = open?.what === "ruling" ? rulings.find((r) => r.n === open.n) : null;
   const elementId = open?.what === "element" ? open.id : null;
-  const segFacts = elementId == null ? null : iso.scene.segments.find((f) => f.segment.id === elementId);
+  const segFacts =
+    elementId == null ? null : iso.scene.segments.find((f) => f.segment.id === elementId);
   const nodeFacts = elementId == null ? null : iso.scene.nodes.find((f) => f.node.id === elementId);
   const anchor = open
-    ? { getBoundingClientRect: () => DOMRect.fromRect({ x: open.x, y: open.y, width: 0, height: 0 }) }
+    ? {
+        getBoundingClientRect: () =>
+          DOMRect.fromRect({ x: open.x, y: open.y, width: 0, height: 0 }),
+      }
     : undefined;
 
   return (
@@ -375,30 +401,35 @@ function Canvas({
       }}
     >
       {picture === "model" ? (
-      <DuctDrawing
-        label={iso.label}
-        project={iso.project}
-        scene={iso.scene}
-        encoding={scale.encoding}
-        fitKey={iso.fitKey}
-        selected={selected}
-        // The set rides `critical` (a heavy ink underlay that draws on any projection); the orbit
-        // agent's `lit` prop only acts under its run lens, which this iso canvas does not mount.
-        critical={lit}
-        hovered={hovered}
-        issue={page.issue}
-        claim=""
-        onHover={onHover}
-        onSelect={pickElement}
-        onSelectIssue={(issue) => {
-          const r = rulings.find((x) => x.kind === "issue" && x.issue.id === issue.id);
-          if (r) setOpen({ what: "ruling", n: r.n, ...pointer.current });
-        }}
-        onDrag={iso.onDrag}
-        underlay={underlay}
-        controls={<EncodingPicker value={scale.encoding.key} onPick={(key) => setPage({ encoding: key })} />}
-        cornerLift={CORNER.height + CORNER.margin}
-      />
+        <DuctDrawing
+          label={iso.label}
+          project={iso.project}
+          scene={iso.scene}
+          encoding={scale.encoding}
+          fitKey={iso.fitKey}
+          selected={selected}
+          // The set rides `critical` (a heavy ink underlay that draws on any projection); the orbit
+          // agent's `lit` prop only acts under its run lens, which this iso canvas does not mount.
+          critical={lit}
+          hovered={hovered}
+          issue={page.issue}
+          claim=""
+          onHover={onHover}
+          onSelect={pickElement}
+          onSelectIssue={(issue) => {
+            const r = rulings.find((x) => x.kind === "issue" && x.issue.id === issue.id);
+            if (r) setOpen({ what: "ruling", n: r.n, ...pointer.current });
+          }}
+          onDrag={iso.onDrag}
+          underlay={underlay}
+          controls={
+            <EncodingPicker
+              value={scale.encoding.key}
+              onPick={(key) => setPage({ encoding: key })}
+            />
+          }
+          cornerLift={CORNER.height + CORNER.margin}
+        />
       ) : (
         <Schematic
           index={index}
@@ -532,12 +563,17 @@ function Canvas({
               ) : nodeFacts ? (
                 <NodeFactsView {...nodeFacts} />
               ) : (
-                <p className="text-ink-2">element {nameOfId(elementId) ?? elementId} is not drawn here</p>
+                <p className="text-ink-2">
+                  element {nameOfId(elementId) ?? elementId} is not drawn here
+                </p>
               )}
               <p data-pe-loss={elementId}>
-                Pe loss <span className="face-mono">{fmt(index.loss.get(elementId), 4)}</span> in-wg ·
-                from fan <span className="face-mono">{fmtFt(cumulative.get(elementId))}</span> eq ft
-                {priced ? null : <span className="text-ink-2"> (unpriced: no ASHRAE tables read)</span>}
+                Pe loss <span className="face-mono">{fmt(index.loss.get(elementId), 4)}</span> in-wg
+                · from fan <span className="face-mono">{fmtFt(cumulative.get(elementId))}</span> eq
+                ft
+                {priced ? null : (
+                  <span className="text-ink-2"> (unpriced: no ASHRAE tables read)</span>
+                )}
               </p>
               {sub?.legOf.get(elementId) ? <p>on leg {sub.legOf.get(elementId)!.name}</p> : null}
             </div>

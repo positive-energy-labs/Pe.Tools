@@ -88,6 +88,11 @@ const ductsPageSchema = z.object({
   selected: z.string().default(""),
   /** The selected issue id (it may name no element: no-root, multi-root); empty = none. Page, never URL. */
   issue: z.string().default(""),
+  /**
+   * The Diagnostics kind picked in its key (`diagnosticKind`): it narrows the Diagnostics rows and
+   * the picture's finding annotations; empty = none, and the picture annotates Fix rows only. Page, never URL.
+   */
+  diagnostic: z.string().default(""),
   /** The picture's encoding, a key of `ENCODINGS` (`encoding.tsx`). */
   encoding: z.string().default("health"),
   /** The camera the model picture looks through: the isometric globe, or `plan` (a preset on it). */

@@ -3,7 +3,10 @@
  * Write, then the collapsed Diagnostics. The rows are `inbox-rows.ts`' (pure, tested); this draws
  * them. A row reads its title and status at rest and takes its verbs on hover; pressing it opens
  * the prose and the worded verbs under it. Inputs are never edited here: a Set row's verb selects
- * the element and focuses the cell on its tree row.
+ * the element and focuses the cell on its tree row. The selected element leads to its findings:
+ * every row that names it opens, wears selected and scrolls into view, Diagnostics included. The
+ * Diagnostics head carries its key, one chip per row kind with its count; a picked chip narrows
+ * the Diagnostics rows (and the picture's annotations, `annotatedFindings`) to that kind.
  */
 import { useMemo, type ReactNode } from "react";
 import {
@@ -38,6 +41,8 @@ import {
   type Verdict,
 } from "../../claims";
 import {
+  diagnosticKind,
+  diagnosticsKey,
   INBOX_LABELS,
   INBOX_ORDER,
   type CellRef,
@@ -123,6 +128,8 @@ export function Inbox({
   write,
   heal,
   fan,
+  selected,
+  diagnostic,
 }: {
   groups: Record<Exclude<InboxGroup, "write">, readonly InboxItem[]>;
   work: InboxWork;
@@ -136,6 +143,10 @@ export function Inbox({
   write: WriteVerbs;
   heal: HealVerbs;
   fan: FanVerbs;
+  /** The page's selected element: every row naming it opens. */
+  selected: number | null;
+  /** The Diagnostics kind picked in its key (empty = none), and its press. */
+  diagnostic: { kind: string; pick: (kind: string) => void };
 }) {
   const cellOf = (segment: string, key: string) =>
     (work.doc as unknown as Record<string, Record<string, object> | undefined> | null)?.[segment]?.[
@@ -319,6 +330,7 @@ export function Inbox({
       status: <span data-tone={item.tone}>{item.status}</span>,
       verbs: verbsOf(item, false),
       onMouseEnter: () => light(item.ids),
+      lit: selected != null && item.ids.includes(selected),
       onClick: () => onSelect(item.ids[0] ?? null),
       detail: (
         <>
@@ -404,6 +416,22 @@ export function Inbox({
     ),
   }));
 
+  const legend = diagnosticsKey(groups.diagnostics).map(({ kind, count }) => (
+    <Button
+      key={kind}
+      kind="framed"
+      label={`${kind} ${count}`}
+      reason={
+        diagnostic.kind === kind
+          ? "Show every Diagnostics row again, and annotate only the Fix rows on the picture"
+          : `Show only the ${kind} rows, here and on the picture`
+      }
+      pressed={diagnostic.kind === kind}
+      onClick={() => diagnostic.pick(diagnostic.kind === kind ? "" : kind)}
+    >
+      {kind} <span className="text-ink-mute tabular-nums">{count}</span>
+    </Button>
+  ));
   const specs = useMemo(
     () =>
       ({
@@ -413,7 +441,10 @@ export function Inbox({
         write: { label: INBOX_LABELS.write, rows: [writeSpec, ...reviewSpecs], always: true },
         diagnostics: {
           label: INBOX_LABELS.diagnostics,
-          rows: groups.diagnostics.map(spec),
+          rows: groups.diagnostics
+            .filter((r) => !diagnostic.kind || diagnosticKind(r) === diagnostic.kind)
+            .map(spec),
+          legend: legend.length ? legend : undefined,
           collapsible: true,
           defaultCollapsed: true,
         },
@@ -435,6 +466,9 @@ export function Inbox({
       heal.busy,
       fan.busy,
       onVerdict,
+      selected,
+      diagnostic.kind,
+      diagnostic.pick,
     ],
   );
   return (

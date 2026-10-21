@@ -6,6 +6,8 @@ import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import { unitFlowsIn } from "@pe/ducts-domain/survey";
 
 import {
+  annotatedFindings,
+  diagnosticsKey,
   healRunView,
   inboxRows,
   proximityIds,
@@ -671,5 +673,33 @@ describe("a unit's flow in the open system", () => {
   it("reads the document-wide flow only with no system open", () => {
     const rows = inboxRows({ ...base, equipmentFlows: unitFlowsIn(surveyed, null) });
     expect(keys(rows.set)).not.toContain("equipmentFlows:1");
+  });
+});
+
+describe("the Diagnostics key and the picture's annotations", () => {
+  const rows = inboxRows(base);
+  it("keys each Diagnostics row by its kind, a bridged join by its grade, with counts", () => {
+    const key = diagnosticsKey(rows.diagnostics);
+    expect(key).toContainEqual({ kind: "near-miss", count: 1 });
+    expect(key).toContainEqual({ kind: "stretched", count: 1 });
+    expect(key).toContainEqual({ kind: "catalog-missing-table", count: 1 });
+    expect(key.reduce((n, k) => n + k.count, 0)).toBe(rows.diagnostics.length);
+  });
+  it("with no kind picked annotates the Fix rows only; a picked kind annotates its Diagnostics rows", () => {
+    const fix = annotatedFindings(rows, null, "");
+    expect(fix).toContain("open-end:g1:2:1");
+    expect(fix).toContain("proximity:9:0|10:0");
+    expect(fix).not.toContain("proximity:5:0|6:0");
+    expect([...annotatedFindings(rows, null, "near-miss")]).toEqual(["proximity:5:0|6:0"]);
+  });
+  it("a Heal row stands for the findings it covers", () => {
+    const heal = {
+      groups: [{ group: "g1", items: [{ key: "cap", ids: [2], covers: ["open-end:g1:2:1"] }] }],
+      covered: new Set(["open-end:g1:2:1"]),
+      hard: new Map(),
+    } as unknown as HealPlan;
+    const healed = inboxRows({ ...base, heal });
+    expect(keys(healed.fix)).toContain("heal:g1");
+    expect(annotatedFindings(healed, heal, "")).toContain("open-end:g1:2:1");
   });
 });

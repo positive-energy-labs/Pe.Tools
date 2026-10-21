@@ -23,7 +23,9 @@ const groups = (over: Partial<Record<(typeof order)[number], InboxGroupSpec>> = 
   ...over,
 });
 const heads = (container: HTMLElement) =>
-  [...container.querySelectorAll("[data-inbox-group]")].map((g) => g.getAttribute("data-inbox-group"));
+  [...container.querySelectorAll("[data-inbox-group]")].map((g) =>
+    g.getAttribute("data-inbox-group"),
+  );
 
 test("group heads draw in the fixed order, an empty group draws nothing", () => {
   const { container } = render(
@@ -70,6 +72,40 @@ test("a row with detail opens in place; a row without is a plain pick", () => {
   expect(screen.queryByText("why")).toBeNull();
   fireEvent.click(screen.getByText("title f2"));
   expect(screen.queryByText("why")).toBeNull();
+});
+
+test("a lit row opens, wears selected and unfolds its collapsed group; a legend press unfolds too", () => {
+  const lit = groups({
+    diagnostics: {
+      label: "Diagnostics",
+      rows: [row("d1"), row("d2", { detail: <p>d2 why</p>, lit: true })],
+      collapsible: true,
+      defaultCollapsed: true,
+    },
+    fix: { label: "Fix", rows: [row("f1", { detail: <p>f1 why</p>, lit: true })] },
+  });
+  const { container, rerender } = render(
+    <Inbox aria-label="inbox" order={order} groups={lit} empty="nothing" />,
+  );
+  expect(screen.getByText("d2 why")).toBeTruthy();
+  expect(screen.getByText("f1 why")).toBeTruthy();
+  expect(
+    [...container.querySelectorAll("[data-selected]")].map((r) => r.getAttribute("data-key")),
+  ).toEqual(["f1", "d2"]);
+  const plain = groups({
+    diagnostics: {
+      label: "Diagnostics",
+      rows: [row("d1")],
+      collapsible: true,
+      defaultCollapsed: true,
+      legend: <button type="button">near-miss 1</button>,
+    },
+  });
+  rerender(<Inbox aria-label="inbox" order={order} groups={plain} empty="nothing" />);
+  fireEvent.click(container.querySelector('[data-inbox-group="diagnostics"] [role="button"]')!);
+  expect(screen.queryByText("title d1")).toBeNull();
+  fireEvent.click(screen.getByText("near-miss 1"));
+  expect(screen.getByText("title d1")).toBeTruthy();
 });
 
 test("a group marked always draws with no rows, and with nothing at all the inbox says so", () => {

@@ -1013,6 +1013,34 @@ export function writeRow(left: { fix: number; set: number }, write: WriteState):
 /** The Fix rows that hold the ESP back: every one but a Heal row standing in no path. */
 export const holding = (fix: readonly InboxItem[]) => fix.filter((i) => i.blocks !== false).length;
 
+/** A Diagnostics row's kind in the key: a bridged join by its grade (its status), any other row by its kind. */
+export const diagnosticKind = (item: InboxItem) => (item.kind === "join" ? item.status : item.kind);
+
+/** The Diagnostics key: one entry per row kind with its count, in first-row order. */
+export function diagnosticsKey(rows: readonly InboxItem[]) {
+  const counts = new Map<string, number>();
+  for (const row of rows)
+    counts.set(diagnosticKind(row), (counts.get(diagnosticKind(row)) ?? 0) + 1);
+  return [...counts].map(([kind, count]) => ({ kind, count }));
+}
+
+/**
+ * The finding ids the picture annotates: with no kind picked, the Fix rows' (a Heal row stands for
+ * the findings it covers); with one, the Diagnostics rows of that kind.
+ */
+export function annotatedFindings(
+  rows: { fix: readonly InboxItem[]; diagnostics: readonly InboxItem[] },
+  heal: Pick<HealPlan, "groups"> | null,
+  kind: string,
+): ReadonlySet<string> {
+  if (kind)
+    return new Set(rows.diagnostics.filter((r) => diagnosticKind(r) === kind).map((r) => r.key));
+  const covers = new Map(
+    (heal?.groups ?? []).map((g) => [`heal:${g.group}`, g.items.flatMap((i) => i.covers)]),
+  );
+  return new Set(rows.fix.flatMap((r) => covers.get(r.key) ?? [r.key]));
+}
+
 /** The whole inbox: its groups in `INBOX_ORDER`, and the Write row. */
 export function inboxRows(input: TriageInput & { claims: readonly Claim[]; write: WriteState }) {
   const { fix, set, diagnostics } = triage(input);
