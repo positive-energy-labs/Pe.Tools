@@ -141,6 +141,18 @@ export function SpaceRoute({
     url.searchParams.set("scene", id);
     window.history.replaceState(window.history.state, "", url);
   }, []);
+  const open = (id: string, imported?: ViewState) => {
+    const read = async () => {
+      try {
+        await load(id, imported);
+      } catch (e) {
+        setError(String(e));
+      }
+    };
+    // A resident scope has no I/O. Its selection is urgent, not background transition work.
+    if (cache.current.entries.has(id)) void read();
+    else startTransition(read);
+  };
   useEffect(() => {
     if (!view) return;
     try {
@@ -245,18 +257,7 @@ export function SpaceRoute({
               placeholder="Saved scene SHA-256"
             />
           </div>
-          <Button
-            label="Open saved scene"
-            onClick={() =>
-              startTransition(async () => {
-                try {
-                  await load(artifactId.trim());
-                } catch (e) {
-                  setError(String(e));
-                }
-              })
-            }
-          >
+          <Button label="Open saved scene" onClick={() => open(artifactId.trim())}>
             Open saved scene
           </Button>
           {view && (
@@ -416,13 +417,7 @@ export function SpaceRoute({
                       setEditing(null);
                       setError(null);
                     } else {
-                      startTransition(async () => {
-                        try {
-                          await load(imported.scene, imported);
-                        } catch (e) {
-                          setError(String(e));
-                        }
-                      });
+                      open(imported.scene, imported);
                     }
                   } catch (e) {
                     setError(String(e));
