@@ -6,13 +6,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  * meaning rides `data-tone`); `shade` orders the kinds inside a class. Shades have no tokens yet
  * (owed in the design-system ledger), so a view draws `tone` and may use `shade` only as order.
  */
-import {
-  transitionPatches,
-  type DuctFinding,
-  type DuctsRouteDocument,
-  type RouteStatePatch,
-} from "@pe/agent-contracts";
-import { Button } from "@pe/kit/lang/button";
+import type { DuctFinding } from "@pe/agent-contracts";
 import { ISSUE_BLOCKS, type Blocks, type IssueKind } from "@pe/ducts-domain/issues";
 import { INFERRED_KINDS } from "@pe/ducts-domain/proximity";
 import type { VerdictTone } from "@pe/kit/table/model";
@@ -132,38 +126,13 @@ const TIERS: { key: string; label: string; holds: (f: DuctFinding) => boolean }[
 const tierOf = (f: DuctFinding) => TIERS.find((t) => t.holds(f))!.key;
 const RANK = { anomalous: 0, stretched: 1, "near-miss": 2 } as const;
 const GRADE_TONE = { anomalous: "alarm", stretched: "caution", "near-miss": undefined } as const;
-const verdictOf = (doc: DuctsRouteDocument | null, id: string, rung: "staged" | "proposal") => {
-  const value = doc?.assumptions[id]?.[rung]?.value;
-  return value?.kind === "verdict" ? value.verdict : null;
-};
 /**
  * The survey's findings, grouped by who clears them; what the route assumed is spelled out. An
- * inferred join shows its grade, worst first, and with Work a person's confirm: a staged `connect`
- * that makes the results resting on it final (Pea's proposal shows, and never confirms).
+ * inferred join shows its grade, worst first. Nothing is confirmed here: a bridged join is final,
+ * and a real one is made by healing in Revit.
  */
-export function FindingsList({
-  findings,
-  work,
-}: {
-  findings: readonly DuctFinding[];
-  work?: {
-    doc: DuctsRouteDocument | null;
-    write: (patch: RouteStatePatch[]) => Promise<unknown>;
-  };
-}) {
+export function FindingsList({ findings }: { findings: readonly DuctFinding[] }) {
   if (!findings.length) return null;
-  const confirm = (id: string, on: boolean) =>
-    work &&
-    void work.write(
-      transitionPatches(
-        ["assumptions"],
-        id,
-        work.doc?.assumptions[id] ?? {},
-        on
-          ? { kind: "stage", rung: { value: { kind: "verdict", verdict: "connect" } } }
-          : { kind: "unstage" },
-      ),
-    );
   return (
     <dl className="grid grid-cols-[auto_1fr] gap-x-3 t-small" data-findings="">
       {TIERS.filter((t) => findings.some((f) => tierOf(f) === t.key)).map((tier) => (
@@ -179,46 +148,18 @@ export function FindingsList({
               .filter((f) => tierOf(f) === tier.key)
               .sort((a, b) => (a.grade ? RANK[a.grade] : 3) - (b.grade ? RANK[b.grade] : 3))
               .map((f) => {
-                const staged = verdictOf(work?.doc ?? null, f.id, "staged");
-                const proposed = verdictOf(work?.doc ?? null, f.id, "proposal");
                 return (
                   <div key={f.id} data-finding={f.id}>
                     <span data-tone={f.assumed || tier.key === "inferred" ? "caution" : "alarm"}>
                       {f.kind}
                     </span>{" "}
                     {f.grade ? (
-                      <span
-                        data-grade={f.grade}
-                        data-tone={staged === "connect" ? undefined : GRADE_TONE[f.grade]}
-                        className={staged === "connect" ? "text-ink-2" : undefined}
-                      >
-                        {staged === "connect" ? `${f.grade}, confirmed` : f.grade}
+                      <span data-grade={f.grade} data-tone={GRADE_TONE[f.grade]}>
+                        {f.grade}
                       </span>
                     ) : null}{" "}
                     <span className="face-mono">{f.elementIds.join(" ")}</span> {f.note}
                     {f.assumed ? <span className="text-ink-2"> · assumed: {f.assumed}</span> : null}
-                    {f.grade && work ? (
-                      <>
-                        {" "}
-                        <Button
-                          data-confirm={f.id}
-                          aria-pressed={staged === "connect"}
-                          label={
-                            staged === "connect"
-                              ? "Take the confirmation back; results resting on this join turn provisional again"
-                              : "Confirm this join: results resting on it stop being provisional"
-                          }
-                          onClick={() => confirm(f.id, staged !== "connect")}
-                        >
-                          {staged === "connect" ? "confirmed" : "confirm"}
-                        </Button>
-                        {proposed && proposed !== staged ? (
-                          <TooltipHint content="Pea proposed this; it confirms nothing until a person stages it">
-                            <span data-tone="pea"> Pea: {proposed}</span>
-                          </TooltipHint>
-                        ) : null}
-                      </>
-                    ) : null}
                   </div>
                 );
               })}

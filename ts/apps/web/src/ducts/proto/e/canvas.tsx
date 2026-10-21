@@ -515,7 +515,6 @@ function Canvas({
               r={openRuling}
               nameOfId={nameOfId}
               onVerdict={onVerdict}
-              work={work}
               doc={doc}
               onHover={onHover}
               onPick={onSelect}
@@ -547,7 +546,6 @@ function RulingBody({
   r,
   nameOfId,
   onVerdict,
-  work,
   doc,
   onHover,
   onPick,
@@ -555,7 +553,6 @@ function RulingBody({
   r: Ruling;
   nameOfId: (id: number) => string | null;
   onVerdict?: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;
-  work: ProtoProps["work"];
   doc: ProtoProps["doc"];
   onHover: (id: number | null) => void;
   onPick: (id: number) => void;
@@ -599,12 +596,9 @@ function RulingBody({
     return (
       <div className="flex flex-col gap-2" data-ruling={r.n}>
         <p>
-          <span className="face-mono">{r.n}</span> inferred join · a person rules
+          <span className="face-mono">{r.n}</span> inferred join · bridged
         </p>
-        <FindingsList
-          findings={[r.finding]}
-          work={{ doc: work.doc, write: work.write as (p: unknown) => Promise<unknown> }}
-        />
+        <FindingsList findings={[r.finding]} />
       </div>
     );
   const info = ISSUE_KINDS[r.issue.kind];
