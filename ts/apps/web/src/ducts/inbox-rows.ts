@@ -18,13 +18,14 @@
  */
 import type { DuctFinding, DuctsRouteDocument } from "@pe/agent-contracts";
 import { bin } from "@pe/ducts-domain/bins";
+import { fanCandidates, type FanAssignment } from "@pe/ducts-domain/fan-assignment";
 import type { HealGroup, HealItem, HealPlan } from "@pe/ducts-domain/heal";
 import { ruleByKey } from "@pe/ducts-domain/loss-rules";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 import { slotWord, type AirflowOf, type AirflowOption } from "./airflow";
 import type { Claim } from "./legs";
-import type { DuctsHealRun } from "./manifest";
+import type { DuctsFanRun, DuctsHealRun, DuctsPage } from "./manifest";
 
 export const INBOX_ORDER = ["fix", "set", "check", "write", "diagnostics"] as const;
 export type InboxGroup = (typeof INBOX_ORDER)[number];
@@ -68,6 +69,20 @@ export type RowVerb =
       label: string;
       says: string;
       refusal: string | null;
+    }
+  /**
+   * Preview or apply making a unit a system's base equipment (`ducts.assign-fan`); `refusal` says
+   * why apply is not armed, `outcome` is the last run of this pair in words.
+   */
+  | {
+      kind: "fan";
+      unitId: number;
+      systemId: number;
+      mode: "preview" | "apply";
+      label: string;
+      says: string;
+      refusal: string | null;
+      outcome: string | null;
     }
   /** Select the element on the drawing and focus the cell that holds the input. */
   | { kind: "focus"; cell: CellRef; label: string; says: string }
@@ -120,7 +135,8 @@ export interface HealRunView {
 }
 
 export interface TriageInput {
-  snapshot: Pick<DuctSnapshot, "groups" | "nodes" | "segments">;
+  snapshot: Pick<DuctSnapshot, "groups" | "nodes" | "segments"> &
+    Partial<Pick<DuctSnapshot, "systems">>;
   /** The chosen group; empty is every group. */
   group: string;
   findings: readonly DuctFinding[];
@@ -138,6 +154,48 @@ export interface TriageInput {
   unitAirflow?: { current: string; options: readonly AirflowOption[] };
   /** Every root unit's role with why: ruled, staged, proposed from its flow, or the default (survey). */
   roles?: ReadonlyMap<number, { role: "fan" | "passive"; why: string; reason: string }>;
+  /** The last make-the-fan run and the page epoch it is fresh against. */
+  fan?: { run: DuctsFanRun | null; epoch: number };
+}
+
+/**
+ * The two verbs that make a unit a system's fan in Revit: preview (rolled back) and apply, armed by
+ * a passing preview of this pair over this snapshot. Shared by the no-fan row and the Inputs pane.
+ */
+export function fanVerbs(
+  a: FanAssignment,
+  name: (id: number) => string,
+  fan: { run: DuctsFanRun | null; epoch: number } | undefined,
+): Extract<RowVerb, { kind: "fan" }>[] {
+  const run = fan?.run;
+  const mine = run?.unitId === a.unitId && run.systemId === a.systemId ? run : null;
+  const outcome = mine
+    ? `${mine.mode === "preview" ? "previewed" : "applied"}: ${fanWords(mine.response)}`
+    : null;
+  const words = `make ${name(a.unitId)} the fan of ${a.system}`;
+  return [
+    {
+      kind: "fan",
+      ...a,
+      mode: "preview",
+      label: `preview: ${words}`,
+      says: `Preview in Revit, rolled back: ${words} (its base equipment, Duct Systems > Select Equipment)`,
+      refusal: null,
+      outcome,
+    },
+    {
+      kind: "fan",
+      ...a,
+      mode: "apply",
+      label: words,
+      says: `${words[0]!.toUpperCase()}${words.slice(1)} in Revit; the system keeps its id, name and type`,
+      refusal: fanRefusal(
+        { fan: run ?? null, epoch: fan?.epoch ?? 0 },
+        { unitId: a.unitId, systemId: a.systemId },
+      ),
+      outcome,
+    },
+  ];
 }
 
 /**
@@ -464,9 +522,11 @@ export function triage(input: TriageInput) {
     const item = { ...base, group: "fix" as const, kind: f.kind, tone: "alarm" as const };
     switch (f.kind) {
       case "no-fan": {
-        const roots = (snapshot.groups.find((g) => g.id === f.groupId)?.rootIds ?? []).filter(
-          (id) => roleNow(id) === "passive",
-        );
+        const all = snapshot.groups.find((g) => g.id === f.groupId)?.rootIds ?? [];
+        const roots = all.filter((id) => roleNow(id) === "passive");
+        // One unit on the network: naming it the system's base equipment in Revit proposes it fan.
+        const based =
+          all.length === 1 ? fanCandidates(snapshot, all[0]!, f.groupId!) : ([] as FanAssignment[]);
         fix.push({
           ...item,
           title: "No duct path to a fan",
@@ -481,6 +541,7 @@ export function triage(input: TriageInput) {
                 says: `Stage ${name(id)} as the fan; a group needs an air mover to price`,
               }),
             ),
+            ...based.flatMap((a) => fanVerbs(a, name, input.fan)),
             select(f.elementIds),
           ],
         });
@@ -549,7 +610,10 @@ export function triage(input: TriageInput) {
         // per fan) or rules the inline gear passive.
         const active = f.elementIds.filter((id) => roleNow(id) !== "passive");
         const why = f.elementIds
-          .map((id) => `${name(id)}: ${roleNow(id) ?? "fan"}, ${input.roles?.get(id)?.reason ?? "staged"}`)
+          .map(
+            (id) =>
+              `${name(id)}: ${roleNow(id) ?? "fan"}, ${input.roles?.get(id)?.reason ?? "staged"}`,
+          )
           .join("; ");
         fix.push({
           ...item,
@@ -906,3 +970,24 @@ export function inboxRows(input: TriageInput & { claims: readonly Claim[]; write
     diagnostics,
   };
 }
+
+/** A fan run's answer in words: the refusal, else the read back. */
+export const fanWords = (response: DuctsFanRun["response"]) =>
+  response.outcome === "refused"
+    ? `refused: ${response.reason ?? "refused"}`
+    : (response.check ?? response.outcome);
+
+/** Why the fan apply is not armed for this pair, or null when a fresh preview of it passed. */
+export const fanRefusal = (
+  page: Pick<DuctsPage, "fan" | "epoch">,
+  pair: { unitId: number; systemId: number } | undefined,
+) => {
+  if (!pair) return null;
+  const run = page.fan;
+  if (run?.mode !== "preview" || run.unitId !== pair.unitId || run.systemId !== pair.systemId)
+    return "Preview it first";
+  if (run.epoch !== page.epoch) return "The snapshot changed since the preview; preview again";
+  return run.response.outcome === "planned"
+    ? null
+    : `The preview refused: ${run.response.reason ?? "refused"}`;
+};

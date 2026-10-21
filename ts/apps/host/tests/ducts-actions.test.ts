@@ -236,6 +236,35 @@ test("heal preview and apply send the route's items to ducts.heal, differing onl
     }),
   ));
 
+test("assign-fan preview and apply send the pair to ducts.assign-fan, differing only in previewOnly", () =>
+  lane(({ owner, outgoing, post, answer, intent }) =>
+    Effect.gen(function* () {
+      const pair = { systemId: 6103113, unitId: 9668311 };
+      for (const [id, key, outcome] of [
+        ["fan-preview-1", "ducts.preview-assign-fan", "planned"],
+        ["fan-apply-1", "ducts.apply-assign-fan", "assigned"],
+      ] as const) {
+        expect((yield* post(intent(id, key, undefined, pair))).status).toBe(202);
+        const frame = yield* Queue.take(outgoing);
+        expect(frame.request?.operationKey).toBe("ducts.assign-fan");
+        const sent = { ...pair, previewOnly: key === "ducts.preview-assign-fan" };
+        expect(JSON.parse(frame.request!.payloadJson)).toEqual(sent);
+        const reply = { ...sent, outcome, reason: null, connector: 1, check: "ok" };
+        yield* answer(frame.request!.requestId, reply);
+        const row = (yield* Effect.promise(() => owner.wait(id))) as {
+          state: string;
+          result: { value: unknown };
+        };
+        expect(row.state).toBe("succeeded");
+        expect(row.result.value).toEqual(reply);
+      }
+      const bad = yield* post(
+        intent("fan-bad", "ducts.apply-assign-fan", undefined, { systemId: 1 }),
+      );
+      expect(bad.status).toBeGreaterThanOrEqual(400);
+    }),
+  ));
+
 test("a heal group named without items is planned by the route's classifier; one with items passes untouched", async () => {
   const end = (index: number, point: number[]) => ({
     index,

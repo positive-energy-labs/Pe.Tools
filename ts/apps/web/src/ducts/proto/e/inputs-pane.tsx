@@ -15,6 +15,7 @@ import { Row } from "@pe/kit/lang/row";
 import { airflowOptions, airflowPatches, slotWord, type AirflowOf } from "../../airflow";
 
 import { EquipmentCells, TerminalCells, type InputsCtx } from "./input-cells";
+import type { ReactNode } from "react";
 import type { LossesWork } from "../../work";
 
 export interface InputsPaneProps {
@@ -26,6 +27,8 @@ export interface InputsPaneProps {
   selected: number | null;
   select: (id: number | null) => void;
   light: (ids: readonly number[] | null) => void;
+  /** A unit's make-the-fan verbs and last outcome, or null when none is owed (`fansOwedBase`). */
+  fanVerbs?: (id: number) => ReactNode;
 }
 
 /** The unit ids and terminal ids of one system, in snapshot order. */
@@ -70,7 +73,16 @@ export function InputsPane(props: InputsPaneProps) {
       {units.length ? (
         <AirflowSlot snapshot={snapshot} work={work} group={group} of="unit" />
       ) : null}
-      {units.map((id) => row(id, <EquipmentCells ctx={ctx} id={id} />, "unit"))}
+      {units.map((id) =>
+        row(
+          id,
+          <>
+            <EquipmentCells ctx={ctx} id={id} />
+            {props.fanVerbs?.(id) ?? null}
+          </>,
+          "unit",
+        ),
+      )}
       {terminals.length ? (
         <AirflowSlot snapshot={snapshot} work={work} group={group} of="terminal" />
       ) : null}

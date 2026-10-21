@@ -32,10 +32,13 @@ function mount(
     set?: InboxItem[];
     diagnostics?: InboxItem[];
     store?: Parameters<typeof Inbox>[0]["work"]["store"];
+    fanRefusal?: string | null;
   } = {},
 ) {
   const apply = handle(over.apply ?? null);
   const heal = { preview: handle(null), apply: handle(null), busy: false };
+  const fan = { preview: handle(null), apply: handle(null), busy: false };
+  const pair = { unitId: 17, systemId: 19 };
   const write = vi.fn(async (_patches: unknown) => null);
   const groups = {
     fix: [
@@ -65,7 +68,31 @@ function mount(
           },
         ],
       }),
-      item({ key: "f1", group: "fix", title: "No duct path to a fan" }),
+      item({
+        key: "f1",
+        group: "fix",
+        title: "No duct path to a fan",
+        verbs: [
+          {
+            kind: "fan",
+            ...pair,
+            mode: "preview",
+            label: "preview: make FC-17 the fan of SA 19",
+            says: "Preview in Revit, rolled back",
+            refusal: null,
+            outcome: null,
+          },
+          {
+            kind: "fan",
+            ...pair,
+            mode: "apply",
+            label: "make FC-17 the fan of SA 19",
+            says: "Make it the fan",
+            refusal: over.fanRefusal === undefined ? "Preview it first" : over.fanRefusal,
+            outcome: null,
+          },
+        ],
+      }),
     ],
     set: [
       item({
@@ -113,9 +140,10 @@ function mount(
         review: over.review ?? [],
       }}
       heal={heal}
+      fan={fan}
     />,
   );
-  return { ...utils, apply, heal, write };
+  return { ...utils, apply, heal, fan, write };
 }
 
 test("a Heal row previews with its group, and heals only once a preview armed it", () => {
@@ -134,6 +162,26 @@ test("a Heal row previews with its group, and heals only once a preview armed it
   const open = armed.container.querySelector('[data-inbox-detail="heal:g1"]') as HTMLElement;
   fireEvent.click(within(open).getByRole("button", { name: "heal" }));
   expect(armed.heal.apply.run).toHaveBeenCalledWith({ group: "g1" });
+});
+
+test("a no-fan row previews making its one unit the fan, and applies only once a preview armed it", () => {
+  const first = mount();
+  fireEvent.click(screen.getByText("No duct path to a fan"));
+  const detail = first.container.querySelector('[data-inbox-detail="f1"]') as HTMLElement;
+  fireEvent.click(
+    within(detail).getByRole("button", { name: "preview: make FC-17 the fan of SA 19" }),
+  );
+  expect(first.fan.preview.run).toHaveBeenCalledWith({ unitId: 17, systemId: 19 });
+  const refused = within(detail).getByRole("button", { name: "make FC-17 the fan of SA 19" });
+  expect(refused.getAttribute("aria-disabled")).toBe("true");
+  fireEvent.click(refused);
+  expect(first.fan.apply.run).not.toHaveBeenCalled();
+  cleanup();
+  const armed = mount({ fanRefusal: null });
+  fireEvent.click(screen.getByText("No duct path to a fan"));
+  const open = armed.container.querySelector('[data-inbox-detail="f1"]') as HTMLElement;
+  fireEvent.click(within(open).getByRole("button", { name: "make FC-17 the fan of SA 19" }));
+  expect(armed.fan.apply.run).toHaveBeenCalledWith({ unitId: 17, systemId: 19 });
 });
 
 test("groups draw Fix, Set, Write in loop order with Diagnostics collapsed last", () => {
@@ -176,16 +224,42 @@ test("the Write row's apply is refused with what remains, and armed when nothing
 test("the Write group lists every planned change, old to new, and each refusal", () => {
   const { container } = mount({
     review: [
-      { key: "a", element: "Grille 30", what: "airflow", from: "none", to: "'Flow' 234 cfm", outcome: "planned", reason: null },
-      { key: "b", element: "Pe store", what: "terminalFlow slot", from: "PE_M_Grd_AirFlow", to: "Flow", outcome: "planned", reason: null },
-      { key: "c", element: "FC-17", what: "ESP", from: "none", to: "—", outcome: "refused", reason: "neither the instance nor its type has 'X'" },
+      {
+        key: "a",
+        element: "Grille 30",
+        what: "airflow",
+        from: "none",
+        to: "'Flow' 234 cfm",
+        outcome: "planned",
+        reason: null,
+      },
+      {
+        key: "b",
+        element: "Pe store",
+        what: "terminalFlow slot",
+        from: "PE_M_Grd_AirFlow",
+        to: "Flow",
+        outcome: "planned",
+        reason: null,
+      },
+      {
+        key: "c",
+        element: "FC-17",
+        what: "ESP",
+        from: "none",
+        to: "—",
+        outcome: "refused",
+        reason: "neither the instance nor its type has 'X'",
+      },
     ],
   });
   const group = container.querySelector('[data-inbox-group="write"]') as HTMLElement;
   expect(within(group).getByText("Grille 30 · airflow")).toBeTruthy();
   expect(within(group).getByText("none → 'Flow' 234 cfm")).toBeTruthy();
   expect(within(group).getByText("PE_M_Grd_AirFlow → Flow")).toBeTruthy();
-  expect(within(group).getByText("refused: neither the instance nor its type has 'X'")).toBeTruthy();
+  expect(
+    within(group).getByText("refused: neither the instance nor its type has 'X'"),
+  ).toBeTruthy();
 });
 
 test("the airflow row's open choice stages the terminalFlow slot", () => {
@@ -202,7 +276,12 @@ test("the airflow row's open choice stages the terminalFlow slot", () => {
             current: "PE_M_Grd_AirFlow",
             options: [
               { slot: "Flow", label: "Flow · instance", have: 1, of: 1 },
-              { slot: "PE_M_Grd_AirFlow", label: "PE_M_Grd_AirFlow · instance, shared", have: 0, of: 1 },
+              {
+                slot: "PE_M_Grd_AirFlow",
+                label: "PE_M_Grd_AirFlow · instance, shared",
+                have: 0,
+                of: 1,
+              },
             ],
           },
         ],
@@ -236,7 +315,14 @@ test("taking back a stored ignore stages a delete over it", () => {
         group: "diagnostics",
         title: "Open end at 2",
         verbs: [
-          { kind: "verdict", key: "open-end:2:1", verdict: "ignore", label: "take back", says: "Take the ruling back", on: true },
+          {
+            kind: "verdict",
+            key: "open-end:2:1",
+            verdict: "ignore",
+            label: "take back",
+            says: "Take the ruling back",
+            on: true,
+          },
         ],
       }),
     ],

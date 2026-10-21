@@ -1,6 +1,7 @@
 /**
  * /ducts verbs on the host: `ducts.preview-losses` and `ducts.apply-losses` are one native op, `ducts.apply`,
- * and `ducts.preview-heal` and `ducts.apply-heal` are `ducts.heal`, each sent with `previewOnly` true or false. The web builds the whole write list from the person's
+ * `ducts.preview-heal` and `ducts.apply-heal` are `ducts.heal`, and `ducts.preview-assign-fan` and
+ * `ducts.apply-assign-fan` are `ducts.assign-fan`, each sent with `previewOnly` true or false. The web builds the whole write list from the person's
  * staged cells and Pe's own lookup; the host admits it against the exact document lifetime and
  * process incarnation, journals the native step, and never reads or rewrites the Work.
  */
@@ -27,11 +28,16 @@ import {
 const preparedDuctsSchema = z.strictObject({ process: nativeProcessSchema });
 
 /** Each verb's native op and whether it only previews. */
-const NATIVE: Record<DuctsActionKey, { op: "ducts.apply" | "ducts.heal"; previewOnly: boolean }> = {
+const NATIVE: Record<
+  DuctsActionKey,
+  { op: "ducts.apply" | "ducts.heal" | "ducts.assign-fan"; previewOnly: boolean }
+> = {
   "ducts.preview-losses": { op: "ducts.apply", previewOnly: true },
   "ducts.apply-losses": { op: "ducts.apply", previewOnly: false },
   "ducts.preview-heal": { op: "ducts.heal", previewOnly: true },
   "ducts.apply-heal": { op: "ducts.heal", previewOnly: false },
+  "ducts.preview-assign-fan": { op: "ducts.assign-fan", previewOnly: true },
+  "ducts.apply-assign-fan": { op: "ducts.assign-fan", previewOnly: false },
 };
 
 /**

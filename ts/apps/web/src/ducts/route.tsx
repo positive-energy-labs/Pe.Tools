@@ -279,6 +279,8 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
       apply: handle.actions.apply,
       healPreview: handle.actions["heal-preview"],
       heal: handle.actions.heal,
+      fanPreview: handle.actions["fan-preview"],
+      fan: handle.actions.fan,
       busy,
     },
     staged: pendingCount(handle.work.doc, snapshot?.store),

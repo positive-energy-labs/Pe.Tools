@@ -24,16 +24,17 @@ import {
   readAction,
   runSemanticAction,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import type { DuctsApply, DuctsHeal } from "@pe/host-contracts/generated";
+import type { DuctsApply, DuctsAssignFan, DuctsHeal } from "@pe/host-contracts/generated";
 import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
 import { applyRequest, price } from "@pe/ducts-domain/pricing";
 import { pendingRulings, withStoredRulings } from "@pe/ducts-domain/rulings";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { fanCandidates } from "@pe/ducts-domain/fan-assignment";
 import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { survey } from "@pe/ducts-domain/survey";
 import { airflowOptions } from "./airflow";
-import { holding, triage, writeBlocked } from "./inbox-rows";
+import { fanRefusal, fanWords, holding, triage, writeBlocked } from "./inbox-rows";
 
 /** What Revit said the staged cells would write, and the Work and snapshot it was asked over. */
 export interface DuctsEvaluation {
@@ -53,6 +54,18 @@ export interface DuctsHealRun {
   epoch: number;
   response: DuctsHeal.Res.Response;
   before: { esp: number | null; roots: number[]; ids: number[] };
+}
+
+/**
+ * The last `ducts.assign-fan` run: the unit and system it named, preview or apply, the snapshot
+ * epoch it ran over, and Revit's answer (outcome, reason or the read back's words).
+ */
+export interface DuctsFanRun {
+  unitId: number;
+  systemId: number;
+  mode: "preview" | "apply";
+  epoch: number;
+  response: DuctsAssignFan.Res.Response;
 }
 
 const ductsPageSchema = z.object({
@@ -78,6 +91,8 @@ const ductsPageSchema = z.object({
   evaluation: z.custom<DuctsEvaluation>().nullable().default(null),
   /** The last heal preview or apply; the Heal row reads it. Page, never URL. */
   heal: z.custom<DuctsHealRun>().nullable().default(null),
+  /** The last make-the-fan preview or apply; its verbs read it. Page, never URL. */
+  fan: z.custom<DuctsFanRun>().nullable().default(null),
 });
 export type DuctsPage = z.infer<typeof ductsPageSchema>;
 /** The Page keys the address carries; every one has a default, so a bare `/ducts` is a page. */
@@ -173,7 +188,13 @@ const built = (ctx: DuctsCtx) => {
 
 const dispatch = async <T = DuctsApply.Res.Response>(
   ctx: DuctsCtx,
-  key: "ducts.preview-losses" | "ducts.apply-losses" | "ducts.preview-heal" | "ducts.apply-heal",
+  key:
+    | "ducts.preview-losses"
+    | "ducts.apply-losses"
+    | "ducts.preview-heal"
+    | "ducts.apply-heal"
+    | "ducts.preview-assign-fan"
+    | "ducts.apply-assign-fan",
   input: Record<string, unknown>,
 ): Promise<T> => {
   if (ctx.target.kind !== "document") throw Error("An open document is required");
@@ -226,6 +247,29 @@ const healInput = z.object({ group: z.string() }) as unknown as z.ZodType<never>
 /** The group a heal verb names; undefined when the handle asks for the verb at large. */
 const groupOf = (input: unknown) => (input as { group?: string } | undefined)?.group;
 
+const fanInput = z.object({
+  unitId: z.number(),
+  systemId: z.number(),
+}) as unknown as z.ZodType<never>;
+/** The unit and system a fan verb names; undefined when the handle asks for the verb at large. */
+const pairOf = (input: unknown) => {
+  const p = input as { unitId?: number; systemId?: number } | undefined;
+  return p?.unitId != null && p.systemId != null
+    ? { unitId: p.unitId, systemId: p.systemId }
+    : undefined;
+};
+/** The pair as a candidate over the snapshot the route read; throws why it is not offered. */
+const fanOf = (ctx: DuctsCtx, pair: { unitId: number; systemId: number }) => {
+  const snapshot = observed<DuctSnapshot>(ctx, "ducts");
+  if (!snapshot) throw Error("The duct snapshot is not read yet");
+  const found = fanCandidates(snapshot, pair.unitId).find((c) => c.systemId === pair.systemId);
+  if (!found)
+    throw Error(
+      `System ${pair.systemId} has base equipment, or ${pair.unitId} roots none of its groups`,
+    );
+  return found;
+};
+
 const outcomeWords = (response: DuctsApply.Res.Response) =>
   Object.entries(response.counts)
     .filter(([, n]) => n)
@@ -252,7 +296,7 @@ export const manifest = defineRoute<
   DuctsRouteDocument,
   DuctsReading,
   DuctsPage,
-  "refresh" | "preview" | "apply" | "heal-preview" | "heal"
+  "refresh" | "preview" | "apply" | "heal-preview" | "heal" | "fan-preview" | "fan"
 >({
   key: "ducts",
   name: "Ducts",
@@ -485,6 +529,62 @@ export const manifest = defineRoute<
         // Revit renumbers what it rebuilt: read the snapshot again, and keep the before for the row.
         ctx.setPage({
           heal: { ...run, mode: "apply", response },
+          epoch: ctx.page.epoch + 1,
+          evaluation: null,
+        });
+      },
+    },
+    // Revit's Duct Systems > Select Equipment (pressure-drop ledger 2026-10-21): make a unit the
+    // base equipment of a system, the first rung of the fan proposal. Preview runs Pe's guards, the
+    // write and its read back in Revit and rolls it back; apply is armed by that preview only.
+    "fan-preview": {
+      label: "preview fan",
+      does: "ducts.preview-assign-fan",
+      // The Inputs pane and the no-fan row draw it.
+      visible: false,
+      input: fanInput,
+      dirties: [],
+      waitSeconds: NATIVE_APPLY_WAIT_S,
+      ready: (ctx, input) => {
+        const pair = pairOf(input);
+        return pair ? why(() => fanOf(ctx, pair)) : null;
+      },
+      run: async (ctx, input) => {
+        const pair = pairOf(input)!;
+        const found = fanOf(ctx, pair);
+        const response = await dispatch<DuctsAssignFan.Res.Response>(
+          ctx,
+          "ducts.preview-assign-fan",
+          pair,
+        );
+        ctx.setPage({ fan: { ...pair, mode: "preview", epoch: ctx.page.epoch, response } });
+        ctx.note(
+          "fan preview",
+          `${found.system}: ${fanWords(response)}`,
+          response.outcome === "refused",
+        );
+      },
+    },
+    fan: {
+      label: "make the fan",
+      does: "ducts.apply-assign-fan",
+      visible: false,
+      input: fanInput,
+      dirties: [],
+      waitSeconds: NATIVE_APPLY_WAIT_S,
+      // Armed only by a passing preview of this pair over this snapshot.
+      ready: (ctx, input) => fanRefusal(ctx.page, pairOf(input)),
+      run: async (ctx, input) => {
+        const pair = pairOf(input)!;
+        const response = await dispatch<DuctsAssignFan.Res.Response>(
+          ctx,
+          "ducts.apply-assign-fan",
+          pair,
+        );
+        ctx.note("fan", fanWords(response), response.outcome === "refused");
+        // The base equipment is Revit's now: read the snapshot again and the role reason follows it.
+        ctx.setPage({
+          fan: { ...pair, mode: "apply", epoch: ctx.page.epoch, response },
           epoch: ctx.page.epoch + 1,
           evaluation: null,
         });

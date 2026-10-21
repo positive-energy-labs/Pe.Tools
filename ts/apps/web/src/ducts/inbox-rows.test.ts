@@ -297,6 +297,57 @@ describe("the ducts inbox", () => {
     for (const row of rows.fix) expect(row.ids.length).toBeGreaterThan(0);
   });
 
+  it("a no-fan row with exactly one unit offers to make it its system's fan, armed by a fresh preview", () => {
+    const unit = {
+      ...node(7, "equipment", null),
+      connectors: [{ index: 1, classification: "SupplyAir" }],
+    } as unknown as TriageInput["snapshot"]["nodes"][number];
+    const fanless = {
+      ...snapshot,
+      groups: [{ ...group("g2", [7]), systemNames: ["SA 19"] }],
+      nodes: [...snapshot.nodes, unit],
+      systems: [
+        { id: 19, name: "SA 19", classification: "SupplyAir", baseEquipmentId: null },
+      ] as TriageInput["snapshot"]["systems"],
+    };
+    const roles = new Map([[7, { role: "passive" as const, why: "proposed", reason: "x" }]]);
+    const noFan = (fan?: TriageInput["fan"]) =>
+      inboxRows({
+        ...base,
+        snapshot: fanless,
+        roles,
+        fan,
+        nameOf: (id) => (id === 7 ? "FC-17" : String(id)),
+      })
+        .fix.find((r) => r.kind === "no-fan")!
+        .verbs.filter((v) => v.kind === "fan");
+    expect(noFan()).toMatchObject([
+      { mode: "preview", unitId: 7, systemId: 19, label: "preview: make FC-17 the fan of SA 19" },
+      { mode: "apply", label: "make FC-17 the fan of SA 19", refusal: "Preview it first" },
+    ]);
+    const response = { outcome: "planned", check: "SA 19: base equipment FC-17" } as never;
+    const preview = { unitId: 7, systemId: 19, mode: "preview" as const, epoch: 3, response };
+    expect(noFan({ run: preview, epoch: 3 })[1]).toMatchObject({
+      refusal: null,
+      outcome: "previewed: SA 19: base equipment FC-17",
+    });
+    expect(noFan({ run: preview, epoch: 4 })[1]!.refusal).toMatch(/snapshot changed/);
+    const refused = {
+      ...preview,
+      response: { outcome: "refused", reason: "its port is in SA 18" } as never,
+    };
+    expect(noFan({ run: refused, epoch: 3 })[1]!.refusal).toBe(
+      "The preview refused: its port is in SA 18",
+    );
+    // A system that already has base equipment is never offered (the op refuses a swap).
+    const based = { ...fanless, systems: [{ ...fanless.systems![0]!, baseEquipmentId: 8 }] };
+    expect(
+      inboxRows({ ...base, snapshot: based, roles })
+        .fix.find((r) => r.kind === "no-fan")!
+        .verbs.filter((v) => v.kind === "fan"),
+    ).toEqual([]);
+  });
+
   it("Check holds claims awaiting a verdict and Pea's proposals awaiting staging", () => {
     const doc = ductsRouteState.schema.parse({
       flows: {
@@ -525,7 +576,10 @@ describe("healing replaces the capped and connect verdicts", () => {
     // A unit sits in every group its ports reach: a run whose group is still there never moves.
     const shared = {
       ...snapshot,
-      groups: [{ ...snapshot.groups[1]!, id: "g0", rootIds: snapshot.groups[0]!.rootIds }, ...snapshot.groups],
+      groups: [
+        { ...snapshot.groups[1]!, id: "g0", rootIds: snapshot.groups[0]!.rootIds },
+        ...snapshot.groups,
+      ],
     };
     expect(healRunView({ ...run, mode: "apply" }, shared, 5, () => null).group).toBe(run.group);
     const result = inboxRows({ ...base, snapshot: after, healRun: applied }).fix.find(

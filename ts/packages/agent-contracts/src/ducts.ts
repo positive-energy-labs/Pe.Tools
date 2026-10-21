@@ -652,6 +652,17 @@ export const ductsHealInputSchema = z.strictObject({
 });
 export type DuctsHealInput = z.infer<typeof ductsHealInputSchema>;
 
+/**
+ * What `ducts.preview-assign-fan` and `ducts.apply-assign-fan` send; the host adds `previewOnly` and
+ * calls the native `ducts.assign-fan` (`DuctsAssignFan.Req.Request`): make the unit the base equipment
+ * of the Revit system (`ducts.snapshot` systems[].id and an equipment node id).
+ */
+export const ductsAssignFanInputSchema = z.strictObject({
+  systemId: z.number().int().positive(),
+  unitId: z.number().int().positive(),
+});
+export type DuctsAssignFanInput = z.infer<typeof ductsAssignFanInputSchema>;
+
 /** What a person says when they want the Ducts page: the whole route family answers to these words. */
 export const DUCTS_FINDS = [
   "duct",

@@ -68,6 +68,36 @@ export interface WriteVerbs {
   review: readonly ReviewLine[];
 }
 
+/** A fan verb's handles: the route's fan preview and apply, run with the verb's unit and system. */
+export interface FanVerbs {
+  preview: ActionHandle;
+  apply: ActionHandle;
+  busy: boolean;
+}
+
+/** One make-the-fan verb as a button; the Inputs pane and the no-fan row draw it the same way. */
+export function FanButton({
+  verb,
+  fan,
+}: {
+  verb: Extract<RowVerb, { kind: "fan" }>;
+  fan: FanVerbs;
+}) {
+  const handle = verb.mode === "preview" ? fan.preview : fan.apply;
+  return (
+    <Button
+      kind={verb.mode === "apply" ? "commit" : "framed"}
+      label={verb.label}
+      reason={verb.says}
+      refusal={verb.refusal ?? handle.refusal}
+      busy={fan.busy}
+      onClick={() => void handle.run({ unitId: verb.unitId, systemId: verb.systemId })}
+    >
+      {verb.label}
+    </Button>
+  );
+}
+
 /** A Heal row's verbs: the route's heal preview and heal, run with the row's group. */
 export interface HealVerbs {
   preview: ActionHandle;
@@ -92,6 +122,7 @@ export function Inbox({
   onFocusCell,
   write,
   heal,
+  fan,
 }: {
   groups: Record<Exclude<InboxGroup, "write">, readonly InboxItem[]>;
   work: InboxWork;
@@ -104,6 +135,7 @@ export function Inbox({
   onFocusCell: (cell: CellRef) => void;
   write: WriteVerbs;
   heal: HealVerbs;
+  fan: FanVerbs;
 }) {
   const cellOf = (segment: string, key: string) =>
     (work.doc as unknown as Record<string, Record<string, object> | undefined> | null)?.[segment]?.[
@@ -190,6 +222,9 @@ export function Inbox({
           },
         );
       }
+      case "fan":
+        // Worded in the open row only: the label names the unit and the system.
+        return worded ? <FanButton key={`n${i}${verb.mode}`} verb={verb} fan={fan} /> : null;
       case "claim":
         return VERDICTS.map((v, j) =>
           make(
@@ -392,6 +427,7 @@ export function Inbox({
       write.apply.refusal,
       write.busy,
       heal.busy,
+      fan.busy,
       onVerdict,
     ],
   );

@@ -54,6 +54,9 @@ export interface ProtoProps {
     /** A group's heal preview and heal; the Heal row runs them with its group. */
     healPreview: ActionHandle;
     heal: ActionHandle;
+    /** Make a unit a system's fan (base equipment) in Revit: preview, then apply. */
+    fanPreview: ActionHandle;
+    fan: ActionHandle;
     busy: boolean;
   };
   /** How many changes a write would carry: staged cells and pending rulings. */

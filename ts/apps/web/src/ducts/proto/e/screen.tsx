@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { RouteStatePatch } from "@pe/agent-contracts";
 import type { DuctsApply } from "@pe/host-contracts/generated";
 import { survey } from "@pe/ducts-domain/survey";
+import { fansOwedBase, type FanAssignment } from "@pe/ducts-domain/fan-assignment";
 import { healPlan } from "@pe/ducts-domain/heal";
 import { Button } from "@pe/kit/lang/button";
 import { Row } from "@pe/kit/lang/row";
@@ -16,7 +17,7 @@ import { PaneSplit } from "#/components/lang/pane-resize";
 
 import { airflowOptions } from "../../airflow";
 import { elementNamer } from "../../claims";
-import { healRunView, inboxRows, type CellRef } from "../../inbox-rows";
+import { fanVerbs, healRunView, inboxRows, type CellRef } from "../../inbox-rows";
 import { groupLabels } from "../../inputs";
 import { previewFresh } from "../../manifest";
 import type { LossesWork } from "../../work";
@@ -30,7 +31,7 @@ import { FanSections } from "./fan-sections";
 import { RunDetail, runOf } from "./run-detail";
 import { ECanvas } from "./canvas";
 import { grilleLabels } from "./labels";
-import { Inbox } from "./inbox";
+import { FanButton, Inbox, type FanVerbs } from "./inbox";
 import { InputsPane } from "./inputs-pane";
 import { RulesTree, ruleOfIds } from "./rules-pane";
 import { SystemTree } from "./tree-sidebar";
@@ -130,6 +131,7 @@ export function EScreen({ props }: { props: ProtoProps }) {
             airflow: snapshot ? airflowOptions(snapshot, page.group) : undefined,
             unitAirflow: snapshot ? airflowOptions(snapshot, page.group, "unit") : undefined,
             roles: surveyed.roles,
+            fan: { run: page.fan, epoch: page.epoch },
             claims: props.claims,
             write: {
               staged: props.staged,
@@ -155,6 +157,42 @@ export function EScreen({ props }: { props: ProtoProps }) {
       preview,
     ],
   );
+  // A unit whose role is fan while no Revit system names it base equipment offers to make it one.
+  const fanHandles: FanVerbs = {
+    preview: props.actions.fanPreview,
+    apply: props.actions.fan,
+    busy: props.actions.busy,
+  };
+  const owedBase = useMemo(
+    () =>
+      snapshot && surveyed
+        ? fansOwedBase(snapshot, surveyed.roles)
+        : new Map<number, FanAssignment[]>(),
+    [snapshot, surveyed],
+  );
+  const fanVerbsOf = (id: number) => {
+    const verbs = (owedBase.get(id) ?? []).flatMap((a) =>
+      fanVerbs(a, nameOf, { run: page.fan, epoch: page.epoch }),
+    );
+    if (!verbs.length) return null;
+    const outcome = verbs.find((v) => v.outcome)?.outcome ?? null;
+    return (
+      <span
+        className="flex flex-wrap items-baseline gap-1"
+        data-e-fan-verbs={id}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {verbs.map((v) => (
+          <FanButton key={`${v.systemId}:${v.mode}`} verb={v} fan={fanHandles} />
+        ))}
+        {outcome ? (
+          <span className="t-small text-ink-2" data-e-fan-outcome="">
+            {outcome}
+          </span>
+        ) : null}
+      </span>
+    );
+  };
   // The review lists only a preview that still describes this Work and snapshot.
   const review = useMemo(
     () => (preview && previewFresh(page, props.work.revision) ? reviewLines(preview, nameOf) : []),
@@ -377,6 +415,7 @@ export function EScreen({ props }: { props: ProtoProps }) {
         flush
       >
         <InputsPane
+          fanVerbs={fanVerbsOf}
           snapshot={snapshot}
           priced={priced}
           work={work}
@@ -447,6 +486,7 @@ export function EScreen({ props }: { props: ProtoProps }) {
               apply: props.actions.heal,
               busy: props.actions.busy,
             }}
+            fan={fanHandles}
           />
         ) : null}
       </Pane>

@@ -3,7 +3,7 @@ import { instancesActions, instancesReading } from "./instances.ts";
 import { scheduleActions, scheduleReads } from "./schedule-actions.ts";
 import { familyActions, familyReads } from "./family-actions.ts";
 import { stagedRoomEditSchema } from "./takeoffs.ts";
-import { ductsApplyInputSchema, ductsHealInputSchema } from "./ducts.ts";
+import { ductsApplyInputSchema, ductsAssignFanInputSchema, ductsHealInputSchema } from "./ducts.ts";
 import { nativeProcessSchema } from "./action-receipts.ts";
 import { z } from "zod";
 import { executionTargetSchema } from "./target.ts";
@@ -161,6 +161,20 @@ export const ductsActions = {
     needs: "project-document",
     actor: "any",
     input: ductsHealInputSchema,
+    dirties: ["snapshot"],
+  },
+  "ducts.preview-assign-fan": {
+    says: "Preview making a unit the fan of a duct system in Revit (Duct Systems > Select Equipment: the system's base equipment): runs Pe's guards, the write and its read back, then rolls it back. Refuses a system that already has base equipment, and a unit with no port of the system's air classification in that system or on its ducts. Show the person the outcome before any apply.",
+    needs: "project-document",
+    actor: "any",
+    input: ductsAssignFanInputSchema,
+    dirties: [],
+  },
+  "ducts.apply-assign-fan": {
+    says: "Make a unit the base equipment (the fan) of a duct system in Revit, as a preview showed and a person approved; the system keeps its id, name and type. Read the duct snapshot again after: the unit's role reads base equipment of that system.",
+    needs: "project-document",
+    actor: "any",
+    input: ductsAssignFanInputSchema,
     dirties: ["snapshot"],
   },
 } as const satisfies Record<string, ActionDefinition>;
