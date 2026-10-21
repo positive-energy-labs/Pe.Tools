@@ -58,6 +58,7 @@ The surface that makes a firm model compute duct pressure drop: a grille-first d
 - 2026-10-20, kaitpw: **heal what we can; what is left shows plainly and blocks only when it breaks the calc.**
 - 2026-10-20, kaitpw: **Pe products manage Revit state.** Important inputs and rulings are backed by Revit state, preferably parameters on the element, so another tool and another user see the same thing; Pe adds the agent bindings and a convenience UI over it. Pending (unwritten) edits are the only Pe-held state.
 - 2026-10-20, kaitpw: **a friction rate that is the same everywhere lives in settings**, not on the main page.
+- 2026-10-20, kaitpw (deferred to counsel, leaning this way): **the rulings that remain after healing (ignore an open end, object to an inferred join, a passive fan) persist in the model's Project Information store (`_PE_DuctLosses`), not in element parameters.** They are not useful to schedule and not inherent to Revit, so other systems gain nothing from them; Pe Work holds only pending edits. Caps and joins become real geometry.
 ## Tried & rejected
 
 
