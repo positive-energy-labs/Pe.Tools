@@ -7,19 +7,24 @@
  */
 import { useMemo, type ReactNode } from "react";
 import { Ban, Check, Crosshair, EyeOff, Fan, Link, Pencil, X, type LucideIcon } from "lucide-react";
-import {
-  transitionPatches,
-  type DuctsRouteDocument,
-  type RouteStatePatch,
-} from "@pe/agent-contracts";
+import type { DuctsRouteDocument, RouteStatePatch } from "@pe/agent-contracts";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Inbox as KitInbox, type InboxRowSpec } from "@pe/kit/lang/inbox";
 import { reviewTransitions, type CellWire } from "#/components/work/band";
 import type { ActionHandle } from "#/route/handle";
 
-import { verdictPatches } from "../../assumptions";
-import { ClaimElement, claimParts, ShowInRevit, showElements, VERDICTS, type Verdict } from "../../claims";
+import { airflowPatches } from "../../airflow";
+import { rulingPatches, verdictPatches } from "../../assumptions";
+import {
+  ClaimElement,
+  claimParts,
+  ShowInRevit,
+  showElements,
+  VERDICTS,
+  type Verdict,
+} from "../../claims";
 import {
   INBOX_LABELS,
   INBOX_ORDER,
@@ -30,12 +35,15 @@ import {
   type WriteRow,
 } from "../../inbox-rows";
 import type { Claim } from "../../legs";
+import type { ReviewLine } from "../../write-review";
 
 type RevitDoc = { session: string; openId: string };
 export type InboxWork = {
   doc: DuctsRouteDocument | null;
   revision: number | null;
   write: (patch: RouteStatePatch[]) => Promise<unknown>;
+  /** The model's store: its rulings are the base a verdict or role press stages against. */
+  store: DuctSnapshot["store"];
 };
 
 /** The Write group's verbs: the route's own preview and apply, as the handle refuses or arms them. */
@@ -44,6 +52,8 @@ export interface WriteVerbs {
   apply: ActionHandle;
   busy: boolean;
   row: WriteRow;
+  /** Every change a fresh preview plans, one line each; empty with no fresh preview. */
+  review: readonly ReviewLine[];
 }
 
 const VERDICT_ICON: Record<"capped" | "connect" | "ignore", LucideIcon> = {
@@ -109,7 +119,9 @@ export function Inbox({
           verb.label,
           verb.says,
           () =>
-            void work.write(verdictPatches(work.doc, verb.key, verb.on ? "unset" : verb.verdict)),
+            void work.write(
+              verdictPatches(work.doc, verb.key, verb.on ? "unset" : verb.verdict, work.store),
+            ),
           { pressed: verb.on },
         );
       case "role":
@@ -120,12 +132,23 @@ export function Inbox({
           verb.says,
           () =>
             void work.write(
-              transitionPatches(["roles"], String(verb.id), cellOf("roles", String(verb.id)), {
-                kind: "stage",
-                rung: { value: { role: verb.role } },
-              }),
+              rulingPatches(work.doc, work.store, "roles", String(verb.id), verb.role),
             ),
         );
+      case "airflow":
+        // The choice lists in the open row only: one press per candidate, its coverage beside it.
+        return worded
+          ? verb.options.map((o) =>
+              make(
+                `a${i}${o.slot}`,
+                Pencil,
+                `${o.label} · ${o.have}/${o.of}`,
+                `Read every terminal's airflow from ${o.label}: ${o.have} of ${o.of} terminals hold a value`,
+                () => void work.write(airflowPatches(work.doc, o.slot)),
+                { pressed: o.slot === verb.current },
+              ),
+            )
+          : null;
       case "focus":
         return make(`f${i}`, Pencil, verb.label, verb.says, () => onFocusCell(verb.cell));
       case "claim":
@@ -167,7 +190,13 @@ export function Inbox({
           "select in Revit",
           "select in Revit",
           () => doc && void showElements(doc, verb.ids),
-          { refusal: !doc ? "no Revit document is connected" : !verb.ids.length ? "no element to select" : null },
+          {
+            refusal: !doc
+              ? "no Revit document is connected"
+              : !verb.ids.length
+                ? "no element to select"
+                : null,
+          },
         );
     }
   };
@@ -219,10 +248,18 @@ export function Inbox({
       onClick: () => onSelect(item.ids[0] ?? null),
       detail: (
         <>
-          {claim?.kind === "claim" ? claimProse(claim.claim) : item.note ? <p>{item.note}</p> : <p>{item.title}</p>}
+          {claim?.kind === "claim" ? (
+            claimProse(claim.claim)
+          ) : item.note ? (
+            <p>{item.note}</p>
+          ) : (
+            <p>{item.title}</p>
+          )}
           <div className="flex flex-wrap items-center gap-1" data-inbox-verbs="">
             {verbsOf(item, true)}
-            {item.ids.length && doc ? <ShowInRevit doc={doc} elementIds={item.ids} what="it" /> : null}
+            {item.ids.length && doc ? (
+              <ShowInRevit doc={doc} elementIds={item.ids} what="it" />
+            ) : null}
           </div>
         </>
       ),
@@ -264,13 +301,36 @@ export function Inbox({
       ) : undefined,
   };
 
+  // Every change the fresh preview plans, one row each: element · what, old -> new; a refusal says why.
+  const reviewSpecs: InboxRowSpec[] = write.review.map((line) => ({
+    key: line.key,
+    "data-kind": "write-review",
+    title: `${line.element} · ${line.what}`,
+    titleText: `${line.element} · ${line.what}`,
+    status: (
+      <span
+        data-tone={line.outcome === "refused" ? "alarm" : undefined}
+        data-outcome={line.outcome}
+      >
+        {line.outcome === "refused" ? "refused" : `${line.from} → ${line.to}`}
+      </span>
+    ),
+    detail: (
+      <p>
+        {line.outcome === "refused"
+          ? `refused: ${line.reason ?? "no reason given"}`
+          : `${line.from} → ${line.to}`}
+      </p>
+    ),
+  }));
+
   const specs = useMemo(
     () =>
       ({
         fix: { label: INBOX_LABELS.fix, rows: groups.fix.map(spec) },
         set: { label: INBOX_LABELS.set, rows: groups.set.map(spec) },
         check: { label: INBOX_LABELS.check, rows: groups.check.map(spec) },
-        write: { label: INBOX_LABELS.write, rows: [writeSpec], always: true },
+        write: { label: INBOX_LABELS.write, rows: [writeSpec, ...reviewSpecs], always: true },
         diagnostics: {
           label: INBOX_LABELS.diagnostics,
           rows: groups.diagnostics.map(spec),
@@ -279,7 +339,19 @@ export function Inbox({
         },
       }) satisfies Record<InboxGroup, unknown>,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- spec closes over props that change with them
-    [groups, work.doc, work.revision, doc, write.row, write.preview.refusal, write.apply.refusal, write.busy, onVerdict],
+    [
+      groups,
+      work.doc,
+      work.revision,
+      work.store,
+      doc,
+      write.row,
+      write.review,
+      write.preview.refusal,
+      write.apply.refusal,
+      write.busy,
+      onVerdict,
+    ],
   );
   return (
     <KitInbox

@@ -28,7 +28,9 @@ import type { DuctsApply } from "@pe/host-contracts/generated";
 import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
 import { applyRequest, price } from "@pe/ducts-domain/pricing";
+import { pendingRulings, withStoredRulings } from "@pe/ducts-domain/rulings";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { airflowOptions } from "./airflow";
 import { triage, writeBlocked } from "./inbox-rows";
 
 /** What Revit said the staged cells would write, and the Work and snapshot it was asked over. */
@@ -79,7 +81,10 @@ const observed = <T>(ctx: DuctsCtx, key: DuctsReading) => {
   return reading?.state === "ready" ? (reading.observation as T) : null;
 };
 
-/** The segments `ducts.apply` writes; `assumptions`, `roles` and `loads` stay in Pe. */
+/**
+ * The segments `ducts.apply` writes to elements and the store; `loads` stays in Pe, and the rulings
+ * (`assumptions` verdicts, `roles`) are written to the store as deltas (`pendingRulings`).
+ */
 export const WRITTEN = [
   "rules",
   "terminalDrops",
@@ -95,14 +100,12 @@ const stagedCells = (doc: DuctsRouteDocument | null) =>
       cell?.staged ? [{ segment, key, cell }] : [],
     ),
   );
-/** Staged rulings (assumption verdicts, unit roles): route Work that no write carries. */
-export const stagedRulings = (doc: DuctsRouteDocument | null) =>
-  (["assumptions", "roles"] as const).reduce(
-    (n, segment) => n + Object.values(doc?.[segment] ?? {}).filter((cell) => cell?.staged).length,
-    0,
-  );
-/** How many staged cells a write would carry. */
-export const stagedCount = (doc: DuctsRouteDocument | null) => stagedCells(doc).length;
+type Store = DuctSnapshot["store"];
+/** How many changes a write would carry: staged cells, and rulings that differ from the store's. */
+export const pendingCount = (doc: DuctsRouteDocument | null, store: Store) =>
+  stagedCells(doc).length + pendingRulings(doc, store).length;
+const pendingOf = (ctx: DuctsCtx) =>
+  pendingCount(ctx.work.doc, observed<DuctSnapshot>(ctx, "ducts")?.store);
 
 /**
  * What stands between the Work and a write, in the inbox's own terms: the Fix and Set rows of the
@@ -125,7 +128,8 @@ const standing = (ctx: DuctsCtx) => {
     findings: priced.findings,
     flows: priced.flows,
     equipmentFlows: priced.equipmentFlows,
-    doc: ctx.work.doc,
+    doc: withStoredRulings(ctx.work.doc, snapshot.store),
+    airflow: airflowOptions(snapshot, ctx.page.group),
   });
   return { fix: fix.length, set: set.length };
 };
@@ -214,12 +218,14 @@ export const manifest = defineRoute<
       nouns: ["assumption"],
       noun: "duct assumptions",
       show: (value) => {
-        const a = value as DuctAssumption;
-        return a.kind === "verdict"
-          ? a.verdict
-          : a.kind === "flex-roughness"
-            ? `${a.ft} ft`
-            : `${a.inWg} in-wg`;
+        const a = value as DuctAssumption | undefined;
+        return !a
+          ? "take back"
+          : a.kind === "verdict"
+            ? a.verdict
+            : a.kind === "flex-roughness"
+              ? `${a.ft} ft`
+              : `${a.inWg} in-wg`;
       },
     },
     {
@@ -312,8 +318,8 @@ export const manifest = defineRoute<
       dirties: [],
       waitSeconds: NATIVE_APPLY_WAIT_S,
       requires: { work: true },
-      count: (ctx) => stagedCells(ctx.work.doc).length || null,
-      ready: (ctx) => (stagedCells(ctx.work.doc).length ? why(() => built(ctx)) : "Nothing staged"),
+      count: (ctx) => pendingOf(ctx) || null,
+      ready: (ctx) => (pendingOf(ctx) ? why(() => built(ctx)) : "Nothing staged"),
       run: async (ctx) => {
         const request = built(ctx);
         const response = await dispatch(ctx, "ducts.preview-losses", request);
@@ -341,7 +347,7 @@ export const manifest = defineRoute<
       requires: { work: true },
       // Armed only while Fix and Set are empty and the preview matches this Work and snapshot.
       ready: (ctx) =>
-        !stagedCells(ctx.work.doc).length
+        !pendingOf(ctx)
           ? "Nothing staged"
           : (writeBlocked(standing(ctx) ?? { fix: 0, set: 0 }) ??
             (ctx.page.evaluation === null
@@ -351,11 +357,15 @@ export const manifest = defineRoute<
                 : null)),
       run: async (ctx) => {
         const applied = stagedCells(ctx.work.doc).filter((cell) => cell.segment !== "catalogs");
+        const rulings = pendingRulings(
+          ctx.work.doc,
+          observed<DuctSnapshot>(ctx, "ducts")?.store,
+        ).map(({ segment, key }) => ({ segment, key, cell: ctx.work.doc![segment][key]! }));
         const response = await dispatch(ctx, "ducts.apply-losses", built(ctx));
         ctx.note("apply", outcomeWords(response), response.counts.refused > 0);
-        // The staged cells are in Revit now; the snapshot and its store are their home.
-        const patches: RouteStatePatch[] = applied.flatMap(({ segment, key, cell }) =>
-          transitionPatches([segment], key, cell, { kind: "unstage" }),
+        // The staged cells are in Revit now and the rulings in its store; the snapshot is their home.
+        const patches: RouteStatePatch[] = [...applied, ...rulings].flatMap(
+          ({ segment, key, cell }) => transitionPatches([segment], key, cell, { kind: "unstage" }),
         );
         const refusal = await ctx.write(patches);
         ctx.setPage({ epoch: ctx.page.epoch + 1, evaluation: null });

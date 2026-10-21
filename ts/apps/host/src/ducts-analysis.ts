@@ -712,7 +712,11 @@ function project(
     rows = selectedTerminals.map((node) => ({
       ...baseRow(node, node.id),
       kind: "terminal",
-      flowSource: flows.get(node.id)?.source ?? null,
+      // A flow Revit holds names the airflow slot it was read from.
+      flowSource:
+        flows.get(node.id)?.source === "revit" && node.flowParameter
+          ? `revit:${node.flowParameter}`
+          : (flows.get(node.id)?.source ?? null),
       requiredEspNowInWg: now.paths[node.id]?.total ?? null,
       requiredEspStagedInWg: next.paths[node.id]?.total ?? null,
     }));
@@ -932,6 +936,12 @@ function project(
     selection: assessment.selection,
     completeness: assessment.completeness,
     coverage: assessment.coverage,
+    airflow: {
+      slot: input.snapshot.slots?.terminalFlow ?? "PE_M_Grd_AirFlow",
+      candidates: (input.snapshot.airflowCandidates ?? [])
+        .slice(0, 20)
+        .map(({ slot, where, shared, have, of }) => ({ slot, where, shared, have, of })),
+    },
     rows: pageRows,
     findings:
       request.projection === "summary"

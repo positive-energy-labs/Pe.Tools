@@ -13,11 +13,13 @@ import { Row } from "@pe/kit/lang/row";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 
+import { airflowOptions } from "../../airflow";
 import { elementNamer } from "../../claims";
 import { inboxRows, type CellRef } from "../../inbox-rows";
 import { groupLabels } from "../../inputs";
 import { previewFresh } from "../../manifest";
 import type { LossesWork } from "../../work";
+import { reviewLines } from "../../write-review";
 import { buildTree, systemList, type TreeNode } from "../b/model";
 import type { ProtoProps } from "../props";
 import { BarLegend, LossBar } from "./bar";
@@ -47,8 +49,9 @@ export function EScreen({ props }: { props: ProtoProps }) {
       doc,
       revision: props.work.revision,
       write: props.work.write as unknown as (p: RouteStatePatch[]) => Promise<unknown>,
+      store: snapshot?.store ?? null,
     }),
-    [doc, props.work.revision, props.work.write],
+    [doc, props.work.revision, props.work.write, snapshot],
   );
   const ruleOf = useMemo(() => ruleOfIds(priced), [priced]);
   const tree = useMemo(
@@ -71,7 +74,10 @@ export function EScreen({ props }: { props: ProtoProps }) {
     const n = snapshot ? elementNamer(snapshot, null) : () => null;
     return (id: number) => labels.get(id) ?? n(id) ?? "element not in snapshot";
   }, [snapshot, labels]);
-  const names = useMemo(() => (snapshot ? groupLabels(snapshot) : new Map<string, string>()), [snapshot]);
+  const names = useMemo(
+    () => (snapshot ? groupLabels(snapshot) : new Map<string, string>()),
+    [snapshot],
+  );
   // The survey is the priced result's, or the unpriced one while the tables are unread; the
   // manifest's apply gate reads the same rows (`triage`) over the same tolerated snapshot.
   const surveyed = useMemo(
@@ -91,10 +97,10 @@ export function EScreen({ props }: { props: ProtoProps }) {
             doc,
             nameOf,
             groupLabel: (id) => names.get(id) ?? id,
+            airflow: snapshot ? airflowOptions(snapshot, page.group) : undefined,
             claims: props.claims,
             write: {
               staged: props.staged,
-              rulings: props.rulings,
               hasPreview: page.evaluation !== null,
               fresh: previewFresh(page, props.work.revision),
               planned: preview?.counts.planned ?? null,
@@ -102,7 +108,23 @@ export function EScreen({ props }: { props: ProtoProps }) {
             },
           })
         : null,
-    [surveyed, page, doc, nameOf, names, props.claims, props.staged, props.rulings, props.work.revision, preview],
+    [
+      surveyed,
+      snapshot,
+      page,
+      doc,
+      nameOf,
+      names,
+      props.claims,
+      props.staged,
+      props.work.revision,
+      preview,
+    ],
+  );
+  // The review lists only a preview that still describes this Work and snapshot.
+  const review = useMemo(
+    () => (preview && previewFresh(page, props.work.revision) ? reviewLines(preview, nameOf) : []),
+    [preview, page, props.work.revision, nameOf],
   );
   const toRule = inbox ? inbox.fix.length + inbox.set.length + inbox.check.length : 0;
   // A Set row's verb selects the element and focuses its cell once the tree has drawn it.
@@ -312,20 +334,21 @@ export function EScreen({ props }: { props: ProtoProps }) {
         />
       </Pane>
     ) : null;
-  const lower = !inputsPane && !rulesPane ? null : (
-    <PaneSplit
-      axis="vertical"
-      start={inputsPane}
-      end={rulesPane}
-      resize={{
-        target: "end",
-        defaultSize: 220,
-        minSize: 100,
-        minOtherSize: 100,
-        persist: "proto-e-inputs",
-      }}
-    />
-  );
+  const lower =
+    !inputsPane && !rulesPane ? null : (
+      <PaneSplit
+        axis="vertical"
+        start={inputsPane}
+        end={rulesPane}
+        resize={{
+          target: "end",
+          defaultSize: 220,
+          minSize: 100,
+          minOtherSize: 100,
+          persist: "proto-e-inputs",
+        }}
+      />
+    );
   const left = (
     <PaneSplit
       axis="vertical"
@@ -364,7 +387,7 @@ export function EScreen({ props }: { props: ProtoProps }) {
             light={light}
             onSelect={select}
             onFocusCell={focusCell}
-            write={{ ...props.actions, row: inbox.write }}
+            write={{ ...props.actions, row: inbox.write, review }}
           />
         ) : null}
       </Pane>

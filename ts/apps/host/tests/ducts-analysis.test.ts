@@ -1322,6 +1322,8 @@ test("apply-request builds a canonical immutable candidate without reacquiring",
     terminals: {},
     terminalFlows: {},
     equipmentFlows: {},
+    verdicts: {},
+    roles: {},
     workRevision: 3,
     customerKeep: { exact: [1, "untouched"] },
   };

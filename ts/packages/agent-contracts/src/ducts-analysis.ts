@@ -93,7 +93,7 @@ const row = z.strictObject({
   requiredEspStagedInWg: z.number().nullable(),
   availableFanStaticInWg: z.number().nullable(),
   flowCfm: z.number().nullable(),
-  /** Where a terminal row's `flowCfm` came from: "override" | "load-preview:<tag>" | "revit". */
+  /** Where a terminal row's `flowCfm` came from: "override" | "load-preview:<tag>" | "revit:<airflow slot>". */
   flowSource: z.string().nullable(),
   spaceText: z.string().nullable(),
   detail: z.string().nullable(),
@@ -386,6 +386,26 @@ export const ductsAnalysisResponseSchema = z.strictObject({
     unassignedEquipmentPorts: z.number().int(),
     admittedCircuitTerminals: z.number().int(),
     reachedCircuitTerminals: z.number().int(),
+  }),
+  /**
+   * The airflow read slot (a walk step, pressure-drop ledger 2026-10-20): the TerminalFlow slot the
+   * snapshot read, and every air flow parameter the terminals carry with how many of them hold a
+   * nonzero value, best first. `@connector` is the connector flow. Pea proposes a slot as a claim;
+   * a person picks it on the page.
+   */
+  airflow: z.strictObject({
+    slot: z.string(),
+    candidates: z
+      .array(
+        z.strictObject({
+          slot: z.string(),
+          where: z.string(),
+          shared: z.boolean(),
+          have: z.number().int(),
+          of: z.number().int(),
+        }),
+      )
+      .max(20),
   }),
   rows: z.array(row).max(100),
   /** The survey's findings; the summary projection carries them, person first, trimmed last under the byte budget. */

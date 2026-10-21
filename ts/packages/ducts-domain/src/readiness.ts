@@ -10,6 +10,7 @@
 import { ductOverrideKey, type DuctAssumption, type DuctsRouteDocument } from "@pe/agent-contracts";
 
 import { ISSUE_BLOCKS } from "./issues.ts";
+import { withStoredRulings } from "./rulings.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 type DuctIssue = DuctSnapshot["issues"][number];
@@ -51,8 +52,9 @@ export function snapshotById(snapshot: DuctSnapshot): ById {
 
 export function readiness(
   snapshot: DuctSnapshot,
-  doc: DuctsRouteDocument | null,
+  work: DuctsRouteDocument | null,
 ): Record<string, GroupReadiness> {
+  const doc = withStoredRulings(work, snapshot.store);
   const { issues, nodes, segments } = snapshotById(snapshot);
   const verdict = (issue: DuctIssue) => {
     const value = staged(doc, issue.id);

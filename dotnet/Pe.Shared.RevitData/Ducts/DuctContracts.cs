@@ -99,6 +99,12 @@ public sealed record DuctParameterSlots(
     string FittingCoefficient = DuctParameterSlots.DefaultFittingCoefficient,
     string TerminalFlow = "PE_M_Grd_AirFlow") { // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later)
     public const string DefaultFittingCoefficient = "Pe_C";
+
+    /// <summary>
+    ///     The TerminalFlow slot value that reads the terminal's connector flow (the built-in RBS_DUCT_FLOW_PARAM, which
+    ///     Revit reports from the family's connector) instead of a named parameter. Read only: apply refuses to write it.
+    /// </summary>
+    public const string ConnectorFlow = "@connector";
     private static readonly DuctParameterSlots Defaults = new();
 
     /// <summary>Each name this leaves blank (a partial wire object) comes from <paramref name="under" />.</summary>
@@ -125,6 +131,7 @@ public sealed record DuctParameterSlots(
 /// <summary>
 ///     Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
 ///     the blob is unreadable or another version (fail-closed: ducts.apply refuses to overwrite it).
+///     AirflowCandidates are the air flow parameters the terminals carry, the picker for the TerminalFlow slot.
 /// </summary>
 public sealed record DuctSnapshotData(
     DuctDocument Document,
@@ -140,7 +147,25 @@ public sealed record DuctSnapshotData(
     DuctParameterSlots Slots,
     DuctLossStore? Store = null,
     string? StoreError = null,
-    DuctPhases? Phases = null);
+    DuctPhases? Phases = null,
+    IReadOnlyList<DuctAirflowCandidate>? AirflowCandidates = null);
+
+/// <summary>
+///     One parameter a terminal's design airflow could be read from (pressure-drop ledger, 2026-10-20: the airflow read
+///     slot is a walk step). Slot is the TerminalFlow slot value that reads it: a parameter name, or
+///     <see cref="DuctParameterSlots.ConnectorFlow" /> for the connector flow. Where is instance, type or connector;
+///     Shared is true for a shared parameter. Have counts terminals with a nonzero value, Of every terminal; Groups the
+///     same per group that holds terminals.
+/// </summary>
+public sealed record DuctAirflowCandidate(
+    string Slot,
+    string Where,
+    bool Shared,
+    int Have,
+    int Of,
+    IReadOnlyList<DuctGroupCoverage> Groups);
+
+public sealed record DuctGroupCoverage(string GroupId, int Have, int Of);
 
 /// <summary>
 ///     The document's phases, Document.Phases in order (earliest first), and Views: how many non-template plan and 3D
@@ -271,7 +296,10 @@ public sealed record DuctConnector(
 /// <summary>One stated or reported value with its unit and provenance.</summary>
 public sealed record DuctFact(string Key, double? Value, string? Text, string Unit, DuctProvenance Provenance);
 
-/// <summary>PhaseCreated and PhaseDemolished name the element's phases (null when it has none, or none demolished it).</summary>
+/// <summary>
+///     PhaseCreated and PhaseDemolished name the element's phases (null when it has none, or none demolished it).
+///     FlowParameter, on a terminal, is the TerminalFlow slot that supplied its terminalFlow fact; null when none did.
+/// </summary>
 public sealed record DuctNode(
     long Id,
     DuctNodeKind Kind,
@@ -291,7 +319,8 @@ public sealed record DuctNode(
     string? Label = null,
     string? UniqueId = null,
     string? PhaseCreated = null,
-    string? PhaseDemolished = null);
+    string? PhaseDemolished = null,
+    string? FlowParameter = null);
 
 public sealed record DuctRoughness(double ValueFt, DuctProvenance Provenance);
 

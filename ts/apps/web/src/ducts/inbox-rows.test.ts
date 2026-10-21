@@ -72,12 +72,36 @@ describe("a staged verdict is a ruling, not a Revit write", () => {
     expect(ruled.status).toBe("ruled: capped");
     expect(ruled.verbs[0]).toMatchObject({ kind: "verdict", verdict: "capped", on: true, label: "take back" });
   });
-  it("the Write row counts rulings apart from Revit writes", () => {
-    const rows = inboxRows({ ...base, doc, write: { ...base.write, rulings: 2 } });
-    expect(rows.write.status).toBe(
-      "2 rulings staged · nothing to write to Revit yet: stage a flow, ESP, rule or drop",
-    );
+  it("a pending ruling is a write to the model's store, previewed like any other", () => {
+    const rows = inboxRows({ ...base, doc, write: { ...base.write, staged: 2 } });
+    expect(rows.write.status).toBe("not previewed");
     expect(inboxRows(base).write.status).toBe("nothing staged");
+  });
+});
+
+describe("the airflow read slot", () => {
+  const airflow = {
+    current: "PE_M_Grd_AirFlow",
+    options: [
+      { slot: "Flow", label: "Flow · instance", have: 1, of: 2 },
+      { slot: "PE_M_Grd_AirFlow", label: "PE_M_Grd_AirFlow · instance, shared", have: 0, of: 2 },
+    ],
+  };
+  it("asks first, while a terminal reads no flow, with every candidate's coverage", () => {
+    const rows = inboxRows({ ...base, airflow });
+    expect(keys(rows.set)).toEqual(["airflow", "flows:30", "equipmentFlows:1"]);
+    const row = rows.set[0]!;
+    expect(row.title).toBe("Airflow from PE_M_Grd_AirFlow");
+    expect(row.status).toBe("0 of 2 terminals read");
+    expect(row.ids).toEqual([30]);
+    expect(row.verbs[0]).toMatchObject({ kind: "airflow", current: "PE_M_Grd_AirFlow" });
+  });
+  it("is gone once every terminal reads a flow", () => {
+    const flows = new Map<number, { cfm: number | null }>([
+      [30, { cfm: 90 }],
+      [31, { cfm: 120 }],
+    ]);
+    expect(keys(inboxRows({ ...base, flows, airflow }).set)).toEqual(["equipmentFlows:1"]);
   });
 });
 

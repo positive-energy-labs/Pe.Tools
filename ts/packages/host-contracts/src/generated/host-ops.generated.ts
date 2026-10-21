@@ -242,6 +242,9 @@ export namespace DuctsApply {
      * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
      * `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
      * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
+     * v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
+     * finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
+     * edits. A v1 blob reads as v2 with no rulings; every write is v2.
      *
      */
     export interface DuctLossStore {
@@ -260,6 +263,12 @@ export namespace DuctsApply {
       };
       equipmentFlows?: {
         [k: string]: DuctFlowRecord;
+      };
+      verdicts?: {
+        [k: string]: DuctVerdictRecord;
+      };
+      roles?: {
+        [k: string]: DuctRoleRecord;
       };
       slots?: null | DuctParameterSlots;
       workRevision?: number;
@@ -297,6 +306,22 @@ export namespace DuctsApply {
       source?: null | string;
       appliedAt: string;
     }
+    /**
+     * A person's ruling on an issue or inferred-join finding id: `ignore` leaves an open end out of the walk, or
+     * withholds (objects to) an inferred join.
+     *
+     */
+    export interface DuctVerdictRecord {
+      verdict: string;
+      ruledAt: string;
+    }
+    /**
+     * A person's ruling on an air mover: `passive` moves no design air (or `fan`, the default, said aloud).
+     */
+    export interface DuctRoleRecord {
+      role: string;
+      ruledAt: string;
+    }
   }
   export namespace Res {
     /**
@@ -310,8 +335,10 @@ export namespace DuctsApply {
       storeRevision: number;
     }
     /**
-     * One target's outcome. Kind: fitting, terminal, component, equipment, terminal-flow, equipment-flow, store. Outcome: planned (preview),
-     * written, refused (Reason says why), unchanged (already holds the value). Before and After are display text.
+     * One target's outcome. Kind: fitting, terminal, component, equipment, terminal-flow, equipment-flow, store, and the
+     * store entries a write changes: slot (Key names the slot), verdict (Key is the issue or finding id, Id its first
+     * element) and role (Id is the unit). Outcome: planned (preview), written, refused (Reason says why), unchanged
+     * (already holds the value). Before and After are display text; "none" is no entry.
      *
      */
     export interface DuctWrite {
@@ -321,6 +348,7 @@ export namespace DuctsApply {
       reason?: null | string;
       before?: null | string;
       after?: null | string;
+      key?: null | string;
     }
     export interface DuctApplyCounts {
       planned: number;
@@ -454,6 +482,7 @@ export namespace DuctsSnapshot {
     /**
      * Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
      * the blob is unreadable or another version (fail-closed: ducts.apply refuses to overwrite it).
+     * AirflowCandidates are the air flow parameters the terminals carry, the picker for the TerminalFlow slot.
      *
      */
     export interface Response {
@@ -471,6 +500,7 @@ export namespace DuctsSnapshot {
       store?: null | DuctLossStore;
       storeError?: null | string;
       phases?: null | DuctPhases;
+      airflowCandidates?: DuctAirflowCandidate[] | null;
     }
     /**
      * The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
@@ -508,6 +538,8 @@ export namespace DuctsSnapshot {
     }
     /**
      * PhaseCreated and PhaseDemolished name the element's phases (null when it has none, or none demolished it).
+     * FlowParameter, on a terminal, is the TerminalFlow slot that supplied its terminalFlow fact; null when none did.
+     *
      */
     export interface DuctNode {
       id: number;
@@ -529,6 +561,7 @@ export namespace DuctsSnapshot {
       uniqueId?: null | string;
       phaseCreated?: null | string;
       phaseDemolished?: null | string;
+      flowParameter?: null | string;
     }
     /**
      * One physical HVAC connector. Kind is "end" or "curve" (a tap on a duct's side). Direction is Revit's
@@ -721,6 +754,9 @@ export namespace DuctsSnapshot {
      * Pe's provenance for duct losses: one versioned JSON blob in the hidden Project Information text parameter
      * `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
      * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
+     * v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
+     * finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
+     * edits. A v1 blob reads as v2 with no rulings; every write is v2.
      *
      */
     export interface DuctLossStore {
@@ -739,6 +775,12 @@ export namespace DuctsSnapshot {
       };
       equipmentFlows: {
         [k: string]: DuctFlowRecord;
+      };
+      verdicts: {
+        [k: string]: DuctVerdictRecord;
+      };
+      roles: {
+        [k: string]: DuctRoleRecord;
       };
       slots?: null | DuctParameterSlots;
       workRevision: number;
@@ -777,6 +819,22 @@ export namespace DuctsSnapshot {
       appliedAt: string;
     }
     /**
+     * A person's ruling on an issue or inferred-join finding id: `ignore` leaves an open end out of the walk, or
+     * withholds (objects to) an inferred join.
+     *
+     */
+    export interface DuctVerdictRecord {
+      verdict: string;
+      ruledAt: string;
+    }
+    /**
+     * A person's ruling on an air mover: `passive` moves no design air (or `fan`, the default, said aloud).
+     */
+    export interface DuctRoleRecord {
+      role: string;
+      ruledAt: string;
+    }
+    /**
      * The document's phases, Document.Phases in order (earliest first), and Views: how many non-template plan and 3D
      * views show each phase (VIEW_PHASE) under each phase filter (VIEW_PHASE_FILTER), most first. A firm models what its
      * views show; an element in a phase no view shows is often forgotten (pressure-drop ledger, 2026-10-19).
@@ -793,6 +851,27 @@ export namespace DuctsSnapshot {
       phase?: null | string;
       filter?: null | string;
       count: number;
+    }
+    /**
+     * One parameter a terminal's design airflow could be read from (pressure-drop ledger, 2026-10-20: the airflow read
+     * slot is a walk step). Slot is the TerminalFlow slot value that reads it: a parameter name, or
+     * ConnectorFlow for the connector flow. Where is instance, type or connector;
+     * Shared is true for a shared parameter. Have counts terminals with a nonzero value, Of every terminal; Groups the
+     * same per group that holds terminals.
+     *
+     */
+    export interface DuctAirflowCandidate {
+      slot: string;
+      where: string;
+      shared: boolean;
+      have: number;
+      of: number;
+      groups: DuctGroupCoverage[];
+    }
+    export interface DuctGroupCoverage {
+      groupId: string;
+      have: number;
+      of: number;
     }
   }
 }

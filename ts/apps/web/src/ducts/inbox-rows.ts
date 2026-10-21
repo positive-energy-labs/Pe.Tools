@@ -2,8 +2,9 @@
  * The /ducts inbox in loop order, derived and never stored (modelled on `rooms/cards.ts`):
  * - Fix: what blocks a path to the fan (`bins.ts` `blocking`): no duct path to a fan, anomalous
  *   joins, open ends, loops, no or several roots, a catalog table missing or out of range.
- * - Set: an input a person owes: a terminal with no flow, a fan with no design flow, flex left on
- *   the rigid roughness. Each Set row deep-links to the cell on the tree row that holds it.
+ * - Set: an input a person owes: first, while any terminal has no flow, which parameter the airflow
+ *   is read from (`airflow.ts`); then a terminal with no flow, a fan with no design flow, flex left
+ *   on the rigid roughness. Each Set row deep-links to the cell on the tree row that holds it.
  * - Check: Pea's claims for this group awaiting a verdict, and Pea's proposals awaiting staging.
  * - Write: one row, armed only while Fix and Set are empty and the preview is fresh.
  * - Diagnostics: bridged joins (near miss, stretched); final, collapsed, and the only rows that may
@@ -17,6 +18,7 @@ import { bin } from "@pe/ducts-domain/bins";
 import { ruleByKey } from "@pe/ducts-domain/loss-rules";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
+import { slotWord, type AirflowOption } from "./airflow";
 import type { Claim } from "./legs";
 
 export const INBOX_ORDER = ["fix", "set", "check", "write", "diagnostics"] as const;
@@ -56,6 +58,8 @@ export type RowVerb =
   /** Select the element on the drawing and focus the cell that holds the input. */
   | { kind: "focus"; cell: CellRef; label: string; says: string }
   | { kind: "claim"; claim: Claim }
+  /** Choose the parameter every terminal's airflow is read from: one press per candidate. */
+  | { kind: "airflow"; current: string; options: readonly AirflowOption[] }
   | {
       kind: "stage";
       segment: string;
@@ -90,6 +94,8 @@ export interface TriageInput {
   doc: DuctsRouteDocument | null;
   nameOf?: (id: number) => string;
   groupLabel?: (id: string) => string;
+  /** The airflow read slot and its candidates in this scope (`airflowOptions`). */
+  airflow?: { current: string; options: readonly AirflowOption[] };
 }
 
 const verdictOf = (doc: DuctsRouteDocument | null, key: string) => {
@@ -258,7 +264,13 @@ export function triage(input: TriageInput) {
             ids: f.elementIds,
             note: "A person ruled on this open end; the ruling lives in this route and writes nothing to Revit.",
             verbs: [
-              verdict(doc, f.id, ruled, "take back", "Take the ruling back; the end comes up under Fix again"),
+              verdict(
+                doc,
+                f.id,
+                ruled,
+                "take back",
+                "Take the ruling back; the end comes up under Fix again",
+              ),
               select(f.elementIds),
             ],
           });
@@ -328,7 +340,13 @@ export function triage(input: TriageInput) {
           verbs: [
             ...(grade
               ? [
-                  verdict(doc, f.id, "connect", "keep the join", "Connect: keep this join as drawn"),
+                  verdict(
+                    doc,
+                    f.id,
+                    "connect",
+                    "keep the join",
+                    "Connect: keep this join as drawn",
+                  ),
                   verdict(doc, f.id, "ignore", "break the join", "Ignore: withhold this join"),
                 ]
               : []),
@@ -356,15 +374,23 @@ export function triage(input: TriageInput) {
       ids,
       note: "A person withheld this inferred join; the path breaks here.",
       verbs: [
-        verdict(doc, key, "ignore", "withdraw", "Take the objection back; the join is bridged again"),
+        verdict(
+          doc,
+          key,
+          "ignore",
+          "withdraw",
+          "Take the objection back; the join is bridged again",
+        ),
         select(ids),
       ],
     });
   }
 
+  const flowless: number[] = [];
   for (const n of snapshot.nodes) {
     if (n.kind !== "terminal" || !n.groupId || (group && n.groupId !== group)) continue;
     if (fanless.has(n.groupId) || flows.get(n.id)?.cfm != null) continue;
+    flowless.push(n.id);
     set.push({
       key: `flows:${n.id}`,
       group: "set",
@@ -382,6 +408,23 @@ export function triage(input: TriageInput) {
         },
         select([n.id]),
       ],
+    });
+  }
+  // The airflow source is the critical step: while a terminal has no flow, the first Set row asks
+  // which parameter holds them, with each candidate's coverage, before any one terminal's row.
+  if (flowless.length && input.airflow) {
+    const { current, options } = input.airflow;
+    const at = options.find((o) => o.slot === current);
+    set.unshift({
+      key: "airflow",
+      group: "set",
+      kind: "airflow",
+      title: `Airflow from ${slotWord(current)}`,
+      status: `${at?.have ?? 0} of ${at?.of ?? flowless.length} terminals read`,
+      tone: "caution",
+      ids: flowless,
+      note: `${flowless.length} terminal${flowless.length === 1 ? "" : "s"} read no airflow from ${slotWord(current)}. Pick the parameter this project keeps design airflow in; each choice says how many terminals hold a value.`,
+      verbs: [{ kind: "airflow", current, options }, select(flowless)],
     });
   }
   const units = new Set<number>();
@@ -467,8 +510,9 @@ export function checks(input: TriageInput & { claims: readonly Claim[] }): Inbox
       note: `Pea says this is ${claim.state}`,
       verbs: [{ kind: "claim", claim }, select(claim.at)],
     }));
-  const awaiting = (cells: Record<string, { proposal?: { value?: unknown }; staged?: unknown }> | undefined) =>
-    Object.entries(cells ?? {}).filter(([, cell]) => cell.proposal && !cell.staged);
+  const awaiting = (
+    cells: Record<string, { proposal?: { value?: unknown }; staged?: unknown }> | undefined,
+  ) => Object.entries(cells ?? {}).filter(([, cell]) => cell.proposal && !cell.staged);
   const segments = doc as unknown as Record<
     string,
     Record<string, { proposal?: { value?: unknown }; staged?: unknown }> | undefined
@@ -492,7 +536,14 @@ export function checks(input: TriageInput & { claims: readonly Claim[] }): Inbox
           label: "accept",
           says: "Stage Pea's proposal",
         },
-        { kind: "stage", segment, key, move: "deny", label: "reject", says: "Clear Pea's proposal" },
+        {
+          kind: "stage",
+          segment,
+          key,
+          move: "deny",
+          label: "reject",
+          says: "Clear Pea's proposal",
+        },
         ...(FOCUSABLE.has(segment) && ids[0] != null
           ? [
               {
@@ -535,11 +586,10 @@ export function checks(input: TriageInput & { claims: readonly Claim[] }): Inbox
   return items;
 }
 
-/** What the Write row needs from the page: staged cells, and the last preview's standing. */
+/** What the Write row needs from the page: pending changes, and the last preview's standing. */
 export interface WriteState {
+  /** Staged cells and pending rulings: a ruling is a write to the model's store. */
   staged: number;
-  /** Staged rulings (verdicts, roles): route Work that Pe keeps and Revit never receives. */
-  rulings?: number;
   hasPreview: boolean;
   fresh: boolean;
   planned: number | null;
@@ -564,9 +614,7 @@ export function writeRow(left: { fix: number; set: number }, write: WriteState):
   return {
     title: write.fresh && write.planned ? `Write ${write.planned} to Revit` : "Write to Revit",
     status: !write.staged
-      ? write.rulings
-        ? `${write.rulings} ruling${write.rulings === 1 ? "" : "s"} staged · nothing to write to Revit yet: stage a flow, ESP, rule or drop`
-        : "nothing staged"
+      ? "nothing staged"
       : !write.hasPreview
         ? "not previewed"
         : !write.fresh

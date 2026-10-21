@@ -5,11 +5,13 @@
  * (its rung named beside it in quiet text) until one is staged.
  */
 import { DUCT_UNIT_ROLES, transitionPatches } from "@pe/agent-contracts";
+import { storedRuling } from "@pe/ducts-domain/rulings";
 import type { Priced } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { cellFromTrichotomy, StateCell } from "@pe/kit/lang/cell";
 import { reviewTransitions, type CellWire } from "#/components/work/band";
 
+import { rulingPatches } from "../../assumptions";
 import { equipmentInputs, terminalInputs, type Resolved } from "../../inputs";
 import type { CellSegment } from "../../inbox-rows";
 import type { LossesWork } from "../../work";
@@ -130,21 +132,34 @@ function InputCell({
   );
 }
 
-/** A unit's role: `fan` unless a person stages `passive`; typing either word stages it. */
+/**
+ * A unit's role: `fan` unless a person rules `passive`; typing either word stages it. A `passive`
+ * the model's store holds reads as "ruled"; typing `fan` takes it back (`rulingPatches`).
+ */
 function RoleCell({
   id,
   work,
   resolved,
+  store,
 }: {
   id: number;
   work: LossesWork;
   resolved: Resolved<"fan" | "passive">;
+  store: DuctSnapshot["store"];
 }) {
   const key = String(id);
   const cell = work.doc?.roles[key] ?? {};
   const standing = (cell.staged ?? cell.proposal)?.value;
   const wire: CellWire = { segment: "roles", revision: work.revision, write: work.write };
-  const word = cell.staged ? "override" : cell.proposal ? "Pea proposes" : resolved.word;
+  const stored = storedRuling(store, "roles", key);
+  const word =
+    cell.staged && stored === cell.staged.value.role
+      ? "ruled"
+      : cell.staged
+        ? "override"
+        : cell.proposal
+          ? "Pea proposes"
+          : resolved.word;
   return (
     <span
       className="inline-flex items-baseline gap-1 whitespace-nowrap"
@@ -165,12 +180,7 @@ function RoleCell({
           if (!(DUCT_UNIT_ROLES as readonly string[]).includes(role))
             return `a role is ${DUCT_UNIT_ROLES.join(" or ")}`;
           return work
-            .write(
-              transitionPatches(["roles"], key, cell, {
-                kind: "stage",
-                rung: { value: { role: role as (typeof DUCT_UNIT_ROLES)[number] } },
-              }),
-            )
+            .write(rulingPatches(work.doc, store, "roles", key, role) as never)
             .then((refusal) => refusal?.message);
         }}
         transitions={reviewTransitions(wire, key, cell)}
@@ -192,10 +202,17 @@ export interface InputsCtx {
 /** A terminal row's flow and drop cells. */
 export function TerminalCells({ ctx, id }: { ctx: InputsCtx; id: number }) {
   if (!ctx.priced) return null;
-  const inputs = terminalInputs(ctx.priced, id);
+  const from = ctx.snapshot.nodes.find((n) => n.id === id)?.flowParameter ?? null;
+  const inputs = terminalInputs(ctx.priced, id, from);
   return (
     <span className="inline-flex items-baseline gap-3">
-      <InputCell spec={SPECS.flows} id={id} work={ctx.work} resolved={inputs.flow} label={`flow of ${id}`} />
+      <InputCell
+        spec={SPECS.flows}
+        id={id}
+        work={ctx.work}
+        resolved={inputs.flow}
+        label={`flow of ${id}`}
+      />
       <InputCell
         spec={SPECS.terminalDrops}
         id={id}
@@ -220,8 +237,14 @@ export function EquipmentCells({ ctx, id }: { ctx: InputsCtx; id: number }) {
         resolved={inputs.flow}
         label={`flow of ${id}`}
       />
-      <RoleCell id={id} work={ctx.work} resolved={inputs.role} />
-      <InputCell spec={SPECS.esp} id={id} work={ctx.work} resolved={inputs.esp} label={`ESP of ${id}`} />
+      <RoleCell id={id} work={ctx.work} resolved={inputs.role} store={ctx.snapshot.store} />
+      <InputCell
+        spec={SPECS.esp}
+        id={id}
+        work={ctx.work}
+        resolved={inputs.esp}
+        label={`ESP of ${id}`}
+      />
     </span>
   );
 }
