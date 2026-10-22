@@ -8,6 +8,7 @@ import { z } from "zod";
 import {
   familiesRouteState,
   ffPlanEntrySchema,
+  routePageSchema,
   workKey,
   type ActionReceipt,
   type AppliedFilter,
@@ -45,9 +46,6 @@ import { podHost } from "#/route/pods";
 import type { Inspectable } from "#/route/inspect";
 import { familiesGroupOf, stagedDrafts } from "./staged";
 
-/** The families view opens on parameters that hold a value somewhere in the shown types. */
-export const DEFAULT_FAMILIES_QUERY = "!empty !absent";
-
 export interface FamiliesPage {
   /** The next read's scope. Picker changes never issue a matrix read. */
   draft: FamiliesDraft;
@@ -63,7 +61,7 @@ export interface FamiliesPage {
   carryOver: boolean;
 }
 
-const familiesPageSchema = z.object({
+const familiesPageSchema = routePageSchema("families").extend({
   // A newly bound document drafts its placed families (ruling 44): the cheaper, relevant read.
   draft: z
     .object({
@@ -94,7 +92,6 @@ const familiesPageSchema = z.object({
     })
     .nullable()
     .default(null),
-  query: z.string().default(DEFAULT_FAMILIES_QUERY),
   carryOver: z.boolean().default(false),
 });
 
@@ -312,7 +309,7 @@ export const manifest = entityRoute<
   FamiliesRouteDocument,
   FamiliesReadingKey,
   FamiliesPage,
-  "read" | "save-draft" | "set-query"
+  "read" | "save-draft"
 >(familiesSpec, {
   work: familiesRouteState,
   cells: [
@@ -376,20 +373,8 @@ export const manifest = entityRoute<
         : null,
   } as never,
   page: familiesPageSchema as never,
+  address: "families",
   actions: {
-    "set-query": {
-      label: "set table query",
-      says: "Set the Families pivot's query (rules and free words) without reading or changing Revit.",
-      needs: "host",
-      actor: "any",
-      visible: false,
-      input: z.object({ query: z.string() }) as never,
-      dirties: [],
-      ready: () => null,
-      run: async (ctx, input: { query: string }) => {
-        ctx.setPage({ query: input.query });
-      },
-    },
     read: {
       label: "read families",
       says: "Read the drafted families from this exact document; category and family picks alone do not read the matrix.",

@@ -2,10 +2,9 @@
 import { act, fireEvent, render } from "@testing-library/react";
 import { expect, test, vi } from "vite-plus/test";
 
-import { TypeGrid, identityWidth } from "#/families/pivot-grid";
-import { applyFamiliesQuery, buildPivot, type PivotRow } from "#/families/pivot";
 import type { ParamColumn, TypeRow } from "#/families/matrix-columns";
-import type { FamilySnapshotRecord } from "#/host/loaded-families-view";
+import { type PivotRow } from "#/families/pivot";
+import { TypeGrid, identityWidth } from "#/families/pivot-grid";
 
 const param = (key: string): ParamColumn => ({
   key,
@@ -33,54 +32,6 @@ const type = (
   formulas: {},
   storageTypes: Object.fromEntries(Object.keys(scopes).map((key) => [key, "String"])),
 });
-const family = (name: string, typeNames: string[]) =>
-  ({
-    familyName: name,
-    typeNames,
-    categoryName: "Air Terminals",
-    placedInstanceCount: 1,
-  }) as FamilySnapshotRecord;
-
-test("!empty and numeric clauses count only shown types; whitespace is empty but 0 and No are filled", () => {
-  const types = [
-    type("A", "one", { w: "  " }, { w: "Family" }),
-    type("A", "two", { w: "No" }, { w: "Family" }),
-    type("B", "one", { w: "0", flow: "30 CFM" }, { w: "Family", flow: "Family" }),
-  ];
-  const { pivotRows, pivotFamilies } = buildPivot(
-    types,
-    [param("w"), param("flow")],
-    [family("A", ["one", "two"]), family("B", ["one"])],
-  );
-  expect(
-    applyFamiliesQuery("!empty family~A", pivotRows, pivotFamilies).shownRows.map((row) => [
-      row.key,
-      row.families,
-      row.filled,
-      row.present,
-    ]),
-  ).toEqual([["w", 1, 1, 2]]);
-  expect(
-    applyFamiliesQuery("!empty family~B", pivotRows, pivotFamilies).shownRows.map((row) => [
-      row.key,
-      row.filled,
-    ]),
-  ).toEqual([
-    ["w", 1],
-    ["flow", 1],
-  ]);
-  expect(applyFamiliesQuery("filled>=2 family~A", pivotRows, pivotFamilies).shownRows).toEqual([]);
-  expect(
-    applyFamiliesQuery("fams>=2", pivotRows, pivotFamilies).shownRows.map((row) => row.key),
-  ).toEqual(["w"]);
-  // `!` negates a rule; a family clause narrows the type columns, and rows recount over them.
-  const names = (query: string) => {
-    const shown = applyFamiliesQuery(query, pivotRows, pivotFamilies);
-    return [shown.shownFamilies.map((each) => each.name), shown.shownRows.map((row) => row.key)];
-  };
-  expect(names("family!=B !absent")).toEqual([["A"], ["w"]]);
-  expect(names("parameter=flow !valueless")).toEqual([["B"], ["flow"]]);
-});
 
 test("511 type columns mount a bounded window and expose direct editable cells", async () => {
   const params = Array.from({ length: 377 }, (_, i) => param(`p${i}`));
@@ -105,7 +56,17 @@ test("511 type columns mount a bounded window and expose direct editable cells",
     <TypeGrid
       rows={rows}
       types={types}
-      families={[{ name: "A", category: "Air Terminals", types: 511, placed: 1, params: 377 }]}
+      families={[
+        {
+          familyId: 1,
+          familyUniqueId: "fixture-family-a",
+          name: "A",
+          category: "Air Terminals",
+          types: 511,
+          placed: 1,
+          params: 377,
+        },
+      ]}
       edit={{
         params: new Map(params.map((entry) => [entry.key, entry])),
         live: {
@@ -214,7 +175,17 @@ test("archived type cells render the saved value without edit controls", () => {
     <TypeGrid
       rows={[row]}
       types={[type("A", "one", { w: "No" }, { w: "Family" })]}
-      families={[{ name: "A", category: "Air Terminals", types: 1, placed: 1, params: 1 }]}
+      families={[
+        {
+          familyId: 1,
+          familyUniqueId: "fixture-family-a",
+          name: "A",
+          category: "Air Terminals",
+          types: 1,
+          placed: 1,
+          params: 1,
+        },
+      ]}
       edit={{
         params: new Map([["w", param("w")]]),
         live: {

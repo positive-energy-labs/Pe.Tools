@@ -1,5 +1,3 @@
-import { useContext, useEffect, useRef } from "react";
-import { ChatFocus } from "#/route/situation-ladder";
 import { showFamilyCell, type FamiliesPatchCell, type PodDraftSource } from "@pe/agent-contracts";
 
 import { FactChip } from "@pe/kit/lang/chip";
@@ -131,16 +129,6 @@ export function FamiliesReceipts() {
  */
 export function FamiliesProposalsBand() {
   const { cells, rows, params, wire, plan, store, live, parse } = useFamiliesWorkspace();
-  const focus = useContext(ChatFocus);
-  const patchRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (focus?.[0] !== "native FF patch") return;
-    patchRef.current?.querySelectorAll("details").forEach((detail) => {
-      detail.open = true;
-    });
-    patchRef.current?.scrollIntoView({ block: "nearest" });
-    patchRef.current?.focus({ preventScroll: true });
-  }, [focus]);
   const patch = store.handle.work.doc?.patch ?? ({} as FamiliesPatchCell);
   const patchSource = (patch.staged ?? patch.proposal)?.value;
   // A plan row with no resolved id (no `hashKey`) is a name the host refused, in its own words.
@@ -164,7 +152,7 @@ export function FamiliesProposalsBand() {
     // In the head's Work slot: that block is fixed and scrolls itself, so the grid never moves (F-R4-1).
     <section aria-label="proposals" className="flex flex-col">
       {patchSource ? (
-        <div ref={patchRef} tabIndex={-1} aria-label="Native family patch">
+        <div aria-label="Native family patch">
           <ReviewRow
             wire={{ ...store.wire, segment: null }}
             address="patch"

@@ -1,5 +1,6 @@
 import { contentViewport, fitFrame, type Bounds2 } from "#/lib/affine-frame";
 import { pathD } from "#/takeoff/model";
+import { revitTarget } from "@pe/kit/lang/row";
 import { cn } from "@pe/kit/lib/utils";
 
 export function ZoneThumb({
@@ -7,6 +8,7 @@ export function ZoneThumb({
   className,
 }: {
   zone: {
+    elementId?: number | null;
     loops: readonly (readonly (readonly [number, number])[])[];
     bounds: Bounds2;
     color: string;
@@ -18,6 +20,7 @@ export function ZoneThumb({
   const frame = fitFrame(b, viewport, { padding, yAxis: "up" });
   return (
     <svg
+      {...revitTarget(zone.elementId == null ? [] : [zone.elementId])}
       viewBox={`0 0 ${viewport.width} ${viewport.height}`}
       preserveAspectRatio="xMidYMid meet"
       className={cn("size-8", className)}

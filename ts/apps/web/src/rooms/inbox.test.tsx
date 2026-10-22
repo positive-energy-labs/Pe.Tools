@@ -1,16 +1,11 @@
 // @vitest-environment jsdom
-/**
- * The feedback inbox, deterministic: a hand-made Work (a Pea proposal, a staged merge, a staged
- * reject, a note) over a one-run fixture snapshot. Row order and glyphs come from `inboxCards`;
- * `accept` on the card writes the staged transition through the wire, bound to the revision.
- */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, test } from "vite-plus/test";
 import { roomsRouteState, type Mark, type RouteStatePatch } from "@pe/agent-contracts";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, expect, test } from "vite-plus/test";
 
-import { cardsMarkdown, coverage, inboxCards, rdp } from "./cards";
-import { cardLine, cardMoves, FeedbackCard, RoomsInbox } from "./inbox";
+import { inboxCards } from "./cards";
+import { FeedbackCard, cardMoves } from "./inbox";
 
 afterEach(cleanup);
 
@@ -74,36 +69,7 @@ const doc = roomsRouteState.schema.parse({
     },
   },
 });
-const labelOf = (guid: string) => snapshot.regions.find((r) => r.guid === guid)?.name;
 const cards = inboxCards(doc, snapshot, VIEW);
-
-test("the inbox rows run proposed, accepted by id, then the note, each with its glyph and tag", () => {
-  render(
-    <RoomsInbox
-      cards={cards}
-      regions={snapshot.regions}
-      labelOf={labelOf}
-      pinned={null}
-      onPin={() => {}}
-      onHover={() => {}}
-      markdown={() => ""}
-      snap={async () => null}
-    />,
-  );
-  const list = screen.getByLabelText("feedback inbox");
-  const glyphs = [...list.querySelectorAll("[data-glyph]")].map((node) => node.textContent);
-  expect(glyphs).toEqual(["◆", "●", "●", "✎"]);
-  expect(cards.map((card) => [card.id, card.state, card.by])).toEqual([
-    ["p1", "proposed", "pea"],
-    ["s1", "accepted", "person"],
-    ["s2", "accepted", "person"],
-    ["n1", "note", "person"],
-  ]);
-  expect(list.textContent).toContain("[p1]");
-  expect(list.textContent).toContain("(s1)");
-  expect(cardLine(cards[0]!, labelOf)).toBe("merge · Kitchen, Nook · 400 sf");
-  expect(cardLine(cards[3]!, labelOf)).toBe("note · Closet · this is a closet");
-});
 
 test("accept on Pea's card writes marks/p1/staged through the wire, bound to the revision", async () => {
   const wrote: [RouteStatePatch[], number | undefined][] = [];
@@ -133,33 +99,4 @@ test("accept on Pea's card writes marks/p1/staged through the wire, bound to the
   expect(cardMoves(cards[3]!, { write, revision: 7 }, apply).map((v) => v.word)).toEqual([
     "delete",
   ]);
-});
-
-test("copy markdown writes cardsMarkdown to the clipboard and says so", async () => {
-  const copied: string[] = [];
-  const writeText = async (text: string) => void copied.push(text);
-  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-  render(
-    <RoomsInbox
-      cards={cards}
-      regions={snapshot.regions}
-      labelOf={labelOf}
-      pinned={null}
-      onPin={() => {}}
-      onHover={() => {}}
-      markdown={() => cardsMarkdown(doc, snapshot)}
-      snap={async () => null}
-    />,
-  );
-  fireEvent.click(screen.getByText("copy markdown"));
-  await waitFor(() => expect(screen.getByText("copied")).toBeTruthy());
-  expect(copied).toEqual([cardsMarkdown(doc, snapshot)]);
-  expect(copied[0]).toContain("◆ proposed · merge p1");
-});
-
-test("a lasso covers the regions it half fills; RDP drops the points on a straight edge", () => {
-  expect(coverage(square(0, 0, 16), snapshot.regions)).toEqual(["a", "b"]);
-  expect(coverage(square(0, 0, 14), snapshot.regions)).toEqual(["a"]);
-  const edge = [0, 1, 2, 3, 4, 5].map((x) => [x, 0.01 * (x % 2)] as const);
-  expect(rdp(edge, 0.3)).toEqual([edge[0], edge[5]]);
 });

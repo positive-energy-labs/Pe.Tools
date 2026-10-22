@@ -1,4 +1,4 @@
-import { takeoffDecisionKey } from "@pe/agent-contracts";
+import { linkTo, takeoffDecisionKey } from "@pe/agent-contracts";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 
 import type { TableState } from "@pe/kit/table/model";
@@ -205,11 +205,16 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
   const scopeCalls = visibleRows.filter((r) => r.state === "call").length;
   const scopeSqft = visibleRows.reduce((s, r) => s + r.room.sqft, 0);
 
-  const proposedUrl = new URL("/takeoffs", "https://pe.local");
-  if (store.target) proposedUrl.searchParams.set("target", store.target);
-  if (level) proposedUrl.searchParams.set("level", level);
-  if (selected) proposedUrl.searchParams.set("zone", selected.zone.guid);
-  if (cursorRow) proposedUrl.searchParams.set("room", cursorRow.room.guid);
+  // The room's address, as the contract writes a takeoffs link (defaults drop; target carried).
+  const proposedUrl = linkTo(
+    "takeoffs",
+    {
+      level,
+      ...(selected ? { zone: selected.zone.guid } : {}),
+      ...(cursorRow ? { room: cursorRow.room.guid } : {}),
+    },
+    { target: store.target || undefined },
+  );
 
   return {
     store,
@@ -258,7 +263,7 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     chips,
     scopeCalls,
     scopeSqft,
-    proposedUrl: `${proposedUrl.pathname}${proposedUrl.search}`,
+    proposedUrl,
   };
 }
 

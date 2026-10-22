@@ -8,6 +8,7 @@
 import { useCallback, useMemo, useState } from "react";
 import type {
   CandidateRegion,
+  PlaneViewport,
   Reading,
   RouteStatePatch,
   StagedRoomEdit,
@@ -28,6 +29,7 @@ import {
   transitionPatches,
 } from "@pe/agent-contracts";
 
+import type { NativeObservation } from "#/revit/observation";
 import type { CellWire } from "#/components/work/band";
 import { previousOf, useHostCall } from "#/readings";
 import { NATIVE_READ_WAIT_S } from "#/route/waits";
@@ -54,7 +56,7 @@ export interface TakeoffSelection {
   readonly stage: "adopt" | "audit" | "sync";
 }
 
-export interface TakeoffNavigation {
+interface TakeoffNavigation {
   readonly level: string;
   readonly zone: string | null;
   readonly room: string | null;
@@ -250,30 +252,33 @@ export function useTakeoffsController(options: {
   thread?: string;
   work?: string;
   savedCapture?: TakeoffCapture;
-  navigation?: {
-    value: TakeoffNavigation;
-    set: (next: Partial<TakeoffNavigation>) => void;
-  };
+  url?: boolean;
 }) {
   const handle = useRoute(manifest, {
-    url: false,
+    url: options.url ?? false,
     target: options.target ? (options.target as never) : null,
     ...(options.work !== undefined ? { work: options.work } : {}),
     ...(options.thread ? { thread: options.thread } : {}),
   });
   const [page, setPage] = handle.page;
-  const [localNavigation, setLocalNavigation] = useState<TakeoffNavigation>({
-    level: "",
-    zone: null,
-    room: null,
-  });
-  const navigation = options.navigation?.value ?? localNavigation;
+  const navigation: TakeoffNavigation = {
+    level: page.level,
+    zone: page.zone || null,
+    room: page.room || null,
+  };
   const setNavigation = useCallback(
     (next: Partial<TakeoffNavigation>) => {
-      if (options.navigation) options.navigation.set(next);
-      else setLocalNavigation((current) => ({ ...current, ...next }));
+      setPage(
+        {
+          ...(next.level === undefined ? {} : { level: next.level }),
+          ...(next.zone === undefined ? {} : { zone: next.zone ?? "" }),
+          ...(next.room === undefined ? {} : { room: next.room ?? "" }),
+          ...(next.level === undefined || next.level === page.level ? {} : { viewport: null }),
+        },
+        { history: "push" },
+      );
     },
-    [options.navigation],
+    [setPage, page.level],
   );
   // Hover is shared by the table and plan, but lasts only for this controller mount.
   const [hover, setHover] = useState("");
@@ -295,8 +300,28 @@ export function useTakeoffsController(options: {
   };
   const snapshot = projectSnapshot();
   const capture = options.savedCapture;
+  const displayed = observed<TakeoffObservation>(observation);
+  const nativeCapture =
+    displayed?.kind === "ready"
+      ? displayed.capture
+      : displayed && "previous" in displayed
+        ? displayed.previous
+        : undefined;
   const authority =
     capture?.snapshot?.world ?? observed<TakeoffSnapshot>(snapshot)?.world ?? EMPTY_WORLD;
+  const nativeObservation = useMemo<NativeObservation>(
+    () => ({
+      scope: {
+        document: handle.demo || capture ? null : (nativeCapture?.provenance.target ?? null),
+        source: handle.demo ? "fixture" : capture ? "saved" : "native",
+      },
+      references: authority.zones.flatMap((zone) => [
+        { elementId: zone.zone.elementId },
+        ...zone.rooms.map((room) => ({ elementId: room.elementId })),
+      ]),
+    }),
+    [handle.demo, capture, nativeCapture, authority],
+  );
   // The person's staged cells only; Pea's proposals are not drawn here yet (interaction's cutover).
   const staged = useMemo(
     (): Record<string, StagedRoomEdit> =>
@@ -392,6 +417,7 @@ export function useTakeoffsController(options: {
         );
         setPage({
           views,
+          viewport: null,
           zones: page.zones.filter((zone) => allowed.has(zone)),
           panel: null,
           syncReview: null,
@@ -431,6 +457,7 @@ export function useTakeoffsController(options: {
       resetTarget: () => {
         setPage({
           ...EMPTY_TAKEOFF_SELECTION,
+          viewport: null,
           panel: null,
           syncReview: null,
         });
@@ -522,9 +549,11 @@ export function useTakeoffsController(options: {
 
   return {
     handle,
+    nativeObservation,
     cells,
     wires,
     savedCapture: capture,
+    displayedCapture: capture ?? nativeCapture,
     source: capture ? ("saved" as const) : ("live" as const),
     target:
       handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
@@ -553,6 +582,9 @@ export function useTakeoffsController(options: {
     zoneKey: navigation.zone,
     level: navigation.level,
     cursor: navigation.room,
+    viewport: page.viewport,
+    setViewport: (viewport: PlaneViewport | null, history: "push" | "replace") =>
+      setPage({ viewport }, { history }),
     decisions: decisions,
     panel: page.panel,
     syncReview: page.syncReview,

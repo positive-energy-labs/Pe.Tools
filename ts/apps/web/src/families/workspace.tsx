@@ -27,6 +27,7 @@ import { familyVerdicts } from "#/families/verdict";
 import { typeRowKey } from "#/families/picks";
 import { FamiliesViewBridge } from "./view-bridge";
 import { projectPatch } from "./patch-overlay";
+import type { RevitObservationScope } from "#/revit/element-target";
 
 const NO_CELLS: Record<string, FamilyCellState> = {};
 const NO_EXCLUDED = new Set<string>();
@@ -75,6 +76,14 @@ function useFamiliesWorkspaceModel(
   const familyFeed = store.feeds.family;
 
   const fixture = !archived && fixtureFamilies !== undefined;
+  const nativeScope = useMemo<RevitObservationScope>(
+    () => ({
+      source: fixture ? "fixture" : archived ? "saved" : "native",
+      document: !fixture && !archived ? (visibleReading?.document ?? null) : null,
+      observationId: visibleReading?.id,
+    }),
+    [fixture, archived, visibleReading?.document, visibleReading?.id],
+  );
   // The resolved target came from this inventory subject. Requiring its current observation keeps
   // retained stale inventory from counting as a connected bridge.
   const connected =
@@ -277,6 +286,7 @@ function useFamiliesWorkspaceModel(
     applied,
     plan,
     lastReading: visibleReading,
+    nativeScope,
     applyData,
     tableState,
     busy,

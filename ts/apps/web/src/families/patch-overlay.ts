@@ -48,7 +48,7 @@ const show = (value: unknown): string => {
 const UNRESOLVED = new Set(["∅", "ambiguous", "blank"]);
 
 /** A parameter by name within this type's own scope; two same-named resolving columns are ambiguous. */
-export function readParameterValue(
+function readParameterValue(
   type: Pick<TypeRow, "scopes" | "values">,
   name: string,
   params: readonly Pick<ParamColumn, "key" | "name">[],

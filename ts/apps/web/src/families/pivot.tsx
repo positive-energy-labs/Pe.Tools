@@ -1,26 +1,25 @@
 import { familyCellAddress } from "@pe/agent-contracts";
-import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, type ReactNode } from "react";
 
 import { ReadCell } from "@pe/kit/table/cells";
-import { Button } from "@pe/kit/lang/button";
+import { Pane } from "#/components/lang/pane";
 import type { Column, QueryVocabulary } from "@pe/kit/table/model";
 import { TableFrame } from "#/components/master-table/table-frame";
 import {
   conditionValues,
   passes,
-  quoted,
   readQuery,
   visibleRows,
   wordMatches,
   type QueryRead,
 } from "@pe/kit/table/view";
 import type { ParamColumn, TypeRow } from "#/families/matrix-columns";
-import { TypeGrid, GRID, identityWidth, type TypeGridEdit } from "#/families/pivot-grid";
-import { PivotMinimap } from "#/families/pivot-minimap";
+import { TypeGrid, type TypeGridEdit } from "#/families/pivot-grid";
+import { usePivotMap } from "#/families/pivot-map";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 import type { FamilySnapshotRecord } from "#/host/loaded-families-view";
-import { ChatFocus } from "#/route/situation-ladder";
 import type { ParameterMetadataRecord } from "./parameter-metadata";
+import { FAMILIES_FILTERS } from "./query-filters";
 
 export const filledValue = (value: string | undefined) =>
   value !== undefined && value.trim() !== "";
@@ -38,6 +37,8 @@ export interface PivotRow {
 }
 
 export interface PivotFamily {
+  familyId: number;
+  familyUniqueId: string;
   name: string;
   category: string;
   types: number;
@@ -85,6 +86,8 @@ export function buildPivot(
     };
   });
   const pivotFamilies: PivotFamily[] = families.map((family) => ({
+    familyId: family.familyId,
+    familyUniqueId: family.familyUniqueId,
     name: family.familyName,
     category: family.categoryName ?? "",
     types: family.typeNames.length,
@@ -185,6 +188,7 @@ function familiesVocabulary(
   return {
     fields: [...PARAMETER_FIELDS, ...FAMILY_FIELDS],
     rules: RULES,
+    filters: FAMILIES_FILTERS,
     count: (query) => applyFamiliesQuery(query, rows, families).shownRows.length,
     values: (label, query) => {
       const scope = applyFamiliesQuery(query, rows, families);
@@ -198,6 +202,11 @@ function familiesVocabulary(
 
 /** What Pea reads of the query language: the rule words, then one line per field. */
 export const FAMILIES_QUERY_HELP = [
+  ...FAMILIES_FILTERS.map((filter) => ({
+    insert: filter.clause,
+    label: filter.label,
+    hint: `${filter.default ? "default · " : ""}${filter.description}`,
+  })),
   ...RULES.map((rule) => ({ insert: rule.word, label: rule.word, hint: rule.label })),
   ...[...PARAMETER_FIELDS, ...FAMILY_FIELDS].map((field) => ({
     insert: `${field.label}${field.kind === "number" ? ">=" : "~"}`,
@@ -226,7 +235,6 @@ const identityColumns: Column<PivotRow>[] = [
 ];
 
 export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: ReactNode }) {
-  const focus = useContext(ChatFocus);
   const {
     rows,
     params,
@@ -234,6 +242,7 @@ export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: Rea
     tableState,
     store,
     archived,
+    nativeScope,
     live,
     parse,
     overlay,
@@ -249,20 +258,6 @@ export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: Rea
     );
     return { ...pivot, pivotRows: [...pivot.pivotRows, ...created] };
   }, [rows, params, families, overlay]);
-  const focusKey = focus?.[0] ?? null;
-  const appliedFocus = useRef<string | null>(null);
-  useEffect(() => {
-    if (!focusKey) {
-      appliedFocus.current = null;
-      return;
-    }
-    if (appliedFocus.current === focusKey) return;
-    const param = params.find((entry) => entry.key === focusKey);
-    if (param) {
-      appliedFocus.current = focusKey;
-      store.setPage({ query: `parameter=${quoted(param.name)}` });
-    }
-  }, [focusKey, params, store.setPage]);
   const filtered = useMemo(() => {
     const ruled = applyFamiliesQuery(tableState.query, pivotRows, pivotFamilies);
     // A row the patch writes is never hidden by a rule word; a parameter clause or a free word narrows it.
@@ -286,7 +281,6 @@ export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: Rea
     () => familiesVocabulary(pivotRows, pivotFamilies),
     [pivotRows, pivotFamilies],
   );
-  const [map, setMap] = useState(true);
   const scroller = useRef<HTMLDivElement>(null);
   const edit = useMemo<TypeGridEdit>(() => {
     const metadata = new Map<string, ParameterMetadataRecord[]>();
@@ -320,54 +314,32 @@ export function FamiliesPivot({ empty, above }: { empty?: ReactNode; above?: Rea
     () => visibleRows(filtered.shownRows, identityColumns, { ...tableState, query: "" }),
     [filtered.shownRows, tableState],
   );
+  const map = usePivotMap(scroller, mappedRows, types, overlay);
   return (
-    <div className="flex size-full min-h-0">
-      <div className="relative flex min-w-0 flex-1 flex-col">
-        {above}
-        <TableFrame
-          label="parameters × family types"
-          rows={filtered.shownRows}
-          columns={identityColumns}
-          rowKey={rowKey}
-          state={tableState}
-          onStateChange={store.actions.setTable}
-          summary={`${mappedRows.length} parameters × ${filtered.shownFamilies.length} families · ${types.length} types`}
-          query={vocabulary}
-          chips={scopeChips}
-          actions={
-            <Button
-              label="map"
-              kind="framed"
-              pressed={map}
-              onClick={() => setMap(!map)}
-              reason={map ? "hide the minimap" : "show the minimap"}
-            >
-              map
-            </Button>
-          }
-        >
-          <TypeGrid
-            rows={mappedRows}
-            types={types}
-            families={filtered.shownFamilies}
-            edit={edit}
-            scroller={scroller}
-            empty={mappedRows.length ? undefined : empty}
-          />
-        </TableFrame>
-      </div>
-      <PivotMinimap
-        rows={mappedRows}
-        types={types}
-        overlay={overlay}
-        scroller={scroller}
-        open={map}
-        onOpenChange={setMap}
-        identityWidth={identityWidth}
-        typeWidth={GRID.type}
-        rowHeight={GRID.row}
-        headerHeight={GRID.header}
-      />
-    </div>
+    <Pane title="parameters × family types" scroll="clip" flush floaters={[map]}>
+      {above}
+      <TableFrame
+        label="parameters × family types"
+        rows={filtered.shownRows}
+        rowCount={{ shown: mappedRows.length, total: pivotRows.length }}
+        columns={identityColumns}
+        rowKey={rowKey}
+        state={tableState}
+        onStateChange={store.actions.setTable}
+        summary={`${filtered.shownFamilies.length} families · ${types.length} types`}
+        query={vocabulary}
+        chips={scopeChips}
+      >
+        <TypeGrid
+          rows={mappedRows}
+          types={types}
+          families={filtered.shownFamilies}
+          nativeScope={nativeScope}
+          edit={edit}
+          scroller={scroller}
+          empty={mappedRows.length ? undefined : empty}
+        />
+      </TableFrame>
+    </Pane>
   );
 }

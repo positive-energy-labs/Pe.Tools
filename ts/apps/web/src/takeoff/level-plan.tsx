@@ -1,4 +1,9 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
+import type { PlaneViewport } from "@pe/agent-contracts";
+import { Pane } from "#/components/lang/pane";
+import { revitTarget } from "@pe/kit/lang/row";
+import { usePlaneViewport, PLAN_CLICK_PX } from "#/lib/plane-viewport";
+import { usePlanMap } from "#/lib/plan-map";
 import { Key } from "#/components/anatomy";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
@@ -6,6 +11,8 @@ import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan-image";
 import { token } from "@pe/kit/lib/token";
 import {
   contentViewport,
+  boundsOf,
+  type Point2,
   fitFrame,
   type AffineFrame,
   type Bounds2,
@@ -22,6 +29,8 @@ import {
   type RoomState,
 } from "#/takeoff/room-state";
 import type { ModelRoom, ModelZone } from "#/takeoff/world";
+import type { TakeoffPage } from "./actions";
+import { useRouteViewBridge } from "#/route/view-bridge";
 
 /** Revit's plan export: pixel size and where three corners sit in model feet. */
 type PlanRegistration = {
@@ -53,6 +62,12 @@ export interface TakeoffPlanImage {
   registration: PlanRegistration;
 }
 
+/** Model feet at the registered image's four corners, including a rotated crop. */
+export const planCorners = (plan: TakeoffPlanImage): Point2[] => {
+  const { topLeft: a, topRight: b, bottomLeft: c } = plan.registration;
+  return [a, b, c, [b[0] + c[0] - a[0], b[1] + c[1] - a[1]]];
+};
+
 /**
  * The plan frame as the registration's viewport. `fitFrame` maps model (x, y) to
  * (tx + s·x, ty − s·y), which is `toPx` with pxPerFt = s, minX = −tx/s, maxY = ty/s: the SVG's
@@ -80,6 +95,11 @@ export function PlanImageLayer({ plan, frame }: { plan: TakeoffPlanImage; frame:
 }
 
 export function LevelPlan({
+  lease,
+  viewport: pageViewport,
+  onViewport,
+  above,
+  children,
   plan,
   planRefusal,
   planError,
@@ -94,6 +114,17 @@ export function LevelPlan({
   onCursor,
   onClear,
 }: {
+  lease?: {
+    thread?: string;
+    visible: boolean;
+    page: TakeoffPage;
+    applyViewport: (viewport: PlaneViewport | null) => void;
+    context: Record<string, unknown>;
+  };
+  viewport: PlaneViewport | null;
+  onViewport: (next: PlaneViewport, how: "gesture" | "move") => void;
+  above?: ReactNode;
+  children?: ReactNode;
   /** Absent until a plan image reaches the route; the zones draw alone. */
   plan?: TakeoffPlanImage | null;
   /** The host's named reason the view has no registered image; said, never drawn as nothing. */
@@ -124,35 +155,114 @@ export function LevelPlan({
       for (const r of z.rooms) if (r.outer) b = unionBounds(b, loopBounds([r.outer]));
       for (const s of z.residues) b = unionBounds(b, loopBounds([s.outer]));
     }
-    return b;
-  }, [drawn]);
+    return plan ? unionBounds(b, boundsOf(planCorners(plan))) : b;
+  }, [drawn, plan]);
 
-  if (!bounds)
+  const world = useMemo(() => {
+    if (!bounds) return null;
+    const { viewport, padding } = contentViewport(bounds, 0.03);
+    const frame = fitFrame(bounds, viewport, { padding, yAxis: "up" });
+    const fit = plan
+      ? boundsOf(planCorners(plan).map(frame.toViewport))
+      : { minX: 0, minY: 0, maxX: viewport.width, maxY: viewport.height };
+    return { ...viewport, frame, fit };
+  }, [bounds, plan]);
+  const { setHost, size, view, move, handlers, dragDistance, dragging } = usePlaneViewport(
+    pageViewport,
+    world?.fit ?? null,
+    onViewport,
+  );
+  useRouteViewBridge({
+    route: "takeoffs",
+    thread: lease?.thread,
+    surface: "route",
+    visible: !!lease?.visible && !!world && !!size,
+    page: lease?.page ?? {},
+    apply: (patch) => lease?.applyViewport(patch.viewport as PlaneViewport | null),
+    context: {
+      ...lease?.context,
+      size,
+      frame: world?.frame.transform ?? null,
+      plan: plan ? { href: plan.href, registration: plan.registration } : null,
+    },
+    facts: {
+      pose: view,
+      size,
+      fit: world?.fit ?? null,
+      frame: world?.frame.transform ?? null,
+      units: "model XY feet; affine frame to world units; viewport scale and screen translations",
+      planRefusal: planRefusal ?? null,
+      planError: planError ?? null,
+      planNote: planNote ?? null,
+      totalZones: zones.length,
+      drawnZones: drawn.length,
+      skippedZones: skipped,
+      truncated: drawn.length > 100,
+      totalRooms: drawn.reduce((total, zone) => total + zone.rooms.length, 0),
+      roomsTruncated: drawn.reduce((total, zone) => total + zone.rooms.length, 0) > 100,
+      rooms: drawn
+        .flatMap((zone) => zone.rooms.map((room) => ({ zone, room })))
+        .slice(0, 100)
+        .map(({ zone, room }) => ({
+          guid: room.guid,
+          name: room.name,
+          zone: zone.zone.guid,
+          bounds: room.outer ? loopBounds([room.outer]) : null,
+        })),
+      zones: drawn.slice(0, 100).map((zone) => ({
+        guid: zone.zone.guid,
+        name: zone.name,
+        bounds: zone.zone.bounds,
+        dimmed: shown !== null && !shown.has(zone.zone.guid),
+        rooms: zone.rooms.length,
+      })),
+    },
+  });
+  const shapes = useMemo(
+    () =>
+      world
+        ? drawn.flatMap((z) => [
+            { d: pathD(z.zone.loops, world.frame), ink: `rgb(${z.zone.color})` },
+            ...z.rooms
+              .filter((room) => room.outer)
+              .map((room) => ({
+                d: pathD([room.outer!, ...room.holes], world.frame),
+                ink: stateInk(stateOf(room)),
+              })),
+          ])
+        : [],
+    [world, drawn, stateOf],
+  );
+  const map = usePlanMap(view, move, world, size, shapes, plan ?? null);
+  const pane = { id: "plan", title: "plan", scroll: "clip" as const, flush: true, floaters: [map] };
+  if (!bounds || !world)
     return (
-      <div className="flex size-full items-center justify-center px-4">
-        {zones.length > 0 ? (
-          <EmptyState story="filter" exit="see the rail — they stay listed there, marked">
-            all {zones.length} zone{zones.length === 1 ? "" : "s"} on this level are sub-
-            {PLAN_MIN_SQFT} sf scribbles, drawn far from the cluster
-          </EmptyState>
-        ) : (
-          <EmptyState
-            story="scope"
-            exit="adopt zones from a zoning-plan view, or pick another level above"
-          >
-            nothing has been adopted on this level yet
-          </EmptyState>
-        )}
-      </div>
+      <Pane {...pane}>
+        {above}
+        <div className="flex size-full items-center justify-center px-4">
+          {zones.length > 0 ? (
+            <EmptyState story="filter" exit="see the rail — they stay listed there, marked">
+              all {zones.length} zone{zones.length === 1 ? "" : "s"} on this level are sub-
+              {PLAN_MIN_SQFT} sf scribbles, drawn far from the cluster
+            </EmptyState>
+          ) : (
+            <EmptyState
+              story="scope"
+              exit="adopt zones from a zoning-plan view, or pick another level above"
+            >
+              nothing has been adopted on this level yet
+            </EmptyState>
+          )}
+        </div>
+      </Pane>
     );
 
   const span = Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY, 1e-6);
   const font = span / 95;
-  const { viewport, padding } = contentViewport(bounds, 0.03);
-  const frame = fitFrame(bounds, viewport, { padding, yAxis: "up" });
-
+  const frame = world.frame;
   return (
-    <div className="flex size-full min-h-0 flex-col">
+    <Pane {...pane}>
+      {above}
       {planRefusal ? (
         <OutcomeLine
           kind="refused"
@@ -164,139 +274,167 @@ export function LevelPlan({
       ) : planNote ? (
         <OutcomeLine kind="advisory" label="no plan image" says={planNote} />
       ) : null}
-      <svg
-        viewBox={`0 0 ${viewport.width} ${viewport.height}`}
-        preserveAspectRatio="xMidYMid meet"
-        className="min-h-0 w-full flex-1"
+      <div
+        ref={setHost}
+        data-takeoff-plan=""
+        className="relative min-h-0 flex-1 overflow-hidden"
+        style={{ cursor: dragging ? "grabbing" : "grab", touchAction: "none" }}
+        {...handlers}
+        onClickCapture={(event) => {
+          if (dragDistance.current >= PLAN_CLICK_PX) {
+            event.stopPropagation();
+            event.preventDefault();
+          }
+        }}
       >
-        <title>Level plan — declared zones, detected rooms, held residue</title>
+        <svg
+          width={world.width}
+          height={world.height}
+          viewBox={`0 0 ${world.width} ${world.height}`}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.scale})`,
+            transformOrigin: "0 0",
+          }}
+        >
+          <title>Level plan — declared zones, detected rooms, held residue</title>
 
-        <rect
-          x={0}
-          y={0}
-          width={viewport.width}
-          height={viewport.height}
-          fill="transparent"
-          onClick={onClear}
-        />
-        {plan ? <PlanImageLayer plan={plan} frame={frame} /> : null}
+          <rect
+            x={0}
+            y={0}
+            width={world.width}
+            height={world.height}
+            fill="transparent"
+            onClick={onClear}
+          />
+          {plan ? <PlanImageLayer plan={plan} frame={frame} /> : null}
 
-        {drawn.map((z) => {
-          const dimmed = shown !== null && !shown.has(z.zone.guid);
-          const on = z.zone.key === selectedKey;
-          const rgb = `rgb(${z.zone.color})`;
-          const [zoneLabelX, zoneLabelY] = frame.toViewport([
-            (z.zone.bounds.minX + z.zone.bounds.maxX) / 2,
-            (z.zone.bounds.minY + z.zone.bounds.maxY) / 2,
-          ]);
-          return (
-            <g
-              key={z.zone.key}
-              opacity={dimmed ? 0.15 : 1}
-              onMouseEnter={() => onHover(z.zone.guid)}
-              onMouseLeave={() => onHover("")}
-            >
-              <path
-                d={pathD(z.zone.loops, frame)}
-                fillRule="evenodd"
-                fill={`color-mix(in srgb, ${rgb} ${on ? 16 : 8}%, transparent)`}
-                stroke={rgb}
-                strokeWidth={on ? 2.5 : 1}
-                strokeOpacity={on ? 1 : 0.55}
-                vectorEffect="non-scaling-stroke"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!dimmed) onSelectZone(z);
-                }}
-              />
-
-              {z.residues.map((s) => (
+          {drawn.map((z) => {
+            const dimmed = shown !== null && !shown.has(z.zone.guid);
+            const on = z.zone.key === selectedKey;
+            const rgb = `rgb(${z.zone.color})`;
+            const [zoneLabelX, zoneLabelY] = frame.toViewport([
+              (z.zone.bounds.minX + z.zone.bounds.maxX) / 2,
+              (z.zone.bounds.minY + z.zone.bounds.maxY) / 2,
+            ]);
+            return (
+              <g
+                key={z.zone.key}
+                opacity={dimmed ? 0.15 : 1}
+                onMouseEnter={() => onHover(z.zone.guid)}
+                onMouseLeave={() => onHover("")}
+              >
                 <path
-                  key={s.id}
-                  d={pathD([s.outer, ...s.holes], frame)}
+                  {...revitTarget(z.zone.elementId == null ? [] : [z.zone.elementId])}
+                  d={pathD(z.zone.loops, frame)}
                   fillRule="evenodd"
-                  fill={`color-mix(in srgb, ${ABSENT_INK} 12%, transparent)`}
-                  stroke={ABSENT_INK}
-                  strokeOpacity={0.35}
-                  strokeWidth={1}
+                  fill={`color-mix(in srgb, ${rgb} ${on ? 16 : 8}%, transparent)`}
+                  stroke={rgb}
+                  strokeWidth={on ? 2.5 : 1}
+                  strokeOpacity={on ? 1 : 0.55}
                   vectorEffect="non-scaling-stroke"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!dimmed) onSelectZone(z);
+                  }}
                 />
-              ))}
 
-              {z.rooms.map((room) => {
-                const state = stateOf(room);
-                const isCursor = room.guid === cursor;
-                const tone = isCursor ? CURSOR_INK : stateInk(state);
-                const [labelX, labelY] = frame.toViewport(room.label);
-                const click = (e: React.MouseEvent) => {
-                  e.stopPropagation();
-                  if (!dimmed) onCursor(z, room.guid);
-                };
-                if (!room.outer)
+                {z.residues.map((s) => (
+                  <path
+                    key={s.id}
+                    d={pathD([s.outer, ...s.holes], frame)}
+                    fillRule="evenodd"
+                    fill={`color-mix(in srgb, ${ABSENT_INK} 12%, transparent)`}
+                    stroke={ABSENT_INK}
+                    strokeOpacity={0.35}
+                    strokeWidth={1}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ))}
+
+                {z.rooms.map((room) => {
+                  const state = stateOf(room);
+                  const isCursor = room.guid === cursor;
+                  const tone = isCursor ? CURSOR_INK : stateInk(state);
+                  const [labelX, labelY] = frame.toViewport(room.label);
+                  const click = (e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    if (!dimmed) onCursor(z, room.guid);
+                  };
+                  if (!room.outer)
+                    return (
+                      <circle
+                        key={room.guid}
+                        {...revitTarget(room.elementId == null ? [] : [room.elementId])}
+                        cx={labelX}
+                        cy={labelY}
+                        r={span / 260}
+                        fill={`color-mix(in srgb, ${tone} 45%, transparent)`}
+                        stroke={tone}
+                        strokeWidth={isCursor ? 2 : 1}
+                        vectorEffect="non-scaling-stroke"
+                        onClick={click}
+                      >
+                        <title>{`${room.name} — ${room.sqft} sf · ${STATE_META[state].label} (no detected boundary)`}</title>
+                      </circle>
+                    );
                   return (
-                    <circle
+                    <g
                       key={room.guid}
-                      cx={labelX}
-                      cy={labelY}
-                      r={span / 260}
-                      fill={`color-mix(in srgb, ${tone} 45%, transparent)`}
-                      stroke={tone}
-                      strokeWidth={isCursor ? 2 : 1}
-                      vectorEffect="non-scaling-stroke"
+                      {...revitTarget(room.elementId == null ? [] : [room.elementId])}
                       onClick={click}
                     >
-                      <title>{`${room.name} — ${room.sqft} sf · ${STATE_META[state].label} (no detected boundary)`}</title>
-                    </circle>
-                  );
-                return (
-                  <g key={room.guid} onClick={click}>
-                    <path
-                      d={pathD([room.outer, ...room.holes], frame)}
-                      fillRule="evenodd"
-                      fill={`color-mix(in srgb, ${tone} ${isCursor ? 34 : state === "unreviewed" ? 7 : 13}%, transparent)`}
-                      stroke={tone}
-                      strokeOpacity={0.85}
-                      strokeWidth={isCursor ? 2.5 : state === "call" ? 1.75 : 1}
-                      vectorEffect="non-scaling-stroke"
-                    >
-                      <title>{`${room.name} — ${room.sqft} sf · ${STATE_META[state].label}`}</title>
-                    </path>
-                    {on && room.sqft > 40 && (
-                      <text
-                        x={labelX}
-                        y={labelY}
-                        textAnchor="middle"
-                        fontSize={font}
-                        fill={token("ink")}
+                      <path
+                        d={pathD([room.outer, ...room.holes], frame)}
+                        fillRule="evenodd"
+                        fill={`color-mix(in srgb, ${tone} ${isCursor ? 34 : state === "unreviewed" ? 7 : 13}%, transparent)`}
+                        stroke={tone}
+                        strokeOpacity={0.85}
+                        strokeWidth={isCursor ? 2.5 : state === "call" ? 1.75 : 1}
+                        vectorEffect="non-scaling-stroke"
                       >
-                        <tspan x={labelX} fontWeight="var(--weight-strong)">
-                          {room.name}
-                        </tspan>
-                        <tspan x={labelX} dy={font * 1.15} fillOpacity={0.65}>
-                          {room.sqft} sf
-                        </tspan>
-                      </text>
-                    )}
-                  </g>
-                );
-              })}
+                        <title>{`${room.name} — ${room.sqft} sf · ${STATE_META[state].label}`}</title>
+                      </path>
+                      {on && room.sqft > 40 && (
+                        <text
+                          x={labelX}
+                          y={labelY}
+                          textAnchor="middle"
+                          fontSize={font}
+                          fill={token("ink")}
+                        >
+                          <tspan x={labelX} fontWeight="var(--weight-strong)">
+                            {room.name}
+                          </tspan>
+                          <tspan x={labelX} dy={font * 1.15} fillOpacity={0.65}>
+                            {room.sqft} sf
+                          </tspan>
+                        </text>
+                      )}
+                    </g>
+                  );
+                })}
 
-              {!on && (
-                <text
-                  x={zoneLabelX}
-                  y={zoneLabelY}
-                  textAnchor="middle"
-                  fontSize={font * 0.95}
-                  fill={token("ink")}
-                  fillOpacity={0.55}
-                >
-                  {z.zone.key}
-                </text>
-              )}
-            </g>
-          );
-        })}
-      </svg>
+                {!on && (
+                  <text
+                    {...revitTarget(z.zone.elementId == null ? [] : [z.zone.elementId])}
+                    x={zoneLabelX}
+                    y={zoneLabelY}
+                    textAnchor="middle"
+                    fontSize={font * 0.95}
+                    fill={token("ink")}
+                    fillOpacity={0.55}
+                  >
+                    {z.zone.key}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
 
       <div
         className="hairline-t pointer-events-none flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 px-2 py-0.5"
@@ -314,6 +452,7 @@ export function LevelPlan({
           </span>
         )}
       </div>
-    </div>
+      {children}
+    </Pane>
   );
 }

@@ -30,6 +30,7 @@ const OVERSCAN = 3;
 import { ParameterMetadata, type ParameterMetadataRecord } from "./parameter-metadata";
 import type { OverlayCell, PatchOverlay } from "./patch-overlay";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { revitFamily, revitScope, type RevitObservationScope } from "#/revit/element-target";
 
 const HOW = {
   type: "an explicit type cell",
@@ -70,6 +71,7 @@ export const TypeGrid = memo(function TypeGrid({
   rows,
   types,
   families,
+  nativeScope,
   edit,
   scroller,
   empty,
@@ -77,6 +79,7 @@ export const TypeGrid = memo(function TypeGrid({
   rows: readonly PivotRow[];
   types: readonly TypeRow[];
   families: readonly PivotFamily[];
+  nativeScope?: RevitObservationScope | null;
   edit: TypeGridEdit;
   scroller: RefObject<HTMLDivElement | null>;
   empty?: ReactNode;
@@ -156,7 +159,7 @@ export const TypeGrid = memo(function TypeGrid({
     return families
       .map((family) => {
         const count = types.filter((type) => type.familyName === family.name).length;
-        const group = { name: family.name, start, count };
+        const group = { ...family, start, count };
         start += count;
         return group;
       })
@@ -218,6 +221,7 @@ export const TypeGrid = memo(function TypeGrid({
         aria-label="parameters × family types"
         aria-rowcount={rows.length + 1}
         aria-colcount={types.length + 1}
+        {...revitScope(nativeScope)}
       >
         <div
           style={{
@@ -256,9 +260,14 @@ export const TypeGrid = memo(function TypeGrid({
             {groups
               .filter((group) => group.start < colEnd && group.start + group.count > colStart)
               .map((group) => (
-                <TooltipHint content={group.name} key={group.name}>
+                <TooltipHint
+                  content={`${group.name} · right-click or BX for current placements across all types`}
+                  key={group.name}
+                >
                   <div
                     role="presentation"
+                    tabIndex={0}
+                    {...revitFamily(group)}
                     className="t-small t-upper truncate border-b border-l px-1"
                     data-surface="recess"
                     style={{
