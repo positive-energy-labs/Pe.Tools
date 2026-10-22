@@ -4,6 +4,8 @@
  * loads only when a diagram mounts.
  */
 import { useEffect, useRef } from "react";
+import { Table } from "@pe/kit/table/table";
+import type { Column } from "@pe/kit/table/model";
 
 import {
   PRODUCT_MAP,
@@ -93,31 +95,44 @@ export function Legend() {
   );
 }
 
+const PART_COLUMNS: readonly Column<MapPart>[] = [
+  {
+    key: "label",
+    label: "Part",
+    cell: (part) => <div className="px-2 py-1.5 whitespace-normal">{part.label}</div>,
+  },
+  {
+    key: "adds",
+    label: "What it adds",
+    cell: (part) => <div className="px-2 py-1.5 whitespace-normal">{part.adds}</div>,
+  },
+  {
+    key: "automatic",
+    label: "Automatic today?",
+    cell: (part) => <div className="px-2 py-1.5 whitespace-normal">{part.automatic}</div>,
+  },
+  {
+    key: "data",
+    label: "Where the data is",
+    cell: (part) => <div className="px-2 py-1.5 whitespace-normal">{part.data}</div>,
+  },
+  {
+    key: "effort",
+    label: "How hard to get",
+    cell: (part) => <div className="px-2 py-1.5 whitespace-normal">{part.effort}</div>,
+  },
+];
+
 export function PartsTable({ parts }: { parts: readonly MapPart[] }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse t-small [&_td]:border-t [&_td]:py-1.5 [&_td]:pr-3 [&_td]:align-top [&_th]:pr-3 [&_th]:text-left">
-        <thead>
-          <tr>
-            <th>Part</th>
-            <th>What it adds</th>
-            <th>Automatic today?</th>
-            <th>Where the data is</th>
-            <th>How hard to get</th>
-          </tr>
-        </thead>
-        <tbody>
-          {parts.map((p) => (
-            <tr key={p.id}>
-              <td>{p.label}</td>
-              <td>{p.adds}</td>
-              <td>{p.automatic}</td>
-              <td>{p.data}</td>
-              <td>{p.effort}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="overflow-x-auto [&_td]:align-top">
+      <Table
+        rows={parts}
+        columns={PART_COLUMNS}
+        rowKey={(part) => part.id}
+        label="Product map parts"
+        maxHeight="none"
+      />
     </div>
   );
 }
