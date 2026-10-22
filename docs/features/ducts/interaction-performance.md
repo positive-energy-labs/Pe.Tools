@@ -39,6 +39,10 @@ The 355-system list was scrolled by real wheel input through 3,200 px, then EX 6
 
 Opening all systems still took roughly five seconds in the profiled samples. It mounts 1,229 rows, including 873 inbox rows, with many tooltip and button components. Bounding mounted rows and deferring closed-row controls is further work; reducing mesh detail will not fix it. A browser-only CSS containment trial did not establish a useful improvement and was not shipped.
 
+The final unprofiled all-systems check took 5,338 ms to the UI observation. This remains a failed responsiveness result, despite the camera fixes.
+
 Repeated development profiles accumulated millions of React User Timing measures. Reload between bounded trials; do not call accumulated-profiler timings production performance. The final wheel and globe claims concern gesture publication and visible camera changes, not a claim that all navigation latency is solved.
 
 Raw traces, screenshots, scripts and the aggregate report are disposable evidence under `.artifacts/runs/orbit-diagnose-20261022/`. `proof-report.json` names each sample. Native custody, model hashes and cleanup receipts are under `.artifacts/accept/orbit-perf-proof-20261022/`.
+
+PROVEN[deterministic + compile, `pnpm verify` including repo guards and isolated R25/R24 compile, product source `9ecf3f11`, 2026-10-22]: full chain green; warnings remain. The focused camera, minimap and Ducts run passed 117 tests with one skipped. Cleanup stopped the owned browser, both owned hosts and the controlled Revit session; the copied model hash is unchanged. No user-owned Revit process was stopped.
