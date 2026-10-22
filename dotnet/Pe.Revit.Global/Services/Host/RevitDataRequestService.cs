@@ -1089,6 +1089,13 @@ internal sealed class RevitDataRequestService {
         }
     }
 
+    [Op("revit.resolve.family-instances", Does = "Resolve the exact captured familyId and familyUniqueId into current placed FamilyInstance refs across all of that family's types in this project document. Checks the paired family identity with no name or UniqueId fallback. Read-only; no transaction, family editor, active-view filter, or linked traversal. Scans document instances, returns exact total and at most maxResults refs (default 500, range 1..1000) with IDs and UniqueIds. Error issues refuse identity; empty or truncated results must not authorize Select or Selection Box. Does not select a family definition or resolve a type name. Use the captured document lifetime for this read and any later action.", Title = "Resolve Placed Family Instances", Finds = ["families", "family-instances", "placements", "resolve", "element-references", "select", "selection-box"], Intent = OpIntent.Read, Actor = OpActor.Any, Cost = OpCost.Bounded, Tier = OpTier.Default, Thread = OpThread.Revit, Example = "{ \"familyId\": 12345, \"familyUniqueId\": \"captured-family-unique-id\", \"maxResults\": 500 }")]
+    private static FamilyInstanceReferencesData ResolveFamilyInstancesCore(
+        FamilyInstanceReferencesRequest request,
+        ProjectDocument document
+    ) =>
+        document.Value.ResolveFamilyInstances(request);
+
     [Op("revit.resolve.unit-value", Does = "Read what typed text means as a measured value in this document: Revit parses it for the given spec with the document's own units and answers with the value converted into the given display unit plus Revit's own rendering of it in that unit (no symbol). Read-only, no transaction. A surface stages { text, unit }; a refusal carries Revit's reason and stages nothing.", Title = "Resolve Measured Value", Finds = ["unit", "units", "parse", "measured", "value", "display-unit", "cell"], Cost = OpCost.Bounded, Example = "{ \"spec\": \"autodesk.spec.aec:airFlow-2.0.0\", \"unit\": \"CFM\", \"text\": \"300 L/s\" }")]
     private UnitValueResolveData ResolveUnitValueCore(
         UnitValueResolveRequest request,
