@@ -58,3 +58,11 @@ test("present cases carry counts and at most ten element ids", () => {
   expect(present.count).toBeGreaterThanOrEqual(12);
   expect(present.elementIds).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 });
+
+test("the skill carries each comparison cell's evidence, not only its note", () => {
+  const skill = renderDuctsSkill();
+  for (const { rows } of DUCTS_GUIDE.compare)
+    for (const row of rows)
+      for (const c of [row.revit, row.naviate, row.pe])
+        if (c.detail) expect(skill).toContain(c.detail.replace(/\.$/, ""));
+});

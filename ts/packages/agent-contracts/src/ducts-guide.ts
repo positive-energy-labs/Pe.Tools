@@ -7,7 +7,7 @@
  * ruling was made lives in `docs/features/ducts/LEDGER.md`.
  *
  * Register: plain third person for any engineer or reviewer. "The engineer" is the person using
- * the route, "Pea" the agent, "the route" the page. No second person, no project-specific ids.
+ * the route, "Pea" the agent, "the route" the page. No second person. Element ids and system names appear only in a case's recorded example.
  */
 import { CASE_GROUPS, DUCT_CASES, type CaseGroup, type DuctCase } from "./ducts-cases.ts";
 import { DUCTS_COMPARE } from "./ducts-compare.ts";
@@ -144,7 +144,7 @@ export const DUCTS_RESIDENCY: readonly DuctsResidency[] = [
     whoWrites: "The firm",
   },
   {
-    value: "Design friction rate",
+    value: "Design friction rate (changes only the feet shown, never a pressure or the ESP)",
     livesIn: "Route settings (the duct settings popover)",
     survivesSave: "Yes, in local settings",
     whoSees: "Only this computer",
@@ -153,7 +153,7 @@ export const DUCTS_RESIDENCY: readonly DuctsResidency[] = [
 ];
 
 export const DUCTS_RESIDENCY_RULE =
-  "Anything that affects the calculation is stored in the model, so another person or another tool sees the same thing. The only state Pe keeps for itself is what has been typed and not yet written.";
+  "Anything that affects the pressure is stored in the model, so another person or another tool sees the same thing. The only state Pe keeps for itself is what has been typed and not yet written.";
 
 /** What an engineer has to decide; the route cannot settle these from the model alone. */
 export const DUCTS_ENGINEER_DECIDES: readonly string[] = [
@@ -173,7 +173,7 @@ export const DUCTS_LIMITS: readonly string[] = [
   "A duct entered from its side connector is charged friction over its whole length. The error is small per duct but there can be many.",
   "Internal equipment drops (coil, filter, ERV core) have no source and are not counted.",
   "A loop drawn in Revit is cut where the walk reaches a joint a second time. The air is not split between the two paths, so those paths read slightly high or low.",
-  "Equivalent feet are converted at each duct's own friction rate, so a longer run can lose less pressure than a shorter one. How the critical run is chosen and shown against feet is not yet ruled.",
+  "Equivalent feet are converted at each duct's own friction rate, so a longer run can lose less pressure than a shorter one. The critical run is chosen by pressure, so the run with the most feet is not always the critical one. Showing feet as pressure divided by the design rate, which would keep the two in the same order, is owed.",
   "Revit allows one fan per system. A system name spanning two networks with their own air handlers is priced per fan here, but cannot be given one base equipment in Revit until it is split.",
   "Results are not stored. A schedule cannot read the ESP until a result parameter exists.",
   "A link on the tutorial opens a case on the project it was recorded from. On another document the ids will not resolve. Deriving live examples from the open document is planned.",

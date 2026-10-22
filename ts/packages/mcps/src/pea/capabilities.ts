@@ -174,7 +174,7 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
       kind: "route-doc",
       title: "Ducts guide",
       description:
-        "What the Ducts route does and why, the one source the /ducts tutorial renders: the walk and who does each step, what Pea does and never does, where every duct value lives and what survives a save, why not Revit's own pressure drop, Manual D and Naviate compared, what the engineer decides, the limits, and the known cases (number, title, code; pass section cases for their prose). Pass document, an exact open document, to add present: the cases its fresh ducts analysis shows, with up to ten element ids each. Answer questions about the route from this, never from general knowledge. Read only; no Work or model mutation.",
+        "What the Ducts route does and why, the one source the /ducts tutorial renders: the walk and who does each step, what Pea does and never does, where every duct value lives and what survives a save, Pe compared with Revit's own pressure drop and Naviate feature by feature (section compare, with the evidence per cell), what the engineer decides, the limits, and the known cases (number, title, code; pass section cases for their prose). Pass document, an exact open document, to add present: the cases its fresh ducts analysis shows, with up to ten element ids each. Answer questions about the route from this, never from general knowledge. Read only; no Work or model mutation.",
       finds: [
         "ducts",
         "tutorial",

@@ -29,6 +29,9 @@ const OPERATIONS = String.raw`The Ducts route computes this. Never rebuild it wi
 8. Send the person to the Ducts page for rulings and for writing, and say which verb to press: preview lists every change it would make, element, parameter or ruling, old to new; write applies them. Report in the route's words: system, finding, and required ESP now versus staged; after a heal, the system's ESP before and after.`;
 
 const bare = (text: string) => text.replace(/\.$/, "");
+/** A comparison cell with its evidence, so the skill carries what the tutorial shows on hover. */
+const cell = (c: { note: string; detail?: string }) =>
+  c.detail ? `${bare(c.note)} (${bare(c.detail)})` : bare(c.note);
 const bullets = (items: readonly string[]) => items.map((item) => `- ${item}`).join("\n");
 
 /** The skill markdown, frontmatter included. Pure over the guide it is given. */
@@ -76,7 +79,7 @@ export function renderDuctsSkill(guide: DuctsGuide = DUCTS_GUIDE): string {
       guide.compare.flatMap(({ rows }) =>
         rows.map(
           (r) =>
-            `${r.feature}. Revit: ${r.revit.note}. Naviate: ${r.naviate.note}. Pe: ${r.pe.note}.`,
+            `${r.feature}. Revit: ${cell(r.revit)}. Naviate: ${cell(r.naviate)}. Pe: ${cell(r.pe)}.`,
         ),
       ),
     ),

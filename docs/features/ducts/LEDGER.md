@@ -67,6 +67,7 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 - Revit's `size_lookup` as the interpolator: exact match or default only.
 
 ## Owed
+- 2026-10-22, feet shown as pressure divided by the design friction rate, so feet keep the same order as pressure (kaitpw 2026-10-21, tentatively agreed: "analysis is what we need, not sizing"); today the tree shows feet at each duct's own rate, as RHVAC does, and the critical run is picked by pressure.
 
 **Walk and pricing**
 - Open equipment ports never reach the proximity pass: a filter chassis port 1.9 in from an air handler's return port, facing, both return air, never joins, so the return never reaches its air handler and a lone filter chassis stays a fan with its open port hidden. kaitpw agreed: raise equipment ports as open ends and let the face rule join them.

@@ -259,6 +259,7 @@ export const DUCTS_COMPARE: readonly { group: string; rows: readonly DuctsCompar
           "A project already reads a loaded family's lookup tables without opening the family, so a firm catalog can travel inside its families when it returns.",
         ),
         lead: ["naviate"],
+        outOfScope: true,
       },
       {
         feature: "Datasheet to data",
