@@ -13,7 +13,7 @@ function CaseCard({ c }: { c: DuctCase }) {
       data-status={c.status}
     >
       <div className="flex items-baseline gap-2">
-        <span className="font-mono t-small">{c.number}</span>
+        <span className="face-mono t-small">{c.number}</span>
         <b>{c.title}</b>
         <span className="t-small text-ink-mute">{c.status}</span>
         {c.code ? <code className="ml-auto t-small">{c.code}</code> : null}
@@ -31,7 +31,7 @@ function CaseCard({ c }: { c: DuctCase }) {
           <b>Possible change.</b> {c.idea}
         </p>
       ) : null}
-      {c.ids ? <p className="m-0 font-mono t-small text-ink-mute">{c.ids}</p> : null}
+      {c.ids ? <p className="m-0 face-mono t-small text-ink-mute">{c.ids}</p> : null}
       {c.examples.length ? (
         <p className="m-0 t-small">
           {c.examples.map((e, i) => (
