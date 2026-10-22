@@ -7,7 +7,7 @@
  * ruling was made lives in `docs/features/ducts/LEDGER.md`.
  *
  * Register: plain third person for any engineer or reviewer. "The engineer" is the person using
- * the route, "Pea" the agent, "the route" the page. No second person. Element ids and system names appear only in a case's recorded example.
+ * the tool, "Pea" the agent, "the tool" the Ducts page. "Route" is a code word and never appears in this prose. No second person. Element ids and system names appear only in a case's recorded example.
  */
 import { CASE_GROUPS, DUCT_CASES, type CaseGroup, type DuctCase } from "./ducts-cases.ts";
 import { DUCTS_COMPARE } from "./ducts-compare.ts";
@@ -35,27 +35,27 @@ export interface DuctsResidency {
 }
 
 export const DUCTS_SUMMARY =
-  "The ducts route reads every duct network in the document from Revit's connectors, repairs what it safely can, prices each grille's path from its fan, and writes the inputs it used back into the model so they travel with it. The result is a design-grade number with its assumptions listed. It is not a certification. The engineer sees the number per grille and what it rests on, Pea proposes and previews, and the engineer rules on anything the model cannot settle.";
+  "The Ducts tool reads every duct network in the document from Revit's connectors, repairs what it safely can, prices each grille's path from its fan, and writes the inputs it used back into the model so they travel with it. The result is a design-grade number with its assumptions listed. It is not a certification. The engineer sees the number per grille and what it rests on, Pea proposes and previews, and the engineer rules on anything the model cannot settle.";
 
 export const DUCTS_WALK: readonly DuctsWalkStep[] = [
   {
     step: "Name the system",
     who: "Engineer or Pea",
-    body: "Pick a Revit duct system by its name. The page shows every duct network that system touches, one section per fan, and marks any network shared with other systems. The search box moves within the same read: an element id, an equipment tag, or another system.",
+    body: "Pick a Revit duct system by its name. The tool shows every duct network that system touches, one section per fan, and marks any network shared with other systems. The search box moves within the same read: an element id, an equipment tag, or another system.",
   },
   {
     step: "Heal the model",
-    who: "Route proposes, engineer approves, Pea or engineer applies",
+    who: "The tool proposes, engineer approves, Pea or engineer applies",
     body: "Pe builds the network from Revit's connectors, not from the system name. Gaps under about 2 in and near-miss taps are bridged for the calculation and listed as diagnostics. Dangling ends get a cap, touching ends get connected, and small same-size gaps get a union. These are written into Revit after a preview. Anything harder appears as a Fix row that names the repair and selects the element in Revit.",
   },
   {
     step: "Point at the airflow",
     who: "Engineer",
-    body: "Choose which parameter holds each grille's design airflow on this project (a firm parameter, the family's own Flow, or whatever the drafter used). The page lists every grille's value and its source. A grille with no value becomes a Set row. A fan's flow is the sum of its grilles. Only a side-stream unit such as a dehumidifier needs a typed flow.",
+    body: "Choose which parameter holds each grille's design airflow on this project (a firm parameter, the family's own Flow, or whatever the drafter used). The tool lists every grille's value and its source. A grille with no value becomes a Set row. A fan's flow is the sum of its grilles. Only a side-stream unit such as a dehumidifier needs a typed flow.",
   },
   {
     step: "Price",
-    who: "Route",
+    who: "The tool",
     body: "Each duct's friction comes from its length, size, flow and roughness. Each fitting's loss is an ASHRAE coefficient times the velocity pressure at the actual flow. Each grille's path is summed from its fan, and the worst path is that fan's external static pressure (ESP). A grille's own drop is included when one is entered and never blocks the result when it is not.",
   },
   {
@@ -74,22 +74,22 @@ export const DUCTS_WALK: readonly DuctsWalkStep[] = [
 export const DUCTS_NOT_ONE_CLICK =
   "It is not one click. Three things need a person on most models: which parameter holds the design airflow, the joins the evidence argues against, and approval of each write. The rest is automatic, and Pea can do the walking.";
 
-/** What Pea does on the route, as object rights. */
+/** What Pea does in the tool, as object rights. */
 export const DUCTS_PEA_DOES: readonly string[] = [
-  "Puts the page on the system the engineer names.",
-  "Reads every fact and finding the page shows, including Diagnostics.",
+  "Opens the tool on the system the engineer names, or moves it there.",
+  "Reads every fact and finding the tool shows, including Diagnostics.",
   "Proposes a value on any cell and any blocking row, with its evidence in the note.",
   "Presses survey, previews heals, and applies a heal once the engineer approves it.",
   "Previews making a unit the fan of its system, and shows the outcome.",
-  "Walks the inbox in order, Fix, Set, Check, Write, and reports in the route's words: system, finding, required ESP now and staged.",
+  "Walks the inbox in order, Fix, Set, Check, Write, and reports in the tool's words: system, finding, required ESP now and staged.",
 ];
 
-/** What Pea never does on the route. */
+/** What Pea never does in the tool. */
 export const DUCTS_PEA_NEVER: readonly string[] = [
   "Stages a ruling or an airflow slot; typing is the engineer's decision.",
   "Writes an ESP or presses the loss write.",
   "Applies the fan assignment; it previews and the engineer presses it.",
-  "Computes a pressure drop of its own, by script or by hand; the route's number is the number.",
+  "Computes a pressure drop of its own, by script or by hand; the tool's number is the number.",
   "Edits geometry by script; transitions, takeoffs, long gaps and anything joining two systems are the engineer's, in Revit.",
 ];
 
@@ -99,7 +99,7 @@ export const DUCTS_RESIDENCY: readonly DuctsResidency[] = [
     livesIn: "Nowhere. Recomputed on every read.",
     survivesSave: "No",
     whoSees: "Anyone with Pe sees the same number from the same model",
-    whoWrites: "The route",
+    whoWrites: "The tool",
   },
   {
     value: "Grille airflow, unit airflow, unit ESP, terminal drop, fitting coefficient",
@@ -145,7 +145,7 @@ export const DUCTS_RESIDENCY: readonly DuctsResidency[] = [
   },
   {
     value: "Design friction rate (changes only the feet shown, never a pressure or the ESP)",
-    livesIn: "Route settings (the duct settings popover)",
+    livesIn: "Tool settings (the duct settings popover)",
     survivesSave: "Yes, in local settings",
     whoSees: "Only this computer",
     whoWrites: "The engineer",
@@ -155,9 +155,9 @@ export const DUCTS_RESIDENCY: readonly DuctsResidency[] = [
 export const DUCTS_RESIDENCY_RULE =
   "Anything that affects the pressure is stored in the model, so another person or another tool sees the same thing. The only state Pe keeps for itself is what has been typed and not yet written.";
 
-/** What an engineer has to decide; the route cannot settle these from the model alone. */
+/** What an engineer has to decide; the tool cannot settle these from the model alone. */
 export const DUCTS_ENGINEER_DECIDES: readonly string[] = [
-  "Anomalous joins: a reversed connector, a part pushed through a duct, supply meeting return. The route objects and waits for a ruling.",
+  "Anomalous joins: a reversed connector, a part pushed through a duct, supply meeting return. The tool objects and waits for a ruling.",
   "Hard repairs: a tap off a fitting, a gap over 3 in, a size or air-type change, a system that should be split or merged. Pe selects the element in Revit; the engineer fixes it.",
   "Which parameter holds the design airflow on this project, and a flow for any grille that has none.",
   "A flow for a side-stream unit (a dehumidifier) whose air does not end at grilles.",

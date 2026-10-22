@@ -25,8 +25,11 @@ test("the bundled ducts skill is projected from DUCTS_GUIDE and keeps the operat
   ])
     expect(skill).toContain(key);
   expect(skill).toContain(
-    "Never rebuild it with pod or C# scripts; they will not match the page the person reads",
+    "Never rebuild it with pod or C# scripts; they will not match the tool the person reads",
   );
+  // Facts, not lines to say: no scripted instruction to the person, and "tool" is the person's word.
+  expect(skill).not.toContain("tell the person to open /ducts");
+  expect(skill).not.toMatch(/the route|route's words/i);
   expect(skill).not.toContain("Project A");
   // The cases stay in the read, not the skill.
   expect(skill).not.toContain(DUCTS_GUIDE.cases[0]!.whatWeDo);

@@ -583,12 +583,12 @@ const countBy = <T>(items: T[], key: (item: T) => string) =>
     return acc;
   }, {});
 
-/** What Pea tells the person when saved Work could not be read in full; the price ran without it. */
+/** The facts about saved Work that could not be read in full; the price ran without it. Pea writes what to say. */
 const unreadableWorkFinding = (dropped: string[]): DuctFinding => ({
   id: "work:unreadable",
   kind: "unreadable-work",
   elementIds: [],
-  note: `The Ducts page's saved work is in an old format (could not read: ${dropped.join(", ")}). Tell the person: open /ducts and press Start fresh, or ask me to propose the values again.`,
+  note: `Saved Work for this document has cells this version cannot read: ${dropped.join(", ")}. The rest of the Work still holds. Proposing those values again keeps it; Start fresh, a button only the person can press, sets the whole Work aside, proposals and staged values included.`,
   assumed: "Priced from Revit facts alone; the unreadable saved values were not applied.",
   clearer: "person",
 });

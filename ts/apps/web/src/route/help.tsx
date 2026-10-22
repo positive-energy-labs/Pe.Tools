@@ -37,7 +37,7 @@ interface Bound extends KeyMeta {
 
 const CARD_W = 240;
 /** The chord that opens this page; the page does not list it among the keys it explains. */
-const HELP_CHORD = { hotkey: "Alt+/", label: "How this route works" } as const;
+const HELP_CHORD = { hotkey: "Alt+/", label: "How this tool works" } as const;
 const CARD_GAP = 12;
 /** Below this the chart keeps one column of cards instead of two. */
 const TWO_COLUMNS_W = 800;
@@ -303,7 +303,7 @@ function HelpBody({
         {band.length ? (
           <Rows keys={band} flow />
         ) : (
-          <span className="t-small text-ink-mute">this route declares no chords</span>
+          <span className="t-small text-ink-mute">this tool declares no chords</span>
         )}
       </div>
       {regions.length ? (
@@ -389,7 +389,7 @@ export function RouteHelpButton({
             label={HELP_CHORD.label}
             word="Tutorial"
             hotkey={HELP_CHORD.hotkey}
-            reason="how this route works — its regions and every key bound right now (Alt+/)"
+            reason="how this tool works — its regions and every key bound right now (Alt+/)"
             invoke={() => setOpen(true)}
           />
         }

@@ -1,5 +1,5 @@
 /**
- * The ducts tutorial (Alt+/): what the route does, how it compares with native Revit and
+ * The ducts tutorial (Alt+/): what the tool does, how it compares with native Revit and
  * Naviate, where every number lives, what an engineer is needed
  * for, the limits, and the catalogue of cases the engine handles. Parts and statuses come from the
  * product map (`@pe/agent-contracts/product-map`); everything else, cases included, is the data
@@ -7,7 +7,7 @@
  * `docs/features/ducts/LEDGER.md` and `WHY-NOT-REVIT.md`.
  *
  * Register: plain, third person, for any engineer or reviewer. "The engineer" is the person using
- * the route, "Pea" the agent, "the route" the page. No second person, no project-specific ids.
+ * the tool, "Pea" the agent, "the tool" the Ducts page. No second person, no project-specific ids.
  */
 import { mapLink } from "@pe/agent-contracts/product-map";
 import { Legend, Mermaid, PartsTable, chainChart, pathChart } from "#/product-map/diagram";

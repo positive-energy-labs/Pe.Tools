@@ -8,7 +8,7 @@ import { expectText, journey, PLAN, requireRevit, SITUATION, WEB } from "./cdp.t
 const TARGET = process.env.E2E_TARGET ?? "";
 const PART = process.env.E2E_PART ?? "a";
 const REFUSAL =
-  "This route's saved Work is in a shape this version cannot read, so it was left untouched; it cannot be opened here.";
+  "This tool's saved Work is in a shape this version cannot read, so it was left untouched; it cannot be opened here.";
 const url = `${WEB}/families${TARGET ? `?target=${encodeURIComponent(TARGET)}` : ""}`;
 
 await journey(PART === "b" ? "J6b" : "J6", async (page, step) => {

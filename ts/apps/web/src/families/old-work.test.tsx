@@ -28,7 +28,7 @@ import { manifest as familiesManifest } from "#/families/manifest";
 
 const SESSION = "session-old-work";
 const UNREADABLE =
-  "This route's saved Work is in a shape this version cannot read, so it was left untouched; it cannot be opened here.";
+  "This tool's saved Work is in a shape this version cannot read, so it was left untouched; it cannot be opened here.";
 
 /** Flipped by the host's start-fresh answer; the next Work read is then an empty Work. */
 let fresh = false;
