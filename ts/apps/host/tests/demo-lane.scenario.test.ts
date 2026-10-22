@@ -301,7 +301,7 @@ const modelCell = (page: Page, family: string) =>
 const expectModelValue = (page: Page, family: string, value: string) =>
   expect.poll(() => modelCell(page, family).inputValue(), { timeout: 30_000 }).toBe(value);
 
-test("/families Archived inspects a saved reading without a target or Revit connection", async () => {
+test("/families History inspects a saved reading without a target or Revit connection", async () => {
   const work = bindWork("families", address("C:/archive/Offline.rvt"));
   const parameter = (name: string, value: string) => ({
     definition: {
