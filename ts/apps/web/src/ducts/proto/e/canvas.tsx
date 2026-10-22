@@ -14,7 +14,7 @@ import { KeyLegend } from "#/components/lang/kbd";
 import { Pane } from "#/components/lang/pane";
 import { useNativeObservation } from "#/revit/observation";
 import { useScene } from "#/scene/use-scene";
-import type { OrbitViewport } from "#/scene/orbit";
+import { useLiveOrbit } from "#/scene/live-orbit";
 
 import type { Ruling } from "../../annotations";
 import { elementNamer } from "../../claims";
@@ -118,17 +118,13 @@ function Canvas({
   const read = useScene(request, native, page.epoch);
   const bounds = usePictureBounds(read.meshes, scene);
   const committedPose = useMemo(() => poseOf(page.viewport, bounds), [page.viewport, bounds]);
-  // Exception to Page owning visible state: this is a gesture preview, never persisted. Page and
-  // Pea's facts.pose receive the released pose; publishing each preview made the whole route stutter.
-  const [orbitDraft, setOrbitDraft] = useState<{
-    base: typeof page.viewport;
-    system: string;
-    pose: OrbitViewport;
-  } | null>(null);
-  const pose =
-    orbitDraft?.base === page.viewport && orbitDraft.system === page.system
-      ? orbitDraft.pose
-      : committedPose;
+  const pose = committedPose;
+  const orbit = useLiveOrbit(
+    committedPose,
+    (viewport, how) => setPage({ viewport }, { history: how === "gesture" ? "replace" : "push" }),
+    `${native?.session}/${native?.openId}/${page.system}/${page.picture}`,
+    page.viewport,
+  );
   // Pea reads the committed pose (`facts.pose`), not the in-progress globe preview.
   useEffect(() => {
     onPose?.(committedPose);
@@ -216,18 +212,7 @@ function Canvas({
     bounds,
     scene,
     meshes: read.meshes,
-    onOrbit: (viewport, how) => {
-      if (how === "gesture")
-        setOrbitDraft({ base: page.viewport, system: page.system, pose: viewport });
-      else {
-        setOrbitDraft(null);
-        setPage({ viewport }, { history: "push" });
-      }
-    },
-    onOrbitEnd: (viewport) => {
-      setOrbitDraft(null);
-      if (viewport) setPage({ viewport }, { history: "replace" });
-    },
+    orbit,
     swap,
     small: () => schematic("inset"),
   });
@@ -285,7 +270,7 @@ function Canvas({
           <ModelPicture
             read={read}
             bounds={bounds}
-            pose={pose}
+            orbit={orbit}
             scene={scene}
             layers={layers}
             encoding={scale.encoding}

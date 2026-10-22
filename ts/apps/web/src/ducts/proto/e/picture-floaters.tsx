@@ -9,6 +9,7 @@ import { tokenRef } from "@pe/kit/lib/token";
 import type { FloaterSpec } from "#/components/lang/floater";
 import { OrbitMinimap } from "#/components/lang/minimap";
 import type { OrbitViewport } from "#/scene/orbit";
+import type { LiveOrbit } from "#/scene/live-orbit";
 import { Scene3D } from "#/scene/scene3d";
 import type { SceneMeshes } from "#/scene/types";
 
@@ -26,8 +27,7 @@ export function usePictureFloaters({
   bounds,
   scene,
   meshes,
-  onOrbit,
-  onOrbitEnd,
+  orbit,
   swap,
   small,
 }: {
@@ -36,8 +36,7 @@ export function usePictureFloaters({
   bounds: PictureBounds | null;
   scene: Scene;
   meshes: SceneMeshes | null;
-  onOrbit: (pose: OrbitViewport, how: "gesture" | "move") => void;
-  onOrbitEnd: (pose: OrbitViewport | null) => void;
+  orbit: LiveOrbit;
   swap: () => void;
   /** The schematic, small. */
   small: () => ReactNode;
@@ -79,12 +78,7 @@ export function usePictureFloaters({
       onOpenChange: setGlobe,
       render: () =>
         pose ? (
-          <OrbitMinimap
-            viewport={pose}
-            onViewport={onOrbit}
-            onGestureEnd={onOrbitEnd}
-            paint={paint}
-          />
+          <OrbitMinimap orbit={orbit} paint={paint} />
         ) : (
           <p className="t-small text-ink-2 m-0 p-2">no pose yet</p>
         ),
@@ -108,12 +102,7 @@ export function usePictureFloaters({
             {picture === "model" ? (
               small()
             ) : meshes && pose ? (
-              <Scene3D
-                className="size-full"
-                meshes={meshes}
-                viewport={pose}
-                onViewport={() => {}}
-              />
+              <Scene3D className="size-full" meshes={meshes} orbit={orbit} />
             ) : (
               <span className="t-small text-ink-2 m-auto">model</span>
             )}

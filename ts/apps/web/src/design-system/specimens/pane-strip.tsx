@@ -1,3 +1,4 @@
+import { useLiveOrbit } from "#/scene/live-orbit";
 /**
  * The pane strip specimen (ledger 2026-10-21): one pane with two modes, two floaters (a plane
  * minimap over a stand-in 4000x3000 field, an orbit globe with a few painted segments) and three
@@ -199,6 +200,7 @@ export function PaneStripSpecimen() {
     zoom: 1,
     pivot: [0, 0, 0],
   });
+  const camera = useLiveOrbit(orbit, setOrbit, "specimen");
   const [mapOpen, setMapOpen] = useState(true);
   const [globeOpen, setGlobeOpen] = useState(false);
   const [layers, setLayers] = useState<readonly string[]>(["grid", "rooms"]);
@@ -251,9 +253,7 @@ export function PaneStripSpecimen() {
                 place: "tr",
                 open: globeOpen,
                 onOpenChange: setGlobeOpen,
-                render: () => (
-                  <OrbitMinimap viewport={orbit} onViewport={setOrbit} paint={paintSegments} />
-                ),
+                render: () => <OrbitMinimap orbit={camera} paint={paintSegments} />,
               },
             ]}
           >

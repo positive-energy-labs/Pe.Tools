@@ -23,6 +23,7 @@ import {
   type PlaneViewport,
 } from "#/scene/plane";
 import type { Psc1Metadata } from "#/scene/psc1";
+import { useLiveOrbit } from "#/scene/live-orbit";
 import { Scene3D } from "#/scene/scene3d";
 import type { Layer3D, Pick, SceneMeshes } from "#/scene/types";
 
@@ -88,6 +89,12 @@ export function SpacePicture({
     page.viewport?.kind === "orbit" ? page.viewport : bounds ? frame(bounds) : null;
   /** The 3D pose under an axis: the one it left, else the fit. */
   const under = returnPose.current ?? (bounds ? frame(bounds) : null);
+  const orbit = useLiveOrbit(
+    axis ? under : pose,
+    (viewport, how) => setPage({ viewport }, { history: how === "gesture" ? "replace" : "push" }),
+    `${page.scene}/${page.ids.join(",")}/${page.mode}`,
+    page.viewport,
+  );
   const plane = useMemo(() => {
     if (!axis || !bounds || !size) return null;
     const viewport: PlaneViewport =
@@ -97,8 +104,7 @@ export function SpacePicture({
 
   const toMode = (next: SpacePage["mode"]) => {
     if (next === page.mode) return;
-    if (page.mode === "3d")
-      returnPose.current = page.viewport?.kind === "orbit" ? page.viewport : null;
+    if (page.mode === "3d") returnPose.current = orbit.read();
     if (next !== "3d") return setPage({ mode: next }, push);
     setPage({ mode: "3d", viewport: returnPose.current }, push);
   };
@@ -244,13 +250,7 @@ export function SpacePicture({
       onOpenChange: (globe) => setOpen({ ...open, globe }),
       render: () =>
         pose ? (
-          <OrbitMinimap
-            viewport={pose}
-            onViewport={(viewport, how) =>
-              setPage({ viewport }, { history: how === "gesture" ? "replace" : "push" })
-            }
-            paint={box}
-          />
+          <OrbitMinimap orbit={orbit} paint={box} />
         ) : (
           <p className="t-small text-ink-2 m-0 p-2">no scene yet</p>
         ),
@@ -335,10 +335,7 @@ export function SpacePicture({
           <Scene3D
             className="size-full"
             meshes={meshes}
-            viewport={axis ? (under ?? pose) : pose}
-            onViewport={(viewport, how) =>
-              setPage({ viewport }, { history: how === "gesture" ? "replace" : "push" })
-            }
+            orbit={orbit}
             plane={plane}
             onPlane={(viewport, how) =>
               setPage({ viewport }, { history: how === "gesture" ? "replace" : "push" })

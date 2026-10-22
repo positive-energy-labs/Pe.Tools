@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
-import { act, render } from "@testing-library/react";
+import { act, fireEvent, render } from "@testing-library/react";
 import { expect, it, vi } from "vite-plus/test";
 import { SceneMeshes } from "./types";
 import type { OrbitViewport } from "./orbit";
+import { createLiveOrbit } from "./live-orbit";
+import { OrbitMinimap } from "#/components/lang/minimap";
 import { Scene3D } from "./scene3d";
 
 const renderer = vi.hoisted(() => ({ current: null as any }));
@@ -45,7 +47,15 @@ it("keeps motion local, publishes on release and accepts external camera moves",
     [],
   );
   const onViewport = vi.fn();
-  const view = render(<Scene3D meshes={meshes} viewport={initial} onViewport={onViewport} />);
+  const orbit = createLiveOrbit(initial, onViewport);
+  const view = render(
+    <>
+      <Scene3D meshes={meshes} orbit={orbit} />
+      <OrbitMinimap orbit={orbit} />
+    </>,
+  );
+  const globe = view.getByRole("group", { name: "orbit globe" });
+  const initialGlobe = globe.innerHTML;
   act(() => {
     moves.dispatchEvent(new Event("start"));
     for (let yaw = 31; yaw <= 60; yaw++) {
@@ -54,15 +64,17 @@ it("keeps motion local, publishes on release and accepts external camera moves",
     }
   });
   expect(onViewport).not.toHaveBeenCalled();
+  expect(orbit.read()).toEqual(pose);
+  expect(globe.innerHTML).not.toEqual(initialGlobe);
   act(() => {
     moves.dispatchEvent(new Event("end"));
   });
   expect(onViewport).toHaveBeenCalledExactlyOnceWith(pose, "gesture");
   setViewport.mockClear();
-  view.rerender(<Scene3D meshes={meshes} viewport={{ ...pose }} onViewport={onViewport} />);
+  act(() => orbit.accept({ ...pose }));
   expect(setViewport).not.toHaveBeenCalled();
   const external = { ...pose, yaw: 90 };
-  view.rerender(<Scene3D meshes={meshes} viewport={external} onViewport={onViewport} />);
+  act(() => orbit.accept(external));
   expect(setViewport).toHaveBeenCalledExactlyOnceWith(external);
   vi.useFakeTimers();
   onViewport.mockClear();
@@ -81,6 +93,21 @@ it("keeps motion local, publishes on release and accepts external camera moves",
     vi.advanceTimersByTime(150);
   });
   expect(onViewport).toHaveBeenCalledExactlyOnceWith(pose, "gesture");
+  // The other input drives the same renderer immediately, without a Page prop round trip.
+  onViewport.mockClear();
+  setViewport.mockClear();
+  const from = orbit.read()!;
+  const pointer = (type: string, x: number) =>
+    fireEvent(globe, new MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: 10 }));
+  pointer("pointerdown", 10);
+  pointer("pointermove", 30);
+  const turned = { ...from, yaw: from.yaw - 8 };
+  expect(setViewport).toHaveBeenCalledExactlyOnceWith(turned);
+  expect(onViewport).not.toHaveBeenCalled();
+  pointer("pointerup", 30);
+  expect(onViewport).toHaveBeenCalledExactlyOnceWith(turned, "gesture");
+  act(() => orbit.accept({ ...turned }));
+  expect(setViewport).toHaveBeenCalledTimes(1);
   view.unmount();
   vi.useRealTimers();
   vi.unstubAllGlobals();

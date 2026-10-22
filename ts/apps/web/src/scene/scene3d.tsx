@@ -1,8 +1,8 @@
 /**
  * The one 3D renderer in the web app. The route's viewport (a Page key of kind `orbit`) owns the
- * committed pose. Exception to publishing every visible change through Page: the renderer
- * owns a transient gesture until release (wheel until quiet). Per-move Page writes rerun route and
- * domain work; the Chadds orbit probe measured 918 ms submission gaps that way. The final pose
+ * committed pose. The shared LiveOrbit owns motion from either canvas or globe until release.
+ * Exception to publishing every visible change through Page: live camera subscribers update
+ * directly. Per-move Page writes rerun route and domain work; the Chadds orbit probe measured 918 ms submission gaps that way. The final pose
  * reports as "gesture" (replace history); named moves push. No second persisted camera exists.
  *
  * The canvas names the Revit element under the pointer in `data-revit-ids`, so the app-root
@@ -22,7 +22,7 @@ import {
   useNativeObservation,
   type NativeObservation,
 } from "#/revit/observation";
-import { samePose, type OrbitViewport } from "./orbit";
+import type { LiveOrbit, OrbitGesture } from "./live-orbit";
 import { isClick, pickAt } from "./picking";
 import { samePlane, type PlaneAxis, type PlaneViewport } from "./plane";
 import type { Project, Ray, Size } from "./projection";
@@ -31,9 +31,8 @@ import type { Layer3D, Pick, SceneInstance, SceneMeshes } from "./types";
 
 export type Scene3DProps = {
   meshes: SceneMeshes | null;
-  /** Decoded by the route from its page key. */
-  viewport: OrbitViewport;
-  onViewport: (next: OrbitViewport, how: "gesture" | "move") => void;
+  /** Shared live camera; Page is only its committed snapshot. */
+  orbit: LiveOrbit;
   /** An axis drawn orthographically instead of the orbit; null or absent = the orbit. */
   plane?: { axis: PlaneAxis; viewport: PlaneViewport } | null;
   onPlane?: (next: PlaneViewport, how: "gesture" | "move") => void;
@@ -98,8 +97,6 @@ export function Scene3D(props: Scene3DProps): ReactNode {
   const latest = useRef({ ...props, observation });
   latest.current = { ...props, observation };
   const core = useRef<SceneRenderer | null>(null);
-  /** The last pose this canvas published; its decoded echo is not re-applied. */
-  const published = useRef<OrbitViewport | null>(null);
   const publishedPlane = useRef<PlaneViewport | null>(null);
   const gesturing = useRef(false);
   const [failed, setFailed] = useState<{ meshes: SceneMeshes; message: string } | null>(null);
@@ -118,6 +115,24 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     core.current = r;
     r.setOnFrame((project, size, ray) => latest.current.onProject?.(project, size, ray));
     const { canvas, moves } = r;
+    const orbit = props.orbit;
+    let token: OrbitGesture | null = null;
+    let applying = false;
+    const follow = () => {
+      if (orbit.owns(token)) return;
+      const pose = orbit.read();
+      if (!pose) return;
+      applying = true;
+      r.setViewport(pose);
+      applying = false;
+    };
+    const unfollow = orbit.subscribe(follow);
+    follow();
+    const change = () => {
+      if (applying || r.plane()) return;
+      if (orbit.owns(token)) orbit.preview(token, r.viewport());
+      else follow();
+    };
     const publish = () => {
       const p = r.plane();
       if (p) {
@@ -126,15 +141,16 @@ export function Scene3D(props: Scene3DProps): ReactNode {
         publishedPlane.current = p;
         return latest.current.onPlane?.(p, "gesture");
       }
-      const v = r.viewport();
-      if (samePose(v, latest.current.viewport, meshes.bounds)) return;
-      published.current = v;
-      latest.current.onViewport(v, "gesture");
+      orbit.end(token);
+      token = null;
     };
-    const start = () => void (gesturing.current = true);
+    const start = () => {
+      gesturing.current = true;
+      if (!r.plane() && !orbit.owns(token)) token = orbit.begin();
+    };
     let wheelEnd: ReturnType<typeof setTimeout> | undefined;
     // FOOTGUN: publishing during a drag navigates the route and reruns domain projections.
-    // The renderer owns motion; onProject keeps annotations current without changing Page.
+    // LiveOrbit shares motion with the globe; onProject keeps annotations current without Page.
     const end = () => {
       if (wheelEnd !== undefined) return;
       gesturing.current = false;
@@ -153,9 +169,17 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       clearTimeout(wheelEnd);
       wheelEnd = undefined;
     };
+    const cancel = () => {
+      interruptWheel();
+      orbit.cancel(token);
+      token = null;
+      gesturing.current = false;
+    };
     canvas.addEventListener("wheel", wheel, { capture: true, passive: true });
     canvas.addEventListener("pointerdown", interruptWheel, true);
+    canvas.addEventListener("pointercancel", cancel, true);
     moves.addEventListener("start", start);
+    moves.addEventListener("change", change);
     moves.addEventListener("end", end);
 
     // The element under the pointer, declared where the element menu looks (absent when none).
@@ -206,29 +230,25 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       clearTimeout(wheelEnd);
       canvas.removeEventListener("wheel", wheel, true);
       canvas.removeEventListener("pointerdown", interruptWheel, true);
+      canvas.removeEventListener("pointercancel", cancel, true);
       cancelAnimationFrame(hover);
       canvas.removeEventListener("pointermove", pointerMove);
       canvas.removeEventListener("pointerleave", pointerLeave);
       canvas.removeEventListener("pointerdown", pointerDown, true);
       canvas.removeEventListener("pointerup", pointerUp);
       canvas.removeEventListener("contextmenu", contextMenu);
+      unfollow();
+      orbit.cancel(token);
+      moves.removeEventListener("start", start);
+      moves.removeEventListener("change", change);
+      moves.removeEventListener("end", end);
       r.dispose();
       core.current = null;
-      published.current = null;
       publishedPlane.current = null;
       gesturing.current = false;
     };
-  }, [meshes]);
+  }, [meshes, props.orbit]);
 
-  // The route's viewport wins, except mid-gesture and for the echo of our own publish.
-  useEffect(() => {
-    const r = core.current;
-    if (!r || !meshes || gesturing.current) return;
-    const own = published.current;
-    if (own && samePose(own, props.viewport, meshes.bounds)) return;
-    published.current = null;
-    r.setViewport(props.viewport);
-  }, [props.viewport, meshes]);
   // The plane follows the same rule; a fit (null viewport) is the route's to compute.
   useEffect(() => {
     const r = core.current;

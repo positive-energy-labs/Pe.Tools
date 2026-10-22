@@ -5,7 +5,7 @@
  * it once, and F with nothing selected clears to fit. With no meshes yet the annotations still draw
  * over the fit of the subject's centrelines; the camera then turns by the globe only.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { useScopeKeys } from "@pe/kit/keys";
 import type { PageMove } from "#/route/manifest";
@@ -17,6 +17,7 @@ import {
   type OrbitViewport,
 } from "#/scene/orbit";
 import { viewportProject, type Project, type Size } from "#/scene/projection";
+import type { LiveOrbit } from "#/scene/live-orbit";
 import { Scene3D } from "#/scene/scene3d";
 import type { SceneRead } from "#/scene/use-scene";
 import type { Bounds, SceneMeshes } from "#/scene/types";
@@ -74,7 +75,7 @@ export const poseOf = (
 export function ModelPicture({
   read,
   bounds,
-  pose,
+  orbit,
   scene,
   layers,
   encoding,
@@ -92,7 +93,7 @@ export function ModelPicture({
 }: {
   read: SceneRead;
   bounds: PictureBounds | null;
-  pose: OrbitViewport | null;
+  orbit: LiveOrbit;
   scene: Scene;
   layers: ReadonlySet<string>;
   encoding: Encoding;
@@ -110,6 +111,9 @@ export function ModelPicture({
   onHover: (id: number | null) => void;
 }) {
   const meshes = read.meshes;
+  // Subscribe inside the picture, never in the route: even the centreline-only preview follows
+  // the live camera while native meshes are loading, without waking pricing or the inbox.
+  const pose = useSyncExternalStore(orbit.subscribe, orbit.read);
   const [said, setSaid] = useState<string | null>(null);
   // A callback ref: the element can arrive after the first commit (a pane revealed later).
   const [host, setHost] = useState<HTMLDivElement | null>(null);
@@ -143,7 +147,12 @@ export function ModelPicture({
   const litKeys = useMemo(() => keys(lit), [lit, keysOf]); // eslint-disable-line react-hooks/exhaustive-deps
   const isolated = layers.has("meshes") ? null : NONE;
 
-  const move = (viewport: OrbitViewport | null) => setPage({ viewport }, { history: "push" });
+  const move = (viewport: OrbitViewport | null) => {
+    if (viewport) return orbit.move(viewport);
+    // Fit can already be the saved Page value while a live gesture has moved away from it.
+    orbit.restore(poseOf(null, bounds));
+    setPage({ viewport: null }, { history: "push" });
+  };
   useScopeKeys([
     {
       hotkey: "F",
@@ -155,7 +164,7 @@ export function ModelPicture({
           ? boundsOfInstances(meshes, (i) => selectedKeys.has(i.key))
           : boundsOfPoints(centrelinePoints(scene, selected));
         if (!bounds || !target) return setSaid("the selection is not in the picture");
-        move(frame(bounds.scene, padded(target), pose ?? undefined));
+        move(frame(bounds.scene, padded(target), orbit.read() ?? undefined));
       },
     },
     {
@@ -164,7 +173,9 @@ export function ModelPicture({
       says: "Look straight down (plan), or back to the isometric; the pivot and zoom stay",
       callback: () =>
         pose
-          ? move(applyLook(pose.elev >= 89 ? "iso" : "plan", pose))
+          ? move(
+              applyLook((orbit.read() ?? pose).elev >= 89 ? "iso" : "plan", orbit.read() ?? pose),
+            )
           : setSaid("no pose yet: the picture has nothing to look at"),
     },
     {
@@ -190,10 +201,7 @@ export function ModelPicture({
         <Scene3D
           className="size-full"
           meshes={meshes}
-          viewport={pose}
-          onViewport={(viewport, how) =>
-            setPage({ viewport }, { history: how === "gesture" ? "replace" : "push" })
-          }
+          orbit={orbit}
           selected={selectedKeys}
           lit={litKeys}
           isolated={isolated}

@@ -1,3 +1,4 @@
+import { createLiveOrbit } from "#/scene/live-orbit";
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -8,27 +9,26 @@ afterEach(cleanup);
 
 test("globe preview uses total displacement before a prop echo and commits only on release", () => {
   const onViewport = vi.fn();
-  const onGestureEnd = vi.fn();
   const viewport: OrbitViewport = { kind: "orbit", yaw: 30, elev: 30, zoom: 1, pivot: [0, 0, 0] };
-  const view = render(
-    <OrbitMinimap viewport={viewport} onViewport={onViewport} onGestureEnd={onGestureEnd} />,
-  );
+  const orbit = createLiveOrbit(viewport, onViewport);
+  const view = render(<OrbitMinimap orbit={orbit} />);
   const globe = view.getByRole("group", { name: "orbit globe" });
   const pointer = (type: string, x: number) =>
     fireEvent(globe, new MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: 10 }));
   pointer("pointerdown", 10);
   pointer("pointermove", 20);
   pointer("pointermove", 30);
-  expect(onViewport).toHaveBeenLastCalledWith({ ...viewport, yaw: 22 }, "gesture");
-  expect(onGestureEnd).not.toHaveBeenCalled();
+  expect(orbit.read()).toEqual({ ...viewport, yaw: 22 });
+  expect(onViewport).not.toHaveBeenCalled();
   pointer("pointerup", 30);
-  expect(onGestureEnd).toHaveBeenCalledExactlyOnceWith({ ...viewport, yaw: 22 });
+  expect(onViewport).toHaveBeenCalledExactlyOnceWith({ ...viewport, yaw: 22 }, "gesture");
   pointer("lostpointercapture", 30);
-  expect(onGestureEnd).toHaveBeenCalledTimes(1);
+  expect(onViewport).toHaveBeenCalledTimes(1);
   pointer("pointerdown", 10);
   pointer("pointermove", 20);
   pointer("lostpointercapture", 20);
-  expect(onGestureEnd).toHaveBeenLastCalledWith(null);
+  expect(orbit.read()).toEqual({ ...viewport, yaw: 22 });
+  expect(onViewport).toHaveBeenCalledTimes(1);
 });
 
 // A 4000x3000 field thumbnails at 260/4000 = 0.065: a click at (130, 97.5) is field (2000, 1500).
@@ -79,13 +79,14 @@ test("a click on a plane minimap centres a plane viewport there at its own scale
 test("a globe stop click writes that stop's yaw and elevation as a move; below the floor refuses", () => {
   const onViewport = vi.fn();
   const viewport: OrbitViewport = { kind: "orbit", yaw: 30, elev: 30, zoom: 1, pivot: [0, 0, 0] };
-  const view = render(<OrbitMinimap viewport={viewport} onViewport={onViewport} />);
+  const orbit = createLiveOrbit(viewport, onViewport);
+  const view = render(<OrbitMinimap orbit={orbit} />);
   const stop = (id: string) => view.container.querySelector(`[data-orbit-stop="${id}"]`)!;
   expect(view.container.querySelectorAll("[data-orbit-stop]")).toHaveLength(18);
   fireEvent.click(stop("90/45"));
   expect(onViewport).toHaveBeenLastCalledWith({ ...viewport, yaw: 90, elev: 45 }, "move");
   fireEvent.click(stop("pole/90"));
-  expect(onViewport).toHaveBeenLastCalledWith({ ...viewport, yaw: 30, elev: 90 }, "move");
+  expect(onViewport).toHaveBeenLastCalledWith({ ...viewport, yaw: 90, elev: 90 }, "move");
   onViewport.mockClear();
   fireEvent.click(stop("0/-45"));
   expect(onViewport).not.toHaveBeenCalled();

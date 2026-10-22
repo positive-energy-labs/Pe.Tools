@@ -4,18 +4,27 @@
  * Two pictures, one contract: `PlaneMinimap` for a scrolled or panned plane (the families pivot
  * minimap, generalised) and `OrbitMinimap` for an orbit camera (the ducts globe, ported).
  */
-import { useEffect, useMemo, useRef, type MouseEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 
 import { tokenRef } from "@pe/kit/lib/token";
 
 import type { OrbitViewport, PlaneViewport, ScrollViewport } from "@pe/agent-contracts";
 export type { OrbitViewport, PlaneViewport, ScrollViewport };
 
+import type { LiveOrbit, OrbitGesture } from "#/scene/live-orbit";
+
 type ViewportHow = "gesture" | "move";
 
 interface MinimapProps<V> {
   viewport: V;
-  onViewport(next: V, how: ViewportHow): void;
+  onViewport: (next: V, how: ViewportHow) => void;
 }
 
 type Size = { width: number; height: number };
@@ -74,7 +83,7 @@ export function PlaneMinimap<V extends PlaneViewport | ScrollViewport>({
 }: MinimapProps<V> & {
   extent: Size;
   viewportSize: Size;
-  paint(ctx: CanvasRenderingContext2D, scale: number): void;
+  paint: (ctx: CanvasRenderingContext2D, scale: number) => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const dragged = useRef(false);
@@ -205,25 +214,28 @@ const stopTitle = (v: Vec, elev: number) =>
  * the picture inside the sphere through the globe's own projection (unit-sphere space, z up).
  */
 export function OrbitMinimap({
-  viewport,
-  onViewport,
-  onGestureEnd,
+  orbit,
   paint,
-}: MinimapProps<OrbitViewport> & {
-  /** With a transient preview consumer, commit once on release; null cancels the preview. */
-  onGestureEnd?: (viewport: OrbitViewport | null) => void;
-  paint?(project: (p: readonly number[]) => [number, number]): ReactNode;
+}: {
+  orbit: LiveOrbit;
+  paint?: (project: (p: readonly number[]) => [number, number]) => ReactNode;
   stops?: "globe";
 }) {
-  const { yaw, elev } = viewport;
+  const viewport = useSyncExternalStore(orbit.subscribe, orbit.read);
+  const { yaw, elev } = viewport ?? { yaw: 0, elev: 0 };
   const pressed = useRef<{
     x: number;
     y: number;
     moved: boolean;
     ended?: boolean;
-    from: OrbitViewport;
-    latest: OrbitViewport;
+    token: OrbitGesture;
   } | null>(null);
+  useEffect(
+    () => () => {
+      if (pressed.current) orbit.cancel(pressed.current.token);
+    },
+    [orbit],
+  );
   const body = useMemo(() => {
     const at = globeProjection(yaw, elev);
     const eye = towards(yaw, elev);
@@ -276,7 +288,7 @@ export function OrbitMinimap({
           opacity={front ? 1 : 0.35}
           onClick={() => {
             if (below || pressed.current?.moved) return;
-            onViewport({ ...viewport, yaw: stop.rel ?? yaw, elev: stop.elev }, "move");
+            if (viewport) orbit.move({ ...viewport, yaw: stop.rel ?? yaw, elev: stop.elev });
           }}
         >
           <title>{stopTitle(stop.v, stop.elev)}</title>
@@ -317,17 +329,18 @@ export function OrbitMinimap({
         if (event.button !== 0) return;
         // A drag turns the globe; it never starts a text selection in the pane.
         event.preventDefault();
+        const token = orbit.begin();
+        if (!token) return;
         pressed.current = {
           x: event.clientX,
           y: event.clientY,
           moved: false,
-          from: viewport,
-          latest: viewport,
+          token,
         };
       }}
       onPointerMove={(event) => {
         const start = pressed.current;
-        if (!start) return;
+        if (!start || !orbit.owns(start.token)) return;
         if (
           !start.moved &&
           Math.abs(event.clientX - start.x) + Math.abs(event.clientY - start.y) < 3
@@ -335,24 +348,31 @@ export function OrbitMinimap({
           return;
         if (!start.moved) event.currentTarget.setPointerCapture?.(event.pointerId);
         start.moved = true;
-        start.latest = {
-          ...start.from,
+        const next = {
+          ...start.token.from,
           // Absolute displacement survives multiple pointer events before React commits.
-          yaw: start.from.yaw - (event.clientX - start.x) * DEG_PER_PX,
-          elev: clampElev(start.from.elev + (event.clientY - start.y) * DEG_PER_PX),
+          yaw: start.token.from.yaw - (event.clientX - start.x) * DEG_PER_PX,
+          elev: clampElev(start.token.from.elev + (event.clientY - start.y) * DEG_PER_PX),
         };
-        onViewport(start.latest, "gesture");
+        orbit.preview(start.token, next);
       }}
       onPointerUp={() => {
-        if (pressed.current?.moved) onGestureEnd?.(pressed.current.latest);
+        if (pressed.current) orbit.end(pressed.current.token);
         if (pressed.current) pressed.current.ended = true;
         // The click that follows a drag still needs to know it was one.
-        setTimeout(() => (pressed.current = null));
+        const released = pressed.current;
+        setTimeout(() => {
+          if (pressed.current === released) pressed.current = null;
+        });
+      }}
+      onPointerCancel={() => {
+        if (pressed.current) orbit.cancel(pressed.current.token);
+        pressed.current = null;
       }}
       onLostPointerCapture={() => {
         if (pressed.current && !pressed.current.ended) {
+          orbit.cancel(pressed.current.token);
           pressed.current = null;
-          onGestureEnd?.(null);
         }
       }}
     >
