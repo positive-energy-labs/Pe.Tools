@@ -7311,6 +7311,59 @@ export namespace RevitMatrixScheduleProfiles {
   }
 }
 
+/** Resolve the exact captured familyId and familyUniqueId into current placed FamilyInstance refs across all of that family's types in this project document. Checks the paired family identity with no name or UniqueId fallback. Read-only; no transaction, family editor, active-view filter, or linked traversal. Scans document instances, returns exact total and at most maxResults refs (default 500, range 1..1000) with IDs and UniqueIds. Error issues refuse identity; empty or truncated results must not authorize Select or Selection Box. Does not select a family definition or resolve a type name. Use the captured document lifetime for this read and any later action. */
+export namespace RevitResolveFamilyInstances {
+  export namespace Req {
+    /**
+     * Resolve current placements across every type of one exactly identified loaded family.
+     */
+    export interface Request {
+      familyId: number;
+      familyUniqueId: string;
+      maxResults?: number;
+    }
+  }
+  export namespace Res {
+    export type RevitDataIssueSeverity = "Info" | "Warning" | "Error";
+
+    /**
+     * Echoes the requested family identity; error issues mean it was not resolved.
+     * Empty or truncated placements must not authorize Select or Selection Box.
+     *
+     */
+    export interface Response {
+      familyId: number;
+      familyUniqueId: string;
+      instances: ElementContextElementRef[];
+      page: RevitDataResultPage;
+      issues: RevitDataIssue[];
+    }
+    export interface ElementContextElementRef {
+      elementId: number;
+      elementUniqueId: string;
+      className: string;
+      categoryName?: null | string;
+      name: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      mark?: null | string;
+    }
+    export interface RevitDataResultPage {
+      totalCount: number;
+      returnedCount: number;
+      isTruncated: boolean;
+    }
+    export interface RevitDataIssue {
+      code: string;
+      severity: RevitDataIssueSeverity;
+      message: string;
+      familyName?: null | string;
+      typeName?: null | string;
+      parameterName?: null | string;
+    }
+  }
+}
+
 /** Resolve natural references like this view, selected equipment, or printed mech Level 1 plan into stable Revit handles with provenance; narrow by handle kind and printed context when the user already described the scope. */
 export namespace RevitResolveReferences {
   export namespace Req {
@@ -8429,6 +8482,7 @@ export interface HostOps {
   "revit.matrix.parameter-coverage": { request: RevitMatrixParameterCoverage.Req.Request; response: RevitMatrixParameterCoverage.Res.Response };
   "revit.matrix.schedule-coverage": { request: RevitMatrixScheduleCoverage.Req.Request; response: RevitMatrixScheduleCoverage.Res.Response };
   "revit.matrix.schedule-profiles": { request: RevitMatrixScheduleProfiles.Req.Request; response: RevitMatrixScheduleProfiles.Res.Response };
+  "revit.resolve.family-instances": { request: RevitResolveFamilyInstances.Req.Request; response: RevitResolveFamilyInstances.Res.Response };
   "revit.resolve.references": { request: RevitResolveReferences.Req.Request; response: RevitResolveReferences.Res.Response };
   "revit.resolve.unit-value": { request: RevitResolveUnitValue.Req.Request; response: RevitResolveUnitValue.Res.Response };
   "rooms.draw": { request: RoomsDraw.Req.Request; response: RoomsDraw.Res.Response };
@@ -8522,6 +8576,7 @@ export const hostOpKeys = [
   "revit.matrix.parameter-coverage",
   "revit.matrix.schedule-coverage",
   "revit.matrix.schedule-profiles",
+  "revit.resolve.family-instances",
   "revit.resolve.references",
   "revit.resolve.unit-value",
   "rooms.draw",
