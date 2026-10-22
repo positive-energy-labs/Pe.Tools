@@ -130,12 +130,29 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       latest.current.onViewport(v, "gesture");
     };
     const start = () => void (gesturing.current = true);
+    let wheelEnd: ReturnType<typeof setTimeout> | undefined;
     // FOOTGUN: publishing during a drag navigates the route and reruns domain projections.
     // The renderer owns motion; onProject keeps annotations current without changing Page.
     const end = () => {
+      if (wheelEnd !== undefined) return;
       gesturing.current = false;
       publish();
     };
+    // Wheel events have no release: OrbitControls ends each tick. Save the burst after quiet,
+    // not each tick; drawing still runs immediately on every controls change.
+    const wheel = () => {
+      clearTimeout(wheelEnd);
+      wheelEnd = setTimeout(() => {
+        wheelEnd = undefined;
+        end();
+      }, 150);
+    };
+    const interruptWheel = () => {
+      clearTimeout(wheelEnd);
+      wheelEnd = undefined;
+    };
+    canvas.addEventListener("wheel", wheel, { capture: true, passive: true });
+    canvas.addEventListener("pointerdown", interruptWheel, true);
     moves.addEventListener("start", start);
     moves.addEventListener("end", end);
 
@@ -184,6 +201,9 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     canvas.addEventListener("pointerup", pointerUp);
     canvas.addEventListener("contextmenu", contextMenu);
     return () => {
+      clearTimeout(wheelEnd);
+      canvas.removeEventListener("wheel", wheel, true);
+      canvas.removeEventListener("pointerdown", interruptWheel, true);
       cancelAnimationFrame(hover);
       canvas.removeEventListener("pointermove", pointerMove);
       canvas.removeEventListener("pointerleave", pointerLeave);

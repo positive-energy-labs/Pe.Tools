@@ -64,6 +64,24 @@ it("keeps motion local, publishes on release and accepts external camera moves",
   const external = { ...pose, yaw: 90 };
   view.rerender(<Scene3D meshes={meshes} viewport={external} onViewport={onViewport} />);
   expect(setViewport).toHaveBeenCalledExactlyOnceWith(external);
+  vi.useFakeTimers();
+  onViewport.mockClear();
+  act(() => {
+    for (let zoom = 2; zoom <= 10; zoom++) {
+      renderer.current.canvas.dispatchEvent(new WheelEvent("wheel"));
+      moves.dispatchEvent(new Event("start"));
+      pose = { ...external, zoom };
+      moves.dispatchEvent(new Event("change"));
+      moves.dispatchEvent(new Event("end"));
+      vi.advanceTimersByTime(30);
+    }
+  });
+  expect(onViewport).not.toHaveBeenCalled();
+  act(() => {
+    vi.advanceTimersByTime(150);
+  });
+  expect(onViewport).toHaveBeenCalledExactlyOnceWith(pose, "gesture");
   view.unmount();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
