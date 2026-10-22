@@ -397,7 +397,6 @@ export const routeAddresses = {
     title: "Family",
     fields: {
       ...entityFields,
-      capture: field(z.boolean().default(false), { url: "replace" }),
       demo,
     },
   },
@@ -474,9 +473,6 @@ export const routeAddresses = {
       mode: field(modeKey(["threads", "world"], "threads"), { url: "replace" }),
       /** The turn to focal-scroll on open; absent = the tail. */
       turn: field(z.number().int().positive().optional(), { url: "replace" }),
-      plugin: field(text(), { url: "push" }),
-      /** The group path (canonical JSON) the head's drill-in scoped the plugin to. */
-      focus: field(text(4096), { url: "push" }),
       /** The composer draft: in the address bar, never in a link. */
       prompt: field(text(), { url: "replace", share: false }),
     },
@@ -669,7 +665,11 @@ export function tabLink(
       page[name] = parsed.data;
     }
   }
-  return { ok: true, route: key, link: linkTo(key, page as never, carry) };
+  // The route's rule between fields, as a move from the bare Place: a named key that breaks it is
+  // refused, so a stored Place is never one `readLink` would silently fit.
+  const moved = transition(key, readLink(key, {}).page as never, page as never);
+  if (!moved.ok) return { ok: false, error: `${key} tab link: ${moved.error}` };
+  return { ok: true, route: key, link: linkTo(key, moved.patch as never, carry) };
 }
 
 /**
