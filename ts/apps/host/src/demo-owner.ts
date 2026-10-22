@@ -80,7 +80,7 @@ type RunSource = {
  * The simulated engine checks captured bytes the way `PodRuns.Decode` does: every root and
  * dependency hash must match its bytes, or the run refuses before anything is filed.
  */
-export function verifyCaptured({ root, dependencies }: RunSource) {
+function verifyCaptured({ root, dependencies }: RunSource) {
   for (const file of [root, ...dependencies])
     if (
       createHash("sha256").update(Buffer.from(file.bytesBase64, "base64")).digest("hex") !==

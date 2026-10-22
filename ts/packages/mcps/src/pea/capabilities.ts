@@ -1,7 +1,10 @@
+import { discoveryMachine } from "@pe/agent-contracts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { contextFetch as fetch } from "@pe/runtime/context";
 import {
   capabilityPrincipals,
+  DUCTS_FINDS,
+  ductsAnalysisRequestSchema,
   instancesReading,
   scheduleReads,
   actionControls,
@@ -9,11 +12,18 @@ import {
   familyReads,
   actionBasesSchema,
   settingsRouteState,
+  agentKeys,
+  routeAddressFields,
+  routeAddresses,
+  routeViewRoutes,
+  type RouteAddress,
+  type RouteViewRoute,
 } from "@pe/agent-contracts";
 /** One discovery projection and ranker: native availability is contextual; installed content
  * comes from one admitted snapshot, independent of the native catalog. Session/document readings
  * remain fresh; missing sources report their diagnostic instead of hiding the answering ones. */
 import { z } from "zod";
+import { ductsGuideInputSchema } from "./ducts-skill.ts";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import {
   HOST_RPC_SDK_SESSION_HEADER,
@@ -137,39 +147,56 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
     ),
     ...sources.routes.flatMap(routeRows),
     {
-      key: "route:families.view",
+      key: "route:ducts.analysis",
       kind: "route-command",
-      title: "Families visible view",
+      title: "Analyze duct pressure drop",
       description:
-        "Read the currently mounted Families pane in this thread: its stage, rule line, exact visible reading id, and visible counts. If two panes are open, pass an instance from the ambiguity result. No Revit read.",
-      finds: ["families", "visible", "archive", "rules"],
+        "Calculate pressure-drop demand over a complete retained duct graph without a mounted page. Artifact-only projection apply-request builds a bounded reference to an immutable canonical staged-write candidate; download its payload, obtain approval and revalidate before the separate preview/apply doors. It does not stage Work or write Revit. Use source fresh with an exact document and selector document for the first full inventory; reuse the returned artifact for equipment, terminal, group or exact space-text projections and pagination, with no further native reads. Use projection ports for exact UID/connector evidence pins to propose in canonical Work; use projection circuits or circuit-path for staged physical fan/passive/terminal evidence and balanced-design demand; role evidence is proposed through generic ducts Work, staged only by a person. Projection components exposes staged signed KCL and optional prescribed-flow TOTAL-pressure closure with bounded hydraulic head summaries. Unknown circulation, constitutive laws or fan allocation remain unresolved; legacy circuits remain tree-limited. Legacy path totals remain separate, and physical circuit pressure is not a manufacturer scalar ESP. Totals expose incomplete inputs and native parity limits. Space text does not prove room identity. Read/calculation only; no model or Work mutation. Rows carry `tag`, the equipment tag (PE_G___TagInstance), to match a name like FC-23. If the page's saved Work is unreadable, a finding of kind unreadable-work says what to tell the person; the price still runs. Start with skill:@product/skills/calc-duct-pressure-drop.",
+      finds: [
+        "ducts",
+        "pressure drop",
+        "fan static",
+        "equipment",
+        "terminal",
+        "grille",
+        "room",
+        "space",
+        "critical path",
+        ...DUCTS_FINDS,
+      ],
       needs: "nothing",
       mutates: false,
       principal: capabilityPrincipals(false),
-      input: z.toJSONSchema(z.object({ instance: z.uuid().optional() })) as Record<string, unknown>,
-      source: "browser Page",
+      input: z.toJSONSchema(ductsAnalysisRequestSchema) as Record<string, unknown>,
+      source: "host Ducts analysis",
       rank: 2,
     },
     {
-      key: "route:families.set-query",
-      kind: "route-command",
-      title: "Set Families visible query",
+      key: "route:ducts.guide",
+      kind: "route-doc",
+      title: "Ducts guide",
       description:
-        "Change the query line in one mounted Families view. Read route:families.view first, then pass its instance and revision. The browser acknowledges the rendered query and counts. No Work or Revit read.",
-      finds: ["families", "filter", "rules", "visible"],
+        "What the Ducts route does and why, the one source the /ducts tutorial renders: the walk and who does each step, what Pea does and never does, where every duct value lives and what survives a save, Pe compared with Revit's own pressure drop and Naviate feature by feature (section compare, with the evidence per cell), what the engineer decides, the limits, and the known cases (number, title, code; pass section cases for their prose). Pass document, an exact open document, to add present: the cases its fresh ducts analysis shows, with up to ten element ids each. Answer questions about the route from this, never from general knowledge. Read only; no Work or model mutation.",
+      finds: [
+        "ducts",
+        "tutorial",
+        "guide",
+        "pressure drop",
+        "esp",
+        "where does it live",
+        "what can pea do",
+        "limits",
+        "cases",
+        ...DUCTS_FINDS,
+      ],
       needs: "nothing",
-      mutates: true,
-      principal: capabilityPrincipals(true),
-      input: z.toJSONSchema(
-        z.object({
-          instance: z.uuid(),
-          revision: z.number().int().nonnegative(),
-          query: z.string().max(4096),
-        }),
-      ) as Record<string, unknown>,
-      source: "browser Page",
+      mutates: false,
+      principal: capabilityPrincipals(false),
+      input: z.toJSONSchema(ductsGuideInputSchema) as Record<string, unknown>,
+      source: "Ducts guide",
       rank: 2,
     },
+    ...routeViewRoutes.flatMap(routeViewRows),
     ...sources.packages.flatMap(packageRows),
     ...sources.skills.map(skillRow),
     ...(sources.pages ?? []),
@@ -204,6 +231,61 @@ function opRow(op: OpsCatalogEntry): Capability {
   };
 }
 
+/** A route with an address (`routeAddresses`) gets one read and one set, both over the person's open page. */
+function routeViewRows(route: RouteViewRoute): Capability[] {
+  const spec = routeAddresses[route];
+  const { policy, words } = spec.agent as NonNullable<RouteAddress["agent"]>;
+  const keys = agentKeys(route);
+  const sets = Object.keys(routeAddressFields(route).shape);
+  const lower = spec.title.toLowerCase();
+  return [
+    {
+      key: `route:${route}.view`,
+      kind: "route-command",
+      title: `${spec.title} visible view`,
+      description: `Read the ${spec.title} page the person has open in this thread: its settable keys (${keys.join(", ")}) with their current values, the identity of what is shown, and derived facts (${route === "families" ? "stage, rule help, the exact visible reading id and counts" : "the system names with their classification, units and how many duct networks each spans, and the levels"}). Returns instance and revision for ${`route:${route}.set-view`}. If two panes are open, pass an instance from the ambiguity result. No Revit read.`,
+      finds: [
+        lower,
+        "visible",
+        "page",
+        ...(route === "families" ? ["archive", "rules"] : [...DUCTS_FINDS, "system", "level"]),
+      ],
+      needs: "nothing",
+      mutates: false,
+      principal: capabilityPrincipals(false),
+      input: z.toJSONSchema(z.object({ instance: z.uuid().optional() })) as Record<string, unknown>,
+      source: "browser Page",
+      rank: 2,
+    },
+    {
+      key: `route:${route}.set-view`,
+      kind: "route-command",
+      title: `Set ${spec.title} visible view`,
+      description: `${policy} Read route:${route}.view first, then pass its instance and revision with a nonempty subset of ${sets.join(", ")}${words ? ` or ${Object.keys(words.shape).join(", ")}` : ""}. The browser acknowledges the render before this returns.`,
+      finds: [
+        lower,
+        "filter",
+        "visible",
+        "page",
+        ...(route === "ducts" ? [...DUCTS_FINDS, "system", "level"] : ["rules"]),
+      ],
+      needs: "nothing",
+      mutates: true,
+      principal: capabilityPrincipals(true),
+      input: z.toJSONSchema(
+        z.object({
+          instance: z.uuid(),
+          revision: z.number().int().nonnegative(),
+          ...routeAddressFields(route).partial().shape,
+          ...words?.partial().shape,
+        }),
+      ) as Record<string, unknown>,
+      source: "browser Page",
+      rank: 2,
+    },
+  ];
+}
+
 function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
   const scopeHint =
     spec.route === settingsRouteState.route
@@ -234,7 +316,18 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
       z.object({
         patches: z
           .array(z.object({ path: z.array(z.union([z.string(), z.number()])), value: z.unknown() }))
-          .min(1),
+          .min(1)
+          .optional(),
+        ...(spec.route === "ducts"
+          ? {
+              loadsText: z
+                .string()
+                .optional()
+                .describe(
+                  "The load tool's Load Preview pasted raw (tab-separated); parsed and proposed as loads/preview.",
+                ),
+            }
+          : {}),
       }),
     ) as Record<string, unknown>,
     source: "route registry",
@@ -375,7 +468,7 @@ export function createCapabilityCatalogSource(options: {
         : scoped;
       return {
         ...catalog,
-        machine,
+        machine: discoveryMachine(machine),
         recents: recent.recents,
         sources: { ...catalog.sources, recents: recent.status },
       };

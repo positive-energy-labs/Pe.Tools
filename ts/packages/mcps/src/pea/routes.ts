@@ -6,6 +6,7 @@
 import type { z } from "zod";
 import type { RouteStateSpec, RouteWriteAdmission } from "@pe/agent-contracts";
 import {
+  ductsRouteState,
   familiesRouteState,
   familyDraftRouteState,
   parameterLinksRouteState,
@@ -48,5 +49,6 @@ export function createRouteRegistrations(
     entry(scheduleGridRouteState),
     entry(takeoffsRouteState),
     entry(roomsRouteState),
+    entry(ductsRouteState),
   ];
 }

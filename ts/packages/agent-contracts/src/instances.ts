@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { nativeProcessSchema } from "./action-receipts.ts";
-import { sdkReadingSchema } from "./reading.ts";
+import { sdkStandardReadingSchema, holdingsReadingSchema } from "./reading.ts";
 import {
   sdkSessionSelectionSchema,
   sdkDocumentRefSchema,
@@ -190,10 +190,13 @@ export function instancesSessionSelection(input: unknown): SdkSessionSelection |
 }
 
 export const instancesReading = {
-  says: "Read SDK sessions, installed years, recents, documents, visible windows (dialogs), session-journal logs, or op receipts including work outside the host journal. Logs and ops accept tail (1–500, default 100); the SDK owns their lineage and envelopes.",
+  says: "Read SDK sessions, installed years, recents, documents, visible windows (dialogs), session-journal logs, or op receipts including work outside the host journal. Holdings requires exact session, processStartUtc and openId, returns at most 100 elements with a content-bound cursor; null/failed observations refuse. Logs and ops accept tail (1–500, default 100); the SDK owns their lineage and envelopes.",
   dirties: [],
   needs: "nothing",
   actor: "any",
   mutates: false,
-  input: sdkReadingSchema.omit({ kind: true }),
+  input: z.discriminatedUnion("read", [
+    sdkStandardReadingSchema.omit({ kind: true }),
+    holdingsReadingSchema.omit({ kind: true }),
+  ]),
 } as const;

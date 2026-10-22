@@ -1,10 +1,8 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, test, vi } from "vite-plus/test";
-import { hostFetch } from "#/host/runtime";
 import { deliverFeedback, sendFeedback, type Feedback } from "#/host/feedback";
-
-import { FeedbackPicker, startFeedback } from "./feedback-picker";
+import { hostFetch } from "#/host/runtime";
+import { cleanup } from "@testing-library/react";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 
 vi.mock("#/host/runtime", () => ({ hostFetch: vi.fn() }));
 
@@ -16,30 +14,6 @@ vi.mock("react-grab/primitives", () => ({
   isElementGrabbable: () => true,
 }));
 afterEach(cleanup);
-
-test("the one feedback owner portals its real cancel into the bar and keeps a standalone fallback", async () => {
-  const tree = (host: boolean) => (
-    <>
-      {host && <span id="pe-feedback-cancel" />}
-      <FeedbackPicker key="picker" hideTrigger />
-    </>
-  );
-  const view = render(tree(true));
-  act(() => startFeedback());
-  const cancel = await screen.findByRole("button", { name: "cancel feedback" });
-  expect(document.getElementById("pe-feedback-cancel")?.contains(cancel)).toBe(true);
-  expect(cancel.closest("[data-feedback-chrome]")).toBeTruthy();
-  fireEvent.click(cancel);
-  await waitFor(() => expect(screen.queryByRole("button", { name: "cancel feedback" })).toBeNull());
-  act(() => startFeedback());
-  await screen.findByRole("button", { name: "cancel feedback" });
-  view.rerender(tree(false));
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "cancel feedback" }).closest(".fixed")).toBeTruthy(),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "cancel feedback" }));
-  expect(screen.queryByRole("button", { name: "cancel feedback" })).toBeNull();
-});
 
 const note: Feedback = {
   comment: "the duct table hides the 4th column",

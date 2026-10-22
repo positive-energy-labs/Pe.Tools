@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { semanticActions } from "@pe/agent-contracts";
 
-import { actionCall, actionRoute } from "./chat-plugins";
+import { actionRoute } from "./chat-plugins";
 
 describe("chat plugin records", () => {
   it("an action opens the pane whose manifest declares a verb doing it, never a guess at its words", () => {
@@ -19,21 +19,5 @@ describe("chat plugin records", () => {
     expect(actionRoute("schedule.nonexistent")).toBeNull();
     expect(actionRoute("pod.list")).toBeNull();
     expect(actionRoute("takeoffs")).toBeNull();
-  });
-
-  it("a script contribution key is an action call; a member or an old pod key is not", () => {
-    const ran = { structuredContent: { result: { action: { id: "r1" } } } };
-    expect(actionCall("pe_do", { key: "script:@snowdon-ducts/src/Census.cs" }, ran)).toEqual({
-      id: "r1",
-      key: "script:@snowdon-ducts/src/Census.cs",
-    });
-    expect(actionCall("pe_do", { key: "op:revit.context.lens" }, ran)).toEqual({
-      id: "r1",
-      key: "revit.context.lens",
-    });
-    expect(
-      actionCall("pe_do", { key: "member:@snowdon-ducts/settings/checks.json" }, ran),
-    ).toBeNull();
-    expect(actionCall("pe_do", { key: "pod:sheets.rename" }, ran)).toBeNull();
   });
 });

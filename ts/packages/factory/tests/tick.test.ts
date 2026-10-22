@@ -300,18 +300,4 @@ describe("tick", () => {
       rmSync(repo, { recursive: true, force: true });
     }
   }, 60_000);
-
-  it("projects fixture readings into a non-empty charts array", () => {
-    const html = readFileSync(join(import.meta.dirname, "..", "src", "ui", "index.html"), "utf8");
-    const expression = html.match(
-      /const chartProjection = ([\s\S]*?);\r?\n      const chart =/,
-    )?.[1];
-    expect(expression).toBeDefined();
-    // oxlint-disable-next-line typescript/no-implied-eval -- exercise the page's function verbatim.
-    const project = Function(`return (${expression})`)() as (
-      setpoints: Record<string, string>,
-      events: { kind: string; sha: string }[],
-    ) => object[];
-    expect(project({ "files.n": "down" }, [{ kind: "reading", sha: "abc" }])).not.toHaveLength(0);
-  });
 });

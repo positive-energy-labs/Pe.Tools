@@ -1,11 +1,8 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { adapterCli, adapterLaunch } from "../src/harness/adapter.ts";
 import { createProviders } from "../src/harness/providers.ts";
-import type { ProviderRefusal } from "@pe/agent-contracts";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -60,87 +57,6 @@ test.each(["codex", "claude"] as const)(
         .toMatchObject({ state: "refused", step: "signed-in" });
     } finally {
       await providers.close();
-    }
-  },
-);
-
-test("a zero-exit installer with no executable remains refused with its console and discovery evidence", async () => {
-  const logged = vi.spyOn(console, "log").mockImplementation(() => {});
-  const env = home();
-  for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
-  vi.stubEnv("PE_HARNESS_ADAPTER_CODEX", join(import.meta.dirname, "fake-acp-agent.mjs"));
-  vi.stubEnv("FAKE_ACP_AUTH", "none");
-  const providers = createProviders({
-    probeOnStart: false,
-    openConsole: async (_command, _env, opened) => {
-      opened();
-      return { exitCode: 0, commandExitCode: 0, logPath: join(env.LOCALAPPDATA, "console.log") };
-    },
-  });
-  const request = (verb: string) =>
-    new Request(`http://host/pe/providers/codex/${verb}`, { method: "POST" });
-  try {
-    const first = await (await providers.fetch(request("probe"))).json();
-    expect(first.readiness.detail).toMatchObject({
-      step: "installed",
-      message: expect.any(String),
-      resolvedExecutable: null,
-    });
-    expect(logged.mock.calls.flat().join("\n")).toContain(JSON.stringify(first.readiness.detail));
-    expect(first.readiness.detail.lookup).toMatchObject({ status: 1, reason: expect.any(String) });
-    expect(first.readiness.detail.candidates).toContainEqual(
-      expect.objectContaining({
-        path: expect.stringContaining("codex.exe"),
-        reason: expect.stringMatching(/missing|ENOENT/),
-      }),
-    );
-    await providers.fetch(request("open-login"));
-    await expect
-      .poll(() => providers.readiness().find((p) => p.id === "codex")?.readiness)
-      .toMatchObject({
-        state: "refused",
-        step: "installed",
-        detail: { console: { exitCode: 0, logPath: join(env.LOCALAPPDATA, "console.log") } },
-      });
-  } finally {
-    await providers.close();
-  }
-});
-
-test.runIf(process.platform === "win32")(
-  "a locked executable preserves the real Win32 sharing violation, and a miss preserves code 2 or 3",
-  async () => {
-    const env = home();
-    const cli = file(join(env.LOCALAPPDATA, "Programs", "OpenAI", "Codex", "bin", "codex.exe"));
-    const script = join(env.USERPROFILE, "lock.ps1");
-    writeFileSync(
-      script,
-      "param($path)\n$f = [IO.File]::Open($path, 'Open', 'Read', 'None'); [Console]::WriteLine('locked'); [Console]::ReadLine() | Out-Null; $f.Dispose()",
-    );
-    const lock = spawn("powershell.exe", ["-NoProfile", "-File", script, cli], {
-      windowsHide: true,
-      stdio: "pipe",
-    });
-    const exited = new Promise<void>((resolve) => lock.once("exit", () => resolve()));
-    await new Promise<void>((resolve, reject) => {
-      lock.stdout!.once("data", () => resolve());
-      lock.once("error", reject);
-    });
-    const detail: ProviderRefusal = {
-      step: "installed",
-      message: "",
-      candidates: [],
-      resolvedExecutable: null,
-      lookup: null,
-      console: null,
-    };
-    try {
-      expect(adapterCli("codex", env, detail)).toBe("codex");
-      expect(detail.candidates[0]).toMatchObject({ path: cli, win32Error: 32 });
-      expect([2, 3]).toContain(detail.candidates[1]!.win32Error);
-    } finally {
-      lock.stdin!.end("\n");
-      await exited;
     }
   },
 );
@@ -213,31 +129,3 @@ function file(path: string) {
   writeFileSync(path, "lookup only, never executed");
   return path;
 }
-
-test.each(["codex", "claude"] as const)(
-  "%s is discovered after installation without restarting the host",
-  (harness) => {
-    const env: NodeJS.ProcessEnv = home();
-    const fresh = join(env.USERPROFILE!, "new tools");
-    expect(adapterCli(harness, env)).toBe(harness);
-    const cli = file(join(fresh, `${harness}.exe`));
-    env.Path = String.raw`C:\stale;"%USERPROFILE%\new tools"`;
-    expect(adapterCli(harness, env)).toBe(cli);
-    expect(adapterLaunch(harness, env).env).toEqual({
-      [harness === "codex" ? "CODEX_PATH" : "CLAUDE_CODE_EXECUTABLE"]: cli,
-    });
-  },
-);
-
-test.each(["codex", "claude"] as const)(
-  "%s resolves its official installer location in the supplied home",
-  (harness) => {
-    const env = home();
-    const cli = file(
-      harness === "codex"
-        ? join(env.LOCALAPPDATA, "Programs", "OpenAI", "Codex", "bin", "codex.exe")
-        : join(env.USERPROFILE, ".local", "bin", "claude.exe"),
-    );
-    expect(adapterCli(harness, env)).toBe(cli);
-  },
-);

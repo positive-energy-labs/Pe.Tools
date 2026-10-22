@@ -4,7 +4,7 @@
  */
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { Context, Effect, Layer } from "effect";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, open, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
@@ -22,6 +22,7 @@ import { CaptureStore } from "../src/captures-route.ts";
 import { listPackages } from "../src/packages.ts";
 import { exportPod, importPod, writeZip } from "../src/pod-transfer.ts";
 import { human } from "./callers.ts";
+import { productPluginDecisionsPath } from "../src/product-paths.ts";
 
 let root: string;
 let pods: string;
@@ -115,66 +116,60 @@ const mixed = {
   "output/run-1/receipt.json": "{}",
 };
 
-test("import refuses broken authored Page syntax before installing any member", async () => {
-  const archivePath = join(root, "broken-page.zip");
-  await writeFile(
-    archivePath,
-    writeZip(
-      new Map([
-        [
-          "pod.json",
-          Buffer.from(
-            JSON.stringify({
-              schemaVersion: 2,
-              id: "broken-page",
-              name: "Broken",
-              entrypoints: [],
-            }),
-          ),
-        ],
-        ["pages/tour/index.html", Buffer.from("<script>const = ;</script>")],
-      ]),
-    ),
-  );
-  await expect(importPod({ archivePath })).rejects.toThrow(/JavaScript/);
-  await expect(readFile(join(pods, "broken-page", "pod.json"))).rejects.toMatchObject({
-    code: "ENOENT",
+test("identity duplicate checks include disabled siblings with invalid members", async () => {
+  await writePod("default", { "pod.json": '{"id":"same"}' });
+  await writePod("twin", { "pod.json": '{"id":"same"}', "assets/oversize.bin": "" });
+  const large = await open(join(pods, "twin/assets/oversize.bin"), "r+");
+  await large.truncate(64 * 1024 * 1024 + 1);
+  await large.close();
+  const decisions = productPluginDecisionsPath();
+  expect(decisions.startsWith(root)).toBe(true);
+  await mkdir(join(decisions, ".."), { recursive: true });
+  await writeFile(decisions, '{"pod:same":false}');
+  const result = await call("pod.list", { projection: "identity", folder: "default" });
+  expect(result.status).toBe(400);
+  expect(JSON.stringify(result.json)).toContain("duplicate manifest identity");
+});
+
+test("identity fully admits its target and observes manifest replacement and new duplicate claims", async () => {
+  await writePod("default", { "pod.json": '{"id":"before"}', "settings/kept.json": "{}" });
+  const decisions = productPluginDecisionsPath();
+  expect(decisions.startsWith(root)).toBe(true);
+  await mkdir(join(decisions, ".."), { recursive: true });
+  await writeFile(decisions, '{"pod:before":false}');
+  expect((await call("pod.list", { projection: "identity", folder: "default" })).status).toBe(400);
+  await writeFile(decisions, "{}");
+  expect((await call("pod.list", { projection: "identity", folder: "default" })).json).toEqual({
+    projection: "identity",
+    identity: { id: "before", folder: "default" },
   });
+  await writePod("default", { "pod.json": '{"id":"afterx"}' });
+  expect((await call("pod.list", { projection: "identity", folder: "default" })).json).toEqual({
+    projection: "identity",
+    identity: { id: "afterx", folder: "default" },
+  });
+  await writePod("new-twin", { "pod.json": '{"id":"afterx"}' });
+  const changed = await call("pod.list", { projection: "identity", folder: "default" });
+  expect(changed.status).toBe(400);
+  expect(JSON.stringify(changed.json)).toContain("duplicate manifest identity");
 });
 
-test("pod.capture answers the admitted bundle by manifest id from a renamed folder, with no native call", async () => {
-  await writePod("Renamed In Explorer", mixed);
-
-  const captured = await call("pod.capture", { pod: "ducts" });
-
-  expect(captured.status).toBe(200);
-  expect(captured.json.folder).toBe("Renamed In Explorer");
-  expect(captured.json.memberBundle.files.map((f: { path: string }) => f.path).sort()).toEqual([
-    "pages/tour/index.html",
-    "pod.json",
-    "settings/checks.json",
-    "src/Census.cs",
-  ]);
-  expect(captured.json.contributions.map((c: { key: string }) => c.key).sort()).toEqual([
-    "member:@ducts/settings/checks.json",
-    "page:@ducts/pages/tour",
-    "script:@ducts/src/Census.cs",
-  ]);
-  expect((await call("pod.capture", { pod: "missing" })).status).toBe(404);
-  expect(nativeCalls).toEqual([]);
-});
-
-test("pod.list carries each pod's canonical contribution keys", async () => {
-  await writePod("Renamed In Explorer", mixed);
-
-  const listed = await call("pod.list");
-
-  expect(listed.status).toBe(200);
-  expect(listed.json.pods[0].contributions.map((c: { key: string }) => c.key).sort()).toEqual([
-    "member:@ducts/settings/checks.json",
-    "page:@ducts/pages/tour",
-    "script:@ducts/src/Census.cs",
-  ]);
+test("identity refuses selected invalid members, links and unsafe output folders", async () => {
+  await writePod("default", { "pod.json": '{"id":"selected"}', "assets/oversize.bin": "" });
+  const large = await open(join(pods, "default/assets/oversize.bin"), "r+");
+  await large.truncate(64 * 1024 * 1024 + 1);
+  await large.close();
+  expect((await call("pod.list", { projection: "identity", folder: "default" })).status).toBe(400);
+  await rm(join(pods, "default/assets/oversize.bin"));
+  await mkdir(join(root, "outside"));
+  await symlink(join(root, "outside"), join(pods, "default/linked"), "junction");
+  expect((await call("pod.list", { projection: "identity", folder: "default" })).status).toBe(400);
+  expect((await call("pod.list", { projection: "identity", folder: "../outside" })).status).toBe(
+    400,
+  );
+  expect(
+    (await call("pod.list", { projection: "identity", folder: "default/nested" })).status,
+  ).toBe(400);
   expect(nativeCalls).toEqual([]);
 });
 

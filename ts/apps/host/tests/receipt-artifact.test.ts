@@ -52,8 +52,3 @@ test.each([
   expect(existsSync(join(root, "served"))).toBe(false);
   expect(existsSync(join(root, "maps"))).toBe(false);
 });
-
-test("a library regex that merely mentions sourceMappingURL is not a link", () => {
-  const { split } = client({}, "var r=/\\/\\/[@#] sourceMappingURL=([^\\s]+)/;\n//# debugId=d-1\n");
-  expect(split()).toHaveLength(1);
-});

@@ -12,6 +12,7 @@ import {
   findCapabilities,
   mentionOf,
 } from "@pe/agent-contracts";
+import { ActionResultError } from "../shared/takeoff-action-client.ts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
 import type { PodList } from "@pe/host-contracts/operation-types";
 import { readCatalog } from "./capability-tools.ts";
@@ -329,27 +330,50 @@ export class PeaCliCommands {
         "Get-Content .\\Probe.cs | pea script execute --stdin --source-name Probe.cs",
       ].join("\n"),
       run: async (ctx) => {
-        const scriptContent = await resolveCliScriptContent(ctx.values);
-        const sourcePath = firstNonBlank(ctx.values.sourcePath);
-        if (!scriptContent && !sourcePath)
-          throw new Error("Provide --file, --stdin, --script-content, or --source-path.");
-        if (scriptContent && sourcePath)
-          throw new Error(
-            "Provide inline content (--file/--stdin/--script-content) or --source-path, not both.",
-          );
+        try {
+          const scriptContent = await resolveCliScriptContent(ctx.values);
+          const sourcePath = firstNonBlank(ctx.values.sourcePath);
+          if (!scriptContent && !sourcePath)
+            throw new Error("Provide --file, --stdin, --script-content, or --source-path.");
+          if (scriptContent && sourcePath)
+            throw new Error(
+              "Provide inline content (--file/--stdin/--script-content) or --source-path, not both.",
+            );
 
-        const timeoutSeconds = asOptionalNumber(ctx.values.timeoutSeconds);
-        const result = await this.createScriptingTools(ctx.values, timeoutSeconds).execute({
-          scriptContent,
-          sourcePath,
-          workspaceKey: ctx.values.workspace,
-          sourceName: firstNonBlank(ctx.values.sourceName),
-          permissionMode: parseCliPermissionMode(ctx.values.permissionMode),
-          timeoutSeconds,
-        } satisfies ScriptExecuteInput);
-        if (result.status !== "Succeeded") process.exitCode = 1;
-        if (ctx.values.json) process.stdout.write(`${JSON.stringify(result)}\n`);
-        else writeScriptExecution(result);
+          const timeoutSeconds = asOptionalNumber(ctx.values.timeoutSeconds);
+          const result = await this.createScriptingTools(ctx.values, timeoutSeconds).execute({
+            scriptContent,
+            sourcePath,
+            workspaceKey: ctx.values.workspace,
+            sourceName: firstNonBlank(ctx.values.sourceName),
+            permissionMode: parseCliPermissionMode(ctx.values.permissionMode),
+            timeoutSeconds,
+          } satisfies ScriptExecuteInput);
+          if (result.status !== "Succeeded") process.exitCode = 1;
+          if (ctx.values.json) process.stdout.write(`${JSON.stringify(result)}\n`);
+          else writeScriptExecution(result);
+        } catch (error) {
+          if (!ctx.values.json) throw error;
+          process.exitCode = 1;
+          const action = error instanceof ActionResultError ? error.action : undefined;
+          process.stdout.write(
+            `${JSON.stringify({
+              error: error instanceof Error ? error.message : String(error),
+              ...(action
+                ? {
+                    actionId: action.id,
+                    state: action.state,
+                    ...("status" in action ? { status: action.status } : {}),
+                    ...("evidence" in action && action.evidence
+                      ? { evidence: { result: scriptFailureDiagnostics(action.evidence.result) } }
+                      : {}),
+                    ...("acceptance" in action ? { acceptance: action.acceptance } : {}),
+                  }
+                : {}),
+              ...(error instanceof Error && "refusal" in error ? { refusal: error.refusal } : {}),
+            })}\n`,
+          );
+        }
       },
     });
   }
@@ -395,6 +419,8 @@ export class PeaCliCommands {
       toKebab: true,
       run: async (ctx) => {
         const result = await this.createScriptingTools(ctx.values).listPods();
+        if (!("pods" in result))
+          throw Error("pod.list returned identity instead of full inventory");
         writeScriptPodList(result);
       },
     });
@@ -623,4 +649,27 @@ function parseOptionalJson(value: unknown, file: unknown): unknown {
   if (text && path) throw new Error("Use either --request or --request-file, not both.");
   if (!text && !path) return undefined;
   return JSON.parse(path ? readFileSync(path, "utf8") : text!);
+}
+
+/** Failure stdout is diagnostic evidence, not a source/assembly/data dump; actionId recovers the receipt. */
+function scriptFailureDiagnostics(value: unknown) {
+  if (!value || typeof value !== "object") return undefined;
+  const result: Record<string, unknown> = Object.fromEntries(
+    Object.entries(value).filter(([key]) => ["status", "executionId", "diagnostics"].includes(key)),
+  );
+  if (Array.isArray(result.diagnostics) && result.diagnostics.length > 64) {
+    result.diagnosticsTotal = result.diagnostics.length;
+    result.diagnosticsTruncated = true;
+    const priority = (diagnostic: unknown) => {
+      const severity =
+        diagnostic && typeof diagnostic === "object" && "severity" in diagnostic
+          ? diagnostic.severity
+          : undefined;
+      return severity === "Error" ? 0 : severity === "Warning" ? 1 : 2;
+    };
+    result.diagnostics = [...result.diagnostics]
+      .sort((a: unknown, b: unknown) => priority(a) - priority(b))
+      .slice(0, 64);
+  }
+  return result;
 }

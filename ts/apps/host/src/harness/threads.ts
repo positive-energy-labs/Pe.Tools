@@ -31,6 +31,10 @@ import {
   attachmentRefusal,
   createThreadRequestSchema,
   emptyThreadLifecycle,
+  harnessThreadSummarySchema,
+  tabLink,
+  THREAD_TABS_MAX,
+  threadTabRequestSchema,
   threadLifecycleSchema,
   updateThreadRequestSchema,
   forkThreadRequestSchema,
@@ -171,10 +175,10 @@ export type HarnessThreadsOptions = {
 };
 
 /** A turn with no session update for this long gets a `waiting` marker, and again each period. */
-export const WAITING_MS = 60_000;
+const WAITING_MS = 60_000;
 export const IDLE_CHILD_MS = 15 * 60_000;
 /** How long a prompt waits for the turn it interrupts to end before refusing. */
-export const INTERRUPT_MS = 10_000;
+const INTERRUPT_MS = 10_000;
 /** Thrown by `input` on a body route sent without a JSON content type; served as 415. */
 class NotJson extends Error {}
 const warn = (message: string) => Effect.runSync(Effect.logWarning(message));
@@ -373,6 +377,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       const meta = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8")) as Meta;
       meta.head = threadHeadSchema.safeParse(meta.head ?? emptyThreadHead).data ?? emptyThreadHead;
       meta.lifecycle = threadLifecycleSchema.parse(meta.lifecycle ?? emptyThreadLifecycle());
+      meta.tabs = harnessThreadSummarySchema.shape.tabs.parse(meta.tabs);
       meta.forkOf ??= null;
       meta.promptCapabilities ??= null;
       // Threads from before providers ran on the harness's own login.
@@ -459,6 +464,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
       forkOf: null,
       promptCapabilities: null,
       lifecycle: emptyThreadLifecycle(),
+      tabs: [],
     });
     return t;
   }
@@ -554,6 +560,7 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
     cursor: options.log.last,
     head: reading(t.meta.head),
     lifecycle: t.meta.lifecycle,
+    tabs: t.meta.tabs,
     activity: activity(t),
   });
 
@@ -864,7 +871,21 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         elicitation: { form: {} },
       },
     });
-    const request = { cwd: options.worldRoot, mcpServers: [options.mcpServer(context)] };
+    // The user's own Claude settings (plugins, hooks, skills) stay out of Pea; the product home's
+    // project settings stay in. Codex's counterpart is the project config in the world root.
+    const request = {
+      cwd: options.worldRoot,
+      mcpServers: [options.mcpServer(context)],
+      // Claude Code truncates MCP server instructions; the whole kernel rides the system prompt.
+      ...(harness === "claude"
+        ? {
+            _meta: {
+              systemPrompt: { append: await options.developerInstructions?.() },
+              claudeCode: { options: { settingSources: ["project", "local"] } },
+            },
+          }
+        : {}),
+    };
     // No session verb restores the user's model or traits (drive 2026-10-01: a sonnet thread came
     // back opus), so both are re-applied below.
     const wantModel = t.meta.modelId;
@@ -1158,12 +1179,22 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
   ) {
     clearIdle(t);
     t.running = turnId;
+    // The head as of delivery is the document this turn runs against; the record names it itself.
+    const head = readHead(t.meta.id);
     append(t, {
       kind: "prompt",
       turnId,
       text,
       ...(attachments ? { attachments } : {}),
       ...(mentions ? { mentions } : {}),
+      ...(head.defaultTarget
+        ? {
+            target: {
+              request: head.defaultTarget,
+              ...(head.displayLabel ? { label: head.displayLabel } : {}),
+            },
+          }
+        : {}),
     });
     arm(t);
     let outcome = "failed";
@@ -1517,6 +1548,46 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
         notifySummaries();
         return json(summary(t));
       }
+      case "thread.tabs": {
+        const change = await input(threadTabRequestSchema);
+        // No await below: the tab list is read, changed and written in one tick, so no lifecycle
+        // or tab write interleaves (one in-memory meta, written whole by `writeMeta`).
+        const tabs = t.meta.tabs;
+        const index = tabs.findIndex((tab) => tab.id === change.id);
+        if (change.op === "close") {
+          if (index < 0) return json(summary(t));
+          tabs.splice(index, 1);
+        } else {
+          const canonical = tabLink(change.route, change.link);
+          if (!canonical.ok) return json({ error: canonical.error }, 400);
+          const held = index < 0 ? null : tabs[index]!;
+          if (held && held.route !== canonical.route)
+            return json(
+              { error: `Tab ${change.id} is a ${held.route} tab, not ${canonical.route}` },
+              409,
+            );
+          if (held?.link === canonical.link) return json(summary(t));
+          if (!held && tabs.length >= THREAD_TABS_MAX)
+            return json(
+              {
+                error: `A thread keeps ${THREAD_TABS_MAX} tabs; close one first`,
+                thread: summary(t),
+              },
+              409,
+            );
+          const tab = {
+            id: change.id,
+            route: canonical.route,
+            link: canonical.link,
+            at: new Date().toISOString(),
+          };
+          if (held) tabs[index] = tab;
+          else tabs.push(tab);
+        }
+        writeMeta(t);
+        notifySummaries();
+        return json(summary(t));
+      }
       case "thread.remove":
         threads.delete(t.meta.id);
         await stop(t);
@@ -1657,6 +1728,8 @@ export function createHarnessThreads(options: HarnessThreadsOptions) {
             traitValues: same ? { ...t.meta.traitValues } : {},
             forkOf: { threadId: t.meta.id, acpSessionId: same ? t.meta.acpSessionId : null },
             lifecycle: emptyThreadLifecycle(),
+            // A fork starts where its parent stood: the same tabs and Places.
+            tabs: t.meta.tabs.map((tab) => ({ ...tab })),
           },
           [...t.events],
         );

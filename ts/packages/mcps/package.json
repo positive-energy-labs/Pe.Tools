@@ -36,6 +36,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "catalog:",
     "@pe/agent-contracts": "workspace:*",
+    "@pe/ducts-domain": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/runtime": "workspace:*",
     "effect": "4.0.0-beta.92",

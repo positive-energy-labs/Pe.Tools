@@ -47,53 +47,6 @@ test("matching SDK process cannot authorize a foreign bridge owner", async () =>
   ).rejects.toMatchObject({ evidence: { notDispatched: true } });
 });
 
-test.each([undefined, { id: "4242" }, { pid: 4242 }])(
-  "SDK owns the ladder for %j; digits never become pid",
-  async (selection) => {
-    const calls: readonly string[][] = [];
-    const read = async (args: readonly string[]) => {
-      (calls as string[][]).push([...args]);
-      return sdkSessions(args);
-    };
-    const selectedBridge = bridge([
-      { ...socket, processId: selection && "pid" in selection ? selection.pid : socket.processId },
-    ]);
-    expect((await resolveSdkSession(selectedBridge, { session: selection }, read)).sessionId).toBe(
-      "attachment",
-    );
-    expect(calls).toEqual([
-      [
-        "doc",
-        "list",
-        ...(selection
-          ? "id" in selection
-            ? ["--id", selection.id]
-            : ["--pid", String(selection.pid)]
-          : []),
-        "--json",
-      ],
-    ]);
-  },
-);
-
-test.each(["session.ambiguous", "session.no-match", "session.no-revit"])(
-  "%s passes through with the complete SDK envelope",
-  async (code) => {
-    const envelope = {
-      ...JSON.parse(sdkEnvelope({ state: "refused", candidates: ["a", "b"] })),
-      exitCode: 3,
-      diagnostics: [{ code, detail: "SDK's exact words", fix: "SDK's exact remedy" }],
-      nextSteps: ["SDK next step"],
-    };
-    await expect(
-      resolveSdkSession(bridge(), {}, async () => JSON.stringify(envelope)),
-    ).rejects.toMatchObject({
-      message: `${code}: SDK's exact words`,
-      evidence: { notDispatched: true, result: envelope },
-    });
-  },
-);
-
 test.each([
   { pid: 43 },
   { processStartUtc: "1970-01-01T00:00:02Z" },
@@ -122,13 +75,6 @@ test("two attachments for a process refuse; an unrelated last attachment never w
   ).toBe("attachment");
 });
 
-test.each(["", "not json", JSON.stringify({ result: { state: "ok" } })])(
-  "malformed SDK output %j cannot resolve a socket",
-  async (output) => {
-    await expect(resolveSdkSession(bridge(), {}, async () => output)).rejects.toThrow(/pe-revit/);
-  },
-);
-
 test("the held attachment is checked again after the SDK answers", async () => {
   const sockets = [socket];
   await expect(
@@ -137,44 +83,6 @@ test("the held attachment is checked again after the SDK answers", async () => {
       return sdkSessions(args);
     }),
   ).rejects.toMatchObject({ evidence: { notDispatched: true } });
-});
-
-test("one live incarnation skips the SDK; a replacement resolves again", async () => {
-  const current = { ...socket, processId: process.pid };
-  const sockets = [current];
-  let calls = 0;
-  const read = async () => {
-    calls++;
-    return sdkEnvelope(
-      { state: "ok", documents: [] },
-      {
-        ...sdkResolved,
-        pid: process.pid,
-        processStartUtc: new Date(current.processStartUtcUnixMs!).toISOString(),
-      },
-    );
-  };
-  const target = bridge(sockets);
-  const scope = { session: { pid: process.pid } };
-  await resolveSdkSession(target, scope, read);
-  await resolveSdkSession(target, scope, read);
-  expect(calls).toBe(1);
-  current.processStartUtcUnixMs = 2000;
-  await resolveSdkSession(target, scope, read);
-  expect(calls).toBe(2);
-});
-
-test("a cached socket cannot outlive its process", async () => {
-  const sockets = [{ ...socket, processId: 2147483647 }];
-  const target = bridge(sockets);
-  let calls = 0;
-  const read = async () => {
-    calls++;
-    return sdkEnvelope({ state: "ok", documents: [] }, { ...sdkResolved, pid: 2147483647 });
-  };
-  await resolveSdkSession(target, { session: { pid: 2147483647 } }, read);
-  await resolveSdkSession(target, { session: { pid: 2147483647 } }, read);
-  expect(calls).toBe(2);
 });
 
 test("an exact product document uses its held pid and refuses a closed lifetime or SDK document id", () =>

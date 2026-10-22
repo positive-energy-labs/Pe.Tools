@@ -2,6 +2,7 @@ import { Deferred, Effect, Option } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import {
   BRIDGE_PATH,
+  HOST_CONTEXT_HEADER,
   HOST_RUNTIME_SERVICE_HEADER,
   HOST_RUNTIME_SERVICE_QUERY,
 } from "@pe/host-contracts/contracts";
@@ -18,6 +19,7 @@ import { matchPeRoute } from "@pe/agent-contracts/pe-api";
 import {
   admitRequest,
   callerOf,
+  browserContextHeaders,
   mintBrowserContext,
   Refused,
   REFUSAL_HEADER,
@@ -26,7 +28,7 @@ import {
 import { recordHostFact, type ReceiptExport } from "./receipt-export.ts";
 import { HostLifecycle } from "./host-lifecycle.ts";
 import { authorizeShutdownFor } from "@pe/host-contracts/pe-service-host";
-import { deviceCredential, type Devices } from "./remote-device.ts";
+import { deviceCredential, DEVICE_COOKIE, type Devices } from "./remote-device.ts";
 import type { DeviceTransport } from "@pe/host-contracts/pe-api";
 
 export type IdentityResult =
@@ -308,6 +310,9 @@ export async function readRequestIdentity(
             device: device?.id,
             headers: {
               ...result.headers,
+              ...(headers[HOST_CONTEXT_HEADER]
+                ? { [HOST_CONTEXT_HEADER]: headers[HOST_CONTEXT_HEADER] }
+                : {}),
               ...(credential?.audience === "mcp"
                 ? { authorization: `Bearer ${credential.token}` }
                 : {}),
@@ -331,6 +336,24 @@ export async function readRequestIdentity(
         if (!(error instanceof Refused)) throw error;
         result = refuse(error.refusal.code, error.refusal.reason);
       }
+    }
+    if ("principal" in result) {
+      const selected = browserContextHeaders(result.principal, headers);
+      const cookies = [
+        selected.cookie,
+        browser && device && credential?.audience === "browser"
+          ? `${DEVICE_COOKIE}=${credential.token}`
+          : undefined,
+      ].filter((value): value is string => value !== undefined);
+      result = {
+        ...result,
+        headers: {
+          ...result.headers,
+          ...selected,
+          ...(result.principal.kind === "remote" ? { host: result.principal.authority } : {}),
+          ...(cookies.length ? { cookie: cookies.join("; ") } : {}),
+        },
+      };
     }
     if ("principal" in result && !isRemote && navigation && !pathname.startsWith("/pages"))
       result = { ...result, setCookie: mintBrowserContext(result.principal) };

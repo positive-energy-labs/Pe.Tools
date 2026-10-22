@@ -14,6 +14,7 @@ import type { Column } from "@pe/kit/table/model";
 import { parseConditionNumber } from "@pe/kit/table/view";
 import type { ScheduleGridSnapshot as Snapshot } from "@pe/agent-contracts";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { revitTarget } from "@pe/kit/lang/row";
 
 type ScheduleRow = Snapshot["rows"][number];
 type Binding = ScheduleRow["bindings"][number];
@@ -214,12 +215,12 @@ export function useScheduleGridColumns(
         right: true,
         width: "w-12",
         lock: true,
-        sort: (row) => row.rowNumber,
+        // No sort: row-number order is the schedule's own order, which clearing every sort restores.
         cell: (row) => (
           <TooltipHint
             content={`row ${row.rowNumber} · ${row.kind}${row.subjectIds.length > 0 ? ` · elements [${row.subjectIds.join(",")}]` : ""}`}
           >
-            <span>
+            <span {...revitTarget(row.subjectIds)}>
               <StateCell
                 scale="row"
                 value={`${row.rowNumber}${row.subjectIds.length > 1 ? ` ×${row.subjectIds.length}` : ""}`}

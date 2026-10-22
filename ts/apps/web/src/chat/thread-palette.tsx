@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlarmClock,
   AlarmClockOff,
@@ -23,7 +23,16 @@ import {
   Trash2,
   type LucideIcon,
 } from "lucide-react";
-import { type DocumentRequest, type Provider, type UpdateThreadRequest } from "@pe/agent-contracts";
+import {
+  linkTo,
+  readLink,
+  routeAddresses,
+  type RouteField,
+  type RouteKey,
+  type DocumentRequest,
+  type Provider,
+  type UpdateThreadRequest,
+} from "@pe/agent-contracts";
 import { Dialog, DialogContent, DialogTitle } from "#/components/lang/dialog";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { CommandPalette } from "#/components/lang/command-palette";
@@ -132,7 +141,7 @@ function wakeLabel(at: Date, now = new Date()): string {
     : `${at.toLocaleDateString([], { weekday: "short" })} ${time}`;
 }
 
-function ThreadActions({
+function ThreadActionsMenu({
   thread,
   open,
   setOpen,
@@ -174,202 +183,219 @@ function ThreadActions({
   const copy = (text: string, what: string) =>
     void navigator.clipboard.writeText(text).catch(() => setFailure(`Could not copy the ${what}`));
   const lifecycle = thread.lifecycle;
-  const forks = verbs.providers.filter(isReady);
-  const now = new Date();
-  const plan = threadActions(group);
-  const verbOf = (id: ThreadAction["id"]) => plan.find((verb) => verb.id === id)!;
-  const lifecycleAction = (
-    id: ThreadAction["id"],
-    icon: LucideIcon,
-    groupName?: string,
-  ): Action => {
-    const verb = verbOf(id);
-    return {
-      id: verb.id,
-      label: verb.label,
-      sub:
-        verb.note ??
-        (verb.label === "Wake now" && count === 1 && lifecycle.snoozedUntil
-          ? `snoozed until ${wakeLabel(new Date(lifecycle.snoozedUntil), now)}`
-          : undefined),
-      icon,
-      group: groupName,
-      refusal: verb.refusal,
-      run: () => apply(verb),
+  // Built when the menu opens: 100+ closed rows must not each compute presets and wake labels.
+  const buildActions = (): Action[] => {
+    const forks = verbs.providers.filter(isReady);
+    const now = new Date();
+    const plan = threadActions(group);
+    const verbOf = (id: ThreadAction["id"]) => plan.find((verb) => verb.id === id)!;
+    const lifecycleAction = (
+      id: ThreadAction["id"],
+      icon: LucideIcon,
+      groupName?: string,
+    ): Action => {
+      const verb = verbOf(id);
+      return {
+        id: verb.id,
+        label: verb.label,
+        sub:
+          verb.note ??
+          (verb.label === "Wake now" && count === 1 && lifecycle.snoozedUntil
+            ? `snoozed until ${wakeLabel(new Date(lifecycle.snoozedUntil), now)}`
+            : undefined),
+        icon,
+        group: groupName,
+        refusal: verb.refusal,
+        run: () => apply(verb),
+      };
     };
+    const snooze = verbOf("snooze");
+    const pinIcon = verbOf("pin").label === "Unpin" ? PinOff : Pin;
+    const settleIcon = verbOf("settle").label === "Reopen" ? RotateCcw : CircleCheck;
+    const unreadIcon = verbOf("unread").label === "Mark read" ? MailOpen : Mail;
+    const archiveIcon = verbOf("archive").label === "Restore" ? ArchiveRestore : Archive;
+    return [
+      lifecycleAction("pin", pinIcon),
+      lifecycleAction("settle", settleIcon),
+      snooze.label === "Wake now"
+        ? lifecycleAction("snooze", AlarmClockOff)
+        : {
+            id: "snooze",
+            label: "Snooze",
+            sub: snooze.note,
+            icon: AlarmClock,
+            refusal: snooze.refusal,
+            children: [
+              ...snoozePresets(now).map((preset) => ({
+                id: `snooze:${preset.id}`,
+                label: preset.label,
+                sub: wakeLabel(preset.at, now),
+                reading: true,
+                run: () => apply(snooze, () => ({ snoozedUntil: preset.at.toISOString() })),
+              })),
+              { id: "snooze:custom", label: "Custom…", run: () => setForm("snooze") },
+            ],
+          },
+      lifecycleAction("unread", unreadIcon, " "),
+      {
+        id: "rename",
+        label: "Rename…",
+        icon: Pencil,
+        group: " ",
+        refusal: oneThreadRefusal("Rename", count),
+        run: () => {
+          setTitle(thread.title);
+          setForm("rename");
+        },
+      },
+      ...(thread.head.defaultTarget
+        ? [
+            {
+              id: "new-target",
+              label: "New thread on this target",
+              sub: count > 1 ? undefined : targetLabel(thread),
+              icon: SquarePen,
+              group: " ",
+              refusal: oneThreadRefusal("New thread", count) ?? verbOf("new-target").refusal,
+              run: () => verbs.onNewTarget(thread.head.defaultTarget),
+            },
+          ]
+        : []),
+      ...(forks.length
+        ? [
+            {
+              id: "fork",
+              label: "Fork",
+              icon: GitFork,
+              group: " ",
+              refusal:
+                oneThreadRefusal("Fork", count) ??
+                (busy ? "wait for the turn to finish" : undefined),
+              children: forks.map((provider) => ({
+                id: `fork:${provider.id}`,
+                label: provider.name,
+                run: () => verbs.onFork(thread.id, provider.id),
+              })),
+            },
+          ]
+        : []),
+      ...(onFilterTarget
+        ? [
+            {
+              id: "filter",
+              label: "Filter by target",
+              sub: count > 1 ? undefined : targetLabel(thread),
+              icon: ListFilter,
+              group: "  ",
+              refusal: oneThreadRefusal("Filter", count),
+              run: onFilterTarget,
+            },
+          ]
+        : []),
+      {
+        id: "export",
+        label: "Download transcript",
+        icon: Download,
+        group: "  ",
+        refusal: oneThreadRefusal("Export", count),
+        run: () => {
+          void (async () => {
+            const response = await peClient.response("thread.export", {
+              params: { id: thread.id },
+            });
+            if (!response.ok) throw Error((await readPeError(response)).message);
+            const url = URL.createObjectURL(await response.blob());
+            const link = document.createElement("a");
+            link.href = url;
+            link.download =
+              /filename="([^"]+)"/.exec(response.headers.get("content-disposition") ?? "")?.[1] ??
+              `${thread.id}.json`;
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+          })().catch((error: unknown) =>
+            setFailure(error instanceof Error ? error.message : "Could not export this thread"),
+          );
+        },
+      },
+      {
+        id: "copy",
+        label: "Copy",
+        icon: Copy,
+        group: "  ",
+        refusal: oneThreadRefusal("Copy", count),
+        children: [
+          {
+            id: "copy:link",
+            label: "Thread link",
+            run: () => {
+              const url = new URL(location.href);
+              const route =
+                (Object.keys(routeAddresses) as RouteKey[]).find(
+                  (key) => routeAddresses[key].path === url.pathname,
+                ) ?? "pea";
+              const { page, carry } = readLink(route, Object.fromEntries(url.searchParams));
+              const fields: Record<string, RouteField> = routeAddresses[route].fields;
+              const shareable = Object.fromEntries(
+                Object.entries(page).filter(([key]) => fields[key]?.share !== false),
+              );
+              copy(
+                new URL(linkTo(route, shareable, { ...carry, thread: thread.id }), url.origin).href,
+                "thread link",
+              );
+            },
+          },
+          {
+            id: "copy:id",
+            label: "Thread id",
+            sub: thread.id,
+            reading: true,
+            run: () => copy(thread.id, "thread id"),
+          },
+          ...(thread.head.defaultTarget
+            ? [
+                {
+                  id: "copy:target",
+                  label: "Exact target",
+                  sub: targetLabel(thread),
+                  run: () => copy(JSON.stringify(thread.head.defaultTarget), "target"),
+                },
+              ]
+            : []),
+        ],
+      },
+      {
+        id: "auto",
+        label: "Auto-settle",
+        sub:
+          count > 1
+            ? undefined
+            : lifecycle.autoSettle === "manual"
+              ? "manual only"
+              : `after ${lifecycle.autoSettle === "1d" ? "1 day" : "7 days"} idle`,
+        icon: Timer,
+        group: "  ",
+        refusal: oneThreadRefusal("Auto-settle", count),
+        children: (["manual", "1d", "7d"] as const).map((policy) => ({
+          id: `auto:${policy}`,
+          label:
+            policy === "manual"
+              ? "Manual only"
+              : `After ${policy === "1d" ? "1 day" : "7 days"} of inactivity`,
+          active: lifecycle.autoSettle === policy,
+          run: () => void verbs.onUpdate(thread.id, { autoSettle: policy }),
+        })),
+      },
+      lifecycleAction("archive", archiveIcon, "   "),
+      {
+        id: "delete",
+        label: "Delete permanently…",
+        icon: Trash2,
+        group: "   ",
+        refusal: oneThreadRefusal("Delete", count) ?? (busy ? "finish the work first" : undefined),
+        run: () => setForm("delete"),
+      },
+    ];
   };
-  const snooze = verbOf("snooze");
-  const pinIcon = verbOf("pin").label === "Unpin" ? PinOff : Pin;
-  const settleIcon = verbOf("settle").label === "Reopen" ? RotateCcw : CircleCheck;
-  const unreadIcon = verbOf("unread").label === "Mark read" ? MailOpen : Mail;
-  const archiveIcon = verbOf("archive").label === "Restore" ? ArchiveRestore : Archive;
-  const actions: Action[] = [
-    lifecycleAction("pin", pinIcon),
-    lifecycleAction("settle", settleIcon),
-    snooze.label === "Wake now"
-      ? lifecycleAction("snooze", AlarmClockOff)
-      : {
-          id: "snooze",
-          label: "Snooze",
-          sub: snooze.note,
-          icon: AlarmClock,
-          refusal: snooze.refusal,
-          children: [
-            ...snoozePresets(now).map((preset) => ({
-              id: `snooze:${preset.id}`,
-              label: preset.label,
-              sub: wakeLabel(preset.at, now),
-              reading: true,
-              run: () => apply(snooze, () => ({ snoozedUntil: preset.at.toISOString() })),
-            })),
-            { id: "snooze:custom", label: "Custom…", run: () => setForm("snooze") },
-          ],
-        },
-    lifecycleAction("unread", unreadIcon, " "),
-    {
-      id: "rename",
-      label: "Rename…",
-      icon: Pencil,
-      group: " ",
-      refusal: oneThreadRefusal("Rename", count),
-      run: () => {
-        setTitle(thread.title);
-        setForm("rename");
-      },
-    },
-    ...(thread.head.defaultTarget
-      ? [
-          {
-            id: "new-target",
-            label: "New thread on this target",
-            sub: count > 1 ? undefined : targetLabel(thread),
-            icon: SquarePen,
-            group: " ",
-            refusal: oneThreadRefusal("New thread", count) ?? verbOf("new-target").refusal,
-            run: () => verbs.onNewTarget(thread.head.defaultTarget),
-          },
-        ]
-      : []),
-    ...(forks.length
-      ? [
-          {
-            id: "fork",
-            label: "Fork",
-            icon: GitFork,
-            group: " ",
-            refusal:
-              oneThreadRefusal("Fork", count) ?? (busy ? "wait for the turn to finish" : undefined),
-            children: forks.map((provider) => ({
-              id: `fork:${provider.id}`,
-              label: provider.name,
-              run: () => verbs.onFork(thread.id, provider.id),
-            })),
-          },
-        ]
-      : []),
-    ...(onFilterTarget
-      ? [
-          {
-            id: "filter",
-            label: "Filter by target",
-            sub: count > 1 ? undefined : targetLabel(thread),
-            icon: ListFilter,
-            group: "  ",
-            refusal: oneThreadRefusal("Filter", count),
-            run: onFilterTarget,
-          },
-        ]
-      : []),
-    {
-      id: "export",
-      label: "Download transcript",
-      icon: Download,
-      group: "  ",
-      refusal: oneThreadRefusal("Export", count),
-      run: () => {
-        void (async () => {
-          const response = await peClient.response("thread.export", { params: { id: thread.id } });
-          if (!response.ok) throw Error((await readPeError(response)).message);
-          const url = URL.createObjectURL(await response.blob());
-          const link = document.createElement("a");
-          link.href = url;
-          link.download =
-            /filename="([^"]+)"/.exec(response.headers.get("content-disposition") ?? "")?.[1] ??
-            `${thread.id}.json`;
-          link.click();
-          setTimeout(() => URL.revokeObjectURL(url), 1000);
-        })().catch((error: unknown) =>
-          setFailure(error instanceof Error ? error.message : "Could not export this thread"),
-        );
-      },
-    },
-    {
-      id: "copy",
-      label: "Copy",
-      icon: Copy,
-      group: "  ",
-      refusal: oneThreadRefusal("Copy", count),
-      children: [
-        {
-          id: "copy:link",
-          label: "Thread link",
-          run: () => {
-            const url = new URL(location.href);
-            url.searchParams.set("thread", thread.id);
-            copy(url.href, "thread link");
-          },
-        },
-        {
-          id: "copy:id",
-          label: "Thread id",
-          sub: thread.id,
-          reading: true,
-          run: () => copy(thread.id, "thread id"),
-        },
-        ...(thread.head.defaultTarget
-          ? [
-              {
-                id: "copy:target",
-                label: "Exact target",
-                sub: targetLabel(thread),
-                run: () => copy(JSON.stringify(thread.head.defaultTarget), "target"),
-              },
-            ]
-          : []),
-      ],
-    },
-    {
-      id: "auto",
-      label: "Auto-settle",
-      sub:
-        count > 1
-          ? undefined
-          : lifecycle.autoSettle === "manual"
-            ? "manual only"
-            : `after ${lifecycle.autoSettle === "1d" ? "1 day" : "7 days"} idle`,
-      icon: Timer,
-      group: "  ",
-      refusal: oneThreadRefusal("Auto-settle", count),
-      children: (["manual", "1d", "7d"] as const).map((policy) => ({
-        id: `auto:${policy}`,
-        label:
-          policy === "manual"
-            ? "Manual only"
-            : `After ${policy === "1d" ? "1 day" : "7 days"} of inactivity`,
-        active: lifecycle.autoSettle === policy,
-        run: () => void verbs.onUpdate(thread.id, { autoSettle: policy }),
-      })),
-    },
-    lifecycleAction("archive", archiveIcon, "   "),
-    {
-      id: "delete",
-      label: "Delete permanently…",
-      icon: Trash2,
-      group: "   ",
-      refusal: oneThreadRefusal("Delete", count) ?? (busy ? "finish the work first" : undefined),
-      run: () => setForm("delete"),
-    },
-  ];
   // One line per verb (T3): its computed fact (a wake time, the policy, the target) trails on
   // the right, then the drill-in chevron.
   const actionRow = (item: Action) => ({
@@ -409,7 +435,7 @@ function ThreadActions({
         levels={[
           {
             label: "",
-            items: () => actions,
+            items: buildActions,
             onPick: (item) => {
               if (item.children) return;
               setOpen(false);
@@ -497,7 +523,9 @@ function ThreadActions({
                     );
                     return;
                   }
-                  apply(snooze, () => ({ snoozedUntil: time.toISOString() }));
+                  apply(threadActions(group).find((verb) => verb.id === "snooze")!, () => ({
+                    snoozedUntil: time.toISOString(),
+                  }));
                   setForm(null);
                 }}
               >
@@ -540,6 +568,18 @@ function ThreadTime({ thread, now }: { thread: RosterThread; now: number }) {
     </TooltipHint>
   );
 }
+
+/**
+ * A row's menu re-renders only when its data changes. The closures the sidebar mints per render
+ * (`setOpen`, `onMany`, `onFilterTarget`) close over this row's thread and stable setters, so
+ * they are not compared; the thread, the open flag, the selection and the verbs are.
+ */
+const ThreadActions = memo(ThreadActionsMenu, (before, after) => {
+  const { setOpen: _a, onMany: _b, onFilterTarget: _c, ...was } = before;
+  const { setOpen: _d, onMany: _e, onFilterTarget: _f, ...now } = after;
+  const keys = Object.keys(was) as (keyof typeof was)[];
+  return keys.length === Object.keys(now).length && keys.every((key) => was[key] === now[key]);
+});
 
 function CompactThreadTarget({ thread }: { thread: RosterThread }) {
   return thread.head.defaultTarget ? (
@@ -585,24 +625,24 @@ export function ThreadsSidebar({
   const [now, setNow] = useState(Date.now);
   const previousThreads = useRef(new Map<string, RosterThread>());
   const [woken, setWoken] = useState<ReadonlySet<string>>(new Set());
+  const wokenRef = useRef(woken);
+  wokenRef.current = woken;
   useEffect(() => {
     // shortcut: wake marks survive only this sidebar mount, persist a wake reason if reloads must retain them.
     const priorThreads = previousThreads.current;
-    setWoken((previous) => {
-      const next = new Set<string>();
-      for (const thread of threads) {
-        if (
-          thread.id !== currentThreadId &&
-          shelfOf(thread, now) !== "snoozed" &&
-          shelfOf(thread, now) !== "archived" &&
-          (previous.has(thread.id) || wokeFromSnooze(priorThreads.get(thread.id), thread, now))
-        )
-          next.add(thread.id);
-      }
-      return next.size === previous.size && [...next].every((id) => previous.has(id))
-        ? previous
-        : next;
-    });
+    const previous = wokenRef.current;
+    const next = new Set<string>();
+    for (const thread of threads) {
+      if (
+        thread.id !== currentThreadId &&
+        shelfOf(thread, now) !== "snoozed" &&
+        shelfOf(thread, now) !== "archived" &&
+        (previous.has(thread.id) || wokeFromSnooze(priorThreads.get(thread.id), thread, now))
+      )
+        next.add(thread.id);
+    }
+    // A setter that would not change the set does not run.
+    if (next.size !== previous.size || ![...next].every((id) => previous.has(id))) setWoken(next);
     previousThreads.current = new Map(threads.map((thread) => [thread.id, thread]));
   }, [threads, currentThreadId, now]);
   useEffect(() => {

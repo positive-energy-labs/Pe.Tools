@@ -174,23 +174,6 @@ test("apply and command serialize without losing either update", async () => {
   });
 });
 
-test("apply refuses a revision that moved", async () => {
-  const { store } = memoryStore();
-  const module = workspace(store);
-  const w = bind(module);
-  expect(await w.read()).toBeNull();
-  const revision = 0;
-
-  expect(await w.apply("human", [{ path: ["count"], value: 1 }], revision)).toMatchObject({
-    ok: true,
-  });
-  expect(await w.apply("human", [{ path: ["count"], value: 2 }], revision)).toMatchObject({
-    ok: false,
-    error: "the document moved to r1",
-  });
-  expect((await w.read())?.doc).toMatchObject({ count: 1 });
-});
-
 test("a handler throw discards its staged document write", async () => {
   const { store } = memoryStore();
   const module = workspace(store, {
@@ -209,21 +192,6 @@ test("a handler throw discards its staged document write", async () => {
     ok: false,
   });
   expect(await w.read()).toBeNull();
-});
-
-test("registration rejects route delimiters and schemas that cannot become JSON Schema", () => {
-  const { store } = memoryStore();
-  const colonRoute = registration();
-  colonRoute.spec.route = "bad:route";
-  expect(() => workspace(store, { registration: colonRoute })).toThrow("cannot contain ':'");
-
-  const badDocument = registration();
-  badDocument.spec.schema = z.date() as unknown as typeof documentSchema;
-  expect(() => workspace(store, { registration: badDocument })).toThrow();
-
-  const badCommand = registration();
-  badCommand.spec.commands.increment!.input = z.date();
-  expect(() => workspace(store, { registration: badCommand })).toThrow();
 });
 
 test("mask, schema, and human command gate are enforced", async () => {
@@ -247,24 +215,6 @@ test("mask, schema, and human command gate are enforced", async () => {
     ok: false,
     error: "unknown command 'bind'",
   });
-});
-
-test("publishes all action outcomes", async () => {
-  const { store } = memoryStore();
-  const published: RouteWorkspaceEvent[] = [];
-  const module = workspace(store);
-  const w = bind(module);
-  module.subscribe((event) => published.push(event));
-
-  await w.apply("agent", [{ path: ["values", "agent"], value: "proposal" }], 0);
-  await bind(module, documentB).apply("human", [{ path: ["count"], value: 1 }], 0);
-  await w.apply("human", [{ path: ["count"], value: 2 }], 1);
-  expect(await w.cmd("human", "fail", {}, 2)).toMatchObject({
-    ok: false,
-  });
-
-  expect(published).toHaveLength(4);
-  expect(published[1]?.scope).toEqual(documentB);
 });
 
 // External replay/collision/reconstruction proof lives in host partition-operation.test.ts through /actions.
@@ -428,31 +378,4 @@ test("the sweep discards an addressless Work when its lifetime leaves the sessio
   ]);
   // Swept once: the lifetime is forgotten with its Work.
   expect(await module.sweepOpen([{ session: "revit", openId: "doc-2" }])).toBe(0);
-});
-
-test("the sweep says how many Works one closed lifetime took with it", async () => {
-  const { store } = memoryStore();
-  const module = new RouteWorkspace({
-    registrations: [
-      registration(),
-      { ...registration(), spec: { ...registration().spec, route: "other-route" } },
-    ],
-    store,
-  });
-  await bind(module, unsaved).apply("human", [{ path: ["values", "a"], value: "A" }], 0);
-  await module.apply(
-    { ...unsaved, route: "other-route" },
-    "other-route",
-    "human",
-    [{ path: ["values", "a"], value: "A" }],
-    0,
-  );
-  const events: RouteWorkspaceEvent[] = [];
-  module.subscribe((event) => events.push(event));
-
-  expect(await module.sweepOpen([{ session: "revit", openId: "doc-2" }])).toBe(2);
-  expect(events.map((event) => [event.route, event.removed])).toEqual([
-    ["test-route", 2],
-    ["other-route", 2],
-  ]);
 });

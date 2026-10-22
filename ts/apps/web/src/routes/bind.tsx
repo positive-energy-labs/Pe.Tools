@@ -1,25 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { z } from "zod";
+import { readLink, routePageSchema } from "@pe/agent-contracts";
 import { defineRoute, urlPage } from "#/route";
+import { routeSearch } from "#/route/route-owner";
 import { BindRoute } from "#/pages-bind/picker";
 
 const manifest = defineRoute({
   key: "bind",
   name: "Bind",
-  page: z.object({
-    page: z.string().default(""),
-    view: z
-      .preprocess((value) => value === true || value === "1" || value === 1, z.boolean())
-      .default(false),
-  }),
-  url: ["page", "view"],
+  address: "bind",
+  page: routePageSchema("bind"),
 });
 const url = urlPage(manifest)!;
 
 /** `/bind?page=<slug>`: the human door to a Page's binding, opened by the Page's chip. */
 export const Route = createFileRoute("/bind")({
-  validateSearch: (search: Record<string, unknown>) => manifest.page!.parse(url.read(search)),
+  validateSearch: (search: Record<string, unknown>) => ({
+    ...routeSearch(search),
+    ...readLink("bind", search).page,
+  }),
   search: { middlewares: [...url.middlewares] },
   component: Bind,
 });

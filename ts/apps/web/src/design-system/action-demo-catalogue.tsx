@@ -45,7 +45,7 @@ const rows = (route: string, path: string, seeds: AnySeeds): SeedRow[] =>
  * Chat and Schedules declare their manifests as builders over live deps, so their seed records are
  * read straight from the seed modules the builders hand to `seeds:`. Same data, no deps needed.
  */
-export const SEED_CATALOGUE: SeedRow[] = [
+const SEED_CATALOGUE: SeedRow[] = [
   ...rows("chat", "/pea", CHAT_SEEDS as AnySeeds),
   ...rows("pods", "/pods", PODS_SEEDS as AnySeeds),
   ...rows("schedules", "/schedules", SCHEDULE_SEEDS as AnySeeds),

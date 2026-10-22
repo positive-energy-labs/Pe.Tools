@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { frozenDemo } from "#/host/demo-client";
 import {
   unstale,
@@ -11,7 +10,7 @@ import {
   type Reading,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
-import { changedInRevit, previousOf, useHostStatus } from "#/readings";
+import { changedInRevit, previousOf, useHostStatusSlice } from "#/readings";
 import { refuse, useRoute } from "#/route";
 import { manifestChords } from "#/route/keys";
 import { KeysNode, useScopeKeys } from "@pe/kit/keys";
@@ -91,19 +90,7 @@ export function LiveScheduleGridWorkspace({
     if (workspaceId !== undefined) setPage({ workspaceId });
   }, [setPage, workspaceId]);
 
-  // `/schedules` owns its URL: the open schedule rides it, so a reload reopens it.
-  const navigate = useNavigate();
-  useEffect(() => {
-    if (!framed || !url) return;
-    void navigate({
-      to: ".",
-      search: (previous: Record<string, unknown>) => ({
-        ...previous,
-        schedule: page.workspaceId || undefined,
-      }),
-      replace: true,
-    } as never);
-  }, [framed, url, navigate, page.workspaceId]);
+  // `/schedules` owns its URL through its contract address: `workspaceId` rides it, so a reload reopens it.
 
   const work = handle.work;
   const catalog = valueOf(handle.readings.catalog, scheduleCatalogSchema);
@@ -227,7 +214,7 @@ export function LiveScheduleGridWorkspace({
   // are not attached to, and every Reading taken before the detach comes back marked.
   const gridChanged = changedInRevit(handle.readings.work) || changedInRevit(handle.readings.saved);
   const listChanged = changedInRevit(handle.readings.catalog);
-  const connected = previousOf(useHostStatus())?.bridgeIsConnected !== false;
+  const connected = useHostStatusSlice((status) => previousOf(status)?.bridgeIsConnected !== false);
   const freshness: ScheduleGridState["freshness"] = !connected
     ? "disconnected"
     : gridChanged
@@ -282,8 +269,16 @@ export function LiveScheduleGridWorkspace({
     refused: page.refused,
     onFocus: { grid: focusOf("grid") },
     freshness,
-    documentScope: target
-      ? { bridgeSessionId: target.session, openDocumentId: target.openId }
+    nativeObservation: {
+      scope: shown
+        ? {
+            document: shown.target,
+            source: demo ? "fixture" : shown === retained ? "native" : "saved",
+          }
+        : null,
+    },
+    documentScope: shown
+      ? { bridgeSessionId: shown.target.session, openDocumentId: shown.target.openId }
       : undefined,
   };
 

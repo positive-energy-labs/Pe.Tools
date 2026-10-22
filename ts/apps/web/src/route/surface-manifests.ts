@@ -1,23 +1,14 @@
 import { z } from "zod";
 import { defineRoute } from "./manifest";
-import { materials } from "#/duct/math";
+import { routePageSchema } from "@pe/agent-contracts";
 import { SHEET_ROWS, solve } from "#/grilles/math";
 
 export const ductLossManifest = defineRoute({
   key: "duct-loss",
   name: "Duct Loss",
   docs: "Calculate duct friction from dimensions and airflow. The wheel, charts and formula use the same inputs. All calculation runs in this browser.",
-  page: z.object({
-    shape: z.enum(["round", "rect"]).default("round"),
-    a: z.number().default(12),
-    b: z.number().default(8),
-    cfm: z.number().default(1000),
-    length: z.number().default(100),
-    roughness: z.number().default(materials["galvanized steel"]),
-    density: z.number().default(0.075),
-    face: z.enum(["commercial", "residential"]).default("commercial"),
-  }),
-  url: ["shape", "a", "b", "cfm", "length", "roughness", "density", "face"],
+  address: "duct-loss",
+  page: routePageSchema("duct-loss"),
 });
 
 const grilleInput = z

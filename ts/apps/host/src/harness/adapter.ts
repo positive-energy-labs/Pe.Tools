@@ -46,7 +46,7 @@ export const adapters: Record<
  * dispatched in index.ts), so no second Node ships; a source host runs the adapter's bin under its
  * own Node. The adapter drives the user's own CLI (`adapterCli`), never a shipped one.
  */
-export function adapterLaunch(
+function adapterLaunch(
   harness: HarnessId,
   env: NodeJS.ProcessEnv = process.env,
   detail?: ProviderRefusal,

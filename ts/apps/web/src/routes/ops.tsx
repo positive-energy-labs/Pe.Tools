@@ -1,21 +1,16 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, stripSearchParams, type SearchSchemaInput } from "@tanstack/react-router";
 
+import { readLink } from "@pe/agent-contracts";
 import { OpsRoute } from "#/ops/workspace";
-
-const str = (value: unknown) => (typeof value === "string" && value ? value : undefined);
-
-export type OpsSearch = { op?: string; target?: string; actionId?: string; thread?: string };
-
-export const opsSearch = (search: Record<string, unknown>): OpsSearch =>
-  Object.fromEntries(
-    (["op", "target", "actionId", "thread"] as const).flatMap((key) => {
-      const value = str(search[key]);
-      return value === undefined ? [] : [[key, value]];
-    }),
-  );
+import { routeSearch } from "#/route/route-owner";
 
 export const Route = createFileRoute("/ops")({
-  validateSearch: opsSearch,
+  validateSearch: (search: SearchSchemaInput & Record<string, unknown>) => ({
+    ...routeSearch(search),
+    ...readLink("ops", search).page,
+  }),
+  // The contract defaults never reach the address, as on `/` and `/pea`.
+  search: { middlewares: [stripSearchParams(readLink("ops", {}).page)] },
   component: OpsFileRoute,
 });
 
@@ -24,8 +19,8 @@ function OpsFileRoute() {
   const navigate = Route.useNavigate();
   return (
     <OpsRoute
-      op={search.op ?? ""}
-      actionId={search.actionId ?? null}
+      op={search.op}
+      actionId={search.actionId || null}
       set={(patch) => {
         void navigate({ search: (previous) => ({ ...previous, ...patch }), replace: true });
       }}

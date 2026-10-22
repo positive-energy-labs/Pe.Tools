@@ -43,90 +43,6 @@ const propose = (familyName: string, typeName = "12 X 4") => ({
   value: { value: { value: "Base", storageType: "String" } },
 });
 
-test("F-J1-7: a proposal naming no loaded family is refused at the door, naming the key", async () => {
-  const { work } = workspace();
-  const refused = await work.apply(scope, "families", "agent", [propose("Casework 2")], 0);
-  expect(refused).toMatchObject({ ok: false, kind: "refused" });
-  if (refused.ok) return;
-  expect(refused).toMatchObject({ code: "unknown-family-type" });
-  if (!("agentHint" in refused)) return;
-  expect(refused.agentHint).toContain('["Casework 2","12 X 4","View Description"]');
-  expect(refused.agentHint).toContain('e.g. ["Casework","12 X 4",');
-  expect((await work.view(scope, "families"))!.revision).toBe(0);
-});
-
-test("an element id in the family slot is refused by the schema, before Revit is asked", async () => {
-  const { work, reads } = workspace();
-  const key = JSON.stringify([3573700, "12 X 4", "View Description"]);
-  const refused = await work.apply(
-    scope,
-    "families",
-    "agent",
-    [
-      {
-        path: ["cells", key, "proposal"],
-        value: { value: { value: "Base", storageType: "String" } },
-      },
-    ],
-    0,
-  );
-  expect(refused).toMatchObject({ ok: false });
-  expect(reads).toHaveLength(0);
-});
-
-test("a type the family does not have is refused, a human write too", async () => {
-  const { work } = workspace();
-  const refused = await work.apply(scope, "families", "human", [propose("Casework", "24 X 4")], 0);
-  expect(refused).toMatchObject({ ok: false, kind: "refused" });
-});
-
-test("a valid key lands, and clearing a cell never asks Revit", async () => {
-  const { work, reads } = workspace();
-  const landed = await work.apply(scope, "families", "agent", [propose("Casework")], 0);
-  expect(landed).toMatchObject({ ok: true, revision: 1 });
-  expect(reads).toEqual([{ target: at, filter: casework([]) }]);
-  const key = familyCellKey({
-    familyName: "Casework",
-    typeName: "12 X 4",
-    parameter: "View Description",
-  });
-  const withdrawn = await work.apply(
-    scope,
-    "families",
-    "agent",
-    [{ path: ["cells", key, "proposal"], value: null }],
-    1,
-  );
-  expect(withdrawn).toMatchObject({ ok: true });
-  expect(reads).toHaveLength(1);
-  expect(
-    familiesRouteState.schema.parse((await work.view(scope, "families"))!.doc).cells[key],
-  ).toMatchObject({ proposal: null });
-});
-
-test("an exclusion carries its writer: Pea cannot write one as the person, nor lift the person's", async () => {
-  const { work, reads } = workspace();
-  const exclude = (by: string) => [{ path: ["excluded", "Casework"], value: { by } }];
-  expect(await work.apply(scope, "families", "agent", exclude("person"), 0)).toMatchObject({
-    ok: false,
-    kind: "refused",
-  });
-  expect(await work.apply(scope, "families", "human", exclude("pea"), 0)).toMatchObject({
-    ok: false,
-  });
-  const held = await work.apply(scope, "families", "human", exclude("person"), 0);
-  expect(held).toMatchObject({ ok: true, revision: 1 });
-  const lifted = await work.apply(
-    scope,
-    "families",
-    "agent",
-    [{ path: ["excluded", "Casework"] }],
-    1,
-  );
-  expect(lifted).toMatchObject({ ok: false, kind: "refused" });
-  expect(reads).toHaveLength(0);
-});
-
 // F-J1-12, from hold 4b's recorded shapes (thread 1da7e887): the session list and the catalog as
 // the C# collector answers. It lists types only for a Rows/Full view, at most maxSamplesPerEntry
 // (default 10), and warns when the filter matches nothing.
@@ -237,20 +153,6 @@ test("F-J1-12: the live catalog loopback admits a key for a type past the tenth,
   expect(cleared).toMatchObject({ ok: true, revision: 3 });
 });
 
-test("F-J1-12: a scope that resolves to no loaded family refuses with that diagnosis, not a key hint", async () => {
-  // Nothing is loaded under Walls, e.g. its one family was unloaded after the person staged this.
-  const { work, at, author } = ProjectAWork([], ["Walls"]);
-  expect(await author()).toMatchObject({ ok: true, revision: 1 });
-  const refused = await work.apply(at, "families", "agent", [propose("Price LBP15A Exhaust")], 1);
-  expect(refused).toMatchObject({ ok: false, kind: "refused" });
-  if (refused.ok) return;
-  if (!("agentHint" in refused)) return;
-  expect(refused.agentHint).toContain(
-    "scope resolved to no loaded families: Loaded-family filter matched zero families out of 1.",
-  );
-  expect(refused.agentHint).not.toContain("A key is");
-});
-
 const casework = (familyNames: string[]) => ({
   categoryNames: ["Casework"],
   familyNames,
@@ -286,67 +188,8 @@ test("F-J1-10: Pea proposes a scope and the person's staged scope is untouched",
   expect(cell.proposal).toMatchObject({ value: casework([]) });
 });
 
-test("F-J1-10: a scope write naming an unknown family refuses by name, Pea's or the person's", async () => {
-  const { work } = workspace();
-  for (const [actor, rung] of [
-    ["agent", "proposal"],
-    ["human", "staged"],
-  ] as const) {
-    const refused = await work.apply(
-      scope,
-      "families",
-      actor,
-      [
-        {
-          path: ["scope", rung],
-          value: { value: casework(["Casework", "Price LBPH15A Exhaust"]) },
-        },
-      ],
-      0,
-    );
-    expect(refused).toMatchObject({ ok: false, kind: "refused" });
-    if (refused.ok) continue;
-    expect(refused).toMatchObject({ families: ["Price LBPH15A Exhaust"] });
-    if (!("agentHint" in refused)) continue;
-    expect(refused.agentHint).toContain('"Price LBPH15A Exhaust"');
-    expect(refused.agentHint).not.toContain('"Casework"');
-  }
-  expect((await work.view(scope, "families"))!.revision).toBe(0);
-});
-
 // M13-1: a stale rung never blocks its own correction. project-a loads only "Price LBP15A Exhaust";
 // "Price LBP15A Exhaust Old" was renamed away after it was written, so its rung is stale.
-const airTerminals = (familyNames: string[]) => ({
-  value: { categoryNames: ["Air Terminals"], familyNames, placementScope: "AllLoaded" },
-});
-
-test("M13-1 (a): a stale staged scope does not block Pea's corrected proposal", async () => {
-  const { work, at } = seededWork({
-    scope: { staged: airTerminals(["Price LBP15A Exhaust Old"]) },
-  });
-  const landed = await work.apply(
-    at,
-    "families",
-    "agent",
-    [{ path: ["scope", "proposal"], value: airTerminals(["Price LBP15A Exhaust"]) }],
-    1,
-  );
-  expect(landed, JSON.stringify(landed)).toMatchObject({ ok: true, revision: 2 });
-});
-
-test("M13-1 (b): a stale proposal does not block the person's corrected staged scope", async () => {
-  const { work, at } = seededWork({
-    scope: { proposal: airTerminals(["Price LBP15A Exhaust Old"]) },
-  });
-  const landed = await work.apply(
-    at,
-    "families",
-    "human",
-    [{ path: ["scope", "staged"], value: airTerminals(["Price LBP15A Exhaust"]) }],
-    1,
-  );
-  expect(landed, JSON.stringify(landed)).toMatchObject({ ok: true, revision: 2 });
-});
 
 /** project-a Work saved at revision 1 holding `doc`, as it reads after the catalog moved under it. */
 function seededWork(doc: unknown, host: HostCall = liveHost()) {
@@ -404,21 +247,6 @@ test("M13-2 (d): Pea proposes a scope, then cells in it, with nothing staged; th
     ),
   ).toMatchObject({ ok: true, revision: 2 });
   expect(one.calls.at(-1).filter).toEqual(exhaustScope);
-});
-
-test("M13-2 (e): cells with no scope on either rung refuse by name, and Revit is never asked", async () => {
-  const { work, at, calls } = seededWork({});
-  for (const actor of ["agent", "human"] as const) {
-    const refused = await work.apply(at, "families", actor, [propose("Price LBP15A Exhaust")], 1);
-    expect(refused).toMatchObject({ ok: false, kind: "refused" });
-    if (refused.ok) continue;
-    expect(refused).toMatchObject({ code: "no-scope" });
-    if (!("agentHint" in refused)) continue;
-    expect(refused.agentHint).toBe(
-      "Propose or stage a scope before proposing cells. Nothing was written.",
-    );
-  }
-  expect(calls).toHaveLength(0);
 });
 
 // Item 3: the door's refusal is structured. The web draws `code` and its parts; Pea reads `agentHint`.

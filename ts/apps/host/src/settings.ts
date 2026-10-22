@@ -24,7 +24,7 @@ import type {
   SettingsValidate,
 } from "@pe/host-contracts/generated";
 import type { PodDraftSource, PodMemberSource } from "@pe/agent-contracts";
-import { isPackageMember, listPackages, readPackage } from "./packages.ts";
+import { isPackageMember, listPackages, readPackage, resolvePackageIdentity } from "./packages.ts";
 import { requirePackageEnabled, activePackages } from "./package-lifecycle.ts";
 import { LocalOpError } from "./local-error.ts";
 import { productPodsRootPath } from "./product-paths.ts";
@@ -69,6 +69,21 @@ export const listPods = Effect.fnUntraced(function* (ctx: PodContext = {}) {
     })),
     unreadable: found.unreadable,
   } satisfies PodList;
+});
+
+export const resolvePodIdentity = Effect.fnUntraced(function* (
+  folder: string,
+  ctx: PodContext = {},
+) {
+  const root = ctx.podsRoot ?? productPodsRootPath();
+  return yield* Effect.tryPromise({
+    try: async () => {
+      const identity = await resolvePackageIdentity(folder, root);
+      await requirePackageEnabled(identity.id, root);
+      return { projection: "identity" as const, identity };
+    },
+    catch: (error) => new LocalOpError("pod.list", errorMessage(error), 400),
+  });
 });
 
 /**

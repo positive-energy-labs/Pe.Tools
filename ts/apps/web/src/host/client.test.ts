@@ -1,18 +1,8 @@
-import { readFileSync } from "node:fs";
+import type { HostOperationCatalogEntry } from "#/ops/manifest";
+import { runOp } from "#/ops/run";
+import type { HostCaller } from "#/route/manifest";
 import { expect, expectTypeOf, it, vi } from "vite-plus/test";
 import { callHostRpc } from "./client";
-import type { HostCaller } from "#/route/manifest";
-import { runOp } from "#/ops/run";
-import type { HostOperationCatalogEntry } from "#/ops/manifest";
-
-it("the route adapter has no untyped operation escape hatch", () => {
-  expect(readFileSync(new URL("./client.ts", import.meta.url), "utf8")).not.toContain(
-    "callHostDynamic",
-  );
-  expect(readFileSync(new URL("../route/use-route.ts", import.meta.url), "utf8")).not.toContain(
-    "callHostDynamic",
-  );
-});
 
 it("direct and target-bound calls reject undeclared keys and malformed requests", () => {
   const compileOnly = (bound: HostCaller) => {

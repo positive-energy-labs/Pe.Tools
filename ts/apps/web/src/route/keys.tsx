@@ -1,17 +1,19 @@
-import type { Chord, ScopeKey } from "@pe/kit/keys";
+import { actionScopeKeys, type ActionDefinition, type Chord, type ScopeKey } from "@pe/kit/keys";
 import type { RouteHandle } from "./handle";
 
 type AnyHandle = RouteHandle<any, any, any, any>;
 
 const actionKey = (handle: AnyHandle, name: string, hotkey: Chord): ScopeKey => {
   const action = handle.actions[name]!;
-  return {
-    hotkey,
+  const definition: ActionDefinition = {
+    id: `route.${handle.manifest.key}.${name}`,
     label: action.label,
-    says: action.says,
+    description: action.says,
+    bindings: [hotkey],
     refusal: action.refusal,
-    callback: () => void action.run(),
+    invoke: () => void action.run(),
   };
+  return actionScopeKeys([definition])[0]!;
 };
 
 /** The route node's chords: every manifest action that declares one. */

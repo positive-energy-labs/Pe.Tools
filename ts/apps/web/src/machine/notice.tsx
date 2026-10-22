@@ -24,7 +24,7 @@ import { QuestionForm } from "#/chat/question-form";
 import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Row } from "@pe/kit/lang/row";
-import { Composer, type ComposerHandle } from "#/components/lang/conversation";
+import { Composer } from "#/components/lang/conversation";
 import { harnessClient } from "#/workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "#/workbench/config";
 import { openFullWindow } from "#/navigation/surface-host";
@@ -55,7 +55,7 @@ type TrayMessage = Extract<RendererMessage, { type: `notice-${string}` }>;
 const tray = (message: TrayMessage) => postRendererMessage(window.chrome?.webview, message);
 
 /** How long each item holds before the card walks on. */
-export const NOTICE_DRAIN_MS = 8_000;
+const NOTICE_DRAIN_MS = 8_000;
 const TICK_MS = 100;
 const FIXTURE = "Fixture: nothing here reaches a host.";
 /** How often snoozed items are checked for their hour being up. */
@@ -334,7 +334,6 @@ function Reply({
   const [text, setText] = useState("");
   /** The turn this reply started: Stop holds the slot until it is stopped. */
   const [turn, setTurn] = useState<string | null>(null);
-  const box = useRef<ComposerHandle>(null);
   const harness = () => harnessClient(resolveWorkbenchConfig().origin);
   const reply = useAction(
     (input: string) => harness().prompt(threadId, { text: input }),
@@ -342,7 +341,6 @@ function Reply({
       setText("");
       setTurn(turnId);
       onError(null);
-      box.current?.rest();
     },
   );
   const send = () => {
@@ -361,7 +359,6 @@ function Reply({
   return (
     <div className="pb-1.5">
       <Composer
-        ref={box}
         variant="reply"
         aria-label="reply to Pea"
         placeholder="Reply to Pea"

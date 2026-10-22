@@ -5,6 +5,12 @@ import { normalizePeError } from "@pe/host-contracts/pe-api";
 import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
 import { peRoutes, peRouteUrl, servePeRoute, matchPeRoute } from "@pe/agent-contracts/pe-api";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
+import { resolveSdkSession } from "./sdk-session.ts";
+import {
+  createDuctsAnalysis,
+  ductsNativeRead,
+  type DuctsAnalysisSources,
+} from "./ducts-analysis.ts";
 import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
 import type { MachineShareAdapter } from "./machine.ts";
 import { Deferred, Effect, Layer, Option, Stream } from "effect";
@@ -20,9 +26,10 @@ import {
   bindWork,
   documentRefSchema,
   documentRows,
-  familiesViewAckSchema,
-  familiesViewCommandSchema,
-  familiesViewSchema,
+  routeViewAckSchema,
+  routeViewSetSchema,
+  routeViewSchema,
+  routeViewRoutes,
   readingKey,
   recentRows,
   START_FRESH,
@@ -68,7 +75,11 @@ import { createProviders } from "./harness/providers.ts";
 import { peaMcpServer } from "./harness/adapter.ts";
 import { createHarnessThreads } from "./harness/threads.ts";
 import { hostOwnership } from "./host-ownership.ts";
-import { productHarnessThreadsPath, productRouteWorkPath } from "./product-paths.ts";
+import {
+  productDuctsAnalysesPath,
+  productHarnessThreadsPath,
+  productRouteWorkPath,
+} from "./product-paths.ts";
 import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
 import {
   createMachine,
@@ -109,6 +120,8 @@ import {
   type PageDescriptor,
 } from "./page-libraries.ts";
 import { join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { createPackageLifecycle, bindPackageLifecycle } from "./package-lifecycle.ts";
 import { createPluginsHandler } from "./plugins-handler.ts";
 import { createPodRoutes } from "./pod-routes.ts";
@@ -140,6 +153,7 @@ export interface PeRoutesOptions {
   reportContext?: (thread: string) => AgentReportContext | null;
   /** The host log `log.read` pages; the host's own when absent. */
   log?: HostLog;
+  ductsAnalysis?: Omit<DuctsAnalysisSources, "readWork">;
 }
 
 const feedbackSchema = peRoutes["feedback.submit"].body;
@@ -154,6 +168,12 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 /** The route-document, Reading, capability and Families-view surface, host-owned. */
 export function createPeRoutes(options: PeRoutesOptions) {
   const work = new RouteWorkspace({ registrations: options.registrations, store: options.store });
+  const analysis = options.ductsAnalysis
+    ? createDuctsAnalysis({
+        ...options.ductsAnalysis,
+        readWork: (key) => work.readRaw(key, "ducts"),
+      })
+    : null;
   const views = new RouteViewStore();
   const resources = observeResources(work, options.heads, options.observeHostResource);
   const observeBase = options.markReadings ? options.markReadings(resources) : resources;
@@ -208,6 +228,48 @@ export function createPeRoutes(options: PeRoutesOptions) {
     const method = request.method;
     const declared = matchPeRoute(method, url.pathname);
     if (!declared || declared.route.owner !== "pe") return json({ error: "Unknown Pe route" }, 404);
+    if (declared.id === "space.scene-artifact") {
+      const id = declared.params.id!;
+      if (!/^[a-f0-9]{64}$/.test(id)) return json({ error: "Invalid scene id" }, 400);
+      try {
+        const bytes = await readFile(join(productRoot(), "cache", "space-scenes", `${id}.bin`));
+        if (createHash("sha256").update(bytes).digest("hex") !== id)
+          return json({ error: "Scene artifact integrity failed" }, 409);
+        return new Response(bytes, {
+          headers: {
+            "content-type": "application/octet-stream",
+            "cache-control": "private, max-age=31536000, immutable",
+          },
+        });
+      } catch {
+        return json(
+          { error: "Scene artifact unavailable; capture it again from its document" },
+          404,
+        );
+      }
+    }
+    if (declared.id === "ducts.analysis" || declared.id === "ducts.analysis-artifact") {
+      if (!analysis) return json({ error: "Ducts analysis is unavailable" }, 503);
+      try {
+        return declared.id === "ducts.analysis"
+          ? json(await analysis.read(peRoutes["ducts.analysis"].body.parse(await request.json())))
+          : await analysis.artifact(declared.params.id!);
+      } catch (error) {
+        const problem = error as { message?: unknown; statusCode?: unknown };
+        const status =
+          typeof problem?.statusCode === "number" &&
+          problem.statusCode >= 400 &&
+          problem.statusCode <= 599
+            ? problem.statusCode
+            : error instanceof z.ZodError
+              ? 400
+              : 409;
+        return json(
+          { error: typeof problem?.message === "string" ? problem.message : message(error) },
+          status,
+        );
+      }
+    }
     if (declared.id === "features.get") return json(hostDescriptor(resolveHostVersion()));
     if (declared.id === "machine.bootstrap") {
       const receipt = await alignBootstrap(await request.json(), caller, hostActionJournal());
@@ -400,33 +462,39 @@ export function createPeRoutes(options: PeRoutesOptions) {
       });
     }
 
-    if (parts[0] === "route-view" && parts[1] === "families") {
-      const [, , instance] = parts;
+    // One channel for every route that leases a view (`routeViewRoutes`); the route is a path segment.
+    if (
+      parts[0] === "route-view" &&
+      parts[1] &&
+      (routeViewRoutes as readonly string[]).includes(parts[1])
+    ) {
+      const route = parts[1];
+      const instance = parts[2];
       if (method === "PUT" && !instance) {
-        const parsed = familiesViewSchema.safeParse(await body());
-        return parsed.success
+        const parsed = routeViewSchema.safeParse(await body());
+        return parsed.success && parsed.data.route === route
           ? json(views.publish(parsed.data))
-          : json({ error: "invalid Families view" }, 400);
+          : json({ error: `invalid ${route} view` }, 400);
       }
       if (method === "GET" && !instance) {
         const thread = url.searchParams.get("thread");
         if (!thread) return json({ error: "thread required" }, 400);
-        const result = views.select(thread, url.searchParams.get("instance") ?? undefined);
+        const result = views.select(thread, route, url.searchParams.get("instance") ?? undefined);
         return result && !("ok" in result)
           ? json(result)
           : json(result ?? { ok: false, error: "view unavailable" }, 409);
       }
-      if (method === "POST" && instance === "set-query") {
-        const parsed = familiesViewCommandSchema.safeParse(await body());
+      if (method === "POST" && instance === "set") {
+        const parsed = routeViewSetSchema.safeParse(await body());
         if (!parsed.success)
-          return json({ ok: false, error: "invalid Families query command" }, 400);
-        const { thread, instance: target, revision, query } = parsed.data;
-        const result = await views.setQuery(thread, target, revision, query);
+          return json({ ok: false, error: `invalid ${route} view command` }, 400);
+        const { thread, instance: target, revision, patch } = parsed.data;
+        const result = await views.set(thread, route, target, revision, patch);
         return json(result, (result as { ok: boolean }).ok ? 200 : 409);
       }
       if (method === "POST" && instance === "ack") {
-        const parsed = familiesViewAckSchema.safeParse(await body());
-        if (!parsed.success) return json({ ok: false, error: "invalid Families view ack" }, 400);
+        const parsed = routeViewAckSchema.safeParse(await body());
+        if (!parsed.success) return json({ ok: false, error: `invalid ${route} view ack` }, 400);
         const result = views.ack(parsed.data);
         return json(result, result.ok ? 200 : 409);
       }
@@ -906,6 +974,36 @@ export function makeHostPeRoutes(
   );
   const routes = createPeRoutes({
     registrations,
+    ductsAnalysis: {
+      root: productDuctsAnalysesPath(),
+      producer: { version: resolveHostVersion(), ...hostOwnership },
+      marks: documentMarks(bridge),
+      resolve: async (target) => {
+        if (!bridge) throw Error("No Revit bridge is available");
+        const session = await resolveSdkSession(bridge, {
+          bridgeSessionId: target.session,
+          openDocumentId: target.openId,
+        });
+        const document = session.state?.openDocuments.find((doc) => doc.openId === target.openId);
+        if (!document || document.isFamilyDocument)
+          throw Error("Ducts analysis requires the exact open project document");
+        return {
+          target,
+          address: document.address ?? null,
+          title: document.title,
+          process: { pid: session.processId, startUtcUnixMs: session.processStartUtcUnixMs },
+          provenance: {
+            sdk: session.resolved,
+            lane: session.lane,
+            sourceRoot: session.sourceRoot,
+            installedRoot: session.installedRoot,
+            buildStamp: session.buildStamp,
+            sdkSessionId: session.sdkSessionId,
+          },
+        };
+      },
+      call: ductsNativeRead(hostBaseUrl),
+    },
     store: fileRouteDocumentStore(productRouteWorkPath()),
     heads: threads.heads,
     navigation: {

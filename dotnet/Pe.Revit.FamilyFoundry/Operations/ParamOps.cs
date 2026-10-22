@@ -83,6 +83,12 @@ public sealed class SetParamMetadata((string Name, FamilyModelParameter Spec)[] 
         if (labels.TryGetValue(label, out var forge)) return forge;
         var requested = new ForgeTypeId(label);
         if (Pe.Revit.DocumentData.Parameters.RevitLabelCatalog.GetPropertyGroupToLabelMap().ContainsKey(requested)) return requested;
+        // "Mechanical - Airflow" was refused on 2026-10-08 (family ledger): LabelUtils' text and the UI label differ. The
+        // GroupTypeId property name, letters only, is the fallback that depends on no label table.
+        var letters = new string(label.Where(char.IsLetterOrDigit).ToArray());
+        var byName = typeof(GroupTypeId).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .FirstOrDefault(p => p.PropertyType == typeof(ForgeTypeId) && string.Equals(p.Name, letters, StringComparison.OrdinalIgnoreCase));
+        if (byName?.GetValue(null) is ForgeTypeId named) return named;
         throw new InvalidOperationException($"Unknown parameter group '{label}'. Use a native GroupTypeId TypeId or a Revit group label.");
     }
 

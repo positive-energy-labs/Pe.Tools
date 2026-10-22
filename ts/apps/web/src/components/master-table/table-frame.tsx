@@ -1,25 +1,26 @@
 /**
- * TABLE FRAME — a table's chrome, as a wrapper (the approved reshape): the box, the scope strip
- * (label, summary, modes, select-all, actions) and the one query box, where every narrowing is a
- * chip. It holds no table state of its own: it reads the route's `state` and the same
+ * TABLE FRAME — a table's chrome, as a wrapper (the approved reshape): the box and one head line
+ * holding the query box (every narrowing is a chip), summary, modes, select-all and actions. The
+ * head carries no title: the pane or route names the table. Folded, the chips stay on one line and
+ * end "+N more"; focus or an open picker unfolds them into a drawer across the frame. It holds no table state of its own: it reads the route's `state` and the same
  * `visibleRows(...)` the grid draws, so its counts are the grid's rows. A table that wants no
  * chrome is a bare `Table`.
  */
-import { useState, type ReactNode } from "react";
+import { useLayoutEffect, useState, type ReactNode } from "react";
 import type { RowData } from "@tanstack/react-table";
 
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { NarrowChip } from "@pe/kit/lang/chip";
 import { Button } from "@pe/kit/lang/button";
-import { resolveStateColumn } from "@pe/kit/table/master-table-columns";
+import { useScopeKeys } from "@pe/kit/keys";
 import type { Column, QueryCommand, QueryVocabulary, TableState } from "@pe/kit/table/model";
-import { ConditionTarget, QueryBox } from "@pe/kit/table/query";
+import { QueryBox } from "@pe/kit/table/query";
+import { ColumnQuery, QueryWorkbench, queryCapabilities } from "@pe/kit/table/query-workbench";
 import { selectableKeys, type TableSelection } from "@pe/kit/table/table";
-import { conditionValues, quoted, visibleRows } from "@pe/kit/table/view";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { visibleRows } from "@pe/kit/table/view";
 
 export interface TableFrameProps<Row extends RowData> {
-  /** What is in scope, said as the strip's lead. */
+  /** The frame's accessible name; never drawn (round 12). */
   label: string;
   rows: readonly Row[];
   columns: readonly Column<Row>[];
@@ -27,8 +28,11 @@ export interface TableFrameProps<Row extends RowData> {
   state: TableState;
   onStateChange: (state: TableState) => void;
   summary?: ReactNode;
-  /** Present, the frame draws the query box even where no column declares a `condition`. */
-  searchPlaceholder?: string;
+  /** Offer free-text search even when no column declares a filter capability. */
+  search?: true;
+  /** The counts the placeholder says, for a route whose `rows` are already narrowed (`query`). Absent,
+   * shown is the grid's rows and total is `rows`. */
+  rowCount?: { shown: number; total: number };
   /** A route's own vocabulary, for rows it narrows before the frame sees them (families); absent,
    * the box names the columns that declare a `condition`. */
   query?: QueryVocabulary;
@@ -47,28 +51,6 @@ export interface TableFrameProps<Row extends RowData> {
   children: ReactNode;
 }
 
-function columnVocabulary<Row>(
-  rows: readonly Row[],
-  columns: readonly Column<Row>[],
-  state: TableState,
-): QueryVocabulary {
-  const scope = (query: string) => visibleRows(rows, columns, { ...state, query });
-  const resolved = columns.map(resolveStateColumn);
-  return {
-    fields: resolved.map((column) => ({
-      label: column.label,
-      kind: column.condition?.kind,
-      sort: column.sort ? column.key : undefined,
-    })),
-    rules: [],
-    count: (query) => scope(query).length,
-    values: (label, query) => {
-      const condition = resolved.find((column) => column.label === label)?.condition;
-      return condition ? conditionValues(scope(query), condition) : [];
-    },
-  };
-}
-
 export function TableFrame<Row extends RowData>({
   label,
   rows,
@@ -77,7 +59,8 @@ export function TableFrame<Row extends RowData>({
   state,
   onStateChange,
   summary,
-  searchPlaceholder,
+  search,
+  rowCount,
   query,
   command,
   chips,
@@ -87,40 +70,89 @@ export function TableFrame<Row extends RowData>({
   selection,
   children,
 }: TableFrameProps<Row>) {
+  const [foldRoot, setFoldRoot] = useState<HTMLDivElement | null>(null);
+  useFoldCount(foldRoot);
   const visibleColumns = columns.filter((column) => !state.hiddenColumns?.includes(column.key));
-  const conditioned = visibleColumns.some((column) => resolveStateColumn(column).condition);
   const [draft, setDraft] = useState("");
-  const [box, setBox] = useState<HTMLInputElement | null>(null);
+  const [queryInput, setQueryInput] = useState<HTMLInputElement | null>(null);
+  const region = queryInput?.closest<HTMLElement>('[data-slot="artifact-frame"]') ?? null;
+  useScopeKeys(
+    [
+      { hotkey: "/", label: "Search this table", callback: () => queryInput?.focus() },
+      {
+        hotkey: "F",
+        label: "Open this table's filters",
+        callback: () => {
+          const trigger = region?.querySelector<HTMLButtonElement>("[data-table-filter-trigger]");
+          trigger?.focus();
+          trigger?.click();
+        },
+      },
+    ],
+    region,
+  );
   // A route vocabulary narrowed the rows already; the frame only orders them.
   const shown = visibleRows(rows, visibleColumns, query ? { ...state, query: "" } : state).map(
     rowKey,
   );
+  const counts = rowCount ?? { shown: shown.length, total: rows.length };
+  const vocabulary = query ?? queryCapabilities(rows, visibleColumns, state);
+  const capable =
+    vocabulary.fields.some((field) => field.kind || field.sort) ||
+    vocabulary.rules.length > 0 ||
+    Boolean(vocabulary.filters?.length);
   const reach = selection ? selectableKeys(selection, shown) : [];
   const selectedShown = reach.filter((key) => selection!.selected.has(key)).length;
   const boxed =
-    searchPlaceholder !== undefined ||
+    search === true ||
     query !== undefined ||
     command !== undefined ||
     chips !== undefined ||
     filters !== undefined ||
-    conditioned ||
+    capable ||
     Boolean(state.query);
+  const controls = boxed && (
+    <div
+      ref={setFoldRoot}
+      data-table-fold=""
+      data-slot="table-query-controls"
+      className="flex min-w-0 max-w-full flex-[1_1_20rem] items-center gap-1"
+    >
+      {filters}
+      <QueryBox
+        lead={
+          capable ? (
+            <QueryWorkbench vocabulary={vocabulary} state={state} onStateChange={onStateChange} />
+          ) : undefined
+        }
+        vocabulary={vocabulary}
+        state={state}
+        onStateChange={onStateChange}
+        draft={draft}
+        onDraft={setDraft}
+        onInput={setQueryInput}
+        placeholder={`search ${counts.shown} of ${counts.total} rows`}
+        command={command}
+      >
+        {chips?.map((chip) => (
+          <NarrowChip
+            key={chip.label}
+            label={chip.label}
+            onRemove={chip.onClear}
+            title="A route-owned filter narrowing this table right now; removing it widens back out."
+          />
+        ))}
+      </QueryBox>
+    </div>
+  );
   return (
     <ArtifactFrame
-      className="flex min-h-0 flex-1 flex-col"
+      className="relative flex min-h-0 flex-1 flex-col"
+      label={label}
       head={
         <>
-          <TooltipHint content="Everything currently in scope. This table is never hidden and never narrowed silently — every filter acting on it is a chip in its query box.">
-            <span className="t-small t-upper">{label}</span>
-          </TooltipHint>
+          {controls}
           {summary && <span className="face-mono t-small text-ink-2">{summary}</span>}
-          {!query && boxed && (
-            <span className="face-mono t-small text-ink-2">
-              {shown.length === rows.length
-                ? `${rows.length} rows`
-                : `${shown.length} of ${rows.length} rows`}
-            </span>
-          )}
         </>
       }
       headTrail={
@@ -146,45 +178,44 @@ export function TableFrame<Row extends RowData>({
         </>
       }
     >
-      {boxed && (
-        <div
-          data-slot="table-filters"
-          className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-px px-2 hairline-b"
-        >
-          {filters}
-          <QueryBox
-            vocabulary={query ?? columnVocabulary(rows, visibleColumns, state)}
-            state={state}
-            onStateChange={onStateChange}
-            draft={draft}
-            onDraft={setDraft}
-            onInput={setBox}
-            placeholder={searchPlaceholder}
-            command={command}
-          >
-            {chips?.map((chip) => (
-              <NarrowChip
-                key={chip.label}
-                label={chip.label}
-                onRemove={chip.onClear}
-                title="A route-owned filter narrowing this table right now; removing it widens back out."
-              />
-            ))}
-          </QueryBox>
-        </div>
-      )}
-      <ConditionTarget.Provider
-        value={
-          conditioned
-            ? (field) => {
-                setDraft(quoted(field));
-                box?.focus();
-              }
-            : null
-        }
-      >
+      <ColumnQuery.Provider value={capable ? { vocabulary, state, onStateChange } : null}>
         {children}
-      </ConditionTarget.Provider>
+      </ColumnQuery.Provider>
     </ArtifactFrame>
   );
+}
+
+/** Folded, chips past the line's end hide and the field says "+N more"; unfolded, every chip shows. */
+function useFoldCount(root: HTMLElement | null) {
+  useLayoutEffect(() => {
+    const field = root?.querySelector<HTMLElement>("[data-search-field]");
+    if (!root || !field) return;
+    const fit = () => {
+      // Open, the drawer wraps: the last folded count stays for the next close.
+      if (root.matches(":focus-within, :has([data-popup-open])")) return;
+      const chips = [...field.children].slice(0, -1);
+      for (const chip of chips) chip.removeAttribute("data-fold-hidden");
+      field.removeAttribute("data-fold-more");
+      const right = field.getBoundingClientRect().right;
+      // ponytail: fixed px reserves for the input (12ch) and the "+N more" word; measure them if a face changes.
+      const past = (reserve: number) =>
+        chips.filter((chip) => chip.getBoundingClientRect().right > right - reserve);
+      if (past(96).length === 0) return;
+      const hidden = past(96 + 64);
+      for (const chip of hidden) chip.setAttribute("data-fold-hidden", "");
+      field.setAttribute("data-fold-more", `+${hidden.length} more`);
+    };
+    fit();
+    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(fit);
+    resize?.observe(root);
+    const mutation = new MutationObserver(fit);
+    mutation.observe(field, { childList: true, subtree: true, characterData: true });
+    const later = () => requestAnimationFrame(fit);
+    root.addEventListener("focusout", later);
+    return () => {
+      resize?.disconnect();
+      mutation.disconnect();
+      root.removeEventListener("focusout", later);
+    };
+  }, [root]);
 }

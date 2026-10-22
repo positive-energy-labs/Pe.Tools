@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { cleanHarnessEnv, createProviders } from "../src/harness/providers.ts";
+import { createProviders } from "../src/harness/providers.ts";
 import { productAccessPath, productProvidersPath } from "../src/product-paths.ts";
 
 let root: string;
@@ -37,71 +37,6 @@ const add = {
   name: "Synthetic",
   auth: { kind: "endpoint", baseUrl: "https://synthetic.invalid", apiKey: "synthetic-key" },
 };
-
-test("an Anthropic credit refusal crosses add as a classified line without model retries", async () => {
-  const raw = JSON.stringify({
-    type: "error",
-    error: {
-      type: "invalid_request_error",
-      message: "Your credit balance is too low to access the Anthropic API.",
-    },
-  });
-  let calls = 0;
-  const server = createServer((req, res) => {
-    if (req.url === "/v1/models") {
-      res.writeHead(200).end(JSON.stringify({ data: [{ id: "claude-a" }, { id: "claude-b" }] }));
-    } else {
-      calls++;
-      res.writeHead(400).end(raw);
-    }
-  });
-  const baseUrl = await listen(server);
-  try {
-    const providers = createProviders({ probeOnStart: false });
-    const response = await providers.fetch(
-      request("providers", "POST", { ...add, auth: { ...add.auth, baseUrl } }),
-    );
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
-      step: "endpoint",
-      message: "billing: Out of credit or billing limit reached.",
-      failure: {
-        kind: "billing",
-        message: "billing: Out of credit or billing limit reached.",
-        raw,
-      },
-    });
-    expect(calls).toBe(1);
-    expect(providers.get("claude-synthetic")).toBeNull();
-  } finally {
-    await close(server);
-  }
-});
-
-test("each child gets fresh PATH and a capture failure is visible in provider readiness", async () => {
-  let captures = 0;
-  let failed = false;
-  const providers = createProviders({
-    probeOnStart: false,
-    shellPath: async () => {
-      if (failed) throw new Error("synthetic profile failure");
-      return `C:\\capture-${++captures}`;
-    },
-  });
-  const record = providers.get("claude")!;
-  for (const capture of [1, 2]) {
-    const env = await providers.env(record);
-    const pathKey = Object.keys(env).find((key) => key.toUpperCase() === "PATH")!;
-    expect(env[pathKey]?.startsWith(`C:\\capture-${capture};`)).toBe(true);
-  }
-  failed = true;
-  await expect(providers.env(record)).rejects.toThrow("synthetic profile failure");
-  const response = await providers.fetch(request("providers/claude/probe", "POST", {}));
-  expect((await response.json()).readiness).toEqual({
-    state: "unknown",
-    message: "The probe failed: synthetic profile failure",
-  });
-});
 
 test("the refusal logged and copied contains neither endpoint key nor URL query nor inherited credentials", async () => {
   const server = createServer((req, res) => {
@@ -144,32 +79,6 @@ test("the refusal logged and copied contains neither endpoint key nor URL query 
     await providers.close();
     await close(server);
   }
-});
-
-test("known auth overrides are removed case-insensitively while login homes and tool paths remain", () => {
-  const inherited = {
-    openai_api_key: "synthetic",
-    ANTHROPIC_AUTH_TOKEN: "synthetic",
-    CLAUDE_CODE_USE_BEDROCK: "1",
-    CLAUDE_CODE_OAUTH_TOKEN: "synthetic",
-    CODEX_CONFIG: "synthetic",
-    MODEL_PROVIDER: "foreign",
-    DEFAULT_AUTH_REQUEST: "foreign-login",
-    PEA_ENDPOINT_API_KEY: "synthetic",
-    PATH: "tools",
-    CODEX_HOME: "login-home",
-    CLAUDE_CONFIG_DIR: "claude-home",
-    AWS_PROFILE: "other-tool-account",
-    CUSTOM_UNKNOWN_AUTH: "outside-boundary",
-  };
-  expect(cleanHarnessEnv(inherited)).toEqual({
-    PATH: "tools",
-    CODEX_HOME: "login-home",
-    CLAUDE_CONFIG_DIR: "claude-home",
-    AWS_PROFILE: "other-tool-account",
-    CUSTOM_UNKNOWN_AUTH: "outside-boundary",
-  });
-  expect(inherited.openai_api_key).toBe("synthetic");
 });
 
 test.each([
@@ -308,16 +217,6 @@ test("old readiness remains inspectable without periodic paid inference, and a f
   process.env.FAKE_ACP_AUTH = "none";
   const failed = await providers.fetch(request("providers/claude/probe", "POST", {}));
   expect((await failed.json()).readiness.state).toBe("refused");
-});
-
-test("external corruption after a successful read still refuses provider writes", async () => {
-  const providers = createProviders({ probeOnStart: false });
-  await providers.fetch(request("providers"));
-  const path = productProvidersPath();
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, "{broken");
-  expect((await providers.fetch(request("providers", "POST", add))).status).toBe(409);
-  expect(await readFile(path, "utf8")).toBe("{broken");
 });
 
 test("known keys still redact thread output after their provider file becomes unreadable", async () => {

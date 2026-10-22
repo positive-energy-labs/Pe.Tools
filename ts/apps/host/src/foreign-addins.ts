@@ -17,7 +17,7 @@ export type AddinRoots = { user: string; machine: string; programFiles: string[]
  * the add-in payload's own name and its 0.6.x `00-<Name>.addin` shim. The one manifest that is this
  * product is the per-user `<year>\<Name>.addin` whose `<Assembly>` lies inside `<year>\<Name>\`.
  */
-export function foreignAddins(manifest: ProductManifest, roots: AddinRoots) {
+function foreignAddins(manifest: ProductManifest, roots: AddinRoots) {
   const addin = manifest.payloads?.find((p) => p.type === "VersionedAddin")?.name;
   const named = (scope: string) =>
     (manifest.legacy ?? []).flatMap((spec) => {

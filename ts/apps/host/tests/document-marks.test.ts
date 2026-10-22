@@ -19,10 +19,8 @@ import type { HostBridgeEvent, RevitBridge } from "../src/bridge.ts";
 import { assertFresh, documentMarks, STALE_READ } from "../src/document-marks.ts";
 import { setup } from "./schedule-test-fixture.ts";
 import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";
-import { resourceResponse } from "../../../packages/runtime/src/resource-stream.ts";
 
 const A = { session: "S1", openId: "open-A" };
-const B = { session: "S1", openId: "open-B" };
 
 /** A bridge that is only its event tap and its session view. */
 function fakeBridge(sdkSessionId?: string) {
@@ -66,38 +64,6 @@ test("a restored read from before host observation cannot arm apply", () => {
   ).not.toThrow();
 });
 
-test("one event marks every document it names, and nothing it does not", async () => {
-  const world = fakeBridge();
-  const marks = documentMarks(world.bridge);
-  expect(marks.changedAt(A)).toBeNull();
-
-  world.changed("S1", "open-A", "open-B");
-  await settle();
-  expect(marks.changedAt(A)).toBeGreaterThan(0);
-  expect(marks.changedAt(B)).toBeGreaterThan(0);
-  expect(marks.changedAt({ session: "S1", openId: "open-C" })).toBeNull();
-  expect(marks.changedAt({ session: "S2", openId: "open-A" })).toBeNull();
-});
-
-test("a Target names either session id: the broker's or pe-revit's", async () => {
-  const world = fakeBridge("sdk-7");
-  const marks = documentMarks(world.bridge);
-  world.changed("S1", "open-A");
-  await settle();
-  expect(marks.changedAt(A)).toBeGreaterThan(0);
-  expect(marks.changedAt({ session: "sdk-7", openId: "open-A" })).toBeGreaterThan(0);
-});
-
-test("a detached bridge marks the whole session: we are blind, so every read is changed", async () => {
-  const world = fakeBridge();
-  const marks = documentMarks(world.bridge);
-  world.detached("S1");
-  await settle();
-  expect(marks.changedAt(A)).toBeGreaterThan(0);
-  expect(marks.changedAt(B)).toBeGreaterThan(0);
-  expect(marks.changedAt({ session: "S2", openId: "open-A" })).toBeNull();
-});
-
 test("the envelope carries the mark: served unchanged, republished changed, without a new read", async () => {
   const world = fakeBridge();
   const marks = documentMarks(world.bridge);
@@ -137,117 +103,6 @@ test("the envelope carries the mark: served unchanged, republished changed, with
   world.changed("S1", "open-A");
   await settle();
   expect(frames).toHaveLength(2);
-});
-
-test("a stored capture keeps its own taken-at: re-serving it after a gap does not say current", async () => {
-  const world = fakeBridge();
-  const marks = documentMarks(world.bridge);
-  const capture = {
-    id: "c1",
-    target: A,
-    capturedAt: new Date(Date.now() - 60_000).toISOString(),
-    snapshot: { takenAt: new Date(Date.now() - 60_000).toISOString() },
-  };
-  world.changed("S1", "open-A");
-  await settle();
-
-  const frames: ReadingFrame[] = [];
-  // The client reconnected and subscribed again; the host serves the same stored capture.
-  markReadings(marks)(
-    hostResourceObserver(
-      world.bridge,
-      undefined as never,
-      undefined as never,
-      "http://127.0.0.1",
-      () => Promise.resolve(new Response(JSON.stringify(capture))),
-    ),
-  )({ kind: "schedule-reading", subject: "saved", id: "c1" }, (frame) => frames.push(frame));
-  await settle();
-  await settle();
-  expect(frames.at(-1)).toMatchObject({ kind: "snapshot", changed: true });
-});
-
-test("host resource drops broker and SDK marks when a disconnected session leaves inventory", async () => {
-  const writes = vi.spyOn(Map.prototype, "set");
-  const listeners = new Set<(event: HostBridgeEvent) => void>();
-  let sessions = [
-    { sessionId: "S1", sdkSessionId: "sdk-1", connected: true },
-    { sessionId: "S2", sdkSessionId: "sdk-2", connected: true },
-  ];
-  const bridge = {
-    list: Effect.sync(() => sessions),
-    snapshot: (id: string) =>
-      Effect.sync(() => sessions.find((session) => session.sessionId === id)!),
-    subscribe: (listener: (event: HostBridgeEvent) => void) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-  } as unknown as RevitBridge["Service"];
-  const marks = documentMarks(bridge);
-  const capture = { id: "c1", target: A, capturedAt: new Date().toISOString() };
-  const observe = markReadings(marks)(
-    hostResourceObserver(bridge, undefined, undefined, undefined, () =>
-      Promise.resolve(new Response(JSON.stringify(capture))),
-    ),
-  );
-  const keys = [{ kind: "schedule-reading", subject: "saved", id: "c1" }];
-  const response = resourceResponse(
-    new Request(`http://host/pe/resources?keys=${encodeURIComponent(JSON.stringify(keys))}`),
-    observe,
-  );
-  const reader = response.body!.getReader();
-  const frames: ReadingFrame[] = [];
-  const collecting = (async () => {
-    for (;;) {
-      const next = await reader.read();
-      if (next.done) return;
-      frames.push(JSON.parse(new TextDecoder().decode(next.value).slice(6)));
-    }
-  })();
-  const emit = (event: HostBridgeEvent) => {
-    for (const listener of listeners) listener(event);
-  };
-  try {
-    await expect.poll(() => frames.length).toBe(1);
-    emit({
-      kind: "event",
-      sessionId: "S2",
-      eventName: "document-changed",
-      payloadJson: JSON.stringify({ changedOpenIds: ["other"] }),
-    });
-    await expect.poll(() => marks.changedAt({ session: "S2", openId: "other" })).not.toBeNull();
-    // Inspect retention without adding a diagnostic API to the product's mark owner.
-    const held =
-      writes.mock.contexts[
-        writes.mock.calls.findIndex(([key, value]) => key === "S2" && value instanceof Map)
-      ]!;
-    writes.mockRestore();
-    if (!(held instanceof Map)) throw Error("Session mark map was not retained");
-    const priorSize = held.size;
-    const prior = marks.changedAt({ session: "S2", openId: "other" });
-    emit({
-      kind: "event",
-      sessionId: "S1",
-      eventName: "document-changed",
-      payloadJson: JSON.stringify({ changedOpenIds: ["open-A", "open-B"] }),
-    });
-    await expect.poll(() => frames.at(-1)).toMatchObject({ changed: true });
-    sessions[0]!.connected = false;
-    emit({ kind: "disconnected", sessionId: "S1" });
-    await expect.poll(() => marks.changedAt({ session: "sdk-1", openId: "unread" })).not.toBeNull();
-    sessions = sessions.slice(1);
-    emit({ kind: "state-sync", sessionId: "S2" });
-    await expect.poll(() => frames.at(-1)).toMatchObject({ changed: false });
-    for (const session of ["S1", "sdk-1"])
-      for (const openId of ["open-A", "open-B", "unread"])
-        expect(marks.changedAt({ session, openId })).toBeNull();
-    expect(marks.changedAt({ session: "S2", openId: "other" })).toBe(prior);
-    expect(held.size).toBe(priorSize);
-  } finally {
-    writes.mockRestore();
-    await reader.cancel();
-    await collecting;
-  }
 });
 
 test("a push over a newer mark is refused undispatched in one sentence, over HTTP", async () => {

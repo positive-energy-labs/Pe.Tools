@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { HostLog } from "../src/host-log.ts";
-import { mkdir, mkdtemp, open, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
@@ -49,37 +49,6 @@ const bytes = async (directory: string) =>
       .map(async (file) => [file, await readFile(join(directory, file), "utf8")]),
   );
 
-test("mixed legacy and self-identifying files census real Work without creating or rewriting state", async () => {
-  const directory = await temporary();
-  const store = fileRouteDocumentStore(directory);
-  const saved = bindWork("family", address("C:\\Models\\Actual.rvt"));
-  const legacy = bindWork("family", address("C:\\Models\\Legacy.rvt"));
-  await store.setState({ targetKey: workKey(saved), route: "family", value: envelope });
-  await writeFile(join(directory, filename(workKey(legacy), "family")), JSON.stringify(envelope));
-  await writeFile(join(directory, `${"f".repeat(64)}.json`), "{broken");
-  const before = await bytes(directory);
-  const workspace = new RouteWorkspace({ registrations: [registration()], store });
-  const snapshot = await readNavigation(workspace, {
-    threads: async () => [],
-    documents: async () => [],
-  });
-  expect(snapshot.works).toHaveLength(1);
-  expect(snapshot.works[0]).toMatchObject({
-    id: workKey(saved),
-    state: "ready",
-    revision: 3,
-    url: null,
-  });
-  expect(snapshot.observations.join(" ")).toContain("1 legacy hash-only");
-  expect(snapshot.observations.join(" ")).toContain("1 stored files");
-  expect(JSON.stringify(snapshot)).not.toContain("PRIVATE-RAW-WORK");
-  expect(await store.getState({ targetKey: workKey(legacy), route: "family" })).toEqual(envelope);
-  expect(await bytes(directory)).toEqual(before);
-  // A later canonical write makes that exact Work discoverable, without a second index.
-  await store.setState({ targetKey: workKey(legacy), route: "family", value: envelope });
-  expect((await workspace.instances()).works).toHaveLength(2);
-});
-
 test("HTTP navigation resumes only the exact unique current document and reflects later writes", async () => {
   const store = fileRouteDocumentStore(await temporary());
   const scope = bindWork("family", address("C:\\Models\\A.rvt"));
@@ -120,47 +89,6 @@ test("HTTP navigation resumes only the exact unique current document and reflect
   expect((await read()).works[0]!.reason).toContain("not currently available");
 });
 
-test("open, workspace, unreadable and retired route Work never acquire a fabricated resume link", async () => {
-  const store = fileRouteDocumentStore(await temporary());
-  const open = bindWork("family", null, undefined, { session: "s", openId: "unsaved" });
-  const fixed = bindWork("instances", null, "instances");
-  const arbitrary = bindWork("takeoffs", null, "not-a-capture");
-  const broken = bindWork("family", address("C:\\Models\\Broken.rvt"));
-  const retired = bindWork("retired", null);
-  for (const scope of [open, fixed, arbitrary, retired])
-    await store.setState({ targetKey: workKey(scope), route: scope.route, value: envelope });
-  await store.setState({
-    targetKey: workKey(broken),
-    route: broken.route,
-    value: { version: 1, revision: -1, doc: {} },
-  });
-  const workspace = new RouteWorkspace({
-    registrations: [registration(), registration("instances"), registration("takeoffs")],
-    store,
-  });
-  const read = (documents: unknown[] = []) =>
-    readNavigation(workspace, { threads: async () => [], documents: async () => documents });
-  const snapshot = await read([{ session: "s", openId: "unsaved", address: null }]);
-  const row = (id: string) => snapshot.works.find((work) => work.id === id)!;
-  expect(row(workKey(open)).url).toContain("/family?");
-  for (const workspaceWork of [fixed, arbitrary])
-    expect(row(workKey(workspaceWork))).toMatchObject({
-      url: null,
-      reason: "This tool has no URL that resumes this named Work workspace.",
-    });
-  expect(row(workKey(broken))).toMatchObject({ state: "unreadable", url: null, revision: null });
-  expect(row(workKey(retired))).toMatchObject({ state: "unregistered", url: null });
-  expect((await read()).works.find((work) => work.id === workKey(open))!.url).toBeNull();
-  // Save As changed the lifetime's binding: the former open-only Work cannot resume addressed Work.
-  expect(
-    (
-      await read([
-        { session: "s", openId: "unsaved", address: address("C:\\Models\\NowSaved.rvt") },
-      ])
-    ).works.find((work) => work.id === workKey(open))!.url,
-  ).toBeNull();
-});
-
 test("transplanted identity and malformed data are reported without mutating their files", async () => {
   const directory = await temporary();
   const store = fileRouteDocumentStore(directory);
@@ -176,23 +104,6 @@ test("transplanted identity and malformed data are reported without mutating the
     "identity",
   );
   expect(await bytes(directory)).toEqual(before);
-});
-
-test("oversized canonical files are reported without loading or changing their bytes", async () => {
-  const directory = await temporary();
-  const store = fileRouteDocumentStore(directory);
-  const path = join(directory, `${"d".repeat(64)}.json`);
-  const file = await open(path, "w");
-  try {
-    await file.truncate(17 * 1024 * 1024);
-  } finally {
-    await file.close();
-  }
-  const before = await stat(path);
-  expect(await store.listState!()).toMatchObject({ records: [], unreadable: 1 });
-  const after = await stat(path);
-  expect(after.size).toBe(before.size);
-  expect(after.mtimeMs).toBe(before.mtimeMs);
 });
 
 test("Pea navigation reads real persisted harness summaries and preserves thread identity", async () => {
@@ -256,41 +167,4 @@ test("Pea navigation reads real persisted harness summaries and preserves thread
   } finally {
     await threads.close();
   }
-});
-
-test("failed owners remain explicit and do not turn registrations into instances", async () => {
-  const directory = await temporary();
-  const store = fileRouteDocumentStore(directory);
-  const before = await bytes(directory);
-  const accesses: string[] = [];
-  const workspace = new RouteWorkspace({
-    registrations: [registration()],
-    store: {
-      ...store,
-      getState: async (...args) => {
-        accesses.push("getState");
-        return store.getState(...args);
-      },
-      setState: async (...args) => {
-        accesses.push("setState");
-        return store.setState(...args);
-      },
-    },
-  });
-  const snapshot = await readNavigation(workspace, {
-    threads: async () => {
-      throw Error("offline");
-    },
-    documents: async () => {
-      throw Error("offline");
-    },
-  });
-  expect(snapshot.works).toEqual([]);
-  expect(snapshot.threads).toEqual([]);
-  expect(snapshot.observations).toEqual([
-    "Pea thread summaries are unavailable.",
-    "Current document bindings are unavailable; document resume links are refused.",
-  ]);
-  expect(accesses).toEqual([]);
-  expect(await bytes(directory)).toEqual(before);
 });

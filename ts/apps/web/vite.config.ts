@@ -28,8 +28,14 @@ const config = defineConfig(({ mode, command }) => {
     if (rootEnv[key] && !process.env[key]) process.env[key] = rootEnv[key];
   }
 
+  // Dev-only reading source for /ducts: a saved `ducts.snapshot` (`src/ducts/route.tsx`).
+  const ductsFixture = mode === "development" ? process.env.PE_DUCTS_FIXTURE : undefined;
+
   return {
     define: {
+      "import.meta.env.VITE_DUCTS_FIXTURE": JSON.stringify(
+        ductsFixture ? `/@fs/${ductsFixture.replaceAll("\\", "/")}` : "",
+      ),
       __PE_WEB_RECEIPT_BUILD__: receiptBuildDefines(command === "build" ? "release" : "dev")
         .__PE_WEB_RECEIPT_BUILD__,
       "import.meta.env.PE_RUNTIME_SERVICE": JSON.stringify(
@@ -38,6 +44,34 @@ const config = defineConfig(({ mode, command }) => {
     },
     plugins: [
       devIcons(),
+      // proto: with a saved ducts fixture and no host, answer the shell's one
+      // required host call so /ducts opens in a plain browser. Throwaway.
+      !!ductsFixture && {
+        name: "proto-fixture-environment",
+        configureServer(server: {
+          middlewares: {
+            use: (
+              fn: (
+                req: { url?: string },
+                res: { setHeader: (k: string, v: string) => void; end: (b: string) => void },
+                next: () => void,
+              ) => void,
+            ) => void;
+          };
+        }) {
+          server.middlewares.use((req, res, next) => {
+            if (!req.url?.startsWith("/pe/environment")) return next();
+            res.setHeader("content-type", "application/json");
+            res.end(
+              JSON.stringify({
+                environmentId: "00000000-0000-4000-8000-000000000001",
+                paired: true,
+                local: true,
+              }),
+            );
+          });
+        },
+      },
       checkoutIngress(),
       tanstackStart({
         router: {
@@ -72,7 +106,11 @@ const config = defineConfig(({ mode, command }) => {
       allowedHosts: ["127.0.0.1"],
       cors: false,
       fs: {
-        allow: [searchForWorkspaceRoot(import.meta.dirname), familyFixturesDir],
+        allow: [
+          searchForWorkspaceRoot(import.meta.dirname),
+          familyFixturesDir,
+          ...(ductsFixture ? [dirname(ductsFixture)] : []),
+        ],
       },
       proxy: process.env.PE_TOOLS_HOST_BASE_URL
         ? devHostProxy(process.env.PE_TOOLS_HOST_BASE_URL)

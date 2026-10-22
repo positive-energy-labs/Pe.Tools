@@ -125,7 +125,7 @@
       "type": "PathShim",
       "name": "pea",
       "target": "versionedApp:pea",
-      "dev": "corepack pnpm@11.13.1 --dir \"{root}/ts\" --filter @pe/pea pea"
+      "dev": "node \"{root}/ts/node_modules/jiti/lib/jiti-cli.mjs\" \"{root}/ts/apps/pea/src/main.ts\""
     }
   ]
 }

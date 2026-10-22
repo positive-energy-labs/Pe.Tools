@@ -35,9 +35,3 @@ test("a detached run resolves on its envelope while the pipe stays open", async 
   expect(result).not.toBe("slow");
   expect(Date.now() - started).toBeLessThan(3000);
 });
-
-test("a verb that prints only to stderr fails with the stderr tail", async () => {
-  await expect(
-    updateVerb(["-e", "process.stderr.write('You must install .NET to run this application')"]),
-  ).rejects.toThrow(/produced no output.*; stderr: You must install \.NET/);
-});

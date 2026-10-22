@@ -564,6 +564,11 @@ export type MachineOwner = ReturnType<typeof createMachine>;
  * summary and list) but run outside the Machine's own routes. Set once at boot.
  */
 let hostMachine: MachineOwner | undefined;
+export function currentMachine(): Machine {
+  if (!hostMachine) throw Error("Machine census is unavailable.");
+  return hostMachine.current();
+}
+
 export const useHostMachine = (owner: MachineOwner | undefined) => {
   hostMachine = owner;
 };
@@ -842,7 +847,7 @@ export async function bridgeAttachments(
 }
 
 /** Read/discover only: stale files remain visible and no display sweeps another host's record. */
-export async function readMachinePeers(
+async function readMachinePeers(
   appBase: string,
   ownServiceName: string,
 ): Promise<readonly MachinePeer[]> {

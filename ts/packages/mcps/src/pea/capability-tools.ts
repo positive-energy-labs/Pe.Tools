@@ -15,6 +15,10 @@ import {
   semanticActions,
   familyReads,
   familiesRouteState,
+  routeAddresses,
+  routeViewRoutes,
+  type RouteAddress,
+  type RouteViewRoute,
   familyCatalogRequest,
   workKeySchema,
   type FamilyReadKey,
@@ -66,12 +70,15 @@ import {
   type TargetInventory,
   type DocumentRef,
   type ThreadHead,
+  transitionPatches,
 } from "@pe/agent-contracts";
+import { parseLoadPreview } from "@pe/ducts-domain/load-preview";
 import { HostRpcCaller, type ResolvedTarget } from "../shared/host-rpc-caller.ts";
 import type { RevitCatalogLoadedFamilies } from "@pe/host-contracts/generated";
 import { coerceJsonObject } from "../shared/coerce.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 import { peSourceTree } from "./source-tree.ts";
+import { ductsGuideInputSchema, ductsGuideReading, presentDuctCases } from "./ducts-skill.ts";
 
 function base(): string {
   // Hosted tools inherit the authority already admitted by the host middleware.
@@ -135,9 +142,8 @@ const targetQuery = (target: Target): string => {
 };
 
 /**
- * The route Work a Target keys: its document's Address, as the browser resolves it. Work keys by
- * Address, so an exact `open` Target is resolved through the live inventory; dropping it read the
- * Target-less Work instead of the Chat's (E2E-J1). A closed document refuses rather than fall back.
+ * Resolve route Work like the browser: Address when saved, exact open lifetime when unsaved.
+ * Carry the lifetime beside an Address for Save As migration; a closed lifetime refuses (E2E-J1).
  */
 async function routeWorkScope(target: Target): Promise<{ query: string; target: ResolvedTarget }> {
   if (target?.kind !== "open") return { query: targetQuery(target), target: namedTarget(target) };
@@ -147,13 +153,15 @@ async function routeWorkScope(target: Target): Promise<{ query: string; target: 
   const document = sessions
     .find((session) => session.sessionId === target.ref.session)
     ?.openDocuments?.find((doc) => doc.openId === target.ref.openId);
-  const address = addressSchema.safeParse(document?.address).data;
-  if (!address)
+  if (!document)
     throw Error(
-      "The Chat's document is no longer open, so its route Work has no Address to read; ask the person to pick the document again.",
+      "The Chat's document is no longer open in its session; ask the person to pick an open document again.",
     );
+  const address = addressSchema.safeParse(document.address).data ?? null;
+  const query = new URLSearchParams({ open: `${target.ref.session}/${target.ref.openId}` });
+  if (address) query.set("target", address);
   return {
-    query: new URLSearchParams({ target: address }).toString(),
+    query: query.toString(),
     target: { session: target.ref.session, document: address },
   };
 }
@@ -165,7 +173,11 @@ export const peFind = createTool({
   inputSchema: z.object({
     query: z.string().optional().describe("Keywords describing what you need."),
     kind: capabilityKindSchema.optional(),
-    needs: capabilityNeedsSchema.optional(),
+    needs: capabilityNeedsSchema
+      .optional()
+      .describe(
+        "document includes project-document and family-document capabilities. Other needs match exactly. This filters requirements, not current availability.",
+      ),
     mutates: z.boolean().optional(),
     limit: z.number().int().min(1).max(50).default(8),
   }),
@@ -729,25 +741,106 @@ async function dispatch(
           result: await response.json(),
         };
       }
-      if (row.key === "route:families.view" || row.key === "route:families.set-query") {
+      if (row.key === "route:ducts.analysis") {
+        const response = await createPeClient(base(), fetch).response("ducts.analysis", {
+          body: peRoutes["ducts.analysis"].body.parse(payload),
+        });
+        const result = await response.json();
+        if (response.ok) result.artifact.url = new URL(result.artifact.url, base()).toString();
+        return {
+          ok: response.ok,
+          target: response.ok
+            ? { session: result.target.session, document: result.target.openId }
+            : { session: null, document: null },
+          result,
+        };
+      }
+      if (row.key === "route:ducts.guide") {
+        const { document, section } = ductsGuideInputSchema.parse(payload);
+        const guide = ductsGuideReading(section);
+        if (!document)
+          return { ok: true, target: { session: null, document: null }, result: { guide } };
+        // The same fresh document read route:ducts.analysis runs; the guide stands without it.
+        try {
+          const response = await createPeClient(base(), fetch).response("ducts.analysis", {
+            body: peRoutes["ducts.analysis"].body.parse({
+              source: { kind: "fresh", target: document },
+              selector: { kind: "document" },
+              projection: "summary",
+              // One row: the guide wants the counts and the findings, not the page.
+              limit: 1,
+            }),
+          });
+          if (!response.ok)
+            return {
+              ok: true,
+              target: { session: null, document: null },
+              result: { guide, present: null, presentError: await response.text() },
+            };
+          const result = await response.json();
+          return {
+            ok: true,
+            target: { session: result.target.session, document: result.target.openId },
+            result: {
+              guide,
+              present: presentDuctCases(result.findingCounts.byKindAndGrade, result.findings),
+            },
+          };
+        } catch (error) {
+          return {
+            ok: true,
+            target: { session: null, document: null },
+            result: { guide, present: null, presentError: message(error) },
+          };
+        }
+      }
+      const view = /^route:([a-z-]+)\.(view|set-view)$/.exec(row.key);
+      if (view && view[1] && routeViewRoutes.includes(view[1] as RouteViewRoute)) {
+        // One channel for every route that leases a view (`routeViewRoutes`): read the leased view, or patch its Page keys.
+        const route = view[1] as RouteViewRoute;
         if (!viewThread) throw Error("This MCP server has no thread (no harness context).");
-        const query = new URLSearchParams({ thread: viewThread });
-        if (row.key === "route:families.view" && typeof payload.instance === "string")
-          query.set("instance", payload.instance);
         const client = createPeClient(base(), fetch);
-        const response = row.key.endsWith(".view")
-          ? await client.response("view.get", { query: Object.fromEntries(query) })
-          : await client.response("view.query", {
-              body: peRoutes["view.query"].body.parse({ ...payload, thread: viewThread }),
-            });
+        const read = (instance: unknown) =>
+          client.response("view.get", {
+            params: { route },
+            query: {
+              thread: viewThread,
+              ...(typeof instance === "string" ? { instance } : {}),
+            },
+          });
+        let response: Response;
+        if (view[2] === "view") response = await read(payload.instance);
+        else {
+          const { instance, revision, ...rest } = payload;
+          const spec = routeAddresses[route].agent as NonNullable<RouteAddress["agent"]>;
+          let patch = rest as Record<string, string>;
+          let refused: string | null = null;
+          if (spec.resolve) {
+            // The view's own facts say which ids exist; a name resolves against them or not at all.
+            const lease = (await (await read(instance)).json()) as {
+              facts?: Record<string, unknown>;
+            };
+            const resolved = spec.resolve(rest, lease.facts ?? {});
+            if (resolved.ok) patch = resolved.patch;
+            else refused = resolved.error;
+          }
+          response = refused
+            ? Response.json({ ok: false, error: refused }, { status: 409 })
+            : await client.response("view.set", {
+                params: { route },
+                body: peRoutes["view.set"].body.parse({
+                  thread: viewThread,
+                  instance,
+                  revision,
+                  patch,
+                }),
+              });
+        }
         const result = (await response.json()) as Record<string, unknown>;
-        if (
-          row.key === "route:families.view" &&
-          response.ok &&
-          typeof result.readingId === "string"
-        ) {
+        const context = (result.context ?? {}) as Record<string, unknown>;
+        if (route === "families" && response.ok && typeof context.readingId === "string") {
           const reference = await fetch(
-            `${base()}/families/readings?id=${encodeURIComponent(result.readingId)}&format=reference`,
+            `${base()}/families/readings?id=${encodeURIComponent(context.readingId)}&format=reference`,
           );
           if (reference.ok) {
             const reading = (await reference.json()) as Record<string, unknown>;
@@ -768,8 +861,8 @@ async function dispatch(
           } else
             result.readingError = `Retained reading reference unavailable (${reference.status})`;
         }
-        const observed = result.document as { session?: unknown } | undefined;
-        const work = result.work as { binding?: unknown; target?: unknown } | undefined;
+        const observed = context.document as { session?: unknown } | undefined;
+        const work = context.work as { binding?: unknown; target?: unknown } | undefined;
         return {
           ok: response.ok,
           target: {
@@ -853,13 +946,31 @@ async function dispatch(
       if (row.kind === "route-doc") {
         if (input.expectedRevision === undefined)
           throw new Error(`Read route:${parsed.route} first and pass its expectedRevision.`);
+        // Ducts Work is keyed by document: an unbound write lands in Work no page reads (wave 3, 2026-10-19).
+        if (parsed.route === "ducts" && !workspaceId && !defaultTarget)
+          throw new Error(
+            "route:ducts.propose needs this thread's document, and none is bound: Ducts Work belongs to one document, so this proposal would land where no page reads it. Ask the person to select the open document in the composer (that binds this thread), or target_set one of your own open documents; then read route:ducts again and propose.",
+          );
+        // Ducts: a raw Load Preview paste is parsed here and proposed as loads/preview.
+        const loads =
+          parsed.route === "ducts" && typeof payload.loadsText === "string"
+            ? transitionPatches(
+                ["loads"],
+                "preview",
+                {},
+                {
+                  kind: "propose",
+                  rung: { value: { systems: parseLoadPreview(payload.loadsText).systems } },
+                },
+              )
+            : [];
         return routeWrite(
           parsed.route,
           "apply",
           defaultTarget,
           input.expectedRevision,
           {
-            patches: payload.patches,
+            patches: [...(Array.isArray(payload.patches) ? payload.patches : []), ...loads],
           },
           workspaceId,
         );

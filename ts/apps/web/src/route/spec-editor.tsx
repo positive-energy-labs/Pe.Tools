@@ -35,7 +35,7 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import { Switcher } from "#/components/lang/switcher";
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
 import { projectHostValidationState } from "#/lib/schema-to-field-render/field-state";
-import { inventoryOf, previousOf, useHostStatus, useInventory } from "#/readings";
+import { inventoryOf, previousOf, useHostStatusSlice, useInventory } from "#/readings";
 import { schemaFormModel } from "#/settings/schema-form";
 import {
   actionResult,
@@ -346,9 +346,11 @@ export function SpecEditor({
   optionsFrom?: OptionsFrom | null;
   onSaved?: (ref: MemberRef) => void;
 }) {
-  const status = useHostStatus(!fixture);
-  const session =
-    !fixture && status.state === "ready" && status.observation.bridgeIsConnected === true;
+  const bridged = useHostStatusSlice(
+    (status) => status.state === "ready" && status.observation.bridgeIsConnected === true,
+    !fixture,
+  );
+  const session = !fixture && bridged;
   const options = useOptionsFrom(fixture ? null : optionsFrom, !fixture);
   const [basis, setBasis] = useState<string | null>(fixture?.content ?? null);
   const [basisSha, setBasisSha] = useState<string | null>(null);

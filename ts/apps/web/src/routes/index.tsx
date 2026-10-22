@@ -1,17 +1,16 @@
 import { createFileRoute, stripSearchParams, type SearchSchemaInput } from "@tanstack/react-router";
+import { readLink } from "@pe/agent-contracts";
+import { routeSearch } from "#/route/route-owner";
 import { Directory } from "#/navigation/directory";
 import { Ledger } from "#/navigation/ledger";
 import { LEDGER_PRESENTATIONS } from "#/navigation/ledger-model";
-import {
-  directorySearch,
-  DIRECTORY_DEFAULTS,
-  type DirectorySearch,
-} from "#/navigation/directory-search";
 
 export const Route = createFileRoute("/")({
-  validateSearch: (search: SearchSchemaInput & Partial<DirectorySearch>) =>
-    directorySearch({ ...search }),
-  search: { middlewares: [stripSearchParams(DIRECTORY_DEFAULTS)] },
+  validateSearch: (search: SearchSchemaInput & Record<string, unknown>) => ({
+    ...routeSearch(search),
+    ...readLink("home", search).page,
+  }),
+  search: { middlewares: [stripSearchParams(readLink("home", {}).page)] },
   component: Home,
 });
 

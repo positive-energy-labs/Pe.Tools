@@ -23,6 +23,15 @@
     "./pe-api": {
       "types": "./src/pe-api.ts",
       "import": "./src/pe-api.ts"
+    },
+    "./product-map": {
+      "types": "./src/product-map.ts",
+      "import": "./src/product-map.ts"
+    },
+    "./space-view": "./src/space-view.ts",
+    "./ducts-guide": {
+      "types": "./src/ducts-guide.ts",
+      "import": "./src/ducts-guide.ts"
     }
   },
   "publishConfig": {
@@ -42,7 +51,6 @@
   "devDependencies": {
     "@types/node": "^25.6.2",
     "@typescript/native-preview": "7.0.0-dev.20260509.2",
-    "beautiful-mermaid": "catalog:",
     "bumpp": "^11.1.0",
     "typescript": "^6.0.3",
     "vite-plus": "catalog:"

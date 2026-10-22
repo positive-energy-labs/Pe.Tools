@@ -1,5 +1,4 @@
 import { captureDirectory } from "../../../apps/host/src/packages.ts";
-import { existsSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -63,44 +62,22 @@ test("a corrupt projection receipt cannot turn skill retirement into a path esca
   }
 });
 
-test("an unreceipted same-named skill stays byte-exact; the product does not publish over it and says how to resolve it", async () => {
+test("a same-named skill folder without a receipt is overwritten by the product's skill", async () => {
   const home = await mkdtemp(join(tmpdir(), "pe-skill-shipped-"));
   try {
     const roots = resolvePeaSkillPaths({ productHomePath: home });
     for (const [i, root] of roots.entries()) {
       await mkdir(join(root, "build-pod"), { recursive: true });
       await writeFile(join(root, "build-pod", "SKILL.md"), `older projection ${i}`);
-      await writeFile(join(root, "build-pod", "notes.txt"), `mine ${i}`);
     }
     await mkdir(join(roots[0]!, "mine"), { recursive: true });
     await writeFile(join(roots[0]!, "mine", "SKILL.md"), "user skill");
     const publication = await publishPeaSkills({ productHomePath: home, captureDirectory });
-    for (const [i, root] of roots.entries()) {
-      expect(await readFile(join(root, "build-pod", "SKILL.md"), "utf8")).toBe(
-        `older projection ${i}`,
-      );
-      expect(await readFile(join(root, "build-pod", "notes.txt"), "utf8")).toBe(`mine ${i}`);
-      expect(
-        JSON.parse(await readFile(join(root, ".pe-projection.json"), "utf8")),
-      ).not.toHaveProperty("build-pod");
-    }
-    expect(publication.skills.some((s) => s.key === "skill:@skills/skills/build-pod")).toBe(false);
-    expect(await readFile(join(roots[0]!, "mine", "SKILL.md"), "utf8")).toBe("user skill");
-    expect(publication.notices).toEqual(
-      roots.map((root) => expect.stringContaining(join(root, "build-pod"))),
-    );
-    for (const notice of publication.notices) expect(notice).toContain("rename or delete");
-    expect(existsSync(join(home, ".backups"))).toBe(false);
-    // The diagnostic holds until the user resolves it; then the product publishes.
-    expect(
-      (await publishPeaSkills({ productHomePath: home, captureDirectory })).notices,
-    ).toHaveLength(2);
-    for (const root of roots) await rm(join(root, "build-pod"), { recursive: true });
-    const resolved = await publishPeaSkills({ productHomePath: home, captureDirectory });
-    expect(resolved.notices).toEqual([]);
-    const shipped = resolved.skills.find((s) => s.key === "skill:@product/skills/build-pod")!;
+    const shipped = publication.skills.find((s) => s.key === "skill:@product/skills/build-pod")!;
     for (const root of roots)
       expect(await readFile(join(root, "build-pod", "SKILL.md"), "utf8")).toBe(shipped.content);
+    expect(await readFile(join(roots[0]!, "mine", "SKILL.md"), "utf8")).toBe("user skill");
+    expect(publication.notices).toEqual([]);
   } finally {
     await rm(home, { recursive: true, force: true });
   }

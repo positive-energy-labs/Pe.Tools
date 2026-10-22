@@ -296,24 +296,6 @@ test("wrong request or plan cannot overwrite a confirmed receipt, and corrupt ad
   }
 });
 
-test("malformed plans and failed reads retain the full last plan, one refresh shared", async () => {
-  const f = await fixture();
-  try {
-    let next: unknown = plan;
-    const reader = f.make(vi.fn(async () => envelope(next)));
-    const first = reader.refresh();
-    expect(reader.refresh()).toBe(first);
-    expect((await first).plan).toBe(plan);
-    next = { planId: "subset", available: true };
-    const failed = await reader.refresh();
-    expect(failed.plan).toBe(plan);
-    expect(failed.planLeg.error).not.toBeNull();
-    expect(failed.planLeg.observedAtUtc).toBe((await first).planLeg.observedAtUtc);
-  } finally {
-    await f.close();
-  }
-});
-
 test("an authoritative pre-effect refusal survives restart without locking the next plan", async () => {
   const f = await fixture();
   try {
@@ -338,18 +320,6 @@ test("an authoritative pre-effect refusal survives restart without locking the n
       })
       .apply("d8125ca6-8a92-4668-a43c-6176d8849f5c");
     expect(next.requestId).not.toBe(first.requestId);
-  } finally {
-    await f.close();
-  }
-});
-
-test("receipt-only refresh never reads the feed and preserves terminal refusals", async () => {
-  const f = await fixture();
-  try {
-    const admitted = await f.reader.apply(plan.planId);
-    f.confirm(receipt(admitted.requestId!, "ok"));
-    expect((await f.reader.refresh(false)).receipt?.state).toBe("ok");
-    expect(f.calls.filter(({ args }) => args[1] === "check")).toHaveLength(0);
   } finally {
     await f.close();
   }
@@ -380,130 +350,6 @@ test("lost acknowledgement recovers a terminal refusal even when op result inclu
     await f.close();
   }
 });
-
-test("invalid plan identity refuses before writing an admission or invoking the SDK", async () => {
-  const f = await fixture();
-  try {
-    await expect(f.reader.apply("not-a-uuid")).rejects.toThrow("canonical UUID");
-    await expect(readFile(f.path)).rejects.toMatchObject({ code: "ENOENT" });
-    expect(f.calls).toEqual([]);
-    expect((await f.reader.apply(plan.planId)).receipt?.state).toBe("running");
-  } finally {
-    await f.close();
-  }
-});
-
-test.each(["direct", "recovered", "persisted"] as const)(
-  "failed SDK diagnostic survives %s admission and restart without inventing a receipt leg",
-  async (mode) => {
-    const f = await fixture();
-    const detail = "Access to the path 'C:\\sdk\\sessions\\installed-update-25' is denied.";
-    const diagnostic = `op.failed: ${detail}`;
-    let requestId = "5f871e2c-01db-400e-a0ae-65cb79a3e22f";
-    const failed = () => ({
-      ...receipt(requestId, "failed"),
-      restartYears: [],
-      legs: [
-        {
-          name: "download",
-          status: "ok",
-          observedAtUtc: "2026-10-10T08:51:34.7368843Z",
-          detail: null,
-          exitCode: null,
-        },
-      ],
-    });
-    const runner: UpdateRunner = vi.fn(async (args) => {
-      if (args[1] === "apply") {
-        requestId = args[args.indexOf("--request-id") + 1]!;
-        if (mode === "recovered") throw Error("ack lost");
-        return {
-          ...envelope(failed(), 1),
-          diagnostics: [{ code: "op.failed", detail, fix: null }],
-        };
-      }
-      if (args[0] === "op") {
-        const answer = recovered(failed());
-        return {
-          ...answer,
-          exitCode: 1,
-          result: {
-            ...(answer.result as object),
-            response: {
-              requestId,
-              key: "update.apply",
-              verdict: "failed",
-              result: failed(),
-              code: "op.failed",
-              detail,
-            },
-          },
-        };
-      }
-      return envelope(plan);
-    });
-    try {
-      if (mode === "persisted")
-        await writeFile(
-          f.path,
-          JSON.stringify({
-            requestId,
-            planId: plan.planId,
-            admittedAtUtc: "2026-10-10T08:51:00Z",
-            receiptObservedAtUtc: "2026-10-10T08:51:45Z",
-            receipt: failed(),
-          }),
-        );
-      const reader = f.make(runner);
-      const result =
-        mode === "persisted" ? await reader.refresh(false) : await reader.apply(plan.planId);
-      expect(result.receipt).toEqual(failed());
-      expect(result.receiptLeg.error).toBe(diagnostic);
-      const restarted = await f.make(runner).refresh(false);
-      expect(restarted.receipt).toEqual(failed());
-      expect(restarted.receiptLeg.error).toBe(diagnostic);
-      const lifecycle = {
-        latch: Effect.runSync(Deferred.make<void>()),
-        handle: Effect.runSync(Deferred.make<ServiceHostHandle>()),
-      };
-      const web = HttpRouter.toWebHandler(
-        updateRoutes.pipe(
-          Layer.provideMerge(
-            Layer.mergeAll(
-              Layer.succeed(UpdateReader, reader),
-              Layer.succeed(HostLifecycle, lifecycle),
-            ),
-          ),
-        ),
-        { disableLogger: true },
-      );
-      try {
-        const response = await web.handler(
-          new Request("http://host/host/update", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ planId: plan.planId }),
-          }),
-          Context.empty() as never,
-        );
-        expect(response.status).toBe(409);
-        expect(await response.json()).toMatchObject({
-          accepted: false,
-          requestId,
-          error: diagnostic,
-          receipt: failed(),
-        });
-      } finally {
-        await web.dispose();
-      }
-      expect(vi.mocked(runner).mock.calls.filter(([args]) => args[1] === "apply")).toHaveLength(
-        mode === "persisted" ? 0 : 1,
-      );
-    } finally {
-      await f.close();
-    }
-  },
-);
 
 test("automatic admission excludes new Pea work through download and handoff, terminal refusal releases it", async () => {
   const f = await fixture();

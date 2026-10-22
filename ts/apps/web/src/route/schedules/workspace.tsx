@@ -27,6 +27,7 @@ import {
   type ScheduleCellWrites,
 } from "./columns";
 import type { Refusal } from "#/route";
+import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
 
 export interface ScheduleGridState {
   slice: ScheduleGridDocument | null;
@@ -53,6 +54,8 @@ export interface ScheduleGridState {
   freshness: "current" | "changed" | "disconnected";
   /** The document the drawn read came from; a measured parse is asked of exactly it. */
   documentScope?: HostCallOptions;
+  /** Native action provenance belongs to the displayed capture, independently of the selector. */
+  nativeObservation?: NativeObservation;
   activeRow?: string | null;
   locateRow?: (row: string) => void;
 }
@@ -87,9 +90,10 @@ export function useScheduleCellWrites({
   snapshot,
   refused,
   documentScope,
+  nativeObservation,
 }: Pick<
   ScheduleGridState,
-  "slice" | "revision" | "apply" | "snapshot" | "refused" | "documentScope"
+  "slice" | "revision" | "apply" | "snapshot" | "refused" | "documentScope" | "nativeObservation"
 >): ScheduleCellWrites {
   const cells = slice?.cells ?? {};
   const stale = slice?.basis?.stale ?? [];
@@ -97,7 +101,19 @@ export function useScheduleCellWrites({
   const wire = scheduleCellWire({ apply, revision, snapshot });
   /** The measured cell's one call, owned by this snapshot: a re-read aborts what is in flight. */
   const parse = useMeasuredParse(snapshot, documentScope);
-  const parseMeasured = (key: string, text: string) => parse(bindingAt(key)?.displayUnit, text);
+  const parseMeasured: ScheduleCellWrites["parseMeasured"] = (key, text) => {
+    const scope = nativeObservation?.scope;
+    if (
+      scope?.source !== "native" ||
+      !scope.document ||
+      documentScope?.bridgeSessionId !== scope.document.session ||
+      documentScope?.openDocumentId !== scope.document.openId
+    )
+      return Promise.resolve({
+        refusal: "A native parse needs the displayed observation's exact document lifetime.",
+      });
+    return parse(bindingAt(key)?.displayUnit, text);
+  };
 
   /** Typing stages; it also severs a standing proposal, so the typed value is not contested. */
   const stageEdit = async (key: string, value: string | MeasuredValue): Promise<string | void> => {
@@ -126,6 +142,7 @@ export function ScheduleGridWorkspace({
     onFocus,
     freshness,
     documentScope,
+    nativeObservation,
     activeRow: locatedRow,
   },
   onRefused,
@@ -151,6 +168,7 @@ export function ScheduleGridWorkspace({
     snapshot,
     refused,
     documentScope,
+    nativeObservation,
   });
   const { wire, stageEdit, parseMeasured } = writes;
 
@@ -251,78 +269,80 @@ export function ScheduleGridWorkspace({
 
   return (
     // Focus arriving from outside the grid's pane is the edge a stage revalidates on.
-    <div
-      className="contents"
-      onFocusCapture={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onFocus.grid();
-      }}
-    >
-      <Pane flush scroll="clip">
-        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex min-h-0 flex-1 flex-col">
-            {snapshot ? (
-              <TableFrame
-                // A schedule switch remounts the box: no draft or typed text outlives its schedule.
-                key={snapshot.scheduleId}
-                label="schedule rows"
-                rows={snapshot.rows}
-                columns={gridColumns}
-                rowKey={(row) => String(row.rowNumber)}
-                state={tableState}
-                onStateChange={setTableState}
-                searchPlaceholder="search any field, or type a column name"
-                actions={facts}
-              >
-                <Table
+    <NativeObservationScope value={nativeObservation ?? { scope: null }}>
+      <div
+        className="contents"
+        onFocusCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onFocus.grid();
+        }}
+      >
+        <Pane flush scroll="clip">
+          <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col">
+              {snapshot ? (
+                <TableFrame
+                  // A schedule switch remounts the box: no draft or typed text outlives its schedule.
+                  key={snapshot.scheduleId}
+                  label="schedule rows"
                   rows={snapshot.rows}
                   columns={gridColumns}
                   rowKey={(row) => String(row.rowNumber)}
-                  label="schedule rows"
                   state={tableState}
                   onStateChange={setTableState}
-                  activeKey={locatedRow}
-                  cellEdit={cellEdit}
-                  gutter={(row) => {
-                    const owed = snapshot.columns.filter(
-                      (column) =>
-                        cells[scheduleCellKey(row.rowNumber, column.columnNumber)]?.proposal !=
-                        null,
-                    ).length;
-                    return owed > 0
-                      ? {
-                          count: owed,
-                          tone: "caution" as const,
-                          title: `${owed} pea proposal${owed === 1 ? "" : "s"} on this row await${owed === 1 ? "s" : ""} a verdict — accept stages, deny clears`,
-                        }
-                      : null;
-                  }}
-                  empty={
+                  search
+                  actions={facts}
+                >
+                  <Table
+                    rows={snapshot.rows}
+                    columns={gridColumns}
+                    rowKey={(row) => String(row.rowNumber)}
+                    label="schedule rows"
+                    state={tableState}
+                    onStateChange={setTableState}
+                    activeKey={locatedRow}
+                    cellEdit={cellEdit}
+                    gutter={(row) => {
+                      const owed = snapshot.columns.filter(
+                        (column) =>
+                          cells[scheduleCellKey(row.rowNumber, column.columnNumber)]?.proposal !=
+                          null,
+                      ).length;
+                      return owed > 0
+                        ? {
+                            count: owed,
+                            tone: "caution" as const,
+                            title: `${owed} pea proposal${owed === 1 ? "" : "s"} on this row await${owed === 1 ? "s" : ""} a verdict — accept stages, deny clears`,
+                          }
+                        : null;
+                    }}
+                    empty={
+                      <EmptyState
+                        story="scope"
+                        exit="press r to read it again, or Ctrl K for another"
+                      >
+                        this schedule has no rows
+                      </EmptyState>
+                    }
+                  />
+                </TableFrame>
+              ) : (
+                <div className="grid h-full place-items-center p-6">
+                  {hydrated ? (
                     <EmptyState
                       story="scope"
-                      exit="press r to read it again, or Ctrl K for another"
+                      exit="press Ctrl K to choose one (type to filter, ↑/↓ then Enter), or ask pea to open one"
                     >
-                      this schedule has no rows
+                      no schedule open
                     </EmptyState>
-                  }
-                />
-              </TableFrame>
-            ) : (
-              <div className="grid h-full place-items-center p-6">
-                {hydrated ? (
-                  <EmptyState
-                    story="scope"
-                    exit="press Ctrl K to choose one (type to filter, ↑/↓ then Enter), or ask pea to open one"
-                  >
-                    no schedule open
-                  </EmptyState>
-                ) : (
-                  <OutcomeLine kind="busy" label="connecting to the workbench" />
-                )}
-              </div>
-            )}
-          </div>
-        </section>
-      </Pane>
-    </div>
+                  ) : (
+                    <OutcomeLine kind="busy" label="connecting to the workbench" />
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
+        </Pane>
+      </div>
+    </NativeObservationScope>
   );
 }

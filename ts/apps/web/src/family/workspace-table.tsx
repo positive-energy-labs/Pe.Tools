@@ -198,7 +198,7 @@ export function FamilyWorkspaceTable() {
           </HelpTip>
         </span>
       }
-      searchPlaceholder="parameter"
+      search
       modes={tableModes}
       actions={tableActions}
     >
@@ -263,7 +263,7 @@ export function FamilyWorkspaceTable() {
           </span>
         </TooltipHint>
       }
-      searchPlaceholder="parameter"
+      search
       actions={tableActions}
     >
       <Table

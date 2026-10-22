@@ -1,55 +1,89 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import type { FamiliesView } from "@pe/agent-contracts";
+import type { RouteView } from "@pe/agent-contracts";
 import { RouteViewStore } from "./route-view-store.ts";
 
-const view = (instance: string, thread = "t"): FamiliesView => ({
+const counts = { families: 2, types: 3, parameters: 4 };
+const view = (instance: string, thread = "t"): RouteView => ({
+  route: "families",
   thread,
   instance,
   surface: "chat",
-  stage: "archived",
-  query: "",
-  ruleHelp: [],
-  readingId: "read-1",
-  document: { session: "s", openId: "o" },
-  work: { route: "families", binding: "host", target: null },
-  counts: { families: 2, types: 3, parameters: 4 },
+  page: { query: "" },
+  context: {
+    stage: "archived",
+    readingId: "read-1",
+    document: { session: "s", openId: "o" },
+    work: { route: "families", binding: "host", target: null },
+  },
+  facts: { counts, ruleHelp: [] },
+});
+const ducts = (instance: string): RouteView => ({
+  route: "ducts",
+  thread: "t",
+  instance,
+  surface: "route",
+  page: { system: "", level: "", selected: "" },
+  context: { document: { session: "s", openId: "o" } },
+  facts: { systems: [{ name: "Supply 1" }] },
 });
 const id1 = "00000000-0000-4000-8000-000000000001";
 const id2 = "00000000-0000-4000-8000-000000000002";
 
-describe("mounted Families view custody", () => {
-  it("refuses ambiguity and only acknowledges rendered query on the exact context", async () => {
+describe("mounted route view custody", () => {
+  it("refuses ambiguity and only acknowledges the rendered patch on the exact context", async () => {
     const store = new RouteViewStore();
     const first = store.publish(view(id1));
     store.publish(view(id2));
-    expect(store.select("t")).toMatchObject({ ok: false, instances: [id1, id2] });
+    expect(store.select("t", "families")).toMatchObject({ ok: false, instances: [id1, id2] });
     let intent: { commandId: string } | undefined;
     store.subscribe((value) => {
       intent = value;
     });
-    const result = store.setQuery("t", id1, first.revision, "blank");
-    expect(
+    const result = store.set("t", "families", id1, first.revision, { query: "blank" });
+    const ack = (query: string) =>
       store.ack({
+        outcome: "rendered",
         instance: id1,
         commandId: intent!.commandId,
         revision: first.revision,
-        query: "wrong",
-        counts: first.counts,
-      }).ok,
-    ).toBe(false);
-    store.publish({ ...view(id1), query: "blank" });
+        page: { query },
+        facts: first.facts,
+      }).ok;
+    expect(ack("wrong")).toBe(false);
+    store.publish({ ...view(id1), page: { query: "blank" } });
+    expect(ack("blank")).toBe(true);
+    await expect(result).resolves.toMatchObject({ ok: true, page: { query: "blank" } });
+    const next = store.select("t", "families", id1)!;
+    expect("revision" in next && next.revision).toBeGreaterThan(first.revision);
+  });
+
+  it("keeps one lease per route and refuses keys the lease does not offer", async () => {
+    const store = new RouteViewStore();
+    const lease = store.publish(ducts(id1));
+    expect(store.select("t", "families")).toMatchObject({ ok: false });
+    await expect(
+      store.set("t", "ducts", id1, lease.revision, { query: "x" }),
+    ).resolves.toMatchObject({ ok: false });
+    await expect(store.set("t", "ducts", id1, lease.revision, {})).resolves.toMatchObject({
+      ok: false,
+    });
+    let commandId = "";
+    store.subscribe((intent) => {
+      commandId = intent.commandId;
+    });
+    const result = store.set("t", "ducts", id1, lease.revision, { system: "Supply 1" });
+    store.publish({ ...ducts(id1), page: { system: "Supply 1", level: "", selected: "" } });
     expect(
       store.ack({
+        outcome: "rendered",
         instance: id1,
-        commandId: intent!.commandId,
-        revision: first.revision,
-        query: "blank",
-        counts: first.counts,
+        commandId,
+        revision: lease.revision,
+        page: { system: "Supply 1", level: "", selected: "" },
+        facts: lease.facts,
       }).ok,
     ).toBe(true);
-    await expect(result).resolves.toMatchObject({ ok: true, query: "blank" });
-    const next = store.select("t", id1)!;
-    expect("revision" in next && next.revision).toBeGreaterThan(first.revision);
+    await expect(result).resolves.toMatchObject({ ok: true });
   });
 
   it("refuses a changed reading and retires an expired lease", async () => {
@@ -61,21 +95,26 @@ describe("mounted Families view custody", () => {
       store.subscribe((intent) => {
         commandId = intent.commandId;
       });
-      const result = store.setQuery("t", id1, first.revision, "filled");
-      store.publish({ ...view(id1), readingId: "read-2", query: "filled" });
+      const result = store.set("t", "families", id1, first.revision, { query: "filled" });
+      store.publish({
+        ...view(id1),
+        context: { ...view(id1).context, readingId: "read-2" },
+        page: { query: "filled" },
+      });
       expect(
         store.ack({
+          outcome: "rendered",
           instance: id1,
           commandId,
           revision: first.revision,
-          query: "filled",
-          counts: first.counts,
+          page: { query: "filled" },
+          facts: first.facts,
         }).ok,
       ).toBe(false);
       await vi.advanceTimersByTimeAsync(8_000);
       await expect(result).resolves.toMatchObject({ ok: false });
       await vi.advanceTimersByTimeAsync(7_000);
-      expect(store.select("t", id1)).toBeNull();
+      expect(store.select("t", "families", id1)).toBeNull();
     } finally {
       vi.useRealTimers();
     }
@@ -90,21 +129,22 @@ describe("mounted Families view custody", () => {
       store.subscribe((intent) => {
         commandId = intent.commandId;
       });
-      const result = store.setQuery("old-thread", id1, first.revision, "blank");
-      store.publish({ ...view(id1, "new-thread"), query: "blank" });
-      expect(store.select("old-thread", id1)).toBeNull();
+      const result = store.set("old-thread", "families", id1, first.revision, { query: "blank" });
+      store.publish({ ...view(id1, "new-thread"), page: { query: "blank" } });
+      expect(store.select("old-thread", "families", id1)).toBeNull();
       expect(
         store.ack({
+          outcome: "rendered",
           instance: id1,
           commandId,
           revision: first.revision,
-          query: "blank",
-          counts: first.counts,
+          page: { query: "blank" },
+          facts: first.facts,
         }).ok,
       ).toBe(false);
       store.remove(id1);
       await expect(result).resolves.toMatchObject({ ok: false, error: "view unmounted" });
-      expect(store.select("new-thread", id1)).toBeNull();
+      expect(store.select("new-thread", "families", id1)).toBeNull();
     } finally {
       vi.useRealTimers();
     }

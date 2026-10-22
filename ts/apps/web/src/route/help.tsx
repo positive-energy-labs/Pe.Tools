@@ -15,7 +15,14 @@ import { Button } from "@pe/kit/lang/button";
 import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { startFeedback } from "#/components/feedback-picker";
 import { SettingsHelpTrigger } from "#/machine/navigation";
-import { readKeyMeta, readRegistrations, useScopeKeys, type KeyMeta } from "@pe/kit/keys";
+import {
+  chordLabel,
+  readKeyMeta,
+  readRegistrations,
+  useScopeKeys,
+  type Chord,
+  type KeyMeta,
+} from "@pe/kit/keys";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 interface Region {
@@ -25,7 +32,7 @@ interface Region {
 }
 
 interface Bound extends KeyMeta {
-  hotkey: string;
+  hotkey: Chord;
 }
 
 const CARD_W = 240;
@@ -78,7 +85,7 @@ function Rows({ keys, flow = false }: { keys: readonly Bound[]; flow?: boolean }
     >
       {keys.map((k) => (
         <div
-          key={`${k.hotkey}:${k.name}`}
+          key={`${chordLabel(k.hotkey)}:${k.name}`}
           className={flow ? "flex items-center gap-2.5" : "contents"}
         >
           <dt>
@@ -271,8 +278,13 @@ function HelpBody({
   const bound = new Map<string, Bound>();
   for (const reg of hotkeys) {
     const meta = readKeyMeta(reg.options.meta);
-    if (!meta || (reg.hotkey === HELP_CHORD.hotkey && meta.name === HELP_CHORD.label)) continue;
-    const key = `${reg.hotkey}:${meta.name}`;
+    if (
+      !meta ||
+      reg.options.enabled === false ||
+      (reg.hotkey === HELP_CHORD.hotkey && meta.name === HELP_CHORD.label)
+    )
+      continue;
+    const key = `${reg.hotkey}:${meta.actionId ?? meta.name}`;
     if ((bound.get(key)?.depth ?? Infinity) > meta.depth)
       bound.set(key, { ...meta, hotkey: reg.hotkey });
   }
@@ -301,7 +313,17 @@ function HelpBody({
           this route draws no panes to explain
         </div>
       )}
-      {docs ? <div className="shrink-0 overflow-y-auto px-8 pt-3 pb-8 t-prose">{docs}</div> : null}
+      {docs ? (
+        <div
+          className="shrink-0 overflow-y-auto px-8 pt-3 pb-8 t-prose"
+          // A link in the prose is a "take me there": the page it lands on is the answer, so the help closes.
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest("a")) close();
+          }}
+        >
+          {docs}
+        </div>
+      ) : null}
       {utilities ? (
         <div className="hairline-t flex shrink-0 items-center gap-3 px-8 py-3">
           <Button

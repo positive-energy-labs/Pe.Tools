@@ -1,7 +1,7 @@
 /** Chat's whole Situation, drawn in the composer: Work and live asks at the top of the box, the
- *  next turn's provider, traits and document target in its bottom row beside Send. The target binds
+ *  next turn's provider, traits and document target as marks in the lane beside Send. The target binds
  *  through the thread head (`PUT /scope/:thread`); a `?target` pin seeds a document-less thread once. */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type SVGProps } from "react";
 import {
   resolveCallTarget,
   machineInventory,
@@ -9,7 +9,7 @@ import {
   type Machine,
   type Reading,
 } from "@pe/agent-contracts";
-import { Check, Copy, File, X } from "lucide-react";
+import { Check, Copy, X } from "lucide-react";
 import { Popover } from "@base-ui/react/popover";
 import { PopupFrame } from "@pe/kit/lang/list-popup";
 import { useAtomValue } from "@effect/atom-react";
@@ -290,17 +290,15 @@ export function ChatCluster({
   );
 }
 
-/** The pickers as marks: provider › model › traits, then the document target. `open` adds the
- *  target/open switch (the open composer's bottom row). */
+/** The pickers as marks: provider › model › traits, then the document target, whose popup carries
+ *  the target/open switch. */
 export function ComposerPickers({
   situation,
   urlTarget,
-  open,
 }: {
   /** The URL's `?target` pin: a thread with no document takes it once (e2e finding 7). */
   urlTarget?: string;
   situation: ChatSituation;
-  open: boolean;
 }) {
   const { currentThreadId, chat } = useWorkbench();
   const isRunning = selectRunStatus(chat) !== "idle";
@@ -364,19 +362,22 @@ export function ComposerPickers({
   return (
     <section aria-label="Situation" className="contents" data-testid="composer-head">
       <HeadLadder face="icon" />
-      <ComposerOpenMode switcher={open}>
-        <Ladder
-          face="icon"
-          mark={<File className="size-3.5" data-tone={situation.bound ? "done" : undefined} />}
-          levels={levels}
-          caution={Boolean(health)}
-          disabled={targetDisabled}
-          title={
-            ladder.sessionWord
-              ? `${ladder.sessionWord} › ${ladder.docWord ?? "no document"}; pick to change`
-              : "choose a session and a document; Chat runs without one, Revit operations do not"
-          }
-        />
+      <ComposerOpenMode>
+        {(header) => (
+          <Ladder
+            face="icon"
+            header={header}
+            mark={<RevitMark data-tone={situation.bound ? "done" : undefined} />}
+            levels={levels}
+            caution={Boolean(health)}
+            disabled={targetDisabled}
+            title={
+              ladder.sessionWord
+                ? `${ladder.sessionWord} › ${ladder.docWord ?? "no document"}; pick to change`
+                : "choose a session and a document; Chat runs without one, Revit operations do not"
+            }
+          />
+        )}
       </ComposerOpenMode>
     </section>
   );
@@ -407,11 +408,16 @@ export function ComposerWork({ situation }: { situation: ChatSituation }) {
   // Live asks only: an expired ask is a transcript record, never a head row.
   const approvals = selectApprovals(chat);
   const questions = selectQuestions(chat);
-  const works = useHeadWorks(documentAddress(inventory, bound), ladder.docWord ?? "document", {
-    open: store.actions.setPlugin,
-    planIn: store.actions.planIn,
-    planRefusal: useAtomValue(store.atoms.planRefusal),
-  });
+  const works = useHeadWorks(
+    documentAddress(inventory, bound),
+    ladder.docWord ?? "document",
+    {
+      open: (place) => void store.actions.openTab(place.route, place.page, place.carry),
+      planIn: (place) => store.actions.planIn(place.route, place.page, place.carry),
+      planRefusal: useAtomValue(store.atoms.planRefusal),
+    },
+    bound,
+  );
   return (
     <>
       <ComposerPending
@@ -462,5 +468,17 @@ function PlanChip({ tasks }: { tasks: readonly PlanTask[] }) {
         </div>
       </PopupFrame>
     </Popover.Root>
+  );
+}
+
+/** The document control's glyph: Revit's tile, a square with its R cut through, in currentColor. */
+function RevitMark(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="2 2 20 20" fill="currentColor" aria-hidden="true" {...props}>
+      <path
+        fillRule="evenodd"
+        d="M4 2h16a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm4 4v12h2.6v-4.4h1.7l2.9 4.4h3l-3.3-4.8A3.9 3.9 0 0 0 13.2 6Zm2.6 2.2h2.5a1.6 1.6 0 0 1 0 3.2h-2.5Z"
+      />
+    </svg>
   );
 }

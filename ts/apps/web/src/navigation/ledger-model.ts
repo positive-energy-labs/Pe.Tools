@@ -10,6 +10,7 @@ import type {
   NavigationWork,
 } from "@pe/agent-contracts";
 import { HOST_RESTARTED } from "@pe/agent-contracts/chat-state";
+import { linkTo } from "@pe/agent-contracts";
 import { summarizeFailure } from "@pe/host-contracts/failure-summary";
 
 /** In the order the eye takes them; waits and working lead and never fold. */
@@ -89,7 +90,7 @@ function threadRow(
     where: thread.providerName,
     says,
     at: thread.updatedAt,
-    url: `/pea?thread=${thread.id}`,
+    url: linkTo("pea", {}, { thread: thread.id }),
   });
   if (state === "waiting" || pending > 0) {
     const ask = asks.get(thread.id);
@@ -148,7 +149,9 @@ function receiptRow(receipt: ActionReceipt): LedgerRow | null {
     says: failure.summary,
     at: receipt.startedAt,
     // The failure's door is the row's address; a receipt itself has no page yet.
-    url: failure.door?.href ?? null,
+    url: failure.door
+      ? `${linkTo("settings", { section: failure.door.section })}${failure.door.hash ? `#${failure.door.hash}` : ""}`
+      : null,
     refusal: failure.door ? undefined : "No address yet: this receipt has no page",
     detail: failure.detail ?? undefined,
   };
@@ -165,7 +168,7 @@ export function ledgerRows(sources: LedgerSources, now: number): LedgerRow[] {
       where: "this computer",
       says: null,
       at: null,
-      url: "/settings",
+      url: linkTo("settings"),
     })),
     ...sources.threads
       .filter((thread) => thread.lifecycle.status === "active")

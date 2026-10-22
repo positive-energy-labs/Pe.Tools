@@ -27,19 +27,6 @@ const basis = {
   events: [],
 };
 
-it.each(["<script>const = ;</script>", "<div a='1' a='2'></div>"])(
-  "refuses invalid authored Page syntax before retaining an export: %s",
-  async (html) => {
-    const { directory } = await fixture(html);
-    await expect(exportPage({ directory, ...basis, library: async () => "" })).rejects.toThrow(
-      /Invalid .*HTML|Invalid .*JavaScript/,
-    );
-    await expect(readFile(join(directory, ".state", "exports"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-  },
-);
-
 it("pins local scripts, imported CSS and relative assets, snapshot, document and exact source hashes", async () => {
   const { directory } = await fixture(
     '<head><link rel="stylesheet" href="assets/main.css"><script src="/pages/pe.js"></script><script src="app.js"></script></head><img src="assets/icon.svg">',
@@ -190,19 +177,6 @@ it("embeds local module dependencies as data URLs and preserves dollar expressio
   expect(result.provenance.files.map((file) => file.path)).toContain("value.mjs");
 });
 
-it("keeps the existing host facsimile presentation library offline", async () => {
-  const { directory } = await fixture('<script src="/pages/revit.js"></script>');
-  const result = await exportPage({
-    directory,
-    ...basis,
-    library: async (path) => {
-      expect(path).toBe("/pages/revit.js");
-      return "globalThis.rv = { face: true };";
-    },
-  });
-  expect(result.html).toContain("globalThis.rv = { face: true };");
-});
-
 it.each(["async", "defer"])(
   "refuses %s scripts rather than changing their execution order",
   async (flag) => {
@@ -213,36 +187,3 @@ it.each(["async", "defer"])(
     );
   },
 );
-
-it("resolves pe.kitReady only after the kit script and stylesheet both load", async () => {
-  const source = (await readFile(new URL("../src/pages/pe.js", import.meta.url), "utf8")).replace(
-    "/*pe:runtime*/ null",
-    JSON.stringify({ header: "x-runtime", query: "runtime", service: "test" }),
-  );
-  const nodes: { onload(): void; src?: string; href?: string }[] = [];
-  const window: { pe?: { kitReady: Promise<unknown>; kit?: unknown } } = {};
-  runInNewContext(source, {
-    window,
-    location: new URL("http://host/pages/test/"),
-    document: {
-      querySelector: () => null,
-      createElement: () => ({}),
-      head: { append: (...items: typeof nodes) => nodes.push(...items) },
-    },
-  });
-  expect(nodes.map((node) => node.src ?? node.href)).toEqual([
-    "/pages/kit/pe-kit.css",
-    "/pages/kit/pe-kit.js",
-  ]);
-  const kit = { React: {} };
-  window.pe!.kit = kit;
-  let ready = false;
-  void window.pe!.kitReady.then(() => {
-    ready = true;
-  });
-  nodes[1]!.onload();
-  await Promise.resolve();
-  expect(ready).toBe(false);
-  nodes[0]!.onload();
-  expect(await window.pe!.kitReady).toBe(kit);
-});

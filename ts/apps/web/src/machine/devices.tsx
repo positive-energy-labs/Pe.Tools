@@ -284,7 +284,7 @@ function DeviceName({
   );
 }
 
-export function DevicePairing({
+function DevicePairing({
   environmentId,
   connected,
 }: {

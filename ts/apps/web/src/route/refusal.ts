@@ -4,17 +4,14 @@
  * abort to stop an action at a refused mutation, then restores the structured result. Codes are
  * ordered: `no-target` before `not-ready` before `stale-revision`.
  */
-import type { FamiliesRefusal, RouteStateWriteResult } from "@pe/agent-contracts";
+import type {
+  FamiliesRefusal,
+  RouteStateWriteResult,
+  RouteViewRefusalCode,
+} from "@pe/agent-contracts";
 
-export type RefusalCode =
-  | "not-ready"
-  | "no-target"
-  | "busy"
-  | "stale-revision"
-  | "conflict"
-  | "partial"
-  | "unknown"
-  | "failed";
+/** The contract's list (`routeViewRefusalCodes`): a Page refusal reaches Pea's view ack unchanged. */
+export type RefusalCode = RouteViewRefusalCode;
 
 export interface Refusal {
   readonly code: RefusalCode;

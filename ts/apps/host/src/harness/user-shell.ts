@@ -92,10 +92,18 @@ export async function userCodexMcpServers(configPath: string): Promise<string[]>
 }
 
 /** The project-level Codex config Pea writes in the world root: the user's own servers, off by name. */
-export function peaCodexProjectConfig(names: readonly string[]): string {
+function peaCodexProjectConfig(names: readonly string[]): string {
   return [
     "# Written by Pea at every host start. Your own Codex MCP servers (~/.codex/config.toml) stay",
     "# out of Pea threads; Pea attaches its own. Edits here are overwritten.",
+    "# Your Codex memories stay out too: they hold your other work, not this product home's.",
+    "",
+    "[features]",
+    "memories = false",
+    "",
+    "[memories]",
+    "use_memories = false",
+    "generate_memories = false",
     ...names.flatMap((name) => ["", `[mcp_servers.${JSON.stringify(name)}]`, "enabled = false"]),
     "",
   ].join("\n");

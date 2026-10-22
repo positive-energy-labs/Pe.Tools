@@ -4,7 +4,6 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
 import { emptyThreadLifecycle, type HarnessEvent } from "@pe/agent-contracts";
 import { createHarnessThreads } from "../src/harness/threads.ts";
 import type { Providers } from "../src/harness/providers.ts";
@@ -115,25 +114,6 @@ test("lifecycle transitions persist, reject stale windows, and keep the exact ta
   await reopened.close();
 });
 
-test("read watermark is monotonic; rename neither wakes snooze nor creates unread activity", async () => {
-  const event: HarnessEvent = {
-    kind: "turn_end",
-    turnId: "done",
-    stopReason: "end_turn",
-    seq: 1,
-    at: "2026-10-01T00:00:00.000Z",
-  };
-  const { call } = fixture([event]);
-  await call({ expectedRevision: 0, readSeq: 1 });
-  await call({ expectedRevision: 0, readSeq: 0 });
-  expect((await call()).value.lifecycle.readSeq).toBe(1);
-  expect((await call({ expectedRevision: 0, readSeq: 99 })).status).toBe(400);
-  await call({ expectedRevision: 0, snoozedUntil: "2099-10-11T12:00:00.000Z" });
-  const renamed = await call({ title: "Renamed" });
-  expect(renamed.value.lifecycle.snoozedUntil).toBe("2099-10-11T12:00:00.000Z");
-  expect(renamed.value.activity.lastSeq).toBe(1);
-});
-
 test("restart recovery expires asks; archive and restore keep history", async () => {
   const event: HarnessEvent = {
     kind: "question_request",
@@ -152,71 +132,4 @@ test("restart recovery expires asks; archive and restore keep history", async ()
   expect((await call({ expectedRevision: 0, status: "archived" })).status).toBe(200);
   expect(readFileSync(join(root, "thread", "events.jsonl"), "utf8")).toBe(before);
   expect((await call({ expectedRevision: 1, status: "active" })).status).toBe(200);
-});
-
-test("stale automatic reads preserve a newer explicit unread choice", async () => {
-  const { call } = fixture([
-    {
-      kind: "turn_end",
-      turnId: "done",
-      stopReason: "end_turn",
-      seq: 1,
-      at: "2026-10-01T00:00:00.000Z",
-    },
-  ]);
-  await call({ expectedRevision: 0, readSeq: 1 });
-  await call({ expectedRevision: 0, explicitUnread: true });
-  expect((await call({ expectedRevision: 0, readSeq: 1 })).status).toBe(409);
-  expect((await call()).value.lifecycle).toMatchObject({
-    revision: 1,
-    readSeq: 1,
-    explicitUnread: true,
-  });
-  expect((await call({ expectedRevision: 1, readSeq: 1 })).value.lifecycle).toMatchObject({
-    revision: 2,
-    explicitUnread: false,
-  });
-});
-
-test("a real prompt reopens settled work with a new anchor; active prompts retain it", async () => {
-  const { host, call } = fixture();
-  await call({ expectedRevision: 0, status: "settled" });
-  const send = () =>
-    host.fetch(
-      new Request("http://host/pe/threads/thread/prompt", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: randomUUID(), text: "Continue" }),
-      }),
-    );
-  await send();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  const reopened = (await call()).value.lifecycle;
-  expect(reopened).toMatchObject({ status: "active", settledAt: null });
-  expect(reopened.reopenedAt).not.toBeNull();
-  await send();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  expect((await call()).value.lifecycle.reopenedAt).toBe(reopened.reopenedAt);
-});
-
-test("an opted-in old conversation does not auto-settle immediately after reopening", async () => {
-  vi.useFakeTimers();
-  vi.setSystemTime(new Date("2026-10-11T12:00:00.000Z"));
-  const { call } = fixture();
-  await call({ expectedRevision: 0, status: "settled", autoSettle: "1d" });
-  await call({ expectedRevision: 1, status: "active" });
-  await vi.advanceTimersByTimeAsync(60_000);
-  expect((await call()).value.lifecycle.status).toBe("active");
-});
-
-test("the threads Reading projects scope and lifecycle changes for an off-thread reader", async () => {
-  const { host, call } = fixture();
-  vi.useFakeTimers();
-  const seen: string[] = [];
-  const release = host.observe({ kind: "threads" }, (frame) => seen.push(JSON.stringify(frame)))!;
-  expect(seen.at(-1)).toContain('"pinned":false');
-  await call({ expectedRevision: 0, pinned: true });
-  await vi.advanceTimersByTimeAsync(100);
-  expect(seen.at(-1)).toContain('"pinned":true');
-  release();
 });

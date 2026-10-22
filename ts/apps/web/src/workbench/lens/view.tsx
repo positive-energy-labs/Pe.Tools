@@ -5,10 +5,10 @@ import { useWorkbench } from "#/workbench/provider";
 import { annotation } from "#/components/anatomy";
 import { Moments } from "../moments";
 import { EmptyState, emptyMark } from "@pe/kit/lang/empty";
-import { formatTime } from "./moments";
+import { toTurns } from "./moments";
+import { TurnPeek } from "./peek";
 import { useLensModel } from "./model";
 import type { ChatState } from "@pe/agent-contracts/chat-state";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 export function Lens({ state }: { state: ChatState }) {
   const {
@@ -19,18 +19,16 @@ export function Lens({ state }: { state: ChatState }) {
     frameRef,
     scrollerRef,
     chatRef,
-    stripRef,
-    wickRef,
-    capTopRef,
-    capBotRef,
-    csFocalRef,
-    caretRef,
+    dialRef,
+    thumbRef,
     bandRefs,
+    tickRefs,
     registerMoment,
-    onBandClick,
+    goTo,
     awayFromTail,
   } = useLensModel({ state });
-  const previewRef = useRef<HTMLSpanElement>(null);
+  const laneRef = useRef<HTMLDivElement>(null);
+  const turns = toTurns(moments);
   const { updateThread, threads } = useWorkbench();
   const updateRead = useRef(updateThread);
   updateRead.current = updateThread;
@@ -82,83 +80,58 @@ export function Lens({ state }: { state: ChatState }) {
   return (
     <div {...annotation("frame")} ref={frameRef}>
       <div {...annotation("scroller")} ref={scrollerRef}>
-        <div {...annotation("grid")}>
-          <div
-            {...annotation("dial")}
-            onClick={onBandClick}
-            onMouseOver={(event) => {
-              // One floating label outside the bands: a band's own opacity would dim it.
-              const label = previewRef.current;
-              const band = (event.target as HTMLElement).closest<HTMLElement>(
-                '[data-annotation="dial-band"]',
-              );
-              const moment = band && moments.find((m) => m.id === band.dataset.key);
-              if (!label) return;
-              label.hidden = !moment;
-              if (!band || !moment) return;
-              const box = band.getBoundingClientRect();
-              label.textContent = `#${moment.turn}${moment.preview ? `  ${moment.preview}` : ""}`;
-              label.style.top = `${box.top + box.height / 2 - event.currentTarget.getBoundingClientRect().top}px`;
-            }}
-            onMouseLeave={() => {
-              if (previewRef.current) previewRef.current.hidden = true;
-            }}
-            aria-label="Timeline"
-          >
-            <div {...annotation("dial-strip")} ref={stripRef}>
-              {moments.map((moment, index) => (
-                <div
-                  key={moment.id}
-                  data-key={moment.id}
-                  {...annotation("dial-band")}
-                  data-role={moment.role}
-                  data-delta={
-                    cache.changed.size > 0 && index === moments.length - 1 ? "" : undefined
-                  }
-                  ref={(el) => {
-                    if (el) bandRefs.current.set(moment.id, el);
-                    else bandRefs.current.delete(moment.id);
-                  }}
-                >
-                  <TooltipHint content={formatTime(moment.createdAt)}>
-                    <span {...annotation("dial-number")}>#{moment.turn}</span>
-                  </TooltipHint>
-                </div>
-              ))}
+        <div {...annotation("chat")} ref={chatRef}>
+          {showEmpty ? (
+            <div className="grid min-h-[60vh] place-content-center justify-items-center gap-1.5 px-6 text-center">
+              <h1 className={emptyMark()} data-tone="pea">
+                Pea
+              </h1>
+              <EmptyState story="scope" exit="ask anything below, or pick a thread on the left">
+                no messages in this thread yet
+              </EmptyState>
             </div>
-            <div {...annotation("reticle-wick")} ref={wickRef} />
-            <div {...annotation("reticle-cap")} ref={capTopRef} />
-            <div {...annotation("reticle-cap")} ref={capBotRef} />
-            <div {...annotation("reticle-focal")} ref={csFocalRef} />
-            <div {...annotation("caret")} ref={caretRef} />
-            <span {...annotation("dial-preview")} ref={previewRef} hidden />
-            {awayFromTail ? (
-              <div className="chat-tail-rail">
-                <Button
-                  icon={ArrowDown}
-                  label="Jump to latest turn in timeline"
-                  onClick={() => window.dispatchEvent(new Event("pe:focus-tail"))}
-                />
-              </div>
-            ) : null}
-          </div>
-
-          <div {...annotation("chat")} ref={chatRef}>
-            {showEmpty ? (
-              <div className="grid min-h-[60vh] place-content-center justify-items-center gap-1.5 px-6 text-center">
-                <h1 className={emptyMark()} data-tone="pea">
-                  Pea
-                </h1>
-                <EmptyState story="scope" exit="ask anything below, or pick a thread on the left">
-                  no messages in this thread yet
-                </EmptyState>
-              </div>
-            ) : null}
-            <Moments messages={messages} register={registerMoment} harness={state.harness} />
-          </div>
+          ) : null}
+          <Moments messages={messages} register={registerMoment} harness={state.harness} />
         </div>
       </div>
-      {moments.length > 0 ? <div {...annotation("scrim")} aria-hidden="true" /> : null}
+      {/* The lane: outside the scroller, so only the transcript scrolls. It spans the chat's
+          measure + side lane like the composer frame, so the rail rides the composer's right
+          lane, centred between the pane head and the composer. A wheel over it still scrolls
+          the transcript. */}
+      <div
+        {...annotation("lane")}
+        ref={laneRef}
+        onWheel={(event) => scrollerRef.current?.scrollBy({ top: event.deltaY })}
+      >
+        <div {...annotation("dial")} ref={dialRef} aria-label="Timeline">
+          <div {...annotation("thumb")} ref={thumbRef} />
+          {turns.map((turn, index) => (
+            <div
+              key={turn.first}
+              data-key={turn.first}
+              data-index={index}
+              {...annotation("dial-band")}
+              data-delta={cache.changed.size > 0 && index === turns.length - 1 ? "" : undefined}
+              ref={(el) => {
+                if (el) bandRefs.current.set(turn.first, el);
+                else bandRefs.current.delete(turn.first);
+              }}
+            />
+          ))}
+          {turns.map((turn, index) => (
+            <div
+              key={turn.turn}
+              data-index={index}
+              {...annotation("dial-tick")}
+              ref={(el) => {
+                if (el) tickRefs.current.set(turn.turn, el);
+                else tickRefs.current.delete(turn.turn);
+              }}
+            />
+          ))}
+        </div>
+        <TurnPeek turns={turns} laneRef={laneRef} dialRef={dialRef} goTo={goTo} />
+      </div>
       {awayFromTail ? (
         <div className="chat-tail-floater">
           <Button

@@ -14,10 +14,10 @@ import type { ChatDraft } from "#/workbench/prompt";
 
 // ponytail: our own ceiling, 5 MB a file and 10 a message; the model provider's limit is the real
 // authority. Raise these when a provider accepts more and users hit them.
-export const ATTACHMENT_LIMITS = { fileBytes: 5 * 1024 * 1024, files: 10 };
+const ATTACHMENT_LIMITS = { fileBytes: 5 * 1024 * 1024, files: 10 };
 
 /** The one attachment rule: which files fit beside `held` ones, and one line naming the rest. */
-export function admitFiles(files: File[], held: number): { admitted: File[]; refusal?: string } {
+function admitFiles(files: File[], held: number): { admitted: File[]; refusal?: string } {
   const admitted: File[] = [];
   const tooBig: string[] = [];
   const tooMany: string[] = [];

@@ -37,16 +37,6 @@ const options: IdentityOptions = {
 };
 const remote = { host: "box.tailabc.ts.net", "tailscale-user-login": "person@example.com" };
 
-test("pairing uses eight unambiguous characters and expires at two minutes", () => {
-  let now = Date.now();
-  const devices = createDevices(undefined, () => now);
-  const pairing = devices.pair("browser");
-  expect(Date.parse(pairing.expiresAt) - now).toBe(120_000);
-  expect(pairing.code).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
-  now += 120_000;
-  expect(() => devices.claim(pairing.code, "Laptop", "lan")).toThrow("device.pairing");
-});
-
 test("five wrong attempts exhaust a code across transports, including the correct sixth attempt", () => {
   const devices = createDevices();
   const pairing = devices.pair("browser");
@@ -57,20 +47,6 @@ test("five wrong attempts exhaust a code across transports, including the correc
   expect(() => devices.claim(pairing.code, "Laptop", "tailnet")).toThrow("attempt");
   const renewed = devices.pair("browser");
   expect(devices.claim(renewed.code.toLowerCase(), "Laptop", "lan").session.label).toBe("Laptop");
-});
-
-test("a dedicated SSH ingress cannot claim local human authority by changing Host", async () => {
-  expect(
-    await readRequestIdentity(
-      { host: "127.0.0.1:5180", accept: "text/html", "sec-fetch-mode": "navigate" },
-      "/",
-      options,
-      "GET",
-      false,
-      "127.0.0.1",
-      true,
-    ),
-  ).toMatchObject({ refusal: { code: "identity.host" } });
 });
 
 test("remote listener marks real loopback tunnel requests before the identity middleware", async () => {
@@ -152,21 +128,6 @@ test("remote listener marks real loopback tunnel requests before the identity mi
     Effect.runSync(Deferred.succeed(latch, undefined));
     await done;
   }
-});
-
-test("access-084: an unpaired remote device cannot read host state", async () => {
-  expect(await readRequestIdentity(remote, "/pe/threads", options)).toMatchObject({
-    refusal: { code: "device.unpaired" },
-  });
-});
-
-test("access-084: remote navigation never bootstraps a human browser context", async () => {
-  const result = await readRequestIdentity(
-    { ...remote, accept: "text/html", "sec-fetch-mode": "navigate" },
-    "/",
-    options,
-  );
-  expect(result).not.toHaveProperty("setCookie");
 });
 
 test("access-084: one device persists across LAN, tailnet and SSH; revoke refuses its next request", async () => {

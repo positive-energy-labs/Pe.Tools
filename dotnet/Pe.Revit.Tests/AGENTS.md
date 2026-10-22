@@ -36,7 +36,7 @@ Override with **attached** only when the running session's documents, UI state, 
 dotnet tool run pe-revit -- test --project .\dotnet\Pe.Revit.Tests\Pe.Revit.Tests.csproj --attach --id pe.app-25 --filter "Name~SomeFocusedTest" --timeout-seconds 900 --json
 ```
 
-For freshness outside a test run, `pe-revit session hr --id <session>` hot-applies to a live session and `pe-revit session hr --id <session> --restart --unsaved keep|discard` is the cold swap that actually reloads. Run `pe-revit test --plan --project <P>` when the rung is not obvious, and `pe-revit guide test` for the refusal table.
+For freshness outside a test run, `pe-revit session hr --id <session>` hot-applies to a live session and `pe-revit session hr --id <session> --restart` is the cold swap that actually reloads (a checkout session discards unsaved edits by default). Run `pe-revit test --plan --project <P>` when the rung is not obvious, and `pe-revit guide test` for the refusal table.
 
 ## Shared Language
 

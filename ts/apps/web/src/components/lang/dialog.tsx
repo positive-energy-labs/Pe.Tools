@@ -7,11 +7,12 @@ import { tv } from "@pe/kit/lib/tv";
 import { Button } from "@pe/kit/lang/button";
 import { X as RiCloseLine } from "lucide-react";
 
+// One column with a zero minimum: a row wider than the dialog truncates, never scrolls the dialog sideways.
 export const dialogRecipe = tv({
   slots: {
     overlay: "fixed inset-0 isolate z-modal bg-scrim supports-backdrop-filter:backdrop-blur-xs",
     content:
-      "fixed top-1/2 left-1/2 z-modal grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto text-ink shadow-modal outline-none sm:max-w-lg",
+      "fixed top-1/2 left-1/2 z-modal grid grid-cols-[minmax(0,1fr)] max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto text-ink shadow-modal outline-none sm:max-w-lg",
     header: "flex flex-col gap-1",
     title: "t-title",
   },

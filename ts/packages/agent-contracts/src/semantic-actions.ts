@@ -3,6 +3,7 @@ import { instancesActions, instancesReading } from "./instances.ts";
 import { scheduleActions, scheduleReads } from "./schedule-actions.ts";
 import { familyActions, familyReads } from "./family-actions.ts";
 import { stagedRoomEditSchema } from "./takeoffs.ts";
+import { ductsApplyInputSchema, ductsAssignFanInputSchema, ductsHealInputSchema } from "./ducts.ts";
 import { nativeProcessSchema } from "./action-receipts.ts";
 import { z } from "zod";
 import { executionTargetSchema } from "./target.ts";
@@ -128,8 +129,60 @@ const definitions = {
   },
 } as const;
 export const takeoffActions = definitions;
+
+/**
+ * /ducts verbs: one native op, `ducts.apply`, once with `previewOnly` and once for real. Their own
+ * keys, so `operations call ducts.apply` still names the native op.
+ */
+export const ductsActions = {
+  "ducts.preview-losses": {
+    says: "Plan the staged duct loss writes (fitting coefficients, terminal and component drops, fan static) and report each write's outcome without changing Revit.",
+    needs: "project-document",
+    actor: "any",
+    input: ductsApplyInputSchema,
+    dirties: [],
+  },
+  "ducts.apply-losses": {
+    says: "Write the staged duct loss values to Revit (fitting coefficients, terminal and component drops, fan static) and record their provenance in Project Information.",
+    needs: "project-document",
+    actor: "any",
+    input: ductsApplyInputSchema,
+    dirties: ["snapshot"],
+  },
+  "ducts.preview-heal": {
+    says: "Preview healing duct groups in Revit: cap dangling open ends, connect coincident same-size ends, close same-size gaps of at most 3 in; runs every repair and Pe's post-check, then rolls all of it back. Name a group without items to preview everything the Ducts route would heal there; show the person the per-item outcome before any apply.",
+    needs: "project-document",
+    actor: "any",
+    input: ductsHealInputSchema,
+    dirties: [],
+  },
+  "ducts.apply-heal": {
+    says: "Heal duct groups in Revit, one transaction per group, with exactly the items a preview showed and a person approved; an item failing Pe's post-check is refused and rolled back. Revit gives rebuilt elements new ids: read the duct snapshot again after.",
+    needs: "project-document",
+    actor: "any",
+    input: ductsHealInputSchema,
+    dirties: ["snapshot"],
+  },
+  "ducts.preview-assign-fan": {
+    says: "Preview making a unit the fan of a duct system in Revit (Duct Systems > Select Equipment: the system's base equipment): runs Pe's guards, the write and its read back, then rolls it back. Refuses a system that already has base equipment, and a unit with no port of the system's air classification in that system or on its ducts. Show the person the outcome before any apply.",
+    needs: "project-document",
+    actor: "any",
+    input: ductsAssignFanInputSchema,
+    dirties: [],
+  },
+  "ducts.apply-assign-fan": {
+    says: "Make a unit the base equipment (the fan) of a duct system in Revit, as a preview showed and a person approved; the system keeps its id, name and type. Read the duct snapshot again after: the unit's role reads base equipment of that system.",
+    needs: "project-document",
+    actor: "any",
+    input: ductsAssignFanInputSchema,
+    dirties: ["snapshot"],
+  },
+} as const satisfies Record<string, ActionDefinition>;
+export type DuctsActionKey = keyof typeof ductsActions;
+
 export const semanticActions = {
   ...definitions,
+  ...ductsActions,
   ...familyActions,
   ...instancesActions,
   ...scheduleActions,

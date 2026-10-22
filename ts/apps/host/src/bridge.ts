@@ -2,7 +2,7 @@ import { Context, Deferred, Effect, Layer, PubSub, Ref, Schema } from "effect";
 import type { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpServerResponse as Response } from "effect/unstable/http";
 import { recordBridgeQueue } from "./gateway-owner.ts";
-import { receiptProducerSchema, type ReceiptProducer } from "@pe/agent-contracts";
+import { receiptProducerSchema, type DocumentRef, type ReceiptProducer } from "@pe/agent-contracts";
 import { randomUUID } from "node:crypto";
 import { runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
 import { hostOwnership } from "./host-ownership.ts";
@@ -191,7 +191,10 @@ export class RevitBridge extends Context.Service<
       openDocumentId?: string | null,
       requestId?: string,
     ) => Effect.Effect<
-      { value: unknown; target: { session: string; document: string | null } },
+      {
+        value: unknown;
+        target: { session: string; document: string | null; documentRef?: DocumentRef };
+      },
       BridgeError | NoRevitSession
     >;
     /** Retire only a host-queued request; never send op.cancel to Revit. */
@@ -763,6 +766,10 @@ export const RevitBridgeLive = Layer.effect(
           value: result.value,
           target: {
             session: session.sessionId,
+            // The native reply confirms the execution lifetime. Never fill it from a selector or census.
+            ...(result.openDocumentId
+              ? { documentRef: { session: session.sessionId, openId: result.openDocumentId } }
+              : {}),
             document:
               state.openDocuments.find((document) => document.openId === result.openDocumentId)
                 ?.address ?? null,

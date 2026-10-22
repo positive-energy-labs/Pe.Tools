@@ -166,6 +166,21 @@ export class RouteWorkspace {
   }
 
   /**
+   * The saved document exactly as stored, not validated against the route's schema: for a reader
+   * that salvages what still parses instead of refusing. Null when no Work exists; `doc` is null
+   * when even the envelope is unreadable.
+   */
+  async readRaw(scope: WorkKey, route: string): Promise<{ doc: unknown; revision: number } | null> {
+    if (!this.#registry.has(route)) return null;
+    const raw = await this.#serialized(() => this.#carryOver(scope, route));
+    if (raw == null) return null;
+    const envelope = envelopeSchema.safeParse(raw);
+    return envelope.success
+      ? { doc: envelope.data.doc, revision: envelope.data.revision }
+      : { doc: null, revision: 0 };
+  }
+
+  /**
    * A reader's view of the route: absent Work reads as the empty document at r0, the one `apply`
    * starts from. Null only for an unregistered route, so a registered route never reads unknown.
    */

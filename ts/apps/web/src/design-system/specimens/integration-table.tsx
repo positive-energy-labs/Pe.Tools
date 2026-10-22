@@ -155,7 +155,7 @@ export function RealTable() {
             state={tableState}
             onStateChange={setTableState}
             summary={<>13 params · 3 types</>}
-            searchPlaceholder="search params…"
+            search
             selection={{ selected: selectedKeys, onChange: setSelectedKeys }}
           >
             <Table

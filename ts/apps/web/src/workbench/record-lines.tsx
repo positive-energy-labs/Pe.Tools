@@ -9,18 +9,21 @@ import { Button } from "@pe/kit/lang/button";
 import { previousOf, useReading } from "#/readings";
 import {
   actionRoute,
+  actionPlace,
   actionWord,
   chatPluginTitle,
   type ActionCall,
   type ProposedRecord,
 } from "./chat-plugins";
 import { useWorkbench } from "./provider";
+import { NativeReadingReferences } from "#/revit/reading-references";
 
 const line = "flex min-w-0 items-baseline gap-2 t-small text-ink-2";
 
 /** `Pea proposed {n} changes in {Route} · {Subject}`: counts are the call's own, never live Work. */
 export function ProposedLine({ record }: { record: ProposedRecord }) {
   const { store } = useWorkbench();
+  const place = record.place;
   return (
     <div className={line} data-proposed={record.route}>
       <span className="truncate">
@@ -28,9 +31,14 @@ export function ProposedLine({ record }: { record: ProposedRecord }) {
         {chatPluginTitle(record.route)}
         {record.subject ? ` · ${record.subject}` : ""}
       </span>
-      <Button label="open ›" onClick={() => store.actions.setPlugin(record.route)}>
+      <Button
+        label="open ›"
+        refusal={place.ok ? null : place.refusal}
+        onClick={() => place.ok && void store.actions.openTab(place.route, place.page, place.carry)}
+      >
         open ›
       </Button>
+      {!place.ok ? <span data-tone="caution">{place.refusal}</span> : null}
     </div>
   );
 }
@@ -46,34 +54,45 @@ export function ActionLine({ call }: { call: ActionCall }) {
   // A control (`action.resume`) names the original receipt; its key is the action's own.
   const key = row?.key ?? call.key;
   const route = actionRoute(key);
+  const place = route ? actionPlace(route, row) : null;
   const state = row?.state ?? (reading.state === "failed" ? "receipt unread" : "reading");
   return (
-    <div className={line} data-action={call.id}>
-      <span className="truncate">
-        Pea ran {actionWord(key)}
-        {route ? ` in ${chatPluginTitle(route)}` : ""} ·{" "}
-        <span
-          className="face-mono"
-          data-tone={
-            state === "succeeded"
-              ? "done"
-              : state === "running" || state === "reading"
-                ? undefined
-                : "caution"
-          }
-        >
-          {state}
+    <div className="flex min-w-0 flex-col gap-1">
+      <div className={line} data-action={call.id}>
+        <span className="truncate">
+          Pea ran {actionWord(key)}
+          {route ? ` in ${chatPluginTitle(route)}` : ""} ·{" "}
+          <span
+            className="face-mono"
+            data-tone={
+              state === "succeeded"
+                ? "done"
+                : state === "running" || state === "reading"
+                  ? undefined
+                  : "caution"
+            }
+          >
+            {state}
+          </span>
         </span>
-      </span>
-      {route ? (
-        <Button label="open ›" onClick={() => store.actions.setPlugin(route)}>
-          open ›
-        </Button>
-      ) : (
-        <Link to="/ops" search={{ actionId: call.id }}>
-          receipt ›
-        </Link>
-      )}
+        {route ? (
+          <Button
+            label="open ›"
+            refusal={place?.ok ? null : place?.refusal}
+            onClick={() =>
+              place?.ok && void store.actions.openTab(place.route, place.page, place.carry)
+            }
+          >
+            open ›
+          </Button>
+        ) : (
+          <Link to="/ops" search={{ actionId: call.id }}>
+            receipt ›
+          </Link>
+        )}
+      </div>
+      {place && !place.ok ? <span data-tone="caution">{place.refusal}</span> : null}
+      {row?.state === "succeeded" ? <NativeReadingReferences receipt={row} /> : null}
     </div>
   );
 }

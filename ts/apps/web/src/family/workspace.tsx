@@ -104,7 +104,9 @@
  *                  Because it reads the saved bytes rather than the table, it is armed rather than
  *                  pressed — the ceremony, its refusals and its receipt live in `#/family/build`.
  */
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
+import { useSearch } from "@tanstack/react-router";
+import { linkTo, readLink } from "@pe/agent-contracts";
 
 import { Button } from "@pe/kit/lang/button";
 import { Code, stringify } from "@pe/kit/lang/code";
@@ -241,6 +243,19 @@ function FamilyAuditPanes() {
   );
 }
 
+function PodMemberLink({
+  pod,
+  path,
+  children,
+}: {
+  pod: string;
+  path: string;
+  children: ReactNode;
+}) {
+  const { carry } = readLink("pods", useSearch({ strict: false }));
+  return <a href={linkTo("pods", { pod, path }, carry)}>{children}</a>;
+}
+
 /** The ledger lines the audit adds to the kernel's Situation. */
 export function familyFacts(store: FamilyStore) {
   const { lane, snapshot, sharedEdit, evidence } = store;
@@ -299,12 +314,12 @@ export function familyFacts(store: FamilyStore) {
             content="Edit the shared source JSON in its pod. Changes affect every member that includes it."
             key={`${dependency.id}:${dependency.path}`}
           >
-            <a href={`/pods?${new URLSearchParams({ pod: dependency.id, path: dependency.path })}`}>
+            <PodMemberLink pod={dependency.id} path={dependency.path}>
               {sharedEdit?.directives.some((directive) => directive.endsWith(dependency.path))
                 ? "open referenced source "
                 : "edit shared "}
               @{dependency.id}/{dependency.path}
-            </a>
+            </PodMemberLink>
           </TooltipHint>,
         ] as const,
     ),

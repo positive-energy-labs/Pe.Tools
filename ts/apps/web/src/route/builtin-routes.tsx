@@ -1,9 +1,10 @@
-import { lazy, useState, type ComponentType } from "react";
+import { lazy, type ComponentType } from "react";
 import { createRouteRegistry } from "@pe/kit/route-registry";
 import { manifest as families } from "#/families/manifest";
 import { familyManifest } from "#/family/manifest";
 import { openManifest } from "#/open/manifest";
 import { manifest as parameterLinks } from "#/parameter-links/manifest";
+import { manifest as ducts } from "#/ducts/manifest";
 import { manifest as rooms } from "#/rooms/manifest";
 import { schedulesManifest } from "#/route/schedules/manifest";
 import { manifest as pods } from "#/routes/pods";
@@ -25,6 +26,7 @@ const ParameterLinksRouteContent = named(
 );
 const TakeoffsPane = named(() => import("#/takeoff/pane"), "TakeoffsPane");
 const OpenPage = named(() => import("#/open/route"), "OpenPage");
+const DuctsRoute = named(() => import("#/ducts/route"), "DuctsRoute");
 const RoomsRoute = named(() => import("#/rooms/route"), "RoomsRoute");
 
 export const publicRoutes = createRouteRegistry();
@@ -54,12 +56,17 @@ publicRoutes.register({
 });
 publicRoutes.register({ manifest: rooms, hosted: () => <HostedRooms /> });
 
-function HostedRooms() {
-  const [layers, setLayers] = useState("");
-  return <RoomsRoute focus="" layers={layers} setLayers={setLayers} url={false} />;
+publicRoutes.register({ manifest: ducts, hosted: () => <HostedDucts /> });
+
+function HostedDucts() {
+  return <DuctsRoute url={false} />;
 }
 
+function HostedRooms() {
+  return <RoomsRoute url={false} />;
+}
+
+/** A chat pane owns its Page without the address (`url={false}`), like Ducts and Rooms. */
 function HostedPods({ thread }: { thread: string }) {
-  const [ref, select] = useState<{ pod?: string; path?: string }>({});
-  return <PodsRouteContent {...ref} thread={thread} select={select} />;
+  return <PodsRouteContent thread={thread} url={false} />;
 }

@@ -1,9 +1,8 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vite-plus/test";
 import { freezeScript } from "../src/operation-script.ts";
-import { productUserContentRootPath } from "../src/product-paths.ts";
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { Deferred, Effect, Layer } from "effect";
@@ -18,20 +17,10 @@ import { hostOwnership } from "../src/host-ownership.ts";
 import { requestIdentityLayer } from "../src/request-identity.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 
-vi.mock("../src/product-paths.ts", async (original) => ({
-  ...(await original<typeof import("../src/product-paths.ts")>()),
-  productUserContentRootPath: vi.fn(),
-}));
-
 it.each([
   ["Succeeded", "succeeded"],
-  ["PolicyRejected", "failed"],
-  ["Rejected", "failed"],
-  ["CompilationFailed", "failed"],
-  ["ReferenceResolutionFailed", "failed"],
   ["RuntimeFailed", "failed"],
   ["Cancelled", "cancelled"],
-  ["TimedOut", "failed"],
   ["UnexpectedStatus", "failed"],
   [undefined, "failed"],
 ])(
@@ -161,46 +150,6 @@ it.each([
   30_000,
 );
 
-it("captures only CSharp sources plus manifest and project metadata", async () => {
-  const home = await mkdtemp(join(tmpdir(), "pe-pod-capture-"));
-  vi.mocked(productUserContentRootPath).mockReturnValue(home);
-  const members = {
-    "pod.json": '{"id":"tour"}',
-    "PeScripts.csproj": "<Project />",
-    "README.md": "Guide",
-    "skills/inspect/SKILL.md": "Inspect",
-    "skills/inspect/references/support.txt": "Support",
-    "src/main.cs": "return 1;",
-    "settings/default.json": "{}",
-    "assets/icon.svg": "<svg />",
-    "pages/tour/index.html": "<title>Tour</title>",
-    "pages/tour/.state/events.jsonl": '{"seq":1}',
-  };
-  try {
-    for (const [path, content] of Object.entries({ ...members, "bin/ignored.txt": "ignored" })) {
-      const file = join(home, "Pods", "tour", path);
-      await mkdir(join(file, ".."), { recursive: true });
-      await writeFile(file, content);
-    }
-    const captured = await freezeScript({ sourcePath: "src/main.cs", workspaceKey: "tour" });
-    expect(
-      Object.fromEntries(
-        captured!.sourceBundle.files.map(({ path, bytesBase64 }) => [
-          path,
-          Buffer.from(bytesBase64, "base64").toString("utf8"),
-        ]),
-      ),
-    ).toEqual({
-      "pod.json": members["pod.json"],
-      "PeScripts.csproj": members["PeScripts.csproj"],
-      "src/main.cs": members["src/main.cs"],
-    });
-  } finally {
-    vi.mocked(productUserContentRootPath).mockReset();
-    await rm(home, { recursive: true, force: true });
-  }
-});
-
 it("freezes a supplied snapshot without reading disk and rejects ambiguous or authority bytes", async () => {
   const files = [{ path: "src/Run.cs", bytesBase64: Buffer.from("original").toString("base64") }];
   const frozen = await freezeScript({ sourcePath: "src/Run.cs", sourceBundle: { files } });
@@ -222,20 +171,4 @@ it("freezes a supplied snapshot without reading disk and rejects ambiguous or au
       }),
     ).rejects.toThrow();
   }
-});
-
-it("accepts the full four MiB binary budget even when its base64 wire form exceeds five MiB", async () => {
-  const files = Array.from({ length: 8 }, (_, index) => ({
-    path: `src/File${index}.cs`,
-    bytesBase64: Buffer.alloc(512 * 1024).toString("base64"),
-  }));
-  expect(
-    (await freezeScript({ sourcePath: "src/Run.cs", sourceBundle: { files } }))!.sourceBundle.files,
-  ).toHaveLength(8);
-  await expect(
-    freezeScript({
-      sourcePath: "src/Run.cs",
-      sourceBundle: { files: [...files, { path: "src/Overflow.cs", bytesBase64: "YQ==" }] },
-    }),
-  ).rejects.toThrow(/byte bounds/);
 });

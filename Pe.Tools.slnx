@@ -59,7 +59,7 @@
     <Project Path="dotnet/Pe.Partition.Tests/Pe.Partition.Tests.csproj" />
     <Project Path="dotnet/Pe.Revit.Partition/Pe.Revit.Partition.csproj" />
     <Project Path="dotnet/Pe.Revit.SettingsRuntime/Pe.Revit.SettingsRuntime.csproj" />
-    <!-- Default `pe-revit test fresh` discovery is solution-scoped. Keep the Revit test host in
+    <!-- Default `pe-revit test` discovery is solution-scoped. Keep the Revit test host in
          the root solution so agents do not need a product-specific project-path escape hatch. -->
     <Project Path="dotnet/Pe.Revit.Tests/Pe.Revit.Tests.csproj" />
     <Project Path="dotnet/Pe.Revit.Takeoff/Pe.Revit.Takeoff.csproj" />

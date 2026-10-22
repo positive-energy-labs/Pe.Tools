@@ -1,3 +1,4 @@
+import type { DiscoveryMachine } from "../src/discovery-machine.ts";
 import type { Machine, MachineAttachment, MachineAttachmentDocument } from "../src/machine.ts";
 
 const at = "2026-10-12T12:00:00.000Z";
@@ -5,7 +6,9 @@ const leg = { observedAtUtc: at, attemptedAtUtc: at, error: null };
 type Attachment = Pick<MachineAttachment, "session"> & {
   documents: readonly Omit<MachineAttachmentDocument, "access" | "session">[] | null;
 };
-export function machineFixture(attachments: readonly Attachment[] = []): Machine {
+export function machineFixture(
+  attachments: readonly Attachment[] = [],
+): Machine & DiscoveryMachine {
   return {
     observedAtUtc: at,
     host: null,

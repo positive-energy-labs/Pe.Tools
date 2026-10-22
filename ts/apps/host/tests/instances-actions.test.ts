@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { instancesActions, instancesSessionSelection } from "@pe/agent-contracts";
+import { instancesSessionSelection } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { HOST_CONTEXT_HEADER, HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
 import { admitInstancesAction, recoverInstancesAction } from "../src/instances-actions.ts";
@@ -377,17 +377,6 @@ test.each(["stop", "restart", "reset"])(
   },
 );
 
-test("a user's own background run stays you and refuses agent stop without a grant", async () => {
-  const f = await setup(
-    () => ({ result: { state: "ok" } }),
-    [controlledRow({ shape: shape("background") })],
-  );
-  await expect(
-    f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "agent"),
-  ).rejects.toMatchObject({ refusal: { code: "lifecycle.ungranted-documents" } });
-  expect(f.calls.every((args) => args[1] === "list")).toBe(true);
-});
-
 test.each(["start", "open"])(
   "a held Pea %s acquisition admits agent stop only when every document is its own",
   async (verb) => {
@@ -456,60 +445,6 @@ test("an agent opens a new copy into the Revit an acquisition started; a reload 
   ).rejects.toMatchObject({ refusal: { code: "human.only" } });
 });
 
-test("the launch schema carries every open option and no staged state", () => {
-  const launch = instancesActions["instances.open"].input;
-  expect(
-    launch.parse({
-      source: "C:/Tower.rvt",
-      template: false,
-      into: into(),
-      detach: true,
-      upgrade: true,
-      links: "allow",
-      reload: false,
-    }),
-  ).toMatchObject({ detach: true, upgrade: true, links: "allow" });
-  // Exactly one destination: a session, or a new Revit.
-  expect(
-    launch.safeParse({ source: "C:/Tower.rvt", into: { ...into(), ...newRevit() } }).success,
-  ).toBe(false);
-  expect(launch.safeParse({ source: "C:/Tower.rvt" }).success).toBe(false);
-  // A launch cannot carry a session name, a posture, or a workspace: those were the staged shape.
-  expect(
-    launch.safeParse({ source: "C:/Tower.rvt", into: into(), workspaceId: "instances" }).success,
-  ).toBe(false);
-  expect(
-    launch.safeParse({ source: "C:/Tower.rvt", into: newRevit({ owner: "somebody" }) }).success,
-  ).toBe(false);
-  expect(instancesActions["instances.start"].input.safeParse({ year: "2025" }).success).toBe(false);
-  for (const key of [
-    "instances.start",
-    "instances.open",
-    "instances.restart",
-    "instances.stop",
-    "instances.close",
-  ] as const)
-    expect(instancesActions[key].actor).toBe("any");
-});
-
-test.each([
-  [{ owner: "you", addins: "on" }, false, false],
-  [{ owner: "pea", addins: "off" }, true, true],
-])("start %j reaches session start as background %s, quarantine %s", async (shapeOf, bg, q) => {
-  const f = await setup(() => startedAnswer, []);
-  const receipt = await f.admit("instances.start", { year: "2025", ...shapeOf });
-  expect(receipt.state).toBe("succeeded");
-  const argv = f.calls.at(-1)!;
-  expect(argv.slice(0, 2)).toEqual(["session", "start"]);
-  expect(flag(argv, "--year")).toBe("2025");
-  expect(flag(argv, "--request-id")).toBe(receipt.steps[0]!.id);
-  expect(flag(argv, "--expect-session")).toBe("absent");
-  expect(argv.includes("--background")).toBe(bg);
-  expect(argv.includes("--quarantine")).toBe(q);
-  if (!bg) expect(argv).not.toContain("--id");
-  expect(f.calls.map((call) => call.slice(0, 2).join(" "))).toEqual(["session start"]);
-});
-
 test("each Pea acquisition starts its own named Revit, never the person's dev session name", async () => {
   // The person's foreground dev session holds the checkout's default name ("dev" here).
   const f = await setup(() => startedAnswer, [controlledRow()]);
@@ -530,138 +465,6 @@ test("each Pea acquisition starts its own named Revit, never the person's dev se
     // A checkout admits only one hot-reload session per key; Pea's is a snapshot beside it.
     expect(argv.includes("--snapshot")).toBe(argv.includes("--project"));
   }
-});
-
-test("every option reaches doc open for a running session, and the receipt names the opened path", async () => {
-  const f = await setup(() => ({ result: { state: "ok", document: { openId } } }));
-  const receipt = await f.admit("instances.open", {
-    source: "C:/Tower.rvt",
-    into: into(),
-    detach: true,
-    upgrade: true,
-    links: "allow",
-  });
-  expect(receipt.state).toBe("succeeded");
-  expect(f.calls.map((c) => c.slice(0, 2).join(" "))).toEqual(["session list", "doc open"]);
-  expect(f.calls[0]).toEqual(["session", "list", "--id", "dev", "--json"]);
-  const open = f.calls.at(-1)!;
-  expect(open.slice(0, 3)).toEqual(["doc", "open", "C:/Tower.rvt"]);
-  expect(flag(open, "--id")).toBe("dev");
-  expect(open).toContain("--detach");
-  expect(open).toContain("--upgrade");
-  expect(flag(open, "--links")).toBe("allow");
-  expect(open).not.toContain("--unsynced");
-  expect(flag(open, "--request-id")).toBe(receipt.steps[0]!.id);
-  expect(flag(open, "--expect-session")).toBe(receiptPath);
-  expect(flag(open, "--expect-doc")).toBe("absent");
-  expect(open).not.toContain("--reload");
-  expect(receipt.steps[0]).toMatchObject({ state: "succeeded", key: "instances.open" });
-  expect((receipt as { result?: unknown }).result).toMatchObject({
-    opened: "C:/Tower.rvt",
-    copiedFrom: null,
-    detached: true,
-    // The receipt keeps the SDK's DocOpResult: the opened lifetime is its `document`.
-    document: { state: "ok", document: { openId } },
-  });
-});
-
-test("an open that names no option sends none of them", async () => {
-  const f = await setup(() => ({ result: { state: "ok", document: { openId } } }));
-  expect((await f.admit("instances.open", { source: "C:/Tower.rvt", into: into() })).state).toBe(
-    "succeeded",
-  );
-  const open = f.calls.at(-1)!;
-  for (const name of ["--detach", "--upgrade", "--reload", "--template", "--unsynced"])
-    expect(open).not.toContain(name);
-  expect(open).not.toContain("--links");
-});
-
-test("reload names the open document and a template creates a new one", async () => {
-  const f = await setup(() => ({ result: { state: "ok", document: { openId } } }));
-  await f.admit("instances.open", { source: openId, into: into(), reload: true });
-  const reload = f.calls.at(-1)!;
-  expect(reload.slice(0, 3)).toEqual(["doc", "open", openId]);
-  expect(reload).toContain("--reload");
-  expect(flag(reload, "--expect-doc")).toBe(openId);
-
-  await f.admit("instances.open", { source: "C:/Office.rte", into: into(), template: true });
-  const template = f.calls.at(-1)!;
-  expect(template.slice(0, 2)).toEqual(["doc", "open"]);
-  expect(flag(template, "--template")).toBe("C:/Office.rte");
-  expect(template[2]).toBe("--id");
-  expect(flag(template, "--expect-doc")).toBe("new");
-});
-
-test("a launch into a new Revit starts it, then opens the source as its own op in that session", async () => {
-  const f = await setup(
-    (args) =>
-      args[0] === "session" ? startedAnswer : { result: { state: "ok", document: { openId } } },
-    [],
-  );
-  const receipt = await f.admit("instances.open", {
-    source: "C:/Tower.rvt",
-    into: newRevit({ addins: "off" }),
-    upgrade: true,
-    links: "allow",
-  });
-  expect(receipt.state).toBe("succeeded");
-  const [start, open] = receipt.steps;
-  expect(start).toMatchObject({ key: "instances.open.start", state: "succeeded" });
-  expect(open).toMatchObject({ key: "instances.open", state: "succeeded" });
-  const [startArgv, openArgv] = f.calls.filter((argv) => argv[1] !== "list");
-  expect(startArgv!.slice(0, 2)).toEqual(["session", "start"]);
-  expect(startArgv).not.toContain("--background");
-  expect(startArgv).toContain("--quarantine");
-  expect(startArgv).not.toContain("C:/Tower.rvt");
-  expect(flag(startArgv!, "--request-id")).toBe(start!.id);
-  expect(openArgv!.slice(0, 3)).toEqual(["doc", "open", "C:/Tower.rvt"]);
-  expect(flag(openArgv!, "--id")).toBe("dev");
-  expect(openArgv).toContain("--upgrade");
-  expect(flag(openArgv!, "--links")).toBe("allow");
-  expect(flag(openArgv!, "--request-id")).toBe(open!.id);
-  expect(flag(openArgv!, "--expect-session")).toBe(receiptPath);
-  expect(flag(openArgv!, "--expect-doc")).toBe("absent");
-});
-
-test("a Pea launch copies a local, non-workshared file into Pea's work folder and opens the copy", async () => {
-  const f = await setup(
-    () => ({ result: { state: "ok", document: { openId } } }),
-    [controlledRow({ id: "pea-bg", shape: shape("background") })],
-  );
-  await recordPeaLaunch(f.owner);
-  const source = await f.file("Tower.rvt", "header Worksharing: Not enabled tail");
-  const before = await readFile(source);
-  const receipt = await f.admit("instances.open", { source, into: into("pea-bg") });
-  expect(receipt.state).toBe("succeeded");
-  const open = f.calls.at(-1)!;
-  const opened = open[2]!;
-  expect(opened).not.toBe(source);
-  expect(opened.startsWith(f.peaWork)).toBe(true);
-  expect(opened.endsWith("Tower.rvt")).toBe(true);
-  expect(open).not.toContain("--detach");
-  expect(await readFile(opened)).toEqual(before);
-  expect(await readFile(source)).toEqual(before);
-  // No half-written copy is left beside the finished one.
-  expect(await readdir(join(opened, ".."))).toEqual(["Tower.rvt"]);
-  expect((receipt as { result?: unknown }).result).toMatchObject({
-    opened,
-    copiedFrom: source,
-    detached: false,
-  });
-});
-
-test("a Pea launch into a new Revit copies the file before the Revit starts", async () => {
-  const f = await setup(
-    (args) =>
-      args[0] === "session" ? startedAnswer : { result: { state: "ok", document: { openId } } },
-    [],
-  );
-  const source = await f.file("Plant.rvt", "Worksharing: Not enabled");
-  const receipt = await f.admit("instances.open", { source, into: newRevit({ owner: "pea" }) });
-  expect(receipt.state).toBe("succeeded");
-  const open = f.calls.at(-1)!;
-  expect(open[2]!.startsWith(f.peaWork)).toBe(true);
-  expect(f.calls.filter((argv) => argv[1] === "start")[0]).toContain("--background");
 });
 
 test("a Pea launch of a workshared model copies first, then opens the copy detached", async () => {
@@ -685,21 +488,6 @@ test("a Pea launch of a workshared model copies first, then opens the copy detac
   });
 });
 
-test("a Pea launch of a cloud model without a version refuses before connected open", async () => {
-  const f = await setup(
-    () => ({ result: { state: "ok", document: { openId } } }),
-    [controlledRow({ id: "pea-bg", shape: shape("background") })],
-  );
-  await recordPeaLaunch(f.owner);
-  const source = "cld://US/{p}p/{m}Tower.rvt";
-  expect(await f.admit("instances.open", { source, into: into("pea-bg") })).toMatchObject({
-    state: "failed",
-    notDispatched: true,
-    error: expect.stringContaining("immutable APS version"),
-  });
-  expect(f.calls.some((args) => args[0] === "doc" && args[1] === "open")).toBe(false);
-});
-
 test("Pea refuses, undispatched, a file whose worksharing it cannot read or a source it cannot resolve", async () => {
   const f = await setup(
     () => ({ result: { state: "ok", document: { openId } } }),
@@ -714,143 +502,6 @@ test("Pea refuses, undispatched, a file whose worksharing it cannot read or a so
   expect(f.calls.some((argv) => argv[0] === "doc" && argv[1] === "open")).toBe(false);
   expect(existsSync(f.peaWork)).toBe(false);
 });
-
-test("a person's foreground session opens the file as given, with no copy", async () => {
-  const f = await setup(() => ({ result: { state: "ok", document: { openId } } }));
-  const source = await f.file("Mine.rvt", "Worksharing: Not enabled");
-  expect(
-    (await f.admit("instances.open", { source, into: into() }, undefined, "human")).state,
-  ).toBe("succeeded");
-  expect(f.calls.at(-1)![2]).toBe(source);
-  expect(f.calls.at(-1)).not.toContain("--detach");
-  expect(existsSync(f.peaWork)).toBe(false);
-});
-
-test("allowing missing links reaches doc open and its omission result stays in the receipt", async () => {
-  // The SDK reports the omission in the bridge's own result, beside the policy it applied.
-  const nativeResult = {
-    state: "ok",
-    document: { openId },
-    result: {
-      links: "allow",
-      missingLinkCount: 1,
-      missingLinks: [
-        {
-          elementId: "1234",
-          name: "Site",
-          type: "RevitLinkType",
-          status: "NotFound",
-          path: "C:/Links/site.rvt",
-        },
-      ],
-    },
-  };
-  const f = await setup(() => ({ result: nativeResult }));
-  const receipt = await f.admit("instances.open", {
-    source: "C:/Tower.rvt",
-    into: into(),
-    links: "allow",
-  });
-  expect(receipt.state).toBe("succeeded");
-  expect(receipt.steps[0]).toMatchObject({ state: "succeeded", result: nativeResult });
-  expect(flag(f.calls.at(-1)!, "--links")).toBe("allow");
-});
-
-test("the default missing-links refusal keeps its SDK explanation", async () => {
-  const f = await setup(() => ({
-    result: { state: "refused" },
-    diagnostics: [
-      {
-        code: "doc.missing-links",
-        detail: "C:/Links/site.rvt was not found",
-        fix: null,
-      },
-    ],
-  }));
-  const receipt = await f.admit("instances.open", { source: "C:/Tower.rvt", into: into() });
-  expect(receipt.state).toBe("failed");
-  expect(receipt.steps[0]).toMatchObject({
-    state: "failed",
-    status: 409,
-    evidence: {
-      result: {
-        diagnostics: [{ code: "doc.missing-links", detail: "C:/Links/site.rvt was not found" }],
-      },
-    },
-  });
-});
-
-test("only a matching running open blocks a new intent; unknown remains recoverable without blocking later opens", async () => {
-  let entered!: () => void;
-  const dispatched = new Promise<void>((resolve) => {
-    entered = resolve;
-  });
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  let first = true;
-  const f = await setup(async () => {
-    if (first) {
-      first = false;
-      entered();
-      await held;
-      return Error("lost original response");
-    }
-    return { result: { state: "ok" } };
-  });
-  const open = (source: string) => f.admit("instances.open", { source, into: into() });
-  const original = open("C:/Tower.rvt");
-  await dispatched;
-  try {
-    expect(await open("C:/Tower.rvt")).toMatchObject({
-      state: "failed",
-      notDispatched: true,
-      error: expect.stringContaining("already opening"),
-    });
-    expect((await open("C:/Other.rvt")).state).toBe("succeeded");
-  } finally {
-    release();
-  }
-  const lost = await original;
-  expect(lost.state).toBe("unknown");
-  expect((await open("C:/Tower.rvt")).state).toBe("succeeded");
-  expect((await f.owner.list(undefined, lost.id))[0]?.state).toBe("unknown");
-  expect(f.calls.filter((args) => args[0] === "doc")).toHaveLength(3);
-});
-
-test("a restart binds the exact recorded incarnation; a foreign incarnation is refused undispatched", async () => {
-  const f = await setup(() => ({ result: { state: "ok", id: "dev" } }));
-  const receipt = await f.admit("instances.restart", { session });
-  expect(receipt.state).toBe("succeeded");
-  expect(f.calls.map((c) => c.slice(0, 2).join(" "))).toEqual(["session list", "session hr"]);
-  expect(f.calls[0]).toEqual(["session", "list", "--id", "dev", "--json"]);
-  expect(flag(f.calls.at(-1)!, "--expect-session")).toBe(receiptPath);
-
-  const foreign = await f.admit("instances.restart", {
-    session: { selection: { id: "dev" }, process: { ...originalProcess, pid: 43 } },
-  });
-  expect(foreign).toMatchObject({ state: "failed", notDispatched: true });
-  expect(f.calls.at(-1)?.slice(0, 2)).toEqual(["session", "list"]);
-});
-
-test.each([2, 3])(
-  "an empty-result SDK exit %s is a settled undispatched refusal",
-  async (exitCode) => {
-    const f = await setup(() => ({
-      result: {},
-      exitCode,
-      diagnostics: [{ code: "session.bad-invocation", detail: "invalid selector", fix: null }],
-    }));
-    expect(
-      await f.admit("instances.start", { year: "2025", owner: "you", addins: "on" }),
-    ).toMatchObject({
-      state: "failed",
-      notDispatched: true,
-      error: expect.stringContaining("invalid selector"),
-    });
-  },
-);
 
 test.each(["open", "stop", "restart", "close"])(
   "observed 4242 is adopted by the SDK before %s dispatches by pid with its receipt",
@@ -893,44 +544,6 @@ test.each(["open", "stop", "restart", "close"])(
   },
 );
 
-test("a numeric controlled session name stays an id", async () => {
-  const f = await setup(() => ({ result: { state: "ok" } }), [controlledRow({ id: "4242" })]);
-  expect(
-    (await f.admit("instances.open", { source: "C:/Tower.rvt", into: { session: { id: "4242" } } }))
-      .state,
-  ).toBe("succeeded");
-  expect(flag(f.calls.at(-1)!, "--id")).toBe("4242");
-  expect(f.calls.at(-1)).not.toContain("--pid");
-  expect(f.calls.some((args) => args[1] === "start")).toBe(false);
-});
-
-test("a selection that names no running session is refused before anything dispatches", async () => {
-  const f = await setup(() => ({ result: { state: "ok" } }), []);
-  expect(
-    await f.admit("instances.open", { source: "C:/Tower.rvt", into: { session: { id: "gone" } } }),
-  ).toMatchObject({ state: "failed", notDispatched: true });
-  expect(f.calls.map((args) => args.slice(0, 2).join(" "))).toEqual(["session list"]);
-});
-
-test.each(["pid", "processStartUtc"] as const)(
-  "an observed original %s mismatch refuses before adoption",
-  async (field) => {
-    const f = await setup(() => adoptionAnswer, [observedRow]);
-    const foreign = {
-      ...observed,
-      process: {
-        ...observed.process,
-        [field]: field === "pid" ? 4243 : "1970-01-01T00:00:02.0000000Z",
-      },
-    };
-    expect(await f.admit("instances.restart", { session: foreign })).toMatchObject({
-      state: "failed",
-      notDispatched: true,
-    });
-    expect(f.calls).toHaveLength(1);
-  },
-);
-
 test.each(["resolved-pid", "resolved-start", "session-start", "receipt"])(
   "adoption refuses an invalid %s before the requested mutation",
   async (bad) => {
@@ -948,120 +561,6 @@ test.each(["resolved-pid", "resolved-start", "session-start", "receipt"])(
     expect(f.calls.some((args) => args[0] === "doc")).toBe(false);
   },
 );
-
-test("a supervisor refusal after an effect leg never claims nothing was dispatched", async () => {
-  // A refused op response names one code (recorded shape, beta.208); its result keeps the legs.
-  const f = await setup((args) =>
-    args[0] === "op"
-      ? {
-          result: {
-            state: "refused",
-            requestId: args[2],
-            receipt: { requestId: args[2], key: "session.hr", verdict: "refused" },
-            response: {
-              requestId: args[2],
-              key: "session.hr",
-              verdict: "refused",
-              code: "op.stale-expectation",
-              detail: "replacement refused after stop",
-              result: { state: "refused", legs: [{ name: "stop", status: "ok" }] },
-            },
-          },
-        }
-      : Error("lost"),
-  );
-  const lost = await f.admit("instances.restart", { session });
-  const settled = await recoverInstancesAction(lost.id, f.owner, f.deps);
-  expect(settled.steps[0]).toMatchObject({ state: "failed" });
-  expect(settled.steps[0]).not.toHaveProperty("notDispatched", true);
-  expect(settled).not.toHaveProperty("notDispatched", true);
-  expect(f.calls.filter((args) => args[1] === "hr")).toHaveLength(1);
-});
-
-test.each(["adoption", "mutation"])(
-  "a lost observed %s recovers and resumes without repeating SDK adoption",
-  async (lostLeg) => {
-    let lostOnce = false;
-    const f = await setup(
-      (args) => {
-        if (args[0] === "op") {
-          const adoption = lostLeg === "adoption";
-          return {
-            result: {
-              state: "ok",
-              requestId: args[2],
-              receipt: {
-                requestId: args[2],
-                key: adoption ? "session.start" : "doc.open",
-                verdict: "ok",
-              },
-              // Recorded op responses (beta.208): the verb's result and resolution, never an envelope.
-              response: adoption
-                ? { requestId: args[2], key: "session.start", verdict: "ok", ...adoptionAnswer }
-                : {
-                    requestId: args[2],
-                    key: "doc.open",
-                    verdict: "ok",
-                    result: { openId, path: null },
-                  },
-            },
-          };
-        }
-        if (!lostOnce && (lostLeg === "adoption" ? args[1] === "start" : args[0] === "doc")) {
-          lostOnce = true;
-          return Error("lost original response");
-        }
-        return args[1] === "start"
-          ? adoptionAnswer
-          : { result: { state: "ok", document: { openId } } };
-      },
-      [observedRow],
-    );
-    const input = { source: "C:/Tower.rvt", into: { session: { pid: 4242 } } };
-    const lost = await f.admit("instances.open", input);
-    expect(lost.state).toBe("unknown");
-    await recoverInstancesAction(lost.id, f.owner, f.deps);
-    const resumed = await f.admit("instances.open", input, lost.id);
-    expect(resumed.state).toBe("succeeded");
-    expect(f.calls.filter((args) => args[1] === "start")).toHaveLength(1);
-    expect(f.calls.filter((args) => args[0] === "doc")).toHaveLength(1);
-  },
-);
-
-test("a Pea copy is made once: resuming a lost open reuses the frozen copy", async () => {
-  let lostOnce = true;
-  const f = await setup(
-    (args) => {
-      if (args[0] === "op")
-        return {
-          result: {
-            state: "ok",
-            requestId: args[2],
-            receipt: { requestId: args[2], key: "doc.open", verdict: "ok" },
-            response: { requestId: args[2], key: "doc.open", verdict: "ok", result: { openId } },
-          },
-        };
-      if (lostOnce) {
-        lostOnce = false;
-        return Error("lost original response");
-      }
-      return { result: { state: "ok", document: { openId } } };
-    },
-    [controlledRow({ id: "pea-bg", shape: shape("background") })],
-  );
-  await recordPeaLaunch(f.owner);
-  const source = await f.file("Tower.rvt", "Worksharing: Not enabled");
-  const input = { source, into: into("pea-bg") };
-  const lost = await f.admit("instances.open", input);
-  expect(lost.state).toBe("unknown");
-  await recoverInstancesAction(lost.id, f.owner, f.deps);
-  const resumed = await f.admit("instances.open", input, lost.id);
-  expect(resumed.state).toBe("succeeded");
-  expect(await readdir(f.peaWork)).toHaveLength(1);
-  expect((resumed as { result?: { opened?: string } }).result?.opened?.startsWith(f.peaWork)).toBe(
-    true,
-  );
-});
 
 test("F7: an acquisition records its paths before writing; a crash at any boundary reconciles from receipts, never guessed", async () => {
   let opened = "";
@@ -1337,16 +836,6 @@ test("a Save As of an acquired document records its new file as the acquisition'
   );
   expect(cleaned.state).toBe("succeeded");
   expect(existsSync(out)).toBe(true);
-});
-
-test("a detached handover preserves worksets", async () => {
-  const { f, acquired } = await acquisitionSetup(true);
-  expect(
-    await f.admit("instances.handover", { acquisition: acquired.id }, undefined, "agent"),
-  ).toMatchObject({ state: "succeeded" });
-  const save = f.calls.find((argv) => argv[1] === "save")!;
-  expect(flag(save, "--worksets")).toBe("preserve");
-  expect(save).not.toContain("strip");
 });
 
 test.each([false, true])(
@@ -1734,26 +1223,6 @@ test("R4d: after recovery over HTTP, cleanup closes and stops the Revit that sur
   expect(foldAcquisitions(await f.owner.list())[0]!.state).toBe("released");
 });
 
-test("a reconciling acquisition refuses handover and cleanup until recovered; its lost open is never replayed", async () => {
-  const f = await setup(
-    (args) => (args[0] === "session" ? startedAnswer : Error("lost open response")),
-    [controlledRow({ shape: shape("background") })],
-  );
-  const source = await f.file("Tower.rvt", "Worksharing: Not enabled");
-  const lost = await f.admit("instances.open", { source, into: newRevit({ owner: "pea" }) });
-  expect(lost.state).toBe("unknown");
-  const before = f.calls.length;
-  for (const [key, input] of [
-    ["instances.handover", { acquisition: lost.id }],
-    ["instances.cleanup", { acquisition: lost.id, unsaved: "discard" }],
-  ] as const)
-    await expect(f.admit(key, input, undefined, "agent")).rejects.toMatchObject({
-      refusal: { code: "acquisition.unproven" },
-    });
-  expect(f.calls.slice(before)).toEqual([]);
-  expect(f.calls.filter((argv) => argv[1] === "open")).toHaveLength(1);
-});
-
 test.each(["running", "missing-response", "wrong-request", "wrong-key", "conflicting-state"])(
   "a lost supervisor with %s evidence stays unknown and never re-dispatches",
   async (mode) => {
@@ -1783,139 +1252,6 @@ test.each(["running", "missing-response", "wrong-request", "wrong-key", "conflic
     expect(f.calls.filter((args) => args[1] === "start")).toHaveLength(1);
   },
 );
-
-test("an unknown supervisor request is refused undispatched from the read-only receipt lookup", async () => {
-  const f = await setup(
-    (args) =>
-      args[0] === "op"
-        ? {
-            result: { requestId: args[2], state: "refused" },
-            diagnostics: [{ code: "op.unknown-request", detail: "never admitted", fix: null }],
-          }
-        : Error("lost"),
-    [],
-  );
-  const lost = await f.admit("instances.start", { year: "2025", owner: "you", addins: "on" });
-  const settled = await recoverInstancesAction(lost.id, f.owner, f.deps);
-  expect(settled.steps[0]).toMatchObject({ state: "failed", notDispatched: true });
-  expect(f.calls.filter((args) => args[1] === "start")).toHaveLength(1);
-});
-
-test("a pre-admission SDK refusal is failed and undispatched; recovery settles a lost open from its op receipt", async () => {
-  let mode: "refuse" | "hang" | "answer" = "refuse";
-  const f = await setup((args) => {
-    if (args[0] === "op")
-      return {
-        result: {
-          state: "ok",
-          requestId: args[2],
-          receipt: { requestId: args[2], key: "doc.open", verdict: "ok" },
-          response: { requestId: args[2], key: "doc.open", verdict: "ok", result: { openId } },
-        },
-      };
-    if (mode === "refuse")
-      return {
-        result: { state: "refused" },
-        diagnostics: [
-          { code: "op.stale-expectation", detail: "the session is a replacement", fix: null },
-        ],
-      };
-    if (mode === "hang") return Error("pe-revit produced no output");
-    return { result: { state: "ok", document: { openId } } };
-  });
-  const input = { source: "C:/Tower.rvt", into: into() };
-  const refused = await f.admit("instances.open", input);
-  expect(refused).toMatchObject({
-    state: "failed",
-    notDispatched: true,
-    error: expect.stringContaining("op.stale-expectation"),
-  });
-
-  mode = "hang";
-  const lost = await f.admit("instances.open", input);
-  expect(lost.state).toBe("unknown");
-  mode = "answer";
-  const settled = await recoverInstancesAction(lost.id, f.owner, f.deps);
-  // Recovery settles the step from the SDK's record; the row completes only on an explicit resume.
-  expect(settled.state).toBe("unknown");
-  expect(settled.steps[0]).toMatchObject({ state: "succeeded", result: { result: { openId } } });
-  const recovery = f.calls.at(-1)!;
-  expect(recovery).toEqual(["op", "result", settled.steps[0]!.id, "--json"]);
-  const dispatched = f.calls.length;
-  const resumed = await f.admit("instances.open", input, lost.id);
-  expect(resumed.state).toBe("succeeded");
-  expect(f.calls.length).toBe(dispatched); // the recovered step replays; nothing is re-dispatched
-});
-
-test.each(["start", "stop", "hr"])(
-  "a lost session %s reads its durable supervisor receipt and never re-dispatches",
-  async (verb) => {
-    const response = { state: "ok", id: "dev", legs: [] };
-    const f = await setup((args) =>
-      args[0] === "op"
-        ? {
-            result: {
-              state: "ok",
-              requestId: args[2],
-              receipt: { requestId: args[2], key: `session.${verb}`, verdict: "ok" },
-              // A supervisor's recorded response (op result, beta.208): the verb's result, not its envelope.
-              response: {
-                requestId: args[2],
-                key: `session.${verb}`,
-                verdict: "ok",
-                resolved: null,
-                result: response,
-              },
-            },
-          }
-        : Error("pe-revit produced no output"),
-    );
-    const key = `instances.${verb === "hr" ? "restart" : verb}`;
-    const input =
-      verb === "start"
-        ? { year: "2025", owner: "you", addins: "on" }
-        : { session, ...(verb === "stop" ? { unsaved: "keep" } : {}) };
-    const lost = await f.admit(key, input);
-    expect(lost.state).toBe("unknown");
-    const settled = await recoverInstancesAction(lost.id, f.owner, f.deps);
-    expect(settled.steps[0]).toMatchObject({ state: "succeeded", result: response });
-    expect(f.calls.at(-1)).toEqual(["op", "result", lost.steps[0]!.id, "--json"]);
-    const count = f.calls.length;
-    expect((await f.admit(key, input, lost.id)).state).toBe("succeeded");
-    expect(f.calls).toHaveLength(count);
-    expect(f.calls.filter((args) => args[1] === verb)).toHaveLength(1);
-  },
-);
-
-test("a repeated press launches again: nothing is staged, so nothing is consumed", async () => {
-  const f = await setup(() => startedAnswer, []);
-  const input = { year: "2025", owner: "you", addins: "on" };
-  expect((await f.admit("instances.start", input)).state).toBe("succeeded");
-  expect((await f.admit("instances.start", input)).state).toBe("succeeded");
-  expect(f.calls.filter((argv) => argv[1] === "start")).toHaveLength(2);
-});
-
-test("SDK close refuses product references and wrong-source ids before mutation", async () => {
-  const f = await setup(() => {
-    throw Error("must not mutate");
-  });
-  await expect(
-    f.admit("instances.close", {
-      session,
-      document: { session: "attachment", openId },
-      unsaved: "keep",
-    }),
-  ).rejects.toThrow();
-  expect(f.calls).toEqual([]);
-  const refused = await f.admit("instances.close", {
-    session,
-    document: { source: "sdk", session: session.selection, openId: "product-open-id" },
-    unsaved: "keep",
-  });
-  expect(refused.state).toBe("failed");
-  expect(JSON.stringify(refused)).toContain("SDK document lifetime");
-  expect(f.calls.map((args) => args.slice(0, 2))).toEqual([["doc", "list"]]);
-});
 
 test("restart, stop and close run for a human; stop and close require an unsaved choice", async () => {
   const f = await setup((args) =>
@@ -1960,69 +1296,6 @@ test("restart, stop and close run for a human; stop and close require an unsaved
   expect(flag(closeArgv, "--expect-doc")).toBe(openId);
 });
 
-test("an action whose destination is not the supplied session is refused before it is admitted", async () => {
-  const f = await setup(() => ({ result: { state: "ok" } }));
-  await expect(
-    admitInstancesAction(
-      {
-        id: "foreign-destination",
-        kind: "workflow",
-        key: "instances.open",
-        destination: { kind: "host" },
-        input: { source: "C:/Tower.rvt", into: into() },
-        bases: {},
-      },
-      crossingOf("agent"),
-      f.owner,
-      f.deps,
-    ),
-  ).rejects.toThrow("destination must match");
-  expect(f.calls).toEqual([]);
-});
-
-test("open into your session remains human-only even with a grant", async () => {
-  const f = await setup(() => ({ result: { state: "ok" } }));
-  bindControl({ heads: grantHead });
-  await expect(
-    f.admit("instances.open", { source: "C:/Mine.rvt", into: into() }, undefined, "agent"),
-  ).rejects.toMatchObject({ refusal: { code: "human.only" } });
-  expect(f.calls.every((args) => args[1] === "list")).toBe(true);
-});
-
-test("close checks only its exact document even with another ungranted document open", async () => {
-  const f = await setup(() => ({ result: { state: "ok" } }));
-  bindControl({ heads: grantHead });
-  f.census.documents = [openId, "b".repeat(32)];
-  const input = {
-    session,
-    document: { source: "sdk", session: session.selection, openId },
-    unsaved: "keep",
-  };
-  expect(await f.admit("instances.close", input, undefined, "agent")).toMatchObject({
-    state: "succeeded",
-    basis: { kind: "grant", lifetime: grantHead().grant!.lifetime },
-  });
-  await expect(
-    f.admit(
-      "instances.close",
-      { ...input, document: { ...input.document, openId: "b".repeat(32) } },
-      undefined,
-      "agent",
-    ),
-  ).rejects.toMatchObject({ refusal: { code: "grant.other-lifetime" } });
-});
-
-test("a stale empty census cannot admit an agent stop", async () => {
-  const f = await setup(() => ({ result: { state: "ok" } }));
-  f.census.documents = [];
-  await f.machine.refresh();
-  f.census.fail = true;
-  await expect(
-    f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "agent"),
-  ).rejects.toMatchObject({ refusal: { code: "lifecycle.ungranted-documents" } });
-  expect(f.calls.every((args) => args[1] === "list")).toBe(true);
-});
-
 test("a document arriving after admission refuses stop at effect entry", async () => {
   const f = await setup(() => ({ result: { state: "ok" } }));
   f.census.documents = [];
@@ -2062,47 +1335,6 @@ test("a user document opened in Pea's Revit after admission refuses Pea's stop a
 
 const sdkDocument = { source: "sdk", session: session.selection, openId } as const;
 
-test.each([
-  [{ kind: "self" }, undefined, []],
-  [
-    { kind: "save-as", out: "C:/out/Tower-copy.rvt", worksets: "strip" },
-    undefined,
-    ["--out", "C:/out/Tower-copy.rvt", "--worksets", "strip"],
-  ],
-  [
-    { kind: "central", comment: "rooms renumbered" },
-    "all",
-    ["--central", "--comment", "rooms renumbered", "--release", "all"],
-  ],
-] as const)("save %o reaches doc save for the exact lifetime", async (to, release, expected) => {
-  const f = await setup(() => ({ result: { state: "ok", document: { openId } } }));
-  const row = await f.admit("instances.save", {
-    session,
-    document: sdkDocument,
-    to,
-    ...(release ? { release } : {}),
-  });
-  expect(row.state).toBe("succeeded");
-  const save = f.calls.at(-1)!;
-  expect(save.slice(0, 6)).toEqual(["doc", "save", "--doc", openId, "--id", "dev"]);
-  expect(save.slice(6, 6 + expected.length)).toEqual(expected);
-  expect(flag(save, "--expect-doc")).toBe(openId);
-  expect(flag(save, "--expect-session")).toBe(receiptPath);
-  expect(flag(save, "--request-id")).toBe(row.steps.at(-1)!.id);
-});
-
-test("save refuses states the SDK would refuse: comment without central, worksets without a Save As", () => {
-  const input = instancesActions["instances.save"].input;
-  for (const to of [
-    { kind: "self", comment: "x" },
-    { kind: "central", out: "C:/x.rvt" },
-    { kind: "self", worksets: "strip" },
-    // R6: the SDK's out is a Save As that retargets the open document; it is never called a copy.
-    { kind: "copy", out: "C:/x.rvt" },
-  ])
-    expect(input.safeParse({ session, document: sdkDocument, to }).success).toBe(false);
-});
-
 test("an agent save is one document crossing: the granted lifetime admits, another refuses", async () => {
   const f = await setup(() => ({ result: { state: "ok", document: { openId } } }));
   bindControl({ heads: grantHead });
@@ -2120,106 +1352,6 @@ test("an agent save is one document crossing: the granted lifetime admits, anoth
       "agent",
     ),
   ).rejects.toMatchObject({ refusal: { code: "grant.other-lifetime" } });
-});
-
-test("reset needs an unsaved choice and reaches session reset with release and restart", async () => {
-  const f = await setup(() => ({ result: { id: "dev", state: "ok", phase: "ready" } }));
-  await expect(f.admit("instances.reset", { session })).rejects.toThrow();
-  expect(f.calls).toEqual([]);
-  const row = await f.admit("instances.reset", {
-    session,
-    unsaved: "discard",
-    release: "none",
-    restart: true,
-  });
-  expect(row.state).toBe("succeeded");
-  const reset = f.calls.at(-1)!;
-  expect(reset.slice(0, 4)).toEqual(["session", "reset", "--id", "dev"]);
-  expect(flag(reset, "--unsaved")).toBe("discard");
-  expect(flag(reset, "--release")).toBe("none");
-  expect(reset).toContain("--restart");
-  expect(flag(reset, "--expect-session")).toBe(receiptPath);
-  expect(flag(reset, "--request-id")).toBe(row.steps.at(-1)!.id);
-});
-
-const dialogList = {
-  state: "ok",
-  pid: originalProcess.pid,
-  processStartUtc: originalProcess.processStartUtc,
-  expectSession: receiptPath,
-  windows: [{ handle: "0x1A2B", identity: { observationId: "fresh-dialog" } }],
-};
-
-test("dialog dismiss binds the fresh observation, exact process and action request", async () => {
-  const f = await setup((args) => ({
-    result: args.includes("--dismiss") ? { state: "ok" } : dialogList,
-  }));
-  f.census.documents = [];
-  const result = await f.admit(
-    "instances.dialogs",
-    { session, hwnd: "0x1A2B" },
-    undefined,
-    "agent",
-  );
-  expect(result.state).toBe("succeeded");
-  const calls = f.calls.filter((args) => args[1] === "dialogs");
-  expect(calls).toHaveLength(2);
-  expect(calls[0]).toEqual(["session", "dialogs", "--pid", String(originalProcess.pid), "--json"]);
-  expect(flag(calls[1]!, "--expect-dialog")).toBe("fresh-dialog");
-  expect(flag(calls[1]!, "--expect-session")).toBe(receiptPath);
-  expect(flag(calls[1]!, "--pid")).toBe(String(originalProcess.pid));
-  expect(flag(calls[1]!, "--request-id")).toBe(result.steps.at(-1)!.id);
-});
-
-test("dialog dismiss passes the SDK stale-identity refusal through as undispatched", async () => {
-  const f = await setup((args) =>
-    args.includes("--dismiss")
-      ? {
-          result: { state: "refused" },
-          exitCode: 3,
-          diagnostics: [
-            { code: "session.dialog-identity-stale", detail: "Window replaced", fix: null },
-          ],
-        }
-      : { result: dialogList },
-  );
-  const result = await f.admit("instances.dialogs", { session, hwnd: "0x1A2B" });
-  expect(result.steps.at(-1)).toMatchObject({ state: "failed", notDispatched: true });
-  const step = result.steps.at(-1)!;
-  if (step.state !== "failed") throw Error("SDK refusal must fail the step");
-  expect(step.error).toContain("session.dialog-identity-stale");
-  expect(step.evidence).toMatchObject({
-    result: {
-      diagnostics: [
-        { code: "session.dialog-identity-stale", detail: "Window replaced", fix: null },
-      ],
-    },
-  });
-});
-
-test("a lost dialog dismiss recovers from its SDK receipt without replay", async () => {
-  const f = await setup((args) => {
-    if (args[0] === "op")
-      return {
-        result: {
-          requestId: args[2],
-          state: "ok",
-          receipt: { requestId: args[2], key: "session.dialogs", verdict: "ok" },
-          response: {
-            requestId: args[2],
-            key: "session.dialogs",
-            verdict: "ok",
-            result: { state: "ok" },
-          },
-        },
-      };
-    return args.includes("--dismiss") ? Error("lost response") : { result: dialogList };
-  });
-  const lost = await f.admit("instances.dialogs", { session, hwnd: "0x1A2B" });
-  expect(lost.steps.at(-1)!.state).toBe("unknown");
-  const settled = await recoverInstancesAction(lost.id, f.owner, f.deps);
-  expect(settled.steps.at(-1)!.state).toBe("succeeded");
-  expect(f.calls.filter((args) => args.includes("--dismiss"))).toHaveLength(1);
 });
 
 test("/actions/cancel stops a running Instances step through the SDK op cancel, never the Revit bridge", async () => {

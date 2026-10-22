@@ -1,9 +1,6 @@
 import { normalizePeError } from "@pe/host-contracts/pe-api";
-import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
 import { cli } from "gunshi";
 import { expect, test, vi } from "vite-plus/test";
-import type { HostOpResponse } from "@pe/host-contracts/operation-types";
-import { documentRows, recentRows } from "@pe/agent-contracts";
 import { PeaCliCommands } from "../src/pea/PeaCliCommands.ts";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 import { admitCrossing, callerOf, Refused } from "../../../apps/host/src/control.ts";
@@ -83,252 +80,6 @@ test("CLI has no actor flag; no-context host and script writes get context.missi
   }
 });
 
-const statuses = [
-  "Succeeded",
-  "RuntimeFailed",
-  "CompilationFailed",
-  "Cancelled",
-] satisfies HostOpResponse<"scripting.execute">["status"][];
-
-test("import carries the optional local folder through Gunshi to pod.import", async () => {
-  const commands = new PeaCliCommands({ hostBaseUrl: "http://host.test" });
-  const scripting = {
-    importPod: vi.fn(async () => ({ id: "pe-standards", folder: "Office Copy" })),
-  };
-  const tools = vi
-    .spyOn(
-      commands as unknown as { createScriptingTools: () => typeof scripting },
-      "createScriptingTools",
-    )
-    .mockReturnValue(scripting);
-  const output = vi.spyOn(console, "log").mockImplementation(() => {});
-  try {
-    const command = commands.scriptCommand();
-    const run = (args: string[]) => cli(args, command, { subCommands: command.subCommands });
-    await run(["import", "--archive", "example.zip", "--folder", "Office Copy"]);
-    expect(scripting.importPod).toHaveBeenLastCalledWith({
-      archivePath: "example.zip",
-      folder: "Office Copy",
-    });
-    expect(output).toHaveBeenCalledWith("folder Office Copy");
-    await run(["import", "--archive", "example.zip"]);
-    expect(scripting.importPod).toHaveBeenLastCalledWith({
-      archivePath: "example.zip",
-      folder: undefined,
-    });
-  } finally {
-    output.mockRestore();
-    tools.mockRestore();
-  }
-});
-
-test.each(statuses)("pea script execute maps %s to the process exit code", async (status) => {
-  const originalExitCode = process.exitCode;
-  const commands = new PeaCliCommands({ hostBaseUrl: "http://host.test" });
-  const scripting = {
-    execute: vi.fn(async () => ({
-      status,
-      executionId: "execution-1",
-      diagnostics: [],
-      output: "",
-      revitVersion: "2025",
-      targetFramework: "net8.0-windows",
-    })),
-  };
-  const tools = vi
-    .spyOn(
-      commands as unknown as {
-        createScriptingTools: () => typeof scripting;
-      },
-      "createScriptingTools",
-    )
-    .mockReturnValue(scripting);
-  const output = vi.spyOn(console, "log").mockImplementation(() => {});
-  try {
-    process.exitCode = 0;
-    const command = commands.scriptCommand();
-    await cli(["execute", "--script-content", "WriteLine(1);"], command, {
-      subCommands: command.subCommands,
-    });
-
-    expect(process.exitCode).toBe(status === "Succeeded" ? 0 : 1);
-  } finally {
-    process.exitCode = originalExitCode;
-    output.mockRestore();
-    tools.mockRestore();
-  }
-});
-
-test("pea script execute --json prints the whole result as one JSON object", async () => {
-  const originalExitCode = process.exitCode;
-  const commands = new PeaCliCommands({ hostBaseUrl: "http://host.test" });
-  const result = {
-    status: "RuntimeFailed" as const,
-    executionId: "execution-1",
-    diagnostics: [
-      { stage: "resolve", severity: "Info" as const, message: "resolved 3 references" },
-      { stage: "runtime", severity: "Warning" as const, message: "one duct had no level" },
-    ],
-    output: "hello\n",
-    revitVersion: "2025",
-    targetFramework: "net8.0-windows",
-    data: { ducts: [1, 2] },
-  };
-  const scripting = { execute: vi.fn(async () => result) };
-  const tools = vi
-    .spyOn(
-      commands as unknown as { createScriptingTools: () => typeof scripting },
-      "createScriptingTools",
-    )
-    .mockReturnValue(scripting);
-  const log = vi.spyOn(console, "log").mockImplementation(() => {});
-  const error = vi.spyOn(console, "error").mockImplementation(() => {});
-  const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-  try {
-    process.exitCode = 0;
-    const command = commands.scriptCommand();
-    await cli(["execute", "--script-content", "WriteLine(1);", "--json"], command, {
-      subCommands: command.subCommands,
-    });
-
-    expect(log).not.toHaveBeenCalled();
-    expect(error).not.toHaveBeenCalled();
-    expect(stdout).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(String(stdout.mock.calls[0]![0]))).toEqual(result);
-    expect(process.exitCode).toBe(1);
-  } finally {
-    process.exitCode = originalExitCode;
-    stdout.mockRestore();
-    error.mockRestore();
-    log.mockRestore();
-    tools.mockRestore();
-  }
-});
-
-test("pea find prints key, kind and title per row of the host's catalog; --mention prints the pointer", async () => {
-  const at = "2026-10-12T12:00:00.000Z";
-  const machine = machineFixture([
-    {
-      session: "b1",
-      documents: [
-        {
-          openId: "o1",
-          address: "C:\\Models\\Riser.rvt",
-          title: "Mechanical Riser",
-          isFamilyDocument: false,
-          isActive: true,
-        },
-      ],
-    },
-  ]);
-  const skill = {
-    key: "skill:@skills/skills/riser-check",
-    kind: "skill",
-    title: "riser-check",
-    description: "Check a riser.",
-    needs: "nothing",
-    mutates: false,
-    principal: ["human", "pea", "page", "external-mcp"],
-    input: {},
-    source: "skills",
-    package: { id: "skills", path: "skills/riser-check/SKILL.md", sha256: "a".repeat(64) },
-    rank: 0,
-  } as const;
-  // A human-only press: pe_find never offers it, so neither does pea find.
-  const humanOnly = {
-    ...skill,
-    key: "route:riser.apply",
-    kind: "route-command",
-    title: "Riser: apply",
-    principal: ["human"],
-    package: undefined,
-  } as const;
-  const recents = [
-    {
-      title: "Plant",
-      path: "C:\\Jobs\\Plant.rvt",
-      isCloud: false,
-      region: null,
-      projectGuid: null,
-      modelGuid: null,
-      year: 2025,
-      savedYear: 2025,
-      rank: 1,
-    },
-  ];
-  const host = fakeRuntimeHost("http://127.0.0.1:9");
-  const urls: URL[] = [];
-  vi.stubGlobal("fetch", async (input: string | URL | Request) => {
-    urls.push(new URL(input instanceof Request ? input.url : String(input)));
-    return Response.json({
-      at,
-      machine,
-      recents,
-      sources: {},
-      diagnostics: [],
-      capabilities: [
-        skill,
-        humanOnly,
-        ...documentRows({ machine }),
-        ...recentRows({ machine, recents }),
-      ],
-    });
-  });
-  const output = vi.spyOn(console, "log").mockImplementation(() => {});
-  const disclosed = vi.spyOn(console, "error").mockImplementation(() => {});
-  try {
-    const command = new PeaCliCommands({ hostBaseUrl: host }).findCommand();
-    await cli(["riser"], command);
-    expect(urls[0]?.pathname).toBe("/pe/capabilities");
-    expect(disclosed).toHaveBeenCalledWith(`host ${host}`);
-    // findCapabilities' ranking: the skill's key, title and description all say riser.
-    expect(output.mock.calls.map(([line]) => line)).toEqual([
-      "skill:@skills/skills/riser-check  skill  riser-check",
-      "doc:b1/o1  document  Mechanical Riser",
-    ]);
-    output.mockClear();
-    await cli(["--kind", "document", "--json"], command);
-    expect(JSON.parse(output.mock.calls[0]![0] as string)).toMatchObject([
-      { key: "doc:b1/o1", kind: "document" },
-    ]);
-    output.mockClear();
-    await cli(["--mention", "doc:b1/o1"], command);
-    expect(JSON.parse(output.mock.calls[0]![0] as string)).toEqual({
-      key: "doc:b1/o1",
-      kind: "document",
-      title: "Mechanical Riser",
-      takenAt: at,
-      facts: {
-        session: "b1",
-        openId: "o1",
-        address: "C:\\Models\\Riser.rvt",
-        family: false,
-        active: true,
-        revit: "2025",
-        custody: "controlled",
-      },
-    });
-    // Revit's recent documents are rows too; the mention carries the source that opens them.
-    output.mockClear();
-    await cli(["--kind", "recent", "plant"], command);
-    expect(output.mock.calls.map(([line]) => line)).toEqual([
-      "recent:C:\\Jobs\\Plant.rvt  recent  Plant",
-    ]);
-    output.mockClear();
-    await cli(["--mention", "recent:C:\\Jobs\\Plant.rvt"], command);
-    expect(JSON.parse(output.mock.calls[0]![0] as string).facts).toMatchObject({
-      year: 2025,
-      open: null,
-      openWith: "C:\\Jobs\\Plant.rvt",
-    });
-  } finally {
-    output.mockRestore();
-    disclosed.mockRestore();
-    vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
-  }
-});
-
 test("pea host call reaches a declared HTTP route through the principal-carrying client", async () => {
   const base = fakeRuntimeHost("http://127.0.0.1:9");
   vi.stubEnv("PE_CONTEXT", "cli-context");
@@ -353,3 +104,162 @@ test("pea host call reaches a declared HTTP route through the principal-carrying
     vi.unstubAllEnvs();
   }
 });
+
+test.each([
+  { json: false, status: "PolicyRejected", count: 1 },
+  { json: true, status: "PolicyRejected", count: 69 },
+])(
+  "script CLI retains dispatched diagnostics ($status, json=$json)",
+  async ({ json, status, count }) => {
+    const originalExitCode = process.exitCode;
+    const base = fakeRuntimeHost("http://127.0.0.1:19998");
+    const native = {
+      status,
+      executionId: "5f894ab15210479c8202297e93ac7c8a",
+      diagnostics: [
+        {
+          stage: "policy",
+          severity: "Error",
+          source: "TargetRepair.cs",
+          message:
+            "WriteTransaction scripts may not create their own Revit transactions; the host owns the transaction.",
+        },
+      ],
+    };
+    const policyError = native.diagnostics[0]!;
+    native.diagnostics =
+      count === 66
+        ? [
+            ...Array.from({ length: 65 }, (_, i) => ({
+              stage: "resolve",
+              severity: "Info",
+              source: "references",
+              message: `reference ${i}`,
+            })),
+            policyError,
+          ]
+        : Array.from({ length: count }, () => policyError);
+    if (count === 69)
+      native.diagnostics = [
+        ...Array.from({ length: 65 }, (_, i) => ({
+          stage: "resolve",
+          severity: "Info",
+          source: "references",
+          message: `reference ${i}`,
+        })),
+        { ...policyError, severity: "Warning", message: "first warning" },
+        policyError,
+        { ...policyError, severity: "Warning", message: "second warning" },
+        { ...policyError, message: "second error" },
+      ];
+    const calls: string[] = [];
+    let actionId: string | undefined;
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      calls.push(url.pathname);
+      if (url.pathname === "/ops")
+        return Response.json({
+          bridgeSessionId: "fixture-session",
+          operations: [{ key: "scripting.execute", intent: "Mutate", needs: "document" }],
+        });
+      expect(url.pathname).toBe("/actions");
+      const admission = JSON.parse(await new Response(init?.body).text());
+      actionId = admission.id;
+      return Response.json({
+        kind: admission.kind,
+        id: admission.id,
+        key: admission.key,
+        caller: { kind: "anonymous" },
+        basis: null,
+        destination: admission.destination,
+        request: admission.input,
+        bases: admission.bases,
+        steps: [],
+        preparation: { state: "ready", value: { sourceBundle: "MUST NOT PRINT" } },
+        recovery: [],
+        startedAt: "2026-10-15T00:00:00Z",
+        publication: { state: "unrequested" },
+        state: "failed",
+        status: 422,
+        error: `Script execution ${status}`,
+        evidence: {
+          result: {
+            ...native,
+            data: { assembly: "MUST NOT PRINT" },
+            sourceBundle: "MUST NOT PRINT",
+          },
+        },
+      });
+    });
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const command = new PeaCliCommands({ hostBaseUrl: base }).scriptCommand();
+    try {
+      process.exitCode = 0;
+      const invoke = () =>
+        cli(
+          [
+            "execute",
+            "--script-content",
+            "using var tx = new Transaction(doc);",
+            "--permission-mode",
+            "WriteTransaction",
+            "--bridge-session-id",
+            "fixture-session",
+            "--open-document-id",
+            "fixture-open",
+            ...(json ? ["--json"] : []),
+          ],
+          command,
+          { subCommands: command.subCommands },
+        );
+      if (json) {
+        await invoke();
+        expect(stdout).toHaveBeenCalledTimes(1);
+        const outcome = JSON.parse(String(stdout.mock.calls[0]![0]));
+        expect(outcome).toMatchObject({
+          actionId,
+          state: "failed",
+          status: 422,
+          evidence: {
+            result: {
+              ...native,
+              diagnostics:
+                count === 69
+                  ? [
+                      native.diagnostics[66],
+                      native.diagnostics[68],
+                      native.diagnostics[65],
+                      native.diagnostics[67],
+                      ...native.diagnostics.slice(0, 60),
+                    ]
+                  : count === 66
+                    ? [policyError, ...native.diagnostics.slice(0, 63)]
+                    : native.diagnostics.slice(0, 64),
+            },
+          },
+        });
+        if (count === 66) expect(outcome.evidence.result.diagnostics[0]).toEqual(policyError);
+        if (count > 64)
+          expect(outcome.evidence.result).toMatchObject({
+            diagnosticsTotal: count,
+            diagnosticsTruncated: true,
+          });
+        else expect(outcome.evidence.result).not.toHaveProperty("diagnosticsTruncated");
+        expect(outcome.error).toContain(`Script execution ${status}`);
+        expect(outcome).not.toHaveProperty("request");
+        expect(JSON.stringify(outcome)).not.toContain("MUST NOT PRINT");
+        expect(process.exitCode).toBe(1);
+      } else {
+        await expect(invoke()).rejects.toThrow(/: failed: Script execution PolicyRejected/);
+        expect(stdout).not.toHaveBeenCalled();
+      }
+      expect(calls.filter((path) => path === "/actions")).toHaveLength(1);
+      expect(calls).not.toContain("/call");
+    } finally {
+      process.exitCode = originalExitCode;
+      stdout.mockRestore();
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  },
+);

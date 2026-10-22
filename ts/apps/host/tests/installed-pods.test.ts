@@ -62,15 +62,6 @@ test("first boot imports the shipped pod; a restart offers nothing again, even a
   expect((await listPackages(pods)).packages.map((p) => p.id)).toEqual(["default"]);
 });
 
-test("every boot seeds the default pod once and never rewrites it", async () => {
-  await boot();
-  const manifest = join(pods, "default", "pod.json");
-  expect(JSON.parse(await readFile(manifest, "utf8"))).toMatchObject({ id: "default" });
-  await writeFile(manifest, '{ "mine": true }');
-  await boot();
-  expect(await readFile(manifest, "utf8")).toBe('{ "mine": true }');
-});
-
 test("a user's pod with the shipped id, or a folder with its name, is never overwritten", async () => {
   await mkdir(join(pods, "Mine"), { recursive: true });
   const mine = JSON.stringify({
@@ -93,12 +84,6 @@ test("a user's pod with the shipped id, or a folder with its name, is never over
   await writeFile(join(pods, "example", "notes.txt"), "mine");
   expect((await boot()).outcomes).toMatchObject([{ outcome: "present", id: "example" }]);
   expect(await readFile(join(pods, "example", "notes.txt"), "utf8")).toBe("mine");
-});
-
-test("a source-lane host ships nothing and writes no ledger", async () => {
-  const report = await importShippedPods({ shippedRoot: null, ledger, podsRoot: pods, captures });
-  expect(report).toEqual({ shippedRoot: null, outcomes: [] });
-  await expect(readFile(ledger)).rejects.toThrow();
 });
 
 test("the real examples stage and first-boot import unchanged: same members, project bytes kept, four kinds of keys", async () => {

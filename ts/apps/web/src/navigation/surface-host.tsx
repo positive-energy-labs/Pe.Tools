@@ -53,7 +53,7 @@ export interface SurfaceHost {
 }
 
 /** One destination policy for router changes, ordinary links and native document navigation. */
-export function surfaceDestination(
+function surfaceDestination(
   surface: AppSurface,
   destination: string,
   origin: string,
@@ -77,10 +77,7 @@ function navigateNativeHistory(direction: "back" | "forward"): boolean {
   return postRendererMessage(native, { type: "navigate-history", direction });
 }
 
-export function usableOverlay(
-  visible: boolean,
-  rect: Pick<DOMRect, "x" | "y" | "width" | "height">,
-) {
+function usableOverlay(visible: boolean, rect: Pick<DOMRect, "x" | "y" | "width" | "height">) {
   return (
     visible &&
     [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) &&

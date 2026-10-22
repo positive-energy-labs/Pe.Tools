@@ -13,7 +13,7 @@ import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import { OwnerInspector } from "#/state/owner-inspector";
 
-export function AppChrome() {
+function AppChrome() {
   return (
     <>
       <MachineAttention />
@@ -24,13 +24,14 @@ export function AppChrome() {
   );
 }
 
-export function AppDevtools({ pathname, shell }: { pathname: string; shell?: string }) {
+function AppDevtools({ pathname, shell }: { pathname: string; shell?: string }) {
   if (pathname === "/open" || shell === "tray") return null;
   return (
     <TanStackDevtools
       // The bottom corners belong to the product's own chrome (feedback left, machine chip right);
-      // the dev-only trigger waits, fixed and hidden until hover, on the right edge's middle.
-      config={{ position: "middle-right", triggerMode: "fixed", hideUntilHover: true }}
+      // the right edge's middle is the chat rail's (centred lens); the dev-only trigger waits, fixed
+      // and hidden until hover, on the left edge's middle.
+      config={{ position: "middle-left", triggerMode: "fixed", hideUntilHover: true }}
       plugins={[
         { name: "Tanstack Router", render: <TanStackRouterDevtoolsPanel /> },
         { name: "Route owners", render: <OwnerInspector /> },

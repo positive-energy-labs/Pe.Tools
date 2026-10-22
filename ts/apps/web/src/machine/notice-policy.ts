@@ -9,7 +9,7 @@ import { z } from "zod";
 import { machineNoticeSchema } from "@pe/host-contracts/native-adapter";
 import type { MachineNotice } from "@pe/agent-contracts";
 
-export const SNOOZE_MS = 3_600_000;
+const SNOOZE_MS = 3_600_000;
 const KEPT = 200;
 const STORAGE_KEY = "pe.notices.ledger";
 
@@ -24,9 +24,9 @@ export interface NoticeLedger {
   readonly acked: Readonly<Record<string, number>>;
   readonly snoozed: Readonly<Record<string, { until: number; notice: MachineNotice }>>;
 }
-export const emptyLedger: NoticeLedger = { acked: {}, snoozed: {} };
+const emptyLedger: NoticeLedger = { acked: {}, snoozed: {} };
 
-export function threadOf(notice: MachineNotice): string | null {
+function threadOf(notice: MachineNotice): string | null {
   if (notice.act && "threadId" in notice.act) return notice.act.threadId;
   const link = /^\/pea\?thread=([^&#]+)/.exec(notice.href ?? "");
   return link ? decodeURIComponent(link[1]!) : null;

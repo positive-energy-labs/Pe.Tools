@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import {
   machineAttachments,
+  discoveryMachine,
+  type DiscoveryMachine,
   type Machine,
   documentRows,
   findCapabilities,
@@ -107,7 +109,7 @@ export function mentionFace(
 }
 
 /** The `@query` the caret sits at the end of: an `@` at the start or after whitespace. */
-export function mentionQuery(text: string, caret: number): { start: number; query: string } | null {
+function mentionQuery(text: string, caret: number): { start: number; query: string } | null {
   const match = /(?:^|\s)@([^\s@]*)$/.exec(text.slice(0, caret));
   return match ? { start: caret - match[1]!.length - 1, query: match[1]! } : null;
 }
@@ -115,11 +117,14 @@ export function mentionQuery(text: string, caret: number): { start: number; quer
 /** The catalog the `@` menu reads: every other row as the catalog read it, the open documents
  * from the live inventory (a closed document is no target, and a catalog may be old), and the
  * recent ones less whatever the inventory says is open now. */
-export function liveCatalog(catalog: CapabilityCatalog, machine: Machine): CapabilityCatalog {
+export function liveCatalog(
+  catalog: CapabilityCatalog,
+  machine: Machine | DiscoveryMachine,
+): CapabilityCatalog {
   const live = {
     ...catalog,
     at: machine.observedAtUtc,
-    machine,
+    machine: discoveryMachine(machine),
   };
   return {
     ...live,
@@ -160,7 +165,7 @@ export function dropMention(draft: ChatDraft, key: string): ChatDraft {
 }
 
 /** Pick `row` for the `@query` at `caret`: the token replaces the query, the mention joins once. */
-export function pickMention(
+function pickMention(
   draft: ChatDraft,
   caret: number,
   row: Capability,

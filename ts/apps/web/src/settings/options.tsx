@@ -26,7 +26,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [store] = useState(createPageOptions);
   return <Context value={store}>{children}</Context>;
 }
-export function useRouteOptions() {
+function useRouteOptions() {
   const store = useContext(Context);
   return useSyncExternalStore(
     store?.subscribe ?? emptySubscribe,

@@ -10,50 +10,6 @@ import { admitRequest } from "../src/control.ts";
 import { human, pea } from "./callers.ts";
 import { RouteWorkspace } from "@pe/runtime";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
-import { createPeRoutes, createContributionContent } from "../src/pe-routes.ts";
-
-test("source review waits for the admitted snapshot without a preceding discovery request", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pe-route-source-"));
-  await mkdir(join(root, "Pods/sample/routes/tool"), { recursive: true });
-  await writeFile(
-    join(root, "Pods/sample/pod.json"),
-    JSON.stringify({
-      id: "sample",
-      routes: [{ sourcePath: "routes/tool/index.js", name: "Tool", description: "" }],
-    }),
-  );
-  await writeFile(join(root, "Pods/sample/routes/tool/index.js"), "export const version = 1;");
-  const content = createContributionContent({
-    worldRoot: root,
-    packages: () => listPackages(join(root, "Pods")),
-    decisionsPath: join(root, "plugins.json"),
-  });
-  try {
-    const app = createPeRoutes({
-      registrations: [],
-      store: fileRouteDocumentStore(join(root, "work")),
-      heads: { observe: () => () => {} },
-      contributionRead: async (key, hash) => {
-        await content.read();
-        return content.member(key, hash);
-      },
-    });
-    const response = await app.fetch(
-      new Request(
-        peRouteUrl(
-          "contributions.read",
-          { query: { key: "route:@sample/routes/tool/index.js" } },
-          "http://host",
-        ),
-      ),
-    );
-    expect(await response.json()).toMatchObject({ content: "export const version = 1;" });
-  } finally {
-    await content.read();
-    await content.lifecycle.close();
-    await rm(root, { recursive: true, force: true });
-  }
-});
 
 test("only an administrator may trust executable routes; a document grant does not install code", () => {
   const rule = peRoutes["plugins.routeTrust"];

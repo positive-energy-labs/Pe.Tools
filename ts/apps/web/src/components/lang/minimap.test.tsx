@@ -1,0 +1,93 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render } from "@testing-library/react";
+import { afterEach, expect, test, vi } from "vite-plus/test";
+
+import { OrbitMinimap, PlaneMinimap, type OrbitViewport } from "./minimap";
+
+afterEach(cleanup);
+
+test("globe preview uses total displacement before a prop echo and commits only on release", () => {
+  const onViewport = vi.fn();
+  const onGestureEnd = vi.fn();
+  const viewport: OrbitViewport = { kind: "orbit", yaw: 30, elev: 30, zoom: 1, pivot: [0, 0, 0] };
+  const view = render(
+    <OrbitMinimap viewport={viewport} onViewport={onViewport} onGestureEnd={onGestureEnd} />,
+  );
+  const globe = view.getByRole("group", { name: "orbit globe" });
+  const pointer = (type: string, x: number) =>
+    fireEvent(globe, new MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: 10 }));
+  pointer("pointerdown", 10);
+  pointer("pointermove", 20);
+  pointer("pointermove", 30);
+  expect(onViewport).toHaveBeenLastCalledWith({ ...viewport, yaw: 22 }, "gesture");
+  expect(onGestureEnd).not.toHaveBeenCalled();
+  pointer("pointerup", 30);
+  expect(onGestureEnd).toHaveBeenCalledExactlyOnceWith({ ...viewport, yaw: 22 });
+  pointer("lostpointercapture", 30);
+  expect(onGestureEnd).toHaveBeenCalledTimes(1);
+  pointer("pointerdown", 10);
+  pointer("pointermove", 20);
+  pointer("lostpointercapture", 20);
+  expect(onGestureEnd).toHaveBeenLastCalledWith(null);
+});
+
+// A 4000x3000 field thumbnails at 260/4000 = 0.065: a click at (130, 97.5) is field (2000, 1500).
+const extent = { width: 4000, height: 3000 };
+const viewportSize = { width: 800, height: 600 };
+
+test("a click on a plane minimap centres a scroll viewport there, inside the field", () => {
+  const onViewport = vi.fn();
+  const view = render(
+    <PlaneMinimap
+      viewport={{ kind: "scroll", top: 0, left: 0 }}
+      onViewport={onViewport}
+      extent={extent}
+      viewportSize={viewportSize}
+      paint={() => {}}
+    />,
+  );
+  const canvas = view.container.querySelector("canvas")!;
+  fireEvent.click(canvas, { clientX: 130, clientY: 97.5 });
+  expect(onViewport).toHaveBeenLastCalledWith({ kind: "scroll", top: 1200, left: 1600 }, "move");
+  // A click in the far corner stops at the field's edge.
+  fireEvent.click(canvas, { clientX: 260, clientY: 195 });
+  expect(onViewport).toHaveBeenLastCalledWith({ kind: "scroll", top: 2400, left: 3200 }, "move");
+});
+
+test("a click on a plane minimap centres a plane viewport there at its own scale", () => {
+  const onViewport = vi.fn();
+  const view = render(
+    <PlaneMinimap
+      viewport={{ kind: "plane", scale: 2, tx: 0, ty: 0 }}
+      onViewport={onViewport}
+      extent={extent}
+      viewportSize={viewportSize}
+      paint={() => {}}
+    />,
+  );
+  fireEvent.click(view.container.querySelector("canvas")!, { clientX: 130, clientY: 97.5 });
+  // Field (2000, 1500) lands at screen (400, 300): 2000 * 2 + tx = 400.
+  expect(onViewport).toHaveBeenLastCalledWith(
+    { kind: "plane", scale: 2, tx: -3600, ty: -2700 },
+    "move",
+  );
+  // The box shows the visible field: 800/2 by 600/2 field units at the thumbnail scale.
+  const box = view.container.querySelector<HTMLElement>("[data-minimap-viewport]")!;
+  expect([box.style.width, box.style.height]).toEqual(["26px", "19.5px"]);
+});
+
+test("a globe stop click writes that stop's yaw and elevation as a move; below the floor refuses", () => {
+  const onViewport = vi.fn();
+  const viewport: OrbitViewport = { kind: "orbit", yaw: 30, elev: 30, zoom: 1, pivot: [0, 0, 0] };
+  const view = render(<OrbitMinimap viewport={viewport} onViewport={onViewport} />);
+  const stop = (id: string) => view.container.querySelector(`[data-orbit-stop="${id}"]`)!;
+  expect(view.container.querySelectorAll("[data-orbit-stop]")).toHaveLength(18);
+  fireEvent.click(stop("90/45"));
+  expect(onViewport).toHaveBeenLastCalledWith({ ...viewport, yaw: 90, elev: 45 }, "move");
+  fireEvent.click(stop("pole/90"));
+  expect(onViewport).toHaveBeenLastCalledWith({ ...viewport, yaw: 30, elev: 90 }, "move");
+  onViewport.mockClear();
+  fireEvent.click(stop("0/-45"));
+  expect(onViewport).not.toHaveBeenCalled();
+  expect(stop("0/-45").hasAttribute("data-refused")).toBe(true);
+});

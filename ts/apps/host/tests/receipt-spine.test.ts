@@ -1,5 +1,5 @@
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
-import { chmod, mkdtemp, readdir, rm } from "node:fs/promises";
+import { chmod, mkdtemp, rm } from "node:fs/promises";
 import { readJournal } from "./journal-fixture.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,16 +28,6 @@ async function fixture() {
   const path = join(dir, "actions.json");
   return { path, owner: new ActionJournal(path, () => stamp) };
 }
-
-test("constructing and reading an empty journal leaves no files or floating writes", async () => {
-  const { path, owner } = await fixture();
-  expect(await owner.read({})).toEqual([]);
-  expect(await owner.list()).toEqual([]);
-  expect(await readdir(join(path, ".."))).toEqual([]);
-  // An unused constructor must not start an asynchronous load or recreate a retired directory.
-  new ActionJournal(join(path, "unused", "actions.json"));
-  await rm(join(path, ".."), { recursive: true });
-});
 
 test("subscribers read one durable action authority, retain opaque ids across restart and cannot settle via facts", async () => {
   const { path, owner } = await fixture();

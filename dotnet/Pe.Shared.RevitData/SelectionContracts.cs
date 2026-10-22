@@ -137,13 +137,19 @@ public record ElementContextQueryData(
     List<RevitDataIssue> Issues
 );
 
-/// <summary>Request for revit.context.show-elements: select elements and zoom a view to them, for the person at the window.</summary>
-/// <param name="ElementIds">Element ids to select and zoom to, from any handle-returning op.</param>
-/// <param name="ViewId">Graphical view to activate and zoom; omit for the active view.</param>
+/// <summary>Request for revit.context.show-elements: select elements and show them, for the person at the window.</summary>
+/// <param name="ElementIds">Element ids to select, from any handle-returning op.</param>
+/// <param name="ViewId">Graphical view to activate and zoom instead of boxing the {3D} view; edits nothing.</param>
+/// <param name="SelectOnly">Select and nothing else: the view, its zoom and its section box stay as they are.</param>
+/// <param name="ExpectedUniqueIds">Expected identities paired with local IDs. A mismatch refuses that ID; never resolve the UniqueId as another target. Omitted identities are ID-only within the exact open document lifetime.</param>
 public record RevitShowElementsRequest(
     List<long> ElementIds,
-    long? ViewId = null
+    long? ViewId = null,
+    bool SelectOnly = false,
+    Dictionary<long, string>? ExpectedUniqueIds = null
 );
+
+public record RevitShowElementsIssue(long ElementId, string Code, string Message);
 
 /// <summary>What revit.context.show-elements selected, what it could not find, and the view it zoomed.</summary>
 /// <param name="Shown">Ids now selected.</param>
@@ -151,12 +157,20 @@ public record RevitShowElementsRequest(
 /// <param name="ViewId">The view that now shows them.</param>
 /// <param name="ViewName">That view's name.</param>
 /// <param name="Note">One line on what happened.</param>
+/// <param name="Boxed">Targets with model geometry included in the committed 3D section box. This does not guarantee visibility.</param>
+/// <param name="Hidden">Boxed targets absent from that view's visible-element collection.</param>
+/// <param name="IdentityVerified">Targets whose supplied expected UniqueId matched the local ID. ID-only targets never appear here.</param>
+/// <param name="Issues">Per-target refusals and partial failures.</param>
 public record RevitShowElementsData(
     List<long> Shown,
     List<long> Missing,
     long ViewId,
     string ViewName,
-    string Note
+    string Note,
+    List<long> Boxed,
+    List<long> Hidden,
+    List<long> IdentityVerified,
+    List<RevitShowElementsIssue> Issues
 );
 
 /// <summary>Request for revit.context.lens: box a 3D view around elements so a window or a capture can look at them.</summary>

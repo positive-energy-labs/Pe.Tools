@@ -440,6 +440,37 @@ export function useReading<T = unknown>(
   return useAtomValue(atom);
 }
 
+/**
+ * The slice of a Reading a component uses. A frame that leaves the slice equal (JSON-wise) does not
+ * notify, so a poll that moved other fields re-renders nobody here.
+ */
+function useReadingSlice<T, S>(
+  request: ReadingRequest | null,
+  select: (reading: Reading<T>) => S,
+  source: Readings = peReadings,
+): S {
+  const key = request ? readingKey(request) : null;
+  const selectRef = useRef(select);
+  selectRef.current = select;
+  const slice = useMemo(() => {
+    const atom = request ? readingAtom<T>(request, source) : (absentAtom as Atom.Atom<Reading<T>>);
+    let held: { value: S; json: string } | undefined;
+    return Atom.make((get) => {
+      const value = selectRef.current(get(atom));
+      const json = JSON.stringify(value) ?? "";
+      if (held?.json === json) return held.value;
+      held = { value, json };
+      return value;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, source]);
+  return useAtomValue(slice);
+}
+
+/** The `host-status` slice a component uses; see `useReadingSlice`. */
+export const useHostStatusSlice = <S>(select: (reading: Reading<PeInfo>) => S, enabled = true): S =>
+  useReadingSlice<PeInfo, S>(enabled ? { kind: "host-status" } : null, select);
+
 /** An Action succeeded; this subject's snapshot is reacquired from the host. */
 export const dirty = (request: ReadingRequest, source: Readings = peReadings) =>
   source.dirty(request);
@@ -505,10 +536,6 @@ export interface PeInfo {
   world?: unknown;
   bridgeIsConnected: boolean;
 }
-
-/** The shell lamp and every capability gate read the same Reading; the host polls it at 5s. */
-export const useHostStatus = (enabled = true): Reading<PeInfo> =>
-  useReading<PeInfo>(enabled ? { kind: "host-status" } : null);
 
 /* -- Inventory: the open documents the host tracks, fused with the SDK census -------------- */
 
@@ -594,6 +621,20 @@ export function targetInventory(
 /* -- Host RPC: a call, not a subject ------------------------------------------------------ */
 
 /**
+ * Calls in flight by their deps. A remount (or a second component) asking the same thing joins
+ * the pending call instead of queueing another: Revit runs one op at a time and refuses past 8
+ * waiting (`ducts.snapshot` remounts filled it). A `refresh` always starts a fresh call.
+ */
+const inflight = new Map<string, Promise<unknown>>();
+const flightKey = (deps: readonly unknown[]) => {
+  try {
+    return JSON.stringify(deps);
+  } catch {
+    return null;
+  }
+};
+
+/**
  * A host operation read on mount. Not a Reading: it has no subject key and no owner, so it
  * carries no cache and no revalidation. Call `refresh` after a write that changes its answer.
  */
@@ -603,6 +644,8 @@ export function useHostCall<T>(
   enabled = true,
   /** Unanswered past this, the read ends as an error ("no answer after Ns") and is aborted. */
   waitSeconds = HOST_READ_WAIT_S,
+  /** Deps name the call completely (an op key and its request), so equal deps may share it. */
+  shared = false,
 ) {
   const identity = useRef({ deps: [...deps], generation: 0 });
   if (!sameDeps(identity.current.deps, deps)) {
@@ -633,7 +676,19 @@ export function useHostCall<T>(
       controller.abort();
       setState({ error: Error(`no answer after ${waitSeconds}s`), pending: false, generation });
     }, waitSeconds * 1000);
-    void run(controller.signal)
+    const key = shared ? flightKey(deps) : null;
+    const joined =
+      key !== null && nonce === 0 ? (inflight.get(key) as Promise<T> | undefined) : undefined;
+    // A shared call outlives the mount that started it, so no one mount's abort cancels it.
+    const call = joined ?? run(key !== null ? new AbortController().signal : controller.signal);
+    if (key !== null && !joined) {
+      inflight.set(key, call);
+      void call.then(
+        () => inflight.get(key) === call && inflight.delete(key),
+        () => inflight.get(key) === call && inflight.delete(key),
+      );
+    }
+    void call
       .finally(() => clearTimeout(wait))
       .then(
         (data) => {
@@ -733,6 +788,7 @@ export function useHostOp<K extends OpKey>(key: K, ...args: OpCallArgs<K, HostQu
     ],
     enabled ?? true,
     waitSeconds,
+    true,
   );
 }
 

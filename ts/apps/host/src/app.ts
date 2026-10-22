@@ -1,3 +1,4 @@
+import { currentMachine } from "./machine.ts";
 import { sdkSession } from "./sdk-session.ts";
 import { requestIdentityLayer } from "./request-identity.ts";
 import { createDevices, type Devices } from "./remote-device.ts";
@@ -38,6 +39,7 @@ import { hostOwnership, productRoot } from "./host-ownership.ts";
 import { staticSpaLayer } from "./static-spa.ts";
 import { peRoutesLayer, peApiErrorsLayer } from "./pe-routes.ts";
 import { capturesRoute } from "./captures-route.ts";
+import { ductCatalogsRoute } from "./duct-catalogs.ts";
 import { pagesRoute } from "./pages-route.ts";
 import { makeInstalledUpdateReader, updateRoutes } from "./update-route.ts";
 import { UpdateReader, type UpdateFact } from "./update-reader.ts";
@@ -128,7 +130,7 @@ function makeRevitComposition(spa: SpaFallback = () => emptyNotFound) {
       settingsSchemaRoute,
       hostStatusRoute,
       hostInstallRoute,
-      instancesReadingsRoute,
+      instancesReadingsRoute(currentMachine),
       callRoute,
     ),
   };
@@ -249,6 +251,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
     mcpRoute(() => `http://127.0.0.1:${port()}`),
     capturesRoute(spa),
     pagesRoute(),
+    ductCatalogsRoute,
     adminShutdownRoute,
     adminWindowRoute,
     updateRoutes,

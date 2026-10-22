@@ -185,17 +185,12 @@ export function LangChatSpecimens() {
           </div>
           <ComposerFrame>
             <Composer
-              variant="full"
               aria-label="Specimen message"
               placeholder="Ask Pea, or type / for a skill"
-              pickers={() => <PickerSpecimen />}
-              tools={
-                <>
-                  <span>Ready</span>
-                  <Button kind="framed" icon={GitFork} label="Fork this thread" />
-                  <Button kind="framed" icon={Paperclip} label="Attach files" />
-                </>
-              }
+              pickers={<PickerSpecimen />}
+              tools={<span>Ready</span>}
+              fork={<Button kind="framed" icon={GitFork} label="Fork this thread" />}
+              attach={<Button kind="framed" icon={Paperclip} label="Attach files" />}
               send={<Button kind="commit" icon={ArrowUp} label="send" />}
               onSend={() => undefined}
             />

@@ -24,6 +24,9 @@ import { RemoteDeviceGate } from "#/machine/devices";
 import { PodRoutesProvider } from "#/route/pod-routes";
 
 import { TooltipProvider } from "@pe/kit/lang/tooltip";
+import { ElementMenu } from "#/revit/element-menu";
+import { WorkbenchProvider } from "#/workbench/provider";
+import { RouteDock } from "#/workbench/route-panes";
 
 import appCss from "../styles.css?url";
 
@@ -41,8 +44,8 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
     ...routeSearch(search),
     shell: search.shell === "tray" || search.shell === "card" ? search.shell : undefined,
   }),
-  // The URL carries the thread (its head is the target store) and a `?target` pin across every link.
-  search: { middlewares: [retainSearchParams(["thread", "target", "shell"])] },
+  // Resource identity crosses links; shell presentation belongs to the local surface adapter.
+  search: { middlewares: [retainSearchParams(["thread", "target", "work"])] },
   head: () => ({
     meta: [
       {
@@ -76,20 +79,25 @@ export function RootComponent() {
       <NavigationProvider>
         <RouteControlsProvider>
           <SettingsProvider>
-            <div className="flex h-dvh min-h-0 min-w-0 flex-col">
-              <AppBar />
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                <div
-                  className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto overscroll-none"
-                  data-app-content
-                >
-                  <SituationPinnedControl />
-                  <div className="min-h-0 min-w-0 flex-1">
-                    <SurfaceOutlet />
+            <WorkbenchProvider>
+              <div className="flex h-dvh min-h-0 min-w-0 flex-col">
+                <AppBar />
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                  <div
+                    className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto overscroll-none"
+                    data-app-content
+                  >
+                    <SituationPinnedControl />
+                    <div className="min-h-0 min-w-0 flex-1">
+                      <RouteDock>
+                        <SurfaceOutlet />
+                      </RouteDock>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+              <ElementMenu />
+            </WorkbenchProvider>
           </SettingsProvider>
         </RouteControlsProvider>
       </NavigationProvider>

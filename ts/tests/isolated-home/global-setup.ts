@@ -12,6 +12,10 @@ export default function isolateProductHome() {
   process.env.PE_TEST_HOME_ROOT = root;
   process.env.PE_TOOLS_PRODUCT_HOME = join(root, "product");
   process.env.LOCALAPPDATA = join(root, "local");
+  // SDK known-folder discovery needs exclusive roots, not LOCALAPPDATA alone.
+  process.env.PE_SESSION_REGISTRY_ROOT = join(root, "sdk", "registry");
+  process.env.PE_SESSION_FILES_ROOT = join(root, "sdk", "files");
+  process.env.PE_SERVICE_STATE_ROOT = join(root, "sdk", "services");
   // Best effort: a directory a lingering handle pins is the OS temp cleaner's, not a test failure.
   return () => {
     try {

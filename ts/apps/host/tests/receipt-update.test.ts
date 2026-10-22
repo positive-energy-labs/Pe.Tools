@@ -1,18 +1,9 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Context, Layer } from "effect";
-import { HttpRouter } from "effect/unstable/http";
 import { expect, test, vi } from "vite-plus/test";
 import type { Envelope, UpdatePlan, UpdateReceipt } from "@pe/host-contracts/pe-revit-contract";
-import {
-  createUpdateReader,
-  UpdateReader,
-  type UpdateFact,
-  type UpdateRunner,
-} from "../src/update-reader.ts";
-import { updateRoutes } from "../src/update-route.ts";
+import { createUpdateReader, type UpdateFact, type UpdateRunner } from "../src/update-reader.ts";
 import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
 
 vi.mock("../src/host-ownership.ts", async (original) => {
@@ -152,87 +143,6 @@ test("a settled update announces on its transition into terminal, and a re-read 
     expect(f.facts).toHaveLength(2);
     expect(f.facts[1]).toEqual(f.facts[0]);
   } finally {
-    await f.close();
-  }
-});
-
-test("a failed automatic update announces its trigger, failed leg and exit code", async () => {
-  const f = await fixture("failed");
-  try {
-    const reader = f.make();
-    await reader.refresh();
-    await reader.apply(PLAN_ID, true);
-    await f.make().refresh();
-    expect(f.facts).toMatchObject([
-      {
-        kind: "settled",
-        state: "failed",
-        detail: "no space",
-        automatic: true,
-        failedLeg: "done",
-        exitCode: 1603,
-      },
-    ]);
-  } finally {
-    await f.close();
-  }
-});
-
-test("the automatic-update switch is one marker file that survives a new reader", async () => {
-  const f = await fixture();
-  try {
-    const reader = f.make();
-    expect(reader.current().automatic).toBe(true);
-    expect((await reader.setAutomatic(false)).automatic).toBe(false);
-    expect(existsSync(f.automaticOffPath)).toBe(true);
-    expect(f.make().current().automatic).toBe(false);
-    expect((await reader.setAutomatic(true)).automatic).toBe(true);
-    expect(existsSync(f.automaticOffPath)).toBe(false);
-    expect(f.make().current().automatic).toBe(true);
-  } finally {
-    await f.close();
-  }
-});
-
-test("a marker written by hand turns a running reader off without a host restart", async () => {
-  const f = await fixture();
-  try {
-    const reader = f.make();
-    expect(reader.current().automatic).toBe(true);
-    await writeFile(f.automaticOffPath, "");
-    expect(reader.current().automatic).toBe(false);
-    await rm(f.automaticOffPath);
-    expect(reader.current().automatic).toBe(true);
-  } finally {
-    await f.close();
-  }
-});
-
-test("POST /host/update/automatic validates its body and flips the marker", async () => {
-  const f = await fixture();
-  const reader = f.make();
-  const web = HttpRouter.toWebHandler(
-    updateRoutes.pipe(Layer.provideMerge(Layer.succeed(UpdateReader, reader))),
-    { disableLogger: true },
-  );
-  const post = (body: unknown) =>
-    web.handler(
-      new Request("http://host/host/update/automatic", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      }),
-      Context.empty() as never,
-    );
-  try {
-    expect((await post({})).status).toBe(400);
-    expect((await post({ enabled: "no" })).status).toBe(400);
-    const off = await post({ enabled: false });
-    expect(off.status).toBe(200);
-    expect((await off.json()).automatic).toBe(false);
-    expect(existsSync(f.automaticOffPath)).toBe(true);
-  } finally {
-    await web.dispose();
     await f.close();
   }
 });

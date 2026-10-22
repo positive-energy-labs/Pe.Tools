@@ -17,7 +17,7 @@ export type ThreadShelf = "active" | "pinned" | "snoozed" | "settled" | "archive
 export type ThreadFilter = "inbox" | "all" | "archived";
 
 /** Inbox observes work in flight and answers the user has not read; pinning alone is not work. */
-export function inThreadInbox(thread: HarnessThreadSummary, now = Date.now()): boolean {
+function inThreadInbox(thread: HarnessThreadSummary, now = Date.now()): boolean {
   if (thread.activity.state === "running") return true;
   const shelf = shelfOf(thread, now);
   if (shelf === "archived" || shelf === "snoozed") return false;
@@ -40,7 +40,7 @@ export function relativeThreadAge(at: string, now = Date.now()): string {
         ? `${Math.floor(minutes / 60)}h`
         : `${Math.floor(minutes / 1440)}d`;
 }
-export const navigationTargetKey = (target: HarnessThreadSummary["head"]["defaultTarget"]) =>
+const navigationTargetKey = (target: HarnessThreadSummary["head"]["defaultTarget"]) =>
   JSON.stringify(
     target === null
       ? null

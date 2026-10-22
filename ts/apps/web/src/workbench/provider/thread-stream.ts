@@ -1,5 +1,5 @@
-import { peReadings, previousOf, type Liveness } from "#/readings";
-import type { HarnessEvent, Reading } from "@pe/agent-contracts";
+import { peReadings, type Liveness } from "#/readings";
+import type { HarnessEvent } from "@pe/agent-contracts";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
@@ -40,8 +40,7 @@ const lastSeq = (events: readonly HarnessEvent[]) => events.at(-1)?.seq ?? 0;
  * Whether the chat is still waiting for its thread body. A failed host status ends the wait; until
  * the host status Reading lands there is no thread fetch either.
  */
-export function chatLoading(hostStatus: Reading<unknown>, threadPending: boolean): boolean {
-  const hostKnown = previousOf(hostStatus) !== undefined || hostStatus.state === "failed";
+export function chatLoading(hostKnown: boolean, threadPending: boolean): boolean {
   return !hostKnown || threadPending;
 }
 

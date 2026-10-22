@@ -6,7 +6,7 @@
  * No connected-or-not lamp: those states left product chrome (host ledger 2026-10-09). Machine
  * state and repair actions live on the canonical Machine route; configuration lives in Settings.
  */
-import { useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useRef, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import {
@@ -87,22 +87,31 @@ export function useChooseTarget(): [string | null, (target: string | null) => vo
 }
 
 /**
- * The thread this page's target lives on, from `?thread`. A page opened without one mints a fresh
- * thread and writes it into the URL, the way `/pea` opens an empty thread; the root retains it on
- * every link after that. (Re-openable: "latest thread" instead of a fresh one.)
+ * The route's target context, from `?thread`. An unaddressed route issues a browser-only draft;
+ * its first chat send promotes it to a durable host conversation.
  */
 export function useRouteThread(): string {
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as { thread?: string };
-  const [minted] = useState(() => crypto.randomUUID());
-  const thread = search.thread ?? minted;
+  const minted = useRef<string | null>(null);
+  if (search.thread) minted.current = null;
+  else minted.current ??= crypto.randomUUID();
+  const thread = search.thread ?? minted.current!;
   useEffect(() => {
-    if (!search.thread)
+    if (!search.thread) {
+      // Keep issuance across a target pick or refresh until the host creates the real thread.
+      try {
+        sessionStorage.setItem(`pe.routeThread.${thread}`, "minted");
+      } catch {
+        /* History also carries issuance. */
+      }
       void navigate({
         to: ".",
         search: (previous: Record<string, unknown>) => ({ ...previous, thread }),
+        state: (previous) => ({ ...previous, __peMintedThread: thread }),
         replace: true,
       });
+    }
   }, [navigate, search.thread, thread]);
   return thread;
 }

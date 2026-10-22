@@ -1,13 +1,18 @@
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { readPeError } from "@pe/host-contracts/pe-api";
 import { contextFetch as fetch } from "@pe/runtime/context";
-import { type ActionReceipt } from "@pe/agent-contracts";
+import { documentRefSchema, type ActionReceipt, type DocumentRef } from "@pe/agent-contracts";
 import { readAction, type DetachedAction } from "./takeoff-action-client.ts";
 import { runCapability, CANCEL_KEY } from "./admission.ts";
 import { Effect } from "effect";
 import { resolveHostBaseUrl } from "./host-config.ts";
 /** What a /call response says it actually ran against; headers absent means no Revit session. */
-export type ResolvedTarget = { session: string | null; document: string | null };
+export type ResolvedTarget = {
+  session: string | null;
+  /** The document Address, never an openId. */
+  document: string | null;
+  nativeObservation?: { source: "native"; document: DocumentRef; requestId: string };
+};
 import {
   type HostOperationCostTier,
   type HostOperationDefinition,
@@ -311,8 +316,23 @@ const callHostRpcEffect = Effect.fnUntraced(function* (
 function readResolvedTarget(response: Response): ResolvedTarget | undefined {
   const session = response.headers.get("x-pe-resolved-session");
   const document = response.headers.get("x-pe-resolved-document");
+  const openId = response.headers.get("x-pe-resolved-open-id");
+  const requestId = response.headers.get("x-pe-native-request-id");
+  let nativeObservation: ResolvedTarget["nativeObservation"];
+  if (session && openId && requestId?.trim()) {
+    try {
+      const ref = documentRefSchema.safeParse({ session, openId: decodeURIComponent(openId) });
+      if (ref.success) nativeObservation = { source: "native", document: ref.data, requestId };
+    } catch {
+      // Malformed provenance leaves the read visible but unavailable for native actions.
+    }
+  }
   return session || document
-    ? { session, document: document ? decodeURIComponent(document) : null }
+    ? {
+        session,
+        document: document ? decodeURIComponent(document) : null,
+        ...(nativeObservation ? { nativeObservation } : {}),
+      }
     : undefined;
 }
 

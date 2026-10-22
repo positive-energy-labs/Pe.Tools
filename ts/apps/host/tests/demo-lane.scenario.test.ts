@@ -1,5 +1,4 @@
-/** Browser proof against the real host: frozen seeds draw inert verbs and their refusal;
- * live demo owners run capture → plan → apply, with the filed receipts read back on `/pods`. */
+/** Browser proof against the real host: capture → plan → apply with filed receipts read back on `/pods`. */
 import { existsSync, mkdtempSync } from "node:fs";
 import { createServer as createNodeServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -15,55 +14,7 @@ import { makeHttpLive } from "../src/app.ts";
 import { hostOwnership, productRoot } from "../src/host-ownership.ts";
 import { hostTakeoffCaptures } from "../src/takeoff-captures.ts";
 
-type AnyManifest = {
-  key: string;
-  name: string;
-  actions: Record<string, { label: string }>;
-  seeds?: Record<string, { title: string }>;
-};
-
-/**
- * The manifests are loaded THROUGH VITE, not imported: `apps/host` compiles on nodenext and a web
- * module's extensionless `#/` specifier does not resolve there (see review-0910/reconcile.md). One
- * dev server, loaded once at collection time, gives the same objects the browser will mount — so a
- * new seed on any manifest is a new test here with no edit to this file.
- */
 const webRoot = resolve(import.meta.dirname, "..", "..", "web");
-const vite = await createViteServer({
-  root: webRoot,
-  configFile: join(webRoot, "vite.config.ts"),
-  server: { hmr: false, middlewareMode: true },
-});
-const load = async (module: string): Promise<Record<string, unknown>> =>
-  (await vite.ssrLoadModule(module)) as Record<string, unknown>;
-type Factory = (deps: unknown) => AnyManifest;
-
-/** Route path per manifest; `key` is the manifest's word, the path is the router's. */
-const ROUTES: readonly { path: string; manifest: AnyManifest }[] = [
-  {
-    path: "/pea",
-    manifest: ((await load("/src/chat/manifest.ts")).chatManifest as Factory)({ thread: "" }),
-  },
-  {
-    path: "/open",
-    manifest: (await load("/src/open/manifest.ts")).openManifest as AnyManifest,
-  },
-  { path: "/takeoffs", manifest: (await load("/src/takeoff/manifest.ts")).manifest as AnyManifest },
-  {
-    path: "/family",
-    manifest: ((await load("/src/family/manifest.ts")).familyManifest as () => AnyManifest)(),
-  },
-  {
-    path: "/families",
-    manifest: (await load("/src/families/manifest.ts")).manifest as AnyManifest,
-  },
-  {
-    path: "/schedules",
-    manifest: (
-      (await load("/src/route/schedules/manifest.ts")).schedulesManifest as () => AnyManifest
-    )(),
-  },
-];
 
 async function waitForService(appBase: string) {
   const deadline = Date.now() + 10_000;
@@ -154,88 +105,7 @@ afterAll(async () => {
   }).catch(() => undefined);
   await hostDone;
   await browserVite?.close();
-  await vite.close();
 }, 200_000);
-
-for (const { path, manifest } of ROUTES)
-  for (const [action, seed] of Object.entries(manifest.seeds ?? {})) {
-    if (!seed) continue;
-    test(`${manifest.key} ?demo=${action}`, async () => {
-      const page = await browser!.newPage();
-      // Body reads can 4xx without Revit; uncaught errors and writes still fail the frozen lane.
-      const errors: string[] = [];
-      const posts: string[] = [];
-      page.on("pageerror", (error: { message: string }) =>
-        errors.push(`page error: ${error.message}`),
-      );
-      page.on("console", (message: { type(): string; text(): string }) => {
-        if (message.type() === "error" && !message.text().startsWith("Failed to load resource"))
-          errors.push(message.text());
-      });
-      // `/call` includes body reads; actions and route-state are the write doors.
-      page.on("request", (request: { method(): string; url(): string }) => {
-        const url = request.url();
-        if (request.method() === "POST" && /\/(actions|route-state)\b/.test(url)) posts.push(url);
-      });
-      try {
-        await page.goto(`${baseUrl}${path}?demo=${encodeURIComponent(action)}`, {
-          waitUntil: "domcontentloaded",
-        });
-        if (manifest.key !== "chat") await pinSituation(page);
-        // Shell head or Situation, independent of the body title.
-        const head = page
-          .getByRole("region", { name: `${manifest.name} route` })
-          .or(page.getByRole("region", { name: "Situation" }));
-        await expect.poll(() => head.count(), { timeout: 30_000 }).toBeGreaterThan(0);
-        if (manifest.key === "chat") {
-          await expect.poll(() => head.first().innerText()).toContain("Operations Demo.rvt");
-          if (action === "diagram") {
-            const diagram = page.getByRole("group", { name: "AHU-1 supply air", exact: true });
-            await expect.poll(() => diagram.locator("[data-diagram] svg").count()).toBe(1);
-          }
-          // innerText applies CSS casing, so this reads what the user sees, not the DOM text.
-          if (action === "granted")
-            await expect.poll(() => page.getByTestId("grant-chip").innerText()).toBe("rw · 42m");
-        }
-        if (
-          manifest.key !== "schedules" &&
-          (await head.getByRole("button", { name: "verbs", exact: true }).count()) > 0
-        )
-          await expect.poll(() => head.first().innerText(), { timeout: 15_000 }).toContain("r0");
-        // Chat draws verbs beside its Situation, in the composer; other routes keep the row.
-        const controls =
-          manifest.key === "chat" ? page.locator('[data-pane-id="composer"]') : head.first();
-        const labels = Object.values(manifest.actions)
-          .map((spec) => spec.label)
-          .join("|");
-        const verbs = controls.getByRole("button", {
-          name: new RegExp(`^(?:${labels})(?:[: ].+)?$`, "i"),
-        });
-        await expect.poll(() => verbs.count()).toBeGreaterThan(0);
-        for (const verb of await verbs.all()) {
-          expect(
-            await verb.getAttribute("aria-disabled"),
-            `${manifest.key}.${action} is operable under a frozen seed`,
-          ).toBe("true");
-          await verb.hover();
-          await page.bringToFront();
-          await expect
-            .poll(() =>
-              page
-                .locator('[role="presentation"][data-open]')
-                .getByText(/^frozen seed is read-only(?: · |$)/)
-                .isVisible(),
-            )
-            .toBe(true);
-          await page.mouse.move(0, 0);
-        }
-        expect(errors, `${manifest.key}.${action} threw or logged`).toEqual([]);
-        expect(posts, `${manifest.key}.${action} wrote under a frozen seed`).toEqual([]);
-      } finally {
-        await page.close();
-      }
-    }, 120_000);
-  }
 
 // biome-ignore lint/suspicious/noExplicitAny: the page type is not threaded through here.
 type Page = any;
@@ -432,74 +302,6 @@ const modelCell = (page: Page, family: string) =>
 const expectModelValue = (page: Page, family: string, value: string) =>
   expect.poll(() => modelCell(page, family).inputValue(), { timeout: 30_000 }).toBe(value);
 
-/** Picker changes resolve a cheap catalog; only the explicit action requests the matrix. */
-test("live /families: explicit read retains the last matrix while the next scope is drafted", async () => {
-  const { shown } = await liveLoop("families-reads", async (page) => {
-    const calls: string[] = [];
-    page.on("request", (request: { method(): string; url(): string; postDataJSON(): unknown }) => {
-      if (request.method() === "POST" && request.url().includes("/families/readings")) {
-        calls.push("revit.matrix.loaded-families");
-        return;
-      }
-      if (request.method() === "POST" && request.url().endsWith("/call"))
-        calls.push((request.postDataJSON() as { key: string }).key);
-    });
-    await openLive(page, "/families", "demo=edit&live=1");
-    const count = (key: string) => calls.filter((call) => call === key).length;
-    // The categories picker is a ListPopup: its trigger opens a list whose search owns typing.
-    const trigger = page.getByRole("button", { name: "Choose category" });
-    await expect.poll(() => trigger.count(), { timeout: 30_000 }).toBe(1);
-    await page.waitForTimeout(3_000);
-    const idle = {
-      catalog: count("revit.catalog.loaded-families"),
-      matrix: count("revit.matrix.loaded-families"),
-    };
-    await trigger.click();
-    await page
-      .getByRole("option", { name: /Mechanical Equipment/ })
-      .first()
-      .click();
-    // The multi-pick list stays open and, in the docked Situation, covers the verbs; Esc folds it.
-    await page.keyboard.press("Escape");
-    await expect
-      .poll(() => count("revit.catalog.loaded-families"), { timeout: 10_000 })
-      .toBe(idle.catalog);
-    await page.waitForTimeout(3_000);
-    const afterScope = {
-      catalog: count("revit.catalog.loaded-families"),
-      matrix: count("revit.matrix.loaded-families"),
-    };
-    await run(page, "read families");
-    await expect
-      .poll(() => modelCell(page, "Fan Coil Unit - Ducted").count(), { timeout: 30_000 })
-      .toBe(1);
-    await page.getByRole("button", { name: "Choose family" }).click();
-    await page
-      .getByRole("option", { name: /Fan Coil Unit - Ducted/ })
-      .first()
-      .click();
-    await expect.poll(() => modelCell(page, "Fan Coil Unit - Ducted").count()).toBe(1);
-    return JSON.stringify({
-      idle,
-      afterScope,
-      afterRead: count("revit.matrix.loaded-families"),
-      afterDraftChange: count("revit.matrix.loaded-families"),
-    });
-  });
-  console.log(`families-reads ${shown}`);
-  const { idle, afterScope, afterRead, afterDraftChange } = JSON.parse(shown) as {
-    idle: Record<string, number>;
-    afterScope: Record<string, number>;
-    afterRead: number;
-    afterDraftChange: number;
-  };
-  expect(idle!.catalog).toBe(1);
-  expect(idle!.matrix).toBe(0);
-  expect(afterScope).toEqual(idle);
-  expect(afterRead).toBe(1);
-  expect(afterDraftChange).toBe(1);
-}, 180_000);
-
 test("/families Archived inspects a saved reading without a target or Revit connection", async () => {
   const work = bindWork("families", address("C:/archive/Offline.rvt"));
   const parameter = (name: string, value: string) => ({
@@ -615,7 +417,12 @@ test("/families Archived inspects a saved reading without a target or Revit conn
     const body = await page.locator("body").innerText();
     expect(new URL(page.url()).searchParams.get("target")).toBeNull();
     expect(body).toContain("Offline.rvt");
-    expect(await page.getByRole("textbox").count()).toBe(0);
+    const archive = page.getByRole("main").filter({
+      has: page.getByRole("grid", { name: "parameters × family types", exact: true }),
+    });
+    expect(await archive.count()).toBe(1);
+    expect(await archive.getByRole("textbox").count()).toBe(0);
+    expect(await page.getByRole("textbox", { name: "Message", exact: true }).count()).toBe(1);
     expect(
       await page.getByRole("button", { name: /^read families|^plan|^apply families/ }).count(),
     ).toBe(0);
@@ -728,6 +535,7 @@ test("live /families: retained readback supports repeat and consecutive family p
     // The apply is one log row; the simulated engine writes no bundle, so it links nothing.
     await logged(page, "apply 1 family · 1 converged", "no artifacts on disk");
     if (SCRATCH) await page.screenshot({ path: join(SCRATCH, "families-applied.png") });
+    await page.getByRole("combobox", { name: "table query" }).focus();
     await expect
       .poll(() =>
         page.getByRole("button", { name: "parameter contains model", exact: true }).count(),

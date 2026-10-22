@@ -470,8 +470,8 @@ const PEA_WORK = "C:\\Users\\demo\\AppData\\Local\\Positive Energy\\Pe.Tools\\pe
 const HOSPITAL = "C:\\Projects\\Hospital\\Hospital-MEP_kaitp.rvt";
 const SD_DIFFUSER = "C:\\Families\\SD-Diffuser-24x24.rfa";
 const HCB = "C:\\Families\\HCB-48.rfa";
-const CHADDS =
-  "cld://US/{c0ffee00-0000-4000-8000-000000000001}p/{c0ffee00-0000-4000-8000-000000000002}Chadds-Ford-Coord.rvt";
+const PROJECT_A =
+  "cld://US/{c0ffee00-0000-4000-8000-000000000001}p/{c0ffee00-0000-4000-8000-000000000002}Project-A-Coord.rvt";
 
 /** The person's own Revit 2025, started from its icon: Hospital-MEP unsaved, a family beside it. */
 export const BAY_YOURS_25: MachineSession = {
@@ -572,7 +572,7 @@ const peaSession = (
 });
 
 /** Pea's background Revit 2025, mid-job on its own copy of Hospital-MEP. */
-export const BAY_PEA_25 = peaSession("pea-25-schedules", 2025, 22910, [
+const BAY_PEA_25 = peaSession("pea-25-schedules", 2025, 22910, [
   doc("Hospital-MEP_kaitp.rvt", `${PEA_WORK}\\7f3a\\Hospital-MEP_kaitp.rvt`, {
     openId: "22910-copy",
     isActive: true,
@@ -670,7 +670,7 @@ export const BAY_RECENTS = {
     recents: [
       recent("Hospital-MEP_kaitp.rvt", HOSPITAL, 2025, 2025),
       recent("Clinic-Fitout.rvt", "C:\\Projects\\Clinic\\Clinic-Fitout.rvt", 2025, 2023),
-      recent("Chadds-Ford-Coord.rvt", CHADDS, 2025, 2025, {
+      recent("Project-A-Coord.rvt", PROJECT_A, 2025, 2025, {
         region: "US",
         projectGuid: "c0ffee00-0000-4000-8000-000000000001",
         modelGuid: "c0ffee00-0000-4000-8000-000000000002",
@@ -719,6 +719,7 @@ const thread = (
     displayLabel: title,
   },
   lifecycle: emptyThreadLifecycle(),
+  tabs: [],
   activity,
 });
 

@@ -1,5 +1,5 @@
 import { EndpointError } from "./endpoint-error";
-import { Component, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Component, memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import {
   DIAGRAM_TOOL_ID,
@@ -56,6 +56,7 @@ import {
   ToolStatus,
 } from "#/components/lang/conversation";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { NativeReadingReferences } from "#/revit/reading-references";
 
 type RegisterMoment = (id: string, el: HTMLElement | null) => void;
 
@@ -72,8 +73,85 @@ function callRecords(call: ToolCall) {
   };
 }
 
-/** The transcript: one section per message, drawn from the same array the lens measures. */
-export function Moments({
+/**
+ * What a part shows, as a cheap string. Every state change refolds the event log into fresh
+ * message objects, so identity cannot tell a moment changed. A settled call is final; only a
+ * call still moving pays for a stringify of its args and result.
+ */
+function partKey(part: ChatPart): string {
+  switch (part.type) {
+    case "text":
+    case "reasoning":
+      return `${part.type[0]}${part.text.length}`;
+    case "image":
+      return `i${part.image.length}:${part.name ?? ""}`;
+    case "file":
+      return `f${part.name}:${part.size}`;
+    case "tool-call": {
+      const { call, approval } = part;
+      const moving = call.status === "in_progress";
+      return [
+        "c",
+        call.id,
+        call.status,
+        call.title,
+        call.caption ?? "",
+        call.target ?? "",
+        call.images.length,
+        approval?.requestId ?? "",
+        moving ? JSON.stringify(call.args)?.length : "",
+        moving ? JSON.stringify(call.result)?.length : "",
+        call.status === "failed" ? String(call.error).length : "",
+      ].join("|");
+    }
+  }
+}
+
+/** Everything one section draws that its own message does not hold: the head it wears. */
+interface MomentProps {
+  message: ChatMessage;
+  segments: Segment[];
+  continues: boolean;
+  turn: number;
+  harness: string;
+  register: RegisterMoment;
+  /** Equal keys draw equal pixels: the memo boundary compares this, not object identity. */
+  contentKey: string;
+}
+
+function contentKey(
+  message: ChatMessage,
+  segments: Segment[],
+  continues: boolean,
+  turn: number,
+  harness: string,
+): string {
+  // An assistant row draws its segments, which carry runs continued from later messages.
+  const parts =
+    message.role === "assistant"
+      ? segments.flatMap((segment) =>
+          "run" in segment
+            ? segment.run.map(partKey)
+            : [`${segment.index}:${partKey(segment.part)}`],
+        )
+      : message.parts.map(partKey);
+  return [
+    message.role,
+    message.running,
+    message.createdAt?.getTime() ?? "",
+    message.target ?? "",
+    message.mentions?.map((mention) => mention.key).join(",") ?? "",
+    message.failure?.message ?? "",
+    continues,
+    message.role === "user" ? turn : "",
+    harness,
+    parts.join(";"),
+  ].join("#");
+}
+
+/** The transcript: one memoized section per message, drawn from the same array the lens measures.
+ *  A moment re-renders only when its own content key changes. */
+export const Moments = memo(function Moments({
   messages,
   register,
   harness,
@@ -87,10 +165,34 @@ export function Moments({
   let turn = 0;
   return messages.flatMap((message, index) => {
     if (message.role === "user") turn += 1;
+    const segments = message.role === "system" ? [] : groups.get(message.id)!;
+    // Calls continued from the previous message already belong to that sequence's section.
+    if (message.role === "assistant" && segments.length === 0) return [];
+    // A moment directly under one of the same role draws no role line: a run of pea turns reads
+    // as one block, not N banners.
+    const continues = messages[index - 1]?.role === message.role;
+    const shownTurn = Math.max(1, turn);
+    return [
+      <Moment
+        key={message.id}
+        message={message}
+        segments={segments}
+        continues={continues}
+        turn={shownTurn}
+        harness={harness}
+        register={register}
+        contentKey={contentKey(message, segments, continues, shownTurn, harness)}
+      />,
+    ];
+  });
+});
+
+const Moment = memo(
+  function Moment({ message, segments, continues, turn, harness, register }: MomentProps) {
     // A host line (the harness session restarted): one quiet sentence, no head, no copy.
     if (message.role === "system")
-      return [
-        <MomentSection key={message.id} message={message} register={register}>
+      return (
+        <MomentSection message={message} register={register}>
           {message.failure ? (
             <EndpointError message={message.failure.message} failure={message.failure} />
           ) : (
@@ -98,32 +200,28 @@ export function Moments({
               {message.parts.map((part) => (part.type === "text" ? part.text : "")).join(" ")}
             </p>
           )}
-        </MomentSection>,
-      ];
-    const segments = groups.get(message.id)!;
-    // Calls continued from the previous message already belong to that sequence's section.
-    if (message.role === "assistant" && segments.length === 0) return [];
-    // A moment directly under one of the same role draws no role line: a run of pea turns reads
-    // as one block, not N banners.
-    const continues = messages[index - 1]?.role === message.role;
+        </MomentSection>
+      );
     const head = continues ? null : (
       <MessageHead
         role={message.role}
         harness={harness}
-        turn={message.role === "user" ? Math.max(1, turn) : undefined}
+        turn={message.role === "user" ? turn : undefined}
+        target={message.target}
       />
     );
-    return [
-      <MomentSection key={message.id} message={message} register={register}>
+    return (
+      <MomentSection message={message} register={register}>
         {message.role === "user" ? (
           <UserMoment message={message} head={head} />
         ) : (
           <AssistantMoment message={message} head={head} segments={segments} />
         )}
-      </MomentSection>,
-    ];
-  });
-}
+      </MomentSection>
+    );
+  },
+  (prev, next) => prev.contentKey === next.contentKey && prev.register === next.register,
+);
 
 function MomentSection({
   message,
@@ -583,6 +681,7 @@ function ToolCallPart({
       ) : null}
       {!recordsOnly && open ? (
         <div {...annotation("tool-body")}>
+          {call.status === "completed" ? <NativeReadingReferences result={result} /> : null}
           <Code code={stringify(call.args)} lang="json" title="in" copyLabel="Copy input" />
           {result === undefined ? null : failed ? (
             <Code

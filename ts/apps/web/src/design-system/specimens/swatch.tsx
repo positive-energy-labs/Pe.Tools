@@ -2,6 +2,8 @@ import { Link } from "@tanstack/react-router";
 
 import { ThemeToggle } from "@pe/kit/lang/theme-toggle";
 import { FactChip } from "@pe/kit/lang/chip";
+import { SearchControl } from "@pe/kit/lang/search-control";
+import { KeyHint } from "@pe/kit/lang/key-hint";
 
 import { LangBaySpecimens } from "./lang-bay";
 import { LangCellSpecimens } from "./lang-cells";
@@ -45,6 +47,27 @@ export function SwatchSpecimens() {
           <p className="t-small t-upper text-ink-2">lang · the design language primitives</p>
         </div>
         <LangWorkflowSpecimens />
+        <section className="flex flex-col gap-2" aria-label="Search and shortcut primitives">
+          <SearchControl className="max-w-sm">
+            <input
+              aria-label="Search control specimen"
+              placeholder="Search this table"
+              className="min-w-0 flex-1 bg-transparent outline-none"
+            />
+            <KeyHint hotkey="/" />
+          </SearchControl>
+        </section>
+        <section className="flex flex-col gap-2" aria-label="Table typography roles">
+          <span className="role-titlebar">Duct segments</span>
+          <span className="role-colhead">Airflow (cfm)</span>
+          <Link
+            className="t-small text-ink-2"
+            to="/design-system/table-controls"
+            search={{ dataset: "segments" }}
+          >
+            See column heads on the table-controls specimen
+          </Link>
+        </section>
         <LangListSpecimens />
         <LangChatSpecimens />
         <LangCellSpecimens />

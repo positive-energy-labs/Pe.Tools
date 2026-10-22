@@ -16,10 +16,12 @@ import { Route as DataTablesRouteImport } from "./routes/data-tables";
 import { Route as DesignSystemRouteImport } from "./routes/design-system";
 import { Route as DocLabRouteImport } from "./routes/doc-lab";
 import { Route as DuctLossRouteImport } from "./routes/duct-loss";
+import { Route as DuctsRouteImport } from "./routes/ducts";
 import { Route as FamiliesRouteImport } from "./routes/families";
 import { Route as FamilyRouteImport } from "./routes/family";
 import { Route as GrillesRouteImport } from "./routes/grilles";
 import { Route as LabRouteImport } from "./routes/lab";
+import { Route as MapRouteImport } from "./routes/map";
 import { Route as OpenRouteImport } from "./routes/open";
 import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as ParamTablesRouteImport } from "./routes/param-tables";
@@ -29,13 +31,16 @@ import { Route as PodsRouteImport } from "./routes/pods";
 import { Route as RoomsRouteImport } from "./routes/rooms";
 import { Route as SchedulesRouteImport } from "./routes/schedules";
 import { Route as SettingsRouteImport } from "./routes/settings";
+import { Route as SpaceRouteImport } from "./routes/space";
 import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
 import { Route as DesignSystemBandRouteImport } from "./routes/design-system_.band";
+import { Route as DesignSystemControlSurfaceRouteImport } from "./routes/design-system_.control-surface";
 import { Route as DesignSystemListRouteImport } from "./routes/design-system_.list";
 import { Route as DesignSystemPopoversRouteImport } from "./routes/design-system_.popovers";
 import { Route as DesignSystemRevitRouteImport } from "./routes/design-system_.revit";
 import { Route as DesignSystemSwatchRouteImport } from "./routes/design-system_.swatch";
+import { Route as DesignSystemTableControlsRouteImport } from "./routes/design-system_.table-controls";
 import { Route as ToolKeyRouteImport } from "./routes/tool.$key";
 import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
 import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-audit/parse.$parseId";
@@ -75,6 +80,11 @@ const DuctLossRoute = DuctLossRouteImport.update({
   path: "/duct-loss",
   getParentRoute: () => rootRouteImport,
 } as any);
+const DuctsRoute = DuctsRouteImport.update({
+  id: "/ducts",
+  path: "/ducts",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const FamiliesRoute = FamiliesRouteImport.update({
   id: "/families",
   path: "/families",
@@ -93,6 +103,11 @@ const GrillesRoute = GrillesRouteImport.update({
 const LabRoute = LabRouteImport.update({
   id: "/lab",
   path: "/lab",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const MapRoute = MapRouteImport.update({
+  id: "/map",
+  path: "/map",
   getParentRoute: () => rootRouteImport,
 } as any);
 const OpenRoute = OpenRouteImport.update({
@@ -140,6 +155,11 @@ const SettingsRoute = SettingsRouteImport.update({
   path: "/settings",
   getParentRoute: () => rootRouteImport,
 } as any);
+const SpaceRoute = SpaceRouteImport.update({
+  id: "/space",
+  path: "/space",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const TakeoffsRoute = TakeoffsRouteImport.update({
   id: "/takeoffs",
   path: "/takeoffs",
@@ -155,6 +175,12 @@ const DesignSystemBandRoute = DesignSystemBandRouteImport.update({
   path: "/design-system/band",
   getParentRoute: () => rootRouteImport,
 } as any);
+const DesignSystemControlSurfaceRoute =
+  DesignSystemControlSurfaceRouteImport.update({
+    id: "/design-system_/control-surface",
+    path: "/design-system/control-surface",
+    getParentRoute: () => rootRouteImport,
+  } as any);
 const DesignSystemListRoute = DesignSystemListRouteImport.update({
   id: "/design-system_/list",
   path: "/design-system/list",
@@ -175,6 +201,12 @@ const DesignSystemSwatchRoute = DesignSystemSwatchRouteImport.update({
   path: "/design-system/swatch",
   getParentRoute: () => rootRouteImport,
 } as any);
+const DesignSystemTableControlsRoute =
+  DesignSystemTableControlsRouteImport.update({
+    id: "/design-system_/table-controls",
+    path: "/design-system/table-controls",
+    getParentRoute: () => rootRouteImport,
+  } as any);
 const ToolKeyRoute = ToolKeyRouteImport.update({
   id: "/tool/$key",
   path: "/tool/$key",
@@ -199,10 +231,12 @@ export interface FileRoutesByFullPath {
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
   "/duct-loss": typeof DuctLossRoute;
+  "/ducts": typeof DuctsRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
   "/lab": typeof LabRoute;
+  "/map": typeof MapRoute;
   "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
@@ -212,13 +246,16 @@ export interface FileRoutesByFullPath {
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
   "/settings": typeof SettingsRoute;
+  "/space": typeof SpaceRoute;
   "/takeoffs": typeof TakeoffsRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
+  "/design-system/control-surface": typeof DesignSystemControlSurfaceRoute;
   "/design-system/list": typeof DesignSystemListRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
   "/design-system/revit": typeof DesignSystemRevitRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
+  "/design-system/table-controls": typeof DesignSystemTableControlsRoute;
   "/tool/$key": typeof ToolKeyRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
@@ -231,10 +268,12 @@ export interface FileRoutesByTo {
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
   "/duct-loss": typeof DuctLossRoute;
+  "/ducts": typeof DuctsRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
   "/lab": typeof LabRoute;
+  "/map": typeof MapRoute;
   "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
@@ -244,13 +283,16 @@ export interface FileRoutesByTo {
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
   "/settings": typeof SettingsRoute;
+  "/space": typeof SpaceRoute;
   "/takeoffs": typeof TakeoffsRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
+  "/design-system/control-surface": typeof DesignSystemControlSurfaceRoute;
   "/design-system/list": typeof DesignSystemListRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
   "/design-system/revit": typeof DesignSystemRevitRoute;
   "/design-system/swatch": typeof DesignSystemSwatchRoute;
+  "/design-system/table-controls": typeof DesignSystemTableControlsRoute;
   "/tool/$key": typeof ToolKeyRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
@@ -264,10 +306,12 @@ export interface FileRoutesById {
   "/design-system": typeof DesignSystemRoute;
   "/doc-lab": typeof DocLabRoute;
   "/duct-loss": typeof DuctLossRoute;
+  "/ducts": typeof DuctsRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
   "/grilles": typeof GrillesRoute;
   "/lab": typeof LabRoute;
+  "/map": typeof MapRoute;
   "/open": typeof OpenRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
@@ -277,13 +321,16 @@ export interface FileRoutesById {
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
   "/settings": typeof SettingsRoute;
+  "/space": typeof SpaceRoute;
   "/takeoffs": typeof TakeoffsRoute;
   "/design-system_/arming": typeof DesignSystemArmingRoute;
   "/design-system_/band": typeof DesignSystemBandRoute;
+  "/design-system_/control-surface": typeof DesignSystemControlSurfaceRoute;
   "/design-system_/list": typeof DesignSystemListRoute;
   "/design-system_/popovers": typeof DesignSystemPopoversRoute;
   "/design-system_/revit": typeof DesignSystemRevitRoute;
   "/design-system_/swatch": typeof DesignSystemSwatchRoute;
+  "/design-system_/table-controls": typeof DesignSystemTableControlsRoute;
   "/tool/$key": typeof ToolKeyRoute;
   "/api/pdf-audit/parse": typeof ApiPdfAuditParseRouteWithChildren;
   "/api/pdf-audit/parse/$parseId": typeof ApiPdfAuditParseParseIdRoute;
@@ -298,10 +345,12 @@ export interface FileRouteTypes {
     | "/design-system"
     | "/doc-lab"
     | "/duct-loss"
+    | "/ducts"
     | "/families"
     | "/family"
     | "/grilles"
     | "/lab"
+    | "/map"
     | "/open"
     | "/ops"
     | "/param-tables"
@@ -311,13 +360,16 @@ export interface FileRouteTypes {
     | "/rooms"
     | "/schedules"
     | "/settings"
+    | "/space"
     | "/takeoffs"
     | "/design-system/arming"
     | "/design-system/band"
+    | "/design-system/control-surface"
     | "/design-system/list"
     | "/design-system/popovers"
     | "/design-system/revit"
     | "/design-system/swatch"
+    | "/design-system/table-controls"
     | "/tool/$key"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
@@ -330,10 +382,12 @@ export interface FileRouteTypes {
     | "/design-system"
     | "/doc-lab"
     | "/duct-loss"
+    | "/ducts"
     | "/families"
     | "/family"
     | "/grilles"
     | "/lab"
+    | "/map"
     | "/open"
     | "/ops"
     | "/param-tables"
@@ -343,13 +397,16 @@ export interface FileRouteTypes {
     | "/rooms"
     | "/schedules"
     | "/settings"
+    | "/space"
     | "/takeoffs"
     | "/design-system/arming"
     | "/design-system/band"
+    | "/design-system/control-surface"
     | "/design-system/list"
     | "/design-system/popovers"
     | "/design-system/revit"
     | "/design-system/swatch"
+    | "/design-system/table-controls"
     | "/tool/$key"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
@@ -362,10 +419,12 @@ export interface FileRouteTypes {
     | "/design-system"
     | "/doc-lab"
     | "/duct-loss"
+    | "/ducts"
     | "/families"
     | "/family"
     | "/grilles"
     | "/lab"
+    | "/map"
     | "/open"
     | "/ops"
     | "/param-tables"
@@ -375,13 +434,16 @@ export interface FileRouteTypes {
     | "/rooms"
     | "/schedules"
     | "/settings"
+    | "/space"
     | "/takeoffs"
     | "/design-system_/arming"
     | "/design-system_/band"
+    | "/design-system_/control-surface"
     | "/design-system_/list"
     | "/design-system_/popovers"
     | "/design-system_/revit"
     | "/design-system_/swatch"
+    | "/design-system_/table-controls"
     | "/tool/$key"
     | "/api/pdf-audit/parse"
     | "/api/pdf-audit/parse/$parseId";
@@ -395,10 +457,12 @@ export interface RootRouteChildren {
   DesignSystemRoute: typeof DesignSystemRoute;
   DocLabRoute: typeof DocLabRoute;
   DuctLossRoute: typeof DuctLossRoute;
+  DuctsRoute: typeof DuctsRoute;
   FamiliesRoute: typeof FamiliesRoute;
   FamilyRoute: typeof FamilyRoute;
   GrillesRoute: typeof GrillesRoute;
   LabRoute: typeof LabRoute;
+  MapRoute: typeof MapRoute;
   OpenRoute: typeof OpenRoute;
   OpsRoute: typeof OpsRoute;
   ParamTablesRoute: typeof ParamTablesRoute;
@@ -408,13 +472,16 @@ export interface RootRouteChildren {
   RoomsRoute: typeof RoomsRoute;
   SchedulesRoute: typeof SchedulesRoute;
   SettingsRoute: typeof SettingsRoute;
+  SpaceRoute: typeof SpaceRoute;
   TakeoffsRoute: typeof TakeoffsRoute;
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
   DesignSystemBandRoute: typeof DesignSystemBandRoute;
+  DesignSystemControlSurfaceRoute: typeof DesignSystemControlSurfaceRoute;
   DesignSystemListRoute: typeof DesignSystemListRoute;
   DesignSystemPopoversRoute: typeof DesignSystemPopoversRoute;
   DesignSystemRevitRoute: typeof DesignSystemRevitRoute;
   DesignSystemSwatchRoute: typeof DesignSystemSwatchRoute;
+  DesignSystemTableControlsRoute: typeof DesignSystemTableControlsRoute;
   ToolKeyRoute: typeof ToolKeyRoute;
   ApiPdfAuditParseRoute: typeof ApiPdfAuditParseRouteWithChildren;
 }
@@ -470,6 +537,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DuctLossRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/ducts": {
+      id: "/ducts";
+      path: "/ducts";
+      fullPath: "/ducts";
+      preLoaderRoute: typeof DuctsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/families": {
       id: "/families";
       path: "/families";
@@ -496,6 +570,13 @@ declare module "@tanstack/react-router" {
       path: "/lab";
       fullPath: "/lab";
       preLoaderRoute: typeof LabRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/map": {
+      id: "/map";
+      path: "/map";
+      fullPath: "/map";
+      preLoaderRoute: typeof MapRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/open": {
@@ -561,6 +642,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof SettingsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/space": {
+      id: "/space";
+      path: "/space";
+      fullPath: "/space";
+      preLoaderRoute: typeof SpaceRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/takeoffs": {
       id: "/takeoffs";
       path: "/takeoffs";
@@ -580,6 +668,13 @@ declare module "@tanstack/react-router" {
       path: "/design-system/band";
       fullPath: "/design-system/band";
       preLoaderRoute: typeof DesignSystemBandRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/design-system_/control-surface": {
+      id: "/design-system_/control-surface";
+      path: "/design-system/control-surface";
+      fullPath: "/design-system/control-surface";
+      preLoaderRoute: typeof DesignSystemControlSurfaceRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/design-system_/list": {
@@ -608,6 +703,13 @@ declare module "@tanstack/react-router" {
       path: "/design-system/swatch";
       fullPath: "/design-system/swatch";
       preLoaderRoute: typeof DesignSystemSwatchRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/design-system_/table-controls": {
+      id: "/design-system_/table-controls";
+      path: "/design-system/table-controls";
+      fullPath: "/design-system/table-controls";
+      preLoaderRoute: typeof DesignSystemTableControlsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/tool/$key": {
@@ -653,10 +755,12 @@ const rootRouteChildren: RootRouteChildren = {
   DesignSystemRoute: DesignSystemRoute,
   DocLabRoute: DocLabRoute,
   DuctLossRoute: DuctLossRoute,
+  DuctsRoute: DuctsRoute,
   FamiliesRoute: FamiliesRoute,
   FamilyRoute: FamilyRoute,
   GrillesRoute: GrillesRoute,
   LabRoute: LabRoute,
+  MapRoute: MapRoute,
   OpenRoute: OpenRoute,
   OpsRoute: OpsRoute,
   ParamTablesRoute: ParamTablesRoute,
@@ -666,13 +770,16 @@ const rootRouteChildren: RootRouteChildren = {
   RoomsRoute: RoomsRoute,
   SchedulesRoute: SchedulesRoute,
   SettingsRoute: SettingsRoute,
+  SpaceRoute: SpaceRoute,
   TakeoffsRoute: TakeoffsRoute,
   DesignSystemArmingRoute: DesignSystemArmingRoute,
   DesignSystemBandRoute: DesignSystemBandRoute,
+  DesignSystemControlSurfaceRoute: DesignSystemControlSurfaceRoute,
   DesignSystemListRoute: DesignSystemListRoute,
   DesignSystemPopoversRoute: DesignSystemPopoversRoute,
   DesignSystemRevitRoute: DesignSystemRevitRoute,
   DesignSystemSwatchRoute: DesignSystemSwatchRoute,
+  DesignSystemTableControlsRoute: DesignSystemTableControlsRoute,
   ToolKeyRoute: ToolKeyRoute,
   ApiPdfAuditParseRoute: ApiPdfAuditParseRouteWithChildren,
 };

@@ -12,7 +12,7 @@ import { outputRenderers } from "#/ops/renderers";
  * The one word for an action's state. An operation's success is a reply received, never a
  * certified mutation; every surface that names an action's state reads it from here.
  */
-export const stateWord = (row: Pick<ActionReceipt, "kind" | "state">): string =>
+const stateWord = (row: Pick<ActionReceipt, "kind" | "state">): string =>
   row.kind === "operation" && row.state === "succeeded" ? "reply received" : row.state;
 
 const OUTCOME_OF: Record<ActionReceipt["state"], OutcomeKind> = {
@@ -25,7 +25,7 @@ const OUTCOME_OF: Record<ActionReceipt["state"], OutcomeKind> = {
 };
 
 /** The one projection from a receipt row to the line a surface draws after a verb. */
-export const actionOutcome = (row: ActionReceipt): { kind: OutcomeKind; label: string } => ({
+const actionOutcome = (row: ActionReceipt): { kind: OutcomeKind; label: string } => ({
   kind: OUTCOME_OF[row.state],
   label: `${row.key} ${stateWord(row)} · action ${row.id}`,
 });

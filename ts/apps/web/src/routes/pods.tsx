@@ -3,10 +3,11 @@
  * runs filed against the open member. It performs no Revit action; a spec links to the product
  * route its `$schema` names.
  */
-import { z } from "zod";
+import { linkTo, routePageSchema } from "@pe/agent-contracts";
+import { routeSearch } from "#/route/route-owner";
 import { frozenDemo } from "#/host/demo-client";
-import { useEffect, useState } from "react";
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState, type ReactNode } from "react";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 
 import { FactChip } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
@@ -55,21 +56,17 @@ export const manifest = defineRoute({
   name: "Pods",
   needs: "document",
   runs: ["settings.write"],
-  page: z.object({
-    pod: z.string().optional(),
-    path: z.string().optional(),
-    demo: z.string().optional(),
-  }),
-  url: ["pod", "path", "demo"],
+  address: "pods",
+  page: routePageSchema("pods"),
   seeds: PODS_SEEDS,
 });
 
 /** Every entity route definition; `/family` joins when it is on the kernel. */
 const PRODUCT_ROUTES = [
-  { to: "/schedules", def: scheduleSpec },
+  { route: "schedules", def: scheduleSpec },
   // A family model is both routes' spec; the single-family route is its first home.
-  { to: "/family", def: familySpec },
-  { to: "/families", def: familiesSpec },
+  { route: "family", def: familySpec },
+  { route: "families", def: familiesSpec },
 ] as const;
 
 // `|` is illegal in Windows paths, so it cannot occur in a pod id or member path.
@@ -100,52 +97,45 @@ export const DEMO_MEMBER_SPECS = new Map<string, DemoSpec>([
   }),
 ]);
 
+const url = urlPage(manifest)!;
+
 export const Route = createFileRoute("/pods")({
-  validateSearch: urlPage(manifest)!.read,
-  search: { middlewares: [...urlPage(manifest)!.middlewares] },
+  validateSearch: (search: Record<string, unknown>) => ({
+    ...routeSearch(search),
+    ...url.read(search),
+  }),
+  search: { middlewares: [...url.middlewares] },
   component: PodsRoute,
 });
 
 function PodsRoute() {
-  const search = Route.useSearch();
+  const { target } = Route.useSearch();
   const thread = useRouteThread();
-  const navigate = useNavigate();
-  const select = (ref: MemberRef) =>
-    void navigate({ to: ".", search: (previous) => ({ ...previous, ...ref }), replace: true });
   // The live demo lane browses the demo owner's pods through the live path.
-  return (
-    <PodsRouteContent
-      {...search}
-      thread={thread}
-      demo={frozenDemo() ?? undefined}
-      select={select}
-    />
-  );
+  return <PodsRouteContent target={target} thread={thread} demo={frozenDemo() ?? undefined} url />;
 }
 
 export function PodsRouteContent({
-  pod,
-  path,
   target,
   thread,
   demo,
-  select,
+  url,
 }: {
-  pod?: string;
-  path?: string;
   /** A `?target` pin; the root carries it out through `open in <Route>`. */
   target?: string;
   /** The thread whose head is the target store; the root carries it out through every link. */
   thread?: string;
+  /** The demo lane (`frozenDemo`): fixture pods and runs, never a live read. */
   demo?: string;
-  select: (ref: MemberRef) => void;
+  /** True on `/pods`, whose Page is the address; a hosted pane owns its Page without one. */
+  url: boolean;
 }) {
-  const handle = useRoute(manifest, {
-    target: target ?? null,
-    thread,
-    url: false,
-    page: { pod, path, demo },
-  });
+  const handle = useRoute(manifest, { target: target ?? null, thread, url });
+  const router = useRouter();
+  // The Page is the one owner of the open member: `pod`/`path` are contract steps, so a pick
+  // pushes and Back returns; a reload reads them from the address.
+  const [{ pod, path }, setPage] = handle.page;
+  const select = (ref: MemberRef) => setPage(ref);
   const ladder = useDocumentLadder(handle);
   // Field options read the thread's document; choosing one here moves the thread (ledger 2026-09-17).
   const optionsFrom =
@@ -205,21 +195,19 @@ export function PodsRouteContent({
                       <TooltipHint
                         content={`Open this spec in ${product.def.name}; apply happens there.`}
                       >
-                        <Link
-                          to={product.to}
+                        <OpenIn
+                          router={router}
                           // The spec opens selected in the product route's apply stage; the demo
                           // lane keeps its seed so the link lands on a rendered route.
-                          search={
-                            {
-                              stage: "apply",
-                              pod: row!.id,
-                              path: member!.path,
-                              ...(demo ? { demo: "apply" } : {}),
-                            } as never
-                          }
+                          href={linkTo(product.route, {
+                            stage: "apply",
+                            pod: row!.id,
+                            path: member!.path,
+                            ...(demo ? { demo: "apply" } : {}),
+                          })}
                         >
                           open in {product.def.name}
-                        </Link>
+                        </OpenIn>
                       </TooltipHint>
                       )
                     </>
@@ -377,4 +365,36 @@ function usePodRuns(pod: string | null, path: string | null, demo: boolean) {
     };
   }, [pod, path, demo]);
   return { failure, runs };
+}
+
+/**
+ * A canonical link (`linkTo`) resolved by the router as any navigation is: the root's
+ * `retainSearchParams` adds the current thread, target and work, so the rendered href and a
+ * plain click are one location; a modified click is left to the browser. As `route/inspect.tsx`.
+ */
+function OpenIn({
+  router,
+  href,
+  children,
+}: {
+  router: ReturnType<typeof useRouter>;
+  href: string;
+  children: ReactNode;
+}) {
+  // Only the path and search are read, so the base is inert (no `window` on the server).
+  const url = new URL(href, "http://pe.invalid");
+  const destination = { to: url.pathname, search: Object.fromEntries(url.searchParams) };
+  return (
+    <a
+      href={router.buildLocation(destination).href}
+      onClick={(event) => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+          return;
+        event.preventDefault();
+        void router.navigate(destination);
+      }}
+    >
+      {children}
+    </a>
+  );
 }
