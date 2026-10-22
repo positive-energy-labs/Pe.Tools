@@ -195,8 +195,7 @@ export function definePeApi<
     schemas.navigationSnapshotSchema as S["navigationSnapshotSchema"];
   const routeStatePatchSchema = schemas.routeStatePatchSchema as S["routeStatePatchSchema"];
   const routeViewSchema = schemas.routeViewSchema as S["routeViewSchema"];
-  const routeViewSetSchema =
-    schemas.routeViewSetSchema as S["routeViewSetSchema"];
+  const routeViewSetSchema = schemas.routeViewSetSchema as S["routeViewSetSchema"];
   const routeViewAckSchema = schemas.routeViewAckSchema as S["routeViewAckSchema"];
   const pageChoiceSchema = schemas.pageChoiceSchema as S["pageChoiceSchema"];
   const feedbackSchema = z.strictObject({
@@ -730,6 +729,16 @@ export function definePeApi<
     "ducts.analysis-artifact": route(
       "GET",
       "/pe/ducts/analyses/:id/artifact",
+      none,
+      z.unknown(),
+      "read",
+      "pe",
+      "read",
+      "asset",
+    ),
+    "space.scene-artifact": route(
+      "GET",
+      "/pe/space/scenes/:id/artifact",
       none,
       z.unknown(),
       "read",

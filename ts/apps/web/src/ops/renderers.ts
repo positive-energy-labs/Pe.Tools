@@ -98,6 +98,7 @@ export const rawByDesign = [
   "revit.context.visible-summary",
   "revit.detail.data-tables",
   "revit.detail.elements",
+  "revit.detail.space-scene",
   "revit.glance.attention",
   "revit.glance.model",
   "revit.matrix.schedule-profiles",

@@ -31,6 +31,7 @@ import { Route as PodsRouteImport } from "./routes/pods";
 import { Route as RoomsRouteImport } from "./routes/rooms";
 import { Route as SchedulesRouteImport } from "./routes/schedules";
 import { Route as SettingsRouteImport } from "./routes/settings";
+import { Route as SpaceRouteImport } from "./routes/space";
 import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
 import { Route as DesignSystemBandRouteImport } from "./routes/design-system_.band";
@@ -154,6 +155,11 @@ const SettingsRoute = SettingsRouteImport.update({
   path: "/settings",
   getParentRoute: () => rootRouteImport,
 } as any);
+const SpaceRoute = SpaceRouteImport.update({
+  id: "/space",
+  path: "/space",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const TakeoffsRoute = TakeoffsRouteImport.update({
   id: "/takeoffs",
   path: "/takeoffs",
@@ -240,6 +246,7 @@ export interface FileRoutesByFullPath {
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
   "/settings": typeof SettingsRoute;
+  "/space": typeof SpaceRoute;
   "/takeoffs": typeof TakeoffsRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
@@ -276,6 +283,7 @@ export interface FileRoutesByTo {
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
   "/settings": typeof SettingsRoute;
+  "/space": typeof SpaceRoute;
   "/takeoffs": typeof TakeoffsRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
@@ -313,6 +321,7 @@ export interface FileRoutesById {
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
   "/settings": typeof SettingsRoute;
+  "/space": typeof SpaceRoute;
   "/takeoffs": typeof TakeoffsRoute;
   "/design-system_/arming": typeof DesignSystemArmingRoute;
   "/design-system_/band": typeof DesignSystemBandRoute;
@@ -351,6 +360,7 @@ export interface FileRouteTypes {
     | "/rooms"
     | "/schedules"
     | "/settings"
+    | "/space"
     | "/takeoffs"
     | "/design-system/arming"
     | "/design-system/band"
@@ -387,6 +397,7 @@ export interface FileRouteTypes {
     | "/rooms"
     | "/schedules"
     | "/settings"
+    | "/space"
     | "/takeoffs"
     | "/design-system/arming"
     | "/design-system/band"
@@ -423,6 +434,7 @@ export interface FileRouteTypes {
     | "/rooms"
     | "/schedules"
     | "/settings"
+    | "/space"
     | "/takeoffs"
     | "/design-system_/arming"
     | "/design-system_/band"
@@ -460,6 +472,7 @@ export interface RootRouteChildren {
   RoomsRoute: typeof RoomsRoute;
   SchedulesRoute: typeof SchedulesRoute;
   SettingsRoute: typeof SettingsRoute;
+  SpaceRoute: typeof SpaceRoute;
   TakeoffsRoute: typeof TakeoffsRoute;
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
   DesignSystemBandRoute: typeof DesignSystemBandRoute;
@@ -629,6 +642,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof SettingsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/space": {
+      id: "/space";
+      path: "/space";
+      fullPath: "/space";
+      preLoaderRoute: typeof SpaceRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/takeoffs": {
       id: "/takeoffs";
       path: "/takeoffs";
@@ -750,6 +770,7 @@ const rootRouteChildren: RootRouteChildren = {
   RoomsRoute: RoomsRoute,
   SchedulesRoute: SchedulesRoute,
   SettingsRoute: SettingsRoute,
+  SpaceRoute: SpaceRoute,
   TakeoffsRoute: TakeoffsRoute,
   DesignSystemArmingRoute: DesignSystemArmingRoute,
   DesignSystemBandRoute: DesignSystemBandRoute,

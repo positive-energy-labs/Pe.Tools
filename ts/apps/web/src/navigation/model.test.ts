@@ -31,7 +31,7 @@ describe("global navigation admission and catalogue", () => {
     );
   });
   it("retains engineering and exploration routes in one searchable catalogue", () => {
-    expect(new Set(CATALOGUE.map((tool) => tool.to)).size).toBe(19);
+    expect(new Set(CATALOGUE.map((tool) => tool.to)).size).toBe(20);
     expect(CATALOGUE.some((tool) => tool.to === "/ops")).toBe(true);
     expect(matchingTools("airflow calculator").some((tool) => tool.to === "/duct-loss")).toBe(true);
     expect(matchingTools("CHAT").some((tool) => tool.to === "/pea")).toBe(true);
