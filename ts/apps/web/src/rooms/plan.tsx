@@ -10,7 +10,8 @@ import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 import { FactChip } from "@pe/kit/lang/chip";
 import { Pane } from "#/components/lang/pane";
 import { revitTarget } from "@pe/kit/lang/row";
-import { fitView, PLAN_CLICK_PX as CLICK_PX, usePlaneViewport } from "#/lib/plane-viewport";
+import { fitView } from "#/scene/plane";
+import { PLAN_CLICK_PX as CLICK_PX, usePlaneViewport } from "#/scene/use-plane-viewport";
 import { usePlanMap } from "#/lib/plan-map";
 import type { RoomsPage } from "./manifest";
 

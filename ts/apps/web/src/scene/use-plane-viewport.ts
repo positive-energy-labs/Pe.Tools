@@ -1,24 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
 import type { PlaneViewport } from "@pe/agent-contracts";
-import type { Bounds2, Viewport2 } from "./affine-frame";
+import type { Bounds2, Viewport2 } from "#/lib/affine-frame";
+import { clampZoom, fitView, zoomPlane } from "./plane";
 
-const ZOOM = [0.02, 24] as const;
 export const PLAN_CLICK_PX = 5;
-
-export function fitView(box: Bounds2, size: Viewport2, pad = 0): PlaneViewport {
-  const w = Math.max(box.maxX - box.minX, 1);
-  const h = Math.max(box.maxY - box.minY, 1);
-  const scale = Math.min(
-    ZOOM[1],
-    Math.max(ZOOM[0], Math.min((size.width - 2 * pad) / w, (size.height - 2 * pad) / h)),
-  );
-  return {
-    kind: "plane",
-    scale,
-    tx: (size.width - w * scale) / 2 - box.minX * scale,
-    ty: (size.height - h * scale) / 2 - box.minY * scale,
-  };
-}
 
 /** Page owns the pose. A null pose fits at render; the first gesture starts from that fit. */
 export function usePlaneViewport(
@@ -68,19 +53,8 @@ export function usePlaneViewport(
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
       const v = pending.current ?? latest.current.view;
-      const scale = Math.min(
-        ZOOM[1],
-        Math.max(ZOOM[0], v.scale * Math.exp(-event.deltaY * 0.0015)),
-      );
-      move(
-        {
-          kind: "plane",
-          scale,
-          tx: x - ((x - v.tx) * scale) / v.scale,
-          ty: y - ((y - v.ty) * scale) / v.scale,
-        },
-        "gesture",
-      );
+      const k = clampZoom(v.scale * Math.exp(-event.deltaY * 0.0015)) / v.scale;
+      move(zoomPlane(v, k, x, y), "gesture");
     };
     host.addEventListener("wheel", wheel, { passive: false });
     return () => {

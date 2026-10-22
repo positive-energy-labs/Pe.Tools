@@ -2,7 +2,7 @@ import { useMemo, type ReactNode } from "react";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import { Pane } from "#/components/lang/pane";
 import { revitTarget } from "@pe/kit/lang/row";
-import { usePlaneViewport, PLAN_CLICK_PX } from "#/lib/plane-viewport";
+import { usePlaneViewport, PLAN_CLICK_PX } from "#/scene/use-plane-viewport";
 import { usePlanMap } from "#/lib/plan-map";
 import { Key } from "#/components/anatomy";
 import { EmptyState } from "@pe/kit/lang/empty";
