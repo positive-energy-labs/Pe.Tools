@@ -30,6 +30,7 @@ const canonicalFixtures: Record<
     canonicalReviewUrl: "/settings?shell=tray&demo=blocked-plan",
     fixtureKind: "demo-fixture",
   },
+  "/space": { canonicalReviewUrl: "/space", fixtureKind: "live-route" },
   "/takeoffs": { canonicalReviewUrl: "/takeoffs?demo=sync", fixtureKind: "demo-fixture" },
   "/tool/$key": {
     canonicalReviewUrl: `/tool/${encodeURIComponent("route:@snowdon-circuits/routes/voltage-drop/index.js")}`,

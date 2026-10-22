@@ -48,7 +48,7 @@ describe("fixture census", () => {
       "/ops",
       "/parameter-links",
       "/rooms",
-
+      "/space",
       "/tool/$key",
     ]);
     expect(census.classifiedPrototypeRoutes).toContainEqual({
@@ -62,7 +62,7 @@ describe("fixture census", () => {
       canonicalReviewUrl: `/tool/${encodeURIComponent("route:@snowdon-circuits/routes/voltage-drop/index.js")}`,
       fixtureKind: "live-route",
     });
-    expect(census.missingCanonicalFixtures).toBe(8);
+    expect(census.missingCanonicalFixtures).toBe(9);
   });
 
   it("uses real manifest seed names for every demo review URL", () => {
