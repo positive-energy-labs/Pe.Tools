@@ -11,6 +11,7 @@ import {
   DUCTS_REFRESH_HEADER,
   type DuctsReadingRequest,
   emptyThreadHead,
+  type ThreadHead,
 } from "@pe/agent-contracts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
@@ -256,16 +257,18 @@ beforeEach(() => {
   );
   vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
     if (url.startsWith("/pe/scope/") && init?.method === "PUT" && typeof init.body === "string") {
-      const { defaultTarget } = JSON.parse(init.body);
-      head = { ...head, defaultTarget, revision: head.revision + 1 };
+      const { targets } = JSON.parse(init.body) as { targets: ThreadHead["targets"] };
+      head = {
+        ...head,
+        targets: targets.map((target) => ({ ...target, admission: null })),
+        revision: head.revision + 1,
+      };
       queueMicrotask(() => headListeners.forEach((emit) => emit()));
       return Response.json({
         ok: true,
         why: "set",
         head: {
           ...head,
-          hostNow: "2026-10-22T00:00:00.000Z",
-          grantView: null,
         },
       });
     }
