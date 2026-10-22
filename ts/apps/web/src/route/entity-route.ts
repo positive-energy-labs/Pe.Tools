@@ -13,6 +13,8 @@ import {
   stagedEntries,
   type Reading,
   type Rung,
+  type RouteKey,
+  type RoutePage,
   type SemanticActionKey,
 } from "@pe/agent-contracts";
 import { isSpecOf, workflow } from "./workflow";
@@ -37,7 +39,7 @@ export interface MemberRef {
 export type PodRow = PodList["pods"][number];
 
 /** Every entity route's stages (rulings 34-40): Auditing, Applying, History (inspection only; MAP ruling 58). */
-export type EntityStage = "audit" | "apply" | "history";
+export type EntityStage = EntityFields["stage"];
 export type EntityAction = "capture" | "apply";
 const ENTITY_STAGES = [
   { key: "audit", word: "Auditing" },
@@ -87,24 +89,21 @@ export interface HeldRow {
 /** The host's words for a plan whose staged cells moved; the sheet says them before the press. */
 export const STALE_PLAN = "The staged cells changed since this plan; plan again";
 
-export interface EntityPage {
-  stage: EntityStage;
-  /** The member the editor holds; capture lands here, apply reads it. Empty = none. */
-  pod: string;
-  path: string;
-  /** Audit rows picked for capture when the target kind is `selection`. */
-  selection: string[];
-  /** The confirmation sheet is open. Page, never URL. */
+/**
+ * The fields every entity route's contract declares (agent-contracts `routes/entity.ts`): stage,
+ * the opened member (`pod`, `path`: capture lands there, apply reads it; empty = none) and the
+ * right pane. Each route's page schema extends its own `routeAddress(route).schema`.
+ */
+type EntityFields = Pick<RoutePage<"schedules">, "stage" | "pod" | "path" | "pane">;
+
+export interface EntityPage extends EntityFields {
+  /** The confirmation sheet is open. Page, never URL: its sheet is a plan read no link reopens. */
   confirming: boolean;
   /** The sheet the plan read returned. */
   sheet: PlanSheet | null;
 }
 
 const entityPage = z.object({
-  stage: z.enum(["audit", "apply", "history"]).default("audit"),
-  pod: z.string().default(""),
-  path: z.string().default(""),
-  selection: z.array(z.string()).default([]),
   confirming: z.boolean().default(false),
   sheet: z.custom<PlanSheet>().nullable().default(null),
 });
@@ -139,8 +138,6 @@ export interface EntityRouteDef<W, R extends string, P> {
   name: string;
   /** The noun a captured member is filed under: `settings/<entity>/…`. */
   entity: string;
-  /** `selection` = the document plus the audit rows the route has picked (`page.selection`). */
-  target: "document" | "selection";
   /**
    * The spec `$schema` path(s) (`/schemas/settings/…`); the only thing that says a member is this
    * route's. The first is what a new draft is written against.
@@ -241,11 +238,16 @@ export function entityRoute<W, const R extends string, P extends object, const A
     | "inspectables"
     | "readings"
     | "page"
-    | "address"
     | "actions"
     | "runs"
     | "seeds"
-  > & { transition?: PageTransition<P & EntityPage> } = {},
+  > & {
+    /** The route's contract address: its fields are the entity fields plus the route's own. */
+    address: RouteKey;
+    /** Extends `routeAddress(address).schema` with the audit's Page-only state. */
+    page: z.ZodType<P & EntityFields>;
+    transition?: PageTransition<P & EntityPage>;
+  },
 ): RouteManifest<W, R | EntityReading, P & EntityPage, A | EntityAction> {
   const plan = def.plan as ApplyPlan<unknown, string, object> | undefined;
   const staged = def.staged as EntityRouteDef<unknown, string, object>["staged"];
@@ -284,12 +286,9 @@ export function entityRoute<W, const R extends string, P extends object, const A
     input: z.void() as unknown as z.ZodType<never>,
     dirties: ["pods"],
     stage: "audit",
-    count: (ctx) => (def.target === "selection" ? ctx.page.selection.length || null : null),
     ready: (ctx) => {
       if (inHistory(ctx)) return HISTORY;
       if (!ctx.page.pod) return "choose the pod the capture lands in";
-      if (def.target === "selection" && !ctx.page.selection.length)
-        return "pick rows in the audit first";
       const extra = def.captureInput?.(ctx as never);
       return typeof extra === "string" ? extra : null;
     },
@@ -300,7 +299,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
       const result = await workflow(def.capture!, { pod: ctx.page.pod, ...extra }, ctx);
       const members = (result.members ?? [result.member]) as MemberRef[];
       // The page lands on what the capture wrote; only the person changes the stage.
-      if (members[0]) ctx.setPage({ path: members[0].path, selection: [] });
+      if (members[0]) ctx.setPage({ path: members[0].path });
       noteCaptured(ctx, def.entity, members);
       def.onCaptured?.(result, ctx as never);
     },
@@ -359,7 +358,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
           ? { ...(await staged!.plan!(ctx as never)), staged: was }
           : await plan!.read(ctx as never, sourceOf(ctx));
         // The sheet opens over whatever stage the person is in (F-B-8).
-        ctx.setPage({ confirming: true, sheet }, ["stage", "pod", "path", "selection"]);
+        ctx.setPage({ confirming: true, sheet }, ["stage", "pod", "path"]);
         return null;
       }
       // A staged apply may report its own outcome (applied X of N, refused, failed in Revit).
@@ -387,9 +386,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
       R | EntityReading,
       ReadingSpec<P & EntityPage>
     >,
-    page: (audit.page ? z.intersection(audit.page, entityPage) : entityPage) as z.ZodType<
-      P & EntityPage
-    >,
+    page: z.intersection(audit.page, entityPage) as z.ZodType<P & EntityPage>,
     transition: audit.transition,
     // Stage, pod and path are the contract's entity fields, so `/pods` deep-links a spec.
     address: audit.address,

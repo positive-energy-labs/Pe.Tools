@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 
 import { frozenDemo } from "#/host/demo-client";
 import { EntityRouteView } from "#/route/entity";
+import { useRouteLease } from "#/route/view-bridge";
 import { BuildStrip } from "#/family/build";
 import { usePodList } from "#/route/pods";
 import { familyFixtures, type AuthoredFamilyName } from "#/family/authored-families";
@@ -18,15 +19,35 @@ export function FamilyRouteView({
   target = null,
   thread,
   url = true,
+  visible = true,
 }: {
   target?: string | null;
   thread?: string;
   /** False in a chat pane, which does not own the URL. */
   url?: boolean;
+  /** False while a chat pane hides it: Pea leases only what the person can see. */
+  visible?: boolean;
 }) {
   const demo = useMemo(() => frozenDemo() !== null, []);
   const [pods, refreshPods] = usePodList(!demo);
   const store = useFamilyStore({ target, thread, pods, url });
+  const world = store.lane.world;
+  useRouteLease(store.handle, {
+    url,
+    visible,
+    context: {
+      stage: store.handle.page[0].stage,
+      member: store.member,
+      document: store.documentScope ?? null,
+    },
+    facts: {
+      family: world.familyName,
+      types: world.typeNames,
+      parts: world.geom.map((part) => part.slug),
+      parameters: world.params.map((param) => param.name),
+      staged: store.buildFacts.stagedCount,
+    },
+  });
   const readReady = store.handle.actions.read.refusal === null;
   // Unread once the Work reading is current: a reload must not read over a draft still loading.
   const unread = store.snapshot === null && store.handle.work.current;

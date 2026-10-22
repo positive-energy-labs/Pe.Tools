@@ -1,13 +1,31 @@
+import { z } from "zod";
 import { field, text, type RouteDeclaration } from "../route-field.ts";
-import { demo, entityFields } from "./shared.ts";
+import { entityFields, tableFields } from "./entity.ts";
+import { demo } from "./shared.ts";
 
 export const schedulesAddress = {
   path: "/schedules",
   title: "Schedules",
   fields: {
     ...entityFields,
-    /** The open schedule's reading, so a reload reopens it; opening one replaces the place. */
-    workspaceId: field(text(), { url: "replace" }),
+    /**
+     * The open schedule's Work, so a reload reopens it; opening one replaces the place. Opening a
+     * schedule may read Revit, so it stays the person's (the Ladder): Pea reads it.
+     */
+    workspaceId: field(text(), { url: "replace", agent: "read" }),
+    ...tableFields(),
+    /** The located grid cell, `row::column` (a schedule cell key); empty = none. */
+    cell: field(
+      z
+        .string()
+        .regex(/^(\d+::\d+)?$/, "a cell is row::column")
+        .default(""),
+      { url: "replace", agent: "set" },
+    ),
     demo,
+  },
+  agent: {
+    policy:
+      "Change the visible Schedules view: stage, the grid's query line, sort (`-key` descending) and hidden columns (column keys from facts), and the located cell (`row::column`, empty = none). Facts name the open schedule, its columns and its row and staged counts. The open schedule (workspaceId) and the opened spec (pod, path) are the person's: read them. A view change never reads Revit, stages a cell or applies.",
   },
 } satisfies RouteDeclaration;

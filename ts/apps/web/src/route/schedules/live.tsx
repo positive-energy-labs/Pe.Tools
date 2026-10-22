@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { frozenDemo } from "#/host/demo-client";
 import {
   unstale,
@@ -12,6 +12,7 @@ import {
 } from "@pe/agent-contracts";
 import { changedInRevit, previousOf, useHostStatusSlice } from "#/readings";
 import { refuse, useRoute } from "#/route";
+import { useRouteLease } from "#/route/view-bridge";
 import { manifestChords } from "#/route/keys";
 import { KeysNode, useScopeKeys } from "@pe/kit/keys";
 import { EntityRouteView } from "#/route/entity";
@@ -45,6 +46,7 @@ export function LiveScheduleGridWorkspace({
   target: chosen = null,
   thread,
   url = true,
+  visible = true,
 }: {
   workspaceId?: string;
   render?: (state: ScheduleGridState) => ReactNode;
@@ -56,6 +58,8 @@ export function LiveScheduleGridWorkspace({
   thread?: string;
   /** False in a chat pane, which does not own the URL. */
   url?: boolean;
+  /** False while a chat pane hides it: Pea leases only what the person can see. */
+  visible?: boolean;
 }) {
   const manifest = useMemo(() => schedulesManifest(), []);
   const demo = useMemo(() => frozenDemo() !== null, []);
@@ -253,10 +257,17 @@ export function LiveScheduleGridWorkspace({
       void handle.actions[declared.reads].run({ scheduleId: shown.snapshot.scheduleId });
     }
   };
-  const [activeRow, locateRow] = useState<string | null>(null);
   const state: ScheduleGridState = {
-    activeRow,
-    locateRow,
+    // The grid's view and its located cell are contract fields: a link reopens them, Pea sets them.
+    table: { sorts: page.sort, query: page.query, hiddenColumns: page.hidden },
+    // Typing, a header sort and a column toggle are gestures: each rewrites this history entry.
+    setTable: (next) =>
+      setPage(
+        { query: next.query, sort: next.sorts, hidden: next.hiddenColumns ?? [] },
+        { history: "replace" },
+      ),
+    cell: page.cell,
+    locate: (cell) => setPage({ cell }),
     slice: work.doc,
     revision: work.revision,
     hydrated: work.current || work.revision !== null,
@@ -281,6 +292,30 @@ export function LiveScheduleGridWorkspace({
       ? { bridgeSessionId: shown.target.session, openDocumentId: shown.target.openId }
       : undefined,
   };
+
+  const cellStates = Object.values(work.doc?.cells ?? {});
+  useRouteLease(handle, {
+    url,
+    visible,
+    context: {
+      stage: page.stage,
+      workspaceId: page.workspaceId,
+      captureId: shown?.id ?? null,
+      document: shown?.target ?? null,
+    },
+    facts: {
+      schedule: shown?.snapshot.scheduleName ?? null,
+      columns:
+        shown?.snapshot.columns.map((column) => ({
+          key: `c${column.columnNumber}`,
+          header: column.headerText,
+        })) ?? [],
+      rows: shown?.snapshot.rows.length ?? 0,
+      staged: cellStates.filter((cell) => cell.staged).length,
+      proposals: cellStates.filter((cell) => cell.proposal != null).length,
+      freshness,
+    },
+  });
 
   const resolve = (
     <StaleResolve

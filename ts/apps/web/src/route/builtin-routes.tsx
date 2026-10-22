@@ -37,22 +37,27 @@ publicRoutes.register({
 });
 publicRoutes.register({
   manifest: familyManifest(),
-  hosted: ({ thread }) => <FamilyRouteView thread={thread} url={false} />,
+  hosted: ({ thread, visible }) => (
+    <FamilyRouteView thread={thread} url={false} visible={visible} />
+  ),
 });
 publicRoutes.register({
   manifest: families,
-  hosted: ({ thread, visible }) => (
-    <FamiliesRouteContent thread={thread} visible={visible} surface="chat" />
-  ),
+  hosted: ({ thread, visible }) => <FamiliesRouteContent thread={thread} visible={visible} />,
 });
-publicRoutes.register({ manifest: pods, hosted: ({ thread }) => <HostedPods thread={thread} /> });
+publicRoutes.register({
+  manifest: pods,
+  hosted: ({ thread, visible }) => <HostedPods thread={thread} visible={visible} />,
+});
 publicRoutes.register({
   manifest: parameterLinks,
   hosted: ({ thread }) => <ParameterLinksRouteContent thread={thread} />,
 });
 publicRoutes.register({
   manifest: schedulesManifest(),
-  hosted: ({ thread }) => <LiveScheduleGridWorkspace framed url={false} thread={thread} />,
+  hosted: ({ thread, visible }) => (
+    <LiveScheduleGridWorkspace framed url={false} thread={thread} visible={visible} />
+  ),
 });
 publicRoutes.register({ manifest: rooms, hosted: () => <HostedRooms /> });
 
@@ -67,6 +72,6 @@ function HostedRooms() {
 }
 
 /** A chat pane owns its Page without the address (`url={false}`), like Ducts and Rooms. */
-function HostedPods({ thread }: { thread: string }) {
-  return <PodsRouteContent thread={thread} url={false} />;
+function HostedPods({ thread, visible }: { thread: string; visible: boolean }) {
+  return <PodsRouteContent thread={thread} url={false} visible={visible} />;
 }

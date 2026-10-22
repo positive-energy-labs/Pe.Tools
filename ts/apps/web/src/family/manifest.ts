@@ -24,6 +24,7 @@ import {
   type SettingsFieldState,
   type WorkKey,
   type DocumentRef,
+  type RoutePage,
   settingsCandidate,
   settingsFieldPointer,
 } from "@pe/agent-contracts";
@@ -64,8 +65,12 @@ type FamilyRouteDocument = FamilyDraft;
 const draftSpec = (draft: FamilyDraft): string | null =>
   draft.reading === null ? null : settingsCandidate(draft.reading, draft.cells);
 
-export interface FamilyPage {
-  view: "sheet" | "anatomy" | "drill" | "inspector";
+/**
+ * The contract's fields (`routeAddress("family")`: stage, the opened spec, the table view, the
+ * overlay, the drilled type, the inspector and the doc mode) and the one Page-only key: a build
+ * review, which holds an armed intent no link may replay.
+ */
+export interface FamilyPage extends Omit<RoutePage<"family">, keyof EntityPage> {
   /** The exact saved profile and operator intent reviewed before a build may leave the page. */
   buildReview: FamilyBuildReview | null;
 }
@@ -80,10 +85,7 @@ export type FamilyAuthoringFacts = Omit<BuildFacts, "armedToken" | "boundTarget"
   current: boolean;
 };
 
-const familyPageSchema = z.object({
-  /** `?demo=<action>`: the contract field; `frozenDemo` mounts its seed. */
-  demo: routeAddress("family").schema.shape.demo,
-  view: z.enum(["sheet", "anatomy", "drill", "inspector"]).default("sheet"),
+const familyPageSchema = routeAddress("family").schema.extend({
   buildReview: z
     .object({
       source: podMemberSourceSchema,
@@ -104,7 +106,6 @@ export const familySpec: EntityRouteDef<FamilyRouteDocument, FamilyReadingKey, F
   key: "family",
   name: "Family",
   entity: "family",
-  target: "document",
   schema: FAMILY_MODEL_SCHEMA,
   capture: "family.capture",
   apply: "family.apply",
@@ -331,7 +332,6 @@ export const FAMILY_DEMO_PODS: readonly PodRow[] = [
 /** One seed per kernel stage; the raw authored JSON is the seed's `profile` Reading. */
 const familySeed = (
   name: AuthoredFamilyName,
-  view: FamilyPage["view"],
   stage: EntityPage["stage"],
   /** False: the live family with no saved member and no pod bound. */
   saved = true,
@@ -355,7 +355,6 @@ const familySeed = (
     pods: FAMILY_DEMO_PODS,
   },
   page: {
-    view,
     buildReview: null,
     stage,
     ...(saved ? { pod: DEMO_POD, path: demoPath(name) } : {}),
@@ -527,9 +526,9 @@ export const familyManifest = (authoring = absentAuthoringFacts) =>
     } as never,
     runs: ["family.plan"],
     seeds: {
-      read: familySeed("box", "sheet", "audit", false),
-      build: familySeed("refline", "drill", "apply"),
-      capture: familySeed("bath", "anatomy", "audit"),
-      apply: familySeed("grd", "sheet", "apply"),
+      read: familySeed("box", "audit", false),
+      build: familySeed("refline", "apply"),
+      capture: familySeed("bath", "audit"),
+      apply: familySeed("grd", "apply"),
     } as never,
   });

@@ -228,6 +228,18 @@ function opRow(op: OpsCatalogEntry): Capability {
   };
 }
 
+/**
+ * Search words a route's view adds beside its title. ponytail: the route's own address should
+ * declare them (and its facts' shape) beside `agent.policy`; the kernel's `agent` has no slot yet.
+ */
+const VIEW_FINDS: Partial<Record<RouteViewRoute, readonly string[]>> = {
+  ducts: [...DUCTS_FINDS, "system", "level"],
+  families: ["history", "past read", "rules", "query", "columns"],
+  schedules: ["schedule", "grid", "query", "columns", "cell"],
+  family: ["parameters", "types", "inspector", "overlay"],
+  pods: ["pod", "member", "runs"],
+};
+
 /** A route that leases its view (`routeAddress(route).agent`) gets one read and one set, both over the person's open page. */
 function routeViewRows(route: RouteViewRoute): Capability[] {
   const spec = routeAddress(route);
@@ -239,13 +251,8 @@ function routeViewRows(route: RouteViewRoute): Capability[] {
       key: `route:${route}.view`,
       kind: "route-command",
       title: `${spec.title} visible view`,
-      description: `Read the ${spec.title} page the person has open in this thread: its settable keys (${keys.join(", ")}) with their current values, the identity of what is shown, and derived facts (${route === "families" ? "stage, rule help, the exact visible reading id and counts" : "the system names with their classification, units and how many duct networks each spans, and the levels"}). Returns instance and revision for ${`route:${route}.set-view`}. If two panes are open, pass an instance from the ambiguity result. No Revit read.`,
-      finds: [
-        lower,
-        "visible",
-        "page",
-        ...(route === "families" ? ["archive", "rules"] : [...DUCTS_FINDS, "system", "level"]),
-      ],
+      description: `Read the ${spec.title} page the person has open in this thread: its keys (${keys.join(", ")}; settable: ${sets.join(", ")}) with their current values, the identity of what is shown, and the facts it derives. ${policy} Returns instance and revision for ${`route:${route}.set-view`}. If two panes are open, pass an instance from the ambiguity result. No Revit read.`,
+      finds: [lower, "visible", "page", ...(VIEW_FINDS[route] ?? [])],
       needs: "nothing",
       mutates: false,
       principal: capabilityPrincipals(false),
@@ -258,13 +265,7 @@ function routeViewRows(route: RouteViewRoute): Capability[] {
       kind: "route-command",
       title: `Set ${spec.title} visible view`,
       description: `${policy} Read route:${route}.view first, then pass its instance and revision with a nonempty subset of ${sets.join(", ")}${words ? ` or ${Object.keys(words.shape).join(", ")}` : ""}. The browser acknowledges the render before this returns.`,
-      finds: [
-        lower,
-        "filter",
-        "visible",
-        "page",
-        ...(route === "ducts" ? [...DUCTS_FINDS, "system", "level"] : ["rules"]),
-      ],
+      finds: [lower, "filter", "visible", "page", ...(VIEW_FINDS[route] ?? [])],
       needs: "nothing",
       mutates: true,
       principal: capabilityPrincipals(true),
@@ -291,7 +292,7 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
     key: `route:${spec.route}`,
     kind: "route-doc",
     title: spec.title,
-    description: `Read the ${spec.title} document you co-edit with the user: current doc, revision, JSON Schema, agent write mask, and commands. ${spec.description} ${spec.route === "families" ? "For the currently visible matrix or archived reading, use route:families.view first. Work scope can differ from the visible reading. This does not start a matrix read." : ""} ${scopeHint}`,
+    description: `Read the ${spec.title} document you co-edit with the user: current doc, revision, JSON Schema, agent write mask, and commands. ${spec.description} ${spec.route === "families" ? "For the currently visible matrix or past reading, use route:families.view first. Work scope can differ from the visible reading. This does not start a matrix read." : ""} ${scopeHint}`,
     needs: "nothing",
     mutates: false,
     principal: capabilityPrincipals(false),

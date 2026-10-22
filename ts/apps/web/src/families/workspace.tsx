@@ -25,7 +25,7 @@ import { DEMO_FAMILIES } from "#/families/seeds";
 import { familyCellEntries } from "#/families/staged";
 import { familyVerdicts } from "#/families/verdict";
 import { typeRowKey } from "#/families/picks";
-import { FamiliesViewBridge } from "./view-bridge";
+import { FamiliesLease } from "./view-bridge";
 import { projectPatch } from "./patch-overlay";
 import type { RevitObservationScope } from "#/revit/element-target";
 
@@ -317,21 +317,17 @@ export type FamiliesWorkspaceModel = ReturnType<typeof useFamiliesWorkspaceModel
 
 export function FamiliesWorkspace({
   store,
-  url,
-  thread,
+  url = false,
   visible = true,
-  surface = "route",
 }: {
   store: FamiliesStore;
   url?: boolean;
-  thread?: string;
   visible?: boolean;
-  surface?: "chat" | "route";
 }) {
   const model = useFamiliesWorkspaceModel(store, store.demo ? DEMO_FAMILIES : undefined);
   return (
     <FamiliesWorkspaceProvider value={model}>
-      <FamiliesViewBridge model={model} thread={thread} visible={visible} surface={surface} />
+      <FamiliesLease model={model} url={url} visible={visible} />
       <FamiliesWorkspaceView url={url} />
     </FamiliesWorkspaceProvider>
   );

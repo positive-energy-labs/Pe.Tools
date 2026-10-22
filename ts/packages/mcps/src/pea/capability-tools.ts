@@ -975,7 +975,7 @@ async function dispatch(
         const result = await routeFetch(parsed.route, scope.query);
         if (parsed.route === familiesRouteState.route && !("isError" in result))
           result.hint =
-            "This is authored Work. Read route:families.view for the currently visible matrix or archived reading; no matrix read is started.";
+            "This is authored Work. Read route:families.view for the currently visible matrix or past reading; no matrix read is started.";
         // ponytail: families is the only route keyed by loaded Revit types; generalize when a second route needs it
         if (parsed.route !== familiesRouteState.route || "isError" in result)
           return { ok: !("isError" in result), target: scope.target, result };

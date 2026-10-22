@@ -45,6 +45,7 @@ import {
 } from "#/family/manifest";
 import { previousOf, useReading } from "#/readings";
 import { useRoute, type EntityPage } from "#/route";
+import type { PageMove } from "#/route/manifest";
 import { openMember } from "#/route/spec-editor";
 import { displaySpec } from "#/family/spec";
 import { openSpec } from "#/family/host";
@@ -55,6 +56,15 @@ const next = <A>(value: Setter<A>, previous: A): A =>
   typeof value === "function" ? (value as (previous: A) => A)(previous) : value;
 
 export type Inspect = { kind: "part"; slug: string } | { kind: "param"; name: string } | null;
+/** The `inspector` field's text (`part:<slug>`, `param:<name>`, empty) as the inspector's subject. */
+const inspectOf = (text: string): Inspect =>
+  text.startsWith("part:")
+    ? { kind: "part", slug: text.slice(5) }
+    : text.startsWith("param:")
+      ? { kind: "param", name: text.slice(6) }
+      : null;
+const inspectorOf = (inspect: Inspect) =>
+  !inspect ? "" : inspect.kind === "part" ? `part:${inspect.slug}` : `param:${inspect.name}`;
 export type Binding = { slug: string; property: string } | null;
 type ArmedBuild = { token: string | null; reason: string } | null;
 export type PickerState = { open: string | null; level: string | null; query: string };
@@ -63,19 +73,19 @@ const emptyTable = (): TableState => ({ sorts: [], query: "" });
 
 /* ── Page memory ───────────────────────────────────────────────────────────── */
 
-export interface FamilyPageMemory {
-  readonly overlay: Overlay;
-  readonly table: TableState;
+/**
+ * Gestures and transient focus: hover focus, pins, zoom, a collapsed pane, an open picker, the
+ * drilled table's own view. What a person navigates to (the overlay, the table view, the drilled
+ * type, the inspector, the doc mode) is a contract field on the Page (`routeAddress("family")`).
+ */
+interface FamilyPageMemory {
   readonly drill: TableState;
-  readonly docMode: "text" | "sheet";
   readonly docZoom: number;
-  readonly drillType: string | null;
   readonly stageType: string;
   readonly focus: Focus;
   readonly focusedProposal: string | null;
   readonly pinnedParam: string | null;
   readonly anatomyCollapsed: boolean;
-  readonly inspect: Inspect;
   readonly binding: Binding;
   readonly picker: PickerState;
   readonly sharedEdit: { pointer: string; directives: string[] } | null;
@@ -83,18 +93,13 @@ export interface FamilyPageMemory {
 }
 
 const initialMemory = (): FamilyPageMemory => ({
-  overlay: "draft",
-  table: emptyTable(),
   drill: emptyTable(),
-  docMode: "text",
   docZoom: 1,
-  drillType: null,
   stageType: "Standard",
   focus: null,
   focusedProposal: null,
   pinnedParam: null,
   anatomyCollapsed: false,
-  inspect: null,
   binding: null,
   picker: { open: null, level: null, query: "" },
   sharedEdit: null,
@@ -197,8 +202,15 @@ export function useFamilyStore(options: {
   });
   const [page, setPage] = handle.page as unknown as readonly [
     FamilyPage & EntityPage,
-    (next: Partial<FamilyPage & EntityPage>) => void,
+    (next: Partial<FamilyPage & EntityPage>, move?: PageMove<FamilyPage & EntityPage>) => void,
   ];
+  // The contract fields, as the workspace reads them.
+  const table = useMemo(
+    (): TableState => ({ sorts: page.sort, query: page.query, hiddenColumns: page.hidden }),
+    [page.sort, page.query, page.hidden],
+  );
+  const inspect = useMemo(() => inspectOf(page.inspector), [page.inspector]);
+  const drillType = page.drill || null;
   const member = useMemo(
     () => (page.pod && page.path ? { pod: page.pod, path: page.path } : null),
     [page.pod, page.path],
@@ -467,18 +479,22 @@ export function useFamilyStore(options: {
         if (patches.length) setPage({ buildReview: null });
         edits.stage(nextDraft, patches, draftRevision);
       },
-      setOverlay: (value: Setter<Overlay>) =>
-        setMemory((c) => ({ ...c, overlay: next(value, c.overlay) })),
-      setTable: (value: Setter<TableState>) =>
-        setMemory((c) => ({ ...c, table: next(value, c.table) })),
+      setOverlay: (value: Setter<Overlay>) => setPage({ overlay: next(value, page.overlay) }),
+      // Typing, a header sort and a column toggle are gestures: each rewrites this history entry.
+      setTable: (value: Setter<TableState>) => {
+        const updated = next(value, table);
+        setPage(
+          { query: updated.query, sort: updated.sorts, hidden: updated.hiddenColumns ?? [] },
+          { history: "replace" },
+        );
+      },
       setDrill: (value: Setter<TableState>) =>
         setMemory((c) => ({ ...c, drill: next(value, c.drill) })),
-      setDocMode: (value: Setter<"text" | "sheet">) =>
-        setMemory((c) => ({ ...c, docMode: next(value, c.docMode) })),
+      setDocMode: (value: Setter<"text" | "sheet">) => setPage({ doc: next(value, page.doc) }),
       setDocZoom: (value: Setter<number>) =>
         setMemory((c) => ({ ...c, docZoom: next(value, c.docZoom) })),
       setDrillType: (value: Setter<string | null>) =>
-        setMemory((c) => ({ ...c, drillType: next(value, c.drillType) })),
+        setPage({ drill: next(value, drillType) ?? "" }),
       setStageType: (value: Setter<string>) =>
         setMemory((c) => ({ ...c, stageType: next(value, c.stageType) })),
       setFocus: (value: Setter<Focus>) => setMemory((c) => ({ ...c, focus: next(value, c.focus) })),
@@ -489,7 +505,7 @@ export function useFamilyStore(options: {
       setAnatomyCollapsed: (value: Setter<boolean>) =>
         setMemory((c) => ({ ...c, anatomyCollapsed: next(value, c.anatomyCollapsed) })),
       setInspect: (value: Setter<Inspect>) =>
-        setMemory((c) => ({ ...c, inspect: next(value, c.inspect) })),
+        setPage({ inspector: inspectorOf(next(value, inspect)) }),
       setBinding: (value: Setter<Binding>) =>
         setMemory((c) => ({ ...c, binding: next(value, c.binding) })),
       setPicker: (value: Setter<PickerState>) =>
@@ -549,6 +565,12 @@ export function useFamilyStore(options: {
       flush,
       patch,
       page.buildReview,
+      page.overlay,
+      page.doc,
+      table,
+      inspect,
+      drillType,
+      setPage,
     ],
   );
   return {
@@ -579,18 +601,18 @@ export function useFamilyStore(options: {
     buildOutcome,
     buildReceipt,
     // Page memory, flattened
-    overlay: memory.overlay,
-    table: memory.table,
+    overlay: page.overlay,
+    table,
     drill: memory.drill,
-    docMode: memory.docMode,
+    docMode: page.doc,
     docZoom: memory.docZoom,
-    drillType: memory.drillType,
+    drillType,
     stageType: memory.stageType,
     focus: memory.focus,
     focusedProposal: memory.focusedProposal,
     pinnedParam: memory.pinnedParam,
     anatomyCollapsed: memory.anatomyCollapsed,
-    inspect: memory.inspect,
+    inspect,
     binding: memory.binding,
     picker: memory.picker,
     armedBuild,

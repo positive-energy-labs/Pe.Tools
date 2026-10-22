@@ -8,6 +8,7 @@ import {
   scheduleReads,
   splitScheduleCellKey,
   type ActionStatus,
+  type RoutePage,
   type ScheduleGridDocument,
   type WorkKey,
 } from "@pe/agent-contracts";
@@ -30,21 +31,21 @@ import {
 export type ScheduleGridReading = "catalog" | "work" | "saved" | "receipts";
 export type ScheduleGridAction = "read";
 
-/** Route-owned identity discovered by a schedule read. */
-export interface ScheduleGridPage {
-  workspaceId: string;
+/**
+ * The contract's fields (`routeAddress("schedules")`: stage, the opened spec, the open schedule's
+ * `workspaceId`, the grid's table view and its located `cell`) and the Page-only identity a
+ * schedule read discovers, which no link reopens.
+ */
+export type ScheduleGridPage = RoutePage<"schedules"> & {
+  /** The saved capture drawn; a read or the Work's basis sets it. */
   captureId: string;
   /** Cells the last push refused as stale while its readback failed: no C to draw, read again. */
   unread: number;
   /** The last push's refused cells, by key, in the host's words; each draws on its cell. */
   refused: Record<string, string>;
-}
+};
 
-const scheduleGridPage = z.object({
-  /** The open schedule, the contract field the URL carries. */
-  workspaceId: routeAddress("schedules").schema.shape.workspaceId,
-  /** `?demo=<action>`: the contract field; `frozenDemo` mounts its seed. */
-  demo: routeAddress("schedules").schema.shape.demo,
+const scheduleGridPage = routeAddress("schedules").schema.extend({
   captureId: z.string().default(""),
   unread: z.number().default(0),
   refused: z.record(z.string(), z.string()).default({}),
@@ -150,7 +151,6 @@ export const scheduleSpec: EntityRouteDef<
   key: scheduleGridRouteState.route,
   name: "Schedules",
   entity: "schedule",
-  target: "document",
   schema: "/schemas/settings/CmdScheduleManager/schedules.json",
   capture: "schedule.capture",
   apply: "schedule.apply",

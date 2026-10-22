@@ -135,9 +135,14 @@ export function EntityRouteView({
   // TODO: hide this pane (Pane `hidden`) instead of unmounting it, so it keeps what was typed —
   // SpecEditor works while it renders, and a hidden pre-render of it never settles.
   const stage = stages[page.stage] ?? stages.audit!;
-  const [pane, setPane] = useState<"spec" | "output">("spec");
+  // The right pane is a contract field Pea may turn; it turns to output when one appears.
+  const pane = page.pane;
+  const setPane = (next: EntityPage["pane"]) => setPage({ pane: next });
   const hasOutput = output != null;
-  useEffect(() => setPane(hasOutput ? "output" : "spec"), [hasOutput]);
+  const wanted = hasOutput ? "output" : "spec";
+  useEffect(() => {
+    if (page.pane !== wanted) setPage({ pane: wanted });
+  }, [wanted]); // eslint-disable-line react-hooks/exhaustive-deps -- the edge, not the page
   // A route verb's sheet is the plan sheet's sibling: the plan outranks it, and it outranks output.
   const sheet = confirming ? null : (review ?? null);
   const showOutput = !confirming && !sheet && hasOutput && pane === "output";
@@ -213,8 +218,7 @@ export function EntityRouteView({
           palette={url && !(ladder.hosted && !targetRungs) ? () => openPalette(true) : undefined}
           sentence={
             <>
-              {subject ?? def.entity}
-              {def.target === "selection" ? ` (${page.selection.length} picked)` : ""} in{" "}
+              {subject ?? def.entity} in{" "}
               {targetRungs ? (
                 <Ladder
                   levels={[...(ladder.hosted ? [] : ladder.levels), ...targetRungs(ladder)]}

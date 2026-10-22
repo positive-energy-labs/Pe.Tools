@@ -51,15 +51,8 @@ export type PickerState = {
   query: string;
 };
 
-export interface FamiliesPageMemory {
-  readonly table: TableState;
-  readonly picker: PickerState;
-}
-
-const EMPTY_MEMORY: FamiliesPageMemory = {
-  table: { sorts: [], query: "" },
-  picker: { open: null, level: null, query: "" },
-};
+/** A picker's open level and typed text: a popup gesture, never an address. */
+const EMPTY_PICKER: PickerState = { open: null, level: null, query: "" };
 
 const NO_EXCLUDED: FamilyExclusions = {};
 const NO_CELLS: Record<string, FamilyCellState> = {};
@@ -145,28 +138,27 @@ export function useFamiliesStore(
     provided: { pods },
     url: options.url ?? false,
   });
-  const [memory, setMemory] = useState<FamiliesPageMemory>(EMPTY_MEMORY);
-  // The draft and the selection are Page: the verbs read them off `ctx.page`.
+  const [picker, setPickerState] = useState<PickerState>(EMPTY_PICKER);
+  // The draft is Page: the verbs read it off `ctx.page`. The table view and History's pick are
+  // contract fields (`routeAddress("families")`): a link reopens them and Pea sets them.
   const page = handle.page[0] as FamiliesPage & EntityPage;
   const setPage = handle.page[1] as (
     next: Partial<FamiliesPage & EntityPage>,
     move?: PageMove<FamiliesPage & EntityPage>,
   ) => void;
-  const tableRef = useRef(memory.table);
-  tableRef.current = memory.table;
-  const queryRef = useRef(page.query);
-  queryRef.current = page.query;
-  const table = useMemo(() => ({ ...memory.table, query: page.query }), [memory.table, page.query]);
+  const table = useMemo(
+    (): TableState => ({ sorts: page.sort, query: page.query, hiddenColumns: page.hidden }),
+    [page.sort, page.query, page.hidden],
+  );
   const draft = page.draft;
   const draftTouched = useRef(false);
-  const [archiveId, setArchiveId] = useState<string | null>(null);
   const archiveListCall = useHostCall(
     archivedFamiliesObservations,
     ["families-archive-list"],
     page.stage === "history",
   );
   const archiveList = archiveListCall.data ?? [];
-  const selectedArchiveId = archiveId ?? archiveList[0]?.id ?? null;
+  const selectedArchiveId = page.past || (archiveList[0]?.id ?? null);
   const archiveCall = useHostCall(
     () => archivedFamiliesObservation(selectedArchiveId!),
     ["families-archive", selectedArchiveId],
@@ -392,15 +384,14 @@ export function useFamiliesStore(
         draftTouched.current = true;
         setPage({ draft: next(value, draft) });
       },
-      setTable: (value: Setter<TableState>) => {
-        const updated = next(value, { ...tableRef.current, query: queryRef.current });
-        // Typing in the rule line is a gesture: it rewrites this history entry, never adds one.
-        if (updated.query !== queryRef.current)
-          setPage({ query: updated.query }, { history: "replace" });
-        setMemory((current) => ({ ...current, table: updated }));
-      },
-      setPicker: (value: Setter<PickerState>) =>
-        setMemory((current) => ({ ...current, picker: next(value, current.picker) })),
+      // Typing in the rule line, a header sort and a column toggle are gestures: each rewrites
+      // this history entry, never adds one.
+      setTable: (value: TableState) =>
+        setPage(
+          { query: value.query, sort: value.sorts, hidden: value.hiddenColumns ?? [] },
+          { history: "replace" },
+        ),
+      setPicker: (value: Setter<PickerState>) => setPickerState((current) => next(value, current)),
       /**
        * A typed value stages, an emptied one included: empty is a value, so a person can clear a
        * parameter. Equal to the family's current value, it stages nothing. Pea's standing
@@ -447,7 +438,7 @@ export function useFamiliesStore(
     demo,
     refreshPods,
     table,
-    picker: memory.picker,
+    picker,
     page,
     retainedReading,
     retainedError: retainedCall.error?.message ?? null,
@@ -464,7 +455,7 @@ export function useFamiliesStore(
         if (archiveListCall.error) archiveListCall.refresh();
         else archiveCall.refresh();
       },
-      select: setArchiveId,
+      select: (past: string) => setPage({ past }),
     },
     setPage,
     busy: handle.busy,

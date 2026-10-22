@@ -53,7 +53,7 @@ export function ScheduleReview({
         `col ${number}`
       }
       currentText={(key) => cellText(snapshot, key)}
-      locate={(key) => state.locateRow?.(String(splitScheduleCellKey(key).rowNumber))}
+      locate={state.locate}
       wire={writes.wire}
     />
   );

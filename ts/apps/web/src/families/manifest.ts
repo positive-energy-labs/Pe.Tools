@@ -14,6 +14,7 @@ import {
   type AppliedFilter,
   type FamiliesRouteDocument,
   type PodDraftSource,
+  type RoutePage,
 } from "@pe/agent-contracts";
 import { filterWords } from "./scope-band";
 
@@ -46,13 +47,16 @@ import { podHost } from "#/route/pods";
 import type { Inspectable } from "#/route/inspect";
 import { familiesGroupOf, stagedDrafts } from "./staged";
 
-export interface FamiliesPage {
+/**
+ * The contract's fields (`routeAddress("families")`: stage, the opened spec, the pivot's table view
+ * and History's `past` read) and the Page-only rest: a scope draft and a reading, which a link
+ * cannot reopen (the Work's retained reading does).
+ */
+export interface FamiliesPage extends Omit<RoutePage<"families">, keyof EntityPage> {
   /** The next read's scope. Picker changes never issue a matrix read. */
   draft: FamiliesDraft;
   /** The exact document and scope last requested by the person. */
   reading: FamiliesObservation | null;
-  /** The pivot's query box text; route-owned so Pea and direct URLs address the same view. */
-  query: string;
   /**
    * After start fresh: the fresh page offers to hold the old Work's exclusions back again, until
    * pressed, dismissed, or the next plan (journeys' ruling). ponytail: page memory, so a reload
@@ -195,7 +199,6 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
     key: "families",
     name: "Families",
     entity: "families",
-    target: "document",
     schema: [FF_SPEC_SCHEMA, FAMILY_MODEL_SCHEMA],
     apply: "families.apply",
     applies: ["matrix"],

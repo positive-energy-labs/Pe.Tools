@@ -24,7 +24,7 @@ export const Route = createFileRoute("/families")({
 function FamiliesRoute() {
   const { target } = useRouteSearch("families");
   const thread = useRouteThread();
-  return <FamiliesRouteContent target={target} thread={thread} surface="route" url />;
+  return <FamiliesRouteContent target={target} thread={thread} url />;
 }
 
 export function FamiliesRouteContent({
@@ -32,23 +32,13 @@ export function FamiliesRouteContent({
   thread,
   url = false,
   visible = true,
-  surface = "route",
 }: {
   target?: string;
   thread?: string;
-  /** True only on the route itself; a chat pane does not own the URL. */
+  /** True only on the route itself; a chat pane does not own the URL and leases as `chat`. */
   url?: boolean;
   visible?: boolean;
-  surface?: "chat" | "route";
 }) {
   const store = useFamiliesStore({ target, thread, url });
-  return (
-    <FamiliesWorkspace
-      store={store}
-      url={url}
-      thread={thread}
-      visible={visible}
-      surface={surface}
-    />
-  );
+  return <FamiliesWorkspace store={store} url={url} visible={visible} />;
 }

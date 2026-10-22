@@ -15,7 +15,8 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import { readMeasuredText } from "@pe/kit/lang/cell";
 import { Table } from "@pe/kit/table/table";
 import { TableFrame } from "#/components/master-table/table-frame";
-import { emptyTableState, useTableState } from "@pe/kit/table/view";
+import { emptyTableState } from "@pe/kit/table/view";
+import type { TableState } from "@pe/kit/table/model";
 import { Pane } from "#/components/lang/pane";
 import { useMeasuredParse } from "#/host/measured-parse";
 import type { HostCallOptions } from "#/host/client";
@@ -56,8 +57,12 @@ export interface ScheduleGridState {
   documentScope?: HostCallOptions;
   /** Native action provenance belongs to the displayed capture, independently of the selector. */
   nativeObservation?: NativeObservation;
-  activeRow?: string | null;
-  locateRow?: (row: string) => void;
+  /** The grid's query, sorts and hidden columns: contract fields (`routeAddress("schedules")`). */
+  table: TableState;
+  setTable: (next: TableState) => void;
+  /** The located cell (`row::column`); empty = none. */
+  cell: string;
+  locate: (cell: string) => void;
 }
 
 /**
@@ -143,7 +148,10 @@ export function ScheduleGridWorkspace({
     freshness,
     documentScope,
     nativeObservation,
-    activeRow: locatedRow,
+    table: tableState,
+    setTable: setTableState,
+    cell: locatedCell,
+    locate,
   },
   onRefused,
 }: {
@@ -151,12 +159,20 @@ export function ScheduleGridWorkspace({
   /** A refused fill or paste, said once: the route logs it (ruling 9), the grid never draws it. */
   onRefused: (says: string) => void;
 }) {
-  const [tableState, setTableState] = useTableState();
+  // Another schedule starts a bare view; a schedule arriving (a reload, a deep link) keeps the link's.
   const priorSchedule = useRef(snapshot?.scheduleId);
   useEffect(() => {
-    if (priorSchedule.current !== snapshot?.scheduleId) setTableState(emptyTableState());
-    priorSchedule.current = snapshot?.scheduleId;
-  }, [snapshot?.scheduleId, setTableState]);
+    if (
+      priorSchedule.current !== undefined &&
+      snapshot?.scheduleId !== undefined &&
+      priorSchedule.current !== snapshot.scheduleId
+    ) {
+      setTableState(emptyTableState());
+      locate("");
+    }
+    if (snapshot?.scheduleId !== undefined) priorSchedule.current = snapshot.scheduleId;
+  }, [snapshot?.scheduleId]); // eslint-disable-line react-hooks/exhaustive-deps -- the schedule edge
+  const locatedRow = locatedCell ? String(splitScheduleCellKey(locatedCell).rowNumber) : null;
   const document = slice;
   const cells = document?.cells ?? {};
   const stale = document?.basis?.stale ?? [];

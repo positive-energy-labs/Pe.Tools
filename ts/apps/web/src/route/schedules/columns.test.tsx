@@ -8,7 +8,27 @@ import {
 } from "@pe/agent-contracts";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { ScheduleGridWorkspace } from "./workspace";
+import { useState } from "react";
+import { useTableState } from "@pe/kit/table/view";
+import { ScheduleGridWorkspace, type ScheduleGridState } from "./workspace";
+
+/** The grid with its view fields held as the route's Page holds them (`routeAddress("schedules")`). */
+function Grid({
+  state,
+  onRefused,
+}: {
+  state: Omit<ScheduleGridState, "table" | "setTable" | "cell" | "locate">;
+  onRefused: (says: string) => void;
+}) {
+  const [table, setTable] = useTableState();
+  const [cell, locate] = useState("");
+  return (
+    <ScheduleGridWorkspace
+      state={{ ...state, table, setTable, cell, locate }}
+      onRefused={onRefused}
+    />
+  );
+}
 
 /** The field spec `revit.detail.schedules` sends for an Integer column. */
 const INTEGER = { definition: { dataTypeId: "autodesk.spec:spec.int64-2.0.0" } };
@@ -49,7 +69,7 @@ test("millwork in Model AND Count > 1, through the query box, the header, and it
     ],
   });
   const workspace = (snapshot: typeof read) => (
-    <ScheduleGridWorkspace
+    <Grid
       state={{
         slice: { cells: {}, takenAt: null },
         revision: 1,
@@ -199,7 +219,7 @@ test("a grid cell draws the contract's transitions and accept writes at the rend
   const { calls, apply } = writes();
   const refused = refusals();
   const { container } = render(
-    <ScheduleGridWorkspace
+    <Grid
       state={{
         slice: { cells, takenAt: null },
         revision: 7,
@@ -259,7 +279,7 @@ test("Shift selected schedule cells fill in one revision checked write; focused 
     ],
   });
   const { container } = render(
-    <ScheduleGridWorkspace
+    <Grid
       state={{
         slice: { cells: {}, takenAt: null },
         revision: 9,
@@ -321,7 +341,7 @@ test("a range containing a locked schedule cell refuses the whole fill", async (
   const { calls, apply } = writes();
   const refused = refusals();
   const { container } = render(
-    <ScheduleGridWorkspace
+    <Grid
       state={{
         slice: { cells: {}, takenAt: null },
         revision: 3,

@@ -12,6 +12,7 @@ import {
   type RouteView,
   type RouteViewRoute,
 } from "@pe/agent-contracts";
+import type { RouteHandle } from "./handle";
 import { peClient } from "#/host/pe-client";
 import { useHostEvents } from "#/readings";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
@@ -27,6 +28,43 @@ type Intent = {
   revision: number;
   patch: Record<string, string>;
 };
+
+/**
+ * A route handle's lease: the bridge over the handle's own Page, thread and setter, so a route
+ * adds only what it shows (`context`) and what it derives (`facts`). Pea's patch, typed by the
+ * address, lands as one pushed move (`routeAddress(route).history`: Pea's patch is a step).
+ */
+export function useRouteLease(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- any route's handle
+  handle: Pick<RouteHandle<any, any, any, any>, "manifest" | "head" | "page">,
+  {
+    url,
+    visible = true,
+    context,
+    facts,
+  }: {
+    /** True where the route owns the address; a chat pane leases as `chat`. */
+    url: boolean;
+    visible?: boolean;
+    context: Record<string, unknown>;
+    facts: Record<string, unknown>;
+  },
+) {
+  const route = handle.manifest.address;
+  if (!route || !routeAddress(route).agent)
+    throw Error(`${handle.manifest.key} leases no view: its address declares no agent`);
+  const [page, setPage] = handle.page;
+  useRouteViewBridge({
+    route: route as RouteViewRoute,
+    thread: handle.head?.thread,
+    surface: url ? "route" : "chat",
+    visible,
+    page: page as object,
+    apply: (patch) => setPage(patch, { history: "push" }),
+    context,
+    facts,
+  });
+}
 
 export function useRouteViewBridge<R extends RouteViewRoute>({
   route,

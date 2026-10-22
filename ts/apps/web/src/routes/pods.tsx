@@ -49,6 +49,7 @@ import {
   PODS_SEEDS,
 } from "#/route/seeds";
 import { SpecEditor, type DemoSpec } from "#/route/spec-editor";
+import { useRouteLease } from "#/route/view-bridge";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** `/pods` writes no document; its target is the thread's document, which field options read. */
@@ -123,7 +124,10 @@ export function PodsRouteContent({
   thread,
   demo,
   url,
+  visible = true,
 }: {
+  /** False while a chat pane hides it: Pea leases only what the person can see. */
+  visible?: boolean;
   /** A `?target` pin; the root carries it out through `open in <Route>`. */
   target?: string;
   /** The thread whose head is the target store; the root carries it out through every link. */
@@ -137,7 +141,8 @@ export function PodsRouteContent({
   const router = useRouter();
   // The Page is the one owner of the open member: `pod`/`path` are contract steps, so a pick
   // pushes and Back returns; a reload reads them from the address.
-  const [{ pod, path }, setPage] = handle.page;
+  const [page, setPage] = handle.page;
+  const { pod, path } = page;
   const select = (ref: MemberRef) => setPage(ref);
   const ladder = useDocumentLadder(handle);
   // Field options read the thread's document; choosing one here moves the thread (ledger 2026-09-17).
@@ -159,14 +164,29 @@ export function PodsRouteContent({
   const product = member
     ? PRODUCT_ROUTES.find((route) => isSpecOf(member.schema, route.def.schema))
     : undefined;
-  // The member's runs, or the whole pod's (a draft's run belongs to no member).
-  const [podRuns, setPodRuns] = useState(false);
-  const runScope = podRuns || !member ? "pod" : "member";
+  // The member's runs, or the whole pod's (a draft's run belongs to no member): a contract field.
+  const runScope = page.runs === "pod" || !member ? "pod" : "member";
   const { failure: runsFailure, runs } = usePodRuns(
     row?.id ?? null,
     runScope === "pod" ? null : member!.path,
     !!demo,
   );
+  useRouteLease(handle, {
+    url,
+    visible,
+    context: { member: member ? { pod: row!.id, path: member.path } : null },
+    facts: {
+      pods: pods.map((item) => ({
+        id: item.id,
+        name: item.name,
+        members: item.members.map((m) => m.path),
+      })),
+      schema: member?.schema ?? null,
+      runs: runScope,
+      runCount: runs.length,
+      opensIn: product?.route ?? null,
+    },
+  });
 
   // A failed pod read is a refusal: a log row, never a page line (N3).
   const failed = live.state === "failed" ? live.message : null;
@@ -325,7 +345,7 @@ export function PodsRouteContent({
                           : "This draft has no member yet, so its runs belong to the whole pod."
                       }
                       reason="A draft's run belongs to no member: the whole pod lists it."
-                      onClick={() => setPodRuns(!podRuns)}
+                      onClick={() => setPage({ runs: page.runs === "pod" ? "member" : "pod" })}
                     >
                       {runScope === "pod" ? "whole pod" : "this member"}
                     </Button>
