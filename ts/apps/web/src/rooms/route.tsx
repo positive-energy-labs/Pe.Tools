@@ -21,7 +21,8 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import { Pane } from "#/components/lang/pane";
 import { PaneSplit } from "#/components/lang/pane-resize";
 import { Surface } from "#/components/lang/surface";
-import { previousOf, useHostOp } from "#/readings";
+import { previousOf, useHostCall } from "#/readings";
+import { callHostRpc } from "#/host/client";
 import { RouteShell, useRoute, useRouteThread } from "#/route";
 import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
@@ -36,7 +37,7 @@ import { manifest, type RoomsPage } from "./manifest";
 import { RoomsSketch, type Drop } from "./sketch";
 import { snapPlan } from "./snap";
 import { NO_TRACE, type TraceRead } from "./layers";
-import { focusOf, RoomsPlan } from "./plan";
+import { focusOf, RoomsPlan, type RoomsPlanLease } from "./plan";
 import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
 import { railsOf } from "./layers";
 import { frozenDemo } from "#/host/demo-client";
@@ -47,20 +48,20 @@ type Empty = { says: string; exit: string };
 
 /** `rooms.snapshot` from the one document the sentence names. */
 function useRoomsSnapshot(doc: { session: string; openId: string } | null, epoch: number) {
-  const call = useHostOp(
-    "rooms.snapshot",
-    {},
-    {
-      bridgeSessionId: doc?.session,
-      openDocumentId: doc?.openId,
-      enabled: doc !== null,
-    },
+  const call = useHostCall(
+    (signal) =>
+      callHostRpc(
+        "rooms.snapshot",
+        {},
+        {
+          bridgeSessionId: doc!.session,
+          openDocumentId: doc!.openId,
+          signal,
+        },
+      ),
+    ["rooms.snapshot", doc?.session, doc?.openId, epoch],
+    doc !== null,
   );
-  // Every verb bumps the epoch on success; the snapshot is read again then.
-  const { refresh } = call;
-  useEffect(() => {
-    if (epoch > 0) refresh();
-  }, [epoch, refresh]);
   return { snapshot: call.data ?? null, error: call.error?.message ?? null, pending: call.pending };
 }
 
@@ -73,19 +74,20 @@ function useRoomsTrace(
   view: string,
   epoch: number,
 ): TraceRead {
-  const call = useHostOp(
-    "rooms.trace",
-    { view },
-    {
-      bridgeSessionId: doc?.session,
-      openDocumentId: doc?.openId,
-      enabled: doc !== null && view !== "",
-    },
+  const call = useHostCall(
+    (signal) =>
+      callHostRpc(
+        "rooms.trace",
+        { view },
+        {
+          bridgeSessionId: doc!.session,
+          openDocumentId: doc!.openId,
+          signal,
+        },
+      ),
+    ["rooms.trace", doc?.session, doc?.openId, view, epoch],
+    doc !== null && view !== "",
   );
-  const { refresh } = call;
-  useEffect(() => {
-    if (epoch > 0) refresh();
-  }, [epoch, refresh]);
   const error = call.error?.message ?? null;
   return {
     data: call.data ?? null,
@@ -120,7 +122,22 @@ export function RoomsRoute({ url = true }: { url?: boolean } = {}) {
     if (demo && !page.view) setPage({ view: DEMO_VIEW }, { history: "replace" });
   }, [demo, page.view, setPage]);
   const plan = usePlanImage(handle.resolution, page.view || undefined, PLAN_PX);
-  const trace = useRoomsTrace(doc, page.view, page.epoch);
+  const trace = useRoomsTrace(demo ? null : doc, page.view, page.epoch);
+  const snapshotToken = useMemo(() => crypto.randomUUID(), [snapshot]);
+  const lease: RoomsPlanLease = {
+    thread,
+    ready: !!snapshot && !pending && !error,
+    context: {
+      source: demo ? "fixture" : "native",
+      document: demo ? null : doc,
+      acquiredEpoch: page.epoch,
+      snapshotToken,
+      stage: page.stage,
+      view: page.view,
+      work: handle.work.key,
+      workRevision: handle.work.revision,
+    },
+  };
   const nativeObservation = useMemo<NativeObservation>(
     () => ({
       scope: { document: demo || !snapshot ? null : doc, source: demo ? "fixture" : "native" },
@@ -242,6 +259,7 @@ export function RoomsRoute({ url = true }: { url?: boolean } = {}) {
           <RoomsHistory receipts={handle.readings.receipts} />
         ) : (
           <RoomsBody
+            lease={lease}
             snapshot={snapshot}
             empty={empty}
             page={page}
@@ -262,6 +280,7 @@ export function RoomsRoute({ url = true }: { url?: boolean } = {}) {
 }
 
 function RoomsBody({
+  lease,
   snapshot,
   empty,
   page,
@@ -275,6 +294,7 @@ function RoomsBody({
   wire,
   applyMark,
 }: {
+  lease: RoomsPlanLease;
   snapshot: RoomsSnapshot.Res.Response | null;
   empty: Empty | null;
   page: RoomsPage;
@@ -403,6 +423,7 @@ function RoomsBody({
       resize={{ target: "end", defaultSize: 760, minSize: 420, persist: "pe.rooms.tableWidth" }}
       start={
         <RoomsPlan
+          lease={lease}
           rows={onView}
           plan={image}
           planRefusal={refusal}

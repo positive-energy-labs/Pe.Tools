@@ -553,6 +553,7 @@ export function useTakeoffsController(options: {
     cells,
     wires,
     savedCapture: capture,
+    displayedCapture: capture ?? nativeCapture,
     source: capture ? ("saved" as const) : ("live" as const),
     target:
       handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"

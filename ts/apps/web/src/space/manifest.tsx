@@ -9,12 +9,15 @@
  * new scene. Every answer layer is one verb's result held on the Page, never a render-time fetch.
  */
 import { z } from "zod";
-import { routePageSchema } from "@pe/agent-contracts";
+import { routePageSchema, spaceElementKey } from "@pe/agent-contracts";
 import type { OpKey, OpRequestOf, OpResponseOf } from "@pe/host-contracts/operation-types";
 
 import { defineRoute, type Ctx } from "#/route/manifest";
 import { NATIVE_READ_WAIT_S } from "#/route/waits";
 import { sceneRequest } from "#/scene/host";
+import type { Psc1Metadata } from "#/scene/psc1";
+import { refuse } from "#/route/refusal";
+import { cutPolygons } from "./state";
 
 import {
   ENCODINGS,
@@ -41,6 +44,89 @@ const spacePageSchema = routePageSchema("space").extend({
   probe: answer<"revit.detail.space-probe">(),
   sweep: answer<"revit.detail.space-sweep">(),
 });
+
+/** The artifact currently decoded by this route, not the effect-provided Reading mirror. */
+export type LoadedSpaceScene = {
+  id: SpacePage["scene"];
+  metadata: Psc1Metadata;
+  members: ReadonlySet<string>;
+};
+
+export function spaceSceneMembers(metadata: Psc1Metadata): ReadonlySet<string> {
+  const pair = (documentKey: string, linkInstanceId?: number | null) =>
+    JSON.stringify([documentKey, linkInstanceId ?? null]);
+  const sources = new Set(
+    metadata.sources
+      .filter(
+        (source) =>
+          source.linkInstanceId != null || source.documentKey === metadata.stamp.hostDocumentKey,
+      )
+      .map((source) => pair(source.documentKey, source.linkInstanceId)),
+  );
+  return new Set(
+    metadata.elements
+      .filter((element) =>
+        sources.has(pair(element.handle.documentKey, element.handle.linkInstanceId)),
+      )
+      .map((element) => spaceElementKey(element.handle)),
+  );
+}
+
+/** URL restoration is forgiving; explicit Page moves are checked by the bound transition. */
+export function reconcileSpaceMembers(
+  page: SpacePage,
+  scene: LoadedSpaceScene,
+): Partial<SpacePage> {
+  if (page.scene !== scene.id) return {};
+  const members = scene.members;
+  const patch: Partial<SpacePage> = {};
+  if (page.selected !== null && !members.has(page.selected)) patch.selected = null;
+  const hidden = page.hidden.filter((key) => members.has(key));
+  if (hidden.length !== page.hidden.length) patch.hidden = hidden;
+  if (page.isolated !== null) {
+    const isolated = page.isolated.filter((key) => members.has(key));
+    if (isolated.length !== page.isolated.length) patch.isolated = isolated;
+  }
+  return patch;
+}
+
+/** Every explicit human, action and Pea move crosses the same loaded-scene guard. */
+export function bindSpaceManifest(readScene: () => LoadedSpaceScene | null): typeof manifest {
+  return {
+    ...manifest,
+    transition: (current, patch, origin) => {
+      const normalized = manifest.transition?.(current, patch, origin) ?? { patch };
+      if ("refusal" in normalized) return normalized;
+      const candidate = { ...current, ...normalized.patch };
+      const scene = readScene();
+      const matching = scene && scene.id === candidate.scene ? scene : null;
+      const named = [candidate.selected, ...candidate.hidden, ...(candidate.isolated ?? [])].filter(
+        (key): key is string => key !== null,
+      );
+      if (named.length) {
+        if (!matching)
+          return { refusal: refuse("not-ready", "Load this scene before naming its elements") };
+        const missing = named.find((key) => !matching.members.has(key));
+        if (missing)
+          return {
+            refusal: refuse("not-ready", `Element is not in this loaded scene: ${missing}`),
+          };
+      }
+      if (Object.hasOwn(patch, "cuts")) {
+        if (!matching)
+          return { refusal: refuse("not-ready", "Load this scene before changing its cuts") };
+        try {
+          cutPolygons(candidate.cuts, matching.metadata.bounds);
+        } catch (cause) {
+          return {
+            refusal: refuse("not-ready", cause instanceof Error ? cause.message : String(cause)),
+          };
+        }
+      }
+      return normalized;
+    },
+  };
+}
 export type SpacePage = z.infer<typeof spacePageSchema>;
 type SpaceCtx = Ctx<never, "scene", SpacePage>;
 

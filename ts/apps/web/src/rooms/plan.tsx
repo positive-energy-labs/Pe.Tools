@@ -25,6 +25,13 @@ import { layersOf, toggleLayer } from "@pe/agent-contracts";
 import { LAYER_SAYS, LAYERS, TraceFaces, TraceLayers, type Layer, type TraceRead } from "./layers";
 import { CALLOUT_FONT_PX, holdsPin, PIN_R, placeCallouts, type CalloutItem } from "./callouts";
 import type { PlanGeo } from "./sketch";
+import { useRouteViewBridge } from "#/route/view-bridge";
+
+export interface RoomsPlanLease {
+  thread: string;
+  ready: boolean;
+  context: Record<string, unknown>;
+}
 
 export type RoomsRegion = RoomsSnapshot.Res.RoomsRegion;
 
@@ -133,6 +140,7 @@ const FILL_PCT = 27;
 const FILL_HOT_PCT = 40;
 
 export function RoomsPlan({
+  lease,
   rows,
   plan,
   planRefusal,
@@ -149,6 +157,7 @@ export function RoomsPlan({
   setPage,
   overlay,
 }: {
+  lease?: RoomsPlanLease;
   /** Drawn over the plan in screen px (the feedback layer), given the plan's frame. */
   overlay?: (geo: PlanGeo) => ReactNode;
   /** The regions on the drawn view, labelled as the table labels them. */
@@ -280,6 +289,43 @@ export function RoomsPlan({
     zoomed.current = zoomKey;
     move(fitView(boundsOf(boxes), size, ZOOM_PAD_PX), "move");
   }, [world, size, zoomKey, zoomTo, move]);
+
+  useRouteViewBridge({
+    route: "rooms",
+    thread: lease?.thread,
+    surface: "route",
+    visible:
+      !!lease?.ready &&
+      !empty &&
+      !!world &&
+      !!size &&
+      (!page.focus || !zoomTo.length || zoomed.current === page.focus),
+    page,
+    apply: (patch) =>
+      setPage({ viewport: patch.viewport as RoomsPage["viewport"] }, { history: "push" }),
+    context: {
+      ...lease?.context,
+      size,
+      frame: world?.frame.transform ?? null,
+      plan: plan ? { href: plan.href, registration: plan.registration } : null,
+    },
+    facts: {
+      pose: view,
+      size,
+      fit: world?.fit ?? null,
+      frame: world?.frame.transform ?? null,
+      units: "model XY feet; affine frame to world pixels; viewport scale and screen translations",
+      counts,
+      totalRegions: rows.length,
+      truncated: rows.length > 100,
+      regions: (world?.shapes ?? []).slice(0, 100).map((shape) => ({
+        guid: shape.region.guid,
+        label: shape.label,
+        role: shape.region.role,
+        bounds: shape.box,
+      })),
+    },
+  });
 
   const callouts = useMemo(() => {
     if (!world || !size) return [];

@@ -7,8 +7,10 @@ import { ZoneCard } from "#/takeoff/zone-card";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
 import { ScopeKeys } from "@pe/kit/keys";
 import { levelsOf } from "#/takeoff/plan-image";
+import { useSearch } from "@tanstack/react-router";
 
 export function AtlasVisual() {
+  const search = useSearch({ strict: false }) as { thread?: string };
   const {
     store,
     world,
@@ -17,6 +19,7 @@ export function AtlasVisual() {
     geoReady,
     actions,
     queriedZones,
+    tableState,
     zoneKey,
     cursor,
     planOpen,
@@ -39,6 +42,30 @@ export function AtlasVisual() {
   return (
     <Suspense fallback={<div className="t-small t-upper p-2 text-ink-2">reading plan…</div>}>
       <LevelPlan
+        lease={{
+          thread: store.handle.head?.thread ?? search.thread,
+          visible:
+            planOpen &&
+            !!store.displayedCapture &&
+            (store.source === "saved" || store.snapshot.state === "ready"),
+          page: store.handle.page[0],
+          applyViewport: (viewport) => store.setViewport(viewport, "push"),
+          context: {
+            source: store.handle.demo ? "fixture" : store.source,
+            captureId: store.displayedCapture?.id,
+            capturedAt: store.displayedCapture?.capturedAt,
+            observedDocument: store.displayedCapture?.provenance.target,
+            work: store.handle.work.key,
+            workRevision: store.handle.work.revision,
+            stage: store.stage,
+            views: store.views,
+            zones: store.zones,
+            level,
+            zone: zoneKey,
+            room: cursor,
+            filter: tableState.query ?? "",
+          },
+        }}
         viewport={store.viewport}
         onViewport={(viewport, how) =>
           store.setViewport(viewport, how === "move" ? "push" : "replace")

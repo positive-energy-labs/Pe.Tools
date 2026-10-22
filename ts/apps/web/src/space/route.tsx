@@ -7,7 +7,7 @@
  *
  * `?demo=fixture` mounts a synthetic PSC1 scene and one fixture answer per op; no host is read.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { spaceElementKey, type Reading } from "@pe/agent-contracts";
 import { Input } from "@pe/kit/lang/input";
 
@@ -35,7 +35,12 @@ import {
   treeLayer,
   type SpaceLayer,
 } from "./layers";
-import { manifest } from "./manifest";
+import {
+  bindSpaceManifest,
+  reconcileSpaceMembers,
+  spaceSceneMembers,
+  type LoadedSpaceScene,
+} from "./manifest";
 import { SpacePicture } from "./picture";
 import { cutPolygons } from "./state";
 
@@ -51,6 +56,8 @@ export function SpaceRoute({ url = true }: { url?: boolean } = {}) {
   const demo = useMemo(() => frozenDemo() === "fixture", []);
   const [chosen] = useChooseTarget();
   const thread = useRouteThread();
+  const loadedScene = useRef<LoadedSpaceScene | null>(null);
+  const manifest = useMemo(() => bindSpaceManifest(() => loadedScene.current), []);
   const [provided, setProvided] = useState<{ scene: Reading<unknown> }>({
     scene: { state: "absent" },
   });
@@ -65,6 +72,23 @@ export function SpaceRoute({ url = true }: { url?: boolean } = {}) {
   const read = useSceneArtifact(demo ? null : (page.scene ?? null));
   const meshes = demo ? FIXTURE_SCENE.meshes : read.meshes;
   const metadata: Psc1Metadata | null = demo ? FIXTURE_SCENE.metadata : read.metadata;
+  const scene = useMemo<LoadedSpaceScene | null>(
+    () =>
+      metadata && meshes
+        ? { id: page.scene, metadata, members: spaceSceneMembers(metadata) }
+        : null,
+    [metadata, meshes, page.scene],
+  );
+  loadedScene.current = scene;
+  const reconciled = scene ? reconcileSpaceMembers(page, scene) : {};
+  const membersReady = Object.keys(reconciled).length === 0;
+  const reconciledPage = useRef<object | null>(null);
+  useEffect(() => {
+    if (scene && !membersReady && reconciledPage.current !== page) {
+      reconciledPage.current = page;
+      setPage(reconcileSpaceMembers(page, scene), { history: "replace" });
+    }
+  }, [scene, page, membersReady, setPage]);
   useEffect(() => {
     setProvided({
       scene: metadata ? { state: "ready", observation: metadata } : { state: "absent" },
@@ -247,6 +271,19 @@ export function SpaceRoute({ url = true }: { url?: boolean } = {}) {
         )}
         <div className="flex min-h-0 flex-1">
           <SpacePicture
+            lease={{
+              thread,
+              ready: !!scene && membersReady,
+              context: {
+                source: demo ? "fixture" : "artifact",
+                scene: demo ? "fixture:space" : page.scene,
+                boundDocument: doc,
+                hostDocumentKey: metadata?.stamp.hostDocumentKey,
+                epoch: metadata?.stamp.epoch,
+                builtUtc: metadata?.stamp.builtUtc,
+                frame: metadata?.stamp.frame,
+              },
+            }}
             meshes={meshes}
             metadata={metadata}
             page={page}

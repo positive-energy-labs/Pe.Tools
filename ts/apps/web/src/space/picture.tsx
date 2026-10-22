@@ -30,6 +30,8 @@ import { CutOverlay, type Framed } from "./cuts";
 import { LAYER_SAYS, SPACE_LAYERS, rowUnder, type SpaceLayer } from "./layers";
 import type { SpacePage } from "./manifest";
 import { cutPolygons, packPolygons, retained, type Cuts, type Polygons } from "./state";
+import { useRouteViewBridge } from "#/route/view-bridge";
+import { spaceElementKey } from "@pe/agent-contracts";
 
 type SetPage = (next: Partial<SpacePage>, move?: PageMove<SpacePage>) => void;
 const MODE_LABEL = { "3d": "3D", top: "Top", north: "North", east: "East" } as const;
@@ -52,6 +54,7 @@ function useSize(host: HTMLElement | null) {
 }
 
 export function SpacePicture({
+  lease,
   meshes,
   metadata,
   page,
@@ -60,6 +63,7 @@ export function SpacePicture({
   status,
   onError,
 }: {
+  lease?: { thread: string; ready: boolean; context: Record<string, unknown> };
   meshes: SceneMeshes | null;
   metadata: Psc1Metadata | null;
   page: SpacePage;
@@ -143,6 +147,44 @@ export function SpacePicture({
       meshes.instances.filter((i) => i.focus && (!shown || shown.has(i.key))).map((i) => i.key),
     );
   }, [meshes, on, page.isolated]);
+
+  useRouteViewBridge({
+    route: "space",
+    thread: lease?.thread,
+    surface: "route",
+    visible: !!lease?.ready && !!meshes && !!metadata && !!size,
+    page,
+    apply: (patch) => setPage(patch as Partial<SpacePage>, push),
+    context: { ...lease?.context, bounds, size },
+    facts: {
+      pose: axis ? (plane?.viewport ?? null) : pose,
+      size,
+      bounds,
+      modes: ["3d", "top", "north", "east"],
+      layers: SPACE_LAYERS,
+      fresh: metadata?.stamp.fresh ?? false,
+      totalElements: metadata?.elements.length ?? 0,
+      omittedElements: metadata?.omittedElements ?? 0,
+      unavailableElements: metadata?.unavailableElements.length ?? 0,
+      truncated: (metadata?.elements.length ?? 0) > 200,
+      sources: (metadata?.stamp.sources ?? []).slice(0, 100),
+      totalSources: metadata?.stamp.sources.length ?? 0,
+      sourcesTruncated: (metadata?.stamp.sources.length ?? 0) > 100,
+      cutError: cut?.error ?? null,
+      visibilityMembersBeforeCuts:
+        meshes?.instances.filter(
+          (instance) => !hidden.has(instance.key) && (!isolated || isolated.has(instance.key)),
+        ).length ?? 0,
+      elements: (metadata?.elements ?? []).slice(0, 200).map((element) => ({
+        key: spaceElementKey(element.handle),
+        documentKey: element.handle.documentKey,
+        linkInstanceId: element.handle.linkInstanceId ?? null,
+        category: element.handle.category,
+        bounds: element.bounds,
+        focus: element.focus,
+      })),
+    },
+  });
 
   const onPick = (pick: Pick | null, event: PointerEvent) => {
     if (pick) return setPage({ selected: pick.instance.key, row: null }, push);

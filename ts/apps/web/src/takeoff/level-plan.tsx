@@ -29,6 +29,8 @@ import {
   type RoomState,
 } from "#/takeoff/room-state";
 import type { ModelRoom, ModelZone } from "#/takeoff/world";
+import type { TakeoffPage } from "./actions";
+import { useRouteViewBridge } from "#/route/view-bridge";
 
 /** Revit's plan export: pixel size and where three corners sit in model feet. */
 type PlanRegistration = {
@@ -93,6 +95,7 @@ export function PlanImageLayer({ plan, frame }: { plan: TakeoffPlanImage; frame:
 }
 
 export function LevelPlan({
+  lease,
   viewport: pageViewport,
   onViewport,
   above,
@@ -111,6 +114,13 @@ export function LevelPlan({
   onCursor,
   onClear,
 }: {
+  lease?: {
+    thread?: string;
+    visible: boolean;
+    page: TakeoffPage;
+    applyViewport: (viewport: PlaneViewport | null) => void;
+    context: Record<string, unknown>;
+  };
   viewport: PlaneViewport | null;
   onViewport: (next: PlaneViewport, how: "gesture" | "move") => void;
   above?: ReactNode;
@@ -162,6 +172,52 @@ export function LevelPlan({
     world?.fit ?? null,
     onViewport,
   );
+  useRouteViewBridge({
+    route: "takeoffs",
+    thread: lease?.thread,
+    surface: "route",
+    visible: !!lease?.visible && !!world && !!size,
+    page: lease?.page ?? {},
+    apply: (patch) => lease?.applyViewport(patch.viewport as PlaneViewport | null),
+    context: {
+      ...lease?.context,
+      size,
+      frame: world?.frame.transform ?? null,
+      plan: plan ? { href: plan.href, registration: plan.registration } : null,
+    },
+    facts: {
+      pose: view,
+      size,
+      fit: world?.fit ?? null,
+      frame: world?.frame.transform ?? null,
+      units: "model XY feet; affine frame to world units; viewport scale and screen translations",
+      planRefusal: planRefusal ?? null,
+      planError: planError ?? null,
+      planNote: planNote ?? null,
+      totalZones: zones.length,
+      drawnZones: drawn.length,
+      skippedZones: skipped,
+      truncated: drawn.length > 100,
+      totalRooms: drawn.reduce((total, zone) => total + zone.rooms.length, 0),
+      roomsTruncated: drawn.reduce((total, zone) => total + zone.rooms.length, 0) > 100,
+      rooms: drawn
+        .flatMap((zone) => zone.rooms.map((room) => ({ zone, room })))
+        .slice(0, 100)
+        .map(({ zone, room }) => ({
+          guid: room.guid,
+          name: room.name,
+          zone: zone.zone.guid,
+          bounds: room.outer ? loopBounds([room.outer]) : null,
+        })),
+      zones: drawn.slice(0, 100).map((zone) => ({
+        guid: zone.zone.guid,
+        name: zone.name,
+        bounds: zone.zone.bounds,
+        dimmed: shown !== null && !shown.has(zone.zone.guid),
+        rooms: zone.rooms.length,
+      })),
+    },
+  });
   const shapes = useMemo(
     () =>
       world

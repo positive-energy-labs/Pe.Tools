@@ -457,6 +457,10 @@ export const routeAddresses = {
       viewport: planViewport,
       demo,
     },
+    agent: {
+      policy:
+        "Change only the viewport of the visible Rooms plan. Use plane:scale,tx,ty in the displayed frame, or an empty viewport to fit. Facts name the displayed document, acquired snapshot and plan. Focus, view, stage, layers and room selection remain the person's. A view change does not partition rooms, stage Work or write Revit.",
+    },
   },
   takeoffs: {
     path: "/takeoffs",
@@ -468,8 +472,11 @@ export const routeAddresses = {
       viewport: planViewport,
       demo,
     },
+    agent: {
+      policy:
+        "Change only the viewport of the visible Takeoffs plan. Use plane:scale,tx,ty in the displayed frame, or an empty viewport to fit. Facts identify the exact live, saved or fixture capture and current level scope. This does not change level, zone, room, action scope, Work or an RHVAC file, and does not read or write Revit.",
+    },
   },
-  // ponytail: no `agent` block until a policy and a web lease exist, so no unusable Space capability is published.
   space: {
     path: "/space",
     title: "Space",
@@ -483,6 +490,10 @@ export const routeAddresses = {
       demo,
     },
     conflict: spaceConflict,
+    agent: {
+      policy:
+        "Change the visible captured Space picture using ids, mode, viewport, cuts, selected, hidden, isolated and layers. Scene is read-only. Use exact element keys from this loaded scene, preserving document and link identity; unknown members are refused. A null isolation shows all; an empty isolation shows none. Viewport must match the mode, or be empty to fit. Cuts use the scene frame. Editing ids only prepares a later explicit capture. View changes never capture, recapture, select in Revit or write Work.",
+    },
   },
   pods: {
     path: "/pods",
