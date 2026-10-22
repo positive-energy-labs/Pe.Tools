@@ -202,7 +202,9 @@ function EScreenBody({ props }: { props: ProtoProps }) {
     [
       surveyed,
       scope,
-      page,
+      page.fan,
+      page.epoch,
+      page.evaluation,
       doc,
       nameOf,
       groupLabel,

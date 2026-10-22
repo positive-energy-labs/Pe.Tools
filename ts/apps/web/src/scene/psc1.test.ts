@@ -43,6 +43,8 @@ describe("PSC1 decode", () => {
     expect(meta.triangles).toBe(2);
     expect(meshes.positions).toHaveLength(18);
     expect(meshes.positions[17]).toBe(17);
+    // Development prop inspection must not enumerate the geometry buffer or element array.
+    expect(Object.keys(meshes)).toEqual(["bounds"]);
     expect(meshes.bounds.maxX).toBe(1);
     expect(meshes.instances).toEqual([
       {

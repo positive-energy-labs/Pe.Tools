@@ -129,19 +129,14 @@ export function Scene3D(props: Scene3DProps): ReactNode {
       published.current = v;
       latest.current.onViewport(v, "gesture");
     };
-    let queued = 0;
     const start = () => void (gesturing.current = true);
-    const change = () => {
-      if (gesturing.current) queued ||= requestAnimationFrame(() => ((queued = 0), publish()));
-    };
+    // FOOTGUN: publishing during a drag navigates the route and reruns domain projections.
+    // The renderer owns motion; onProject keeps annotations current without changing Page.
     const end = () => {
       gesturing.current = false;
-      cancelAnimationFrame(queued);
-      queued = 0;
       publish();
     };
     moves.addEventListener("start", start);
-    moves.addEventListener("change", change);
     moves.addEventListener("end", end);
 
     // The element under the pointer, declared where the element menu looks (absent when none).
@@ -189,7 +184,6 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     canvas.addEventListener("pointerup", pointerUp);
     canvas.addEventListener("contextmenu", contextMenu);
     return () => {
-      cancelAnimationFrame(queued);
       cancelAnimationFrame(hover);
       canvas.removeEventListener("pointermove", pointerMove);
       canvas.removeEventListener("pointerleave", pointerLeave);

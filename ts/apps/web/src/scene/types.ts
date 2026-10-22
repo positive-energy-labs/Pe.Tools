@@ -32,11 +32,25 @@ export type SceneInstance = {
 };
 
 /** A decoded scene: unindexed triangle positions plus one range per element. */
-export type SceneMeshes = {
-  positions: Float32Array;
-  bounds: Bounds;
-  instances: readonly SceneInstance[];
-};
+export class SceneMeshes {
+  // FOOTGUN: React's development prop inspector enumerates public geometry on each update.
+  #positions: Float32Array;
+  #instances: readonly SceneInstance[];
+  constructor(
+    positions: Float32Array,
+    readonly bounds: Bounds,
+    instances: readonly SceneInstance[],
+  ) {
+    this.#positions = positions;
+    this.#instances = instances;
+  }
+  get positions(): Float32Array {
+    return this.#positions;
+  }
+  get instances(): readonly SceneInstance[] {
+    return this.#instances;
+  }
+}
 
 /** An answer drawn over the scene in its own group, keyed so it is cheap to add and remove.
  * `build` draws in world coordinates (host feet); the group is disposed when the key leaves or

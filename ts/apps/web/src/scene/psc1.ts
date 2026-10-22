@@ -3,7 +3,7 @@
  * metadata JSON, padding to 4 bytes, then float32 xyz positions, nine per triangle, unindexed.
  * Space and ducts fetch the same artifact; both decode it here.
  */
-import type { SceneInstance, SceneMeshes } from "./types";
+import { SceneMeshes, type SceneInstance } from "./types";
 
 import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
 
@@ -65,6 +65,6 @@ export function decodeScene(buffer: ArrayBuffer): { metadata: Psc1Metadata; mesh
   if (nextVertex !== metadata.triangles * 3) throw Error("Incomplete element vertex ranges");
   return {
     metadata,
-    meshes: { positions: new Float32Array(buffer, offset), bounds: metadata.bounds, instances },
+    meshes: new SceneMeshes(new Float32Array(buffer, offset), metadata.bounds, instances),
   };
 }
