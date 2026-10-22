@@ -256,7 +256,7 @@ test("live /schedules: capture then apply files a run receipt", async () => {
   expect(workflows).toEqual(["schedule.capture", "schedule.apply"]);
 }, 180_000);
 
-test("live /family: capture, then apply twice (plan, send) files a run receipt", async () => {
+test("live /family: capture, then one apply press (plan and send) files a run receipt", async () => {
   const { shown, workflows } = await liveLoop("family", async (page) => {
     const pod = await openLive(page, "/family", "demo=capture&live=1");
     await go(page, `${page.url()}&pod=${pod}`);
@@ -265,10 +265,9 @@ test("live /family: capture, then apply twice (plan, send) files a run receipt",
     // The capture's receipt is a log row whose label opens the member it filed.
     await logged(page, "captured 1 family", path);
     if (SCRATCH) await page.screenshot({ path: join(SCRATCH, "family-captured.png") });
-    // Apply is an Applying verb: press 1 plans and opens the sheet (ruling 35).
+    // Apply is an Applying verb: one press plans and applies (ruling 52); no sheet opens.
     await go(page, `${page.url()}&stage=apply`);
     await run(page, "apply");
-    await applySheet(page);
     // The log prints the verb the user pressed, never the action key (w4-revit defect 9).
     await logged(page, "apply", "ran");
     // The owner answers the lamp's host-status read, so the head names no broken host.

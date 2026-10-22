@@ -357,39 +357,9 @@ const familySeed = (
   page: {
     buildReview: null,
     stage,
+    // No sheet: `/family` applies in one press (ruling 52); the staged edits are the preview.
     ...(saved ? { pod: DEMO_POD, path: demoPath(name) } : {}),
-    ...(stage === "apply"
-      ? { confirming: true, sheet: { entries: [{ ...DEMO_PLAN, plan: "demo-plan" }] } }
-      : {}),
   },
-});
-
-/** The plan the apply seed confirms: what `family.plan` would return. */
-const DEMO_PLAN = ffPlanRow({
-  familyId: 7001,
-  familyName: "grd",
-  planHash: "demo-plan-grd",
-  changes: [
-    {
-      section: "parameters",
-      key: "PE_G___Width",
-      kind: "set",
-      mappedFrom: null,
-      before: "1in",
-      after: "2in",
-    },
-    {
-      section: "parameters",
-      key: "PE_G___Depth",
-      kind: "add",
-      mappedFrom: "Depth",
-      before: null,
-      after: {},
-    },
-  ],
-  runEffects: ["regenerate types"],
-  refusals: [],
-  warnings: [],
 });
 
 const absentAuthoringFacts: FamilyAuthoringFacts = {

@@ -292,7 +292,10 @@ session. The unsquashed step commits are at tag `entity-route-20260924-unsquashe
 - `/schedules` apply over staged cells is one press: `schedule.grid.push` has no dry run. It lost
   the push precondition `requires.work`; `staged.ready` and the host's revision base still refuse a
   stale write.
-- Ruling 52 (`/family` one-press apply) and rulings 48-51 (Pea surface) are ruled, not built.
+- Rulings 48-51 (Pea surface): the view read and shape (48) are built on every entity route and
+  `/pods` through the route contract (2026-10-22, branch `adopt/l4-entity`); Pea planning families
+  (50) and the catalog Work key (51) are ruled, not built. Ruling 52 (`/family` one-press apply) is
+  built: only a plan that declares `confirm` (`/families`) opens a sheet.
 - `/families` declares a `capture` verb (`families.capture`, human only). Ruling 49 defers families
   capture to the parameter metadata pane; the verb is live until that is ruled.
 - History is an empty stage on `/schedules` and `/family`; their past captures exist on the host.

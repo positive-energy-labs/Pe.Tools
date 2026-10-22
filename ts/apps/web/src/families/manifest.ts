@@ -240,6 +240,8 @@ export const familiesSpec: EntityRouteDef<FamiliesRouteDocument, FamiliesReading
       apply: async (ctx, included) => {
         await applyFamiliesPlans(ctx, included, true);
       },
+      // The one two-press apply (ruling 52): many families, rows a person may hold back.
+      confirm: true,
     },
     /**
      * The editable table's half. Plan takes staged cells only, generates one patch draft per family

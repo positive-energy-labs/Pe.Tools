@@ -18,7 +18,7 @@ import {
   type SemanticActionKey,
 } from "@pe/agent-contracts";
 import { isSpecOf, workflow } from "./workflow";
-import type { Refusal } from "./refusal";
+import { refuse, type Refusal } from "./refusal";
 import { NATIVE_APPLY_WAIT_S, NATIVE_READ_WAIT_S } from "./waits";
 import {
   defineRoute,
@@ -127,6 +127,11 @@ export interface ApplyPlan<W, R extends string, P> {
   /** Rows held back from apply; the route holds them where its host checks them. */
   excluded?: (view: EntityView<W, R, P>) => readonly string[];
   apply: (ctx: ECtx<W, R, P>, rows: readonly PlanEntry[], source: MemberSource) => Promise<void>;
+  /**
+   * Apply confirms the plan in a second press (`/families` only, MAP ruling 52); absent = one
+   * press plans and applies, and stops on a row the plan refuses. Both of the route's lanes follow it.
+   */
+  confirm?: true;
 }
 
 /** What an entity route's own hooks receive: its audit's ctx plus the entity page and pods. */
@@ -278,7 +283,9 @@ export function entityRoute<W, const R extends string, P extends object, const A
       ? view
       : null;
   };
-  const planning = (ctx: EntityCtx) => Boolean(lane(ctx)) && !sending(ctx);
+  const confirm = Boolean(def.plan?.confirm);
+  /** Press 1 of a confirmed apply: it plans and opens the sheet, and changes nothing. */
+  const planning = (ctx: EntityCtx) => confirm && Boolean(lane(ctx)) && !sending(ctx);
   const capture: RouteAction<unknown, string, EntityPage, never> = {
     waitSeconds: NATIVE_READ_WAIT_S,
     label: `capture ${def.entity}`,
@@ -318,7 +325,9 @@ export function entityRoute<W, const R extends string, P extends object, const A
         ? `plans ${objectOf(ctx) === "cells" ? "the staged cells (filed nowhere)" : `the saved ${def.entity} spec`} and opens the confirmation sheet; changes nothing. Press again to apply.`
         : objectOf(ctx) === "cells" && !staged?.plan
           ? "writes the staged cells to Revit, then reads them back"
-          : hostActions[def.apply].says,
+          : lane(ctx) && !confirm
+            ? `plans and applies ${objectOf(ctx) === "cells" ? "the staged cells" : `the saved ${def.entity} spec`} in one press; stops if the plan refuses a row`
+            : hostActions[def.apply].says,
     plans: planning,
     input: z.void() as unknown as z.ZodType<never>,
     dirties: ["pods", ...(def.applies ?? [])],
@@ -348,7 +357,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
         await workflow(def.apply, { source: sourceOf(ctx) }, ctx);
         return null;
       }
-      const view = sending(ctx);
+      let view = sending(ctx);
       if (!view) {
         // What the plan reads, taken before it reads it: the sheet's staged evidence.
         const was = Object.fromEntries(
@@ -357,9 +366,19 @@ export function entityRoute<W, const R extends string, P extends object, const A
         const sheet = cells
           ? { ...(await staged!.plan!(ctx as never)), staged: was }
           : await plan!.read(ctx as never, sourceOf(ctx));
-        // The sheet opens over whatever stage the person is in (F-B-8).
-        ctx.setPage({ confirming: true, sheet }, ["stage", "pod", "path"]);
-        return null;
+        if (confirm) {
+          // The sheet opens over whatever stage the person is in (F-B-8).
+          ctx.setPage({ confirming: true, sheet }, ["stage", "pod", "path"]);
+          return null;
+        }
+        // One press (ruling 52): the staged edits were the preview; a refused row stops it.
+        const flagged = sheet.entries.find((entry) => entry.flag);
+        if (flagged || !sheet.entries.length)
+          return refuse(
+            "not-ready",
+            flagged ? `${flagged.name}: ${flagged.flag}` : "the plan has no changes to apply",
+          );
+        view = { sheet, excluded: new Set(), included: sheet.entries, stale: false };
       }
       // A staged apply may report its own outcome (applied X of N, refused, failed in Revit).
       const outcome = cells
