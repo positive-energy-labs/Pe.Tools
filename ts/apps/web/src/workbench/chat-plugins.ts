@@ -25,7 +25,7 @@ import { publicRoutes } from "#/route/builtin-routes";
 import { isRecord } from "#/route/route-owner";
 
 export type ChatPluginRoute = string;
-export const chatPluginRoutes = () => publicRoutes.keys();
+const chatPluginRoutes = () => publicRoutes.keys();
 export const chatPluginTitle = (route: ChatPluginRoute) => {
   const manifest = publicRoutes.get(route)?.manifest;
   return manifest ? (manifest.work?.title ?? manifest.name) : `Unavailable route: ${route}`;

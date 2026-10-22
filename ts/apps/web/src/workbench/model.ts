@@ -28,7 +28,7 @@ export function scrollTopForIntent(
   return clamp(item.top - focal * metrics.clientHeight, 0, max);
 }
 
-export function turnAtFocalPoint(
+function turnAtFocalPoint(
   geometry: FocalGeometry[],
   metrics: ScrollMetrics,
   focal = 0.6,

@@ -10,7 +10,7 @@ export interface TableActionContext {
   edit: (cell: HTMLTableCellElement) => boolean;
 }
 
-export const canEditCell = (cell: HTMLTableCellElement | null): cell is HTMLTableCellElement =>
+const canEditCell = (cell: HTMLTableCellElement | null): cell is HTMLTableCellElement =>
   Boolean(
     cell?.isConnected &&
     cell.querySelector(

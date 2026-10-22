@@ -572,7 +572,7 @@ const peaSession = (
 });
 
 /** Pea's background Revit 2025, mid-job on its own copy of Hospital-MEP. */
-export const BAY_PEA_25 = peaSession("pea-25-schedules", 2025, 22910, [
+const BAY_PEA_25 = peaSession("pea-25-schedules", 2025, 22910, [
   doc("Hospital-MEP_kaitp.rvt", `${PEA_WORK}\\7f3a\\Hospital-MEP_kaitp.rvt`, {
     openId: "22910-copy",
     isActive: true,

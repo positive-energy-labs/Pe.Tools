@@ -4,7 +4,7 @@ import { HttpEffect, HttpRouter } from "effect/unstable/http";
 import { catalogSchema, type Catalogs, type CatalogTable } from "@pe/ducts-domain/catalog";
 import { productUserContentRootPath } from "./product-paths.ts";
 
-export const productCatalogsRootPath = () => join(productUserContentRootPath(), "Catalogs");
+const productCatalogsRootPath = () => join(productUserContentRootPath(), "Catalogs");
 export interface CatalogReading {
   tables: Catalogs;
   findings: string[];

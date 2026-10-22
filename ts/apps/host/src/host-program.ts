@@ -151,7 +151,7 @@ function installedTrayArguments(file: ServiceFile, show: boolean): string[] {
 }
 
 /** Claim-owned child: EOF asks the shim to dispose, and the finalizer awaits its actual exit. */
-export async function startInstalledTray(
+async function startInstalledTray(
   handle: ServiceHostHandle,
   show = false,
 ): Promise<() => Promise<void>> {

@@ -92,7 +92,7 @@ export async function userCodexMcpServers(configPath: string): Promise<string[]>
 }
 
 /** The project-level Codex config Pea writes in the world root: the user's own servers, off by name. */
-export function peaCodexProjectConfig(names: readonly string[]): string {
+function peaCodexProjectConfig(names: readonly string[]): string {
   return [
     "# Written by Pea at every host start. Your own Codex MCP servers (~/.codex/config.toml) stay",
     "# out of Pea threads; Pea attaches its own. Edits here are overwritten.",

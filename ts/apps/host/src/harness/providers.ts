@@ -121,7 +121,7 @@ export function isAuthRefusal(error: unknown): boolean {
 const CODEX_PROVIDER = "pea_endpoint";
 
 /** Known inference overrides only; CLI files, credential stores and endpoint billing remain outside this boundary. */
-export function cleanHarnessEnv(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+function cleanHarnessEnv(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return Object.fromEntries(
     Object.entries(source).filter(
       ([key]) =>

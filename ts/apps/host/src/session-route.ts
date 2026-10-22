@@ -60,7 +60,7 @@ export function resolveStartProject(lane: HostLane, sourceRoot: string | null): 
 }
 
 /** GET (list) CLI args; `id` narrows to one session, `all` includes the graveyard. */
-export function sessionStatusArgs(session?: SdkSessionSelection, all = false): string[] {
+function sessionStatusArgs(session?: SdkSessionSelection, all = false): string[] {
   return sessionListArgv({ ...session, all });
 }
 
@@ -69,12 +69,12 @@ type SessionCliRunner<R = never> = (args: readonly string[]) => Effect.Effect<st
 type SessionCliOutcome = { readonly status: number; readonly bodyJson: string };
 
 /** `doc list --recent [--year]`: the per-year recents; needs no Revit. */
-export function docRecentsArgs(year?: string | null): string[] {
+function docRecentsArgs(year?: string | null): string[] {
   return docListArgv({ recent: true, year: readOptionalString(year) });
 }
 
 /** Open documents in the SDK-resolved session; omission runs its default ladder. */
-export function docListArgs(session?: SdkSessionSelection, doc?: string | null): string[] {
+function docListArgs(session?: SdkSessionSelection, doc?: string | null): string[] {
   return docListArgv({ ...session, doc: readOptionalString(doc) });
 }
 
@@ -136,7 +136,7 @@ export const runPeRevitCli: SessionCliRunner = (args) =>
   });
 
 /** The read-only SDK verb a Reading names. Dialogs lists windows; dismissal is an Instances action. */
-export function sdkReadingArgs(request: SdkReading): string[] {
+function sdkReadingArgs(request: SdkReading): string[] {
   switch (request.read) {
     case "holdings":
       throw Error("Holdings are read from canonical Machine.");

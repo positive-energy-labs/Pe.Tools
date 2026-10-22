@@ -13,7 +13,7 @@ import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import { OwnerInspector } from "#/state/owner-inspector";
 
-export function AppChrome() {
+function AppChrome() {
   return (
     <>
       <MachineAttention />
@@ -24,7 +24,7 @@ export function AppChrome() {
   );
 }
 
-export function AppDevtools({ pathname, shell }: { pathname: string; shell?: string }) {
+function AppDevtools({ pathname, shell }: { pathname: string; shell?: string }) {
   if (pathname === "/open" || shell === "tray") return null;
   return (
     <TanStackDevtools

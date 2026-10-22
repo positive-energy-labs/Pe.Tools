@@ -21,7 +21,7 @@ export function hostLog() {
   return (log ??= new HostLog(join(stateDir(), "log")));
 }
 /** Every committed receipt revision is appended to the host log, in commit order. */
-export const logReceipts = (receipts: ActionJournal, into: HostLog) =>
+const logReceipts = (receipts: ActionJournal, into: HostLog) =>
   receipts.subscribe({}, (receipt) => into.append({ kind: "receipt", receipt }));
 export function hostActionJournal() {
   if (journal) return journal;

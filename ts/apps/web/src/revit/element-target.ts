@@ -3,7 +3,7 @@ import { revitTarget, type RevitElementReference } from "@pe/kit/lang/row";
 import type { OpRequestOf, OpResponseOf } from "@pe/host-contracts/operation-types";
 import type { DetachedAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
-export type RevitTargetSource = "native" | "fixture" | "saved" | "dry-run";
+type RevitTargetSource = "native" | "fixture" | "saved" | "dry-run";
 /** Construct from the displayed observation, never the current route selector or thread head. */
 export type RevitObservationScope = {
   document: DocumentRef | null;

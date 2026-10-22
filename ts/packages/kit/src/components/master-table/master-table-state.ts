@@ -1,7 +1,6 @@
 import type { KeyboardEvent } from "react";
 import type { SortingState } from "@tanstack/react-table";
 
-import type { CellMove } from "./cell-navigation";
 import type { TableState } from "./model";
 
 export function toSortingState(sorts: TableState["sorts"]): SortingState {
@@ -17,14 +16,6 @@ export function resolveUpdater<Value>(
   previous: Value,
 ): Value {
   return typeof update === "function" ? (update as (previous: Value) => Value)(previous) : update;
-}
-
-export function keyDirection(key: string, shift: boolean): CellMove | null {
-  if (key === "ArrowUp" || (key === "Enter" && shift)) return "up";
-  if (key === "ArrowDown" || key === "Enter") return "down";
-  if (key === "ArrowLeft" || (key === "Tab" && shift)) return "left";
-  if (key === "ArrowRight" || key === "Tab") return "right";
-  return null;
 }
 
 /** A cell's text editor. A hidden form proxy (base-ui renders one inside every Combobox) is never

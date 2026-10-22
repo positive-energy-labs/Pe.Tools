@@ -109,7 +109,7 @@ export function mentionFace(
 }
 
 /** The `@query` the caret sits at the end of: an `@` at the start or after whitespace. */
-export function mentionQuery(text: string, caret: number): { start: number; query: string } | null {
+function mentionQuery(text: string, caret: number): { start: number; query: string } | null {
   const match = /(?:^|\s)@([^\s@]*)$/.exec(text.slice(0, caret));
   return match ? { start: caret - match[1]!.length - 1, query: match[1]! } : null;
 }
@@ -165,7 +165,7 @@ export function dropMention(draft: ChatDraft, key: string): ChatDraft {
 }
 
 /** Pick `row` for the `@query` at `caret`: the token replaces the query, the mention joins once. */
-export function pickMention(
+function pickMention(
   draft: ChatDraft,
   caret: number,
   row: Capability,

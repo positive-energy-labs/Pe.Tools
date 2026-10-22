@@ -1,11 +1,7 @@
-import { createContext, useContext, type ReactNode } from "react";
-
-/** False inside a host pane (Chat's plugin): the pane's split already spaced it, so the route's
- *  own surface adds no second gutter. */
-export const SurfaceInset = createContext(true);
+import type { ReactNode } from "react";
 
 export function Surface({ head, children }: { head?: ReactNode; children: ReactNode }) {
-  const padding = useContext(SurfaceInset) ? "var(--gutter)" : 0;
+  const padding = "var(--gutter)";
   const body = (
     <div
       data-slot="surface"

@@ -175,10 +175,10 @@ export type HarnessThreadsOptions = {
 };
 
 /** A turn with no session update for this long gets a `waiting` marker, and again each period. */
-export const WAITING_MS = 60_000;
+const WAITING_MS = 60_000;
 export const IDLE_CHILD_MS = 15 * 60_000;
 /** How long a prompt waits for the turn it interrupts to end before refusing. */
-export const INTERRUPT_MS = 10_000;
+const INTERRUPT_MS = 10_000;
 /** Thrown by `input` on a body route sent without a JSON content type; served as 415. */
 class NotJson extends Error {}
 const warn = (message: string) => Effect.runSync(Effect.logWarning(message));

@@ -100,7 +100,7 @@ const SYSTEM_OPTIONS = [
 ];
 const TONE = { approved: "done", submitted: "ink", revise: "caution", hold: "alarm" } as const;
 
-export const SEGMENTS: readonly Segment[] = [
+const SEGMENTS: readonly Segment[] = [
   {
     tag: "SA-101",
     run: "Main trunk off AHU-1",
@@ -288,7 +288,7 @@ export const SEGMENTS: readonly Segment[] = [
 const num = (value: number | null, digits = 0) =>
   value === null ? "—" : value.toLocaleString("en-US", { maximumFractionDigits: digits });
 
-export const SEGMENT_COLUMNS: Column<Segment>[] = [
+const SEGMENT_COLUMNS: Column<Segment>[] = [
   {
     key: "tag",
     label: "Tag",
@@ -472,7 +472,7 @@ const FINDING_TONE = {
   unreviewed: "mute",
 } as const;
 
-export const PARAMETERS: readonly ParameterAudit[] = [
+const PARAMETERS: readonly ParameterAudit[] = [
   {
     family: "Rectangular Duct Tee",
     parameter: "Branch Width",
@@ -597,7 +597,7 @@ export const PARAMETERS: readonly ParameterAudit[] = [
 
 const PARAMETER_VERDICT_TONE = FINDING_TONE;
 
-export const PARAMETER_COLUMNS: Column<ParameterAudit>[] = [
+const PARAMETER_COLUMNS: Column<ParameterAudit>[] = [
   {
     key: "family",
     label: "Family",

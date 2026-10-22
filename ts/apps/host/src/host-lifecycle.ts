@@ -36,7 +36,7 @@ type PortOccupant = {
 };
 
 /** A successful exclusive bind proves availability; the actual host bind and SDK claim still arbitrate races. */
-export function installedPortAvailable(port: number): Promise<boolean> {
+function installedPortAvailable(port: number): Promise<boolean> {
   return new Promise((resolve, reject) => {
     const server = createServer().unref();
     server.once("error", (error: NodeJS.ErrnoException) => {
@@ -50,7 +50,7 @@ export function installedPortAvailable(port: number): Promise<boolean> {
 }
 
 /** Native netstat's numeric listener rows; unknown formats never establish an owner. */
-export function tcpListenerPids(stdout: string, port: number): number[] {
+function tcpListenerPids(stdout: string, port: number): number[] {
   const endpoints = new Set([`127.0.0.1:${port}`, `0.0.0.0:${port}`, `[::]:${port}`]);
   const pids = new Set<number>();
   for (const line of stdout.split(/\r?\n/)) {

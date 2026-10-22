@@ -47,9 +47,6 @@ import { podHost } from "#/route/pods";
 import type { Inspectable } from "#/route/inspect";
 import { familiesGroupOf, stagedDrafts } from "./staged";
 
-/** The families view opens on parameters that hold a value somewhere in the shown types. */
-export { DEFAULT_FAMILIES_QUERY } from "./query-filters";
-
 export interface FamiliesPage {
   /** The next read's scope. Picker changes never issue a matrix read. */
   draft: FamiliesDraft;

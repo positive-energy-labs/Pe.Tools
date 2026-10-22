@@ -105,7 +105,7 @@ export const diameterFor = (Q: number, friction: number) =>
   ((C * Q ** EXP.cfm) / friction) ** (1 / EXP.diameter);
 
 /** Huebscher: the round duct equivalent to a × b. */
-export const equivalent = (a: number, b: number) => (1.3 * (a * b) ** 0.625) / (a + b) ** 0.25;
+const equivalent = (a: number, b: number) => (1.3 * (a * b) ** 0.625) / (a + b) ** 0.25;
 
 /** The rectangular slots: for each side `a`, the side `b ≥ a` that matches D (bisection). */
 export function rectSides(D: number, sides = [4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 30, 36]) {

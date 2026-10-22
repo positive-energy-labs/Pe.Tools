@@ -17,7 +17,7 @@ import { DatabaseSync } from "node:sqlite";
 
 const SCHEMA_VERSION = 1;
 
-export type DocMember = {
+type DocMember = {
   memberId: string;
   kind: "Class" | "Interface" | "Constructor" | "Method" | "Property" | "Field" | "Event";
   name: string;
@@ -62,7 +62,7 @@ export type LocalDocsOptions = {
 // ---------------------------------------------------------------------------
 // Discovery
 
-export function findRevitInstallXmls(year: number): string[] {
+function findRevitInstallXmls(year: number): string[] {
   const programFiles = process.env.ProgramFiles ?? "C:\\Program Files";
   const root = join(programFiles, "Autodesk", `Revit ${year}`);
   return ["RevitAPI.xml", "RevitAPIUI.xml", "RevitAPIIFC.xml"]
@@ -109,7 +109,7 @@ function collectNamed(block: string, tag: string, attr: string): string {
   return parts.join(" | ");
 }
 
-export function parseMemberId(memberId: string): {
+function parseMemberId(memberId: string): {
   kind: DocMember["kind"];
   name: string;
   namespace: string;
@@ -154,7 +154,7 @@ export function parseMemberId(memberId: string): {
   return { kind, name, namespace, declaringType, signature };
 }
 
-export function parseDocXml(xml: string, assembly: string): DocMember[] {
+function parseDocXml(xml: string, assembly: string): DocMember[] {
   const members: DocMember[] = [];
   for (const m of xml.matchAll(/<member name="([^"]+)">([\s\S]*?)<\/member>/g)) {
     const memberId = m[1];
@@ -185,7 +185,7 @@ export function parseDocXml(xml: string, assembly: string): DocMember[] {
 // Tokenization: FTS5's tokenizer can't split camelCase, so we index a
 // pre-split shadow column and split query terms the same way.
 
-export function splitCamel(text: string): string[] {
+function splitCamel(text: string): string[] {
   return text
     .split(/[^A-Za-z0-9]+/)
     .flatMap((w) => w.split(/(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/))

@@ -44,7 +44,7 @@ const NATIVE: Record<
  * A heal group sent without items is planned here from a fresh snapshot with the route's own
  * classifier (`heal.ts`), so an agent can name a group; groups with items pass through untouched.
  */
-export async function planned(input: DuctsHealInput, read: () => Promise<DuctSnapshot>) {
+async function planned(input: DuctsHealInput, read: () => Promise<DuctSnapshot>) {
   if (input.groups.every((g) => g.items)) return input;
   const plan = healPlan(await read());
   return {

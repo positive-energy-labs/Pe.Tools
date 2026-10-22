@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { Receipt, ReceiptReader } from "@pe/agent-contracts";
 import { currentCaller, Refused, refusalHeaders, requireHuman } from "./control.ts";
 
-export const scheduleSchema = z.discriminatedUnion("type", [
+const scheduleSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("interval"), everyMs: z.number().finite().int().min(60_000) }),
   z.strictObject({
     type: z.literal("fixed_time"),
@@ -14,7 +14,7 @@ export const scheduleSchema = z.discriminatedUnion("type", [
   }),
 ]);
 type Schedule = z.infer<typeof scheduleSchema>;
-export function nextRun(schedule: Schedule, from: Date): string {
+function nextRun(schedule: Schedule, from: Date): string {
   if (schedule.type === "interval")
     return new Date(+from + Math.max(60_000, schedule.everyMs)).toISOString();
   const [hour, minute] = schedule.timeOfDay.split(":").map(Number);
@@ -31,7 +31,7 @@ export function nextRun(schedule: Schedule, from: Date): string {
   throw Error("No next scheduled occurrence");
 }
 const isSameSchedule = (a: Schedule, b: Schedule) => JSON.stringify(a) === JSON.stringify(b);
-export const missedRun = (schedule: Schedule, due: string, now: Date) =>
+const missedRun = (schedule: Schedule, due: string, now: Date) =>
   schedule.type === "fixed_time" && +now - Date.parse(due) > 10 * 60_000;
 
 const FEEDBACK_MINER_MIN_RECEIPTS = 25;
@@ -65,7 +65,7 @@ export type ScheduledLaunch = {
   prompt: string;
   selection: ScheduledTask["selection"];
 };
-export function revitTouching(receipt: Receipt): boolean {
+function revitTouching(receipt: Receipt): boolean {
   // Native receipt evidence is an exact SDK process/request join, independent of tool names.
   // Revit-touching excludes missing/running/rejected; unknown and abandoned attempts matter too.
   // Count once by id, not queue/usage echoes or later revisions.
@@ -74,7 +74,7 @@ export function revitTouching(receipt: Receipt): boolean {
     !["missing", "running", "rejected"].includes(receipt.body.verdict)
   );
 }
-export function feedbackMiner(now: Date): ScheduledTask {
+function feedbackMiner(now: Date): ScheduledTask {
   const schedule: Schedule = { type: "fixed_time", timeOfDay: "03:00" };
   return {
     id: "feedback-miner",

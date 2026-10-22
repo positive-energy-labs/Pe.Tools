@@ -1,13 +1,13 @@
 export const FOCAL = 0.5;
 /** A band's height grows with the log of its turn's length: a one-liner still reads as a block,
  *  and a wall of output stops at `MAX_BAND` instead of eating the rail. */
-export const MIN_BAND = 3;
-export const MAX_BAND = 24;
+const MIN_BAND = 3;
+const MAX_BAND = 24;
 /** Rail px per doubling of a turn's length, counted in 40px steps of transcript (two lines). */
 const LOG_STEP = 2.5;
 const LINE_PX = 40;
 
-export function bandHeight(docPx: number): number {
+function bandHeight(docPx: number): number {
   return Math.min(MAX_BAND, MIN_BAND + LOG_STEP * Math.log2(1 + Math.max(0, docPx) / LINE_PX));
 }
 

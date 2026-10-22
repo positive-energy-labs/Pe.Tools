@@ -444,7 +444,7 @@ export function useReading<T = unknown>(
  * The slice of a Reading a component uses. A frame that leaves the slice equal (JSON-wise) does not
  * notify, so a poll that moved other fields re-renders nobody here.
  */
-export function useReadingSlice<T, S>(
+function useReadingSlice<T, S>(
   request: ReadingRequest | null,
   select: (reading: Reading<T>) => S,
   source: Readings = peReadings,
@@ -536,10 +536,6 @@ export interface PeInfo {
   world?: unknown;
   bridgeIsConnected: boolean;
 }
-
-/** The shell lamp and every capability gate read the same Reading; the host polls it at 5s. */
-export const useHostStatus = (enabled = true): Reading<PeInfo> =>
-  useReading<PeInfo>(enabled ? { kind: "host-status" } : null);
 
 /* -- Inventory: the open documents the host tracks, fused with the SDK census -------------- */
 

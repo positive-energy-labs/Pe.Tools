@@ -59,7 +59,7 @@ export interface ReadImageFailure {
 
 export type ReadImageResult = ReadImageSuccess | ReadImageFailure;
 
-export function isReadImageSuccess(value: unknown): value is ReadImageSuccess {
+function isReadImageSuccess(value: unknown): value is ReadImageSuccess {
   if (typeof value !== "object" || value === null) return false;
   const record = value as Record<string, unknown>;
   return (

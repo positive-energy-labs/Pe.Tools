@@ -13,7 +13,7 @@ export const routePath = (key: string) => podWorkPath(key) ?? builtinRoutePath(k
 export const routeKey = (path: string) => podPathWork(path) ?? builtinRouteKey(path);
 export const TASKS = APP_TASKS;
 export type Exposure = AppExposure;
-export const CATALOGUE = TOOLS;
+const CATALOGUE = TOOLS;
 export function matches(text: string, query: string) {
   return query
     .toLowerCase()

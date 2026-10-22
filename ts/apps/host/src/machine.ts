@@ -847,7 +847,7 @@ export async function bridgeAttachments(
 }
 
 /** Read/discover only: stale files remain visible and no display sweeps another host's record. */
-export async function readMachinePeers(
+async function readMachinePeers(
   appBase: string,
   ownServiceName: string,
 ): Promise<readonly MachinePeer[]> {

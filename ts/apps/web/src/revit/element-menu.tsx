@@ -22,8 +22,8 @@ import {
   type ShowElementsResult,
 } from "./element-target";
 import { readFamilyPlacements } from "./observation";
-export { revitScope, revitReferences } from "./element-target";
-export type { ElementTarget, RevitObservationScope, ShowElementsResult } from "./element-target";
+export { revitScope } from "./element-target";
+export type { ShowElementsResult } from "./element-target";
 
 /** Box: select and section-box the {3D} view, then zoom to fit. Select: select only. */
 export async function showInRevit(
