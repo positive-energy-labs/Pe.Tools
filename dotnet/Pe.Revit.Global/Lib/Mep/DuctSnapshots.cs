@@ -436,7 +436,7 @@ public static class DuctSnapshots {
             c.ConnectorType == ConnectorType.Curve ? "curve" : "end",
             P(c.Origin),
             shape,
-            diameter is { } d ? $"{d:0.#}\"ÃƒÂ¸" : width is { } w && height is { } h ? $"{w:0.#}x{h:0.#}" : "",
+            diameter is { } d ? $"{d:0.#}\"ø" : width is { } w && height is { } h ? $"{w:0.#}x{h:0.#}" : "",
             diameter,
             width,
             height,
