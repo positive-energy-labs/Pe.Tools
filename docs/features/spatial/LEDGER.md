@@ -93,6 +93,8 @@ One metric substrate under every Pe.* helper that reads or writes Revit geometry
 
 ## Tried & rejected
 
+- 2026-10-22, immediate TypeGPU cutover: the saved-Chadds prototype reduced GPU pass time for simpler shading, but established neither equivalent-feature LOC savings nor end-to-end improvement. Keep Three.js; the CPU picking improvement is renderer-independent. [Measured evaluation](typegpu-evaluation.md), experiment commit b50ff7d8. Revisit for a demonstrated GPU bottleneck or required compute capability.
+
 - 2026-10-21, element-box-only context selection retained entire imported meshes and framed most of the building around four ducts; replaced with triangle-box clipping. Chromium failed an immutable 49 MB cached fetch with `ERR_CACHE_WRITE_FAILURE`; a no-store fetch of the same bytes succeeded, so scene loading relies on the durable disk artifact rather than browser disk cache.
 
 - 2026-09-05, WriteTransaction probes on `MEP_ArchitectA_ProjectA_R25_detached_20260811.rvt`; the file is still workshared and raises a modal "Central Model is inaccessible" dialog that blocks Revit until a human closes it. Use `ProjectA_Clone_Aug_11` (cloud) or a `doc clone --out` copy for any write probe.
