@@ -30,7 +30,7 @@ import {
 } from "#/takeoff/room-state";
 import type { ModelRoom, ModelZone } from "#/takeoff/world";
 import type { TakeoffPage } from "./actions";
-import { useRouteViewBridge } from "#/route/view-bridge";
+import { useRouteLease } from "#/route/view-bridge";
 
 /** Revit's plan export: pixel size and where three corners sit in model feet. */
 type PlanRegistration = {
@@ -117,8 +117,8 @@ export function LevelPlan({
   lease?: {
     thread?: string;
     visible: boolean;
-    page: TakeoffPage;
-    applyViewport: (viewport: PlaneViewport | null) => void;
+    /** The takeoffs Page; its lease's one key is the viewport (`takeoffsAddress.agent`). */
+    page: readonly [TakeoffPage, (next: Partial<TakeoffPage>, move: { history: "push" }) => void];
     context: Record<string, unknown>;
   };
   viewport: PlaneViewport | null;
@@ -172,13 +172,10 @@ export function LevelPlan({
     world?.fit ?? null,
     onViewport,
   );
-  useRouteViewBridge({
-    route: "takeoffs",
+  // No lease: nothing to publish (`visible` is false), so an empty Page stands in.
+  useRouteLease<"takeoffs", Partial<TakeoffPage>>("takeoffs", lease?.page ?? [{}, () => {}], {
     thread: lease?.thread,
-    surface: "route",
     visible: !!lease?.visible && !!world && !!size,
-    page: lease?.page ?? {},
-    apply: (patch) => patch.viewport !== undefined && lease?.applyViewport(patch.viewport),
     context: {
       ...lease?.context,
       size,

@@ -228,22 +228,10 @@ function opRow(op: OpsCatalogEntry): Capability {
   };
 }
 
-/**
- * Search words a route's view adds beside its title. ponytail: the route's own address should
- * declare them (and its facts' shape) beside `agent.policy`; the kernel's `agent` has no slot yet.
- */
-const VIEW_FINDS: Partial<Record<RouteViewRoute, readonly string[]>> = {
-  ducts: [...DUCTS_FINDS, "system", "level"],
-  families: ["history", "past read", "rules", "query", "columns"],
-  schedules: ["schedule", "grid", "query", "columns", "cell"],
-  family: ["parameters", "types", "inspector", "overlay"],
-  pods: ["pod", "member", "runs"],
-};
-
 /** A route that leases its view (`routeAddress(route).agent`) gets one read and one set, both over the person's open page. */
 function routeViewRows(route: RouteViewRoute): Capability[] {
   const spec = routeAddress(route);
-  const { policy, words, keys, fields } = spec.agent;
+  const { policy, words, keys, fields, finds = [] } = spec.agent;
   const sets = Object.keys(fields.shape);
   const lower = spec.title.toLowerCase();
   return [
@@ -252,7 +240,7 @@ function routeViewRows(route: RouteViewRoute): Capability[] {
       kind: "route-command",
       title: `${spec.title} visible view`,
       description: `Read the ${spec.title} page the person has open in this thread: its keys (${keys.join(", ")}; settable: ${sets.join(", ")}) with their current values, the identity of what is shown, and the facts it derives. ${policy} Returns instance and revision for ${`route:${route}.set-view`}. If two panes are open, pass an instance from the ambiguity result. No Revit read.`,
-      finds: [lower, "visible", "page", ...(VIEW_FINDS[route] ?? [])],
+      finds: [lower, "visible", "page", ...finds],
       needs: "nothing",
       mutates: false,
       principal: capabilityPrincipals(false),
@@ -265,7 +253,7 @@ function routeViewRows(route: RouteViewRoute): Capability[] {
       kind: "route-command",
       title: `Set ${spec.title} visible view`,
       description: `${policy} Read route:${route}.view first, then pass its instance and revision with a nonempty subset of ${sets.join(", ")}${words ? ` or ${Object.keys(words.shape).join(", ")}` : ""}. The browser acknowledges the render before this returns.`,
-      finds: [lower, "filter", "visible", "page", ...(VIEW_FINDS[route] ?? [])],
+      finds: [lower, "filter", "visible", "page", ...finds],
       needs: "nothing",
       mutates: true,
       principal: capabilityPrincipals(true),

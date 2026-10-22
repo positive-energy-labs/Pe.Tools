@@ -11,6 +11,7 @@ import {
   type OrbitLook,
   type Viewport,
 } from "../page-keys.ts";
+import { DUCTS_FINDS } from "../ducts.ts";
 import { field, setKeys, text, type RouteDeclaration } from "../route-field.ts";
 
 /** The layer keys the Ducts spatial picture draws. */
@@ -130,6 +131,7 @@ export const ductsAddress = {
   title: "Ducts",
   fields: ductsFields,
   agent: {
+    finds: [...DUCTS_FINDS, "system", "level"],
     policy:
       "Move the Ducts page in the person's open browser. Its subject: system (a Revit system name such as SA 19, as the person said it; it resolves against the view's system names), level and selected element id; an empty string clears the key. The page shows every duct network the system is in. Set the system only when the person named it, and never pick a system they did not name. Its picture: encoding, layers (comma separated: meshes, context, centrelines, labels, findings; empty = none), picture (model or schematic), and either look (plan, iso, north, south, east or west: the shown picture turned about its pivot) or viewport (orbit:yaw,elev,zoom@x,y,z in feet; empty fits the subject). issue selects one finding by id. Each set is one step the person can go Back from. No Work or Revit read.",
     words: ductsWords,

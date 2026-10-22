@@ -20,7 +20,7 @@ import { appAtomRegistry, routeSearch, useRouteOwner } from "#/route/route-owner
 import { useRoute } from "#/route/use-route";
 import { urlPage } from "#/route/url";
 import { applyPageIntent } from "#/route/view-owner";
-import { useRouteViewBridge } from "#/route/view-bridge";
+import { useRouteLease } from "#/route/view-bridge";
 import { RouteRetention } from "./route-retention";
 import * as routeHost from "#/route/host";
 
@@ -91,13 +91,7 @@ function DuctProbe() {
       window.removeEventListener("keydown", key);
     };
   }, [id, handle.actions.native]);
-  useRouteViewBridge({
-    route: "ducts",
-    thread: search.thread,
-    surface: "route",
-    visible: true,
-    page,
-    apply: setPage,
+  useRouteLease("ducts", handle.page, {
     context: { target: search.target },
     facts: { selected: page.selected },
   });

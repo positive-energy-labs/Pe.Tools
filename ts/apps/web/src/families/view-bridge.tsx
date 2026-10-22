@@ -28,7 +28,8 @@ export function FamiliesLease({
     };
   }, [pivot, query]);
   const history = store.page.stage === "history";
-  useRouteLease(store.handle, {
+  useRouteLease("families", store.handle.page, {
+    thread: store.handle.head?.thread,
     url,
     visible,
     context: {

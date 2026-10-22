@@ -1,8 +1,8 @@
 /**
- * The one browser half of Pea's route-view channel (`routeAddress(route).agent` in agent-contracts). A route
- * with an address mounts this hook with its Page, what it shows, and how to apply a patch through
- * its own Page; the keys Pea may set are the address's. The hook leases the visible view to the host, takes Pea's patch from
- * the event stream, and acknowledges only after the patched Page has rendered. No Page field enters
+ * The one browser half of Pea's route-view channel (`routeAddress(route).agent` in agent-contracts).
+ * A route mounts `useRouteLease` with its Page, what it shows and what it derives; the keys Pea may
+ * set are the address's. The bridge leases the visible view to the host, takes Pea's patch from the
+ * event stream, and acknowledges only after the patched Page has rendered. No Page field enters
  * authored Work.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -12,12 +12,11 @@ import {
   type RouteView,
   type RouteViewRoute,
 } from "@pe/agent-contracts";
-import type { RouteHandle } from "./handle";
 import { peClient } from "#/host/pe-client";
 import { useHostEvents } from "#/readings";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
 import { applyPageIntent, type PageIntent } from "./view-owner";
-import { useRouteCurrent } from "./activity";
+import { useRouteCurrent, useRouteSearch } from "./activity";
 
 type Intent = {
   type: "route-view-intent";
@@ -30,43 +29,43 @@ type Intent = {
 };
 
 /**
- * A route handle's lease: the bridge over the handle's own Page, thread and setter, so a route
- * adds only what it shows (`context`) and what it derives (`facts`). Pea's patch, typed by the
- * address, lands as one pushed move (`routeAddress(route).history`: Pea's patch is a step).
+ * The one lease every route takes: its mounted Page (`useAddressPage`, or a `useRoute` handle's
+ * `page`), what it shows (`context`) and what it derives (`facts`). Pea's patch, typed by the
+ * address, lands as one pushed move (`routeAddress(route).history`: Pea's patch is a step), and the
+ * bridge acknowledges only a patch the Page's owner accepted. With no thread nobody could name the
+ * view, so nothing is published.
  */
-export function useRouteLease(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- any route's handle
-  handle: Pick<RouteHandle<any, any, any, any>, "manifest" | "head" | "page">,
-  {
-    url,
-    visible = true,
-    context,
-    facts,
-  }: {
-    /** True where the route owns the address; a chat pane leases as `chat`. */
-    url: boolean;
+export function useRouteLease<R extends RouteViewRoute, P extends object>(
+  route: R,
+  [page, setPage]: readonly [P, (next: Partial<P>, move: { history: "push" }) => void],
+  shown: {
+    /** The thread that addresses this view; omitted, the URL's `?thread` (none in a chat pane). */
+    thread?: string;
+    /** False where the route does not own the address (a chat pane), as `useRoute` takes it. */
+    url?: boolean;
+    /** False while the route shows nothing Pea could address. */
     visible?: boolean;
-    context: Record<string, unknown>;
-    facts: Record<string, unknown>;
-  },
+    /** Identity of what is shown; an ack fails if it moves while a command is pending. */
+    context?: Record<string, unknown>;
+    /** What the shown Page derives; Pea reads it, never sets it. */
+    facts?: Record<string, unknown>;
+  } = {},
 ) {
-  const route = handle.manifest.address;
-  if (!route || !routeAddress(route).agent)
-    throw Error(`${handle.manifest.key} leases no view: its address declares no agent`);
-  const [page, setPage] = handle.page;
+  const url = shown.url ?? true;
+  const search = useRouteSearch();
   useRouteViewBridge({
-    route: route as RouteViewRoute,
-    thread: handle.head?.thread,
+    route,
+    thread: shown.thread ?? (url ? search.thread : undefined),
     surface: url ? "route" : "chat",
-    visible,
-    page: page as object,
-    apply: (patch) => setPage(patch, { history: "push" }),
-    context,
-    facts,
+    visible: shown.visible ?? true,
+    page: page as Partial<RoutePage<R>>,
+    apply: (patch) => setPage(patch as Partial<P>, { history: "push" }),
+    context: shown.context ?? {},
+    facts: shown.facts ?? {},
   });
 }
 
-export function useRouteViewBridge<R extends RouteViewRoute>({
+function useRouteViewBridge<R extends RouteViewRoute>({
   route,
   thread,
   surface,

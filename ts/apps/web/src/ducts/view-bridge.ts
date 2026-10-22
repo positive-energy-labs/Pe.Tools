@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { viewportCodec, type OrbitViewport } from "@pe/agent-contracts";
 import { systemsOf } from "@pe/ducts-domain/system-scope";
-import { useRouteViewBridge } from "#/route/view-bridge";
+import { useRouteLease } from "#/route/view-bridge";
 import type { PageMove } from "#/route/manifest";
 import type { DuctsPage, LoadedDuctsReading } from "./manifest";
 
@@ -14,7 +14,7 @@ import type { DuctsPage, LoadedDuctsReading } from "./manifest";
  */
 export function useDuctsViewBridge({
   thread,
-  surface,
+  url,
   page,
   setPage,
   document,
@@ -22,7 +22,7 @@ export function useDuctsViewBridge({
   membersReady,
 }: {
   thread?: string;
-  surface: "chat" | "route";
+  url: boolean;
   page: DuctsPage;
   setPage: (patch: Partial<DuctsPage>, move?: PageMove<DuctsPage>) => void;
   document: unknown;
@@ -73,14 +73,11 @@ export function useDuctsViewBridge({
     }),
     [snapshot, pose],
   );
-  useRouteViewBridge({
-    route: "ducts",
+  // A Pea patch is one navigation; the manifest's `transition` couples system, selection and viewport.
+  useRouteLease("ducts", [page, setPage], {
     thread,
-    surface,
+    url,
     visible: reading !== null && membersReady,
-    page,
-    // A Pea patch is one navigation; the manifest's `transition` couples system, selection and viewport.
-    apply: (patch) => setPage(patch, { history: "push" }),
     context: { document, observation },
     facts,
   });

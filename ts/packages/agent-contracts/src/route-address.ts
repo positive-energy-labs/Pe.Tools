@@ -69,6 +69,8 @@ type Moved<P> = { ok: true; page: P; patch: Partial<P> } | { ok: false; error: s
 export interface RouteLease<R extends RouteKey> {
   /** What the person sees, and the rule Pea follows when it sets a key. */
   readonly policy: string;
+  /** Search words Pea finds the view by, beside its title. */
+  readonly finds?: readonly string[];
   /** Input words beside the keys that `resolve` turns into keys. */
   readonly words?: z.ZodObject<Record<string, z.ZodString>>;
   /** Turns the patch Pea wrote into one the lease can take, or refuses it by name. */

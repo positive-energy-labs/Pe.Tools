@@ -31,7 +31,7 @@ import { CutOverlay, type Framed } from "./cuts";
 import { LAYER_SAYS, SPACE_LAYERS, rowUnder, type SpaceLayer } from "./layers";
 import type { SpacePage } from "./manifest";
 import { cutPolygons, packPolygons, retained, type Cuts, type Polygons } from "./state";
-import { useRouteViewBridge } from "#/route/view-bridge";
+import { useRouteLease } from "#/route/view-bridge";
 import { spaceElementKey, toggleLayer } from "@pe/agent-contracts";
 
 type SetPage = (next: Partial<SpacePage>, move?: PageMove<SpacePage>) => void;
@@ -154,13 +154,9 @@ export function SpacePicture({
     );
   }, [meshes, on, page.isolated]);
 
-  useRouteViewBridge({
-    route: "space",
+  useRouteLease("space", [page, setPage], {
     thread: lease?.thread,
-    surface: "route",
     visible: !!lease?.ready && !!meshes && !!metadata && !!size,
-    page,
-    apply: (patch) => setPage(patch, push),
     context: { ...lease?.context, bounds, size },
     facts: {
       pose: axis ? (plane?.viewport ?? null) : pose,

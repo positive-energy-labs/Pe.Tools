@@ -8,3 +8,4 @@ export * from "./workflow";
 export { RouteShell, useRouteThread } from "./shell";
 export * from "./facts";
 export * from "./address-page";
+export { useRouteLease } from "./view-bridge";

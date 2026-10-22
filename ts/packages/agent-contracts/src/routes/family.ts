@@ -30,6 +30,7 @@ export const familyAddress = {
     demo,
   },
   agent: {
+    finds: ["parameters", "types", "inspector", "overlay"],
     policy:
       "Change the visible Family view: stage, the table's query line, sort (`-key` descending) and hidden columns, the overlay (draft, live or saved values), the drilled type (a type name; empty = the family table), the inspector (`part:<slug>` or `param:<name>`; empty = closed) and the doc pane (text or sheet). Facts name the family, its types, parts and parameters. The opened spec (pod, path) is the person's: read it. A view change never reads Revit, stages a value, builds or applies.",
   },

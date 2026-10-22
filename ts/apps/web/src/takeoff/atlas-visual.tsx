@@ -48,8 +48,7 @@ export function AtlasVisual() {
             planOpen &&
             !!store.displayedCapture &&
             (store.source === "saved" || store.snapshot.state === "ready"),
-          page: store.handle.page[0],
-          applyViewport: (viewport) => store.setViewport(viewport, "push"),
+          page: store.handle.page,
           context: {
             source: store.handle.demo ? "fixture" : store.source,
             captureId: store.displayedCapture?.id,

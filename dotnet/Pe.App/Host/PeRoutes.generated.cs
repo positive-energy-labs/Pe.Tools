@@ -30,6 +30,10 @@ internal static class PeRoutes {
             public const string Pod = "pod";
             public const string Path = "path";
             public const string Query = "query";
+            public const string Sort = "sort";
+            public const string Hidden = "hidden";
+            public const string Lines = "lines";
+            public const string Past = "past";
             public const string Demo = "demo";
         }
     }
@@ -42,6 +46,13 @@ internal static class PeRoutes {
             public const string Stage = "stage";
             public const string Pod = "pod";
             public const string Path = "path";
+            public const string Query = "query";
+            public const string Sort = "sort";
+            public const string Hidden = "hidden";
+            public const string Overlay = "overlay";
+            public const string Drill = "drill";
+            public const string Inspector = "inspector";
+            public const string Doc = "doc";
             public const string Demo = "demo";
         }
     }
@@ -55,6 +66,11 @@ internal static class PeRoutes {
             public const string Pod = "pod";
             public const string Path = "path";
             public const string WorkspaceId = "workspaceId";
+            public const string Query = "query";
+            public const string Sort = "sort";
+            public const string Hidden = "hidden";
+            public const string Lines = "lines";
+            public const string Cell = "cell";
             public const string Demo = "demo";
         }
     }
@@ -113,6 +129,7 @@ internal static class PeRoutes {
         internal static class Keys {
             public const string Pod = "pod";
             public const string Path = "path";
+            public const string Runs = "runs";
             public const string Demo = "demo";
         }
     }

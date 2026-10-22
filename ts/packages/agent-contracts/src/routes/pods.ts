@@ -17,6 +17,7 @@ export const podsAddress = {
     demo,
   },
   agent: {
+    finds: ["pod", "member", "runs"],
     policy:
       "Change the visible Pods view: which runs the runs pane lists (the open member's, or the whole pod's). Facts list the installed pods and their members, the open member's schema and its runs. The open member (pod, path) is the person's: read it. A view change never writes a member or runs anything.",
   },

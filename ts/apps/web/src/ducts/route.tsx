@@ -193,7 +193,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   const levels = snapshot?.levels ?? [];
   const onPose = useDuctsViewBridge({
     thread,
-    surface: url ? "route" : "chat",
+    url,
     page,
     setPage,
     document: doc,

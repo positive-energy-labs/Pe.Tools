@@ -26,7 +26,7 @@ import { ROOMS_LAYERS, toggleLayer } from "@pe/agent-contracts";
 import { LAYER_SAYS, TraceFaces, TraceLayers, type Layer, type TraceRead } from "./layers";
 import { CALLOUT_FONT_PX, holdsPin, PIN_R, placeCallouts, type CalloutItem } from "./callouts";
 import type { PlanGeo } from "./sketch";
-import { useRouteViewBridge } from "#/route/view-bridge";
+import { useRouteLease } from "#/route/view-bridge";
 
 export interface RoomsPlanLease {
   thread: string;
@@ -294,18 +294,15 @@ export function RoomsPlan({
     move(fitView(boundsOf(boxes), size, ZOOM_PAD_PX), "move");
   }, [world, size, zoomKey, zoomTo, move]);
 
-  useRouteViewBridge({
-    route: "rooms",
+  // The lease's one key is the viewport (`roomsAddress.agent`); the rest stays the person's.
+  useRouteLease("rooms", [page, setPage], {
     thread: lease?.thread,
-    surface: "route",
     visible:
       !!lease?.ready &&
       !empty &&
       !!world &&
       !!size &&
       (!page.focus || !zoomTo.length || zoomed.current === page.focus),
-    page,
-    apply: (patch) => setPage({ viewport: patch.viewport }, { history: "push" }),
     context: {
       ...lease?.context,
       size,

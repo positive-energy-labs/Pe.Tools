@@ -88,6 +88,8 @@ export interface RouteDeclaration<F extends Fields = Fields> {
   agent?: {
     /** What the person sees, and the rule Pea follows when it sets a key. */
     policy: string;
+    /** Search words Pea finds the view by, beside its title. */
+    finds?: readonly string[];
     /** Input words beside the keys that `resolve` turns into keys. */
     words?: z.ZodObject<Record<string, z.ZodString>>;
     /** Turns the patch Pea wrote into one the lease can take, or refuses it by name. */

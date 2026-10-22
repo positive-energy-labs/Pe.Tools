@@ -171,7 +171,8 @@ export function PodsRouteContent({
     runScope === "pod" ? null : member!.path,
     !!demo,
   );
-  useRouteLease(handle, {
+  useRouteLease("pods", handle.page, {
+    thread: handle.head?.thread,
     url,
     visible,
     context: { member: member ? { pod: row!.id, path: member.path } : null },

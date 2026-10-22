@@ -32,7 +32,8 @@ export function FamilyRouteView({
   const [pods, refreshPods] = usePodList(!demo);
   const store = useFamilyStore({ target, thread, pods, url });
   const world = store.lane.world;
-  useRouteLease(store.handle, {
+  useRouteLease("family", store.handle.page, {
+    thread: store.handle.head?.thread,
     url,
     visible,
     context: {
