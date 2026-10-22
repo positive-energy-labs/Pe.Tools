@@ -11,7 +11,7 @@ import type {
 
 import { composeMember, listPods, listRuns, readMember } from "#/host/pods";
 import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import type { MemberRef, PodRow } from "./manifest";
+import type { MemberRef, PodRow } from "./entity-route";
 export type Composed = PodMemberComposeResponse;
 
 /** A host-local mutation: admitted under an id, its receipt is the truth of what happened. */

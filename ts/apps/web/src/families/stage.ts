@@ -2,7 +2,7 @@
  * `/families`' stages, declared once: which verbs each stage's row draws, the chords they bind,
  * and which panes it shows. The entity view draws from this, never beside it.
  */
-import type { EntityAction, EntityReading, EntityPage } from "#/route/manifest";
+import type { EntityAction, EntityReading, EntityPage } from "#/route/entity-route";
 import type { PaneDecl, StageDecl } from "#/route/stage";
 import type { FamiliesReadingKey } from "./manifest";
 

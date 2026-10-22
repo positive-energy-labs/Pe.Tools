@@ -6,14 +6,8 @@ import {
   type WorkKey,
 } from "@pe/agent-contracts";
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import {
-  type ApplyPlan,
-  type Ctx,
-  type EntityPage,
-  type EntityReading,
-  type HeldRow,
-  type PlanEntry,
-} from "./manifest";
+import type { Ctx } from "./manifest";
+import type { ApplyPlan, EntityPage, EntityReading, HeldRow, PlanEntry } from "./entity-route";
 
 /** `$schema` is an absolute URL on whichever host served it; the path is what names the library. */
 export const isSpecOf = (schema: string | null | undefined, path: string | readonly string[]) => {

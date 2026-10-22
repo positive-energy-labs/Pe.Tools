@@ -42,7 +42,8 @@ import {
   saveSettingsAction,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
-import { defineRoute, type MemberRef } from "./manifest";
+import { defineRoute } from "./manifest";
+import type { MemberRef } from "./entity-route";
 import { Ladder } from "./ladder";
 import { ProposalReview } from "./proposal-review";
 import { podHost, type Composed } from "./pods";

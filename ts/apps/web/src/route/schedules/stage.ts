@@ -4,7 +4,7 @@
  */
 import type { ScheduleCatalog } from "@pe/agent-contracts";
 import type { Rung } from "#/route/ladder";
-import type { EntityAction, EntityReading, EntityStage } from "#/route/manifest";
+import type { EntityAction, EntityReading, EntityStage } from "#/route/entity-route";
 import type { PaneDecl, StageDecl } from "#/route/stage";
 import type { ScheduleGridAction, ScheduleGridReading } from "./manifest";
 import type { ScheduleGridState } from "./workspace";

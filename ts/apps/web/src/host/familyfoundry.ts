@@ -1,6 +1,6 @@
 import type { FfPlanEntry } from "@pe/agent-contracts";
 
-import type { PlanEntry } from "#/route/manifest";
+import type { PlanEntry } from "#/route/entity-route";
 import type { FamiliesPlan } from "@pe/host-contracts/generated";
 
 /** The `$schema` path that says a member is a Family Foundry spec (`{ select, patch, run }`). */

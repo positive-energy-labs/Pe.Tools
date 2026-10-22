@@ -16,7 +16,13 @@ import { KeysNode } from "@pe/kit/keys";
 import { Surface } from "#/components/lang/surface";
 import { previousOf } from "#/readings";
 
-import { STALE_PLAN, sheetOf, type EntityPage, type EntityRouteDef, type PodRow } from "./manifest";
+import {
+  STALE_PLAN,
+  sheetOf,
+  type EntityPage,
+  type EntityRouteDef,
+  type PodRow,
+} from "./entity-route";
 import { isSpecOf } from "./workflow";
 import { Ladder, type Rung } from "./ladder";
 import { PlanSheetView } from "./plan-sheet";

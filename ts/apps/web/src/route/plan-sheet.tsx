@@ -11,7 +11,7 @@ import type { Column } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
 import { cn } from "@pe/kit/lib/utils";
 
-import { STALE_PLAN, type PlanEntry, type PlanSheet } from "./manifest";
+import { STALE_PLAN, type PlanEntry, type PlanSheet } from "./entity-route";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const CELL = "face-mono block truncate px-(--item-pad-x)";
