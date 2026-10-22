@@ -1,3 +1,4 @@
+import { useRouteSearch } from "#/route/activity";
 /**
  * /captures — every picture the host kept of a Revit view, newest first (pages ledger,
  * 2026-10-04: captures are the one picture currency). The list is host-scoped, not a Revit
@@ -56,7 +57,7 @@ export const Route = createFileRoute("/captures")({
 });
 
 function CapturesRoute() {
-  const { sha } = Route.useSearch();
+  const { sha } = useRouteSearch("captures");
   const [captures, setCaptures] = useState<CaptureReceipt[] | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const reload = useCallback(

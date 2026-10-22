@@ -27,6 +27,7 @@ import { TooltipProvider } from "@pe/kit/lang/tooltip";
 import { ElementMenu } from "#/revit/element-menu";
 import { WorkbenchProvider } from "#/workbench/provider";
 import { RouteDock } from "#/workbench/route-panes";
+import { useRouteActivity } from "#/route/activity";
 
 import appCss from "../styles.css?url";
 
@@ -89,7 +90,7 @@ export function RootComponent() {
                   >
                     <SituationPinnedControl />
                     <div className="min-h-0 min-w-0 flex-1">
-                      <RouteDock>
+                      <RouteDock renderRoute={(body) => <SurfaceOutlet>{body}</SurfaceOutlet>}>
                         <SurfaceOutlet />
                       </RouteDock>
                     </div>
@@ -105,14 +106,16 @@ export function RootComponent() {
   );
 }
 
-function SurfaceOutlet() {
+function SurfaceOutlet({ children }: { children?: React.ReactNode }) {
   const host = useSurfaceHost();
   const location = useRouterState({ select: (state) => state.location });
-  if (host.shell.routes === "all" || appRouteMount(location.pathname, host.surface))
-    return <Outlet />;
+  const scope = useRouteActivity();
+  const pathname = scope?.pathname ?? location.pathname;
+  if (host.shell.routes === "all" || appRouteMount(pathname, host.surface))
+    return children ?? <Outlet />;
   return (
     <div className="flex flex-col gap-3 p-3">
-      <p>{appRouteByPath(location.pathname)?.label ?? "This tool"} opens in a full window.</p>
+      <p>{appRouteByPath(pathname)?.label ?? "This tool"} opens in a full window.</p>
       <Button label="Open in full window" onClick={() => host.openFullWindow(location.href)}>
         Open in full window
       </Button>

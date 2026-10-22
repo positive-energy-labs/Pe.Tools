@@ -7,7 +7,7 @@ import {
 import { readRecord } from "@pe/agent-contracts/chat-state";
 import { FactChip } from "@pe/kit/lang/chip";
 import type { RevitElementReference } from "@pe/kit/lang/row";
-import { frozenDemo } from "#/host/demo-client";
+import { useRouteDemo } from "#/route/activity";
 import {
   prepareElements,
   revitReferences,
@@ -83,6 +83,7 @@ export function NativeReadingReferences({
   result?: unknown;
   receipt?: ActionReceipt;
 }) {
+  const demo = useRouteDemo();
   const outer = readRecord(readRecord(result)?.structuredContent) ?? readRecord(result);
   const operation = readRecord(outer?.result);
   const parsedReceipt = receipt
@@ -124,7 +125,7 @@ export function NativeReadingReferences({
   const document = readRecord(readRecord(data)?.document);
   const documentKey = readRecord(data)?.documentKey ?? document?.documentKey;
   if (scope && typeof documentKey === "string") scope = { ...scope, documentKey };
-  if (frozenDemo() !== null) scope = { document: null, source: "fixture" };
+  if (demo !== null) scope = { document: null, source: "fixture" };
   return (
     <div className="flex flex-wrap items-center gap-1" {...revitScope(scope)}>
       {references.slice(0, 50).map((reference, index) => {

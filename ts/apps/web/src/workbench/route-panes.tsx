@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { ChatShell } from "#/chat/chat-shell";
 import { PaneSplit } from "#/components/lang/pane";
@@ -6,24 +6,18 @@ import { ChatPlanIntent } from "#/route/situation-ladder";
 import { useWorkbench } from "./provider";
 import { useRouteTabs } from "./tabs";
 import { RouteTabs } from "./route-tabs";
+import { RouteRetention } from "./route-retention";
 
-/** The URL mounts the sole route body; chat is its sibling, never a second route renderer. */
-export function RouteDock({ children }: { children: ReactNode }) {
+/** The addressed tab owns the URL; visited route bodies retain their own local state. */
+export function RouteDock({
+  children,
+  renderRoute,
+}: {
+  children: ReactNode;
+  renderRoute: (body: ReactNode) => ReactNode;
+}) {
   const { store } = useWorkbench();
   const tabs = useRouteTabs();
-  const mounted = useRef({
-    route: tabs.route,
-    id: tabs.active?.id ?? null,
-    key: tabs.route ?? "chat",
-  });
-  if (mounted.current.route !== tabs.route) {
-    mounted.current = { route: tabs.route, id: tabs.active?.id ?? null, key: tabs.route ?? "chat" };
-  } else if (tabs.active && mounted.current.id === null) {
-    // Enrollment must not remount a route that already read the deep link on its first render.
-    mounted.current.id = tabs.active.id;
-  } else if (tabs.active && tabs.active.id !== mounted.current.id) {
-    mounted.current = { route: tabs.route, id: tabs.active.id, key: tabs.active.id };
-  }
   const plan = useAtomValue(store.atoms.planIntent);
   const planRefusal = useAtomValue(store.atoms.planRefusal);
   const intent = useMemo(
@@ -66,26 +60,19 @@ export function RouteDock({ children }: { children: ReactNode }) {
         />
       )}
       <ChatPlanIntent.Provider value={intent}>
-        {tabs.route ? (
-          <PaneSplit
-            axis={narrow ? "vertical" : "horizontal"}
-            grow
-            resize={{
-              target: "end",
-              defaultSize: narrow ? 280 : 400,
-              minSize: narrow ? 180 : 300,
-              minOtherSize: narrow ? 200 : 360,
-            }}
-            start={
-              <div key={mounted.current.key} className="size-full min-h-0 min-w-0">
-                {children}
-              </div>
-            }
-            end={<ChatShell docked target={tabs.target} />}
-          />
-        ) : (
-          children
-        )}
+        <PaneSplit
+          axis={narrow ? "vertical" : "horizontal"}
+          grow
+          hide={tabs.route ? undefined : "start"}
+          resize={{
+            target: "end",
+            defaultSize: narrow ? 280 : 400,
+            minSize: narrow ? 180 : 300,
+            minOtherSize: narrow ? 200 : 360,
+          }}
+          start={<RouteRetention {...tabs} renderRoute={renderRoute} />}
+          end={tabs.route ? <ChatShell docked target={tabs.target} /> : children}
+        />
       </ChatPlanIntent.Provider>
     </div>
   );

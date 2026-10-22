@@ -43,6 +43,7 @@ import {
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 
 import { defineRoute } from "./manifest";
+import { useRouteDemo } from "./activity";
 import type { MemberRef } from "./entity-route";
 import { Ladder } from "./ladder";
 import { ProposalReview } from "./proposal-review";
@@ -94,11 +95,7 @@ const adoptInput = z.object({ sha256: z.string().min(1) });
  * reviewer and `/family` write them); refresh and validate stay Work commands Pea calls, because
  * the editor already re-reads the member and shows live composition diagnostics.
  */
-const memberWorkManifest = (seed?: SettingsRouteDocument) => {
-  // `?demo=<key>` mounts a seed under whatever key the host page was opened with.
-  const demo = globalThis.location
-    ? new URLSearchParams(globalThis.location.search).get("demo")
-    : null;
+const memberWorkManifest = (seed?: SettingsRouteDocument, demo?: string | null) => {
   return defineRoute<SettingsRouteDocument, never, Record<string, never>, MemberWorkAction>({
     key: settingsRouteState.route,
     name: "Member",
@@ -207,7 +204,8 @@ const memberWorkManifest = (seed?: SettingsRouteDocument) => {
  * has no basis yet adopts the saved bytes. `seed` is the demo lane's Work and nothing is fetched.
  */
 function useMemberWork(member: PodMember | null, seed?: SettingsRouteDocument): MemberWorkHandle {
-  const manifest = useMemo(() => memberWorkManifest(seed), [seed]);
+  const demo = useRouteDemo();
+  const manifest = useMemo(() => memberWorkManifest(seed, demo), [seed, demo]);
   const handle = useRoute(manifest, {
     work: !seed && member ? memberWork(member) : undefined,
   }) as MemberWorkHandle;

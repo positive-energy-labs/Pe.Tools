@@ -1,3 +1,4 @@
+import { useRouteNavigate, useRouteSearch } from "#/route/activity";
 import { createFileRoute, stripSearchParams, type SearchSchemaInput } from "@tanstack/react-router";
 
 import { readLink } from "@pe/agent-contracts";
@@ -15,14 +16,18 @@ export const Route = createFileRoute("/ops")({
 });
 
 function OpsFileRoute() {
-  const search = Route.useSearch();
-  const navigate = Route.useNavigate();
+  const search = useRouteSearch("ops");
+  const navigate = useRouteNavigate();
   return (
     <OpsRoute
       op={search.op}
       actionId={search.actionId || null}
       set={(patch) => {
-        void navigate({ search: (previous) => ({ ...previous, ...patch }), replace: true });
+        void navigate({
+          to: "/ops",
+          search: (previous) => ({ ...previous, ...patch }),
+          replace: true,
+        });
       }}
     />
   );

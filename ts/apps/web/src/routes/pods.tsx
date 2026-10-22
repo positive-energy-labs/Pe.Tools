@@ -1,3 +1,4 @@
+import { useRouteSearch } from "#/route/activity";
 /**
  * /pods — the thinnest view over `pod.list`: every pod's members, the one spec editor, and the
  * runs filed against the open member. It performs no Revit action; a spec links to the product
@@ -5,7 +6,7 @@
  */
 import { linkTo, routePageSchema } from "@pe/agent-contracts";
 import { routeSearch } from "#/route/route-owner";
-import { frozenDemo } from "#/host/demo-client";
+import { useRouteDemo } from "#/route/activity";
 import { useEffect, useState, type ReactNode } from "react";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 
@@ -109,10 +110,12 @@ export const Route = createFileRoute("/pods")({
 });
 
 function PodsRoute() {
-  const { target } = Route.useSearch();
+  const { target } = useRouteSearch("pods");
   const thread = useRouteThread();
   // The live demo lane browses the demo owner's pods through the live path.
-  return <PodsRouteContent target={target} thread={thread} demo={frozenDemo() ?? undefined} url />;
+  return (
+    <PodsRouteContent target={target} thread={thread} demo={useRouteDemo() ?? undefined} url />
+  );
 }
 
 export function PodsRouteContent({

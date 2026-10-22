@@ -1,3 +1,4 @@
+import { useRouteSearch } from "#/route/activity";
 import { createFileRoute, stripSearchParams, type SearchSchemaInput } from "@tanstack/react-router";
 import { RouteShell } from "#/route";
 import { SettingsBody } from "#/machine/body";
@@ -19,7 +20,7 @@ export const Route = createFileRoute("/settings")({
   component: SettingsRoute,
 });
 function SettingsRoute() {
-  const { section, session: named } = Route.useSearch();
+  const { section, session: named } = useRouteSearch("settings");
   const session = named || undefined;
   const { reading, fixture } = useMachine();
   const host = useSurfaceHost();

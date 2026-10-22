@@ -1,3 +1,4 @@
+import { useRouteSearch } from "#/route/activity";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { readLink, routePageSchema } from "@pe/agent-contracts";
@@ -24,6 +25,6 @@ export const Route = createFileRoute("/bind")({
 });
 
 function Bind() {
-  const { page, view } = Route.useSearch();
+  const { page, view } = useRouteSearch("bind");
   return <BindRoute slug={page} view={view} />;
 }

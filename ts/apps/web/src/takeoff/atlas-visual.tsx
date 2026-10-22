@@ -7,10 +7,10 @@ import { ZoneCard } from "#/takeoff/zone-card";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
 import { ScopeKeys } from "@pe/kit/keys";
 import { levelsOf } from "#/takeoff/plan-image";
-import { useSearch } from "@tanstack/react-router";
+import { useRouteSearch } from "#/route/activity";
 
 export function AtlasVisual() {
-  const search = useSearch({ strict: false }) as { thread?: string };
+  const search = useRouteSearch() as { thread?: string };
   const {
     store,
     world,

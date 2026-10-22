@@ -4,6 +4,7 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 
 ## Decided
 
+- 2026-10-22, Ducts readings belong to the host's exact open document and acquisition inputs, not a mounted tab. Retain bounded immutable bodies across zero subscribers; Reading streams carry versions and freshness only. A separate browser fetches the current body without re-reading Revit; tabs in one browser share its decoded body. Document changes and bridge loss invalidate evidence; changing tabs does not.
 - 2026-10-22, camera gestures commit Page only at release (wheel after quiet); captured identity and topology indexes belong to their snapshot. [Interaction evidence and remaining all-systems cost](interaction-performance.md) records browser proof on a controlled Chadds R25 copy.
 
 **The walk**
@@ -110,7 +111,6 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 
 **Page and plumbing**
 - The priced render blocks the main thread 2.5 to 4.5 s on Project A with no progress word, and pricing runs twice inside the route's action-handle memo.
-- One duct snapshot shared by every client of a document, read once by the host and invalidated on Revit change, so a new tab or link never re-reads (kaitpw: closer to the final shape); the in-mount search is the interim.
 - Right after a Revit restart, or with two documents open, a tab can show "no document bound" until reloaded or picked by hand.
 - The design friction-rate popover lives under `ducts/proto/e/`; route settings need a settings paradigm the tutorial can also show (design-system ledger).
 

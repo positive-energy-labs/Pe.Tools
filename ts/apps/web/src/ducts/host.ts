@@ -4,13 +4,13 @@
  * `PE_DUCTS_FIXTURE=<snapshot.json>` at `vp dev` (vite.config.ts) makes the route read a saved
  * snapshot instead of the host, so a view can be built with no Revit.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DuctParameterKey } from "@pe/agent-contracts";
 
 import { hostFetch } from "#/host/runtime";
 import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
-import { useHostOp } from "#/readings";
-import { NATIVE_READ_WAIT_S } from "#/route/waits";
+import { useDuctsReading } from "#/readings";
+import type { HostOpResponse } from "@pe/host-contracts/operation-types";
 import { toGrids, type Grids } from "@pe/ducts-domain/loss-grid";
 import { TABLE_IDS } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -40,6 +40,8 @@ function useSaved(epoch: number) {
     snapshot: state.data ?? null,
     error: state.error ?? null,
     pending: !state.data && !state.error,
+    nativeObservation: undefined,
+    version: undefined,
   };
 }
 
@@ -59,20 +61,27 @@ export function useDuctSnapshot(
     ...(Object.keys(slots).length ? { slots } : {}),
     ...(labelParameter ? { labelParameter } : {}),
   };
-  const call = useHostOp("ducts.snapshot", request, {
-    bridgeSessionId: doc?.session,
-    openDocumentId: doc?.openId,
-    enabled: doc !== null && !SAVED,
-    waitSeconds: NATIVE_READ_WAIT_S,
-  });
+  const call = useDuctsReading<DuctSnapshot>(
+    doc && !SAVED ? { kind: "ducts-snapshot", target: doc, ...request } : null,
+  );
   // A new target is a new request (its deps change); a refresh reads again.
   const { refresh } = call;
+  const previousEpoch = useRef(epoch);
   useEffect(() => {
-    if (epoch > 0) refresh();
+    if (epoch !== previousEpoch.current) {
+      previousEpoch.current = epoch;
+      refresh();
+    }
   }, [epoch, refresh]);
   const saved = useSaved(epoch);
   if (SAVED) return saved;
-  return { snapshot: call.data ?? null, error: call.error?.message ?? null, pending: call.pending };
+  return {
+    snapshot: call.data ?? null,
+    error: call.error?.message ?? null,
+    pending: call.pending,
+    nativeObservation: call.nativeObservation,
+    version: call.version,
+  };
 }
 
 /** In dev with a saved snapshot, the grids come from its sibling `tables.json` (a saved `ducts.tables`). */
@@ -94,33 +103,40 @@ function useSavedTables() {
 
 /** Revit's shipped ASHRAE grids for every table a loss rule may name; needs a session, no document. */
 export function useDuctTables(session: string | null) {
-  const call = useHostOp(
-    "ducts.tables",
-    { ids: [...TABLE_IDS] },
-    {
-      bridgeSessionId: session ?? undefined,
-      enabled: session !== null && !SAVED,
-      waitSeconds: NATIVE_READ_WAIT_S,
-    },
+  const call = useDuctsReading<HostOpResponse<"ducts.tables">>(
+    session && !SAVED ? { kind: "ducts-tables", session, ids: [...TABLE_IDS] } : null,
   );
   const saved = useSavedTables();
   const data = SAVED ? saved.data : call.data;
   const grids = useMemo(() => {
     if (!data) return { grids: null, error: null };
     try {
-      return { grids: toGrids(data), error: null };
+      const version = call.version;
+      let grids = version ? decodedGrids.get(version) : undefined;
+      if (!grids) {
+        grids = toGrids(data);
+        if (version) {
+          decodedGrids.set(version, grids);
+          if (decodedGrids.size > 8) decodedGrids.delete(decodedGrids.keys().next().value!);
+        }
+      }
+      return { grids, error: null };
     } catch (error) {
       return { grids: null, error: String(error) };
     }
-  }, [data]);
+  }, [data, call.version]);
   return {
     grids: grids.grids as Grids | null,
     missing: call.data?.missing ?? [],
     unsupported: call.data?.unsupported ?? {},
     error: grids.error ?? saved.error ?? call.error?.message ?? null,
     pending: SAVED ? !saved.data && !saved.error : call.pending,
+    nativeObservation: call.nativeObservation,
   };
 }
+
+/** The installed table decode is reusable across route unmounts; native body ownership stays host-side. */
+const decodedGrids = new Map<string, Grids>();
 
 /** Portable catalog tables are host files, independent of Revit's ASHRAE grids. */
 export function useDuctCatalogs(epoch: number) {

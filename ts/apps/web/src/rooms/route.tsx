@@ -40,7 +40,7 @@ import { NO_TRACE, type TraceRead } from "./layers";
 import { focusOf, RoomsPlan, type RoomsPlanLease } from "./plan";
 import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
 import { railsOf } from "./layers";
-import { frozenDemo } from "#/host/demo-client";
+import { useRouteDemo } from "#/route/activity";
 import { DEMO_VIEW, DEMO_ROOMS, DEMO_PLAN, DEMO_TRACE } from "./demo";
 import { roomRows, RoomsTable } from "./table";
 
@@ -125,7 +125,7 @@ const PLAN_PX = 8000;
 
 /** `url` is false in a chat pane, which does not own the URL; `focus` is a Page key either way. */
 export function RoomsRoute({ url = true }: { url?: boolean } = {}) {
-  const demo = frozenDemo() === "plan";
+  const demo = useRouteDemo() === "plan";
   const [chosen] = useChooseTarget();
   const thread = useRouteThread();
   const handle = useRoute(manifest, { target: chosen, thread, url });

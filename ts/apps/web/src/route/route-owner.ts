@@ -9,6 +9,7 @@ import { Layer } from "effect";
 import { inspectAtomRegistry, type OwnerReferences } from "#/state/atom-inspect";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
 import { cancelRunningAdmissions } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { useRouteActivity } from "./activity";
 
 /** A resolved Target is only ever two headers on the one `/call` endpoint. */
 export const targetHeaders = (target: ExecutionTarget) =>
@@ -33,11 +34,17 @@ export function useOwned<A>(
   registry: AtomRegistry.AtomRegistry,
   atom: Atom.Atom<A> | null,
 ): A | null {
+  const activity = useRouteActivity();
+  const last = useRef<A | null>(null);
   const subscribe = useMemo(
-    () => (notify: () => void) => (atom ? registry.subscribe(atom, notify) : () => {}),
-    [registry, atom],
+    () => (notify: () => void) =>
+      atom && (!activity || activity.current()) ? registry.subscribe(atom, notify) : () => {},
+    [registry, atom, activity],
   );
-  return useSyncExternalStore(subscribe, () => (atom ? registry.get(atom) : null));
+  return useSyncExternalStore(subscribe, () => {
+    if (activity && !activity.current()) return last.current;
+    return (last.current = atom ? registry.get(atom) : null);
+  });
 }
 
 export type Slice<D> = { doc: D; revision: number } | { doc: null; revision: null };
@@ -350,6 +357,7 @@ export function useRouteOwner<T extends { dispose(): void; registry: AtomRegistr
   create: () => T,
   identity?: unknown,
 ): T {
+  const activity = useRouteActivity();
   const storeRef = useRef<T | null>(null);
   const identityRef = useRef(identity);
   const retiredRef = useRef<T[]>([]);
@@ -362,11 +370,20 @@ export function useRouteOwner<T extends { dispose(): void; registry: AtomRegistr
   const store = storeRef.current;
   useEffect(() => {
     if (disposeTimer.current) clearTimeout(disposeTimer.current);
-    for (const retired of retiredRef.current.splice(0)) retired.dispose();
+    activity?.retain(store);
+    for (const retired of retiredRef.current.splice(0)) {
+      if (activity) activity.retire(retired);
+      else retired.dispose();
+    }
     return () => {
-      disposeTimer.current = setTimeout(() => store.dispose(), 0);
+      // Activity disconnects Effects while preserving this owner. The enclosing pane disposes it.
+      if (!activity || activity.current())
+        disposeTimer.current = setTimeout(() => {
+          if (activity) activity.retire(store);
+          else store.dispose();
+        }, 0);
     };
-  }, [store]);
+  }, [store, activity]);
   return store;
 }
 

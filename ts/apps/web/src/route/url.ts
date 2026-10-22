@@ -23,6 +23,7 @@ import { z } from "zod";
 import type { RouteManifest } from "./manifest";
 import type { ViewOwner } from "./view-owner";
 import { causeRefusal } from "./refusal";
+import { useRouteActivity, useRouteSearch } from "./activity";
 
 export interface UrlPage<P> {
   readonly keys: readonly (keyof P & string)[];
@@ -98,8 +99,10 @@ export function urlPage<W, R extends string, P, A extends string>(
  */
 export function useUrlPage<P>(url: UrlPage<P> | null, owner: ViewOwner<P>) {
   const router = useRouter({ warn: false });
+  const activity = useRouteActivity();
   useEffect(() => {
-    if (!router || !url) return;
+    if (!router || !url || (activity && !activity.current())) return;
+    const ownsUrl = () => !activity || activity.current();
     const token = crypto.randomUUID();
     const marker = "__pePageMove";
     let generation = 0;
@@ -118,7 +121,7 @@ export function useUrlPage<P>(url: UrlPage<P> | null, owner: ViewOwner<P>) {
       generation += 1;
       pending = null;
       const next = location();
-      if (next.pathname === pathname) owner.move(url.read(next.search), {}, "url");
+      if (ownsUrl() && next.pathname === pathname) owner.move(url.read(next.search), {}, "url");
       previous = owner.read();
     };
     const unhistory = router.history.subscribe(({ location: next, action }) => {
@@ -136,7 +139,7 @@ export function useUrlPage<P>(url: UrlPage<P> | null, owner: ViewOwner<P>) {
       queued = true;
       queueMicrotask(() => {
         queued = false;
-        if (!active || !pending || location().pathname !== pathname) return;
+        if (!active || !ownsUrl() || !pending || location().pathname !== pathname) return;
         const history = pending;
         pending = null;
         const current = owner.read().page;
@@ -185,11 +188,11 @@ export function useUrlPage<P>(url: UrlPage<P> | null, owner: ViewOwner<P>) {
       unpage();
       unhistory();
     };
-  }, [router, url, owner]);
+  }, [router, url, owner, activity, activity?.search]);
 }
 
 /** First render: the page the address names, before any effect runs. */
 export function useInitialUrlPage<P>(url: UrlPage<P> | null): Partial<P> {
-  const router = useRouter({ warn: false });
-  return router && url ? url.read(router.state.location.search as Record<string, unknown>) : {};
+  const search = useRouteSearch();
+  return url ? url.read(search) : {};
 }

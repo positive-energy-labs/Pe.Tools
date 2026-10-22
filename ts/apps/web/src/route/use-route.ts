@@ -5,7 +5,7 @@
  * structured Refusals (`route/refusal.ts`).
  */
 import * as Atom from "effect/unstable/reactivity/Atom";
-import { frozenDemo } from "#/host/demo-client";
+import { useRouteCurrent, useRouteDemo } from "./activity";
 import { useMemo, useRef, useState } from "react";
 import {
   UNREADABLE_WORK,
@@ -61,7 +61,8 @@ export function useRoute<W, R extends string, P, A extends string>(
     url?: boolean;
   } = {},
 ): RouteHandle<W, R, P, A> {
-  const demo = useMemo(frozenDemo, []);
+  const demo = useRouteDemo();
+  const current = useRouteCurrent();
   const seed = demo ? manifest.seeds?.[demo as A] : undefined;
   const url = useMemo(
     () => (options.url === false || seed ? null : urlPage(manifest)),
@@ -248,7 +249,11 @@ export function useRoute<W, R extends string, P, A extends string>(
     return (
       patches: RouteStatePatch[],
       expectedRevision?: number | null,
+      admitted = false,
     ): Promise<Refusal | null> => {
+      // Hiding refuses new invocations. An admitted action still files its native result in Work.
+      if (!admitted && !current())
+        return Promise.resolve(refuse("not-ready", "This route tab is hidden"));
       queued += 1;
       let accepted: { base: number; revision: number } | undefined;
       const result = queue
@@ -285,7 +290,7 @@ export function useRoute<W, R extends string, P, A extends string>(
       queue = result.then(() => undefined);
       return result;
     };
-  }, [writer, owner, seed]);
+  }, [writer, owner, seed, current]);
   const scopeKey = JSON.stringify([boundKey, key]);
   const actionScope = useMemo(() => ({}), [scopeKey]);
   const currentActionScope = useRef(actionScope);
@@ -358,7 +363,7 @@ export function useRoute<W, R extends string, P, A extends string>(
       // writes past that snapshot, and a foreign write still refuses it.
       write: async (patches: RouteStatePatch[]) => {
         const refusal =
-          actionRevision === null ? notHydrated : await writeWork(patches, actionRevision);
+          actionRevision === null ? notHydrated : await writeWork(patches, actionRevision, true);
         if (refusal) throw new ActionRefusal(refusal);
         return null;
       },
@@ -392,6 +397,7 @@ export function useRoute<W, R extends string, P, A extends string>(
           count: health ? null : (action.count?.(ctx as never) ?? null),
           refusal: health ?? action.ready(ctx as never, undefined as never),
           run: async (input?: unknown) => {
+            if (!current()) return refuse("not-ready", "This route tab is hidden");
             let stopped = false;
             const refusal = await owner.runAction(
               name,
@@ -458,6 +464,7 @@ export function useRoute<W, R extends string, P, A extends string>(
     seed,
     key,
     actionScope,
+    current,
   ]);
 
   const workHandle = useMemo(
@@ -477,6 +484,7 @@ export function useRoute<W, R extends string, P, A extends string>(
         writer &&
         !seed
           ? async () => {
+              if (!current()) return refuse("not-ready", "This route tab is hidden");
               const refusal = await writer.startFresh();
               if (refusal) owner.registry.set(owner.failure, refusal);
               else dirty({ ...key, kind: "work" });
@@ -485,7 +493,7 @@ export function useRoute<W, R extends string, P, A extends string>(
           : null,
       salvage: writer && !seed ? () => writer.salvage() : null,
       reload: () => {
-        if (seed) return;
+        if (seed || !current()) return;
         owner.registry.set(owner.conflict, false);
         if (spec) dirty({ ...key, kind: "work" });
       },
@@ -502,6 +510,7 @@ export function useRoute<W, R extends string, P, A extends string>(
       conflictNow,
       spec,
       seed,
+      current,
     ],
   );
 

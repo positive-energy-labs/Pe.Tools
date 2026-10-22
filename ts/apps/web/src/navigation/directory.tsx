@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
+import { useRouteSearch } from "#/route/activity";
 import { ChevronRight, Info, RefreshCw } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
@@ -121,7 +122,7 @@ function NavigationStatus() {
 }
 export function Directory() {
   const pods = usePodRoutes();
-  const page = useSearch({ from: "/" });
+  const page = useRouteSearch("home");
   const navigate = useNavigate({ from: "/" });
   const { query, exposure, sort } = page;
   const setPage = useCallback(

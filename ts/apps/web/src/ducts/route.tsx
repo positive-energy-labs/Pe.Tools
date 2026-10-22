@@ -79,7 +79,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
   const nativeObservation = useMemo<NativeObservation>(
     () => ({
       scope: {
-        document: demo || SAVED || !read.snapshot ? null : doc,
+        document: demo || SAVED ? null : (read.nativeObservation?.document ?? null),
         source: demo ? "fixture" : SAVED ? "saved" : "native",
       },
       references: [...(snapshot?.nodes ?? []), ...(snapshot?.segments ?? [])].map((element) => ({
@@ -87,7 +87,7 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
         uniqueId: element.uniqueId,
       })),
     }),
-    [snapshot, read.snapshot, demo, doc],
+    [snapshot, read.nativeObservation, demo],
   );
   const error = demo ? null : read.error;
   const pending = demo ? false : read.pending;

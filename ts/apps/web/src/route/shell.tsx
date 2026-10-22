@@ -7,7 +7,7 @@
  * state and repair actions live on the canonical Machine route; configuration lives in Settings.
  */
 import { useCallback, useContext, useEffect, useRef, type ReactNode } from "react";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useRouteNavigate, useRouteSearch } from "./activity";
 
 import {
   PrimaryRouteControls,
@@ -69,8 +69,8 @@ export interface ShellProps<W, R extends string, P, A extends string> {
 
 /** The one `?target` reader/writer every shell and route shares. Grammar lives in `parseTarget`. */
 export function useChooseTarget(): [string | null, (target: string | null) => void] {
-  const navigate = useNavigate();
-  const search = useSearch({ strict: false }) as { target?: string };
+  const navigate = useRouteNavigate();
+  const search = useRouteSearch();
   const choose = useCallback(
     (target: string | null) =>
       void navigate({
@@ -91,8 +91,8 @@ export function useChooseTarget(): [string | null, (target: string | null) => vo
  * its first chat send promotes it to a durable host conversation.
  */
 export function useRouteThread(): string {
-  const navigate = useNavigate();
-  const search = useSearch({ strict: false }) as { thread?: string };
+  const navigate = useRouteNavigate();
+  const search = useRouteSearch();
   const minted = useRef<string | null>(null);
   if (search.thread) minted.current = null;
   else minted.current ??= crypto.randomUUID();

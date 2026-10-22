@@ -1,3 +1,4 @@
+import { useRouteSearch } from "#/route/activity";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { urlPage, useRouteThread } from "#/route";
@@ -19,7 +20,7 @@ export const Route = createFileRoute("/schedules")({
 });
 
 function SchedulesRoute() {
-  const { target } = Route.useSearch();
+  const { target } = useRouteSearch("schedules");
   const thread = useRouteThread();
   return <LiveScheduleGridWorkspace framed target={target ?? null} thread={thread} />;
 }

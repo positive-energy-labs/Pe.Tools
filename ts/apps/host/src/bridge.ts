@@ -133,6 +133,8 @@ export type HostBridgeEvent = {
   /** state-sync only: set (with prevDocTitle) when the active document actually changed. */
   readonly docChanged?: boolean;
   readonly prevDocTitle?: string | null;
+  /** State-sync's exact lifetimes, so readers fence document close synchronously. */
+  readonly openDocumentIds?: readonly string[];
 };
 
 export type NativeReceiptProducer = {
@@ -432,6 +434,7 @@ export const RevitBridgeLive = Layer.effect(
               yield* emit({
                 sessionId: session.sessionId,
                 kind: "state-sync",
+                openDocumentIds: nextState.openDocuments.map((document) => document.openId),
                 docTitle: nextState.activeDocumentTitle ?? null,
                 ...(prevState.activeDocumentKey !== nextState.activeDocumentKey
                   ? { docChanged: true, prevDocTitle: prevState.activeDocumentTitle ?? null }

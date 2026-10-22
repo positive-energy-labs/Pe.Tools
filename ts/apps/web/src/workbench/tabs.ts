@@ -56,6 +56,7 @@ function place(route: RouteKey, search: Record<string, unknown>, target: Documen
 type Active = { thread: string; id: string; route: RouteKey; link: string };
 type Snapshot = { thread: string; tabs: ThreadTab[]; ready: boolean };
 type TabHistory = {
+  __pePromotedThread?: string;
   __peMintedThread?: string;
   __peRouteTab?: { thread: string; id: string; route: RouteKey };
   __peChat?: boolean;
@@ -145,7 +146,8 @@ export function useRouteTabs() {
           : (local?.id ?? matching?.id ?? crypto.randomUUID());
     held.current = { thread, id, route, link };
   } else if (!route || held.current?.thread !== thread) held.current = null;
-  const active = route && held.current?.thread === thread ? held.current : null;
+  const active =
+    route && held.current?.thread === thread && held.current.route === route ? held.current : null;
 
   // Tag the initial/deep-link entry too; the Page adapter preserves this state on its own moves.
   useEffect(() => {
@@ -424,6 +426,7 @@ export function useRouteTabs() {
             state: (previous: Record<string, unknown>) => ({
               ...previous,
               __peMintedThread: undefined,
+              __pePromotedThread: from,
               __peRouteTab: historyOf(previous).__peRouteTab
                 ? { ...historyOf(previous).__peRouteTab!, thread: owner }
                 : undefined,
@@ -442,6 +445,8 @@ export function useRouteTabs() {
     route,
     tabs,
     active,
+    ready: shown.ready,
+    promotedFrom: historyOf(location.state).__pePromotedThread,
     target: carry.target,
     failure: legacy
       ? "This old workspace group link is unavailable; open a route and choose its exact subject."

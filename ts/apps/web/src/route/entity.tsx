@@ -5,7 +5,7 @@
  * implementations. Stage, pod and path are the kernel's `url` keys (`route/url.ts`).
  */
 import { useEffect, useState, type ReactNode } from "react";
-import { useSearch } from "@tanstack/react-router";
+import { useRouteSearch } from "#/route/activity";
 import { linkTo, readLink } from "@pe/agent-contracts";
 import { usePublishPagePalette } from "#/navigation/route-controls";
 
@@ -103,7 +103,7 @@ export function EntityRouteView({
   /** The audit. */
   children: ReactNode;
 }) {
-  const { carry } = readLink("pods", useSearch({ strict: false }));
+  const { carry } = readLink("pods", useRouteSearch());
   const [page, setPage] = handle.page;
   const ladder = useDocumentLadder(handle);
   // The Situation palette is the sentence's ladder, opened by Ctrl K or its own trigger.

@@ -105,7 +105,7 @@
  *                  pressed — the ceremony, its refusals and its receipt live in `#/family/build`.
  */
 import { useEffect, type ReactNode } from "react";
-import { useSearch } from "@tanstack/react-router";
+import { useRouteSearch } from "#/route/activity";
 import { linkTo, readLink } from "@pe/agent-contracts";
 
 import { Button } from "@pe/kit/lang/button";
@@ -252,7 +252,7 @@ function PodMemberLink({
   path: string;
   children: ReactNode;
 }) {
-  const { carry } = readLink("pods", useSearch({ strict: false }));
+  const { carry } = readLink("pods", useRouteSearch());
   return <a href={linkTo("pods", { pod, path }, carry)}>{children}</a>;
 }
 

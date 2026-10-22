@@ -15,6 +15,7 @@ import { observeSdkReading } from "./session-route.ts";
 import { sdkSession } from "./sdk-session.ts";
 import type { DocumentMarks, DocumentRef } from "./document-marks.ts";
 import type { MachineOwner } from "./machine.ts";
+import { canonicalDuctsSession, ductsReadings } from "./ducts-readings.ts";
 
 /**
  * The host's own HTTP surface, read by the host on the host's clock. A one-shot Reading gets one
@@ -203,6 +204,48 @@ export function hostResourceObserver(
 
     function observe(): () => void {
       switch (request.kind) {
+        case "ducts-snapshot":
+        case "ducts-tables": {
+          if (!bridge) {
+            accept({ error: "No Revit bridge" });
+            return () => {};
+          }
+          let live = true;
+          let release = () => {};
+          void canonicalDuctsSession(
+            bridge,
+            request.kind === "ducts-snapshot" ? request.target.session : request.session,
+          )
+            .then((session) =>
+              Effect.runPromise(
+                resolveSession(bridge, {
+                  bridgeSessionId: session,
+                  openDocumentId:
+                    request.kind === "ducts-snapshot" ? request.target.openId : undefined,
+                }),
+              ),
+            )
+            .then(
+              (resolved) => {
+                if (!live) return;
+                const canonical =
+                  request.kind === "ducts-snapshot"
+                    ? {
+                        ...request,
+                        target: { session: resolved.sessionId, openId: request.target.openId },
+                      }
+                    : { ...request, session: resolved.sessionId };
+                release = ductsReadings(bridge).observe(canonical, (value) => accept({ value }));
+              },
+              (error: unknown) => {
+                if (live) accept({ error: String(error) });
+              },
+            );
+          return () => {
+            live = false;
+            release();
+          };
+        }
         case "machine":
           if (!machine) {
             accept({ error: "Machine owner is unavailable" });

@@ -1,3 +1,4 @@
+import { useRouteSearch } from "#/route/activity";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { urlPage, useRouteThread } from "#/route";
@@ -22,7 +23,7 @@ export const Route = createFileRoute("/family")({
 });
 
 function FamilyRoute() {
-  const { target } = Route.useSearch();
+  const { target } = useRouteSearch("family");
   const thread = useRouteThread();
   return <FamilyRouteView target={target ?? null} thread={thread} />;
 }

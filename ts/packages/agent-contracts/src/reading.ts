@@ -13,6 +13,46 @@ import { appliedScopeSchema } from "./families.ts";
 import { canonicalRouteInput } from "./route-doc.ts";
 import { workKey, workKeySchema } from "./route-state.ts";
 import { addressSchema, documentRefSchema, sameAddress } from "./target.ts";
+import { DUCT_PARAMETER_KEYS } from "./ducts.ts";
+
+/** Acquisition inputs, independent of a Ducts route's local selection and staged calculations. */
+export const ductsSnapshotReadingSchema = z.strictObject({
+  kind: z.literal("ducts-snapshot"),
+  target: documentRefSchema,
+  slots: z
+    .partialRecord(z.enum(DUCT_PARAMETER_KEYS), z.string().nullable())
+    .nullish()
+    .transform((value) => value ?? undefined)
+    .optional(),
+  labelParameter: z
+    .string()
+    .nullish()
+    .transform((value) => value ?? undefined)
+    .optional(),
+});
+export type DuctsSnapshotReading = z.infer<typeof ductsSnapshotReadingSchema>;
+export const ductsTablesReadingSchema = z.strictObject({
+  kind: z.literal("ducts-tables"),
+  session: z.string().min(1),
+  ids: z.array(z.string()).max(256),
+});
+export type DuctsTablesReading = z.infer<typeof ductsTablesReadingSchema>;
+export const ductsReadingSchema = z.discriminatedUnion("kind", [
+  ductsSnapshotReadingSchema,
+  ductsTablesReadingSchema,
+]);
+export type DuctsReadingRequest = z.infer<typeof ductsReadingSchema>;
+export const ductsReadingEnvelopeSchema = z.strictObject({
+  revision: z.string(),
+  state: z.enum(["idle", "loading", "ready", "stale", "failed", "closed"]),
+  version: z.string().nullable(),
+  target: documentRefSchema.nullable(),
+  session: z.string(),
+  error: z.string().optional(),
+});
+export type DuctsReadingEnvelope = z.infer<typeof ductsReadingEnvelopeSchema>;
+export const DUCTS_BODY_VERSION_HEADER = "x-pe-ducts-version";
+export const DUCTS_REFRESH_HEADER = "x-pe-ducts-refresh";
 
 export { address, addressSchema, sameAddress, type Address } from "./target.ts";
 
@@ -115,6 +155,8 @@ export type HoldingsReadingResult =
 export type SdkReading = z.infer<typeof sdkReadingSchema>;
 
 export const readingRequestSchema = z.discriminatedUnion("kind", [
+  ductsSnapshotReadingSchema,
+  ductsTablesReadingSchema,
   z.strictObject({ kind: z.literal("machine") }),
   sdkReadingSchema,
   z.discriminatedUnion("binding", [

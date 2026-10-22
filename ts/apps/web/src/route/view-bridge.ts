@@ -16,6 +16,7 @@ import { peClient } from "#/host/pe-client";
 import { useHostEvents } from "#/readings";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
 import { applyPageIntent, type PageIntent } from "./view-owner";
+import { useRouteCurrent } from "./activity";
 
 type Intent = {
   type: "route-view-intent";
@@ -51,6 +52,7 @@ export function useRouteViewBridge({
   /** What the shown Page derives; the ack echoes it. */
   facts: Record<string, unknown>;
 }) {
+  const routeCurrent = useRouteCurrent();
   const instance = useRef(crypto.randomUUID());
   const revision = useRef<number | null>(null);
   const published = useRef<RouteView | null>(null);
@@ -67,11 +69,12 @@ export function useRouteViewBridge({
   useEffect(() => {
     const changed = () => setPageVisible(document.visibilityState !== "hidden");
     document.addEventListener("visibilitychange", changed);
+    changed();
     return () => document.removeEventListener("visibilitychange", changed);
   }, []);
   const addressed = agentPage(route, page as never);
   const raw: RouteView | null =
-    thread && visible && pageVisible
+    thread && visible && pageVisible && routeCurrent()
       ? { route, thread, instance: instance.current, surface, page: addressed, context, facts }
       : null;
   const viewKey = JSON.stringify(raw);
@@ -82,23 +85,27 @@ export function useRouteViewBridge({
   applyRef.current = apply;
   current.current = view;
   currentPage.current = page;
-  const publish = useCallback((value: RouteView) => {
-    const next = publishing.current
-      .catch(() => {})
-      .then(async () => {
-        const accepted = (await peClient.call("view.publish", {
-          params: { route: value.route },
-          body: value,
-        })) as { revision: number };
-        leased.current = true;
-        if (current.current === value) {
-          revision.current = accepted.revision;
-          published.current = value;
-        }
-      });
-    publishing.current = next;
-    return next;
-  }, []);
+  const publish = useCallback(
+    (value: RouteView) => {
+      const next = publishing.current
+        .catch(() => {})
+        .then(async () => {
+          if (!routeCurrent() || current.current !== value) return;
+          const accepted = (await peClient.call("view.publish", {
+            params: { route: value.route },
+            body: value,
+          })) as { revision: number };
+          leased.current = true;
+          if (routeCurrent() && current.current === value) {
+            revision.current = accepted.revision;
+            published.current = value;
+          }
+        });
+      publishing.current = next;
+      return next;
+    },
+    [routeCurrent],
+  );
   useEffect(() => {
     if (!view) return;
     void publish(view).catch(() => {});
@@ -127,59 +134,64 @@ export function useRouteViewBridge({
     },
     [Boolean(view)],
   );
-  const onEvent = useCallback((event: Intent) => {
-    const value = current.current;
-    if (
-      event.type !== "route-view-intent" ||
-      !value ||
-      event.route !== value.route ||
-      document.visibilityState === "hidden" ||
-      event.thread !== value.thread ||
-      event.instance !== value.instance ||
-      event.revision !== revision.current ||
-      JSON.stringify(published.current) !== JSON.stringify(value)
-    )
-      return;
-    // A refusal is answered at once, against the page Pea leased: the owner refused the patch whole,
-    // so that page still stands; the store settles it only if it is still the current lease page.
-    const refused = (refusal: Refusal) =>
-      void peClient
-        .call("view.ack", {
-          params: { route: value.route },
-          body: {
-            outcome: "refused",
-            instance: value.instance,
-            commandId: event.commandId,
-            revision: event.revision,
-            page: value.page,
-            refusal: {
-              code: refusal.code,
-              message: (refusal.message || "The Page refused the patch").slice(0, 2000),
-              ...(refusal.detail ? { detail: refusal.detail.slice(0, 4000) } : {}),
+  const onEvent = useCallback(
+    (event: Intent) => {
+      const value = current.current;
+      if (
+        event.type !== "route-view-intent" ||
+        !value ||
+        !routeCurrent() ||
+        event.route !== value.route ||
+        document.visibilityState === "hidden" ||
+        event.thread !== value.thread ||
+        event.instance !== value.instance ||
+        event.revision !== revision.current ||
+        JSON.stringify(published.current) !== JSON.stringify(value)
+      )
+        return;
+      // A refusal is answered at once, against the page Pea leased: the owner refused the patch whole,
+      // so that page still stands; the store settles it only if it is still the current lease page.
+      const refused = (refusal: Refusal) =>
+        void peClient
+          .call("view.ack", {
+            params: { route: value.route },
+            body: {
+              outcome: "refused",
+              instance: value.instance,
+              commandId: event.commandId,
+              revision: event.revision,
+              page: value.page,
+              refusal: {
+                code: refusal.code,
+                message: (refusal.message || "The Page refused the patch").slice(0, 2000),
+                ...(refusal.detail ? { detail: refusal.detail.slice(0, 4000) } : {}),
+              },
             },
-          },
-        })
-        .catch(() => {});
-    let patch: ReturnType<typeof readAgentPatch>;
-    try {
-      patch = readAgentPatch(value.route, event.patch);
-    } catch (cause) {
-      return refused(refuse("failed", causeRefusal(cause).message));
-    }
-    const result = applyPageIntent(currentPage.current, () => applyRef.current(patch));
-    if (!result.ok) return refused(result.refusal);
-    // No move: only a page that already holds the patch may acknowledge it (against the unchanged
-    // snapshot); otherwise the Page did nothing Pea asked for, and says so.
-    const wanted = agentPage(value.route, patch as never);
-    if (!result.moved && Object.keys(event.patch).some((key) => value.page[key] !== wanted[key]))
-      return refused(refuse("conflict", "The Page made no move for this patch"));
-    setIntent({ event, receipt: result.receipt, context: JSON.stringify(value.context) });
-  }, []);
+          })
+          .catch(() => {});
+      let patch: ReturnType<typeof readAgentPatch>;
+      try {
+        patch = readAgentPatch(value.route, event.patch);
+      } catch (cause) {
+        return refused(refuse("failed", causeRefusal(cause).message));
+      }
+      const result = applyPageIntent(currentPage.current, () => applyRef.current(patch));
+      if (!result.ok) return refused(result.refusal);
+      // No move: only a page that already holds the patch may acknowledge it (against the unchanged
+      // snapshot); otherwise the Page did nothing Pea asked for, and says so.
+      const wanted = agentPage(value.route, patch as never);
+      if (!result.moved && Object.keys(event.patch).some((key) => value.page[key] !== wanted[key]))
+        return refused(refuse("conflict", "The Page made no move for this patch"));
+      setIntent({ event, receipt: result.receipt, context: JSON.stringify(value.context) });
+    },
+    [routeCurrent],
+  );
   useHostEvents(Boolean(view), onEvent);
   useEffect(() => {
     if (!intent || !view) return;
     const { event, receipt } = intent;
     const eligible = () =>
+      routeCurrent() &&
       document.visibilityState !== "hidden" &&
       receipt.current() &&
       receipt.rendered(currentPage.current) &&
@@ -212,5 +224,5 @@ export function useRouteViewBridge({
     return () => {
       canceled = true;
     };
-  }, [intent, view, page, publish, route]);
+  }, [intent, view, page, publish, route, routeCurrent]);
 }

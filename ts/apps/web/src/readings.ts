@@ -1,11 +1,12 @@
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
-import { runtimeStreamUrl } from "#/host/runtime";
+import { hostFetch, runtimeStreamUrl } from "#/host/runtime";
 /**
  * The read layer. One EventSource, one AtomRegistry, one vocabulary (fable law 5).
  *
  * A Reading is anything observed from Revit, the host, or disk. Every observation in the web app
- * arrives through `readingAtom` over `peReadings`; nothing else opens a connection and nothing
- * caches. A write is not a Reading: it is a plain async call whose success calls `dirty(request)`,
+ * arrives through `readingAtom` over `peReadings`. Large immutable Ducts bodies are retained by
+ * the version this stream confirms; retained bytes never establish freshness. A write is not a
+ * Reading: it is a plain async call whose success calls `dirty(request)`,
  * which reacquires that subject's snapshot from the host.
  *
  * This file absorbs host/resources.ts, host/resource-client.ts, host/queries.ts, host/live.ts,
@@ -23,6 +24,11 @@ import {
   type ReadingFrame,
   type ReadingRequest,
   type TargetInventory,
+  DUCTS_BODY_VERSION_HEADER,
+  DUCTS_REFRESH_HEADER,
+  ductsReadingEnvelopeSchema,
+  type DuctsReadingRequest,
+  type DuctsReadingEnvelope,
 } from "@pe/agent-contracts";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import { useAtomValue } from "@effect/atom-react";
@@ -36,6 +42,12 @@ import type {
   OpKey,
 } from "@pe/host-contracts/operation-types";
 import { callHostRpc } from "#/host/client.ts";
+import { createPeClient } from "@pe/agent-contracts/pe-api";
+import {
+  HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_DOCUMENT_HEADER,
+  HOST_RPC_ORIGIN_HEADER,
+} from "@pe/host-contracts/operation-types";
 import { reportFault } from "#/host/diagnostics";
 import { HOST_READ_WAIT_S } from "#/route/waits";
 import { resolveWorkbenchConfig } from "#/workbench/config.ts";
@@ -438,6 +450,230 @@ export function useReading<T = unknown>(
     [key, source],
   );
   return useAtomValue(atom);
+}
+
+export type DuctsNativeObservation = {
+  session: string;
+  document: { session: string; openId: string } | null;
+  requestId: string;
+  version: string;
+  reused: boolean;
+};
+type DuctsDecodedBody = { data: unknown; nativeObservation: DuctsNativeObservation; bytes: number };
+
+/** Browser evidence only: immutable Ducts bodies by host revision, never authority or a generic RPC cache. */
+export class DuctsBodies {
+  private readonly completed = new Map<string, DuctsDecodedBody>();
+  private readonly flights = new Map<string, Promise<DuctsDecodedBody>>();
+  private bytes = 0;
+  constructor(private readonly limits = { entries: 8, bytes: 256 * 1024 * 1024 }) {}
+
+  read(version: string, load: () => Promise<DuctsDecodedBody>): Promise<DuctsDecodedBody> {
+    const retained = this.completed.get(version);
+    if (retained) {
+      this.completed.delete(version);
+      this.completed.set(version, retained);
+      return Promise.resolve(retained);
+    }
+    const pending = this.flights.get(version);
+    if (pending) return pending;
+    if (this.flights.size >= this.limits.entries)
+      return Promise.reject(Error("Too many Ducts body reads are pending; refresh to retry"));
+    const flight = Promise.resolve()
+      .then(load)
+      .then((body) => {
+        const actual = body.nativeObservation.version;
+        const retained = this.completed.get(actual);
+        if (retained) return retained;
+        if (body.bytes > this.limits.bytes)
+          throw Error("Ducts body exceeds the browser byte budget; graph was not clipped");
+        while (
+          this.completed.size >= this.limits.entries ||
+          this.bytes + body.bytes > this.limits.bytes
+        ) {
+          const oldest = this.completed.keys().next().value!;
+          this.bytes -= this.completed.get(oldest)!.bytes;
+          this.completed.delete(oldest);
+        }
+        this.bytes += body.bytes;
+        this.completed.set(actual, body);
+        return body;
+      })
+      .finally(() => {
+        this.flights.delete(version);
+      });
+    this.flights.set(version, flight);
+    return flight;
+  }
+}
+const ductsBodies = new WeakMap<Readings, DuctsBodies>();
+const bodiesOf = (source: Readings) => {
+  let bodies = ductsBodies.get(source);
+  if (!bodies) {
+    bodies = new DuctsBodies();
+    ductsBodies.set(source, bodies);
+  }
+  return bodies;
+};
+
+/** Tiny owner envelopes drive acquisition; a graph travels over admitted /call only when needed. */
+export function useDuctsReading<T>(
+  request: DuctsReadingRequest | null,
+  source: Readings = peReadings,
+  fetchBody: typeof hostFetch = hostFetch,
+) {
+  const key = request ? readingKey(request) : null;
+  const reading = useReading<DuctsReadingEnvelope>(request, source);
+  const envelope =
+    reading.state === "ready" ? ductsReadingEnvelopeSchema.parse(reading.observation) : null;
+  const current = useRef({ key, envelope });
+  current.current = { key, envelope };
+  const [body, setBody] = useState<{
+    key: string;
+    data?: T;
+    nativeObservation?: DuctsNativeObservation;
+    error?: Error;
+    revision: string;
+  }>();
+  const attempts = useRef(new Map<string, Promise<void>>());
+  const acquire = useCallback(
+    (refresh = false) => {
+      const at = current.current;
+      if (!request || !at.key || !at.envelope) return;
+      const { revision, version, session, target } = at.envelope;
+      const attempt = `${at.key}:${revision}:${refresh}`;
+      if (attempts.current.has(attempt)) return;
+      const headers: Record<string, string> = {
+        [HOST_RPC_BRIDGE_SESSION_HEADER]: session,
+        [HOST_RPC_ORIGIN_HEADER]: `web:${window.location.pathname}`,
+      };
+      if (target) headers[HOST_RPC_DOCUMENT_HEADER] = target.openId;
+      if (refresh) headers[DUCTS_REFRESH_HEADER] = revision;
+      else if (version) headers[DUCTS_BODY_VERSION_HEADER] = version;
+      const promise = (async () => {
+        try {
+          const decoded = await bodiesOf(source).read(
+            refresh ? `refresh:${revision}` : revision,
+            async () => {
+              const response = await createPeClient(undefined, fetchBody).response(
+                "operation.call",
+                {
+                  body:
+                    request.kind === "ducts-snapshot"
+                      ? {
+                          key: "ducts.snapshot",
+                          request: {
+                            ...(request.slots ? { slots: request.slots } : {}),
+                            ...(request.labelParameter
+                              ? { labelParameter: request.labelParameter }
+                              : {}),
+                          },
+                        }
+                      : { key: "ducts.tables", request: { ids: request.ids } },
+                },
+                { headers, signal: AbortSignal.timeout(120_000) },
+              );
+              if (!response.ok) {
+                const problem = (await response.json().catch(() => null)) as {
+                  message?: string;
+                  error?: string;
+                } | null;
+                throw Error(
+                  problem?.message ?? problem?.error ?? `Ducts read failed (${response.status})`,
+                );
+              }
+              const confirmedSession = response.headers.get("x-pe-resolved-session");
+              const confirmedOpenId = response.headers.get("x-pe-resolved-open-id");
+              const nativeRequestId = response.headers.get("x-pe-native-request-id");
+              const bodyVersion = response.headers.get(DUCTS_BODY_VERSION_HEADER);
+              if (
+                confirmedSession !== session ||
+                (target && decodeURIComponent(confirmedOpenId ?? "") !== target.openId) ||
+                !nativeRequestId ||
+                !bodyVersion ||
+                (version && !refresh && bodyVersion !== version)
+              )
+                throw Error("Ducts response did not confirm the requested observation");
+              const json = await response.text();
+              return {
+                data: JSON.parse(json) as unknown,
+                bytes: new TextEncoder().encode(json).byteLength,
+                nativeObservation: {
+                  session,
+                  document: target,
+                  requestId: nativeRequestId,
+                  version: bodyVersion,
+                  reused: response.headers.get("x-pe-ducts-reused") === "true",
+                },
+              };
+            },
+          );
+          const latest = current.current;
+          // HTTP may beat the ready SSE frame, but an older revision can never overwrite a newer body.
+          if (
+            latest.key !== at.key ||
+            latest.envelope?.revision !== decoded.nativeObservation.version ||
+            !["idle", "loading", "ready"].includes(latest.envelope.state)
+          )
+            return;
+          setBody({
+            key: at.key!,
+            data: decoded.data as T,
+            revision: decoded.nativeObservation.version,
+            nativeObservation: decoded.nativeObservation,
+          });
+        } catch (error) {
+          if (current.current.key === at.key && current.current.envelope?.revision === revision)
+            setBody({
+              key: at.key!,
+              revision,
+              error: Error(
+                `${error instanceof Error ? error.message : String(error)}; refresh to retry`,
+              ),
+            });
+        }
+      })();
+      attempts.current.set(attempt, promise);
+      // Attempts only deduplicate this mounted consumer; the host owns every completed payload.
+      if (attempts.current.size > 8) attempts.current.delete(attempts.current.keys().next().value!);
+    },
+    [key, fetchBody, source],
+  );
+  useEffect(() => {
+    if (
+      !envelope ||
+      envelope.state === "loading" ||
+      envelope.state === "failed" ||
+      envelope.state === "closed"
+    )
+      return;
+    // A failed attempt is observable until explicit refresh; rendering never spins network retries.
+    if (body?.key === key && body.revision === envelope.revision) return;
+    // The same acquisition's ready envelope can arrive before its HTTP response.
+    if (envelope.state === "ready" && attempts.current.has(`${key}:${envelope.revision}:false`))
+      return;
+    acquire();
+  }, [key, envelope?.revision, envelope?.state, body, acquire]);
+  const valid =
+    envelope?.state === "ready" &&
+    body?.key === key &&
+    body.nativeObservation?.version === envelope.version;
+  const error =
+    reading.state === "failed"
+      ? Error(reading.message)
+      : envelope?.error
+        ? Error(envelope.error)
+        : body?.key === key && body.revision === envelope?.revision
+          ? body.error
+          : undefined;
+  return {
+    data: valid ? body.data : undefined,
+    nativeObservation: valid ? body.nativeObservation : undefined,
+    version: valid ? body.nativeObservation?.version : undefined,
+    error,
+    pending: request !== null && !valid && !error,
+    refresh: useCallback(() => acquire(true), [acquire]),
+  };
 }
 
 /**

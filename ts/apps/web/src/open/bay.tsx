@@ -37,7 +37,7 @@ import { Switcher } from "#/components/lang/switcher";
 import type { QueryCommand } from "@pe/kit/table/model";
 import { queryWords, readClause, useTableState, visibleRows } from "@pe/kit/table/view";
 import { ActionOutcome } from "#/actions/receipt";
-import { frozenDemo } from "#/host/demo-client";
+import { useRouteDemo } from "#/route/activity";
 import { keyOf, pidOf, processOf, selectionOf } from "#/machine/session";
 import { demoRecents } from "#/machine/use-machine";
 import { dirty, previousOf, useAction, useReading } from "#/readings";
@@ -97,7 +97,8 @@ function OutcomeOf({ outcome }: { outcome: Outcome | null }) {
  * the fixture threads and opens no transport.
  */
 export function useBayReadings(machine: Machine | null, fixture: boolean) {
-  const demo = fixture ? frozenDemo() : null;
+  const routeDemo = useRouteDemo();
+  const demo = fixture ? routeDemo : null;
   const live = useReading<{ result?: { recents?: RecentDocument[] } }>(
     fixture ? null : { kind: "sdk", read: "recents" },
   );

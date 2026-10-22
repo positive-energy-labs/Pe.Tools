@@ -1,4 +1,10 @@
 import { peRoutes } from "@pe/agent-contracts/pe-api";
+import { canonicalDuctsSession, ductsReadings } from "./ducts-readings.ts";
+import {
+  DUCTS_BODY_VERSION_HEADER,
+  DUCTS_REFRESH_HEADER,
+  type DuctsReadingRequest,
+} from "@pe/agent-contracts";
 import { sdkSession, readSessionScope } from "./sdk-session.ts";
 import { admitScheduleAction, recoverScheduleAction, readSchedule } from "./schedule-actions.ts";
 import {
@@ -248,10 +254,18 @@ export function makeCallRoute(
       const key = body.key;
       yield* Effect.try({ try: () => admitAnonymousCall(caller, key), catch: (error) => error });
       const request = "request" in body ? body.request : undefined;
-      const scope = yield* Effect.try({
+      let scope = yield* Effect.try({
         try: () => readSessionScope(req.headers),
         catch: (error) => invalidBody(String(error)),
       });
+      if ((key === "ducts.snapshot" || key === "ducts.tables") && scope.bridgeSessionId) {
+        const bridgeForScope = yield* RevitBridge;
+        const canonicalSession = yield* Effect.tryPromise({
+          try: () => canonicalDuctsSession(bridgeForScope, scope.bridgeSessionId!),
+          catch: (error) => error,
+        });
+        scope = { ...scope, bridgeSessionId: canonicalSession };
+      }
       let bridgeSessionId = scope.bridgeSessionId;
       let openDocumentId: string | null | undefined = scope.openDocumentId;
 
@@ -341,6 +355,53 @@ export function makeCallRoute(
             });
           }
         }
+      }
+      if (key === "ducts.snapshot" || key === "ducts.tables") {
+        const target =
+          key === "ducts.snapshot"
+            ? documentRefSchema.parse({ session: bridgeSessionId, openId: openDocumentId })
+            : { session: bridgeSessionId!, openId: undefined };
+        const subject: DuctsReadingRequest =
+          key === "ducts.snapshot"
+            ? {
+                ...(request as object),
+                kind: "ducts-snapshot",
+                target: documentRefSchema.parse(target),
+              }
+            : { ...(request as { ids: string[] }), kind: "ducts-tables", session: target.session };
+        const owner = ductsReadings(bridge);
+        const shared = yield* Effect.tryPromise({
+          try: () =>
+            owner.read(
+              subject,
+              async () => ({
+                ...(await Effect.runPromise(
+                  bridge.invoke(key, request ?? {}, target.session, target.openId, requestId),
+                )),
+                nativeRequestId: requestId,
+              }),
+              {
+                version: req.headers[DUCTS_BODY_VERSION_HEADER],
+                refresh: req.headers[DUCTS_REFRESH_HEADER],
+              },
+            ),
+          catch: (error) =>
+            error instanceof BridgeError ? error : new BridgeError(String(error), 409),
+        });
+        yield* Effect.try({
+          try: () => owner.assertCurrent(subject, shared.version),
+          catch: (error) => error,
+        });
+        recordOperation(op, { ok: true });
+        return Response.text(shared.json, {
+          headers: {
+            "content-type": "application/json",
+            ...resolvedTargetHeaders(shared.target),
+            "x-pe-native-request-id": shared.nativeRequestId,
+            [DUCTS_BODY_VERSION_HEADER]: shared.version,
+            "x-pe-ducts-reused": String(shared.nativeRequestId !== requestId),
+          },
+        });
       }
       const result = isTsOnlyOperationKey(key)
         ? {

@@ -7,7 +7,15 @@ import {
   ductsRouteState,
   readingKey,
   readingRequestSchema,
+  DUCTS_BODY_VERSION_HEADER,
+  DUCTS_REFRESH_HEADER,
+  type DuctsReadingRequest,
+  emptyThreadHead,
 } from "@pe/agent-contracts";
+import {
+  HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_DOCUMENT_HEADER,
+} from "@pe/host-contracts/operation-types";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { DuctsSnapshot } from "@pe/host-contracts/generated";
 import {
@@ -26,6 +34,26 @@ let revision = 0;
 type Request = DuctsSnapshot.Req.Request;
 const requests: { request: Request; openId: string | null }[] = [];
 const workListeners = new Set<() => void>();
+const ductsListeners = new Set<() => void>();
+const headListeners = new Set<() => void>();
+let head = emptyThreadHead;
+const ductReadings = new Map<string, { request: DuctsReadingRequest; version: string }>();
+let nextReading = 0;
+const ductReading = (request: DuctsReadingRequest) => {
+  const key = readingKey(request);
+  let value = ductReadings.get(key);
+  if (!value) {
+    value = { request, version: `duct-route-fixture-${++nextReading}` };
+    ductReadings.set(key, value);
+  }
+  return value;
+};
+const invalidateDucts = (openId: string) => {
+  for (const value of ductReadings.values())
+    if (value.request.kind === "ducts-snapshot" && value.request.target.openId === openId)
+      value.version = `duct-route-fixture-${++nextReading}`;
+  ductsListeners.forEach((emit) => emit());
+};
 let reply: (request: Request) => Promise<Response>;
 const links = [
   [100, 1],
@@ -151,6 +179,10 @@ beforeEach(() => {
   revision = 0;
   requests.length = 0;
   workListeners.clear();
+  ductsListeners.clear();
+  ductReadings.clear();
+  head = emptyThreadHead;
+  headListeners.clear();
   reply = async () => Response.json(response());
   // Fixture transport only: the route still resolves its target and reads through the production wire.
   vi.stubGlobal(
@@ -180,9 +212,22 @@ beforeEach(() => {
                     )
                   : request.kind === "inventory"
                     ? inventory
-                    : request.kind === "work"
-                      ? { doc: work, revision }
-                      : undefined;
+                    : request.kind === "thread-head"
+                      ? head
+                      : request.kind === "work"
+                        ? { doc: work, revision }
+                        : request.kind === "ducts-snapshot" || request.kind === "ducts-tables"
+                          ? {
+                              state: "ready",
+                              revision: ductReading(request).version,
+                              version: ductReading(request).version,
+                              session:
+                                request.kind === "ducts-snapshot"
+                                  ? request.target.session
+                                  : request.session,
+                              target: request.kind === "ducts-snapshot" ? request.target : null,
+                            }
+                          : undefined;
               if (value !== undefined)
                 this.onmessage?.({
                   data: JSON.stringify({ kind: "snapshot", key: readingKey(request), value }),
@@ -190,6 +235,14 @@ beforeEach(() => {
             };
             if (request.kind === "work")
               workListeners.add(() => {
+                if (!this.closed) emit();
+              });
+            if (request.kind === "thread-head")
+              headListeners.add(() => {
+                if (!this.closed) emit();
+              });
+            if (request.kind === "ducts-snapshot" || request.kind === "ducts-tables")
+              ductsListeners.add(() => {
                 if (!this.closed) emit();
               });
             emit();
@@ -202,6 +255,20 @@ beforeEach(() => {
     },
   );
   vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+    if (url.startsWith("/pe/scope/") && init?.method === "PUT" && typeof init.body === "string") {
+      const { defaultTarget } = JSON.parse(init.body);
+      head = { ...head, defaultTarget, revision: head.revision + 1 };
+      queueMicrotask(() => headListeners.forEach((emit) => emit()));
+      return Response.json({
+        ok: true,
+        why: "set",
+        head: {
+          ...head,
+          hostNow: "2026-10-22T00:00:00.000Z",
+          grantView: null,
+        },
+      });
+    }
     if (url.includes("/route-state/ducts/apply") && typeof init?.body === "string") {
       const { patches, expectedRevision } = JSON.parse(init.body);
       const result = applyPatches(
@@ -217,14 +284,35 @@ beforeEach(() => {
       queueMicrotask(() => workListeners.forEach((emit) => emit()));
       return Response.json({ ok: true, revision });
     }
-    if (
-      url === "/call" &&
-      typeof init?.body === "string" &&
-      JSON.parse(init.body).key === "ducts.snapshot"
-    ) {
-      const request = JSON.parse(init.body).request as Request;
-      requests.push({ request, openId: new Headers(init.headers).get("x-pe-open-document-id") });
-      return reply(request);
+    if (url === "/call" && typeof init?.body === "string") {
+      const { key, request } = JSON.parse(init.body);
+      const headers = new Headers(init.headers);
+      const session = headers.get(HOST_RPC_BRIDGE_SESSION_HEADER)!;
+      const openId = headers.get(HOST_RPC_DOCUMENT_HEADER);
+      const subject = readingRequestSchema.parse(
+        key === "ducts.snapshot"
+          ? { kind: "ducts-snapshot", target: { session, openId }, ...request }
+          : { kind: "ducts-tables", session, ids: request.ids },
+      ) as DuctsReadingRequest;
+      const held = ductReading(subject);
+      if (headers.get(DUCTS_REFRESH_HEADER) === held.version) {
+        held.version = `duct-route-fixture-${++nextReading}`;
+        queueMicrotask(() => ductsListeners.forEach((emit) => emit()));
+      }
+      const version = held.version;
+      if (key === "ducts.snapshot") requests.push({ request, openId });
+      const result =
+        key === "ducts.snapshot"
+          ? await reply(request)
+          : Response.json({ tables: {}, missing: [], unsupported: {} });
+      if (version !== held.version)
+        return Response.json({ error: "Reading invalidated" }, { status: 409 });
+      result.headers.set("x-pe-resolved-session", session);
+      if (openId) result.headers.set("x-pe-resolved-open-id", encodeURIComponent(openId));
+      result.headers.set("x-pe-native-request-id", `native-${version}`);
+      result.headers.set(DUCTS_BODY_VERSION_HEADER, version);
+      result.headers.set("x-pe-ducts-reused", "true");
+      return result;
     }
     throw Error(`Unexpected fixture request: ${url}`);
   });
@@ -276,7 +364,7 @@ async function mount(search = "&system=SA", hosted = false, target = "slice", th
   return { ...rendered, router };
 }
 
-test("an exact document lifetime change fences a pending read, including returning to the first document", async () => {
+test("a changed document fences a pending read after changing targets and returning to that exact open document", async () => {
   inventory.sessions[0]!.openDocuments.push({
     openId: "doc2",
     title: "Second document",
@@ -286,7 +374,7 @@ test("an exact document lifetime change fences a pending read, including returni
   const target = encodeURIComponent(
     JSON.stringify({ kind: "open", ref: { session: "slice", openId: "doc" } }),
   );
-  await mount("&system=SA", false, target, "");
+  const mounted = await mount("&system=SA", false, target, "");
   let release: (value: Response) => void = () => {};
   reply = () =>
     new Promise((resolve) => {
@@ -301,7 +389,11 @@ test("an exact document lifetime change fences a pending read, including returni
     fireEvent.click(await screen.findByRole("option", { name: new RegExp(title) }));
   };
   await pick("Second document");
-  await waitFor(() => expect(requests.at(-1)?.openId).toBe("doc2"));
+  await waitFor(() => expect(requests.at(-1)?.openId).toBe("doc2"), {
+    onTimeout: () =>
+      Error(JSON.stringify({ head, search: mounted.router.state.location.search, requests })),
+  });
+  act(() => invalidateDucts("doc"));
   await pick("Duct route slice");
   await waitFor(() => expect(requests.at(-1)?.openId).toBe("doc"));
   await act(async () =>

@@ -13,6 +13,7 @@ import { serveRoutes } from "./real-server.ts";
 test("the analysis read adapter preserves Pea admission and never borrows a human principal", async () => {
   let nativeReads = 0;
   const bridge = {
+    subscribe: () => () => {},
     list: Effect.succeed([
       {
         sessionId: "bridge-a",
@@ -49,7 +50,11 @@ test("the analysis read adapter preserves Pea admission and never borrows a huma
         nativeReads++;
         return {
           value: { fixture: true },
-          target: { session: "bridge-a", document: "C:/HVAC.rvt" },
+          target: {
+            session: "bridge-a",
+            document: "C:/HVAC.rvt",
+            documentRef: { session: "bridge-a", openId: "open-a" },
+          },
         };
       }),
   } as unknown as RevitBridge["Service"];
