@@ -431,6 +431,9 @@ public static class DuctSnapshots {
         double? width = shape is DuctShape.Rectangular or DuctShape.Oval ? R(c.Width * 12) : null;
         double? height = shape is DuctShape.Rectangular or DuctShape.Oval ? R(c.Height * 12) : null;
         var frame = Try(() => c.CoordinateSystem);
+        var info = c.Owner is FamilyInstance { Category: { } category } && category.ToBuiltInCategory() == BuiltInCategory.OST_DuctFitting
+            ? Try(() => c.GetMEPConnectorInfo())
+            : null;
         return new DuctConnector(
             c.Id,
             c.ConnectorType == ConnectorType.Curve ? "curve" : "end",
@@ -450,7 +453,9 @@ public static class DuctSnapshots {
             ConnectedTo(c),
             DuctNetwork.Area(shape, diameter, width, height) is { } area ? R(area, 5) : null,
             frame is null ? null : V(frame.BasisZ),
-            frame is not null && shape is DuctShape.Rectangular or DuctShape.Oval ? V(frame.BasisX) : null);
+            frame is not null && shape is DuctShape.Rectangular or DuctShape.Oval ? V(frame.BasisX) : null,
+            info?.IsPrimary,
+            info?.IsSecondary);
     }
 
     private static DuctRef? ConnectedTo(Connector c) {
