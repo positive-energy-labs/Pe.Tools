@@ -14,11 +14,8 @@
  */
 import { z } from "zod";
 import {
-  DUCTS_LAYERS,
   ductsRouteState,
-  layersOf,
   routePageSchema,
-  toggleLayer,
   transitionPatches,
   type DuctAssumption,
   type DuctClaim,
@@ -187,19 +184,6 @@ const observed = <T>(ctx: DuctsCtx, key: DuctsReading) => {
 const pendingOf = (ctx: DuctsCtx) =>
   pendingCount(ctx.work.doc, observed<DuctSnapshot>(ctx, "ducts")?.store);
 
-/** The picture's layers on before the person touches one. */
-const PICTURE_ON: readonly (typeof DUCTS_LAYERS)[number][] = ["meshes", "labels", "findings"];
-
-/** The picture's layers that are on. SHIM: the contract's `layers` default is "" (none) and names
- * no on-set (thread 3e493705); until it defaults to `PICTURE_ON`, "" reads as that set and a
- * person who turns every layer off writes "none". */
-export const layersOn = (page: Pick<DuctsPage, "layers">): ReadonlySet<string> =>
-  new Set(page.layers === "" ? PICTURE_ON : layersOf(DUCTS_LAYERS, page.layers));
-
-/** `page.layers` with one picture layer flipped. */
-export const flipLayer = (page: Pick<DuctsPage, "layers">, layer: (typeof DUCTS_LAYERS)[number]) =>
-  toggleLayer(DUCTS_LAYERS, [...layersOn(page)].join(","), layer) || "none";
-
 /**
  * The `revit.detail.space-scene` request for the picture: every element of every group the chosen
  * system is in, with what is around it when the `context` layer is on; null with no system. One
@@ -214,7 +198,7 @@ export const sceneRequestOf = (
   if (!ids.length) return null;
   return sceneRequest(
     ids.sort((a, b) => a - b),
-    !layersOn(page).has("context"),
+    !page.layers.includes("context"),
   );
 };
 

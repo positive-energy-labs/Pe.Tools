@@ -133,7 +133,7 @@ const planViewport = field(
   fitViewportCodec<PlaneViewport>(),
 );
 
-/** The layer keys the Ducts spatial picture draws; a snapshot may name more (`facts.layers`). */
+/** The layer keys the Ducts spatial picture draws. */
 export const DUCTS_LAYERS = ["meshes", "context", "centrelines", "labels", "findings"] as const;
 
 const ductsFields = {
@@ -145,8 +145,11 @@ const ductsFields = {
   selected: field(text(), { url: "push", agent: "set" }),
   /** The picture's encoding, a key of the web's `ENCODINGS`. */
   encoding: field(z.string().max(200).default("health"), { url: "push", agent: "set" }),
-  /** The layer keys the picture draws (`DUCTS_LAYERS`, or a key the snapshot names); empty = none. */
-  layers: field(layersKey([], []), { url: "push", agent: "set" }),
+  /** The layer keys the picture draws; empty = none. */
+  layers: field(layersKey(DUCTS_LAYERS, ["meshes", "labels", "findings"]), {
+    url: "push",
+    agent: "set",
+  }),
   /** What the picture pane draws: the `model` in space, or the `schematic` one-line. */
   picture: field(modeKey(["model", "schematic"], "model"), { url: "push", agent: "set" }),
   /** Where the model picture looks from; null = fit the subject. A drag replaces, a preset pushes. */
@@ -164,8 +167,6 @@ const ductsFields = {
 type DuctsFacts = {
   systems?: { name: string }[];
   levels?: { id: string; name: string }[];
-  /** Layer keys the snapshot names beyond `DUCTS_LAYERS`. */
-  layers?: string[];
   /** The orbit pose the picture shows, fitted or not, as `viewportCodec` writes it. */
   pose?: string;
 };
@@ -182,7 +183,7 @@ const ductsWords = z.object({
  */
 function resolveDucts(input: Record<string, unknown>, facts: Record<string, unknown>) {
   const patch = { ...input } as Record<string, string>;
-  const { systems = [], levels = [], layers = [], pose } = facts as DuctsFacts;
+  const { systems = [], levels = [], pose } = facts as DuctsFacts;
   const keys = [...setKeys(ductsFields), ...Object.keys(ductsWords.shape)];
   const stray = Object.keys(patch).filter((key) => !keys.includes(key));
   if (stray.length)
@@ -210,12 +211,12 @@ function resolveDucts(input: Record<string, unknown>, facts: Record<string, unkn
   if (patch.level && !levels.some((level) => level.id === patch.level))
     return { ok: false as const, error: `unknown level '${patch.level}'` };
   if (patch.layers) {
-    const known = new Set<string>([...DUCTS_LAYERS, ...layers]);
-    const unknown = patch.layers.split(",").filter((name) => !known.has(name.trim()));
+    const known: readonly string[] = DUCTS_LAYERS;
+    const unknown = patch.layers.split(",").filter((name) => !known.includes(name.trim()));
     if (unknown.length)
       return {
         ok: false as const,
-        error: `unknown layers ${unknown.join(", ")}; the picture draws ${[...known].join(", ")}`,
+        error: `unknown layers ${unknown.join(", ")}; the picture draws ${known.join(", ")}`,
       };
   }
   if (patch.look !== undefined) {
@@ -288,7 +289,7 @@ const isSpaceElementKey = (key: string) => {
     return false;
   }
 };
-export const spaceElementKeySchema = z
+const spaceElementKeySchema = z
   .string()
   .max(4096)
   .refine(isSpaceElementKey, "an element key is JSON [documentKey, linkInstanceId|null, uniqueId]");
@@ -302,7 +303,7 @@ const spaceCuts = spaceCutsSchema.default({
 });
 
 /** 3D orbits; an axis editor draws its plane. */
-export const SPACE_MODES = ["3d", "top", "north", "east"] as const;
+const SPACE_MODES = ["3d", "top", "north", "east"] as const;
 const spaceViewport = z.discriminatedUnion("kind", [orbitViewportSchema, planeViewportSchema]);
 
 /** Host element ids, comma joined; any non-integer part makes the whole list unreadable. */
@@ -377,6 +378,9 @@ export const SPACE_LAYERS = [
   "sweep",
 ] as const;
 
+/** The solver layers the Rooms plan draws, in strip order. */
+export const ROOMS_LAYERS = ["rails", "openings", "network", "faces"] as const;
+
 /** The Families query a page opens with: its filter clauses that default on (web `FAMILIES_FILTERS`). */
 export const FAMILIES_DEFAULT_QUERY = "!empty !absent";
 
@@ -403,7 +407,7 @@ export const routeAddresses = {
     fields: ductsFields,
     agent: {
       policy:
-        "Move the Ducts page in the person's open browser. Its subject: system (a Revit system name such as SA 19, as the person said it; it resolves against the view's system names), level and selected element id; an empty string clears the key. The page shows every duct network the system is in. Set the system only when the person named it, and never pick a system they did not name. Its picture: encoding, layers (comma separated: meshes, context, centrelines, labels, findings, or a key the view's facts name), picture (model or schematic), and either look (plan, iso, north, south, east or west: the shown picture turned about its pivot) or viewport (orbit:yaw,elev,zoom@x,y,z in feet; empty fits the subject). issue selects one finding by id. Each set is one step the person can go Back from. No Work or Revit read.",
+        "Move the Ducts page in the person's open browser. Its subject: system (a Revit system name such as SA 19, as the person said it; it resolves against the view's system names), level and selected element id; an empty string clears the key. The page shows every duct network the system is in. Set the system only when the person named it, and never pick a system they did not name. Its picture: encoding, layers (comma separated: meshes, context, centrelines, labels, findings; empty = none), picture (model or schematic), and either look (plan, iso, north, south, east or west: the shown picture turned about its pivot) or viewport (orbit:yaw,elev,zoom@x,y,z in feet; empty fits the subject). issue selects one finding by id. Each set is one step the person can go Back from. No Work or Revit read.",
       words: ductsWords,
       resolve: resolveDucts,
     },
@@ -452,7 +456,7 @@ export const routeAddresses = {
       /** The plan view partition runs on; empty = none chosen. */
       view: field(text(), { url: "push" }),
       /** Solver layers drawn on the plan (`rails,openings`); empty = none. */
-      layers: field(layersKey([], []), { url: "push" }),
+      layers: field(layersKey(ROOMS_LAYERS, []), { url: "push" }),
       /** Region labels (`R12,R3`): selected and zoomed to once drawn. */
       focus: field(text(1024), { url: "replace" }),
       viewport: planViewport,
@@ -484,7 +488,7 @@ export const routeAddresses = {
     fields: {
       ...spaceFields,
       /** The layers the picture draws, in `SPACE_LAYERS` order. */
-      layers: field(z.array(z.enum(SPACE_LAYERS)).default(["meshes", "context", "cuts"]), {
+      layers: field(layersKey(SPACE_LAYERS, ["meshes", "context", "cuts"]), {
         url: "push",
         agent: "set",
       }),
@@ -596,7 +600,7 @@ export type RouteViewRoute = {
 }[RouteKey];
 
 /** Root keys a link carries beside any route's fields; no route declares one. `shell` is never carried. */
-export const carryKeys = ["thread", "target", "work"] as const;
+const carryKeys = ["thread", "target", "work"] as const;
 export type Carry = Partial<Record<(typeof carryKeys)[number], string>>;
 
 /* ── Field reads and writes ──────────────────────────────────────────────────── */
@@ -648,7 +652,7 @@ export const routePageSchema = <R extends RouteKey>(route: R) =>
 const conflictOf = (route: RouteKey) => (routeAddresses[route] as RouteAddress).conflict;
 
 /** `page` with each key that breaks the route's `conflict` rule reset to its default. */
-export function settlePage<P extends Record<string, unknown>>(route: RouteKey, page: P): P {
+function settlePage<P extends Record<string, unknown>>(route: RouteKey, page: P): P {
   const conflict = conflictOf(route);
   const fields = fieldsOf(route);
   let settled = page;

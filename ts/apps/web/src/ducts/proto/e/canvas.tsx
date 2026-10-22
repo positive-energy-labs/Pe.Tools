@@ -7,7 +7,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { DUCTS_LAYERS } from "@pe/agent-contracts";
+import { DUCTS_LAYERS, toggleLayer } from "@pe/agent-contracts";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import { Popover, PopoverContent } from "@pe/kit/lang/popover";
 import { KeyLegend } from "#/components/lang/kbd";
@@ -21,7 +21,7 @@ import { elementNamer } from "../../claims";
 import { PICTURE_KEYS } from "../../docs";
 import { NodeFactsView, SegmentFactsView } from "../../facts";
 import { labelOfNode, legsOf } from "../../legs";
-import { flipLayer, layersOn, sceneRequestOf } from "../../manifest";
+import { sceneRequestOf } from "../../manifest";
 import { ModelPicture, poseOf, usePictureBounds } from "../../model-picture";
 import { ProvisionalNote } from "../../provisional";
 import { indexOf, sceneOf, subjectScene } from "../../scene";
@@ -129,7 +129,7 @@ function Canvas({
   useEffect(() => {
     onPose?.(committedPose);
   }, [committedPose, onPose]);
-  const layers = layersOn(page);
+  const layers = new Set<string>(page.layers);
   const picture = page.picture;
   const swap = () =>
     setPage({ picture: picture === "model" ? "schematic" : "model" }, { history: "push" });
@@ -251,11 +251,13 @@ function Canvas({
         })),
       }}
       layers={{
-        value: [...layers],
+        value: page.layers,
         options: DUCTS_LAYERS.map((key) => ({ key, ...LAYER_WORDS[key] })),
         onToggle: (key) =>
           setPage(
-            { layers: flipLayer(page, key as (typeof DUCTS_LAYERS)[number]) },
+            {
+              layers: toggleLayer(DUCTS_LAYERS, page.layers, key as (typeof DUCTS_LAYERS)[number]),
+            },
             { history: "push" },
           ),
       }}

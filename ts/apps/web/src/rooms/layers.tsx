@@ -1,8 +1,9 @@
 /**
  * The solver's layer 1 on the rooms plan (`rooms.trace`): rails, openings, the network and the
- * faces, each a layer the URL names (`?layers=rails,openings`, read by `layersOf` in agent-contracts). Drawn in the plan's world px, over
+ * faces, each a layer the URL names (`?layers=rails,openings`, `ROOMS_LAYERS` in agent-contracts). Drawn in the plan's world px, over
  * Revit's picture, never instead of it.
  */
+import { ROOMS_LAYERS } from "@pe/agent-contracts";
 import type { RoomsTrace } from "@pe/host-contracts/generated";
 
 import { revitTarget } from "@pe/kit/lang/row";
@@ -16,8 +17,7 @@ export type TraceRead = { data: TraceData | null; none: string | null };
 type Rail = RoomsTrace.Res.RoomsTraceRail;
 type SegKind = RoomsTrace.Res.RoomsSegKind;
 
-export const LAYERS = ["rails", "openings", "network", "faces"] as const;
-export type Layer = (typeof LAYERS)[number];
+export type Layer = (typeof ROOMS_LAYERS)[number];
 
 export const LAYER_SAYS: Record<Layer, string> = {
   rails: "every wall rail the solver read, a grey band of its thickness with its axis",

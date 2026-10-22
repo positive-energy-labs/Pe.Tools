@@ -32,7 +32,7 @@ import { LAYER_SAYS, SPACE_LAYERS, rowUnder, type SpaceLayer } from "./layers";
 import type { SpacePage } from "./manifest";
 import { cutPolygons, packPolygons, retained, type Cuts, type Polygons } from "./state";
 import { useRouteViewBridge } from "#/route/view-bridge";
-import { spaceElementKey } from "@pe/agent-contracts";
+import { spaceElementKey, toggleLayer } from "@pe/agent-contracts";
 
 type SetPage = (next: Partial<SpacePage>, move?: PageMove<SpacePage>) => void;
 const MODE_LABEL = { "3d": "3D", top: "Top", north: "North", east: "East" } as const;
@@ -322,11 +322,7 @@ export function SpacePicture({
         value: page.layers,
         options: SPACE_LAYERS.map((l) => ({ key: l, label: l, says: LAYER_SAYS[l] })),
         onToggle: (l) =>
-          setPage({
-            layers: on.has(l as SpaceLayer)
-              ? page.layers.filter((x) => x !== l)
-              : SPACE_LAYERS.filter((x) => x === l || on.has(x)),
-          }),
+          setPage({ layers: toggleLayer(SPACE_LAYERS, page.layers, l as SpaceLayer) }),
       }}
       floaters={meshes ? floaters : undefined}
     >

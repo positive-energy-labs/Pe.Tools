@@ -22,8 +22,8 @@ import { token } from "@pe/kit/lib/token";
 import { PlanImageLayer, planCorners, type TakeoffPlanImage } from "#/takeoff/level-plan";
 import { pathD } from "#/takeoff/model";
 import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan-image";
-import { layersOf, toggleLayer } from "@pe/agent-contracts";
-import { LAYER_SAYS, LAYERS, TraceFaces, TraceLayers, type Layer, type TraceRead } from "./layers";
+import { ROOMS_LAYERS, toggleLayer } from "@pe/agent-contracts";
+import { LAYER_SAYS, TraceFaces, TraceLayers, type Layer, type TraceRead } from "./layers";
 import { CALLOUT_FONT_PX, holdsPin, PIN_R, placeCallouts, type CalloutItem } from "./callouts";
 import type { PlanGeo } from "./sketch";
 import { useRouteViewBridge } from "#/route/view-bridge";
@@ -249,7 +249,7 @@ export function RoomsPlan({
   } = usePlaneViewport(page.viewport, world?.fit ?? null, (viewport, how) =>
     setPage({ viewport }, { history: how === "move" ? "push" : "replace" }),
   );
-  const layers = layersOf(LAYERS, page.layers);
+  const layers = page.layers;
   const mapShapes = useMemo(
     () =>
       world?.shapes.map((shape) => ({ d: shape.d, ink: token(REGION_INK[shape.state].ink!) })) ??
@@ -265,9 +265,12 @@ export function RoomsPlan({
     floaters: [map],
     layers: {
       value: layers,
-      options: LAYERS.map((key) => ({ key, label: key, says: LAYER_SAYS[key] })),
+      options: ROOMS_LAYERS.map((key) => ({ key, label: key, says: LAYER_SAYS[key] })),
       onToggle: (key: string) =>
-        setPage({ layers: toggleLayer(LAYERS, page.layers, key as Layer) }, { history: "push" }),
+        setPage(
+          { layers: toggleLayer(ROOMS_LAYERS, page.layers, key as Layer) },
+          { history: "push" },
+        ),
     },
   };
 

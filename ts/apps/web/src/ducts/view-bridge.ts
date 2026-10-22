@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { DUCTS_LAYERS, viewportCodec, type OrbitViewport } from "@pe/agent-contracts";
+import { viewportCodec, type OrbitViewport } from "@pe/agent-contracts";
 import { systemsOf } from "@pe/ducts-domain/system-scope";
 import { useRouteViewBridge } from "#/route/view-bridge";
 import type { PageMove } from "#/route/manifest";
@@ -69,9 +69,6 @@ export function useDuctsViewBridge({
         networks: system.groups.length,
       })),
       levels: (snapshot?.levels ?? []).map((level) => ({ id: String(level.id), name: level.name })),
-      layers: [
-        ...new Set([...DUCTS_LAYERS, ...(snapshot?.layers ?? []).map((layer) => layer.key)]),
-      ],
       ...(pose ? { pose: viewportCodec.encode(pose) } : {}),
     }),
     [snapshot, pose],

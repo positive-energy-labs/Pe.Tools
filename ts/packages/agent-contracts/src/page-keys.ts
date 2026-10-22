@@ -129,25 +129,22 @@ export const modeKey = <const M extends readonly [string, ...string[]]>(
   initial: M[number],
 ) => z.enum(modes).default(initial as never);
 
-/** Comma-joined layer names, in `layers` order; empty = none on. */
-export const layersKey = <const L extends readonly string[]>(layers: L, on: readonly L[number][]) =>
-  z.string().default(layers.filter((layer) => on.includes(layer)).join(","));
+/**
+ * The layers on, as names of `layers`; the default is the `on` set a picture opens with, so the
+ * address stays bare until a person flips one, and an empty list is none on. An unknown name makes
+ * the whole value unreadable (the default).
+ */
+export const layersKey = <const L extends readonly [string, ...string[]]>(
+  layers: L,
+  on: readonly L[number][],
+) => z.array(z.enum(layers)).default(layers.filter((layer) => on.includes(layer)) as never);
 
-/** The known names `value` holds, in `layers` order; unknown names drop. */
-export const layersOf = <L extends readonly string[]>(layers: L, value: string): L[number][] => {
-  const named = value.split(",").map((name) => name.trim());
-  return layers.filter((layer) => named.includes(layer));
-};
-
-/** `value` with one layer flipped, as the address writes it. */
+/** `on` with one layer flipped, in `layers` order. */
 export const toggleLayer = <L extends readonly string[]>(
   layers: L,
-  value: string,
+  on: readonly L[number][],
   layer: L[number],
-): string => {
-  const on = layersOf(layers, value);
-  return layers.filter((item) => (item === layer) !== on.includes(item)).join(",");
-};
+): L[number][] => layers.filter((item) => (item === layer) !== on.includes(item));
 
 /** The page's subject: an id or a name the route resolves; empty = none. */
 export const subjectKey = () => z.string().default("");
