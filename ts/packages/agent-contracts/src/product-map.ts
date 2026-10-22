@@ -110,7 +110,8 @@ const PRESSURE_DROP_PARTS: MapPart[] = [
     automatic:
       "No. A grille with a drop in its slot is priced; one without counts as zero, sits in Diagnostics, and never blocks. Manufacturer tables are out of scope until terminals are final.",
     data: "The terminal's drop parameter (slot), when a person enters it. The numbers are only in manufacturer PDFs.",
-    effort: "Deferred by the firm: terminals are finalized last, and installed grilles rarely match the spec.",
+    effort:
+      "Deferred by the firm: terminals are finalized last, and installed grilles rarely match the spec.",
   },
   {
     id: "room",
@@ -146,7 +147,8 @@ const PRESSURE_DROP_PARTS: MapPart[] = [
     label: "Fan's available static",
     status: "none",
     adds: "What the required static is checked against",
-    automatic: "No. Apply writes the required ESP to the unit's parameter; the available static comes from equipment selection.",
+    automatic:
+      "No. Apply writes the required ESP to the unit's parameter; the available static comes from equipment selection.",
     data: "Equipment family, from the submittal",
     effort: "Hard. Comes with equipment selection.",
   },

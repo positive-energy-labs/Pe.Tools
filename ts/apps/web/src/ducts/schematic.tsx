@@ -178,7 +178,11 @@ export function Schematic({
       preserveAspectRatio={inset ? "xMinYMid meet" : undefined}
       className="face-mono t-small"
     >
-      <g onClick={() => tree.root && pick(tree.root.element)} className="cursor-pointer" aria-label="root">
+      <g
+        onClick={() => tree.root && pick(tree.root.element)}
+        className="cursor-pointer"
+        aria-label="root"
+      >
         <title>{tree.rootWord}</title>
         <rect
           x={4}
@@ -190,7 +194,10 @@ export function Schematic({
           className={tree.rooted === "port" ? undefined : "dash-reference"}
         />
         <text x={10} y={rootY} dominantBaseline="central" fill={tokenRef("ink")}>
-          {clip(equipment ? (equipment.family ?? `equipment ${equipment.id}`) : "stand-in root", 16)}
+          {clip(
+            equipment ? (equipment.family ?? `equipment ${equipment.id}`) : "stand-in root",
+            16,
+          )}
         </text>
       </g>
       {layout.placed.map(({ chain, x1, y1, x2, y2 }) => {
@@ -221,7 +228,12 @@ export function Schematic({
               {`${chain.members.length} element${chain.members.length === 1 ? "" : "s"}: ${chain.members.join(", ")}${chain.members.length > 1 ? " (select to unfold)" : ""}`}
             </title>
             {hot ? (
-              <path d={d} fill="none" stroke={tokenRef("select")} strokeWidth={width + SELECT_WIDTH} />
+              <path
+                d={d}
+                fill="none"
+                stroke={tokenRef("select")}
+                strokeWidth={width + SELECT_WIDTH}
+              />
             ) : null}
             {glow ? (
               <path
@@ -340,7 +352,9 @@ function Vertex({
     <g data-vertex={id}>
       <title>{`${id}: ${part.node ? (part.node.partType ?? part.node.kind) : (part.segment?.kind ?? "")}`}</title>
       {hot ? <circle cx={x} cy={y} r={9} fill={tokenRef("select")} /> : null}
-      {glow && !hot ? <circle cx={x} cy={y} r={8} fill={tokenRef("ink")} fillOpacity={0.35} /> : null}
+      {glow && !hot ? (
+        <circle cx={x} cy={y} r={8} fill={tokenRef("ink")} fillOpacity={0.35} />
+      ) : null}
       {kind === "terminal" ? (
         <rect
           x={x - 4}

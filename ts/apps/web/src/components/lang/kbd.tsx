@@ -34,7 +34,9 @@ function Press({ keys = [], pointer }: Omit<LegendKey, "does">) {
 const LEGEND_CHORD = "Shift+/" as Chord;
 
 function LegendKeys({ toggle }: { toggle: () => void }) {
-  useScopeKeys([{ hotkey: LEGEND_CHORD, label: "keys", says: "Show or hide the keys", callback: toggle }]);
+  useScopeKeys([
+    { hotkey: LEGEND_CHORD, label: "keys", says: "Show or hide the keys", callback: toggle },
+  ]);
   return null;
 }
 
@@ -82,7 +84,9 @@ export function KeyLegend({
           <span className="flex h-(--item-h) items-center justify-end">
             <Kbd mute>?</Kbd>
           </span>
-          <span className="whitespace-nowrap text-ink-2">{pinned ? "hide the keys" : "keep the keys open"}</span>
+          <span className="whitespace-nowrap text-ink-2">
+            {pinned ? "hide the keys" : "keep the keys open"}
+          </span>
         </div>
       ) : (
         <div className="flex h-(--item-h) items-center gap-3 whitespace-nowrap">

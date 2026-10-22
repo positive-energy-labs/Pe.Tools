@@ -68,7 +68,10 @@ export function fansOwedBase(
   const kept = [...bySystem.values()].flatMap((list) => {
     const groups = new Set(list.flatMap(networks));
     if (groups.size > 1 && new Set(list.map((a) => a.unitId)).size > 1) {
-      split.set(list[0]!.system, [...new Set(list.map((a) => a.unitId))].sort((a, b) => a - b));
+      split.set(
+        list[0]!.system,
+        [...new Set(list.map((a) => a.unitId))].sort((a, b) => a - b),
+      );
       return [];
     }
     const head = groups.size === 1 ? lead([...groups][0]!) : null;

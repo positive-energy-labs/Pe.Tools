@@ -58,8 +58,7 @@ export function readiness(
   const doc = withStoredRulings(work, snapshot.store);
   const { issues, nodes, segments } = snapshotById(snapshot);
   let surveyed: Set<string> | null = null;
-  const standing = () =>
-    (surveyed ??= new Set(survey(snapshot, work).findings.map((f) => f.id)));
+  const standing = () => (surveyed ??= new Set(survey(snapshot, work).findings.map((f) => f.id)));
   const verdict = (issue: DuctIssue) => {
     const value = staged(doc, issue.id);
     return value?.kind === "verdict" ? value.verdict : null;

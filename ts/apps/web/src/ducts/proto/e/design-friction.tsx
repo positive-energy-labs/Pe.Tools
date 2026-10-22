@@ -47,7 +47,10 @@ export function DesignFrictionSettings({ work, rate }: { work: LossesWork; rate:
               }
               transitions={reviewTransitions(wire, KEY, cell)}
             />
-            <span className="t-small text-ink-2" data-e-source={cell.staged ? "override" : "default"}>
+            <span
+              className="t-small text-ink-2"
+              data-e-source={cell.staged ? "override" : "default"}
+            >
               in-wg per 100 ft · {cell.staged ? "yours" : "default"}
             </span>
           </span>

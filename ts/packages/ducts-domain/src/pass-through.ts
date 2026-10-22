@@ -51,7 +51,9 @@ export function passThrough(snapshot: DuctSnapshot, passive: ReadonlySet<number>
     if (x !== y) up.set(num(x) < num(y) ? y : x, num(x) < num(y) ? x : y);
   };
   const findings: DuctFinding[] = [];
-  const units = [...passive].filter((id) => nodes.get(id)?.kind === "equipment").sort((a, b) => a - b);
+  const units = [...passive]
+    .filter((id) => nodes.get(id)?.kind === "equipment")
+    .sort((a, b) => a - b);
   const reach = new Map<number, string[]>();
   const directRoots = new Map<number, number[]>();
   for (const id of units) {
@@ -100,7 +102,11 @@ export function passThrough(snapshot: DuctSnapshot, passive: ReadonlySet<number>
       groups.push(list[0]!);
       continue;
     }
-    if (list.length > 1) merged.set(id, list.map((g) => g.id).sort((a, b) => num(a) - num(b)));
+    if (list.length > 1)
+      merged.set(
+        id,
+        list.map((g) => g.id).sort((a, b) => num(a) - num(b)),
+      );
     const passing = new Set(inline);
     const rootIds = [
       ...new Set([

@@ -485,10 +485,21 @@ export function computeLosses(
       const price = (path: number[]) =>
         pathRows(own, path, ownBelow, grids, choices, overrides, fail, catalogs);
       const stretchRows = stretch.length ? price(stretch) : [];
-      type Best = { total: number; terminal: number; tel: number; via: boolean; path: number[]; rows: Row[] };
+      type Best = {
+        total: number;
+        terminal: number;
+        tel: number;
+        via: boolean;
+        path: number[];
+        rows: Row[];
+      };
       let best: Best | null = null;
       const consider = (run: Best) => {
-        if (!best || run.total > best.total || (run.total === best.total && run.terminal < best.terminal))
+        if (
+          !best ||
+          run.total > best.total ||
+          (run.total === best.total && run.terminal < best.terminal)
+        )
           best = run;
       };
       // Its own runs: terminals past its port.
@@ -563,9 +574,8 @@ export function computeLosses(
           : (result.paths[critical]?.tel ?? null),
       criticalFan: worstFan?.unit ?? (hasAirMover ? (fans[0]?.unit ?? null) : null),
       revitCritical:
-        (groupCritical == null
-          ? null
-          : systemFor(snapshot, groupCritical)?.criticalPathLossInWg) ?? null,
+        (groupCritical == null ? null : systemFor(snapshot, groupCritical)?.criticalPathLossInWg) ??
+        null,
       hasAirMover,
       provisional: provisionalOf(under),
     };
@@ -899,8 +909,11 @@ export function worstRun(
     const own = [...terminals].flatMap((t) => {
       const p = result.paths[t];
       if (p?.groupId !== g) return [];
-      const unit = solved?.fans.slice(1).find((f) => f.owned.includes(t))?.unit ?? solved?.fans[0]?.unit;
-      return [{ total: p.total, tel: p.tel, terminal: t, unit: unit ?? solved?.criticalFan ?? null }];
+      const unit =
+        solved?.fans.slice(1).find((f) => f.owned.includes(t))?.unit ?? solved?.fans[0]?.unit;
+      return [
+        { total: p.total, tel: p.tel, terminal: t, unit: unit ?? solved?.criticalFan ?? null },
+      ];
     });
     const via = (solved?.fans ?? []).flatMap((f) =>
       f.viaJunction && f.critical != null && terminals.has(f.critical)
@@ -909,7 +922,10 @@ export function worstRun(
     );
     return [...own, ...via];
   });
-  return runs.reduce<(typeof runs)[number] | null>((a, b) => (a == null || b.total > a.total ? b : a), null);
+  return runs.reduce<(typeof runs)[number] | null>(
+    (a, b) => (a == null || b.total > a.total ? b : a),
+    null,
+  );
 }
 
 export interface Fanout {

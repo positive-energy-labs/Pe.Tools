@@ -985,7 +985,12 @@ export function tolerate(
       ];
     if (g.rootIds.length === 0 && g.terminalCount > 0)
       return [
-        { id: `no-root:${id}`, kind: "no-root" as const, groupId: id, note: "terminals but no equipment port" },
+        {
+          id: `no-root:${id}`,
+          kind: "no-root" as const,
+          groupId: id,
+          note: "terminals but no equipment port",
+        },
       ];
     return [];
   });
@@ -1000,7 +1005,10 @@ export function tolerate(
     const fresh = rederived.filter((i) => i.groupId === g.id).map((i) => i.id);
     const stale = new Set(fresh);
     return [
-      { ...group, issueIds: [...group.issueIds.filter((id) => kept.has(id) && !stale.has(id)), ...fresh] },
+      {
+        ...group,
+        issueIds: [...group.issueIds.filter((id) => kept.has(id) && !stale.has(id)), ...fresh],
+      },
     ];
   });
   return {

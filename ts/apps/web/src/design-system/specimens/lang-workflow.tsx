@@ -87,7 +87,12 @@ export function LangWorkflowSpecimens() {
                 count: 3,
               },
             ]}
-            missing={{ key: "missing", stroke: { ink: tokenRef("ink-mute"), width: 1 }, word: "no value", count: 2 }}
+            missing={{
+              key: "missing",
+              stroke: { ink: tokenRef("ink-mute"), width: 1 },
+              word: "no value",
+              count: 2,
+            }}
           />
         </div>
       </SpecimenFrame>

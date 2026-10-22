@@ -681,7 +681,8 @@ export function useHostCall<T>(
       setState({ error: Error(`no answer after ${waitSeconds}s`), pending: false, generation });
     }, waitSeconds * 1000);
     const key = shared ? flightKey(deps) : null;
-    const joined = key !== null && nonce === 0 ? (inflight.get(key) as Promise<T> | undefined) : undefined;
+    const joined =
+      key !== null && nonce === 0 ? (inflight.get(key) as Promise<T> | undefined) : undefined;
     // A shared call outlives the mount that started it, so no one mount's abort cancels it.
     const call = joined ?? run(key !== null ? new AbortController().signal : controller.signal);
     if (key !== null && !joined) {

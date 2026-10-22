@@ -20,7 +20,6 @@ const REPO = execFileSync("git", ["rev-parse", "--show-toplevel"], {
 const PACKAGE = resolve(REPO, "ts/packages/host-contracts");
 
 describe("ops-catalog codegen", () => {
-
   it("host-ops.generated.ts was generated from the current dotnet sources", () => {
     const r = spawnSync("node", ["scripts/ops-catalog-hash.ts"], {
       cwd: PACKAGE,

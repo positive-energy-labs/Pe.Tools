@@ -31,7 +31,9 @@ export function useGroupEncoding(
 ): GroupEncoding {
   const facts = useMemo(
     () =>
-      snapshot ? sceneOf(indexOf(snapshot, priced), groups, () => true) : { segments: [], nodes: [] },
+      snapshot
+        ? sceneOf(indexOf(snapshot, priced), groups, () => true)
+        : { segments: [], nodes: [] },
     [snapshot, priced, groups],
   );
   const directions = useMemo(

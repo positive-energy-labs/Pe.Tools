@@ -145,11 +145,7 @@ export function RunDetail({
       {run.parts.length ? (
         <ul className="grid grid-cols-[1fr_auto_auto] gap-x-3" data-e-parts="">
           {run.parts.map((part, i) => (
-            <li
-              key={`${part.id}:${i}`}
-              className="contents"
-              onMouseEnter={() => light([part.id])}
-            >
+            <li key={`${part.id}:${i}`} className="contents" onMouseEnter={() => light([part.id])}>
               <span className="truncate" title={part.desc}>
                 {nameOf(part.id)}
                 {part.stated ? <span className="text-ink-mute"> · stated</span> : null}

@@ -3,7 +3,12 @@
  * rule and its stated-drop cell are unexported there, so the minimum is copied here unchanged;
  * `StagedRules` is a reduced copy of `StagedLosses` that needs no ASHRAE grids.
  */
-import { transitionPatches, type DuctDrop, type DuctsRouteDocument, type RouteStatePatch } from "@pe/agent-contracts";
+import {
+  transitionPatches,
+  type DuctDrop,
+  type DuctsRouteDocument,
+  type RouteStatePatch,
+} from "@pe/agent-contracts";
 import { reviewTransitions, type CellWire } from "#/components/work/band";
 import { cellFromTrichotomy, StateCell } from "@pe/kit/lang/cell";
 import { Button } from "@pe/kit/lang/button";
@@ -80,7 +85,15 @@ export function DropCell({
     </span>
   );
 }
-export function Chips({ ruleKey, priced, work }: { ruleKey: string; priced: Priced; work: LossesWork }) {
+export function Chips({
+  ruleKey,
+  priced,
+  work,
+}: {
+  ruleKey: string;
+  priced: Priced;
+  work: LossesWork;
+}) {
   const rule = ruleByKey(ruleKey)!;
   const staged = priced.staged.rules[ruleKey]?.table.toUpperCase();
   if (rule.options.length === 1) return <span className="face-mono">{rule.options[0]}</span>;
@@ -152,11 +165,10 @@ export function StagedRules({
           "equipmentFlows",
           "roles",
         ] as const
-      ).flatMap(
-        (segment) =>
-          Object.entries(doc[segment] ?? {}).flatMap(([key, cell]) =>
-            cell?.staged ? transitionPatches([segment], key, cell, { kind: "unstage" }) : [],
-          ),
+      ).flatMap((segment) =>
+        Object.entries(doc[segment] ?? {}).flatMap(([key, cell]) =>
+          cell?.staged ? transitionPatches([segment], key, cell, { kind: "unstage" }) : [],
+        ),
       ),
     );
   };
@@ -211,7 +223,10 @@ export function StagedRules({
         <span>
           fan <ValueDiff from={fmt(fanOf(priced.now))} to={fmt(fanOf(priced.next))} /> in-wg
         </span>
-        <Button label="Discard every staged rule, drop, catalog link, flow, role and unit ESP" onClick={discard}>
+        <Button
+          label="Discard every staged rule, drop, catalog link, flow, role and unit ESP"
+          onClick={discard}
+        >
           discard
         </Button>
       </div>

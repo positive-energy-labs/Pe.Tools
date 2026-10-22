@@ -303,8 +303,8 @@ export function unitOf(snapshot: DuctSnapshot, result: LossResult, group: Group)
     : lead != null
       ? lead
       : critical == null
-      ? null
-      : (systemFor(snapshot, critical)?.baseEquipmentId ?? null);
+        ? null
+        : (systemFor(snapshot, critical)?.baseEquipmentId ?? null);
 }
 
 /**

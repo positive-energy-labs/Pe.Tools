@@ -75,7 +75,11 @@ export function unitRoles(
     }
     const base = baseOf.get(id);
     if (base?.length) {
-      out.set(id, { role: "fan", why: "proposed", reason: `base equipment of ${base.sort().join(", ")}` });
+      out.set(id, {
+        role: "fan",
+        why: "proposed",
+        reason: `base equipment of ${base.sort().join(", ")}`,
+      });
       continue;
     }
     const flow = flows.get(id);
@@ -102,7 +106,8 @@ export function unitRoles(
         : {
             role: "fan",
             why: "proposed",
-            reason: ports < PASSIVE_MIN_PORTS ? "one port: moves air" : "mixed port classes: moves air",
+            reason:
+              ports < PASSIVE_MIN_PORTS ? "one port: moves air" : "mixed port classes: moves air",
           },
     );
   }

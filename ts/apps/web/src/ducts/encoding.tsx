@@ -111,10 +111,7 @@ const rampInk = (role: string, step: number) =>
 /** `n` ramp steps spanning both ends: fewer bins never lose the darkest step. */
 const rampOf = (role: string, n: number) =>
   Array.from({ length: n }, (_, i) =>
-    rampInk(
-      role,
-      RAMP[n === 1 ? RAMP.length - 1 : Math.round((i * (RAMP.length - 1)) / (n - 1))]!,
-    ),
+    rampInk(role, RAMP[n === 1 ? RAMP.length - 1 : Math.round((i * (RAMP.length - 1)) / (n - 1))]!),
   );
 
 /**

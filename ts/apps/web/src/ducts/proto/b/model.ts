@@ -43,7 +43,8 @@ export function splitOf(rows: readonly Row[], equipment: ReadonlySet<number>): S
   const part = (): SplitPart => ({ dp: 0, ids: [], unpriced: 0 });
   const split: Split = { unit: part(), duct: part(), terminal: part() };
   for (const row of rows) {
-    const to = row.kind === "terminal" ? split.terminal : equipment.has(row.id) ? split.unit : split.duct;
+    const to =
+      row.kind === "terminal" ? split.terminal : equipment.has(row.id) ? split.unit : split.duct;
     if (row.dp == null || row.error) to.unpriced++;
     to.dp += row.dp ?? 0;
     if (!to.ids.includes(row.id)) to.ids.push(row.id);
@@ -107,13 +108,13 @@ export function rowsByElement(path: readonly number[], rows: readonly Row[]): Ma
 
 /** An element's own loss from its rows: null when it has rows and none is priced. */
 const selfOfRows = (rows: readonly Row[]) =>
-  rows.length && rows.every((r) => r.dp == null)
-    ? null
-    : rows.reduce((a, r) => a + (r.dp ?? 0), 0);
+  rows.length && rows.every((r) => r.dp == null) ? null : rows.reduce((a, r) => a + (r.dp ?? 0), 0);
 
 /** An element's own effective length from its rows, ft: null when it has rows and none has feet. */
 const selfFtOfRows = (rows: readonly Row[]) =>
-  rows.length && rows.every((r) => r.eqFt == null) ? null : rows.reduce((a, r) => a + (r.eqFt ?? 0), 0);
+  rows.length && rows.every((r) => r.eqFt == null)
+    ? null
+    : rows.reduce((a, r) => a + (r.eqFt ?? 0), 0);
 
 /** A duct's actual friction rate on a path from its friction rows, in-wg per 100 ft; null for a part with none. */
 const rateOfRows = (rows: readonly Row[]) => {
@@ -153,7 +154,11 @@ export function buildTree(
   return groups.map((group) => {
     const solved = priced?.next.byGroup[group.id] ?? null;
     // Walked from the fan the solve walked it from: the largest, when several root it.
-    const tree = groupTree(snapshot, group.id, group.rootIds.length > 1 ? solved?.fans[0]?.unit : undefined);
+    const tree = groupTree(
+      snapshot,
+      group.id,
+      group.rootIds.length > 1 ? solved?.fans[0]?.unit : undefined,
+    );
     const peCritical = solved?.critical ?? null;
     const longest = tree.longest.at(-1) ?? null;
     const fan = solved?.fan ?? null;
@@ -190,7 +195,9 @@ export function buildTree(
       const cut = legsOf(snapshot, run.path, labelOf, work);
       const legs = cut.legs.map((leg, i): TreeNode => {
         const members = [
-          ...(i === 0 && leg.from.kind !== "open" && leg.from.kind !== "level" ? [leg.from.id] : []),
+          ...(i === 0 && leg.from.kind !== "open" && leg.from.kind !== "level"
+            ? [leg.from.id]
+            : []),
           ...leg.ids,
           ...(leg.to.kind !== "open" && leg.to.kind !== "level" ? [leg.to.id] : []),
         ].filter((id) => run.path.includes(id));
@@ -280,7 +287,12 @@ export function buildTree(
         runNode(
           { terminal: f.critical!, path: f.path },
           f.unit,
-          { total: f.esp, tel: f.tel, rows: f.rows, provisional: priced?.next.paths[f.critical!]?.provisional ?? null },
+          {
+            total: f.esp,
+            tel: f.tel,
+            rows: f.rows,
+            provisional: priced?.next.paths[f.critical!]?.provisional ?? null,
+          },
           `${group.id}/f${f.unit}/r${f.critical}`,
           f === viaCritical ? "pe" : null,
         ),
@@ -336,7 +348,20 @@ export function subjectTree(
   const nameOf = elementNamer(snapshot, null);
   const name = (id: number) => nameOf(id) ?? "element not in snapshot";
   const cut = legsOf(snapshot, ids, labelOfNode(snapshot), work);
-  const blank = { total: null, self: null, ft: null, selfFt: null, rate: null, unpriced: null, split: null, level: null, scale: null, critical: null, provisional: null, terminal: null };
+  const blank = {
+    total: null,
+    self: null,
+    ft: null,
+    selfFt: null,
+    rate: null,
+    unpriced: null,
+    split: null,
+    level: null,
+    scale: null,
+    critical: null,
+    provisional: null,
+    terminal: null,
+  };
   const legs = cut.legs.map(
     (leg, i): TreeNode => ({
       ...blank,
@@ -348,7 +373,14 @@ export function subjectTree(
         ...(i === 0 && ids.includes(leg.from.id) ? [leg.from.id] : []),
         ...leg.ids,
         ...(ids.includes(leg.to.id) ? [leg.to.id] : []),
-      ].map((id) => ({ ...blank, key: `subject/r/l${i}/e${id}`, kind: "element", name: name(id), id, children: [] })),
+      ].map((id) => ({
+        ...blank,
+        key: `subject/r/l${i}/e${id}`,
+        kind: "element",
+        name: name(id),
+        id,
+        children: [],
+      })),
     }),
   );
   const first = cut.nodes[0]?.name ?? "start";
@@ -359,7 +391,16 @@ export function subjectTree(
     kind: "system",
     name: "subject (no group in this snapshot)",
     id: ids[0] ?? null,
-    children: [{ ...blank, key: "subject/r", kind: "run", name: `${first} → ${last}`, id: ids.at(-1) ?? null, children: legs }],
+    children: [
+      {
+        ...blank,
+        key: "subject/r",
+        kind: "run",
+        name: `${first} → ${last}`,
+        id: ids.at(-1) ?? null,
+        children: legs,
+      },
+    ],
   };
 }
 

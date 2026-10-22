@@ -9,7 +9,10 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { typeName } from "../../claims";
 import type { TreeNode } from "../b/model";
 
-export function grilleLabels(snapshot: DuctSnapshot, runs: readonly TreeNode[]): Map<number, string> {
+export function grilleLabels(
+  snapshot: DuctSnapshot,
+  runs: readonly TreeNode[],
+): Map<number, string> {
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
   const levels = new Map(snapshot.levels.map((l) => [l.id, l.name]));
   const base = new Map<number, string>();
@@ -20,7 +23,10 @@ export function grilleLabels(snapshot: DuctSnapshot, runs: readonly TreeNode[]):
     const name = node?.label || (node ? typeName(node) : "") || "grille";
     const level = node?.levelId != null ? levels.get(node.levelId) : undefined;
     base.set(run.terminal, level ? `${name} · ${level}` : name);
-    legsOf.set(run.terminal, run.children.map((leg) => leg.name));
+    legsOf.set(
+      run.terminal,
+      run.children.map((leg) => leg.name),
+    );
   }
   const count = (m: Map<number, string>) => {
     const c = new Map<string, number>();
@@ -30,7 +36,9 @@ export function grilleLabels(snapshot: DuctSnapshot, runs: readonly TreeNode[]):
   const first = count(base);
   /** The leg nearest the grille that no other grille of the same name walks. */
   const ownLeg = (id: number, name: string) => {
-    const others = [...base].filter(([o, n]) => o !== id && n === name).flatMap(([o]) => legsOf.get(o) ?? []);
+    const others = [...base]
+      .filter(([o, n]) => o !== id && n === name)
+      .flatMap(([o]) => legsOf.get(o) ?? []);
     const leg = [...(legsOf.get(id) ?? [])].reverse().find((l) => !others.includes(l));
     return leg ? (leg.split(" → ")[0] ?? leg) : null;
   };

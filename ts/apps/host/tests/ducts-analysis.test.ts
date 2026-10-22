@@ -91,7 +91,16 @@ function fixture() {
     flows: [],
     layers: [],
     // Unit 1 is the base equipment of SA: a proposed fan (ducts-domain `unit-roles.ts`).
-    systems: [{ name: "SA", baseEquipmentId: 1, sections: [] }],
+    systems: [
+      {
+        id: 3,
+        name: "SA",
+        classification: "SupplyAir",
+        baseEquipmentId: 1,
+        criticalPath: [],
+        sections: [],
+      },
+    ],
     slots: {
       fanStatic: "FanStatic",
       fanFlow: "FanFlow",

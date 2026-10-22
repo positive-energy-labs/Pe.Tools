@@ -16,11 +16,7 @@ import {
   type ReceiptJoin,
   type HarnessEvent,
 } from "@pe/agent-contracts";
-import {
-  analyticsConfig,
-  readOrCreateInstallId,
-  writeFatalEvidence,
-} from "@pe/runtime";
+import { analyticsConfig, readOrCreateInstallId, writeFatalEvidence } from "@pe/runtime";
 import { isAnyOperationKey, isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
 import { ActionJournal } from "./action-journal.ts";
 import { hostActionJournal, setHostReceiptStamp } from "./gateway-owner.ts";

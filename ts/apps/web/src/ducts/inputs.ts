@@ -77,7 +77,8 @@ function unitRoleInput(
   staged: { role: "fan" | "passive" } | undefined,
 ): Resolved<"fan" | "passive"> & { reason?: string } {
   const r = priced.roles.get(id);
-  if (!r) return staged ? { value: staged.role, word: "override" } : { value: "fan", word: "default" };
+  if (!r)
+    return staged ? { value: staged.role, word: "override" } : { value: "fan", word: "default" };
   const word = r.why === "staged" ? "override" : r.why;
   return { value: r.role, word, reason: r.reason };
 }
