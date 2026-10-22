@@ -134,6 +134,7 @@ export function definePeApi<
     | "providerSchema"
     | "createThreadRequestSchema"
     | "updateThreadRequestSchema"
+    | "threadTabRequestSchema"
     | "harnessThreadSummarySchema"
     | "harnessThreadBodySchema"
     | "harnessEventSchema"
@@ -175,6 +176,7 @@ export function definePeApi<
     schemas.createThreadRequestSchema as S["createThreadRequestSchema"];
   const updateThreadRequestSchema =
     schemas.updateThreadRequestSchema as S["updateThreadRequestSchema"];
+  const threadTabRequestSchema = schemas.threadTabRequestSchema as S["threadTabRequestSchema"];
   const harnessThreadSummarySchema =
     schemas.harnessThreadSummarySchema as S["harnessThreadSummarySchema"];
   const harnessThreadBodySchema = schemas.harnessThreadBodySchema as S["harnessThreadBodySchema"];
@@ -488,6 +490,15 @@ export function definePeApi<
       "PUT",
       "/pe/threads/:id",
       updateThreadRequestSchema,
+      harnessThreadSummarySchema,
+      "caller",
+      "threads",
+      "caller",
+    ),
+    "thread.tabs": route(
+      "POST",
+      "/pe/threads/:id/tabs",
+      threadTabRequestSchema,
       harnessThreadSummarySchema,
       "caller",
       "threads",

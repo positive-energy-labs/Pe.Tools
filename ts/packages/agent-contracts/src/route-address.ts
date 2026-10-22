@@ -630,6 +630,49 @@ export function linkTo<R extends RouteKey>(
 }
 
 /**
+ * A thread tab's link, canonical: `linkTo(route, page, { target, work })`. The path must be the
+ * route's; a draft (`share: false`) or the browser `shell` drops; `thread` (the tab's own thread),
+ * an unknown key, or a value its field cannot read is refused, never defaulted. Target and work
+ * are kept: dropping them would retarget the tab.
+ */
+export function tabLink(
+  route: string,
+  link: string,
+): { ok: true; route: RouteKey; link: string } | { ok: false; error: string } {
+  if (!Object.hasOwn(routeAddresses, route)) return { ok: false, error: `no route '${route}'` };
+  const key = route as RouteKey;
+  let url: URL;
+  try {
+    url = new URL(link, "http://tab.invalid");
+  } catch {
+    return { ok: false, error: "a tab link is a path and search" };
+  }
+  if (url.origin !== "http://tab.invalid" || url.hash)
+    return { ok: false, error: "a tab link is a path and search, no origin or hash" };
+  if (url.pathname !== routeAddresses[key].path)
+    return {
+      ok: false,
+      error: `a ${key} tab links ${routeAddresses[key].path}, not ${url.pathname}`,
+    };
+  const fields = fieldsOf(key);
+  const page: Record<string, unknown> = {};
+  const carry: Carry = {};
+  for (const [name, text] of url.searchParams) {
+    const field = fields[name];
+    if (name === "target" || name === "work") carry[name] = text;
+    else if (name === "shell" || (field?.url && field.share === false)) continue;
+    else if (!field?.url) return { ok: false, error: `a ${key} tab link carries no '${name}'` };
+    else {
+      const decoded = field.codec.decode(text);
+      const parsed = decoded === INVALID ? null : field.schema.safeParse(decoded);
+      if (!parsed?.success) return { ok: false, error: `${key} '${name}' does not read: ${text}` };
+      page[name] = parsed.data;
+    }
+  }
+  return { ok: true, route: key, link: linkTo(key, page as never, carry) };
+}
+
+/**
  * How one transition moves history: null when no URL key changed (an agent-only or Page-only move
  * makes no entry); else the override (a gesture `replace`, a named move or Pea's patch `push`);
  * else `push` if any changed key is a step, `replace` when all are tweaks.

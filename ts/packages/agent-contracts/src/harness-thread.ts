@@ -2,6 +2,7 @@ import { z } from "zod";
 import { callerSchema } from "./caller.ts";
 import { mentionSchema } from "./mention.ts";
 import { documentRequestSchema, threadHeadReadingSchema } from "./target.ts";
+import { routeAddresses, type RouteKey } from "./route-address.ts";
 
 /**
  * The harness-thread wire (ADR 0015: the harness drives; Pea is tools and UI).
@@ -454,6 +455,31 @@ export const updateThreadRequestSchema = z
   .refine((value) => Object.keys(value).length > 0, "Choose a thread change");
 export type UpdateThreadRequest = z.infer<typeof updateThreadRequestSchema>;
 
+/**
+ * The route tabs a thread remembers, in open order: each a Place (`tabLink`, a canonical
+ * `linkTo` with its target and work, never its thread). Which tab is active belongs to each browser
+ * workspace and is never stored here. Writes are per tab, last writer wins; the host stamps `at`.
+ */
+export const THREAD_TABS_MAX = 12;
+export const threadTabSchema = z.strictObject({
+  id: z.uuid(),
+  route: z.enum(Object.keys(routeAddresses) as [RouteKey, ...RouteKey[]]),
+  link: z.string().min(1).max(8192),
+  at: z.iso.datetime(),
+});
+export type ThreadTab = z.infer<typeof threadTabSchema>;
+/** Open or move one tab (`put`, which also re-opens a tab another window closed), or close it. */
+export const threadTabRequestSchema = z.discriminatedUnion("op", [
+  z.strictObject({
+    op: z.literal("put"),
+    id: z.uuid(),
+    route: threadTabSchema.shape.route,
+    link: threadTabSchema.shape.link,
+  }),
+  z.strictObject({ op: z.literal("close"), id: z.uuid() }),
+]);
+export type ThreadTabRequest = z.infer<typeof threadTabRequestSchema>;
+
 export const harnessThreadSummarySchema = z.object({
   origin: z
     .strictObject({ kind: z.literal("scheduled"), taskId: z.string().min(1), runId: z.uuid() })
@@ -472,6 +498,8 @@ export const harnessThreadSummarySchema = z.object({
   cursor: z.number().int().nonnegative(),
   head: threadHeadReadingSchema,
   lifecycle: threadLifecycleSchema,
+  // An absent list is no tabs: summaries written before tabs, and fixtures, read as [].
+  tabs: z.array(threadTabSchema).max(THREAD_TABS_MAX).default([]),
   activity: z.object({
     state: z.enum(["idle", "running", "waiting", "failed"]),
     pending: z.number().int().nonnegative(),

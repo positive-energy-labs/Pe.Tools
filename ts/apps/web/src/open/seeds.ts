@@ -719,6 +719,7 @@ const thread = (
     displayLabel: title,
   },
   lifecycle: emptyThreadLifecycle(),
+  tabs: [],
   activity,
 });
 

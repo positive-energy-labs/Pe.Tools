@@ -34,6 +34,7 @@ export function emptyChatState(): ChatState {
     events: [],
     head: { ...emptyThreadHead, hostNow: "1970-01-01T00:00:00.000Z", grantView: null },
     lifecycle: emptyThreadLifecycle(),
+    tabs: [],
     activity: { state: "idle", pending: 0, lastSeq: 0, message: null },
   };
 }
