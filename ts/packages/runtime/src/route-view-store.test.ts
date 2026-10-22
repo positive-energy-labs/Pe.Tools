@@ -10,7 +10,7 @@ const view = (instance: string, thread = "t"): RouteView => ({
   surface: "chat",
   page: { query: "" },
   context: {
-    stage: "archived",
+    stage: "history",
     readingId: "read-1",
     document: { session: "s", openId: "o" },
     work: { route: "families", binding: "host", target: null },

@@ -38,7 +38,7 @@ function useFamiliesWorkspaceModel(
   fixtureFamilies?: readonly FamilySnapshotRecord[],
 ) {
   const target = store.target;
-  const archived = store.page.stage === "archived";
+  const archived = store.page.stage === "history";
   const scope = store.documentScope;
   const draft = store.draft;
   const { placement, categories: draftCategories, families: pickedFamilies } = draft;
@@ -250,7 +250,7 @@ function useFamiliesWorkspaceModel(
 
   const matrixIssue =
     archived && store.archive.error
-      ? { title: "Couldn't load archived reading", message: store.archive.error }
+      ? { title: "Couldn't load this past read", message: store.archive.error }
       : !archived && store.retainedError
         ? { title: "Couldn't load the last read", message: store.retainedError }
         : store.handle.outcome?.key === "read" && store.handle.outcome.refusal

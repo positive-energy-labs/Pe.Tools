@@ -31,7 +31,7 @@ const keys = { apply: "Mod+Enter" } as const;
 export const SCHEDULE_STAGES: Readonly<Record<EntityStage, StageDecl<R, A, Pane>>> = {
   audit: { verbs: ["capture"], keys, panes: { list, grid }, meter: false },
   apply: { verbs: ["apply"], keys, panes: { list, grid, spec }, meter: false },
-  archived: { verbs: [], keys: {}, panes: {}, meter: false },
+  history: { verbs: [], keys: {}, panes: {}, meter: false },
 };
 
 /**

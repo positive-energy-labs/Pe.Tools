@@ -22,7 +22,7 @@ const keys = { read: "R" } as const;
 export const FAMILIES_STAGES: Readonly<Record<EntityPage["stage"], StageDecl<R, A, Pane>>> = {
   audit: { verbs: ["read", "capture"], keys, panes: { matrix } },
   apply: { verbs: ["apply", "save-draft"], keys, panes: { matrix, spec } },
-  archived: {
+  history: {
     verbs: [],
     keys,
     meter: false,

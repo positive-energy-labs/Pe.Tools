@@ -9,7 +9,7 @@ import { field, text } from "../route-field.ts";
 
 /** Entity routes: stage, pod and path are the address, so `/pods` deep-links a spec. */
 export const entityFields = {
-  stage: field(z.enum(["audit", "apply", "archived"]).default("audit"), { url: "push" }),
+  stage: field(z.enum(["audit", "apply", "history"]).default("audit"), { url: "push" }),
   pod: field(text(), { url: "push" }),
   path: field(text(1024), { url: "push" }),
 };

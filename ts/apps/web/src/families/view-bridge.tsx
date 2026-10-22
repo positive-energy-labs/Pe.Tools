@@ -31,7 +31,7 @@ export function FamiliesViewBridge({
     route: "families",
     thread,
     surface,
-    visible: visible && (stage === "audit" || stage === "apply" || stage === "archived"),
+    visible: visible && (stage === "audit" || stage === "apply" || stage === "history"),
     page: store.page,
     apply: (patch) => store.setPage({ query: patch.query }, { history: "push" }),
     context: {

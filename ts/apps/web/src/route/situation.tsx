@@ -32,7 +32,7 @@ export interface SituationProps {
   target: { session: string | null; document: string | null };
   /**
    * Saved observations have no live target, Work controls, verbs, or route log. The stage word
-   * reads Archived; a route without an archived stage leaves it by choosing a live stage.
+   * reads History; a route without a History stage leaves it by choosing a live stage.
    */
   inspection?: boolean;
   /** A controller transition when changing stage has dependent state. */
@@ -139,9 +139,9 @@ export function Situation({
     (p: Record<string, unknown>) => void,
   ];
   const declared = handle.manifest.stages ?? [];
-  const archived = inspection && !declared.some((item) => item.key === "archived");
-  const stages = archived ? [{ key: "archived", word: "Archived" }, ...declared] : declared;
-  const stage = archived ? "archived" : typeof page.stage === "string" ? page.stage : null;
+  const archived = inspection && !declared.some((item) => item.key === "history");
+  const stages = archived ? [{ key: "history", word: "History" }, ...declared] : declared;
+  const stage = archived ? "history" : typeof page.stage === "string" ? page.stage : null;
   const word = stages.find((item) => item.key === stage)?.word ?? handle.manifest.name;
   const spec = situationCells(handle.manifest.cells);
   const doc = handle.work.doc as Record<string, Record<string, TrichotomyCellLike>> | null;

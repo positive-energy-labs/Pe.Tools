@@ -359,7 +359,7 @@ test("/families Archived inspects a saved reading without a target or Revit conn
       if (request.url().endsWith("/call"))
         writes.push((request.postDataJSON() as { key?: string }).key ?? "unknown call");
     });
-    await go(page, `${baseUrl}/families?stage=archived`);
+    await go(page, `${baseUrl}/families?stage=history`);
     await expect
       .poll(
         () =>

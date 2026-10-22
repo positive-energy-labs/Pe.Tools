@@ -20,7 +20,7 @@ import { filterWords } from "./scope-band";
 import { FF_SPEC_SCHEMA, ffPlanRow } from "#/host/familyfoundry";
 import { FAMILY_MODEL_SCHEMA } from "#/family/manifest";
 import {
-  ARCHIVED,
+  HISTORY,
   admissionPlan,
   byPlan,
   documentOf,
@@ -387,7 +387,7 @@ export const manifest = entityRoute<
       stage: "audit",
       count: (ctx) => ctx.page.draft.families?.length || null,
       ready: (ctx) =>
-        ((ctx.page as FamiliesPage & EntityPage).stage === "archived" ? ARCHIVED : null) ??
+        ((ctx.page as FamiliesPage & EntityPage).stage === "history" ? HISTORY : null) ??
         ctx.work.refusal ??
         (!ctx.page.draft.categories.length
           ? "choose a category first"
@@ -444,8 +444,8 @@ export const manifest = entityRoute<
       stage: "apply",
       count: (ctx) => stagedDrafts(ctx.work.doc?.cells ?? {}).length || null,
       ready: (ctx) =>
-        (ctx.page as FamiliesPage & EntityPage).stage === "archived"
-          ? ARCHIVED
+        (ctx.page as FamiliesPage & EntityPage).stage === "history"
+          ? HISTORY
           : !stagedDrafts(ctx.work.doc?.cells ?? {}).length
             ? "nothing is staged to save"
             : (ctx.page as unknown as EntityPage).pod

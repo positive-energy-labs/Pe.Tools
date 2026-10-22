@@ -1,6 +1,5 @@
 import { plural } from "#/components/work/band";
-import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Surface } from "#/components/lang/surface";
 import { Switcher } from "#/components/lang/switcher";
 import { FamiliesMatrix } from "#/families/matrix";
@@ -36,17 +35,8 @@ const archiveDocument = (
     ? read.work.target.split(/[\\/]/).at(-1) || read.work.target
     : read.document.openId);
 
-function FamiliesArchivedView({ url }: { url?: boolean }) {
+function FamiliesHistoryView({ url }: { url?: boolean }) {
   const { store, lastReading } = useFamiliesWorkspace();
-  const navigate = useNavigate();
-  useEffect(() => {
-    if (!url) return;
-    void navigate({
-      to: ".",
-      search: (previous: Record<string, unknown>) => ({ ...previous, stage: "archived" }),
-      replace: true,
-    } as never);
-  }, [url, navigate]);
   const { list, selectedId, loading, error, failure, retry, select } = store.archive;
   const observed = previousOf(store.handle.inventory) as
     | { sessions?: Parameters<typeof inventoryOf>[0] }
@@ -62,7 +52,7 @@ function FamiliesArchivedView({ url }: { url?: boolean }) {
           inspection
           palette={url ? () => setPalette(true) : undefined}
           target={{ session: null, document: null }}
-          chooseStage={(stage) => store.setPage({ stage: stage as "audit" | "apply" | "archived" })}
+          chooseStage={(stage) => store.setPage({ stage: stage as "audit" | "apply" | "history" })}
           sentence={
             <>
               families from{" "}
@@ -137,7 +127,7 @@ function FamiliesArchivedView({ url }: { url?: boolean }) {
  */
 export function FamiliesWorkspaceView({ url }: { url?: boolean }) {
   const { archived } = useFamiliesWorkspace();
-  return archived ? <FamiliesArchivedView url={url} /> : <FamiliesActiveView url={url} />;
+  return archived ? <FamiliesHistoryView url={url} /> : <FamiliesActiveView url={url} />;
 }
 
 function FamiliesActiveView({ url }: { url?: boolean }) {

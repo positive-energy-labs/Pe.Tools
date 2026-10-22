@@ -22,5 +22,5 @@ const spec: PaneDecl<R, A> = { draws: ["pods"], verbs: ["save"] };
 export const FAMILY_STAGES: Readonly<Record<EntityStage, StageDecl<R, A, Pane>>> = {
   audit: { verbs: ["capture"], keys: {}, panes: { family } },
   apply: { verbs: ["apply", "build"], keys: {}, panes: { family, spec } },
-  archived: { verbs: [], keys: {}, meter: false, panes: { family } },
+  history: { verbs: [], keys: {}, meter: false, panes: { family } },
 };

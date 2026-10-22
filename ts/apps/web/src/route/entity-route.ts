@@ -36,15 +36,15 @@ export interface MemberRef {
 /** One `pod.list` row, as the host projects it. */
 export type PodRow = PodList["pods"][number];
 
-/** Every entity route's stages (rulings 34-40): Auditing, Applying, Archived (inspection only). */
-export type EntityStage = "audit" | "apply" | "archived";
+/** Every entity route's stages (rulings 34-40): Auditing, Applying, History (inspection only; MAP ruling 58). */
+export type EntityStage = "audit" | "apply" | "history";
 export type EntityAction = "capture" | "apply";
 const ENTITY_STAGES = [
   { key: "audit", word: "Auditing" },
   { key: "apply", word: "Applying" },
-  { key: "archived", word: "Archived" },
+  { key: "history", word: "History" },
 ] as const satisfies readonly { key: EntityStage; word: string }[];
-export const ARCHIVED = "Archived readings are inspection only";
+export const HISTORY = "History is inspection only";
 /** The Reading every entity route shares: the installed pods, provided by the route's owner. */
 export type EntityReading = "pods";
 
@@ -101,7 +101,7 @@ export interface EntityPage {
 }
 
 const entityPage = z.object({
-  stage: z.enum(["audit", "apply", "archived"]).default("audit"),
+  stage: z.enum(["audit", "apply", "history"]).default("audit"),
   pod: z.string().default(""),
   path: z.string().default(""),
   selection: z.array(z.string()).default([]),
@@ -226,7 +226,7 @@ export function sheetOf<W, R extends string, P>(
 }
 
 /**
- * The one entity route (rulings 34-45): stages Auditing, Applying, Archived; `capture` (Auditing)
+ * The one entity route (rulings 34-45): stages Auditing, Applying, History; `capture` (Auditing)
  * files the audit as a spec; `apply` (Applying) takes the staged cells, else the opened spec, and
  * with a plan lane press 1 plans and opens the sheet, press 2 sends it. The audit's own verbs ride
  * in `audit`; its `read` is drawn only when the def declares `read: "explicit"`.
@@ -265,7 +265,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     if (!member) return "save the spec before applying";
     return isSpecOf(member.schema, def.schema) ? null : `the member is not a ${def.entity} spec`;
   };
-  const archived = (ctx: EntityCtx) => (ctx.page.stage === "archived" ? ARCHIVED : null);
+  const inHistory = (ctx: EntityCtx) => (ctx.page.stage === "history" ? HISTORY : null);
   /** What apply takes now: the staged cells, else the opened spec. */
   const objectOf = (ctx: EntityCtx) => (stagedCount(ctx) ? "cells" : ctx.page.path ? "spec" : null);
   const lane = (ctx: EntityCtx) => (objectOf(ctx) === "cells" ? staged?.plan : plan);
@@ -286,7 +286,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     stage: "audit",
     count: (ctx) => (def.target === "selection" ? ctx.page.selection.length || null : null),
     ready: (ctx) => {
-      if (archived(ctx)) return ARCHIVED;
+      if (inHistory(ctx)) return HISTORY;
       if (!ctx.page.pod) return "choose the pod the capture lands in";
       if (def.target === "selection" && !ctx.page.selection.length)
         return "pick rows in the audit first";
@@ -325,7 +325,7 @@ export function entityRoute<W, const R extends string, P extends object, const A
     dirties: ["pods", ...(def.applies ?? [])],
     stage: "apply",
     ready: (ctx) => {
-      const refusal = archived(ctx) ?? def.targetReady?.(ctx as never);
+      const refusal = inHistory(ctx) ?? def.targetReady?.(ctx as never);
       if (refusal) return refusal;
       const object = objectOf(ctx);
       if (object === "cells") {

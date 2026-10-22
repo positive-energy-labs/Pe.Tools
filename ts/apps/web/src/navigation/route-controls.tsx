@@ -14,7 +14,7 @@ import { routePath } from "./model";
 
 export type RouteControlName = "controls" | "lamp" | "situation" | "palette" | "inspector";
 export type SituationSignal = {
-  kind: "archived" | "failure" | "busy" | "health" | "ready" | "unbound";
+  kind: "history" | "failure" | "busy" | "health" | "ready" | "unbound";
   tone: "nav" | "alarm" | "commit" | "caution" | "done";
   title: string;
   stamp: string;

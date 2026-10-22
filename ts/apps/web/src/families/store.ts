@@ -163,14 +163,14 @@ export function useFamiliesStore(
   const archiveListCall = useHostCall(
     archivedFamiliesObservations,
     ["families-archive-list"],
-    page.stage === "archived",
+    page.stage === "history",
   );
   const archiveList = archiveListCall.data ?? [];
   const selectedArchiveId = archiveId ?? archiveList[0]?.id ?? null;
   const archiveCall = useHostCall(
     () => archivedFamiliesObservation(selectedArchiveId!),
     ["families-archive", selectedArchiveId],
-    page.stage === "archived" && selectedArchiveId !== null,
+    page.stage === "history" && selectedArchiveId !== null,
   );
 
   const host = useMemo(() => createLiveFamiliesHost(), []);
@@ -191,12 +191,12 @@ export function useFamiliesStore(
   const retainedCall = useHostCall(
     () => latestFamiliesObservation(handle.work.key),
     ["families-retained", workKey(handle.work.key)],
-    documentTarget !== null && page.stage !== "archived",
+    documentTarget !== null && page.stage !== "history",
   );
   const retainedReading = retainedCall.data ?? null;
   useEffect(() => {
     if (
-      page.stage === "archived" ||
+      page.stage === "history" ||
       !retainedReading ||
       handle.busy ||
       retainedReading.document.session !== documentTarget?.session ||
@@ -239,7 +239,7 @@ export function useFamiliesStore(
     (previousOf(handle.readings.matrix as Reading<unknown>) as FamiliesMatrixEnvelope | undefined)
       ?.bodyVersion ?? null;
   useEffect(() => {
-    if (!bodyVersion || bodyVersion === page.reading?.id || page.stage === "archived") return;
+    if (!bodyVersion || bodyVersion === page.reading?.id || page.stage === "history") return;
     let live = true;
     // A failed fetch leaves the matrix on its last body; the envelope still says it moved.
     void archivedFamiliesObservation(bodyVersion).then(
@@ -287,13 +287,13 @@ export function useFamiliesStore(
   const categoryCall = useHostCall(
     () => host.categories(documentTarget!),
     ["categories", documentTarget?.session, documentTarget?.openId],
-    documentTarget !== null && page.stage !== "archived",
+    documentTarget !== null && page.stage !== "history",
   );
   // Listed once per document (ruling 42); the draft's categories and placement filter it here.
   const familyCall = useHostCall(
     () => host.families(documentTarget!),
     ["families", documentTarget?.session, documentTarget?.openId],
-    documentTarget !== null && page.stage !== "archived",
+    documentTarget !== null && page.stage !== "history",
   );
   const categoryKey = draft.categories.join("|");
   // FOOTGUN: base-ui `Combobox items` must keep identity between renders; a fresh `options`
@@ -351,7 +351,7 @@ export function useFamiliesStore(
     ["salvage", documentTarget?.session, documentTarget?.openId, unreadable, page.carryOver],
     salvage !== null &&
       documentTarget !== null &&
-      page.stage !== "archived" &&
+      page.stage !== "history" &&
       (unreadable || page.carryOver),
   );
 

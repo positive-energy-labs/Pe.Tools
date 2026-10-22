@@ -265,19 +265,19 @@ Legacy nouns under review: band, readout, read status, rules.
 
 ## Entity route shape (ruled 2026-09-24, rulings 34-45; the baton is deleted)
 
-One kernel, three consumers. Stages Auditing, Applying, Archived on every entity route.
+One kernel, three consumers. Stages Auditing, Applying, History on every entity route (ruling 58; URL `?stage=history`).
 
 | Stage | Revit | Work | Pod | Row verbs |
 |---|---|---|---|---|
 | Auditing | read, automatic; `read families` is the one explicit read | stage, unstage, accept, deny | `capture` files Reading plus staged as a spec (optional) | read (families only), capture |
 | Applying | press 1 plans, press 2 applies, then readback | staged is the input; consumed cells retire | an opened spec is the input when nothing is staged | apply, save draft; `/family` adds build .rfa |
-| Archived | none | none | none | none |
+| History | none | none | none | none |
 
 Build order (Wave B, held until now):
 1. Kernel: `entityRoute` emits the three stages always, no `capture` stage, no `plan` verb, apply plans on press 1; capture is an Auditing verb on all three; `commit` and `push` die; stale resolve draws on apply's flag; a def declares `read: "explicit"` or gets none.
 2. `/schedules`: apply names its object (ruling 41); `read schedule` and R die; the Ladder pick subscribes.
 3. `/family`: arrival auto-capture and R die; build on Applying with its review as press 1 (ruling 45).
-4. `/families`: Archived from the kernel; pickers list once and sink unplaced (ruling 44); capture declared.
+4. `/families`: History from the kernel; pickers list once and sink unplaced (ruling 44); capture declared.
 5. Work slot `protoui`: V14 one-line rows with tabs; the log's weight (ruling 39).
 
 ## Owed after the entity-route wave (merged 51552a70, 2026-09-24)
@@ -295,7 +295,7 @@ session. The unsquashed step commits are at tag `entity-route-20260924-unsquashe
 - Ruling 52 (`/family` one-press apply) and rulings 48-51 (Pea surface) are ruled, not built.
 - `/families` declares a `capture` verb (`families.capture`, human only). Ruling 49 defers families
   capture to the parameter metadata pane; the verb is live until that is ruled.
-- Archived is an empty stage on `/schedules` and `/family`; their past captures exist on the host.
+- History is an empty stage on `/schedules` and `/family`; their past captures exist on the host.
 - Ruling 43: one plan call over every staged families draft.
 - Browser journeys `tests/e2e/st3-no-refresh.ts`, `st4-changed.ts` and `j6.ts` still assert push,
   `read schedule` and `plan`. Not run.

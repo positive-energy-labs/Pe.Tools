@@ -51,7 +51,7 @@ export function ChainLamp({
     .join("\n");
   const primary = useIsPrimaryRoute(handle.manifest.key);
   const kind: SituationSignal["kind"] = inspection
-    ? "archived"
+    ? "history"
     : handle.failure
       ? "failure"
       : handle.busy
@@ -62,16 +62,10 @@ export function ChainLamp({
             ? "ready"
             : "unbound";
   const tone: SituationSignal["tone"] =
-    kind === "archived"
-      ? "nav"
-      : kind === "busy"
-        ? "commit"
-        : kind === "ready"
-          ? "done"
-          : "caution";
+    kind === "history" ? "nav" : kind === "busy" ? "commit" : kind === "ready" ? "done" : "caution";
   const stateWord =
-    kind === "archived"
-      ? "Archived · Saved observation"
+    kind === "history"
+      ? "History · Saved observation"
       : kind === "failure"
         ? "Attention needed"
         : kind === "busy"
