@@ -17,15 +17,15 @@ import { FactChip } from "@pe/kit/lang/chip";
 import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { revitTarget } from "@pe/kit/lang/row";
-import { callHostRpc } from "#/host/client";
+import { showInRevit, revitScope } from "#/revit/element-menu";
+import { showElementsMessage, type ShowElementsResult } from "#/revit/element-target";
+import { observedElements, useNativeObservation } from "#/revit/observation";
 import { tokenRef } from "@pe/kit/lib/token";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { claimInk } from "./encoding";
 import type { Claim, Leg, Place } from "./legs";
 import type { SubjectDrawn } from "./scene";
-
-type RevitDoc = { session: string; openId: string };
 
 export type Verdict = NonNullable<Claim["verdict"]>;
 export const VERDICTS: readonly { value: Verdict; word: string; says: string }[] = [
@@ -93,7 +93,10 @@ export function elementNamer(snapshot: DuctSnapshot, subject: SubjectDrawn | nul
     const place = subject?.placeOf.get(id);
     if (place && ELEMENT_PLACES.has(place.kind) && !place.name.endsWith(String(id)))
       return place.name;
-    if (node && (node.kind === "equipment" || node.kind === "terminal" || node.kind === "accessory")) {
+    if (
+      node &&
+      (node.kind === "equipment" || node.kind === "terminal" || node.kind === "accessory")
+    ) {
       const typed = typeName(node);
       if (typed) return typed;
     }
@@ -133,40 +136,31 @@ export function claimParts(text: string, nameOf: (id: number) => string | null):
   return parts;
 }
 
-/** `revit.context.show-elements`: select and zoom to the ids; resolves to what Revit answered. */
-export const showElements = (doc: RevitDoc, elementIds: readonly number[]) =>
-  callHostRpc(
-    "revit.context.show-elements",
-    { elementIds: [...elementIds] },
-    { bridgeSessionId: doc.session, openDocumentId: doc.openId },
-  ).then(
-    (answer) => answer.note,
-    (error: unknown) => (error instanceof Error ? error.message : String(error)),
-  );
-
 type ClaimHandlers = {
-  doc: RevitDoc | null;
   onHover: (id: number | null) => void;
   onPick: (id: number) => void;
-  onShown: (word: string) => void;
+  onShown: (result: ShowElementsResult) => void;
 };
 
 /** One resolved id in a claim's text: a button that lights its element on hover and selects it on click. */
 export function ClaimElement({
   part,
-  doc,
   onHover,
   onPick,
   onShown,
 }: { part: Exclude<ClaimPart, string> } & ClaimHandlers) {
+  const observation = useNativeObservation();
+  const target = observedElements(observation, [part.id]);
+  const native = observation.scope?.source === "native" && observation.scope.document !== null;
   return (
     <TooltipHint
-      content={`${part.name} · element ${part.id}: ${doc ? "click to select it in Revit" : "click to select it in the drawing"}`}
+      content={`${part.name} · element ${part.id}: ${native ? "click to select it in Revit" : "click to select it in the drawing"}`}
     >
       <button
         type="button"
         data-claim-element={part.id}
-        {...revitTarget([part.id])}
+        {...revitScope(observation.scope)}
+        {...revitTarget(target.ids, target.refs)}
         aria-label={`${part.name} ${part.id}`}
         className="cursor-pointer underline decoration-dotted underline-offset-2"
         onMouseEnter={() => onHover(part.id)}
@@ -174,9 +168,8 @@ export function ClaimElement({
         onFocus={() => onHover(part.id)}
         onBlur={() => onHover(null)}
         onClick={() => {
-          if (!doc) return onPick(part.id);
-          onShown("selecting…");
-          void showElements(doc, [part.id]).then(onShown);
+          if (!native) return onPick(part.id);
+          void showInRevit(target, true).then(onShown);
         }}
       >
         {part.dot ? (
@@ -194,10 +187,7 @@ export function ClaimElement({
 }
 
 /** A claim's prose with every resolved id as a `ClaimElement`. */
-export function ClaimText({
-  parts,
-  ...handlers
-}: { parts: readonly ClaimPart[] } & ClaimHandlers) {
+export function ClaimText({ parts, ...handlers }: { parts: readonly ClaimPart[] } & ClaimHandlers) {
   return parts.map((part, i) =>
     typeof part === "string" ? (
       <span key={i}>{part}</span>
@@ -211,7 +201,6 @@ export function ClaimsList({
   subject,
   selected,
   nameOfId,
-  doc = null,
   onSelect,
   onVerdict,
   onHover,
@@ -222,8 +211,6 @@ export function ClaimsList({
   selected: string;
   /** `elementNamer` over the read snapshot. */
   nameOfId: (id: number) => string | null;
-  /** The connected document; null keeps an id's click in the drawing. */
-  doc?: RevitDoc | null;
   onSelect: (claim: Claim) => void;
   onVerdict: (claim: Claim, verdict: Verdict) => void;
   /** The drawing's hover: an id named in a claim lights its element. */
@@ -231,7 +218,7 @@ export function ClaimsList({
   /** Select an element in the drawing (no document to send it to). */
   onPick: (id: number) => void;
 }) {
-  const [said, setSaid] = useState<string | null>(null);
+  const [said, setSaid] = useState<ShowElementsResult | null>(null);
   if (!subject.claims.length)
     return (
       <p className="text-ink-2 px-1 py-1" data-claims="none">
@@ -275,7 +262,6 @@ export function ClaimsList({
             <span className="min-w-0 flex-1">
               <ClaimText
                 parts={claimParts(claim.text, nameOfId)}
-                doc={doc}
                 onHover={onHover}
                 onPick={onPick}
                 onShown={setSaid}
@@ -318,7 +304,9 @@ export function ClaimsList({
       })}
       {said ? (
         <li>
-          <FactChip title="what revit.context.show-elements answered">{said}</FactChip>
+          <FactChip title="what revit.context.show-elements answered">
+            {showElementsMessage(said)}
+          </FactChip>
         </li>
       ) : null}
     </ol>

@@ -5,6 +5,8 @@ import { Button } from "@pe/kit/lang/button";
 import { ValueDiff } from "#/components/lang/value-diff";
 import type { ScheduleGridDocument } from "@pe/agent-contracts";
 import { StateCell } from "@pe/kit/lang/cell";
+import { revitTarget } from "@pe/kit/lang/row";
+import { revitScope } from "#/revit/element-target";
 import {
   cellText,
   scheduleCellState,
@@ -35,7 +37,9 @@ export function ScheduleReview({
     const row = snapshot.rows.find((candidate) => candidate.rowNumber === rowNumber);
     const index = snapshot.columns.findIndex((column) => column.columnNumber === columnNumber);
     return row && index >= 0 ? (
-      <StateCell {...scheduleCellState(writes, row, columnNumber, index)} />
+      <span {...revitScope(state.nativeObservation?.scope)} {...revitTarget(row.subjectIds)}>
+        <StateCell {...scheduleCellState(writes, row, columnNumber, index)} />
+      </span>
     ) : undefined;
   };
   return (

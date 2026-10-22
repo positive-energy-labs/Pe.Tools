@@ -15,6 +15,7 @@ import {
   type ProposedRecord,
 } from "./chat-plugins";
 import { useWorkbench } from "./provider";
+import { NativeReadingReferences } from "#/revit/reading-references";
 
 const line = "flex min-w-0 items-baseline gap-2 t-small text-ink-2";
 
@@ -48,32 +49,35 @@ export function ActionLine({ call }: { call: ActionCall }) {
   const route = actionRoute(key);
   const state = row?.state ?? (reading.state === "failed" ? "receipt unread" : "reading");
   return (
-    <div className={line} data-action={call.id}>
-      <span className="truncate">
-        Pea ran {actionWord(key)}
-        {route ? ` in ${chatPluginTitle(route)}` : ""} ·{" "}
-        <span
-          className="face-mono"
-          data-tone={
-            state === "succeeded"
-              ? "done"
-              : state === "running" || state === "reading"
-                ? undefined
-                : "caution"
-          }
-        >
-          {state}
+    <div className="flex min-w-0 flex-col gap-1">
+      <div className={line} data-action={call.id}>
+        <span className="truncate">
+          Pea ran {actionWord(key)}
+          {route ? ` in ${chatPluginTitle(route)}` : ""} ·{" "}
+          <span
+            className="face-mono"
+            data-tone={
+              state === "succeeded"
+                ? "done"
+                : state === "running" || state === "reading"
+                  ? undefined
+                  : "caution"
+            }
+          >
+            {state}
+          </span>
         </span>
-      </span>
-      {route ? (
-        <Button label="open ›" onClick={() => store.actions.setPlugin(route)}>
-          open ›
-        </Button>
-      ) : (
-        <Link to="/ops" search={{ actionId: call.id }}>
-          receipt ›
-        </Link>
-      )}
+        {route ? (
+          <Button label="open ›" onClick={() => store.actions.setPlugin(route)}>
+            open ›
+          </Button>
+        ) : (
+          <Link to="/ops" search={{ actionId: call.id }}>
+            receipt ›
+          </Link>
+        )}
+      </div>
+      {row?.state === "succeeded" ? <NativeReadingReferences receipt={row} /> : null}
     </div>
   );
 }

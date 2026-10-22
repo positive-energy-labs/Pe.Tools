@@ -282,8 +282,16 @@ export function LiveScheduleGridWorkspace({
     refused: page.refused,
     onFocus: { grid: focusOf("grid") },
     freshness,
-    documentScope: target
-      ? { bridgeSessionId: target.session, openDocumentId: target.openId }
+    nativeObservation: {
+      scope: shown
+        ? {
+            document: shown.target,
+            source: demo ? "fixture" : shown === retained ? "native" : "saved",
+          }
+        : null,
+    },
+    documentScope: shown
+      ? { bridgeSessionId: shown.target.session, openDocumentId: shown.target.openId }
       : undefined,
   };
 

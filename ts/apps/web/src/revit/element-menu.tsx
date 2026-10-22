@@ -10,8 +10,7 @@ import { ListPopup } from "@pe/kit/lang/list-popup";
 import { KeyHint } from "@pe/kit/lang/key-hint";
 import { Button } from "@pe/kit/lang/button";
 import { FactChip } from "@pe/kit/lang/chip";
-import { revitTarget, type RevitElementReference } from "@pe/kit/lang/row";
-import type { DocumentRef } from "@pe/agent-contracts";
+import { revitTarget } from "@pe/kit/lang/row";
 import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import {
   elementTargetOf as targetOf,
@@ -19,7 +18,6 @@ import {
   showElementsMessage,
   revitScope,
   type ElementTarget as Target,
-  type RevitObservationScope,
   type ShowElementsResult,
 } from "./element-target";
 export { revitScope, revitReferences } from "./element-target";
@@ -74,6 +72,9 @@ const typing = (el: Element | null) =>
 
 export function ElementMenu() {
   const [menu, setMenu] = useState<(Target & { x: number; y: number }) | null>(null);
+  const count = menu
+    ? new Set([...menu.ids, ...(menu.refs ?? []).map((ref) => ref.elementId)]).size
+    : 0;
   const [said, setSaid] = useState<{ text: string; x: number; y: number } | null>(null);
   const caret = useRef<HTMLSpanElement>(null);
   // The answer stands by the pointer: what Revit did, or why it refused.
@@ -165,7 +166,7 @@ export function ElementMenu() {
           onOpenChange={(next) => {
             if (!next) setMenu(null);
           }}
-          aria-label={`${menu.ids.length + (menu.refs?.length ?? 0)} Revit element(s)`}
+          aria-label={`${count} Revit element(s)`}
           items={VERBS}
           keyOf={(verb) => verb.key}
           labelOf={(verb) => verb.label}
@@ -176,8 +177,8 @@ export function ElementMenu() {
             label: verb.label,
             title:
               verb.key === "box"
-                ? `select ${menu.ids.length}, box the {3D} view around them and zoom to fit; no model element changes`
-                : `select ${menu.ids.length} in Revit; the view stays as it is`,
+                ? `select ${count}, box the {3D} view around them and zoom to fit; no model element changes`
+                : `select ${count} in Revit; the view stays as it is`,
             meta: verb.keys ? <KeyHint>{verb.keys}</KeyHint> : undefined,
           })}
           onPick={(verb) => {
@@ -204,37 +205,36 @@ export function ElementMenu() {
  * The one visible door, for a surface whose selection must offer Revit in plain sight (the
  * selection strip): Selection Box, its answer beside it, and the BX it teaches.
  */
-export function SelectionBoxButton({
-  ids,
-  refs,
-  doc,
-  scope,
-}: {
-  ids: readonly number[];
-  refs?: readonly RevitElementReference[];
-  doc?: DocumentRef | null;
-  scope?: RevitObservationScope | null;
-}) {
-  const [said, setSaid] = useState<string | null>(null);
+export function SelectionBoxButton({ target }: { target: Target }) {
+  const [result, setResult] = useState<ShowElementsResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const prepared = prepareElements(target, false);
   return (
     <span
       className="inline-flex min-w-0 items-center gap-1"
-      {...revitScope(scope ?? doc)}
-      {...revitTarget(ids, refs)}
+      {...revitScope(target.scope)}
+      {...revitTarget(target.ids, target.refs)}
     >
       <Button
         kind="framed"
+        busy={busy}
+        refusal={prepared.kind === "refused" ? prepared.message : null}
         label="Selection Box: box the {3D} view around it in Revit (right-click or BX anywhere)"
         onClick={() => {
-          setSaid("boxing…");
-          void showInRevit({ ids, refs, scope: scope ?? doc ?? null }, false).then((result) =>
-            setSaid(showElementsMessage(result)),
-          );
+          setResult(null);
+          setBusy(true);
+          void showInRevit(target, false)
+            .then(setResult)
+            .finally(() => setBusy(false));
         }}
       >
         Selection Box <KeyHint>BX</KeyHint>
       </Button>
-      {said ? <FactChip title="what revit.context.show-elements answered">{said}</FactChip> : null}
+      {result ? (
+        <FactChip title="what revit.context.show-elements answered">
+          {showElementsMessage(result)}
+        </FactChip>
+      ) : null}
     </span>
   );
 }

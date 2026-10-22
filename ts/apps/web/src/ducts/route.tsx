@@ -34,6 +34,7 @@ import { provisionalWords } from "./provisional";
 import type { ProtoProps } from "./proto/props";
 import { EScreen } from "./proto/e/screen";
 import { useDuctsViewBridge } from "./view-bridge";
+import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
 
 const fmt = (n: number | null | undefined) => (n == null ? "—" : n.toFixed(4));
 
@@ -71,6 +72,20 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
     staged.labelParameter,
   );
   const snapshot = demo?.snapshot ?? read.snapshot;
+  // useDuctSnapshot fences responses by the exact request generation before exposing data.
+  const nativeObservation = useMemo<NativeObservation>(
+    () => ({
+      scope: {
+        document: demo || SAVED || !read.snapshot ? null : doc,
+        source: demo ? "fixture" : SAVED ? "saved" : "native",
+      },
+      references: [...(snapshot?.nodes ?? []), ...(snapshot?.segments ?? [])].map((element) => ({
+        elementId: element.id,
+        uniqueId: element.uniqueId,
+      })),
+    }),
+    [snapshot, read.snapshot, demo, doc],
+  );
   const error = demo ? null : read.error;
   const pending = demo ? false : read.pending;
   const catalogs = useDuctCatalogs(page.epoch);
@@ -380,7 +395,9 @@ export function DuctsRoute({ url = true }: { url?: boolean } = {}) {
         />
       }
     >
-      <EScreen props={shell} />
+      <NativeObservationScope value={nativeObservation}>
+        <EScreen props={shell} />
+      </NativeObservationScope>
     </Surface>
   );
 }

@@ -56,6 +56,7 @@ import {
   ToolStatus,
 } from "#/components/lang/conversation";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { NativeReadingReferences } from "#/revit/reading-references";
 
 type RegisterMoment = (id: string, el: HTMLElement | null) => void;
 
@@ -680,6 +681,7 @@ function ToolCallPart({
       ) : null}
       {!recordsOnly && open ? (
         <div {...annotation("tool-body")}>
+          {call.status === "completed" ? <NativeReadingReferences result={result} /> : null}
           <Code code={stringify(call.args)} lang="json" title="in" copyLabel="Copy input" />
           {result === undefined ? null : failed ? (
             <Code
