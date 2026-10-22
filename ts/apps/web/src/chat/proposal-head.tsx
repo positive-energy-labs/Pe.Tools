@@ -98,6 +98,10 @@ export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; work
   if (!asks.length && !live.length) return null;
   const shown = all || live.length <= REST_WORKS ? live : live.slice(0, REST_WORKS);
   const rest = live.slice(shown.length).map((parts) => tally(parts.flatMap(headGroups)));
+  // A refusal belongs to the route, not the line: three Ducts lines refused for one reason say it once.
+  const refusals = new Map<string, string>();
+  for (const parts of shown)
+    if (parts[0]!.refusal) refusals.set(parts[0]!.route, parts[0]!.refusal);
   return (
     <div
       aria-label="Pea proposals"
@@ -106,6 +110,11 @@ export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; work
       {asks.length > 0 && <div className="hairline-b-faint mb-1 pb-1">{asks}</div>}
       {shown.map((parts) => (
         <WorkLine key={parts[0]!.id} parts={parts} />
+      ))}
+      {[...refusals].map(([route, refusal]) => (
+        <p key={route} className="t-small" data-tone="caution">
+          {route}: {refusal}
+        </p>
       ))}
       {rest.length ? (
         <Button kind="framed" label="Show the remaining routes" onClick={() => setAll(true)}>
@@ -122,8 +131,9 @@ export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; work
   );
 }
 /** One line per Work, read left to right (chat polish round 2, 2026-10-12): the review toggle names
- *  what is staged and how much in words · where, with the revision as the one machine value ·
- *  a refusal · the one commit. */
+ *  what is staged and how much in words · where, with the revision as the one machine value · the
+ *  one commit. Narrow, the line wraps rather than truncates, and the subject is the last thing to
+ *  give way; the commit carries the route's refusal, which `ProposalHead` says once per route. */
 function WorkLine({ parts }: { parts: HeadWork[] }) {
   const [open, setOpen] = useState(false);
   const work = parts[0]!;
@@ -131,7 +141,7 @@ function WorkLine({ parts }: { parts: HeadWork[] }) {
   const counts = tally(groups.flat());
   return (
     <div className="flex flex-col" data-work={work.id}>
-      <div className="flex min-h-(--control-h) min-w-0 items-center gap-2">
+      <div className="flex min-h-(--control-h) min-w-0 flex-wrap items-center gap-x-2">
         <Button
           kind="framed"
           aria-expanded={open}
@@ -144,15 +154,15 @@ function WorkLine({ parts }: { parts: HeadWork[] }) {
             aria-hidden
             className={`size-3.5 shrink-0 transition-transform ${open ? "rotate-90" : ""}`}
           />
-          <span className="min-w-0 truncate">
-            <b>{work.subject}</b>
+          <span className="min-w-0">
+            <b className="whitespace-nowrap">{work.subject}</b>
             <span className="text-ink-2">
               {" · "}
               <Counts {...counts} />
             </span>
           </span>
         </Button>
-        <span className="shrink-0 text-ink-2">
+        <span className="whitespace-nowrap text-ink-2">
           in {work.route} ·{" "}
           <span className="face-mono">
             {work.wire.revision === null ? "unwritten" : `r${work.wire.revision}`}
@@ -165,19 +175,12 @@ function WorkLine({ parts }: { parts: HeadWork[] }) {
             reload
           </Button>
         ) : null}
-        <span className="ml-auto flex min-w-0 items-center gap-2">
-          {work.refusal ? (
-            <TooltipHint content={`${work.commit.word} refused: ${work.refusal}`}>
-              <span className="min-w-0 truncate" data-tone="caution">
-                {work.refusal}
-              </span>
-            </TooltipHint>
-          ) : null}
+        <span className="ml-auto">
           <Button
             kind="framed"
             label={work.commit.word}
-            reason={counts.staged ? COMMIT_REASON : "nothing staged"}
-            refusal={counts.staged ? null : "nothing staged"}
+            reason={COMMIT_REASON}
+            refusal={work.refusal ?? (counts.staged ? null : "nothing staged")}
             onClick={work.commit.run}
           >
             {work.commit.word}
