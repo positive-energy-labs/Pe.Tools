@@ -12,6 +12,7 @@ import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
 import { Row } from "@pe/kit/lang/row";
+import { observedElements, useNativeObservation } from "#/revit/observation";
 
 import { airflowOptions, airflowPatches, slotWord, type AirflowOf } from "../../airflow";
 
@@ -45,6 +46,7 @@ export function inputRowsOf(snapshot: DuctSnapshot, scope: InputsScope) {
 }
 
 export function InputsPane(props: InputsPaneProps) {
+  const observation = useNativeObservation();
   const { snapshot, priced, work, scope, nameOf, selected, select, light } = props;
   const { units, terminals } = inputRowsOf(snapshot, scope);
   const ctx: InputsCtx | null = priced ? { snapshot, priced, work, groups: scope.groups } : null;
@@ -56,22 +58,26 @@ export function InputsPane(props: InputsPaneProps) {
         flow, ESP and role cells open once the loss tables are read
       </p>
     );
-  const row = (id: number, cells: React.ReactNode, kind: "unit" | "grille") => (
-    <Row
-      key={`${kind}:${id}`}
-      role="listitem"
-      lines={2}
-      label={nameOf(id)}
-      title={nameOf(id)}
-      aside={kind}
-      sub={cells}
-      selected={selected === id}
-      onClick={() => select(id)}
-      onMouseEnter={() => light([id])}
-      revitIds={[id]}
-      data-key={`${kind}:${id}`}
-    />
-  );
+  const row = (id: number, cells: React.ReactNode, kind: "unit" | "grille") => {
+    const target = observedElements(observation, [id]);
+    return (
+      <Row
+        key={`${kind}:${id}`}
+        role="listitem"
+        lines={2}
+        label={nameOf(id)}
+        title={nameOf(id)}
+        aside={kind}
+        sub={cells}
+        selected={selected === id}
+        onClick={() => select(id)}
+        onMouseEnter={() => light([id])}
+        revitIds={target.ids}
+        revitRefs={target.refs}
+        data-key={`${kind}:${id}`}
+      />
+    );
+  };
   return (
     <div role="list" aria-label="inputs" data-e-inputs>
       {units.length ? (

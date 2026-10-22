@@ -10,6 +10,7 @@ import { Button } from "@pe/kit/lang/button";
 import { SearchControl } from "@pe/kit/lang/search-control";
 import { Tree } from "@pe/kit/lang/row";
 import { tokenRef } from "@pe/kit/lib/token";
+import { observedElements, useNativeObservation } from "#/revit/observation";
 
 import { formatQuantity, type Encoding, type Quantity } from "../../encoding";
 
@@ -137,6 +138,7 @@ export function GoTo({ go }: { go: (query: string) => string }) {
 }
 
 export function SystemTree({ ctx }: { ctx: TreeCtx }) {
+  const observation = useNativeObservation();
   // Every section opens; the critical run opens under the section that holds it (else the first's).
   const crit =
     ctx.trees.flatMap((t) => t.children).find((r) => r.key === ctx.criticalKey) ??
@@ -167,6 +169,7 @@ export function SystemTree({ ctx }: { ctx: TreeCtx }) {
         meta: ctx.reading?.quantity ? undefined : <MetaHeader />,
       }}
       row={(n) => {
+        const target = observedElements(observation, idsOf(n));
         const label =
           n.kind === "run" ? runName(n) : n.kind === "element" ? ctx.grilleName(n) : n.name;
         const critical = n.kind === "run" && (n.key === ctx.criticalKey || n.critical != null);
@@ -237,7 +240,8 @@ export function SystemTree({ ctx }: { ctx: TreeCtx }) {
             n.kind !== "system" &&
             (n.kind === "run" ? n.terminal : n.id) === ctx.selected,
           onMouseEnter: () => ctx.light(idsOf(n)),
-          revitIds: idsOf(n),
+          revitIds: target.ids,
+          revitRefs: target.refs,
         };
       }}
     />

@@ -13,6 +13,7 @@ import { tableOf, unpriced, type Priced } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Tree } from "@pe/kit/lang/row";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { observedElements, useNativeObservation } from "#/revit/observation";
 
 import { fanOutWords, ruleFanOut } from "../../inputs";
 import type { LossesWork } from "../../work";
@@ -60,6 +61,7 @@ export function RulesTree({
   nameOf: (id: number) => string;
   light: (ids: readonly number[] | null) => void;
 }) {
+  const observation = useNativeObservation();
   const groupOf = useMemo(() => {
     const m = new Map<number, string>();
     for (const n of snapshot.nodes) if (n.groupId) m.set(n.id, n.groupId);
@@ -72,9 +74,7 @@ export function RulesTree({
     const ids = new Map<string, Set<number>>();
     for (const [id, key] of ruleOf)
       if (inScope(id)) (ids.get(key) ?? ids.set(key, new Set()).get(key)!).add(id);
-    const overrides = Object.keys(priced.staged.componentDrops)
-      .map(Number)
-      .filter(inScope);
+    const overrides = Object.keys(priced.staged.componentDrops).map(Number).filter(inScope);
     const rules = [...ids]
       .sort(([, a], [, b]) => b.size - a.size)
       .map(
@@ -87,14 +87,24 @@ export function RulesTree({
             { kind: "table", key: `${ruleKey}/table`, ruleKey, children: [] },
             ...overrides
               .filter((id) => ruleOf.get(id) === ruleKey)
-              .map((id): RuleNode => ({ kind: "override", key: `${ruleKey}/o${id}`, id, ruleKey, children: [] })),
+              .map(
+                (id): RuleNode => ({
+                  kind: "override",
+                  key: `${ruleKey}/o${id}`,
+                  id,
+                  ruleKey,
+                  children: [],
+                }),
+              ),
           ],
         }),
       );
     // A stated drop on an element no rule prices (an accessory) has no type row to sit under.
     const loose = overrides
       .filter((id) => !ruleOf.has(id))
-      .map((id): RuleNode => ({ kind: "override", key: `o${id}`, id, ruleKey: null, children: [] }));
+      .map(
+        (id): RuleNode => ({ kind: "override", key: `o${id}`, id, ruleKey: null, children: [] }),
+      );
     return [...rules, ...loose];
   }, [priced, ruleOf, groupOf, groups, wide]);
 
@@ -133,8 +143,14 @@ export function RulesTree({
         childrenOf={(n) => n.children}
         cursor={focus}
         onCursorChange={onFocus}
-        empty={wide ? "no fitting is priced by a rule" : "no fitting in this system is priced by a rule"}
+        empty={
+          wide ? "no fitting is priced by a rule" : "no fitting in this system is priced by a rule"
+        }
         row={(n) => {
+          const target = observedElements(
+            observation,
+            n.kind === "override" ? [n.id] : idsUnder(n.ruleKey),
+          );
           if (n.kind === "rule") {
             const rule = ruleByKey(n.ruleKey);
             const label = rule ? `${rule.family} : ${rule.type}` : n.ruleKey;
@@ -151,7 +167,11 @@ export function RulesTree({
                   <span className="text-ink-2" title="instances this rule governs in scope">
                     ×{n.count}
                   </span>
-                  {missing ? <span data-tone="caution" title="instances with no value under this table">{missing} unpriced</span> : null}
+                  {missing ? (
+                    <span data-tone="caution" title="instances with no value under this table">
+                      {missing} unpriced
+                    </span>
+                  ) : null}
                   <TooltipHint content="What staging another table for this rule would re-price, in every system">
                     <span className="text-ink-2" data-e-fanout={n.ruleKey}>
                       {fanOutWords(fanOuts.get(n.ruleKey) ?? { grilles: 0, systems: 0 })}
@@ -160,7 +180,8 @@ export function RulesTree({
                 </span>
               ),
               onMouseEnter: () => light(idsUnder(n.ruleKey)),
-              revitIds: idsUnder(n.ruleKey),
+              revitIds: target.ids,
+              revitRefs: target.refs,
             };
           }
           if (n.kind === "table")
@@ -168,7 +189,8 @@ export function RulesTree({
               label: <Chips ruleKey={n.ruleKey} priced={priced} work={work} />,
               title: `the ASHRAE table every ${ruleByKey(n.ruleKey)?.family ?? ""} instance is looked up under`,
               onMouseEnter: () => light(idsUnder(n.ruleKey)),
-              revitIds: idsUnder(n.ruleKey),
+              revitIds: target.ids,
+              revitRefs: target.refs,
             };
           return {
             label: (
@@ -187,7 +209,8 @@ export function RulesTree({
               />
             ),
             onMouseEnter: () => light([n.id]),
-            revitIds: [n.id],
+            revitIds: target.ids,
+            revitRefs: target.refs,
           };
         }}
       />

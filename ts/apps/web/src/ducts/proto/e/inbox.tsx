@@ -8,7 +8,7 @@
  * Diagnostics head carries its key, one chip per row kind with its count; a picked chip narrows
  * the Diagnostics rows (and the picture's annotations, `annotatedFindings`) to that kind.
  */
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   Ban,
   Check,
@@ -25,20 +25,22 @@ import {
 import type { DuctsRouteDocument, RouteStatePatch } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
+import { FactChip } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Inbox as KitInbox, type InboxRowSpec } from "@pe/kit/lang/inbox";
 import { reviewTransitions, type CellWire } from "#/components/work/band";
 import type { ActionHandle } from "#/route/handle";
+import { showInRevit } from "#/revit/element-menu";
+import {
+  prepareElements,
+  showElementsMessage,
+  type ShowElementsResult,
+} from "#/revit/element-target";
+import { observedElements, useNativeObservation } from "#/revit/observation";
 
 import { airflowPatches } from "../../airflow";
 import { rulingPatches, verdictPatches } from "../../assumptions";
-import {
-  ClaimElement,
-  claimParts,
-  showElements,
-  VERDICTS,
-  type Verdict,
-} from "../../claims";
+import { ClaimElement, claimParts, VERDICTS, type Verdict } from "../../claims";
 import {
   diagnosticKind,
   diagnosticsKey,
@@ -53,7 +55,6 @@ import {
 import type { Claim } from "../../legs";
 import type { ReviewLine } from "../../write-review";
 
-type RevitDoc = { session: string; openId: string };
 export type InboxWork = {
   doc: DuctsRouteDocument | null;
   revision: number | null;
@@ -118,7 +119,6 @@ const VERDICT_ICON: Record<"capped" | "connect" | "ignore", LucideIcon> = {
 export function Inbox({
   groups,
   work,
-  doc,
   nameOf,
   onVerdict,
   light,
@@ -132,7 +132,6 @@ export function Inbox({
 }: {
   groups: Record<Exclude<InboxGroup, "write">, readonly InboxItem[]>;
   work: InboxWork;
-  doc: RevitDoc | null;
   nameOf: (id: number) => string;
   onVerdict: ((claim: Claim, verdict: Verdict) => void) | null;
   light: (ids: readonly number[] | null) => void;
@@ -147,6 +146,9 @@ export function Inbox({
   /** The Diagnostics kind picked in its key (empty = none), and its press. */
   diagnostic: { kind: string; pick: (kind: string) => void };
 }) {
+  const observation = useNativeObservation();
+  const [nativeResult, setNativeResult] = useState<ShowElementsResult | null>(null);
+  const [selecting, setSelecting] = useState(false);
   const cellOf = (segment: string, key: string) =>
     (work.doc as unknown as Record<string, Record<string, object> | undefined> | null)?.[segment]?.[
       key
@@ -267,21 +269,27 @@ export function Inbox({
               ?.run(),
         );
       }
-      case "select":
+      case "select": {
+        const target = observedElements(observation, verb.ids);
+        const prepared = prepareElements(target, true);
         return make(
           `x${i}`,
           Crosshair,
           "select in Revit",
           "select in Revit",
-          () => doc && void showElements(doc, verb.ids),
+          () => {
+            setNativeResult(null);
+            setSelecting(true);
+            void showInRevit(target, true)
+              .then(setNativeResult)
+              .finally(() => setSelecting(false));
+          },
           {
-            refusal: !doc
-              ? "no Revit document is connected"
-              : !verb.ids.length
-                ? "no element to select"
-                : null,
+            refusal: prepared.kind === "refused" ? prepared.message : null,
+            busy: selecting,
           },
         );
+      }
     }
   };
   const verbsOf = (item: InboxItem, worded: boolean) =>
@@ -300,10 +308,9 @@ export function Inbox({
           <ClaimElement
             key={j}
             part={p}
-            doc={doc}
             onHover={(id) => light(id == null ? null : [id])}
             onPick={onSelect}
-            onShown={() => undefined}
+            onShown={setNativeResult}
           />
         ),
       )}
@@ -319,6 +326,7 @@ export function Inbox({
       .replace(/ ([,.;:?])/g, "$1");
 
   const spec = (item: InboxItem): InboxRowSpec => {
+    const target = observedElements(observation, item.ids);
     const claim = item.verbs.find((v) => v.kind === "claim");
     const title = claim?.kind === "claim" ? claimLine(claim.claim) : item.title;
     return {
@@ -329,7 +337,8 @@ export function Inbox({
       status: <span data-tone={item.tone}>{item.status}</span>,
       verbs: verbsOf(item, false),
       onMouseEnter: () => light(item.ids),
-      revitIds: item.ids,
+      revitIds: target.ids,
+      revitRefs: target.refs,
       lit: selected != null && item.ids.includes(selected),
       onClick: () => onSelect(item.ids[0] ?? null),
       detail: (
@@ -452,7 +461,8 @@ export function Inbox({
       work.doc,
       work.revision,
       work.store,
-      doc,
+      observation,
+      selecting,
       write.row,
       write.review,
       write.preview.refusal,
@@ -469,16 +479,25 @@ export function Inbox({
     ],
   );
   return (
-    <KitInbox
-      aria-label="inbox"
-      order={INBOX_ORDER}
-      groups={specs}
-      onMouseLeave={() => light(null)}
-      empty={
-        <EmptyState story="scope" exit="stage a change or ask Pea">
-          nothing to rule on
-        </EmptyState>
-      }
-    />
+    <>
+      <KitInbox
+        aria-label="inbox"
+        order={INBOX_ORDER}
+        groups={specs}
+        onMouseLeave={() => light(null)}
+        empty={
+          <EmptyState story="scope" exit="stage a change or ask Pea">
+            nothing to rule on
+          </EmptyState>
+        }
+      />
+      {nativeResult ? (
+        <div role="status" className="px-2 py-1">
+          <FactChip title="what revit.context.show-elements answered">
+            {showElementsMessage(nativeResult)}
+          </FactChip>
+        </div>
+      ) : null}
+    </>
   );
 }

@@ -7,6 +7,7 @@
 import type { Provisional } from "@pe/ducts-domain/losses";
 import { revitTarget } from "@pe/kit/lang/row";
 import { tokenRef } from "@pe/kit/lib/token";
+import { observedElements, useNativeObservation } from "#/revit/observation";
 
 import type { Split, SplitPart } from "../b/model";
 
@@ -14,11 +15,7 @@ export const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" :
 
 /** Equivalent feet as an engineer reads them: whole feet, one place under ten. */
 export const fmtFt = (ft: number | null | undefined) =>
-  ft == null
-    ? "—"
-    : Math.abs(ft) < 10
-      ? ft.toFixed(1)
-      : Math.round(ft).toLocaleString("en-US");
+  ft == null ? "—" : Math.abs(ft) < 10 ? ft.toFixed(1) : Math.round(ft).toLocaleString("en-US");
 
 export function LossBar({
   value,
@@ -74,10 +71,10 @@ export function BarLegend({
         "bars: not priced yet (the ASHRAE tables are not read), so no row draws a bar"
       ) : (
         <>
-          eq ft = effective length from the fan to the row's far end, each fitting as equivalent feet
-          at its duct's own friction rate (small number: in-wg) · bar = in-wg, full width = the
-          critical run ◆ {criticalName ?? "—"} <span className="face-mono">{fmt(scale)}</span>; a run's
-          bar splits into unit end, ducts &amp; fittings, and grille
+          eq ft = effective length from the fan to the row's far end, each fitting as equivalent
+          feet at its duct's own friction rate (small number: in-wg) · bar = in-wg, full width = the
+          critical run ◆ {criticalName ?? "—"} <span className="face-mono">{fmt(scale)}</span>; a
+          run's bar splits into unit end, ducts &amp; fittings, and grille
         </>
       )}
     </p>
@@ -86,8 +83,18 @@ export function BarLegend({
 
 /** The three parts of a run, in bar order (air order: the unit, the ducts, the grille), each its own ink. */
 const PARTS = [
-  { key: "unit", word: "unit end", says: "passive devices in series with the fan (coil, dehu)", ink: "viz-1" },
-  { key: "duct", word: "ducts & fittings", says: "straight duct and every fitting between the unit and the grille", ink: "ink-2" },
+  {
+    key: "unit",
+    word: "unit end",
+    says: "passive devices in series with the fan (coil, dehu)",
+    ink: "viz-1",
+  },
+  {
+    key: "duct",
+    word: "ducts & fittings",
+    says: "straight duct and every fitting between the unit and the grille",
+    ink: "ink-2",
+  },
   { key: "terminal", word: "grille", says: "the terminal's own drop", ink: "viz-5" },
 ] as const;
 
@@ -97,41 +104,59 @@ type Light = (ids: readonly number[] | null) => void;
  * A run's loss as three abutting segments against `scale` (the fan): each segment's width is its
  * in-wg share, and hovering one lights the elements that pay it; leaving gives the row's set back.
  */
-function SplitFill({ split, scale, light, back }: { split: Split; scale: number; light?: Light; back?: readonly number[] }) {
+function SplitFill({
+  split,
+  scale,
+  light,
+  back,
+}: {
+  split: Split;
+  scale: number;
+  light?: Light;
+  back?: readonly number[];
+}) {
+  const observation = useNativeObservation();
   let at = 0;
   return (
     <>
       {PARTS.map(({ key, word, ink }) => {
         const part: SplitPart = split[key];
+        const target = observedElements(observation, part.ids);
         const left = at;
         at += part.dp / scale;
         // Unknown is drawn, never blank: a dashed stub past any known share. Ducts skip it: an unpriced
         // fitting already says so on its own row, and its stub would sit on the grille's.
-        const stub = part.unpriced > 0 && key !== "duct" ? (
-          <span
-            key={`${key}?`}
-            className="absolute -inset-y-px w-1.5 border border-dashed"
-            data-e-split={`${key}-unpriced`}
-            {...revitTarget(part.ids)}
-            title={`${word}: ${part.unpriced} with no drop, so this part is unknown (not zero)`}
-            style={{ left: `min(${at * 100}%, calc(100% - 6px))`, borderColor: tokenRef(ink) }}
-            onMouseEnter={light ? () => light(part.ids) : undefined}
-            onMouseLeave={light ? () => light(back ?? null) : undefined}
-          />
-        ) : null;
+        const stub =
+          part.unpriced > 0 && key !== "duct" ? (
+            <span
+              key={`${key}?`}
+              className="absolute -inset-y-px w-1.5 border border-dashed"
+              data-e-split={`${key}-unpriced`}
+              {...revitTarget(target.ids, target.refs)}
+              title={`${word}: ${part.unpriced} with no drop, so this part is unknown (not zero)`}
+              style={{ left: `min(${at * 100}%, calc(100% - 6px))`, borderColor: tokenRef(ink) }}
+              onMouseEnter={light ? () => light(part.ids) : undefined}
+              onMouseLeave={light ? () => light(back ?? null) : undefined}
+            />
+          ) : null;
         if (part.dp <= 0) return stub;
-        return [stub, (
+        return [
+          stub,
           <span
             key={key}
             className="absolute inset-y-0"
             data-e-split={key}
-            {...revitTarget(part.ids)}
+            {...revitTarget(target.ids, target.refs)}
             title={`${word} ${fmt(part.dp, LOSS_PLACES)} in-wg (${Math.round((part.dp / scale) * 100)}% of the fan)`}
-            style={{ left: `${left * 100}%`, width: `${Math.min(1 - left, part.dp / scale) * 100}%`, backgroundColor: tokenRef(ink) }}
+            style={{
+              left: `${left * 100}%`,
+              width: `${Math.min(1 - left, part.dp / scale) * 100}%`,
+              backgroundColor: tokenRef(ink),
+            }}
             onMouseEnter={light ? () => light(part.ids) : undefined}
             onMouseLeave={light ? () => light(back ?? null) : undefined}
-          />
-        )];
+          />,
+        ];
       })}
     </>
   );
@@ -141,38 +166,60 @@ function SplitFill({ split, scale, light, back }: { split: Split; scale: number;
  * The critical run's split, wide, under the path header: where the fan's static goes, unit end to
  * grille, with each part's in-wg and share. Hovering a part lights its elements everywhere.
  */
-export function SplitStrip({ split, scale, light }: { split: Split | null; scale: number | null; light: Light }) {
+export function SplitStrip({
+  split,
+  scale,
+  light,
+}: {
+  split: Split | null;
+  scale: number | null;
+  light: Light;
+}) {
+  const observation = useNativeObservation();
+  const declaration = (ids: readonly number[]) => {
+    const target = observedElements(observation, ids);
+    return revitTarget(target.ids, target.refs);
+  };
   if (!split || !scale) return null;
   return (
-    <div className="border-line flex flex-col gap-1 border-b px-2 py-1.5 t-small" data-e-split-strip="">
+    <div
+      className="border-line flex flex-col gap-1 border-b px-2 py-1.5 t-small"
+      data-e-split-strip=""
+    >
       <span className="relative block h-2.5" style={{ backgroundColor: tokenRef("line") }}>
         <SplitFill split={split} scale={scale} light={light} />
       </span>
       <span className="flex flex-wrap gap-x-3 text-ink-2">
-        {PARTS.filter(({ key }) => split[key].dp > 0 || split[key].unpriced > 0).map(({ key, word, says, ink }) => (
-          <span
-            key={key}
-            className="inline-flex items-center gap-1"
-            title={says}
-            {...revitTarget(split[key].ids)}
-            onMouseEnter={() => light(split[key].ids)}
-            onMouseLeave={() => light(null)}
-          >
-            <span className="inline-block size-2" style={{ backgroundColor: tokenRef(ink) }} aria-hidden />
-            {word}{" "}
-            {split[key].dp > 0 ? (
-              <>
-                <span className="face-mono text-ink">{fmt(split[key].dp, 3)}</span>
-                <span className="face-mono">{Math.round((split[key].dp / scale) * 100)}%</span>
-              </>
-            ) : null}
-            {split[key].unpriced > 0 ? (
-              <span data-tone="caution">
-                {split[key].dp > 0 ? `+ ${split[key].unpriced} unpriced` : "no drop: unknown"}
-              </span>
-            ) : null}
-          </span>
-        ))}
+        {PARTS.filter(({ key }) => split[key].dp > 0 || split[key].unpriced > 0).map(
+          ({ key, word, says, ink }) => (
+            <span
+              key={key}
+              className="inline-flex items-center gap-1"
+              title={says}
+              {...declaration(split[key].ids)}
+              onMouseEnter={() => light(split[key].ids)}
+              onMouseLeave={() => light(null)}
+            >
+              <span
+                className="inline-block size-2"
+                style={{ backgroundColor: tokenRef(ink) }}
+                aria-hidden
+              />
+              {word}{" "}
+              {split[key].dp > 0 ? (
+                <>
+                  <span className="face-mono text-ink">{fmt(split[key].dp, 3)}</span>
+                  <span className="face-mono">{Math.round((split[key].dp / scale) * 100)}%</span>
+                </>
+              ) : null}
+              {split[key].unpriced > 0 ? (
+                <span data-tone="caution">
+                  {split[key].dp > 0 ? `+ ${split[key].unpriced} unpriced` : "no drop: unknown"}
+                </span>
+              ) : null}
+            </span>
+          ),
+        )}
       </span>
     </div>
   );
@@ -256,7 +303,13 @@ export function MetaBar({
   rowIds?: readonly number[];
 }) {
   const share = value != null && scale ? Math.min(1, value / scale) : null;
-  const own = unpriced ? unpriced.word : self === "" ? "" : selfFt == null ? "—" : `+${fmtFt(selfFt)}`;
+  const own = unpriced
+    ? unpriced.word
+    : self === ""
+      ? ""
+      : selfFt == null
+        ? "—"
+        : `+${fmtFt(selfFt)}`;
   return (
     <span className="inline-flex items-center gap-1.5" data-e-bar={share ?? ""}>
       <span className={`relative inline-block h-1.5 ${COL.bar}`} aria-hidden>
@@ -274,7 +327,11 @@ export function MetaBar({
           </>
         ) : null}
       </span>
-      <span className={`${COL.ft} text-right`} data-e-ft={ft ?? ""} title={`${fmt(value, LOSS_PLACES)} in-wg to here`}>
+      <span
+        className={`${COL.ft} text-right`}
+        data-e-ft={ft ?? ""}
+        title={`${fmt(value, LOSS_PLACES)} in-wg to here`}
+      >
         {fmtFt(ft)}
       </span>
       <span className={`${COL.wg} text-ink-2 t-small`} title="loss to here, in-wg">
@@ -285,7 +342,10 @@ export function MetaBar({
           <span
             className={`border-line border-l pl-1.5 ${COL.ft} text-right`}
             data-e-own={unpriced ? "unpriced" : ""}
-            title={unpriced?.why ?? (typeof self === "number" ? `+${fmt(self, LOSS_PLACES)} in-wg own` : undefined)}
+            title={
+              unpriced?.why ??
+              (typeof self === "number" ? `+${fmt(self, LOSS_PLACES)} in-wg own` : undefined)
+            }
           >
             {own}
           </span>

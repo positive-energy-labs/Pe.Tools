@@ -6,6 +6,7 @@
  */
 import type { FanResult } from "@pe/ducts-domain/losses";
 import { Row } from "@pe/kit/lang/row";
+import { observedElements, useNativeObservation } from "#/revit/observation";
 
 import { fmtFt } from "./bar";
 
@@ -23,6 +24,7 @@ export function FanSections({
   light: (ids: readonly number[] | null) => void;
   select: (id: number | null) => void;
 }) {
+  const observation = useNativeObservation();
   if (fans.length < 2) return null;
   return (
     <div
@@ -34,6 +36,7 @@ export function FanSections({
     >
       {title ? <p className="t-small text-ink-2 px-2 pt-1">{title}</p> : null}
       {fans.map((f, k) => {
+        const target = observedElements(observation, f.owned);
         const where =
           k === 0
             ? "owns the trunk"
@@ -51,7 +54,8 @@ export function FanSections({
             aside={k === 0 ? "largest fan" : "fan"}
             sub={sub}
             onMouseEnter={() => light(f.owned)}
-            revitIds={f.owned}
+            revitIds={target.ids}
+            revitRefs={target.refs}
             onClick={() => select(f.critical)}
             data-key={`fan:${f.unit}`}
           />
