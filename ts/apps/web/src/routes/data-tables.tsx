@@ -1,14 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
-import { actionAdmissionSchema } from "@pe/agent-contracts";
+import { actionAdmissionSchema, routeAddress, type RoutePage } from "@pe/agent-contracts";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Pane } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
 import { useHostOp } from "#/readings";
-import { RouteShell, defineRoute, refuse, useRoute, useRouteThread, type Ctx } from "#/route";
+import {
+  RouteShell,
+  defineRoute,
+  refuse,
+  routeFile,
+  useRoute,
+  useRouteLease,
+  useRouteThread,
+  type Ctx,
+} from "#/route";
 import { Ladder, type Rung } from "#/route/ladder";
-import { routeSearch } from "#/route/route-owner";
 import { useChooseTarget } from "#/route/shell";
 import { Situation } from "#/route/situation";
 import { useDocumentLadder } from "#/route/situation-ladder";
@@ -20,14 +28,15 @@ import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-actio
  * /data-tables — author synthetic data tables in the document the sentence names. The table is
  * the ladder's last rung (revit.detail.data-tables, read from that document); the editor drafts
  * name, columns and rows; `apply` admits one `data-table.apply` against that exact document.
- * Missing rows are pruned on apply, so deleting a row here deletes it in Revit.
+ * Missing rows are pruned on apply, so deleting a row here deletes it in Revit. The open table's
+ * name is the Page (`?table=`); the draft itself is Work in progress and never rides the address.
  */
-export const dataTablesSearch = routeSearch;
-
 export const Route = createFileRoute("/data-tables")({
-  validateSearch: dataTablesSearch,
+  ...routeFile("data-tables"),
   component: DataTablesRoute,
 });
+
+type DataTablesPage = RoutePage<"data-tables">;
 
 export type ColumnKind = "Text" | "Number";
 
@@ -61,13 +70,15 @@ const blank = (): Draft => ({
   rows: [{ key: rowKey(), values: [null] }],
 });
 
-type DataTablesCtx = Ctx<never, never, Record<string, never>>;
+type DataTablesCtx = Ctx<never, never, DataTablesPage>;
 
 /** The route's two verbs over the open draft; `apply` is admitted against the resolved document. */
 const dataTablesManifest = (draft: Draft | null, setDraft: (next: Draft | null) => void) =>
-  defineRoute<never, never, Record<string, never>, "new" | "apply">({
+  defineRoute<never, never, DataTablesPage, "new" | "apply">({
     key: "data-tables",
     name: "Data Tables",
+    address: "data-tables",
+    page: routeAddress("data-tables").schema,
     needs: "project",
     docs: "Choose a document and a data table (or start a new one), edit its columns and rows, then apply. Apply upserts by table name and row key, and prunes rows the draft no longer carries: deleting a row here deletes it in Revit.",
     actions: {
@@ -79,7 +90,10 @@ const dataTablesManifest = (draft: Draft | null, setDraft: (next: Draft | null) 
         input: z.void() as unknown as z.ZodType<never>,
         dirties: [],
         ready: () => null,
-        run: async () => setDraft(blank()),
+        run: async (ctx: DataTablesCtx) => {
+          setDraft(blank());
+          ctx.setPage({ table: "" });
+        },
       },
       apply: {
         label: "apply",
@@ -140,6 +154,7 @@ function DataTablesRoute() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const manifest = useMemo(() => dataTablesManifest(draft, setDraft), [draft]);
   const handle = useRoute(manifest, { target: chosen, thread });
+  const [page, setPage] = handle.page;
   const ladder = useDocumentLadder(handle);
   const doc =
     handle.resolution.kind === "resolved" && handle.resolution.target.kind === "document"
@@ -153,13 +168,42 @@ function DataTablesRoute() {
     { bridgeSessionId: doc?.session, openDocumentId: doc?.openId, enabled: doc !== null },
   );
   const tables = (detail.data?.tables ?? []) as TableHandle[];
+  // The draft opens from the named table once, when the document's tables are read; a later
+  // re-read (palette, apply) must not replace edits in progress. `opened` is the name it opened.
+  const opened = useRef<string | null>(null);
   // A draft belongs to the document it was opened on.
-  useEffect(() => setDraft(null), [docKey]);
-  // An apply changes the list; it re-reads once the verb lands.
+  useEffect(() => {
+    setDraft(null);
+    opened.current = null;
+  }, [docKey]);
+  useEffect(() => {
+    if (!page.table) {
+      opened.current = null;
+      // Back to no table closes a stored table's editor; a new, unsaved draft stays.
+      setDraft((was) => (was && !was.isNew ? null : was));
+      return;
+    }
+    const table = detail.data ? tables.find((row) => row.name === page.table) : undefined;
+    if (table && opened.current !== table.name) {
+      opened.current = table.name;
+      setDraft(draftFrom(table));
+    }
+  }, [page.table, detail.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  // An apply changes the list; it re-reads once the verb lands, and the saved name is the place.
   const outcome = handle.outcome;
   useEffect(() => {
-    if (outcome?.key === "apply") detail.refresh();
+    if (outcome?.key !== "apply") return;
+    detail.refresh();
+    if (draft && !draft.isNew && draft.name) {
+      opened.current = draft.name;
+      setPage({ table: draft.name }, { history: "replace" });
+    }
   }, [outcome]); // eslint-disable-line react-hooks/exhaustive-deps
+  useRouteLease("data-tables", handle.page, {
+    visible: doc !== null && detail.data !== undefined,
+    context: { document: docKey },
+    facts: { tables: tables.map((table) => table.name) },
+  });
 
   // The Situation palette is the sentence's ladder; opening it re-lists the tables.
   const [palette, setPalette] = useState(false);
@@ -189,10 +233,7 @@ function DataTablesRoute() {
       ? "no data tables in this document; start one with new table"
       : (detail.error?.message ?? (doc ? "reading data tables…" : "choose a document first")),
     picked: (id) => draft !== null && !draft.isNew && draft.name === id,
-    pick: (id) => {
-      const table = tables.find((row) => row.name === id);
-      if (table) setDraft(draftFrom(table));
-    },
+    pick: (id) => setPage({ table: id }, { history: "push" }),
   };
 
   return (

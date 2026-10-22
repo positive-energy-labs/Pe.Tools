@@ -103,3 +103,48 @@ describe("the route address", () => {
     });
   });
 });
+
+describe("the thin routes adopt the contract", () => {
+  test("every navigable key round-trips through its link", () => {
+    const captures = routeAddress("captures");
+    expect(captures.link({ sha: "ab", open: ["ab", "cd"] })).toBe("/captures?sha=ab&open=ab%2Ccd");
+    expect(captures.read({ open: "ab,cd" }).page).toEqual({ sha: undefined, open: ["ab", "cd"] });
+    const home = routeAddress("home");
+    expect(home.link({ query: "duct", folded: ["/ducts"], sort: "name" })).toBe(
+      "/?query=duct&folded=%2Fducts&sort=name",
+    );
+    expect(routeAddress("settings").link({ section: "none" })).toBe("/settings?section=none");
+    expect(routeAddress("data-tables").link({ table: "Loads" })).toBe("/data-tables?table=Loads");
+    expect(routeAddress("parameter-links").link({ rail: "folded" })).toBe(
+      "/parameter-links?rail=folded",
+    );
+  });
+
+  test("a route that declared a key nothing renders no longer carries it", () => {
+    expect(routeAddress("parameter-links").keys).toEqual(["rail"]);
+  });
+
+  test("history: a pick pushes, a typed or receipt move replaces", () => {
+    const ops = routeAddress("ops");
+    expect(ops.history({ op: "" }, { op: "revit.x" })).toBe("push");
+    expect(ops.history({ actionId: "" }, { actionId: "a1" })).toBe("replace");
+    const home = routeAddress("home");
+    expect(home.history({ query: "" }, { query: "d" })).toBe("replace");
+    expect(home.history({ exposure: "All" }, { exposure: "Main" })).toBe("push");
+  });
+
+  test("Pea sets what the page shows and nothing the person's press owns", () => {
+    expect(routeAddress("duct-loss").agent.keys).toContain("cfm");
+    expect(routeAddress("settings").agent.read({ section: "none" })).toEqual({ section: "none" });
+    expect(routeAddress("settings").agent.patch.safeParse({ session: "s" }).success).toBe(false);
+    expect(routeAddress("data-tables").agent.patch.safeParse({ table: "Loads" }).success).toBe(
+      true,
+    );
+    // Binding is the person's door and Pea does not lease /pea: no lease at all.
+    expect(routeAddress("bind").agent).toBeUndefined();
+    expect(routeAddress("pea").agent).toBeUndefined();
+    expect(routeAddress("parameter-links").agent).toBeUndefined();
+    // Ops is the admin door: Pea runs an operation through pe_do, not a second path to it.
+    expect(routeAddress("ops").agent).toBeUndefined();
+  });
+});

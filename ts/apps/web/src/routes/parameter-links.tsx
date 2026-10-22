@@ -118,7 +118,8 @@ export function ParameterLinksRouteContent({ thread }: { thread?: string } = {})
   const evaluation = reading?.evaluated ? (reading.evaluation ?? null) : null;
   const status = reading?.status ?? null;
 
-  const [rightOpen, setRightOpen] = useState(true);
+  const [{ rail }, setPage] = route.page;
+  const rightOpen = rail === "open";
   const busy = route.busy?.key ?? null;
   /** The arming reason — the strip's own gate: apply arms only once a reason is supplied. */
   const [writeReason, setWriteReason] = useState("");
@@ -293,7 +294,7 @@ export function ParameterLinksRouteContent({ thread }: { thread?: string } = {})
           persist: "pe.parameterLinks.evalPane",
           collapse: {
             collapsed: !rightOpen,
-            onCollapsedChange: (collapsed) => setRightOpen(!collapsed),
+            onCollapsedChange: (collapsed) => setPage({ rail: collapsed ? "folded" : "open" }),
             collapsedSize: 40,
             collapseBelow: 170,
             title: "evaluation",

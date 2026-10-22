@@ -15,7 +15,7 @@ import { DuctCharts } from "#/duct/charts";
 import { FACES, type FaceKey } from "#/duct/ductulator";
 import { Ductulator } from "#/duct/wheel";
 import { type DuctInput, materials, solve } from "#/duct/math";
-import { RouteShell, useRoute, urlPage } from "#/route";
+import { RouteShell, useRoute, useRouteLease, urlPage } from "#/route";
 import { routeSearch } from "#/route/route-owner";
 
 import { ductLossManifest as manifest } from "#/route/surface-manifests";
@@ -91,6 +91,17 @@ function DuctLossRoute() {
   const [d, setPage] = handle.page;
   const set = (patch: Partial<DuctInput>) => setPage(patch);
   const r = solve(d);
+  // The solved numbers are what the person reads off the panel; Pea reads them, never sets them.
+  useRouteLease("duct-loss", handle.page, {
+    facts: {
+      loss: r.loss,
+      lossPer100: r.lossPer100,
+      velocity: r.velocity,
+      equivalentDiameter: r.equivalentDiameter,
+      reynolds: r.reynolds,
+      friction: r.friction,
+    },
+  });
   const knownMaterial = Object.values<number>(materials).includes(d.roughness);
   const wheelDiameter = d.shape === "round" ? d.a : r.equivalentDiameter;
   const faceKey = d.face;

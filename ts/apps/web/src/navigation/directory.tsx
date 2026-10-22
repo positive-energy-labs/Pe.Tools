@@ -1,6 +1,3 @@
-import { useCallback, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
-import { useRouteSearch } from "#/route/activity";
 import { ChevronRight, Info, RefreshCw } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
 import { Input } from "@pe/kit/lang/input";
@@ -11,6 +8,7 @@ import { Information } from "./popover";
 import type { NavigationWork } from "./navigation-client";
 import { PrimaryRouteControls } from "./route-controls";
 import { RouteHelpButton } from "#/route/help";
+import { useRouteLease, type AddressPage } from "#/route";
 import { usePublishRouteOptions } from "#/settings/options";
 import type { PageOption } from "#/settings/option-state";
 import type { DirectorySearch } from "./directory-search";
@@ -120,31 +118,26 @@ function NavigationStatus() {
     </div>
   );
 }
-export function Directory() {
+export function Directory({ page: address }: { page: AddressPage<"home"> }) {
   const pods = usePodRoutes();
-  const page = useRouteSearch("home");
-  const navigate = useNavigate({ from: "/" });
-  const { query, exposure, sort } = page;
-  const setPage = useCallback(
-    (patch: Partial<DirectoryPage>) => {
-      void navigate({ to: ".", search: (previous) => ({ ...previous, ...patch }) });
-    },
-    [navigate],
-  );
+  const [page, setPage] = address;
+  const { query, exposure, sort, folded } = page;
   usePublishRouteOptions("index", "Tools", directoryOptions, page, setPage);
-  const [collapsed, setCollapsed] = useState<string[]>([]);
   const { snapshot } = useNavigation();
   const go = useDestination();
   const tools = matchingTools(query).filter(
     (tool) => exposure === "All" || tool.exposure === exposure,
   );
   if (sort === "name") tools.sort((a, b) => a.title.localeCompare(b.title));
+  useRouteLease("home", address, {
+    facts: { tools: tools.slice(0, 200).map((tool) => ({ to: tool.to, exposure: tool.exposure })) },
+  });
   const reset = () => {
     setPage({ query: "", exposure: "All" });
   };
   const renderTool = (tool: ReturnType<typeof matchingTools>[number]) => {
     const works = snapshot?.works.filter((work) => work.route === routeKey(tool.to)) ?? [];
-    const expanded = !collapsed.includes(tool.to);
+    const expanded = !folded.includes(tool.to);
     return (
       <div key={tool.to} className="min-w-0 py-2">
         <div className="pe-navigation-row">
@@ -161,9 +154,11 @@ export function Directory() {
               icon={ChevronRight}
               aria-expanded={expanded}
               onClick={() =>
-                setCollapsed((prior) =>
-                  expanded ? [...prior, tool.to] : prior.filter((path) => path !== tool.to),
-                )
+                setPage({
+                  folded: expanded
+                    ? [...folded, tool.to]
+                    : folded.filter((path) => path !== tool.to),
+                })
               }
             >
               {works.length} Works

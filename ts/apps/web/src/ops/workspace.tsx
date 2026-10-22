@@ -1,7 +1,8 @@
 /**
  * The Ops body. The URL is the page: `?op` names the operation, `?target` the session and
  * document (the shell's one target grammar), `?actionId` the journaled receipt to show. Form
- * values and a read's value are render state and die with the tab.
+ * values and a read's value are render state and die with the tab: a request being typed is a
+ * draft, not a place.
  */
 import { useEffect, useMemo, useState } from "react";
 
@@ -13,7 +14,7 @@ import { Button } from "@pe/kit/lang/button";
 import { Provenance } from "#/components/lang/section";
 import { Surface } from "#/components/lang/surface";
 import { previousOf, useReading } from "#/readings";
-import { RouteShell, useRoute } from "#/route";
+import { RouteShell, useRoute, type AddressPage } from "#/route";
 import { Ladder } from "#/route/ladder";
 import { useChooseTarget } from "#/route/shell";
 import { Situation } from "#/route/situation";
@@ -28,15 +29,9 @@ import { Code, stringify } from "@pe/kit/lang/code";
 type Catalog = { operations?: HostOperationCatalogEntry[]; bridgeCatalogError?: string };
 type Value = { op: string; request: unknown; value: unknown; elapsedMs: number };
 
-export function OpsRoute({
-  op,
-  actionId,
-  set,
-}: {
-  op: string;
-  actionId: string | null;
-  set: (patch: { op?: string; actionId?: string }) => void;
-}) {
+export function OpsRoute({ page }: { page: AddressPage<"ops"> }) {
+  const [{ op, actionId: receipt }, setPage] = page;
+  const actionId = receipt || null;
   const [chosen] = useChooseTarget();
   const [values, setValues] = useState<FormValues>({});
   const [value, setValue] = useState<Value | null>(null);
@@ -89,12 +84,12 @@ export function OpsRoute({
           });
           if (outcome.kind === "value") setValue({ op: selected.key, request, ...outcome });
           else {
-            set({ actionId: outcome.id });
+            setPage({ actionId: outcome.id });
             if (outcome.state !== "succeeded") throw Error(`${outcome.id}: ${outcome.state}`);
           }
         },
       }),
-    [selected, values, actionId, set],
+    [selected, values, actionId, setPage],
   );
   const handle = useRoute(manifest, { target: chosen });
   const ladder = useDocumentLadder(handle);
@@ -110,7 +105,7 @@ export function OpsRoute({
     })),
     note: catalog.state === "failed" ? catalog.message : observed?.bridgeCatalogError,
     picked: (id: string) => id === op,
-    pick: (id: string) => set({ op: id, actionId: undefined }),
+    pick: (id: string) => setPage({ op: id, actionId: "" }),
   };
   const Output = value ? outputRenderers[value.op] : undefined;
 

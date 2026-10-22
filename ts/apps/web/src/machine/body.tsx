@@ -87,9 +87,10 @@ export function SettingsBody({
   reading: Reading<Machine>;
   fixture: boolean;
   shell: AppSurface;
-  group?: GroupKey;
+  /** The addressed group; `null` is every group folded, absent is no address (the tray). */
+  group?: GroupKey | null;
   session?: string;
-  onGroup?: (group: GroupKey | undefined) => void;
+  onGroup?: (group: GroupKey | null) => void;
 }) {
   const machine = machineOf(reading);
   const [picked, setPicked] = useState<GroupKey | null | undefined>(group);
@@ -180,15 +181,15 @@ export function SettingsBody({
       body: <SettingsProjection />,
     },
   ];
-  // An address names the group; without one, what waits opens, else the first header that disagrees.
-  // Closing it is remembered here, so an address with no section does not reopen it.
+  // An address names the group (`null`: all folded); without one (the tray), what waits opens, else
+  // the first header that disagrees, and the person's pick is remembered here.
   const automatic =
     autoOpen(machine) ??
     (machine
       ? (machineGroups.find((entry) => entry.tone === "caution" || entry.tone === "alarm")?.key ??
         null)
       : null);
-  const open = group ?? (picked === undefined ? automatic : picked);
+  const open = group !== undefined ? group : picked === undefined ? automatic : picked;
   return (
     <div className="flex min-w-0 flex-col gap-2" data-shell={shell} aria-label="settings">
       <p className="m-0" data-tone={gap || waits.length ? "caution" : undefined} role="status">
@@ -209,7 +210,7 @@ export function SettingsBody({
         open={open}
         onOpen={(key) => {
           setPicked(key as GroupKey | null);
-          onGroup?.((key ?? undefined) as GroupKey | undefined);
+          onGroup?.(key as GroupKey | null);
         }}
         groups={groups}
       />

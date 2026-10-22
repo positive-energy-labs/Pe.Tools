@@ -16,6 +16,7 @@ import { errorMessage } from "./use-workbench";
 import { EMPTY_HEAD, isReady, useProviders, type HeadDraft } from "./providers";
 import {
   documentRequestSchema,
+  routeAddress,
   targetKey,
   type DocumentRequest,
   type ThreadHead,
@@ -63,12 +64,21 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       search: {
         ...search,
         mode: "mode" in search && typeof search.mode === "string" ? search.mode : "threads",
-        patch: (partial, replace = false) =>
-          navigate({
+        // A move of the address's own fields lands in history by the contract's rule (a draft or a
+        // mode tweak replaces); a thread move keeps its caller's choice, as it names another place.
+        patch: (partial, replace = false) => {
+          const pea = routeAddress("pea");
+          const before = pea.read(router.state.location.search).page;
+          const rule =
+            "thread" in partial
+              ? null
+              : pea.history(before, { ...before, ...partial } as typeof before);
+          return navigate({
             to: ".",
             search: (previous: Record<string, unknown>) => ({ ...previous, ...partial }),
-            replace,
-          }),
+            replace: replace || rule === "replace",
+          });
+        },
       },
     }),
   );

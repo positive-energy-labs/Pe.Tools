@@ -1,11 +1,5 @@
-import {
-  createFileRoute,
-  retainSearchParams,
-  stripSearchParams,
-  type SearchSchemaInput,
-} from "@tanstack/react-router";
-import { routeAddress } from "@pe/agent-contracts";
-import { routeSearch } from "#/route/route-owner";
+import { createFileRoute, retainSearchParams } from "@tanstack/react-router";
+import { routeFile } from "#/route";
 import { ChatShell } from "#/chat/chat-shell";
 /**
  * Chat URL state — the single home for navigable/shareable state. TanStack Router owns all of it
@@ -18,17 +12,15 @@ import { ChatShell } from "#/chat/chat-shell";
  *            attachments are present (attachments never serialize).
  * `?demo=<action>` is read by `useRoute`, not here: it mounts one seed in an isolated owner.
  */
-/** The contract defaults (`routeAddress("pea")`): a stale value (the old `mode=chat`) reads as one. */
-const DEFAULTS = routeAddress("pea").defaults;
-
+/**
+ * The contract's defaults never reach the address, and a stale value (the old `mode=chat`) reads as
+ * one (`routeFile`). No lease to Pea: the chat is where Pea reads its own thread, and a thread tab
+ * never holds `/pea`, so Pea has no view of this route to set.
+ */
+const file = routeFile("pea");
 export const Route = createFileRoute("/pea")({
-  validateSearch: (search: SearchSchemaInput & Record<string, unknown>) => ({
-    ...routeSearch(search),
-    ...routeAddress("pea").read(search).page,
-  }),
-  search: {
-    middlewares: [retainSearchParams(["thread"]), stripSearchParams(DEFAULTS)],
-  },
+  validateSearch: file.validateSearch,
+  search: { middlewares: [retainSearchParams(["thread"]), ...file.search.middlewares] },
   component: RouteComponent,
 });
 

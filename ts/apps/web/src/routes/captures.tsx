@@ -1,9 +1,9 @@
-import { useRouteSearch } from "#/route/activity";
 /**
  * /captures — every picture the host kept of a Revit view, newest first (pages ledger,
  * 2026-10-04: captures are the one picture currency). The list is host-scoped, not a Revit
  * target, so the route has no Situation: the shell head carries its name, the host lamp and the
- * one verb. `?sha=<sha>` focuses the takings of one picture; the `capture` inspectable opens here.
+ * one verb. `?sha=<sha>` focuses the takings of one picture, `?open=<sha,...>` unfolds receipts; the
+ * `capture` inspectable opens here.
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -15,7 +15,7 @@ import { CapturesList } from "#/captures/list";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Pane } from "#/components/lang/pane";
 import { Surface } from "#/components/lang/surface";
-import { RouteShell, useRoute, urlPage, type RouteManifest } from "#/route";
+import { RouteShell, useRoute, useRouteLease, urlPage, type RouteManifest } from "#/route";
 
 /**
  * The receipts are a host read, not a Reading: no Revit change mark lights them, so `refresh`
@@ -57,7 +57,6 @@ export const Route = createFileRoute("/captures")({
 });
 
 function CapturesRoute() {
-  const { sha } = useRouteSearch("captures");
   const [captures, setCaptures] = useState<CaptureReceipt[] | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const reload = useCallback(
@@ -79,12 +78,32 @@ function CapturesRoute() {
   }, [reload]);
   const manifest = useMemo(() => capturesManifest(reload), [reload]);
   const handle = useRoute(manifest, { target: null });
+  const [page, setPage] = handle.page;
+  useRouteLease("captures", handle.page, {
+    visible: captures !== null,
+    facts: {
+      captures: (captures ?? []).slice(0, 100).map((receipt) => ({
+        sha: receipt.sha,
+        view: receipt.view.name ?? null,
+        at: receipt.at,
+      })),
+    },
+  });
 
   return (
     <Surface head={<RouteShell manifest={manifest} handle={handle} />}>
       <Pane title="captures" meta={captures ? String(captures.length) : undefined}>
         {failure ? <OutcomeLine kind="error" label="captures unread" says={failure} /> : null}
-        {captures ? <CapturesList captures={captures} focus={sha} /> : null}
+        {captures ? (
+          <CapturesList
+            captures={captures}
+            focus={page.sha}
+            open={page.open}
+            onOpen={(sha, open) =>
+              setPage({ open: open ? [...page.open, sha] : page.open.filter((was) => was !== sha) })
+            }
+          />
+        ) : null}
       </Pane>
     </Surface>
   );

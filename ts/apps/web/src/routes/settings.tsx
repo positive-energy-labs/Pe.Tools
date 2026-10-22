@@ -1,30 +1,24 @@
-import { useRouteSearch } from "#/route/activity";
-import { createFileRoute, stripSearchParams, type SearchSchemaInput } from "@tanstack/react-router";
-import { RouteShell } from "#/route";
+import { createFileRoute } from "@tanstack/react-router";
+import { RouteShell, routeFile, useAddressPage, useRouteLease } from "#/route";
 import { SettingsBody } from "#/machine/body";
-import { routeAddress } from "@pe/agent-contracts";
-import { settingsDestination } from "#/machine/model";
-import { routeSearch } from "#/route/route-owner";
 import { useMachine } from "#/machine/use-machine";
-import { useDestination } from "#/navigation/state";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { settingsManifest as manifest } from "#/route/surface-manifests";
 
 export const Route = createFileRoute("/settings")({
-  validateSearch: (search: SearchSchemaInput & Record<string, unknown>) => ({
-    ...routeSearch(search),
-    ...routeAddress("settings").read(search).page,
-  }),
-  // The contract defaults never reach the address, as on `/` and `/pea`.
-  search: { middlewares: [stripSearchParams(routeAddress("settings").defaults)] },
+  ...routeFile("settings"),
   component: SettingsRoute,
 });
+
 function SettingsRoute() {
-  const { section, session: named } = useRouteSearch("settings");
+  const page = useAddressPage("settings");
+  const [{ section, session: named }, setPage] = page;
   const session = named || undefined;
   const { reading, fixture } = useMachine();
   const host = useSurfaceHost();
-  const go = useDestination();
+  useRouteLease("settings", page, {
+    facts: { machine: reading.state, shell: host.surface },
+  });
   return (
     <RouteShell manifest={manifest}>
       <main
@@ -37,10 +31,10 @@ function SettingsRoute() {
             reading={reading}
             fixture={fixture}
             shell={host.surface}
-            group={section}
+            group={section === "none" ? null : section}
             session={session}
             onGroup={(next) =>
-              go(settingsDestination(next, next === "revit" ? session : undefined))
+              setPage({ section: next ?? "none", session: next === "revit" ? (session ?? "") : "" })
             }
           />
         </div>

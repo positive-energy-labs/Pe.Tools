@@ -48,7 +48,7 @@ const RECEIPT: Inspectable = {
 /** A kept view picture, opened in `/captures` focused on its row. Its id is the blob's sha. */
 const CAPTURE: Inspectable = {
   label: (id) => `capture ${id.slice(0, 8)}`,
-  open: { kind: "route", href: (id) => routeAddress("captures").link({ sha: id }) },
+  open: { kind: "route", href: (id) => routeAddress("captures").link({ sha: id, open: [id] }) },
 };
 
 /** The kinds every route opens, beside the ones its manifest declares. */

@@ -1,30 +1,15 @@
-import { useRouteSearch } from "#/route/activity";
 import { createFileRoute } from "@tanstack/react-router";
 
-import { routeAddress } from "@pe/agent-contracts";
-import { defineRoute, urlPage } from "#/route";
-import { routeSearch } from "#/route/route-owner";
+import { routeFile, useAddressPage } from "#/route";
 import { BindRoute } from "#/pages-bind/picker";
 
-const manifest = defineRoute({
-  key: "bind",
-  name: "Bind",
-  address: "bind",
-  page: routeAddress("bind").schema,
-});
-const url = urlPage(manifest)!;
-
-/** `/bind?page=<slug>`: the human door to a Page's binding, opened by the Page's chip. */
-export const Route = createFileRoute("/bind")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    ...routeSearch(search),
-    ...routeAddress("bind").read(search).page,
-  }),
-  search: { middlewares: [...url.middlewares] },
-  component: Bind,
-});
+/**
+ * `/bind?page=<slug>`: the human door to a Page's binding, opened by the Page's chip. No lease to
+ * Pea: binding a Page is the person's press (`routeAddress("bind")`).
+ */
+export const Route = createFileRoute("/bind")({ ...routeFile("bind"), component: Bind });
 
 function Bind() {
-  const { page, view } = useRouteSearch("bind");
+  const [{ page, view }] = useAddressPage("bind");
   return <BindRoute slug={page} view={view} />;
 }

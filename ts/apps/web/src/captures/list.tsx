@@ -3,7 +3,7 @@
  * with state (a registered picture of a view), so it wears the artifact frame: the head carries
  * its facts, the body its thumbnail and, on demand, the receipt itself.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { CaptureReceipt } from "@pe/agent-contracts";
 
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
@@ -23,8 +23,17 @@ const focusWords = (focus: CaptureReceipt["focus"]): string =>
         ? `scope box ${focus.scopeBox}`
         : "whole view";
 
-function CaptureFrame({ receipt, focused }: { receipt: CaptureReceipt; focused: boolean }) {
-  const [open, setOpen] = useState(focused);
+function CaptureFrame({
+  receipt,
+  focused,
+  open,
+  onOpen,
+}: {
+  receipt: CaptureReceipt;
+  focused: boolean;
+  open: boolean;
+  onOpen: (open: boolean) => void;
+}) {
   const { copied, copy } = useCopy();
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -76,7 +85,7 @@ function CaptureFrame({ receipt, focused }: { receipt: CaptureReceipt; focused: 
               kind="nav"
               direction="forward"
               label={open ? "hide receipt" : "receipt"}
-              onClick={() => setOpen((was) => !was)}
+              onClick={() => onOpen(!open)}
             >
               {open ? "hide receipt" : "receipt"}
             </Button>
@@ -102,9 +111,14 @@ function CaptureFrame({ receipt, focused }: { receipt: CaptureReceipt; focused: 
 export function CapturesList({
   captures,
   focus,
+  open,
+  onOpen,
 }: {
   captures: readonly CaptureReceipt[];
   focus?: string;
+  /** The shas whose receipt is unfolded. */
+  open: readonly string[];
+  onOpen: (sha: string, open: boolean) => void;
 }) {
   if (!captures.length)
     return (
@@ -115,7 +129,13 @@ export function CapturesList({
   return (
     <div className="flex flex-col gap-3">
       {captures.map((receipt) => (
-        <CaptureFrame key={receipt.id} receipt={receipt} focused={receipt.sha === focus} />
+        <CaptureFrame
+          key={receipt.id}
+          receipt={receipt}
+          focused={receipt.sha === focus}
+          open={open.includes(receipt.sha)}
+          onOpen={(next) => onOpen(receipt.sha, next)}
+        />
       ))}
     </div>
   );
