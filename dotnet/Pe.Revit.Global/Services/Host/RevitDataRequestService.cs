@@ -289,6 +289,12 @@ internal sealed class RevitDataRequestService {
                     "TakeoffCarriersNeedInitialization",
                     $"Missing carrier GUIDs: {string.Join(", ", ex.Preflight.MissingCarrierGuids.Select(guid => guid.ToString("D")))}",
                     $"Call takeoffs.initialize-carrier with stage '{ex.Preflight.Stage}' until status is ready.")]);
+        } catch (System.InvalidOperationException ex) when (transactionName != null) {
+            // Takeoff verbs refuse a failed precondition (cross-zone merge, no zone drawn) with this type, inside the
+            // sandbox, so nothing committed: a conflict the host settles `failed`, never an uncertain fault.
+            throw BridgeOperationExceptions.Conflict(
+                ex.Message,
+                [BridgeOperationExceptions.Issue("$", "TakeoffRefused", ex.Message, "Fix what the message names, then retry.")]);
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "TakeoffOperationException",
