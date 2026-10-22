@@ -239,6 +239,7 @@ test("the manifest parses an empty page", () => {
     selected: [],
     epoch: 0,
     layers: "",
+    viewport: null,
     focus: "",
   });
   expect(manifest.stages!.map((stage) => stage.key)).toEqual(["partition", "review", "history"]);

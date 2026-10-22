@@ -290,6 +290,7 @@ export function RoomsTable({
       rows={rows}
       columns={columns}
       rowKey={(row) => row.region.guid}
+      revitIds={(row) => [row.region.elementId]}
       selection={{ selected, onChange: onSelect }}
       activeKey={hovered}
       onRowHover={(row) => onHover(row?.region.guid ?? null)}

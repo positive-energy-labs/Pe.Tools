@@ -5,6 +5,7 @@
  */
 import type { RoomsTrace } from "@pe/host-contracts/generated";
 
+import { revitTarget } from "@pe/kit/lang/row";
 import { FactChip } from "@pe/kit/lang/chip";
 import { tokenRef } from "@pe/kit/lib/token";
 import type { Point2 } from "#/lib/affine-frame";
@@ -76,7 +77,12 @@ export function TraceLayers({
       {on.includes("rails") ? (
         <g data-layer="rails">
           {railsOf(trace).map((rail, i) => (
-            <g key={i} data-rail={rail.elementId}>
+            <g
+              key={i}
+              data-rail={rail.elementId}
+              {...revitTarget([rail.elementId])}
+              style={{ pointerEvents: "auto" }}
+            >
               <line
                 {...line(rail.a, rail.b)}
                 style={{

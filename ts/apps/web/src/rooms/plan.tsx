@@ -4,26 +4,24 @@
  * held region wears a numbered callout whose label is the table's. Click selects, shift-click adds,
  * hover pairs with the table row, a click on empty ground clears; wheel zooms at the cursor.
  */
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef } from "react";
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 
 import { FactChip } from "@pe/kit/lang/chip";
-import { Button } from "@pe/kit/lang/button";
+import { Pane } from "#/components/lang/pane";
+import { revitTarget } from "@pe/kit/lang/row";
+import { fitView, PLAN_CLICK_PX as CLICK_PX, usePlaneViewport } from "#/lib/plane-viewport";
+import { usePlanMap } from "#/lib/plan-map";
+import type { RoomsPage } from "./manifest";
+export { fitView } from "#/lib/plane-viewport";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import {
-  boundsOf,
-  contentViewport,
-  fitFrame,
-  type Bounds2,
-  type Point2,
-  type Viewport2,
-} from "#/lib/affine-frame";
+import { boundsOf, contentViewport, fitFrame, type Bounds2, type Point2 } from "#/lib/affine-frame";
 import { token } from "@pe/kit/lib/token";
 import { PlanImageLayer, type TakeoffPlanImage } from "#/takeoff/level-plan";
 import { pathD } from "#/takeoff/model";
 import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan-image";
-import { toggleLayer } from "@pe/agent-contracts";
+import { layersOf, toggleLayer } from "@pe/agent-contracts";
 import { LAYER_SAYS, LAYERS, TraceFaces, TraceLayers, type Layer, type TraceRead } from "./layers";
 import { CALLOUT_FONT_PX, holdsPin, PIN_R, placeCallouts, type CalloutItem } from "./callouts";
 import type { PlanGeo } from "./sketch";
@@ -134,29 +132,10 @@ const planCorners = (plan: TakeoffPlanImage): Point2[] => {
 
 // ponytail: the world is drawn at 4 px per foot; zoom 0.02 to 24 spans 0.08 to 96 screen px per foot.
 export const PLAN_PX_PER_FT = 4;
-const ZOOM = [0.02, 24] as const;
-const CLICK_PX = 5;
 const ZOOM_PAD_PX = 48;
 /** w16's fill: alpha 70/255 of the state ink. */
 const FILL_PCT = 27;
 const FILL_HOT_PCT = 40;
-
-type View = { scale: number; tx: number; ty: number };
-
-/** The view that fits a world-px box in the pane, centred, with `pad` screen px around it. */
-export const fitView = (box: Bounds2, size: Viewport2, pad: number): View => {
-  const w = Math.max(box.maxX - box.minX, 1);
-  const h = Math.max(box.maxY - box.minY, 1);
-  const scale = Math.min(
-    ZOOM[1],
-    Math.max(ZOOM[0], Math.min((size.width - 2 * pad) / w, (size.height - 2 * pad) / h)),
-  );
-  return {
-    scale,
-    tx: (size.width - w * scale) / 2 - box.minX * scale,
-    ty: (size.height - h * scale) / 2 - box.minY * scale,
-  };
-};
 
 export function RoomsPlan({
   rows,
@@ -171,8 +150,8 @@ export function RoomsPlan({
   onSelect,
   onHover,
   trace,
-  layers,
-  setLayers,
+  page,
+  setPage,
   overlay,
 }: {
   /** Drawn over the plan in screen px (the feedback layer), given the plan's frame. */
@@ -195,9 +174,8 @@ export function RoomsPlan({
   onHover: (guid: string | null) => void;
   /** `rooms.trace` for the drawn view; `none` names why there is nothing to draw. */
   trace: TraceRead;
-  /** The URL's layers, on; `setLayers` writes the URL's `layers` back. */
-  layers: readonly Layer[];
-  setLayers: (next: string) => void;
+  page: RoomsPage;
+  setPage: (next: Partial<RoomsPage>, move?: { history: "push" | "replace" }) => void;
 }) {
   const bounds = useMemo(() => {
     const points: Point2[] = rows.flatMap((row) => loopOf(row.region.outer));
@@ -255,58 +233,48 @@ export function RoomsPlan({
     return { frame, width, height, shapes, fit, pxPerFt: Math.abs(fx - ox) };
   }, [bounds, rows, plan]);
 
-  const [host, setHost] = useState<HTMLDivElement | null>(null);
-  const [size, setSize] = useState<Viewport2 | null>(null);
-  const [view, setView] = useState<View>({ scale: 1, tx: 0, ty: 0 });
-  const drag = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
-  const dragDist = useRef(0);
-  const [dragging, setDragging] = useState(false);
-
-  useEffect(() => {
-    if (!host) return;
-    const observer = new ResizeObserver(([entry]) => {
-      const { width, height } = entry!.contentRect;
-      setSize(width > 0 && height > 0 ? { width, height } : null);
-    });
-    observer.observe(host);
-    const onWheel = (event: WheelEvent) => {
-      event.preventDefault();
-      const rect = host.getBoundingClientRect();
-      const cx = event.clientX - rect.left;
-      const cy = event.clientY - rect.top;
-      setView((v) => {
-        const scale = Math.min(
-          ZOOM[1],
-          Math.max(ZOOM[0], v.scale * Math.exp(-event.deltaY * 0.0015)),
-        );
-        return {
-          scale,
-          tx: cx - ((cx - v.tx) * scale) / v.scale,
-          ty: cy - ((cy - v.ty) * scale) / v.scale,
-        };
-      });
-    };
-    host.addEventListener("wheel", onWheel, { passive: false });
-    return () => {
-      observer.disconnect();
-      host.removeEventListener("wheel", onWheel);
-    };
-  }, [host]);
-
-  // Fit on load: once per drawn view, not on every snapshot refresh.
-  const fitKey = `${rows[0]?.region.view ?? ""}|${plan ? "plan" : ""}`;
-  const fitted = useRef("");
-  useEffect(() => {
-    if (!world || !size || fitted.current === fitKey) return;
-    fitted.current = fitKey;
-    setView(fitView(world.fit, size, 0));
-  }, [world, size, fitKey]);
+  const {
+    setHost,
+    size,
+    view,
+    move,
+    dragging,
+    dragDistance: dragDist,
+    handlers,
+  } = usePlaneViewport(page.viewport, world?.fit ?? null, (viewport, how) =>
+    setPage({ viewport }, { history: how === "move" ? "push" : "replace" }),
+  );
+  const layers = layersOf(LAYERS, page.layers);
+  const mapShapes = useMemo(
+    () =>
+      world?.shapes.map((shape) => ({ d: shape.d, ink: token(REGION_INK[shape.state].ink!) })) ??
+      [],
+    [world],
+  );
+  const map = usePlanMap(view, move, world, size, mapShapes, plan);
+  const pane = {
+    title: "plan",
+    meta: page.view || undefined,
+    scroll: "clip" as const,
+    flush: true,
+    floaters: [map],
+    layers: {
+      value: layers,
+      options: LAYERS.map((key) => ({ key, label: key, says: LAYER_SAYS[key] })),
+      onToggle: (key: string) =>
+        setPage({ layers: toggleLayer(LAYERS, page.layers, key as Layer) }, { history: "push" }),
+    },
+  };
 
   // Focus: zoom to the named regions' union once, when they are drawn.
-  const zoomKey = zoomTo.join(",");
+  const zoomKey = page.focus;
   const zoomed = useRef("");
   useEffect(() => {
-    if (!world || !size || !zoomKey || zoomed.current === zoomKey) return;
+    if (!zoomKey) {
+      zoomed.current = "";
+      return;
+    }
+    if (!world || !size || zoomed.current === zoomKey) return;
     const boxes = world.shapes
       .filter((shape) => zoomTo.includes(shape.region.guid))
       .flatMap((shape) => [
@@ -315,8 +283,8 @@ export function RoomsPlan({
       ]);
     if (!boxes.length) return;
     zoomed.current = zoomKey;
-    setView(fitView(boundsOf(boxes), size, ZOOM_PAD_PX));
-  }, [world, size, zoomKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    move(fitView(boundsOf(boxes), size, ZOOM_PAD_PX), "move");
+  }, [world, size, zoomKey, zoomTo, move]);
 
   const callouts = useMemo(() => {
     if (!world || !size) return [];
@@ -384,22 +352,6 @@ export function RoomsPlan({
           </span>
         </FactChip>
       ))}
-      {LAYERS.map((layer) => {
-        const on = layers.includes(layer);
-        return (
-          <Button
-            key={layer}
-            label={layer}
-            kind="framed"
-            pressed={on}
-            refusal={trace.data ? null : (trace.none ?? "reading the trace")}
-            reason={LAYER_SAYS[layer]}
-            onClick={() => setLayers(toggleLayer(LAYERS, layers.join(","), layer))}
-          >
-            {layer}
-          </Button>
-        );
-      })}
       {!trace.data && trace.none ? (
         <FactChip title="partition this view to write a trace">{trace.none}</FactChip>
       ) : null}
@@ -430,7 +382,7 @@ export function RoomsPlan({
 
   if (empty || !world)
     return (
-      <div className="flex size-full min-h-0 flex-col">
+      <Pane {...pane}>
         {legend}
         {notice}
         <div className="flex flex-1 items-center justify-center px-4">
@@ -441,7 +393,7 @@ export function RoomsPlan({
             {empty?.says ?? "no zones, rooms or plan image on this view yet"}
           </EmptyState>
         </div>
-      </div>
+      </Pane>
     );
 
   const worldStyle: CSSProperties = {
@@ -457,7 +409,7 @@ export function RoomsPlan({
   const font = CALLOUT_FONT_PX;
 
   return (
-    <div className="flex size-full min-h-0 flex-col">
+    <Pane {...pane}>
       {legend}
       {notice}
       <div
@@ -465,25 +417,7 @@ export function RoomsPlan({
         data-rooms-plan=""
         className="relative min-h-0 flex-1 overflow-hidden"
         style={{ cursor: dragging ? "grabbing" : "grab", touchAction: "none" }}
-        onPointerDown={(event) => {
-          if (event.button !== 0) return;
-          drag.current = { x: event.clientX, y: event.clientY, tx: view.tx, ty: view.ty };
-          dragDist.current = 0;
-          setDragging(true);
-        }}
-        onPointerMove={(event) => {
-          const d = drag.current;
-          if (!d) return;
-          const dx = event.clientX - d.x;
-          const dy = event.clientY - d.y;
-          dragDist.current = Math.max(dragDist.current, Math.abs(dx) + Math.abs(dy));
-          if (dragDist.current >= CLICK_PX) event.currentTarget.setPointerCapture(event.pointerId);
-          setView((v) => ({ ...v, tx: d.tx + dx, ty: d.ty + dy }));
-        }}
-        onPointerUp={() => {
-          drag.current = null;
-          setDragging(false);
-        }}
+        {...handlers}
         onClick={() => {
           if (dragDist.current < CLICK_PX) onSelect(null, false);
         }}
@@ -507,6 +441,7 @@ export function RoomsPlan({
               return (
                 <path
                   key={region.guid}
+                  {...revitTarget([region.elementId])}
                   data-state={state}
                   data-unassigned={unassigned(region) || undefined}
                   d={d}
@@ -559,6 +494,10 @@ export function RoomsPlan({
               return (
                 <g
                   key={callout.guid}
+                  {...revitTarget([
+                    world.shapes.find((shape) => shape.region.guid === callout.guid)!.region
+                      .elementId,
+                  ])}
                   data-callout={callout.label}
                   style={{ pointerEvents: "auto", cursor: "pointer" }}
                   onMouseEnter={() => onHover(callout.guid)}
@@ -630,6 +569,6 @@ export function RoomsPlan({
         ) : null}
         {geo && overlay ? overlay(geo) : null}
       </div>
-    </div>
+    </Pane>
   );
 }
