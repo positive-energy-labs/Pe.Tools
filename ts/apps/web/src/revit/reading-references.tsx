@@ -132,7 +132,7 @@ export function NativeReadingReferences({
         return (
           <span key={index} tabIndex={0} {...revitReferences([reference])}>
             <FactChip
-              title={`${reference.kind ?? "Element"} ${reference.elementId ?? "unknown"}: ${prepared.kind === "ready" ? "right-click or BX in the recorded native lifetime" : prepared.message}`}
+              title={`${reference.kind ?? "Element"} ${reference.elementId ?? "unknown"}: ${prepared.kind === "refused" ? prepared.message : "right-click or BX in the recorded native lifetime"}`}
             >
               {reference.label}
             </FactChip>

@@ -8,7 +8,6 @@ import { z } from "zod";
 import {
   receiptSchema,
   receiptStampSchema,
-  receiptBodySchema,
   receiptReasonCodeSchema,
   readingRequestSchema,
   type Receipt,
@@ -21,7 +20,6 @@ import {
   analyticsConfig,
   readOrCreateInstallId,
   writeFatalEvidence,
-  ANALYTICS_PAYLOAD_BUDGET,
 } from "@pe/runtime";
 import { isAnyOperationKey, isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
 import { ActionJournal } from "./action-journal.ts";
