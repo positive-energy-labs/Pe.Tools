@@ -14,7 +14,7 @@ import { z } from "zod";
  */
 
 // A plain YAML scalar: no colon-space anywhere, so never `: "` (gray-matter drops the skill silently).
-export const DUCTS_SKILL_DESCRIPTION =
+const DUCTS_SKILL_DESCRIPTION =
   "Answer anything about the Pe Ducts route and duct pressure drop from the route itself. Use for pressure drop, pdrop, static pressure, ESP or external static, duct losses, the ducts page or /ducts route, the airflow slot, healing open ends or caps on ducts, making a unit the fan of its system, Revit's own pressure drop or critical path, how Pe differs from Manual D, RHVAC or Naviate, where a duct value lives or what survives a save, what Pea can do on ducts, or whether a run is ready, e.g. SA 19 or FC-23.";
 
 const OPERATIONS = String.raw`The Ducts route computes this. Never rebuild it with pod or C# scripts; they will not match the page the person reads.
