@@ -44,6 +44,20 @@ export interface AppRoute {
 
 export const APP_ROUTES: readonly AppRoute[] = [
   {
+    key: "space",
+    path: "/space",
+    title: "Space",
+    label: "MEP context",
+    iconKey: "Boxes",
+    description:
+      "Inspect real model geometry, select elements, and draw straight or bent sections locally.",
+    task: "Coordinate model data",
+    exposure: "Preview",
+    aliases: "3d mesh section viewer spatial context",
+    runtimeNeed: "Revit for capture; saved scenes open without Revit",
+    directory: true,
+  },
+  {
     key: "instances",
     path: "/open",
     title: "Open",

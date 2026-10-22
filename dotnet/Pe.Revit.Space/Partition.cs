@@ -63,6 +63,40 @@ internal sealed class Partition {
         this.Dirty = false;
     }
 
+    internal void BuildElements(IEnumerable<Element> elements, long epoch, Aabb? region = null) {
+        var sink = new List<Tri>();
+        var rows = new List<PrimRow>();
+        this.Skipped = 0;
+        foreach (var element in elements) {
+            if (!Ingest.Allowed(element)) continue;
+            if (Ingest.Element(element, this.Source, rows.Count, sink, this.Transform, rows, includeCurves: false, region: region) == 0) this.Skipped++;
+        }
+        // Scene capture only clips and writes triangles; it never traverses a triangle BVH.
+        this.Adopt(sink.ToArray(), rows.ToArray(), false);
+        this.BuiltAtEpoch = epoch;
+        this.Dirty = false;
+    }
+
+    internal void BuildRegion(Aabb hostBounds, long epoch) {
+        var inverse = this.Transform.Inverse;
+        var min = new XYZ(double.MaxValue, double.MaxValue, double.MaxValue);
+        var max = new XYZ(double.MinValue, double.MinValue, double.MinValue);
+        foreach (var x in new[] { hostBounds.MinX, hostBounds.MaxX })
+        foreach (var y in new[] { hostBounds.MinY, hostBounds.MaxY })
+        foreach (var z in new[] { hostBounds.MinZ, hostBounds.MaxZ }) {
+            var point = inverse.OfPoint(new XYZ(x, y, z));
+            min = new XYZ(Math.Min(min.X, point.X), Math.Min(min.Y, point.Y), Math.Min(min.Z, point.Z));
+            max = new XYZ(Math.Max(max.X, point.X), Math.Max(max.Y, point.Y), Math.Max(max.Z, point.Z));
+        }
+        // The transformed enclosure is conservative for rotated links. Exact clipping stays in Scene.
+        using var outline = new Outline(min, max);
+        // One float ulp covers ingest rounding at the crop boundary; it only broadens the candidate gate.
+        var magnitude = new[] { min.X, min.Y, min.Z, max.X, max.Y, max.Z }.Max(Math.Abs);
+        using var filter = new BoundingBoxIntersectsFilter(outline, Math.Max(1, magnitude) * Math.Pow(2, -23));
+        using var collector = new FilteredElementCollector(this.Doc);
+        this.BuildElements(collector.WhereElementIsNotElementType().WherePasses(filter), epoch, hostBounds);
+    }
+
     /// <summary>
     ///     Host-only incremental refresh. Deleted ids drop, added and modified ids retessellate, and
     ///     the next flat array is built by copying the untouched ranges and appending the new ones.
@@ -130,7 +164,7 @@ internal sealed class Partition {
 
     /// <summary>Takes ownership of one triangle array and its rows, then derives the range map,
     /// the id index, and the tree. The only place any of the four is assigned.</summary>
-    private void Adopt(Tri[] tris, PrimRow[] prims) {
+    private void Adopt(Tri[] tris, PrimRow[] prims, bool buildIndex = true) {
         var start = new int[prims.Length + 1];
         for (var i = 0; i < prims.Length; i++) start[i + 1] = start[i] + prims[i].Triangles;
 
@@ -139,7 +173,7 @@ internal sealed class Partition {
         this._start = start;
         this.Categories = prims.Select(p => p.Category).Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(c => c, StringComparer.OrdinalIgnoreCase).ToList();
-        this.Bvh = Bvh.Build(tris);
+        this.Bvh = Bvh.Build(buildIndex ? tris : []);
     }
 
     public Handle HandleFor(PrimRow row) => new(
