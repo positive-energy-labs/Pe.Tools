@@ -1,9 +1,7 @@
 import { createFileRoute, retainSearchParams, stripSearchParams } from "@tanstack/react-router";
 import { z } from "zod";
 import { MODES } from "#/workbench/depth";
-import { WorkbenchProvider } from "#/workbench/provider";
 import { ChatShell } from "#/chat/chat-shell";
-import { chatPluginRoutes } from "#/workbench/chat-plugins";
 /**
  * Chat URL state — the single home for navigable/shareable state. TanStack Router owns all of it
  * (validateSearch + the middlewares below); nothing hand-rolls `new URL().searchParams`.
@@ -11,8 +9,6 @@ import { chatPluginRoutes } from "#/workbench/chat-plugins";
  *            state)
  *   mode   — threads | world sidebar view (default stripped from the URL)
  *   turn   — turn number to focal-scroll on open/share (absent = tail)
- *   plugin — the route hosted in the plugin pane; focus — the group path (canonical JSON) the
- *            head's drill-in scoped it to. Opening a plugin any other way clears the focus.
  *   prompt — short composer draft; the composer drops it from the URL past PROMPT_MAX or when
  *            attachments are present (attachments never serialize).
  * `?demo=<action>` is read by `useRoute`, not here: it mounts one seed in an isolated owner.
@@ -29,12 +25,6 @@ export const chatSearchSchema = z.object({
     .default(DEFAULTS.mode)
     .catch(DEFAULTS.mode),
   turn: z.coerce.number().int().positive().optional().catch(undefined),
-  plugin: z
-    .string()
-    .refine((key) => chatPluginRoutes().includes(key))
-    .optional()
-    .catch(undefined),
-  focus: z.string().optional().catch(undefined),
   prompt: z.string().max(PROMPT_MAX).optional(),
 });
 
@@ -48,18 +38,12 @@ export const Route = createFileRoute("/pea")({
 
 function RouteComponent() {
   // `target` is the root's retained pin (routes/__root.tsx), carried across every Chat link.
-  const { plugin, focus, thread, target } = Route.useSearch();
-  return <ChatRouteContent plugin={plugin} focus={focus} thread={thread} target={target} />;
+  const { thread, target } = Route.useSearch();
+  return <ChatRouteContent thread={thread} target={target} />;
 }
 
 export function ChatRouteContent({
-  plugin,
-  focus,
   target,
-}: Pick<z.infer<typeof chatSearchSchema>, "plugin" | "focus" | "thread"> & { target?: string }) {
-  return (
-    <WorkbenchProvider>
-      <ChatShell plugin={plugin} focus={focus} target={target} />
-    </WorkbenchProvider>
-  );
+}: Pick<z.infer<typeof chatSearchSchema>, "thread"> & { target?: string }) {
+  return <ChatShell target={target} />;
 }

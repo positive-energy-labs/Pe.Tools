@@ -97,12 +97,20 @@ export function useRouteThread(): string {
   const [minted] = useState(() => crypto.randomUUID());
   const thread = search.thread ?? minted;
   useEffect(() => {
-    if (!search.thread)
+    if (!search.thread) {
+      // Keep issuance across a target pick or refresh until the host creates the real thread.
+      try {
+        sessionStorage.setItem(`pe.routeThread.${thread}`, "minted");
+      } catch {
+        /* History also carries issuance. */
+      }
       void navigate({
         to: ".",
         search: (previous: Record<string, unknown>) => ({ ...previous, thread }),
+        state: (previous) => ({ ...previous, __peMintedThread: thread }),
         replace: true,
       });
+    }
   }, [navigate, search.thread, thread]);
   return thread;
 }
